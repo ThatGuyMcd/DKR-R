@@ -1,0 +1,29 @@
+name: Beta 11 binutils runtime
+
+on:
+  push:
+    branches:
+      - chatgpt/beta11-build
+
+permissions:
+  contents: read
+
+jobs:
+  libs:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package cross-binutils runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils-mips-linux-gnu
+          mkdir -p out
+          cp -a /usr/lib/x86_64-linux-gnu/libopcodes-2.38-mips.so out/
+          cp -a /usr/lib/x86_64-linux-gnu/libbfd-2.38-mips.so out/
+          ldd /usr/bin/mips-linux-gnu-as
+          sha256sum out/* > out/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beta11-binutils-runtime
+          path: out
+          retention-days: 1
