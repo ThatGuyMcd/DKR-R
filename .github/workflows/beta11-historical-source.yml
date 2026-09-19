@@ -1,0 +1,28 @@
+name: Inspect historical source package
+
+on:
+  push:
+    branches:
+      - chatgpt/beta11-build
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download 1.0.4 source release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p historical
+          gh release download Version1.0.4 --repo ThatGuyMcd/DKR-R --pattern 'DKR-R-1.0.4-Source.zip' --dir historical
+          unzip -l historical/DKR-R-1.0.4-Source.zip | tee historical/CONTENTS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dkr-r-1.0.4-source-inspection
+          path: historical
+          retention-days: 1
+          compression-level: 0
