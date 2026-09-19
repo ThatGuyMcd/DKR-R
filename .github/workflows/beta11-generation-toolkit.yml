@@ -23,6 +23,7 @@ jobs:
           git -C extern/dkr-decomp submodule update --init --recursive
           mkdir -p build-toolkit/wheels
           python3 -m pip download -r extern/dkr-decomp/requirements.txt -d build-toolkit/wheels
+          python3 -m pip download --no-binary=:all: -d build-toolkit/wheels-src 'Levenshtein>=0.26.1' 'rapidfuzz>=3.9.7' 'PyYAML>=6.0' 'pygfxd>=1.0.3' 'charset-normalizer>=3.0'
           make -C extern/dkr-decomp/tools all
       - name: Package toolkit
         run: |
@@ -34,7 +35,7 @@ jobs:
           cp -a extern/dkr-decomp/tools/dkr_assets_tool build-toolkit/dkr-tools/
           cp -a extern/dkr-decomp/tools/n64crc build-toolkit/dkr-tools/
           cp -a extern/dkr-decomp/tools/Flips build-toolkit/dkr-tools/
-          tar --zstd -cf build-toolkit/DKR-R-beta11-generation-toolkit.tar.zst build-toolkit/root build-toolkit/wheels build-toolkit/dkr-tools
+          tar --zstd -cf build-toolkit/DKR-R-beta11-generation-toolkit.tar.zst build-toolkit/root build-toolkit/wheels build-toolkit/wheels-src build-toolkit/dkr-tools
           sha256sum build-toolkit/DKR-R-beta11-generation-toolkit.tar.zst > build-toolkit/TOOLKIT-SHA256SUMS.txt
       - name: Upload toolkit
         uses: actions/upload-artifact@v4
