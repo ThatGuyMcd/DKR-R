@@ -1,0 +1,47 @@
+name: Beta 11 generation toolkit
+
+on:
+  push:
+    branches:
+      - chatgpt/beta11-build
+
+permissions:
+  contents: read
+
+jobs:
+  toolkit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl python3 python3-pip python3-venv libpcre2-dev gcc-mips-linux-gnu binutils-mips-linux-gnu zstd
+      - name: Prepare DKR decomp tooling
+        run: |
+          git -C extern/dkr-decomp submodule update --init --recursive
+          mkdir -p build-toolkit/wheels
+          python3 -m pip download -r extern/dkr-decomp/requirements.txt -d build-toolkit/wheels
+          make -C extern/dkr-decomp/tools all
+      - name: Package toolkit
+        run: |
+          mkdir -p build-toolkit/root/usr/bin build-toolkit/root/usr/lib build-toolkit/root/usr/mips-linux-gnu build-toolkit/dkr-tools
+          cp -a /usr/bin/mips-linux-gnu-* build-toolkit/root/usr/bin/
+          cp -a /usr/lib/gcc-cross build-toolkit/root/usr/lib/
+          cp -a /usr/mips-linux-gnu/. build-toolkit/root/usr/mips-linux-gnu/
+          cp -a extern/dkr-decomp/tools/ido-recomp build-toolkit/dkr-tools/
+          cp -a extern/dkr-decomp/tools/dkr_assets_tool build-toolkit/dkr-tools/
+          cp -a extern/dkr-decomp/tools/n64crc build-toolkit/dkr-tools/
+          cp -a extern/dkr-decomp/tools/Flips build-toolkit/dkr-tools/
+          tar --zstd -cf build-toolkit/DKR-R-beta11-generation-toolkit.tar.zst build-toolkit/root build-toolkit/wheels build-toolkit/dkr-tools
+          sha256sum build-toolkit/DKR-R-beta11-generation-toolkit.tar.zst > build-toolkit/TOOLKIT-SHA256SUMS.txt
+      - name: Upload toolkit
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta11-generation-toolkit
+          path: |
+            build-toolkit/DKR-R-beta11-generation-toolkit.tar.zst
+            build-toolkit/TOOLKIT-SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
