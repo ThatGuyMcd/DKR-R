@@ -20,7 +20,10 @@ jobs:
           mkdir -p out
           cp -a /usr/lib/x86_64-linux-gnu/libopcodes-2.38-mips.so out/
           cp -a /usr/lib/x86_64-linux-gnu/libbfd-2.38-mips.so out/
+          cp -a /usr/lib/x86_64-linux-gnu/libctf-mips.so* out/
+          cp -a /usr/lib/x86_64-linux-gnu/libctf-nobfd-mips.so* out/ || true
           ldd /usr/bin/mips-linux-gnu-as
+          ldd /usr/bin/mips-linux-gnu-ld
           sha256sum out/* > out/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
