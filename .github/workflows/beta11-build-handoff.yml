@@ -1,0 +1,47 @@
+name: Beta 11 build handoff
+
+on:
+  push:
+    branches:
+      - chatgpt/beta11-build
+
+permissions:
+  contents: read
+
+jobs:
+  handoff:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install preparation toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd binutils-mips-linux-gnu build-essential pkg-config python3 python3-pip python3-venv libpcre2-dev cmake ninja-build clang lld
+
+      - name: Prepare pinned dependencies
+        run: |
+          python3 scripts/bootstrap_dependencies.py
+          bash scripts/apply-dependency-patches.sh
+
+      - name: Package source, dependencies, and portable MIPS tools
+        run: |
+          mkdir -p build-handoff/toolchain/bin
+          cp -a /usr/bin/mips-linux-gnu-* build-handoff/toolchain/bin/ || true
+          tar --zstd -cf build-handoff/DKR-R-beta11-handoff.tar.zst \
+            --exclude='./.git' \
+            --exclude='./build-handoff/DKR-R-beta11-handoff.tar.zst' \
+            --exclude='*/.git' \
+            .
+          sha256sum build-handoff/DKR-R-beta11-handoff.tar.zst | tee build-handoff/SHA256SUMS.txt
+
+      - name: Upload handoff
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta11-source-handoff
+          path: |
+            build-handoff/DKR-R-beta11-handoff.tar.zst
+            build-handoff/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
