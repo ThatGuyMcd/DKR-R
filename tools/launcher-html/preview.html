@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>DKR-R — Screen preview</title>
+  <link rel="icon" href="assets/favicon.png">
+  <style>
+    /* Renders the launcher at a device's exact window size, scaled down to fit this tab, so the
+       Steam Deck layout can be checked next to a desktop one. Media and container queries see the
+       real size because the launcher runs in an iframe of that size. */
+    :root { --bg: #061520; --bar: #0a2231; --ink: #eaf3f5; --soft: #9fb8c4; --line: #1f4c63; --amber: #ffc453; --go: #54c9ad; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body { display: grid; grid-template-rows: auto 1fr; background: var(--bg); color: var(--ink); font: 14px/1.4 'Segoe UI', system-ui, sans-serif; }
+    header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 16px; background: var(--bar); border-bottom: 1px solid var(--line); }
+    h1 { margin: 0 8px 0 0; font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+    button, input { font: inherit; color: inherit; }
+    .preset { display: grid; gap: 1px; min-height: 40px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 8px; background: #0d2d40; text-align: left; cursor: pointer; transition: background-color 120ms, border-color 120ms; }
+    .preset:hover { background: #134058; }
+    .preset[aria-pressed="true"] { border-color: var(--amber); background: #3a2c14; }
+    .preset strong { font-size: 13px; }
+    .preset small { color: var(--soft); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+    .custom { display: flex; align-items: center; gap: 6px; color: var(--soft); }
+    .custom input { width: 72px; min-height: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: #061d2c; font-variant-numeric: tabular-nums; }
+    .custom button, .tool { min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 6px; background: #0d2d40; cursor: pointer; }
+    .info { margin-left: auto; color: var(--soft); font-variant-numeric: tabular-nums; }
+    .info b { color: var(--go); font-weight: 600; }
+    main { position: relative; overflow: hidden; }
+    .frame { position: absolute; left: 50%; top: 50%; transform-origin: 0 0; border: 0; border-radius: 6px; box-shadow: 0 0 0 1px #2f6a86, 0 20px 50px rgb(0 0 0 / .5); background: #053373; }
+    :focus-visible { outline: 3px solid #ffd11f; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Screen preview</h1>
+    <div class="presets" id="presets" role="group" aria-label="Screen sizes"></div>
+    <form class="custom" id="custom"><label>W <input id="w" type="number" min="640" max="7680" required></label><label>H <input id="h" type="number" min="480" max="4320" required></label><button>Apply</button></form>
+    <button class="tool" id="reload" type="button">Reload</button>
+    <span class="info" id="info" role="status"></span>
+  </header>
+  <main id="stage"><iframe class="frame" id="frame" title="DKR-R launcher" src="index.html"></iframe></main>
+  <script>
+    // Window sizes the launcher really runs at. Handhelds on Windows usually run at 150-200% scaling,
+    // which leaves the same 1280-wide layout as the Deck.
+    const PRESETS = [
+      { id: 'deck', name: 'Steam Deck', w: 1280, h: 800 },
+      { id: '720', name: 'Handheld / TV 720p', w: 1280, h: 720 },
+      { id: 'laptop', name: 'Laptop', w: 1366, h: 768 },
+      { id: '1080', name: 'Desktop 1080p', w: 1920, h: 1080 },
+      { id: '1440', name: 'Desktop 1440p', w: 2560, h: 1440 },
+      { id: 'tv4k', name: 'TV 4K', w: 3840, h: 2160 },
+      { id: 'tv5k', name: 'TV 5K', w: 5120, h: 2880 },
+    ];
+    const frame = document.getElementById('frame');
+    const stage = document.getElementById('stage');
+    const info = document.getElementById('info');
+    let size = { w: 1280, h: 800 };
+
+    function remember(value) { try { localStorage.setItem('dkr-preview-size', JSON.stringify(value)); } catch { /* optional */ } }
+    function recall() { try { return JSON.parse(localStorage.getItem('dkr-preview-size')); } catch { return null; } }
+
+    function apply(next) {
+      size = next;
+      remember(size);
+      frame.style.width = size.w + 'px';
+      frame.style.height = size.h + 'px';
+      document.getElementById('w').value = size.w;
+      document.getElementById('h').value = size.h;
+      for (const btn of document.querySelectorAll('.preset')) btn.setAttribute('aria-pressed', String(+btn.dataset.w === size.w && +btn.dataset.h === size.h));
+      fit();
+    }
+
+    function fit() {
+      const box = stage.getBoundingClientRect();
+      const scale = Math.min(1, (box.width - 32) / size.w, (box.height - 32) / size.h);
+      frame.style.transform = `scale(${scale}) translate(-50%, -50%)`;
+      describe(scale);
+    }
+
+    // What the launcher inside decided: its interface size (Auto on TVs) and sidebar mode.
+    function describe(scale) {
+      const inner = frame.contentWindow?.DKRLauncher?.display;
+      const ui = inner ? inner.scale() : 1;
+      const roomy = frame.contentDocument?.documentElement.hasAttribute('data-roomy');
+      const keys = size.h / ui < 700 ? ', compact keyboards' : '';
+      const uiText = inner ? ` · interface ${Math.round(ui * 100)}%${inner.setting === 'auto' ? ' (auto)' : ''}` : '';
+      info.innerHTML = `<b>${size.w} × ${size.h}</b> · shown at ${Math.round(scale * 100)}%${uiText} · ${roomy ? 'roomy' : 'compact'} sidebar${keys}`;
+    }
+    setInterval(() => describe(Math.min(1, (stage.getBoundingClientRect().width - 32) / size.w, (stage.getBoundingClientRect().height - 32) / size.h)), 500);
+
+    document.getElementById('presets').append(...PRESETS.map((p) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'preset';
+      btn.dataset.w = p.w;
+      btn.dataset.h = p.h;
+      btn.innerHTML = `<strong>${p.name}</strong><small>${p.w} × ${p.h}</small>`;
+      btn.addEventListener('click', () => apply({ w: p.w, h: p.h }));
+      return btn;
+    }));
+    document.getElementById('custom').addEventListener('submit', (event) => {
+      event.preventDefault();
+      apply({ w: +document.getElementById('w').value, h: +document.getElementById('h').value });
+    });
+    document.getElementById('reload').addEventListener('click', () => frame.contentWindow.location.reload());
+    addEventListener('resize', fit);
+    apply(recall() || PRESETS[0]);
+  </script>
+</body>
+</html>

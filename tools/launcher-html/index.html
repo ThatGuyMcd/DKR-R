@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>DKR-R — Launcher UI study</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/pages.css">
+  <link rel="stylesheet" href="styles/mods.css">
+  <link rel="stylesheet" href="styles/online.css">
+  <link rel="stylesheet" href="styles/sound.css">
+  <link rel="stylesheet" href="styles/controller.css">
+  <!-- Not deferred: the interface size has to be set before the first paint. -->
+  <script src="js/display.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/state.js"></script>
+  <script defer src="js/components.js"></script>
+  <script defer src="js/rom.js"></script>
+  <script defer src="js/pages/play.js"></script>
+  <script defer src="js/pages/graphics.js"></script>
+  <script defer src="js/pages/sound.js"></script>
+  <script defer src="js/pages/controls.js"></script>
+  <script defer src="js/pages/saves.js"></script>
+  <script defer src="js/pages/textures.js"></script>
+  <script defer src="js/pages/mods.js"></script>
+  <script defer src="js/pages/online.js"></script>
+  <script defer src="js/pages/about.js"></script>
+  <script defer src="js/app.js"></script>
+  <script defer src="js/controller.js"></script>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"><div class="cloud-strip"><img src="assets/background.png" alt=""><img src="assets/background.png" alt=""><img src="assets/background.png" alt=""><img src="assets/background.png" alt=""></div></div>
+  <div class="launcher" id="launcher">
+    <aside class="sidebar" aria-label="Launcher navigation">
+      <div class="brand" aria-label="Diddy Kong Racing Recompiled"><div class="coin"><img class="coin-front" src="assets/logo-front.png" alt="DKR-R"><img class="coin-back" src="assets/logo-back.png" alt=""></div></div>
+      <nav id="navigation" aria-label="Pages"></nav>
+      <div class="sidebar-actions" id="sidebar-actions"></div>
+    </aside>
+    <main class="content" id="content" tabindex="-1" aria-labelledby="page-heading"></main>
+  </div>
+  <dialog id="modal" aria-labelledby="modal-heading"></dialog>
+  <div id="notification" role="status" aria-live="polite" popover="manual" hidden></div>
+  <noscript>Enable JavaScript to explore the launcher prototype.</noscript>
+</body>
+</html>
