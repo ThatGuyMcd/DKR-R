@@ -110,12 +110,14 @@ runtime-recomp/RecompiledPatches/
 build/runtime-tools/
 runtime-recomp/build/
 
-# tools/blender holds the DKR track editor addon and is tracked. Everything else
+# tools/blender holds the DKR track editor addon and tools/launcher-html the
+# HTML/CSS/JS study of the launcher UI; both are tracked. Everything else
 # under tools/ is not. Git does not descend into an excluded directory, so the
 # directory itself must stay un-excluded for any rule inside it to apply - do
-# not restore a bare /tools/ rule, it makes the addon invisible again.
+# not restore a bare /tools/ rule, it makes these folders invisible again.
 /tools/*
 !/tools/blender/
+!/tools/launcher-html/
 
 # Blender addon build output, rebuilt by tools/blender/package_addon.py
 /tools/blender/dkr_track_editor.zip

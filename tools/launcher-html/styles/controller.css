@@ -1,0 +1,219 @@
+/* Controller-first pieces shared by every page: controller focus, drop-down lists, keyboard fields,
+   the on-screen keyboard, the ROM drop-down and browser, and the button legend. */
+:root { --nav-ease: cubic-bezier(.2, 0, 0, 1); }
+
+/* Focus that came from the D-pad (see controller.js); keyboard focus keeps :focus-visible. */
+:where(a, button, input, select, summary, [tabindex]) { scroll-margin-block: 48px; }
+html[data-input="gamepad"] .is-pressed:not(:disabled, [aria-disabled="true"]) { scale: .96; transition: scale 80ms var(--nav-ease); }
+/* A disabled button the D-pad is resting on (controller.js unlock): still looks unavailable. */
+button[aria-disabled="true"] { cursor: not-allowed; }
+button[aria-disabled="true"]:not(.start-button, .picker-option) { opacity: .55; }
+.race-button[aria-disabled="true"]::before { opacity: 0 !important; animation: none !important; }
+.race-button[aria-disabled="true"] > span::before { content: none !important; }
+.race-button[aria-disabled="true"] > span { color: inherit !important; text-shadow: none !important; }
+.picker-option[aria-disabled="true"] { opacity: .45; }
+
+html[data-input="gamepad"] :is(body, .content, dialog) { cursor: none; }
+/* The page panel takes focus on every page change; it is not a control, so it gets no ring. */
+#content:focus { outline: none; }
+
+/* ------------------------------------------------------------ drop-down list */
+.picker {
+  position: fixed; inset: auto; margin: 0; padding: 6px; overflow-y: auto; overscroll-behavior: contain;
+  border: 1px solid #3c6478; border-radius: 12px; background: #071c29; color: #eaf3f5;
+  box-shadow: 0 14px 36px rgb(0 0 0 / .5), 0 0 0 1px rgb(0 0 0 / .3);
+  font: 15px/1.35 'Segoe UI', system-ui, sans-serif; scrollbar-width: thin; scrollbar-color: #3c6478 transparent;
+}
+.picker:popover-open { animation: picker-in 140ms var(--nav-ease); }
+@keyframes picker-in { from { opacity: 0; translate: 0 -4px; } }
+.picker-option {
+  position: relative; display: grid; gap: 1px; width: 100%; min-height: 44px; padding: 9px 12px 9px 36px;
+  border: 0; border-radius: 7px; /* 12px list − 6px padding + 1px */ background: transparent; color: inherit;
+  font: inherit; text-align: left; transition: background-color 120ms var(--nav-ease);
+}
+.picker-option:hover:not(:disabled) { background: #163a4f; }
+.picker-option:is(:focus-visible, .nav-focus) { outline: none; background: #1f4a62; box-shadow: inset 0 0 0 2px #ffd11f; }
+.picker-option:focus { outline: none; }
+.picker-option[aria-selected="true"]::before {
+  content: ''; position: absolute; left: 14px; top: 19px; width: 11px; height: 6px;
+  border-left: 2.5px solid #54c9ad; border-bottom: 2.5px solid #54c9ad; rotate: -45deg;
+}
+.picker-option:disabled { opacity: .45; cursor: not-allowed; }
+.picker-label { font-weight: 600; overflow-wrap: anywhere; }
+.picker-detail { color: #9fb8c4; font-size: 12.5px; overflow-wrap: anywhere; }
+.picker-option.is-action { color: #ffc453; }
+.picker-option.is-action::before { content: '+'; position: absolute; left: 14px; top: 50%; translate: 0 -52%; font: 600 20px/1 'Segoe UI', sans-serif; }
+.picker-sep { height: 1px; margin: 6px 8px; background: rgb(255 255 255 / .1); }
+
+/* ------------------------------------------------------------ keyboard fields */
+.field-button {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 44px; margin: 0;
+  padding: 8px 12px; border: 1px solid #2f6a86; border-radius: 8px; background: #061d2c; color: #fff;
+  font: 600 16px/1.3 'Segoe UI', system-ui, sans-serif; text-align: left;
+  transition: border-color 150ms var(--nav-ease), background-color 150ms var(--nav-ease), scale 150ms var(--nav-ease);
+}
+.field-button:hover:not(:disabled) { border-color: #5a97b1; }
+.field-button:active:not(:disabled) { scale: .98; }
+.field-button:disabled { opacity: .5; cursor: not-allowed; }
+.field-button-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field-button-value.is-placeholder { color: #7f9dab; font-weight: 400; }
+.field-button-icon { flex: none; width: 22px; height: 15px; color: #7fa7b8; transition: color 150ms var(--nav-ease); }
+.field-button:is(:hover, :focus-visible, .nav-focus):not(:disabled) .field-button-icon { color: #ffc453; }
+.field-button.is-mono .field-button-value { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; letter-spacing: .04em; }
+dialog .field-button.is-dialog { margin-top: 2px; }
+
+/* ------------------------------------------------------------ on-screen keyboard */
+/* DrawTextEntryKeyboard: min(760, display − 32) wide, keys 42px tall (34px under 700px of height). */
+dialog.kb-dialog { width: min(760px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 24px; }
+.kb-dialog h2 { margin-bottom: 12px; padding-bottom: 12px; }
+.kb-help { margin: 0 0 14px; color: var(--muted); font: 14px/1.45 'Segoe UI', system-ui, sans-serif; text-wrap: pretty; }
+.kb-dialog .kb-input {
+  display: block; width: 100%; min-height: 48px; margin: 0; padding: 8px 14px; border: 1px solid var(--border);
+  border-radius: var(--radius-control); background: var(--panel-soft); color: #fff; font: 600 20px/1.3 'Segoe UI', system-ui, sans-serif;
+}
+.kb-dialog .kb-input.is-mono { font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace; letter-spacing: .06em; }
+.kb-dialog .kb-input::placeholder { color: #9dbad0; font-weight: 400; }
+.kb-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.kb-tile {
+  display: grid; place-items: center; height: 60px; border: 2px solid #2f6a86; border-radius: 10px; background: #04192a;
+  color: #fff4d0; box-shadow: inset 0 3px 0 rgb(0 0 0 / .35); font: 700 30px/1 'Cascadia Mono', Consolas, monospace;
+}
+.kb-tile.is-filled { border-color: #6fb3cc; }
+.kb-tile.is-caret { border-color: #ffc453; box-shadow: inset 0 3px 0 rgb(0 0 0 / .35), 0 0 0 3px rgb(255 196 83 / .3); }
+.kb-error { margin: 10px 0 0; color: #ffb3a1; font: 600 14px/1.4 'Segoe UI', system-ui, sans-serif; }
+.kb-error:empty { display: none; }
+.kb-keys { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; margin: 14px 0 8px; }
+.kb-dialog .race-button { min-height: 0; padding: 0 8px; }
+.kb-keys .race-button { height: 42px; font-size: 20px; }
+/* The launcher lettering has capitals only, so lowercase keys (and the case key) switch to the UI face. */
+.kb-keys.is-lower .race-button, .kb-dialog .kb-case { font: 600 19px/1 'Segoe UI', system-ui, sans-serif; }
+.kb-actions { display: grid; grid-template-columns: repeat(var(--kb-cols, 2), minmax(0, 1fr)); gap: 8px; }
+.kb-actions .race-button { height: 44px; font-size: 16px; }
+.kb-actions.is-finish { --kb-cols: 2; margin-top: 12px; }
+.kb-actions .race-button > span { white-space: nowrap; }
+@media (max-height: 699px) {
+  dialog.kb-dialog { padding: 16px 20px 18px; }
+  .kb-help { display: none; }
+  .kb-keys .race-button { height: 34px; }
+  .kb-actions .race-button { height: 38px; }
+  .kb-tile { height: 48px; font-size: 24px; }
+}
+@media (max-width: 560px) {
+  .kb-keys { gap: 5px; }
+  .kb-keys .race-button { font-size: 17px; }
+  .kb-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ------------------------------------------------------------ ROM drop-down */
+.rom-select {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-width: 0; min-height: 60px; margin: 0;
+  padding: 9px 16px 9px 16px; border: 2px solid #091b24; border-radius: 10px; background: #fff; color: #091b24;
+  box-shadow: 0 3px 0 rgb(9 27 36 / .22); text-align: left; font: 15px/1.3 'Segoe UI', system-ui, sans-serif;
+  transition: border-color 150ms var(--nav-ease), background-color 150ms var(--nav-ease), scale 150ms var(--nav-ease);
+}
+.rom-select:hover:not(:disabled) { background: #f4fbfb; border-color: #0b5963; }
+.rom-select:active:not(:disabled) { scale: .98; }
+.rom-select-text { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.rom-select strong { font: 700 16px/1.25 'Segoe UI', system-ui, sans-serif; }
+.rom-select small { overflow: hidden; color: #45595f; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.rom-select-chevron { flex: none; width: 10px; height: 10px; margin-right: 2px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; rotate: 45deg; translate: 0 -3px; }
+.rom-select:disabled { cursor: not-allowed; }
+/* Dark variant for the Online header. */
+.rom-select.is-compact { min-height: 52px; padding: 7px 14px; border: 1px solid #2f6a86; border-radius: 8px; background: #061d2c; color: #fff; box-shadow: none; }
+.rom-select.is-compact:hover:not(:disabled) { background: #0a2a3d; border-color: #5a97b1; }
+.rom-select.is-compact small { color: #b3c8d3; }
+.rom-select.is-compact:is(:disabled, [aria-disabled="true"]) { opacity: .6; }
+.rom-select.is-compact:is(:disabled, [aria-disabled="true"]) .rom-select-chevron { opacity: 0; }
+
+/* ------------------------------------------------------------ ROM browser */
+/* DrawRomBrowser: 72% × 78% of the window, clamped to 680-1040 × 560-760. */
+dialog.rom-browser {
+  width: min(calc(var(--vw) - 32px), clamp(680px, var(--vw) * .72, 1040px)); height: min(calc(var(--vh) - 32px), clamp(560px, var(--vh) * .78, 760px));
+  max-height: none; padding: 22px 24px 20px; overflow: hidden;
+}
+dialog.rom-browser[open] { display: flex; flex-direction: column; }
+.rom-browser h2 { margin-bottom: 10px; padding-bottom: 12px; }
+.rb-sub, .rb-where, .rb-message { font: 14px/1.45 'Segoe UI', system-ui, sans-serif; }
+.rb-sub { margin: 0 0 12px; color: var(--muted); }
+.rb-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 12px; }
+.rb-where { flex: 1 1 260px; min-width: 0; margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.rb-where strong { color: var(--text); font-weight: 600; }
+.rb-nav { display: flex; gap: 8px; }
+.rb-nav .race-button { min-height: 42px; padding: 0 16px; }
+.rb-message { margin: 0 0 10px; color: #ffc453; font-weight: 600; }
+.rb-message:empty { display: none; }
+.rb-list {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 12px;
+  background: #051f3a; scrollbar-width: thin; scrollbar-color: #3c6478 transparent;
+}
+.rb-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 46px; padding: 8px 12px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text); text-align: left; font: 600 15px/1.3 'Segoe UI', system-ui, sans-serif;
+  transition: background-color 120ms var(--nav-ease);
+}
+.rb-row:hover { background: #0b3b63; }
+.rb-row:is(:focus-visible, .nav-focus) { outline: none; background: #0d579e; box-shadow: inset 0 0 0 2px #ffd11f; }
+.rb-row:focus { outline: none; }
+.rb-icon { flex: none; width: 22px; height: 22px; color: #ffc453; }
+.rb-row.is-rom .rb-icon { color: #54c9ad; }
+.rb-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rb-tag { flex: none; padding: 3px 8px; border-radius: 5px; background: rgb(255 255 255 / .08); color: #cfe0e6; font-size: 12px; font-weight: 600; }
+.rb-tag.is-known { background: #104e43; color: #b4f4dd; }
+.rb-row.is-unsupported { color: #b9c6cc; }
+.rb-row.is-unsupported .rb-icon { color: #8a9ba3; }
+.rb-row.is-unsupported .rb-tag:last-child { background: #4a221b; color: #ffb3a1; }
+.rb-empty { margin: 12px; color: var(--muted); font: 14px/1.4 'Segoe UI', system-ui, sans-serif; }
+.rb-actions { margin-top: 16px; }
+@media (max-height: 699px) {
+  dialog.rom-browser { padding: 16px 20px; }
+  .rb-sub { display: none; }
+  .rb-row { min-height: 40px; }
+}
+
+/* ------------------------------------------------------------ button legend */
+/* Only while a controller is in use. It straddles the bottom edge of the content panel, in the
+   window margin, so it never takes space from the page. */
+#controller-legend {
+  position: fixed; inset: auto calc(var(--margin) + 22px) max(4px, calc(var(--margin) / 2 - 13px)) auto; margin: 0;
+  align-items: center; gap: 16px; height: 28px; padding: 0 14px 0 6px; overflow: visible;
+  border: 1px solid rgba(31,158,148,.88); border-radius: 999px; background: #061b26; color: #d8e6ec;
+  box-shadow: 0 4px 14px rgb(0 0 0 / .35); font: 600 12.5px/1 'Segoe UI', system-ui, sans-serif;
+  pointer-events: none;
+}
+#controller-legend:popover-open { display: flex; animation: picker-in 160ms var(--nav-ease); }
+.cl-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cl-glyph {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  background: #2b3d47; color: #fff; font: 700 11px/1 'Segoe UI', system-ui, sans-serif;
+}
+.cl-glyph + .cl-glyph { margin-left: -3px; }
+.cl-glyph.is-shoulder { border-radius: 5px; padding: 0 6px; background: #3a4e58; }
+.cl-glyph.is-xbox.is-a { background: #3aa94a; }
+.cl-glyph.is-xbox.is-b { background: #d9433a; }
+.cl-glyph.is-xbox.is-x { background: #2f73cf; }
+.cl-glyph.is-xbox.is-y { background: #d9a91c; color: #231a02; }
+.cl-glyph.is-ps { font-size: 12px; }
+.cl-glyph.is-ps.is-a { color: #8fb4ff; }
+.cl-glyph.is-ps.is-b { color: #ff8078; }
+.cl-glyph.is-ps.is-x { color: #ff9bd6; }
+.cl-glyph.is-ps.is-y { color: #6ee0b6; }
+.cl-glyph.is-start { border-radius: 5px; font-size: 10.5px; }
+.cl-glyph.is-dpad { position: relative; min-width: 18px; width: 18px; height: 18px; padding: 0; background: none; }
+.cl-glyph.is-dpad i { position: absolute; border-radius: 2px; background: #d8e6ec; }
+.cl-glyph.is-dpad i:first-child { left: 6px; top: 0; width: 6px; height: 18px; }
+.cl-glyph.is-dpad i:last-child { left: 0; top: 6px; width: 18px; height: 6px; }
+/* Hint bubble: why the focused button is unavailable, or the tip its tooltip would give. */
+#nav-hint {
+  position: fixed; inset: auto; margin: 0; max-width: min(380px, calc(var(--vw) - 16px)); padding: 7px 12px;
+  border: 1px solid #3c6478; border-radius: 8px; background: #0b2433; color: #eaf3f5; overflow: visible;
+  box-shadow: 0 8px 22px rgb(0 0 0 / .45); font: 600 13px/1.4 'Segoe UI', system-ui, sans-serif; pointer-events: none;
+}
+#nav-hint:popover-open { display: flex; gap: 8px; align-items: flex-start; animation: picker-in 120ms var(--nav-ease); }
+#nav-hint.is-locked { border-color: #c08a2c; background: #2e2412; color: #ffe4a5; }
+#nav-hint.is-nudged { animation: hint-nudge 260ms var(--nav-ease); }
+@keyframes hint-nudge { 25% { translate: -4px 0; } 50% { translate: 4px 0; } 75% { translate: -2px 0; } }
+.nav-hint-lock { flex: none; position: relative; width: 10px; height: 8px; margin: 6px 1px 0; border-radius: 2px; background: currentColor; }
+.nav-hint-lock::before { content: ''; position: absolute; left: 1.5px; bottom: 6px; width: 7px; height: 6px; border: 1.6px solid currentColor; border-bottom: 0; border-radius: 4px 4px 0 0; box-sizing: border-box; }
+@media (max-width: 650px) { #controller-legend { right: 12px; left: 12px; bottom: 6px; justify-content: center; } }
+/* A dialog holding focus itself (CHOOSE A NEW CONTROL) shows no ring: nothing in it is selected. */
+dialog:focus, dialog.nav-focus { outline: none; }

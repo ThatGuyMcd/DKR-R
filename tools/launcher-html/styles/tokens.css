@@ -1,0 +1,67 @@
+/* Original values: runtime_ui.cpp / ApplyStyle, colors and LoadLauncherFonts. */
+@font-face { font-family: Racing; src: url('../assets/racing_banana.ttf') format('truetype'); font-display: swap; }
+/* ImGui sizes a face by ascent - descent (stbtt_ScaleForPixelHeight), CSS by the em square:
+   Jumpman's 2252-unit extent on a 2048 em needs 90.941%, and its merged digits are 1.42x that. */
+@font-face { font-family: Jumpman; src: url('../assets/jumpman.ttf') format('truetype'); size-adjust: 90.941%; ascent-override: 90.43%; descent-override: 19.531%; line-gap-override: 0%; font-display: swap; }
+@font-face { font-family: RacingDigits; src: url('../assets/jumpman.ttf') format('truetype'); unicode-range: U+0030-0039; size-adjust: 129.136%; font-display: swap; }
+:root {
+  --background: #053373;
+  --panel: #06336e;
+  --panel-soft: #0d579e;
+  --text: #fff6da;
+  --muted: #b0c9cc;
+  --accent: #1ac2a3;
+  --warm: #ffab14;
+  --red: #e82e21;
+  --blue: #0a6ea1;
+  --cream: #fff0c2;
+  --border: #296b70;
+  --sidebar-bg: rgba(6,27,38,.88);
+  --content-bg: rgba(9,22,31,.90);
+  --card-bg: rgba(11,46,64,.96);
+  --radius-panel: 18px;
+  --radius-control: 12px;
+  --body-font: RacingDigits, Racing, sans-serif;
+  --control-font: RacingDigits, 'Lucida Console', monospace;
+  --body-size: 19px;
+  --heading-size: 58px;
+  --item-gap: 13px;
+  --row-gap: 12px;
+  /* The launcher shell scales with the window like the native one (runtime_ui.cpp launcher loop and
+     CalculateSidebarLayout). At 1280 x 800 (Steam Deck) this gives the old fixed values:
+     28px margin, 23px gap, 301px sidebar, 39px content padding, 13px sidebar padding, 40px buttons.
+     Native paddings are measured from the panel edge; CSS pads inside the 2px border, hence the - 2px. */
+  /* Interface size (js/display.js) zooms the page; these are the viewport sizes after it. */
+  --ui-scale: 1;
+  --vw: calc(100vw / var(--ui-scale));
+  --vh: calc(100dvh / var(--ui-scale));
+  --margin: clamp(16px, var(--vw) * .022, 34px);
+  --panel-gap: clamp(14px, var(--vw) * .018, 28px);
+  --sidebar-min: 230px;
+  --sidebar-width: clamp(var(--sidebar-min), var(--vw) * .235, min(340px, var(--vw) * .34));
+  --content-padding: calc(clamp(20px, (var(--vw) - 2 * var(--margin) - var(--sidebar-width) - var(--panel-gap)) * .045, 44px) - 2px);
+  --panel-height: calc(var(--vh) - 2 * var(--margin));
+  /* Sidebar: compact below an 840px-tall panel (Steam Deck), roomier above it (1080p and up). */
+  --nav-edge: clamp(10px, var(--panel-height) * .02, 16px);
+  --nav-padding: calc(var(--nav-edge) - 2px);
+  --nav-gap: 4px;
+  --brand-gap: 10px;
+  --action-section-gap: 10px;
+  --action-gap: 4px;
+  --logo-desired: 112px;
+  --nav-button: 40px;
+  --nav-fixed: calc(2 * var(--nav-edge) + var(--brand-gap) + var(--action-section-gap) + var(--action-gap) + 14 * var(--nav-gap));
+  --logo-size: min(var(--logo-desired), var(--sidebar-width) - 2 * var(--nav-edge), max(64px, var(--panel-height) - var(--nav-fixed) - 11 * 26px));
+  --nav-height: clamp(26px, (var(--panel-height) - var(--nav-fixed) - var(--logo-size)) / 11, var(--nav-button));
+}
+@media (max-width: 979px) { :root { --sidebar-min: 190px; } }
+/* Set by js/display.js from the scaled window height (media queries only see the real one). */
+:root[data-roomy] {
+  --nav-edge: clamp(10px, var(--panel-height) * .02, 24px);
+  --nav-gap: 8px;
+  --brand-gap: 18px;
+  --action-section-gap: 16px;
+  --action-gap: 8px;
+  --logo-desired: 218px;
+  --nav-button: 46px;
+}

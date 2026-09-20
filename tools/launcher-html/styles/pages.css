@@ -1,0 +1,102 @@
+/* Play: ROM pass, launch notices and START. Motion uses the sidebar polish curve. */
+.play-page { --play-ease: cubic-bezier(.2, 0, 0, 1); --mods-ease: var(--play-ease); display: grid; gap: 16px; max-width: 1100px; }
+.play-header h1 { margin-bottom: 4px; }
+.play-header p, .race-pass-body p, .play-notice p, .play-start-hint { font: 14px/1.5 'Segoe UI', system-ui, sans-serif; text-wrap: pretty; }
+.play-page h2, .play-notice strong { text-wrap: balance; }
+.play-header p { margin: 0; color: var(--muted); }
+/* The ROM pass: status, the file it points at, and the actions for it. */
+.race-pass { padding: 20px 24px; background: var(--cream); border-color: var(--red); color: #091b24; }
+.race-pass.ready { border-color: var(--accent); }
+.race-pass-status { display: flex; align-items: flex-start; gap: 20px; }
+.race-pass-body { flex: 1; min-width: 0; padding-top: 6px; }
+/* Darker than the brand red/green so the status stays readable on cream (4.5:1+). */
+.race-pass-status h2 { color: #c0261b; margin-bottom: 8px; }
+.race-pass.ready h2 { color: #037a47; }
+.traffic-lights { width: 42px; height: 112px; flex: none; border-radius: 21px; background: #0c1922; display: grid; justify-items: center; align-content: start; gap: 14px; padding-top: 15px; }
+.traffic-lights i { width: 18px; height: 18px; border-radius: 50%; background: #4e5b5b; }
+.traffic-lights i:first-child { background: #ec3627; }
+.traffic-lights i:nth-child(2) { background: #ffae18; }
+.ready .traffic-lights i { background: #4e5b5b; }
+.ready .traffic-lights i:last-child { background: #20da81; }
+.race-pass-body .rom-file { margin: 0; font-size: 15px; font-weight: 600; color: #091b24; overflow-wrap: anywhere; }
+.race-pass-body .rom-meta { margin: 2px 0 0; color: #45595f; overflow-wrap: anywhere; }
+/* The ROM list: the drop-down sits where the file name used to, so switching is one press away. */
+.rom-pick { display: grid; gap: 6px; max-width: 560px; margin: 4px 0 8px; }
+.rom-pick-label { color: #3f5359; font: 700 11px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.rom-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-top: 16px; }
+.rom-actions .race-button { min-width: 240px; height: 46px; color: var(--text); }
+.rom-actions .race-button > span { white-space: nowrap; }
+.play-text-button { min-height: 44px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #0b5963; font: 600 14px/1 'Segoe UI', system-ui, sans-serif; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.play-text-button:hover { background: #091b2410; }
+.play-text-button.is-destructive { color: #8a2a17; }
+.race-pass :is(:focus-visible, .nav-focus) { outline-color: #091b24; }
+/* Anything that changes what START does sits directly above it.
+   Concentric corners: 6px button radius + 12px inset = the 18px panel radius. */
+.play-notices { display: contents; }
+.play-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; padding: 13px 12px 13px 20px; border-radius: var(--radius-panel); background: #092e42; box-shadow: inset 3px 0 #ffc453; color: #c7dce6; }
+.play-notice > div { flex: 1 1 320px; min-width: 0; }
+.play-notice strong { display: block; color: #ffe4a5; font: 600 15px/1.4 'Segoe UI', system-ui, sans-serif; }
+.play-notice p { margin: 2px 0 0; }
+.play-notice.is-warning { background: #42341d; box-shadow: inset 3px 0 #ffab14; color: #ffdc9a; }
+.play-notice.is-warning strong { color: #ffeccb; }
+/* Notice actions sit on two different tints: a translucent fill and a white ring adapt to both. */
+.play-notice .mods-button { border-radius: 6px; border-color: transparent; background: rgb(255 255 255 / .06); box-shadow: 0 0 0 1px rgb(255 255 255 / .12); }
+.play-notice .mods-button:hover:not(:disabled) { border-color: transparent; background: rgb(255 255 255 / .1); box-shadow: 0 0 0 1px rgb(255 255 255 / .2); }
+.start-button {
+  min-height: 68px; box-shadow: 0 4px 0 #0b6a58, inset 0 1px 0 rgb(255 255 255 / .2);
+  transition-property: background-color, border-color, color, box-shadow, translate;
+  transition-duration: 200ms; transition-timing-function: var(--play-ease);
+}
+/* Too wide for scale-on-press (0.96 pulls each side in ~20px): START presses down into its base instead. */
+.start-button:active:not(:disabled) { translate: 0 2px; box-shadow: 0 2px 0 #0b6a58, inset 0 1px 0 rgb(255 255 255 / .2); transition-duration: 80ms; }
+/* Disabled START reads as unavailable rather than as a faded primary. */
+.start-button:is(:disabled, [aria-disabled="true"]) { opacity: 1; background-color: #1c3440; border-color: transparent; color: #8fa6ad; box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
+.play-start-hint { margin: -8px 0 0; color: var(--muted); text-align: center; }
+
+/* Race buttons get the sidebar's polish: depth on the label, soft checker fade-in, press feedback. */
+.play-page .race-button > span { text-shadow: 0 2px 0 rgb(0 0 0 / .22); }
+.play-page .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled)::before { transition: opacity 120ms var(--play-ease); }
+.play-page .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled) > span::before { animation: sidebar-plate-in 120ms var(--play-ease); }
+.rom-actions .race-button, .play-text-button { transition-property: scale, border-color, background-color; transition-duration: 150ms; transition-timing-function: var(--play-ease); }
+.rom-actions .race-button:active:not(:disabled), .play-text-button:active { scale: .96; }
+/* Racing's periods almost touch; spread them and hand back the trailing space so the label stays centred. */
+.play-ellipsis { margin-left: .04em; letter-spacing: .12em; margin-right: -.12em; }
+
+/* A ROM just loaded: the lights run red, amber, green once and the pass border turns with the green. */
+.race-pass.is-arriving { animation: pass-arrive 200ms var(--play-ease) 360ms backwards; }
+.is-arriving .traffic-lights i:nth-child(1) { animation: lamp-red 120ms ease-in 120ms backwards; }
+.is-arriving .traffic-lights i:nth-child(2) { animation: lamp-amber 120ms ease-in 240ms backwards; }
+.is-arriving .traffic-lights i:nth-child(3) { animation: lamp-green 200ms var(--play-ease) 360ms backwards; }
+@keyframes pass-arrive { from { border-color: var(--red); } }
+@keyframes lamp-red { from { background-color: #ec3627; } }
+@keyframes lamp-amber { from { background-color: #ffae18; } }
+@keyframes lamp-green { from { background-color: #4e5b5b; scale: .6; } }
+/* Notices that appear after a change stagger in. A dismissed one fades up first, then its row closes
+   so START glides up without the text being squashed on the way. */
+.play-page .is-entering { animation: play-enter 300ms var(--play-ease) backwards; animation-delay: calc(var(--enter-i, 0) * 100ms); }
+@keyframes play-enter { from { opacity: 0; translate: 0 12px; filter: blur(4px); } }
+.play-notice.is-leaving {
+  overflow: hidden; padding-block: 0; margin-bottom: -16px; opacity: 0; translate: 0 -8px; filter: blur(4px); pointer-events: none;
+  transition-property: height, padding, margin, opacity, translate, filter;
+  transition-duration: 200ms, 200ms, 200ms, 150ms, 150ms, 150ms;
+  transition-delay: 100ms, 100ms, 100ms, 0ms, 0ms, 0ms;
+  transition-timing-function: var(--play-ease), var(--play-ease), var(--play-ease), ease-in, ease-in, ease-in;
+}
+.support-card { min-height: 430px; }
+.support-card p { margin-bottom: 13px; }
+.settings { width: 92%; max-width: 920px; }
+.binding-row, .credit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+.binding-row > * { flex: 1; min-width: 0; }
+.credit-row > .race-button { width: 190px; flex: none; }
+.controller-preview { min-height: 294px; padding: 14px 16px; }
+/* CHOOSE A NEW CONTROL: the bar drains while it waits; empty means cancelled. */
+.capture-timer { font: 15px/1.5 'Segoe UI', system-ui, sans-serif; color: var(--muted); }
+.capture-bar { display: block; height: 6px; margin-top: 4px; overflow: hidden; border-radius: 3px; background: rgb(255 255 255 / .12); }
+.capture-bar i { display: block; height: 100%; background: var(--warm); transform-origin: left; animation: capture-drain var(--capture-seconds, 5s) linear forwards; }
+@keyframes capture-drain { to { transform: scaleX(0); } }
+.interface-note { margin: 0; font: 14px/1.45 'Segoe UI', system-ui, sans-serif; }
+.stick-preview { display: flex; gap: 20px; margin: 22px 0; }
+.stick { display: grid; place-items: center; width: 70px; height: 70px; border: 2px solid var(--border); background: #071e2c; border-radius: 50%; }
+.stick::after { content: ''; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+.content { container: content / inline-size; }
+@media (max-width: 650px) { .settings { width: 100%; } .race-pass { padding: 18px 16px; } .race-pass-status { gap: 14px; } .rom-actions .race-button { flex: 1 1 100%; min-width: 0; } .rom-actions .play-text-button { margin-left: -8px; } .play-notice .mods-button { min-height: 44px; } .credit-row { flex-wrap: wrap; } }

@@ -1,0 +1,170 @@
+/* Sound (UX study): Master leads, the mix sits under it; the EQ presets and the 3-4 player switch take
+   the second column when there is room. Segoe body text and the sidebar polish curve, like Play/Mods. */
+.sound-page {
+  --snd-ease: cubic-bezier(.2, 0, 0, 1);
+  --snd-fill: var(--warm);
+  --snd-thumb: var(--warm);
+  --snd-track: #245a70;
+  --snd-on: #ffc453;
+  --snd-focus: #ffd11f;
+  display: grid; gap: 16px; max-width: 1240px;
+}
+.snd-header h1 { margin-bottom: 4px; }
+.snd-header p { margin: 0; color: var(--muted); font: 14px/1.5 'Segoe UI', system-ui, sans-serif; text-wrap: pretty; }
+.snd-layout, .snd-side { display: grid; gap: 16px; align-items: start; }
+/* Two columns once both fit a full-width slider (1080p and up); the Deck keeps one list. */
+@container content (min-width: 1060px) { .snd-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Cards: title and caption on the left, the card's own action on the right. */
+.snd-card { display: grid; gap: 10px; padding: 20px 22px 18px; transition: border-color 150ms var(--snd-ease); }
+/* On a pad the card holding focus is lit, so LB / RB read as moving between these three. */
+html[data-input="gamepad"] .snd-card:focus-within { border-color: rgb(255 209 31 / .45); }
+.snd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 16px; margin-bottom: 4px; }
+.snd-head-text { min-width: 0; }
+.snd-head h2 { margin: 0 0 6px; font: 26px/1.05 var(--body-font); color: var(--text); letter-spacing: .02em; text-wrap: balance; }
+.snd-caption { margin: 0; color: var(--muted); font: 14px/1.45 'Segoe UI', system-ui, sans-serif; text-wrap: pretty; }
+.snd-link {
+  flex: none; min-height: 44px; padding: 0 14px; border: 1px solid rgb(255 255 255 / .16); border-radius: 10px;
+  background: rgb(255 255 255 / .04); color: #d3e7ee; font: 600 14px/1 'Segoe UI', system-ui, sans-serif;
+  transition-property: background-color, border-color, color, scale; transition-duration: 150ms; transition-timing-function: var(--snd-ease);
+}
+.snd-link:hover:not(:disabled) { background: rgb(255 255 255 / .09); border-color: rgb(255 255 255 / .28); color: #fff; }
+.snd-link:active:not(:disabled) { scale: .96; }
+.snd-link:is(:disabled, [aria-disabled="true"]) { opacity: .45; cursor: default; }
+
+/* ------------------------------------------------------------ rows */
+/* Mute | label | slider | value. The row, not the thin track, carries the focus ring. */
+.snd-row {
+  display: grid; grid-template-columns: 44px minmax(6.5em, 9.5em) minmax(0, 1fr) 4.5em; align-items: center; gap: 0 14px;
+  min-height: 52px; font-size: 16px; padding: 4px 12px 4px 4px; border-radius: 12px; transition: background-color 150ms var(--snd-ease);
+}
+.snd-row.is-band { grid-template-columns: minmax(4em, 6em) minmax(0, 1fr) 4.5em; padding-left: 12px; }
+.snd-row:hover { background: rgb(255 255 255 / .035); }
+.snd-row:has(.snd-range:is(:focus-visible, .nav-focus)) { background: rgb(255 255 255 / .06); outline: 3px solid var(--snd-focus); }
+.sound-page .snd-range:is(:focus-visible, .nav-focus), .sound-page .snd-switch:is(:focus-visible, .nav-focus) { outline: none; }
+.snd-label { font: 600 16px/1.2 'Segoe UI', system-ui, sans-serif; color: var(--text); cursor: pointer; }
+.snd-value { justify-self: end; font: 20px/1 var(--body-font); font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+.snd-value small { margin-left: 2px; font: 600 13px/1 'Segoe UI', system-ui, sans-serif; color: var(--muted); }
+
+/* Master: the one most people came for, so it is the biggest thing on the page. */
+.snd-row.is-master { min-height: 62px; margin-inline: -4px; padding-inline: 8px 16px; background: rgb(0 0 0 / .2); }
+.snd-row.is-master:hover { background: rgb(0 0 0 / .14); }
+.snd-row.is-master:has(.snd-range:is(:focus-visible, .nav-focus)) { background: rgb(255 255 255 / .06); }
+.snd-row.is-master .snd-label { font-size: 19px; font-weight: 700; }
+.snd-row.is-master .snd-value { font-size: 25px; }
+
+/* The mix: a small label and hairline, with the "nothing plays" warning riding on it. */
+.snd-mix-label { display: flex; align-items: center; gap: 12px; margin: 8px 0 -2px; padding-inline: 4px; min-height: 20px; }
+.snd-mix-label > span { font: 700 11px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: #8fb3bd; }
+.snd-mix-label::after { content: ''; order: 1; flex: 1; height: 1px; background: rgb(255 255 255 / .1); }
+.snd-note { order: 2; margin: 0; color: #ffd690; font: 600 13px/1.3 'Segoe UI', system-ui, sans-serif; }
+.snd-mix { display: grid; gap: 2px; }
+
+/* ------------------------------------------------------------ mute */
+.snd-mute {
+  display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 10px;
+  background: transparent; color: #a9c8d1;
+  transition-property: background-color, color, scale; transition-duration: 150ms; transition-timing-function: var(--snd-ease);
+}
+.snd-mute svg { width: 24px; height: 24px; }
+.snd-mute:hover { background: rgb(255 255 255 / .08); color: #fff; }
+.snd-mute:active { scale: .9; }
+/* The speaker shows the level, like the system tray: two waves, one, none, or crossed out. */
+.snd-mute .snd-cross,
+.snd-mute:is([data-level="0"], [data-level="muted"]) :is(.snd-wave-1, .snd-wave-2),
+.snd-mute[data-level="1"] .snd-wave-2 { display: none; }
+.snd-mute[data-level="muted"] .snd-cross { display: inline; }
+.snd-mute[data-level="muted"] { color: #ffa396; background: rgb(255 110 90 / .14); }
+.snd-mute[data-level="muted"]:hover { background: rgb(255 110 90 / .22); }
+
+/* Muted keeps the level on the track, greyed; the value says why it is silent. */
+.snd-row.is-muted { --snd-fill: #5d7682; --snd-thumb: #7d949d; }
+.snd-row.is-muted .snd-value { font: 700 12px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #ffa396; }
+.snd-row.is-silenced :is(.snd-label, .snd-value, .snd-range) { opacity: .5; }
+
+/* ------------------------------------------------------------ sliders */
+/* 44px of grab area around a 10px groove; the fill shows the level at a glance. */
+.snd-range { --fill: 0%; appearance: none; display: block; width: 100%; height: 44px; margin: 0; background: transparent; cursor: pointer; }
+.snd-range::-webkit-slider-runnable-track {
+  height: 10px; border-radius: 5px;
+  background: linear-gradient(to right, var(--snd-fill) var(--fill), var(--snd-track) var(--fill));
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / .35);
+}
+.snd-range::-webkit-slider-thumb {
+  appearance: none; width: 26px; height: 26px; margin-top: -8px; border-radius: 50%;
+  background: var(--text); border: 5px solid var(--snd-thumb); box-shadow: 0 2px 6px rgb(0 0 0 / .45);
+  transition: scale 150ms var(--snd-ease);
+}
+.snd-range:active::-webkit-slider-thumb, .snd-range:is(:focus-visible, .nav-focus)::-webkit-slider-thumb { scale: 1.12; }
+.snd-range::-moz-range-track { height: 10px; border-radius: 5px; background: var(--snd-track); }
+.snd-range::-moz-range-progress { height: 10px; border-radius: 5px; background: var(--snd-fill); }
+.snd-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--text); border: 5px solid var(--snd-thumb); box-shadow: 0 2px 6px rgb(0 0 0 / .45); }
+.snd-row.is-master .snd-range::-webkit-slider-runnable-track { height: 14px; border-radius: 7px; }
+.snd-row.is-master .snd-range::-webkit-slider-thumb { width: 30px; height: 30px; margin-top: -8px; }
+.snd-row.is-master .snd-range::-moz-range-track, .snd-row.is-master .snd-range::-moz-range-progress { height: 14px; border-radius: 7px; }
+/* EQ bands are boosts and cuts: the fill grows out of a 0 dB centre mark. */
+.snd-range.is-bipolar::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(to right, transparent calc(50% - 1px), #d8ebf1 calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(to right, var(--snd-track) var(--lo), var(--snd-fill) var(--lo) var(--hi), var(--snd-track) var(--hi));
+}
+.snd-range.is-bipolar::-moz-range-track {
+  background:
+    linear-gradient(to right, transparent calc(50% - 1px), #d8ebf1 calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    linear-gradient(to right, var(--snd-track) var(--lo), var(--snd-fill) var(--lo) var(--hi), var(--snd-track) var(--hi));
+}
+.snd-range.is-bipolar::-moz-range-progress { background: transparent; }
+
+/* ------------------------------------------------------------ EQ presets */
+/* The MODS / HACKS painted-sign buttons (mods.css .mods-section-nav), as Online's section tabs use
+   them: the preset in use is the red sign. No chevron, since these pick a sound, not open a section.
+   Natural widths, left-aligned, wrapping like those bars; narrow panels stretch them to fill rows. */
+.snd-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.snd-chip {
+  flex: 0 1 auto; display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 10px 12px;
+  border: 2px solid #2987aa; border-radius: 8px 16px 8px 8px; background: #075478; color: #fff2c8;
+  font: 18px/1.4 var(--body-font); letter-spacing: .015em; white-space: nowrap;
+  text-shadow: 0 2px 0 #031623; box-shadow: 0 3px 0 #03121c, inset 0 2px 0 #ffffff14;
+  transition-property: background-color, border-color, color, scale; transition-duration: 150ms; transition-timing-function: var(--snd-ease);
+}
+.snd-chip:hover { background: #08698f; border-color: #ffca56; color: #fff7dc; }
+.snd-chip:active { scale: .96; }
+.snd-chip[aria-pressed="true"]:is(*, :hover) { background: #aa3322; border-color: #ffc454; color: #fff5d5; }
+.snd-preset-about { min-height: 1.45em; }
+.snd-preset-about strong { color: var(--text); font-weight: 600; }
+.snd-bands { display: grid; gap: 2px; margin: 4px -12px 0; }
+
+/* ------------------------------------------------------------ switch */
+/* The whole row is the target; the switch sits on the right like system settings. */
+.snd-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px;
+  margin: -4px -12px -6px; padding: 10px 12px; border-radius: 12px; cursor: pointer; transition: background-color 150ms var(--snd-ease);
+}
+.snd-toggle:hover { background: rgb(255 255 255 / .035); }
+.snd-toggle:has(.snd-switch:is(:focus-visible, .nav-focus)) { background: rgb(255 255 255 / .06); outline: 3px solid var(--snd-focus); }
+.snd-toggle-text { display: grid; gap: 4px; min-width: 0; }
+.snd-toggle-text strong { font: 600 16px/1.3 'Segoe UI', system-ui, sans-serif; color: var(--text); }
+.snd-switch {
+  appearance: none; position: relative; flex: none; width: 58px; height: 34px; margin: 0; border-radius: 17px;
+  border: 1px solid #6f97a6; background: #123e58; cursor: pointer;
+  transition-property: background-color, border-color; transition-duration: 150ms; transition-timing-function: var(--snd-ease);
+}
+.snd-switch::after {
+  content: ''; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%;
+  background: #dbe7ed; box-shadow: 0 1px 3px rgb(0 0 0 / .4); transition: translate 150ms var(--snd-ease), background-color 150ms var(--snd-ease);
+}
+.snd-switch:checked { background: var(--snd-on); border-color: var(--snd-on); }
+.snd-switch:checked::after { translate: 24px 0; background: #513815; }
+
+/* Narrow panels: label and value on top, the slider gets the full width underneath. */
+@container content (max-width: 600px) {
+  .snd-row { grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-areas: "mute label value" "slider slider slider"; padding-bottom: 6px; }
+  .snd-row.is-band { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label value" "slider slider"; padding-top: 8px; }
+  .snd-row > .snd-mute { grid-area: mute; }
+  .snd-row > .snd-label { grid-area: label; }
+  .snd-row > .snd-value { grid-area: value; }
+  .snd-row > .snd-range { grid-area: slider; }
+  .snd-head { flex-wrap: wrap; }
+  .snd-chip { flex: 1 1 110px; padding-inline: 10px; }
+  .snd-card { padding-inline: 16px; }
+}

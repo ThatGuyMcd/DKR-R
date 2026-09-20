@@ -1,0 +1,59 @@
+* { box-sizing: border-box; }
+html { zoom: var(--ui-scale); }
+html, body { margin: 0; width: 100%; height: 100%; }
+body { background: var(--background); color: var(--text); font: var(--body-size)/1 var(--body-font); -webkit-font-smoothing: antialiased; }
+.backdrop { position: fixed; inset: 0; overflow: hidden; z-index: -1; }
+.cloud-strip { display: flex; height: calc(var(--vh) * 1.03); width: max-content; position: absolute; top: calc(var(--vh) * -.015); animation: clouds 220s linear infinite; }
+.cloud-strip img { height: 100%; width: auto; flex: none; }
+.cloud-strip img:nth-child(even) { transform: scaleX(-1); }
+@keyframes clouds { to { transform: translateX(-50%); } }
+.launcher { display: grid; grid-template-columns: var(--sidebar-width) minmax(320px,1fr); gap: var(--panel-gap); height: var(--vh); padding: var(--margin); }
+.sidebar, .content { border: 2px solid; border-radius: var(--radius-panel); min-width: 0; }
+.sidebar { background: var(--sidebar-bg); border-color: rgba(255,171,20,.92); padding: var(--nav-padding); overflow-y: auto; scrollbar-width: none; }
+.content { background: var(--content-bg); border-color: rgba(31,158,148,.88); padding: var(--content-padding); padding-bottom: 54px; overflow-y: auto; overflow-x: hidden; scrollbar-color: #586470 #101c25; scrollbar-width: thin; }
+.brand { height: var(--logo-size); width: var(--logo-size); margin: 0 auto calc(var(--brand-gap) + 2 * var(--nav-gap)); perspective: 800px; }
+.coin { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; animation: coin-spin 4.8s linear infinite; }
+.coin img { position: absolute; width: 100%; height: 100%; object-fit: contain; backface-visibility: hidden; }
+.coin-back { transform: rotateY(180deg); }
+@keyframes coin-spin { to { transform: rotateY(360deg); } }
+#navigation { display: grid; gap: var(--nav-gap); }
+.sidebar .race-button { width: 100%; height: var(--nav-height); min-height: 26px; padding: 0 6px; border-color: rgba(255,171,20,.92); }
+/* Sidebar polish: the checker hover stays; it now fades in, and buttons get depth and press feedback. */
+.sidebar { --sidebar-ease: cubic-bezier(.2, 0, 0, 1); }
+.sidebar .race-button {
+  box-shadow: 0 2px 0 rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .14);
+  transition-property: transform, border-color; transition-duration: 150ms; transition-timing-function: var(--sidebar-ease);
+}
+.sidebar .race-button:active:not(:disabled) { transform: scale(.96); }
+.sidebar .race-button > span { text-shadow: 0 2px 0 rgb(0 0 0 / .22); text-wrap: balance; }
+/* Soft in, instant out: the transition only lives on the hover state. */
+.sidebar .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled)::before { transition: opacity 120ms var(--sidebar-ease); }
+.sidebar .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled) > span::before { animation: sidebar-plate-in 120ms var(--sidebar-ease); }
+@keyframes sidebar-plate-in { from { opacity: 0; scale: .9; } }
+/* Hairline between page navigation and the restart / exit actions. */
+.sidebar-actions { position: relative; }
+.sidebar-actions::before {
+  content: ''; position: absolute; left: 6px; right: 6px; height: 1px;
+  top: calc((var(--action-section-gap) + 2 * var(--nav-gap)) / -2 - 1px);
+  background: rgba(255,171,20,.35);
+}
+.sidebar-actions { display: grid; gap: calc(var(--action-gap) + 2 * var(--nav-gap)); margin-top: calc(var(--action-section-gap) + 2 * var(--nav-gap)); }
+.stack { display: grid; gap: var(--item-gap); }
+.row { display: flex; align-items: center; gap: var(--row-gap); flex-wrap: wrap; }
+.row > * { flex: 1; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--row-gap); }
+.spacer { height: var(--space, 18px); }
+[hidden] { display: none !important; }
+@media (max-width: 650px) {
+  .launcher { display: flex; flex-direction: column; height: auto; min-height: var(--vh); padding: 12px; gap: 12px; }
+  .sidebar { padding: 12px; overflow: visible; }
+  .brand { height: 80px; width: 80px; margin-bottom: 12px; }
+  #navigation { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+  .sidebar .race-button { height: auto; min-height: 44px; font-size: 14px; }
+  .sidebar-actions { display: flex; margin-top: 10px; gap: 8px; }
+  .sidebar-actions::before { top: -6px; }
+  .content { padding: 22px 18px 40px; overflow: visible; }
+  .grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+html[data-motion="off"] *, html[data-motion="off"] *::before { animation: none !important; transition: none !important; }
