@@ -127,6 +127,7 @@ struct PlayPageState {
     bool was_ready = false;
     double arrived_at = -10.0;             // a ROM was just loaded (PaddockClock)
     std::filesystem::path forgotten;       // FORGET can be undone while the page stays open
+    std::string catalog_error;
     bool notices_known = false;            // nothing animates on page load
     std::set<std::string> shown;
     std::map<std::string, double> entered;
@@ -385,6 +386,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     if (entered) {
         state.context = ImGui::GetCurrentContext();
         state.forgotten.clear();
+        state.catalog_error.clear();
         state.notices_known = false;
         state.shown.clear();
         state.entered.clear();
@@ -400,6 +402,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         state.focus = PlayPageState::Focus::Start;
     }
     state.was_ready = play.rom_ready;
+
+    if (state.catalog_error != play.rom_status) state.catalog_error.clear();
 
     RefreshModBrowserCards(g_legacy_imports.snapshot());
     const bool imports_busy = g_legacy_imports.snapshot().busy;
@@ -453,8 +457,13 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         const float actions_height = actions_row ? 46.0F : 46.0F + 8.0F + 44.0F;
         const float file_height = PaddockTextHeight(file_type, file, body_width);
         const float meta_height = PaddockTextHeight(meta_type, meta, body_width);
+        const float catalog_height = (g_font_controls != nullptr
+            ? g_font_controls->FontSize : ImGui::GetFontSize()) + 20.0F;
+        const float catalog_error_height = state.catalog_error.empty() ? 0.0F
+            : 8.0F + PaddockTextHeight(meta_type, state.catalog_error, body_width);
         const float body_height = 6.0F + heading.line + 8.0F + file_height + 2.0F +
-                                  meta_height + 16.0F + actions_height;
+                                  meta_height + 16.0F + meta_type.line + 8.0F +
+                                  catalog_height + catalog_error_height + 16.0F + actions_height;
         const float height = 2.0F + 20.0F + std::max(112.0F, body_height) + 20.0F + 2.0F;
         const ImVec2 end{at.x + width, at.y + height};
 
@@ -490,6 +499,57 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         meta_style.colour = PaddockCol(meta_colour);
         PaddockTextAt(draw, meta_type, {body_x, y}, body_width, meta, meta_style);
         y += meta_height + 16.0F;
+
+        constexpr std::string_view catalog_label = "Installed ROM";
+        PaddockDrawRun(draw, meta_type, {body_x, y}, PaddockCol(0x091B24),
+                       catalog_label.data(), catalog_label.data() + catalog_label.size());
+        y += meta_type.line + 8.0F;
+        ImGui::SetCursorScreenPos({body_x, y});
+        const std::string selected_key = RomPathKey(play.selected_rom);
+        const auto selected_entry = std::find_if(play.rom_catalog.begin(), play.rom_catalog.end(),
+            [&](const RomCatalogEntry& entry) { return entry.key == selected_key; });
+        const char* preview = play.rom_catalog.empty() ? "No imported ROMs"
+            : (selected_entry != play.rom_catalog.end() ? selected_entry->label.c_str()
+                                                       : "Select Game Pak");
+        std::optional<RomCatalogEntry> requested_rom;
+        ImGui::BeginDisabled(play.rom_catalog.empty() || lobby || launch_modal || imports_busy);
+        ImGui::SetNextItemWidth(body_width);
+        {
+            const ControlFontScope scope(true);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {16.0F, 10.0F});
+            if (ImGui::BeginCombo("##rom-catalog", preview, ImGuiComboFlags_HeightLarge)) {
+                for (std::size_t index = 0; index < play.rom_catalog.size(); ++index) {
+                    const auto& entry = play.rom_catalog[index];
+                    const bool selected = entry.key == selected_key;
+                    ImGui::PushID(static_cast<int>(index));
+                    if (ImGui::Selectable(entry.label.c_str(), selected)) requested_rom = entry;
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", PathUtf8(entry.path).c_str());
+                    if (selected) ImGui::SetItemDefaultFocus();
+                    ImGui::PopID();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopStyleVar();
+        }
+        ImGui::EndDisabled();
+        y += catalog_height;
+        if (!state.catalog_error.empty()) {
+            PaddockTextStyle error_style;
+            error_style.colour = PaddockCol(0x8A2A17);
+            PaddockTextAt(draw, meta_type, {body_x, y + 8.0F}, body_width,
+                          state.catalog_error, error_style);
+            y += catalog_error_height;
+        }
+        // Validation can remove a missing entry: apply only after iterating the catalog.
+        if (requested_rom) {
+            if (SelectCatalogRom(*requested_rom, play.selected_rom, play.rom_catalog, play.rom_status)) {
+                play.rom_ready = true;
+                state.catalog_error.clear();
+            } else {
+                state.catalog_error = play.rom_status;
+            }
+        }
+        y += 16.0F;
 
         // Focus rings on the cream pass are dark, like the study's outline.
         ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0x091B24));

@@ -1,4 +1,8 @@
-# DKR-R 1.0.5 Beta 10
+# DKR-R 1.0.5 Beta 11
+
+This build packages main revision 8a8e927, including the merged Track Lab and
+Blender track-editor changes, for playtesting. The Beta 10 fixes described below
+are retained. New editor and gameplay behavior still requires visual acceptance.
 
 This playtest build repairs failed model-load cache accounting in US v1.0,
 safely rejects null model instances, and gives offline custom-mod sessions

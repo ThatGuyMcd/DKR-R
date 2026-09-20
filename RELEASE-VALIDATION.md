@@ -1,9 +1,9 @@
 # Release validation
 
-Current development target: **v1.0.5 Beta 10**. See
+Current development target: **v1.0.5 Beta 11** (main revision `8a8e927`). See
 [Legacy mod compatibility coverage](docs/LEGACY-MOD-COMPATIBILITY-BETA7.md) and
 [Offline mod usage and limits](docs/LEGACY-MODS-BETA.md).
-Beta 10 build/package results are recorded with its artifacts; the historical
+Beta 11 build/package results are recorded with its artifacts; the historical
 results below do not qualify that build.
 
 See [Beta 10 regression investigation and qualification](docs/BETA10-REGRESSION-VALIDATION.md)
