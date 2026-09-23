@@ -212,6 +212,16 @@ PROP_SURFACE = "dkr_surface"
 #: texture's render mode and the faces' flags.
 PROP_LOOK = "dkr_look"
 
+#: How opaque a material's faces are drawn, 0 to 1, whatever their texture's
+#: alpha says: ``Material.dkr_opacity``, registered in :mod:`..props`. Below 1
+#: the export fades the faces through the loader's vertex alpha; see
+#: :mod:`..transparency`.
+PROP_OPACITY = "dkr_opacity"
+
+#: The math node the preview scales the picture's alpha with, found by name so
+#: a slider being dragged changes one value rather than rebuilding the tree.
+OPACITY_NODE = "DKR Opacity"
+
 #: What each surface *does*, for the picker's tooltips. The names and values
 #: come from the catalogue, which generates them from the decomp's
 #: ``include/enums.h``; this is only the behaviour measured alongside them, and
@@ -441,10 +451,79 @@ def _show_image(material, category, image):
             node.image = image
 
 
+def opacity_of(material) -> float:
+    """A material's opacity, 0 to 1; 1 for one that never had it set."""
+    if material is None:
+        return 1.0
+    value = getattr(material, PROP_OPACITY, None)
+    if value is None:
+        value = material.get(PROP_OPACITY)
+    try:
+        return max(0.0, min(1.0, float(1.0 if value is None else value)))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def opacities(obj) -> dict:
+    """``{(texture table index, kind): alpha byte}`` for every faded material.
+
+    Keyed as the materials are - one per kind and table entry - with an
+    untextured material's ``-1`` standing for the file's ``NO_TEXTURE``. Walls
+    are not drawn, so there is nothing to fade on them.
+    """
+    found = {}
+    for slot in obj.material_slots:
+        material = slot.material
+        if material is None or PROP_TEXTURE_INDEX not in material:
+            continue
+        category = material.get(PROP_CATEGORY)
+        if category == INVISIBLE_WALLS:
+            continue
+        alpha = looks.opacity_byte(opacity_of(material))
+        if alpha < 255:
+            found[(int(material[PROP_TEXTURE_INDEX]), category)] = alpha
+    return found
+
+
+def batch_alpha(table):
+    """``alpha_for`` for :func:`..transparency.apply_opacity`, from :func:`opacities`."""
+    def alpha_for(batch):
+        index = int(batch.texture_index)
+        if index == level_model.NO_TEXTURE:
+            index = -1
+        return table.get((index, category_of(int(batch.flags))))
+    return alpha_for
+
+
+def show_opacity(material) -> None:
+    """Make the viewport follow a material's opacity. Appearance only.
+
+    While the picture is already being faded only the one value changes, so a
+    slider dragged across its range does not rebuild the tree on every step.
+    """
+    if material is None or material.get(PROP_CATEGORY) == INVISIBLE_WALLS:
+        return
+    opacity = opacity_of(material)
+    tree = getattr(material, "node_tree", None)
+    node = tree.nodes.get(OPACITY_NODE) if tree else None
+    if node is not None and opacity < 1.0:
+        node.inputs[1].default_value = opacity
+        return
+    image = next((node.image for node in tree.nodes
+                  if node.type == "TEX_IMAGE" and node.image is not None),
+                 None) if tree else None
+    try:
+        _build_material_nodes(material, material.get(PROP_CATEGORY), image,
+                              material.get(PROP_LOOK))
+    except Exception:  # noqa: BLE001 - appearance only
+        traceback.print_exc()
+
+
 def _build_material_nodes(material, category, image, look=None):
     tree, surface = reset_node_tree(material)
     if tree is None:
         return
+    opacity = opacity_of(material)
 
     if image is not None:
         # Level geometry is lit by its baked vertex colours, not by lamps, so
@@ -456,11 +535,17 @@ def _build_material_nodes(material, category, image, look=None):
         shader = tree.nodes.new("ShaderNodeEmission")
         shader.location = (-320, 60)
         tree.links.new(texture.outputs["Color"], shader.inputs["Color"])
+        factor = None
         if look in (looks.CUTOUT, looks.BLEND):
-            _see_through(material, tree, texture, shader, surface, look)
-        else:
-            _set_render_method(material, None)
-            tree.links.new(shader.outputs[0], surface)
+            factor = texture.outputs["Alpha"]
+            if look == looks.CUTOUT:
+                cut = tree.nodes.new("ShaderNodeMath")
+                cut.operation = "GREATER_THAN"
+                cut.inputs[1].default_value = (looks.HARD_THRESHOLD - 0.5) / 255.0
+                cut.location = (-460, -140)
+                tree.links.new(factor, cut.inputs[0])
+                factor = cut.outputs[0]
+        _see_through(material, tree, shader, surface, factor, opacity, look)
         return
 
     shader = tree.nodes.new("ShaderNodeBsdfDiffuse")
@@ -468,37 +553,47 @@ def _build_material_nodes(material, category, image, look=None):
     colour_input = shader.inputs.get("Color")
     if colour_input is not None:
         colour_input.default_value = CATEGORY_TINT[category]
-    tree.links.new(shader.outputs[0], surface)
 
     if category == INVISIBLE_WALLS or colour_input is None:
         # A wall has no look of its own - it is not drawn at all - so a flat
         # tint says what it is better than whatever texture it happens to carry.
+        tree.links.new(shader.outputs[0], surface)
         return
 
     attribute = tree.nodes.new("ShaderNodeVertexColor")
     attribute.layer_name = COLOUR_ATTRIBUTE
     attribute.location = (-400, 0)
     tree.links.new(attribute.outputs["Color"], colour_input)
+    _see_through(material, tree, shader, surface, None, opacity, None)
 
 
-def _see_through(material, tree, texture, shader, surface, look):
+def _see_through(material, tree, shader, surface, factor, opacity, look):
     """Mix the picture with nothing by its alpha, as the game draws it.
 
-    A cut-out is hard-edged at half, which is where the export hardens the
-    texture it writes; a blend uses the alpha as it is.
+    ``factor`` is the picture's alpha as the look reads it - hard-edged at half
+    for a cut-out, which is where the export hardens the texture it writes, and
+    as it is for a blend - or ``None`` where the alpha is not used. The
+    material's opacity multiplies into it, as the vertex alpha does in game.
     """
+    if opacity < 1.0:
+        scale = tree.nodes.new("ShaderNodeMath")
+        scale.name = scale.label = OPACITY_NODE
+        scale.operation = "MULTIPLY"
+        scale.location = (-320, -260)
+        scale.inputs[0].default_value = 1.0
+        scale.inputs[1].default_value = opacity
+        if factor is not None:
+            tree.links.new(factor, scale.inputs[0])
+        factor = scale.outputs[0]
+        look = looks.BLEND
+    if factor is None:
+        _set_render_method(material, None)
+        tree.links.new(shader.outputs[0], surface)
+        return
     transparent = tree.nodes.new("ShaderNodeBsdfTransparent")
     transparent.location = (-320, -120)
     mix = tree.nodes.new("ShaderNodeMixShader")
     mix.location = (-120, 0)
-    factor = texture.outputs["Alpha"]
-    if look == looks.CUTOUT:
-        cut = tree.nodes.new("ShaderNodeMath")
-        cut.operation = "GREATER_THAN"
-        cut.inputs[1].default_value = (looks.HARD_THRESHOLD - 0.5) / 255.0
-        cut.location = (-460, -140)
-        tree.links.new(factor, cut.inputs[0])
-        factor = cut.outputs[0]
     tree.links.new(factor, mix.inputs["Fac"])
     tree.links.new(transparent.outputs["BSDF"], mix.inputs[1])
     tree.links.new(shader.outputs[0], mix.inputs[2])

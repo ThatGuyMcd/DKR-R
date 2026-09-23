@@ -643,6 +643,13 @@ def _draw_chosen_texture(layout, context, settings, texture_ops):
                                text="Change")
 
     box.prop(settings, "texture_surface")
+    # Beside the transparency but not part of it: the look is what the game
+    # does with the picture's alpha, the opacity fades the faces whatever the
+    # texture is - the ROM's included. Apply carries both onto the faces.
+    box.prop(settings, "texture_opacity", slider=True)
+    if settings.texture_opacity < 1.0:
+        _dim_label(box, "Every face drawing the texture fades together")
+        _dim_label(box, "Faded faces lose their baked light and fog")
     box.prop(settings, "texture_transparency")
     box.prop(settings, "texture_mapping", text="")
     if settings.texture_mapping == "PROJECT":

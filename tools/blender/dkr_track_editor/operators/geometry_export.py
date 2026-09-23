@@ -116,8 +116,8 @@ class GeometryEdit:
         """Whether the author actually changed anything about the geometry."""
         if self.rebuilt:
             return True
-        return bool(self.summary.moved or self.summary.flags
-                    or getattr(self.summary, "surfaces", 0))
+        return bool(self.summary.moved or self.summary.painted
+                    or self.summary.flags or getattr(self.summary, "surfaces", 0))
 
     @property
     def ships(self) -> bool:
@@ -943,6 +943,7 @@ def _patch_in_place(model, read, flags, path, obj, notes):
     except level_model_edit.EditError as error:
         raise GeometryExportError(str(error))
 
+    summary.painted += _fade(model, obj, notes)
     _record(obj, model, notes)
     return GeometryEdit(model, summary, path, obj, notes, rebuilt=False)
 
@@ -1010,6 +1011,7 @@ def _rebuild(model, read, path, obj, notes, textures_added=0):
     )
     summary.bounds = bounds
     summary.surfaces = surfaces
+    _fade(model, obj, notes)
 
     if summary.faces_added:
         notes.append(
@@ -1029,6 +1031,24 @@ def _rebuild(model, read, path, obj, notes, textures_added=0):
 
     _record(obj, model, notes)
     return GeometryEdit(model, summary, path, obj, notes, rebuilt=True)
+
+
+def _fade(model, obj, notes) -> int:
+    """Write the materials' opacity into the vertices it fades. Returns how many.
+
+    Last, after every other edit, because the colour it writes replaces the
+    baked light the mesh carries for those vertices; see :mod:`..transparency`.
+    """
+    table = geometry.opacities(obj)
+    if not table:
+        return 0
+    batches, vertices = looks.apply_opacity(model, geometry.batch_alpha(table))
+    if batches:
+        notes.append(
+            "%d draw call(s) are faded by their material's opacity. The game "
+            "draws them with a flat grey in place of their baked light and "
+            "without fog" % batches)
+    return vertices
 
 
 def _record(obj, model, notes) -> None:

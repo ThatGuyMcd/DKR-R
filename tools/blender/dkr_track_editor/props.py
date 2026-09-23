@@ -103,6 +103,11 @@ def texture_surface_items(self, context):
     return _keep("texture_surface", found or [("0", "Road", "")])
 
 
+def _texture_opacity_changed(_settings, context):
+    from .operators import textures  # noqa: PLC0415
+    textures.show_panel_opacity(context)
+
+
 def transparency_items(auto=True):
     """The looks a face can have, for the panels. ``AUTO`` first if asked for."""
     from . import transparency as looks  # noqa: PLC0415
@@ -510,6 +515,19 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
         default="AUTO",
     )
 
+    texture_opacity: FloatProperty(
+        name="Opacity",
+        description=(
+            "How see-through the faces are drawn, whatever texture goes on "
+            "them - the ROM's included. Faces already drawing the picked "
+            "texture fade as it moves, and Apply carries it onto new ones. "
+            "Below 100% the game fades them by vertex alpha, which replaces "
+            "their baked light with a flat grey and turns their fog off"
+        ),
+        min=0.0, max=1.0, default=1.0, subtype="FACTOR",
+        update=_texture_opacity_changed,
+    )
+
     texture_scale: FloatProperty(
         name="Units Per Repeat",
         description=(
@@ -723,9 +741,24 @@ CLASSES = (
 )
 
 
+def _opacity_changed(material, _context):
+    from .operators import geometry  # noqa: PLC0415
+    geometry.show_opacity(material)
+
+
 def register_pointers():
     from .operators.waterfall import DKR_ScrollSettings
     bpy.types.Object.dkr_scroll = PointerProperty(type=DKR_ScrollSettings)
+    bpy.types.Material.dkr_opacity = FloatProperty(
+        name="Opacity",
+        description=(
+            "How see-through every face drawing this material is, whatever "
+            "its texture's alpha says - works on the ROM's textures too. Below "
+            "100% the game fades the faces by vertex alpha, which replaces "
+            "their baked light with a flat grey and turns their fog off"),
+        min=0.0, max=1.0, default=1.0, subtype="FACTOR",
+        update=_opacity_changed,
+    )
     bpy.types.Scene.dkr = PointerProperty(type=DKR_SceneSettings)
     bpy.types.Scene.dkr_ai = PointerProperty(type=DKR_RaceAiSettings)
     bpy.types.Scene.dkr_water = PointerProperty(type=DKR_WaterSettings)
@@ -734,6 +767,8 @@ def register_pointers():
 def unregister_pointers():
     if hasattr(bpy.types.Object, "dkr_scroll"):
         del bpy.types.Object.dkr_scroll
+    if hasattr(bpy.types.Material, "dkr_opacity"):
+        del bpy.types.Material.dkr_opacity
     for name in ("dkr_water", "dkr_ai", "dkr"):
         if hasattr(bpy.types.Scene, name):
             delattr(bpy.types.Scene, name)

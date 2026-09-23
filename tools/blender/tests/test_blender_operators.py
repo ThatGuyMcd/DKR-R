@@ -2209,6 +2209,88 @@ def test_header_reaches_the_package():
         shutil.rmtree(temporary, ignore_errors=True)
 
 
+def test_material_opacity():
+    """A material's opacity: the viewport follows it, and the export writes it.
+
+    The game has one way to fade a face whatever its texture is: the loader
+    reads a vertex coloured ``(1, 1, b)`` as alpha ``b``. So the slider lives on
+    the material, the preview multiplies it into the picture's alpha, and the
+    export gives every vertex of the material's batches that colour.
+    """
+    print("material opacity")
+    from dkr_track_editor import level_model
+    from dkr_track_editor.operators import geometry as geometry_ops
+    from dkr_track_editor.operators import geometry_export
+
+    path, obj = _import_lake(include_hidden=True)
+    if path is None:
+        print("  skip: no extracted level models")
+        return
+
+    material = next(
+        (m for m in obj.data.materials
+         if m is not None and m.get(geometry_ops.PROP_CATEGORY) == geometry_ops.SURFACE
+         and int(m.get(geometry_ops.PROP_TEXTURE_INDEX, -1)) >= 0
+         and any(n.type == "TEX_IMAGE" for n in m.node_tree.nodes)), None)
+    check(material is not None, "a textured surface material to fade")
+    if material is None:
+        return
+    check(hasattr(material, geometry_ops.PROP_OPACITY)
+          and geometry_ops.opacity_of(material) == 1.0,
+          "every material starts fully opaque")
+    check(geometry_ops.OPACITY_NODE not in material.node_tree.nodes,
+          "and its preview has no fade in it")
+
+    material.dkr_opacity = 0.5
+    node = material.node_tree.nodes.get(geometry_ops.OPACITY_NODE)
+    check(node is not None and abs(node.inputs[1].default_value - 0.5) < 1e-6,
+          "setting it puts the fade in the viewport")
+    check(node is not None and node.outputs[0].is_linked,
+          "and the fade reaches the shader")
+    material.dkr_opacity = 0.25
+    again = material.node_tree.nodes.get(geometry_ops.OPACITY_NODE)
+    check(again is not None and again.as_pointer() == node.as_pointer()
+          and abs(node.inputs[1].default_value - 0.25) < 1e-6,
+          "dragging it changes the one value rather than rebuilding the tree")
+
+    edit = geometry_export.build_edited_model(bpy.context)
+    index = int(material[geometry_ops.PROP_TEXTURE_INDEX])
+    faded = kept = wrong = 0
+    for segment in edit.model.segments:
+        for batch in segment.batches:
+            window = segment.colours[batch.vertex_offset:
+                                     batch.vertex_offset + batch.vertex_count]
+            ours = (batch.texture_index == index
+                    and geometry_ops.category_of(batch.flags) == geometry_ops.SURFACE)
+            if ours:
+                faded += 1
+                wrong += sum(1 for c in window if tuple(c) != (1, 1, 64, 255))
+            else:
+                kept += 1
+    check(faded and not wrong,
+          "every vertex of the material's %d batch(es) says alpha 64 to the "
+          "loader (%d do not)" % (faded, wrong))
+    check(edit.ships, "and the package would ship it")
+    check(any("opacity" in note for note in edit.notes),
+          "the export says what fading costs")
+    base = level_model.load(path)
+    same = all(
+        tuple(a) == tuple(b)
+        for s_new, s_old in zip(edit.model.segments, base.segments)
+        for batch in s_new.batches
+        if not (batch.texture_index == index
+                and geometry_ops.category_of(batch.flags) == geometry_ops.SURFACE)
+        for a, b in zip(s_new.colours[batch.vertex_offset:batch.vertex_offset + batch.vertex_count],
+                        s_old.colours[batch.vertex_offset:batch.vertex_offset + batch.vertex_count]))
+    check(same, "the other %d batches keep their baked light" % kept)
+
+    material.dkr_opacity = 1.0
+    check(geometry_ops.OPACITY_NODE not in material.node_tree.nodes,
+          "back to full, the fade leaves the viewport")
+    edit = geometry_export.build_edited_model(bpy.context)
+    check(not edit.edited, "and the export is untouched again (%r)" % edit.describe())
+
+
 def test_surface_types():
     """What the ground behaves like rides on the texture table entry.
 
@@ -4259,6 +4341,37 @@ def test_transparent_rom_texture_is_drawn():
     check(drawing and all(index < segment.opaque_batches
                           for segment, index, _b in drawing),
           "the solid texture's batches are drawn in the first pass")
+
+    # Opacity rides on Apply, whatever the texture: a ROM one here.
+    settings.texture_opacity = 0.5
+    result = bpy.ops.dkr.apply_texture()
+    check(result == {"FINISHED"}, "the texture applies half faded (%r)" % (result,))
+    material = mesh.materials[mesh.polygons[road[0]].material_index]
+    check(abs(geometry_ops.opacity_of(material) - 0.5) < 1e-6,
+          "and its material carries the panel's opacity (%r)"
+          % geometry_ops.opacity_of(material))
+    check(geometry_ops.OPACITY_NODE in material.node_tree.nodes,
+          "which the viewport shows")
+    settings.texture_opacity = 0.3
+    node = material.node_tree.nodes.get(geometry_ops.OPACITY_NODE)
+    check(abs(geometry_ops.opacity_of(material) - 0.3) < 1e-6
+          and node is not None and abs(node.inputs[1].default_value - 0.3) < 1e-6,
+          "moving the slider fades the picked texture's faces live, no Apply")
+    bpy.ops.dkr.pick_texture(index=glass.index)
+    settings.texture_opacity = 1.0
+    check(abs(geometry_ops.opacity_of(material) - 0.3) < 1e-6,
+          "with another texture picked the slider leaves this one alone")
+    bpy.ops.dkr.pick_texture(index=solid.index)
+    check(abs(settings.texture_opacity - 0.3) < 1e-6,
+          "picking a texture the track draws brings its opacity to the slider "
+          "(%r)" % settings.texture_opacity)
+    settings.texture_opacity = 0.5
+    settings.texture_opacity = 1.0
+    result = bpy.ops.dkr.apply_texture()
+    check(result == {"FINISHED"}
+          and geometry_ops.opacity_of(material) == 1.0
+          and geometry_ops.OPACITY_NODE not in material.node_tree.nodes,
+          "applying again at full takes the fade back off")
     fresh()
 
 
@@ -4313,6 +4426,10 @@ def test_custom_texture_transparency():
               and ("prop", "texture_transparency") in drawn
               and ("menu", "dkr.set_face_transparency") in drawn,
               "the Textures panel offers the transparency controls")
+        check(("prop", "texture_opacity") in drawn
+              and drawn.index(("prop", "texture_opacity")) + 1
+              == drawn.index(("prop", "texture_transparency")),
+              "with the opacity right above the transparency")
         check(("label", "Made cut out") in drawn,
               "and says how the chosen texture is made")
         check(any(kind == "operator" and text == "dkr.add_water"
@@ -4417,6 +4534,50 @@ def test_track_from_mesh_keeps_alpha():
         obj = geometry_ops.geometry_objects(bpy.context)[0]
         check(not any(_read_opaque(obj.data)),
               "the imported mesh agrees")
+    finally:
+        fresh()
+        shutil.rmtree(temporary, ignore_errors=True)
+
+
+def test_track_from_mesh_keeps_opacity():
+    """A material made see-through in Blender stays see-through on the track.
+
+    The Principled BSDF's Alpha is a fade over the whole material - glass - and
+    the track's material takes it as its opacity, which the export writes.
+    """
+    print("track from mesh keeps a material's opacity")
+    from dkr_track_editor import transparency
+    from dkr_track_editor.operators import geometry as geometry_ops
+    from dkr_track_editor.operators import geometry_export
+
+    fresh()
+    temporary = tempfile.mkdtemp(prefix="dkr-glass-mesh-")
+    try:
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(temporary, "glass.blend"))
+        solid = _write_alpha_image(temporary, "glass", 32, 32, "soft")
+        bpy.ops.mesh.primitive_grid_add(size=3000.0, x_subdivisions=2,
+                                        y_subdivisions=2)
+        source = bpy.context.active_object
+        material = _image_material("glass", solid)
+        shader = next(n for n in material.node_tree.nodes
+                      if n.type == "BSDF_PRINCIPLED")
+        shader.inputs["Alpha"].default_value = 0.4
+        source.data.materials.append(material)
+        result = bpy.ops.dkr.track_from_mesh_blank(keep_source=False,
+                                                   keep_textures=True)
+        check(result == {"FINISHED"}, "the mesh converts (%r)" % (result,))
+        obj = geometry_ops.geometry_objects(bpy.context)[0]
+        faded = [m for m in obj.data.materials if m is not None
+                 and abs(geometry_ops.opacity_of(m) - 0.4) < 1e-6]
+        check(faded, "its material comes out at the Alpha it was given")
+        check(all(geometry_ops.OPACITY_NODE in m.node_tree.nodes for m in faded),
+              "and the viewport shows it faded")
+        edit = geometry_export.build_edited_model(bpy.context)
+        alpha = transparency.opacity_byte(0.4)
+        colours = [tuple(c) for segment in edit.model.segments
+                   for c in segment.colours]
+        check(colours and all(c == (1, 1, alpha, 255) for c in colours),
+              "and the export fades every vertex to %d" % alpha)
     finally:
         fresh()
         shutil.rmtree(temporary, ignore_errors=True)
@@ -4652,6 +4813,7 @@ def main():
         test_header_from_scratch()
         test_header_reaches_the_package()
         test_surface_types()
+        test_material_opacity()
         test_resegment_makes_the_track_its_own_base()
         test_track_from_mesh()
         test_track_from_mesh_refuses_a_giant()
@@ -4670,6 +4832,7 @@ def main():
         test_transparent_rom_texture_is_drawn()
         test_custom_texture_transparency()
         test_track_from_mesh_keeps_alpha()
+        test_track_from_mesh_keeps_opacity()
         test_waves_on_ancient_lake()
         test_waves_from_scratch()
         test_scratch_track_ships_its_geometry()

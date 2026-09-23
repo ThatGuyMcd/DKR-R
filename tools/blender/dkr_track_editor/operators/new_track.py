@@ -755,6 +755,13 @@ def build_track(operator, context, obj, textures, keep_source, donor=None,
 
     name = obj.name
     uv_layers = [layer.name for layer in obj.data.uv_layers]
+    # A material made see-through in Blender - glass, water - keeps that as its
+    # opacity, read before the mesh it came from can be removed.
+    faded = {}
+    for material_name, entry in (adopted.own.items() if adopted else ()):
+        alpha = custom_textures.material_alpha(bpy.data.materials.get(material_name))
+        if alpha < 1.0:
+            faded[entry] = min(alpha, faded.get(entry, 1.0))
     obj[PROP_CONVERTED] = target
     if keep_source:
         obj.hide_set(True)
@@ -774,6 +781,11 @@ def build_track(operator, context, obj, textures, keep_source, donor=None,
     )
     built[geometry.PROP_MODEL_PATH] = target
     built[geometry.PROP_AUTHORED_BASE] = True
+    for slot in built.material_slots:
+        material = slot.material
+        entry = material.get(geometry.PROP_TEXTURE_INDEX) if material else None
+        if entry is not None and int(entry) in faded:
+            setattr(material, geometry.PROP_OPACITY, faded[int(entry)])
     geometry.record_budget(built, model)
     context.scene.dkr.geometry_path = target
 

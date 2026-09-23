@@ -209,6 +209,24 @@ def image_of(material):
     return node.image if node is not None else None
 
 
+def material_alpha(material) -> float:
+    """The Alpha a material's Principled BSDF is set to, 0 to 1.
+
+    Only a value typed into the socket: an Alpha wired to the picture is the
+    picture's own transparency, which the texture carries, not a fade.
+    """
+    tree = getattr(material, "node_tree", None) if material is not None else None
+    if tree is None:
+        return 1.0
+    for node in tree.nodes:
+        if node.type != "BSDF_PRINCIPLED":
+            continue
+        socket = node.inputs.get("Alpha")
+        if socket is not None and not socket.is_linked:
+            return max(0.0, min(1.0, float(socket.default_value)))
+    return 1.0
+
+
 def _image_file(image) -> str:
     try:
         path = bpy.path.abspath(image.filepath_from_user())

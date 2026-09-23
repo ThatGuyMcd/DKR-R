@@ -60,9 +60,16 @@ the pixels the encoder reads and nothing about the encoder, which stays
 byte-for-byte the asset tool's.
 
 **Vertex alpha is a fourth path, and the loader owns it.** ``track_init_level_model``
-turns a vertex coloured ``(1, 1, b, a)`` into grey with alpha ``b`` and flags its
-batch ``RENDER_VTX_ALPHA``. Nothing here writes that; it is noted so nobody
-paints a vertex that colour by accident and wonders why it faded.
+turns a vertex coloured ``(1, 1, b, a)`` into grey 128 with alpha ``b`` and flags
+its batch ``RENDER_VTX_ALPHA``. ``material_set`` then draws the batch with
+``G_CC_MODULATERGBA``: the texel's alpha times the vertex's, blended, with fog
+off. It is the one knob that fades a face whatever its texture is - one of the
+ROM's included, whose pixels cannot change - so a material's **opacity** is
+written this way: :func:`apply_opacity` gives every vertex of a faded batch that
+colour. What it costs is the baked light (every vertex becomes the same grey)
+and the fog. Retail does the same on 232 batches, 195 of them over an opaque
+texture and left in the opaque pass, which is where :func:`draws_in_opaque_pass`
+keeps them too.
 
 Deliberately free of ``bpy``.
 """
@@ -337,6 +344,53 @@ def bleed(rgba: bytearray, width: int, height: int,
             at = pixel * 4
             rgba[at], rgba[at + 1], rgba[at + 2] = red, green, blue
             known[pixel] = True
+
+
+# ---------------------------------------------------------------------------
+# Opacity: fading a whole face through the loader's vertex alpha
+# ---------------------------------------------------------------------------
+
+#: ``RENDER_VTX_ALPHA``: set by the loader, never by the file.
+RENDER_VTX_ALPHA = 1 << 27
+
+#: The grey ``track_init_level_model`` gives a faded vertex in place of its
+#: baked light.
+VERTEX_ALPHA_GREY = 0x80
+
+
+def opacity_byte(opacity) -> int:
+    """An opacity from 0 to 1 as the vertex alpha byte that says it."""
+    return max(0, min(255, int(round(float(opacity) * 255.0))))
+
+
+def vertex_alpha_colour(alpha: int) -> Tuple[int, int, int, int]:
+    """The vertex colour the loader reads as ``alpha``: ``(1, 1, alpha, 255)``."""
+    return (1, 1, max(0, min(255, int(alpha))), 255)
+
+
+def apply_opacity(model, alpha_for) -> Tuple[int, int]:
+    """Fade the batches ``alpha_for(batch)`` gives an alpha below 255. In place.
+
+    Every vertex in such a batch's window is given :func:`vertex_alpha_colour`,
+    which works because a batch's vertices are its own - the windows tile each
+    segment with no overlap. ``None`` or 255 leaves a batch exactly as it is,
+    retail's own faded edges included. Returns ``(batches, vertices)`` faded.
+    """
+    batches = vertices = 0
+    for segment in model.segments:
+        for batch in segment.batches:
+            alpha = alpha_for(batch)
+            if alpha is None or int(alpha) >= 255:
+                continue
+            colour = vertex_alpha_colour(alpha)
+            start = int(batch.vertex_offset)
+            end = min(start + int(batch.vertex_count), len(segment.colours))
+            for index in range(start, end):
+                if tuple(segment.colours[index]) != colour:
+                    segment.colours[index] = colour
+                    vertices += 1
+            batches += 1
+    return batches, vertices
 
 
 def advice(mode: str, texture_format) -> Optional[str]:

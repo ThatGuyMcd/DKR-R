@@ -296,8 +296,70 @@ def test_encoding():
               "an IA8 texture asked to be opaque is a blend, which it is")
 
 
+def _loader_alpha(colour):
+    """What ``track_init_level_model`` makes of a vertex: ``(alpha, faded)``."""
+    r, g, b, a = colour
+    return (b, True) if r == 1 and g == 1 else (a, False)
+
+
+def test_opacity():
+    print("opacity, through the loader's vertex alpha")
+    check(transparency.opacity_byte(1.0) == 255
+          and transparency.opacity_byte(0.5) == 128
+          and transparency.opacity_byte(0.0) == 0
+          and transparency.opacity_byte(2.0) == 255,
+          "an opacity becomes a byte, clamped")
+    check(_loader_alpha(transparency.vertex_alpha_colour(77)) == (77, True),
+          "the colour written is the one the loader reads as that alpha")
+
+    from types import SimpleNamespace as NS
+    lit = (200, 180, 160, 255)
+    segment = NS(
+        colours=[lit] * 7,
+        batches=[NS(texture_index=0, vertex_offset=0, vertex_count=3, flags=0),
+                 NS(texture_index=1, vertex_offset=3, vertex_count=4, flags=0)])
+    model = NS(segments=[segment])
+    faded = transparency.apply_opacity(
+        model, lambda batch: {1: 100}.get(batch.texture_index))
+    check(faded == (1, 4), "only the faded batch is touched: %r" % (faded,))
+    check(segment.colours[:3] == [lit] * 3,
+          "the other batch keeps its baked light")
+    check(all(_loader_alpha(c) == (100, True) for c in segment.colours[3:]),
+          "every vertex of the faded one reads back as its alpha")
+    check(transparency.apply_opacity(model, lambda batch: 255) == (0, 0)
+          and transparency.apply_opacity(model, lambda batch: None) == (0, 0),
+          "full opacity, or none asked for, changes nothing")
+    check(transparency.draws_in_opaque_pass(transparency.RENDER_VTX_ALPHA,
+                                            False),
+          "a faded batch over an opaque texture stays in the opaque pass, "
+          "as retail's 195 do")
+
+    found = trees()
+    if not found:
+        print("  skip: no extracted assets for the file round trip")
+        return
+    from dkr_track_editor import level_model_encoder  # noqa: PLC0415
+    path = sorted(glob.glob(os.path.join(found[0].root, "levels", "models",
+                                         "*", "*.bin")))[0]
+    model = level_model.load(path)
+    target = model.segments[0].batches[0]
+    transparency.apply_opacity(
+        model, lambda batch: 64 if batch is target else None)
+    with tempfile.TemporaryDirectory() as folder:
+        out = os.path.join(folder, "faded.bin")
+        with open(out, "wb") as handle:
+            handle.write(level_model_encoder.pack(model))
+        again = level_model.load(out)
+    segment = again.segments[0]
+    window = segment.colours[target.vertex_offset:
+                             target.vertex_offset + target.vertex_count]
+    check(window and all(_loader_alpha(c) == (64, True) for c in window),
+          "the fade survives being written and read back")
+
+
 def main():
     test_material_init_table()
+    test_opacity()
     test_pass_rule()
     test_flags_and_modes()
     test_suggest()

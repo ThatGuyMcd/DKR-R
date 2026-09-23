@@ -328,7 +328,8 @@ class ApplyResult:
 
 
 def apply_texture(obj, faces, texture, surface, mapping, scale,
-                  look=looks.AUTO, *, dedicated=False, mapped_uvs=None) -> ApplyResult:
+                  look=looks.AUTO, *, dedicated=False, mapped_uvs=None,
+                  opacity=None) -> ApplyResult:
     """Point faces at a texture, map them, and give them a material.
 
     Every write lands on the mesh's own record of the file - the face's texture
@@ -414,7 +415,7 @@ def apply_texture(obj, faces, texture, surface, mapping, scale,
         if category == geometry.INVISIBLE_WALLS:
             result.walls += 1
         mesh.polygons[face].material_index = _slot_for(
-            obj, stem, category, index, texture, surface, result.look
+            obj, stem, category, index, texture, surface, result.look, opacity
         )
         result.faces += 1
 
@@ -559,7 +560,8 @@ def _overflow_message(faces, mapping, scale) -> str:
     )
 
 
-def _slot_for(obj, stem, category, index, texture, surface, look=None) -> int:
+def _slot_for(obj, stem, category, index, texture, surface, look=None,
+              opacity=None) -> int:
     """The material slot for one (kind, table entry), creating it if needed."""
     for slot, material in enumerate(obj.data.materials):
         if material is None:
@@ -569,14 +571,62 @@ def _slot_for(obj, stem, category, index, texture, surface, look=None) -> int:
             material[geometry.PROP_SURFACE] = int(surface) & 0xFF
             if look is not None:
                 geometry.show_look(material, look)
+            _set_opacity(material, category, opacity)
             return slot
 
     # A wall is not drawn, so it gets the flat tint the importer gives one
     # rather than whatever picture it happens to name - same rule as the import.
     png = None if category == geometry.INVISIBLE_WALLS else texture.png
     material = geometry.material_for(stem, category, index, png, surface, look)
+    _set_opacity(material, category, opacity)
     obj.data.materials.append(material)
     return len(obj.data.materials) - 1
+
+
+def _set_opacity(material, category, opacity) -> None:
+    """Carry the panel's opacity onto a material. A wall is not drawn to fade.
+
+    Only on a change, since the property's update rebuilds the preview.
+    """
+    if (opacity is None or category == geometry.INVISIBLE_WALLS
+            or not hasattr(material, geometry.PROP_OPACITY)):
+        return
+    opacity = max(0.0, min(1.0, float(opacity)))
+    if abs(geometry.opacity_of(material) - opacity) > 1e-6:
+        setattr(material, geometry.PROP_OPACITY, opacity)
+
+
+def materials_drawing(obj, texture_id) -> list:
+    """The drawn materials of ``obj`` whose table entry is this texture.
+
+    Every surface type's entry counts: the slider speaks of the picture, and
+    the same picture as grass and as road fades together.
+    """
+    if obj is None or texture_id is None or int(texture_id) < 0:
+        return []
+    indices = {index for index, entry in enumerate(geometry.texture_table(obj))
+               if entry.get("id") == int(texture_id)}
+    return [material for material in obj.data.materials
+            if material is not None
+            and material.get(geometry.PROP_CATEGORY) != geometry.INVISIBLE_WALLS
+            and material.get(geometry.PROP_TEXTURE_INDEX) in indices]
+
+
+def picked_opacity(context):
+    """The opacity the picked texture is drawn with on the track, or ``None``."""
+    found = materials_drawing(target(context), context.scene.dkr.texture_id)
+    return geometry.opacity_of(found[0]) if found else None
+
+
+def show_panel_opacity(context) -> None:
+    """Fade the picked texture's faces live as the panel's slider moves.
+
+    A texture not on the track yet has no faces to fade, so for it the value
+    waits for Apply.
+    """
+    opacity = float(context.scene.dkr.texture_opacity)
+    for material in materials_drawing(target(context), context.scene.dkr.texture_id):
+        _set_opacity(material, material.get(geometry.PROP_CATEGORY), opacity)
 
 
 # ---------------------------------------------------------------------------
@@ -664,6 +714,10 @@ class DKR_OT_pick_texture(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.dkr.texture_id = int(self.index)
+        # The slider shows the picked texture's opacity where the track draws it.
+        opacity = picked_opacity(context)
+        if opacity is not None:
+            context.scene.dkr.texture_opacity = opacity
         for area in (context.screen.areas if context.screen else []):
             area.tag_redraw()
         return {"FINISHED"}
@@ -695,18 +749,20 @@ class DKR_OT_apply_texture(_FaceOperator, bpy.types.Operator):
         mapping = settings.texture_mapping
         scale = float(settings.texture_scale)
         look = settings.texture_transparency
+        opacity = float(settings.texture_opacity)
 
         def work(obj, faces):
             result = apply_texture(obj, faces, texture, surface, mapping, scale,
-                                   look)
+                                   look, opacity=opacity)
             for message in _notes(result, texture):
                 self.report({"WARNING"}, message)
             self.report(
                 {"INFO"},
-                "%d face(s) now draw %s as texture %d (%s, %s)"
+                "%d face(s) now draw %s as texture %d (%s, %s, %d%% opaque)"
                 % (result.faces, texture.name, result.index,
                    geometry.surface_name(surface),
-                   LOOK_WORDS.get(result.look, result.look)),
+                   LOOK_WORDS.get(result.look, result.look),
+                   round(opacity * 100.0)),
             )
             return {"FINISHED"}
 
