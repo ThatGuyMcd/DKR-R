@@ -69,12 +69,24 @@ namespace dkr::runtime::custom_tracks {
 //     cannot be renumbered after the fact, so a track discovered later has no
 //     textures in the published table at all. Its model's ids are reset to
 //     texture 0 rather than left pointing past the end of the table.
+//
+// Textures2D and Sprites are a track's own MINIMAP, and they arrive the same
+// way. tex_init_textures loads ASSET_TEXTURES_2D_TABLE, then the 3D table, then
+// ASSET_SPRITES_TABLE, each counted to its terminator exactly like the level
+// tables, and load_texture / tex_load_sprite / load_sprite_info read an entry
+// by table difference. So a picture appended to the 2D table and a sprite
+// appended to the sprite table load with no new mechanism, published once at
+// boot like Textures3D. Two ids are placeholders the runtime substitutes, in
+// the stored prefix of the model (minimapSpriteIndex, 0x20) and in the sprite
+// itself (baseTextureId); see kCustomSpriteIdBase below.
 enum class Section {
     LevelHeaders,
     LevelObjectMaps,
     LevelNames,
     LevelModels,
     Textures3D,
+    Textures2D,
+    Sprites,
 };
 
 // A level owns two object maps, and init_track spawns from both:
@@ -150,6 +162,67 @@ struct TextureInfo {
     }
 }
 
+// ---------------------------------------------------------------------------
+// A track's own minimap
+// ---------------------------------------------------------------------------
+//
+// A SPRITES payload is what dkr_assets_tool's BuildSprite writes: a 12-byte
+// SpriteHeader - s16 baseTextureId, s16 numberOfFrames, s16 anchor x, s16
+// anchor y, s32 the game fills - then numberOfFrames + 1 bytes of frame
+// boundaries, padded to 16. tex_load_sprite loads frameTexOffsets[frames]
+// textures from ASSET_TEXTURES_2D starting at baseTextureId, and
+// minimap_marker_pos places every racer's dot relative to the anchor.
+struct SpriteInfo {
+    std::int16_t base_texture = 0;   // baseTextureId as the payload holds it
+    std::uint16_t frames = 0;
+    std::int16_t anchor_x = 0;
+    std::int16_t anchor_y = 0;
+    std::uint16_t textures = 0;      // frameTexOffsets[frames]
+};
+
+// gCurrentSpriteAsset is a 512-byte buffer (MAX_SPRITE_ASSET_SIZE), and
+// asset_load copies a whole sprite into it before anything is checked.
+inline constexpr std::size_t kMaxSpritePayload = 512;
+
+// The placeholder a model's minimapSpriteIndex (LevelModel 0x20) holds for the
+// track's own minimap sprite, and the one that sprite's baseTextureId holds for
+// the track's own 2D texture. The real indices are the ROM's counts plus an
+// ordinal - 193 sprites and 906 2D textures in US v1.0 - which only the
+// player's cartridge knows, so the exporter writes these and the runtime
+// substitutes them, exactly as it does kCustomTextureIdBase. 0x7000 fits the
+// s16 both ids travel in. Kept identical in
+// tools/blender/dkr_track_editor/minimap.py.
+inline constexpr std::int32_t kCustomSpriteIdBase = 0x7000;
+inline constexpr std::int32_t kCustomSpriteIdCount = 16;
+inline constexpr std::int32_t kCustomTexture2DIdBase = 0x7000;
+inline constexpr std::int32_t kCustomTexture2DIdCount = 255;
+
+// Where minimapSpriteIndex sits in a LevelModel (include/structs.h).
+inline constexpr std::size_t kModelMinimapSprite = 0x20;
+// Level header byte 0xBC, bit 0: hud_render_general draws no minimap at all.
+// Hubs and cutscenes set it.
+inline constexpr std::size_t kHeaderMinimapFlags = 0xBC;
+inline constexpr std::uint8_t kHeaderNoMinimap = 0x01;
+
+// Reads a SPRITES payload into `info`. False, with the reason in `error`, for
+// one the loader would misread: shorter than its own header and frame table,
+// longer than the buffer asset_load copies it into, no frames, or frame
+// boundaries that do not start at 0 and climb.
+[[nodiscard]] bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes,
+                                          SpriteInfo& info, std::string& error);
+
+// The minimapSpriteIndex a LEVEL_MODELS payload carries in its stored prefix,
+// or -1 when the payload has no readable stored prefix (an older exporter's,
+// which predates own minimaps and so names a retail sprite anyway).
+[[nodiscard]] std::int64_t model_minimap_sprite(const std::vector<std::uint8_t>& bytes);
+
+// Whether the header served at `header_offset` must hide the minimap: its
+// track ships a minimap of its own that the once-per-boot sprite or 2D texture
+// table does not hold - installed after boot - so the model's placeholder could
+// not be resolved and the HUD would draw a stray sprite with the dots scattered
+// round it. Nothing is hidden for a track without one, or for a retail header.
+[[nodiscard]] bool minimap_hidden(std::uint32_t header_offset);
+
 struct Track {
     std::string id;
     std::string name;
@@ -159,6 +232,9 @@ struct Track {
     // One per TEXTURES_3D entry, in manifest order - the order that is each
     // texture's identity.
     std::vector<TextureInfo> textures;
+    // One per TEXTURES_2D and SPRITES entry, in manifest order.
+    std::vector<TextureInfo> textures_2d;
+    std::vector<SpriteInfo> sprites;
     bool enabled = true;
     // manifest.hdTexturePack, and the sibling archive resolved at scan time.
     // See "A track's high-resolution texture pack" below.
@@ -421,6 +497,7 @@ struct ArtworkSummary {
     std::size_t textures = 0;
     std::size_t translucent = 0;
     std::size_t animated = 0;
+    bool minimap = false;   // ships a minimap of its own
 };
 [[nodiscard]] ArtworkSummary artwork(const std::string& track_id);
 

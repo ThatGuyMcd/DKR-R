@@ -37,9 +37,9 @@ def _module_classes():
     """
     from . import prefs, props
     from .operators import (ai, checks, custom_textures, edit, geometry,
-                            header, io_objects, level_type, new_track, pack,
-                            placeholders, race_ai, skybox, start_grid, textures,
-                            water, waterfall)
+                            header, io_objects, level_type, minimap, new_track,
+                            pack, placeholders, race_ai, skybox, start_grid,
+                            textures, water, waterfall)
     from .ui import panels
 
     classes = []
@@ -58,6 +58,7 @@ def _module_classes():
     classes += list(edit.CLASSES)
     classes += list(ai.CLASSES)
     classes += list(race_ai.CLASSES)
+    classes += list(minimap.CLASSES)
     classes += list(checks.CLASSES)
     classes += list(header.CLASSES)
     classes += list(new_track.CLASSES)
@@ -95,11 +96,12 @@ def register():
     bpy.types.TOPBAR_MT_file_import.append(_menu_import)
     bpy.types.TOPBAR_MT_file_export.append(_menu_export)
 
-    # The bot lines are a draw handler, not a registered class, so the class
-    # loop does not undo them; unregister removes the handler itself.
-    from .operators import race_ai
+    # The bot lines and the minimap are draw handlers, not registered classes,
+    # so the class loop does not undo them; unregister removes them itself.
+    from .operators import minimap, race_ai
 
     race_ai.register_overlay()
+    minimap.register_overlay()
 
 
 def unregister():
@@ -108,9 +110,10 @@ def unregister():
     from . import props
 
     try:
-        from .operators import race_ai
+        from .operators import minimap, race_ai
 
         race_ai.unregister_overlay()
+        minimap.teardown()
     except Exception:  # noqa: BLE001 - unregistering must not fail
         pass
 

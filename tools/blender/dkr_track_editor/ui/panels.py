@@ -17,7 +17,8 @@ import textwrap
 
 import bpy
 
-from .. import catalog as catalog_module, level_types, prefs, race_ai, scene, skyboxes
+from .. import (catalog as catalog_module, level_types, prefs, race_ai, scene,
+                skyboxes, transparency as looks)
 from ..operators import geometry as geometry_ops
 from ..operators import header as header_ops
 from ..operators import level_type as level_type_ops
@@ -650,6 +651,19 @@ def _draw_chosen_texture(layout, context, settings, texture_ops):
     if settings.texture_opacity < 1.0:
         _dim_label(box, "Every face drawing the texture fades together")
         _dim_label(box, "Faded faces lose their baked light and fog")
+        try:
+            surface = int(settings.texture_surface)
+        except (TypeError, ValueError):
+            surface = None
+        if looks.fade_stays_in_first_pass(chosen.format, chosen.render_mode,
+                                          getattr(chosen, "own", False),
+                                          surface):
+            warning = box.column(align=True)
+            warning.alert = True
+            warning.label(text="In game, faded faces over this texture",
+                          icon="ERROR")
+            warning.label(text="hide what is behind them. Fade one of")
+            warning.label(text="your own textures, or calm water")
     box.prop(settings, "texture_transparency")
     box.prop(settings, "texture_mapping", text="")
     if settings.texture_mapping == "PROJECT":
@@ -943,23 +957,169 @@ def _place_button(layout, entry, placing=None):
 
 
 class DKR_PT_minimap(DkrPanel, bpy.types.Panel):
-    """Menu only. A track borrows another track's minimap today; how the game
-    places one is still to be investigated, so nothing here is wired"""
+    """The track's minimap. Road edges drawn means the track has one; no edges
+    means it ships without - there is nothing else to choose"""
 
     bl_label = "Minimap"
     bl_idname = "DKR_PT_minimap"
     bl_parent_id = "DKR_PT_track"
     bl_options = {"DEFAULT_CLOSED"}
 
-    def draw_header_preset(self, context):
-        self.layout.label(text="in development", icon="EXPERIMENTAL")
+    def draw(self, context):
+        from ..operators import minimap as minimap_ops
+
+        layout = self.layout
+        settings = context.scene.dkr
+        try:
+            state = minimap_ops.track_state(context)
+        except Exception as error:  # noqa: BLE001 - the panel must still draw
+            info_box(layout, context, "The minimap could not be read: %s" % error,
+                     icon="ERROR", alert=True)
+            return
+
+        if state.kind == minimap_ops.OWN:
+            self._own(layout, context, settings, state, minimap_ops)
+            return
+
+        box = layout.box()
+        if state.kind == minimap_ops.RETAIL:
+            lines(box, context, "Using %s's own minimap" % state.label,
+                  icon="CHECKMARK", tight=True)
+            if state.retail is not None:
+                icon = minimap_ops.retail_icon(state.retail,
+                                               int(state.base.minimap_colour))
+                if icon:
+                    box.template_icon(icon_value=icon, scale=6.0)
+            layout.operator("dkr.minimap_draw_edge", icon="GREASEPENCIL")
+            lines(layout, context, "The track keeps its shape, so the retail "
+                  "picture still shows its road. Drawing edges replaces it.",
+                  dim=True)
+            return
+        if state.kind == minimap_ops.PENDING:
+            lines(box, context, "Checking whether the track was reshaped...",
+                  icon="TIME", tight=True)
+        elif state.kind == minimap_ops.CHANGED:
+            text = ("Shape changed - draw road edges, or the track ships "
+                    "without a minimap")
+            if state.error:
+                text = "%s. %s" % (text, state.error)
+            lines(box, context, text, icon="ERROR", tight=True)
+        elif state.kind == minimap_ops.NO_TRACK:
+            lines(box, context, "No track geometry to put a minimap on",
+                  icon="INFO", tight=True)
+        else:
+            lines(box, context, "No road edges - the track ships without a "
+                  "minimap", icon="GREASEPENCIL", tight=True)
+
+        column = layout.column(align=True)
+        column.operator("dkr.minimap_from_ai", icon="TRACKING")
+        column.operator("dkr.minimap_draw_edge", icon="GREASEPENCIL")
+        lines(layout, context, "Trace the outside border of the road, then the "
+              "inside one. Each closed line is an edge; the road is what lies "
+              "between.", icon="INFO", dim=True)
+
+    def _own(self, layout, context, settings, state, minimap_ops):
+        built = minimap_ops.build(context, state)
+        box = layout.box()
+        count = len(state.edges)
+        box.label(text="%d edge%s" % (count, "" if count == 1 else "s"),
+                  icon="GREASEPENCIL")
+        for index, gap in state.open[:3]:
+            box.label(text="Edge %d is open (gap %d units)" % (index + 1, gap),
+                      icon="ERROR")
+        if len(state.open) > 3:
+            box.label(text="...and %d more" % (len(state.open) - 3), icon="BLANK1")
+        if state.open:
+            row = box.row()
+            row.alignment = "RIGHT"
+            row.operator("dkr.minimap_close_edges", text="Close")
+
+        if built is None or built.error:
+            info_box(layout, context, built.error if built else
+                     "The picture could not be made", icon="ERROR", alert=True)
+        else:
+            picture = layout.box()
+            icon = minimap_ops.preview_icon(built, built.placement.colour)
+            if icon:
+                picture.template_icon(icon_value=icon, scale=7.0)
+            placement = built.placement
+            _dim_label(picture, "%dx%d px, turned %d°" % (
+                placement.width, placement.height, placement.rotation))
+            if built.png_error:
+                lines(picture, context, "Your PNG is not used: %s" % built.png_error,
+                      icon="ERROR", tight=True)
+            elif settings.minimap_png:
+                _dim_label(picture, "Picture: %s" % bpy.path.basename(settings.minimap_png),
+                           icon="IMAGE_DATA")
+
+        row = layout.row(align=True)
+        row.prop(settings, "show_minimap_overlay", toggle=True,
+                 icon="HIDE_OFF" if settings.show_minimap_overlay else "HIDE_ON")
+        row.operator("dkr.minimap_draw_edge", icon="GREASEPENCIL")
+        layout.operator("dkr.minimap_clear", icon="TRASH")
+
+
+class DKR_PT_minimap_appearance(DkrPanel, bpy.types.Panel):
+    bl_label = "Appearance"
+    bl_idname = "DKR_PT_minimap_appearance"
+    bl_parent_id = "DKR_PT_minimap"
+    bl_options = {"DEFAULT_CLOSED"}
 
     def draw(self, context):
         layout = self.layout
-        info_box(layout, context,
-                 "For now the track borrows another track's minimap. Placing "
-                 "its own is still being investigated.")
-        layout.operator("dkr.minimap_fit", icon="FULLSCREEN_ENTER")
+        settings = context.scene.dkr
+        column = layout.column(align=True)
+        column.prop(settings, "minimap_size", slider=True)
+        _labelled(layout, "Rotation").prop(settings, "minimap_rotation", text="")
+        row = _labelled(layout, "Colour").row(align=True)
+        row.prop(settings, "minimap_colour", text="")
+        row.menu("DKR_MT_minimap_colours", text="", icon="DOWNARROW_HLT")
+        layout.prop(settings, "minimap_soft", slider=True)
+        layout.prop(settings, "minimap_flag")
+
+
+class DKR_PT_minimap_numbers(DkrPanel, bpy.types.Panel):
+    """The nine header numbers, all calculated. Shown with Show Raw Bytes"""
+
+    bl_label = "Numbers"
+    bl_idname = "DKR_PT_minimap_numbers"
+    bl_parent_id = "DKR_PT_minimap"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.scene.dkr.show_raw
+
+    def draw(self, context):
+        from ..operators import minimap as minimap_ops
+
+        layout = self.layout
+        settings = context.scene.dkr
+        built = minimap_ops.build(context)
+        if built is None or built.placement is None:
+            _dim_label(layout, "Draw the road's edges to calculate them")
+        else:
+            placement = built.placement
+            column = layout.column(align=True)
+            for label, value in (
+                ("Scale X / Y", "%.3f / %.3f" % (placement.x_scale, placement.y_scale)),
+                ("Rotation", "%d°" % placement.rotation),
+                ("Offset Adv 1", "%d, %d" % (placement.offset_x, placement.offset_y)),
+                ("Offset Adv 2", "%d, %d  (mirror)" % (placement.offset_x2,
+                                                       placement.offset_y2)),
+                ("Anchor", "%d, %d" % (placement.anchor_x, placement.anchor_y)),
+                ("Colour", "%06x" % placement.colour),
+            ):
+                split = _labelled(column, label, factor=0.42)
+                row = split.row()
+                row.enabled = False
+                row.label(text=value)
+            _dim_label(layout, "All calculated from the edges")
+        row = layout.row(align=True)
+        row.operator("dkr.minimap_save_png", icon="EXPORT")
+        row.operator("dkr.minimap_use_png", icon="IMPORT")
+        if settings.minimap_png:
+            layout.operator("dkr.minimap_forget_png", icon="LOOP_BACK")
 
 
 # ---------------------------------------------------------------------------
@@ -1654,6 +1814,8 @@ CLASSES = (
     DKR_PT_waterfalls,
     DKR_PT_place,
     DKR_PT_minimap,
+    DKR_PT_minimap_appearance,
+    DKR_PT_minimap_numbers,
     DKR_PT_object,
     DKR_PT_grid_root,
     DKR_PT_race_ai,

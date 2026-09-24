@@ -67,9 +67,31 @@ off. It is the one knob that fades a face whatever its texture is - one of the
 ROM's included, whose pixels cannot change - so a material's **opacity** is
 written this way: :func:`apply_opacity` gives every vertex of a faded batch that
 colour. What it costs is the baked light (every vertex becomes the same grey)
-and the fog. Retail does the same on 232 batches, 195 of them over an opaque
-texture and left in the opaque pass, which is where :func:`draws_in_opaque_pass`
-keeps them too.
+and the fog.
+
+**A faded face has to be drawn in the second pass.** ``dRenderSettingsVtxAlpha``
+blends *and writes depth*: its no-write half is chosen by ``RENDER_Z_UPDATE``,
+which is bit 8 - ``RENDER_HIDDEN`` on a batch, so never set on one that is
+drawn. And the first pass walks the segments front to back. A faded face left
+there is drawn before what stands behind it, blends with the sky, and then
+hides everything behind it from the depth buffer: a lake that shows the sky
+instead of its bed. Retail leaves 195 faded batches in the first pass, and every
+one fades to alpha 0 - an edge vanishing into nothing, with nothing behind it to
+hide - never to a see-through surface. The second pass comes after the solid
+track and the racers, back to front, so there the fade shows what is behind it.
+
+:func:`draws_in_opaque_pass` gives a batch over an opaque texture no way into
+the second pass but ``RENDER_WATER``, so the export moves a faded face in one
+of two ways:
+
+* A texture of the track's own is written ``TRANSPARENT``
+  (:func:`faded_render_mode`); its pixels stay as its look makes them, so an
+  opaque one still ignores its alpha and the vertex alpha is the whole fade.
+* Calm water - ``SURFACE_WATER_CALM`` over a ROM texture, whose render mode
+  cannot change - gets ``RENDER_WATER`` (:func:`faded_flags`), which is what
+  retail's own water carries: no shadows fall on it, and a racer crossing it
+  gets the water effect. Anything else cannot be moved without side effects,
+  and :func:`faded_in_opaque_pass` counts it so the export can say so.
 
 Deliberately free of ``bpy``.
 """
@@ -391,6 +413,64 @@ def apply_opacity(model, alpha_for) -> Tuple[int, int]:
                     vertices += 1
             batches += 1
     return batches, vertices
+
+
+#: ``SurfaceType``'s still water in ``include/enums.h``: the one water an author
+#: puts in a texture table (the wavy one is synthesised from the header).
+SURFACE_WATER_CALM = 11
+
+
+def faded_render_mode(render_mode, texture_format) -> str:
+    """The render mode a texture drawn by faded faces has to be written with.
+
+    ``TRANSPARENT`` where the render mode decides it, so the faces are drawn in
+    the second pass; see the module docstring. A format that is see-through
+    anyway keeps its own, and one the render mode cannot make see-through - the
+    greyscale ones, CI8 - keeps it too and is left to :func:`faded_in_opaque_pass`.
+    """
+    mode = render_mode or "OPAQUE"
+    if translucent(texture_format, mode) or int(texture_format) & 0xF not in MODE_DECIDES:
+        return mode
+    return "TRANSPARENT"
+
+
+def faded_flags(flags, is_translucent, surface) -> int:
+    """``flags`` for a faded batch, with ``RENDER_WATER`` if it is calm water
+    that would otherwise be drawn in the first pass.
+
+    Only for water, because the flag does more than move the batch; see the
+    module docstring. A decal stays in the first pass whatever it carries, so it
+    is left alone.
+    """
+    value = int(flags) & 0xFFFFFFFF
+    if (surface == SURFACE_WATER_CALM and not value & RENDER_DECAL
+            and draws_in_opaque_pass(value, is_translucent)):
+        return value | RENDER_WATER
+    return value
+
+
+def fade_stays_in_first_pass(texture_format, render_mode, own, surface) -> bool:
+    """Whether faces drawing this texture, faded, would still be drawn in the
+    first pass - and so hide what is behind them. For the panel to warn before
+    the export does."""
+    if translucent(texture_format, render_mode):
+        return False
+    if own and translucent(texture_format,
+                           faded_render_mode(render_mode, texture_format)):
+        return False
+    return surface != SURFACE_WATER_CALM
+
+
+def faded_in_opaque_pass(model, alpha_for) -> int:
+    """How many batches ``alpha_for`` fades that sit in the first pass anyway."""
+    count = 0
+    for segment in model.segments:
+        for index, batch in enumerate(segment.batches):
+            alpha = alpha_for(batch)
+            if (alpha is not None and int(alpha) < 255
+                    and index < segment.opaque_batches):
+                count += 1
+    return count
 
 
 def advice(mode: str, texture_format) -> Optional[str]:

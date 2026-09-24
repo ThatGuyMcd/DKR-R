@@ -10,9 +10,10 @@ import bpy
 from bpy.props import BoolProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper
 
-from .. import (catalog as catalog_module, dkrmap, level_types, prefs, scene,
-                validate, water)
+from .. import (catalog as catalog_module, dkrmap, level_model, level_types,
+                minimap, prefs, scene, validate, water)
 from . import geometry_export
+from . import minimap as minimap_ops
 
 
 class DKR_OT_export_dkrmap(bpy.types.Operator, ExportHelper):
@@ -142,19 +143,30 @@ class DKR_OT_export_dkrmap(bpy.types.Operator, ExportHelper):
                 base = _authored_header(context)
             if base is not None and geometry_has_waves(context):
                 _check_wave_header(self, base, tree)
-            if base is not None:
-                header = package.encode_header(
-                    base, catalog.raw.get("enumValues", {}),
-                    tree.asset_index if tree else None,
-                )
-                package.notes.append("header.bin %d bytes" % len(header))
 
             # Before the geometry, because the model's texture table names
             # these by position and a failure to compile one has to stop the
             # export rather than ship a model pointing at a payload that is
             # not there.
             own, texture_payloads = _encode_textures(self, context, package)
-            _encode_geometry(self, context, package)
+            edit = geometry_export.build_edited_model(context)
+            # Before the header, whose "no minimap" bit follows from it, and
+            # from the model the package will actually ship: the numbers are
+            # fitted to its bounds.
+            chart = _plan_minimap(self, context, package, edit)
+            if base is not None:
+                template.apply_overrides(base, {
+                    minimap.NO_MINIMAP_POINTER: minimap_ops.header_value(
+                        template.lookup(base, minimap.NO_MINIMAP_POINTER),
+                        chart.state),
+                })
+                header = package.encode_header(
+                    base, catalog.raw.get("enumValues", {}),
+                    tree.asset_index if tree else None,
+                )
+                package.notes.append("header.bin %d bytes" % len(header))
+            _encode_geometry(self, context, package, edit, chart)
+            _encode_minimap(self, package, chart)
             _warn_header_without_geometry(self, context, package)
 
             stale = _attach_existing_payloads(package)
@@ -241,7 +253,7 @@ def _encode_textures(operator, context, package):
     from .. import textures as texture_module  # noqa: PLC0415
     from . import custom_textures, geometry as geometry_ops  # noqa: PLC0415
 
-    own = custom_textures.entries(context)
+    own = custom_textures.exported(context)
 
     # A table entry naming a texture the package will not carry is the one
     # failure here that the game cannot survive: the id falls outside the
@@ -271,7 +283,7 @@ def _encode_textures(operator, context, package):
     # textures were made from, packed in the .blend, so it rebuilds them.
     restored, lost = custom_textures.restore_missing(context)
     if restored:
-        own = custom_textures.entries(context)
+        own = custom_textures.exported(context)
         geometry_ops.show_own_pictures(context)
         package.notes.append(
             "%d texture(s) of this track's own were missing beside the .blend "
@@ -297,7 +309,7 @@ def _encode_textures(operator, context, package):
 
     separated = _separate_identical(context, own)
     if separated:
-        own = custom_textures.entries(context)
+        own = custom_textures.exported(context)
         package.notes.append(
             "%s reduced to the same pixels as another of this track's textures "
             "with a different original, so one invisible bit was flipped to "
@@ -569,7 +581,81 @@ def _bleed(numpy, pixels, solid, passes=6):
         known |= reached
 
 
-def _encode_geometry(operator, context, package):
+class MinimapPlan:
+    """What the export does about the minimap, decided once."""
+
+    __slots__ = ("state", "built")
+
+    def __init__(self, state, built=None):
+        self.state = state
+        self.built = built
+
+    @property
+    def own(self) -> bool:
+        return self.state.ships_own and self.built is not None
+
+
+def _plan_minimap(operator, context, package, edit):
+    """Decide the minimap from the model this export ships.
+
+    Never a reason to refuse the export: a track with no edges ships without a
+    minimap and says so, and one whose picture cannot be made is told why and
+    ships without one too.
+    """
+    found = minimap_ops.shape_of_edit(edit) if edit is not None else None
+    if edit is not None:
+        minimap_ops.remember_shape(context, found)
+    state = minimap_ops.track_state(context, found=found)
+    if not state.ships_own:
+        if state.kind == minimap_ops.RETAIL:
+            package.notes.append("minimap: %s's own, unchanged" % state.label)
+        elif state.kind == minimap_ops.CHANGED:
+            message = ("the track was reshaped, so it ships without %s's "
+                       "minimap - it would show the wrong road. Draw the road's "
+                       "edges under Track > Minimap to give it its own"
+                       % (state.label or "the base track"))
+            package.notes.append("minimap: none - " + message)
+            operator.report({"WARNING"}, message)
+        else:
+            package.notes.append("minimap: none - no road edges drawn")
+        return MinimapPlan(state)
+
+    built = minimap_ops.build(context, state)
+    if built is None or built.error:
+        message = ("the minimap could not be made, so the track ships without "
+                   "one: %s" % (built.error if built else "no picture"))
+        package.notes.append("minimap: none - " + message)
+        operator.report({"WARNING"}, message)
+        state.kind = minimap_ops.CHANGED
+        return MinimapPlan(state)
+    for index, gap in state.open:
+        operator.report({"WARNING"}, "minimap edge %d is open by %d units; the "
+                        "picture closes it with a straight line" % (index + 1, gap))
+    if built.png_error:
+        operator.report({"WARNING"}, "minimap: your PNG is not used - %s"
+                        % built.png_error)
+    return MinimapPlan(state, built)
+
+
+def _encode_minimap(operator, package, chart):
+    if not chart.own:
+        package.drop_minimap()
+        return
+    placement = chart.built.placement
+    texture = minimap.texture_payload(chart.built.rgba, placement.width,
+                                      placement.height, placement.sprite_x,
+                                      placement.sprite_y)
+    sprite = minimap.sprite_payload(placement.anchor_x, placement.anchor_y)
+    package.encode_minimap(texture, sprite)
+    package.notes.append(
+        "minimap: %dx%d, turned %d degrees, scale %.3f, offsets %d,%d "
+        "(mirrored %d,%d); %d edge(s)"
+        % (placement.width, placement.height, placement.rotation,
+           placement.x_scale, placement.offset_x, placement.offset_y,
+           placement.offset_x2, placement.offset_y2, len(chart.state.edges)))
+
+
+def _encode_geometry(operator, context, package, edit, chart):
     """Compile the edited track geometry into the package, if it changed.
 
     A track that only reworks the objects standing on shipped geometry ships no
@@ -577,19 +663,28 @@ def _encode_geometry(operator, context, package):
     base track's model, and the package stays small and stays correct. Writing
     an unchanged copy would work and would make every remix carry a hundred
     kilobytes that say nothing.
+
+    The one exception is a minimap of the track's own: its numbers live in the
+    model's header, so a track that has one ships its model even untouched.
     """
-    edit = geometry_export.build_edited_model(context)
     if edit is None:
         _report_unusable_meshes(operator, context)
+        if chart.own:
+            _encode_base_with_minimap(operator, context, package, chart)
         return
 
     for note in edit.notes:
         operator.report({"WARNING"}, note)
 
-    if edit.ships:
+    if chart.own:
+        minimap.apply_to_model(edit.model, chart.built.placement)
+
+    if edit.ships or chart.own:
         payload = package.encode_level_model(edit.model)
         package.notes.append(
-            "model.bin %d bytes: %s" % (len(payload), edit.describe())
+            "model.bin %d bytes: %s" % (
+                len(payload), edit.describe() if edit.ships
+                else "the base geometry, carrying the minimap's numbers")
         )
         return
 
@@ -609,6 +704,27 @@ def _encode_geometry(operator, context, package):
             "if the track should ship the shipped geometry"
             % os.path.basename(package.directory),
         )
+
+
+def _encode_base_with_minimap(operator, context, package, chart):
+    """The base track's model, unedited but for its minimap numbers.
+
+    For a remix with no geometry in the scene: the model is still the one the
+    header names, and the minimap's numbers have nowhere else to go.
+    """
+    from . import level_type as level_type_ops  # noqa: PLC0415
+
+    level, _header = level_type_ops.imported_level(context)
+    if level is None or not level.model_path:
+        operator.report({"WARNING"}, "the minimap needs the track's model, and "
+                        "this scene names none; it ships without one")
+        chart.built = None
+        return
+    model = level_model.load(level.model_path)
+    minimap.apply_to_model(model, chart.built.placement)
+    payload = package.encode_level_model(model)
+    package.notes.append("model.bin %d bytes: %s's geometry, carrying the "
+                         "minimap's numbers" % (len(payload), level.label))
 
 
 def _report_unusable_meshes(operator, context):

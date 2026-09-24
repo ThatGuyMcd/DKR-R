@@ -983,11 +983,12 @@ class CustomTexture:
     """
 
     __slots__ = ("ordinal", "name", "png", "width", "height", "format",
-                 "legacy_render_mode", "mode", "source", "original", "nudge")
+                 "legacy_render_mode", "mode", "source", "original", "nudge",
+                 "faded")
 
     def __init__(self, ordinal, name, png, width, height, texture_format,
                  render_mode="OPAQUE", source="", original="", nudge=0,
-                 transparency_mode=None):
+                 transparency_mode=None, faded=False):
         self.ordinal = int(ordinal)
         self.name = name
         self.png = png
@@ -1011,6 +1012,11 @@ class CustomTexture:
         self.original = original
         #: :func:`nudge_texels`'s, kept so every export writes the same bytes.
         self.nudge = int(nudge or 0)
+        #: Whether a material fading its faces draws it, which is the export's
+        #: to know: such a texture is written see-through so the faces are drawn
+        #: in the second pass - see :func:`.transparency.faded_render_mode`.
+        #: The look an author sees does not change.
+        self.faded = bool(faded)
 
     @property
     def index(self) -> int:
@@ -1020,8 +1026,26 @@ class CustomTexture:
     def render_mode(self) -> str:
         """The header's render mode: the look's, or what an old texture had."""
         if self.mode is None:
-            return self.legacy_render_mode
-        return transparency.render_mode_for(self.mode)
+            mode = self.legacy_render_mode
+        else:
+            mode = transparency.render_mode_for(self.mode)
+        if self.faded:
+            return transparency.faded_render_mode(mode, self.format)
+        return mode
+
+    @property
+    def pixel_mode(self):
+        """The look the pixels are prepared for, :func:`.transparency.prepare`'s.
+
+        The look itself, but a faded texture from before transparency existed
+        that was solid is made solid: written see-through, its alpha would
+        start to count, and the fade is meant to be the vertex alpha alone.
+        """
+        if (self.mode is None and self.faded
+                and not transparency.translucent(self.format,
+                                                 self.legacy_render_mode)):
+            return transparency.OPAQUE
+        return self.mode
 
     @property
     def translucent(self) -> bool:
@@ -1062,7 +1086,7 @@ class CustomTexture:
 
     def encode(self) -> bytes:
         return encode_texture(self.png, self.format, self.render_mode,
-                              nudge=self.nudge, transparency_mode=self.mode)
+                              nudge=self.nudge, transparency_mode=self.pixel_mode)
 
     def texels(self, nudge=None) -> bytes:
         """The image as ``encode`` writes it, without the header.
@@ -1071,7 +1095,8 @@ class CustomTexture:
         """
         width, height, rgba = read_png(self.png)
         check_size(width, height, self.format)
-        rgba = transparency.prepare(rgba, width, height, self.mode, self.format)
+        rgba = transparency.prepare(rgba, width, height, self.pixel_mode,
+                                    self.format)
         return nudge_texels(encode_texels(rgba, width, height, self.format),
                             width, height, self.format,
                             self.nudge if nudge is None else nudge)

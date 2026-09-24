@@ -76,15 +76,17 @@ class CustomTextureError(Exception):
 # The scene's list, as the rest of the addon wants to see it
 # ---------------------------------------------------------------------------
 
-def entries(context) -> list:
+def entries(context, faded=()) -> list:
     """The track's own textures as :class:`..textures.CustomTexture`.
 
     In collection order, which is ordinal order, which is the order the package
-    writes them in. Nothing sorts this.
+    writes them in. Nothing sorts this. ``faded`` holds the texture ids a
+    material fades faces over; :func:`exported` fills it.
     """
     settings = getattr(context.scene, "dkr", None)
     if settings is None:
         return []
+    faded = set(faded)
     found = []
     for ordinal, record in enumerate(settings.custom_textures):
         found.append(texture_module.CustomTexture(
@@ -99,8 +101,19 @@ def entries(context) -> list:
             original=resolve(record.original),
             nudge=record.nudge,
             transparency_mode=record.transparency or None,
+            faded=texture_module.custom_id(ordinal) in faded,
         ))
     return found
+
+
+def exported(context) -> list:
+    """:func:`entries` as the package writes them.
+
+    A texture a material fades faces over is written see-through, so the game
+    draws those faces in the second pass; see :mod:`..transparency`. Only the
+    export asks for this - everywhere else a texture is what its look says.
+    """
+    return entries(context, geometry.faded_texture_ids(context))
 
 
 def resolve(stored: str) -> str:

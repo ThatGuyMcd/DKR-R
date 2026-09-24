@@ -70,6 +70,20 @@ TEXTURE_SECTION = "TEXTURES_3D"
 #: with a dozen of its own images should not bury its four payloads.
 TEXTURE_DIR = "textures"
 
+#: The track's own minimap: its picture in ``ASSET_TEXTURES_2D`` and the sprite
+#: that wraps it in ``ASSET_SPRITES``. Both tables are published once, at boot,
+#: exactly as ``TEXTURES_3D`` is, and both entries are named by placeholder -
+#: the model's ``minimapSpriteIndex`` and the sprite's ``baseTextureId`` - that
+#: the runtime rewrites, because the real indices depend on the player's ROM.
+#: See :mod:`.minimap`.
+MINIMAP_TEXTURE_SECTION = "TEXTURES_2D"
+MINIMAP_SPRITE_SECTION = "SPRITES"
+MINIMAP_DIR = "minimap"
+MINIMAP_FILES = {
+    MINIMAP_TEXTURE_SECTION: MINIMAP_DIR + "/texture.bin",
+    MINIMAP_SPRITE_SECTION: MINIMAP_DIR + "/sprite.bin",
+}
+
 #: Where the addon leaves asset-tool input inside the track directory.
 SOURCE_DIR = "source"
 
@@ -123,6 +137,8 @@ class TrackPackage:
         #: The pack is not part of the package - see :mod:`.rice_pack` - but
         #: the manifest names it, so the two can be matched up later.
         self.hd_pack: Optional[Dict[str, object]] = None
+        #: section -> absolute path, for the minimap's picture and sprite.
+        self.minimap: Dict[str, str] = {}
         self.notes: List[str] = []
 
     # -- sources ---------------------------------------------------------
@@ -265,6 +281,37 @@ class TrackPackage:
             position += 1
         return payloads
 
+    def encode_minimap(self, texture: bytes, sprite: bytes) -> None:
+        """Attach the track's own minimap: its picture and the sprite around it.
+
+        The picture is one texture, so it is the track's 2D texture 0, and the
+        sprite's placeholder names exactly that. One of each, always together:
+        a sprite without its texture would name a texture that is not there.
+        """
+        folder = os.path.join(self.directory, MINIMAP_DIR)
+        os.makedirs(folder, exist_ok=True)
+        for section, payload in ((MINIMAP_TEXTURE_SECTION, texture),
+                                 (MINIMAP_SPRITE_SECTION, sprite)):
+            path = os.path.join(self.directory, *MINIMAP_FILES[section].split("/"))
+            with open(path, "wb") as handle:
+                handle.write(payload)
+            self.minimap[section] = path
+
+    def drop_minimap(self) -> None:
+        """Remove a minimap an earlier export left, for a track that has none.
+
+        The manifest only claims what this export attached, so a stale pair
+        would never load - but it would sit there looking as if it did.
+        """
+        self.minimap = {}
+        for relative in MINIMAP_FILES.values():
+            stale = os.path.join(self.directory, *relative.split("/"))
+            if os.path.isfile(stale):
+                os.remove(stale)
+        folder = os.path.join(self.directory, MINIMAP_DIR)
+        if os.path.isdir(folder) and not os.listdir(folder):
+            os.rmdir(folder)
+
     def add_payload(self, section: str, path: str) -> None:
         """Attach a compiled section payload produced by the asset tool."""
         if section not in SECTIONS:
@@ -304,6 +351,13 @@ class TrackPackage:
                 "file": "%s/%d.bin" % (TEXTURE_DIR, position),
             }
             for position in range(len(self.texture_payloads))
+        ]
+        # The picture before the sprite, which names it by the picture's
+        # position among this track's 2D textures.
+        adds += [
+            {"section": section, "file": MINIMAP_FILES[section]}
+            for section in (MINIMAP_TEXTURE_SECTION, MINIMAP_SPRITE_SECTION)
+            if section in self.minimap
         ]
         manifest = {
             "schemaVersion": SCHEMA_VERSION,
@@ -409,6 +463,20 @@ class TrackPackage:
                 "- `%s/%d.bin`" % (TEXTURE_DIR, position)
                 for position in range(len(self.texture_payloads))
             ] + [""]
+        if self.minimap:
+            lines += [
+                "## Minimap",
+                "",
+                "The track's own minimap: `%s` is the picture, an IA8"
+                % MINIMAP_FILES[MINIMAP_TEXTURE_SECTION],
+                "texture, and `%s` the sprite that anchors it on the"
+                % MINIMAP_FILES[MINIMAP_SPRITE_SECTION],
+                "HUD. DKR-R appends them to `ASSET_TEXTURES_2D` and `ASSET_SPRITES`",
+                "and points the model's `minimapSpriteIndex` at the sprite, so",
+                "like the track's own textures they load from the next launch",
+                "after the track is installed.",
+                "",
+            ]
         if self.hd_pack:
             pack = self.hd_pack["file"]
             lines += [

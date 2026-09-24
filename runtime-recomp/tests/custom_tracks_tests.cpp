@@ -87,6 +87,75 @@ std::vector<std::uint8_t> as_bytes(const std::string& text) {
     return std::vector<std::uint8_t>(text.begin(), text.end());
 }
 
+// A SPRITES payload as BuildSprite writes one: a 12-byte SpriteHeader, the
+// frame boundaries, padded to 16.
+std::string sprite_payload(std::int32_t base_texture, std::uint16_t frames = 1,
+                           std::int16_t anchor_x = 61, std::int16_t anchor_y = 62) {
+    std::string out(16U, '\0');
+    out[0] = static_cast<char>((base_texture >> 8) & 0xFF);
+    out[1] = static_cast<char>(base_texture & 0xFF);
+    out[2] = static_cast<char>((frames >> 8) & 0xFF);
+    out[3] = static_cast<char>(frames & 0xFF);
+    out[4] = static_cast<char>((anchor_x >> 8) & 0xFF);
+    out[5] = static_cast<char>(anchor_x & 0xFF);
+    out[6] = static_cast<char>((anchor_y >> 8) & 0xFF);
+    out[7] = static_cast<char>(anchor_y & 0xFF);
+    for (std::uint16_t frame = 0; frame <= frames && 12U + frame < out.size(); ++frame) {
+        out[12U + frame] = static_cast<char>(frame);
+    }
+    return out;
+}
+
+// The same model with minimapSpriteIndex (0x20, inside the stored prefix) set.
+std::string with_minimap(std::string payload, std::int32_t sprite) {
+    const std::size_t at = 10U + 0x20U;
+    const auto value = static_cast<std::uint32_t>(sprite);
+    payload[at] = static_cast<char>((value >> 24) & 0xFF);
+    payload[at + 1U] = static_cast<char>((value >> 16) & 0xFF);
+    payload[at + 2U] = static_cast<char>((value >> 8) & 0xFF);
+    payload[at + 3U] = static_cast<char>(value & 0xFF);
+    return payload;
+}
+
+std::int32_t served_minimap_sprite(std::uint32_t offset, std::int32_t size) {
+    const std::uint8_t* bytes = payload_for(Section::LevelModels, offset, size);
+    assert(bytes != nullptr);
+    const std::uint8_t* at = bytes + 10U + 0x20U;
+    return static_cast<std::int32_t>((static_cast<std::uint32_t>(at[0]) << 24) |
+                                     (static_cast<std::uint32_t>(at[1]) << 16) |
+                                     (static_cast<std::uint32_t>(at[2]) << 8) | at[3]);
+}
+
+// A header that names retail object maps, so a track needs ship none.
+std::string minimal_header() {
+    std::string header(200U, '\0');
+    header[0x37] = 73;
+    header[0xBB] = 5;
+    return header;
+}
+
+void write_minimap_track(const std::filesystem::path& root, const std::string& id,
+                         const std::string& sprite, const std::string& model,
+                         bool texture = true) {
+    std::filesystem::create_directories(root / "minimap");
+    std::string adds =
+        "{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"},"
+        "{\"section\":\"LEVEL_MODELS\",\"file\":\"m.bin\"}";
+    if (texture) {
+        adds += ",{\"section\":\"TEXTURES_2D\",\"file\":\"minimap/texture.bin\"}";
+        write_file(root / "minimap" / "texture.bin", texture_payload(48, 60, 5, 0));
+    }
+    if (!sprite.empty()) {
+        adds += ",{\"section\":\"SPRITES\",\"file\":\"minimap/sprite.bin\"}";
+        write_file(root / "minimap" / "sprite.bin", sprite);
+    }
+    write_file(root / "manifest.json",
+               "{\"schemaVersion\":1,\"id\":\"" + id + "\",\"name\":\"" + id +
+                   "\",\"adds\":[" + adds + "]}");
+    write_file(root / "h.bin", minimal_header());
+    write_file(root / "m.bin", model);
+}
+
 void write_track(const std::filesystem::path& root, const std::string& id,
                  std::size_t payload_size) {
     std::filesystem::create_directories(root);
@@ -1031,6 +1100,119 @@ int main() {
         assert(track_select_entries().empty());
     }
     std::filesystem::remove_all(root);
+    // A track's own minimap: a picture in the 2D texture table and a sprite in
+    // the sprite table, both published once at boot like the 3D textures, and
+    // named by placeholders the runtime substitutes as it serves them - the
+    // model's minimapSpriteIndex and the sprite's baseTextureId.
+    std::filesystem::remove_all(root);
+    const std::string mapped_model =
+        with_minimap(model_payload({1234}), kCustomSpriteIdBase);
+    write_minimap_track(root / "mapped.dkrmap", "mapped",
+                        sprite_payload(kCustomTexture2DIdBase), mapped_model);
+    scan(root);
+    assert(tracks().size() == 1U);
+    assert(tracks().front().textures_2d.size() == 1U);
+    assert(tracks().front().sprites.size() == 1U);
+    assert(tracks().front().sprites.front().anchor_x == 61);
+    assert(artwork("mapped").minimap && !artwork("nobody").minimap);
+    {
+        std::vector<std::uint8_t> bytes = as_bytes(mapped_model);
+        assert(model_minimap_sprite(bytes) == kCustomSpriteIdBase);
+        assert(model_minimap_sprite(as_bytes(std::string(8U, 'x'))) == -1);
+    }
+
+    // Boot: tex_init_textures publishes the 2D table, then the sprite table.
+    constexpr std::int32_t kTextures2D[] = {0x0, 0x100, 0x200, -1};           // 2 retail
+    constexpr std::int32_t kSprites[] = {0x0, 0x10, 0x20, 0x30, -1};          // 3 retail
+    const std::vector<std::int32_t> table_2d =
+        build_extended_table(Section::Textures2D, kTextures2D);
+    assert(level_count(table_2d) == 3 && table_2d[2] == 0x200);
+    const std::vector<std::int32_t> sprite_table =
+        build_extended_table(Section::Sprites, kSprites);
+    assert(level_count(sprite_table) == 4 && sprite_table[3] == 0x30);
+    {
+        // The sprite now draws the 2D texture the track shipped: retail count
+        // + 0, and its anchor is untouched.
+        const std::uint8_t* sprite = payload_for(Section::Sprites, 0x30, 16);
+        assert(sprite != nullptr);
+        assert(sprite[0] == 0 && sprite[1] == 2);
+        assert(sprite[4] == 0 && sprite[5] == 61);
+    }
+
+    // Level load: the model now names the track's sprite, retail count + 0.
+    const std::vector<std::int32_t> mapped_headers =
+        build_extended_table(Section::LevelHeaders, kRetail);
+    const std::vector<std::int32_t> mapped_models =
+        build_extended_table(Section::LevelModels, kRetail);
+    assert(served_minimap_sprite(0x400, static_cast<std::int32_t>(mapped_model.size())) == 3);
+    // Rebuilding substitutes into the file's bytes again, not into the blob.
+    (void) build_extended_table(Section::LevelModels, kRetail);
+    assert(served_minimap_sprite(0x400, static_cast<std::int32_t>(mapped_model.size())) == 3);
+    assert(!minimap_hidden(static_cast<std::uint32_t>(mapped_headers[3])));
+    assert(!minimap_hidden(0x250));   // a retail header is never touched
+    (void) mapped_models;
+
+    // Installed after boot: the level tables are rebuilt and take the track,
+    // the sprite and 2D tables are not. Its model falls back to sprite 0 and
+    // its header is served with the "no minimap" bit, until a relaunch.
+    write_minimap_track(root / "zlate.dkrmap", "zlate",
+                        sprite_payload(kCustomTexture2DIdBase), mapped_model);
+    scan(root);
+    assert(tracks().size() == 2U);
+    const std::vector<std::int32_t> late_headers =
+        build_extended_table(Section::LevelHeaders, kRetail);
+    const std::vector<std::int32_t> late_models =
+        build_extended_table(Section::LevelModels, kRetail);
+    {
+        std::uint32_t mapped_header = 0;
+        std::uint32_t late_header = 0;
+        for (std::size_t index = 3; index + 2U < late_headers.size(); ++index) {
+            const auto offset = static_cast<std::uint32_t>(late_headers[index]);
+            const auto size = late_headers[index + 1] - late_headers[index];
+            (void) size;
+            if (resolved_level_id("mapped") == static_cast<std::int32_t>(index)) {
+                mapped_header = offset;
+            }
+            if (resolved_level_id("zlate") == static_cast<std::int32_t>(index)) {
+                late_header = offset;
+            }
+        }
+        assert(mapped_header != 0U && late_header != 0U);
+        assert(!minimap_hidden(mapped_header));
+        assert(minimap_hidden(late_header));
+        const auto model_size = static_cast<std::int32_t>(mapped_model.size());
+        const std::int32_t a = served_minimap_sprite(static_cast<std::uint32_t>(late_models[3]), model_size);
+        const std::int32_t b = served_minimap_sprite(static_cast<std::uint32_t>(late_models[4]), model_size);
+        assert((a == 3 && b == 0) || (a == 0 && b == 3));
+    }
+
+    // Refused at scan: a model naming a minimap its track does not ship, a
+    // sprite drawing a 2D texture past the track's own, and sprites the loader
+    // would misread - no frames, or too long for the buffer it is copied into.
+    std::filesystem::remove_all(root);
+    write_minimap_track(root / "nosprite.dkrmap", "nosprite", std::string{},
+                        mapped_model);
+    write_minimap_track(root / "overreach.dkrmap", "overreach",
+                        sprite_payload(kCustomTexture2DIdBase + 1), mapped_model);
+    write_minimap_track(root / "frameless.dkrmap", "frameless",
+                        sprite_payload(kCustomTexture2DIdBase, 0), mapped_model);
+    write_minimap_track(root / "huge.dkrmap", "huge",
+                        sprite_payload(kCustomTexture2DIdBase) + std::string(512U, '\0'),
+                        mapped_model);
+    // A sprite naming one of the ROM's own 2D textures needs none of its own.
+    write_minimap_track(root / "borrowed.dkrmap", "borrowed", sprite_payload(12),
+                        with_minimap(model_payload({1234}), 1), false);
+    scan(root);
+    assert(tracks().size() == 1U);
+    assert(tracks().front().id == "borrowed");
+    {
+        SpriteInfo info;
+        std::string reason;
+        assert(inspect_sprite_payload(as_bytes(sprite_payload(12)), info, reason));
+        assert(info.frames == 1U && info.textures == 1U && info.base_texture == 12);
+        assert(!inspect_sprite_payload(as_bytes(std::string(10U, '\0')), info, reason));
+    }
+
     std::printf("custom_tracks_tests: ok\n");
     return 0;
 }

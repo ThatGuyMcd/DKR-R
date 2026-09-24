@@ -76,7 +76,9 @@ def test_registration():
                  "set_level_type", "use_imported_level_type", "toggle_vehicle",
                  "set_default_vehicle", "generate_start_grid",
                  "select_grid_children", "step_music", "play_music",
-                 "pick_skybox", "show_skybox", "minimap_fit",
+                 "pick_skybox", "show_skybox", "minimap_draw_edge",
+                 "minimap_from_ai", "minimap_close_edges", "minimap_clear",
+                 "minimap_save_png", "minimap_use_png", "minimap_forget_png",
                  "make_convertible", "ai_copy_difficulty",
                  "set_face_transparency", "set_texture_transparency",
                  "restore_custom_textures",
@@ -2289,6 +2291,189 @@ def test_material_opacity():
           "back to full, the fade leaves the viewport")
     edit = geometry_export.build_edited_model(bpy.context)
     check(not edit.edited, "and the export is untouched again (%r)" % edit.describe())
+
+
+def _faded_batches(model, obj):
+    """``[(segment, index, batch), ...]`` for every batch a material fades."""
+    from dkr_track_editor.operators import geometry as geometry_ops
+
+    alpha_for = geometry_ops.batch_alpha(geometry_ops.opacities(obj))
+    return [(segment, index, batch)
+            for segment in model.segments
+            for index, batch in enumerate(segment.batches)
+            if alpha_for(batch) is not None]
+
+
+def test_faded_water_is_drawn_last():
+    """Faded calm water over a ROM texture is flagged ``RENDER_WATER``.
+
+    A faded face left in the first pass is drawn before what is behind it and
+    then hides it - a lake showing the sky instead of its bed - so the export
+    moves it to the second. A ROM texture's render mode cannot change, so for
+    one of those the only way is the flag retail's own water carries, and it is
+    only given to water.
+    """
+    print("faded water is drawn in the second pass")
+    from dkr_track_editor import level_model, transparency as looks
+    from dkr_track_editor.operators import geometry as geometry_ops
+    from dkr_track_editor.operators import geometry_export
+
+    path, obj = _import_lake(include_hidden=True)
+    if path is None:
+        print("  skip: no extracted level models")
+        return
+
+    translucency = geometry_export.texture_translucency(bpy.context, obj)
+    material = next(
+        (m for m in obj.data.materials
+         if m is not None
+         and m.get(geometry_ops.PROP_CATEGORY) == geometry_ops.SURFACE
+         and translucency.get(int(m.get(geometry_ops.PROP_TEXTURE_INDEX, -1)))
+         is False), None)
+    check(material is not None, "a surface material over an opaque ROM texture")
+    if material is None:
+        return
+    index = int(material[geometry_ops.PROP_TEXTURE_INDEX])
+
+    material.dkr_opacity = 0.4
+    edit = geometry_export.build_edited_model(bpy.context)
+    faded = _faded_batches(edit.model, obj)
+    stuck = [batch for segment, at, batch in faded
+             if at < segment.opaque_batches]
+    check(faded and len(stuck) == len(faded),
+          "faded, ground over an opaque ROM texture cannot leave the first pass "
+          "(%d of %d stay)" % (len(stuck), len(faded)))
+    check(any("still drawn with the solid track" in note for note in edit.notes),
+          "and the export says so")
+
+    for other in obj.data.materials:
+        if (other is not None
+                and int(other.get(geometry_ops.PROP_TEXTURE_INDEX, -1)) == index):
+            other[geometry_ops.PROP_SURFACE] = looks.SURFACE_WATER_CALM
+    edit = geometry_export.build_edited_model(bpy.context)
+    faded = _faded_batches(edit.model, obj)
+    moved = [batch for segment, at, batch in faded
+             if at >= segment.opaque_batches and batch.flags & looks.RENDER_WATER]
+    check(faded and len(moved) == len(faded),
+          "as calm water, every faded draw call is flagged RENDER_WATER and "
+          "drawn in the second pass (%d of %d)" % (len(moved), len(faded)))
+    check(any("RENDER_WATER" in note for note in edit.notes)
+          and not any("still drawn with the solid track" in note
+                      for note in edit.notes),
+          "the export says what it did, and nothing is left behind")
+    ours = {id(batch) for _segment, _at, batch in faded}
+    base = level_model.load(path)
+    before = sum(1 for segment in base.segments for batch in segment.batches
+                 if batch.flags & looks.RENDER_WATER)
+    after = sum(1 for segment in edit.model.segments
+                for batch in segment.batches
+                if batch.flags & looks.RENDER_WATER and id(batch) not in ours)
+    check(after == before,
+          "and no other draw call gained the flag (%d water before, %d besides "
+          "ours after)" % (before, after))
+
+    # The panel says it before the export has to: over dry ground the fade
+    # would hide what is behind it, over calm water it would not.
+    from dkr_track_editor.ui import panels
+    settings = bpy.context.scene.dkr
+    settings.texture_id = geometry_ops.texture_table(obj)[index]["id"]
+    settings.texture_opacity = 0.4
+    warning = ("label", "In game, faded faces over this texture")
+    settings.texture_surface = "0"
+    check(warning in _draw_panel(panels.DKR_PT_textures),
+          "the Textures panel warns about fading this texture on dry ground")
+    settings.texture_surface = str(looks.SURFACE_WATER_CALM)
+    check(warning not in _draw_panel(panels.DKR_PT_textures),
+          "and not as calm water")
+
+
+def test_faded_own_texture_is_drawn_last():
+    """A faded texture of the track's own is written see-through.
+
+    That is what puts the faded faces in the second pass, and it is the
+    package's business alone: the look an author sees stays what they picked,
+    and the pixels - which name the HD replacement - do not change.
+    """
+    print("a faded texture of the track's own is written see-through")
+    from dkr_track_editor import level_model, textures as texture_module
+    from dkr_track_editor.operators import custom_textures as custom_ops
+    from dkr_track_editor.operators import geometry as geometry_ops
+
+    fresh()
+    temporary = tempfile.mkdtemp(prefix="dkr-faded-own-")
+    try:
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(temporary,
+                                                          "faded.blend"))
+        picture = _write_probe_image(temporary, "lake", 64, 32)
+        bpy.ops.mesh.primitive_grid_add(size=4000.0, x_subdivisions=3,
+                                        y_subdivisions=3)
+        bpy.ops.dkr.track_from_mesh_blank(keep_source=False)
+        built = geometry_ops.geometry_objects(bpy.context)
+        check(len(built) == 1, "the track built")
+        if not built:
+            return
+        obj = built[0]
+
+        bpy.ops.dkr.add_custom_texture(
+            filepath=picture, size="64x32",
+            texture_format=str(texture_module.FORMAT_CODES["RGBA16"]))
+        settings = bpy.context.scene.dkr
+        _select_faces(obj.data, [polygon.index for polygon in obj.data.polygons])
+        settings.texture_id = texture_module.custom_id(0)
+        settings.texture_mapping = "PROJECT"
+        bpy.ops.dkr.apply_texture()
+        entry = custom_ops.entries(bpy.context)[0]
+        check(not entry.translucent,
+              "the picture is opaque to start with (%s)" % entry.transparency)
+
+        table = geometry_ops.texture_table(obj)
+        material = next(
+            (m for m in obj.data.materials
+             if m is not None and 0 <= int(m.get(geometry_ops.PROP_TEXTURE_INDEX,
+                                                 -1)) < len(table)
+             and table[int(m[geometry_ops.PROP_TEXTURE_INDEX])]["id"]
+             == texture_module.custom_id(0)), None)
+        check(material is not None, "a material draws it")
+        if material is None:
+            return
+        material.dkr_opacity = 0.4
+
+        exported = custom_ops.exported(bpy.context)[0]
+        check(exported.render_mode == "TRANSPARENT" and exported.translucent,
+              "faded, the export writes it see-through")
+        look = custom_ops.entries(bpy.context)[0]
+        check(look.render_mode == entry.render_mode
+              and look.transparency == entry.transparency,
+              "while everywhere else it is still what its look says")
+        check(exported.texels() == entry.texels(),
+              "and its pixels do not change")
+
+        settings.track_name = "Faded"
+        settings.track_id = "faded"
+        bpy.ops.dkr.place_object(object_id="ASSET_OBJECT_SETUPPOINT")
+        target = os.path.join(temporary, "faded.dkrmap")
+        result = bpy.ops.dkr.export_dkrmap(filepath=target, validate_first=False)
+        check(result == {"FINISHED"}, "the package exports (%r)" % (result,))
+        if result != {"FINISHED"}:
+            return
+        with open(os.path.join(target, "textures", "0.bin"), "rb") as handle:
+            payload = handle.read()
+        check(payload[2] == 0x01,
+              "the package's texture says TRANSPARENT RGBA16 (0x%02x)"
+              % payload[2])
+        model = level_model.load(os.path.join(target, "model.bin"))
+        faded = _faded_batches(model, obj)
+        check(faded and all(at >= segment.opaque_batches
+                            for segment, at, _batch in faded),
+              "and its %d faded draw call(s) are drawn in the second pass"
+              % len(faded))
+
+        material.dkr_opacity = 1.0
+        check(not custom_ops.exported(bpy.context)[0].translucent,
+              "back to full opacity, it is written opaque again")
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+        fresh()
 
 
 def test_surface_types():
@@ -4814,6 +4999,8 @@ def main():
         test_header_reaches_the_package()
         test_surface_types()
         test_material_opacity()
+        test_faded_water_is_drawn_last()
+        test_faded_own_texture_is_drawn_last()
         test_resegment_makes_the_track_its_own_base()
         test_track_from_mesh()
         test_track_from_mesh_refuses_a_giant()

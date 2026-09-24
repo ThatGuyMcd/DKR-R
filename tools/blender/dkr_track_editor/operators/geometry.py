@@ -495,6 +495,22 @@ def batch_alpha(table):
     return alpha_for
 
 
+def faded_texture_ids(context) -> set:
+    """The texture ids that faded materials draw, across every track mesh.
+
+    Faces are faded through vertex alpha, whatever the texture. A texture of
+    the track's own that one of these ids names is written see-through, so the
+    game draws the faded faces in the second pass; see :mod:`..transparency`.
+    """
+    found = set()
+    for obj in geometry_objects(context):
+        table = texture_table(obj)
+        for index, _category in opacities(obj):
+            if 0 <= index < len(table):
+                found.add(int(table[index].get("id", 0)))
+    return found
+
+
 def show_opacity(material) -> None:
     """Make the viewport follow a material's opacity. Appearance only.
 

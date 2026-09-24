@@ -419,6 +419,20 @@ ones. `RENDER_CUTOUT` (bit 4) is independent of the side: it makes the batch
 alpha-tested (`G_RM_AA_ZB_TEX_EDGE`), and retail sets it on 302 batches, all
 over see-through textures.
 
+Vertex alpha does not move a batch either, and it only works in the second
+pass. `track_init_level_model` reads a vertex coloured `(1, 1, b)` as alpha `b`
+and flags its batch `RENDER_VTX_ALPHA` (bit 27), and `material_set` then draws
+it with `dRenderSettingsVtxAlpha`, whose entries blend **and write depth**. The
+no-write half is chosen by `RENDER_Z_UPDATE`, bit 8, which on a batch is
+`RENDER_HIDDEN`. The first pass walks the segments front to back, so a faded
+batch there is drawn before what stands behind it, blends with the sky and then
+hides the rest from the depth buffer. Retail leaves 195 faded batches in the
+first pass, and in both revisions every one of them fades to alpha 0: an edge
+vanishing into nothing, never a see-through surface. The second pass runs back
+to front, after the solid track and the objects. The addon's material opacity
+therefore writes a faded texture of the track's own as `TRANSPARENT` and flags
+faded calm water `RENDER_WATER`, which is what retail's own water carries.
+
 ## Waves
 
 A segment with `hasWaves` non-zero (retail writes -1) is a wave tile, and the

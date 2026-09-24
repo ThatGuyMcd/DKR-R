@@ -34,8 +34,10 @@ PLAIN_SUITES = [
     "test_textures.py", "test_custom_textures.py", "test_rice_identity.py",
     "test_level_types.py", "test_skyboxes.py", "test_race_ai.py",
     "test_transparency.py", "test_water.py", "test_texture_scroll.py",
+    "test_minimap.py",
 ]
-BLENDER_SUITES = ["test_blender_roundtrip.py", "test_blender_operators.py", "test_blender_waterfalls.py"]
+BLENDER_SUITES = ["test_blender_roundtrip.py", "test_blender_operators.py",
+                  "test_blender_waterfalls.py", "test_blender_minimap.py"]
 
 
 def find_blender(explicit=None):

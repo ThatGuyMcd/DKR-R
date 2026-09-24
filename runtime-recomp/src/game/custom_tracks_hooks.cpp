@@ -43,6 +43,11 @@ constexpr std::uint32_t kLevelHeadersSection = 23U;
 // pairs. textures_sprites.c reaches it as
 // asset_table_load(ASSET_TEXTURES_3D_TABLE) at boot and asset_load with
 // ASSET_TEXTURES_3D per texture, which is the same pair of hooks below.
+//
+// A minimap is the next two pairs along, data-then-table as well:
+// ASSET_TEXTURES_2D and its table are 4/5, and after the game text, menu text
+// and screens, ASSET_SPRITES and its table are 12/13. tex_init_textures loads
+// all three tables at boot, 2D first and sprites last.
 using dkr::runtime::custom_tracks::Section;
 
 struct SectionMapping {
@@ -53,6 +58,8 @@ struct SectionMapping {
 
 constexpr SectionMapping kSectionMappings[] = {
     {3U, 2U, Section::Textures3D},
+    {5U, 4U, Section::Textures2D},
+    {13U, 12U, Section::Sprites},
     {20U, 21U, Section::LevelObjectMaps},
     {22U, 23U, Section::LevelHeaders},
     {24U, 25U, Section::LevelNames},
@@ -414,6 +421,20 @@ bool apply_custom_payload(std::uint8_t* rdram,const AssetLoadRequest& request) {
                      "[custom-tracks] header at offset %u now points at %s "
                      "%d\n",
                      request.offset, fixup.label, index);
+    }
+
+    // A track whose own minimap is not in this session's sprite table - it
+    // was installed after boot, and that table is published once - would draw
+    // sprite 0 with its dots placed for another picture. The header's own
+    // "no minimap" bit, the one hubs use, hides it until the next launch.
+    namespace tracks = dkr::runtime::custom_tracks;
+    if (request.size > static_cast<std::int32_t>(tracks::kHeaderMinimapFlags) &&
+        tracks::minimap_hidden(request.offset)) {
+        const auto at = static_cast<std::int32_t>(tracks::kHeaderMinimapFlags);
+        MEM_BU(at, rdram_address(request.destination)) |= tracks::kHeaderNoMinimap;
+        std::fprintf(stderr,
+                     "[custom-tracks] header at offset %u hides its minimap: "
+                     "relaunch to load it\n", request.offset);
     }
     return true;
 }

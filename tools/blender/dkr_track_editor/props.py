@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import bpy
 from bpy.props import (
-    BoolProperty, CollectionProperty, EnumProperty, FloatProperty, IntProperty,
-    PointerProperty, StringProperty,
+    BoolProperty, CollectionProperty, EnumProperty, FloatProperty,
+    FloatVectorProperty, IntProperty, PointerProperty, StringProperty,
 )
 
 from . import catalog as catalog_module, level_types, race_ai, water
@@ -443,6 +443,76 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
                for vehicle, label in level_types.PLAYER_VEHICLES],
         default="VEHICLE_CAR",
         update=_redraw_update,
+    )
+
+    # -- the minimap -------------------------------------------------------
+    #
+    # How the picture looks. Where the dots go is never a setting: the numbers
+    # follow from the edges and these, so nothing here can put them off the road.
+
+    minimap_size: IntProperty(
+        name="Size",
+        description=(
+            "The picture's longest side. Retail's run from 60 to 80 pixels. "
+            "It is loaded into 4KB of texture memory, so a square one stops at "
+            "64 and the width is rounded to a multiple of 8"
+        ),
+        default=64, min=48, max=80, subtype="PIXEL",
+        update=_redraw_update,
+    )
+    minimap_rotation: EnumProperty(
+        name="Rotation",
+        description="Which way up the map is drawn. The game never turns it with "
+                    "the player",
+        items=[
+            ("AUTO", "Auto", "Stand the road upright in the smallest picture, "
+                             "as retail turns its long tracks"),
+            ("0", "0°", "North up, as the top view shows the track"),
+            ("90", "90°", "A quarter turn"),
+            ("180", "180°", "Upside down"),
+            ("270", "270°", "Three quarters of a turn"),
+        ],
+        default="AUTO",
+        update=_redraw_update,
+    )
+    minimap_colour: FloatVectorProperty(
+        name="Colour",
+        description=(
+            "The tint the game multiplies the picture by. Most tracks are "
+            "white; Snowflake Mountain's are red and Crescent Island's teal. "
+            "Three-player split screen draws it white whatever this is"
+        ),
+        subtype="COLOR_GAMMA", size=3, min=0.0, max=1.0,
+        default=(1.0, 1.0, 1.0),
+        update=_redraw_update,
+    )
+    minimap_soft: IntProperty(
+        name="Soft Edge",
+        description="0 is a hard edge, 1 retail's soft one, 2 softer still",
+        default=1, min=0, max=2,
+        update=_redraw_update,
+    )
+    minimap_flag: BoolProperty(
+        name="Checkered Finish Line",
+        description="Draw the 5x5 checkerboard retail maps put just behind the "
+                    "start grid",
+        default=True,
+        update=_redraw_update,
+    )
+    show_minimap_overlay: BoolProperty(
+        name="Show On Track",
+        description=(
+            "Lay the minimap over the track in the viewport, where the game's "
+            "dots would put it, so an edge that wanders off the road shows"
+        ),
+        default=False,
+        update=_redraw_update,
+    )
+    minimap_png: StringProperty(
+        name="Own Picture",
+        description="A retouched PNG used instead of the picture the edges "
+                    "make. It has to be the same size",
+        default="", subtype="FILE_PATH",
     )
 
     # -- the texture browser ---------------------------------------------

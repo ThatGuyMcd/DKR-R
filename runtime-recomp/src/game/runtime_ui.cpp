@@ -7846,11 +7846,15 @@ void DrawTrackLabTrack(const dkr::runtime::custom_tracks::Track& track, float wi
                                : author + "  -  level assigned at launch",
                     info_width);
         const tracks_ns::ArtworkSummary art = tracks_ns::artwork(track.id);
-        if (art.textures > 0U) {
-            std::string line = std::to_string(art.textures) +
-                               (art.textures == 1U ? " texture" : " textures");
-            if (art.translucent > 0U) line += ", " + std::to_string(art.translucent) + " see-through";
-            if (art.animated > 0U) line += ", " + std::to_string(art.animated) + " animated";
+        if (art.textures > 0U || art.minimap) {
+            std::string line;
+            if (art.textures > 0U) {
+                line = std::to_string(art.textures) +
+                       (art.textures == 1U ? " texture" : " textures");
+                if (art.translucent > 0U) line += ", " + std::to_string(art.translucent) + " see-through";
+                if (art.animated > 0U) line += ", " + std::to_string(art.animated) + " animated";
+            }
+            if (art.minimap) line += line.empty() ? "own minimap" : ", own minimap";
             PaddockGap(5.0F);
             PaddockText(muted, PaddockRgb(0xABC0CC), line, info_width);
         }

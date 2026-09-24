@@ -53,8 +53,9 @@ class DKR_OT_validate(bpy.types.Operator):
             )
             if key:
                 report = validate.Report(list(report) + grid_issues(context, key))
-            from . import waterfall
-            report = validate.Report(list(report) + waterfall.issues(context))
+            from . import minimap, waterfall
+            report = validate.Report(list(report) + waterfall.issues(context)
+                                     + minimap.issues(context))
         except Exception as error:  # noqa: BLE001
             traceback.print_exc()
             self.report({"ERROR"}, "validation failed: %s" % error)

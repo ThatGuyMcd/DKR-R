@@ -31,15 +31,6 @@ class DKR_OT_play_music(_Unavailable, bpy.types.Operator):
     reason = "Listening is not available yet: the music is not loaded from the assets"
 
 
-class DKR_OT_minimap_fit(_Unavailable, bpy.types.Operator):
-    """Frame the minimap around the track geometry"""
-
-    bl_idname = "dkr.minimap_fit"
-    bl_label = "Fit To Track"
-    reason = "In development: how the game places a minimap is still being investigated"
-
-
 CLASSES = (
     DKR_OT_play_music,
-    DKR_OT_minimap_fit,
 )

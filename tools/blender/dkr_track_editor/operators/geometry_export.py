@@ -218,7 +218,8 @@ def _require_schema(mesh) -> None:
 class MeshRead:
     """The mesh, re-expressed in the file's own terms, one entry per segment."""
 
-    __slots__ = ("faces", "positions", "colours", "pool_of", "notes")
+    __slots__ = ("faces", "positions", "colours", "pool_of", "notes",
+                 "watered")
 
     def __init__(self):
         #: segment -> [layout.Face, ...]
@@ -230,6 +231,9 @@ class MeshRead:
         #: segment -> {blender vertex index: pool index}
         self.pool_of: Dict[int, Dict[int, int]] = {}
         self.notes: List[str] = []
+        #: ``{(segment, key)}``: the draw calls of faded calm water that were
+        #: given ``RENDER_WATER`` to be drawn in the second pass.
+        self.watered = set()
 
 
 def _segment_of_vertex(mesh, segments_biased, model, face_segments=None) -> List[int]:
@@ -421,15 +425,23 @@ def _check_segment_range(assigned, model) -> None:
             )
 
 
-def read_mesh(obj, model, translucency=None) -> MeshRead:
+def read_mesh(obj, model, translucency=None, fades=None,
+              surfaces=None) -> MeshRead:
     """Re-express the mesh as loose faces and one vertex pool per segment.
 
     ``translucency`` is :func:`.geometry.table_translucency` for the mesh's
     texture table. Where it knows a face's texture, the face's side of
     ``numberofOpaqueBatches`` is the one the game will draw it on, whatever the
     face carried; see :mod:`..transparency`.
+
+    ``fades`` is :func:`.geometry.opacities` and ``surfaces`` is
+    :func:`.geometry.surface_types`: a faded face of calm water that would be
+    drawn in the first pass is flagged ``RENDER_WATER`` to be drawn in the
+    second, by :func:`..transparency.faded_flags`.
     """
     translucency = translucency or {}
+    fades = fades or {}
+    surfaces = surfaces or {}
     mesh = obj.data
     _require_schema(mesh)
 
@@ -536,12 +548,21 @@ def read_mesh(obj, model, translucency=None) -> MeshRead:
 
         serial = serials[index] - 1
         texture = textures[index] & 0xFF
+        face_flags = geometry.to_unsigned32(flags[index])
         side = bool(opaque[index])
+        watered = False
         if texture != level_model.NO_TEXTURE and texture in translucency:
-            side = looks.draws_in_opaque_pass(
-                geometry.to_unsigned32(flags[index]), translucency[texture])
-        key = _batch_key(model, segment_index, serial, flags[index],
+            side = looks.draws_in_opaque_pass(face_flags, translucency[texture])
+            if side and (texture, geometry.category_of(face_flags)) in fades:
+                moved = looks.faded_flags(face_flags, translucency[texture],
+                                          surfaces.get(texture))
+                watered = moved != face_flags
+                if watered:
+                    face_flags, side = moved, False
+        key = _batch_key(model, segment_index, serial, face_flags,
                          texture, side)
+        if watered:
+            read.watered.add((segment_index, key))
 
         corners = list(polygon.loop_indices)
         # The file stores triangles. Blender's extrude makes quads out of the
@@ -744,9 +765,12 @@ def build_edited_model(context) -> Optional[GeometryEdit]:
                "; ".join(conflicts[:3]))
         )
 
-    read = read_mesh(obj, model, texture_translucency(context, obj))
+    translucency = texture_translucency(context, obj)
+    promoted = _promoted_by_fade(context, obj, translucency)
+    read = read_mesh(obj, model, translucency, geometry.opacities(obj),
+                     geometry.surface_types(obj))
     notes: List[str] = list(read.notes)
-    moved = _sides_moved(read, model)
+    moved = _sides_moved(read, model, promoted)
     if moved:
         notes.append(
             "%d draw call(s) move between the solid and the see-through pass "
@@ -770,6 +794,7 @@ def build_edited_model(context) -> Optional[GeometryEdit]:
         edit = _patch_in_place(model, read, flags, path, obj, notes)
     else:
         edit = _rebuild(model, read, path, obj, notes, added)
+    _explain_fades(edit, read, promoted)
     _settle_waves(context, edit)
     return edit
 
@@ -829,20 +854,36 @@ def _reference_texture(model):
     return None
 
 
-def texture_translucency(context, obj) -> dict:
-    """:func:`.geometry.table_translucency` for this mesh's texture table."""
+def texture_translucency(context, obj, exported=True) -> dict:
+    """:func:`.geometry.table_translucency` for this mesh's texture table.
+
+    ``exported`` reads the track's own textures as the package writes them,
+    where a faded one is see-through; ``False`` reads them as their looks say.
+    """
     from . import custom_textures  # noqa: PLC0415 - it imports geometry
 
+    own = (custom_textures.exported(context) if exported
+           else custom_textures.entries(context))
     return geometry.table_translucency(
         [record.get("id", 0) for record in geometry.texture_table(obj)],
-        prefs.resolve(context), custom_textures.entries(context))
+        prefs.resolve(context), own)
 
 
-def _sides_moved(read, model) -> int:
+def _promoted_by_fade(context, obj, translucency) -> set:
+    """The table entries whose texture is written see-through only because a
+    material fades faces drawing it."""
+    looked = texture_translucency(context, obj, exported=False)
+    return {index for index, see_through in translucency.items()
+            if see_through and not looked.get(index, True)}
+
+
+def _sides_moved(read, model, promoted=()) -> int:
     """How many source batches the derived opaque side moves.
 
     Only faces that still name their source batch are counted, so a face the
-    author added is not reported as a correction.
+    author added is not reported as a correction. Nor are the ones a fade moved,
+    which :func:`_explain_fades` reports: faded water given ``RENDER_WATER``,
+    and faces whose texture is see-through only because of a fade.
     """
     moved = set()
     for segment_index, faces in read.faces.items():
@@ -850,6 +891,9 @@ def _sides_moved(read, model) -> int:
         for face in faces:
             serial = face.key.serial
             if serial is None or serial >= len(segment.batches):
+                continue
+            if ((segment_index, face.key) in read.watered
+                    or face.key.texture_index in promoted):
                 continue
             if face.key.texture_index != segment.batches[serial].texture_index:
                 continue
@@ -1049,6 +1093,46 @@ def _fade(model, obj, notes) -> int:
             "draws them with a flat grey in place of their baked light and "
             "without fog" % batches)
     return vertices
+
+
+def _explain_fades(edit, read, promoted) -> None:
+    """Say how the faded faces reach the second pass, and which cannot.
+
+    A faded face in the first pass hides everything behind it, so the export
+    moves it; see :mod:`..transparency`. What it could not move, and what moved
+    along with a texture the fade made see-through, is the author's to know.
+    """
+    table = geometry.opacities(edit.object)
+    if not table:
+        return
+    alpha_for = geometry.batch_alpha(table)
+    batches = [batch for segment in edit.model.segments
+               for batch in segment.batches]
+    if read.watered:
+        edit.notes.append(
+            "%d draw call(s) of faded calm water are flagged RENDER_WATER, as "
+            "the game's own water is, so they are drawn after the solid track "
+            "and show what is under them. No shadows fall on them"
+            % len(read.watered))
+    if promoted:
+        drawing = [batch for batch in batches
+                   if batch.texture_index in promoted]
+        solid = sum(1 for batch in drawing if alpha_for(batch) is None)
+        note = ("%d draw call(s) are faded over a texture of the track's own, "
+                "which is written see-through so they are drawn after the "
+                "solid track" % (len(drawing) - solid))
+        if solid:
+            note += (". %d other draw call(s) draw that texture unfaded and are "
+                     "drawn after the solid track with it; give the faded faces "
+                     "a copy of the picture if that shows" % solid)
+        edit.notes.append(note)
+    stuck = looks.faded_in_opaque_pass(edit.model, alpha_for)
+    if stuck:
+        edit.notes.append(
+            "%d faded draw call(s) are still drawn with the solid track, where "
+            "the game draws them before what is behind them and then hides it "
+            "all. Only a texture of the track's own, or calm water, can be "
+            "moved: use one, or give the faces a see-through texture" % stuck)
 
 
 def _record(obj, model, notes) -> None:
