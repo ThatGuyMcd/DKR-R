@@ -1,0 +1,74 @@
+/* Save Manager only. Native source: DrawSaveManager and DrawAdventureBuilder. */
+@font-face { font-family: SavesProggy; src: url('../assets/proggy_clean.ttf') format('truetype'); font-display: swap; }
+.saves-page, .saves-dialog { --control-font: RacingDigits, SavesProggy, monospace; }
+.saves-page p { margin: 0 0 13px; line-height: 19px; }
+.saves-page .saves-intro { margin-bottom: 55px; }
+.saves-body { margin-right: 30px; container-type: inline-size; }
+.saves-space { margin-bottom: 13px; }
+.saves-page .saves-button { width: 100%; height: 46px; min-height: 0; padding: 0 16px; margin-bottom: 13px; }
+.saves-card { border: 2px solid var(--border); border-radius: 18px; background: rgba(11,46,64,.96); padding: 12px 14px 20px; margin-bottom: 13px; min-width: 0; }
+.saves-card p:last-child { margin-bottom: 0; }
+.saves-adventure { padding: 16px 18px 24px; }
+.saves-actions { display: grid; gap: 12px; margin-bottom: 13px; }
+.saves-actions-three { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.saves-actions-two { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.saves-actions .saves-button { margin: 0; }
+.saves-separator { display: flex; align-items: center; gap: 20px; min-height: 25px; padding-left: 20px; margin: 0 0 13px; }
+.saves-separator::after { content: ''; height: 3px; flex: 1; background: rgba(242,140,20,.75); }
+.saves-paks, .saves-backups { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 13px 12px; margin-bottom: 13px; }
+.saves-backups { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.saves-paks .saves-card, .saves-backups .saves-card { margin: 0; }
+.saves-backup .saves-button { height: 38px; margin: 0; }
+.saves-page .saves-danger, .saves-dialog .saves-danger { background-color: #73171a; height: 44px; }
+.saves-error { color: var(--red); }
+.saves-builder-tabs { display: flex; gap: 4px; border-bottom: 1px solid #334d6b; margin: 0 0 13px; overflow-x: auto; scrollbar-width: thin; }
+.saves-builder-tabs button { flex: 0 0 auto; min-width: 0; height: 41px; padding: 11px 16px; border: 0; border-radius: 4px 4px 0 0; background: #1f3147; line-height: 19px; white-space: nowrap; }
+.saves-builder-tabs button[aria-selected="true"] { background: #334d6b; }
+.saves-builder-tabs button:hover { background: #3c79bd; }
+.saves-setting-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0 12px; margin-bottom: 13px; }
+.saves-setting-grid > * { min-width: 0; min-height: 86px; margin: 0; padding: 2px 4px 15px; }
+.saves-setting-grid .field { align-content: start; }
+.saves-setting-grid .checkbox { align-self: start; align-items: flex-start; padding-top: 2px; }
+.saves-setting-grid .checkbox span { align-self: flex-start; padding-top: 11px; line-height: 19px; }
+.saves-trials > * { min-height: 67px; }
+.saves-initials { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; width: max(1px,calc(min(100%,620px) - 38px)); margin-bottom: 13px; }
+.saves-initials .field { margin: 0; }
+.saves-page .saves-comfortable { width: max(1px,calc(min(100%,620px) - 38px)); height: 42px; }
+.saves-builder [role="tabpanel"] .saves-button { height: 42px; }
+.saves-progress { position: relative; height: 41px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 13px; background: var(--panel-soft); }
+.saves-progress::before { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--progress); background: #e6b300; }
+.saves-progress span { position: relative; display: block; text-align: center; line-height: 39px; }
+.saves-page .saves-builder .saves-apply { height: 52px; background: var(--accent); }
+.saves-records { margin-bottom: 13px; }
+.saves-records summary { cursor: pointer; padding: 11px 16px; background: #09616e; border-radius: 12px; }
+.saves-records summary:hover { background: #fa6e14; }
+.saves-record { padding-top: 13px; border-top: 1px solid rgba(242,140,20,.75); margin-top: 13px; }
+.saves-dialog { width: max-content; max-width: calc(var(--vw) - 32px); padding: 24px 26px; border-radius: 18px; }
+.saves-dialog .dialog-actions { justify-content: flex-start; gap: 12px; margin-top: 13px; }
+.saves-dialog .saves-button { height: 42px; min-height: 0; }
+.saves-dialog .saves-button:first-child { width: 140px; }
+.saves-dialog .saves-button:last-child { width: 220px; }
+.saves-dialog-reset .saves-button { height: 40px; }
+.saves-dialog-reset .saves-button:first-child { width: 130px; }
+.saves-dialog-reset .saves-button:last-child { width: 150px; }
+@container (max-width: 983.99px) {
+  .saves-setting-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@container (min-width: 984px) {
+  .saves-setting-grid > :nth-child(3n + 1) { padding-top: 17px; }
+}
+@container (min-width: 652px) and (max-width: 983.99px) {
+  .saves-setting-grid > :nth-child(2n + 1) { padding-top: 17px; }
+}
+@container (max-width: 959.99px) {
+  .saves-backups { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@container (max-width: 651.99px) {
+  .saves-setting-grid { grid-template-columns: minmax(0,1fr); }
+}
+@container (max-width: 619.99px) {
+  .saves-actions, .saves-paks, .saves-backups { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 650px) {
+  .saves-body { margin-right: 0; }
+}

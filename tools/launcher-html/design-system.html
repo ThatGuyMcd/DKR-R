@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<meta content="dark" name="color-scheme"/>
+<title>DKR-R — Design System</title>
+<link href="assets/favicon.png" rel="icon"/>
+<link href="styles/tokens.css" rel="stylesheet"/>
+<link href="styles/layout.css" rel="stylesheet"/>
+<link href="styles/components.css" rel="stylesheet"/>
+<link href="styles/pages.css" rel="stylesheet"/>
+<link href="styles/mods.css" rel="stylesheet"/>
+<link href="styles/online.css" rel="stylesheet"/>
+<link href="styles/sound.css" rel="stylesheet"/>
+<link href="styles/controller.css" rel="stylesheet"/>
+<script src="js/display.js"></script>
+<style>
+    /* Documentation-only composition. Product specimens keep original project classes and behavior. */
+    html { scroll-behavior: smooth; }
+    body { min-height: 100%; overflow-y: auto; background: #10161c; }
+    body > .backdrop { display: none; }
+    .ds-shell { width: min(1320px, calc(100% - 48px)); margin: 0 auto; padding: 0 0 96px; }
+    .ds-nav { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 24px; overflow-x: auto; padding: 14px 0 12px; border-bottom: 1px solid rgba(242,140,20,.72); background: rgba(12,18,24,.97); backdrop-filter: blur(14px); }
+    .ds-nav a { flex: 0 0 auto; color: var(--muted); font: 700 11px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .09em; text-transform: uppercase; text-decoration: none; }
+    .ds-nav a:hover, .ds-nav a:focus-visible { color: var(--cream); }
+    .ds-header { padding: 64px 0 48px; border: 0; background: transparent; }
+    .ds-header-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px,.8fr); gap: 56px; align-items: end; }
+    .ds-header h1 { margin: 0 0 12px; }
+    .ds-kicker, .ds-group-label { margin: 0 0 10px; color: var(--warm); font: 700 11px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+    .ds-header-copy, .ds-header-note { margin: 0; color: var(--muted); font: 14px/1.55 'Segoe UI', system-ui, sans-serif; }
+    .ds-header-note { padding-left: 18px; border-left: 2px solid var(--border); }
+    .ds-section { scroll-margin-top: 64px; padding: 44px 0 20px; margin: 0; border: 0; border-top: 1px solid rgba(41,107,112,.8); background: transparent; }
+    .ds-section-head { display: grid; grid-template-columns: 220px minmax(0,1fr); gap: 32px; align-items: start; padding: 0 0 28px; margin: 0; border: 0; }
+    .ds-section-head h2 { margin: 0; color: var(--warm); font-size: 24px; }
+    .ds-section-head p { max-width: 760px; margin: 2px 0 0; color: var(--muted); font: 13px/1.55 'Segoe UI', system-ui, sans-serif; text-align: left; }
+    .ds-subsection { display: grid; grid-template-columns: 220px minmax(0,1fr); gap: 32px; align-items: start; padding: 28px 0; margin: 0; border-top: 1px solid rgba(41,107,112,.46); }
+    .ds-subsection > h3 { position: sticky; top: 60px; grid-column: 1; margin: 0; color: var(--cream); font: 700 14px/1.35 'Segoe UI', system-ui, sans-serif; }
+    .ds-subsection-body { grid-column: 2; min-width: 0; }
+    .ds-subsection:not(:has(.ds-subsection-body)) > *:not(h3) { grid-column: 2; min-width: 0; }
+    .ds-spec-list { display: grid; }
+    .ds-spec-row { display: grid; grid-template-columns: 180px minmax(0,1fr) auto; align-items: center; gap: 24px; min-height: 78px; padding: 14px 0; border-bottom: 1px solid rgba(41,107,112,.42); }
+    .ds-spec-row:last-child { border-bottom: 0; }
+    .ds-spec-name, .ds-meta { font: 12px/1.4 'Segoe UI', system-ui, sans-serif; color: var(--muted); }
+    .ds-spec-name { color: var(--cream); font-weight: 600; }
+    .ds-meta { text-align: right; white-space: nowrap; }
+    .ds-preview h1, .ds-preview h2, .ds-preview h3, .ds-preview p { margin-bottom: 0; }
+    .ds-preview h1 { min-height: 0; }
+    /* Typography specimens show the notice text without its component surface. */
+    .ds-preview.play-notice { display: block; padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
+    .ds-swatches { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; padding: 1px; background: rgba(41,107,112,.55); }
+    .ds-swatch { overflow: hidden; border: 0; border-radius: 0; background: var(--card-bg); }
+    .ds-swatch-color { height: 76px; border-bottom: 1px solid rgba(41,107,112,.5); }
+    .ds-swatch-info { min-height: 68px; padding: 12px; font: 12px/1.4 'Segoe UI', system-ui, sans-serif; }
+    .ds-swatch-info strong { display: block; margin-bottom: 3px; color: var(--cream); }
+    .ds-surface-board { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+    .ds-surface-sample { min-height: 120px; display: flex; flex-direction: column; justify-content: end; padding: 14px; border: 1px solid rgba(41,107,112,.7); border-radius: var(--radius-control); font: 12px/1.35 'Segoe UI', system-ui, sans-serif; }
+    .ds-surface-sample strong { color: var(--cream); }
+    .ds-surface-sample span { color: var(--muted); }
+    .ds-component-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1px; padding: 1px; background: rgba(41,107,112,.5); }
+    .ds-compare-grid { align-items: stretch; }
+    .ds-demo { min-width: 0; padding: 20px; border: 0; border-radius: 0; background: rgba(9,22,31,.72); }
+    .ds-demo-title { margin: 0 0 16px; color: var(--muted); font: 700 10px/1 'Segoe UI', system-ui, sans-serif; letter-spacing: .11em; text-transform: uppercase; }
+    .ds-family-stack { display: grid; gap: 1px; padding: 1px; background: rgba(41,107,112,.5); }
+    .ds-family { display: grid; grid-template-columns: 150px minmax(0,1fr); gap: 18px; align-items: start; padding: 20px; background: rgba(9,22,31,.72); }
+    .ds-family-label { display: grid; gap: 5px; color: var(--muted); font: 11px/1.35 'Segoe UI', system-ui, sans-serif; }
+    .ds-family-label strong { color: var(--cream); font-size: 12px; }
+    .ds-family-label code { overflow-wrap: anywhere; }
+    .ds-family-canvas { min-width: 0; }
+    .ds-states { display: grid; grid-template-columns: repeat(auto-fit,minmax(120px,1fr)); gap: 10px; align-items: end; }
+    .ds-state { min-width: 0; }
+    .ds-state-label { display: block; margin-bottom: 7px; color: var(--muted); font: 10px/1 'Segoe UI', system-ui, sans-serif; text-transform: uppercase; letter-spacing: .07em; }
+    .ds-forced-hover::before { opacity: 1; animation: checkers 3.25s linear infinite; }
+    .ds-forced-hover { border-color: #ffda63; }
+    .ds-forced-hover > span::before { content: ''; position: absolute; z-index: -1; inset: -5px -10px; border-radius: 9px; background: rgba(7,28,39,.95); border: 1px solid #ffcc4b; }
+    .ds-forced-hover > span { color: #fff9de; text-shadow: 1px 1px #000; }
+    .ds-forced-focus { outline: 3px solid #ffd11f; outline-offset: 3px; }
+    .ds-layout-demo { display: grid; gap: 12px; }
+    .ds-layout-box { min-height: 70px; display: grid; place-items: center; padding: 12px; border: 1px dashed var(--border); border-radius: var(--radius-control); color: var(--muted); font: 12px/1.3 'Segoe UI', system-ui, sans-serif; text-align: center; }
+    .ds-two-col { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--row-gap); }
+    .ds-motion-block + .ds-motion-block { margin-top: 28px; }
+    .ds-motion-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1px; padding: 1px; background: rgba(41,107,112,.5); }
+    .ds-motion-sample { min-height: 110px; display: grid; place-items: center; overflow: hidden; }
+    .ds-motion-sample .brand { width: 84px; height: 84px; margin: 0; }
+    .ds-checker { width: 100%; }
+    .ds-cloud-window { position: relative; height: 110px; overflow: hidden; border-radius: var(--radius-control); background: var(--background); }
+    .ds-cloud-window .cloud-strip { position: absolute; height: 130px; top: -10px; }
+    .ds-pattern-single { max-width: 760px; }
+    .ds-token-bg-background { background: var(--background); }
+    .ds-token-bg-panel { background: var(--panel); }
+    .ds-token-bg-panel-soft { background: var(--panel-soft); }
+    .ds-token-bg-sidebar { background: var(--sidebar-bg); }
+    .ds-token-bg-content { background: var(--content-bg); }
+    .ds-token-bg-card { background: var(--card-bg); }
+    .ds-token-bg-text { background: var(--text); }
+    .ds-token-bg-muted { background: var(--muted); }
+    .ds-token-bg-accent { background: var(--accent); }
+    .ds-token-bg-warm { background: var(--warm); }
+    .ds-token-bg-red { background: var(--red); }
+    .ds-token-bg-blue { background: var(--blue); }
+    .ds-token-bg-cream { background: var(--cream); }
+    .ds-token-bg-border { background: var(--border); }
+    .ds-checker-swatch { background: conic-gradient(#f9a535 25%,#e16f19 0 50%,#f9a535 0 75%,#e16f19 0) 0 0 / 52px 52px; }
+    .ds-online-token-ink { background: var(--ol-ink); }
+    .ds-online-token-soft { background: var(--ol-soft); }
+    .ds-online-token-cream { background: var(--ol-cream); }
+    .ds-online-token-amber { background: var(--ol-amber); }
+    .ds-online-token-go { background: var(--ol-go); }
+    .ds-online-token-stop { background: var(--ol-stop); }
+    .ds-online-token-panel { background: var(--ol-panel); }
+    .ds-online-token-ring { background: var(--ol-ring); }
+    @media (max-width: 980px) {
+      .ds-shell { width: min(100% - 28px,1320px); }
+      .ds-header-grid, .ds-section-head, .ds-subsection { grid-template-columns: 1fr; gap: 14px; }
+      .ds-subsection > h3 { position: static; grid-column: 1; }
+      .ds-subsection-body, .ds-subsection:not(:has(.ds-subsection-body)) > *:not(h3) { grid-column: 1; }
+      .ds-swatches { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .ds-surface-board, .ds-motion-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .ds-family { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .ds-shell { width: min(100% - 20px,1320px); }
+      .ds-nav { gap: 16px; }
+      .ds-header { padding-top: 42px; }
+      .ds-component-grid, .ds-swatches, .ds-surface-board, .ds-motion-grid, .ds-two-col { grid-template-columns: 1fr; }
+      .ds-spec-row { grid-template-columns: 1fr; gap: 8px; }
+      .ds-meta { text-align: left; }
+    }
+</style>
+</head>
+<body>
+<div aria-hidden="true" class="backdrop"><div class="cloud-strip"><img alt="" src="assets/background.png"/><img alt="" src="assets/background.png"/><img alt="" src="assets/background.png"/><img alt="" src="assets/background.png"/></div></div>
+<div class="ds-shell">
+<nav aria-label="Design system sections" class="ds-nav">
+<a href="#overview">Overview</a>
+<a href="#foundations">Foundations</a>
+<a href="#controls">Controls</a>
+<a href="#components">Components</a>
+<a href="#patterns">Patterns</a>
+<a href="#layout">Layout</a>
+<a href="#motion">Motion</a>
+</nav>
+<header class="ds-header" id="overview">
+<div class="ds-header-grid">
+<div>
+<p class="ds-kicker">DKR-R Launcher / Living Reference</p>
+<h1>DESIGN SYSTEM</h1>
+<p class="ds-header-copy">A visual QA reference for the launcher. The document is organized by foundations, control families, reusable components and composed patterns so differences in scale, spacing, borders, states and interaction behavior can be compared directly.</p>
+</div>
+<p class="ds-header-note"><strong>Reading order:</strong> start with the shared visual foundations, compare primitive controls across features, then inspect composed Sound and Online patterns. Product specimens below keep their original classes and assets.</p>
+</div>
+</header>
+<section class="ds-section" id="foundations">
+<div class="ds-section-head"><h2>01 — Foundations</h2><p>Shared visual primitives first. Typography and core tokens establish the baseline; Online-specific color extensions are shown separately so divergence is explicit.</p></div>
+<div class="ds-subsection"><h3>Typography</h3><div class="ds-subsection-body"><div class="ds-spec-list">
+<div class="ds-spec-row">
+<div class="ds-spec-name">Display heading / h1</div>
+<div class="ds-preview"><h1>RACE READY</h1></div>
+<div class="ds-meta">58px / 58px</div>
+</div>
+<div class="ds-spec-row">
+<div class="ds-spec-name">Section heading / h2</div>
+<div class="ds-preview"><h2>Choose your settings</h2></div>
+<div class="ds-meta">19px / 19px</div>
+</div>
+<div class="ds-spec-row">
+<div class="ds-spec-name">Subheading / h3</div>
+<div class="ds-preview"><h3>Controller configuration</h3></div>
+<div class="ds-meta">19px / 19px</div>
+</div>
+<div class="ds-spec-row">
+<div class="ds-spec-name">Body / p</div>
+<div class="ds-preview"><p>Configure the launcher using the same body typography found across standard pages.</p></div>
+<div class="ds-meta">19px / 21.85px</div>
+</div>
+<div class="ds-spec-row">
+<div class="ds-spec-name">Muted body</div>
+<div class="ds-preview"><p class="muted">Secondary information uses the muted text token.</p></div>
+<div class="ds-meta">19px / 21.85px</div>
+</div>
+<div class="ds-spec-row">
+<div class="ds-spec-name">Play-page body</div>
+<div class="ds-preview play-header"><p>Compact system copy used in launch status and notices.</p></div>
+<div class="ds-meta">14px / 21px</div>
+</div>
+<div class="ds-spec-row">
+<div class="ds-spec-name">Notice emphasis</div>
+<div class="ds-preview play-notice"><strong>1 enabled mod needs preparing</strong></div>
+<div class="ds-meta">15px / 21px</div>
+</div>
+<div class="ds-spec-row">
+<div class="ds-spec-name">Control typography</div>
+<div class="ds-preview"><input aria-label="Control typography example" type="text" value="PLAYER ONE"/></div>
+<div class="ds-meta">21px / 21px</div>
+</div>
+</div></div></div>
+<div class="ds-subsection"><h3>Core color tokens</h3><div class="ds-subsection-body"><div class="ds-swatches">
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-background"></div><div class="ds-swatch-info"><strong>Background</strong><span>--background · #053373</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-panel"></div><div class="ds-swatch-info"><strong>Panel</strong><span>--panel · #06336e</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-panel-soft"></div><div class="ds-swatch-info"><strong>Panel soft</strong><span>--panel-soft · #0d579e</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-text"></div><div class="ds-swatch-info"><strong>Text</strong><span>--text · #fff6da</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-muted"></div><div class="ds-swatch-info"><strong>Muted</strong><span>--muted · #b0c9cc</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-accent"></div><div class="ds-swatch-info"><strong>Accent</strong><span>--accent · #1ac2a3</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-warm"></div><div class="ds-swatch-info"><strong>Warm</strong><span>--warm · #ffab14</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-red"></div><div class="ds-swatch-info"><strong>Red</strong><span>--red · #e82e21</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-blue"></div><div class="ds-swatch-info"><strong>Blue</strong><span>--blue · #0a6ea1</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-cream"></div><div class="ds-swatch-info"><strong>Cream</strong><span>--cream · #fff0c2</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-border"></div><div class="ds-swatch-info"><strong>Border</strong><span>--border · #296b70</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-sidebar"></div><div class="ds-swatch-info"><strong>Sidebar surface</strong><span>rgba(6,27,38,.88)</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-content"></div><div class="ds-swatch-info"><strong>Content surface</strong><span>rgba(9,22,31,.90)</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-token-bg-card"></div><div class="ds-swatch-info"><strong>Card surface</strong><span>rgba(11,46,64,.96)</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-checker-swatch"></div><div class="ds-swatch-info"><strong>Checker interaction</strong><span>Race-button hover background</span></div></div>
+</div></div></div>
+<div class="ds-subsection"><h3>Surfaces</h3><div class="ds-subsection-body">
+<div class="ds-surface-board">
+<div class="ds-surface-sample ds-token-bg-sidebar"><strong>Sidebar</strong><span>--sidebar-bg</span></div>
+<div class="ds-surface-sample ds-token-bg-content"><strong>Content</strong><span>--content-bg</span></div>
+<div class="ds-surface-sample ds-token-bg-card"><strong>Card</strong><span>--card-bg</span></div>
+<div class="ds-surface-sample ds-checker-swatch"><strong>Checker interaction</strong><span>race-button hover</span></div>
+</div></div></div>
+<div class="ds-subsection"><h3>Online color extension</h3><div class="ds-subsection-body"><div class="online-page"><div class="ds-swatches">
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-ink"></div><div class="ds-swatch-info"><strong>Online ink</strong><span>--ol-ink · #eaf3f5</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-soft"></div><div class="ds-swatch-info"><strong>Online soft</strong><span>--ol-soft · #b3c8d3</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-cream"></div><div class="ds-swatch-info"><strong>Online cream</strong><span>--ol-cream · #fff0c2</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-amber"></div><div class="ds-swatch-info"><strong>Online amber</strong><span>--ol-amber · #ffc453</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-go"></div><div class="ds-swatch-info"><strong>Go / ready</strong><span>--ol-go · #54c9ad</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-stop"></div><div class="ds-swatch-info"><strong>Stop / not ready</strong><span>--ol-stop · #e8452f</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-panel"></div><div class="ds-swatch-info"><strong>Online panel</strong><span>--ol-panel · #0a2638</span></div></div>
+<div class="ds-swatch"><div class="ds-swatch-color ds-online-token-ring"></div><div class="ds-swatch-info"><strong>Online ring</strong><span>--ol-ring · #1f4c63</span></div></div>
+</div></div></div></div>
+</section>
+<section class="ds-section" id="controls">
+<div class="ds-section-head"><h2>02 — Controls</h2><p>Primitive interactive families are grouped by purpose rather than source page. This is the main comparison layer for spotting inconsistent heights, radii, weights, states and input behavior.</p></div>
+<div class="ds-subsection"><h3>Button families</h3><div class="ds-subsection-body">
+<div class="ds-family-stack">
+<div class="ds-family">
+<div class="ds-family-label"><strong>Launcher</strong><code>.race-button</code></div>
+<div class="ds-family-canvas">
+<div class="ds-states">
+<div class="ds-state"><span class="ds-state-label">Default</span><button class="race-button full"><span>DEFAULT</span></button></div>
+<div class="ds-state"><span class="ds-state-label">Hover</span><button class="race-button full ds-forced-hover"><span>HOVER</span></button></div>
+<div class="ds-state"><span class="ds-state-label">Focus</span><button class="race-button full ds-forced-focus"><span>FOCUS</span></button></div>
+<div class="ds-state"><span class="ds-state-label">Disabled</span><button class="race-button full" disabled=""><span>DISABLED</span></button></div>
+</div>
+<div class="spacer"></div>
+<div class="ds-states">
+<div class="ds-state"><span class="ds-state-label">Accent</span><button class="race-button green full"><span>PLAY</span></button></div>
+<div class="ds-state"><span class="ds-state-label">Danger</span><button class="race-button red full"><span>REMOVE</span></button></div>
+<div class="ds-state"><span class="ds-state-label">Orange</span><button class="race-button orange full"><span>WARNING</span></button></div>
+<div class="ds-state"><span class="ds-state-label">Selected</span><button class="race-button selected full"><span>SELECTED</span></button></div>
+</div>
+</div>
+</div>
+<div class="ds-family online-page">
+<div class="ds-family-label"><strong>Online</strong><code>.ol-btn</code></div>
+<div class="ds-family-canvas"><div class="ds-states">
+<div class="ds-state"><span class="ds-state-label">Default</span><button class="ol-btn">Manage</button></div>
+<div class="ds-state"><span class="ds-state-label">Strong</span><button class="ol-btn is-strong">Generate code</button></div>
+<div class="ds-state"><span class="ds-state-label">Go</span><button class="ol-btn is-go">Accept</button></div>
+<div class="ds-state"><span class="ds-state-label">Danger</span><button class="ol-btn is-danger">Leave lobby</button></div>
+<div class="ds-state"><span class="ds-state-label">Icon</span><button aria-label="Remove" class="ol-btn is-icon">×</button></div>
+<div class="ds-state"><span class="ds-state-label">Disabled</span><button class="ol-btn" disabled="">Unavailable</button></div>
+</div></div>
+</div>
+</div></div></div>
+<div class="ds-subsection"><h3>Inputs &amp; selects</h3><div class="ds-subsection-body">
+<div class="ds-component-grid ds-compare-grid">
+<div class="ds-demo">
+<p class="ds-demo-title">Text input</p>
+<label class="field">Player name<input type="text" value="DIDDY"/></label>
+<label class="field">Disabled<input disabled="" type="text" value="LOCKED"/></label>
+</div>
+<div class="ds-demo">
+<p class="ds-demo-title">Select</p>
+<label class="field">Resolution<select><option>1280 × 720</option><option>1920 × 1080</option></select></label>
+<label class="field">Disabled<select disabled=""><option>Unavailable</option></select></label>
+</div>
+<div class="ds-demo online-page">
+<p class="ds-demo-title">Online field button</p>
+<div class="ol-field"><span>Lobby name</span><button aria-label="Lobby name example" class="field-button" type="button"><span class="field-button-value">DKR-R Grand Prix</span><svg aria-hidden="true" class="field-button-icon" viewbox="0 0 24 16"><rect fill="none" height="14" rx="3" stroke="currentColor" stroke-width="1.6" width="22" x="1" y="1"></rect><path d="M5 5h2M9 5h2M13 5h2M17 5h2M5 8.5h2M9 8.5h2M13 8.5h2M17 8.5h2M7.5 12h9" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path></svg></button></div>
+</div>
+</div></div></div>
+<div class="ds-subsection"><h3>Slider families</h3><div class="ds-subsection-body">
+<div class="ds-component-grid ds-compare-grid">
+<div class="sound-page"><section class="card snd-card">
+<header class="snd-head">
+<div class="snd-head-text">
+<h2>Volume sliders</h2>
+<p class="snd-caption">Volume ranges from 0 to 100%, with a mute control for each channel.</p>
+</div>
+</header>
+<div class="snd-row is-master" data-ds-sound-row="">
+<button aria-label="Mute master" aria-pressed="false" class="snd-mute" data-level="2" tabindex="-1" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M3.5 9.2h3.2L11.5 5v14l-4.8-4.2H3.5z" fill="currentColor"></path><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"><path class="snd-wave-1" d="M15 9.2a4 4 0 0 1 0 5.6"></path><path class="snd-wave-2" d="M17.8 6.4a8 8 0 0 1 0 11.2"></path><path class="snd-cross" d="M15.5 9.5l5 5M20.5 9.5l-5 5"></path></g></svg>
+</button>
+<label class="snd-label" for="ds-snd-master">Master</label>
+<input aria-label="Master volume" class="snd-range" id="ds-snd-master" max="100" min="0" step="5" type="range" value="80"/>
+<span aria-hidden="true" class="snd-value">80<small>%</small></span>
+</div>
+<div class="snd-mix-label"><span>Mix</span></div>
+<div class="snd-mix">
+<div class="snd-row" data-ds-sound-row="">
+<button aria-label="Mute music" aria-pressed="false" class="snd-mute" data-level="2" tabindex="-1" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M3.5 9.2h3.2L11.5 5v14l-4.8-4.2H3.5z" fill="currentColor"></path><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"><path class="snd-wave-1" d="M15 9.2a4 4 0 0 1 0 5.6"></path><path class="snd-wave-2" d="M17.8 6.4a8 8 0 0 1 0 11.2"></path><path class="snd-cross" d="M15.5 9.5l5 5M20.5 9.5l-5 5"></path></g></svg>
+</button>
+<label class="snd-label" for="ds-snd-music">Music</label>
+<input aria-label="Music volume" class="snd-range" id="ds-snd-music" max="100" min="0" step="5" type="range" value="65"/>
+<span aria-hidden="true" class="snd-value">65<small>%</small></span>
+</div>
+</div>
+</section></div>
+<div class="sound-page"><section class="card snd-card">
+<header class="snd-head">
+<div class="snd-head-text">
+<h2>Equalizer slider</h2>
+<p class="snd-caption">The bipolar variant grows from the 0 dB center mark toward boost or cut.</p>
+</div>
+</header>
+<div class="snd-bands">
+<div class="snd-row is-band" data-ds-band-row="">
+<label class="snd-label" for="ds-snd-bass">Bass</label>
+<input aria-label="Bass" class="snd-range is-bipolar" id="ds-snd-bass" max="12" min="-12" step="1" type="range" value="5"/>
+<span aria-hidden="true" class="snd-value">+5<small>dB</small></span>
+</div>
+<div class="snd-row is-band" data-ds-band-row="">
+<label class="snd-label" for="ds-snd-treble">Treble</label>
+<input aria-label="Treble" class="snd-range is-bipolar" id="ds-snd-treble" max="12" min="-12" step="1" type="range" value="-4"/>
+<span aria-hidden="true" class="snd-value">-4<small>dB</small></span>
+</div>
+</div>
+</section></div>
+</div></div></div>
+<div class="ds-subsection"><h3>Selection &amp; switches</h3><div class="ds-subsection-body">
+<div class="ds-component-grid ds-compare-grid">
+<div class="ds-demo">
+<p class="ds-demo-title">Checkbox</p>
+<label class="checkbox"><input checked="" type="checkbox"/><span>Enable widescreen</span></label>
+<label class="checkbox"><input type="checkbox"/><span>Windowed mode</span></label>
+</div>
+<div class="sound-page"><section class="card snd-card">
+<header class="snd-head">
+<div class="snd-head-text">
+<h2>Switch &amp; local action</h2>
+<p class="snd-caption">Sound adds its own switch, mute control and compact card-level action button.</p>
+</div>
+<button class="snd-link" type="button">Reset mix</button>
+</header>
+<label class="snd-toggle" for="ds-snd-switch">
+<span class="snd-toggle-text">
+<strong>Race music with 3-4 players</strong>
+<span class="snd-caption">Same switch markup and behavior used on the Sound page.</span>
+</span>
+<input checked="" class="snd-switch" id="ds-snd-switch" role="switch" type="checkbox"/>
+</label>
+<div class="snd-mix-label"><span>Mute states</span></div>
+<div class="ds-states">
+<div class="ds-state">
+<span class="ds-state-label">Audible</span>
+<button aria-label="Mute" aria-pressed="false" class="snd-mute" data-level="2" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M3.5 9.2h3.2L11.5 5v14l-4.8-4.2H3.5z" fill="currentColor"></path><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"><path class="snd-wave-1" d="M15 9.2a4 4 0 0 1 0 5.6"></path><path class="snd-wave-2" d="M17.8 6.4a8 8 0 0 1 0 11.2"></path><path class="snd-cross" d="M15.5 9.5l5 5M20.5 9.5l-5 5"></path></g></svg>
+</button>
+</div>
+<div class="ds-state">
+<span class="ds-state-label">Muted</span>
+<button aria-label="Unmute" aria-pressed="true" class="snd-mute" data-level="muted" type="button">
+<svg aria-hidden="true" viewbox="0 0 24 24"><path d="M3.5 9.2h3.2L11.5 5v14l-4.8-4.2H3.5z" fill="currentColor"></path><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"><path class="snd-wave-1" d="M15 9.2a4 4 0 0 1 0 5.6"></path><path class="snd-wave-2" d="M17.8 6.4a8 8 0 0 1 0 11.2"></path><path class="snd-cross" d="M15.5 9.5l5 5M20.5 9.5l-5 5"></path></g></svg>
+</button>
+</div>
+</div>
+</section></div>
+<div class="online-page"><section class="ol-card">
+<label class="ol-switch"><input checked="" data-ds-online-switch="" type="checkbox"/><span><strong>Appear offline</strong><small>Friends see you as offline. You can still join with a code.</small></span></label>
+<label class="ol-switch"><input data-ds-online-switch="" type="checkbox"/><span><strong>Allow lobby invites</strong><small>Friends can invite you to their lobby with one click.</small></span></label>
+<p class="ol-soft ol-privacy-note">Races connect PC to PC. Share codes only with people you trust.</p>
+</section></div>
+</div></div></div>
+<div class="ds-subsection"><h3>Navigation controls</h3><div class="ds-subsection-body">
+<div class="ds-family-stack">
+<div class="ds-family">
+<div class="ds-family-label"><strong>Launcher tabs</strong><code>.tabs + .race-button</code></div>
+<div class="ds-family-canvas"><div class="tabs">
+<button class="race-button selected"><span>GENERAL</span></button>
+<button class="race-button"><span>VIDEO</span></button>
+<button class="race-button"><span>AUDIO</span></button>
+</div></div>
+</div>
+<div class="ds-family online-page">
+<div class="ds-family-label"><strong>Online section nav</strong><code>.ol-section-nav</code></div>
+<div class="ds-family-canvas"><nav aria-label="Online section navigation example" class="ol-section-nav" data-ds-online-nav="">
+<button aria-current="page" class="ol-btn">Open lobbies</button>
+<button class="ol-btn">Host / Quick Join</button>
+<button class="ol-btn">Host settings</button>
+<button class="ol-btn">Friends</button>
+</nav></div>
+</div>
+<div class="ds-family sound-page">
+<div class="ds-family-label"><strong>Sound presets</strong><code>.snd-chip</code></div>
+<div class="ds-family-canvas"><section class="card snd-card">
+<header class="snd-head">
+<div class="snd-head-text">
+<h2>EQ presets</h2>
+<p class="snd-caption">Preset chips are a dedicated Sound treatment derived from the painted-sign navigation pattern.</p>
+</div>
+</header>
+<div aria-label="Equalizer preset examples" class="snd-chips" data-ds-chips="" role="group">
+<button aria-pressed="true" class="snd-chip" type="button">Flat</button>
+<button aria-pressed="false" class="snd-chip" type="button">Bass boost</button>
+<button aria-pressed="false" class="snd-chip" type="button">Clear</button>
+<button aria-pressed="false" class="snd-chip" type="button">Warm</button>
+</div>
+<p class="snd-caption snd-preset-about"><strong>Flat</strong> · The original game sound.</p>
+</section></div>
+</div>
+</div></div></div>
+</section>
+<section class="ds-section" id="components">
+<div class="ds-section-head"><h2>03 — Components</h2><p>Reusable UI assemblies that sit above primitive controls but below full page patterns.</p></div>
+<div class="ds-subsection"><h3>Cards, notices &amp; disclosure</h3><div class="ds-subsection-body"><div class="ds-component-grid">
+<div class="card"><h3>Standard card</h3><p class="muted">Base panel using the existing <code>.card</code> class.</p><button class="race-button"><span>ACTION</span></button></div>
+<div class="play-notice"><div><strong>Launcher notice</strong><p>Contextual information using the Play page notice treatment.</p></div><button class="race-button"><span>REVIEW</span></button></div>
+<details class="disclosure ds-demo"><summary class="race-button"><span>ADVANCED SETTINGS</span></summary><div class="disclosure-body"><p class="muted">Native disclosure behavior and original spacing.</p></div></details>
+<div class="ds-demo"><div class="separator"><span>Section separator</span></div><p class="muted">The orange hairline separator used within settings pages.</p></div>
+</div></div></div>
+<div class="ds-subsection"><h3>Code entry states</h3><div class="ds-subsection-body"><div class="ds-component-grid">
+<div class="ds-demo">
+<p class="ds-demo-title">Filled / caret · focus the field to see the active caret</p>
+<button class="ol-code-field" type="button">
+<span class="ol-code-tiles"><span class="ol-code-tile is-filled">T</span><span class="ol-code-tile is-filled">I</span><span class="ol-code-tile is-filled">N</span><span class="ol-code-tile is-filled">A</span><span class="ol-code-tile is-caret"></span></span>
+</button>
+</div>
+<div class="ds-demo">
+<p class="ds-demo-title">Validation error</p>
+<button class="ol-code-field has-error" type="button">
+<span class="ol-code-tiles"><span class="ol-code-tile is-filled">X</span><span class="ol-code-tile is-filled">X</span><span class="ol-code-tile"></span><span class="ol-code-tile"></span><span class="ol-code-tile"></span></span>
+</button>
+<p class="ol-error">Enter all 5 characters of the code.</p>
+</div>
+</div></div></div>
+</section>
+<section class="ds-section" id="patterns">
+<div class="ds-section-head"><h2>04 — Patterns</h2><p>Compositions that combine multiple components into real launcher workflows. Online patterns stay intact here so spacing and hierarchy can be evaluated in context.</p></div>
+<div class="online-page"><div class="ds-subsection"><h3>Header &amp; Game ROM switcher</h3><div class="ds-subsection-body"><div class="ds-demo">
+<header class="ol-header">
+<div class="ol-header-text"><h1>ONLINE</h1><p class="ol-lede">Private lobbies, friend presence and synchronized racing.</p></div>
+<div class="ol-rom-slot"><div class="ol-rom">
+<span class="ol-rom-label" id="ds-rom-label">Game ROM</span>
+<button aria-labelledby="ds-rom-label ds-rom-name ds-rom-version" aria-describedby="ds-rom-hint" aria-haspopup="listbox" aria-expanded="false" class="rom-select is-compact" id="ds-rom-select" type="button">
+<span class="rom-select-text"><strong id="ds-rom-name">Diddy Kong Racing</strong><small id="ds-rom-version">Version 1.1</small></span>
+<span aria-hidden="true" class="rom-select-chevron"></span>
+</button>
+<small id="ds-rom-hint">Everyone in a lobby needs the same revision.</small>
+</div></div>
+</header>
+</div></div></div><div class="ds-subsection"><h3>Host / Quick Join fork</h3><div class="ds-subsection-body"><div class="ol-choices">
+<section class="ol-choice is-host">
+<span class="ol-choice-tag">Host</span>
+<h2>Start a lobby</h2>
+<p>Share a 5-character code with up to 3 friends.</p>
+<div class="ol-field"><span>Lobby name</span><button aria-label="Lobby name: DKR-R Grand Prix. Opens the on-screen keyboard." class="field-button" type="button"><span class="field-button-value">DKR-R Grand Prix</span><svg aria-hidden="true" class="field-button-icon" viewbox="0 0 24 16"><rect fill="none" height="14" rx="3" stroke="currentColor" stroke-width="1.6" width="22" x="1" y="1"></rect><path d="M5 5h2M9 5h2M13 5h2M17 5h2M5 8.5h2M9 8.5h2M13 8.5h2M17 8.5h2M7.5 12h9" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path></svg></button></div>
+<label class="ol-field"><span>Online Adventure save</span><select><option>Copy my single-player save</option><option>Start with a fresh save</option></select></label>
+<button class="ol-btn">Host settings</button>
+<button class="race-button green ol-cta"><span>CREATE LOBBY</span></button>
+</section>
+<div aria-hidden="true" class="ol-or"><span class="ol-or-sign">or</span></div>
+<section class="ol-choice is-join">
+<span class="ol-choice-tag">Join</span>
+<h2>Join a friend</h2>
+<p>Type the code your host sent you.</p>
+<button aria-label="Quick Join code example" class="ol-code-field" type="button">
+<span class="ol-code-tiles"><span class="ol-code-tile is-filled">B</span><span class="ol-code-tile is-filled">A</span><span class="ol-code-tile is-filled">N</span><span class="ol-code-tile is-filled">J</span><span class="ol-code-tile is-caret"></span></span>
+</button>
+<div class="ol-actions"><button class="ol-btn">Paste code</button></div>
+<button class="race-button ol-cta"><span>REQUEST TO JOIN</span></button>
+</section>
+</div><ol aria-label="How online races work example" class="ol-steps">
+<li><span class="ol-step-num">1</span><span><strong>Open</strong>The host creates a lobby</span></li>
+<li><span class="ol-step-num">2</span><span><strong>Share</strong>Friends type the code</span></li>
+<li><span class="ol-step-num">3</span><span><strong>Approve</strong>The host lets them in</span></li>
+<li><span class="ol-step-num">4</span><span><strong>Race</strong>Everyone readies up</span></li>
+</ol></div></div><div class="ds-subsection"><h3>Rooms, cards &amp; waiting states</h3><div class="ds-subsection-body"><div class="ds-component-grid">
+<section class="ol-card ol-feature">
+<h2>Open lobbies</h2>
+<p class="ol-soft">Standard Online card surface.</p>
+<article class="ol-room is-invited">
+<span class="ol-soft-tag">Lobby invitation</span>
+<h3>Banjo64</h3>
+<p>1 / 4 racers · 42 ms · Rollback · ROM v 1.1</p>
+<div class="ol-actions"><button class="ol-btn is-go">Accept and join</button><button class="ol-btn">Decline</button></div>
+</article>
+<article class="ol-room">
+<span class="ol-soft-tag">Friend lobby</span>
+<h3>TipTupTina</h3>
+<p>1 / 2 racers · 68 ms · Rollback · ROM v 1.0</p>
+<p class="ol-rom-mismatch">This lobby races on v 1.0. You have v 1.1 selected.</p>
+</article>
+</section>
+<section class="ol-waiting" role="status">
+<div aria-hidden="true" class="ol-waiting-lights"><i></i><i></i><i></i></div>
+<h2>Knocking on the door…</h2>
+<p>Waiting for the host to let you in with code <strong class="ol-mono">BANJ4</strong>.</p>
+<p class="ol-soft">The host has to approve every request.</p>
+<button class="ol-btn">Cancel request</button>
+</section>
+</div></div></div><div class="ds-subsection"><h3>Lobby identity &amp; admission</h3><div class="ds-subsection-body"><div class="ds-component-grid">
+<div class="ol-lobby ds-online-wide">
+<div class="ol-lobby-top">
+<div class="ol-lobby-title">
+<span class="ol-live">Hosting</span>
+<h2>DKR-R Grand Prix</h2>
+<p>2 of 4 racers. Friends can join with the code.</p>
+</div>
+<div class="ol-plate">
+<span class="ol-plate-label">Lobby code</span>
+<span class="ol-code-tiles"><span class="ol-code-tile">B</span><span class="ol-code-tile">A</span><span class="ol-code-tile">N</span><span class="ol-code-tile">J</span><span class="ol-code-tile">4</span></span>
+<div class="ol-plate-actions"><button class="ol-btn is-strong">Copy code</button><button class="ol-btn">New code</button></div>
+<span class="ol-expiry">Expires in <span class="ol-expiry-time">05:42:16</span></span>
+</div>
+</div>
+<section aria-label="Join requests example" class="ol-gate">
+<h3>Wants to join</h3>
+<div class="ol-gate-row">
+<span class="ol-avatar">K</span>
+<span class="ol-gate-name"><strong>KrunchKart</strong><small>Used your lobby code</small></span>
+<button class="ol-btn is-go">Let in</button><button class="ol-btn">Decline</button><button class="ol-btn">Block for session</button>
+</div>
+</section>
+</div>
+</div></div></div><div class="ds-subsection"><h3>Starting grid, readiness &amp; connection quality</h3><div class="ds-subsection-body"><ol aria-label="Starting grid examples" class="ol-grid">
+<li class="ol-slot is-ready is-you">
+<span class="ol-slot-num">P1</span><span class="ol-avatar">D</span>
+<span class="ol-slot-body"><strong>DiddyPlayer <span class="ol-tag">Host</span><span class="ol-tag is-you">You</span></strong><span class="ol-slot-meta"><span class="ol-ready-text">Ready</span><span class="ol-soft">Online save verified</span><span class="ol-ping">This PC</span></span></span>
+</li>
+<li class="ol-slot is-ready">
+<span class="ol-slot-num">P2</span><span class="ol-avatar">B</span>
+<span class="ol-slot-body"><strong>Banjo64</strong><span class="ol-slot-meta"><span class="ol-ready-text">Ready</span><span class="ol-ping"><span aria-hidden="true" class="ol-bars" data-level="3"><i></i><i></i><i></i></span>42 ms</span></span></span>
+</li>
+<li class="ol-slot">
+<span class="ol-slot-num">P3</span><span class="ol-avatar">T</span>
+<span class="ol-slot-body"><strong>TipTupTina</strong><span class="ol-slot-meta"><span class="ol-ready-text">Not ready yet</span><span class="ol-ping"><span aria-hidden="true" class="ol-bars" data-level="2"><i></i><i></i><i></i></span>88 ms</span></span></span>
+</li>
+<li class="ol-slot is-empty"><span class="ol-slot-num">P4</span><span class="ol-slot-body"><strong>Open slot</strong><small>Waiting for a friend</small></span></li>
+</ol><div class="ol-start">
+<div aria-hidden="true" class="ol-lights"><i class="is-go"></i><i class="is-go"></i><i class="is-wait"></i><i class="is-off"></i></div>
+<p class="ol-start-hint">2 of 3 racers ready</p>
+<div class="ol-start-actions"><button class="race-button green ol-cta"><span>READY TO RACE</span></button><button class="race-button red ol-cta" disabled=""><span>START RACE</span></button></div>
+</div></div></div><div class="ds-subsection"><h3>Checklist &amp; session feedback</h3><div class="ds-subsection-body"><div class="ds-component-grid">
+<section class="ol-check">
+<div class="ol-check-head"><h2>Before you race</h2><p>Online uses explicit OK, error and information states.</p></div>
+<ul class="ol-check-list">
+<li class="is-ok"><span aria-hidden="true" class="ol-check-icon"></span><span><strong>Game ROM</strong>v 1.1 selected. Friends need v 1.1 too.</span><span class="ol-soft-tag">Switch at the top</span></li>
+<li class="is-bad"><span aria-hidden="true" class="ol-check-icon"></span><span><strong>Game ROM</strong>Not loaded yet</span><button class="ol-btn is-strong">Choose ROM…</button></li>
+<li class="is-info"><span aria-hidden="true" class="ol-check-icon"></span><span><strong>Magic Codes</strong>None on. Friends need none on too.</span><a class="ol-link" href="#online">Change</a></li>
+</ul>
+</section>
+<section class="ol-card ol-feature">
+<h2>Connection status</h2>
+<p class="ol-soft">Metric tiles used by the connection view.</p>
+<div class="ol-metrics">
+<div><small>Synchronization</small><strong>Rollback</strong></div>
+<div><small>Input delay</small><strong>2 frames</strong></div>
+<div><small>App RTT</small><strong>42 ms</strong></div>
+<div><small>Jitter</small><strong>3 ms</strong></div>
+<div><small>Expired probes</small><strong>0%</strong></div>
+<div><small>Input stalls</small><strong>0</strong></div>
+</div>
+<p class="ol-test-status">Testing session traffic… 4 seconds. Ready, Start and lobby changes are paused.</p>
+</section>
+</div></div></div><div class="ds-subsection"><h3>Profile, presence &amp; friends</h3><div class="ds-subsection-body"><div class="ds-component-grid">
+<section class="ol-card ol-me">
+<div class="ol-me-head"><span class="ol-avatar is-large">D</span><div class="ol-me-name"><span class="ol-me-label">Racer name</span><strong>DiddyPlayer</strong></div></div>
+<div class="ol-presence"><span aria-hidden="true" class="ol-dot"></span>Online</div>
+<div class="ol-presence is-hidden"><span aria-hidden="true" class="ol-dot"></span>Friends see you as offline</div>
+<div class="ol-friend-code"><span><small>Your friend code</small><strong class="ol-mono">DKR-BANJ4T7K</strong></span><button class="ol-btn">Copy</button></div>
+</section>
+<section class="ol-card">
+<div class="ol-card-head"><h2>Friends</h2><span class="ol-count">2 online</span></div>
+<div class="ol-friend-toolbar"><div class="ol-search"><button aria-label="Search friends. Opens the on-screen keyboard." class="field-button" type="button"><span class="field-button-value is-placeholder">Search names or nicknames</span><svg aria-hidden="true" class="field-button-icon" viewbox="0 0 24 16"><rect fill="none" height="14" rx="3" stroke="currentColor" stroke-width="1.6" width="22" x="1" y="1"></rect><path d="M5 5h2M9 5h2M13 5h2M17 5h2M5 8.5h2M9 8.5h2M13 8.5h2M17 8.5h2M7.5 12h9" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path></svg></button></div><label class="ol-field"><span>Friend filter</span><select><option>All friends</option><option>Online</option><option>Offline</option></select></label><label class="ol-field"><span>Sort friends</span><select><option>Online first</option><option>Name A-Z</option></select></label></div>
+<div class="ol-friend-group"><h3>Your friends</h3><ul class="ol-friend-list">
+<li class="ol-friend is-online"><span class="ol-avatar-wrap"><span class="ol-avatar">B</span><span aria-hidden="true" class="ol-dot"></span></span><span class="ol-friend-text"><strong>Banjo64</strong><small>Online</small></span><button class="ol-btn is-strong">Invite</button></li>
+<li class="ol-friend is-pending"><span class="ol-avatar-wrap"><span class="ol-avatar">K</span><span aria-hidden="true" class="ol-dot"></span></span><span class="ol-friend-text"><strong>KrunchKart</strong><small>Wants to be friends</small></span><button class="ol-btn is-go">Accept</button><button aria-label="Decline" class="ol-btn is-icon">×</button></li>
+<li class="ol-friend is-offline"><span class="ol-avatar-wrap"><span class="ol-avatar">T</span><span aria-hidden="true" class="ol-dot"></span></span><span class="ol-friend-text"><strong>TipTupTina</strong><small>Offline</small></span><button class="ol-btn">Manage</button></li>
+</ul></div>
+</section>
+</div></div></div><div class="ds-subsection"><h3>In-game overlay</h3><div class="ds-subsection-body"><div class="online-page ds-pattern-single"><section class="ol-card ol-feature">
+<h2>Overlay preview</h2>
+<div aria-label="Overlay preview example" class="ol-overlay-preview">
+<span class="ol-preview-label">In-game preview</span>
+<div class="ol-overlay-sample at-top-left"><strong>NETWORK · 42 ms</strong><div>Jitter 3 ms · Delay 2f</div><div>Loss 0% · Rollback 0</div></div>
+<div class="ol-overlay-sample is-input at-bottom-right"><strong>CONTROLLER</strong><div>Local: A + →</div><div>Player 1 committed: A + →</div></div>
+</div>
+</section></div></div></div></div>
+</section>
+<section class="ds-section" id="layout">
+<div class="ds-section-head"><h2>05 — Layout &amp; Spacing</h2><p>Structural patterns used throughout the launcher: stacks, two-column grids, flexible action rows and the main sidebar/content split.</p></div>
+<div class="ds-subsection"><h3>Layout primitives</h3><div class="ds-subsection-body"><div class="ds-component-grid">
+<div class="ds-demo">
+<p class="ds-demo-title">Stack · gap: var(--item-gap)</p>
+<div class="stack ds-layout-demo">
+<div class="ds-layout-box">Stack item</div>
+<div class="ds-layout-box">Stack item</div>
+<div class="ds-layout-box">Stack item</div>
+</div>
+</div>
+<div class="ds-demo">
+<p class="ds-demo-title">Grid · two columns · gap: var(--row-gap)</p>
+<div class="grid ds-layout-demo">
+<div class="ds-layout-box">Column A</div>
+<div class="ds-layout-box">Column B</div>
+<div class="ds-layout-box">Column A</div>
+<div class="ds-layout-box">Column B</div>
+</div>
+</div>
+<div class="ds-demo">
+<p class="ds-demo-title">Row · flexible wrap</p>
+<div class="row">
+<button class="race-button"><span>PRIMARY</span></button>
+<button class="race-button"><span>SECONDARY</span></button>
+</div>
+</div>
+<div class="ds-demo">
+<p class="ds-demo-title">Card / panel geometry</p>
+<div class="card"><p>Panel radius: <strong>18px</strong></p><p>Control radius: <strong>12px</strong></p><p class="muted">Borders and surface values come directly from the original tokens.</p></div>
+</div>
+</div></div></div>
+<div class="ds-subsection"><h3>Launcher split pattern</h3><div class="ds-subsection-body"><div class="ds-two-col">
+<div class="ds-layout-box">Sidebar region<br/>var(--sidebar-width)</div>
+<div class="ds-layout-box">Content region<br/>minmax(320px, 1fr)</div>
+</div></div></div>
+</section>
+<section class="ds-section" id="motion">
+<div class="ds-section-head"><h2>06 — Motion &amp; Interaction</h2><p>Animation behaviors are collected in one place rather than being scattered across feature sections, making duration and visual intensity easier to compare.</p></div>
+<div class="ds-subsection"><h3>Motion gallery</h3><div class="ds-subsection-body">
+<div class="ds-motion-block">
+<p class="ds-group-label">Core launcher</p>
+<div class="ds-motion-grid">
+<div class="ds-demo">
+<p class="ds-demo-title">Cloud drift · 220s linear infinite</p>
+<div class="ds-cloud-window"><div class="cloud-strip"><img alt="" src="assets/background.png"/><img alt="" src="assets/background.png"/><img alt="" src="assets/background.png"/><img alt="" src="assets/background.png"/></div></div>
+</div>
+<div class="ds-demo">
+<p class="ds-demo-title">Coin spin · 4.8s linear infinite</p>
+<div class="ds-motion-sample"><div class="brand"><div class="coin"><img alt="DKR-R" class="coin-front" src="assets/logo-front.png"/><img alt="" class="coin-back" src="assets/logo-back.png"/></div></div></div>
+</div>
+<div class="ds-demo">
+<p class="ds-demo-title">Checker hover · 3.25s linear infinite</p>
+<div class="ds-motion-sample"><button class="race-button ds-forced-hover ds-checker"><span>HOVER MOTION</span></button></div>
+</div>
+<div class="ds-demo play-page">
+<p class="ds-demo-title">Play entrance · 300ms</p>
+<div class="ds-motion-sample"><div class="play-notice is-entering"><div><strong>Entering notice</strong><p>Opacity, translate and blur resolve to the final state.</p></div></div></div>
+</div>
+</div>
+</div>
+<div class="ds-motion-block online-page">
+<p class="ds-group-label">Online</p>
+<div class="ds-motion-grid">
+<div class="ds-demo"><p class="ds-demo-title">Live pulse · ol-pulse · 1.6s</p><div class="ds-motion-sample"><span class="ol-live">Hosting</span></div></div>
+<div class="ds-demo"><p class="ds-demo-title">Waiting sequence · ol-seq · 1.5s</p><div class="ds-motion-sample"><div aria-hidden="true" class="ol-waiting-lights"><i></i><i></i><i></i></div></div></div>
+<div class="ds-demo"><p class="ds-demo-title">View entrance · ol-enter · 320ms</p><div class="ds-motion-sample"><div class="ol-room is-entering"><h3>Entering panel</h3><p class="ol-soft">Opacity and translate resolve into place.</p></div></div></div>
+<div class="ds-demo"><p class="ds-demo-title">Switch transition · 150ms</p><div class="ds-motion-sample"><label class="ol-switch"><input checked="" data-ds-online-switch="" type="checkbox"/><span><strong>Animated switch</strong><small>Toggle to replay the source switch animation.</small></span></label></div></div>
+<div class="ds-demo"><p class="ds-demo-title">Countdown pop · ol-pop · 450ms</p><div class="ds-motion-sample"><span class="ol-countdown-num">3</span></div></div>
+</div>
+</div></div></div>
+</section>
+</div>
+<script src="js/components.js"></script>
+<script>
+    // Keep documentation specimens behaving like their source components.
+    const romSelect = document.getElementById('ds-rom-select');
+    let romVersion = '1.1';
+    function openRomPicker() {
+      const picker = DKRLauncher.ui.picker({
+        anchor: romSelect,
+        label: 'Game ROM',
+        value: romVersion,
+        minWidth: 260,
+        options: ['1.1', '1.0'].map((version) => ({
+          value: version, label: 'Diddy Kong Racing', detail: 'Version ' + version,
+        })),
+        onPick: (version) => {
+          romVersion = version;
+          document.getElementById('ds-rom-version').textContent = 'Version ' + version;
+        },
+      });
+      if (!picker) return;
+      picker.element.id = 'ds-rom-options';
+      romSelect.setAttribute('aria-controls', picker.element.id);
+      romSelect.setAttribute('aria-expanded', 'true');
+      picker.element.addEventListener('toggle', (event) => {
+        if (event.newState !== 'closed') return;
+        romSelect.setAttribute('aria-expanded', 'false');
+        romSelect.removeAttribute('aria-controls');
+      });
+      // The reference page does not load the launcher's controller navigation.
+      picker.element.addEventListener('keydown', (event) => {
+        if (event.key === 'Tab') { picker.close(true); return; }
+        const options = [...picker.element.querySelectorAll('[role="option"]')];
+        const index = options.indexOf(document.activeElement);
+        const next = { ArrowDown: Math.min(index + 1, options.length - 1), ArrowUp: Math.max(index - 1, 0), Home: 0, End: options.length - 1 }[event.key];
+        if (next === undefined) return;
+        event.preventDefault();
+        options[next].focus();
+      });
+    }
+    romSelect.addEventListener('click', openRomPicker);
+    romSelect.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      openRomPicker();
+    });
+
+    document.querySelectorAll('[data-ds-sound-row]').forEach((row) => {
+      const input = row.querySelector('.snd-range');
+      const value = row.querySelector('.snd-value');
+      const mute = row.querySelector('.snd-mute');
+      const sync = () => {
+        const level = Number(input.value);
+        const muted = mute.getAttribute('aria-pressed') === 'true';
+        input.style.setProperty('--fill', level + '%');
+        row.classList.toggle('is-muted', muted);
+        value.replaceChildren(document.createTextNode(muted ? 'Muted' : String(level)));
+        if (!muted) {
+          const unit = document.createElement('small');
+          unit.textContent = '%';
+          value.append(unit);
+        }
+        mute.dataset.level = muted ? 'muted' : level === 0 ? '0' : level < 50 ? '1' : '2';
+      };
+      input.addEventListener('input', () => {
+        if (mute.getAttribute('aria-pressed') === 'true') mute.setAttribute('aria-pressed', 'false');
+        sync();
+      });
+      mute.addEventListener('click', () => {
+        mute.setAttribute('aria-pressed', String(mute.getAttribute('aria-pressed') !== 'true'));
+        sync();
+      });
+      sync();
+    });
+
+    document.querySelectorAll('[data-ds-band-row]').forEach((row) => {
+      const input = row.querySelector('.snd-range');
+      const value = row.querySelector('.snd-value');
+      const sync = () => {
+        const level = Number(input.value);
+        const pos = ((level + 12) / 24) * 100;
+        input.style.setProperty('--lo', Math.min(pos, 50) + '%');
+        input.style.setProperty('--hi', Math.max(pos, 50) + '%');
+        value.replaceChildren(document.createTextNode((level > 0 ? '+' : level < 0 ? '-' : '') + Math.abs(level)));
+        const unit = document.createElement('small');
+        unit.textContent = 'dB';
+        value.append(unit);
+      };
+      input.addEventListener('input', sync);
+      input.addEventListener('dblclick', () => { input.value = 0; sync(); });
+      input.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); input.value = 0; sync(); } });
+      sync();
+    });
+
+    document.querySelectorAll('[data-ds-online-nav]').forEach((nav) => {
+      nav.addEventListener('click', (event) => {
+        const button = event.target.closest('.ol-btn');
+        if (!button) return;
+        nav.querySelectorAll('.ol-btn').forEach((item) => item.removeAttribute('aria-current'));
+        button.setAttribute('aria-current', 'page');
+      });
+    });
+
+    document.querySelectorAll('[data-ds-online-switch]').forEach((input) => {
+      input.addEventListener('change', () => {
+        input.classList.remove('is-flipped');
+        void input.offsetWidth;
+        input.classList.add('is-flipped');
+      });
+    });
+
+    document.querySelectorAll('[data-ds-chips]').forEach((group) => {
+      group.addEventListener('click', (event) => {
+        const button = event.target.closest('.snd-chip');
+        if (!button) return;
+        group.querySelectorAll('.snd-chip').forEach((chip) => chip.setAttribute('aria-pressed', String(chip === button)));
+        const about = group.parentElement.querySelector('.snd-preset-about strong');
+        if (about) about.textContent = button.textContent;
+      });
+    });
+  </script>
+</body>
+</html>
