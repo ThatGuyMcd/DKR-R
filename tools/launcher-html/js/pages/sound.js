@@ -127,7 +127,7 @@ DKRLauncher.pages.sound = function (container) {
     return h('div', { class: 'snd-row is-band' }, h('label', { class: 'snd-label', for: id }, label), input, value);
   }
 
-  // data-section: LB / RB on a pad jump between the three cards.
+  // data-section: LB / RB on a pad jump between Volume and Equalizer.
   function section({ id, title, caption, action }, ...body) {
     return h('section', { class: 'card snd-card', 'aria-labelledby': id, 'data-section': '' },
       h('header', { class: 'snd-head' },
@@ -197,17 +197,22 @@ DKRLauncher.pages.sound = function (container) {
   // ------------------------------------------------------------ multiplayer
 
   const music34 = h('input', {
-    type: 'checkbox', role: 'switch', class: 'snd-switch', id: 'snd-music34', 'data-fk': 'snd-music34',
+    type: 'checkbox', role: 'switch', id: 'snd-music34', 'data-fk': 'snd-music34',
+    'aria-label': 'Keep race music playing with 3-4 players',
     'aria-describedby': 'snd-music34-about',
   });
   music34.addEventListener('change', () => save({ restore34PlayerMusic: music34.checked }));
-  const multiplayer = section({ id: 'snd-multi-title', title: 'Multiplayer' },
-    h('label', { class: 'snd-toggle', for: 'snd-music34' },
-      h('span', { class: 'snd-toggle-text' },
-        h('strong', {}, 'Race music with 3-4 players'),
-        h('span', { class: 'snd-caption', id: 'snd-music34-about' },
-          'The original game turns the music off in 3 and 4 player races. Turn this on to keep it playing.')),
-      music34));
+  const multiplayer = h('div', { class: 'snd-multiplayer' },
+    h('label', { class: 'ol-switch snd-multiplayer-target', for: 'snd-music34' }, music34),
+    h('span', { class: 'snd-multiplayer-tip', id: 'snd-music34-about', role: 'tooltip' },
+      'The original game turns race music off with 3 or 4 players. Leave this on to keep it playing.'));
+  multiplayer.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || multiplayer.classList.contains('is-tip-dismissed')) return;
+    event.preventDefault();
+    multiplayer.classList.add('is-tip-dismissed');
+  });
+  multiplayer.addEventListener('mouseleave', () => multiplayer.classList.remove('is-tip-dismissed'));
+  multiplayer.addEventListener('focusout', () => multiplayer.classList.remove('is-tip-dismissed'));
 
   // ------------------------------------------------------------ state -> view
 
@@ -265,9 +270,11 @@ DKRLauncher.pages.sound = function (container) {
   }
 
   const heading = h('header', { class: 'snd-header' },
-    h('h1', { id: 'page-heading', text: 'Sound' }),
-    h('p', {}, 'Set how loud the game is and shape its sound. Changes apply right away.'));
-  const layout = h('div', { class: 'snd-layout' }, volume, h('div', { class: 'snd-side' }, equalizer, multiplayer));
+    h('div', { class: 'snd-header-text' },
+      h('h1', { id: 'page-heading', text: 'Sound' }),
+      h('p', {}, 'Set how loud the game is and shape its sound. Changes apply right away.')),
+    multiplayer);
+  const layout = h('div', { class: 'snd-layout' }, volume, equalizer);
   sync();
   container.append(h('div', { class: 'sound-page' }, heading, layout));
 };

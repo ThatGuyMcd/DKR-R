@@ -1,23 +1,22 @@
-/* Sound (UX study): Master leads, the mix sits under it; the EQ presets and the 3-4 player switch take
-   the second column when there is room. Segoe body text and the sidebar polish curve, like Play/Mods. */
+/* Sound (UX study): Volume above Equalizer, with multiplayer music in the header.
+   Segoe body text and the sidebar polish curve, like Play/Mods. */
 .sound-page {
   --snd-ease: cubic-bezier(.2, 0, 0, 1);
   --snd-fill: var(--warm);
   --snd-thumb: var(--warm);
   --snd-track: #245a70;
-  --snd-on: #ffc453;
   --snd-focus: #ffd11f;
   display: grid; gap: 16px; max-width: 1240px;
 }
+.snd-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.snd-header-text { min-width: 0; }
 .snd-header h1 { margin-bottom: 4px; }
 .snd-header p { margin: 0; color: var(--muted); font: 14px/1.5 'Segoe UI', system-ui, sans-serif; text-wrap: pretty; }
-.snd-layout, .snd-side { display: grid; gap: 16px; align-items: start; }
-/* Two columns once both fit a full-width slider (1080p and up); the Deck keeps one list. */
-@container content (min-width: 1060px) { .snd-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.snd-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 
 /* Cards: title and caption on the left, the card's own action on the right. */
 .snd-card { display: grid; gap: 10px; padding: 20px 22px 18px; transition: border-color 150ms var(--snd-ease); }
-/* On a pad the card holding focus is lit, so LB / RB read as moving between these three. */
+/* On a pad the card holding focus is lit, so LB / RB show which section is active. */
 html[data-input="gamepad"] .snd-card:focus-within { border-color: rgb(255 209 31 / .45); }
 .snd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 16px; margin-bottom: 4px; }
 .snd-head-text { min-width: 0; }
@@ -41,7 +40,7 @@ html[data-input="gamepad"] .snd-card:focus-within { border-color: rgb(255 209 31
 .snd-row.is-band { grid-template-columns: minmax(4em, 6em) minmax(0, 1fr) 4.5em; padding-left: 12px; }
 .snd-row:hover { background: rgb(255 255 255 / .035); }
 .snd-row:has(.snd-range:is(:focus-visible, .nav-focus)) { background: rgb(255 255 255 / .06); outline: 3px solid var(--snd-focus); }
-.sound-page .snd-range:is(:focus-visible, .nav-focus), .sound-page .snd-switch:is(:focus-visible, .nav-focus) { outline: none; }
+.sound-page .snd-range:is(:focus-visible, .nav-focus) { outline: none; }
 .snd-label { font: 600 16px/1.2 'Segoe UI', system-ui, sans-serif; color: var(--text); cursor: pointer; }
 .snd-value { justify-self: end; font: 20px/1 var(--body-font); font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
 .snd-value small { margin-left: 2px; font: 600 13px/1 'Segoe UI', system-ui, sans-serif; color: var(--muted); }
@@ -134,27 +133,16 @@ html[data-input="gamepad"] .snd-card:focus-within { border-color: rgb(255 209 31
 .snd-preset-about strong { color: var(--text); font-weight: 600; }
 .snd-bands { display: grid; gap: 2px; margin: 4px -12px 0; }
 
-/* ------------------------------------------------------------ switch */
-/* The whole row is the target; the switch sits on the right like system settings. */
-.snd-toggle {
-  display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px;
-  margin: -4px -12px -6px; padding: 10px 12px; border-radius: 12px; cursor: pointer; transition: background-color 150ms var(--snd-ease);
+/* Multiplayer reuses the Online switch from the design system. */
+.snd-multiplayer { --ol-go: #54c9ad; --ol-ease: var(--snd-ease); position: relative; flex: none; justify-self: end; }
+.ol-switch.snd-multiplayer-target { display: grid; place-items: center; width: 44px; height: 44px; margin: 0; padding: 0; }
+.snd-multiplayer-tip {
+  position: absolute; z-index: 10; top: 100%; right: 0; width: min(300px, calc(var(--vw) - 64px)); padding: 12px 14px;
+  border-radius: 8px; background: #071c29; color: var(--text); box-shadow: 0 8px 24px rgb(0 0 0 / .35), 0 0 0 1px rgb(255 255 255 / .15);
+  font: 14px/1.45 'Segoe UI', system-ui, sans-serif; text-wrap: pretty; visibility: hidden; opacity: 0;
+  transition: opacity 120ms var(--snd-ease), visibility 120ms var(--snd-ease);
 }
-.snd-toggle:hover { background: rgb(255 255 255 / .035); }
-.snd-toggle:has(.snd-switch:is(:focus-visible, .nav-focus)) { background: rgb(255 255 255 / .06); outline: 3px solid var(--snd-focus); }
-.snd-toggle-text { display: grid; gap: 4px; min-width: 0; }
-.snd-toggle-text strong { font: 600 16px/1.3 'Segoe UI', system-ui, sans-serif; color: var(--text); }
-.snd-switch {
-  appearance: none; position: relative; flex: none; width: 58px; height: 34px; margin: 0; border-radius: 17px;
-  border: 1px solid #6f97a6; background: #123e58; cursor: pointer;
-  transition-property: background-color, border-color; transition-duration: 150ms; transition-timing-function: var(--snd-ease);
-}
-.snd-switch::after {
-  content: ''; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%;
-  background: #dbe7ed; box-shadow: 0 1px 3px rgb(0 0 0 / .4); transition: translate 150ms var(--snd-ease), background-color 150ms var(--snd-ease);
-}
-.snd-switch:checked { background: var(--snd-on); border-color: var(--snd-on); }
-.snd-switch:checked::after { translate: 24px 0; background: #513815; }
+.snd-multiplayer:is(:hover, :focus-within):not(.is-tip-dismissed) .snd-multiplayer-tip { visibility: visible; opacity: 1; }
 
 /* Narrow panels: label and value on top, the slider gets the full width underneath. */
 @container content (max-width: 600px) {

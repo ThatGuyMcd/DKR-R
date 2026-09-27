@@ -65,7 +65,7 @@ window.DKRLauncher = window.DKRLauncher || {};
     sound: {
       master: 100, music: 100, sfx: 100, vehicles: 100, nature: 100,
       muted: { master: false, music: false, sfx: false, vehicles: false, nature: false },
-      bass: 0, mid: 0, treble: 0, eqCustom: null, restore34PlayerMusic: false,
+      bass: 0, mid: 0, treble: 0, eqCustom: null, restore34PlayerMusic: true,
     },
     controls: {
       gyro: false,
