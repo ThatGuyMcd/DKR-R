@@ -1,72 +1,126 @@
-/* Controls only: measurements and colors from DrawControlsReference / ApplyStyle. */
-@font-face { font-family: ControlsProggy; src: url('../assets/proggy_clean.ttf') format('truetype'); font-display: swap; }
-.controls-page, .controls-capture { --control-font: RacingDigits, ControlsProggy, monospace; }
+/* Controls: readable settings surfaces within the launcher visual language. */
+.controls-page, .controls-capture {
+  --control-font: 'Segoe UI', system-ui, sans-serif;
+  --controls-line: #365361;
+  --controls-surface: #102c3c;
+  font: 16px/1.45 var(--control-font);
+  color: var(--text);
+}
 .controls-page { container-type: inline-size; }
-.controls-page p { margin: 0 0 13px; line-height: 19px; }
-.controls-page .controls-intro { margin-bottom: 38px; }
-.controls-underlined { border-bottom: 1px solid rgba(242,140,20,.75); padding-bottom: 13px; margin: 0 0 13px; }
-.controls-players, .controls-tabs { display: grid; gap: 12px; margin-right: 30px; }
-.controls-players { grid-template-columns: repeat(4,minmax(0,1fr)); margin-bottom: 40px; }
-.controls-tabs { grid-template-columns: repeat(5,minmax(0,1fr)); margin-bottom: 40px; }
-.controls-page .race-button { width: 100%; min-width: 0; min-height: 0; height: 42px; padding: 0 16px; }
-.controls-players .race-button { height: 46px; }
-.controls-tabs .race-button { padding-inline: 4px; }
-.controls-body { margin-right: 30px; container-type: inline-size; }
-.controls-body > .race-button, .controls-body > .controls-row { margin-bottom: 13px; }
-.controls-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.content:has(.controls-page) { background: #0c202d; }
+.controls-page h1 { min-height: 0; font-size: var(--heading-size); margin: 0 0 10px; }
+.controls-page p, .controls-capture p { line-height: 1.45; margin: 0 0 12px; }
+.controls-page .muted, .controls-study-note { color: var(--muted); font-size: 14px; }
+.controls-page .controls-intro { margin-bottom: 24px; }
+.controls-page :is(h2, h3), .controls-capture :is(h2, h3) { font: 600 18px/1.4 var(--control-font); text-wrap: balance; }
+.controls-player-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.controls-player-bar > span { color: var(--muted); font-size: 14px; }
+.controls-players { --snd-ease: cubic-bezier(.2, 0, 0, 1); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; flex: 1; max-width: 520px; }
+.controls-players .snd-chip { min-width: 0; }
+.controls-page .race-button, .controls-capture .race-button {
+  min-width: 0; min-height: 44px; height: auto; padding: 10px 14px;
+  border: 1px solid #476373; border-radius: 8px; background: #173a4e; color: var(--text);
+  font: 600 14px/1.35 var(--control-font); text-decoration: none;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.controls-page .race-button > span, .controls-capture .race-button > span { overflow-wrap: anywhere; }
+.controls-page .race-button::before, .controls-page .race-button > span::before,
+.controls-capture .race-button::before, .controls-capture .race-button > span::before { display: none; }
+.controls-page .race-button:is(:hover, :focus-visible, .nav-focus):not(:disabled),
+.controls-capture .race-button:is(:hover, :focus-visible, .nav-focus):not(:disabled) { background: #234e65; border-color: #b9cdd7; }
+.controls-page .race-button:is(:hover, :focus-visible, .nav-focus) > span,
+.controls-capture .race-button:is(:hover, :focus-visible, .nav-focus) > span { color: inherit; text-shadow: none; }
+.controls-page .race-button.selected { background: #ffd078; border-color: #ffd078; color: var(--background); }
+.controls-page .race-button.selected:is(:hover, :focus-visible, .nav-focus) { background: #ffdc99; color: var(--background); }
+.controls-page :is(button, input, select, summary):focus-visible,
+.controls-capture :is(button, input):focus-visible { outline: 3px solid #ffd078; outline-offset: 3px; }
+.controls-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--controls-line); margin-bottom: 22px; overflow-x: auto; padding: 4px; }
+.controls-tabs .race-button { flex: 1 0 auto; border: 0; border-radius: 4px 4px 0 0; background: transparent; padding: 10px; }
+.controls-tabs .race-button.selected { background: #ffffff08; color: var(--warm); box-shadow: inset 0 -3px #ffd078; }
+.controls-tabs .race-button.selected:is(:hover, :focus-visible, .nav-focus) { background: #ffffff10; color: var(--warm); }
+.controls-body { min-width: 0; }
+.controls-scope { font-size: 13px; color: var(--warm); font-weight: 600; }
+.controls-separator { margin: 0 0 16px; }
+.controls-body > .controls-separator:not(:first-child) { margin-top: 20px; }
+.controls-body > .controls-scope + .controls-separator { margin-top: 0; }
+.controls-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .controls-row > * { min-width: 0; }
-.controls-row .race-button { height: 44px; }
-.controls-space { margin-bottom: 13px; }
-.controls-preview { height: 294px; padding: 12px 14px; margin-bottom: 13px; border: 2px solid var(--border); border-radius: 18px; background: rgba(11,46,64,.92); overflow: hidden; }
-.controls-preview h2 { font: 58px/1 Jumpman, sans-serif; margin: 0 0 13px; }
-.controls-progress { height: 26px; margin-bottom: 13px; position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-soft); text-align: center; }
-.controls-progress::before { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--progress); background: #e6b300; }
-.controls-progress span { position: relative; display: block; line-height: 24px; }
-.controls-separator { display: flex; align-items: center; gap: 20px; min-height: 25px; margin: 0 0 13px; }
-.controls-separator::before, .controls-separator::after { content: ''; height: 3px; background: rgba(242,140,20,.75); }
-.controls-separator::before { width: 0; }
-.controls-separator::after { flex: 1; }
-.controls-page .checkbox { min-height: 41px; }
-.controls-gyro-sensitivity .slider { height: 39px; }
-.controls-gyro-sensitivity .slider input::-webkit-slider-thumb { height: 31px; }
-.controls-gyro-sensitivity .slider input::-moz-range-thumb { height: 31px; }
-.controls-bindings { margin-bottom: 19px; }
-.controls-binding-header, .controls-binding { display: grid; grid-template-columns: clamp(180px,38%,300px) repeat(2,minmax(0,1fr)); gap: 0; }
-.controls-bindings.has-keyboard :is(.controls-binding-header,.controls-binding) { grid-template-columns: clamp(180px,30%,300px) repeat(3,minmax(0,1fr)); }
-.controls-binding-header { background: #303033; }
-.controls-binding-header > span { padding: 6px 8px; }
-.controls-binding > * { border-right: 1px solid rgba(255,255,255,.12); }
-.controls-binding:nth-child(odd) { background: rgba(255,255,255,.06); }
-.controls-binding-label { padding: 13px 8px; }
-.controls-binding .race-button { width: calc(100% - 8px); margin: 2px 4px; height: 38px; }
-.controls-vehicle-table { width: 100%; border-collapse: collapse; margin-bottom: 13px; table-layout: fixed; text-align: left; }
-.controls-vehicle-table th { font-weight: normal; background: #303033; }
-.controls-vehicle-table :is(th,td) { padding: 4px 8px; border-right: 1px solid rgba(255,255,255,.12); }
-.controls-vehicle-table tr:nth-child(even) { background: rgba(255,255,255,.06); }
+.controls-body > .controls-row { margin-bottom: 20px; }
+.controls-page .field { gap: 8px; margin-bottom: 16px; }
+.controls-page .field > label { font-size: 16px; }
+.controls-page select { min-height: 44px; font: 15px/1.4 var(--control-font); background: #102c3c; border: 1px solid #476373; border-radius: 8px; }
+.controls-connection { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.controls-connection::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #b9cdd7; }
+.controls-connection.is-connected::before { background: #69ddbc; }
+.controls-preview { padding: 16px; margin: 0 0 20px; border: 1px solid var(--controls-line); border-radius: 8px; background: #102c3c; }
+.controls-preview .controls-separator { margin-bottom: 6px; }
+.controls-axis { display: grid; grid-template-columns: 100px minmax(40px, 1fr) 52px; gap: 12px; align-items: center; min-height: 32px; font-size: 14px; }
+.controls-axis meter { width: 100%; height: 16px; }
+.controls-axis meter::-webkit-meter-bar { background: #081b28; border: 1px solid #476373; }
+.controls-axis meter::-webkit-meter-optimum-value { background: #77bfdb; }
+.controls-axis-value { grid-column: 3; text-align: right; font-variant-numeric: tabular-nums; }
+.controls-preview .controls-buttons-status { margin: 10px 0 0; font-size: 14px; }
+.controls-page .checkbox { min-height: 44px; margin-bottom: 8px; gap: 12px; }
+.controls-page .checkbox input { width: 24px; height: 24px; border-radius: 5px; background: #102c3c; border-color: #6d8998; }
+.controls-page .checkbox input:checked::after { width: 12px; height: 6px; border-width: 3px; transform: translateY(-2px) rotate(-45deg); border-color: #ffd078; }
+.controls-page .disclosure { margin: 24px 0 0; border-top: 1px solid var(--controls-line); }
+.controls-page .disclosure > summary { min-height: 48px; border: 0; border-radius: 0; background: transparent; padding: 12px 0; }
+.controls-page .disclosure-body { padding: 8px 0 4px; }
+.controls-page .disclosure-body > .race-button { margin-top: 12px; }
+.controls-page .controls-slider-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; }
+.controls-slider-field > label { grid-column: 1; grid-row: 1; }
+.controls-slider-field > output { grid-column: 2; grid-row: 1; font-size: 15px; font-variant-numeric: tabular-nums; }
+.controls-page .slider { grid-column: 1 / -1; height: 44px; background: transparent; border: 0; }
+.controls-page .slider input { padding: 0; }
+.controls-page .slider input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: #476373; }
+.controls-page .slider input::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -8px; border: 3px solid #122c3a; background: #ffd078; border-radius: 50%; box-shadow: 0 0 0 1px #ffd078; }
+.controls-page .slider input::-moz-range-track { height: 6px; background: #476373; }
+.controls-page .slider input::-moz-range-thumb { width: 18px; height: 18px; background: #ffd078; border: 2px solid #122c3a; border-radius: 50%; }
+.controls-bindings, .controls-vehicle-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 20px; }
+.controls-bindings th, .controls-vehicle-table th { font-weight: 600; text-align: left; }
+.controls-bindings thead th, .controls-vehicle-table thead th { color: var(--muted); font-size: 13px; padding: 10px 8px; border-bottom: 1px solid var(--controls-line); }
+.controls-binding-group th { padding: 20px 8px 8px; color: var(--text); font-size: 14px; }
+.controls-binding { border-bottom: 1px solid #ffffff0c; }
+.controls-binding:nth-child(odd) { background: #ffffff03; }
+.controls-binding > th { padding: 8px; font-size: 15px; }
+.controls-binding > td { padding: 4px; vertical-align: middle; }
+.controls-binding .race-button { width: 100%; padding: 8px; font-weight: 400; }
+.controls-binding .controls-alternate .race-button { background: transparent; border-color: #365361; }
+.controls-binding .race-button.is-unbound { color: var(--muted); background: transparent; border-style: dashed; }
+.controls-cell-label { display: none; }
+.controls-vehicle-table :is(th, td) { padding: 8px; border-bottom: 1px solid var(--controls-line); }
 .controls-vehicle-table .checkbox { margin: 0; }
-.controls-shortcuts { border: 0; min-width: 0; margin: 0; padding: 0; }
-.controls-shortcuts:disabled { opacity: .6; }
-.controls-shortcut { margin-bottom: 13px; }
-.controls-capture { width: min(520px,calc(var(--vw) - 32px)); min-height: 300px; }
-.controls-capture h3 { font: 58px/1 Jumpman, sans-serif; }
-.controls-capture .dialog-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
-/* This native dialog has no timeout; its own Escape/cancel instructions apply. */
+.controls-shortcut { padding: 20px 0; border-bottom: 1px solid var(--controls-line); }
+.controls-shortcut h3 { font-size: 16px; margin-bottom: 12px; }
+.controls-shortcut-field { display: grid; gap: 6px; }
+.controls-shortcut-field > span { color: var(--muted); font-size: 14px; }
+.controls-feedback:not(:empty) { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; padding: 12px 16px; border: 1px solid #75baa5; border-radius: 8px; background: #183f3a; }
+.controls-feedback p { margin: 0; }
+.controls-feedback .race-button { flex-shrink: 0; }
+.controls-study-note { margin: 28px 0 0 !important; padding-top: 14px; border-top: 1px solid var(--controls-line); }
+.controls-capture { width: min(560px, calc(var(--vw) - 32px)); background: #102c3c; }
+.controls-capture h2 { font-size: 22px; }
+.controls-capture .dialog-actions { gap: 12px; }
 body:has(.controls-capture[open]) #controller-legend { display: none; }
-/* Native switches to padded, stacked binding cards below these usable widths. */
-@container (max-width: 779.99px) {
-  .controls-bindings.has-keyboard .controls-binding-header { display: none; }
-  .controls-bindings.has-keyboard .controls-binding { display: flex; flex-direction: column; height: 220px; padding: 12px 14px; margin-bottom: 13px; border: 2px solid var(--border); border-radius: 18px; background: rgba(11,46,64,.92); gap: 13px; }
-  .controls-bindings.has-keyboard .controls-binding-label { padding: 0; border: 0; }
-  .controls-bindings.has-keyboard .controls-binding .race-button { flex: none; width: 100%; margin: 0; }
+.controls-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@container (max-width: 580px) {
+  .controls-player-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .controls-players { max-width: none; }
+  .controls-players .snd-chip { padding-inline: 6px; }
+  .controls-bindings thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .controls-bindings, .controls-bindings tbody { display: block; }
+  .controls-binding-group { display: block; }
+  .controls-binding { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 8px 0; }
+  .controls-binding > th { grid-column: 1 / -1; padding: 0 4px 6px; }
+  .controls-binding > td { min-width: 0; }
+  .controls-cell-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+  .controls-binding .race-button { font-size: 13px; }
 }
-@container (max-width: 599.99px) {
-  .controls-bindings .controls-binding-header { display: none; }
-  .controls-bindings:not(.has-keyboard) .controls-binding { display: flex; flex-direction: column; height: 166px; padding: 12px 14px; margin-bottom: 13px; border: 2px solid var(--border); border-radius: 18px; background: rgba(11,46,64,.92); gap: 13px; }
-  .controls-bindings .controls-binding-label { padding: 0; border: 0; }
-  .controls-bindings .controls-binding .race-button { flex: none; width: 100%; margin: 0; }
-}
-@media (max-width: 650px) {
-  .controls-players, .controls-tabs, .controls-body { margin-right: 0; }
-  .controls-players, .controls-tabs { gap: 6px; }
-  .controls-page .race-button { padding-inline: 4px; font-size: 14px; }
+@container (max-width: 380px) {
+  .controls-players { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .controls-row { grid-template-columns: 1fr; }
+  .controls-binding { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .controls-binding > th { font-size: 16px; }
+  .controls-axis { grid-template-columns: 80px minmax(30px, 1fr) 45px; gap: 8px; }
+  .controls-vehicle-table :is(th, td) { padding: 8px 3px; font-size: 13px; }
 }

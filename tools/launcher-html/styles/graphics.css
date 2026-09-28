@@ -1,0 +1,45 @@
+/* Graphics follows the launcher's titled sections and shared native controls. */
+.graphics-page { --control-font: 'Segoe UI', system-ui, sans-serif; display: grid; gap: 18px; max-width: 1240px; }
+.gfx-header h1 { margin-bottom: 6px; }
+.gfx-caption, .gfx-preview, .gfx-help, .gfx-status { font: 14px/1.5 'Segoe UI', system-ui, sans-serif; color: var(--muted); text-wrap: pretty; margin: 0; }
+.gfx-header .gfx-caption { font-size: 16px; }
+.gfx-preview { margin-top: 6px; }
+.gfx-section { padding: 20px; min-width: 0; }
+.gfx-section-header { margin-bottom: 18px; }
+.gfx-section h2 { font: 26px/1.05 var(--body-font); color: var(--text); letter-spacing: .02em; margin-bottom: 6px; text-wrap: balance; }
+.gfx-heading-symbol { font-family: 'Segoe UI', system-ui, sans-serif; font-weight: 700; }
+.gfx-columns { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; align-items: stretch; }
+.gfx-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin-bottom: 16px; }
+.graphics-page .field { min-width: 0; margin: 0; gap: 8px; align-content: start; }
+.graphics-page .field > label, .gfx-option-label { font: 600 16px/1.4 'Segoe UI', system-ui, sans-serif; }
+.graphics-page select { min-height: 44px; font-size: 17px; }
+.graphics-page .slider { height: 44px; }
+.graphics-page .slider output { font-size: 18px; font-variant-numeric: tabular-nums; }
+.gfx-option { margin-top: 16px; }
+.gfx-option .checkbox { gap: 12px; margin: 0; min-height: 44px; }
+.gfx-option .checkbox input { width: 40px; height: 40px; }
+.gfx-option .gfx-help { margin-left: 52px; margin-top: 2px; }
+.gfx-advanced { margin-top: 18px; border-top: 1px solid var(--border); }
+.gfx-advanced summary { min-height: 44px; padding: 14px 4px 4px; font: 600 16px/1.4 'Segoe UI', system-ui, sans-serif; }
+.gfx-advanced summary:hover { color: var(--warm); }
+.gfx-advanced-body { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin-top: 16px; }
+.gfx-advanced-body .gfx-option { margin-top: 0; }
+.gfx-interface-field { max-width: 480px; margin-bottom: 12px !important; }
+#gfx-scale-status { margin-top: 4px; color: var(--text); font-variant-numeric: tabular-nums; }
+.gfx-footer { border-top: 1px solid var(--border); padding-top: 18px; display: grid; gap: 12px; }
+.gfx-footer h2 { margin: 0 0 6px; }
+.gfx-reset-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.gfx-reset-actions .race-button { min-height: 44px; background: #123e50; line-height: 1.2; transition: transform 120ms ease, border-color 120ms ease; }
+.gfx-reset-actions .race-button:active:not(:disabled) { transform: scale(.96); }
+.gfx-status { color: var(--warm); }
+.gfx-status:empty { display: none; }
+.graphics-page :is(input, select, summary, button) { scroll-margin-block: 16px; }
+html[data-input="gamepad"] .gfx-section:focus-within { border-color: #ffd11f; }
+@container content (max-width: 850px) {
+  .gfx-columns { grid-template-columns: minmax(0,1fr); }
+}
+@container content (max-width: 540px) {
+  .gfx-fields, .gfx-advanced-body { grid-template-columns: minmax(0,1fr); }
+  .gfx-section { padding: 16px; }
+  .gfx-reset-actions .race-button { flex: 1 1 auto; }
+}

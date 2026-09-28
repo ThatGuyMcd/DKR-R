@@ -71,6 +71,70 @@ window.DKRLauncher = window.DKRLauncher || {};
       h('div', { class: 'disclosure-body' }, ...[].concat(bodyChildren)));
   }
 
+  // Game ROM trigger and shared picker, as shown in the design system.
+  function dropdownRow({ id, label, options, value, onChange }) {
+    const title = h('label', { id: id + '-label', for: id, text: label });
+    const selected = h('strong', { id: id + '-value' });
+    const button = h('button', { id, type: 'button', class: 'rom-select is-compact',
+      'aria-labelledby': title.id + ' ' + selected.id, 'aria-haspopup': 'listbox', 'aria-expanded': 'false' },
+      h('span', { class: 'rom-select-text' }, selected), h('span', { class: 'rom-select-chevron', 'aria-hidden': 'true' }));
+    const element = h('div', { class: 'field' }, title, button);
+    function setValue(next) {
+      value = next;
+      selected.textContent = options.find((option) => option.value === value)?.label || 'Unavailable';
+    }
+    function setOptions(next) { options = next; setValue(value); }
+    function open() {
+      if (button.disabled || button.getAttribute('aria-disabled') === 'true') return;
+      const popup = picker({ anchor: button, options, value, label,
+        onPick: (next) => { setValue(next); onChange(next); },
+        onClose: () => { button.setAttribute('aria-expanded', 'false'); button.removeAttribute('aria-controls'); },
+      });
+      if (!popup) return;
+      popup.element.id = id + '-options';
+      button.setAttribute('aria-controls', popup.element.id);
+      button.setAttribute('aria-expanded', 'true');
+      popup.element.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' || event.key === 'Tab') {
+          if (event.key === 'Escape') event.preventDefault();
+          event.stopPropagation(); popup.close(true); return;
+        }
+        const items = [...popup.element.querySelectorAll('[role="option"]')].filter((item) => !item.disabled && item.getAttribute('aria-disabled') !== 'true');
+        const index = items.indexOf(document.activeElement);
+        const next = { ArrowDown: Math.min(index + 1, items.length - 1), ArrowUp: Math.max(index - 1, 0), Home: 0, End: items.length - 1 }[event.key];
+        if (next === undefined) return;
+        event.preventDefault(); event.stopPropagation(); items[next]?.focus();
+      });
+    }
+    button.addEventListener('click', open);
+    button.addEventListener('keydown', (event) => {
+      if (!['ArrowDown', 'ArrowUp', 'F4'].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation(); open();
+    });
+    setValue(value);
+    return { element, button, setValue, setOptions };
+  }
+
+  // Reuse the documented Sound range skin without changing the page's other controls.
+  function rangeField({ id, label, min = 0, max = 100, step = 1, value, format = String, onInput }) {
+    const input = h('input', { id, class: 'snd-range', type: 'range', min, max, step, value });
+    const output = h('output', { class: 'snd-value', for: id, 'aria-hidden': 'true' });
+    const element = h('div', { class: 'field settings-slider' }, h('label', { for: id, text: label }), input, output);
+    function setValue(next) {
+      input.value = next;
+      const actual = Number(input.value);
+      const text = format(actual);
+      const parts = text.match(/^(.*?)(%| °\/s)$/);
+      output.replaceChildren(parts ? parts[1] : text);
+      if (parts) output.append(h('small', { text: parts[2] }));
+      input.setAttribute('aria-valuetext', text);
+      input.style.setProperty('--fill', ((actual - min) / (max - min) * 100) + '%');
+    }
+    input.addEventListener('input', () => { setValue(input.value); onInput(Number(input.value)); });
+    setValue(value);
+    return { element, input, setValue };
+  }
+
   function tabs(tabDefs, activeId, onSelect) {
     const nav = h('div', { class: 'tabs' }, ...tabDefs.map((tab) =>
       raceButton({
@@ -156,7 +220,7 @@ window.DKRLauncher = window.DKRLauncher || {};
   // One list for mouse, keyboard and controller: the D-pad walks the options, A picks, B closes.
   // The browser's own <select> popup can't be driven by a controller, so every select opens this.
 
-  function picker({ anchor, options, value, onPick, label, minWidth = 220 }) {
+  function picker({ anchor, options, value, onPick, onClose, label, minWidth = 220 }) {
     // The click on the field that just light-dismissed its own list shouldn't reopen it.
     if (picker.dismissedAnchor === anchor && performance.now() - picker.dismissedAt < 350) return null;
     closePicker();
@@ -176,7 +240,12 @@ window.DKRLauncher = window.DKRLauncher || {};
 
     let closed = false;
     const api = { element: list, anchor, close };
-    const onScroll = (event) => { if (!list.contains(event.target)) close(false); };
+    const onScroll = (event) => {
+      if (list.contains(event.target)) return;
+      // Ignore queued scroll events from bringing the trigger into view before opening.
+      const current = anchor.getBoundingClientRect();
+      if (current.top !== rect.top || current.left !== rect.left) close(false);
+    };
     const onResize = () => close(false);
     function close(restoreFocus) {
       if (closed) return;
@@ -187,6 +256,7 @@ window.DKRLauncher = window.DKRLauncher || {};
       list.remove();
       if (restoreFocus && anchor.isConnected) anchor.focus({ preventScroll: true });
       if (picker.current === api) picker.current = null;
+      onClose?.();
     }
     // Light dismiss (outside click, Escape). Focus goes back to the field unless the click
     // that dismissed the list already moved it somewhere else.
@@ -392,7 +462,7 @@ window.DKRLauncher = window.DKRLauncher || {};
   }
 
   DKRLauncher.ui = {
-    h, raceButton, card, field, checkboxRow, sliderRow, selectRow,
+    h, raceButton, card, field, checkboxRow, sliderRow, selectRow, dropdownRow, rangeField,
     disclosure, tabs, notify, openModal, closeModal,
     topModal, stackDialog, requestClose, picker, closePicker, selectPicker, fieldButton, keyboard, pageZoom,
   };

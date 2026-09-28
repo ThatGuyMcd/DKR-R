@@ -24,5 +24,6 @@ DKRLauncher.config = {
     { name: 'Monocypher', url: 'https://github.com/LoupVaillant/Monocypher' },
     { name: 'Mbed TLS', url: 'https://github.com/Mbed-TLS/mbedtls' },
     { name: 'GekkoNet', url: 'https://github.com/HeatXD/GekkoNet' },
+    { name: 'Diddy Kong Racing Decomp', url: 'https://github.com/DavidSM64/Diddy-Kong-Racing' },
   ],
 };

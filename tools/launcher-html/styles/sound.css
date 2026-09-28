@@ -8,8 +8,8 @@
   --snd-focus: #ffd11f;
   display: grid; gap: 16px; max-width: 1240px;
 }
-.snd-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.snd-header-text { min-width: 0; }
+.snd-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.snd-header-text { min-width: 0; flex: 1 1 320px; }
 .snd-header h1 { margin-bottom: 4px; }
 .snd-header p { margin: 0; color: var(--muted); font: 14px/1.5 'Segoe UI', system-ui, sans-serif; text-wrap: pretty; }
 .snd-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -134,8 +134,11 @@ html[data-input="gamepad"] .snd-card:focus-within { border-color: rgb(255 209 31
 .snd-bands { display: grid; gap: 2px; margin: 4px -12px 0; }
 
 /* Multiplayer reuses the Online switch from the design system. */
-.snd-multiplayer { --ol-go: #54c9ad; --ol-ease: var(--snd-ease); position: relative; flex: none; justify-self: end; }
-.ol-switch.snd-multiplayer-target { display: grid; place-items: center; width: 44px; height: 44px; margin: 0; padding: 0; }
+.snd-multiplayer { --ol-go: #54c9ad; --ol-ease: var(--snd-ease); position: relative; flex: none; max-width: 100%; justify-self: end; }
+.ol-switch.snd-multiplayer-target { display: flex; align-items: center; gap: 12px; min-height: 44px; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+.snd-multiplayer-target > span { gap: 3px; }
+.snd-multiplayer-target strong { font-size: 15px; line-height: 1.4; }
+.snd-multiplayer-target small { color: var(--muted); font-size: 14px; line-height: 1.45; }
 .snd-multiplayer-tip {
   position: absolute; z-index: 10; top: 100%; right: 0; width: min(300px, calc(var(--vw) - 64px)); padding: 12px 14px;
   border-radius: 8px; background: #071c29; color: var(--text); box-shadow: 0 8px 24px rgb(0 0 0 / .35), 0 0 0 1px rgb(255 255 255 / .15);

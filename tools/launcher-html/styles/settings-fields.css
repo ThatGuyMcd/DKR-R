@@ -1,0 +1,15 @@
+/* Only the slider family: the track and thumb reuse the Sound design-system skin. */
+.settings-slider {
+  --snd-ease: cubic-bezier(.2, 0, 0, 1);
+  --snd-fill: var(--warm);
+  --snd-thumb: var(--warm);
+  --snd-track: #245a70;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-radius: var(--radius-control);
+}
+.settings-slider > label { grid-column: 1; grid-row: 1; }
+.settings-slider > output { grid-column: 2; grid-row: 1; }
+.settings-slider > .snd-range, .settings-slider > p { grid-column: 1 / -1; }
+.settings-slider:has(.snd-range:is(:focus-visible, .nav-focus)) { background: rgb(255 255 255 / .06); outline: 3px solid #ffd11f; outline-offset: 3px; }
+.settings-slider .snd-range:is(:focus-visible, .nav-focus) { outline: none; }
