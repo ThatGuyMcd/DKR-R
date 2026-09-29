@@ -1,0 +1,54 @@
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -217,2 +217,6 @@
+         ultramodern::sleep_until(next);
++        // Quit can arrive while sleeping, including the very first retrace.
++        if (exited.load()) break;
+         auto time_now = ultramodern::time_since_start();
+@@ -229,2 +233,7 @@
+         // If the game hasn't started yet, set a dummy VI mode and origin.
++        // Publish a whole VI state. The guest setters use this same mutex;
++        // reading/swapping the double buffer without it can lose their writes.
++        // Do not hold it across sleeping, renderer work or the VI callback.
++        std::unique_lock vi_lock{ events_context.message_mutex };
+         if (!ultramodern::is_game_started()) {
+@@ -251,3 +260,2 @@
+         if (ultramodern::is_game_started()) {
+-            std::lock_guard lock{ events_context.message_mutex };
+             ViState* cur_state = events_context.vi.get_cur_state();
+@@ -295,4 +303,5 @@
+         }
+ 
++        vi_lock.unlock();
+         if (events_callbacks.vi_callback != nullptr) {
+             events_callbacks.vi_callback();
+@@ -607,6 +616,8 @@
+ extern "C" PTR(void) osViGetNextFramebuffer() {
++    std::lock_guard lock{ events_context.message_mutex };
+     return events_context.vi.get_next_state()->framebuffer;
+ }
+ 
+ extern "C" PTR(void) osViGetCurrentFramebuffer() {
++    std::lock_guard lock{ events_context.message_mutex };
+     return events_context.vi.get_cur_state()->framebuffer;
+@@ -684,6 +695,18 @@
+         events_context.vi.cur_state = 0;
+         events_context.vi.field = 0;
+-        events_context.vi.states[0] = ViState{};
+-        events_context.vi.states[1] = ViState{};
+-        events_context.vi.regs = {};
+-        events_context.vi.update_screen_regs = {};
++        // Both buffers must be valid BEFORE any worker can publish a present
++        // or a started/quit transition. Bootstrap must not depend on observing
++        // !is_game_started() in the first iteration of the VI thread.
++        ViState initial{};
++        initial.mode = &dummy_mode;
++        initial.framebuffer = static_cast<PTR(void)>(0x80700000U);
++        initial.control = dummy_mode.comRegs.ctrl;
++        initial.state = VI_STATE_BLACK;
++        events_context.vi.states[0] = initial;
++        events_context.vi.states[1] = initial;
++        events_context.vi.update_vi();
++        events_context.vi.update_screen_regs = events_context.vi.regs;
+         events_context.sp.mq = NULLPTR;

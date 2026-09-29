@@ -1,0 +1,99 @@
+diff --git a/ultramodern/src/mesgqueue.cpp b/ultramodern/src/mesgqueue.cpp
+--- a/ultramodern/src/mesgqueue.cpp
++++ b/ultramodern/src/mesgqueue.cpp
+@@ -1,2 +1,3 @@
+ #include <array>
++#include "deferred_event_queue.hpp"
+ #include <cstdio>
+@@ -28,60 +29,2 @@
+-// This queue is the wakeup path for emulated hardware events. A conventional
+-// FIFO provides deterministic producer ordering and wakeups at N64 event rates.
+-class ExternalMessageQueue {
+-public:
+-    bool enqueue(QueuedMessage message) {
+-        {
+-            std::lock_guard lock{ mutex_ };
+-            messages_.push_back(std::move(message));
+-        }
+-        condition_.notify_one();
+-        return true;
+-    }
+-
+-    bool try_dequeue(QueuedMessage& message) {
+-        std::lock_guard lock{ mutex_ };
+-        if (messages_.empty()) {
+-            return false;
+-        }
+-        message = std::move(messages_.front());
+-        messages_.pop_front();
+-        return true;
+-    }
+-
+-    void wait_dequeue(QueuedMessage& message) {
+-        std::unique_lock lock{ mutex_ };
+-        condition_.wait(lock, [this] { return !messages_.empty(); });
+-        message = std::move(messages_.front());
+-        messages_.pop_front();
+-    }
+-
+-    template <typename Rep, typename Period>
+-    bool wait_dequeue_timed(
+-        QueuedMessage& message,
+-        const std::chrono::duration<Rep, Period>& timeout) {
+-        std::unique_lock lock{ mutex_ };
+-        if (!condition_.wait_for(lock, timeout,
+-                                 [this] { return !messages_.empty(); })) {
+-            return false;
+-        }
+-        message = std::move(messages_.front());
+-        messages_.pop_front();
+-        return true;
+-    }
+-
+-private:
+-    std::mutex mutex_;
+-    std::condition_variable condition_;
+-    std::deque<QueuedMessage> messages_;
+-};
++using ExternalMessageQueue = dkr::runtime::DeferredEventQueue<QueuedMessage>;
+ 
+@@ -102,3 +51,3 @@
+     QueuedMessage queued{};
+-    while (external_messages.try_dequeue(queued)) {
++    while (external_messages.try_dequeue_any(queued)) {
+         if (queued.delivery != nullptr) {
+@@ -203,2 +152,2 @@
+-        const bool sent = do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
++        const bool sent = to_send.mq == NULLPTR || do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
+         if (!sent && to_send.requeue_if_blocked) {
+@@ -214,3 +163,3 @@
+     for (QueuedMessage& cur_mesg : requeued_messages) {
+-        external_messages.enqueue(cur_mesg);
++        external_messages.defer(std::move(cur_mesg));
+     }
+@@ -229,2 +178,2 @@
+-    const bool sent = do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
++    const bool sent = to_send.mq == NULLPTR || do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
+     if (profile) {
+@@ -243,3 +192,3 @@
+     if (!sent && to_send.requeue_if_blocked) {
+-        external_messages.enqueue(to_send);
++        external_messages.defer(std::move(to_send));
+     } else if (sent) {
+@@ -260,4 +209,4 @@
+-        const bool sent = do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
++        const bool sent = to_send.mq == NULLPTR || do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
+         if (!sent && to_send.requeue_if_blocked) {
+-            external_messages.enqueue(to_send);
++            external_messages.defer(std::move(to_send));
+         } else if (sent) {
+@@ -276,3 +225,4 @@
+     mq->first = 0;
++    external_messages.retry(mq_);
+ }
+ 
+@@ -347,3 +297,4 @@
+     mq->validCount--;
++    external_messages.retry(mq_);
+ 
+     // If any threads were blocked on sending to this message queue, pop the first one and schedule it.

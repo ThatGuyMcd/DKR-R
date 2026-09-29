@@ -94,6 +94,11 @@ __pycache__/
 .cache/
 
 # Local credentials and signing material
+packaging/android/.gradle/
+packaging/android/local.properties
+packaging/android/**/build/
+*.jks
+*.keystore
 .env
 .env.*
 !.env.example

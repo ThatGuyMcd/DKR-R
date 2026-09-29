@@ -215,16 +215,16 @@ inline bool replica_fast_forward_window(
     return true;
 }
 
-// DKR's authored simulation advances at 30 Hz. Keep a rollback guest far
-// enough behind Player 1 for an unreliable live-state sample to arrive before
-// the guest reaches that exact boundary. This is a bounded presentation
-// cushion, not accumulated simulation debt.
+// Debt is measured against the newest ALREADY RECEIVED commitment, not the
+// host's wall clock. Propagation delay is already behind that cursor: adding
+// RTT/2 again retains avoidable old simulation frames. Only jitter needs a
+// small receive cushion. Optional correction snapshots never require parking.
 inline std::uint32_t rollback_replica_target_debt(
     std::uint16_t round_trip_ms, std::uint16_t jitter_ms,
     std::uint8_t input_delay_frames) {
     constexpr std::uint32_t frame_ms = 34U;
+    (void)round_trip_ms;
     const std::uint32_t delivery_budget_ms =
-        static_cast<std::uint32_t>(round_trip_ms) / 2U +
         static_cast<std::uint32_t>(jitter_ms) * 2U + 8U;
     const std::uint32_t measured_frames =
         (delivery_budget_ms + frame_ms - 1U) / frame_ms + 1U;
@@ -241,15 +241,8 @@ inline std::uint32_t rollback_replica_target_debt(
 inline std::uint32_t authored_timeline_target_debt(
     std::uint16_t round_trip_ms, std::uint16_t jitter_ms,
     std::uint8_t input_delay_frames) {
-    constexpr std::uint32_t frame_ms = 34U;
-    const std::uint32_t delivery_budget_ms =
-        static_cast<std::uint32_t>(round_trip_ms) / 2U +
-        static_cast<std::uint32_t>(jitter_ms) * 2U + 8U;
-    const std::uint32_t measured_frames =
-        (delivery_budget_ms + frame_ms - 1U) / frame_ms + 1U;
-    const std::uint32_t configured_ceiling = (std::clamp)(
-        static_cast<std::uint32_t>(input_delay_frames) + 2U, 2U, 8U);
-    return (std::clamp)(measured_frames, 1U, configured_ceiling);
+    return (std::min)(rollback_replica_target_debt(
+        round_trip_ms, jitter_ms, input_delay_frames), 8U);
 }
 
 inline std::uint32_t authored_catch_up_budget(
@@ -496,17 +489,19 @@ inline std::uint32_t effective_host_authority_lead_limit(
 inline std::uint8_t host_authoritative_input_delay_frames(
     double p99_round_trip_ms, double burst_jitter_ms, float loss_percent,
     bool local_network) {
-    const double bounded_rtt = (std::max)(0.0, p99_round_trip_ms);
-    const double bounded_jitter = (std::max)(0.0, burst_jitter_ms);
+    // Keep the qualified high-jitter allowance: the simpler single-percentile
+    // candidate lost more short taps on a constrained four-peer route. Only
+    // the healthy-route floor is reduced after fresh probe qualification.
+    (void)local_network;
+    const double bounded_rtt = (std::clamp)(p99_round_trip_ms, 0.0, 10000.0);
+    const double bounded_jitter = (std::clamp)(burst_jitter_ms, 0.0, 10000.0);
     const double loss_headroom_ms =
         (std::clamp)(static_cast<double>(loss_percent), 0.0, 15.0) * 2.0;
-    const double route_budget_ms = bounded_rtt +
-        bounded_jitter * 2.5 + loss_headroom_ms;
-    const int route_floor = local_network ? 2 : 3;
+    const double route_budget_ms = bounded_rtt + bounded_jitter * 2.5 + loss_headroom_ms;
     return static_cast<std::uint8_t>((std::clamp)(
         static_cast<int>(std::ceil(
             route_budget_ms / (1000.0 / 30.0))) + 1,
-        route_floor, static_cast<int>(kMaximumInputDelayFrames)));
+        2, static_cast<int>(kMaximumInputDelayFrames)));
 }
 
 // An unordered reliable authority stream may deliver overlapping batches in

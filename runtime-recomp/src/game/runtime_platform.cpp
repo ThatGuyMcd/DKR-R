@@ -565,7 +565,24 @@ void ReconcileControllers() {
     }
 }
 
-void RefreshControllers() {
+std::atomic<bool> g_controller_inventory_dirty{true};
+int SDLCALL ControllerInventoryEvent(void*, SDL_Event* event) {
+    if (event->type == SDL_JOYDEVICEADDED || event->type == SDL_JOYDEVICEREMOVED ||
+        event->type == SDL_CONTROLLERDEVICEADDED || event->type == SDL_CONTROLLERDEVICEREMOVED ||
+        event->type == SDL_CONTROLLERDEVICEREMAPPED) {
+        g_controller_inventory_dirty.store(true, std::memory_order_relaxed);
+    }
+    return 1;
+}
+
+void RefreshControllers(bool force = true) {
+    // All callers own g_platform_mutex. Sampling still happens every poll;
+    // only enumeration and assignment reconciliation are cached.
+    static auto next_inventory_check = std::chrono::steady_clock::time_point{};
+    const auto now = std::chrono::steady_clock::now();
+    const bool dirty = g_controller_inventory_dirty.exchange(false, std::memory_order_relaxed);
+    if (!force && !dirty && now < next_inventory_check) return;
+    next_inventory_check = now + std::chrono::seconds(1);
     for (auto iterator = g_controller_devices.begin();
          iterator != g_controller_devices.end();) {
         if (!ControllerRecordAttached(*iterator)) {
@@ -1398,6 +1415,8 @@ bool dkr::runtime::platform::initialise() {
         return false;
     }
     SDL_version linked_version{};
+    SDL_AddEventWatch(ControllerInventoryEvent, nullptr);
+    g_controller_inventory_dirty.store(true, std::memory_order_relaxed);
     SDL_GetVersion(&linked_version);
     std::fprintf(stderr, "[boot][platform] SDL linked=%u.%u.%u\n",
                  linked_version.major, linked_version.minor,
@@ -1407,6 +1426,7 @@ bool dkr::runtime::platform::initialise() {
                  sdl3_version != nullptr && *sdl3_version != '\0'
                      ? sdl3_version : "not reported");
     if (!InitialiseSdl2ControllerBackend(true)) {
+        SDL_DelEventWatch(ControllerInventoryEvent, nullptr);
         SDL_Quit();
         return false;
     }
@@ -1458,6 +1478,7 @@ void dkr::runtime::platform::shutdown() {
         SDL_DestroyWindow(g_window);
         g_window = nullptr;
     }
+    SDL_DelEventWatch(ControllerInventoryEvent, nullptr);
     SDL_Quit();
 #endif
 }
@@ -1466,7 +1487,7 @@ void dkr::runtime::platform::shutdown() {
 ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
     if (g_window == nullptr) {
         Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
         flags |= SDL_WINDOW_VULKAN;
 #endif
         g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",
@@ -1549,6 +1570,35 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
     }
 #endif
     return create_window();
+}
+
+void* dkr::runtime::platform::prepare_window_for_launcher() {
+#if defined(__linux__) && !defined(__ANDROID__)
+    // Qualification switch: never allow SDL/OpenGL to convert a live Vulkan
+    // window. Both renderers have been destroyed at this launcher boundary.
+    const char* opt_in = SDL_getenv("DKR_LINUX_ACCELERATED_LAUNCHER");
+    if (g_window && opt_in && std::string_view(opt_in) == "1" &&
+        (SDL_GetWindowFlags(g_window) & SDL_WINDOW_VULKAN)) {
+        int x, y, width, height;
+        SDL_GetWindowPosition(g_window, &x, &y);
+        SDL_GetWindowSize(g_window, &width, &height);
+        const Uint32 flags = SDL_GetWindowFlags(g_window);
+        // Create before destroying so a failed allocation keeps the proven
+        // software path and its original window intact.
+        auto* replacement = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",
+            x, y, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
+        if (replacement) {
+            SDL_DestroyWindow(g_window);
+            g_window = replacement;
+            SDL_SetWindowMinimumSize(g_window, 800, 600);
+            if (flags & SDL_WINDOW_MAXIMIZED) SDL_MaximizeWindow(g_window);
+            const auto fullscreen = flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
+            if (fullscreen) SDL_SetWindowFullscreen(g_window, fullscreen);
+            if (!(flags & SDL_WINDOW_HIDDEN)) SDL_ShowWindow(g_window);
+        }
+    }
+#endif
+    return g_window;
 }
 
 void dkr::runtime::platform::pump_window_events(void*) {
@@ -1801,7 +1851,7 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
     }
     std::scoped_lock lock(g_platform_mutex);
     SDL_GameControllerUpdate();
-    RefreshControllers();
+    RefreshControllers(false);
 
     SDL_GameController* controller = g_controllers[0];
     const bool connected = controller != nullptr;
@@ -2163,6 +2213,10 @@ void dkr::runtime::platform::set_audio_frequency(std::uint32_t frequency) {
 #endif
 }
 
+#if defined(__ANDROID__)
+#include "../android/mobile_ui.hpp"
+#endif
+
 void dkr::runtime::platform::poll_input() {
 #if DKR_RUNTIME_HAS_RT64
     if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
@@ -2182,7 +2236,7 @@ void dkr::runtime::platform::poll_input() {
         RefreshSdl3Controllers();
     } else {
         SDL_GameControllerUpdate();
-        RefreshControllers();
+        RefreshControllers(false);
     }
     const bool blocked = dkr::runtime::ui::overlay_visible();
     const bool window_focused = g_window != nullptr &&
@@ -2222,6 +2276,12 @@ void dkr::runtime::platform::poll_input() {
                 !online_routing,
                 player == (online_routing ? online_profile : 0U));
         }
+#if defined(__ANDROID__)
+        if (player == (online_routing ? online_profile : 0U)) {
+            dkr::runtime::mobile::merge_input(state,
+                gameplay_blocked || !window_focused || dkr::runtime::mobile::editing());
+        }
+#endif
         g_physical_buttons[player].store(state.buttons, std::memory_order_release);
         g_physical_stick_x[player].store(state.stick_x, std::memory_order_release);
         g_physical_stick_y[player].store(state.stick_y, std::memory_order_release);

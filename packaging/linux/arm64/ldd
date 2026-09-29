@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Cross-packaging dependency inspection for ARM ELF files in a multiarch image.
+# linuxdeploy otherwise invokes the host ldd, which calls ARM files "static".
+set -euo pipefail
+if [[ $# == 1 ]] && aarch64-linux-gnu-readelf -h "$1" 2>/dev/null | grep -F AArch64 >/dev/null; then
+  exec /lib/ld-linux-aarch64.so.1 --list "$1"
+fi
+exec /usr/bin/ldd "$@"

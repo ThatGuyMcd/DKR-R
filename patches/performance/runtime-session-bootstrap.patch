@@ -1,0 +1,14 @@
+diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
+--- a/librecomp/src/recomp.cpp
++++ b/librecomp/src/recomp.cpp
+@@ -739,2 +739,10 @@
+ void recomp::start(const recomp::Configuration& cfg) {
++    // A late SDL/lifecycle quit can follow the previous session's final
++    // cleanup. Reset the launch gate here, before workers are created, not
++    // only during teardown. Otherwise Quit is treated as already started.
++    {
++        std::lock_guard<std::mutex> lock(current_game_mutex);
++        current_game.reset();
++        game_status.store(GameStatus::None);
++    }
+     exited.store(false);

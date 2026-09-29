@@ -1,0 +1,35 @@
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -5,3 +5,5 @@
+ #include "rt64_workload_queue.h"
+ #include "water_performance.hpp"
++#include "render_idle_policy.hpp"
++#include "performance_trace.hpp"
+ 
+@@ -1224,13 +1226,25 @@
+             if (threadsRunning) {
+-                if (workerMutex.try_lock()) {
++                const auto idleResult = dkr::runtime::render_idle::try_submit(threadMutex, workerMutex, [&] {
++                    // Do not compete with queued frames either. Never wait on a
++                    // producer, and do not retain cursorMutex across GPU work.
++                    std::unique_lock<std::mutex> cursorLock(cursorMutex, std::try_to_lock);
++                    return !cursorLock.owns_lock() || !threadsRunning || (writeCursor != threadCursor);
++                }, [&] {
++                    dkr::runtime::performance_trace::Scope idleScope(
++                        dkr::runtime::performance_trace::Region::IdleGpuSubmit);
+                     commandList->begin();
+                     commandList->setPipeline(idle.pipeline.get());
+                     commandList->setComputePipelineLayout(idle.pipelineLayout.get());
+                     commandList->dispatch(1, 1, 1);
+                     commandList->end();
+                     ext.workloadGraphicsWorker->execute();
+                     ext.workloadGraphicsWorker->wait();
+-                    workerMutex.unlock();
++                });
++                if (idleResult != dkr::runtime::render_idle::Result::Submitted) {
++                    dkr::runtime::performance_trace::event(
++                        dkr::runtime::performance_trace::Region::IdleGpuSkipped);
+                 }
+                 
+                 Thread::sleepMilliseconds(1);

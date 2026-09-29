@@ -1445,6 +1445,10 @@ int g_paddock_modal_windows = 0;
 // A modal window with the paddock's painted title bar. Only the window is
 // styled here; wrap the call in a PaddockFlatScope for the body.
 inline bool BeginPaddockModalWindow(const char* name, ImGuiWindowFlags flags) {
+#if defined(__ANDROID__)
+    dkr::runtime::mobile::constrain_modal();
+    flags &= ~(ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+#endif
     // The title bar is sized from the current font and painted below. Never
     // push a font across Begin: PopFont would drop the popup's atlas texture.
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {24.0F, 24.0F});

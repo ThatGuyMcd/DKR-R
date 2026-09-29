@@ -1,0 +1,11 @@
+diff --git a/src/common/rt64_timer.cpp b/src/common/rt64_timer.cpp
+--- a/src/common/rt64_timer.cpp
++++ b/src/common/rt64_timer.cpp
+@@ -8,2 +8,3 @@
+ #include "rt64_timer.h"
++#include "presentation_wait.hpp"
+ 
+@@ -24,2 +25,3 @@
+     void Timer::preciseSleepUntil(const Timestamp endTime) {
++        dkr::runtime::coarse_presentation_wait(endTime);
+         auto startTime = std::chrono::high_resolution_clock::now();

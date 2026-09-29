@@ -81,6 +81,12 @@
   ],
   "functionHooks": [
     {
+      "function": "__scMain",
+      "beforeVram": "0x80079648",
+      "text": "extern void dkr_scheduler_keep_host_tasks(uint8_t*, uint32_t, uint32_t, uint32_t); dkr_scheduler_keep_host_tasks(rdram, (uint32_t)ctx->r18, 0x800DE754U, 0x800DE758U);",
+      "reason": "Before __scHandleRetrace, preserve only submitted host-owned SP/DP tasks until their actual completion is consumed. s2 is OSSched; the retail hardware timeout counters are gCurRSPTaskCounter/gCurRDPTaskCounter. Do not skip retrace scheduling, acknowledge early, or fabricate completion."
+    },
+    {
       "function": "generate_track",
       "beforeVram": "0x8002C0FC",
       "text": "extern void dkr_custom_tracks_track_heap(uint8_t*, recomp_context*); dkr_custom_tracks_track_heap(rdram, ctx);",

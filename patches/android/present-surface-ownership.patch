@@ -1,0 +1,12 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -483,5 +483,7 @@
+                     ext.presentGraphicsWorker->execute();
+                     ext.presentGraphicsWorker->wait();
+-                    swapChainValid = ext.swapChain->resize();
++                    // Drop framebuffer references before resize destroys the
++                    // attached image views (all GPU draws have completed).
+                     swapChainFramebuffers.clear();
++                    swapChainValid = ext.swapChain->resize();
+ 

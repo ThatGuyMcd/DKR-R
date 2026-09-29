@@ -64,6 +64,8 @@ struct Group {
     bool interpolate_texcoords = false;
     bool interpolate_tiles = false;
     std::uint8_t mode = 0U;
+    bool procedural_water = false;
+    std::uint8_t water_scroll_tag = 0U;
 };
 
 struct EndScopeResult {
@@ -86,11 +88,13 @@ public:
     constexpr void load_matrix(std::size_t slot, std::uint32_t identity,
                                bool interpolate_vertices = false,
                                bool interpolate_texcoords = false,
-                               bool interpolate_tiles = false) {
+                               bool interpolate_tiles = false,
+                               bool procedural_water = false,
+                               std::uint8_t water_scroll_tag = 0U) {
         selected_matrix_ = clamp_slot(slot);
         matrix_groups_[selected_matrix_] = Group{
             identity, interpolate_vertices, interpolate_texcoords,
-            interpolate_tiles, 0U};
+            interpolate_tiles, 0U, procedural_water, water_scroll_tag};
     }
 
     constexpr void select_matrix(std::size_t slot) {
@@ -142,7 +146,16 @@ public:
             // Aspect scopes carry only RT64 projection policy. They must not
             // replace the selected matrix's interpolation identity, including
             // when a new world matrix is loaded after the scope begins.
-            return matrix_groups_[selected_matrix_];
+            auto group = matrix_groups_[selected_matrix_];
+            // Aspect changes restore the existing matrix identity, but must
+            // not grant the water fast path to an enclosing shadow, scenery
+            // or vehicle scope. Only provenance changes; identity policy does
+            // not. Rejected scopes also fall back to the original draw path.
+            if (rejected_scope_depth_ != 0U) group.procedural_water = false;
+            for (std::size_t i = 0; group.procedural_water && i < scope_depth_; ++i)
+                if (!is_aspect_policy_scope(scopes_[i].mode)) group.procedural_water = false;
+            if (!group.procedural_water) group.water_scroll_tag = 0U;
+            return group;
         }
         return scopes_[scope_depth_ - 1U];
     }

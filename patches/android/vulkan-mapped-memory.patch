@@ -1,0 +1,51 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -11,2 +11,3 @@
+ #include "performance_trace.hpp"
++#include "android_memory_policy.hpp"
+ #include "plume_vulkan.h"
+@@ -906,16 +907,48 @@
+     void *VulkanBuffer::map(uint32_t subresource, const RenderRange *readRange) {
++        const auto range = dkr::runtime::android_graphics::mapped_range(desc.size,
++            readRange != nullptr, readRange ? readRange->begin : 0, readRange ? readRange->end : 0);
++        if (!range.valid || allocation == VK_NULL_HANDLE) {
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::BufferMap, VK_ERROR_MEMORY_MAP_FAILED);
++        }
+         void *data = nullptr;
+         VkResult res = vmaMapMemory(device->allocator, allocation, &data);
+         if (res != VK_SUCCESS) {
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::BufferMap, res);
+             fprintf(stderr, "vmaMapMemory failed with error code 0x%X.\n", res);
+             return nullptr;
+         }
++        // VMA performs nonCoherentAtomSize alignment and is a no-op for
++        // coherent memory. A map never establishes GPU completion: callers
++        // retain their existing readback fence before coming here.
++        if (range.size != 0) {
++            res = vmaInvalidateAllocation(device->allocator, allocation, range.offset, range.size);
++            if (res != VK_SUCCESS) {
++                vmaUnmapMemory(device->allocator, allocation);
++                fprintf(stderr, "vmaInvalidateAllocation failed with error code 0x%X.\n", res);
++                dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::BufferMap, res);
++            }
++        }
+ 
+         return data;
+     }
+ 
+     void VulkanBuffer::unmap(uint32_t subresource, const RenderRange *writtenRange) {
++        const auto range = dkr::runtime::android_graphics::mapped_range(desc.size,
++            writtenRange != nullptr, writtenRange ? writtenRange->begin : 0, writtenRange ? writtenRange->end : 0);
++        if (!range.valid) {
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::BufferFlush, VK_ERROR_MEMORY_MAP_FAILED);
++        } else if (range.size != 0) {
++            const VkResult res = vmaFlushAllocation(device->allocator, allocation, range.offset, range.size);
++            if (res != VK_SUCCESS) {
++                fprintf(stderr, "vmaFlushAllocation failed with error code 0x%X.\n", res);
++                vmaUnmapMemory(device->allocator, allocation);
++                dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::BufferFlush, res);
++            }
++        }
+         vmaUnmapMemory(device->allocator, allocation);
+     }

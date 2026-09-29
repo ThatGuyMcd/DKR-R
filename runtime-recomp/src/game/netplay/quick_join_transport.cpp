@@ -302,11 +302,14 @@ public:
         std::string& error) override {
         std::shared_ptr<rtc::DataChannel> channel;
         std::shared_ptr<Peer> target;
+        std::array<std::shared_ptr<rtc::DataChannel>, 5> peer_channels{};
         {
             std::scoped_lock lock(mutex_);
             for (const auto& [identifier, peer] : peers_) {
                 if (peer->address == destination) {
                     target = peer;
+                    peer_channels = {peer->control_channel, peer->authority_channel,
+                        peer->realtime_channel, peer->checkpoint_channel, peer->replica_channel};
                     switch (quick_join_delivery_class(traffic)) {
                     case TransportTrafficClass::Checkpoint:
                         channel = peer->checkpoint_channel;
@@ -337,15 +340,10 @@ public:
         // Realtime traffic is tiny and must never wait behind more than a few
         // frames. Replica traffic is disposable latest-wins data, so stop
         // feeding SCTP as soon as one useful state is already in flight.
-        const std::size_t maximum_buffered =
-            traffic == TransportTrafficClass::Control ? (64U << 10U)
-            : traffic == TransportTrafficClass::Authoritative ? (128U << 10U)
-            : traffic == TransportTrafficClass::Checkpoint ? (32U << 10U)
-            : traffic == TransportTrafficClass::Realtime ? (16U << 10U)
-            : (24U << 10U);
         const auto buffered = channel->bufferedAmount();
-        if (bytes.size() + 1U > maximum_buffered ||
-            buffered > maximum_buffered - (bytes.size() + 1U)) {
+        std::size_t aggregate = 0;
+        for (const auto& lane : peer_channels) if (lane) aggregate += lane->bufferedAmount();
+        if (!quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U)) {
             error.clear();
             return DatagramSendStatus::WouldBlock;
         }
@@ -410,6 +408,11 @@ public:
         queue->pop_front();
         error.clear();
         return true;
+    }
+
+    void set_receive_signal(std::shared_ptr<TransportReceiveSignal> signal) override {
+        std::scoped_lock lock(mutex_);
+        receive_signal_ = std::move(signal);
     }
 
     std::size_t buffered_bytes(TransportTrafficClass traffic) const override {
@@ -1119,6 +1122,7 @@ private:
                     locked->queued_bytes += bytes.size();
                     queue->push_back({locked->address, std::move(bytes)});
                 }
+                if (receive_signal_) receive_signal_->notify();
             }));
     }
 
@@ -1219,6 +1223,7 @@ private:
     std::string local_peer_id_;
     std::string remote_host_id_;
     mutable std::mutex mutex_;
+    std::shared_ptr<TransportReceiveSignal> receive_signal_;
     std::shared_ptr<rtc::WebSocket> websocket_;
     std::shared_ptr<PendingRekey> pending_rekey_;
     std::atomic<QuickJoinRekeyStatus> rekey_state_{QuickJoinRekeyStatus::Idle};

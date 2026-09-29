@@ -81,6 +81,12 @@
   ],
   "functionHooks": [
     {
+      "function": "__scMain",
+      "beforeVram": "0x80079A98",
+      "text": "extern void dkr_scheduler_keep_host_tasks(uint8_t*, uint32_t, uint32_t, uint32_t); dkr_scheduler_keep_host_tasks(rdram, (uint32_t)ctx->r18, 0x800DECD4U, 0x800DECD8U);",
+      "reason": "Rev A equivalent of the qualified host-owned task lifetime hook before __scHandleRetrace; retain all other retail scheduler work and the real SP/DP acknowledgement ordering."
+    },
+    {
       "function": "generate_track",
       "beforeVram": "0x8002C13C",
       "text": "extern void dkr_custom_tracks_track_heap(uint8_t*, recomp_context*); dkr_custom_tracks_track_heap(rdram, ctx);",

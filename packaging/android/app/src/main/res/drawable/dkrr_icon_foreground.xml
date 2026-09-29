@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 666:375 source aspect preserved, centred within the adaptive-icon safe zone. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="56dp" android:height="31.53dp" android:gravity="center">
+        <bitmap android:src="@drawable/dkrr_logo" android:gravity="fill" android:filter="true" />
+    </item>
+</layer-list>

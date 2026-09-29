@@ -4,6 +4,7 @@
 #include "f3ddkr_rt64.hpp"
 #include "intro_tail_policy.hpp"
 #include "scheduler_event_policy.hpp"
+#include "host_task_lifetime.hpp"
 #include "presentation_identity.hpp"
 #include "runtime_platform.hpp"
 #include "revision_addresses.hpp"
@@ -681,6 +682,26 @@ extern "C" void dkr_track_select_lens_flare_tint_end(
 #endif
 }
 
+extern "C" void dkr_scheduler_keep_host_tasks(std::uint8_t* rdram,
+    std::uint32_t scheduler, std::uint32_t sp_counter, std::uint32_t dp_counter) {
+    if (!rdram || !IsRdramWordAddress(scheduler, 0x278U) ||
+        !IsRdramWordAddress(sp_counter, 0U) || !IsRdramWordAddress(dp_counter, 0U)) return;
+    using namespace dkr::runtime::host_tasks;
+    const gpr sc = static_cast<std::int32_t>(scheduler);
+    const auto protect = [&](std::uint32_t task, std::uint32_t counter, Engine engine) {
+        const gpr address = static_cast<std::int32_t>(counter);
+        const auto ticks = static_cast<std::uint32_t>(MEM_W(0, address));
+        // The next retail retrace increments this to eleven and would retire
+        // the task as failed N64 hardware. Native work can legitimately take
+        // longer (shader compilation, scheduling, slower drivers). Do not let
+        // the guest recycle its task/buffers while the host still owns them.
+        if (ticks >= 10 && task && IsRdramWordAddress(task, 0x4CU) &&
+            registry.protect(task + 0x10U, engine, ticks)) MEM_W(0, address) = 0;
+    };
+    protect(static_cast<std::uint32_t>(MEM_W(0x274, sc)), sp_counter, Engine::Sp);
+    protect(static_cast<std::uint32_t>(MEM_W(0x278, sc)), dp_counter, Engine::Dp);
+}
+
 extern "C" int dkr_scheduler_sp_event_valid(std::uint8_t* rdram,
                                                recomp_context* context) {
     if (rdram != nullptr && context != nullptr) {
@@ -694,6 +715,8 @@ extern "C" int dkr_scheduler_sp_event_valid(std::uint8_t* rdram,
             // means the scheduler already consumed this SP edge; it is not a
             // valid retail task and must not reach that unchecked load.
             if (dkr::runtime::scheduler::is_valid_sp_task_pointer(task)) {
+                using namespace dkr::runtime::host_tasks;
+                registry.consume(registry.lookup(task + 0x10U, Engine::Sp), Engine::Sp);
                 return 1;
             }
         }
@@ -736,6 +759,8 @@ extern "C" int dkr_scheduler_dp_event_valid(std::uint8_t* rdram,
                 MEM_W(0x278, static_cast<gpr>(
                     static_cast<std::int32_t>(scheduler))));
             if (dkr::runtime::scheduler::is_valid_dp_task_pointer(task)) {
+                using namespace dkr::runtime::host_tasks;
+                registry.consume(registry.lookup(task + 0x10U, Engine::Dp), Engine::Dp);
                 return 1;
             }
         }

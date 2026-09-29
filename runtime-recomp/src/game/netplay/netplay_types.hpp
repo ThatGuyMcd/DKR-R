@@ -74,7 +74,25 @@ enum class HostControlPolicy : std::uint8_t {
 };
 enum class Route : std::uint8_t { Unknown, Lan, Direct, Relay };
 enum class Revision : std::uint8_t { UsV77, UsV80 };
-enum class SynchronizationMode : std::uint8_t { Rollback, Lockstep };
+// Values 0/1 are frozen: saved settings and existing lobbies keep their exact
+// meaning. Experimental rollback is a distinct, explicitly negotiated mode.
+enum class SynchronizationMode : std::uint8_t { Rollback = 0, Lockstep = 1, ExperimentalRollback = 2 };
+
+constexpr bool valid_synchronization_mode(SynchronizationMode mode) {
+    return mode == SynchronizationMode::Rollback || mode == SynchronizationMode::Lockstep ||
+           mode == SynchronizationMode::ExperimentalRollback;
+}
+constexpr bool synchronization_has_prediction_window(SynchronizationMode mode) {
+    return mode == SynchronizationMode::Rollback || mode == SynchronizationMode::ExperimentalRollback;
+}
+constexpr const char* synchronization_name(SynchronizationMode mode) {
+    switch (mode) {
+    case SynchronizationMode::Rollback: return "Host prediction (legacy Rollback)";
+    case SynchronizationMode::Lockstep: return "Strict input sync (Lockstep)";
+    case SynchronizationMode::ExperimentalRollback: return "Experimental rollback";
+    }
+    return "Unknown synchronization mode";
+}
 
 struct PackedInput {
     std::uint16_t buttons = 0;

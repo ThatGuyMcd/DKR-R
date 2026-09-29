@@ -1098,7 +1098,7 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
     if (visibility > static_cast<std::uint8_t>(Visibility::Lan) ||
         host_control > static_cast<std::uint8_t>(HostControlPolicy::EveryAssignedPort) ||
         (rule_flags & ~7U) != 0U ||
-        synchronization > static_cast<std::uint8_t>(SynchronizationMode::Lockstep) ||
+        !valid_synchronization_mode(static_cast<SynchronizationMode>(synchronization)) ||
         payload.input_delay_frames > 9U || countdown_active > 1U ||
         payload.countdown_remaining_ms > 5000U) {
         error = "Lobby rules are invalid.";
@@ -1289,8 +1289,7 @@ bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
     payload.descriptor.player_count = bytes[cursor++];
     payload.descriptor.input_delay_frames = bytes[cursor++];
     payload.descriptor.rollback_window = bytes[cursor++];
-    if (bytes[cursor] > static_cast<std::uint8_t>(
-                            SynchronizationMode::Lockstep)) {
+    if (!valid_synchronization_mode(static_cast<SynchronizationMode>(bytes[cursor]))) {
         error = "Start descriptor synchronization mode is invalid.";
         return false;
     }

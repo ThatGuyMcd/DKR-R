@@ -1,0 +1,23 @@
+diff --git a/src/hle/rt64_game_frame.cpp b/src/hle/rt64_game_frame.cpp
+--- a/src/hle/rt64_game_frame.cpp
++++ b/src/hle/rt64_game_frame.cpp
+@@ -7,6 +7,7 @@
+ #include "rt64_game_frame.h"
+ #include "rt64_workload_queue.h"
++#include "water_scroll_policy.hpp"
+ 
+ #include "xxHash/xxh3.h"
+@@ -770,3 +771,13 @@
+-            const hlslpp::float2 WrappingModulo = curWorkload.extended.texcoordWrapPoint;
++            hlslpp::float2 WrappingModulo = curWorkload.extended.texcoordWrapPoint;
++            // DKR procedural water wraps at its authored texture dimensions,
++            // not the workload-wide default. The native bridge captures this
++            // at guest submission; no live guest reads or global state here.
++            const auto previousTag = prevWorkload.drawData.transformGroups[
++                prevWorkload.drawData.worldTransformGroups[prevTransformIndex]].texcoordInterpolation;
++            if (dkr::runtime::water::is_scroll_tag(curGroup.texcoordInterpolation) &&
++                previousTag == curGroup.texcoordInterpolation) {
++                WrappingModulo = { dkr::runtime::water::scroll_period(previousTag, 0),
++                                   dkr::runtime::water::scroll_period(previousTag, 1) };
++            }
+             const hlslpp::float2 WrappingModuloHalf = WrappingModulo / 2.0f;

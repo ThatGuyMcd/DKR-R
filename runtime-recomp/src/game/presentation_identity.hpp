@@ -2320,6 +2320,8 @@ struct MatrixInterpolation {
     bool interpolate_vertices = false;
     bool interpolate_texcoords = false;
     bool interpolate_tiles = false;
+    bool procedural_water = false;
+    std::uint8_t water_scroll_tag = 0U;
 };
 
 MatrixInterpolation matrix_interpolation(

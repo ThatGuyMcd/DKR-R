@@ -1,0 +1,60 @@
+diff --git a/src/render/rt64_buffer_uploader.cpp b/src/render/rt64_buffer_uploader.cpp
+--- a/src/render/rt64_buffer_uploader.cpp
++++ b/src/render/rt64_buffer_uploader.cpp
+@@ -8,1 +8,2 @@
++#include "performance_trace.hpp"
+ #include "rt64_buffer_uploader.h"
+@@ -60,5 +61,2 @@
+ 
+-            {
+-                std::unique_lock<std::mutex> readyLock(readyMutex);
+-                workAvailable = false;
+-            }
++            workAvailable = false; // workMutex also protects the wait predicate.
+ 
+             readyCondition.notify_all();
+@@ -72,2 +70,3 @@
+     void BufferUploader::threadUpload(const Upload &upload) {
++        dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::BufferUpload);
+         if (!upload.valid()) {
+@@ -80,1 +80,4 @@
+         const RenderRange writtenRange(srcOffset, srcOffset + srcSize);
+-        uint8_t *dstData = static_cast<uint8_t *>(upload.dstPair->uploadBuffer->map());
++        // This is write-only staging memory: do not invalidate/read its entire
++        // allocation on non-coherent mobile heaps before overwriting a range.
++        const RenderRange noRead(0, 0);
++        uint8_t *dstData = static_cast<uint8_t *>(upload.dstPair->uploadBuffer->map(0, &noRead));
+         memcpy(dstData + srcOffset, static_cast<const uint8_t *>(upload.srcData) + srcOffset, srcSize);
+@@ -108,13 +108,28 @@
+     void BufferUploader::submit(RenderWorker *worker, const std::vector<Upload> &uploads) {
++        bool queued = false;
+         {
+             std::unique_lock<std::mutex> queueLock(workMutex);
++            readyCondition.wait(queueLock, [this]() { return !workAvailable; });
+             pendingUploads = uploads;
+             updateResources(worker, pendingUploads);
+-            workAvailable = true;
++            // Tiny memcpy batches cost less than handing off to a sleeping
++            // Android worker. Keep larger transfers asynchronous. GPU copies,
++            // barriers and completion fences are unchanged.
++            constexpr size_t inlineBudget = 64 * 1024;
++            size_t remaining = inlineBudget;
++            for (const Upload &u : pendingUploads) {
++                if (!u.valid()) continue;
++                const size_t count = u.srcDataIndexRange.second - u.srcDataIndexRange.first;
++                if (u.srcDataStride && count > remaining / u.srcDataStride) { queued = true; break; }
++                remaining -= count * u.srcDataStride;
++            }
++            if (queued) workAvailable = true;
++            else for (const Upload &u : pendingUploads) threadUpload(u);
+         }
+-
+-        workCondition.notify_all();
++        if (queued) workCondition.notify_one();
+     }
+@@ -177,3 +192,4 @@
+     void BufferUploader::wait() {
+-        std::unique_lock<std::mutex> readyLock(readyMutex);
++        dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::BufferUploadWait);
++        std::unique_lock<std::mutex> readyLock(workMutex);
+         readyCondition.wait(readyLock, [this]() {

@@ -1,0 +1,46 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -5,1 +5,2 @@
++#include "performance_trace.hpp"
+ #include "rt64_present_queue.h"
+@@ -20,2 +20,5 @@
+     PresentQueue::~PresentQueue() {
+-        presentThreadRunning = false;
++        {
++            const std::scoped_lock lock(cursorMutex);
++            presentThreadRunning = false;
++        }
+         cursorCondition.notify_all();
+@@ -40,17 +43,13 @@
+-        // Stall the thread until the barrier is lifted if we're trying to write on a present being used by the GPU.
+-        bool waitForBarrier;
+-        do {
+-            const std::scoped_lock lock(cursorMutex);
+-            waitForBarrier = (nextWriteCursor == barrierCursor);
+-        } while (waitForBarrier);
+-
+         // Modify the cursor and notify anything waiting on the queue.
+         {
+-            const std::scoped_lock lock(cursorMutex);
++            std::unique_lock lock(cursorMutex);
++            cursorCondition.wait(lock, [&] {
++                return nextWriteCursor != barrierCursor || !presentThreadRunning;
++            });
++            if (!presentThreadRunning) return;
+             writeCursor = nextWriteCursor;
+         }
+@@ -408,2 +408,3 @@
+                 presentProfiler.logAndRestart();
++                if (swapChainValid) dkr::runtime::performance_trace::record_present();
+                 if (swapChainValid) {
+@@ -440,4 +440,7 @@
+     void PresentQueue::threadAdvanceBarrier() {
+-        std::scoped_lock<std::mutex> cursorLock(cursorMutex);
+-        barrierCursor = (barrierCursor + 1) % presents.size();
++        {
++            std::scoped_lock<std::mutex> cursorLock(cursorMutex);
++            barrierCursor = (barrierCursor + 1) % presents.size();
++        }
++        cursorCondition.notify_all();
+     }

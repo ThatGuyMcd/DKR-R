@@ -71,6 +71,9 @@ set(DKR_MONOCYPHER_SOURCE "${DKRPORT_ROOT}/extern/monocypher")
 set(DKR_LIBDATACHANNEL_SOURCE "${DKRPORT_ROOT}/extern/libdatachannel")
 set(DKR_MBEDTLS_SOURCE "${DKRPORT_ROOT}/extern/mbedtls")
 set(DKR_SDL3_SOURCE "${DKRPORT_ROOT}/extern/sdl3")
+if(ANDROID)
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/AndroidPlatform.cmake")
+endif()
 option(DKR_RUNTIME_BUILD_SDL3_INPUT_HOST
     "Build the isolated SDL3 native controller and sensor host" ON)
 set(DKR_GENERATED_SOURCE_V77 "${CMAKE_CURRENT_LIST_DIR}/RecompiledFuncs" CACHE PATH
@@ -115,6 +118,7 @@ endif()
 # production recompilation projects. It carries GPL-3.0 licensing; see the
 # runtime preparation notice before distributing a linked executable.
 add_subdirectory("${DKR_MODERN_RUNTIME_SOURCE}" "${CMAKE_BINARY_DIR}/n64-modern-runtime")
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/PerformancePatches.cmake")
 if(MSVC)
     # The pinned dependencies enable multi-processor compilation internally.
     # Serialize writes to each target PDB from the project boundary so clean
@@ -229,6 +233,8 @@ add_library(DKRNetplayCore STATIC
     src/game/netplay/rollback_ring.cpp
     src/game/netplay/rollback_simulation_state.cpp
     src/game/netplay/rollback_state_store.cpp
+    src/game/netplay/experimental_rollback.cpp
+    src/game/netplay/replay_qualification.cpp
     src/game/netplay/runtime_state.cpp
     src/game/netplay/secure_channel.cpp
     src/game/netplay/session_transport.cpp
@@ -309,6 +315,7 @@ if(DKR_RUNTIME_BUILD_RT64 AND DKR_RUNTIME_BUILD_SDL3_INPUT_HOST)
     endif()
 endif()
 
+option(DKR_ANDROID_RENDER_QUALIFICATION "Private desktop qualification of Android render-pass stages; never package" OFF)
 if(DKR_RUNTIME_BUILD_RT64)
     if(NOT EXISTS "${DKR_RT64_SOURCE}/CMakeLists.txt")
         message(FATAL_ERROR
@@ -316,9 +323,178 @@ if(DKR_RUNTIME_BUILD_RT64)
             "Run Prepare-DKR-Runtime.cmd first.")
     endif()
     set(RT64_STATIC TRUE CACHE BOOL "Build RT64 as a static runtime dependency" FORCE)
-    set(RT64_SDL_WINDOW_VULKAN TRUE CACHE BOOL "Allow SDL/Vulkan window integration" FORCE)
+    if(ANDROID)
+        set(RT64_SDL_WINDOW_VULKAN FALSE CACHE BOOL "Android uses ANativeWindow" FORCE)
+    else()
+        set(RT64_SDL_WINDOW_VULKAN TRUE CACHE BOOL "Allow SDL/Vulkan window integration" FORCE)
+    endif()
     add_compile_definitions(HLSL_CPU)
     add_subdirectory("${DKR_RT64_SOURCE}" "${CMAKE_BINARY_DIR}/rt64")
+    if(ANDROID)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        set_property(TARGET file_to_c PROPERTY CROSSCOMPILING_EMULATOR
+            "${Python3_EXECUTABLE};${DKRPORT_ROOT}/scripts/run_host_shader_tool.py;${DKR_HOST_FILE_TO_C}")
+        target_sources(nfd PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/android/android_file_dialog.cpp")
+        target_link_libraries(nfd PRIVATE SDL2::SDL2)
+        get_target_property(DKR_RT64_SOURCES rt64 SOURCES)
+        list(FILTER DKR_RT64_SOURCES EXCLUDE REGEX "(^|/)rt64_application_window\\.cpp$")
+        set_property(TARGET rt64 PROPERTY SOURCES "${DKR_RT64_SOURCES}")
+        target_sources(rt64 PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/android/android_rt64_window.cpp")
+        target_link_libraries(rt64 SDL2::SDL2 android log)
+        include("${CMAKE_CURRENT_LIST_DIR}/cmake/android/RendererPatches.cmake")
+    endif()
+    # Android's RGBA patch and the resource budget compose on the same staged
+    # application source. Desktop starts from the unchanged dependency source.
+    if(ANDROID)
+        set(DKR_RESOURCE_PATCH_SOURCE "${CMAKE_BINARY_DIR}/generated/android-renderer")
+        dkr_stage_patch(plume "${DKR_RT64_SOURCE}" android-vulkan-surface
+            "${DKRPORT_ROOT}/patches/android/vulkan-surface-capabilities.patch"
+            src/contrib/plume/plume_vulkan.cpp src/contrib/plume/plume_vulkan.h)
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-vulkan-surface" android-vulkan-descriptors
+            "${DKRPORT_ROOT}/patches/android/vulkan-descriptor-safety.patch"
+            src/contrib/plume/plume_vulkan.cpp)
+        dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" android-buffer-lifecycle
+            "${DKRPORT_ROOT}/patches/android/buffer-worker-lifecycle.patch"
+            src/render/rt64_buffer_uploader.cpp)
+        dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/android-buffer-lifecycle" android-small-upload
+            "${DKRPORT_ROOT}/patches/android/buffer-small-upload.patch" src/render/rt64_buffer_uploader.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-small-upload/src/render/rt64_buffer_uploader.cpp"
+            TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES "${DKR_RT64_SOURCE}/src/render;${DKRPORT_ROOT}/runtime-recomp/src/game")
+        dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" android-background-priority
+            "${DKRPORT_ROOT}/patches/android/background-shader-priority.patch" src/common/rt64_thread.cpp)
+        dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" android-texture-memory
+            "${DKRPORT_ROOT}/patches/android/texture-memory-pressure.patch" src/render/rt64_texture_cache.cpp)
+        target_include_directories(rt64 BEFORE PRIVATE
+            "${CMAKE_BINARY_DIR}/generated/android-vulkan-surface/src/contrib/plume")
+        # Every composed plume source must see the same staged class layout.
+        target_include_directories(plume BEFORE PRIVATE
+            "${CMAKE_BINARY_DIR}/generated/android-vulkan-surface/src/contrib/plume")
+    else()
+        set(DKR_RESOURCE_PATCH_SOURCE "${DKR_RT64_SOURCE}")
+    endif()
+    dkr_stage_patch(rt64 "${DKR_RESOURCE_PATCH_SOURCE}" performance-renderer
+        "${DKRPORT_ROOT}/patches/performance/renderer-workers.patch" src/hle/rt64_application.cpp)
+    if(ANDROID)
+        dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/performance-renderer" android-transfer-qualification
+            "${DKRPORT_ROOT}/patches/android/renderer-transfer-qualification.patch" src/hle/rt64_application.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-transfer-qualification/src/hle/rt64_application.cpp"
+            TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
+            "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game"
+            COMPILE_OPTIONS "-include;render_resource_policy.hpp")
+    endif()
+    dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" performance-pacing
+        "${DKRPORT_ROOT}/patches/performance/presentation-wait.patch" src/common/rt64_timer.cpp)
+    dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" performance-measurements
+        "${DKRPORT_ROOT}/patches/performance/renderer-measurements.patch"
+        src/hle/rt64_state.cpp src/hle/rt64_framebuffer.cpp src/render/rt64_render_worker.cpp)
+    if(ANDROID)
+        set(DKR_VULKAN_MEASURE_SOURCE "${CMAKE_BINARY_DIR}/generated/android-vulkan-descriptors")
+    else()
+        set(DKR_VULKAN_MEASURE_SOURCE "${DKR_RT64_SOURCE}")
+    endif()
+    dkr_stage_patch(plume "${DKR_VULKAN_MEASURE_SOURCE}" performance-vulkan-measurements
+        "${DKRPORT_ROOT}/patches/performance/vulkan-measurements.patch" src/contrib/plume/plume_vulkan.cpp)
+    if(ANDROID)
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/performance-vulkan-measurements" android-mapped-memory
+            "${DKRPORT_ROOT}/patches/android/vulkan-mapped-memory.patch" src/contrib/plume/plume_vulkan.cpp)
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-mapped-memory" android-resource-failures
+            "${DKRPORT_ROOT}/patches/android/vulkan-resource-failures.patch" src/contrib/plume/plume_vulkan.cpp)
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-resource-failures" android-capability-preflight
+            "${DKRPORT_ROOT}/patches/android/vulkan-capability-preflight.patch" src/contrib/plume/plume_vulkan.cpp)
+        configure_file("${CMAKE_BINARY_DIR}/generated/android-vulkan-surface/src/contrib/plume/plume_vulkan.h"
+            "${CMAKE_BINARY_DIR}/generated/android-capability-preflight/src/contrib/plume/plume_vulkan.h" COPYONLY)
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-capability-preflight" android-surface-recovery
+            "${DKRPORT_ROOT}/patches/android/vulkan-surface-recovery.patch"
+            src/contrib/plume/plume_vulkan.cpp src/contrib/plume/plume_vulkan.h)
+        target_include_directories(rt64 BEFORE PRIVATE "${CMAKE_BINARY_DIR}/generated/android-surface-recovery/src/contrib/plume")
+        target_include_directories(plume BEFORE PRIVATE "${CMAKE_BINARY_DIR}/generated/android-surface-recovery/src/contrib/plume")
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-surface-recovery" android-copy-contract
+            "${DKRPORT_ROOT}/patches/android/vulkan-copy-contract.patch" src/contrib/plume/plume_vulkan.cpp)
+        configure_file("${CMAKE_BINARY_DIR}/generated/android-surface-recovery/src/contrib/plume/plume_vulkan.h"
+            "${CMAKE_BINARY_DIR}/generated/android-copy-contract/src/contrib/plume/plume_vulkan.h" COPYONLY)
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-copy-contract" android-pipeline-cache
+            "${DKRPORT_ROOT}/patches/android/vulkan-pipeline-cache.patch"
+            src/contrib/plume/plume_vulkan.cpp src/contrib/plume/plume_vulkan.h)
+        target_include_directories(rt64 BEFORE PRIVATE "${CMAKE_BINARY_DIR}/generated/android-pipeline-cache/src/contrib/plume")
+        target_include_directories(plume BEFORE PRIVATE "${CMAKE_BINARY_DIR}/generated/android-pipeline-cache/src/contrib/plume")
+    endif()
+    if(ANDROID OR DKR_ANDROID_RENDER_QUALIFICATION)
+        if(ANDROID)
+            set(DKR_PASS_PATCH_SOURCE "${CMAKE_BINARY_DIR}/generated/android-pipeline-cache")
+            set(DKR_PASS_HEADER_SOURCE "${DKR_PASS_PATCH_SOURCE}/src/contrib/plume")
+        else()
+            set(DKR_PASS_PATCH_SOURCE "${CMAKE_BINARY_DIR}/generated/performance-vulkan-measurements")
+            set(DKR_PASS_HEADER_SOURCE "${DKR_RT64_SOURCE}/src/contrib/plume")
+        endif()
+        dkr_stage_patch(plume "${DKR_PASS_PATCH_SOURCE}" android-pass-retention
+            "${DKRPORT_ROOT}/patches/android/vulkan-pass-retention.patch" src/contrib/plume/plume_vulkan.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-pass-retention/src/contrib/plume/plume_vulkan.cpp"
+            TARGET_DIRECTORY plume PROPERTIES INCLUDE_DIRECTORIES
+            "${DKR_PASS_HEADER_SOURCE};${DKR_RT64_SOURCE}/src/contrib/plume;${CMAKE_CURRENT_LIST_DIR}/src/game")
+        configure_file("${DKR_PASS_HEADER_SOURCE}/plume_vulkan.h"
+            "${CMAKE_BINARY_DIR}/generated/android-pass-retention/src/contrib/plume/plume_vulkan.h" COPYONLY)
+        dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-pass-retention" android-read-barriers
+            "${DKRPORT_ROOT}/patches/android/vulkan-read-barriers.patch"
+            src/contrib/plume/plume_vulkan.cpp src/contrib/plume/plume_vulkan.h)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-read-barriers/src/contrib/plume/plume_vulkan.cpp"
+            TARGET_DIRECTORY plume PROPERTIES INCLUDE_DIRECTORIES
+            "${DKR_RT64_SOURCE}/src/contrib/plume;${CMAKE_CURRENT_LIST_DIR}/src/game")
+        target_include_directories(plume BEFORE PRIVATE "${CMAKE_BINARY_DIR}/generated/android-read-barriers/src/contrib/plume"
+            "${CMAKE_CURRENT_LIST_DIR}/src/game")
+        target_include_directories(rt64 BEFORE PRIVATE "${CMAKE_BINARY_DIR}/generated/android-read-barriers/src/contrib/plume"
+            "${CMAKE_CURRENT_LIST_DIR}/src/game")
+        dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" android-depth-pass-retention
+            "${DKRPORT_ROOT}/patches/android/render-pass-retention.patch" src/render/rt64_framebuffer_renderer.cpp)
+    endif()
+    dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" performance-present-wait
+        "${DKRPORT_ROOT}/patches/performance/present-queue-wait.patch" src/hle/rt64_present_queue.cpp)
+    if(ANDROID)
+        dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/performance-present-wait" android-present-ownership
+            "${DKRPORT_ROOT}/patches/android/present-surface-ownership.patch" src/hle/rt64_present_queue.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-present-ownership/src/hle/rt64_present_queue.cpp"
+            TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+    endif()
+    dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" performance-workload-wait
+        "${DKRPORT_ROOT}/patches/performance/workload-queue-wait.patch" src/hle/rt64_workload_queue.cpp)
+    dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/performance-workload-wait" water-renderer-history
+        "${DKRPORT_ROOT}/patches/performance/water-renderer-history.patch" src/hle/rt64_workload_queue.cpp)
+    set_source_files_properties("${CMAKE_BINARY_DIR}/generated/water-renderer-history/src/hle/rt64_workload_queue.cpp"
+        TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
+        "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+    if(ANDROID)
+        dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/water-renderer-history" android-render-idle-priority
+            "${DKRPORT_ROOT}/patches/android/render-idle-priority.patch" src/hle/rt64_workload_queue.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-render-idle-priority/src/hle/rt64_workload_queue.cpp"
+            TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
+            "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+    endif()
+    if(ANDROID OR DKR_ANDROID_RENDER_QUALIFICATION)
+        if(ANDROID)
+            set(DKR_STAGE_TIMING_SOURCE "${CMAKE_BINARY_DIR}/generated/android-render-idle-priority")
+        else()
+            set(DKR_STAGE_TIMING_SOURCE "${CMAKE_BINARY_DIR}/generated/water-renderer-history")
+        endif()
+        dkr_stage_patch(rt64 "${DKR_STAGE_TIMING_SOURCE}" android-render-stage-timing
+            "${DKRPORT_ROOT}/patches/android/render-stage-timing.patch" src/hle/rt64_workload_queue.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-render-stage-timing/src/hle/rt64_workload_queue.cpp"
+            TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
+            "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+    endif()
+    dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" performance-shader-wait
+        "${DKRPORT_ROOT}/patches/performance/shader-cache-wait.patch" src/render/rt64_raster_shader_cache.cpp)
+    dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" water-scroll-interpolation
+        "${DKRPORT_ROOT}/patches/performance/water-scroll-interpolation.patch" src/hle/rt64_game_frame.cpp)
+    set_source_files_properties("${CMAKE_BINARY_DIR}/generated/performance-renderer/src/hle/rt64_application.cpp"
+        TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
+        "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+    # Forced include applies only to this isolated translation unit.
+    if(MSVC)
+        set_property(SOURCE "${CMAKE_BINARY_DIR}/generated/performance-renderer/src/hle/rt64_application.cpp"
+            TARGET_DIRECTORY rt64 APPEND PROPERTY COMPILE_OPTIONS /FIrender_resource_policy.hpp)
+    else()
+        set_property(SOURCE "${CMAKE_BINARY_DIR}/generated/performance-renderer/src/hle/rt64_application.cpp"
+            TARGET_DIRECTORY rt64 APPEND PROPERTY COMPILE_OPTIONS -include render_resource_policy.hpp)
+    endif()
     if(MSVC AND TARGET rt64)
         # RT64 enables /MP internally. Ensure all compiler workers serialize
         # writes to the target PDB so clean RelWithDebInfo builds are reliable.
@@ -368,6 +544,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         endif()
 
         set(REQUIRED_INPUT_HOOKS
+            "dkr_scheduler_keep_host_tasks"
             "dkr_netplay_prepare_controller_init"
             "dkr_netplay_resolve_authored_input_frame"
             "dkr_legacy_scene_begin"
@@ -464,6 +641,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         src/game/game_registration.cpp
         src/game/null_renderer.cpp
         src/game/presentation_identity.cpp
+        src/game/water_profile.cpp
         src/game/rev_a_asset_mutex.cpp
         src/game/rom_revision.cpp
         src/game/renderer_snapshot.cpp
@@ -515,7 +693,12 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         set_property(SOURCE resources/dkr-r.rc APPEND PROPERTY COMPILE_DEFINITIONS
             "DKR_RELEASE_RESOURCE_VERSION=${DKR_RELEASE_RESOURCE_VERSION},${DKR_RELEASE_BUILD_NUMBER}")
     endif()
-    add_executable(DKRPortGame ${DKR_GAME_SOURCES})
+    if(ANDROID)
+        add_library(DKRPortGame SHARED ${DKR_GAME_SOURCES} src/android/android_platform.cpp src/android/mobile_ui.cpp)
+        target_link_libraries(DKRPortGame PRIVATE SDL2::SDL2 SDL2::SDL2main android log)
+    else()
+        add_executable(DKRPortGame ${DKR_GAME_SOURCES})
+    endif()
     if(MSVC)
         # These new bridge callbacks hold leases across guest scheduler calls.
         # Scheduler termination must unwind them even through C-linkage entrypoints.
@@ -730,6 +913,170 @@ foreach(config Debug Release RelWithDebInfo MinSizeRel)
 endforeach()
 
 if(BUILD_TESTING)
+    add_executable(DKRRenderIdlePolicyTests tests/render_idle_policy_tests.cpp)
+    add_executable(DKRRenderPassPolicyTests tests/render_pass_policy_tests.cpp)
+    target_compile_features(DKRRenderPassPolicyTests PRIVATE cxx_std_20)
+    add_test(NAME DKRRenderPassPolicy COMMAND DKRRenderPassPolicyTests)
+    set_tests_properties(DKRRenderPassPolicy PROPERTIES ENVIRONMENT "DKR_POWER_PROFILE=1")
+    target_compile_features(DKRRenderIdlePolicyTests PRIVATE cxx_std_20)
+    target_link_libraries(DKRRenderIdlePolicyTests PRIVATE Threads::Threads)
+    add_test(NAME DKRRenderIdlePolicy COMMAND DKRRenderIdlePolicyTests)
+    set_tests_properties(DKRRenderIdlePolicy PROPERTIES TIMEOUT 15)
+    add_executable(DKRHostTaskLifetimeTests tests/host_task_lifetime_tests.cpp)
+    target_compile_features(DKRHostTaskLifetimeTests PRIVATE cxx_std_20)
+    target_link_libraries(DKRHostTaskLifetimeTests PRIVATE Threads::Threads)
+    add_test(NAME DKRHostTaskLifetime COMMAND DKRHostTaskLifetimeTests)
+    add_executable(DKRPerformancePolicyTests tests/performance_policy_tests.cpp)
+    add_test(NAME DKRPerformancePolicy COMMAND DKRPerformancePolicyTests)
+    set_tests_properties(DKRPerformancePolicy PROPERTIES ENVIRONMENT "DKR_POWER_PROFILE=1")
+    if(DKR_RUNTIME_BUILD_RT64)
+        # Explicit microbenchmarks, not pass/fail performance claims. Never run
+        # during other builds or tests; driver/game qualification is separate.
+        foreach(variant IN ITEMS Baseline Candidate)
+            set(timer_source "${CMAKE_BINARY_DIR}/generated/performance-pacing/src/common/rt64_timer.cpp")
+            add_executable(DKROptimisationBench${variant} EXCLUDE_FROM_ALL tests/optimisation_microbench.cpp "${timer_source}")
+            if(variant STREQUAL "Baseline")
+                target_compile_definitions(DKROptimisationBench${variant} PRIVATE DKR_PRESENTATION_LEGACY_WAIT=1)
+            endif()
+            target_include_directories(DKROptimisationBench${variant} PRIVATE
+                "${DKR_RT64_SOURCE}/src" "${DKR_RT64_SOURCE}/src/common" "${CMAKE_CURRENT_LIST_DIR}/src/game")
+            if(WIN32)
+                target_link_libraries(DKROptimisationBench${variant} PRIVATE winmm)
+            endif()
+        endforeach()
+    endif()
+    add_executable(DKRMobileTouchPolicyTests tests/mobile_touch_policy_tests.cpp)
+    target_compile_features(DKRMobileTouchPolicyTests PRIVATE cxx_std_20)
+    add_test(NAME DKRMobileTouchPolicy COMMAND DKRMobileTouchPolicyTests)
+    if(DKR_RUNTIME_BUILD_RT64 AND NOT ANDROID)
+        add_executable(DKRMobileUiTests tests/mobile_ui_tests.cpp src/android/mobile_ui.cpp)
+        target_compile_features(DKRMobileUiTests PRIVATE cxx_std_20)
+        target_compile_definitions(DKRMobileUiTests PRIVATE DKR_MOBILE_UI_TEST=1 SDL_MAIN_HANDLED=1)
+        target_include_directories(DKRMobileUiTests PRIVATE "${DKR_RT64_SOURCE}/src/contrib" "${DKR_RT64_SOURCE}/src")
+        target_link_libraries(DKRMobileUiTests PRIVATE rt64)
+        if(WIN32)
+            target_include_directories(DKRMobileUiTests PRIVATE "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/include")
+            target_link_directories(DKRMobileUiTests PRIVATE "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+            target_link_libraries(DKRMobileUiTests PRIVATE SDL2)
+            add_custom_command(TARGET DKRMobileUiTests POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
+                "$<TARGET_FILE_DIR:DKRMobileUiTests>/SDL2.dll")
+        else()
+            target_include_directories(DKRMobileUiTests PRIVATE ${SDL2_INCLUDE_DIRS})
+            target_link_libraries(DKRMobileUiTests PRIVATE ${SDL2_LIBRARIES})
+        endif()
+        add_test(NAME DKRMobileUi COMMAND DKRMobileUiTests)
+    endif()
+    add_executable(DKRMobileGraphicsPresetTests tests/mobile_graphics_preset_tests.cpp)
+    target_include_directories(DKRMobileGraphicsPresetTests PRIVATE
+        "${DKR_MODERN_RUNTIME_SOURCE}/ultramodern/include"
+        "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty")
+    add_test(NAME DKRMobileGraphicsPreset COMMAND DKRMobileGraphicsPresetTests)
+    add_executable(DKRAndroidStorageTests tests/android_storage_tests.cpp)
+    add_executable(DKRAndroidCompatibilityTests tests/android_compatibility_tests.cpp)
+    target_compile_features(DKRAndroidCompatibilityTests PRIVATE cxx_std_20)
+    add_test(NAME DKRAndroidCompatibility COMMAND DKRAndroidCompatibilityTests)
+    if(DKR_RUNTIME_BUILD_RT64)
+        add_executable(DKRAndroidTextureCopyTests tests/android_texture_copy_tests.cpp)
+        target_include_directories(DKRAndroidTextureCopyTests PRIVATE "${DKR_RT64_SOURCE}/src/contrib/plume")
+        target_compile_definitions(DKRAndroidTextureCopyTests PRIVATE NOMINMAX)
+        add_test(NAME DKRAndroidTextureCopy COMMAND DKRAndroidTextureCopyTests)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME DKRAndroidStartupContract
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/android_startup_contract_tests.py")
+        # Explicit GPU check: exercise the actual remaining Android startup
+        # helper on desktop Vulkan, not a separate simplified implementation.
+        add_executable(DKRAndroidTransferGpuTests EXCLUDE_FROM_ALL tests/android_transfer_gpu_tests.cpp)
+        target_compile_features(DKRAndroidTransferGpuTests PRIVATE cxx_std_20)
+        target_include_directories(DKRAndroidTransferGpuTests PRIVATE "${DKR_RT64_SOURCE}/src" "${CMAKE_CURRENT_LIST_DIR}/src/game"
+            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+        target_compile_definitions(DKRAndroidTransferGpuTests PRIVATE DKR_GRAPHICS_FAULT_TEST=1 NOMINMAX)
+        target_link_libraries(DKRAndroidTransferGpuTests PRIVATE rt64)
+        if(WIN32)
+            target_link_directories(DKRAndroidTransferGpuTests PRIVATE "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+            target_link_libraries(DKRAndroidTransferGpuTests PRIVATE SDL2)
+            add_custom_command(TARGET DKRAndroidTransferGpuTests POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
+                    "$<TARGET_FILE_DIR:DKRAndroidTransferGpuTests>/SDL2.dll")
+        else()
+            target_link_libraries(DKRAndroidTransferGpuTests PRIVATE ${SDL2_LIBRARIES})
+        endif()
+    endif()
+    add_executable(DKRGraphicsResourceFailureTests tests/graphics_resource_failure_tests.cpp)
+    add_executable(DKRAndroidPipelineCacheTests tests/android_pipeline_cache_tests.cpp)
+    target_compile_features(DKRAndroidPipelineCacheTests PRIVATE cxx_std_20)
+    add_test(NAME DKRAndroidPipelineCache COMMAND DKRAndroidPipelineCacheTests)
+    if(TARGET rt64)
+        add_executable(DKRAndroidRenderPassGpuTests EXCLUDE_FROM_ALL tests/android_render_pass_gpu_tests.cpp
+            "${DKR_RT64_SOURCE}/src/contrib/plume/plume_vulkan.cpp" "${DKR_RT64_SOURCE}/src/contrib/plume/plume_vulkan.h")
+        dkr_stage_patch(DKRAndroidRenderPassGpuTests "${DKR_RT64_SOURCE}" test-android-pass-retention
+            "${DKRPORT_ROOT}/patches/android/vulkan-pass-retention.patch" src/contrib/plume/plume_vulkan.cpp)
+        configure_file("${DKR_RT64_SOURCE}/src/contrib/plume/plume_vulkan.h"
+            "${CMAKE_BINARY_DIR}/generated/test-android-pass-retention/src/contrib/plume/plume_vulkan.h" COPYONLY)
+        dkr_stage_patch(DKRAndroidRenderPassGpuTests "${CMAKE_BINARY_DIR}/generated/test-android-pass-retention" test-android-read-barriers
+            "${DKRPORT_ROOT}/patches/android/vulkan-read-barriers.patch"
+            src/contrib/plume/plume_vulkan.cpp src/contrib/plume/plume_vulkan.h)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/test-android-read-barriers/src/contrib/plume/plume_vulkan.cpp"
+            PROPERTIES INCLUDE_DIRECTORIES "${DKR_RT64_SOURCE}/src/contrib/plume;${CMAKE_CURRENT_LIST_DIR}/src/game")
+        target_include_directories(DKRAndroidRenderPassGpuTests BEFORE PRIVATE
+            "${CMAKE_BINARY_DIR}/generated/test-android-read-barriers/src/contrib/plume")
+        target_compile_features(DKRAndroidRenderPassGpuTests PRIVATE cxx_std_20)
+        target_compile_definitions(DKRAndroidRenderPassGpuTests PRIVATE NOMINMAX)
+        target_include_directories(DKRAndroidRenderPassGpuTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+        target_link_libraries(DKRAndroidRenderPassGpuTests PRIVATE plume)
+        if(PLUME_SDL_VULKAN_ENABLED)
+            target_link_libraries(DKRAndroidRenderPassGpuTests PRIVATE ${SDL2_LIBRARIES})
+        endif()
+        add_executable(DKRAndroidUploadGpuTests EXCLUDE_FROM_ALL tests/android_upload_gpu_tests.cpp
+            "${DKR_RT64_SOURCE}/src/render/rt64_buffer_uploader.cpp")
+        dkr_stage_patch(DKRAndroidUploadGpuTests "${DKR_RT64_SOURCE}" test-android-buffer-lifecycle
+            "${DKRPORT_ROOT}/patches/android/buffer-worker-lifecycle.patch" src/render/rt64_buffer_uploader.cpp)
+        dkr_stage_patch(DKRAndroidUploadGpuTests "${CMAKE_BINARY_DIR}/generated/test-android-buffer-lifecycle" test-android-small-upload
+            "${DKRPORT_ROOT}/patches/android/buffer-small-upload.patch" src/render/rt64_buffer_uploader.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/test-android-small-upload/src/render/rt64_buffer_uploader.cpp"
+            PROPERTIES INCLUDE_DIRECTORIES "${DKR_RT64_SOURCE}/src/render;${DKRPORT_ROOT}/runtime-recomp/src/game")
+        target_compile_features(DKRAndroidUploadGpuTests PRIVATE cxx_std_20)
+        target_compile_definitions(DKRAndroidUploadGpuTests PRIVATE NOMINMAX)
+        target_include_directories(DKRAndroidUploadGpuTests PRIVATE "${DKR_RT64_SOURCE}/src"
+            "${DKR_RT64_SOURCE}/src/contrib/plume" "${DKRPORT_ROOT}/runtime-recomp/src/game")
+        target_link_libraries(DKRAndroidUploadGpuTests PRIVATE rt64)
+        # Reference path for controlled upload microbenchmarks, never packaged.
+        add_executable(DKRAndroidUploadBaselineTests EXCLUDE_FROM_ALL tests/android_upload_gpu_tests.cpp
+            "${DKR_RT64_SOURCE}/src/render/rt64_buffer_uploader.cpp")
+        dkr_stage_patch(DKRAndroidUploadBaselineTests "${DKR_RT64_SOURCE}" test-android-upload-baseline
+            "${DKRPORT_ROOT}/patches/android/buffer-worker-lifecycle.patch" src/render/rt64_buffer_uploader.cpp)
+        target_compile_features(DKRAndroidUploadBaselineTests PRIVATE cxx_std_20)
+        target_compile_definitions(DKRAndroidUploadBaselineTests PRIVATE NOMINMAX)
+        target_include_directories(DKRAndroidUploadBaselineTests PRIVATE "${DKR_RT64_SOURCE}/src"
+            "${DKR_RT64_SOURCE}/src/contrib/plume")
+        target_link_libraries(DKRAndroidUploadBaselineTests PRIVATE rt64)
+        if(WIN32)
+            target_link_directories(DKRAndroidUploadBaselineTests PRIVATE "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+            target_link_libraries(DKRAndroidUploadBaselineTests PRIVATE SDL2)
+            target_link_directories(DKRAndroidUploadGpuTests PRIVATE "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+            target_link_libraries(DKRAndroidUploadGpuTests PRIVATE SDL2)
+        else()
+            target_link_libraries(DKRAndroidUploadBaselineTests PRIVATE ${SDL2_LIBRARIES})
+            target_link_libraries(DKRAndroidUploadGpuTests PRIVATE ${SDL2_LIBRARIES})
+        endif()
+    endif()
+    target_compile_features(DKRGraphicsResourceFailureTests PRIVATE cxx_std_20)
+    target_compile_definitions(DKRGraphicsResourceFailureTests PRIVATE DKR_GRAPHICS_FAULT_TEST=1)
+    add_test(NAME DKRGraphicsResourceFailure COMMAND DKRGraphicsResourceFailureTests)
+    set_tests_properties(DKRGraphicsResourceFailure PROPERTIES TIMEOUT 5)
+    target_compile_features(DKRAndroidStorageTests PRIVATE cxx_std_20)
+    add_test(NAME DKRAndroidStorage COMMAND DKRAndroidStorageTests)
+    foreach(snapshot_variant IN ITEMS Native AndroidCompatibility)
+        add_executable(DKRAtomicSnapshot${snapshot_variant}Tests tests/atomic_snapshot_tests.cpp)
+        target_include_directories(DKRAtomicSnapshot${snapshot_variant}Tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+        target_compile_features(DKRAtomicSnapshot${snapshot_variant}Tests PRIVATE cxx_std_20)
+        if(snapshot_variant STREQUAL "AndroidCompatibility")
+            target_compile_definitions(DKRAtomicSnapshot${snapshot_variant}Tests PRIVATE DKR_TEST_ATOMIC_SNAPSHOT_FALLBACK=1)
+        endif()
+        add_test(NAME DKRAtomicSnapshot${snapshot_variant} COMMAND DKRAtomicSnapshot${snapshot_variant}Tests)
+    endforeach()
     if(DKR_RUNTIME_BUILD_RT64 AND DKR_RUNTIME_BUILD_SDL3_INPUT_HOST)
         add_executable(DKRSdl3InputClientTests
             tests/sdl3_input_client_tests.cpp
@@ -818,6 +1165,10 @@ if(BUILD_TESTING)
     )
     target_link_libraries(DKRRollbackDriverTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRRollbackDriver COMMAND DKRRollbackDriverTests)
+
+    add_executable(DKRExperimentalRollbackTests tests/experimental_rollback_tests.cpp)
+    target_link_libraries(DKRExperimentalRollbackTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRExperimentalRollback COMMAND DKRExperimentalRollbackTests)
 
     add_executable(DKRSecureChannelTests
         tests/secure_channel_tests.cpp
@@ -1038,6 +1389,30 @@ if(BUILD_TESTING)
             target_compile_options(DKRSplitScreenRT64Tests PRIVATE -UNDEBUG)
         endif()
         add_test(NAME DKRSplitScreenRT64 COMMAND DKRSplitScreenRT64Tests)
+
+        add_executable(DKRWaterUVTests tests/water_uv_rt64_tests.cpp)
+        target_include_directories(DKRWaterUVTests PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/src/game"
+            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+        target_link_libraries(DKRWaterUVTests PRIVATE rt64)
+        target_compile_definitions(DKRWaterUVTests PRIVATE NOMINMAX)
+        if(WIN32)
+            target_link_directories(DKRWaterUVTests PRIVATE
+                "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+            target_link_libraries(DKRWaterUVTests PRIVATE SDL2)
+            add_custom_command(TARGET DKRWaterUVTests POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
+                    "$<TARGET_FILE_DIR:DKRWaterUVTests>/SDL2.dll")
+        else()
+            target_link_libraries(DKRWaterUVTests PRIVATE ${SDL2_LIBRARIES})
+        endif()
+        if(MSVC)
+            target_compile_options(DKRWaterUVTests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(DKRWaterUVTests PRIVATE -UNDEBUG)
+        endif()
+        add_test(NAME DKRWaterUV COMMAND DKRWaterUVTests)
 
         add_executable(DKRLiveLodTests tests/live_lod_tests.cpp)
         add_executable(DKRHudGroupsTests tests/hud_group_layout_tests.cpp)
@@ -1452,6 +1827,7 @@ if(BUILD_TESTING)
     set(DKR_ASSERT_TEST_TARGETS
         DKRNetplayCoreTests
         DKRRollbackDriverTests
+        DKRExperimentalRollbackTests
         DKRRuntimeStateTests
         DKRSecureChannelTests
         DKRDatagramSocketTests

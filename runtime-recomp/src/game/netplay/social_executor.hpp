@@ -37,14 +37,18 @@ public:
                         jobs_.pop_front();
                     }
                 }
-                try {
-                    if (job) job();
-                    const auto now = std::chrono::steady_clock::now();
-                    if (now >= deadline) {
-                        tick();
-                        deadline = now + std::chrono::milliseconds(100);
-                    }
-                } catch (...) { failure(); }
+                const auto report_failure = [&] {
+                    try { failure(); } catch (...) {}
+                };
+                // A failed queued operation must not starve scheduled ticks.
+                try { if (job) job(); } catch (...) { report_failure(); }
+                const auto now = std::chrono::steady_clock::now();
+                if (now >= deadline) {
+                    // Advance even if user code throws: no expired-deadline loop.
+                    deadline = now + std::chrono::milliseconds(100);
+                    try { tick(); } catch (...) { report_failure(); }
+                    deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+                }
             }
         });
     }

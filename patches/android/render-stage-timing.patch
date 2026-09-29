@@ -1,0 +1,62 @@
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -8,2 +8,3 @@
+ #include "rt64_workload_queue.h"
++#include "render_metrics.hpp"
+ #include "water_performance.hpp"
+@@ -703,5 +704,21 @@
+             workerMutex.lock();
++            // Only this renderer thread owns the diagnostic pool. Its exit is
++            // joined by WorkloadQueue's destructor before the device is freed.
++            // Allocate once per renderer thread, and only during an opt-in capture.
++            thread_local std::unique_ptr<RenderQueryPool> detailPool;
++            const bool captureDetails = dkr::runtime::performance_trace::enabled();
++            if (captureDetails && !detailPool) {
++                detailPool = ext.device->createQueryPool(3);
++            }
++            const bool measureDetails = captureDetails && detailPool && detailPool->getCount() == 3;
+             ext.workloadGraphicsWorker->commandList->begin();
++            if (measureDetails) {
++                ext.workloadGraphicsWorker->commandList->resetQueryPool(detailPool.get(), 0, 3);
++                ext.workloadGraphicsWorker->commandList->writeTimestamp(detailPool.get(), 0);
++            }
+             ext.workloadGraphicsWorker->commandList->resetQueryPool(queryPool.get(), 0, 2);
+@@ -708,3 +725,6 @@
+             framebufferRenderer->recordSetup(ext.workloadGraphicsWorker, bufferUploaders, processRSP ? rspProcessor.get() : nullptr, processWorldVertices ? vertexProcessor.get() : nullptr, &workload.outputBuffers, workloadConfig.raytracingEnabled);
++            if (measureDetails) {
++                ext.workloadGraphicsWorker->commandList->writeTimestamp(detailPool.get(), 1);
++            }
+             
+@@ -793,3 +812,7 @@
++                    const RenderTarget *measuredTarget = colorTarget ? colorTarget : depthTarget;
++                    dkr::runtime::render_metrics::target(measuredTarget->width, measuredTarget->height,
++                        measuredTarget->multisampling.sampleCount, static_cast<unsigned>(measuredTarget->format));
+                     framebufferRenderer->recordFramebuffer(ext.workloadGraphicsWorker, framebufferIndex++);
+ 
+@@ -843,3 +863,6 @@
++            if (measureDetails) {
++                ext.workloadGraphicsWorker->commandList->writeTimestamp(detailPool.get(), 2);
++            }
+             ext.workloadGraphicsWorker->commandList->writeTimestamp(queryPool.get(), 1);
+@@ -850,3 +873,10 @@
+             // Update the GPU profiler with the results from the timestamps of the frame.
++            if (measureDetails) {
++                // The existing workload fence has completed. Query without a
++                // second wait, extra submission or per-frame allocation/log.
++                detailPool->queryResults();
++                const auto *times = detailPool->getResults();
++                thread_local uint64_t lastMeasuredStart = 0;
++                // queryResults reports a driver failure by retaining its old
++                // results. Do not count that stale sample again as new work.
++                if (times[0] > lastMeasuredStart) {
++                    dkr::runtime::render_metrics::gpu_times(times[0], times[1], times[2]);
++                    lastMeasuredStart = times[0];
++                }
++                thread_local unsigned diagnosticFrames = 0;
++                if (++diagnosticFrames % 300 == 0) {
++                    const auto summary = dkr::runtime::render_metrics::describe_delta({});
++                    fprintf(stderr, "[perf][renderer-cumulative]\n%s", summary.c_str());
++                }
++            }
+             queryPool->queryResults();

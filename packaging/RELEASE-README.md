@@ -1,6 +1,18 @@
-# DKR-R 1.0.5 Beta 11
+# DKR-R 1.0.5 Beta 12
 
-This build packages main revision 8a8e927, including the merged Track Lab and
+This optimisation beta adds reusable graphics-task snapshots, bounded shader
+worker pools, lower-wakeup presentation pacing, an exception-safe social worker,
+and optional Battery/Balanced/Quality graphics presets. Existing saved settings
+are preserved. Android adds capability-checked presentation setup, first-GPU-error
+reporting and cached asset extraction. Android first-use defaults render at 480p
+with standard framebuffer precision; existing users can apply Balanced explicitly.
+
+Windows x64, Linux x64, Linux ARM64 and Android ARM64 packages are separate builds.
+An Android APK building successfully does not qualify every handheld GPU. Physical
+Android/ARM device performance, lifecycle and graphics checks remain necessary.
+See `docs/BETA12-OPTIMISATION.md` for the exact scope and qualification limits.
+
+This build retains main revision 8a8e927, including the merged Track Lab and
 Blender track-editor changes, for playtesting. The Beta 10 fixes described below
 are retained. New editor and gameplay behavior still requires visual acceptance.
 

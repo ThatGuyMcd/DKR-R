@@ -3,6 +3,8 @@
 #include "datagram_socket.hpp"
 
 #include <cstdint>
+#include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <span>
 #include <string>
@@ -23,6 +25,18 @@ enum class TransportTrafficClass : std::uint8_t {
 };
 
 enum class QuickJoinRekeyStatus { Idle, Pending, Committed, Failed };
+
+// Callbacks may outlive a retired transport. They own only this notification
+// object, never a DirectSession pointer or its mutex. A generation prevents
+// notifications during packet processing from being mistaken for old work.
+struct TransportReceiveSignal {
+    std::atomic<std::uint64_t> generation{0};
+    std::condition_variable changed;
+    void notify() {
+        generation.fetch_add(1, std::memory_order_release);
+        changed.notify_all();
+    }
+};
 
 // Keep each traffic class on its own Quick Join data channel. In particular,
 // immutable frame commits use a reliable/unordered channel: losing one SCTP
@@ -54,6 +68,7 @@ public:
                          std::vector<std::uint8_t>& bytes,
                          std::string& error) = 0;
     virtual void service() {}
+    virtual void set_receive_signal(std::shared_ptr<TransportReceiveSignal>) {}
     // Only authenticated session admission may pin a logical route across ICE
     // replacement. An unapproved connection must retain its bounded lifetime.
     virtual void retain_peer_route(const PeerAddress&) {}

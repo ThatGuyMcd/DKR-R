@@ -107,6 +107,8 @@ struct AddressTable {
     std::uint32_t MenuStage;
     std::uint32_t MenuDelay;
     std::uint32_t PostraceFinishState;
+    std::uint32_t WaveTexUVMaskX;
+    std::uint32_t WaveTexUVMaskY;
 };
 
 inline constexpr AddressTable kUsV77{
@@ -206,6 +208,8 @@ inline constexpr AddressTable kUsV77{
     0x801263E0U,
     0x800DF47CU,
     0x80126C28U,
+    0x8012A094U, // gWaveTexUVMaskX, verified v77 ELF symbol
+    0x8012A098U, // gWaveTexUVMaskY
 };
 
 inline constexpr AddressTable kUsV80{
@@ -305,9 +309,13 @@ inline constexpr AddressTable kUsV80{
     0x80126980U,
     0x800DF9FCU,
     0x801271E8U,
+    0x8012A654U, // gWaveTexUVMaskX, verified v80 ELF symbol
+    0x8012A658U, // gWaveTexUVMaskY
 };
 
 inline rom::Revision gSelectedRevision = rom::Revision::UsV77;
+inline std::uint32_t WaveTexUVMaskX = kUsV77.WaveTexUVMaskX;
+inline std::uint32_t WaveTexUVMaskY = kUsV77.WaveTexUVMaskY;
 inline std::uint32_t EntrypointStackTop = kUsV77.EntrypointStackTop;
 inline std::uint32_t AspMainTextStart = kUsV77.AspMainTextStart;
 inline std::uint32_t MusicPlayer = kUsV77.MusicPlayer;
@@ -511,6 +519,8 @@ inline bool select(const rom::Revision revision) {
     MenuStage = table.MenuStage;
     MenuDelay = table.MenuDelay;
     PostraceFinishState = table.PostraceFinishState;
+    WaveTexUVMaskX = table.WaveTexUVMaskX;
+    WaveTexUVMaskY = table.WaveTexUVMaskY;
     gSelectedRevision = revision;
     return true;
 }

@@ -144,6 +144,16 @@ target_compile_features(DKRLegacyModProcess PUBLIC cxx_std_20)
 target_compile_definitions(DKRLegacyModProcess PRIVATE NOMINMAX)
 add_executable(DKRLegacyModWorker "${_dkr_mod_src}/legacy_mod_worker.cpp")
 set_target_properties(DKRLegacyModWorker PROPERTIES OUTPUT_NAME "DKR-R-ModWorker")
+if(ANDROID)
+    # Android only permits execution from the installed, read-only native
+    # library directory. Package this PIE helper there using a .so filename.
+    set_target_properties(DKRLegacyModWorker PROPERTIES
+        OUTPUT_NAME "libDKR-R-ModWorker.so"
+        BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+    # Android's CMake platform suppresses automatic RPATH emission. This
+    # executable is spawned independently of Java's loaded-library namespace.
+    target_link_options(DKRLegacyModWorker PRIVATE "-Wl,-rpath,$ORIGIN")
+endif()
 add_library(DKRLegacyWorkerCore STATIC $<TARGET_OBJECTS:DKRLegacyModCore>)
 target_include_directories(DKRLegacyWorkerCore PUBLIC
     "$<TARGET_PROPERTY:DKRLegacyModCore,INTERFACE_INCLUDE_DIRECTORIES>")

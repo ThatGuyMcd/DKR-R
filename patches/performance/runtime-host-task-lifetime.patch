@@ -1,0 +1,105 @@
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -12,2 +12,3 @@
+ #include "graphics_snapshot_pool.hpp"
+ #include "performance_trace.hpp"
++#include "host_task_lifetime.hpp"
+ 
+ #include "blockingconcurrentqueue.h"
+@@ -32,8 +33,14 @@
+ static RdramSnapshotPool rdram_snapshot_pool;
++namespace host_tasks = dkr::runtime::host_tasks;
+ 
+ struct SpTaskAction {
+     OSTask task;
+     RdramSnapshotPool::Snapshot rdram_snapshot;
+     bool presentation_allowed;
++    host_tasks::Token token;
++};
++struct QueuedRspTask {
++    OSTask* task = nullptr;
++    host_tasks::Token token{};
+ };
+@@ -152,3 +160,3 @@
+     moodycamel::BlockingConcurrentQueue<Action> action_queue{};
+-    moodycamel::BlockingConcurrentQueue<OSTask*> sp_task_queue{};
++    moodycamel::BlockingConcurrentQueue<QueuedRspTask> sp_task_queue{};
+     moodycamel::ConcurrentQueue<OSThread*> deleted_threads{};
+@@ -339,6 +347,7 @@
+         // Wait until an RSP task has been sent
+-        OSTask* task;
+-        events_context.sp_task_queue.wait_dequeue(task);
++        QueuedRspTask queued;
++        events_context.sp_task_queue.wait_dequeue(queued);
++        OSTask* task = queued.task;
+ 
+         if (task == nullptr) {
+             return;
+@@ -352,3 +361,4 @@
+         // Tell the game that the RSP has completed
++        host_tasks::registry.mark(queued.token, host_tasks::Stage::SpNotify);
+         sp_complete();
+     }
+@@ -432,1 +442,6 @@
+                 // games such as DKR that schedule their next task on SP.
++                host_tasks::registry.mark(task_action->token, host_tasks::Stage::SpNotify);
++                host_tasks::qualification_delay(host_tasks::Stage::SpNotify, task_action->task.t.type);
+                 sp_complete();
++                host_tasks::registry.mark(task_action->token, host_tasks::Stage::SpAcknowledged);
+ 
+                 if (task_action->presentation_allowed) {
+@@ -446,2 +461,4 @@
+                     [[maybe_unused]] auto renderer_start = std::chrono::high_resolution_clock::now();
++                    host_tasks::registry.mark(task_action->token, host_tasks::Stage::Parse);
+                     renderer_context->send_dl(&task_action->task, task_action->rdram_snapshot.get());
++                    host_tasks::registry.mark(task_action->token, host_tasks::Stage::Parsed);
+                     [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
+@@ -451,3 +468,5 @@
+                 }
+ 
++                host_tasks::registry.mark(task_action->token, host_tasks::Stage::DpNotify);
++                host_tasks::qualification_delay(host_tasks::Stage::DpNotify, task_action->task.t.type);
+                 dp_complete();
+@@ -611,2 +630,3 @@
+ void ultramodern::submit_rsp_task(RDRAM_ARG PTR(OSTask) task_) {
+     OSTask* task = TO_PTR(OSTask, task_);
++    const auto token = host_tasks::registry.begin(static_cast<uint32_t>(task_), task->t.type);
+ 
+@@ -627,3 +647,3 @@
+             events_context.action_queue.enqueue(SpTaskAction{
+-                *task, RdramSnapshotPool::Snapshot{}, false });
++                *task, RdramSnapshotPool::Snapshot{}, false, token });
+             return;
+@@ -639,3 +659,3 @@
+         events_context.action_queue.enqueue(SpTaskAction{
+-            *task, std::move(rdram_snapshot), true });
++            *task, std::move(rdram_snapshot), true, token });
+     }
+@@ -648,6 +668,7 @@
+         if (task->t.type == M_AUDTASK && !external_work_allowed) {
++            host_tasks::registry.mark(token, host_tasks::Stage::SpNotify);
+             sp_complete();
+             return;
+         }
+-        events_context.sp_task_queue.enqueue(task);
++        events_context.sp_task_queue.enqueue(QueuedRspTask{task, token});
+     }
+@@ -664,4 +685,5 @@
+ 
+-    OSTask* task = nullptr;
++    QueuedRspTask task;
+     while (events_context.sp_task_queue.try_dequeue(task)) {}
++    host_tasks::registry.reset();
+ 
+@@ -753,3 +775,3 @@
+     if (events_context.sp.task_thread.joinable()) {
+-        events_context.sp_task_queue.enqueue(nullptr);
++        events_context.sp_task_queue.enqueue(QueuedRspTask{});
+         events_context.sp.task_thread.join();
+@@ -759,4 +781,4 @@
+     while (events_context.action_queue.try_dequeue(action)) {}
+-    OSTask* task = nullptr;
++    QueuedRspTask task;
+     while (events_context.sp_task_queue.try_dequeue(task)) {}
+ }

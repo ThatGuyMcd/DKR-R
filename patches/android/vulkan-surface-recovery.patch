@@ -1,0 +1,105 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -13,2 +13,3 @@
+ #include "android_vulkan_checks.hpp"
++#include "android_surface_state.hpp"
+ #include "render_resource_policy.hpp"
+@@ -2110,2 +2111,9 @@
+         surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
+-        surfaceCreateInfo.window = desc.renderWindow;
++        dkr::runtime::android_surface::Lease lease;
++        if (!lease.window) return;
++        this->desc.renderWindow = lease.window;
++        ANativeWindow_acquire(this->desc.renderWindow);
++        androidWindowOwned = true;
++        androidSurfaceGeneration = lease.generation;
++        surfaceCreateInfo.window = lease.window;
+ 
+@@ -2344,3 +2352,4 @@
+             vkDestroySurfaceKHR(renderInterface->instance, surface, nullptr);
+         }
++        if (androidWindowOwned) ANativeWindow_release(desc.renderWindow);
+ 
+@@ -2406,2 +2415,40 @@
+     bool VulkanSwapChain::resize() {
++        dkr::runtime::android_surface::Lease lease;
++        if (!lease.window) return false;
++        if (lease.generation != androidSurfaceGeneration || androidSurfaceLost) {
++            // Called by PresentQueue only after its framebuffer fence and
++            // framebuffer references are drained. Also retire presentation
++            // queue operations before destroying the old surface/swapchain.
++            VkResult idle;
++            {
++                const std::scoped_lock queueLock(*commandQueue->queue->mutex);
++                idle = vkQueueWaitIdle(commandQueue->queue->vk);
++            }
++            if (idle != VK_SUCCESS) {
++                dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Fence, idle);
++                return false;
++            }
++            releaseImageViews(); releaseSwapChain();
++            auto* renderInterface = commandQueue->device->renderInterface;
++            if (surface != VK_NULL_HANDLE) vkDestroySurfaceKHR(renderInterface->instance, surface, nullptr);
++            surface = VK_NULL_HANDLE;
++            if (androidWindowOwned) ANativeWindow_release(desc.renderWindow);
++            desc.renderWindow = lease.window; ANativeWindow_acquire(desc.renderWindow);
++            androidWindowOwned = true;
++            VkAndroidSurfaceCreateInfoKHR info{};
++            info.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
++            info.window = desc.renderWindow;
++            const auto result = vkCreateAndroidSurfaceKHR(renderInterface->instance, &info, nullptr, &surface);
++            if (result != VK_SUCCESS) {
++                dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Surface, result);
++                return false;
++            }
++            androidSurfaceGeneration = lease.generation;
++            androidSurfaceLost = false;
++            androidRequestedRate = 0;
++            currentPresentId = 0;
++            fprintf(stderr, "[Android] Recreated native presentation surface generation=%llu\n",
++                static_cast<unsigned long long>(androidSurfaceGeneration));
++        }
+         getWindowSize(width, height);
+@@ -2419,2 +2464,3 @@
+         if (capsResult != VK_SUCCESS) {
++            if (capsResult == VK_ERROR_SURFACE_LOST_KHR) { androidSurfaceLost = true; return false; }
+             dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Surface, capsResult);
+@@ -2379,2 +2425,6 @@
+             res = vkQueuePresentKHR(commandQueue->queue->vk, &presentInfo);
+         }
++        if (res == VK_ERROR_SURFACE_LOST_KHR) androidSurfaceLost = true;
++        else if (res < 0 && res != VK_ERROR_OUT_OF_DATE_KHR)
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Present, res);
+ 
+@@ -2534,2 +2580,3 @@
+     bool VulkanSwapChain::needsResize() const {
++        if (!dkr::runtime::android_surface::matches(androidSurfaceGeneration) || androidSurfaceLost) return true;
+         uint32_t windowWidth, windowHeight;
+@@ -2574,2 +2621,3 @@
+     bool VulkanSwapChain::isEmpty() const {
++        if (!dkr::runtime::android_surface::matches(androidSurfaceGeneration) || androidSurfaceLost) return true;
+         return (vk == VK_NULL_HANDLE) || (width == 0) || (height == 0);
+@@ -2645,3 +2693,8 @@
+-        VkResult res = vkAcquireNextImageKHR(commandQueue->device->vk, vk, UINT64_MAX, interfaceSemaphore->vk, VK_NULL_HANDLE, textureIndex);
++        if (!dkr::runtime::android_surface::matches(androidSurfaceGeneration) || androidSurfaceLost) return false;
++        const auto rate = dkr::runtime::android_surface::target_rate.load();
++        if (rate != androidRequestedRate) {
++            dkr::runtime::android_surface::request_rate(desc.renderWindow, rate);
++            androidRequestedRate = rate;
++        }
++        // A finite acquire is retryable and leaves the semaphore unsignalled
++        // on timeout. It never authorizes reuse of an outstanding GPU fence.
++        VkResult res = vkAcquireNextImageKHR(commandQueue->device->vk, vk, 100000000ULL, interfaceSemaphore->vk, VK_NULL_HANDLE, textureIndex);
++        if (res == VK_ERROR_SURFACE_LOST_KHR) { androidSurfaceLost = true; return false; }
+         if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
+diff --git a/src/contrib/plume/plume_vulkan.h b/src/contrib/plume/plume_vulkan.h
+--- a/src/contrib/plume/plume_vulkan.h
++++ b/src/contrib/plume/plume_vulkan.h
+@@ -235,2 +235,5 @@
+         uint32_t requestedWindowHeight = 0;
++        uint64_t androidSurfaceGeneration = 0;
++        bool androidSurfaceLost = false;
++        bool androidWindowOwned = false;
++        int androidRequestedRate = 0;
+         VkSwapchainCreateInfoKHR createInfo = {};

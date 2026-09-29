@@ -1,0 +1,55 @@
+diff --git a/src/contrib/plume/plume_vulkan.h b/src/contrib/plume/plume_vulkan.h
+--- a/src/contrib/plume/plume_vulkan.h
++++ b/src/contrib/plume/plume_vulkan.h
+@@ -10,2 +10,3 @@
+ #include "plume_render_interface.h"
++#include "render_pass_policy.hpp"
+ 
+@@ -303,3 +304,4 @@
+         VkRenderPass activeRenderPass = VK_NULL_HANDLE;
++        dkr::runtime::render_pass::ReadBarrierCache shaderReadBarriers;
+ 
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -2795,3 +2795,4 @@
+     void VulkanCommandList::begin() {
++        shaderReadBarriers.reset();
+         vkResetCommandBuffer(vk, 0);
+@@ -2831,4 +2832,2 @@
+-        endActiveRenderPass();
+-
+         const bool geometryEnabled = queue->device->capabilities.geometryShader;
+         const bool rtEnabled = queue->device->capabilities.raytracing;
+@@ -2866,3 +2866,22 @@
+             const RenderTextureBarrier &textureBarrier = textureBarriers[i];
+             VulkanTexture *interfaceTexture = static_cast<VulkanTexture *>(textureBarrier.texture);
++            const auto identity = reinterpret_cast<std::uintptr_t>(interfaceTexture);
++            if (textureBarrier.layout == RenderTextureLayout::SHADER_READ &&
++                interfaceTexture->textureLayout == RenderTextureLayout::SHADER_READ &&
++                shaderReadBarriers.covers(identity, interfaceTexture->barrierStages, stages)) {
++                // A real barrier in this recording already made this image
++                // visible to every requested stage. In SHADER_READ layout no
++                // write can intervene. Retain the broader established scope.
++                dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::ReadBarrierRemoved);
++                continue;
++            }
++            if (textureBarrier.layout == RenderTextureLayout::SHADER_READ) {
++                shaderReadBarriers.record(identity, stages);
++            }
++            else {
++                // Writes, transfers, GENERAL and depth attachments are never
++                // elided. Their next read must establish visibility again.
++                shaderReadBarriers.invalidate(identity);
++            }
+             VkImageMemoryBarrier imageMemoryBarrier = {};
+@@ -2890,5 +2909,10 @@
+         if (bufferMemoryBarriers.empty() && imageMemoryBarriers.empty()) {
++            if (activeRenderPass != VK_NULL_HANDLE) {
++                dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::PassBreakRemoved);
++            }
+             return;
+         }
+ 
++        endActiveRenderPass();
+         vkCmdPipelineBarrier(vk, srcStageMask, dstStageMask, 0, 0, nullptr, uint32_t(bufferMemoryBarriers.size()), bufferMemoryBarriers.data(), uint32_t(imageMemoryBarriers.size()), imageMemoryBarriers.data());

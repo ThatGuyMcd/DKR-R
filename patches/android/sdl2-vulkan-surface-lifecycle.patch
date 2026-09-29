@@ -1,0 +1,23 @@
+diff --git a/src/core/android/SDL_android.c b/src/core/android/SDL_android.c
+--- a/src/core/android/SDL_android.c
++++ b/src/core/android/SDL_android.c
+@@ -1057,7 +1057,8 @@
+     SDL_LockMutex(Android_ActivityMutex);
+ 
+ #ifdef SDL_VIDEO_OPENGL_EGL
+-    if (Android_Window) {
++    if (Android_Window && (Android_Window->flags & SDL_WINDOW_OPENGL) &&
++        !SDL_IsVideoContextExternal()) {
+         SDL_VideoDevice *_this = SDL_GetVideoDevice();
+         SDL_WindowData *data = (SDL_WindowData *)Android_Window->driverdata;
+ 
+@@ -1090,7 +1091,8 @@
+         SDL_WindowData *data = (SDL_WindowData *)Android_Window->driverdata;
+ 
+         /* Wait for Main thread being paused and context un-activated to release 'egl_surface' */
+-        if (!data->backup_done) {
++        if ((Android_Window->flags & SDL_WINDOW_OPENGL) &&
++            !SDL_IsVideoContextExternal() && !data->backup_done) {
+             nb_attempt -= 1;
+             if (nb_attempt == 0) {
+                 SDL_SetError("Try to release egl_surface with context probably still active");

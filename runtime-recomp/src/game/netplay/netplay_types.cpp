@@ -13,8 +13,8 @@ bool valid_launch_descriptor(const LaunchDescriptor& descriptor) {
         descriptor.player_count > kSupportedOnlinePlayers ||
         descriptor.input_delay_frames > kMaximumInputDelayFrames ||
         descriptor.rollback_window > 20U ||
-        descriptor.synchronization > SynchronizationMode::Lockstep ||
-        (descriptor.synchronization == SynchronizationMode::Rollback &&
+        !valid_synchronization_mode(descriptor.synchronization) ||
+        (synchronization_has_prediction_window(descriptor.synchronization) &&
          descriptor.rollback_window < 2U) ||
         (descriptor.synchronization == SynchronizationMode::Lockstep &&
          descriptor.rollback_window != 0U) ||
@@ -90,8 +90,8 @@ bool valid_room_name(std::string_view value) {
 bool valid_rules(const Rules& rules) {
     return rules.maximum_players >= 2U && rules.maximum_players <= kSupportedOnlinePlayers &&
            rules.manual_input_delay <= kMaximumInputDelayFrames &&
-           rules.synchronization <= SynchronizationMode::Lockstep &&
-           ((rules.synchronization == SynchronizationMode::Rollback &&
+           valid_synchronization_mode(rules.synchronization) &&
+           ((synchronization_has_prediction_window(rules.synchronization) &&
              rules.rollback_window >= 2U && rules.rollback_window <= 20U) ||
             (rules.synchronization == SynchronizationMode::Lockstep &&
              rules.rollback_window == 0U));

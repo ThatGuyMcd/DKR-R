@@ -42,12 +42,14 @@ private:
     void record_track_performance(std::uint8_t* snapshot,
                                   track_performance::Clock::time_point start);
     track_performance::Capture track_capture_{};
+    std::chrono::steady_clock::time_point last_android_report_{};
     std::mutex presentation_mutex_;
     std::unique_ptr<RT64::Application> application_;
     F3DDKRRT64Bridge f3ddkr_;
     std::uint64_t present_count_ = 0;
     std::uint64_t interpolated_present_count_ = 0;
     presentation_counter::Snapshot completed_presentations_{};
+    bool first_successful_presentation_reported_ = false;
     std::chrono::steady_clock::time_point last_wait_presentation_{};
     std::chrono::milliseconds slowest_wait_replay_{};
     std::uint64_t observed_wait_generation_ = 0U;

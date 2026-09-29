@@ -12,6 +12,9 @@
 #include "runtime_enhancements.hpp"
 #include "widescreen_policy.hpp"
 #include "split_screen_rt64.hpp"
+#include "water_uv_rt64.hpp"
+#include "water_performance.hpp"
+#include "water_scroll_policy.hpp"
 
 #include "gbi/rt64_f3d.h"
 #include "gbi/rt64_gbi_f3d.h"
@@ -206,11 +209,20 @@ void SelectInterpolationGroup(RT64::RSP& rsp, std::uint32_t id,
                               bool interpolate_texcoords = false,
                               bool interpolate_tiles = false,
                               std::uint8_t aspect_mode = G_EX_ASPECT_AUTO,
-                              bool preserve_vertex_interpolation = false) {
+                              bool preserve_vertex_interpolation = false,
+                              std::uint8_t water_scroll_tag = 0U) {
+    auto current_menu = ReadU32(rsp.state->RDRAM, kCurrentMenuIdAddress);
+#if defined(DKR_WATER_QUALIFICATION)
+    // The automatic preview is hosted by the title frontend, which normally
+    // disables tile interpolation. Exercise the GAMEPLAY matching policy in
+    // this private probe without changing guest menu/save/gameplay state.
+    static const bool qualify_gameplay_tiles = std::getenv("DKR_WATER_TEST_MAP") != nullptr;
+    if (qualify_gameplay_tiles) current_menu = 15U;
+#endif
     interpolate_tiles =
         dkr::runtime::interpolation::effective_tile_interpolation(
             interpolate_tiles,
-            ReadU32(rsp.state->RDRAM, kCurrentMenuIdAddress));
+            current_menu);
     const bool task_interpolation_allowed =
         dkr::runtime::presentation::task_interpolation_allowed();
     if (!task_interpolation_allowed && !preserve_vertex_interpolation) {
@@ -241,9 +253,16 @@ void SelectInterpolationGroup(RT64::RSP& rsp, std::uint32_t id,
         !interpolation_disabled && interpolate_vertices
             ? G_EX_COMPONENT_INTERPOLATE
             : G_EX_COMPONENT_SKIP;
+    static_assert(G_EX_COMPONENT_AUTO < 0x80 && G_EX_COMPONENT_SKIP < 0x80 &&
+                  G_EX_COMPONENT_INTERPOLATE < 0x80);
+    static const bool baseline_scroll = [] {
+        const char* value = std::getenv("DKR_WATER_SCROLL_BASELINE");
+        return value != nullptr && value[0] == '1';
+    }();
     const std::uint8_t texcoord_component =
         !interpolation_disabled && interpolate_texcoords
-            ? G_EX_COMPONENT_INTERPOLATE
+            ? (!baseline_scroll && dkr::runtime::water::is_scroll_tag(water_scroll_tag)
+                ? water_scroll_tag : G_EX_COMPONENT_INTERPOLATE)
             : G_EX_COMPONENT_SKIP;
     // F3DDKR submits an already-combined model/view/projection matrix through
     // its matrix command. It is not an affine model transform and cannot be
@@ -1829,6 +1848,11 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application,
     data_->matrix_aspect_override = G_EX_ASPECT_AUTO;
     data_->background_fill_stretch_active = false;
     g_completed_tasks.store(data_->task_count, std::memory_order_release);
+    if (water::enabled()) {
+        water::end_task(presentation::task_scene_generation(),
+            ReadU32(state->RDRAM, revision_addresses::CurrentMapId & 0x007FFFFCU),
+            ReadU32(state->RDRAM, kCurrentMenuIdAddress & 0x007FFFFCU));
+    }
 }
 
 void dkr::runtime::F3DDKRRT64Bridge::RejectTask(
@@ -2085,7 +2109,8 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationGroup(
             active_group.interpolate_tiles,
             ActiveAspectMode(data.interpolation_groups,
                              data.matrix_aspect_override_active,
-                             data.matrix_aspect_override));
+                             data.matrix_aspect_override), false,
+            active_group.procedural_water ? active_group.water_scroll_tag : 0U);
         state->rsp->modelViewProjChanged = true;
         dkr::runtime::presentation::select_split_world_projection(
             *state->rsp,
@@ -2471,7 +2496,8 @@ void dkr::runtime::F3DDKRRT64Bridge::Matrix(
     }
     data.interpolation_groups.load_matrix(
         index, matrix_group.identity, matrix_group.interpolate_vertices,
-        matrix_group.interpolate_texcoords, matrix_group.interpolate_tiles);
+        matrix_group.interpolate_texcoords, matrix_group.interpolate_tiles,
+        matrix_group.procedural_water, matrix_group.water_scroll_tag);
     const auto active_group = data.interpolation_groups.active_group();
     SelectInterpolationGroup(rsp, active_group.identity,
                              active_group.interpolate_vertices,
@@ -2480,7 +2506,8 @@ void dkr::runtime::F3DDKRRT64Bridge::Matrix(
                               ActiveAspectMode(
                                   data.interpolation_groups,
                                   data.matrix_aspect_override_active,
-                                  data.matrix_aspect_override));
+                                  data.matrix_aspect_override), false,
+                             active_group.procedural_water ? active_group.water_scroll_tag : 0U);
     rsp.matrix(address, static_cast<std::uint8_t>(
         active_->gbi_->constants[F3DENUM::G_MTX_LOAD]));
 }
@@ -2845,6 +2872,24 @@ void dkr::runtime::F3DDKRRT64Bridge::Triangle(RT64::State* state,
         return;
     }
 
+    const bool procedural_water = data.interpolation_groups.active_group().procedural_water;
+    const bool skip_equal_uv = procedural_water && water::equal_uv_enabled();
+    const bool coalesce_water = procedural_water && water::coalesce_enabled();
+    const bool profile_water = procedural_water && water::enabled();
+    if (profile_water) {
+        static thread_local std::uint8_t last_scroll_tag = 0U;
+        const auto tag = data.interpolation_groups.active_group().water_scroll_tag;
+        if (tag != last_scroll_tag) {
+            std::fprintf(stderr, "[perf][water-scroll] authored-period=%.0fx%.0f tag=%u\n",
+                water::scroll_period(tag,0), water::scroll_period(tag,1), unsigned(tag));
+            last_scroll_tag = tag;
+        }
+    }
+    auto& draw = state->ext.workloadQueue->workloads[state->ext.workloadQueue->writeCursor].drawData;
+    const auto before_vertices = profile_water ? draw.vertexCount() : 0U;
+    const auto started = profile_water ? track_performance::Clock::now() : track_performance::Clock::time_point{};
+    std::uint64_t skipped = 0U;
+    std::uint64_t skipped_culling = 0U;
     for (std::uint32_t i = 0; i < count; ++i) {
         const std::uint32_t address = source + i * 16U;
         const std::uint8_t flag = ReadU8(state->RDRAM, address + 0U);
@@ -2863,21 +2908,28 @@ void dkr::runtime::F3DDKRRT64Bridge::Triangle(RT64::State* state,
             ReadS16(state->RDRAM, address + 10U),
             ReadS16(state->RDRAM, address + 14U),
         };
-        rsp.clearGeometryMode(rsp.cullBothMask);
+        std::uint32_t requested_culling = 0U;
         if ((flag & 0x40U) == 0) {
             const bool positive_x = rsp.viewportStack[rsp.viewportStackSize - 1].scale.x > 0.0F;
-            rsp.setGeometryMode(positive_x ?
+            requested_culling = positive_x ?
                 active_->gbi_->constants[F3DENUM::G_CULL_BACK] :
-                active_->gbi_->constants[F3DENUM::G_CULL_FRONT]);
+                active_->gbi_->constants[F3DENUM::G_CULL_FRONT];
         }
+        // Never merge across authored batches, matrices, material changes or
+        // changed per-triangle culling. Non-water keeps the exact old path.
+        skipped_culling += water::set_culling(rsp, requested_culling, coalesce_water && i != 0U);
 
         for (std::size_t corner = 0; corner < vertices.size(); ++corner) {
-            const std::uint32_t texcoord =
-                (static_cast<std::uint32_t>(static_cast<std::uint16_t>(s[corner])) << 16U) |
-                static_cast<std::uint16_t>(t[corner]);
-            rsp.modifyVertex(vertices[corner], G_MWO_POINT_ST, texcoord);
+            skipped += water::set_texcoord(rsp, draw, vertices[corner], s[corner], t[corner], skip_equal_uv);
         }
         rsp.drawIndexedTri(vertices[0], vertices[1], vertices[2]);
+    }
+    if (profile_water) {
+        water::bridge.triangles += count;
+        water::bridge.skipped += skipped;
+        water::bridge.skipped_culling += skipped_culling;
+        water::bridge.added_vertices += draw.vertexCount() - before_vertices;
+        water::bridge.batch_ms += std::chrono::duration<double, std::milli>(track_performance::Clock::now() - started).count();
     }
     data.vertex_cursor = 0U;
 }
@@ -3008,7 +3060,8 @@ void dkr::runtime::F3DDKRRT64Bridge::MoveWord(
                                   ActiveAspectMode(
                                       data.interpolation_groups,
                                       data.matrix_aspect_override_active,
-                                      data.matrix_aspect_override));
+                                      data.matrix_aspect_override), false,
+                                 active_group.procedural_water ? active_group.water_scroll_tag : 0U);
         state->rsp->modelViewProjChanged = true;
     } else {
         RT64::GBI_F3D::moveWord(state, display_list);

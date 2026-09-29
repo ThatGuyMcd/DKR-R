@@ -29,6 +29,15 @@ if ([IO.Path]::IsPathRooted($BuildDirectory)) {
 }
 $stage = Join-Path $distRoot "DKR-R-$Version-Windows-x64"
 if (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) {
+    if (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_ANDROID_RENDER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
+        throw 'Refusing to package private Android renderer qualification.'
+    }
+    if (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_WATER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
+        throw 'Refusing to package private water-scene qualification.'
+    }
+    if (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_TASK_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
+        throw 'Refusing to package private host-task fault injection. Rebuild with DKR_TASK_QUALIFICATION=OFF.'
+    }
     if (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_LEGACY_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
         throw 'Refusing to package a private legacy-content qualification build. Reconfigure and rebuild with DKR_LEGACY_QUALIFICATION=OFF first.'
     }
@@ -46,6 +55,13 @@ if (Test-Path -LiteralPath $zip) {
 }
 
 $bin = Join-Path $resolvedBuild "bin\$Configuration"
+if (Test-Path -LiteralPath (Join-Path $bin 'DKR-R.exe')) {
+    $imageText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $bin 'DKR-R.exe')))
+    if ($imageText.Contains('DKR_WATER_TEST_MAP') -or $imageText.Contains('[perf][private-water-preview]')) {
+        throw 'Release executable still contains private water qualification; rebuild after disabling it.'
+    }
+    $imageText = $null
+}
 foreach ($name in $runtimeFiles) {
     $source = Join-Path $bin $name
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {

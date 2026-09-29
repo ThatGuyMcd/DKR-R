@@ -1,0 +1,53 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -894,6 +894,8 @@
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vmaCreateBuffer failed with error code 0x%X.\n", res);
+-            return;
++            fprintf(stderr, "[Android] Failed buffer bytes=%llu heap=%u flags=%u\n",
++                static_cast<unsigned long long>(desc.size), unsigned(desc.heapType), unsigned(desc.flags));
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::BufferAllocation, res);
+         }
+@@ -956,6 +956,6 @@
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkCreateBufferView failed with error code 0x%X.\n", res);
+-            return;
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::ResourceView, res);
+         }
+@@ -1015,6 +1015,9 @@
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vmaCreateImage failed with error code 0x%X.\n", res);
+-            return;
++            fprintf(stderr, "[Android] Failed image %ux%ux%u format=%u usage=0x%X samples=%u\n",
++                imageInfo.extent.width, imageInfo.extent.height, imageInfo.extent.depth,
++                unsigned(imageInfo.format), imageInfo.usage, unsigned(imageInfo.samples));
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::ImageAllocation, res);
+         }
+@@ -1054,6 +1054,6 @@
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkCreateImageView failed with error code 0x%X.\n", res);
+-            return;
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::ResourceView, res);
+         }
+@@ -1107,6 +1107,6 @@
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkCreateImageView failed with error code 0x%X.\n", res);
+-            return;
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::ResourceView, res);
+         }
+@@ -2628,5 +2628,5 @@
+         res = vkCreateRenderPass(device->vk, &passInfo, nullptr, &renderPass);
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkCreateRenderPass failed with error code 0x%X.\n", res);
+-            return;
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::ResourceView, res);
+         }
+@@ -2643,6 +2643,6 @@
+         res = vkCreateFramebuffer(device->vk, &fbInfo, nullptr, &vk);
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkCreateFramebuffer failed with error code 0x%X.\n", res);
+-            return;
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::ResourceView, res);
+         }
+     }

@@ -1,0 +1,22 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -11,1 +11,2 @@
++#include "performance_trace.hpp"
+ #include "plume_vulkan.h"
+@@ -1393,1 +1394,6 @@
+-        VkResult res = vkCreateComputePipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
++        VkResult res;
++        {
++            dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::VulkanCompute);
++            res = vkCreateComputePipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
++        }
+         if (res != VK_SUCCESS) {
+@@ -1652,1 +1658,6 @@
+-        VkResult res = vkCreateGraphicsPipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
++        VkResult res;
++        {
++            dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::VulkanGraphics);
++            res = vkCreateGraphicsPipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
++        }
+         if (res != VK_SUCCESS) {

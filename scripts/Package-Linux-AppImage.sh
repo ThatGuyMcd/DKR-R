@@ -4,6 +4,21 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIRECTORY="${DKR_LINUX_BUILD_DIR:-${PROJECT_ROOT}/build/dkr-runtime-linux}"
 if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
+   grep -Eq '^DKR_ANDROID_RENDER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
+  echo 'Refusing to package private Android renderer qualification.' >&2
+  exit 1
+fi
+if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
+   grep -Eq '^DKR_WATER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
+  echo 'Refusing to package private water-scene qualification.' >&2
+  exit 1
+fi
+if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
+   grep -Eq '^DKR_TASK_QUALIFICATION:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
+  echo 'Refusing to package private host-task fault injection. Rebuild with DKR_TASK_QUALIFICATION=OFF.' >&2
+  exit 1
+fi
+if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
    grep -Eq '^DKR_LEGACY_QUALIFICATION:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
   echo 'Refusing to package a private legacy-content qualification build. Reconfigure and rebuild with DKR_LEGACY_QUALIFICATION=OFF first.' >&2
   exit 1
@@ -20,9 +35,15 @@ SKIP_RUNTIME_TESTS="${DKR_SKIP_RUNTIME_TESTS:-0}"
 [[ "${SKIP_RUNTIME_TESTS}" == 0 || "${SKIP_RUNTIME_TESTS}" == 1 ]] || {
   echo 'DKR_SKIP_RUNTIME_TESTS must be 0 or 1' >&2; exit 1;
 }
-APPDIR="${DKR_APPDIR:-${PROJECT_ROOT}/dist/DKR-R-${VERSION}-Linux-x86_64.AppDir}"
-OUTPUT="${DKR_APPIMAGE_OUTPUT:-${PROJECT_ROOT}/dist/DKR-R-${VERSION}-Linux-x86_64.AppImage}"
-LINUXDEPLOY="${LINUXDEPLOY:-${PROJECT_ROOT}/.deps/tools/linuxdeploy-x86_64.AppImage}"
+ARCH="${DKR_LINUX_ARCH:-x86_64}"
+case "${ARCH}" in
+  x86_64) ELF_MACHINE='Advanced Micro Devices X86-64' ;;
+  aarch64) ELF_MACHINE='AArch64' ;;
+  *) echo "Unsupported AppImage architecture: ${ARCH}" >&2; exit 1 ;;
+esac
+APPDIR="${DKR_APPDIR:-${PROJECT_ROOT}/dist/DKR-R-${VERSION}-Linux-${ARCH}.AppDir}"
+OUTPUT="${DKR_APPIMAGE_OUTPUT:-${PROJECT_ROOT}/dist/DKR-R-${VERSION}-Linux-${ARCH}.AppImage}"
+LINUXDEPLOY="${LINUXDEPLOY:-${PROJECT_ROOT}/.deps/tools/linuxdeploy-${ARCH}.AppImage}"
 APPIMAGE_PLUGIN="${LINUXDEPLOY_PLUGIN_APPIMAGE:-${PROJECT_ROOT}/.deps/tools/linuxdeploy-plugin-appimage}"
 ICON_FILE="${DKR_LINUX_ICON_FILE:-${PROJECT_ROOT}/assets/ui/Icons/256x256.png}"
 ICON_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/dkr-r-icon.XXXXXX")"
@@ -94,6 +115,17 @@ collect_linux_dependency_notices() {
 }
 
 [[ -x "${BINARY}" ]] || { echo "Missing Linux release binary: ${BINARY}" >&2; exit 1; }
+if grep -aEq 'DKR_WATER_TEST_MAP|\[perf\]\[private-water-preview\]' "${BINARY}"; then
+  echo 'Release binary still contains private water qualification; rebuild after disabling it.' >&2
+  exit 1
+fi
+READELF="${READELF:-readelf}"
+command -v "${READELF}" >/dev/null || { echo "Missing ELF inspector: ${READELF}" >&2; exit 1; }
+for architecture_file in "${BINARY}" "${MOD_WORKER}" "${INPUT_HOST}" "${SDL3_LIBRARY}"; do
+  "${READELF}" -h "${architecture_file}" | grep -F "${ELF_MACHINE}" >/dev/null || {
+    echo "Wrong architecture (expected ${ARCH}): ${architecture_file}" >&2; exit 1;
+  }
+done
 [[ -x "${MOD_WORKER}" ]] || { echo "Missing legacy importer: ${MOD_WORKER}" >&2; exit 1; }
 [[ -x "${INPUT_HOST}" ]] || { echo "Missing private SDL3 input host: ${INPUT_HOST}" >&2; exit 1; }
 [[ -f "${SDL3_LIBRARY}" ]] || { echo "Missing private SDL3 runtime: ${SDL3_LIBRARY}" >&2; exit 1; }
@@ -149,7 +181,15 @@ export APPIMAGE_EXTRACT_AND_RUN=1
 # metadata without the network-facing catalogue validation step.
 export LDAI_NO_APPSTREAM=1
 
-"${LINUXDEPLOY}" --appimage-extract-and-run \
+run_appimage() {
+  if [[ -n "${DKR_APPIMAGE_RUNNER:-}" ]]; then
+    bash "${DKR_APPIMAGE_RUNNER}" "$@"
+  else
+    "$@"
+  fi
+}
+
+run_appimage "${LINUXDEPLOY}" --appimage-extract-and-run \
   --appdir "${APPDIR}" \
   --executable "${BINARY_STAGE}/DKR-R" \
   --desktop-file "${PROJECT_ROOT}/packaging/linux/dkr-port.desktop" \
@@ -194,12 +234,12 @@ fi
 
 collect_linux_dependency_notices "${APPDIR}"
 validate_release_tree "${APPDIR}"
-"${APPIMAGE_PLUGIN}" --appdir "${APPDIR}"
+run_appimage "${APPIMAGE_PLUGIN}" --appdir "${APPDIR}"
 [[ -s "${OUTPUT}" ]] || { echo "AppImage output is missing or empty: ${OUTPUT}" >&2; exit 1; }
 if [[ "${SKIP_RUNTIME_TESTS}" == 0 ]]; then
-APPIMAGE_EXTRACT_AND_RUN=1 "${OUTPUT}" --self-test-pak "${PAK_TEST}"
+APPIMAGE_EXTRACT_AND_RUN=1 run_appimage "${OUTPUT}" --self-test-pak "${PAK_TEST}"
 SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy APPIMAGE_EXTRACT_AND_RUN=1 \
-  "${OUTPUT}" --self-test-input-switch "${INPUT_SWITCH_TEST}"
+  run_appimage "${OUTPUT}" --self-test-input-switch "${INPUT_SWITCH_TEST}"
 else
   echo 'WARNING: Runtime tests explicitly deferred; package runtime qualification remains pending.' >&2
 fi

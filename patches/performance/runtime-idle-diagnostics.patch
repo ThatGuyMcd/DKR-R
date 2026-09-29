@@ -1,0 +1,29 @@
+diff --git a/ultramodern/src/mesgqueue.cpp b/ultramodern/src/mesgqueue.cpp
+--- a/ultramodern/src/mesgqueue.cpp
++++ b/ultramodern/src/mesgqueue.cpp
+@@ -1,2 +1,4 @@
+ #include <array>
++#include <cstdio>
++#include <cstdlib>
+ #include <bitset>
+@@ -218,2 +220,6 @@
+ void ultramodern::wait_for_external_message(RDRAM_ARG1) {
++    static const bool profile = std::getenv("DKR_IDLE_PROFILE") != nullptr;
++    static thread_local unsigned long long calls = 0, retries = 0;
++    static thread_local auto next_report = std::chrono::steady_clock::now();
+     QueuedMessage to_send;
+@@ -225,3 +231,15 @@
+     const bool sent = do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
++    if (profile) {
++        ++calls;
++        retries += !sent && to_send.requeue_if_blocked;
++        const auto now = std::chrono::steady_clock::now();
++        if (now >= next_report) {
++            std::fprintf(stderr, "[perf][idle] calls=%llu retries=%llu queue=%08x msg=%08x\n",
++                         calls, retries, unsigned(to_send.mq), unsigned(to_send.mesg));
++            calls = retries = 0;
++            next_report = now + std::chrono::seconds(5);
++        }
++    }
+     if (!sent && to_send.requeue_if_blocked) {
+         external_messages.enqueue(to_send);

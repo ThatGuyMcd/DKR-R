@@ -1,0 +1,6 @@
+if(NOT ANDROID OR NOT TARGET SDL2::SDL2)
+    message(FATAL_ERROR "Android SDL2 must be configured before renderer dependencies.")
+endif()
+set(SDL2_FOUND TRUE)
+set(SDL2_LIBRARIES SDL2::SDL2)
+set(SDL2_INCLUDE_DIRS "$<TARGET_PROPERTY:SDL2::SDL2,INTERFACE_INCLUDE_DIRECTORIES>")

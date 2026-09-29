@@ -1,6 +1,17 @@
 # Release validation
 
-Current development target: **v1.0.5 Beta 11** (main revision `8a8e927`). See
+## 26 September 2026 — Beta 12 water performance rebuild
+
+See [water performance implementation and qualification](docs/WATER-PERFORMANCE-IMPLEMENTATION-20260926.md)
+for the measured water draw/matching bottleneck, water-only scroll-wrap correction,
+83/83 project tests on both Windows and Linux x64, visible startup/preview checks,
+and remaining physical-device/full-route checks. New Windows, Linux x64 AppImage
+and Android packages are available. Linux ARM rebuilding remains deferred at the
+user's request to leave its broken Docker environment alone.
+
+Current development target: **v1.0.5 Beta 12**, based on main revision `ab141cb`
+plus the existing ARM/mobile changes and the optimisation pass documented in
+[Beta 12 qualification](docs/BETA12-OPTIMISATION.md). See
 [Legacy mod compatibility coverage](docs/LEGACY-MOD-COMPATIBILITY-BETA7.md) and
 [Offline mod usage and limits](docs/LEGACY-MODS-BETA.md).
 Beta 11 build/package results are recorded with its artifacts; the historical

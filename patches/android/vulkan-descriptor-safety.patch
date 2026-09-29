@@ -1,0 +1,143 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -11,6 +11,7 @@
+ #include "plume_vulkan.h"
+ #include "render_resource_policy.hpp"
+ #include "graphics_health.hpp"
++#include "android_descriptor_policy.hpp"
+ 
+ #include <algorithm>
+ #include <cmath>
+@@ -1911,6 +1912,7 @@
+         }
+ 
+         setLayout = new VulkanDescriptorSetLayout(device, desc);
++        if (setLayout->vk == VK_NULL_HANDLE) return;
+ 
+         descriptorPool = createDescriptorPool(device, typeCounts, desc.lastRangeIsBoundless);
+         if (descriptorPool == VK_NULL_HANDLE) {
+@@ -1932,7 +1934,34 @@
+         }
+ 
+         VkResult res = vkAllocateDescriptorSets(device->vk, &allocateInfo, &vk);
++        // A bounded compatibility retry reserves the full declared range in
++        // the POOL only, in case a driver budgets variable ranges this way.
++        // This does not establish the cause of a failed allocation. Layout,
++        // shader indexing, allocation count and update-after-bind stay intact.
++        if (desc.lastRangeIsBoundless) {
++            const auto& range = desc.descriptorRanges[desc.descriptorRangesCount - 1];
++            if (dkr::runtime::android_graphics::retry_full_pool(res, boundlessRangeSize, range.count)) {
++                fprintf(stderr, "[Android] Descriptor allocation result=%d (0x%X), requested=%u declared=%u; retrying full pool budget\n",
++                    res, res, boundlessRangeSize, range.count);
++                vkDestroyDescriptorPool(device->vk, descriptorPool, nullptr);
++                descriptorPool = VK_NULL_HANDLE;
++                vk = VK_NULL_HANDLE;
++                typeCounts[toVk(range.type)] += range.count - boundlessRangeSize;
++                descriptorPool = createDescriptorPool(device, typeCounts, true);
++                if (descriptorPool != VK_NULL_HANDLE) {
++                    allocateInfo.descriptorPool = descriptorPool;
++                    res = vkAllocateDescriptorSets(device->vk, &allocateInfo, &vk);
++                    if (res == VK_SUCCESS) fprintf(stderr, "[Android] Descriptor full-pool retry succeeded\n");
++                } else {
++                    return;
++                }
++            }
++        }
+         if (res != VK_SUCCESS) {
++            vk = VK_NULL_HANDLE;
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::DescriptorAllocate, res);
++            fprintf(stderr, "[Android] Descriptor request: variable=%u allocated=%u bindings=%u\n",
++                desc.lastRangeIsBoundless, boundlessRangeSize, desc.descriptorRangesCount);
+             fprintf(stderr, "vkAllocateDescriptorSets failed with error code 0x%X.\n", res);
+             return;
+         }
+@@ -2021,6 +2050,10 @@
+     }
+ 
+     void VulkanDescriptorSet::setDescriptor(uint32_t descriptorIndex, const VkDescriptorBufferInfo *bufferInfo, const VkDescriptorImageInfo *imageInfo, const VkBufferView *texelBufferView, void *pNext) {
++        if (vk == VK_NULL_HANDLE || !setLayout || setLayout->vk == VK_NULL_HANDLE) {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::DescriptorUse, VK_ERROR_INITIALIZATION_FAILED);
++            if (dkr::runtime::graphics_health::stop_failed_task()) return;
++        }
+         assert(descriptorIndex < setLayout->descriptorBindingIndices.size());
+ 
+         const uint32_t indexBase = setLayout->descriptorIndexBases[descriptorIndex];
+@@ -2068,6 +2101,7 @@
+             return descriptorPool;
+         }
+         else {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::DescriptorPool, res);
+             fprintf(stderr, "vkCreateDescriptorPool failed with error code 0x%X.\n", res);
+             return VK_NULL_HANDLE;
+         }
+@@ -3532,6 +3566,10 @@
+         assert(setIndex < pipelineLayout->descriptorSetLayouts.size());
+ 
+         const VulkanDescriptorSet *interfaceSet = static_cast<const VulkanDescriptorSet *>(descriptorSet);
++        if (interfaceSet->vk == VK_NULL_HANDLE) {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::DescriptorUse, VK_ERROR_INITIALIZATION_FAILED);
++            if (dkr::runtime::graphics_health::stop_failed_task()) return;
++        }
+         vkCmdBindDescriptorSets(vk, bindPoint, pipelineLayout->vk, setIndex, 1, &interfaceSet->vk, 0, nullptr);
+     }
+ 
+@@ -3639,11 +3677,13 @@
+         submitInfo.pCommandBuffers = commandBuffers.data();
+         submitInfo.commandBufferCount = uint32_t(commandBuffers.size());
+ 
+-        const VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
++        // Vulkan requires one stage mask for each waited semaphore.
++        thread_local std::vector<VkPipelineStageFlags> waitStages;
++        waitStages.assign(waitSemaphoreVector.size(), VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+         if (!waitSemaphoreVector.empty()) {
+             submitInfo.pWaitSemaphores = waitSemaphoreVector.data();
+             submitInfo.waitSemaphoreCount = uint32_t(waitSemaphoreVector.size());
+-            submitInfo.pWaitDstStageMask = &waitStages;
++            submitInfo.pWaitDstStageMask = waitStages.data();
+         }
+ 
+         if (!signalSemaphoreVector.empty()) {
+@@ -3872,14 +3912,15 @@
+         // Check for supported features.
+         void *featuresChain = nullptr;
+         VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures = {};
+-        const bool descriptorIndexingFound = supportedOptionalExtensions.find(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) != supportedOptionalExtensions.end();
++        const bool core12 = physicalDeviceProperties.apiVersion >= VK_API_VERSION_1_2;
++        const bool descriptorIndexingFound = core12 || supportedOptionalExtensions.find(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME) != supportedOptionalExtensions.end();
+         if (descriptorIndexingFound) {
+             indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+             featuresChain = &indexingFeatures;
+         }
+ 
+         VkPhysicalDeviceScalarBlockLayoutFeatures layoutFeatures = {};
+-        const bool scalarBlockLayoutFound = supportedOptionalExtensions.find(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME) != supportedOptionalExtensions.end();
++        const bool scalarBlockLayoutFound = core12 || supportedOptionalExtensions.find(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME) != supportedOptionalExtensions.end();
+         if (scalarBlockLayoutFound) {
+             layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
+             layoutFeatures.pNext = featuresChain;
+@@ -3972,7 +4013,23 @@
+             createDeviceChain = &accelerationStructureFeatures;
+         }
+ 
+-        const bool descriptorIndexingSupported = indexingFeatures.descriptorBindingPartiallyBound && indexingFeatures.descriptorBindingVariableDescriptorCount && indexingFeatures.runtimeDescriptorArray;
++        const bool descriptorIndexingSupported = dkr::runtime::android_graphics::descriptor_features(
++            indexingFeatures.descriptorBindingPartiallyBound,
++            indexingFeatures.descriptorBindingVariableDescriptorCount,
++            indexingFeatures.runtimeDescriptorArray,
++            indexingFeatures.descriptorBindingSampledImageUpdateAfterBind,
++            indexingFeatures.shaderSampledImageArrayNonUniformIndexing);
++        fprintf(stderr, "[Android] GPU API=%u.%u.%u driver=0x%X descriptor-features partial=%u variable=%u runtime=%u sampled-update=%u nonuniform=%u scalar=%u\n",
++            VK_VERSION_MAJOR(physicalDeviceProperties.apiVersion), VK_VERSION_MINOR(physicalDeviceProperties.apiVersion),
++            VK_VERSION_PATCH(physicalDeviceProperties.apiVersion), physicalDeviceProperties.driverVersion,
++            indexingFeatures.descriptorBindingPartiallyBound, indexingFeatures.descriptorBindingVariableDescriptorCount,
++            indexingFeatures.runtimeDescriptorArray, indexingFeatures.descriptorBindingSampledImageUpdateAfterBind,
++            indexingFeatures.shaderSampledImageArrayNonUniformIndexing, layoutFeatures.scalarBlockLayout);
++        if (!descriptorIndexingSupported || !layoutFeatures.scalarBlockLayout) {
++            fprintf(stderr, "[Android] Required texture indexing/layout features unavailable; refusing invalid GPU commands\n");
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::DeviceFeatures, VK_ERROR_FEATURE_NOT_PRESENT);
++            return;
++        }
+         if (descriptorIndexingSupported) {
+             indexingFeatures.pNext = createDeviceChain;
+             createDeviceChain = &indexingFeatures;

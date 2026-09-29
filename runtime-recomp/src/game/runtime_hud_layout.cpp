@@ -1,4 +1,5 @@
 #include "runtime_hud_layout.hpp"
+#include "atomic_snapshot.hpp"
 
 #include "librecomp/helpers.hpp"
 #include "presentation_identity.hpp"
@@ -54,7 +55,7 @@ std::optional<hg::Layout> g_preview;
 nlohmann::json g_presets = nlohmann::json::object();
 int g_viewport_width = 640;
 int g_viewport_height = 480;
-std::atomic<std::shared_ptr<const PublishedState>> g_published;
+dkr::runtime::AtomicSnapshot<const PublishedState> g_published;
 thread_local std::shared_ptr<const PublishedState> g_frame_state;
 thread_local bool g_group_frame = false;
 thread_local hg::Scenario g_scenario = hg::Scenario::Race;

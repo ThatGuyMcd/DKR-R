@@ -1,4 +1,5 @@
 #include "authoritative_state_codec.hpp"
+#include "../performance_trace.hpp"
 
 #include <algorithm>
 #include <array>
@@ -167,6 +168,7 @@ bool decode_authoritative_state_delta_wire(
     std::size_t maximum_decoded_size,
     std::vector<std::uint8_t>& state,
     std::string& error) {
+    performance_trace::Scope profile(performance_trace::Region::OnlineStateDecode, wire.size());
     state.clear();
     if (!authoritative_state_wire_is_delta(wire)) {
         error = "The authoritative replica is not a temporal delta.";
@@ -197,6 +199,7 @@ bool decode_authoritative_state_wire(
     std::size_t maximum_decoded_size,
     std::vector<std::uint8_t>& state,
     std::string& error) {
+    performance_trace::Scope profile(performance_trace::Region::OnlineStateDecode, wire.size());
     state.clear();
     if (wire.size() < kHeaderBytes ||
         !std::equal(kMagic.begin(), kMagic.end(), wire.begin())) {

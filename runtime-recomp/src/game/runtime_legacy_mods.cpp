@@ -1,4 +1,5 @@
 #include "runtime_legacy_mods.hpp"
+#include "atomic_snapshot.hpp"
 #include "custom_tracks.hpp"
 #include "runtime_netplay.hpp"
 #include "game_payload.hpp"
@@ -27,15 +28,15 @@ extern "C" void dkr_custom_tracks_extend_table(std::uint8_t*,recomp_context*,std
 extern "C" int dkr_custom_tracks_asset_override(std::uint8_t*,recomp_context*);
 namespace dkr::runtime::legacy {
 namespace {
-std::atomic<std::shared_ptr<mods::RuntimeSession>> session;
-std::atomic<std::shared_ptr<const mods::PreparedModLaunch>> launch;
+AtomicSnapshot<mods::RuntimeSession> session;
+AtomicSnapshot<const mods::PreparedModLaunch> launch;
 struct MenuState {
     std::mutex mutex;
     mods::TrackMenuAdapter adapter;
     bool allow_races, catalog_ready=false;
     MenuState(std::vector<mods::Root> roots,bool races):adapter(std::move(roots),races),allow_races(races){}
 };
-std::atomic<std::shared_ptr<MenuState>> menu;
+AtomicSnapshot<MenuState> menu;
 struct CharacterState {
     std::mutex mutex;
     mods::CharacterRoster roster;
@@ -46,7 +47,7 @@ struct CharacterState {
     bool menu_active=false;
     explicit CharacterState(std::shared_ptr<const mods::CharacterNamespace> assets):roster(std::move(assets)){}
 };
-std::atomic<std::shared_ptr<CharacterState>> characters;
+AtomicSnapshot<CharacterState> characters;
 mods::CharacterPresentationCalls presentation_calls(const GamePayload& p) {
     return {p.asset_allocate,p.menu_texture_load,p.sound_bank_relocate,p.sound_bank_play,p.sound_parameter,p.sound_spatial_point};
 }

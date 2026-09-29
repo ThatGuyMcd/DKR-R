@@ -1,4 +1,6 @@
 #include "friend_service.hpp"
+#include "../atomic_snapshot.hpp"
+#include "../performance_trace.hpp"
 
 #include "session_transport.hpp"
 #include "social_executor.hpp"
@@ -642,7 +644,7 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
     void tick();
     void publish_snapshot();
     void publish_requests_locked();
-    std::atomic<std::shared_ptr<const FriendServiceSnapshot>> ui_snapshot{std::make_shared<const FriendServiceSnapshot>()};
+    AtomicSnapshot<const FriendServiceSnapshot> ui_snapshot{std::make_shared<const FriendServiceSnapshot>()};
     std::vector<FriendInviteView> copy_invitations_locked() const;
     std::vector<FriendRequestView> copy_pending_requests_locked() const;
     std::vector<FriendView> copy_friends_locked(bool include_blocked) const;
@@ -2223,6 +2225,7 @@ std::vector<FriendLobbyInviteView> FriendService::Impl::copy_outgoing_lobby_invi
 }
 
 void FriendService::Impl::publish_snapshot() {
+    performance_trace::Scope measure(performance_trace::Region::FriendSnapshot);
     auto next = std::make_shared<FriendServiceSnapshot>();
     // Serialize publication with immediate user-action updates. Publishing an
     // older worker snapshot after Cancel would otherwise revive its card.

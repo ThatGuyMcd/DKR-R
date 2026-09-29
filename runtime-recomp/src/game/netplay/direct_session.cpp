@@ -1,4 +1,5 @@
 #include "direct_session.hpp"
+#include "experimental_runtime_admission.hpp"
 #include "online_lobby_policy.hpp"
 
 #include "authoritative_state_codec.hpp"
@@ -8,6 +9,7 @@
 
 #include "authoritative_state.hpp"
 #include "../determinism_hash_policy.hpp"
+#include "../performance_trace.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -173,7 +175,10 @@ DirectSession::DirectSession()
 
 DirectSession::~DirectSession() {
     disconnect("The racer application closed.");
-    worker_stop_.store(true, std::memory_order_release);
+    {
+        std::scoped_lock lock(mutex_);
+        worker_stop_.store(true, std::memory_order_release);
+    }
     state_changed_.notify_all();
     if (network_worker_.joinable()) network_worker_.join();
     replay_writer_.stop();
@@ -233,6 +238,10 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
                          std::string room_name, ConnectionMethod method,
                          std::string player_name, const Rules& rules,
                          std::string& error) {
+    if (const char* reason = experimental::runtime_admission_error(rules.synchronization)) {
+        error = reason;
+        return false;
+    }
     std::scoped_lock lock(mutex_);
     local_online_save_ready_ = false;
     local_online_save_acknowledged_ = false;
@@ -329,6 +338,7 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
     } else {
         transport_ = make_udp_session_transport();
     }
+    transport_->set_receive_signal(receive_signal_);
     if (!transport_->open(port, error)) return false;
     host_key_pair_ = secure::generate_key_pair();
     invitation_capability_ = secure::generate_key();
@@ -356,6 +366,8 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
     input_delay_ = rules.automatic_input_delay ? 2U : rules.manual_input_delay;
     room_view_ = lobby_.room();
     state_ = ConnectionState::Hosting;
+    worker_wake_ = true;
+    state_changed_.notify_all();
     if (method_ == ConnectionMethod::QuickJoin) {
         invite_ = transport_->quick_join_code();
         transport_->set_quick_join_bootstrap(make_quick_join_bootstrap());
@@ -484,6 +496,7 @@ bool DirectSession::join_friend_invite(std::string_view invite,
     } else {
         transport_ = make_udp_session_transport();
     }
+    transport_->set_receive_signal(receive_signal_);
     if (!transport_->open(0U, error)) return false;
     is_host_ = false;
     method_ = method;
@@ -501,6 +514,8 @@ bool DirectSession::join_friend_invite(std::string_view invite,
     room_view_.room_id = quick_join ? std::string{} : hex64(match_id_);
     room_view_.manifest = manifest_;
     state_ = ConnectionState::Connecting;
+    worker_wake_ = true;
+    state_changed_.notify_all();
     invite_ = std::string(invite);
     quick_join_bootstrap_pending_ = quick_join;
     status_ = quick_join
@@ -722,11 +737,15 @@ void DirectSession::disconnect(std::string_view reason) {
     client_friend_admission_ = {};
     clear_friend_admissions_locked();
     status_ = reason.empty() ? "Offline." : std::string(reason);
+    presentation_view_.store(std::make_shared<const SessionView>(view_locked()), std::memory_order_release);
+    worker_wake_ = true;
+    state_changed_.notify_all();
 }
 
 void DirectSession::pump() {
     {
         std::scoped_lock lock(mutex_);
+        if (state_ == ConnectionState::Offline && replay_writes_.empty()) return;
         worker_wake_ = true;
     }
     state_changed_.notify_all();
@@ -738,7 +757,9 @@ void DirectSession::network_loop() {
     auto last_commit_progress = std::chrono::steady_clock::now();
     bool progress_stall_reported = false;
     bool worker_fault = false;
+    unsigned consecutive_receive_drains = 0;
     while (!worker_stop_.load(std::memory_order_acquire)) {
+        const auto received_generation = receive_signal_->generation.load(std::memory_order_acquire);
         for (auto it = replay_writes_.begin(); it != replay_writes_.end();) {
             if (it->wait_for(std::chrono::seconds(0)) != std::future_status::ready) { ++it; continue; }
             const auto error = it->get();
@@ -802,9 +823,32 @@ void DirectSession::network_loop() {
                     state_ == ConnectionState::AwaitingApproval
                 ? std::chrono::milliseconds(4)
                 : std::chrono::milliseconds(12);
-        state_changed_.wait_for(lock, receive_poll, [this] {
-            return worker_stop_.load(std::memory_order_acquire) || worker_wake_;
-        });
+        const auto wake = [this, received_generation] {
+            return worker_stop_.load(std::memory_order_acquire) || worker_wake_ ||
+                receive_signal_->generation.load(std::memory_order_acquire) != received_generation;
+        };
+        if (receive_signal_->generation.load(std::memory_order_acquire) != received_generation &&
+            ++consecutive_receive_drains >= 4U) {
+            // Under sustained receive load the predicate can remain true for
+            // every pass. Release mutex_ for gameplay/UI instead of repeatedly
+            // draining while owning it. Only shutdown/local work can interrupt
+            // this short fairness window; incoming bytes remain in the inbox.
+            state_changed_.wait_for(lock, std::chrono::microseconds(250), [this] {
+                return worker_stop_.load(std::memory_order_acquire) || worker_wake_;
+            });
+            consecutive_receive_drains = 0;
+        } else if (state_ == ConnectionState::Offline && replay_writes_.empty()) {
+            // No socket, heartbeat or replay-completion deadline exists here.
+            // host/join/disconnect/quit publish the wake under the same mutex.
+            state_changed_.wait(lock, wake);
+        } else {
+            // Callback notifications do not take mutex_: no transport/session
+            // lock inversion. Keep the bounded fallback for UDP and a notify
+            // racing the condition-variable wait itself (at most 4 ms in-game).
+            state_changed_.wait_for(lock, receive_poll, wake);
+        }
+        if (receive_signal_->generation.load(std::memory_order_acquire) == received_generation)
+            consecutive_receive_drains = 0;
     }
 }
 
@@ -1095,6 +1139,10 @@ bool DirectSession::revoke_invitation(std::string& error) {
 
 bool DirectSession::request_start(std::string& error) {
     std::scoped_lock lock(mutex_);
+    if (const char* reason = experimental::runtime_admission_error(lobby_.room().rules.synchronization)) {
+        error = reason;
+        return false;
+    }
     if (pending_invitation_) {
         error = "Wait for the code replacement to finish before starting.";
         return false;
@@ -2956,7 +3004,7 @@ SessionPollResult DirectSession::poll_authoritative_state(
 bool DirectSession::publish_live_replica(
     std::uint32_t frame, std::span<const std::uint8_t> state,
     bool reliable_keyframe, std::string& error) {
-    std::scoped_lock lock(mutex_);
+    std::unique_lock lock(mutex_);
     if (!is_host_ || state_ != ConnectionState::Running ||
         !authoritative_phase_active_ ||
         authority_lifecycle_ != AuthorityLifecycle::Racing) {
@@ -2969,8 +3017,39 @@ bool DirectSession::publish_live_replica(
         return false;
     }
 
-    live_replica_states_[frame] =
-        std::vector<std::uint8_t>(state.begin(), state.end());
+    // Encoding/checksum read owned bytes, never live RDRAM or native state.
+    // No background job queue: one bounded encode on the publishing thread.
+    std::vector<std::uint8_t> owned(state.begin(), state.end());
+    const auto generation = input_epoch_;
+    const auto scene = scene_epoch_;
+    const auto match = match_id_;
+    const auto base_frame = live_replica_keyframe_frame_;
+    std::vector<std::uint8_t> base;
+    if (!reliable_keyframe && base_frame && *base_frame < frame)
+        base = live_replica_keyframe_state_;
+    lock.unlock();
+    PreparedStateWire prepared;
+    {
+        performance_trace::Scope profile(performance_trace::Region::OnlineStateEncode, owned.size());
+        if (!base.empty()) prepared.bytes = encode_authoritative_state_delta_wire(owned, base, *base_frame);
+        if (prepared.bytes.empty()) prepared.bytes = encode_authoritative_state_wire(owned);
+        prepared.checksum = authoritative_state_checksum(prepared.bytes);
+    }
+    lock.lock();
+    if (generation != input_epoch_ || scene != scene_epoch_ || match != match_id_ ||
+        state_ != ConnectionState::Running || !authoritative_phase_active_ ||
+        authority_lifecycle_ != AuthorityLifecycle::Racing) {
+        // A transition retired this optional publication while it encoded.
+        error.clear();
+        return true;
+    }
+    if (!base.empty() && (base_frame != live_replica_keyframe_frame_ ||
+        base != live_replica_keyframe_state_)) {
+        // Never publish a delta referencing a replaced baseline.
+        error.clear();
+        return true;
+    }
+    live_replica_states_[frame] = std::move(owned);
     if (reliable_keyframe) {
         live_replica_keyframe_frame_ = frame;
         live_replica_keyframe_state_ = live_replica_states_[frame];
@@ -2980,7 +3059,7 @@ bool DirectSession::publish_live_replica(
         : protocol::MessageType::LiveReplicaSnapshot;
     if (!send_authoritative_state(
             nullptr, frame, live_replica_states_[frame], 0xFFFFU,
-            message_type, true)) {
+            message_type, true, &prepared)) {
         error = "Player 1 could not queue the live race state.";
         return false;
     }
@@ -4215,6 +4294,26 @@ SessionView DirectSession::view() const {
     return view_locked();
 }
 
+SessionPacingView DirectSession::pacing_view() const {
+    performance_trace::Scope profile(performance_trace::Region::OnlinePacingView);
+    std::scoped_lock lock(mutex_);
+    SessionPacingView result{state_, 0, 0, authoritative_input_frame_,
+        input_epoch_, simulation_wake_generation_};
+    if (is_host_) {
+        for (const auto& peer : peers_) {
+            if (!peer.active) continue;
+            result.network_rtt_ms = (std::max)(result.network_rtt_ms,
+                static_cast<std::uint16_t>(std::clamp(peer.rtt_ms, 0.0, 65535.0)));
+            result.network_jitter_ms = (std::max)(result.network_jitter_ms,
+                static_cast<std::uint16_t>(std::clamp(peer.jitter_ms, 0.0, 65535.0)));
+        }
+    } else if (local_slot_ < room_view_.players.size()) {
+        result.network_rtt_ms = room_view_.players[local_slot_].ping_ms;
+        result.network_jitter_ms = room_view_.players[local_slot_].jitter_ms;
+    }
+    return result;
+}
+
 SessionView DirectSession::presentation_view() const {
     const auto snapshot = presentation_view_.load(std::memory_order_acquire);
     return snapshot ? *snapshot : SessionView{};
@@ -4264,14 +4363,29 @@ SessionView DirectSession::view_locked() const {
     result.checkpoint_encoding_cache_hits = checkpoint_encoding_cache_hits_;
     result.maximum_network_pump_us = maximum_network_pump_us_;
     const auto queue_now = std::chrono::steady_clock::now();
+    std::size_t lane_index = 0;
     for (const auto* queue : {&critical_outbound_, &repair_outbound_, &commit_outbound_,
              &high_priority_outbound_, &authority_outbound_, &normal_priority_outbound_, &bulk_outbound_}) {
         for (const auto& packet : *queue) {
             result.pending_outbound_bytes += packet.bytes.size();
             const auto age = std::chrono::duration_cast<std::chrono::milliseconds>(queue_now - packet.enqueued).count();
             result.oldest_outbound_age_ms = (std::max)(result.oldest_outbound_age_ms,
-                static_cast<std::uint32_t>((std::clamp)(age, std::int64_t{0}, std::int64_t{UINT32_MAX})));
+                static_cast<std::uint32_t>((std::clamp<std::int64_t>)(age, 0, UINT32_MAX)));
+            // No peer addresses or identities are exported by diagnostics.
+            std::size_t slot = 0;
+            if (is_host_) {
+                for (const auto& peer : peers_)
+                    if (peer.active && peer.address == packet.destination) { slot = peer.slot; break; }
+            }
+            if (slot < kMaximumPlayers) {
+                auto& lane = result.outbound_lanes[slot][lane_index];
+                ++lane.packets;
+                lane.bytes += packet.bytes.size();
+                lane.oldest_ms = (std::max)(lane.oldest_ms,
+                    static_cast<std::uint32_t>((std::clamp<std::int64_t>)(age, 0, UINT32_MAX)));
+            }
         }
+        ++lane_index;
     }
     result.host_backpressure_events = host_backpressure_events_;
     result.maximum_peer_frame_debt = maximum_peer_frame_debt_;
@@ -4306,6 +4420,12 @@ SessionView DirectSession::view_locked() const {
     result.local_input_echo_ms = local_input_echo_ms_;
     result.local_input_consume_ms = local_input_consume_ms_;
     result.measured_input_echoes = measured_input_echoes_;
+    result.input_echo_latency = input_latency_->echo.summary();
+    result.input_consume_latency = input_latency_->consume.summary();
+    result.input_enqueue_latency = input_latency_->enqueue.summary();
+    result.predicted_local_samples = predicted_local_samples_;
+    result.mismatched_local_samples = mismatched_local_samples_;
+    result.superseded_local_samples = superseded_local_samples_;
     result.live_replica_requests_sent = live_replica_requests_sent_;
     result.live_replica_request_misses = live_replica_request_misses_;
     result.live_replica_window_rejections = live_replica_window_rejections_;
@@ -4926,6 +5046,11 @@ void DirectSession::flush_outbound_locked() {
         TransportTrafficClass traffic = TransportTrafficClass::Control;
     };
     std::vector<BlockedRoute> blocked_routes;
+    blocked_routes.reserve(kMaximumPlayers * 5U);
+    struct RouteBudget { PeerAddress destination; std::size_t bytes; };
+    std::vector<RouteBudget> route_budgets;
+    route_budgets.reserve(kMaximumPlayers);
+    const auto flush_started = std::chrono::steady_clock::now();
     const auto traffic_class = [](protocol::MessageType type) {
         return
             (type == protocol::MessageType::StateSnapshot ||
@@ -4959,12 +5084,16 @@ void DirectSession::flush_outbound_locked() {
             });
     };
     const auto flush_queue = [&](std::deque<OutboundPacket>& queue,
-                                 std::size_t budget) {
+                                 std::size_t budget, std::size_t byte_budget) {
         // Examine only packets present at entry. Rotated blocked packets retain
         // per-route order and are retried by the worker's next flush, while a
         // congested peer/channel cannot prevent healthy routes from draining.
         const std::size_t attempts = (std::min)(budget, queue.size());
+        std::size_t sent_bytes = 0;
         for (std::size_t attempt = 0U; attempt < attempts; ++attempt) {
+            // Bound the shared session-lock hold. Remaining reliable data is
+            // retained for the next service pass, not dropped or re-encoded.
+            if (std::chrono::steady_clock::now() - flush_started >= std::chrono::milliseconds(2)) break;
             OutboundPacket packet = std::move(queue.front());
             queue.pop_front();
             // Only redundant disposable traffic expires. Ledger, repair,
@@ -4980,6 +5109,18 @@ void DirectSession::flush_outbound_locked() {
             }
             const TransportTrafficClass traffic = traffic_class(packet.type);
             if (route_blocked(packet.destination, traffic)) {
+                queue.push_back(std::move(packet));
+                continue;
+            }
+            auto route = std::find_if(route_budgets.begin(), route_budgets.end(),
+                [&](const RouteBudget& candidate) { return candidate.destination == packet.destination; });
+            if (route == route_budgets.end()) {
+                route_budgets.push_back({packet.destination, 0});
+                route = std::prev(route_budgets.end());
+            }
+            if (sent_bytes + packet.bytes.size() > byte_budget ||
+                route->bytes + packet.bytes.size() > (64U << 10U)) {
+                blocked_routes.push_back({packet.destination, traffic});
                 queue.push_back(std::move(packet));
                 continue;
             }
@@ -5006,16 +5147,18 @@ void DirectSession::flush_outbound_locked() {
             }
             ++packets_sent_;
             bytes_sent_ += packet.bytes.size();
+            sent_bytes += packet.bytes.size();
+            route->bytes += packet.bytes.size();
         }
     };
 
-    flush_queue(critical_outbound_, 64U);
-    flush_queue(repair_outbound_, 64U);
-    flush_queue(commit_outbound_, 64U);
-    flush_queue(high_priority_outbound_, 64U);
-    flush_queue(authority_outbound_, 32U);
-    flush_queue(normal_priority_outbound_, 8U);
-    flush_queue(bulk_outbound_, 2U);
+    flush_queue(critical_outbound_, 16U, 16U << 10U);
+    flush_queue(high_priority_outbound_, 32U, 16U << 10U);
+    flush_queue(repair_outbound_, 32U, 16U << 10U);
+    flush_queue(commit_outbound_, 64U, 24U << 10U);
+    flush_queue(authority_outbound_, 8U, 32U << 10U);
+    flush_queue(normal_priority_outbound_, 8U, 16U << 10U);
+    flush_queue(bulk_outbound_, 2U, 32U << 10U);
 }
 
 std::uint64_t& DirectSession::outbound_sequence(
@@ -5476,30 +5619,28 @@ void DirectSession::pump_locked() {
     // peer's measured result for the launch so all racers share one timeline.
     if (is_host_ && !launch_descriptor_ &&
         lobby_.room().rules.automatic_input_delay) {
-        std::uint8_t calculated_delay =
-            method_ == ConnectionMethod::Lan ? 2U : 3U;
+        std::uint8_t calculated_delay = 2U;
         for (const PeerRecord& peer : peers_) {
             if (!peer.active) continue;
             std::array<double, 32U> ordered{};
-            std::copy_n(peer.rtt_samples.begin(), peer.rtt_sample_count,
-                        ordered.begin());
+            std::size_t fresh_count = 0;
+            for (std::size_t i = 0; i < peer.rtt_sample_count; ++i)
+                if (peer.rtt_sample_times[i].time_since_epoch().count() &&
+                    now - peer.rtt_sample_times[i] <= std::chrono::seconds(20))
+                    ordered[fresh_count++] = peer.rtt_samples[i];
             std::sort(ordered.begin(),
                       ordered.begin() +
-                          static_cast<std::ptrdiff_t>(peer.rtt_sample_count));
-            const double p50 = peer.rtt_sample_count == 0U
-                ? peer.rtt_ms
-                : ordered[(peer.rtt_sample_count - 1U) / 2U];
-            const std::size_t p99_index = peer.rtt_sample_count == 0U
-                ? 0U
-                : ((peer.rtt_sample_count - 1U) * 99U + 99U) / 100U;
-            const double p99 = peer.rtt_sample_count == 0U
-                ? peer.rtt_ms : ordered[p99_index];
-            const double burst_jitter =
-                (std::max)(peer.jitter_ms, p99 - p50);
+                          static_cast<std::ptrdiff_t>(fresh_count));
+            const double p99 = fresh_count == 0U ? peer.rtt_ms
+                : ordered[(fresh_count * 99U + 99U) / 100U - 1U];
+            const double p50 = fresh_count == 0U ? peer.rtt_ms
+                : ordered[(fresh_count - 1U) / 2U];
+            if (fresh_count < 4U && method_ != ConnectionMethod::Lan)
+                calculated_delay = (std::max<std::uint8_t>)(calculated_delay, 3U);
             calculated_delay = (std::max)(
                 calculated_delay,
                 host_authoritative_input_delay_frames(
-                    p99, burst_jitter, peer.loss_percent,
+                    p99, (std::max)(peer.jitter_ms, p99 - p50), peer.loss_percent,
                     method_ == ConnectionMethod::Lan));
         }
         input_delay_ = calculated_delay;
@@ -7331,6 +7472,8 @@ void DirectSession::clear_input_history_locked() {
     for (auto& revisions : received_input_revisions_) revisions.clear();
     local_input_echo_ms_ = local_input_consume_ms_ = 0U;
     measured_input_echoes_ = 0U;
+    *input_latency_ = {};
+    predicted_local_samples_ = mismatched_local_samples_ = superseded_local_samples_ = 0;
     refreshed_input_samples_ = stale_input_revisions_ = prediction_limit_waits_ = 0U;
 }
 
@@ -7353,6 +7496,8 @@ void DirectSession::store_local_input_locked(std::uint32_t frame,
             return;
         }
         position->second = input;
+        if (metadata.sampled_at.time_since_epoch().count() && !metadata.consumed)
+            ++superseded_local_samples_;
         ++metadata.revision;
         ++refreshed_input_samples_;
     } else {
@@ -7360,6 +7505,7 @@ void DirectSession::store_local_input_locked(std::uint32_t frame,
     }
     metadata.sampled_at = physical_sample ? std::chrono::steady_clock::now()
                                          : std::chrono::steady_clock::time_point{};
+    metadata.echoed = metadata.consumed = metadata.enqueued = false;
     timeline_.set_local(local_slot_, frame, input);
     // The host never needs to answer its own repair requests.
     while (is_host_ && local_history_.size() > 256U) {
@@ -7372,17 +7518,26 @@ void DirectSession::record_input_latency_locked(
     const protocol::FrameCommitPayload& commit, bool consumed) {
     const auto metadata = local_input_metadata_.find(commit.frame);
     if (metadata == local_input_metadata_.end() ||
-        metadata->second.sampled_at.time_since_epoch().count() == 0 ||
-        (commit.predicted_mask & (1U << local_slot_)) != 0) return;
+        metadata->second.sampled_at.time_since_epoch().count() == 0) return;
+    bool& recorded = consumed ? metadata->second.consumed : metadata->second.echoed;
+    if (recorded) return;
+    recorded = true;
+    if ((commit.predicted_mask & (1U << local_slot_)) != 0) {
+        if (consumed) ++predicted_local_samples_;
+        return;
+    }
     const auto sample = std::lower_bound(local_history_.begin(), local_history_.end(),
         commit.frame, [](const auto& entry, std::uint32_t value) { return entry.first < value; });
     if (sample == local_history_.end() || sample->first != commit.frame ||
-        sample->second != commit.inputs[local_slot_]) return;
+        sample->second != commit.inputs[local_slot_]) {
+        if (consumed) ++mismatched_local_samples_;
+        return;
+    }
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - metadata->second.sampled_at).count();
     const auto ms = static_cast<std::uint32_t>((std::clamp<std::int64_t>)(elapsed, 0, UINT32_MAX));
-    if (consumed) local_input_consume_ms_ = ms;
-    else { local_input_echo_ms_ = ms; ++measured_input_echoes_; }
+    if (consumed) { local_input_consume_ms_ = ms; input_latency_->consume.observe(ms); }
+    else { local_input_echo_ms_ = ms; ++measured_input_echoes_; input_latency_->echo.observe(ms); }
     // No cross-machine clock subtraction. The existing bounded recorder
     // samples once per second; no file I/O in this input path.
     if (commit.frame % 30U == 0U) failure_recorder().record(
@@ -7449,6 +7604,17 @@ void DirectSession::send_local_history(std::uint32_t newest_frame,
         newest_frame, reliable_repair, requested_first);
     const auto payload = protocol::encode_input_batch(batch);
     if (payload.empty()) return;
+    const auto now = std::chrono::steady_clock::now();
+    for (std::size_t index = 0; index < batch.inputs.size(); ++index) {
+        const auto found = local_input_metadata_.find(batch.first_frame + static_cast<std::uint32_t>(index));
+        if (found == local_input_metadata_.end()) continue;
+        auto& sample = found->second;
+        if (sample.enqueued || !sample.sampled_at.time_since_epoch().count()) continue;
+        sample.enqueued = true;
+        input_latency_->enqueue.observe(static_cast<std::uint32_t>(
+            (std::clamp<std::int64_t>)(std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - sample.sampled_at).count(), 0, UINT32_MAX)));
+    }
     send_to(host_address_, reliable_repair
             ? protocol::MessageType::InputRepair
             : protocol::MessageType::Input,
@@ -7888,7 +8054,8 @@ bool DirectSession::apply_frame_correction_locked(std::string& error) {
 bool DirectSession::send_authoritative_state(
     const PeerAddress* destination, std::uint32_t frame,
     std::span<const std::uint8_t> state, std::uint16_t requested_chunks,
-    protocol::MessageType message_type, bool live_replica) {
+    protocol::MessageType message_type, bool live_replica,
+    const PreparedStateWire* prepared) {
     if (!is_host_ || state.empty() ||
         state.size() > kMaximumAuthoritativeStateBytes) return false;
     const std::size_t maximum_datagram_bytes =
@@ -7900,14 +8067,15 @@ bool DirectSession::send_authoritative_state(
                      maximum_datagram_bytes - snapshot_headers)
         : 900U;
     std::vector<std::uint8_t> wire_state;
-    if (!live_replica && checkpoint_encoding_ &&
+    if (prepared) wire_state = prepared->bytes;
+    if (!prepared && !live_replica && checkpoint_encoding_ &&
         checkpoint_encoding_->epoch == scene_epoch_ && checkpoint_encoding_->frame == frame &&
         checkpoint_encoding_->source.size() == state.size() &&
         std::equal(state.begin(), state.end(), checkpoint_encoding_->source.begin())) {
         wire_state = checkpoint_encoding_->wire;
         ++checkpoint_encoding_cache_hits_;
     }
-    if (live_replica && live_replica_keyframe_frame_ &&
+    if (!prepared && live_replica && live_replica_keyframe_frame_ &&
         *live_replica_keyframe_frame_ < frame &&
         !live_replica_keyframe_state_.empty()) {
         wire_state = encode_authoritative_state_delta_wire(
@@ -7927,7 +8095,7 @@ bool DirectSession::send_authoritative_state(
                                    chunk_bytes;
     if (count_size == 0U || count_size > 16U) return false;
     const auto count = static_cast<std::uint16_t>(count_size);
-    const std::uint64_t checksum = authoritative_state_checksum(wire_state);
+    const std::uint64_t checksum = prepared ? prepared->checksum : authoritative_state_checksum(wire_state);
     const std::uint32_t wire_frame = live_replica
         ? live_replica_wire_frame(frame) : frame;
     for (std::uint16_t index = 0U; index < count; ++index) {
@@ -8213,6 +8381,7 @@ void DirectSession::update_peer_metrics(PeerRecord& peer, std::uint64_t token) {
     peer.jitter_ms = peer.pings_received == 0U
         ? 0.0 : peer.jitter_ms * 0.75 + delta * 0.25;
     peer.rtt_samples[peer.rtt_sample_cursor] = measured;
+    peer.rtt_sample_times[peer.rtt_sample_cursor] = std::chrono::steady_clock::now();
     peer.rtt_sample_cursor =
         (peer.rtt_sample_cursor + 1U) % peer.rtt_samples.size();
     peer.rtt_sample_count = (std::min)(peer.rtt_sample_count + 1U,
@@ -8234,6 +8403,37 @@ void DirectSession::queue_diagnostics_locked(std::string_view reason) {
     }
     auto result = std::make_shared<std::promise<std::string>>();
     auto text = failure_recorder().snapshot_text();
+    // Bounded, privacy-safe statistics at the existing diagnostic boundary,
+    // never per-packet disk I/O or timestamps from different machines.
+    std::ostringstream metrics;
+    const auto append_latency = [&metrics](const char* name, const LatencyHistogram& histogram) {
+        const auto value = histogram.summary();
+        metrics << "[netplay][latency] " << name << " samples=" << value.samples
+                << " p50/p95/p99/max-ms=" << value.p50_ms << '/' << value.p95_ms
+                << '/' << value.p99_ms << '/' << value.maximum_ms << '\n';
+    };
+    append_latency("sample-to-application-enqueue", input_latency_->enqueue);
+    append_latency("sample-to-commit-echo", input_latency_->echo);
+    append_latency("sample-to-local-consumption", input_latency_->consume);
+    metrics << "[netplay][latency] predicted=" << predicted_local_samples_
+            << " mismatched=" << mismatched_local_samples_
+            << " superseded=" << superseded_local_samples_
+            << " maximum-pump-us=" << maximum_network_pump_us_ << '\n';
+    const auto queue_now = std::chrono::steady_clock::now();
+    unsigned lane = 0;
+    for (const auto* queue : {&critical_outbound_, &repair_outbound_, &commit_outbound_,
+             &high_priority_outbound_, &authority_outbound_, &normal_priority_outbound_, &bulk_outbound_}) {
+        std::size_t bytes = 0;
+        std::int64_t age_ms = 0;
+        for (const auto& packet : *queue) {
+            bytes += packet.bytes.size();
+            age_ms = (std::max)(age_ms, static_cast<std::int64_t>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(queue_now - packet.enqueued).count()));
+        }
+        metrics << "[netplay][queue] lane=" << lane++ << " packets=" << queue->size()
+                << " bytes=" << bytes << " oldest-ms=" << age_ms << '\n';
+    }
+    text += metrics.str();
     if (!reason.empty()) text = "[netplay][failure] " + std::string(reason) + "\n" + text;
     replay_writes_.push_back(result->get_future());
     if (!replay_writer_.post([text = std::move(text), result] {
@@ -8297,7 +8497,7 @@ LaunchDescriptor DirectSession::make_launch_descriptor() const {
     descriptor.input_delay_frames = input_delay_;
     descriptor.synchronization = room.rules.synchronization;
     descriptor.rollback_window =
-        room.rules.synchronization == SynchronizationMode::Rollback
+        synchronization_has_prediction_window(room.rules.synchronization)
             ? room.rules.rollback_window
             : 0U;
     descriptor.host_control = room.rules.host_control;
@@ -8312,13 +8512,17 @@ LaunchDescriptor DirectSession::make_launch_descriptor() const {
 bool DirectSession::validate_start_descriptor(
     const protocol::StartPayload& payload, std::string& error) const {
     const LaunchDescriptor& descriptor = payload.descriptor;
+    if (const char* reason = experimental::runtime_admission_error(descriptor.synchronization)) {
+        error = reason;
+        return false;
+    }
     if (!valid_launch_descriptor(descriptor) ||
         payload.descriptor_hash != launch_descriptor_hash(descriptor) ||
         descriptor.match_id != match_id_ ||
         descriptor.compatibility_hash != manifest_hash(manifest_) ||
         descriptor.synchronization != room_view_.rules.synchronization ||
         descriptor.rollback_window !=
-            (room_view_.rules.synchronization == SynchronizationMode::Rollback
+            (synchronization_has_prediction_window(room_view_.rules.synchronization)
                  ? room_view_.rules.rollback_window
                  : 0U) ||
         local_slot_ >= kMaximumPlayers || !descriptor.occupied(local_slot_)) {

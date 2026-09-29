@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include "performance_capture.hpp"
 
 namespace dkr::runtime::track_performance {
 
@@ -18,7 +19,7 @@ inline bool enabled() {
         const char* setting = std::getenv("DKR_TRACK_PROFILE");
         return setting != nullptr && setting[0] == '1' && setting[1] == '\0';
     }();
-    return value;
+    return value || performance_capture::active();
 }
 
 struct Summary {

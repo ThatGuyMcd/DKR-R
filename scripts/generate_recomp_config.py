@@ -25,6 +25,7 @@ def main() -> int:
     parser.add_argument("--entrypoint", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--use-mdebug", action="store_true")
+    parser.add_argument("--water-profile", action="store_true", help="Compose checked water timing hooks")
     parser.add_argument("--functions-per-output-file", type=int,
                         help="Optional source granularity for isolated Patch Pipeline qualification")
     arguments = parser.parse_args()
@@ -36,6 +37,11 @@ def main() -> int:
     policy = json.loads(arguments.policy.read_text(encoding="utf-8"))
     if policy.get("schemaVersion") != 1:
         raise ValueError("unsupported Patch Pipeline policy schema")
+    from host_task_policy import verify_host_task_policy
+    verify_host_task_policy(policy, arguments.elf)
+    if arguments.water_profile:
+        from water_profile_policy import compose_water_profile
+        policy = compose_water_profile(policy, arguments.elf)
 
     manual = ", ".join(
         "{ name = %s, section = %s, vram = %s, size = %s }"

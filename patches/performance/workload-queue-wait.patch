@@ -1,0 +1,39 @@
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -20,2 +20,5 @@
+     WorkloadQueue::~WorkloadQueue() {
+-        threadsRunning = false;
++        {
++            const std::scoped_lock lock(cursorMutex, idleMutex);
++            threadsRunning = false;
++        }
+         cursorCondition.notify_all();
+@@ -40,17 +43,13 @@
+-        // Stall the thread until the barrier is lifted if we're trying to write on a workload being used by the GPU.
+-        bool waitForBarrier;
+-        do {
+-            const std::scoped_lock lock(cursorMutex);
+-            waitForBarrier = (nextWriteCursor == barrierCursor);
+-        } while (waitForBarrier);
+-
+         // Modify the cursor and notify anything waiting on the queue.
+         {
+-            const std::scoped_lock lock(cursorMutex);
++            std::unique_lock lock(cursorMutex);
++            cursorCondition.wait(lock, [&] {
++                return nextWriteCursor != barrierCursor || !threadsRunning;
++            });
++            if (!threadsRunning) return;
+             writeCursor = nextWriteCursor;
+         }
+@@ -440,4 +440,7 @@
+     void WorkloadQueue::threadAdvanceBarrier() {
+-        std::scoped_lock<std::mutex> cursorLock(cursorMutex);
+-        barrierCursor = (barrierCursor + 1) % workloads.size();
++        {
++            std::scoped_lock<std::mutex> cursorLock(cursorMutex);
++            barrierCursor = (barrierCursor + 1) % workloads.size();
++        }
++        cursorCondition.notify_all();
+     }

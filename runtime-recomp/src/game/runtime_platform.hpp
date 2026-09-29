@@ -27,6 +27,7 @@ bool input_backend_switch_pending();
 #if DKR_RUNTIME_HAS_RT64
 ultramodern::renderer::WindowHandle create_window();
 ultramodern::renderer::WindowHandle prepare_window_for_game();
+void* prepare_window_for_launcher();
 void pump_window_events(void*);
 void* sdl_window();
 bool handle_window_shortcut(const void* event, bool renderer_active);

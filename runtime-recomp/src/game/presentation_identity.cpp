@@ -1,5 +1,6 @@
 #include "presentation_identity.hpp"
 #include "revision_addresses.hpp"
+#include "water_scroll_policy.hpp"
 
 #include "recomp.h"
 #include "finish_presentation_policy.hpp"
@@ -113,6 +114,8 @@ struct MatrixBinding {
     bool interpolate_vertices = false;
     bool interpolate_texcoords = false;
     bool interpolate_tiles = false;
+    bool procedural_water = false;
+    std::uint8_t water_scroll_tag = 0U;
 };
 
 struct SubmittedFrame {
@@ -661,6 +664,8 @@ dkr::runtime::presentation::matrix_interpolation(
             it->second.interpolate_vertices,
             it->second.interpolate_texcoords,
             it->second.interpolate_tiles,
+            it->second.procedural_water,
+            it->second.water_scroll_tag,
         };
     }
     return {};
@@ -1338,7 +1343,10 @@ extern "C" void dkr_presentation_wave_matrix(
         MatrixBinding{
             dkr::runtime::presentation::with_camera_continuity(
                 identity, g_current_camera_identity),
-            0U, true, true, true});
+            0U, true, true, true, true,
+            dkr::runtime::water::scroll_tag(
+                ReadU32(rdram, dkr::runtime::revision_addresses::WaveTexUVMaskX),
+                ReadU32(rdram, dkr::runtime::revision_addresses::WaveTexUVMaskY))});
 }
 
 extern "C" void dkr_presentation_object_spawned(std::uint8_t*,

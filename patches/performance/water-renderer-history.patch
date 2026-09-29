@@ -1,0 +1,13 @@
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -5,3 +5,4 @@
+ #include "rt64_workload_queue.h"
++#include "water_performance.hpp"
+ 
+ #include "common/rt64_thread.h"
+@@ -1188,2 +1189,4 @@
+                 workloadProfiler.log();
++                dkr::runtime::water::publish_history(matchingProfiler, rendererCPUProfiler,
++                    rendererGPUProfiler, workloadProfiler);
+                 workloadProfiler.reset();

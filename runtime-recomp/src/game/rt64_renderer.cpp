@@ -1,4 +1,12 @@
 #include "rt64_renderer.hpp"
+#include "render_power_policy.hpp"
+#include "performance_trace.hpp"
+#include "water_performance.hpp"
+#include "graphics_health.hpp"
+#if defined(__ANDROID__)
+#include "android_surface_state.hpp"
+#endif
+#include "mobile_graphics_preset.hpp"
 #include "render/rt64_generated_mip_config.h"
 
 #include "game_registration.hpp"
@@ -30,6 +38,13 @@
 #include "ultramodern/ultramodern.hpp"
 
 #include <SDL.h>
+#if defined(__ANDROID__)
+#include <SDL_syswm.h>
+#include <SDL_system.h>
+#include "../android/android_storage.hpp"
+#include "android_pipeline_cache.hpp"
+#include <stdexcept>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -176,6 +191,11 @@ int DetectDisplayRate() {
 
 void ApplyConfig(RT64::Application& application,
                  const ultramodern::renderer::GraphicsConfig& config) {
+    application.userConfig.idleWorkActive = dkr::runtime::render_power::gpu_keep_awake.load();
+#if defined(__ANDROID__)
+    std::fprintf(stderr, "[graphics][power] Android GPU keep-awake=%s\n",
+                 application.userConfig.idleWorkActive ? "on" : "off");
+#endif
     const bool modern = dkr::runtime::enhancements::modern_presentation_enabled();
     const auto effective_api = modern
         ? config.api_option
@@ -254,6 +274,17 @@ void ApplyConfig(RT64::Application& application,
             : config.hpfb_option == ultramodern::renderer::HighPrecisionFramebuffer::Off
                 ? RT64::UserConfiguration::InternalColorFormat::Standard
                 : RT64::UserConfiguration::InternalColorFormat::Automatic;
+#if defined(__ANDROID__)
+    dkr::runtime::android_surface::target_rate.store(g_effective_refresh_target);
+    std::fprintf(stderr,
+        "[android][graphics] resolution-mode=%u multiplier=%.1f downsample=%d "
+        "msaa=%u precision=%u target=%d display=%d\n",
+        static_cast<unsigned>(application.userConfig.resolution),
+        application.userConfig.resolutionMultiplier,
+        std::max(config.ds_option, 1), static_cast<unsigned>(config.msaa_option),
+        static_cast<unsigned>(config.hpfb_option), g_effective_refresh_target,
+        g_detected_display_rate);
+#endif
 }
 
 ultramodern::renderer::SetupResult MapSetupResult(RT64::Application::SetupResult result) {
@@ -303,7 +334,17 @@ dkr::runtime::RT64Renderer::RT64Renderer(
     RT64::Application::Core core{};
 #if defined(_WIN32)
     core.window = window_handle.window;
-#elif defined(__linux__) || defined(__ANDROID__)
+#elif defined(__ANDROID__)
+    SDL_SysWMinfo native_window{};
+    SDL_VERSION(&native_window.version);
+    if (!window_handle || !SDL_GetWindowWMInfo(window_handle, &native_window) ||
+        !native_window.info.android.window) {
+        std::fprintf(stderr, "[boot][android] no game surface: %s\n", SDL_GetError());
+        setup_result = ultramodern::renderer::SetupResult::GraphicsAPINotFound;
+        return;
+    }
+    core.window = native_window.info.android.window;
+#elif defined(__linux__)
     core.window = window_handle;
 #elif defined(__APPLE__)
     core.window.window = window_handle.window;
@@ -344,10 +385,34 @@ dkr::runtime::RT64Renderer::RT64Renderer(
     application_config.appId = "dkr-port";
     application_config.useConfigurationFile = false;
     application_config.detectDataPath = true;
+#if defined(__ANDROID__)
+    // Desktop path detection can select /data/.dkr-port on Android and throw
+    // from RT64's constructor before its setup error handling is reached.
+    // Supply the existing public configuration hook; do not modify RT64.
+    application_config.detectDataPath = false;
+    std::string storage_error;
+    if (!android::prepare_renderer_directory(SDL_AndroidGetInternalStoragePath(),
+                                            application_config.dataPath, storage_error)) {
+        std::fprintf(stderr, "[boot][android] %s\n", storage_error.c_str());
+        setup_result = ultramodern::renderer::SetupResult::GraphicsAPINotFound;
+        return;
+    }
+    std::fprintf(stderr, "[boot][android] private renderer storage ready\n");
+    android_pipeline_cache::directory = application_config.dataPath / "pipeline-cache";
+#endif
     auto config = ultramodern::renderer::get_graphics_config();
-    RT64::setDefaultSamplerAnisotropy(
+#if defined(__ANDROID__)
+    if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
+        dkr::runtime::mobile_graphics::apply_accurate_budget(config);
+    }
+#endif
+    const auto effective_anisotropy =
         static_cast<std::uint32_t>(
-            dkr::runtime::enhancements::anisotropy_level()));
+#if defined(__ANDROID__)
+            !dkr::runtime::enhancements::modern_presentation_enabled() ? 4 :
+#endif
+            dkr::runtime::enhancements::anisotropy_level());
+    RT64::setDefaultSamplerAnisotropy(effective_anisotropy);
     const float texture_lod_bias =
         dkr::runtime::enhancements::effective_texture_lod_bias();
     RT64::setDefaultSamplerMipLODBias(texture_lod_bias);
@@ -357,9 +422,9 @@ dkr::runtime::RT64Renderer::RT64Renderer(
         RT64::generatedMipSessionEnabled() ? "on" : "off",
         RT64::generatedMipSamplingEnabled() ? "on" : "off");
     std::fprintf(stderr,
-                 "[boot][graphics] texture_lod_bias=%+.2f anisotropy=%d\n",
+                 "[boot][graphics] texture_lod_bias=%+.2f anisotropy=%u\n",
                  static_cast<double>(texture_lod_bias),
-                 dkr::runtime::enhancements::anisotropy_level());
+                 effective_anisotropy);
     const auto create_application = [&] {
         const auto application_started_at =
             dkr::runtime::startup_performance::Clock::now();
@@ -396,10 +461,18 @@ dkr::runtime::RT64Renderer::RT64Renderer(
 #endif
     auto setup_started_at = dkr::runtime::startup_performance::Clock::now();
     setup_result = MapSetupResult(application_->setup(thread_id));
+#if defined(__ANDROID__)
+    if (dkr::runtime::graphics_health::failed()) {
+        setup_result = ultramodern::renderer::SetupResult::GraphicsDeviceNotFound;
+    }
+#endif
     dkr::runtime::startup_performance::report("rt64-setup",
                                                setup_started_at);
     chosen_api = MapGraphicsAPI(application_->chosenGraphicsAPI);
     if (setup_result != ultramodern::renderer::SetupResult::Success &&
+#if defined(__ANDROID__)
+        !dkr::runtime::graphics_health::failed() &&
+#endif
         config.api_option != ultramodern::renderer::GraphicsApi::Auto) {
         const auto failed_api = config.api_option;
         const auto failed_result = setup_result;
@@ -544,13 +617,32 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task,
     if (ExperimentalInterpolationEnabled()) {
         application_->state->setRefreshRate(30);
     }
+#if defined(__ANDROID__)
+    if (dkr::runtime::graphics_health::failed()) return;
+    try {
+    dkr::runtime::graphics_health::TaskBoundary boundary;
+#endif
     if (track_performance::enabled()) {
         const auto start = track_performance::Clock::now();
         f3ddkr_.process(*application_, *task);
         record_track_performance(rdram_snapshot, start);
     } else {
+        track_capture_.count = 0; // A later opt-in capture must not span the idle gap.
         f3ddkr_.process(*application_, *task);
     }
+#if defined(__ANDROID__)
+    } catch (const dkr::runtime::graphics_health::TaskAborted&) {
+        // fullSync may have scheduled CPU uploads before descriptor creation.
+        // Drain them while the task snapshot and its draw buffers still live.
+        application_->drawDataUploader->wait();
+        application_->transformsUploader->wait();
+        application_->tilesUploader->wait();
+        application_->state->framebufferRenderer->waitForUploaders();
+        // Return normally so the runtime still completes this task's DP edge.
+        // The SDL thread reports the retained failure and requests shutdown.
+        std::fprintf(stderr, "[android][graphics] stopped failed display-list task\n");
+    }
+#endif
 }
 
 void dkr::runtime::RT64Renderer::record_track_performance(
@@ -580,36 +672,25 @@ void dkr::runtime::RT64Renderer::record_track_performance(
         std::chrono::duration<double, std::milli>(now - start).count();
     if (capture.count < kSamples) return;
 
-    std::array<Samples, 4> history{};
-    bool available = false;
-    if (application_->workloadQueue != nullptr) {
-        auto& queue = *application_->workloadQueue;
-        // Writers own this mutex during matching and rendering. Diagnostics
-        // must never wait for it, alter its timers or retain references after
-        // release. Copy only bounded history, then format/log outside it.
-        std::unique_lock lock(queue.threadMutex, std::try_to_lock);
-        if (lock.owns_lock()) {
-            const RT64::ProfilingTimer* timers[] = {
-                &queue.matchingProfiler, &queue.rendererCPUProfiler,
-                &queue.rendererGPUProfiler, &queue.workloadProfiler};
-            for (std::size_t i = 0U; i < history.size(); ++i) {
-                std::copy_n(timers[i]->data(),
-                    std::min(timers[i]->size(), kSamples), history[i].begin());
-            }
-            available = true;
-        }
-    }
+    // The worker publishes completed timer history; never contend on the
+    // renderer's long-held threadMutex or read its live vectors cross-thread.
+    const auto published = water::read_history();
+    const auto& history = published.values;
+    const double history_age_ms = published.sequence ?
+        std::chrono::duration<double, std::milli>(track_performance::Clock::now() - published.published).count() : -1.0;
+    const bool available = published.sequence != 0U && history_age_ms < 2500.0;
     if (!available) ++capture.unavailable_windows;
     const auto decode = summarize(capture.decode_ms);
     const double seconds = std::chrono::duration<double>(now - capture.started).count();
     std::fprintf(stderr,
         "[perf][track] scene=%u map=%u menu=%u tasks=%zu seconds=%.3f "
         "task-hz=%.2f decode-ms(p50/p95/p99)=%.3f/%.3f/%.3f "
-        "renderer-history-available=%u unavailable-windows=%llu\n",
+        "renderer-history-available=%u unavailable-windows=%llu history-sequence=%llu history-age-ms=%.3f\n",
         scene, map, menu, capture.count, seconds,
         seconds > 0.0 ? static_cast<double>(capture.count - 1U) / seconds : 0.0,
         decode.median, decode.p95, decode.p99, available ? 1U : 0U,
-        static_cast<unsigned long long>(capture.unavailable_windows));
+        static_cast<unsigned long long>(capture.unavailable_windows),
+        static_cast<unsigned long long>(published.sequence), history_age_ms);
     const char* labels[] = {"matching", "render-cpu", "render-gpu", "workload"};
     if (available) {
         for (std::size_t i = 0U; i < history.size(); ++i) {
@@ -625,15 +706,31 @@ void dkr::runtime::RT64Renderer::record_track_performance(
 }
 
 void dkr::runtime::RT64Renderer::update_screen() {
+#if defined(__ANDROID__)
+    if (dkr::runtime::graphics_health::failed()) return;
+#endif
     std::scoped_lock presentation_lock(presentation_mutex_);
     if (application_ == nullptr) {
         return;
+    }
+    const bool keep_awake = render_power::gpu_keep_awake.load();
+    if (application_->userConfig.idleWorkActive != keep_awake) {
+        application_->userConfig.idleWorkActive = keep_awake;
+        application_->updateUserConfig(false);
+        std::fprintf(stderr, "[graphics][power] GPU keep-awake=%s\n", keep_awake ? "on" : "off");
     }
     dkr::runtime::telemetry::record_vi_present();
     RT64::MipWaitFeedbackScope mipFeedback([this] { present_mipmap_loading(*application_); });
     if (application_->sharedQueueResources != nullptr) {
         const std::uint64_t completed = application_->sharedQueueResources->
             totalPresentations.load(std::memory_order_relaxed);
+        if (completed > 0 && !first_successful_presentation_reported_) {
+            first_successful_presentation_reported_ = true;
+#if defined(__ANDROID__)
+            dkr::runtime::graphics_health::first_presentation.store(true);
+#endif
+            dkr::runtime::startup_performance::mark("first-successful-presentation");
+        }
         dkr::runtime::telemetry::record_presented_frames(
             dkr::runtime::presentation_counter::consume_delta(
                 completed, completed_presentations_));
@@ -650,6 +747,22 @@ void dkr::runtime::RT64Renderer::update_screen() {
         dkr::runtime::telemetry::record_presented_frames(1U);
     }
     ++present_count_;
+#if defined(__ANDROID__)
+    constexpr bool report_performance = true;
+#else
+    static const bool report_performance = std::getenv("DKR_POWER_PROFILE") != nullptr;
+#endif
+    const auto report_now = std::chrono::steady_clock::now();
+    if (report_performance && report_now - last_android_report_ >= std::chrono::seconds(5)) {
+        last_android_report_ = report_now;
+        performance_trace::report();
+        const auto metrics = dkr::runtime::telemetry::metrics();
+        std::fprintf(stderr,
+            "[graphics][performance] presented=%.1f sim=%.1f graphics=%.1f "
+            "vi=%.1f target=%d scale=%.1f\n",
+            metrics.presented_fps, metrics.simulation_hz, metrics.graphics_hz,
+            metrics.vi_hz, g_effective_refresh_target, get_resolution_scale());
+    }
     if (present_count_ == 1) {
         dkr::runtime::startup_performance::mark("first-vi-received");
         std::fprintf(stderr, "[boot] VI initialized; starting recompiled DKR entrypoint\n");
@@ -666,7 +779,7 @@ void dkr::runtime::RT64Renderer::update_screen() {
     }
     if (present_count_ == 1) {
         dkr::runtime::startup_performance::mark(
-            "first-game-frame-presented");
+            "first-vi-update-completed");
     }
     // Preserve DKR's proven VI/DP scheduling path exactly; constructing the
     // next overlay frame after the game present keeps UI work out of the
@@ -679,6 +792,9 @@ void dkr::runtime::RT64Renderer::update_screen() {
 }
 
 void dkr::runtime::RT64Renderer::service_online_wait_presentation() {
+#if defined(__ANDROID__)
+    if (dkr::runtime::graphics_health::failed()) return;
+#endif
     constexpr auto kWaitPresentationInterval = std::chrono::milliseconds(33);
     if (!dkr::runtime::netplay::online_wait_active()) {
         wait_replay_deferred_logged_ = false;

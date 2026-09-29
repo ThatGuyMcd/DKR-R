@@ -1,0 +1,19 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -11,1 +11,2 @@
++#include "android_texture_copy_policy.hpp"
+ #include "plume_vulkan.h"
+@@ -3201,2 +3202,12 @@
+     void VulkanCommandList::copyTextureRegion(const RenderTextureCopyLocation &dstLocation, const RenderTextureCopyLocation &srcLocation, uint32_t dstX, uint32_t dstY, uint32_t dstZ, const RenderBox *srcBox) {
++        // Reject unimplemented directions before dereferencing resource types.
++        // Do not silently skip a copy or pretend GPU work completed.
++        if (!dkr::runtime::android_graphics::supported_texture_copy(dstLocation, srcLocation)) {
++            fprintf(stderr, "[Android] Unsupported or invalid texture copy: dst-type=%u src-type=%u dst-texture=%d src-texture=%d src-buffer=%d\n",
++                unsigned(dstLocation.type), unsigned(srcLocation.type), dstLocation.texture != nullptr,
++                srcLocation.texture != nullptr, srcLocation.buffer != nullptr);
++            fflush(stderr);
++            dkr::runtime::graphics_health::quarantine_resource(
++                dkr::runtime::graphics_health::Stage::TextureCopy, VK_ERROR_FEATURE_NOT_PRESENT);
++        }
+         endActiveRenderPass();

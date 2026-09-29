@@ -1,0 +1,22 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -8,2 +8,4 @@
++#include "render_pass_policy.hpp"
++#include "render_metrics.hpp"
+ #include <algorithm>
+ #include <cmath>
+@@ -3098,3 +3100,10 @@
+     void VulkanCommandList::setFramebuffer(const RenderFramebuffer *framebuffer) {
++        if (dkr::runtime::render_pass::redundant_binding(
++                static_cast<const VulkanFramebuffer *>(framebuffer), targetFramebuffer, activeRenderPass != VK_NULL_HANDLE)) {
++            // Binding the same live target changes no attachment, dependency,
++            // clear operation or pipeline state. Explicit barriers still flush.
++            dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::RedundantBind);
++            return;
++        }
+         endActiveRenderPass();
+@@ -3479,3 +3488,4 @@
+             vkCmdBeginRenderPass(vk, &beginInfo, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
++            dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::PassBegin);
+             activeRenderPass = targetFramebuffer->renderPass;

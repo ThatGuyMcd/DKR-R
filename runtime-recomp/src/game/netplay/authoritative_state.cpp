@@ -1,6 +1,7 @@
 #include "authoritative_state.hpp"
 
 #include "../authored_state_contract.hpp"
+#include "../performance_trace.hpp"
 #include "revision_addresses.hpp"
 
 #include <algorithm>
@@ -846,6 +847,7 @@ bool capture_authoritative_state(const std::uint8_t* rdram,
                                  std::uint32_t frame,
                                  std::vector<std::uint8_t>& output,
                                  std::string& error) {
+    performance_trace::Scope profile(performance_trace::Region::OnlineStateCapture);
     output.clear();
     if (rdram == nullptr || rdram_size < kRetailRdramSize) {
         error = "RDRAM is unavailable for authoritative state capture.";
@@ -1018,6 +1020,7 @@ bool apply_authoritative_state_impl(
     bool allow_unmatched_actors, bool preserve_lifecycle,
     std::uint32_t& unmatched_actors,
     std::string& error) {
+    performance_trace::Scope profile(performance_trace::Region::OnlineStateApply, snapshot.size());
     unmatched_actors = 0U;
     if (rdram == nullptr || rdram_size < kRetailRdramSize ||
         snapshot.size() > kMaximumAuthoritativeStateBytes) {

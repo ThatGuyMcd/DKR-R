@@ -1,0 +1,157 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -11,2 +11,3 @@
+ #include "plume_vulkan.h"
++#include "render_resource_policy.hpp"
++#include "graphics_health.hpp"
+ 
+@@ -2173,1 +2174,5 @@
+-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
++        res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
++        if (res != VK_SUCCESS) {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Surface, res);
++            fprintf(stderr, "[Android] Surface capability query failed: %d\n", res);
++            return;
++        }
+ 
+@@ -2182,3 +2187,9 @@
+             pickedAlphaFlag = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+         }
++        else if (surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) {
++            pickedAlphaFlag = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
++        }
++        else if (surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) {
++            pickedAlphaFlag = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
++        }
+         else {
+@@ -2190,5 +2201,4 @@
+-        // Make sure maxImageCount is never below minImageCount, as it's allowed to be zero.
+-        surfaceCapabilities.maxImageCount = std::max(surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+-
+-        // Clamp the requested buffer count between the bounds of the surface capabilities.
+-        this->desc.textureCount = std::clamp(desc.textureCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
++        // Vulkan defines a zero maximum as unbounded, not as the minimum.
++        this->desc.textureCount = dkr::runtime::render_resources::image_count(
++            desc.textureCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+ 
+@@ -2240,13 +2250,1 @@
+-        // Pick an alpha compositing mode, prefer opaque over inherit.
+-        if (surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
+-            pickedAlphaFlag = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+-        }
+-        else if (surfaceCapabilities.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) {
+-            pickedAlphaFlag = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+-        }
+-        else {
+-            fprintf(stderr, "No supported alpha compositing mode was found.\n");
+-            return;
+-        }
++        // Alpha mode was selected from all supported modes above.
+ 
+@@ -2313,3 +2313,5 @@
+     bool VulkanSwapChain::resize() {
+         getWindowSize(width, height);
++        requestedWindowWidth = width;
++        requestedWindowHeight = height;
+ 
+@@ -2320,14 +2320,32 @@
+-        // Destroy any image view references to the current swap chain.
+-        releaseImageViews();
+-
+         // Query surface capabilities to get the valid extent bounds.
+         VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
+-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(commandQueue->device->physicalDevice, surface, &surfaceCapabilities);
++        const VkResult capsResult = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(commandQueue->device->physicalDevice, surface, &surfaceCapabilities);
++        if (capsResult != VK_SUCCESS) {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Surface, capsResult);
++            fprintf(stderr, "[Android] Surface resize query failed: %d\n", capsResult);
++            return false;
++        }
++        // The final presentation pass only writes a color attachment. It does
++        // not sample or transfer into swapchain images. Those optional usage
++        // bits reject otherwise usable Android surfaces on several drivers.
++        if (!(surfaceCapabilities.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Surface, VK_ERROR_FORMAT_NOT_SUPPORTED);
++            return false;
++        }
++        if (!(surfaceCapabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Surface, VK_ERROR_FEATURE_NOT_PRESENT);
++            fprintf(stderr, "[Android] Surface cannot present unrotated content (transforms=%x current=%x).\n",
++                surfaceCapabilities.supportedTransforms, surfaceCapabilities.currentTransform);
++            return false;
++        }
++        desc.textureCount = dkr::runtime::render_resources::image_count(
++            desc.textureCount, surfaceCapabilities.minImageCount, surfaceCapabilities.maxImageCount);
+ 
+         // Clamp the extent to the surface capabilities' min/max bounds.
+         // This is required because the window size may differ from the valid surface extent
+         // (e.g., due to window decorations, compositor behavior, or timing issues).
+         width = std::clamp(width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
+         height = std::clamp(height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
++        if (surfaceCapabilities.currentExtent.width != UINT32_MAX) {
++            width = surfaceCapabilities.currentExtent.width;
++            height = surfaceCapabilities.currentExtent.height;
++        }
++        if (width == 0 || height == 0) return false;
++        releaseImageViews();
+ 
+         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+@@ -2340,1 +2358,1 @@
+-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
++        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+@@ -2349,4 +2367,9 @@
+-        VkResult res = vkCreateSwapchainKHR(commandQueue->device->vk, &createInfo, nullptr, &vk);
++        VkSwapchainKHR replacement = VK_NULL_HANDLE;
++        VkResult res = vkCreateSwapchainKHR(commandQueue->device->vk, &createInfo, nullptr, &replacement);
+         if (res != VK_SUCCESS) {
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Swapchain, res);
+             fprintf(stderr, "vkCreateSwapchainKHR failed with error code 0x%X.\n", res);
++            // Passing oldSwapchain retires it even when creation fails.
++            // Never acquire from the retired chain on the next iteration.
++            releaseSwapChain();
+             return false;
+         }
++        vk = replacement;
++        fprintf(stderr, "[Android] Surface requested=%ux%u current=%ux%u bounds=%ux%u..%ux%u transforms=%x currentTransform=%x preTransform=%x\n",
++            requestedWindowWidth, requestedWindowHeight, surfaceCapabilities.currentExtent.width, surfaceCapabilities.currentExtent.height,
++            surfaceCapabilities.minImageExtent.width, surfaceCapabilities.minImageExtent.height,
++            surfaceCapabilities.maxImageExtent.width, surfaceCapabilities.maxImageExtent.height,
++            surfaceCapabilities.supportedTransforms, surfaceCapabilities.currentTransform, createInfo.preTransform);
++        fprintf(stderr, "[Android] Swapchain %ux%u images=%u usage=%x format=%u\n",
++            width, height, desc.textureCount, createInfo.imageUsage, createInfo.imageFormat);
+ 
+@@ -2413,1 +2440,1 @@
+-        return (vk == VK_NULL_HANDLE) || (windowWidth != width) || (windowHeight != height) || (requiredPresentMode != createdPresentMode);
++        return (vk == VK_NULL_HANDLE) || (windowWidth != requestedWindowWidth) || (windowHeight != requestedWindowHeight) || (requiredPresentMode != createdPresentMode);
+     }
+@@ -2490,3 +2520,7 @@
+         VkResult res = vkAcquireNextImageKHR(commandQueue->device->vk, vk, UINT64_MAX, interfaceSemaphore->vk, VK_NULL_HANDLE, textureIndex);
+         if ((res != VK_SUCCESS) && (res != VK_SUBOPTIMAL_KHR)) {
++            if (res < 0 && res != VK_ERROR_OUT_OF_DATE_KHR &&
++                dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Acquire, res)) {
++                fprintf(stderr, "[Android] Swapchain acquire failed: %d\n", res);
++            }
+             return false;
+         }
+@@ -3629,2 +3678,3 @@
+         if (res != VK_SUCCESS) {
+-            fprintf(stderr, "vkQueueSubmit failed with error code 0x%X.\n", res);
++            if (dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Submit, res))
++                fprintf(stderr, "vkQueueSubmit failed with error code 0x%X.\n", res);
+             return;
+@@ -3640,2 +3690,3 @@
+         if (res != VK_SUCCESS) {
+-            fprintf(stderr, "vkWaitForFences failed with error code 0x%X.\n", res);
++            if (dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::Fence, res))
++                fprintf(stderr, "vkWaitForFences failed with error code 0x%X.\n", res);
+             return;
+diff --git a/src/contrib/plume/plume_vulkan.h b/src/contrib/plume/plume_vulkan.h
+--- a/src/contrib/plume/plume_vulkan.h
++++ b/src/contrib/plume/plume_vulkan.h
+@@ -234,2 +234,4 @@
+         uint32_t height = 0;
++        uint32_t requestedWindowWidth = 0;
++        uint32_t requestedWindowHeight = 0;
+         VkSwapchainCreateInfoKHR createInfo = {};

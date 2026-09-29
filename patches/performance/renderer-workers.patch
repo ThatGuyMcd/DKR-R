@@ -1,0 +1,42 @@
+diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -333,1 +333,10 @@
+         swapChain = presentGraphicsWorker->commandQueue->createSwapChain(swapChainDesc);
++#ifdef __ANDROID__
++        // Validate presentation before compiling pipelines or starting audio.
++        // A surface rejected by the driver must not become an audio-only game.
++        if (!swapChain || !swapChain->resize()) {
++            fprintf(stderr, "[Android] Vulkan presentation preflight failed. Export startup logs from About.\n");
++            return SetupResult::GraphicsDeviceNotFound;
++        }
++#endif
+ 
+@@ -350,2 +350,10 @@
+-        const uint32_t rasterShaderThreads = std::max(threadsAvailable / 2U, 1U);
+-        const uint32_t ubershaderThreads = uint32_t(std::max(int(threadsAvailable) - 2, 1));
++#ifdef __ANDROID__
++        constexpr bool mobileBudget = true;
++#else
++        constexpr bool mobileBudget = false;
++#endif
++        const auto workerBudget = dkr::runtime::render_resources::workers(threadsAvailable, mobileBudget);
++        const uint32_t rasterShaderThreads = workerBudget.raster;
++        const uint32_t ubershaderThreads = workerBudget.uber;
++        fprintf(stderr, "[perf] renderer workers: raster=%u uber=%u texture=%u\n",
++            workerBudget.raster, workerBudget.uber, workerBudget.texture);
+         rasterShaderCache = std::make_unique<RasterShaderCache>(rasterShaderThreads, ubershaderThreads);
+@@ -362,1 +370,1 @@
+-        const uint32_t textureCacheThreads = std::max(threadsAvailable / 4U, 1U);
++        const uint32_t textureCacheThreads = workerBudget.texture;
+         textureCache = std::make_unique<TextureCache>(textureDirectWorker.get(), textureCopyWorker.get(), textureCacheThreads, shaderLibrary.get());
+@@ -369,2 +377,8 @@
+         uint64_t texturePoolSize = std::max((deviceDescription.dedicatedVideoMemory * 2) / 3, MinimumTexturePoolSize);
++#ifdef __ANDROID__
++        // Mobile GPUs share system RAM. This is an eviction budget, not an
++        // eager allocation; avoid retaining most of a handheld's memory.
++        texturePoolSize = MinimumTexturePoolSize;
++#endif
++        fprintf(stderr, "[perf] replacement texture cache budget: %llu MiB\n",
++            static_cast<unsigned long long>(texturePoolSize / (1024 * 1024)));
+         textureCache->setReplacementPoolMaxSize(texturePoolSize);

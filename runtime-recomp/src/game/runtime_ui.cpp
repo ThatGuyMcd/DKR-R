@@ -1,4 +1,11 @@
 #include "runtime_ui.hpp"
+#include "render_power_policy.hpp"
+#include "performance_trace.hpp"
+#include "mobile_graphics_preset.hpp"
+#if defined(__ANDROID__)
+#include "../android/android_platform.hpp"
+#include "../android/mobile_ui.hpp"
+#endif
 #include "runtime_mipmap_modal.hpp"
 
 #include "game_registration.hpp"
@@ -28,6 +35,7 @@
 #include "runtime_netplay.hpp"
 #include "netplay/friend_service.hpp"
 #include "netplay/netplay_build_identity.hpp"
+#include "netplay/experimental_runtime_admission.hpp"
 #include "netplay/netplay_pacing_policy.hpp"
 #include "runtime_platform.hpp"
 #include "runtime_support.hpp"
@@ -423,12 +431,26 @@ double UiAnimationSeconds() {
 }
 bool g_online_guide_do_not_show_again = true;
 bool g_online_guide_reopen_requested = false;
+#if defined(__ANDROID__)
+// Conservative first-use defaults only. The settings loader restores all
+// existing choices, and explicit presets below disclose the quality tradeoff.
+RefreshRate g_modern_refresh_mode = RefreshRate::Manual;
+#else
 RefreshRate g_modern_refresh_mode = RefreshRate::Display;
+#endif
 int g_modern_refresh_target = 60;
+#if defined(__ANDROID__)
+Resolution g_modern_resolution = Resolution::Original2x;
+#else
 Resolution g_modern_resolution = Resolution::Auto;
+#endif
 AspectRatio g_modern_aspect = AspectRatio::Expand;
 Antialiasing g_modern_antialiasing = Antialiasing::None;
+#if defined(__ANDROID__)
+HighPrecisionFramebuffer g_modern_high_precision_fb = HighPrecisionFramebuffer::Off;
+#else
 HighPrecisionFramebuffer g_modern_high_precision_fb = HighPrecisionFramebuffer::On;
+#endif
 GraphicsApi g_modern_graphics_api = GraphicsApi::Auto;
 int g_modern_downsample = 1;
 bool g_fps_overlay_enabled = false;
@@ -551,6 +573,11 @@ int g_online_host_control = static_cast<int>(
 int g_online_maximum_players = 2;
 int g_online_synchronization = static_cast<int>(
     dkr::runtime::netplay::SynchronizationMode::Rollback);
+bool g_online_experimental_rollback = false;
+dkr::runtime::netplay::SynchronizationMode CurrentOnlineSynchronization() {
+    return dkr::runtime::netplay::experimental::selected_mode(
+        g_online_synchronization, g_online_experimental_rollback);
+}
 int g_online_rollback_window = 10;
 bool g_online_automatic_delay = true;
 int g_online_manual_delay = 2;
@@ -1235,6 +1262,9 @@ void LoadLauncherFonts() {
         g_font_fps = g_font_controls != nullptr ? g_font_controls : body_font;
     }
     LoadBrandLogoIntoAtlas();
+#if defined(__ANDROID__)
+    dkr::runtime::mobile::install_context();
+#endif
 }
 
 class ControlFontScope {
@@ -1382,6 +1412,9 @@ void DrawPageHeading(const char* text, bool title = false,
     const float available_width =
         std::max(ImGui::GetContentRegionAvail().x, 1.0F);
     float size = size_override > 0.0F ? size_override : font->FontSize;
+#if defined(__ANDROID__)
+    size = std::min(size, 36.0F);
+#endif
     float tracking = size * (title ? 0.03F : 0.04F);
     float width = TrackedTextWidth(font, size, text, tracking);
     if (width > available_width) {
@@ -1455,6 +1488,10 @@ void ApplyProfileGraphics(GraphicsConfig& config,
     config.ds_option = 1;
     config.rr_option = RefreshRate::Original;
     config.rr_manual_value = 30;
+#if defined(__ANDROID__)
+    // Accurate retains original timing/HUD, not desktop-resolution GPU cost.
+    dkr::runtime::mobile_graphics::apply_accurate_budget(config);
+#endif
 }
 
 void SaveSettings() {
@@ -1508,6 +1545,7 @@ void SaveSettings() {
                << '\n';
         output << "modern_generate_texture_mipmaps="
                << (dkr::runtime::enhancements::generated_mipmaps_requested() ? 1 : 0) << '\n';
+        output << "gpu_keep_awake=" << (dkr::runtime::render_power::gpu_keep_awake.load() ? 1 : 0) << '\n';
         output << "fps_overlay_enabled=" << (g_fps_overlay_enabled ? 1 : 0) << '\n';
         output << "fps_overlay_position=" << g_fps_overlay_position << '\n';
         output << "fps_overlay_detail=" << g_fps_overlay_detail << '\n';
@@ -1674,6 +1712,7 @@ void SaveSettings() {
         output << "online_host_control=" << g_online_host_control << '\n';
         output << "online_maximum_players=" << g_online_maximum_players << '\n';
         output << "online_synchronization=" << g_online_synchronization << '\n';
+        output << "online_experimental_rollback=" << (g_online_experimental_rollback ? 1 : 0) << '\n';
         output << "online_rollback_window=" << g_online_rollback_window << '\n';
         output << "online_automatic_delay=" << (g_online_automatic_delay ? 1 : 0) << '\n';
         output << "online_manual_delay=" << g_online_manual_delay << '\n';
@@ -1949,6 +1988,12 @@ void LoadSettings() {
         if (player_gyro_key) continue;
         try {
             const int number = std::stoi(value);
+            // Keep the opt-in independent of the legacy 0/1 setting (and of
+            // the long compatibility parser below).
+            if (key == "online_experimental_rollback") {
+                g_online_experimental_rollback = number == 1;
+                continue;
+            }
             bool shortcut_setting = false;
             for (std::size_t index = 0; index < kShortcutSettingNames.size(); ++index) {
                 const std::string prefix =
@@ -1968,6 +2013,10 @@ void LoadSettings() {
                 break;
             }
             if (shortcut_setting) continue;
+            if (key == "gpu_keep_awake") {
+                dkr::runtime::render_power::gpu_keep_awake.store(number != 0);
+                continue;
+            }
             if (key == "settings_version") {
                 settings_version = number;
             } else if (key == "settings_complete") {
@@ -3188,17 +3237,25 @@ void DrawColoredWrapped(const ImVec4& color, std::string_view text) {
 
 bool BeginPaddedModal(const char* name, ImGuiWindowFlags flags = 0,
                       const ImVec2& padding = {26.0F, 24.0F}) {
+#if defined(__ANDROID__)
+    dkr::runtime::mobile::constrain_modal();
+    flags &= ~(ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if (g_paddock_modal_windows > 0) return BeginPaddockModalWindow(name, flags);
+#else
     if (g_paddock_modal_windows > 0) {
         return BeginPaddockModalWindow(
             name, flags | ImGuiWindowFlags_NoScrollbar |
                       ImGuiWindowFlags_NoScrollWithMouse);
     }
+#endif
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 18.0F);
     // Modal actions must remain fully visible. Long pages may scroll behind a
     // modal, and specialised children such as the ROM file list may scroll,
     // but the modal window itself must never grow its own scrollbar.
+#if !defined(__ANDROID__)
     flags |= ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+#endif
     const bool visible = ImGui::BeginPopupModal(name, nullptr, flags);
     ImGui::PopStyleVar(2);
     return visible;
@@ -3957,11 +4014,7 @@ std::string BuildSupportReport() {
            << std::lround(dkr::runtime::hud::global_scale() * 100.0F) << "%\n"
            << "Enabled texture packs: " << EnabledTexturePackCount() << '\n'
            << "Online synchronization: "
-           << (static_cast<dkr::runtime::netplay::SynchronizationMode>(
-                   g_online_synchronization) ==
-                       dkr::runtime::netplay::SynchronizationMode::Lockstep
-                   ? "Lockstep"
-                   : "Rollback")
+           << dkr::runtime::netplay::synchronization_name(CurrentOnlineSynchronization())
            << '\n'
            << "Diagnostic logging: "
            << (dkr::runtime::support::diagnostic_logging_enabled() ? "On"
@@ -3991,6 +4044,17 @@ std::string BuildSupportReport() {
 void DrawSupportSummary(float width) {
     PollSupportSystemSummary();
     ImGui::SeparatorText("Support summary");
+#if defined(__ANDROID__)
+    ImGui::TextWrapped("%s", dkr::runtime::android::build_identity().c_str());
+    if (ImGui::Button("RECORD PERFORMANCE REPORT", {width, 42.0F})) {
+        dkr::runtime::android::performance_tools();
+    }
+    if (ImGui::Button("EXPORT ANDROID STARTUP LOGS", {width, 42.0F})) {
+        dkr::runtime::android::export_diagnostics();
+    }
+    ImGui::TextWrapped("Save a diagnostic ZIP using Android's file picker. "
+                       "Review logs before sharing; they may contain paths and session details.");
+#endif
     ImGui::TextDisabled(
         "Privacy-safe settings and system details for troubleshooting.");
     ImGui::Dummy({0.0F, 8.0F});
@@ -4007,11 +4071,7 @@ void DrawSupportSummary(float width) {
                 dkr::runtime::hud::global_scale() * 100.0F);
     ImGui::Text("Enabled texture packs: %zu", EnabledTexturePackCount());
     ImGui::Text("Online synchronization: %s",
-                static_cast<dkr::runtime::netplay::SynchronizationMode>(
-                    g_online_synchronization) ==
-                        dkr::runtime::netplay::SynchronizationMode::Lockstep
-                    ? "Lockstep"
-                    : "Rollback");
+                dkr::runtime::netplay::synchronization_name(CurrentOnlineSynchronization()));
     ImGui::Dummy({0.0F, 8.0F});
     if (g_support_summary) {
         ImGui::TextWrapped("OS: %s", g_support_summary->operating_system.c_str());
@@ -4577,9 +4637,14 @@ bool CreateOnlineLobby() {
     Rules rules{};
     rules.host_control = static_cast<HostControlPolicy>(g_online_host_control);
     rules.maximum_players = static_cast<std::uint8_t>(g_online_maximum_players);
-    rules.synchronization = static_cast<SynchronizationMode>(
-        g_online_synchronization);
-    rules.rollback_window = rules.synchronization == SynchronizationMode::Rollback
+    rules.synchronization = CurrentOnlineSynchronization();
+    // Fail before creating/changing an online save directory. A new label
+    // must never silently start the old implementation under an experiment.
+    if (const char* reason = experimental::runtime_admission_error(rules.synchronization)) {
+        g_online_action_status = reason;
+        return false;
+    }
+    rules.rollback_window = synchronization_has_prediction_window(rules.synchronization)
         ? static_cast<std::uint8_t>(g_online_rollback_window)
         : 0U;
     rules.automatic_input_delay = g_online_automatic_delay;
@@ -5208,8 +5273,9 @@ dkr::runtime::netplay::FriendLobbyAdvertisement FriendLobbyFromSession(
         ? view.invite : std::string{};
     advertisement.maximum_players = view.room.rules.maximum_players;
     advertisement.synchronization =
-        view.room.rules.synchronization == SynchronizationMode::Rollback
-            ? "Rollback" : "Lockstep";
+        view.room.rules.synchronization == SynchronizationMode::ExperimentalRollback
+            ? "Experimental rollback"
+            : (view.room.rules.synchronization == SynchronizationMode::Rollback ? "Rollback" : "Lockstep");
     advertisement.compatibility = DKR_NETWORK_RELEASE_VERSION;
     for (const Player& player : view.room.players) {
         if (player.occupied) ++advertisement.players;
@@ -5321,6 +5387,40 @@ bool DrawGraphicsSettings(bool live) {
     const float setting_width = std::clamp(available_width * 0.92F,
                                            std::min(220.0F, available_width),
                                            std::min(920.0F, available_width));
+    static int performance_preset = 1;
+    ImGui::TextUnformatted("PERFORMANCE PRESET (OPTIONAL)");
+    ImGui::SetNextItemWidth(setting_width);
+    ControlCombo("##performance-preset", &performance_preset,
+#if defined(__ANDROID__)
+        "Battery\0Balanced\0Quality\0Low load - 30 FPS\0Low load - 60 FPS\0"
+#else
+        "Battery\0Balanced\0Quality\0"
+#endif
+    );
+#if defined(__ANDROID__)
+    ImGui::TextWrapped("Low load presets: native 240p game rendering, standard precision, no MSAA or supersampling. Touch controls and launcher remain at screen resolution. These are optional quality reductions, not a change to simulation speed.");
+#endif
+    ImGui::TextWrapped("Battery: 480p / 30 FPS. Balanced: 480p / 60 FPS. Both use standard framebuffer precision and 4x filtering. Quality: window-resolution / 60 FPS, high precision and 16x filtering. All disable MSAA and supersampling; HUD and aspect stay unchanged. Targets are not guarantees. Nothing changes until you press Apply.");
+    if (ImGui::Button("Apply performance preset", {setting_width, 0.0F})) {
+        const auto modern = dkr::runtime::enhancements::PresentationProfile::Modern;
+        if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
+            dkr::runtime::enhancements::set_presentation_profile(modern);
+            ApplyProfileGraphics(config, modern);
+        }
+        dkr::runtime::mobile_graphics::apply_preset(config,
+            static_cast<dkr::runtime::mobile_graphics::Preset>(performance_preset));
+        dkr::runtime::enhancements::set_anisotropy_level(performance_preset == 2 ? 16 : 4);
+        RememberModernGraphics(config);
+        profile = static_cast<int>(modern);
+        resolution = static_cast<int>(config.res_option);
+        aspect = static_cast<int>(config.ar_option);
+        aa = static_cast<int>(config.msaa_option);
+        hpfb = static_cast<int>(config.hpfb_option);
+        downsample = config.ds_option;
+        changed = true;
+    }
+    ImGui::TextWrapped("Texture filtering takes effect on the next game launch. Framebuffer precision may also require restarting the game. Existing saved settings are kept unless you apply a preset.");
+    ImGui::Spacing();
     ImGui::TextUnformatted("PRESENTATION STYLE");
     ImGui::SetNextItemWidth(setting_width);
     profile_changed = ControlCombo("##presentation-profile", &profile,
@@ -5489,6 +5589,14 @@ bool DrawGraphicsSettings(bool live) {
                              dkr::runtime::enhancements::PresentationProfile::Accurate);
     }
     ImGui::Spacing();
+    bool gpu_keep_awake = dkr::runtime::render_power::gpu_keep_awake.load();
+    if (ImGui::Checkbox("GPU keep-awake (driver compatibility)", &gpu_keep_awake)) {
+        dkr::runtime::render_power::gpu_keep_awake.store(gpu_keep_awake);
+        changed = true;
+    }
+    ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
+    ImGui::TextWrapped("Default off to avoid unnecessary CPU/GPU work. Enable only if your graphics driver introduces downclocking stutter. Applies while playing; image quality is unchanged.");
+    ImGui::PopStyleColor();
     ImGui::TextUnformatted("Presentation rate");
     if (dkr::runtime::enhancements::modern_presentation_enabled()) {
         int refresh_mode = g_modern_refresh_mode == RefreshRate::Manual ? 1 : 0;
@@ -6005,8 +6113,9 @@ void DrawNetworkOverlay() {
     std::vector<std::string> fields;
     char buffer[192]{};
     std::snprintf(buffer, sizeof(buffer), "ONLINE %s  %u MS",
-        view.room.rules.synchronization == SynchronizationMode::Rollback
-            ? "ROLLBACK" : "LOCKSTEP",
+        view.room.rules.synchronization == SynchronizationMode::ExperimentalRollback
+            ? "EXPERIMENTAL"
+            : (view.room.rules.synchronization == SynchronizationMode::Rollback ? "ROLLBACK" : "LOCKSTEP"),
         view.network_rtt_ms);
     fields.emplace_back(buffer);
     if (g_network_overlay_detail >= 1) {
@@ -6099,6 +6208,19 @@ void DrawNetworkOverlay() {
             view.local_input_echo_ms, view.local_input_consume_ms,
             static_cast<unsigned long long>(view.measured_input_echoes),
             static_cast<unsigned long long>(view.prediction_limit_waits));
+        fields.emplace_back(buffer);
+        std::snprintf(buffer, sizeof(buffer),
+            "LOCAL CONSUME P50/95/99/MAX %u/%u/%u/%u MS (%llu)",
+            view.input_consume_latency.p50_ms, view.input_consume_latency.p95_ms,
+            view.input_consume_latency.p99_ms, view.input_consume_latency.maximum_ms,
+            static_cast<unsigned long long>(view.input_consume_latency.samples));
+        fields.emplace_back(buffer);
+        std::snprintf(buffer, sizeof(buffer),
+            "HOST ECHO P95 %u MS  ENQUEUE P95 %u MS  PREDICTED/MISMATCH/SUPERSEDED %llu/%llu/%llu",
+            view.input_echo_latency.p95_ms, view.input_enqueue_latency.p95_ms,
+            static_cast<unsigned long long>(view.predicted_local_samples),
+            static_cast<unsigned long long>(view.mismatched_local_samples),
+            static_cast<unsigned long long>(view.superseded_local_samples));
         fields.emplace_back(buffer);
         std::snprintf(buffer, sizeof(buffer),
             "INPUT REFRESH / OLD-DUP REVISION %llu / %llu",
@@ -9898,11 +10020,22 @@ void DrawControllerMappingModal() {
 }
 
 void DrawControlsReference(bool live) {
+#if defined(__ANDROID__)
+    dkr::runtime::mobile::settings();
+#endif
     using dkr::runtime::input::Action;
     DrawPlayerSelector();
     ImGui::Dummy({0.0F, 14.0F});
     constexpr std::array<const char*, 5> sections{
         "DEVICE", "N64 BINDINGS", "DRIVING", "GYRO", "SHORTCUTS"};
+#if defined(__ANDROID__)
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    if (ImGui::BeginCombo("##mobile-controls-section", sections[g_controls_section])) {
+        for (int i = 0; i < static_cast<int>(sections.size()); ++i)
+            if (ImGui::Selectable(sections[i], g_controls_section == i)) g_controls_section = i;
+        ImGui::EndCombo();
+    }
+#else
     // Match the exact usable width of the four-player selector above. A
     // per-button minimum used to make this five-item row spill farther right
     // at compact launcher sizes.
@@ -9924,6 +10057,7 @@ void DrawControlsReference(bool live) {
         }
         if (selected) ImGui::PopStyleColor(2);
     }
+#endif
     ImGui::Dummy({0.0F, 14.0F});
     // Keep a real gutter on the right at every width. Tables and full-width
     // controls otherwise consume the parent's last pixel and collide with the
@@ -10628,8 +10762,19 @@ void DrawOverlayContent(float content_width) {
 
 void dkr::runtime::ui::configure(const std::filesystem::path& config_directory) {
     g_config_directory = config_directory;
+#if defined(__ANDROID__)
+    dkr::runtime::mobile::configure(config_directory);
+#endif
     // Resolve only beside this executable, never from a mod or the CWD.
     std::filesystem::path mod_worker;
+#if defined(__ANDROID__)
+    if (const char* directory = std::getenv("DKR_ANDROID_NATIVE_LIBS")) {
+        const auto candidate = std::filesystem::path(directory) / "libDKR-R-ModWorker.so";
+        std::error_code error;
+        if (candidate.is_absolute() && std::filesystem::is_regular_file(candidate, error))
+            mod_worker = candidate;
+    }
+#else
     if (char* base = SDL_GetBasePath()) {
         std::filesystem::path executable_directory = std::filesystem::u8path(base);
         SDL_free(base);
@@ -10647,6 +10792,7 @@ void dkr::runtime::ui::configure(const std::filesystem::path& config_directory) 
             if (std::filesystem::is_regular_file(candidate, error)) { mod_worker = candidate; break; }
         }
     }
+#endif
     g_legacy_imports.configure(config_directory / "mods" / "legacy", mod_worker);
     dkr::runtime::hud::configure(config_directory);
     const auto adventure = dkr::runtime::saves::adventure_info();
@@ -10713,16 +10859,24 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     }
     dkr::runtime::startup_performance::mark("launcher-enter");
 
+    window = static_cast<SDL_Window*>(dkr::runtime::platform::prepare_window_for_launcher());
+    if (!window) return result;
     SDL_SetWindowTitle(window, "DKR-R - Diddy Kong Racing Recompiled");
     const auto launcher_renderer_started_at =
         dkr::runtime::startup_performance::Clock::now();
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
     // The launcher and RT64 share this Vulkan-capable SDL window for the
     // complete process lifetime. An accelerated SDL renderer can replace the
     // native surface state under Gamescope, so keep the lightweight launcher
     // on the software backend and let RT64 take over the same window directly.
-    SDL_Renderer* renderer = SDL_CreateRenderer(
-        window, -1, SDL_RENDERER_SOFTWARE);
+    SDL_Renderer* renderer = nullptr;
+    const char* accelerated_launcher = SDL_getenv("DKR_LINUX_ACCELERATED_LAUNCHER");
+    if (accelerated_launcher && std::string_view(accelerated_launcher) == "1" &&
+        !(SDL_GetWindowFlags(window) & SDL_WINDOW_VULKAN)) {
+        renderer = SDL_CreateRenderer(window, -1,
+            SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    }
+    if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
 #else
     SDL_Renderer* renderer = SDL_CreateRenderer(
         window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -11068,6 +11222,12 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         dkr::runtime::platform::pump_input_backend_events();
         SDL_Event event{};
         const auto process_launcher_event = [&](SDL_Event& event) {
+#if defined(__ANDROID__)
+            if (dkr::runtime::mobile::event(event, false)) {
+                launcher_last_activity = std::chrono::steady_clock::now();
+                return;
+            }
+#endif
             const bool input_activity =
                 event.type == SDL_MOUSEMOTION ||
                 event.type == SDL_MOUSEBUTTONDOWN ||
@@ -11248,6 +11408,14 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::begin, &background_profile);
         DrawLauncherBackdrop(launcher_background, renderer, launcher_background_scroll);
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::end, &background_profile);
+#if defined(__ANDROID__)
+        dkr::runtime::mobile::menu(page, false, request_restart_popup, request_quit_popup);
+        dkr::runtime::mobile::begin_content();
+        const float right_inner_width = ImGui::GetContentRegionAvail().x;
+        if (page != last_rendered_page) {
+            ImGui::SetScrollY(0); last_rendered_page = page;
+        }
+#else
         const ImVec2 available = ImGui::GetContentRegionAvail();
         const float layout_width = std::floor(available.x);
         const float layout_height = std::floor(available.y);
@@ -11365,6 +11533,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             ImGui::SetKeyboardFocusHere();
             focus_content = false;
         }
+#endif
         if (page == 0) {
             DrawPlayPage(right_inner_width,
                          {selected_rom, rom_status, rom_ready, rom_catalog,
@@ -11402,11 +11571,15 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             DrawSupportSummary(right_inner_width);
         }
         ImGui::Dummy({0.0F, 54.0F});
+#if defined(__ANDROID__)
+        dkr::runtime::mobile::end_content();
+#else
         ImGui::EndGroup();
         ImGui::PopTextWrapPos();
         ImGui::PopItemWidth();
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
+#endif
         DrawRomBrowser(selected_rom, rom_status, rom_ready, rom_catalog);
         if (request_restart_popup) {
             ImGui::OpenPopup("Restart DKR-R?");
@@ -11462,6 +11635,12 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         }
 
         ApplyPaddockModalDim();
+#if defined(__ANDROID__)
+        if (dkr::runtime::mobile::editing()) {
+            dkr::runtime::mobile::draw_controls(false);
+            dkr::runtime::mobile::editor();
+        }
+#endif
         ImGui::Render();
         const auto launcher_ui_build_finished =
             std::chrono::steady_clock::now();
@@ -11638,7 +11817,11 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         online_session_view.launch_countdown_remaining_ms > 0U;
     const bool show_online_waiting = OnlineWaitingActive(online_session_view);
     const bool show_mipmap_loading = RT64::mipLoadingVisible();
-    if (!show_overlay && !show_fps && !show_crt && !show_online_error &&
+    if (
+#if defined(__ANDROID__)
+        false && // Touch Menu remains available, even when all other overlays are off.
+#endif
+        !show_overlay && !show_fps && !show_crt && !show_online_error &&
         !show_online_failure_modal &&
         !show_online_notification &&
         !show_network && !show_controller_input && !show_online_countdown &&
@@ -11661,6 +11844,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         dkr::runtime::platform::update_ui_gamepad_navigation();
     }
     RT64::Inspector* inspector = application.presentQueue->inspector.get();
+    dkr::runtime::performance_trace::Scope ui_measure(dkr::runtime::performance_trace::Region::UiBuild);
     inspector->newFrame(application.framebufferGraphicsWorker.get());
     if (auto* hud_window = static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window())) {
         int hud_viewport_width = 0;
@@ -11702,6 +11886,15 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         }
         const bool focus_selected_page =
             g_overlay_focus_requested.exchange(false, std::memory_order_acq_rel);
+#if defined(__ANDROID__)
+        int mobile_page = g_overlay_page.load(std::memory_order_relaxed);
+        dkr::runtime::mobile::menu(mobile_page, true, request_restart_popup, request_quit_popup);
+        g_overlay_page.store(mobile_page, std::memory_order_relaxed);
+        dkr::runtime::mobile::begin_content();
+        const float content_inner_width = ImGui::GetContentRegionAvail().x;
+        DrawOverlayContent(content_inner_width);
+        dkr::runtime::mobile::end_content();
+#else
         const float overlay_margin = std::clamp(ImGui::GetWindowWidth() * 0.025F, 12.0F, 38.0F);
         const float overlay_gap = std::clamp(ImGui::GetWindowWidth() * 0.018F, 12.0F, 28.0F);
         const float minimum_sidebar = ImGui::GetWindowWidth() < 1000.0F ? 190.0F : 220.0F;
@@ -11821,6 +12014,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         ImGui::PopItemWidth();
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
+#endif
         if (request_quit_popup) {
             // Open the modal in the same parent ID scope where it is rendered.
             // Opening it inside overlay-nav creates a different ImGui popup ID,
@@ -11883,6 +12077,10 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     if (show_online_error) DrawOnlineErrorNotification();
     if (show_online_notification) DrawOnlineNotification();
     ApplyPaddockModalDim();
+#if defined(__ANDROID__)
+    dkr::runtime::mobile::draw_controls(show_overlay);
+    dkr::runtime::mobile::editor();
+#endif
     inspector->endFrame();
 }
 
@@ -11890,6 +12088,9 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
     if (event == nullptr) {
         return false;
     }
+#if defined(__ANDROID__)
+    if (dkr::runtime::mobile::event(*event, !overlay_visible())) return true;
+#endif
     if (HandleInputCaptureEvent(event)) {
         return true;
     }
@@ -11978,12 +12179,19 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
 }
 
 bool dkr::runtime::ui::input_capture_active() {
-    return dkr::runtime::hud::editor::active() || (g_capture_action != -1 && !g_capture_finished) ||
+    return
+#if defined(__ANDROID__)
+           dkr::runtime::mobile::editing() ||
+#endif
+           dkr::runtime::hud::editor::active() || (g_capture_action != -1 && !g_capture_finished) ||
            dkr::runtime::platform::controller_mapping_progress().capturing ||
            g_online_code_keyboard_visible.load(std::memory_order_acquire);
 }
 
 void dkr::runtime::ui::toggle_overlay() {
+#if defined(__ANDROID__)
+    dkr::runtime::mobile::clear();
+#endif
     if (dkr::runtime::hud::editor::active()) { dkr::runtime::hud::editor::request_back(); return; }
     const bool next = !g_overlay_visible.load(std::memory_order_acquire);
     g_overlay_page = 0;

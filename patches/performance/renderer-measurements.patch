@@ -1,0 +1,35 @@
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -5,1 +5,2 @@
+ #include "rt64_state.h"
++#include "performance_trace.hpp"
+ 
+@@ -792,1 +793,2 @@
+     void State::fullSync() {
++        dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::FullSync);
+         flush();
+diff --git a/src/render/rt64_render_worker.cpp b/src/render/rt64_render_worker.cpp
+--- a/src/render/rt64_render_worker.cpp
++++ b/src/render/rt64_render_worker.cpp
+@@ -5,1 +5,2 @@
+ #include "rt64_render_worker.h"
++#include "performance_trace.hpp"
+ 
+@@ -26,2 +27,3 @@
+     void RenderWorker::wait() {
++        dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::GpuFence);
++        dkr::runtime::performance_trace::Scope perWorker(dkr::runtime::performance_trace::fence_region(name));
+         commandQueue->waitForCommandFence(commandFence.get());
+diff --git a/src/hle/rt64_framebuffer.cpp b/src/hle/rt64_framebuffer.cpp
+--- a/src/hle/rt64_framebuffer.cpp
++++ b/src/hle/rt64_framebuffer.cpp
+@@ -5,1 +5,2 @@
+ #include "rt64_framebuffer.h"
++#include "performance_trace.hpp"
+ 
+@@ -137,1 +137,3 @@
+     void Framebuffer::copyNativeToRAM(uint8_t *dst, uint32_t dstRowWidth, uint32_t dstRowStart, uint32_t dstRowEnd) {
++        dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::Readback,
++            static_cast<uint64_t>(dstRowEnd - dstRowStart) * imageRowBytes(dstRowWidth));
+         assert(dst != nullptr);

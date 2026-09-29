@@ -28,6 +28,9 @@ public:
     std::size_t state_bytes() const { return state_bytes_; }
     std::size_t capacity() const { return capacity_; }
     std::size_t memory_bytes() const;
+    // Includes retained capacities/spare checkpoint entries, for callers with
+    // a hard memory budget. memory_bytes() retains its existing live-byte meaning.
+    std::size_t allocated_bytes() const;
     bool contains(std::uint32_t frame) const;
 
 private:

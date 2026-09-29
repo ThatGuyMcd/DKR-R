@@ -1,0 +1,11 @@
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR aarch64)
+set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+set(CMAKE_CROSSCOMPILING_EMULATOR /usr/bin/qemu-aarch64-static)
+set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+# Multiarch libraries installed beside the native host tools in the build image.
+set(CMAKE_LIBRARY_ARCHITECTURE aarch64-linux-gnu)
+set(SDL2_DIR /usr/lib/aarch64-linux-gnu/cmake/SDL2 CACHE PATH "ARM64 SDL2")
+set(ENV{PKG_CONFIG_LIBDIR} /usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig)

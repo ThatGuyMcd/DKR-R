@@ -161,4 +161,16 @@ bool RollbackStateStore::contains(std::uint32_t frame) const {
         [frame](const Entry& entry) { return entry.frame == frame; });
 }
 
+std::size_t RollbackStateStore::allocated_bytes() const {
+    std::size_t result = latest_state_.capacity() +
+        entries_.size() * sizeof(Entry) + spare_entries_.capacity() * sizeof(Entry);
+    const auto add = [&result](const Entry& entry) {
+        result += entry.page_bytes.capacity();
+        result += entry.page_indices.capacity() * sizeof(std::uint32_t);
+    };
+    for (const auto& entry : entries_) add(entry);
+    for (const auto& entry : spare_entries_) add(entry);
+    return result;
+}
+
 } // namespace dkr::runtime::netplay

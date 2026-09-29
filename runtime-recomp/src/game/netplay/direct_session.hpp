@@ -1,7 +1,9 @@
 #pragma once
 
 #include "datagram_socket.hpp"
+#include "../atomic_snapshot.hpp"
 #include "session_transport.hpp"
+#include "latency_metrics.hpp"
 #include "netplay_lobby.hpp"
 #include "netplay_protocol.hpp"
 #include "netplay_timeline.hpp"
@@ -161,6 +163,20 @@ struct SessionView {
     std::uint64_t duplicate_retries_coalesced = 0U;
     std::uint64_t checkpoint_encoding_cache_hits = 0U;
     std::uint64_t maximum_network_pump_us = 0U;
+    LatencySummary input_echo_latency{}, input_consume_latency{}, input_enqueue_latency{};
+    std::uint64_t predicted_local_samples = 0, mismatched_local_samples = 0;
+    std::uint64_t superseded_local_samples = 0;
+    // Rows are player slots, columns are the seven application send lanes.
+    std::array<std::array<QueueLaneSummary, 7>, kMaximumPlayers> outbound_lanes{};
+};
+
+// Fresh O(players) state for the authored scheduler, deliberately excluding
+// strings, room copies, transport locks, and outbound queue scans.
+struct SessionPacingView {
+    ConnectionState state = ConnectionState::Offline;
+    std::uint16_t network_rtt_ms = 0, network_jitter_ms = 0;
+    std::uint32_t authoritative_input_frame = 0, input_epoch = 0;
+    std::uint64_t simulation_wake_generation = 0;
 };
 
 struct RuntimeSessionView {
@@ -383,6 +399,7 @@ public:
                                       std::string& error);
 
     SessionView view() const;
+    SessionPacingView pacing_view() const;
     // UI-only, immutable worker publication: never waits on session/SDK locks.
     SessionView presentation_view() const;
     bool presentation_active() const;
@@ -427,6 +444,7 @@ private:
         bool requires_save_sync = false;
         bool online_save_ready = false;
         std::array<double, 32U> rtt_samples{};
+        std::array<std::chrono::steady_clock::time_point, 32U> rtt_sample_times{};
         std::size_t rtt_sample_count = 0U;
         std::size_t rtt_sample_cursor = 0U;
         std::uint32_t last_ready_request_id = 0U;
@@ -655,13 +673,18 @@ private:
     bool arm_gameplay_handoff_locked(std::uint32_t& resume_frame,
                                      std::string& error);
     void reset_input_delivery_tracking_locked(std::uint32_t first_frame);
+    struct PreparedStateWire {
+        std::vector<std::uint8_t> bytes;
+        std::uint64_t checksum = 0;
+    };
     bool send_authoritative_state(
         const PeerAddress* destination, std::uint32_t frame,
         std::span<const std::uint8_t> state,
         std::uint16_t requested_chunks = 0xFFFFU,
         protocol::MessageType message_type =
             protocol::MessageType::StateSnapshot,
-        bool live_replica = false);
+        bool live_replica = false,
+        const PreparedStateWire* prepared = nullptr);
     std::uint32_t authority_epoch_for_input_epoch(
         std::uint32_t input_epoch) const;
     std::uint32_t authority_epoch() const;
@@ -690,7 +713,8 @@ private:
                                      const secure::Key& key);
 
     mutable std::mutex mutex_;
-    std::condition_variable state_changed_;
+    std::shared_ptr<TransportReceiveSignal> receive_signal_ = std::make_shared<TransportReceiveSignal>();
+    std::condition_variable& state_changed_ = receive_signal_->changed;
     std::unique_ptr<SessionTransport> transport_;
     CompatibilityManifest manifest_{};
     Lobby lobby_{};
@@ -710,6 +734,7 @@ private:
     struct LocalInputMetadata {
         std::uint32_t revision = 1U;
         std::chrono::steady_clock::time_point sampled_at{};
+        bool echoed = false, consumed = false, enqueued = false;
     };
     std::unordered_map<std::uint32_t, LocalInputMetadata> local_input_metadata_;
     std::array<std::unordered_map<std::uint32_t, std::uint32_t>, kMaximumPlayers>
@@ -720,6 +745,14 @@ private:
     std::uint32_t local_input_echo_ms_ = 0U;
     std::uint32_t local_input_consume_ms_ = 0U;
     std::uint64_t measured_input_echoes_ = 0U;
+    // Allocate once per session, not per input. Keep DirectSession small enough
+    // for existing stack-owned instances on Windows' default stack budget.
+    struct InputLatencyMetrics {
+        LatencyHistogram echo, consume, enqueue;
+    };
+    std::unique_ptr<InputLatencyMetrics> input_latency_ = std::make_unique<InputLatencyMetrics>();
+    std::uint64_t predicted_local_samples_ = 0, mismatched_local_samples_ = 0;
+    std::uint64_t superseded_local_samples_ = 0;
     std::unordered_map<std::uint32_t, protocol::FrameCommitPayload>
         frame_commits_;
     std::deque<protocol::FrameCommitPayload> commit_history_;
@@ -1003,7 +1036,7 @@ private:
     // previous ordering as a startup race in DatagramSocket::is_open().
     std::atomic<bool> worker_stop_{false};
     bool worker_wake_ = false;
-    std::atomic<std::shared_ptr<const SessionView>> presentation_view_;
+    AtomicSnapshot<const SessionView> presentation_view_;
     std::chrono::steady_clock::time_point last_view_publication_{};
     std::thread network_worker_;
 };

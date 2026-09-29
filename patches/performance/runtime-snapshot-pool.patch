@@ -1,0 +1,34 @@
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -12,2 +12,3 @@
+ #include <cstring>
++#include "graphics_snapshot_pool.hpp"
++#include "performance_trace.hpp"
+ 
+@@ -30,3 +31,6 @@
++using RdramSnapshotPool = dkr::runtime::GraphicsSnapshotPool<0x800000>;
++static RdramSnapshotPool rdram_snapshot_pool;
++
+ struct SpTaskAction {
+     OSTask task;
+-    std::unique_ptr<uint8_t[]> rdram_snapshot;
++    RdramSnapshotPool::Snapshot rdram_snapshot;
+     bool presentation_allowed;
+ };
+@@ -613,7 +617,7 @@
+             events_context.action_queue.enqueue(SpTaskAction{
+-                *task, std::unique_ptr<uint8_t[]>{}, false });
++                *task, RdramSnapshotPool::Snapshot{}, false });
+             return;
+         }
+         constexpr size_t RDRAMSnapshotSize = 0x800000;
+-        auto rdram_snapshot = std::make_unique<uint8_t[]>(RDRAMSnapshotSize);
++        auto rdram_snapshot = rdram_snapshot_pool.acquire();
+-        std::memcpy(rdram_snapshot.get(), rdram, RDRAMSnapshotSize);
++        {
++            dkr::runtime::performance_trace::Scope measure(
++                dkr::runtime::performance_trace::Region::SnapshotCopy, RDRAMSnapshotSize);
++            std::memcpy(rdram_snapshot.get(), rdram, RDRAMSnapshotSize);
++        }
+         events_context.action_queue.enqueue(SpTaskAction{

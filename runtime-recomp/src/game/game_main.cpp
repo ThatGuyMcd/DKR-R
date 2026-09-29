@@ -10,6 +10,11 @@
 #include "startup_performance.hpp"
 #include "virtual_pak.hpp"
 #include "runtime_legacy_mods.hpp"
+#include "host_task_lifetime.hpp"
+#if defined(__ANDROID__)
+#include "graphics_health.hpp"
+#include "../android/android_platform.hpp"
+#endif
 #if DKR_LEGACY_QUALIFICATION
 #include "legacy_runtime_qualification.hpp"
 #endif
@@ -45,7 +50,7 @@
 #ifndef _WIN32
 #include <csignal>
 #include <cerrno>
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
 #include <execinfo.h>
 #endif
 #include <unistd.h>
@@ -99,6 +104,11 @@ bool ConfigurePersistentRuntimeLog(
     }
 #endif
     std::setvbuf(stderr, nullptr, _IONBF, 0);
+#if defined(__ANDROID__)
+    // RT64 writes GPU/driver identification to stdout. Keep it in the same
+    // private log as startup errors so phone users can export both together.
+    dup2(STDERR_FILENO, STDOUT_FILENO);
+#endif
     std::fprintf(stderr, "[boot] DKR-R %s persistent runtime log\n",
                  DKR_RELEASE_VERSION);
     return true;
@@ -158,6 +168,10 @@ RspUcodeFunc* GetRspMicrocode(const OSTask* task) {
 
 void MessageBox(const char* message) {
     std::fprintf(stderr, "[boot][runtime-error] %s\n", message);
+#if defined(__ANDROID__)
+    const auto failure = dkr::runtime::graphics_health::failure.load();
+    if (failure == 0) dkr::runtime::android::report_graphics_failure(message);
+#endif
 }
 
 std::string GetThreadName(const OSThread* thread) {
@@ -298,7 +312,7 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
 
 void RuntimeSignalHandler(int signal_number) {
     std::fprintf(stderr, "[boot][crash] signal=%d\n", signal_number);
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
     void* frames[48]{};
     const int count = backtrace(frames, 48);
     backtrace_symbols_fd(frames, count, STDERR_FILENO);
@@ -464,6 +478,22 @@ bool RelaunchApplication(int argc, char** argv) {
 int DkrMain(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
+#if defined(__ANDROID__)
+    std::set_terminate([] {
+        // Preserve the exception's cause in the user-exportable log, then let
+        // Android capture the native tombstone through its own signal handler.
+        try {
+            if (const auto failure = std::current_exception()) std::rethrow_exception(failure);
+            std::fprintf(stderr, "[boot][android] terminate without an active exception\n");
+        } catch (const std::exception& error) {
+            std::fprintf(stderr, "[boot][android] unhandled exception: %s\n", error.what());
+        } catch (...) {
+            std::fprintf(stderr, "[boot][android] unhandled non-standard exception\n");
+        }
+        std::fflush(stderr);
+        std::abort();
+    });
+#endif
     dkr::runtime::startup_performance::mark("process-entry");
 #if defined(_WIN32)
     SetUnhandledExceptionFilter(RuntimeCrashFilter);
@@ -652,9 +682,11 @@ int DkrMain(int argc, char** argv) {
         }
     }
 #endif
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__ANDROID__)
     InstallRuntimeSignalHandlers();
 #endif
+    // Android keeps its own fatal-signal handler: replacing it with _exit
+    // suppresses the native tombstone available through ApplicationExitInfo.
 
     dkr::runtime::rom::Identity rom_identity{};
     bool rom_identified = false;
@@ -715,6 +747,11 @@ int DkrMain(int argc, char** argv) {
         ultramodern::renderer::HighPrecisionFramebuffer::Auto;
     graphics_config.rr_manual_value = 30;
     graphics_config.ds_option = 1;
+#if defined(__ANDROID__)
+    // First-run mobile budget. ui::configure below restores saved settings.
+    graphics_config.res_option = ultramodern::renderer::Resolution::Original2x;
+    graphics_config.hpfb_option = ultramodern::renderer::HighPrecisionFramebuffer::Off;
+#endif
     ultramodern::renderer::set_graphics_config(graphics_config);
 
 #if DKR_RUNTIME_HAS_RT64
@@ -864,9 +901,9 @@ int DkrMain(int argc, char** argv) {
         // DKR's scheduler interrupt queue can briefly be full while the VI and
         // audio managers are active. SP/DP completion edges must be retained
         // until the scheduler accepts them or gfxtask_wait can block forever.
-        // The renderer now parses from immutable submission snapshots and all
-        // Release tasks complete comfortably inside DKR's watchdog, so retrying
-        // a blocked edge cannot outlive the task that owns it.
+        // Immutable snapshots protect display lists. The host-task lifetime
+        // hook separately prevents the retail hardware watchdog from retiring
+        // work still queued/executing or awaiting guest completion delivery.
         .message_queue_control = {.requeue_sp = true, .requeue_dp = true},
     };
 
@@ -922,10 +959,47 @@ int DkrMain(int argc, char** argv) {
             }
         }
 #endif
+#if defined(DKR_WATER_QUALIFICATION)
+        if (std::getenv("DKR_WATER_TEST_MAP") && dkr::runtime::netplay::session().active()) {
+            std::fprintf(stderr,"[water][qualification] Refusing an online session.\n");
+            return 4;
+        }
+#endif
         std::fprintf(stderr,
                      "[boot] runtime initialized; waiting for first safe VI state\n");
         std::atomic<bool> runtime_finished{false};
+#if defined(__ANDROID__)
+        dkr::runtime::graphics_health::reset();
+        dkr::runtime::graphics_health::resource_failure_reporter.store(
+            +[](dkr::runtime::graphics_health::Stage stage, std::int32_t result) {
+                char message[192];
+                std::snprintf(message, sizeof(message),
+                    "Renderer stopped safely at %s (Vulkan result %d). Export logs here, then close and reopen DKR-R.",
+                    dkr::runtime::graphics_health::stage_name(stage), result);
+                std::fprintf(stderr, "[android][graphics] %s\n", message);
+                std::fflush(stderr);
+                dkr::runtime::android::report_graphics_failure(message);
+            });
+        bool graphics_failure_reported = false;
+#endif
         std::exception_ptr runtime_failure;
+#if defined(__ANDROID__)
+        const auto report_gpu_failure = [&] {
+            const auto gpu_failure = dkr::runtime::graphics_health::failure.load(std::memory_order_relaxed);
+            if (gpu_failure == 0 || graphics_failure_reported) return;
+            graphics_failure_reported = true;
+            char message[192];
+            std::snprintf(message, sizeof(message), "Vulkan failure: %s (result %d). Rendering has stopped. Export logs using this dialog, then close and reopen DKR-R.",
+                dkr::runtime::graphics_health::stage_name(static_cast<dkr::runtime::graphics_health::Stage>(gpu_failure >> 32)), static_cast<std::int32_t>(gpu_failure));
+            std::fprintf(stderr, "[android][graphics] %s\n", message);
+            dkr::runtime::android::report_graphics_failure(message);
+            // A terminal allocation failure retains resources on the faulting
+            // worker. Joining it here would also freeze SDL. Android's native
+            // failure dialog provides export/explicit close without a GPU.
+            if (!dkr::runtime::graphics_health::resource_quarantined.load(std::memory_order_acquire))
+                ultramodern::quit();
+        };
+#endif
         std::thread runtime_thread([&] {
             try {
                 recomp::start(configuration);
@@ -937,8 +1011,47 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::startup_performance::mark("runtime-thread-started");
 
         const auto runtime_started_at = std::chrono::steady_clock::now();
+#if defined(__ANDROID__)
+        bool startup_wait_reported = false;
+#endif
         bool timeout_requested = false;
+        auto next_task_check = runtime_started_at;
+        unsigned task_stalls_reported = 0;
         while (!runtime_finished.load(std::memory_order_acquire)) {
+            const auto task_check_now = std::chrono::steady_clock::now();
+            if (task_check_now >= next_task_check && task_stalls_reported < 8) {
+                next_task_check = task_check_now + std::chrono::milliseconds(250);
+                dkr::runtime::host_tasks::Task stalled;
+                if (dkr::runtime::host_tasks::registry.take_stall(stalled, task_check_now)) {
+                    char message[256];
+                    std::snprintf(message, sizeof(message),
+                        "Task %llu (%08X) has made no progress for 15 seconds at %s (pending=%u). "
+                        "It may still finish. No completion has been forced.",
+                        static_cast<unsigned long long>(stalled.token.generation), stalled.token.address,
+                        dkr::runtime::host_tasks::stage_name(stalled.stage), stalled.pending);
+                    std::fprintf(stderr, "[host-task][stall] %s\n", message);
+#if defined(__ANDROID__)
+                    if (task_stalls_reported == 0) dkr::runtime::android::report_task_stall(message);
+#endif
+                    ++task_stalls_reported;
+                }
+            }
+#if defined(__ANDROID__)
+            report_gpu_failure();
+            // An initialization fence can stall before the first guest task
+            // exists. Diagnose that wait independently; never fake completion,
+            // reuse its resources or kill the process on a timeout.
+            if (!startup_wait_reported && !dkr::runtime::graphics_health::failed() &&
+                !dkr::runtime::graphics_health::first_presentation.load() &&
+                task_check_now - runtime_started_at >= std::chrono::seconds(15)) {
+                startup_wait_reported = true;
+                constexpr auto message = "No game frame has been presented after 15 seconds. "
+                    "The renderer may still be initializing or waiting for the GPU. "
+                    "You can keep waiting or export logs; no GPU work has been cancelled.";
+                std::fprintf(stderr, "[android][startup-wait] %s\n", message);
+                dkr::runtime::android::report_task_stall(message);
+            }
+#endif
 #if DKR_RUNTIME_HAS_RT64
             // The SDL video subsystem and native window were created on this
             // thread. Keep all window/input event pumping here for Windows,
@@ -966,6 +1079,10 @@ int DkrMain(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         runtime_thread.join();
+#if defined(__ANDROID__)
+        // Setup can finish with an error before the event loop observes it.
+        report_gpu_failure();
+#endif
         dkr::runtime::pak::begin_session_directory({});
         prepared_mods.reset();
         const auto mod_failure=dkr::runtime::legacy::failure();

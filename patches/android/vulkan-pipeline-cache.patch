@@ -1,0 +1,73 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -11,1 +11,2 @@
++#include "android_pipeline_cache.hpp"
+ #include "performance_trace.hpp"
+@@ -1393,1 +1394,1 @@
+             dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::VulkanCompute);
+-            res = vkCreateComputePipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
++            res = vkCreateComputePipelines(device->vk, device->pipelineCache, 1, &pipelineInfo, nullptr, &vk);
+         }
+@@ -1652,1 +1653,1 @@
+             dkr::runtime::performance_trace::Scope measure(dkr::runtime::performance_trace::Region::VulkanGraphics);
+-            res = vkCreateGraphicsPipelines(device->vk, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &vk);
++            res = vkCreateGraphicsPipelines(device->vk, device->pipelineCache, 1, &pipelineInfo, nullptr, &vk);
+         }
+@@ -4057,1 +4058,23 @@
++        {
++            using namespace dkr::runtime::android_pipeline_cache;
++            Identity id{physicalDeviceProperties.vendorID, physicalDeviceProperties.deviceID,
++                        physicalDeviceProperties.driverVersion, {}};
++            std::copy_n(physicalDeviceProperties.pipelineCacheUUID, id.uuid.size(), id.uuid.begin());
++            const auto saved = load(id);
++            VkPipelineCacheCreateInfo cacheInfo{};
++            cacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
++            cacheInfo.initialDataSize = saved.size();
++            cacheInfo.pInitialData = saved.empty() ? nullptr : saved.data();
++            auto cacheResult = vkCreatePipelineCache(vk, &cacheInfo, nullptr, &pipelineCache);
++            if (cacheResult != VK_SUCCESS && !saved.empty()) {
++                cacheInfo.initialDataSize = 0; cacheInfo.pInitialData = nullptr;
++                cacheResult = vkCreatePipelineCache(vk, &cacheInfo, nullptr, &pipelineCache);
++            }
++            if (cacheResult != VK_SUCCESS) pipelineCache = VK_NULL_HANDLE;
++            fprintf(stderr, "[Android] Pipeline cache input=%zu bytes result=%d\n", saved.size(), int(cacheResult));
++        }
++
+         VmaVulkanFunctions vmaFunctions = {};
+@@ -4561,2 +4584,23 @@
+     void VulkanDevice::release() {
++        if (pipelineCache != VK_NULL_HANDLE && vk != VK_NULL_HANDLE) {
++            using namespace dkr::runtime::android_pipeline_cache;
++            // Application teardown joins all pipeline creators first. Never
++            // write a cache after a GPU failure, or serialize in a frame loop.
++            try { if (!dkr::runtime::graphics_health::failed()) {
++                std::size_t size = 0;
++                if (vkGetPipelineCacheData(vk, pipelineCache, &size, nullptr) == VK_SUCCESS &&
++                    size >= 32 && size <= maximum_bytes) {
++                    std::vector<std::uint8_t> data(size);
++                    if (vkGetPipelineCacheData(vk, pipelineCache, &size, data.data()) == VK_SUCCESS) {
++                        data.resize(size);
++                        Identity id{physicalDeviceProperties.vendorID, physicalDeviceProperties.deviceID,
++                                    physicalDeviceProperties.driverVersion, {}};
++                        std::copy_n(physicalDeviceProperties.pipelineCacheUUID, id.uuid.size(), id.uuid.begin());
++                        fprintf(stderr, "[Android] Pipeline cache saved=%u bytes=%zu\n", save(id, data) ? 1U : 0U, size);
++                    }
++                }
++            } } catch (...) {
++                // Optional cache serialization must not make teardown fail
++                // under memory pressure. The previous cache remains usable.
++                fprintf(stderr, "[Android] Pipeline cache save skipped\n");
++            }
++            vkDestroyPipelineCache(vk, pipelineCache, nullptr);
++            pipelineCache = VK_NULL_HANDLE;
++        }
+         nullBuffer = nullptr; // force destruction before destroying allocator
+diff --git a/src/contrib/plume/plume_vulkan.h b/src/contrib/plume/plume_vulkan.h
+--- a/src/contrib/plume/plume_vulkan.h
++++ b/src/contrib/plume/plume_vulkan.h
+@@ -405,2 +405,3 @@
+     struct VulkanDevice : RenderDevice {
+         VkDevice vk = VK_NULL_HANDLE;
++        VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+         VulkanInterface *renderInterface = nullptr;

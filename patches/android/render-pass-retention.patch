@@ -1,0 +1,48 @@
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -5,3 +5,5 @@
+ #include "rt64_framebuffer_renderer.h"
++#include "render_pass_policy.hpp"
++#include "render_metrics.hpp"
+ #include "rt64_generated_mip_config.h"
+@@ -471,3 +473,6 @@
+     void FramebufferRenderer::submitRasterScene(RenderWorker *worker, const Framebuffer &framebuffer, RenderFramebufferStorage *fbStorage, const RasterScene &rasterScene, bool &depthState) {
++        const bool measureRaster = dkr::runtime::performance_trace::enabled();
++        uint64_t measuredDraws = 0, measuredDitherDraws = 0;
+         InstanceDrawCall::Type previousCallType = InstanceDrawCall::Type::Unknown;
+@@ -508,3 +510,4 @@
+         auto drawCallTriangles = [&](const InstanceDrawCall &drawCall) {
++            if (measureRaster) ++measuredDraws;
+             if (drawCall.type == InstanceDrawCall::Type::IndexedTriangles) {
+@@ -597,3 +600,5 @@
+                 if (triangles.postBlendDitherNoise) {
++                    if (measureRaster) measuredDitherDraws += triangles.postBlendDitherNoiseNegative ? 1 : 2;
+                     if (triangles.postBlendDitherNoiseNegative) {
+@@ -665,3 +675,8 @@
++        if (measureRaster) {
++            dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::Draw, measuredDraws);
++            dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::DitherDraw, measuredDitherDraws);
++        }
+         // Mark targets for resolve.
+         if (fbStorage->colorTarget != nullptr) {
+@@ -1238,3 +1243,4 @@
+     void FramebufferRenderer::recordFramebuffer(RenderWorker *worker, uint32_t framebufferIndex) {
++        dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::AllTargets);
+         // Submit all transition barriers first.
+@@ -1313,4 +1322,16 @@
+                 const RasterScene &rasterScene = targetDrawCall.rasterScenes[pair.first];
+-                submitDepthAccess(worker, targetDrawCall.fbStorage, false, depthState);
++                const InstanceDrawCall *firstDraw = rasterScene.instanceIndices.empty() ? nullptr :
++                    &instanceDrawCallVector[rasterScene.instanceIndices.front()];
++                if (dkr::runtime::render_pass::continue_read_only(depthState, colorTarget != nullptr, firstDraw, ZMODE_DEC)) {
++                    // The first real draw immediately needs read-only depth.
++                    // No GPU command writes depth between these two scenes:
++                    // retain the existing pass instead of READ->WRITE->READ.
++                    // All other scene starts preserve the original transition.
++                    dkr::runtime::render_metrics::event(dkr::runtime::render_metrics::Event::DepthExcursion);
++                }
++                else {
++                    submitDepthAccess(worker, targetDrawCall.fbStorage, false, depthState);
++                }
+                 submitRasterScene(worker, framebuffer, targetDrawCall.fbStorage, rasterScene, depthState);

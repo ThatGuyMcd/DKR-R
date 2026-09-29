@@ -1,0 +1,15 @@
+diff --git a/src/render/rt64_texture_cache.cpp b/src/render/rt64_texture_cache.cpp
+--- a/src/render/rt64_texture_cache.cpp
++++ b/src/render/rt64_texture_cache.cpp
+@@ -1,1 +1,2 @@
++#include "android_memory_budget.hpp"
+ //
+@@ -69,2 +70,6 @@
+     void ReplacementMap::evict(std::vector<Texture *> &evictedTextures) {
+-        while ((cachedTexturePoolSize > maxTexturePoolSize) && !unusedTextureList.empty()) {
++        // This runs under the existing texture-map owner lock. Retire only
++        // unused entries through the existing deferred-eviction mechanism;
++        // Android's UI callback never touches texture objects or GPU lifetimes.
++        const auto budget = std::min(maxTexturePoolSize, dkr::runtime::android_memory::unused_cache_limit.load());
++        while ((cachedTexturePoolSize > budget) && !unusedTextureList.empty()) {
+             // Push texture to the eviction list.

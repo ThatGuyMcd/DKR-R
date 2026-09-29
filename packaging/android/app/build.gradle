@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+def sdlSource = providers.gradleProperty('dkrSdlSource').get()
+def nativeStage = providers.gradleProperty('dkrNativeStage').get()
+def root = file('../../..')
+// Reuse the launcher wordmark verbatim; keep generated bitmap resources out of
+// source control and preserve the same artwork on every packaged build.
+def brandingResources = layout.buildDirectory.dir('generated/branding/res')
+tasks.register('stageBrandingLogo', Copy) {
+    from root.toPath().resolve('assets/ui/Icons/DKR-R-Short-Logo.png').toFile()
+    into brandingResources.map { it.dir('drawable-nodpi') }
+    rename { 'dkrr_logo.png' }
+}
+tasks.named('preBuild').configure { dependsOn 'stageBrandingLogo' }
+android {
+    namespace 'io.github.thatguymcd.dkrr'
+    compileSdk 35
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    defaultConfig {
+        applicationId 'io.github.thatguymcd.dkrr.preview'
+        minSdk 28
+        targetSdk 35
+        versionCode 1050027
+        versionName root.toPath().resolve('VERSION').toFile().text.trim()
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    sourceSets.main {
+        res.srcDir brandingResources
+        java.srcDirs += "${sdlSource}/android-project/app/src/main/java"
+        jniLibs.srcDirs = ["${nativeStage}/jniLibs"]
+        assets.srcDirs = ["${nativeStage}/assets"]
+    }
+    packaging { jniLibs { useLegacyPackaging = true } }
+    buildTypes {
+        debug { debuggable true }
+        release { minifyEnabled false }
+    }
+}

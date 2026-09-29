@@ -1,0 +1,12 @@
+diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -1,1 +1,2 @@
++#include "android_transfer_qualification.hpp"
+ //
+@@ -313,2 +314,5 @@
+         presentGraphicsWorker = std::make_unique<RenderWorker>(device.get(), "Present Graphics", RenderCommandListType::DIRECT);
++        fprintf(stderr, "[Android] GPU transfer qualification beginning\n");
++        fflush(stderr);
++        dkr::runtime::android_graphics::qualify_transfer(*textureCopyWorker);
+ 

@@ -11,6 +11,7 @@
 #include "netplay/progress_budget.hpp"
 #include "netplay/online_input_broker.hpp"
 #include "netplay/rollback_simulation_state.hpp"
+#include "netplay/experimental_runtime_admission.hpp"
 #include "netplay/rollback_state_store.hpp"
 #include "netplay/runtime_state.hpp"
 #include "online_roster_policy.hpp"
@@ -696,6 +697,10 @@ SessionPollResult synchronize_live_replica(
         // boundary. Non-sample frames deliberately have no packet and never
         // park either simulation; the immutable input/commit timeline remains
         // the source of every intervening tick.
+        if (g_live_replica.published_frame == frame) {
+            error.clear();
+            return SessionPollResult::Ready;
+        }
         if (!capture_authoritative_state(
                 rdram, 0x00800000U, frame, g_live_replica.capture, error)) {
             return SessionPollResult::Failed;
@@ -2327,6 +2332,13 @@ RollbackMetrics rollback_metrics() {
 
 int drive_authored_tick(std::uint8_t* rdram, recomp_context* context) {
     const RuntimeSessionView view = g_session.runtime_view();
+    if (view.active && view.launch_descriptor) {
+        if (const char* reason = experimental::runtime_admission_error(view.launch_descriptor->synchronization)) {
+            g_session.fail_runtime_start(reason);
+            halt_failed_simulation();
+            return 1;
+        }
+    }
     const FrameDebtPhase observed_phase = g_frame_debt_phase.load(
         std::memory_order_acquire);
     const FrameDebtPhase previous_phase =
@@ -2407,7 +2419,7 @@ int drive_authored_tick(std::uint8_t* rdram, recomp_context* context) {
             return 0;
         }
 
-        const SessionView pacing_view = g_session.view();
+        const SessionPacingView pacing_view = g_session.pacing_view();
         const std::uint32_t frame = g_authored_frame.load(
             std::memory_order_acquire);
         const std::uint32_t maximum_lead = host_authority_lead_limit(
@@ -2552,7 +2564,7 @@ int drive_authored_tick(std::uint8_t* rdram, recomp_context* context) {
     std::uint32_t authoritative_frame =
         g_authored_frame.load(std::memory_order_acquire);
     bool committed_frame_available = true;
-    const SessionView pacing_view = g_session.view();
+    const SessionPacingView pacing_view = g_session.pacing_view();
     if (view.host && view.launch_descriptor) {
         reset_client_catch_up_pacing();
         const std::uint32_t maximum_lead = host_authority_lead_limit(

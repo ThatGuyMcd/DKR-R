@@ -1,0 +1,44 @@
+diff --git a/src/render/rt64_raster_shader_cache.cpp b/src/render/rt64_raster_shader_cache.cpp
+--- a/src/render/rt64_raster_shader_cache.cpp
++++ b/src/render/rt64_raster_shader_cache.cpp
+@@ -17,3 +17,3 @@
+-        thread = std::make_unique<std::thread>(&CompilationThread::loop, this);
+-        threadRunning = false;
++        threadRunning = true;
++        thread = std::make_unique<std::thread>(&CompilationThread::loop, this);
+     }
+@@ -23,3 +23,6 @@
+     RasterShaderCache::CompilationThread::~CompilationThread() {
+-        threadRunning = false;
++        {
++            std::lock_guard lock(shaderCache->descQueueMutex);
++            threadRunning = false;
++        }
+         shaderCache->descQueueChanged.notify_all();
+@@ -35,2 +38,0 @@
+         Thread::setCurrentThreadPriority(Thread::Priority::Idle);
+ 
+-        threadRunning = true;
+-
+         while (threadRunning) {
+@@ -44,2 +45,3 @@
+                 shaderCache->descQueueActiveCount--;
++                shaderCache->descQueueChanged.notify_all();
+                 shaderCache->descQueueChanged.wait(queueLock, [this]() {
+@@ -138,13 +140,7 @@
+-        {
+-            std::unique_lock<std::mutex> queueLock(descQueueMutex);
+-            descQueue = std::queue<ShaderDescription>();
+-        }
+-
+-        bool keepWaiting = false;
+-        do {
+-            std::unique_lock<std::mutex> queueLock(descQueueMutex);
+-            keepWaiting = (descQueueActiveCount > 0);
+-        } while (keepWaiting);
++        std::unique_lock<std::mutex> queueLock(descQueueMutex);
++        descQueue = std::queue<ShaderDescription>();
++        descQueueChanged.wait(queueLock, [&] {
++            return descQueueActiveCount == 0;
++        });
+     }

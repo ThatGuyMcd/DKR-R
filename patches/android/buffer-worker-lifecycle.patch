@@ -1,0 +1,28 @@
+diff --git a/src/render/rt64_buffer_uploader.cpp b/src/render/rt64_buffer_uploader.cpp
+--- a/src/render/rt64_buffer_uploader.cpp
++++ b/src/render/rt64_buffer_uploader.cpp
+@@ -29,12 +29,16 @@
+         this->device = device;
+         workAvailable = false;
++        running = true;
+         thread = new std::thread(&BufferUploader::threadLoop, this);
+     }
+ 
+     BufferUploader::~BufferUploader() {
+-        running = false;
++        {
++            std::scoped_lock lock(workMutex);
++            running = false;
++        }
+         workCondition.notify_all();
+         thread->join();
+         delete thread;
+@@ -42,8 +46,6 @@
+     void BufferUploader::threadLoop() {
+         Thread::setCurrentThreadName("RT64 Buffer");
+ 
+-        running = true;
+-
+         while (running) {
+             std::unique_lock<std::mutex> queueLock(workMutex);
+             workCondition.wait(queueLock, [this]() {

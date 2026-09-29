@@ -937,7 +937,8 @@ const char* OlMenuOwnershipLabel(dkr::runtime::netplay::HostControlPolicy policy
 
 std::string OlRulesLine(const dkr::runtime::netplay::Rules& rules) {
     using dkr::runtime::netplay::SynchronizationMode;
-    std::string line = rules.synchronization == SynchronizationMode::Rollback ? "Rollback" : "Lockstep";
+    std::string line = rules.synchronization == SynchronizationMode::ExperimentalRollback ? "Experimental rollback" :
+        (rules.synchronization == SynchronizationMode::Rollback ? "Host prediction" : "Strict input sync");
     line += " \xC2\xB7 ";
     line += rules.automatic_input_delay ? std::string("Automatic input delay")
                                         : std::to_string(rules.manual_input_delay) + " frame delay";
@@ -995,6 +996,17 @@ struct OlTab {
 };
 
 void DrawOlTabs(const std::vector<OlTab>& tabs, float width) {
+#if defined(__ANDROID__)
+    const char* selected = tabs.front().label;
+    for (const auto& tab : tabs) if (tab.id == g_online_page.section) selected = tab.label;
+    ImGui::SetNextItemWidth(width);
+    if (ImGui::BeginCombo("##mobile-online-section", selected)) {
+        for (const auto& tab : tabs) if (ImGui::Selectable(tab.label, tab.id == g_online_page.section))
+            g_online_page.section = tab.id;
+        ImGui::EndCombo();
+    }
+    return;
+#endif
     const bool compact = width <= 540.0F;
     const float px = compact ? 18.0F : 19.0F;
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -1916,7 +1928,8 @@ void DrawOlHostSettings(float width) {
         static const std::vector<std::string> ownership{
             "Host guides menus until character select", "Host controls shared menus", "Every assigned port"};
         static const std::vector<std::string> racers{"2", "3", "4"};
-        static const std::vector<std::string> modes{"Rollback", "Lockstep"};
+        static const std::vector<std::string> modes{"Host prediction (legacy Rollback)", "Strict input sync (Lockstep)",
+                                                     "Experimental rollback (in development)"};
         PaddockGap(16.0F);
         changed |= OlSelect("menu-ownership", "Menu ownership", &g_online_host_control, ownership, inner);
         PaddockGap(16.0F);
@@ -1929,10 +1942,25 @@ void DrawOlHostSettings(float width) {
         OlParagraph("Races and minigames support 2\xE2\x80\x93" "4 racers. Adventure supports 2.", 15.0F, kOlSoft,
                     inner);
         PaddockGap(16.0F);
-        changed |= OlSelect("synchronization", "Synchronization", &g_online_synchronization, modes, inner);
+        int selected_mode = static_cast<int>(CurrentOnlineSynchronization());
+        if (OlSelect("synchronization", "Synchronization", &selected_mode, modes, inner)) {
+            changed |= dkr::runtime::netplay::experimental::select_mode(
+                selected_mode, g_online_synchronization, g_online_experimental_rollback);
+        }
         PaddockGap(16.0F);
-        if (static_cast<SynchronizationMode>(g_online_synchronization) == SynchronizationMode::Rollback) {
-            changed |= OlRange("rollback-window", "Rollback window (frames)", &g_online_rollback_window, 2, 20, inner);
+        if (CurrentOnlineSynchronization() == SynchronizationMode::ExperimentalRollback) {
+            OlParagraph(dkr::runtime::netplay::experimental::runtime_admission_error(SynchronizationMode::ExperimentalRollback),
+                        14.0F, kOlError, inner, true);
+            PaddockGap(8.0F);
+            if (OlButton("Use previous online mode", OlTone::Plain, inner)) {
+                g_online_experimental_rollback = false;
+                changed = true;
+            }
+        } else if (CurrentOnlineSynchronization() == SynchronizationMode::Rollback) {
+            changed |= OlRange("rollback-window", "Prediction allowance (frames)", &g_online_rollback_window, 2, 20, inner);
+            OlParagraph("The host may predict missing input briefly. Clients follow confirmed host frames; "
+                        "this mode does not rewind gameplay. Distance still affects response time.",
+                        14.0F, kOlSoft, inner);
         } else {
             OlParagraph("Lockstep suits very stable, low-latency connections. Network variation can cause stalls.",
                         14.0F, kOlError, inner, true);
@@ -2563,7 +2591,7 @@ void DrawOlConnection(float width, const OnlineFrame& frame) {
                       static_cast<double>(view.network_loss_percent));
         const std::string measuring = "\xE2\x80\x94";
         const std::array<std::pair<const char*, std::string>, 6> metrics{{
-            {"Synchronization", rollback ? "Rollback" : "Lockstep"},
+            {"Synchronization", synchronization_name(view.room.rules.synchronization)},
             {"Input delay", std::to_string(view.input_delay_frames) +
                                 (view.input_delay_frames == 1U ? " frame" : " frames")},
             {"App RTT", view.network_rtt_ms > 0U ? std::to_string(view.network_rtt_ms) + " ms" : measuring},

@@ -1,0 +1,46 @@
+diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan.cpp
+--- a/src/contrib/plume/plume_vulkan.cpp
++++ b/src/contrib/plume/plume_vulkan.cpp
+@@ -13,2 +13,3 @@
+ #include "plume_vulkan.h"
++#include "android_vulkan_checks.hpp"
+ #include "render_resource_policy.hpp"
+@@ -1013,1 +1014,2 @@
++        dkr_android::qualify_image(device, imageInfo);
+         VkResult res = vmaCreateImage(device->allocator, &imageInfo, &createInfo, &vk, &allocation, &allocationInfo);
+@@ -1214,1 +1215,15 @@
++        VkDescriptorSetVariableDescriptorCountLayoutSupport variableSupport{};
++        variableSupport.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT;
++        VkDescriptorSetLayoutSupport support{};
++        support.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT;
++        support.pNext = descriptorSetDesc.lastRangeIsBoundless ? &variableSupport : nullptr;
++        vkGetDescriptorSetLayoutSupport(device->vk, &setLayoutInfo, &support);
++        if (!support.supported || (descriptorSetDesc.lastRangeIsBoundless && !setBindings.empty() &&
++                setBindings.back().descriptorCount > variableSupport.maxVariableDescriptorCount)) {
++            fprintf(stderr, "[Android] Descriptor layout unsupported: bindings=%u variable-limit=%u\n",
++                setLayoutInfo.bindingCount, variableSupport.maxVariableDescriptorCount);
++            dkr::runtime::graphics_health::quarantine_resource(dkr::runtime::graphics_health::Stage::DeviceLimits, VK_ERROR_FEATURE_NOT_PRESENT);
++        }
+         VkResult res = vkCreateDescriptorSetLayout(device->vk, &setLayoutInfo, nullptr, &vk);
+@@ -1269,1 +1284,2 @@
++        dkr_android::qualify_pipeline(device, descriptorSetLayouts, desc);
+         VkResult res = vkCreatePipelineLayout(device->vk, &layoutInfo, nullptr, &vk);
+@@ -4090,3 +4107,6 @@
+         allocatorInfo.instance = renderInterface->instance;
+-        allocatorInfo.vulkanApiVersion = renderInterface->appInfo.apiVersion;
++        // The instance loader and the physical device need not expose the
++        // same core version (notably Vulkan 1.1 Android + EXT indexing).
++        allocatorInfo.vulkanApiVersion = std::min(renderInterface->appInfo.apiVersion, physicalDeviceProperties.apiVersion);
+ 
+@@ -4477,3 +4497,11 @@
+         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+-        appInfo.apiVersion = VK_API_VERSION_1_2;
++        uint32_t loaderVersion = VK_API_VERSION_1_0;
++        if (vkEnumerateInstanceVersion) vkEnumerateInstanceVersion(&loaderVersion);
++        if (loaderVersion < VK_API_VERSION_1_1) {
++            fprintf(stderr, "[Android] Vulkan 1.1 loader with descriptor-indexing support is required\n");
++            dkr::runtime::graphics_health::record(dkr::runtime::graphics_health::Stage::DeviceFeatures, VK_ERROR_INCOMPATIBLE_DRIVER);
++            return;
++        }
++        appInfo.apiVersion = std::min(loaderVersion, uint32_t(VK_API_VERSION_1_2));
+ 
