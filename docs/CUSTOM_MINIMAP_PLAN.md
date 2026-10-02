@@ -604,8 +604,14 @@ What pinned it down, answering the first question in section 7:
   builds - but nobody has raced a track with its own minimap yet. The step 4
   list stands: 1P, 2P, 3P, 4P, Adventure 2, time trial with a ghost, and the
   widescreen HUD layout moving picture and dots together.
-- **The HD bonus** (a sharper minimap in `-hd.zip`) is not built. A line-swapped
-  IA8 texture needs its own replacement hash in `rice_identity`, which only
-  knows the level-texture loads today.
+- **The HD bonus** was built on 2026-10-02, but nobody has seen it in game yet.
+  The export draws the picture again at `HD_SCALE` (8) pixels a texel from the
+  same edges and placement, then puts it in the `-hd.zip` under
+  `minimap.texture_identity` of the payload it ships. That is `rice_identity`
+  with `swapped=True`: `gDPLoadTextureBlockS` passes a DXT of 0, so the patch
+  takes the row from the render tile's `line`, and the CRC walks the odd rows
+  still swapped. All 33 retail minimaps re-encoded this way come out under the
+  names DKR REMASTERED's Rice pack gives them (`test_rice_identity.py`).
+  A picture from *Use My PNG* has no larger version and is left out.
 - **The viewport overlay** draws with Blender's GPU module, which headless tests
   cannot reach; only the placement of its corners is tested.

@@ -34,8 +34,9 @@ import re
 import shutil
 from typing import Dict, List, Optional
 
-from . import (gltf_io, level_header, level_model_encoder, music_audio,
-               object_map_encoder, rice_pack, textures as texture_module)
+from . import (gltf_io, level_header, level_model_encoder,
+               minimap as minimap_module, music_audio, object_map_encoder,
+               rice_pack, textures as texture_module)
 from .gltf_io import ObjectMap
 
 MANIFEST_NAME = "manifest.json"
@@ -617,6 +618,16 @@ class TrackPackage:
                 "and is complete without the pack. With it, DKR-R's renderer draws",
                 "the original in place of the reduction.",
                 "",
+            ]
+            if self.hd_pack.get("minimap"):
+                lines += [
+                    "It also holds the minimap drawn again at %d times the size,"
+                    % minimap_module.HD_SCALE,
+                    "from the same road edges, so it covers what the small one does",
+                    "and the racers' dots stay on the road.",
+                    "",
+                ]
+            lines += [
                 "You do not install it by hand. Import the track (below) with",
                 "`%s` sitting beside this folder: DKR-R installs the pack with" % pack,
                 "the track, enabled, filed against it rather than added to the",

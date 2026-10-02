@@ -4,7 +4,8 @@
 imported retail track ships untouched, what a reshaped one ships, and that a
 minimap started from the AI path reaches the package - picture, sprite, the
 model's placeholder and numbers, and the header's "no minimap" bit - exactly
-as the runtime reads them.
+as the runtime reads them - and that its high-resolution copy reaches the
+``-hd.zip`` beside it, named after the texture the package ships.
 
     blender --background --factory-startup --python tools/blender/tests/test_blender_minimap.py
 """
@@ -18,6 +19,7 @@ import struct
 import sys
 import tempfile
 import traceback
+import zipfile
 
 import bpy
 
@@ -32,7 +34,8 @@ sys.path.insert(0, _HERE)
 
 import dkr_track_editor  # noqa: E402
 from dkr_track_editor import (  # noqa: E402
-    level_header, level_model, level_model_encoder, minimap, prefs, textures,
+    dkrmap, level_header, level_model, level_model_encoder, minimap, prefs,
+    rice_pack, textures,
 )
 
 FAILURES = []
@@ -229,7 +232,10 @@ def test_retail_flow(temporary):
           and sprite["base"] == minimap.CUSTOM_TEXTURE_ID_BASE,
           "the sprite holds the anchor and the texture placeholder")
     with open(os.path.join(target, "HOW-TO-BUILD.md"), "r", encoding="utf-8") as handle:
-        check("## Minimap" in handle.read(), "the build notes explain it")
+        notes = handle.read()
+    check("## Minimap" in notes, "the build notes explain it")
+    check_hd_pack(target, texture, placement, exported[1])
+    check("minimap drawn again" in notes, "and the HD copy")
 
     # Validate says so.
     bpy.ops.dkr.validate()
@@ -265,6 +271,32 @@ def test_retail_flow(temporary):
         check(_header_byte(target, 0xBC) & 1, "and hides it again")
 
 
+def check_hd_pack(target, texture, placement, manifest):
+    """The minimap's HD copy is in the pack, under the shipped texture's name."""
+    pack = dkrmap.hd_pack_path(target)
+    check(os.path.isfile(pack), "the HD pack is written beside it")
+    if not os.path.isfile(pack):
+        return
+    identity = minimap.texture_identity(texture)
+    name = rice_pack.entry_name(identity)
+    with zipfile.ZipFile(pack) as archive:
+        names = archive.namelist()
+        check(name in names, "it holds the minimap as %s (%s)" % (name, names))
+        if name in names:
+            with tempfile.TemporaryDirectory() as scratch:
+                path = archive.extract(name, scratch)
+                size = textures.png_size(path)
+            scale = minimap.HD_SCALE
+            check(size == (placement.width * scale, placement.height * scale),
+                  "at %d times the texture's size (%r)" % (scale, size))
+    stamp = rice_pack.read_stamp(pack) or {}
+    check(stamp.get("minimap", {}).get("identity") == identity,
+          "the stamp names it (%r)" % stamp.get("minimap"))
+    digest = manifest.get("hdTexturePack", {}).get("textureDigest")
+    check(digest is not None and digest == stamp.get("textureDigest"),
+          "and pairs with the manifest (%r, %r)" % (digest, stamp.get("textureDigest")))
+
+
 def test_png(temporary, built):
     print("Save PNG and Use My PNG")
     ops = _ops()
@@ -284,6 +316,8 @@ def test_png(temporary, built):
     again = ops.build(bpy.context)
     check(again is not None and bytes(again.rgba[:4]) == b"\x00\x00\x00\xff",
           "and the minimap uses it")
+    check(again is not None and again.hd_picture() is None,
+          "your own PNG has no larger version to put in the HD pack")
     wrong = os.path.join(temporary, "wrong.png")
     minimap.write_png(wrong, width + 8, height, bytearray((width + 8) * height * 4))
     try:

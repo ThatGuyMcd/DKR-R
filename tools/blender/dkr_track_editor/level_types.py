@@ -443,10 +443,12 @@ def tab_of(object_type) -> str:
 WEAPON_BALLOON = "ASSET_OBJECT_WEAPONBALLOON"
 SETUPPOINT = "ASSET_OBJECT_SETUPPOINT"
 CHECKPOINT = "ASSET_OBJECT_CHECKPOINT"
+MODECHANGE = "ASSET_OBJECT_MODECHANGE"
 
 
 class Preset:
-    """A type placed with some fields already chosen - a balloon's colour."""
+    """A type placed with some fields already chosen - a balloon's colour, or
+    which way a loop's mode changer switches the racer."""
 
     __slots__ = ("pid", "label", "sub", "object_id", "fields", "icon", "help")
 
@@ -481,6 +483,25 @@ PRESETS: Tuple[Preset, ...] = (
            {"balloonType": "BALLOON_TYPE_MAGNET"}, "COLOR",
            "Weapon balloon, rainbow: a magnet that pulls the racer to the one "
            "ahead."),
+    # A racer crossing a mode changer takes its vehicleID (obj_loop_modechange,
+    # object_functions.c). VEHICLE_LOOPDELOOP runs the loop physics in
+    # racer.c func_8004CC20: gravity along the kart's own floor, unclamped
+    # pitch, throttle held open. The plain car's physics cannot climb past
+    # ~73 degrees whatever its speed, so a loop needs both of these.
+    Preset("LOOP_ENTRY", "Loop Entry", "Loop physics on", MODECHANGE,
+           {"vehicleID": "VEHICLE_LOOPDELOOP"}, "LOOP_FORWARDS",
+           "Stand it across the road at the foot of the loop, like a gate: "
+           "racers crossing it ride the loop glued to its floor. Its local Y "
+           "must point the way they drive (rotation Z 0 drives toward +Y, as "
+           "the start grid does), within 22.5 degrees, and the loop must run "
+           "straight that way - turned further off, the push forward stops "
+           "and the kart falls."),
+    Preset("LOOP_EXIT", "Loop Exit", "Back to car", MODECHANGE,
+           {"vehicleID": "VEHICLE_CAR"}, "LOOP_BACK",
+           "Stand it across the road where the loop lands: racers crossing it "
+           "drive as a car again. Its local Y points the way they drive. "
+           "Without it the loop physics only end after about 10 seconds, or "
+           "1 second airborne."),
 )
 
 
@@ -511,6 +532,9 @@ HELP: Dict[str, str] = {
     "ASSET_OBJECT_GROUNDZIPPER": "A speed pad on the ground.",
     "ASSET_OBJECT_AIRZIPPERS": "Boost rings in the air, for planes.",
     "ASSET_OBJECT_WATERZIPPERS": "Boost pads on water, for hovercraft.",
+    MODECHANGE: "Switches the vehicle of each racer crossing it, inside radius. "
+                "Retail uses it for the loop-de-loops; place one as Loop Entry "
+                "and one as Loop Exit.",
     "ASSET_OBJECT_COIN": "A banana: each one collected makes a racer faster. In "
                          "a banana challenge it is what the racers collect.",
     "ASSET_OBJECT_COINCREATOR": "Spawns bananas during a banana challenge.",
@@ -553,9 +577,9 @@ def place_description(object_type, key: Optional[str],
     """The tooltip of one Place button: what it is, and whether it fits here."""
     parts = []
     if chosen is not None:
-        parts.append("%s (%s). %s balloonType = %s."
+        parts.append("%s (%s). %s %s."
                      % (chosen.label, chosen.sub, chosen.help,
-                        chosen.fields.get("balloonType")))
+                        ", ".join("%s = %s" % item for item in chosen.fields.items())))
     written = HELP.get(object_type.object_id)
     if written:
         parts.append(written)
@@ -590,7 +614,8 @@ def visible_types(catalog, key: Optional[str], tab: str, category: str = "ALL",
                   show_all: bool = False) -> List[Entry]:
     """The Place list for one tab: usable types first, featured, then common.
 
-    A weapon balloon becomes its five colours, since which one is placed is the
+    A type with presets becomes them - a weapon balloon its five colours, a
+    mode changer the loop's entry and exit - since which one is placed is the
     whole point of placing it.
     """
     rows = []
@@ -607,8 +632,9 @@ def visible_types(catalog, key: Optional[str], tab: str, category: str = "ALL",
                                -row[0].retail_count, row[0].object_id))
     out = []
     for object_type, ok in rows:
-        if object_type.object_id == WEAPON_BALLOON:
-            out += [Entry(object_type, p, ok) for p in PRESETS]
+        presets = [p for p in PRESETS if p.object_id == object_type.object_id]
+        if presets:
+            out += [Entry(object_type, p, ok) for p in presets]
         else:
             out.append(Entry(object_type, None, ok))
     return out

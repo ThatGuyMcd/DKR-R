@@ -157,7 +157,14 @@ def ensure_edge_object(context, bounds=None):
     """``(object, layer, drawing)``, making whatever is missing."""
     obj = edge_object(context)
     if obj is None:
-        data = bpy.data.grease_pencils.new(OBJECT_NAME)
+        # Blender 4.3-4.5 keep the legacy datablocks under ``grease_pencils``,
+        # which no longer make an object; the new kind is ``grease_pencils_v3``
+        # there, and took over the plain name in 5.0. Not ``or``: an empty
+        # collection is falsy.
+        pencils = getattr(bpy.data, "grease_pencils_v3", None)
+        if pencils is None:
+            pencils = bpy.data.grease_pencils
+        data = pencils.new(OBJECT_NAME)
         obj = bpy.data.objects.new(OBJECT_NAME, data)
         scene.ensure_root(context).objects.link(obj)
         obj.location = (0.0, 0.0, plane_height(bounds))
@@ -469,18 +476,37 @@ def start_grid(context):
 
 
 class Built:
-    """A picture made for the track, or why it could not be."""
+    """A picture made for the track, or why it could not be.
 
-    __slots__ = ("placement", "rgba", "error", "png_error", "markers", "key")
+    ``edges``, ``soft`` and ``flag`` are what the picture was drawn from, kept
+    so the export can draw it again at high resolution; ``from_png`` says the
+    texture is the author's own PNG instead, which has no larger version.
+    """
+
+    __slots__ = ("placement", "rgba", "error", "png_error", "markers", "key",
+                 "edges", "soft", "flag", "from_png")
 
     def __init__(self, placement=None, rgba=None, error="", png_error="",
-                 markers=(), key=None):
+                 markers=(), key=None, edges=(), soft=1, flag=None,
+                 from_png=False):
         self.placement = placement
         self.rgba = rgba
         self.error = error
         self.png_error = png_error
         self.markers = list(markers)
         self.key = key
+        self.edges = list(edges)
+        self.soft = soft
+        self.flag = flag
+        self.from_png = from_png
+
+    def hd_picture(self):
+        """``(width, height, rgba)`` at :data:`minimap.HD_SCALE`, or ``None``
+        when the texture is the author's PNG."""
+        if self.from_png or self.placement is None:
+            return None
+        return minimap.hd_picture(self.edges, self.placement, self.soft,
+                                  self.flag)
 
 
 _BUILT = {"key": None, "built": None}
@@ -522,10 +548,12 @@ def build(context, state=None) -> Optional[Built]:
         return built
 
     png_error = ""
+    from_png = False
     if settings.minimap_png:
         try:
             rgba = minimap.read_own_png(bpy.path.abspath(settings.minimap_png),
                                         placement.width, placement.height)
+            from_png = True
         except minimap.MinimapError as error:
             png_error = str(error)
 
@@ -543,7 +571,9 @@ def build(context, state=None) -> Optional[Built]:
                 markers.append((u, v, minimap.PREVIEW_CPUS[(number - 1) % 7], None))
         # The player's arrow is drawn over the dots, as the game draws it.
         markers = markers[1:] + markers[:1]
-    built = Built(placement, rgba, png_error=png_error, markers=markers, key=key)
+    built = Built(placement, rgba, png_error=png_error, markers=markers, key=key,
+                  edges=state.edges, soft=settings.minimap_soft, flag=flag,
+                  from_png=from_png)
     _BUILT.update(key=key, built=built)
     return built
 

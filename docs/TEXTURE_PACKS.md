@@ -126,6 +126,12 @@ texture's own size for every size the addon accepts.
   8-bit one under 8 - is read by the game with a stride its rows do not have,
   so its identity depends on memory the addon never wrote. The export names
   these and leaves them out.
+- **The minimap.** A track that draws its own minimap gets that picture in the
+  pack too, drawn again from the same road edges at 8 pixels a texel, so it
+  covers what the texture does and the racers' dots stay on the road. The game
+  loads a minimap line-swapped (`gDPLoadTextureBlockS`), and its name is
+  computed for that load. A minimap from *Use My PNG* has no larger version
+  and is left out.
 - **One pack per export.** The pack's `dkr-r-track.json` and the track's
   `manifest.json` carry the same texture digest, and a pack from another
   export of the same track matches nothing. The installer compares them: a

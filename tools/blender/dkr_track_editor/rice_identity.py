@@ -52,6 +52,13 @@ Two parts, both transcriptions, both held to their sources by
   lands on the image's own size is a property of the sizes the addon accepts,
   and :func:`derive` checks it rather than assuming it.
 
+A texture flagged ``RENDER_LINE_SWAP`` - the minimap is one - is loaded with
+``gDPLoadTextureBlockS`` instead, which passes ``gDPLoadBlock`` a DXT of zero:
+the patch then takes the row from the render tile's ``line``, and the CRC walks
+the odd rows still swapped, as they sit in RDRAM. Pass ``swapped=True`` for
+those. All 33 retail minimaps a Rice pack replaces come out under the names
+that pack gives them (``tests/test_rice_identity.py``).
+
 Deliberately free of ``bpy``.
 """
 
@@ -59,8 +66,8 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-from .textures import (FORMAT_CODES, TextureEncodeError, check_size,
-                       nudge_texels, texel_bytes)
+from .textures import (FORMAT_CODES, TMEM_BYTES, TextureEncodeError,
+                       check_size, nudge_texels, texel_bytes)
 
 # ``PR/gbi.h``.
 G_IM_FMT_RGBA = 0
@@ -271,24 +278,25 @@ class Tiles:
 
 
 def load_texture_block(width, height, texture_format, clamp_s=False,
-                       clamp_t=False) -> Tiles:
+                       clamp_t=False, swapped=False) -> Tiles:
     """The tiles ``material_init``'s ``gDPLoadTextureBlock`` leaves behind.
 
     ``gDPSetTextureImage`` is given width 1 and the load-block size;
     ``gDPLoadBlock`` puts the DXT where the load tile's ``lrt`` goes; the render
     tile's ``line`` is the row in 64-bit words; ``gDPSetTileSize`` covers the
-    whole image from 0,0.
+    whole image from 0,0. ``swapped`` is the ``...S`` variant, identical but
+    for a DXT of zero.
     """
     width, height = int(width), int(height)
     fmt, siz = tile_format(texture_format)
     cms, cmt, masks, maskt = material_tile(width, height, clamp_s, clamp_t)
     if siz == G_IM_SIZ_4b:
         image_siz = G_IM_SIZ_16b
-        dxt = _gbi_dxt_4b(width)
+        dxt = 0 if swapped else _gbi_dxt_4b(width)
         line = ((width >> 1) + 7) >> 3
     else:
         image_siz = _LOAD_BLOCK[siz]
-        dxt = _gbi_dxt(width, _BYTES[siz])
+        dxt = 0 if swapped else _gbi_dxt(width, _BYTES[siz])
         line = ((width * _LINE_BYTES[siz]) + 7) >> 3
     return Tiles(
         fmt=fmt, siz=siz, line=line,
@@ -325,7 +333,25 @@ def live_rectangle(tiles: Tiles):
     return width, height, bytes_per_row
 
 
-def derive(width, height, texture_format, clamp_s=False, clamp_t=False):
+def _check_swapped_size(width, height, texture_format) -> None:
+    """The limits a line-swapped texture answers to.
+
+    Not :func:`..textures.check_size`'s: that one is a level texture's, which
+    has to tile and so has power-of-two sides up to 64. A line-swapped one is a
+    sprite - clamped, any size the header and texture memory hold, as the
+    retail minimaps' 80x50 and 48x73 are.
+    """
+    if width <= 0 or height <= 0 or width > 255 or height > 255:
+        raise IdentityError("%dx%d does not fit a TextureHeader" % (width, height))
+    size = texel_bytes(width, height, texture_format)
+    if size > TMEM_BYTES:
+        raise IdentityError(
+            "%dx%d in this format is %d bytes, past the %d of texture memory "
+            "it is loaded into at once" % (width, height, size, TMEM_BYTES))
+
+
+def derive(width, height, texture_format, clamp_s=False, clamp_t=False,
+           swapped=False):
     """``(fmt, siz, width, height, bytes_per_row)`` the live CRC will use.
 
     Raises :class:`IdentityError` for a texture whose identity cannot be known
@@ -341,12 +367,16 @@ def derive(width, height, texture_format, clamp_s=False, clamp_t=False):
       whatever the loader put after it.
     """
     width, height = int(width), int(height)
-    try:
-        check_size(width, height, texture_format)
-    except TextureEncodeError as error:
-        raise IdentityError(str(error))
+    if swapped:
+        _check_swapped_size(width, height, texture_format)
+    else:
+        try:
+            check_size(width, height, texture_format)
+        except TextureEncodeError as error:
+            raise IdentityError(str(error))
 
-    tiles = load_texture_block(width, height, texture_format, clamp_s, clamp_t)
+    tiles = load_texture_block(width, height, texture_format, clamp_s, clamp_t,
+                               swapped)
     live_width, live_height, stride = live_rectangle(tiles)
     line_bytes = (live_width << tiles.siz) >> 1
     if line_bytes < 4:
@@ -368,24 +398,25 @@ def derive(width, height, texture_format, clamp_s=False, clamp_t=False):
 
 
 def hd_problem(width, height, texture_format, clamp_s=False,
-               clamp_t=False) -> Optional[str]:
+               clamp_t=False, swapped=False) -> Optional[str]:
     """Why a texture this size cannot have a high-resolution version, or ``None``."""
     try:
-        derive(width, height, texture_format, clamp_s, clamp_t)
+        derive(width, height, texture_format, clamp_s, clamp_t, swapped)
     except IdentityError as error:
         return str(error)
     return None
 
 
 def rice_identity(texels, width, height, texture_format, clamp_s=False,
-                  clamp_t=False) -> str:
+                  clamp_t=False, swapped=False) -> str:
     """``<crc>#<fmt>#<siz>`` for these texels, exactly as RT64 will name them.
 
     ``texels`` are the bytes after the ``TextureHeader`` - what
     :func:`..textures.encode_texels` produces and ``textures/N.bin`` carries.
+    For a ``swapped`` texture they are the payload's, odd rows already swapped.
     """
     fmt, siz, live_width, live_height, stride = derive(
-        width, height, texture_format, clamp_s, clamp_t
+        width, height, texture_format, clamp_s, clamp_t, swapped
     )
     if len(texels) < texel_bytes(width, height, texture_format):
         raise IdentityError(

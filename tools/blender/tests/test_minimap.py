@@ -229,6 +229,64 @@ def test_even_odd():
     check(all(value in (0.0, 1.0) for value in hard), "Soft Edge 0 is hard")
 
 
+def test_hd_picture():
+    print("the high-resolution copy covers what the texture does")
+    bounds = (0, 1000, 0, 10, 0, 1000)
+    outer = [(100, 0, 100), (900, 0, 150), (850, 0, 900), (120, 0, 820)]
+    inner = [(300, 0, 300), (700, 0, 330), (680, 0, 700), (310, 0, 650)]
+    edges = [outer, inner]
+    placement = minimap.fit(edges, bounds, size=64, rotation=0)
+    scale = minimap.HD_SCALE
+    flag = (placement.width // 2 - 2, 3)
+    for soft in (0, 1, 2):
+        native = minimap.picture(edges, placement, soft, flag)
+        width, height, hd = minimap.hd_picture(edges, placement, soft, flag)
+        check((width, height) == (placement.width * scale, placement.height * scale),
+              "soft %d: %d times the size (%dx%d)" % (soft, scale, width, height))
+        worst = total = 0.0
+        for v in range(placement.height):
+            for u in range(placement.width):
+                if flag[0] <= u < flag[0] + minimap.FLAG_SIZE and \
+                        flag[1] <= v < flag[1] + minimap.FLAG_SIZE:
+                    continue
+                mean = sum(hd[((v * scale + y) * width + u * scale + x) * 4 + 3]
+                           for y in range(scale) for x in range(scale)) / scale ** 2
+                gap = abs(mean - native[(v * placement.width + u) * 4 + 3])
+                total += gap
+                worst = max(worst, gap)
+        average = total / (placement.width * placement.height)
+        # A hard edge is a staircase in the texture and a line in the copy, so
+        # it can differ by a whole texel there; on average they agree.
+        check(average < (6.0 if soft == 0 else 2.0) and
+              (soft == 0 or worst < 64),
+              "soft %d: reduced back, it is the texture (mean %.2f, worst %.0f)"
+              % (soft, average, worst))
+
+    coverage = minimap.rasterize(edges, placement, scale=scale)
+    check(len(coverage) == width * height, "rasterize draws at a scale")
+    _w, _h, hd = minimap.hd_picture(edges, placement, 1, flag)
+    greys = set()
+    for dy in range(minimap.FLAG_SIZE):
+        for dx in range(minimap.FLAG_SIZE):
+            cx = (flag[0] + dx) * scale + scale // 2
+            cy = (flag[1] + dy) * scale + scale // 2
+            at = (cy * width + cx) * 4
+            if coverage[cy * width + cx] >= 0.35:
+                greys.add((hd[at], (dx + dy) % 2))
+    check(greys and all(grey == (0 if parity == 0 else 255)
+                        for grey, parity in greys),
+          "the flag is the same checkerboard, a square a texel (%r)" % greys)
+
+    rgba = minimap.picture(edges, placement, 1, flag)
+    payload = minimap.texture_payload(rgba, placement.width, placement.height)
+    identity = minimap.texture_identity(payload)
+    check(identity.endswith("#3#1"), "the texture is named as IA8 (%s)" % identity)
+    rgba[3] = 255 - rgba[3]
+    other = minimap.texture_payload(rgba, placement.width, placement.height)
+    check(minimap.texture_identity(other) != identity,
+          "a different picture has a different name")
+
+
 def test_payloads():
     print("the payloads are what the loaders read")
     width, height = 16, 3
@@ -329,6 +387,7 @@ def main():
     test_fit_limits()
     test_auto_rotation()
     test_even_odd()
+    test_hd_picture()
     test_payloads()
     test_inverse()
     if tree is None:

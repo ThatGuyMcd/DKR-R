@@ -82,6 +82,9 @@ MAX_TEXELS = 4096
 WIDTH_STEP = 8
 #: Transparent texels left around the road.
 MARGIN = 2
+#: Pixels a texel in the high-resolution copy the ``-hd.zip`` carries: 80x50
+#: becomes 640x400, sharp at 4K, where the HUD draws a texel ~9 pixels wide.
+HD_SCALE = 8
 #: Samples per pixel side when filling. Four gives seventeen levels of edge,
 #: the sixteen IA8 can store and then some - retail's soft edge.
 SUPERSAMPLE = 4
@@ -575,7 +578,8 @@ def _polygons(edges, placement):
     return polygons
 
 
-def rasterize(edges, placement: Placement, supersample=SUPERSAMPLE) -> List[float]:
+def rasterize(edges, placement: Placement, supersample=SUPERSAMPLE,
+              scale=1) -> List[float]:
     """Coverage of the road, 0 to 1, top row first.
 
     Every edge is a closed polygon - an open stroke is closed by the straight
@@ -583,10 +587,16 @@ def rasterize(edges, placement: Placement, supersample=SUPERSAMPLE) -> List[floa
     so a ring needs no notion of inside and outside and a shortcut is simply
     another edge. Filled at ``supersample`` times the size and averaged down,
     which is where the soft edge retail pictures have comes from.
+
+    ``scale`` draws the same picture with that many pixels to a texel - the
+    high-resolution copy, which lines up with the dots because it is the same
+    mapping.
     """
-    width, height = placement.width, placement.height
+    scale = int(scale)
+    width, height = placement.width * scale, placement.height * scale
     step = int(supersample)
     rows = height * step
+    zoom = step * scale
     polygons = _polygons(edges, placement)
     segments = []
     for polygon in polygons:
@@ -594,7 +604,7 @@ def rasterize(edges, placement: Placement, supersample=SUPERSAMPLE) -> List[floa
             x1, y1 = polygon[(index + 1) % len(polygon)]
             if y0 == y1:
                 continue
-            segments.append((x0 * step, y0 * step, x1 * step, y1 * step))
+            segments.append((x0 * zoom, y0 * zoom, x1 * zoom, y1 * zoom))
 
     # Each segment filed under the sample rows it can cross.
     buckets = [[] for _ in range(rows)]
@@ -621,8 +631,18 @@ def rasterize(edges, placement: Placement, supersample=SUPERSAMPLE) -> List[floa
         for pair in range(0, len(crossings) - 1, 2):
             start = max(0, int(math.ceil(crossings[pair] - 0.5)))
             stop = min(columns - 1, int(math.ceil(crossings[pair + 1] - 0.5)) - 1)
-            for column in range(start, stop + 1):
-                counts[base + column // step] += 1
+            if stop < start:
+                continue
+            # Samples start..stop, counted a pixel at a time rather than a
+            # sample at a time: the ends take what they hold, the middle all.
+            first, last = start // step, stop // step
+            if first == last:
+                counts[base + first] += stop - start + 1
+                continue
+            counts[base + first] += step - start % step
+            counts[base + last] += stop % step + 1
+            for pixel in range(base + first + 1, base + last):
+                counts[pixel] += step
     whole = float(step * step)
     return [count / whole for count in counts]
 
@@ -679,6 +699,11 @@ def picture(edges, placement: Placement, soft=1, flag=None) -> bytearray:
     """
     width, height = placement.width, placement.height
     coverage = soften(rasterize(edges, placement), width, height, soft)
+    return _paint(coverage, width, height, flag, 1)
+
+
+def _paint(coverage, width, height, flag, cell) -> bytearray:
+    """White road at ``coverage``'s alpha, and the flag in squares of ``cell``."""
     rgba = bytearray(width * height * 4)
     for index, value in enumerate(coverage):
         alpha = int(round(max(0.0, min(1.0, value)) * 255))
@@ -686,17 +711,70 @@ def picture(edges, placement: Placement, soft=1, flag=None) -> bytearray:
             rgba[index * 4:index * 4 + 4] = bytes((255, 255, 255, alpha))
     if flag is not None:
         left, top = flag
-        for dy in range(FLAG_SIZE):
-            for dx in range(FLAG_SIZE):
-                x, y = left + dx, top + dy
-                if not (0 <= x < width and 0 <= y < height):
-                    continue
+        for y in range(max(0, top * cell), min(height, (top + FLAG_SIZE) * cell)):
+            for x in range(max(0, left * cell), min(width, (left + FLAG_SIZE) * cell)):
                 if coverage[y * width + x] < 0.35:
                     continue
-                grey = 0 if (dx + dy) % 2 == 0 else 255
+                square = (x // cell - left) + (y // cell - top)
+                grey = 0 if square % 2 == 0 else 255
                 at = (y * width + x) * 4
                 rgba[at:at + 4] = bytes((grey, grey, grey, 255))
     return rgba
+
+
+def hd_soften(coverage: List[float], width: int, height: int, level: int,
+              scale: int) -> List[float]:
+    """:func:`soften` for a picture drawn ``scale`` times larger.
+
+    0 is hard and 1 the coverage as filled, as in the texture - only sharper,
+    which is the point. 2 and up blur by what one 1-2-1 pass spreads a texel,
+    in pixels of this size: two box passes of the same variance per level.
+    """
+    level = int(level)
+    if level <= 0:
+        return [1.0 if value >= 0.5 else 0.0 for value in coverage]
+    out = list(coverage)
+    # A 1-2-1 pass has a variance of half a texel squared; a box 2r+1 wide has
+    # ((2r+1)^2 - 1) / 12, and two of them should add up to it.
+    radius = max(1, int(round((math.sqrt(3.0 * scale * scale + 1.0) - 1.0) / 2.0)))
+    for _ in range(2 * (level - 1)):
+        out = _box_blur(out, width, height, radius)
+    return out
+
+
+def _box_blur(values: List[float], width: int, height: int, radius: int) -> List[float]:
+    """A box ``2 * radius + 1`` wide, along rows then columns, by running sums;
+    near the border it averages only what lies inside, as :func:`soften` does."""
+    def one_way(source, length, count, at):
+        out = [0.0] * len(source)
+        for line in range(count):
+            prefix = [0.0]
+            total = 0.0
+            for index in range(length):
+                total += source[at(line, index)]
+                prefix.append(total)
+            for index in range(length):
+                low = max(0, index - radius)
+                high = min(length, index + radius + 1)
+                out[at(line, index)] = (prefix[high] - prefix[low]) / (high - low)
+        return out
+
+    rows = one_way(values, width, height, lambda y, x: y * width + x)
+    return one_way(rows, height, width, lambda x, y: y * width + x)
+
+
+def hd_picture(edges, placement: Placement, soft=1, flag=None,
+               scale=HD_SCALE) -> Tuple[int, int, bytearray]:
+    """``(width, height, rgba)``: the picture again at ``scale`` pixels a texel.
+
+    The same edges through the same mapping, so in place of the texture it
+    covers exactly what the texture does and the dots land on the same road.
+    """
+    scale = int(scale)
+    width, height = placement.width * scale, placement.height * scale
+    coverage = hd_soften(rasterize(edges, placement, scale=scale), width,
+                         height, soft, scale)
+    return width, height, _paint(coverage, width, height, flag, scale)
 
 
 def tinted(rgba, colour: int, opacity=160) -> bytearray:
@@ -827,6 +905,26 @@ def texture_payload(rgba, width: int, height: int, sprite_x=SPRITE_X,
     while len(payload) % 16:
         payload.append(0)
     return bytes(payload)
+
+
+def texture_identity(payload: bytes) -> str:
+    """The name RT64 replaces this minimap texture by - from the payload itself,
+    so a pack and the package it sits beside cannot disagree about it.
+
+    Retail loads a minimap with ``gDPLoadTextureBlockS``, and so does this one,
+    which :func:`..rice_identity.rice_identity` takes as ``swapped``.
+    """
+    from . import rice_identity  # noqa: PLC0415
+
+    width, height = payload[0], payload[1]
+    start = texture_module.TEXTURE_HEADER_SIZE
+    texels = payload[start:start + texture_module.texel_bytes(width, height, IA8)]
+    try:
+        return rice_identity.rice_identity(texels, width, height, IA8,
+                                           clamp_s=True, clamp_t=True,
+                                           swapped=True)
+    except rice_identity.IdentityError as error:
+        raise MinimapError(str(error))
 
 
 def sprite_payload(anchor_x: int, anchor_y: int, texture_ordinal: int = 0) -> bytes:

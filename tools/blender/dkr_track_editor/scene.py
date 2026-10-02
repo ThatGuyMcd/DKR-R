@@ -87,6 +87,9 @@ TYPE_DISPLAY = {
     "ASSET_OBJECT_AIRZIPPERS": ("ARROWS", 32.0),
     "ASSET_OBJECT_WATERZIPPERS": ("ARROWS", 32.0),
     "ASSET_OBJECT_EXIT": ("CUBE", 40.0),
+    # Without artwork, labelled axes: which way a loop's mode changer faces
+    # decides whether it works, and its Y is the way racers drive through it.
+    "ASSET_OBJECT_MODECHANGE": ("ARROWS", 64.0),
 }
 
 

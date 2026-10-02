@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import traceback
 
 import bpy
@@ -193,7 +194,7 @@ class DKR_OT_export_dkrmap(bpy.types.Operator, ExportHelper):
             # after everything that can still refuse the export - a pack left
             # beside a package that was never written would belong to nothing.
             hd_pack = _write_hd_pack(self, context, package, own,
-                                     texture_payloads)
+                                     texture_payloads, chart)
             package.write()
         except geometry_export.GeometryExportError as error:
             self.report(
@@ -387,14 +388,15 @@ def _separate_identical(context, own) -> list:
     return moved
 
 
-def _write_hd_pack(operator, context, package, own, payloads) -> str:
+def _write_hd_pack(operator, context, package, own, payloads, chart=None) -> str:
     """Write the high-resolution texture pack beside the package.
 
     One replacement per texture of the track's own that can have one, named by
     the identity RT64 will compute for the payload just written - computed from
     those very bytes, so the pack and the package cannot disagree about what
-    the texture is. Returns ``"<file> with N HD texture(s)"`` for the export's
-    report, or ``""`` if no pack was written.
+    the texture is. The track's own minimap goes in too, drawn again at
+    :data:`minimap.HD_SCALE`. Returns ``"<file> with N HD texture(s)"`` for the
+    export's report, or ``""`` if no pack was written.
 
     Nothing here can fail the export. A track is whole without its pack, so a
     texture with no original, one too large for the importer, or a pack that
@@ -433,7 +435,59 @@ def _write_hd_pack(operator, context, package, own, payloads) -> str:
         operator.report({"WARNING"},
                         "and %d more texture(s) have none" % (len(left_out) - 3))
 
-    if not chosen:
+    map_entry = _hd_minimap(operator, package, chart,
+                            {identity for identity, _o, _e in chosen})
+    try:
+        return _pack_entries(operator, package, target, chosen, payloads,
+                             chart, map_entry)
+    finally:
+        if map_entry is not None:
+            try:
+                os.remove(map_entry[1])
+            except OSError:
+                pass
+
+
+def _hd_minimap(operator, package, chart, taken):
+    """``(identity, png path, (width, height))`` for the minimap's HD copy, or
+    ``None`` - with the reason in the notes, since a track that ships no
+    minimap of its own has nothing to replace."""
+    if chart is None or not chart.own or chart.texture is None:
+        return None
+    if chart.built.from_png:
+        package.notes.append("minimap: no HD copy - the texture is your own PNG, "
+                             "which has no larger version")
+        return None
+    try:
+        identity = minimap.texture_identity(chart.texture)
+    except minimap.MinimapError as error:
+        operator.report({"WARNING"},
+                        "no high-resolution minimap: %s" % error)
+        return None
+    if identity in taken:
+        operator.report({"WARNING"},
+                        "no high-resolution minimap: it would have the same "
+                        "name as one of the track's textures (%s)" % identity)
+        return None
+    try:
+        width, height, rgba = chart.built.hd_picture()
+        handle, path = tempfile.mkstemp(prefix="dkr-hd-minimap-", suffix=".png",
+                                        dir=bpy.app.tempdir or None)
+        os.close(handle)
+        minimap.write_png(path, width, height, rgba)
+    except Exception as error:  # noqa: BLE001 - HD is never worth failing over
+        traceback.print_exc()
+        operator.report({"WARNING"},
+                        "no high-resolution minimap: %s" % error)
+        return None
+    return identity, path, (width, height)
+
+
+def _pack_entries(operator, package, target, chosen, payloads, chart,
+                  map_entry) -> str:
+    from .. import rice_pack  # noqa: PLC0415
+
+    if not chosen and map_entry is None:
         if os.path.isfile(target):
             operator.report(
                 {"WARNING"},
@@ -443,7 +497,10 @@ def _write_hd_pack(operator, context, package, own, payloads) -> str:
             )
         return ""
 
-    digest = rice_pack.texture_digest(payloads)
+    # The minimap's payload joins the digest only when its picture is in the
+    # pack, so a pack without one keeps the digest it always had.
+    digest = rice_pack.texture_digest(
+        list(payloads) + ([chart.texture] if map_entry is not None else []))
     stamp = {
         "track": package.track_id,
         "textureDigest": digest,
@@ -452,26 +509,31 @@ def _write_hd_pack(operator, context, package, own, payloads) -> str:
             for identity, _original, entry in chosen
         ],
     }
+    entries = [(identity, original) for identity, original, _e in chosen]
+    if map_entry is not None:
+        stamp["minimap"] = {"identity": map_entry[0],
+                            "size": list(map_entry[2])}
+        entries.append(map_entry[:2])
     try:
-        written = rice_pack.write_pack(
-            target, [(identity, original) for identity, original, _e in chosen],
-            stamp,
-        )
+        written = rice_pack.write_pack(target, entries, stamp)
     except (rice_pack.PackError, OSError) as error:
         operator.report({"WARNING"},
                         "the high-resolution texture pack was not written: %s"
                         % error)
         return ""
 
+    textures = written["count"] - (1 if map_entry is not None else 0)
     package.hd_pack = {
         "file": os.path.basename(target),
         "textureDigest": digest,
-        "textures": written["count"],
+        "textures": textures,
+        "minimap": map_entry is not None,
     }
     megabytes = written["bytes"] / (1024.0 * 1024.0)
-    package.notes.append("%s %.1f MB: %d full-resolution original(s)"
-                         % (os.path.basename(target), megabytes,
-                            written["count"]))
+    package.notes.append("%s %.1f MB: %d full-resolution original(s)%s"
+                         % (os.path.basename(target), megabytes, textures,
+                            " and the minimap at %dx%d" % map_entry[2]
+                            if map_entry is not None else ""))
     if written["bytes"] > rice_pack.LARGE_PACK_BYTES:
         operator.report(
             {"WARNING"},
@@ -479,8 +541,9 @@ def _write_hd_pack(operator, context, package, own, payloads) -> str:
             "made. That is allowed; smaller originals make a smaller pack"
             % (os.path.basename(target), megabytes),
         )
-    return "%s with %d HD texture(s)" % (os.path.basename(target),
-                                          written["count"])
+    return "%s with %d HD texture(s)%s" % (
+        os.path.basename(target), textures,
+        " and an HD minimap" if map_entry is not None else "")
 
 
 #: Pictures past this many pixels are hardened but not bled: spreading colour
@@ -588,11 +651,13 @@ def _bleed(numpy, pixels, solid, passes=6):
 class MinimapPlan:
     """What the export does about the minimap, decided once."""
 
-    __slots__ = ("state", "built")
+    __slots__ = ("state", "built", "texture")
 
     def __init__(self, state, built=None):
         self.state = state
         self.built = built
+        #: The texture payload the package ships, once encoded.
+        self.texture = None
 
     @property
     def own(self) -> bool:
@@ -651,6 +716,7 @@ def _encode_minimap(operator, package, chart):
                                       placement.sprite_y)
     sprite = minimap.sprite_payload(placement.anchor_x, placement.anchor_y)
     package.encode_minimap(texture, sprite)
+    chart.texture = texture
     package.notes.append(
         "minimap: %dx%d, turned %d degrees, scale %.3f, offsets %d,%d "
         "(mirrored %d,%d); %d edge(s)"

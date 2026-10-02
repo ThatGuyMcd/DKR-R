@@ -473,7 +473,8 @@ the one rule about sharing it.
 `Export .dkrmap` writes a directory holding the manifest, a compiled
 `header.bin`, both compiled object maps, any textures the track ships in
 `textures/`, and the glTF sources beside them. A track with pictures of its own
-also gets `<track>-hd.zip` next to the directory - the high-resolution pack. A
+(textures, or a minimap drawn from its edges) also gets `<track>-hd.zip` next
+to the directory - the high-resolution pack, the minimap at 8 times its size. A
 track with its own music carries it as `music/main.mp3` (or `.wav`) and a
 `music` entry in a schema 2 manifest; see `docs/CUSTOM_TRACKS.md`. It
 stays a separate file (a track can be shared without it), but DKR-R's installer
