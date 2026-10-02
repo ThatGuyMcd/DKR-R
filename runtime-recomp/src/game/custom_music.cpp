@@ -212,6 +212,8 @@ void tick(std::uint8_t* rdram) {
         // the tempo it starts at is the one later changes are measured from.
         g_restart_serial.fetch_add(1U, std::memory_order_acq_rel);
         g_base_bpm = 0;
+        std::fprintf(stderr, "[custom-music] sequence %d started; the music file plays in its place\n",
+                     static_cast<int>(carrier));
     }
     g_was_playing = playing;
     if (playing) {

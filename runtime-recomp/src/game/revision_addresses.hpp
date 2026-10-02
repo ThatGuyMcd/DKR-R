@@ -207,7 +207,7 @@ inline constexpr AddressTable kUsV77{
     0x801263E0U,
     0x800DF47CU,
     0x80126C28U,
-    0x80116284U,
+    0x80115D04U,
 };
 
 inline constexpr AddressTable kUsV80{
@@ -307,7 +307,7 @@ inline constexpr AddressTable kUsV80{
     0x80126980U,
     0x800DF9FCU,
     0x801271E8U,
-    0x80115D04U,
+    0x80116284U,
 };
 
 inline rom::Revision gSelectedRevision = rom::Revision::UsV77;

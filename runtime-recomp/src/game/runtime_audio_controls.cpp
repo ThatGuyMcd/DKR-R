@@ -93,7 +93,6 @@ extern "C" void dkr_scale_sequence_player_volume(std::uint8_t* rdram,
 
 extern "C" void dkr_audio_mix_tick(std::uint8_t* rdram,
                                      recomp_context* context) {
-    dkr::runtime::custom_music::tick(rdram);
     if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
         const float previous = g_music_applied.exchange(
             1.0F, std::memory_order_acq_rel);

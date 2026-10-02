@@ -1,4 +1,5 @@
 #include "presentation_identity.hpp"
+#include "custom_music.hpp"
 #include "revision_addresses.hpp"
 
 #include "recomp.h"
@@ -1188,6 +1189,7 @@ extern "C" void dkr_presentation_frame_begin(std::uint8_t* rdram,
                                               recomp_context*) {
     dkr::runtime::hud::begin_authored_frame(rdram);
     dkr::runtime::presentation::postrace_presentation_begin_frame();
+    dkr::runtime::custom_music::tick(rdram);
     const std::uint64_t frame =
         g_authored_frame_sequence.fetch_add(
             1U, std::memory_order_relaxed) + 1U;
