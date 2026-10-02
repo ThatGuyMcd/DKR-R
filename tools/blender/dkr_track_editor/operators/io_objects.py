@@ -429,6 +429,9 @@ class DKR_OT_import_level(bpy.types.Operator):
             from . import header as header_ops, skybox as skybox_ops  # noqa: PLC0415
             header_ops.adopt_answers(context, header)
             skybox_ops.update_preview(context)
+            # The level brings its own song; a music file chosen for whatever
+            # the scene held before belongs to that track, not this one.
+            context.scene.dkr.music_source = "GAME"
         described = ""
         if key:
             described = "; Level Type set to %s" % level_types.label(key)

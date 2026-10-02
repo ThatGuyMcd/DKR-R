@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -223,6 +224,39 @@ inline constexpr std::uint8_t kHeaderNoMinimap = 0x01;
 // round it. Nothing is hidden for a track without one, or for a retail header.
 [[nodiscard]] bool minimap_hidden(std::uint32_t header_offset);
 
+// A track's own recorded music: manifest schema 2, key "music". DKR cannot
+// play it - its music player runs sequences against the ROM's instrument bank
+// from a 13 KB buffer - so custom_music decodes the file on the host and mixes
+// it into the audio output while the retail song the header names, the
+// carrier, plays silently. Following the carrier is how the game's own fades,
+// pause and final-lap speed-up reach the file. See docs/CUSTOM_MUSIC_PLAN.md.
+//
+// Everything here was checked at scan: the file sits inside the track
+// directory (symlinks resolved), has the size the manifest records and starts
+// like the codec it claims, and the carrier is the header's own /music byte.
+// The bytes are only decoded, and their digest checked, when a race needs them.
+inline constexpr const char* kMusicFormat = "audio-stream-v1";
+inline constexpr std::uint64_t kMaxMusicBytes = 64ULL * 1024ULL * 1024ULL;
+inline constexpr std::uint32_t kMaxMusicVolume = 200;   // percent
+inline constexpr std::size_t kHeaderMusic = 0x52;        // level header /music
+
+enum class MusicCodec : std::uint8_t { Mp3, Wav };
+
+struct MusicInfo {
+    MusicCodec codec = MusicCodec::Mp3;
+    std::filesystem::path file;          // absolute, inside the track directory
+    std::string sha256;                  // lowercase hex, as the manifest says
+    std::uint64_t bytes = 0;
+    std::uint32_t sample_rate = 0;       // what the addon measured
+    std::uint32_t channels = 0;
+    std::uint64_t frames = 0;            // decoded sample frames
+    std::uint8_t carrier = 0;            // header /music, never 0
+    std::uint32_t volume = 100;          // percent of the file's own level
+    std::uint64_t loop_start = 0;        // sample frames
+    std::uint64_t loop_end = 0;          // sample frames; 0 is the end of file
+    bool final_lap_speedup = true;       // follow the carrier's tempo changes
+};
+
 struct Track {
     std::string id;
     std::string name;
@@ -242,6 +276,7 @@ struct Track {
     std::string hd_pack_digest;               // hdTexturePack.textureDigest
     std::filesystem::path hd_pack_sibling;    // matched <track>-hd.zip, else empty
     bool hd_pack_sibling_mismatch = false;    // sibling present, digest differs
+    std::optional<MusicInfo> music;           // manifest.music (schema 2)
 };
 
 // Scans `directory` for *.dkrmap archives and parses their manifests. Invalid
@@ -311,6 +346,15 @@ void reload();
 // when the track is disabled or contributes no header.
 [[nodiscard]] std::int32_t resolved_level_id(const std::string& track_id);
 [[nodiscard]] bool owns_level_id(std::int32_t level_id);
+// Called with the level id at every level load - races, restarts and the Track
+// Select previews alike - from the level_load scene-reset hook. custom_music
+// registers here so this module, and the tests that build it alone, never
+// depend on the audio code.
+using LevelLoadObserver = void (*)(std::int32_t level_id);
+void set_level_load_observer(LevelLoadObserver observer);
+// The recorded music of the enabled track that owns `level_id`, if it has any.
+// Asked at every level load, so it copies only the descriptor.
+[[nodiscard]] std::optional<MusicInfo> music_for_level(std::int32_t level_id);
 
 // WORLD_CUSTOM_TRACKS in the Blender addon. Track Select appends these races
 // to the same logical category as legacy courses, outside retail world arrays.

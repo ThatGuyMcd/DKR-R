@@ -458,6 +458,9 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         # The policy's asset hooks call into these with or without RT64; the
         # table logic itself is DKRCustomTracksCore, via DKRLegacyModLaunch.
         src/game/custom_tracks_hooks.cpp
+        # A custom track's MP3/WAV music, played over its silent carrier song.
+        src/game/custom_music.cpp
+        src/game/custom_music_decode.cpp
         src/game/dkr_save_codec.cpp
         src/game/game_payload.cpp
         src/game/game_main.cpp
@@ -525,6 +528,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     endif()
     target_include_directories(DKRPortGame PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
+        "${CMAKE_CURRENT_LIST_DIR}/third_party/dr_libs"
         "${DKR_RECOMP_SOURCE}/include"
         "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
         "${DKR_MODERN_RUNTIME_SOURCE}/ultramodern/include"
@@ -1260,6 +1264,27 @@ if(BUILD_TESTING)
     )
     add_test(NAME DKRAudioMixPolicy COMMAND DKRAudioMixPolicyTests)
 
+    add_executable(DKRCustomMusicPolicyTests
+        tests/custom_music_policy_tests.cpp
+    )
+    target_include_directories(DKRCustomMusicPolicyTests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src/game"
+    )
+    add_test(NAME DKRCustomMusicPolicy COMMAND DKRCustomMusicPolicyTests)
+
+    add_executable(DKRCustomMusicDecodeTests
+        tests/custom_music_decode_tests.cpp
+        src/game/custom_music_decode.cpp
+    )
+    target_include_directories(DKRCustomMusicDecodeTests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src/game"
+        "${CMAKE_CURRENT_LIST_DIR}/third_party/dr_libs"
+    )
+    # The MP3 fixtures are the addon's, so both sides decode the same files.
+    target_compile_definitions(DKRCustomMusicDecodeTests PRIVATE
+        DKR_MUSIC_FIXTURES="${DKRPORT_ROOT}/tools/blender/tests/fixtures")
+    add_test(NAME DKRCustomMusicDecode COMMAND DKRCustomMusicDecodeTests)
+
     add_executable(DKRCountdownTonePolicyTests
         tests/countdown_tone_policy_tests.cpp
     )
@@ -1326,6 +1351,20 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_RT64_SOURCE}/src/contrib"
             "${DKR_RECOMP_SOURCE}/include")
         add_test(NAME DKRCustomTracksGuest COMMAND DKRCustomTracksGuestTests)
+        add_executable(DKRCustomMusicRuntimeTests
+            tests/custom_music_runtime_tests.cpp
+            src/game/custom_music.cpp src/game/custom_music_decode.cpp
+            src/game/custom_tracks.cpp src/game/custom_tracks_hooks.cpp
+            "${DKR_RT64_SOURCE}/src/contrib/miniz/miniz.c")
+        target_include_directories(DKRCustomMusicRuntimeTests PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_RT64_SOURCE}/src/contrib"
+            "${CMAKE_CURRENT_LIST_DIR}/third_party/dr_libs"
+            "${DKR_RECOMP_SOURCE}/include")
+        target_compile_definitions(DKRCustomMusicRuntimeTests PRIVATE
+            DKR_MUSIC_FIXTURES="${DKRPORT_ROOT}/tools/blender/tests/fixtures")
+        find_package(Threads REQUIRED)
+        target_link_libraries(DKRCustomMusicRuntimeTests PRIVATE Threads::Threads)
+        add_test(NAME DKRCustomMusicRuntime COMMAND DKRCustomMusicRuntimeTests)
     endif()
     add_executable(DKRPresentationMarkerPolicyTests
         tests/presentation_marker_policy_tests.cpp)
@@ -1476,6 +1515,8 @@ if(BUILD_TESTING)
         DKRSaveCodecTests
         DKRAudioEqualizerTests
         DKRAudioMixPolicyTests
+        DKRCustomMusicPolicyTests
+        DKRCustomMusicDecodeTests
         DKRCountdownTonePolicyTests
         DKRRendererSnapshotTests
         DKRPresentationIdentityTests
@@ -1499,7 +1540,8 @@ if(BUILD_TESTING)
         DKRDeterminismStateHash80Tests
     )
     if(DKR_RUNTIME_BUILD_RT64)
-        list(APPEND DKR_ASSERT_TEST_TARGETS DKRCustomTracksTests DKRCustomTracksRuntimeTests DKRCustomTracksGuestTests)
+        list(APPEND DKR_ASSERT_TEST_TARGETS DKRCustomTracksTests DKRCustomTracksRuntimeTests DKRCustomTracksGuestTests
+            DKRCustomMusicRuntimeTests)
     endif()
     foreach(DKR_ASSERT_TEST_TARGET IN LISTS DKR_ASSERT_TEST_TARGETS)
         if(MSVC)

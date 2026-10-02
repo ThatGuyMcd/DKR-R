@@ -15,7 +15,7 @@ from __future__ import annotations
 bl_info = {
     "name": "DKR Track Editor",
     "author": "DKR-R",
-    "version": (0, 1, 4),
+    "version": (0, 2, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > DKR",
     "description": "Author Diddy Kong Racing tracks and export .dkrmap packages",
@@ -37,9 +37,9 @@ def _module_classes():
     """
     from . import prefs, props
     from .operators import (ai, checks, custom_textures, edit, geometry,
-                            header, io_objects, level_type, minimap, new_track,
-                            pack, placeholders, race_ai, skybox, start_grid,
-                            textures, water, waterfall)
+                            header, io_objects, level_type, minimap, music,
+                            new_track, pack, placeholders, race_ai, skybox,
+                            start_grid, textures, water, waterfall)
     from .ui import panels
 
     classes = []
@@ -61,6 +61,7 @@ def _module_classes():
     classes += list(minimap.CLASSES)
     classes += list(checks.CLASSES)
     classes += list(header.CLASSES)
+    classes += list(music.CLASSES)
     classes += list(new_track.CLASSES)
     classes += list(pack.CLASSES)
     classes += list(panels.CLASSES)

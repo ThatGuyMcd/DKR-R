@@ -55,6 +55,21 @@ TexScroll; animated viewport preview is not included yet. Custom-texture motion,
 Modern/Accurate interpolation, HD replacements and Track Lab reloads still need
 manual verification in game.
 
+**Music.** Under *Export > Header > Music*, choose **Game Music** to use one of
+the game's songs, or **Music File** to ship your own **MP3 or WAV** (mono or
+stereo, 8-192 kHz, 1 s to 15 min, up to 64 MB; compressed WAV is refused). The
+file is checked by its bytes when you pick it, and again at export. Set
+**Volume**, **Loop Start** and **Loop End** (0 loops at the end of the file;
+whatever is before Loop Start plays once as an intro) and what happens on the
+**Final Lap** - *Speed Up* like the game's songs, pitch rising, or *Keep Speed*.
+The game song chosen below the file still matters: it plays silently under your
+music, and its fades, the pause menu and the final-lap speed-up are what your
+music follows - so pick a race song. MidiFade/MidiChSet objects switch channels
+of a game song and do nothing with a file; the panel and the export say so.
+Listen in Track Lab; the Play button stays unavailable. MP3 encoders add a
+little silence at the edges, so a seamless loop is easiest from a WAV or an MP3
+with a LAME/Xing header (which almost all encoders write).
+
 **Choose the Level Type first.** A new scene shows one panel, *Level Type*,
 asking what kind of level this is: Race, Boss Race, Challenge (Battle, Bananas
 or Eggs), Hub, or the advanced *Special* group (Cutscene, Menu Backdrop, Test
@@ -458,7 +473,9 @@ the one rule about sharing it.
 `Export .dkrmap` writes a directory holding the manifest, a compiled
 `header.bin`, both compiled object maps, any textures the track ships in
 `textures/`, and the glTF sources beside them. A track with pictures of its own
-also gets `<track>-hd.zip` next to the directory - the high-resolution pack. It
+also gets `<track>-hd.zip` next to the directory - the high-resolution pack. A
+track with its own music carries it as `music/main.mp3` (or `.wav`) and a
+`music` entry in a schema 2 manifest; see `docs/CUSTOM_TRACKS.md`. It
 stays a separate file (a track can be shared without it), but DKR-R's installer
 treats the two as one gesture: import the folder that holds both and the pack
 goes in with the track.
@@ -528,6 +545,7 @@ tools/blender/
     water.py                the wave grid, as the game builds it
     validate.py             pre-export checks
     dkrmap.py               the .dkrmap container
+    music_audio.py          recognise and measure a track's MP3/WAV music
     textures.py             the ROM's 3D textures, and encoding your own
     scene.py                object map <-> Blender scene
     props.py                scene settings
@@ -538,6 +556,7 @@ tools/blender/
     operators/custom_textures.py   an image -> a texture the track ships
     operators/race_ai.py           the bot lines overlay, Copy Difficulty
     operators/water.py             Add Water, Select/Remove Water, presets
+    operators/music.py             choose and check the track's music file
     ui/panels.py            the sidebar
     data/catalog.json       generated; do not edit by hand
   tests/
@@ -555,6 +574,9 @@ tools/blender/
     test_water.py               the wave grid, vs every retail wave track
     test_blender_roundtrip.py   byte-exact through a real Blender scene
     test_blender_operators.py   the operators actually work
+    test_music.py               MP3/WAV recognition and the music in a package
+    test_blender_music.py       the music controls, save/reopen and export
+    fixtures/                   two short test tones (generated, original)
 ```
 
 Everything except `scene.py`, `preview.py`, `props.py`, `operators/` and `ui/`

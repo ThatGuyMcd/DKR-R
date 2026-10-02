@@ -107,6 +107,7 @@ struct AddressTable {
     std::uint32_t MenuStage;
     std::uint32_t MenuDelay;
     std::uint32_t PostraceFinishState;
+    std::uint32_t CurrentSequence;
 };
 
 inline constexpr AddressTable kUsV77{
@@ -206,6 +207,7 @@ inline constexpr AddressTable kUsV77{
     0x801263E0U,
     0x800DF47CU,
     0x80126C28U,
+    0x80116284U,
 };
 
 inline constexpr AddressTable kUsV80{
@@ -305,6 +307,7 @@ inline constexpr AddressTable kUsV80{
     0x80126980U,
     0x800DF9FCU,
     0x801271E8U,
+    0x80115D04U,
 };
 
 inline rom::Revision gSelectedRevision = rom::Revision::UsV77;
@@ -404,6 +407,7 @@ inline std::uint32_t GameMode = kUsV77.GameMode;
 inline std::uint32_t MenuStage = kUsV77.MenuStage;
 inline std::uint32_t MenuDelay = kUsV77.MenuDelay;
 inline std::uint32_t PostraceFinishState = kUsV77.PostraceFinishState;
+inline std::uint32_t CurrentSequence = kUsV77.CurrentSequence;
 
 inline const AddressTable& table_for(const rom::Revision revision) {
     return revision == rom::Revision::UsV80 ? kUsV80 : kUsV77;
@@ -511,6 +515,7 @@ inline bool select(const rom::Revision revision) {
     MenuStage = table.MenuStage;
     MenuDelay = table.MenuDelay;
     PostraceFinishState = table.PostraceFinishState;
+    CurrentSequence = table.CurrentSequence;
     gSelectedRevision = revision;
     return true;
 }

@@ -1,7 +1,10 @@
 # Custom music in the Blender track addon
 
 Status: implementation plan, based on the current checkout, 2026-09-23.
-No custom-music implementation or playback qualification has been performed.
+Updated 2026-10-02: recorded music (MP3/WAV) is implemented end to end - see
+"Recorded music" below. It is format- and unit-tested; it has **not** yet been
+heard in game on either revision. The native-sequence and MIDI stages below
+are unchanged and still unimplemented.
 
 The first deliverable is one author-supplied native DKR sequence per `.dkrmap`,
 played through the game's existing instrument bank. Standard MIDI import follows
@@ -43,6 +46,62 @@ These observations establish format constraints, not proof that a newly authored
 song plays correctly. Keep extracted assets local, consistent with
 `docs/ASSET_POLICY.md`.
 
+## Recorded music (MP3/WAV)
+
+A track can ship a recording instead of a sequence. It cannot go through DKR's
+music player at all - the buffer holds about 13 KB and the player only drives
+the instrument bank - so it is played on the host:
+
+- **Carrier.** The header's `/music` still names a retail race song, which
+  plays exactly as retail does. Its volume is forced to zero at `alCSPSetVol`
+  (the existing `dkr_scale_sequence_player_volume` hook), and the requested
+  volume is kept instead. That value is `base * slider * fade`; dividing the
+  song's base back out leaves the options slider, every fade and the pause
+  menu's halving, which then scale the file. The launcher's music slider is
+  applied first, so it reaches the file too.
+- **Play state and tempo.** Once per DKR audio update (the existing
+  `dkr_audio_mix_tick` hook at `sound_update_queue`), the runtime reads
+  `gMusicPlayer->state` (offset 0x2C), `gCurrentSequenceID` and `sMusicTempo`.
+  The file starts from the top whenever the carrier starts, stops (with a short
+  ramp) when it stops or another song takes over, and - when the author chose
+  *Speed Up* - plays faster by the carrier's current BPM over its starting BPM,
+  which is the final lap's 1.12. Jingles have their own player and are never
+  touched.
+- **Binding.** custom_tracks' level-load observer (called from the level_load
+  scene-reset hook, so races, restarts and Track Select previews alike) binds
+  the music of the custom track that owns the level, or clears it. A retail
+  level that uses the same song is unaffected.
+- **Decode and mix.** `custom_music_decode.cpp` checks the file's SHA-256
+  against the manifest and decodes it fully (dr_mp3 / dr_wav, vendored under
+  `runtime-recomp/third_party/dr_libs`) on a worker thread; a restart reuses
+  the decode. `queue_audio` mixes it in, resampled linearly at
+  `source rate / output rate * tempo`, with the loop seam interpolated, before
+  the equaliser and master volume.
+
+No new recompiler hook was needed: the two hooks above already existed in both
+policies, and the only new guest address is `gCurrentSequenceID`
+(`revision_addresses::CurrentSequence`: 0x80115D04 in v77, 0x80116284 in v80,
+from the decomp's symbol files).
+
+What a recording cannot do: the MidiFade/MidiFadePoint/MidiChSet objects switch
+or fade channels of the playing sequence, and a recording has none, so they are
+inaudible on such a track (the addon warns, and leaves them in place). Speed Up
+raises the pitch with the tempo, like a sequence does not; a time-stretch is a
+possible later option.
+
+Code: `tools/blender/dkr_track_editor/music_audio.py`, `operators/music.py`,
+`dkrmap.TrackPackage.set_music`; `runtime-recomp/src/game/custom_music*.{hpp,cpp}`,
+`custom_tracks.cpp: parse_music`. Tests: `tools/blender/tests/test_music.py`,
+`test_blender_music.py`, `runtime-recomp/tests/custom_music_policy_tests.cpp`,
+`custom_music_decode_tests.cpp`, `custom_music_runtime_tests.cpp` (the player
+against simulated guest memory, also clean under TSan and ASan/UBSan) and the
+music cases in `custom_tracks_tests.cpp`.
+
+Still to qualify in game, on both revisions: start, loop seam, restart, final
+lap, pause, fades into and out of results, a jingle over the music, Track Select
+preview -> race, custom -> stock -> custom, the music slider in Accurate and
+Modern, and local multiplayer.
+
 ## First release contract
 
 - Music source choices: **Original game music** or **Custom sequence**.
@@ -63,8 +122,8 @@ song plays correctly. Keep extracted assets local, consistent with
 - The first listening workflow is export and play in Track Lab. Do not enable
   the existing Blender Play button until it can render the DKR instruments.
 
-Native import is the first independently usable milestone. MIDI conversion and
-friendly controls for spatial arrangements are subsequent milestones, rather
+Native import is the first independently usable stage. MIDI conversion and
+friendly controls for spatial arrangements are subsequent stages, rather
 than dependencies for getting a custom composition into a race.
 
 ## Package format
@@ -278,7 +337,7 @@ If custom tracks can enter a netplay route, bind content identity and reload to
 that route's existing compatibility rules; do not change the audio clock.
 
 During implementation, report format/unit-test success separately from audible
-in-game qualification. The native-import milestone is complete only after both
+in-game qualification. The native-import stage is complete only after both
 supported ROM revisions play an authored song and restore original music on
 exit. Changes already present in addon files at planning time are unrelated
 working-tree edits and must be preserved.

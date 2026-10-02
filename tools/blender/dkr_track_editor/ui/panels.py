@@ -1672,6 +1672,10 @@ def _locked(layout, text, value):
 
 
 def _draw_music(layout, context, catalog):
+    from ..operators import music as music_ops  # noqa: PLC0415
+
+    settings = context.scene.dkr
+    own = music_ops.uses_file(settings)
     tracks = level_types.music_tracks(catalog)
     index = header_ops.music_index(context)
     name = (level_types.music_label(tracks[index]) if 0 <= index < len(tracks)
@@ -1679,13 +1683,57 @@ def _draw_music(layout, context, catalog):
     box = layout.box()
     row = box.row()
     row.label(text="Music", icon="SOUND")
-    _dim_label(row, "%s · %d / %d" % (name, index + 1, len(tracks) or 256))
+    row.prop(settings, "music_source", expand=True)
+
+    if own:
+        _draw_music_file(box, context, settings, music_ops)
+        box.separator()
+
+    row = box.row()
+    _dim_label(row, "%s%s · %d / %d" % ("Follows: " if own else "", name,
+                                         index + 1, len(tracks) or 256))
     row = box.row(align=True)
     row.operator("dkr.step_music", text="", icon="PREV_KEYFRAME").step = -1
     row.operator("dkr.play_music", text="Play", icon="PLAY")
     row.operator("dkr.step_music", text="", icon="NEXT_KEYFRAME").step = 1
-    lines(box, context, "The track showing when you export is the one the "
-          "header gets. Listening is not available yet.", dim=True, tight=True)
+    if own:
+        lines(box, context, "The game song above stays silent under your file. "
+              "Its fades, the pause and the final-lap speed-up are what your "
+              "music follows, so pick a race song. Listen in Track Lab.",
+              dim=True, tight=True)
+    else:
+        lines(box, context, "The track showing when you export is the one the "
+              "header gets. Listening is not available yet.", dim=True, tight=True)
+
+
+def _draw_music_file(box, context, settings, music_ops):
+    row = box.row(align=True)
+    row.prop(settings, "music_file", text="")
+    row.operator("dkr.choose_music", text="", icon="FILEBROWSER")
+    row.operator("dkr.check_music", text="", icon="FILE_REFRESH")
+    if not settings.music_file:
+        lines(box, context, "Choose an MP3 or WAV.", dim=True, tight=True)
+    elif settings.music_report:
+        if settings.music_ok:
+            _dim_label(box, settings.music_report)
+        else:
+            info_box(box, context, settings.music_report, icon="ERROR", alert=True)
+    else:
+        lines(box, context, "Press the refresh button to check the file.",
+              dim=True, tight=True)
+
+    column = box.column(align=True)
+    column.prop(settings, "music_volume")
+    column.prop(settings, "music_loop_start")
+    column.prop(settings, "music_loop_end")
+    box.prop(settings, "music_final_lap")
+
+    channel_objects = music_ops.channel_objects(context)
+    if channel_objects:
+        info_box(box, context,
+                 "%d MidiFade/MidiChSet object(s) in this track switch music "
+                 "channels. A music file has none, so they will do nothing."
+                 % len(channel_objects), icon="INFO")
 
 
 def _draw_skybox(layout, context):

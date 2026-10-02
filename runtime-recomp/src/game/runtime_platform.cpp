@@ -2,6 +2,7 @@
 #include "audio_equalizer.hpp"
 #include "controller_snapshot.hpp"
 #include "controller_mapping_policy.hpp"
+#include "custom_music.hpp"
 #include "netplay/online_input_broker.hpp"
 #include "online_input_policy.hpp"
 #include "runtime_input.hpp"
@@ -138,6 +139,8 @@ ControllerMappingSession g_mapping_session;
 SDL_Window* g_window = nullptr;
 std::uint32_t g_audio_frequency = 0;
 std::vector<std::int16_t> g_audio_swap_buffer;
+// A custom track's music file, rendered per output block (custom_music).
+std::vector<float> g_custom_music_buffer;
 dkr::runtime::audio::StereoEqualizer g_audio_equalizer;
 std::uint32_t g_audio_callback_frames = 0;
 bool g_audio_playback_started = false;
@@ -1948,13 +1951,18 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples,
             g_ui_tone_frames_remaining = g_ui_tone_total_frames;
             g_ui_tone_phase = 0.0;
         }
+        // Mixed before the equaliser and master volume, so it is heard
+        // exactly as the game's own music would be.
+        g_custom_music_buffer.assign(sample_count, 0.0F);
+        dkr::runtime::custom_music::render(g_custom_music_buffer.data(),
+                                           sample_count / 2U, g_audio_frequency);
         for (std::size_t i = 0; i < sample_count; i += 2) {
             // RDRAM's 32-bit word swap leaves each native stereo pair in R,L
             // order. Restore conventional L,R order before sending it to SDL.
             const float volume = g_master_volume.load(std::memory_order_relaxed);
             const auto filtered = g_audio_equalizer.process(
-                static_cast<float>(samples[i + 1]),
-                static_cast<float>(samples[i]));
+                static_cast<float>(samples[i + 1]) + g_custom_music_buffer[i],
+                static_cast<float>(samples[i]) + g_custom_music_buffer[i + 1]);
             float ui_tone = 0.0F;
             if (g_ui_tone_frames_remaining != 0U &&
                 g_ui_tone_total_frames != 0U && g_audio_frequency != 0U) {

@@ -66,6 +66,8 @@ ancient-lake-remix.dkrmap/
   minimap/
     texture.bin
     sprite.bin
+  music/
+    main.mp3          (schema 2 only: the track's own music)
 ```
 
 ```json
@@ -94,6 +96,44 @@ minimap".
 
 Payload paths are confined to the track directory: absolute paths and `..`
 are rejected, so a manifest can never name an arbitrary file on the machine.
+
+### A track's own music (schema 2)
+
+A track can ship an MP3 or WAV as its music. It is not an asset-table section -
+DKR never sees these bytes - so it is described by its own `music` key, and a
+package carrying one says `"schemaVersion": 2`. A package without music stays
+schema 1. Runtimes that predate music refuse schema 2 rather than quietly play
+the wrong song.
+
+```json
+{
+  "schemaVersion": 2,
+  "music": {
+    "format": "audio-stream-v1",
+    "codec": "mp3",
+    "file": "music/main.mp3",
+    "sha256": "<64 lowercase hex digits>",
+    "bytes": 4183219,
+    "sampleRate": 44100,
+    "channels": 2,
+    "frames": 7709184,
+    "carrierSequence": 12,
+    "volume": 100,
+    "loopStartFrame": 352800,
+    "loopEndFrame": 0,
+    "finalLap": "speedup"
+  }
+}
+```
+
+`carrierSequence` must equal the header's `/music` byte (0x52): that retail song
+still plays, silently, and the runtime follows its volume and tempo. Loop points
+are in sample frames; `loopEndFrame` 0 is the end of the file. `finalLap` is
+`speedup` (follow the game's 1.12x final-lap tempo, pitch rising) or `constant`.
+The scan refuses a descriptor whose file escapes the track (symlinks resolved),
+whose size or leading bytes disagree with it, or whose carrier is not the
+header's; the digest is checked when the file is decoded for a race. How the
+runtime plays it is in `docs/CUSTOM_MUSIC_PLAN.md`, "Recorded music".
 
 Section payloads are produced by the matching decomp's asset tool
 (`tools/dkr_assets_tool_src`), which is what the `Hint((...))` annotations in

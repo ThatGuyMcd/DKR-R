@@ -1213,6 +1213,107 @@ int main() {
         assert(!inspect_sprite_payload(as_bytes(std::string(10U, '\0')), info, reason));
     }
 
+    // Recorded music (schema 2). The header's /music byte is the carrier, the
+    // file must be inside the track and look like its codec, and the manifest
+    // must not contradict itself.
+    std::filesystem::remove_all(root);
+    {
+        std::string header(0xC8, '\0');
+        header[0x37] = 1;            // collectables map: a real retail index
+        header[0xBB] = 1;            // structure map likewise
+        header[kHeaderMusic] = 12;   // the carrier
+        const std::string mp3 = std::string("ID3\x04\0\0\0\0\0\0", 10) +
+                                std::string(4096, '\x55');
+        const std::string wav = std::string("RIFF\0\0\0\0WAVEfmt ", 16) +
+                                std::string(2048, '\0');
+        const auto descriptor = [&](const std::string& extra, std::size_t bytes) {
+            return std::string("\"music\":{\"format\":\"audio-stream-v1\","
+                               "\"sha256\":\"") + std::string(64, 'a') +
+                   "\",\"bytes\":" + std::to_string(bytes) +
+                   ",\"sampleRate\":44100,\"channels\":2,\"frames\":441000," + extra + "},";
+        };
+        const auto music_track = [&](const std::string& id, int schema,
+                                     const std::string& music_json,
+                                     const std::string& name,
+                                     const std::string& bytes) {
+            const std::filesystem::path dir = root / (id + ".dkrmap");
+            std::filesystem::create_directories(dir / "music");
+            write_file(dir / "h.bin", header);
+            if (!name.empty()) {
+                write_file(dir / name, bytes);
+            }
+            write_file(dir / "manifest.json",
+                       "{\"schemaVersion\":" + std::to_string(schema) +
+                           ",\"id\":\"" + id + "\",\"name\":\"" + id + "\"," +
+                           music_json +
+                           "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
+        };
+        const std::string ok_mp3 =
+            "\"codec\":\"mp3\",\"file\":\"music/main.mp3\",\"carrierSequence\":12,"
+            "\"volume\":90,\"loopStartFrame\":44100,\"loopEndFrame\":0,"
+            "\"finalLap\":\"constant\"";
+        music_track("song", 2, descriptor(ok_mp3, mp3.size()), "music/main.mp3", mp3);
+        music_track("wave", 2,
+                    descriptor("\"codec\":\"wav\",\"file\":\"music/main.wav\","
+                               "\"carrierSequence\":12", wav.size()),
+                    "music/main.wav", wav);
+        // Refused: schema 1 with music, schema 2 without, a carrier that is
+        // not the header's, a file outside the track, a renamed file, a size
+        // that disagrees, and a loop past the end.
+        music_track("old", 1, descriptor(ok_mp3, mp3.size()), "music/main.mp3", mp3);
+        music_track("bare", 2, "", "", "");
+        std::string other = ok_mp3;
+        other.replace(other.find(":12,"), 4, ":13,");
+        music_track("carrier", 2, descriptor(other, mp3.size()), "music/main.mp3", mp3);
+        std::string escape = ok_mp3;
+        escape.replace(escape.find("music/main.mp3"), 14, "../song.dkrmap/x.mp3");
+        music_track("escape", 2, descriptor(escape, mp3.size()), "music/main.mp3", mp3);
+        music_track("renamed", 2, descriptor(ok_mp3, wav.size()), "music/main.mp3", wav);
+        music_track("resized", 2, descriptor(ok_mp3, mp3.size() + 1), "music/main.mp3", mp3);
+        std::string long_loop = ok_mp3;
+        long_loop.replace(long_loop.find("\"loopEndFrame\":0"), 16, "\"loopEndFrame\":441001");
+        music_track("loop", 2, descriptor(long_loop, mp3.size()), "music/main.mp3", mp3);
+
+        // A symlink that leads out of the track is refused even with a clean
+        // name. Skipped where the platform will not create one.
+        bool linked = false;
+        {
+            const std::filesystem::path dir = root / "linked.dkrmap";
+            music_track("linked", 2, descriptor(ok_mp3, mp3.size()), "", "");
+            write_file(root / "outside.mp3", mp3);
+            std::error_code link_error;
+            std::filesystem::create_symlink(root / "outside.mp3",
+                                            dir / "music" / "main.mp3", link_error);
+            linked = !link_error;
+        }
+
+        scan(root);
+        std::vector<std::string> ids;
+        for (const Track& track : tracks()) {
+            ids.push_back(track.id);
+        }
+        std::sort(ids.begin(), ids.end());
+        assert((ids == std::vector<std::string>{"song", "wave"}));
+        (void) linked;
+
+        (void) build_extended_table(Section::LevelHeaders, kRetail);
+        const std::int32_t song_level = resolved_level_id("song");
+        const auto music = music_for_level(song_level);
+        assert(music.has_value());
+        assert(music->codec == MusicCodec::Mp3 && music->carrier == 12);
+        assert(music->volume == 90 && music->loop_start == 44100U && music->loop_end == 0U);
+        assert(!music->final_lap_speedup);
+        assert(music->file.filename() == "main.mp3" && music->bytes == mp3.size());
+        assert(music_for_level(resolved_level_id("wave"))->codec == MusicCodec::Wav);
+        assert(music_for_level(resolved_level_id("wave"))->final_lap_speedup);
+        assert(!music_for_level(0).has_value());
+        set_enabled("song", false);
+        (void) build_extended_table(Section::LevelHeaders, kRetail);
+        assert(!music_for_level(song_level).has_value() ||
+               resolved_level_id("wave") == song_level);
+        set_enabled("song", true);
+    }
+
     std::printf("custom_tracks_tests: ok\n");
     return 0;
 }

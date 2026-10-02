@@ -408,6 +408,21 @@ std::int32_t resolved_level_id(const std::string& track_id) {
     return found == g_resolved_level_ids.end() ? -1 : found->second;
 }
 
+std::optional<MusicInfo> music_for_level(std::int32_t level_id) {
+    std::scoped_lock lock(g_mutex);
+    if (level_id < 0) {
+        return std::nullopt;
+    }
+    for (const Track& track : g_tracks) {
+        const auto resolved = g_resolved_level_ids.find(track.id);
+        if (track.enabled && track.music && resolved != g_resolved_level_ids.end() &&
+            resolved->second == level_id) {
+            return track.music;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<TrackSelectEntry> track_select_entries() {
     std::scoped_lock lock(g_mutex);
     std::vector<TrackSelectEntry> result;
@@ -1298,6 +1313,183 @@ bool locate_unpacked_track(const std::filesystem::path& root,
     return true;
 }
 
+// Reads manifest.music into track.music. The descriptor is the addon's
+// (dkrmap.TrackPackage.set_music); everything it states that the runtime acts
+// on is checked here, so a bad package is named at scan rather than going
+// silent at the starting line. Needs the track's header already parsed: the
+// carrier must be the song that header actually starts.
+bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
+                 Track& track, std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    if (!music.is_object()) {
+        error = "the descriptor is not an object";
+        return false;
+    }
+    const auto text = [&music](const char* key) {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_string() ? found->get<std::string>()
+                                                          : std::string{};
+    };
+    const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_number_integer()
+            ? found->get<std::int64_t>() : fallback;
+    };
+
+    if (text("format") != ct::kMusicFormat) {
+        error = "unknown format \"" + text("format") + "\"";
+        return false;
+    }
+    ct::MusicInfo info;
+    const std::string codec = text("codec");
+    const char* extension = nullptr;
+    if (codec == "mp3") {
+        info.codec = ct::MusicCodec::Mp3;
+        extension = ".mp3";
+    } else if (codec == "wav") {
+        info.codec = ct::MusicCodec::Wav;
+        extension = ".wav";
+    } else {
+        error = "unknown codec \"" + codec + "\"; expected mp3 or wav";
+        return false;
+    }
+
+    // The file stays inside the track: no absolute path, no "..", and after
+    // resolving symlinks it must still be under the resolved track directory.
+    const std::string file = text("file");
+    if (file.empty() || file.find("..") != std::string::npos ||
+        std::filesystem::path(file).is_absolute() ||
+        file.find(':') != std::string::npos || file.front() == '/' ||
+        file.front() == '\\') {
+        error = "unsafe file path";
+        return false;
+    }
+    if (lower_extension(file) != extension) {
+        error = "file \"" + file + "\" does not end in " + extension;
+        return false;
+    }
+    std::error_code code;
+    const std::filesystem::path base = std::filesystem::weakly_canonical(root, code);
+    const std::filesystem::path resolved =
+        std::filesystem::weakly_canonical(root / std::filesystem::u8path(file), code);
+    const auto mismatch =
+        std::mismatch(base.begin(), base.end(), resolved.begin(), resolved.end());
+    if (code || mismatch.first != base.end() || resolved == base) {
+        error = "file \"" + file + "\" resolves outside the track";
+        return false;
+    }
+    if (!std::filesystem::is_regular_file(resolved, code)) {
+        error = "could not find " + file;
+        return false;
+    }
+    info.file = resolved;
+    info.bytes = std::filesystem::file_size(resolved, code);
+    if (code || info.bytes == 0 || info.bytes > ct::kMaxMusicBytes) {
+        error = file + " is empty, unreadable or over 64 MB";
+        return false;
+    }
+    if (number("bytes", -1) != static_cast<std::int64_t>(info.bytes)) {
+        error = file + " is not the size the manifest records; export again";
+        return false;
+    }
+
+    // The leading bytes must be the codec claimed. Decoding waits for a race,
+    // but a renamed or truncated file is caught here.
+    std::array<std::uint8_t, 12> head{};
+    {
+        std::ifstream in(resolved, std::ios::binary);
+        in.read(reinterpret_cast<char*>(head.data()), head.size());
+        if (in.gcount() != static_cast<std::streamsize>(head.size())) {
+            error = "could not read " + file;
+            return false;
+        }
+    }
+    const bool riff = std::memcmp(head.data(), "RIFF", 4) == 0 &&
+                      std::memcmp(head.data() + 8, "WAVE", 4) == 0;
+    const bool mpeg = std::memcmp(head.data(), "ID3", 3) == 0 ||
+                      (head[0] == 0xFF && (head[1] & 0xE0) == 0xE0);
+    if ((info.codec == ct::MusicCodec::Wav && !riff) ||
+        (info.codec == ct::MusicCodec::Mp3 && !mpeg)) {
+        error = file + " is not a" + std::string(info.codec == ct::MusicCodec::Wav
+                                                      ? " WAV" : "n MP3") + " file";
+        return false;
+    }
+
+    info.sha256 = text("sha256");
+    if (info.sha256.size() != 64 ||
+        !std::all_of(info.sha256.begin(), info.sha256.end(), [](char c) {
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+        })) {
+        error = "sha256 is not 64 lowercase hex digits";
+        return false;
+    }
+
+    const std::int64_t rate = number("sampleRate", 0);
+    const std::int64_t channels = number("channels", 0);
+    const std::int64_t frames = number("frames", 0);
+    if (rate < 8000 || rate > 192000 || channels < 1 || channels > 2 || frames <= 0) {
+        error = "sampleRate, channels or frames is missing or out of range";
+        return false;
+    }
+    info.sample_rate = static_cast<std::uint32_t>(rate);
+    info.channels = static_cast<std::uint32_t>(channels);
+    info.frames = static_cast<std::uint64_t>(frames);
+
+    const std::int64_t volume = number("volume", 100);
+    if (volume < 0 || volume > static_cast<std::int64_t>(ct::kMaxMusicVolume)) {
+        error = "volume must be 0-200";
+        return false;
+    }
+    info.volume = static_cast<std::uint32_t>(volume);
+
+    const std::int64_t loop_start = number("loopStartFrame", 0);
+    const std::int64_t loop_end = number("loopEndFrame", 0);
+    const std::int64_t end = loop_end > 0 ? loop_end : frames;
+    if (loop_start < 0 || loop_end < 0 || loop_end > frames || loop_start >= end) {
+        error = "the loop does not fit inside the music";
+        return false;
+    }
+    info.loop_start = static_cast<std::uint64_t>(loop_start);
+    info.loop_end = static_cast<std::uint64_t>(loop_end);
+
+    const std::string final_lap = text("finalLap");
+    if (final_lap == "speedup" || final_lap.empty()) {
+        info.final_lap_speedup = true;
+    } else if (final_lap == "constant") {
+        info.final_lap_speedup = false;
+    } else {
+        error = "unknown finalLap \"" + final_lap + "\"";
+        return false;
+    }
+
+    // The carrier is the song this track's header starts. A descriptor naming
+    // another would never activate, so the contradiction is refused.
+    const std::int64_t carrier = number("carrierSequence", 0);
+    const Entry* header = nullptr;
+    for (const Entry& entry : track.entries) {
+        if (entry.section == Section::LevelHeaders) {
+            header = &entry;
+        }
+    }
+    if (header == nullptr || header->bytes.size() <= ct::kHeaderMusic) {
+        error = "a track with music must ship a level header";
+        return false;
+    }
+    if (carrier <= 0 || carrier > 255) {
+        error = "carrierSequence must be a game song (1-255)";
+        return false;
+    }
+    if (header->bytes[ct::kHeaderMusic] != carrier) {
+        error = "carrierSequence " + std::to_string(carrier) +
+                " is not the header's music (" +
+                std::to_string(header->bytes[ct::kHeaderMusic]) + ")";
+        return false;
+    }
+    info.carrier = static_cast<std::uint8_t>(carrier);
+    track.music = std::move(info);
+    return true;
+}
+
 // Parses one unpacked track. `.dkrmap` archives are unpacked into this form by
 // the importer; the directory form is also what an author edits in place, so
 // reload() can pick up an editor's save without a repack.
@@ -1315,8 +1507,17 @@ bool parse_track(const std::filesystem::path& root, Track& track,
         error = "manifest.json is not valid JSON";
         return false;
     }
-    if (manifest.value("schemaVersion", 0) != 1) {
+    // Schema 2 is schema 1 plus a "music" descriptor, and only a package that
+    // carries music uses it - so a runtime that predates music refuses such a
+    // track instead of quietly playing the carrier song in its place.
+    const int schema = manifest.value("schemaVersion", 0);
+    if (schema != 1 && schema != 2) {
         error = "unsupported schemaVersion";
+        return false;
+    }
+    if ((schema == 2) != manifest.contains("music")) {
+        error = schema == 2 ? "schemaVersion 2 without a music descriptor"
+                            : "a music descriptor needs schemaVersion 2";
         return false;
     }
 
@@ -1469,6 +1670,12 @@ bool parse_track(const std::filesystem::path& root, Track& track,
                     " - its minimap would point nowhere";
             return false;
         }
+    }
+
+    if (manifest.contains("music") &&
+        !parse_music(manifest["music"], root, track, error)) {
+        error = "music: " + error;
+        return false;
     }
 
     // A header carries 0 in both object map fields, because the real indices

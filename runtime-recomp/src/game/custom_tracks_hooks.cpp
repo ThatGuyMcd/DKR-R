@@ -708,6 +708,14 @@ static void size_menu_display_lists(std::uint8_t* rdram) {
                  static_cast<int>(batches), static_cast<int>(g_menu_commands));
 }
 
+namespace {
+dkr::runtime::custom_tracks::LevelLoadObserver g_level_load_observer = nullptr;
+} // namespace
+
+void dkr::runtime::custom_tracks::set_level_load_observer(LevelLoadObserver observer) {
+    g_level_load_observer = observer;
+}
+
 // Called by the existing level_load scene-reset hook, before the level
 // allocates anything. Every load passes here - races, Track Lab and restarts,
 // and also the Track Select previews that load_level_game's hook never sees -
@@ -717,6 +725,9 @@ extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram,
     const auto level = static_cast<std::int32_t>(context->r4);
     grow_main_pool_for_level(rdram, level);
     prepare_track_heap(level);
+    if (g_level_load_observer != nullptr) {
+        g_level_load_observer(level);
+    }
 
     // A preview that outgrows the display list it is drawn into runs over the
     // matrices behind it. The boot sizing covers every course Track Select

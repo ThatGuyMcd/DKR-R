@@ -202,6 +202,13 @@ class DKR_ValidationEntry(bpy.types.PropertyGroup):
     objects: StringProperty(default="")
 
 
+def _music_changed(settings, context):
+    """Re-check the chosen file whenever the source or path changes."""
+    from .operators import music  # noqa: PLC0415 - registered after this module
+
+    music.refresh_report(settings)
+
+
 def _redraw_views(context):
     screen = getattr(context, "screen", None)
     if screen is None:
@@ -379,6 +386,71 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
         default="",
     )
     track_author: StringProperty(name="Author", default="")
+
+    # -- the track's own music ---------------------------------------------
+    #
+    # An MP3 or WAV the runtime plays over a silent retail song (the header's
+    # /music, the "carrier"), which keeps the game's fades and final-lap
+    # speed-up driving it. See music_audio and operators/music.py. A .blend
+    # saved before these existed opens on "Game Music", which is what it had.
+
+    music_source: EnumProperty(
+        name="Music Source",
+        items=[
+            ("GAME", "Game Music",
+             "One of the game's own songs, chosen below"),
+            ("FILE", "Music File",
+             "Your own MP3 or WAV, played over the game song chosen below, "
+             "which stays silent and only drives fades and the final-lap "
+             "speed-up"),
+        ],
+        default="GAME",
+        update=_music_changed,
+    )
+    music_file: StringProperty(
+        name="Music File",
+        description="The MP3 or WAV the track ships. Kept relative to the "
+                    ".blend when it is saved",
+        default="",
+        subtype="FILE_PATH",
+        update=_music_changed,
+    )
+    music_volume: IntProperty(
+        name="Volume",
+        description="Level of the file in the game's mix. 100% plays it as "
+                    "recorded; the game's music slider and fades still apply",
+        default=100, min=0, max=200, subtype="PERCENTAGE",
+    )
+    music_loop_start: FloatProperty(
+        name="Loop Start",
+        description="Where the music jumps back to after reaching Loop End. "
+                    "Anything before it plays once, as an intro",
+        default=0.0, min=0.0, precision=3, unit="TIME_ABSOLUTE",
+    )
+    music_loop_end: FloatProperty(
+        name="Loop End",
+        description="Where the music jumps back to Loop Start. 0 loops at the "
+                    "end of the file",
+        default=0.0, min=0.0, precision=3, unit="TIME_ABSOLUTE",
+    )
+    music_final_lap: EnumProperty(
+        name="Final Lap",
+        description="What the music does when the game speeds its song up on "
+                    "the last lap",
+        items=[
+            ("speedup", "Speed Up",
+             "Play faster on the final lap, pitch rising, as the game's own "
+             "songs do"),
+            ("constant", "Keep Speed",
+             "Keep playing at the recorded speed and pitch"),
+        ],
+        default="speedup",
+    )
+    #: What the last check of music_file found - a summary, or the reason it
+    #: cannot be used. Written by the operators so a redraw never re-reads a
+    #: large file; the export checks the file again regardless.
+    music_report: StringProperty(default="")
+    music_ok: BoolProperty(default=False)
 
     slot: EnumProperty(
         name="Object Map",

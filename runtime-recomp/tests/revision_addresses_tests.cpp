@@ -21,6 +21,7 @@ int main() {
     assert(MenuStage == 0x80126980U);
     assert(MenuDelay == 0x800DF9FCU);
     assert(PostraceFinishState == 0x801271E8U);
+    assert(CurrentSequence == 0x80115D04U);
 
     assert(select(dkr::runtime::rom::Revision::UsV77));
     assert(selected_revision() == dkr::runtime::rom::Revision::UsV77);
@@ -37,6 +38,7 @@ int main() {
     assert(MenuStage == 0x801263E0U);
     assert(MenuDelay == 0x800DF47CU);
     assert(PostraceFinishState == 0x80126C28U);
+    assert(CurrentSequence == 0x80116284U);
 
     assert(!select(dkr::runtime::rom::Revision::Unsupported));
     assert(selected_revision() == dkr::runtime::rom::Revision::UsV77);

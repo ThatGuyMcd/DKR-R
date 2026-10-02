@@ -143,6 +143,9 @@ class DKR_OT_export_dkrmap(bpy.types.Operator, ExportHelper):
                 base = _authored_header(context)
             if base is not None and geometry_has_waves(context):
                 _check_wave_header(self, base, tree)
+            # Before any payload is compiled: a music file that cannot ship
+            # stops the export while nothing has been written yet.
+            _attach_music(self, context, package, base)
 
             # Before the geometry, because the model's texture table names
             # these by position and a failure to compile one has to stop the
@@ -791,6 +794,45 @@ def _warn_header_without_geometry(operator, context, package):
         "and there is none. Building track geometry from a Blender mesh is not "
         "supported yet - import a track's geometry and reshape it instead",
     )
+
+
+def _attach_music(operator, context, package, header):
+    """Ship the track's own music, or remove what an earlier export left.
+
+    The carrier is the header's ``/music``: the game song that plays silently
+    under the file so its fades and final-lap speed-up still reach it. Checked
+    here, with the file and its loop, so a broken song is an export error and
+    never a silent fall-back to the game song in the race.
+    """
+    from .. import level_header_template as template  # noqa: PLC0415
+    from . import music  # noqa: PLC0415
+
+    settings = context.scene.dkr
+    if not music.uses_file(settings):
+        package.drop_music()
+        return
+    if header is None:
+        raise dkrmap.DkrMapError(
+            "the track's music needs a level header to bind to; this track "
+            "exports none"
+        )
+    package.set_music(
+        music.file_path(settings),
+        carrier=template.lookup(header, "/music") or 0,
+        volume=settings.music_volume,
+        loop_start=settings.music_loop_start,
+        loop_end=settings.music_loop_end,
+        final_lap=settings.music_final_lap,
+    )
+    channel_objects = music.channel_objects(context)
+    if channel_objects:
+        message = (
+            "%d music-channel object(s) (MidiFade/MidiChSet) have no effect "
+            "with a music file, which has no channels to switch; they are "
+            "exported unchanged" % len(channel_objects)
+        )
+        package.notes.append(message)
+        operator.report({"WARNING"}, message)
 
 
 def _require_header_asset_index(document, tree):

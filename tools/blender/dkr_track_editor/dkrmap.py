@@ -27,18 +27,23 @@ Deliberately free of ``bpy``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 from typing import Dict, List, Optional
 
-from . import (gltf_io, level_header, level_model_encoder,
+from . import (gltf_io, level_header, level_model_encoder, music_audio,
                object_map_encoder, rice_pack, textures as texture_module)
 from .gltf_io import ObjectMap
 
 MANIFEST_NAME = "manifest.json"
 SCHEMA_VERSION = 1
+#: A package that carries its own music. Older runtimes refuse any schema they
+#: do not know, which is the point: a track that silently played the carrier
+#: song instead of its own music would look like a working export.
+MUSIC_SCHEMA_VERSION = 2
 SUFFIX = ".dkrmap"
 
 #: Sections a track can add, and the payload file each conventionally uses.
@@ -83,6 +88,24 @@ MINIMAP_FILES = {
     MINIMAP_TEXTURE_SECTION: MINIMAP_DIR + "/texture.bin",
     MINIMAP_SPRITE_SECTION: MINIMAP_DIR + "/sprite.bin",
 }
+
+#: The track's own recorded music. It is not an asset-table section: DKR never
+#: sees these bytes. The runtime decodes the file on the host and mixes it into
+#: the game's audio while the retail song the header names (the *carrier*)
+#: plays silently, so the game's own fades and final-lap speed-up still drive
+#: it. One file, named ``main`` plus the codec's extension.
+MUSIC_DIR = "music"
+MUSIC_STEM = "main"
+MUSIC_FORMAT = "audio-stream-v1"
+
+#: What the music does when the game speeds its song up on the final lap.
+FINAL_LAP_SPEEDUP = "speedup"     # play faster, pitch rising, as retail does
+FINAL_LAP_CONSTANT = "constant"   # keep the recorded speed
+FINAL_LAP_MODES = (FINAL_LAP_SPEEDUP, FINAL_LAP_CONSTANT)
+
+#: Percent of the file's own level. Above 100 boosts a quiet master; the
+#: runtime clamps the mixed sample, so the ceiling only bounds how hard.
+MAX_MUSIC_VOLUME = 200
 
 #: Where the addon leaves asset-tool input inside the track directory.
 SOURCE_DIR = "source"
@@ -139,6 +162,9 @@ class TrackPackage:
         self.hd_pack: Optional[Dict[str, object]] = None
         #: section -> absolute path, for the minimap's picture and sprite.
         self.minimap: Dict[str, str] = {}
+        #: ``(source path, manifest descriptor)`` for the track's own music,
+        #: set by :meth:`set_music`, else ``None``.
+        self.music: Optional[tuple] = None
         self.notes: List[str] = []
 
     # -- sources ---------------------------------------------------------
@@ -315,6 +341,84 @@ class TrackPackage:
         if os.path.isdir(folder) and not os.listdir(folder):
             os.rmdir(folder)
 
+    def set_music(self, source_path: str, carrier: int, volume: int = 100,
+                  loop_start: float = 0.0, loop_end: float = 0.0,
+                  final_lap: str = FINAL_LAP_SPEEDUP) -> "music_audio.AudioInfo":
+        """Ship ``source_path`` as the track's music.
+
+        Everything is checked here, before anything is written: the file's
+        bytes, the loop against its real length, and the carrier. ``carrier``
+        is the header's ``/music`` - the retail song that plays silently so the
+        game keeps driving fades and tempo - and must not be 0, which is "no
+        music": with nothing playing there is nothing to follow.
+
+        The file itself is copied by :meth:`write`, last but the manifest.
+        """
+        try:
+            info = music_audio.inspect_file(source_path)
+            music_audio.check_loop(info, loop_start, loop_end)
+        except music_audio.AudioError as error:
+            raise DkrMapError("the track's music cannot be used: %s" % error) from error
+        try:
+            carrier = int(carrier)
+        except (TypeError, ValueError):
+            carrier = 0
+        if not 0 < carrier < 256:
+            raise DkrMapError(
+                "the track's music needs a game song under it to follow (the "
+                "header's music is \"none\"). Pick any race song in Music; it "
+                "stays silent and only drives the fades and the final-lap speed-up"
+            )
+        if final_lap not in FINAL_LAP_MODES:
+            raise DkrMapError("unknown final-lap behaviour %r" % final_lap)
+        volume = max(0, min(int(volume), MAX_MUSIC_VOLUME))
+        start_frame = int(round(loop_start * info.sample_rate))
+        end_frame = int(round(loop_end * info.sample_rate)) if loop_end > 0 else 0
+        end_frame = min(end_frame, info.frames)
+        with open(source_path, "rb") as handle:
+            digest = hashlib.sha256(handle.read()).hexdigest()
+        descriptor = {
+            "format": MUSIC_FORMAT,
+            "codec": info.codec,
+            "file": "%s/%s%s" % (MUSIC_DIR, MUSIC_STEM, music_audio.EXTENSIONS[info.codec]),
+            "sha256": digest,
+            "bytes": info.size,
+            "sampleRate": info.sample_rate,
+            "channels": info.channels,
+            "frames": info.frames,
+            "carrierSequence": carrier,
+            "volume": volume,
+            "loopStartFrame": start_frame,
+            "loopEndFrame": end_frame,
+            "finalLap": final_lap,
+        }
+        self.music = (os.path.abspath(source_path), descriptor)
+        self.notes.append("music: %s, loop %.2f s to %s" % (
+            info.summary(), loop_start,
+            "%.2f s" % loop_end if loop_end > 0 else "the end"))
+        return info
+
+    def drop_music(self) -> None:
+        """Forget the track's music and remove what an earlier export wrote.
+
+        Only the generated copy under ``music/`` goes; the author's own file,
+        wherever it lives, is never touched.
+        """
+        self.music = None
+        self._remove_music_copies(keep=None)
+
+    def _remove_music_copies(self, keep: Optional[str]) -> None:
+        folder = os.path.join(self.directory, MUSIC_DIR)
+        if not os.path.isdir(folder):
+            return
+        for extension in music_audio.EXTENSIONS.values():
+            name = MUSIC_STEM + extension
+            path = os.path.join(folder, name)
+            if name != keep and os.path.isfile(path):
+                os.remove(path)
+        if not os.listdir(folder):
+            os.rmdir(folder)
+
     def add_payload(self, section: str, path: str) -> None:
         """Attach a compiled section payload produced by the asset tool."""
         if section not in SECTIONS:
@@ -363,7 +467,7 @@ class TrackPackage:
             if section in self.minimap
         ]
         manifest = {
-            "schemaVersion": SCHEMA_VERSION,
+            "schemaVersion": MUSIC_SCHEMA_VERSION if self.music else SCHEMA_VERSION,
             "id": self.track_id,
             "name": self.name,
             "adds": adds,
@@ -372,6 +476,8 @@ class TrackPackage:
             manifest["author"] = self.author
         if self.revision:
             manifest["builtFrom"] = self.revision
+        if self.music:
+            manifest["music"] = dict(self.music[1])
         if self.hd_pack:
             # Informational: the runtime reads the keys it knows and nothing
             # else. The digest is the pack stamp's, so a pack and a package
@@ -409,6 +515,25 @@ class TrackPackage:
             destination = os.path.join(self.directory, SECTIONS[section])
             if os.path.abspath(source_path) != os.path.abspath(destination):
                 shutil.copyfile(source_path, destination)
+
+        # The music is copied before the manifest that claims it, and checked
+        # against the digest recorded when it was validated: an author who
+        # saves over the file mid-export gets an error, not a package whose
+        # manifest describes different bytes.
+        if self.music:
+            source_path, descriptor = self.music
+            destination = os.path.join(self.directory, *descriptor["file"].split("/"))
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            with open(source_path, "rb") as handle:
+                data = handle.read()
+            if hashlib.sha256(data).hexdigest() != descriptor["sha256"]:
+                raise DkrMapError("the music file changed while exporting; export again")
+            if os.path.abspath(source_path) != os.path.abspath(destination):
+                with open(destination, "wb") as handle:
+                    handle.write(data)
+            self._remove_music_copies(keep=os.path.basename(destination))
+        else:
+            self._remove_music_copies(keep=None)
 
         manifest_path = os.path.join(self.directory, MANIFEST_NAME)
         with open(manifest_path, "w", encoding="utf-8", newline="\n") as handle:

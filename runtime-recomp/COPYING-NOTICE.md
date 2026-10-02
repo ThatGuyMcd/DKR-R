@@ -17,3 +17,8 @@ preparation scripts fetch the exact upstream source revisions into the ignored
 source form used for the executable. Generated recompilation output and
 user-owned game data are deliberately excluded and are regenerated locally from
 the supported ROM.
+
+`third_party/dr_libs/dr_mp3.h` (v0.7.3) and `dr_wav.h` (v0.14.5) are David Reid's
+single-file decoders, vendored unmodified and available under the public domain
+(Unlicense) or MIT No Attribution, at the user's choice; their licence text is
+at the end of each file. They decode a custom track's own music.

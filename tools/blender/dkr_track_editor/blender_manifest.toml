@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "dkr_track_editor"
-version = "0.1.4"
+version = "0.2.0"
 name = "DKR Track Editor"
 tagline = "Author Diddy Kong Racing tracks and export .dkrmap packages"
 maintainer = "DKR-R contributors"
