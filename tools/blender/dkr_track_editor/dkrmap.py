@@ -185,7 +185,10 @@ class TrackPackage:
         a Phase 1 remix keeps its geometry, world and race type and changes only
         what the author edits. The two runtime-owned offsets are left at zero.
         """
-        payload = level_header.encode(document, enum_values, asset_index)
+        try:
+            payload = level_header.encode(document, enum_values, asset_index)
+        except level_header.HeaderError as error:
+            raise DkrMapError("could not compile the level header: %s" % error) from error
         os.makedirs(self.directory, exist_ok=True)
         path = os.path.join(self.directory, SECTIONS["LEVEL_HEADERS"])
         with open(path, "wb") as handle:

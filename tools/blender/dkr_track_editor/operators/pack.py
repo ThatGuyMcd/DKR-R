@@ -160,6 +160,7 @@ class DKR_OT_export_dkrmap(bpy.types.Operator, ExportHelper):
                         template.lookup(base, minimap.NO_MINIMAP_POINTER),
                         chart.state),
                 })
+                _require_header_asset_index(base, tree)
                 header = package.encode_header(
                     base, catalog.raw.get("enumValues", {}),
                     tree.asset_index if tree else None,
@@ -789,6 +790,45 @@ def _warn_header_without_geometry(operator, context, package):
         "geometry field for the runtime to patch from a LEVEL_MODELS payload, "
         "and there is none. Building track geometry from a Blender mesh is not "
         "supported yet - import a track's geometry and reshape it instead",
+    )
+
+
+def _require_header_asset_index(document, tree):
+    """Refuse symbolic asset references when no asset tree can resolve them.
+
+    Level headers store integer indices, while extracted JSON uses build ids such
+    as ``ASSET_OBJECT_DOME1``.  A numeric value can be written without the
+    decomp, but a build id cannot safely be guessed: asset ordering is supplied
+    by the extracted tree for the selected game revision.
+    """
+    if tree is not None:
+        return
+
+    from .. import level_header  # noqa: PLC0415
+    from .. import level_header_template as template  # noqa: PLC0415
+
+    unresolved = []
+    for field in level_header.LAYOUT:
+        if field.kind != "asset":
+            continue
+        value = template.lookup(document, field.pointer)
+        if value is None:
+            value = field.default
+        if isinstance(value, str) and value:
+            unresolved.append((field.pointer, value))
+
+    if not unresolved:
+        return
+
+    preview = ", ".join("%s = %s" % pair for pair in unresolved[:3])
+    if len(unresolved) > 3:
+        preview += ", and %d more" % (len(unresolved) - 3)
+    raise dkrmap.DkrMapError(
+        "the level header contains asset names that must be resolved to numeric "
+        "indices, but no decomp asset tree is configured (%s). Set Decomp "
+        "Assets in Preferences > Add-ons > DKR Track Editor to the extracted "
+        "assets/.vanilla/<region>.<version>/ folder, or clear those asset-backed "
+        "header choices before exporting" % preview
     )
 
 
