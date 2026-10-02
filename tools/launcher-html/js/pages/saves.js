@@ -57,8 +57,8 @@ DKRLauncher.pages.saves = function (container) {
   const feedback = h('p', { class: 'saves-status', role: 'status', 'aria-live': 'polite' });
   const isEditable = () => model.exists && model.valid && model.size === 512;
   const isDirty = () => !!view.draft && JSON.stringify(view.draft) !== JSON.stringify(model.image);
-  function button(label, onClick, { disabled = false, className = '', key = label, reason = '' } = {}) {
-    const el = ui.raceButton({ label, onClick, disabled });
+  function button(label, onClick, { disabled = false, className = '', key = label, reason = '', settings = false } = {}) {
+    const el = (settings ? ui.settingsButton : ui.raceButton)({ label, onClick, disabled });
     el.classList.add('saves-button');
     if (className) el.classList.add(...className.split(' '));
     el.dataset.fk = 'saves-' + key;
@@ -303,7 +303,7 @@ DKRLauncher.pages.saves = function (container) {
         button('Edit slot ' + (i + 1), () => {
           view.section = 'edit'; view.tab = 'adventure-' + i; render();
           page.querySelector('#saves-builder-panel')?.focus({ preventScroll: true });
-        })))));
+        }, { settings: true })))));
     }
     host.append(separator('Backups'), text('Restore earlier progress. A safety backup is also created before applying edits or resetting a save.', 'muted'));
     if (!model.backups.length) host.append(h('div', { class: 'saves-empty' },
@@ -320,14 +320,14 @@ DKRLauncher.pages.saves = function (container) {
             model.exists = true; model.valid = backup.valid ?? true; model.size = backup.size ?? 512; view.draft = null;
             setStatus('Backup restored. Any replaced save was backed up too.');
           }, true);
-        }, { key: 'restore-' + i })))));
+        }, { key: 'restore-' + i, settings: true })))));
       if (model.backups.length > 6) host.append(button(view.allBackups ? 'Show recent backups' : `Show all ${model.backups.length} backups`, () => {
         view.allBackups = !view.allBackups; render();
       }, { key: 'all-backups' }));
     }
     if (model.exists) host.append(h('section', { class: 'saves-reset' },
       h('div', {}, h('h2', { text: 'Start over' }), text('Reset all three slots, unlocks and records. A backup is kept.', 'muted')),
-      button('Reset save', startFresh, { className: 'saves-danger' })));
+      button('Reset save', startFresh, { settings: true })));
   }
 
   function render() {

@@ -180,10 +180,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
   }
 
   function checkbox(label, checked, { disabled, onChange, fk, ariaLabel } = {}) {
-    const input = h('input', { type: 'checkbox', disabled, 'aria-label': ariaLabel, 'data-fk': fk });
-    input.checked = !!checked;
-    input.addEventListener('change', () => onChange(input.checked));
-    return h('label', { class: 'im im-check' + (disabled ? ' is-disabled' : '') },
+    const input = ui.checkboxInput({ checked, onChange, disabled, 'aria-label': ariaLabel, 'data-fk': fk });
+    return h('label', { class: 'checkbox im im-check' + (disabled ? ' is-disabled' : '') },
       input, label ? h('span', {}, label) : null);
   }
 
@@ -203,7 +201,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
         if (event.target.open) view.detailsOpen.add(key);
         else view.detailsOpen.delete(key);
       },
-    }, h('summary', { 'data-fk': 'help-disclosure-' + key }, label), ...children);
+    }, h('summary', { 'data-fk': 'help-disclosure-' + key, class: key.startsWith('import-') ? 'settings-button' : undefined }, label), ...children);
   }
 
   function spinner(large) {
@@ -817,7 +815,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
     return out;
   }
 
-  function plainButton(label, onClick, { cls = '', fk, disabled = false } = {}) {
+  function plainButton(label, onClick, { cls = '', fk, disabled = false, settings = false } = {}) {
+    if (settings) return ui.settingsButton({ label, onClick, disabled, class: cls, 'data-fk': fk });
     return h('button', { type: 'button', class: 'mods-button ' + cls, onclick: onClick, disabled, 'data-fk': fk }, label);
   }
 
@@ -850,7 +849,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
       }),
     });
     const filterButton = plainButton('Filters' + (advancedCount ? ` (${advancedCount})` : ''),
-      () => { view.filtersOpen = !view.filtersOpen; scheduleRender(); }, { fk: key + '-filters', cls: view.filtersOpen ? 'is-selected' : '' });
+      () => { view.filtersOpen = !view.filtersOpen; scheduleRender(); }, { fk: key + '-filters', cls: view.filtersOpen ? 'is-selected' : '', settings: true });
     filterButton.setAttribute('aria-expanded', String(view.filtersOpen));
     filterButton.setAttribute('aria-controls', 'mods-filters');
     out.push(h('div', { class: 'mods-toolbar' }, search,
@@ -1001,8 +1000,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
         h('p', {}, 'Track files stay in this folder. HD texture packs are installed separately in AppData.'),
         lab.workingFolder ? h('p', { class: 'mods-feedback' }, 'Watching: ' + lab.workingFolder) : null,
         h('div', { class: 'mods-action-row' },
-          plainButton(lab.workingFolder ? 'Change folder' : 'Choose working folder', chooseWorkingFolder, { disabled: locked, fk: 'lab-folder' }),
-          lab.workingFolder ? plainButton('Stop watching', () => updateLab({ workingFolder: '', watched: [], armed: '', autoBoot: false }), { disabled: locked, fk: 'lab-stop', cls: 'mods-link' }) : null))));
+          plainButton(lab.workingFolder ? 'Change folder' : 'Choose working folder', chooseWorkingFolder, { disabled: locked, fk: 'lab-folder', settings: true }),
+          lab.workingFolder ? plainButton('Stop watching', () => updateLab({ workingFolder: '', watched: [], armed: '', autoBoot: false }), { disabled: locked, fk: 'lab-stop', settings: true }) : null))));
     if (view.trackImportStatus) out.push(h('p', { class: 'mods-feedback', role: 'status' }, view.trackImportStatus));
     out.push(h('div', { class: 'mods-library-heading' }, h('h3', {}, `Test tracks (${installed.length})`),
       plainButton('Rescan tracks', () => chooseWorkingFolder(true), { disabled: locked || !lab.workingFolder, fk: 'lab-rescan', cls: 'mods-link' })));
@@ -1037,9 +1036,9 @@ DKRLauncher.pages = DKRLauncher.pages || {};
       helpDisclosure('ROM versions and compatibility', 'versions',
         h('p', {}, "Legacy patches need their exact source ROM. Tracks are prepared for your imported US v1.0 or v1.1 ROMs; characters are validated for either version. Native DKR tracks do not need patch preparation.")),
       h('div', { class: 'mods-action-row' },
-        plainButton('Refresh library', refreshLibraries, { disabled: locked, fk: 'help-refresh' }),
-        plainButton('Turn off legacy tracks', () => disableAll(false), { disabled: locked, fk: 'help-off-tracks' }),
-        plainButton('Turn off all characters', () => disableAll(true), { disabled: locked, fk: 'help-off-characters' }))];
+        plainButton('Refresh library', refreshLibraries, { disabled: locked, fk: 'help-refresh', settings: true }),
+        plainButton('Turn off legacy tracks', () => disableAll(false), { disabled: locked, fk: 'help-off-tracks', settings: true }),
+        plainButton('Turn off all characters', () => disableAll(true), { disabled: locked, fk: 'help-off-characters', settings: true }))];
     if (lib.result) out.push(h('p', { class: 'mods-feedback', role: 'status' }, lib.result));
     out.push(h('h3', { class: 'mods-import-heading' }, 'Legacy import history'),
       h('p', { class: 'mods-tool-intro' }, 'Preparing an import again adds support for your current ROM and reinstalls removed entries. Hidden mods stay hidden.'));
@@ -1053,7 +1052,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
       out.push(helpDisclosure(group.items.map((item) => item.name).join(', '), 'import-' + review,
         ...group.items.map((item) => h('div', { class: 'mods-import-entry' }, h('strong', {}, `${item.name} / ${item.kind}`),
           ...item.warnings.map((warning) => h('p', { class: 'mods-feedback' }, warning.replace(/Game Pak/g, 'ROM'))))),
-        plainButton('Prepare this import again', () => prepareReview(review), { disabled: locked || !gamePakRevision(), fk: 'help-prepare-' + group.index })));
+        plainButton('Prepare this import again', () => prepareReview(review), { disabled: locked || !gamePakRevision(), fk: 'help-prepare-' + group.index, settings: true })));
     }
     return out;
   }
@@ -1067,9 +1066,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
     const out = [h('header', { class: 'mods-page-header' },
       h('div', {}, h('h1', { id: 'page-heading' }, 'MODS / HACKS'),
         h('p', {}, 'Your tracks, racers and race modifiers.')),
-      plainButton([h('span', { class: 'mods-import-symbol', 'aria-hidden': 'true' }, '+'),
-        h('span', {}, 'Import mods')], importMods,
-        { cls: 'mods-import-button', fk: 'import-mods', disabled: modsLocked || lib.busy || view.pickerOpen }))];
+      ui.importButton({ label: 'Import mods', onClick: importMods,
+        'data-fk': 'import-mods', disabled: modsLocked || lib.busy || view.pickerOpen }))];
     const statusLine = h('div', { class: 'mods-rom-line', id: 'mods-rom-status' },
       h('p', {}, revision
         ? `${selected.length} legacy mods enabled. Changes apply on the next launch.`
@@ -1516,13 +1514,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
 
   // ---------------------------------------------------------------- render
 
-  // The page is rebuilt on every change, so CSS transitions never run. Mark the nodes whose
-  // visible state just changed and let one-shot keyframes play from the previous state.
-  function markChanges(toggleStates) {
-    for (const input of pageRoot.querySelectorAll('.mods-toggle input[data-fk]')) {
-      const before = toggleStates.get(input.dataset.fk);
-      if (before !== undefined && before !== input.checked) input.classList.add('is-flipped');
-    }
+  // Only section changes need entrance motion; checkboxes use the shared native state.
+  function markChanges() {
     const now = { section: view.section, category: view.category, filtersOpen: view.filtersOpen };
     const before = shownView;
     shownView = now;
@@ -1554,10 +1547,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
     const selection = focusedInput?.matches('input[type=search], input[type=text]')
       ? [focusedInput.selectionStart, focusedInput.selectionEnd] : null;
     if (pageRoot && pageRoot.isConnected) {
-      const toggleStates = new Map([...pageRoot.querySelectorAll('.mods-toggle input[data-fk]')]
-        .map((input) => [input.dataset.fk, input.checked]));
       pageRoot.replaceChildren(...buildPage());
-      markChanges(toggleStates);
+      markChanges();
     } else {
       pageRoot = null;
     }

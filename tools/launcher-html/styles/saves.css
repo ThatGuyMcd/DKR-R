@@ -10,14 +10,14 @@
 .saves-body { min-width: 0; }
 .saves-overview { font: 16px/1.5 'Segoe UI', system-ui, sans-serif; }
 .saves-overview :is(h2, h3) { font: 600 18px/1.4 'Segoe UI', system-ui, sans-serif; }
-.saves-overview .saves-button { font: 600 16px/1.3 'Segoe UI', system-ui, sans-serif; }
+.saves-overview .saves-button:where(:not(.settings-button)) { font: 600 16px/1.3 'Segoe UI', sans-serif; }
 .saves-overview .saves-file-actions > .saves-button { font: var(--body-size)/1 var(--body-font); }
 .saves-overview .saves-slot-total, .saves-overview .saves-empty p:first-child { font-weight: 600; }
-.saves-page .saves-button, .saves-dialog .saves-button {
+.saves-page .saves-button:where(:not(.settings-button)), .saves-dialog .saves-button:where(:not(.settings-button)) {
   min-height: 44px; padding: 10px 16px; line-height: 1.2;
   background-color: #123e50; transition: transform 120ms ease, border-color 120ms ease;
 }
-.saves-button:active:not(:disabled) { transform: scale(.96); }
+.saves-button:not(.settings-button):active:not(:disabled) { transform: scale(.96); }
 .saves-page .saves-primary, .saves-dialog .saves-button:last-child:not(.saves-danger) {
   background-color: var(--accent); color: #062c30; border-color: var(--accent);
 }
@@ -67,8 +67,6 @@
 .saves-setting-grid > * { min-width: 0; margin: 0; }
 .saves-setting-grid .field { align-content: start; gap: 8px; }
 .saves-setting-grid label { font: 16px/1.4 'Segoe UI', sans-serif; }
-.saves-setting-grid .checkbox { min-height: 44px; }
-.saves-setting-grid .checkbox input { width: 40px; height: 40px; }
 .saves-page select { font-size: 17px; min-height: 44px; }
 .saves-initials { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; max-width: 280px; margin-bottom: 20px; }
 .saves-initials .field { margin: 0; }

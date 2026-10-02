@@ -17,27 +17,9 @@
 .controls-player-bar > span { color: var(--muted); font-size: 14px; }
 .controls-players { --snd-ease: cubic-bezier(.2, 0, 0, 1); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; flex: 1; max-width: 520px; }
 .controls-players .snd-chip { min-width: 0; }
-.controls-page .race-button, .controls-capture .race-button {
-  min-width: 0; min-height: 44px; height: auto; padding: 10px 14px;
-  border: 1px solid #476373; border-radius: 8px; background: #173a4e; color: var(--text);
-  font: 600 14px/1.35 var(--control-font); text-decoration: none;
-  transition: background-color 140ms ease, border-color 140ms ease;
-}
-.controls-page .race-button > span, .controls-capture .race-button > span { overflow-wrap: anywhere; }
-.controls-page .race-button::before, .controls-page .race-button > span::before,
-.controls-capture .race-button::before, .controls-capture .race-button > span::before { display: none; }
-.controls-page .race-button:is(:hover, :focus-visible, .nav-focus):not(:disabled),
-.controls-capture .race-button:is(:hover, :focus-visible, .nav-focus):not(:disabled) { background: #234e65; border-color: #b9cdd7; }
-.controls-page .race-button:is(:hover, :focus-visible, .nav-focus) > span,
-.controls-capture .race-button:is(:hover, :focus-visible, .nav-focus) > span { color: inherit; text-shadow: none; }
-.controls-page .race-button.selected { background: #ffd078; border-color: #ffd078; color: var(--background); }
-.controls-page .race-button.selected:is(:hover, :focus-visible, .nav-focus) { background: #ffdc99; color: var(--background); }
 .controls-page :is(button, input, select, summary):focus-visible,
 .controls-capture :is(button, input):focus-visible { outline: 3px solid #ffd078; outline-offset: 3px; }
-.controls-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--controls-line); margin-bottom: 22px; overflow-x: auto; padding: 4px; }
-.controls-tabs .race-button { flex: 1 0 auto; border: 0; border-radius: 4px 4px 0 0; background: transparent; padding: 10px; }
-.controls-tabs .race-button.selected { background: #ffffff08; color: var(--warm); box-shadow: inset 0 -3px #ffd078; }
-.controls-tabs .race-button.selected:is(:hover, :focus-visible, .nav-focus) { background: #ffffff10; color: var(--warm); }
+.controls-tabs { margin-bottom: 22px; }
 .controls-body { min-width: 0; }
 .controls-scope { font-size: 13px; color: var(--warm); font-weight: 600; }
 .controls-separator { margin: 0 0 16px; }
@@ -60,13 +42,10 @@
 .controls-axis meter::-webkit-meter-optimum-value { background: #77bfdb; }
 .controls-axis-value { grid-column: 3; text-align: right; font-variant-numeric: tabular-nums; }
 .controls-preview .controls-buttons-status { margin: 10px 0 0; font-size: 14px; }
-.controls-page .checkbox { min-height: 44px; margin-bottom: 8px; gap: 12px; }
-.controls-page .checkbox input { width: 24px; height: 24px; border-radius: 5px; background: #102c3c; border-color: #6d8998; }
-.controls-page .checkbox input:checked::after { width: 12px; height: 6px; border-width: 3px; transform: translateY(-2px) rotate(-45deg); border-color: #ffd078; }
 .controls-page .disclosure { margin: 24px 0 0; border-top: 1px solid var(--controls-line); }
 .controls-page .disclosure > summary { min-height: 48px; border: 0; border-radius: 0; background: transparent; padding: 12px 0; }
 .controls-page .disclosure-body { padding: 8px 0 4px; }
-.controls-page .disclosure-body > .race-button { margin-top: 12px; }
+.controls-page .disclosure-body > .settings-button { margin-top: 12px; }
 .controls-page .controls-slider-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; }
 .controls-slider-field > label { grid-column: 1; grid-row: 1; }
 .controls-slider-field > output { grid-column: 2; grid-row: 1; font-size: 15px; font-variant-numeric: tabular-nums; }
@@ -84,9 +63,9 @@
 .controls-binding:nth-child(odd) { background: #ffffff03; }
 .controls-binding > th { padding: 8px; font-size: 15px; }
 .controls-binding > td { padding: 4px; vertical-align: middle; }
-.controls-binding .race-button { width: 100%; padding: 8px; font-weight: 400; }
-.controls-binding .controls-alternate .race-button { background: transparent; border-color: #365361; }
-.controls-binding .race-button.is-unbound { color: var(--muted); background: transparent; border-style: dashed; }
+.controls-binding .settings-button { width: 100%; padding: 8px; font-weight: 400; }
+.controls-binding .controls-alternate .settings-button { background: transparent; border-color: #365361; }
+.controls-binding .settings-button.is-unbound { color: var(--muted); background: transparent; border-style: dashed; }
 .controls-cell-label { display: none; }
 .controls-vehicle-table :is(th, td) { padding: 8px; border-bottom: 1px solid var(--controls-line); }
 .controls-vehicle-table .checkbox { margin: 0; }
@@ -96,7 +75,7 @@
 .controls-shortcut-field > span { color: var(--muted); font-size: 14px; }
 .controls-feedback:not(:empty) { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; padding: 12px 16px; border: 1px solid #75baa5; border-radius: 8px; background: #183f3a; }
 .controls-feedback p { margin: 0; }
-.controls-feedback .race-button { flex-shrink: 0; }
+.controls-feedback .settings-button { flex-shrink: 0; }
 .controls-study-note { margin: 28px 0 0 !important; padding-top: 14px; border-top: 1px solid var(--controls-line); }
 .controls-capture { width: min(560px, calc(var(--vw) - 32px)); background: #102c3c; }
 .controls-capture h2 { font-size: 22px; }
@@ -114,7 +93,7 @@ body:has(.controls-capture[open]) #controller-legend { display: none; }
   .controls-binding > th { grid-column: 1 / -1; padding: 0 4px 6px; }
   .controls-binding > td { min-width: 0; }
   .controls-cell-label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
-  .controls-binding .race-button { font-size: 13px; }
+  .controls-binding .settings-button { font-size: 13px; }
 }
 @container (max-width: 380px) {
   .controls-players { grid-template-columns: repeat(2, minmax(0, 1fr)); }

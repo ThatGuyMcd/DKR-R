@@ -40,7 +40,7 @@
 .ol-field :is(input, select) { width: 100%; min-width: 0; }
 .ol-field output { float: right; color: var(--ol-amber); font-variant-numeric: tabular-nums; }
 .ol-field input[type="range"] { accent-color: var(--ol-go); min-height: 40px; padding: 0; }
-.ol-field input:disabled, .ol-switch input:disabled { opacity: .5; cursor: not-allowed; }
+.ol-field input:disabled { opacity: .5; cursor: not-allowed; }
 .ol-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ol-room { display: grid; gap: 12px; padding: 18px; min-width: 0; border-radius: 12px; background: #061d2c; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
 .ol-room :is(h3, p) { margin: 0; }
@@ -151,7 +151,7 @@
 .ol-choice-tag { padding: 3px 10px; border-radius: 4px; background: #042233; color: var(--ol-amber); font-size: 15px; text-transform: uppercase; letter-spacing: .08em; }
 .ol-choice h2 { margin: 0; color: var(--ol-cream); font-size: 34px; line-height: 1.1; text-shadow: 0 3px 0 #031623; }
 .ol-choice p { margin: 0; max-width: 36ch; color: #d3e5ec; }
-.ol-choice .ol-cta { width: 100%; margin-top: auto; }
+.ol-choice > :is(.ol-cta, .settings-button) { width: 100%; margin-top: auto; }
 .ol-choice.is-host p { margin-bottom: 14px; }
 /* The fork between hosting and joining: a lane line with a road sign that leans toward the card you're on. */
 .ol-or { display: flex; flex-direction: column; align-items: center; gap: 10px; }
@@ -394,28 +394,9 @@
 .ol-friend.is-pending small { color: var(--ol-amber); }
 .ol-add { display: grid; gap: 6px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgb(255 255 255 / .08); }
 
-/* Switches */
-.ol-switch { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; cursor: pointer; }
+/* Described settings share the Controls checkbox; only row layout is local. */
+.ol-switch { margin: 0; padding: 12px 0; }
 .ol-switch + .ol-switch { border-top: 1px solid rgb(255 255 255 / .07); }
-.ol-switch input {
-  appearance: none; position: relative; flex: none; width: 44px; height: 26px; margin: 1px 0 0; border-radius: 999px;
-  background: #123e58; box-shadow: inset 0 0 0 1px #7aa9bc; cursor: pointer;
-  transition: background-color 150ms var(--ol-ease), box-shadow 150ms var(--ol-ease);
-}
-.ol-switch input::after {
-  content: ''; position: absolute; top: 4px; left: 4px; width: 18px; height: 18px; border-radius: 50%;
-  background: #dbe7ed; transition: translate 150ms var(--ol-ease), background-color 150ms var(--ol-ease);
-}
-.ol-switch input:checked { background: var(--ol-go); box-shadow: inset 0 0 0 1px var(--ol-go); }
-.ol-switch input:checked::after { translate: 18px 0; background: #07332c; }
-.ol-switch input.is-flipped { animation: ol-switch-off 150ms var(--ol-ease) backwards; }
-.ol-switch input.is-flipped:checked { animation-name: ol-switch-on; }
-.ol-switch input.is-flipped::after { animation: ol-knob-off 150ms var(--ol-ease) backwards; }
-.ol-switch input.is-flipped:checked::after { animation-name: ol-knob-on; }
-@keyframes ol-switch-on { from { background-color: #123e58; box-shadow: inset 0 0 0 1px #7aa9bc; } }
-@keyframes ol-switch-off { from { background-color: #54c9ad; box-shadow: inset 0 0 0 1px #54c9ad; } }
-@keyframes ol-knob-on { from { translate: 0 0; background-color: #dbe7ed; } }
-@keyframes ol-knob-off { from { translate: 18px 0; background-color: #07332c; } }
 .ol-switch > span { display: grid; min-width: 0; }
 .ol-switch strong { color: #fff; font-size: 15px; }
 .ol-switch small { color: var(--ol-soft); font-size: 13px; line-height: 1.4; }

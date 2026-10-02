@@ -4,13 +4,13 @@ DKRLauncher.config = {
   version: '1.0.5-beta.8',
   pages: [
     { id: 'play', label: 'PLAY', variant: 'green' },
+    { id: 'online', label: 'DKR-R ONLINE' },
+    { id: 'mods', label: 'MODS / HACKS' },
     { id: 'graphics', label: 'GRAPHICS' },
     { id: 'sound', label: 'SOUND' },
     { id: 'controls', label: 'CONTROLS' },
     { id: 'saves', label: 'SAVE MANAGER' },
     { id: 'textures', label: 'TEXTURES' },
-    { id: 'mods', label: 'MODS / HACKS' },
-    { id: 'online', label: 'DKR-R ONLINE' },
     { id: 'about', label: 'ABOUT DKR-R' },
   ],
   links: {

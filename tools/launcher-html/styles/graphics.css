@@ -17,13 +17,14 @@
 .graphics-page .slider output { font-size: 18px; font-variant-numeric: tabular-nums; }
 .gfx-option { margin-top: 16px; }
 .gfx-option .checkbox { gap: 12px; margin: 0; min-height: 44px; }
-.gfx-option .checkbox input { width: 40px; height: 40px; }
-.gfx-option .gfx-help { margin-left: 52px; margin-top: 2px; }
+.gfx-option .gfx-help { margin-left: 36px; margin-top: 2px; }
 .gfx-advanced { margin-top: 18px; border-top: 1px solid var(--border); }
 .gfx-advanced summary { min-height: 44px; padding: 14px 4px 4px; font: 600 16px/1.4 'Segoe UI', system-ui, sans-serif; }
 .gfx-advanced summary:hover { color: var(--warm); }
 .gfx-advanced-body { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin-top: 16px; }
-.gfx-advanced-body .gfx-option { margin-top: 0; }
+/* Match the adjacent field's label line + gap, then centre on its dropdown. */
+.gfx-advanced-body .gfx-option { margin-top: 0; padding-top: calc(16px * 1.4 + 8px); }
+.gfx-advanced-body .checkbox { min-height: 52px; }
 .gfx-interface-field { max-width: 480px; margin-bottom: 12px !important; }
 #gfx-scale-status { margin-top: 4px; color: var(--text); font-variant-numeric: tabular-nums; }
 .gfx-footer { border-top: 1px solid var(--border); padding-top: 18px; display: grid; gap: 12px; }
@@ -40,6 +41,7 @@ html[data-input="gamepad"] .gfx-section:focus-within { border-color: #ffd11f; }
 }
 @container content (max-width: 540px) {
   .gfx-fields, .gfx-advanced-body { grid-template-columns: minmax(0,1fr); }
+  .gfx-advanced-body .gfx-option { padding-top: 0; }
   .gfx-section { padding: 16px; }
   .gfx-reset-actions .race-button { flex: 1 1 auto; }
 }

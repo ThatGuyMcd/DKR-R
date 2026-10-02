@@ -38,10 +38,27 @@ window.DKRLauncher = window.DKRLauncher || {};
     return h('div', { class: 'field' }, h('label', {}, labelText, controlEl));
   }
 
-  function checkboxRow(label, checked, onChange) {
-    const input = h('input', { type: 'checkbox' });
+  // Controls' quiet action style is opt-in; race buttons keep their own identity.
+  function settingsButton({ label, onClick, disabled, ...props }) {
+    return h('button', { ...props, type: 'button', class: ['settings-button', props.class].filter(Boolean).join(' '),
+      disabled, onclick: onClick }, h('span', {}, label));
+  }
+
+  function importButton({ label, onClick, disabled, ...props }) {
+    return h('button', { ...props, type: 'button', class: ['import-button', props.class].filter(Boolean).join(' '),
+      disabled, onclick: onClick },
+      h('span', { class: 'import-button-symbol', 'aria-hidden': 'true' }), h('span', {}, label));
+  }
+
+  function checkboxInput({ checked = false, onChange, ...props } = {}) {
+    const input = h('input', { ...props, type: 'checkbox', class: 'ui-checkbox' });
     input.checked = !!checked;
-    input.addEventListener('change', () => onChange(input.checked));
+    if (onChange) input.addEventListener('change', () => onChange(input.checked));
+    return input;
+  }
+
+  function checkboxRow(label, checked, onChange) {
+    const input = checkboxInput({ checked, onChange });
     return h('label', { class: 'checkbox' }, input, h('span', { text: label }));
   }
 
@@ -462,7 +479,7 @@ window.DKRLauncher = window.DKRLauncher || {};
   }
 
   DKRLauncher.ui = {
-    h, raceButton, card, field, checkboxRow, sliderRow, selectRow, dropdownRow, rangeField,
+    h, raceButton, settingsButton, importButton, card, field, checkboxInput, checkboxRow, sliderRow, selectRow, dropdownRow, rangeField,
     disclosure, tabs, notify, openModal, closeModal,
     topModal, stackDialog, requestClose, picker, closePicker, selectPicker, fieldButton, keyboard, pageZoom,
   };

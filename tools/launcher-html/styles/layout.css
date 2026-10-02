@@ -18,7 +18,7 @@ body { background: var(--background); color: var(--text); font: var(--body-size)
 @keyframes coin-spin { to { transform: rotateY(360deg); } }
 #navigation { display: grid; gap: var(--nav-gap); }
 .sidebar .race-button { width: 100%; height: var(--nav-height); min-height: 26px; padding: 0 6px; border-color: rgba(255,171,20,.92); }
-/* Sidebar polish: the checker hover stays; it now fades in, and buttons get depth and press feedback. */
+/* Sidebar depth and press feedback; checker transitions live in components.css. */
 .sidebar { --sidebar-ease: cubic-bezier(.2, 0, 0, 1); }
 .sidebar .race-button {
   box-shadow: 0 2px 0 rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .14);
@@ -26,10 +26,11 @@ body { background: var(--background); color: var(--text); font: var(--body-size)
 }
 .sidebar .race-button:active:not(:disabled) { transform: scale(.96); }
 .sidebar .race-button > span { text-shadow: 0 2px 0 rgb(0 0 0 / .22); text-wrap: balance; }
-/* Soft in, instant out: the transition only lives on the hover state. */
-.sidebar .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled)::before { transition: opacity 120ms var(--sidebar-ease); }
-.sidebar .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled) > span::before { animation: sidebar-plate-in 120ms var(--sidebar-ease); }
-@keyframes sidebar-plate-in { from { opacity: 0; scale: .9; } }
+/* Selection stays visible above the checker without shifting the centred label. */
+.sidebar .race-button[aria-current="page"]::after {
+  content: ''; position: absolute; inset: 0; z-index: 2; border-radius: inherit; pointer-events: none;
+  box-shadow: inset 3px 0 var(--cream), inset 5px 0 rgba(7,28,39,.85);
+}
 /* Hairline between page navigation and the restart / exit actions. */
 .sidebar-actions { position: relative; }
 .sidebar-actions::before {

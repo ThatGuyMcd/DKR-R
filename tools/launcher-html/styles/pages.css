@@ -53,10 +53,8 @@
 .start-button:is(:disabled, [aria-disabled="true"]) { opacity: 1; background-color: #1c3440; border-color: transparent; color: #8fa6ad; box-shadow: 0 0 0 1px rgb(255 255 255 / .08); }
 .play-start-hint { margin: -8px 0 0; color: var(--muted); text-align: center; }
 
-/* Race buttons get the sidebar's polish: depth on the label, soft checker fade-in, press feedback. */
+/* Label depth and press feedback complement the shared checker transitions. */
 .play-page .race-button > span { text-shadow: 0 2px 0 rgb(0 0 0 / .22); }
-.play-page .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled)::before { transition: opacity 120ms var(--play-ease); }
-.play-page .race-button:is(:hover,:focus-visible,.nav-focus):not(:disabled) > span::before { animation: sidebar-plate-in 120ms var(--play-ease); }
 .rom-actions .race-button, .play-text-button { transition-property: scale, border-color, background-color; transition-duration: 150ms; transition-timing-function: var(--play-ease); }
 .rom-actions .race-button:active:not(:disabled), .play-text-button:active { scale: .96; }
 /* Racing's periods almost touch; spread them and hand back the trailing space so the label stays centred. */

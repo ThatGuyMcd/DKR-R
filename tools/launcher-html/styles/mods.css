@@ -61,19 +61,9 @@ dialog.imgui-modal.im-top { --im-border: #296b70; }
   transform: translate(-50%,-50%); border-radius: 9px; background: rgba(7,28,39,.95); border: 1px solid rgba(255,204,75,.88);
 }
 
-/* Checkbox: FrameHeight square, CheckMark = kAccent, label after ItemInnerSpacing.x. */
-.im-check { display: flex; align-items: flex-start; gap: 4px; width: max-content; max-width: 100%; min-height: 41px; cursor: pointer; }
-.im-check input {
-  appearance: none; flex: none; margin: 0; width: 41px; height: 41px; cursor: pointer;
-  border: 1px solid var(--im-border); border-radius: 12px; background-color: var(--im-frame);
-  background-origin: border-box; background-repeat: no-repeat; background-size: 41px 41px;
-}
-.im-check input:hover:not(:disabled) { background-color: var(--im-frame-hover); }
-.im-check input:active:not(:disabled) { background-color: var(--im-frame-active); }
-.im-check input:checked {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 41 41'%3E%3Cpolyline points='7.45 20.5 16.15 29.2 33.55 11.8' fill='none' stroke='%231ac2a3' stroke-width='5.8' stroke-linejoin='miter'/%3E%3C/svg%3E");
-}
-.im-check > span { padding-top: 11px; line-height: 19px; white-space: pre; }
+/* Layout only: all checkbox appearance comes from the shared component. */
+.im-check { width: max-content; max-width: 100%; margin: 0; }
+.im-check > span { line-height: 1.45; white-space: pre; }
 .im-check.is-disabled { opacity: .6; cursor: default; }
 .im-check.is-disabled input { opacity: 1; cursor: default; }
 
@@ -275,11 +265,7 @@ dialog.imgui-modal.fixed-height { height: min(var(--im-modal-height), calc(var(-
 .mods-vehicles { margin: 18px 0 9px; color: #c4dce5; font-size: 12px; font-weight: 600; }
 .mods-card-note { color: #a8bdc9; font-size: 12px; margin: 0 0 18px; }
 .mods-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; margin-top: auto; border-top: 1px solid #ffffff0e; }
-.mods-page .mods-toggle { margin: 0; display: inline-flex; align-items: center; gap: 10px; min-height: 42px; }
-.mods-page .mods-toggle input { position: relative; width: 38px; height: 22px; border-radius: 20px; border: 1px solid #6d8290; background: #304855; transition: background-color 150ms; }
-.mods-page .mods-toggle input:checked { background: #54c9ad; border-color: #54c9ad; }
-.mods-page .mods-toggle input::after { content: ''; position: absolute; top: 3px; left: 3px; height: 14px; width: 14px; border-radius: 50%; background: #dbe7ed; transition: transform 150ms; }
-.mods-page .mods-toggle input:checked::after { transform: translateX(16px); background: #102b2c; }
+.mods-page .mods-toggle { margin: 0; display: inline-flex; align-items: center; }
 .mods-page .mods-toggle > span { padding: 0; font-size: 12px; }
 .mods-library-help { margin: 22px 0 0; color: #9cb2be; font-size: 12px; }
 .mods-empty { text-align: center; padding: 48px 24px; border-radius: 14px; background: #ffffff04; }
@@ -288,9 +274,7 @@ dialog.imgui-modal.fixed-height { height: min(var(--im-modal-height), calc(var(-
 .mods-tool-section > h2 { font-size: 24px; font-weight: 650; margin-bottom: 8px; }
 .mods-tool-intro { color: #abc0cc; margin-bottom: 24px; }
 :is(.mods-page, dialog.imgui-modal) .im-text { line-height: 1.55; white-space: pre-wrap; }
-:is(.mods-page, dialog.imgui-modal) .im-check { align-items: center; gap: 10px; min-height: 42px; }
 :is(.mods-page, dialog.imgui-modal) .im-check > span { white-space: normal; padding-top: 0; line-height: 1.45; }
-:is(.mods-page, dialog.imgui-modal) .im-check:not(.mods-toggle) input { width: 24px; height: 24px; border-radius: 6px; background-size: 24px 24px; }
 :is(.mods-page, dialog.imgui-modal) .race-button { min-height: 42px; height: auto; padding: 10px 16px; background: #1c3c4c; border-color: #3c5864; border-radius: 9px; white-space: normal; font: 600 13px/1.5 'Segoe UI', system-ui, sans-serif; transition: background-color 150ms, transform 150ms; }
 :is(.mods-page, dialog.imgui-modal) .race-button:hover:not(:disabled) { background: #2c5060; }
 :is(.mods-page, dialog.imgui-modal) .race-button:active:not(:disabled) { transform: scale(.96); }
@@ -333,7 +317,7 @@ dialog.imgui-modal .im-heading-font { font: 600 20px/1.4 'Segoe UI', system-ui, 
 }
 @media (max-width: 650px) {
   .mods-page-header { gap: 18px; }
-  .mods-page-header > .mods-button { width: 100%; }
+  .mods-page-header > .import-button { width: 100%; }
   .mods-button { min-height: 44px; }
   .mods-section-nav { gap: 0 18px; }
   .mods-section-nav .mods-button { font-size: 12px; }
@@ -341,7 +325,7 @@ dialog.imgui-modal .im-heading-font { font: 600 20px/1.4 'Segoe UI', system-ui, 
   .mods-categories .mods-button { flex: 1; }
   .mods-library-card { padding: 18px; }
   .mods-toolbar { gap: 10px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .mods-toolbar > .mods-button { grid-column: 1 / -1; }
+  .mods-toolbar > :is(.mods-button, .settings-button) { grid-column: 1 / -1; }
   .mods-page .mods-toggle { min-height: 44px; }
 }
 .mods-task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0 26px; }
@@ -355,7 +339,8 @@ dialog.imgui-modal .im-heading-font { font: 600 20px/1.4 'Segoe UI', system-ui, 
 .mods-action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .mods-task-card .mods-action-row { margin-bottom: 0; }
 .mods-help-disclosure { padding: 0 16px; margin: 16px 0; border-radius: 10px; background: #ffffff04; box-shadow: inset 0 0 0 1px #ffffff0d; }
-.mods-help-disclosure > summary { padding: 13px 0; min-height: 46px; cursor: pointer; color: #cfdee6; font-weight: 600; overflow-wrap: anywhere; }
+.mods-help-disclosure > summary:not(.settings-button) { padding: 13px 0; min-height: 46px; cursor: pointer; color: #cfdee6; font-weight: 600; overflow-wrap: anywhere; }
+.mods-help-disclosure > summary.settings-button { display: list-item; list-style-position: inside; margin-block: 12px; text-align: left; overflow-wrap: anywhere; }
 .mods-help-disclosure > summary::marker { color: #8eaab9; }
 .mods-help-disclosure > :last-child:not(summary) { margin-bottom: 16px; }
 .mods-help-disclosure p { color: #abc0cc; font-size: 13px; }
@@ -443,9 +428,6 @@ dialog.imgui-modal .im-titlebar { font-size: 24px; background: #08567c; color: #
 .mods-card-footer { border-top: 2px dashed #39718a; }
 .mods-card-footer .mods-link { color: #ffe0a0; }
 .mods-library-card > .mods-link { color: #ffe0a0; }
-.mods-page .mods-toggle input { background-color: #123e58; border-color: #7aa9bc; }
-.mods-page .mods-toggle input:checked { background-color: #ffc453; border-color: #ffc453; }
-.mods-page .mods-toggle input:checked::after { background: #513815; }
 
 .mods-tool-section .im-table { gap: 18px; padding-bottom: 5px; }
 .mods-tool-section .im-magic-cell {
@@ -468,8 +450,6 @@ dialog.imgui-modal .im-titlebar { font-size: 24px; background: #08567c; color: #
 .mods-tool-section .im-magic-cell:has(input:checked) .im-check { background: #79601c; }
 .mods-tool-section .im-magic-cell:has(input:checked) .im-check::before { background: conic-gradient(#ffe29a 25%, #675016 0 50%, #ffe29a 0 75%, #675016 0) 0 0 / 12px 12px; }
 .mods-tool-section .im-magic-cell .im-check > span { min-width: 0; font-size: 20px; line-height: 1.25; color: #fff3cb; overflow-wrap: anywhere; }
-.mods-tool-section .im-magic-cell .im-check input { background-color: #04263c; border: 2px solid #7db9ce; border-radius: 6px; box-shadow: 0 2px 0 #02121d; }
-.mods-tool-section .im-magic-cell .im-check input:checked { background-color: #073c36; border-color: #ffe293; }
 .mods-tool-section .im-magic-cell .im-indent { display: flex; flex-direction: column; flex: 1; padding: 16px 14px 12px; }
 .mods-tool-section .im-magic-cell .im-indent > :first-child { font-size: 14px; color: #dae8ee; margin-bottom: 14px; }
 .mods-tool-section .im-magic-cell .im-indent > :last-child { margin-top: auto; margin-bottom: 0; padding-top: 10px; border-top: 1px dashed #356078; color: #adc8d6; font-size: 11px; line-height: 1.55; }
@@ -480,14 +460,6 @@ dialog.imgui-modal .im-titlebar { font-size: 24px; background: #08567c; color: #
   .mods-library-card { padding: 16px; }
 }
 /* One track library, with format labels separate from activation state. */
-.mods-import-button {
-  min-height: 56px; gap: 12px; padding: 10px 20px 10px 12px;
-  border: 2px solid #ffd06b; border-radius: 8px 18px 8px 8px;
-  background: #b94b1a; color: #fff3c9; font: 22px/1.1 var(--body-font);
-  text-shadow: 0 2px #632706; box-shadow: 0 4px 0 #5e240f, inset 0 2px 0 #ffffff26;
-}
-.mods-import-button:hover:not(:disabled) { background: #d65b1e; border-color: #ffe39c; }
-.mods-import-symbol { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 5px; background: #6f2b11; font: 26px/1 'Segoe UI', system-ui, sans-serif; text-shadow: none; }
 .mods-rom-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; padding: 4px 0 16px; border-bottom: 1px solid #325365; }
 .mods-rom-line p { flex: 1 1 300px; margin: 0; color: #c3d3dc; font-size: 13px; }
 .mods-text-link { display: inline-flex; align-items: center; min-height: 40px; color: #ffce72; font-weight: 600; text-decoration-thickness: 1px; text-underline-offset: 4px; }
@@ -524,9 +496,8 @@ dialog.imgui-modal .mods-native-title + .im { margin-top: 12px; }
 .mods-page, dialog.imgui-modal { --mods-ease: cubic-bezier(.2, 0, 0, 1); }
 .mods-categories { border-radius: 12px; } /* 8px buttons + 4px padding */
 .mods-empty { box-shadow: inset 0 0 0 1px #ffffff0d; }
-.mods-text-link, .mods-help-disclosure > summary { transition: color 150ms var(--mods-ease); }
-.mods-help-disclosure > summary:hover { color: #fff; }
-.mods-page .mods-toggle input { transition-property: background-color, border-color; transition-timing-function: var(--mods-ease); }
+.mods-text-link, .mods-help-disclosure > summary:not(.settings-button) { transition: color 150ms var(--mods-ease); }
+.mods-help-disclosure > summary:not(.settings-button):hover { color: #fff; }
 
 /* A chevron's ink sits toward its tip; nudge it back so it reads centred against the label. */
 .mods-section-nav .mods-button::before { translate: -2px 0; }
@@ -540,13 +511,5 @@ dialog.imgui-modal .mods-native-title + .im { margin-top: 12px; }
 .mods-page .is-entering { animation: mods-enter 320ms var(--mods-ease) backwards; animation-delay: calc(var(--enter-i, 0) * 60ms); }
 @keyframes mods-enter { from { opacity: 0; translate: 0 8px; } }
 
-.mods-page .mods-toggle input.is-flipped { animation: mods-toggle-off 150ms var(--mods-ease) backwards; }
-.mods-page .mods-toggle input.is-flipped:checked { animation-name: mods-toggle-on; }
-.mods-page .mods-toggle input.is-flipped::after { animation: mods-knob-off 150ms var(--mods-ease) backwards; }
-.mods-page .mods-toggle input.is-flipped:checked::after { animation-name: mods-knob-on; }
-@keyframes mods-toggle-on { from { background-color: #123e58; border-color: #7aa9bc; } }
-@keyframes mods-toggle-off { from { background-color: #ffc453; border-color: #ffc453; } }
-@keyframes mods-knob-on { from { transform: none; background: #dbe7ed; } }
-@keyframes mods-knob-off { from { transform: translateX(16px); background: #513815; } }
 /* The shared motion-off rule only reaches ::before. */
 html[data-motion="off"] .mods-page *::after { animation: none !important; transition: none !important; }

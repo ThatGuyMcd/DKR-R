@@ -51,7 +51,7 @@ DKRLauncher.pages.controls = function (container) {
   };
   const page = h('div', { class: 'controls-page' });
   const players = h('div', { class: 'controls-players', role: 'group', 'aria-label': 'Local players' });
-  const tabs = h('div', { class: 'controls-tabs', role: 'tablist', 'aria-label': 'Controls sections', 'data-tabs': true });
+  const tabs = h('div', { class: 'controls-tabs secondary-nav', role: 'tablist', 'aria-label': 'Controls sections', 'data-tabs': true });
   const body = h('div', { class: 'controls-body', id: 'controls-section', role: 'tabpanel' });
   const feedback = h('div', { class: 'controls-feedback', role: 'status', 'aria-live': 'polite' });
   const text = (value, className) => h('p', { class: className, text: value });
@@ -61,6 +61,7 @@ DKRLauncher.pages.controls = function (container) {
   const scope = (shared = false) => text(shared ? 'Applies to all players' : `Player ${selectedPlayer + 1} settings`, 'controls-scope');
   function disclosure(label, ...children) {
     const el = ui.disclosure(label, children, expanded.has(label));
+    el.querySelector('summary').classList.replace('race-button', 'settings-button');
     el.querySelector('summary').dataset.fk = 'controls-' + label;
     el.addEventListener('toggle', () => { if (el.isConnected) el.open ? expanded.add(label) : expanded.delete(label); });
     return el;
@@ -84,7 +85,7 @@ DKRLauncher.pages.controls = function (container) {
     return value.replace(/lefttrigger \+|righttrigger \+|left[xy] [+-]|right[xy] [+-]|\b[a-z]+\b/g, (part) => names[part] || part);
   }
   function button(label, onClick, disabled = false) {
-    const el = ui.raceButton({ label, onClick, disabled });
+    const el = ui.settingsButton({ label, onClick, disabled });
     el.dataset.fk = 'controls-' + label;
     return el;
   }
@@ -380,6 +381,7 @@ DKRLauncher.pages.controls = function (container) {
     }));
     tabs.replaceChildren(...sections.map(([label, title]) => {
       const btn = button(title, () => { section = label; render(); });
+      btn.className = 'secondary-nav-tab';
       btn.id = 'controls-tab-' + label.toLowerCase().replaceAll(' ', '-');
       btn.setAttribute('role', 'tab');
       btn.setAttribute('aria-selected', String(section === label));

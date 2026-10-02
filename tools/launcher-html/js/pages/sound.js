@@ -196,18 +196,17 @@ DKRLauncher.pages.sound = function (container) {
 
   // ------------------------------------------------------------ multiplayer
 
-  const music34 = h('input', {
-    type: 'checkbox', role: 'switch', id: 'snd-music34', 'data-fk': 'snd-music34',
+  const music34 = ui.checkboxInput({
+    id: 'snd-music34', 'data-fk': 'snd-music34',
     'aria-labelledby': 'snd-music34-label',
     'aria-describedby': 'snd-music34-description snd-music34-about',
   });
   music34.addEventListener('change', () => save({ restore34PlayerMusic: music34.checked }));
   const multiplayer = h('div', { class: 'snd-multiplayer' },
-    h('label', { class: 'ol-switch snd-multiplayer-target', for: 'snd-music34' },
+    h('label', { class: 'checkbox snd-multiplayer-target', for: 'snd-music34' }, music34,
       h('span', {},
         h('strong', { id: 'snd-music34-label' }, 'Multiplayer music'),
-        h('small', { id: 'snd-music34-description' }, 'Keep music on with 3–4 players.')),
-      music34),
+        h('small', { id: 'snd-music34-description' }, 'Keep music on with 3–4 players.'))),
     h('span', { class: 'snd-multiplayer-tip', id: 'snd-music34-about', role: 'tooltip' },
       'The original game turns race music off with 3 or 4 players. Leave this on to keep it playing.'));
   multiplayer.addEventListener('keydown', (event) => {

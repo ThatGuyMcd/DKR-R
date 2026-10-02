@@ -17,13 +17,6 @@
   transition: scale 150ms ease, border-color 150ms ease;
 }
 :is(.launcher-detail-page, .launcher-detail-modal) .race-button:active:not(:disabled) { scale: .96; }
-:is(.launcher-detail-page, .launcher-detail-modal) .checkbox { min-height: 44px; margin-bottom: 8px; }
-:is(.launcher-detail-page, .launcher-detail-modal) .checkbox input {
-  width: 24px; height: 24px; border-radius: 5px; background: #102c3c; border-color: #6d8998;
-}
-:is(.launcher-detail-page, .launcher-detail-modal) .checkbox input:checked::after {
-  width: 12px; height: 6px; border-width: 3px; border-color: var(--warm); transform: translateY(-2px) rotate(-45deg);
-}
 .launcher-detail-actions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin: 16px 0; }
 .launcher-detail-actions > * { min-width: 0; }
 .launcher-detail-facts { display: grid; grid-template-columns: minmax(120px,1fr) minmax(0,2fr); gap: 8px 16px; margin: 0 0 20px; }

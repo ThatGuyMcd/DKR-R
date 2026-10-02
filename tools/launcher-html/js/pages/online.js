@@ -22,7 +22,6 @@ DKRLauncher.pages = DKRLauncher.pages || {};
   let root = null;
   let regions = null;
   let shownPhase = null;
-  const renderedSwitches = new Map();
   let ownsModLock = false;
   const timers = new Set();
   let section = 'lobbies';
@@ -418,7 +417,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
           h('div', { class: 'ol-actions' },
             ready && !matches
               ? button(romFor(lobby.revision) ? `Switch to ${needed}` : `Add a ${needed} ROM…`, () => switchTo(lobby.revision, 'join-lobby-' + lobby.name), { tone: 'is-strong', fk: 'switch-rom-' + lobby.name })
-              : button(invited ? 'Accept and join' : 'Request to join', () => join(lobby), { tone: 'is-go', disabled: !ready, fk: 'join-lobby-' + lobby.name, reason: 'Choose a Game ROM first, at the top of this page.' }),
+              : button(invited ? 'Accept and join' : 'Request to join', () => join(lobby), { tone: 'is-go', settings: !invited, disabled: !ready, fk: 'join-lobby-' + lobby.name, reason: 'Choose a Game ROM first, at the top of this page.' }),
             invited ? button('Decline', () => updateOnline({ dismissedInvites: [...online().dismissedInvites, lobby.code] })) : null));
       }),
       !available.length ? h('p', {}, 'No friends are hosting an open lobby right now.') : null,
@@ -440,7 +439,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
         h('strong', { class: 'ol-mono' }, entry.code), h('p', { class: 'ol-soft' }, entry.lifetime +
           (entry.expiresAt ? entry.expiresAt <= Date.now() ? ' · Expired' : ' · ' + formatExpiry(entry.expiresAt - Date.now()) + ' remaining' : '')),
         h('div', { class: 'ol-actions' },
-          button('Copy code', () => copy(entry.code, 'Friend Code copied.'), { disabled: !!entry.expiresAt && entry.expiresAt <= Date.now(), reason: 'This code has expired. Generate a new one.' }),
+          button('Copy code', () => copy(entry.code, 'Friend Code copied.'), { settings: true, disabled: !!entry.expiresAt && entry.expiresAt <= Date.now(), reason: 'This code has expired. Generate a new one.' }),
           button('Revoke', () => updateOnline({ generatedCodes: online().generatedCodes.filter((c) => c.code !== entry.code) }), { tone: 'is-danger' })))),
       button('Copy friend connection diagnostics', () => copy('DKR-R mockup: presence available; transport simulated; no network measurements.', 'Diagnostics copied. No names, codes or addresses included.')));
   }
@@ -487,14 +486,14 @@ DKRLauncher.pages = DKRLauncher.pages || {};
   }
 
   function showGuide() {
-    const remember = h('input', { type: 'checkbox' }); remember.checked = true;
+    const remember = ui.checkboxInput({ checked: true });
     ui.openModal({ heading: 'Welcome to DKR-R Online', body: [
       h('p', {}, 'Host a private room, share its five-character code, approve requests and ready up. Player 1 starts the race for everyone.'),
       h('p', {}, 'Open lobbies lists rooms hosted by friends. Friend Codes add racers to your list; lobby invitations grant one admission and expire after five minutes.'),
       h('p', {}, 'Host Settings controls racer limits, shared menus, synchronization and input delay. Rollback and automatic delay are the defaults.'),
       h('p', {}, 'Every racer needs the same ROM revision and gameplay settings. The host supplies a separate online Adventure save; single-player progress is kept.'),
       h('p', {}, 'Online is in beta. This mockup simulates lobbies, friends and connection results locally.'),
-      h('label', {}, remember, ' Do not show this guide again'),
+      h('label', { class: 'checkbox' }, remember, h('span', {}, 'Do not show this guide again')),
     ], actions: [ui.raceButton({ label: 'GOT IT', onClick: () => { updateOnline({ guideAcknowledged: remember.checked }); ui.closeModal(); } })] });
   }
 
@@ -551,7 +550,9 @@ DKRLauncher.pages = DKRLauncher.pages || {};
   }
 
   // reason: shown when the D-pad rests on the button while it is disabled (controller.js).
-  function button(label, onClick, { tone = '', disabled = false, fk, ariaLabel, title, reason } = {}) {
+  function button(label, onClick, { tone = '', disabled = false, fk, ariaLabel, title, reason, settings = false } = {}) {
+    if (settings) return ui.settingsButton({ label, onClick, disabled, 'data-fk': fk,
+      'aria-label': ariaLabel, title, 'data-disabled-reason': disabled ? reason : undefined });
     return h('button', {
       type: 'button', class: 'ol-btn' + (tone ? ' ' + tone : ''), disabled, 'data-fk': fk,
       'aria-label': ariaLabel, title, onclick: onClick, 'data-disabled-reason': disabled ? reason : undefined,
@@ -577,10 +578,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
   }
 
   function switchRow(title, description, checked, onChange, fk, disabled = false) {
-    const input = h('input', { type: 'checkbox', role: 'switch', 'data-fk': fk, disabled });
-    input.checked = !!checked;
-    input.addEventListener('change', () => onChange(input.checked));
-    return h('label', { class: 'ol-switch' }, input,
+    const input = ui.checkboxInput({ checked, onChange, 'data-fk': fk, disabled });
+    return h('label', { class: 'checkbox ol-switch' }, input,
       h('span', {}, h('strong', {}, title), h('small', {}, description)));
   }
 
@@ -655,7 +654,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
           codeButton,
           error,
           h('div', { class: 'ol-actions' }, button('Paste code', pasteCode, { fk: 'paste-code' })),
-          bigButton('REQUEST TO JOIN', () => { joinHost = 'Banjo64'; requestJoin(); }, { fk: 'request-join', disabled: !state.get().rom.ready, reason: 'Choose a Game ROM first, at the top of this page.' }))),
+          button('Request to join', () => { joinHost = 'Banjo64'; requestJoin(); }, { settings: true, fk: 'request-join', disabled: !state.get().rom.ready, reason: 'Choose a Game ROM first, at the top of this page.' }))),
       h('ol', { class: 'ol-steps', 'aria-label': 'How online races work' },
         ...[['Open', 'The host creates a lobby'], ['Share', 'Friends type the code'], ['Approve', 'The host lets them in'], ['Race', 'Everyone readies up']]
           .map(([title, text], i) => h('li', {}, h('span', { class: 'ol-step-num' }, i + 1), h('span', {}, h('strong', {}, title), text)))),
@@ -690,7 +689,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
         h('span', { class: 'ol-plate-code' },
           codeTiles(session.code), h('span', { class: 'ol-visually-hidden' }, session.code.split('').join(' '))),
         h('div', { class: 'ol-plate-actions' },
-          button('Copy code', () => copy(session.code, `Code ${session.code} copied. Share it only with friends.`), { tone: 'is-strong', fk: 'copy-code' }),
+          button('Copy code', () => copy(session.code, `Code ${session.code} copied. Share it only with friends.`), { settings: true, fk: 'copy-code' }),
           button('New code', newCode, { fk: 'new-code', disabled: busy(), title: 'Stops the old code working. Racers already here stay.', reason: 'Not while the connection test or countdown is running.' })),
         h('span', { class: 'ol-expiry' }, 'Expires in ', h('span', { class: 'ol-expiry-time' }, formatExpiry(session.expiresAt - Date.now()))))
         : h('div', { class: 'ol-plate is-guest' },
@@ -840,7 +839,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
         o.appearOffline ? 'Friends see you as offline' : inLobby() ? 'Online · in a lobby' : 'Online'),
       h('div', { class: 'ol-friend-code' },
         h('span', {}, h('small', {}, 'Your friend code'), h('strong', { class: 'ol-mono' }, o.friendCode)),
-        button('Copy', () => copy(o.friendCode, 'Friend code copied.'), { fk: 'copy-friend-code' })),
+        button('Copy', () => copy(o.friendCode, 'Friend code copied.'), { fk: 'copy-friend-code', settings: true })),
       h('p', { class: 'ol-soft' }, 'Device identity: ' + o.identityLabel),
       section === 'profile' ? textField('Display name', o.displayName, (v) => updateOnline({ displayName: v || 'Player' }), 24) : null,
       section === 'profile' ? button('Save online profile', () => { updateOnline({ nickname: online().displayName }); ui.notify('Online profile saved.'); }) : null);
@@ -942,7 +941,7 @@ DKRLauncher.pages = DKRLauncher.pages || {};
       h('span', { class: 'ol-rom-label', id: 'ol-rom-label' }, 'Game ROM'),
       known
         ? roms.romSelect({ fk: 'online-rom', compact: true, disabled: locked, reason: 'Locked while you are in a lobby. Everyone races on the same revision.', onChange: romChanged })
-        : button('Choose a ROM…', openRomBrowser, { tone: 'is-strong', fk: 'online-rom' }),
+        : ui.importButton({ label: 'Choose a ROM…', onClick: openRomBrowser, 'data-fk': 'online-rom' }),
       h('small', {}, locked ? 'Locked while you are in a lobby.' : known ? 'Everyone in a lobby needs the same revision.' : 'You need a ROM to host or join.'));
   }
 
@@ -990,15 +989,8 @@ DKRLauncher.pages = DKRLauncher.pages || {};
     regions.side.replaceChildren(...(section !== 'profile' ? [profileCard()] : []),
       card('Online guide', 'Two to four racers. One private lobby.',
         h('p', { class: 'ol-soft' }, session.phase === 'idle' ? 'Host settings apply to the next lobby you create.' : 'Gameplay settings are fixed until you leave this session.'),
-        button('Read the online guide', showGuide, { fk: 'online-guide' }),
+        button('Read the online guide', showGuide, { fk: 'online-guide', settings: true }),
         h('p', { class: 'ol-preview-note' }, 'Interactive preview · Friends, rooms and measurements are simulated.')));
-    // Switches are rebuilt too; replay the flip on any whose rendered value changed.
-    for (const el of root.querySelectorAll('.ol-switch input[data-fk]')) {
-      const before = renderedSwitches.get(el.dataset.fk);
-      if (before !== undefined && before !== el.checked) el.classList.add('is-flipped');
-      renderedSwitches.set(el.dataset.fk, el.checked);
-    }
-
     if (shownPhase !== null && shownPhase !== phaseKey) {
       [...regions.session.querySelectorAll(':scope > *, .ol-lobby > :not(.ol-countdown), .ol-choices > *')]
         .filter((el) => !el.matches('.ol-lobby, .ol-choices'))
