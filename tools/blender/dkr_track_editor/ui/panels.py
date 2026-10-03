@@ -1699,6 +1699,7 @@ def _draw_music(layout, context, catalog):
 
     settings = context.scene.dkr
     own = music_ops.uses_file(settings)
+    midi = music_ops.uses_midi(settings)
     tracks = level_types.music_tracks(catalog)
     index = header_ops.music_index(context)
     name = (level_types.music_label(tracks[index]) if 0 <= index < len(tracks)
@@ -1711,10 +1712,13 @@ def _draw_music(layout, context, catalog):
     if own:
         _draw_music_file(box, context, settings, music_ops)
         box.separator()
+    elif midi:
+        _draw_music_midi(box, context, settings)
+        box.separator()
 
     row = box.row()
-    _dim_label(row, "%s%s · %d / %d" % ("Follows: " if own else "", name,
-                                         index + 1, len(tracks) or 256))
+    prefix = "Follows: " if own else "Replaces: " if midi else ""
+    _dim_label(row, "%s%s · %d / %d" % (prefix, name, index + 1, len(tracks) or 256))
     row = box.row(align=True)
     row.operator("dkr.step_music", text="", icon="PREV_KEYFRAME").step = -1
     row.operator("dkr.play_music", text="Play", icon="PLAY")
@@ -1724,6 +1728,10 @@ def _draw_music(layout, context, catalog):
               "Its fades, the pause and the final-lap speed-up are what your "
               "music follows, so pick a race song. Listen in Track Lab.",
               dim=True, tight=True)
+    elif midi:
+        lines(box, context, "Your song plays in place of the game song above, "
+              "whenever the game would start it, so pick a race song. Listen in "
+              "Track Lab.", dim=True, tight=True)
     else:
         lines(box, context, "The track showing when you export is the one the "
               "header gets. Listening is not available yet.", dim=True, tight=True)
@@ -1757,6 +1765,31 @@ def _draw_music_file(box, context, settings, music_ops):
                  "%d MidiFade/MidiChSet object(s) in this track switch music "
                  "channels. A music file has none, so they will do nothing."
                  % len(channel_objects), icon="INFO")
+
+
+def _draw_music_midi(box, context, settings):
+    """A file picker and what the conversion found. Instruments, drums, tempo
+    and loop are the converter's; there is nothing else to set."""
+    row = box.row(align=True)
+    row.prop(settings, "music_midi", text="")
+    row.operator("dkr.choose_midi", text="", icon="FILEBROWSER")
+    row.operator("dkr.check_music", text="", icon="FILE_REFRESH")
+    if not settings.music_midi:
+        lines(box, context, "Choose a .mid. It is converted to the game's own "
+              "music and played on DKR's instruments; the loop comes from "
+              "loopStart/loopEnd markers, or the whole song loops.",
+              dim=True, tight=True)
+    elif settings.music_report:
+        if settings.music_ok:
+            _dim_label(box, settings.music_report)
+            for warning in [w for w in settings.music_warnings.split("\n") if w]:
+                lines(box, context, warning, dim=True, tight=True)
+        else:
+            info_box(box, context, settings.music_report, icon="ERROR", alert=True)
+    else:
+        lines(box, context, "Press the refresh button to convert the file.",
+              dim=True, tight=True)
+    box.prop(settings, "music_volume")
 
 
 def _draw_skybox(layout, context):

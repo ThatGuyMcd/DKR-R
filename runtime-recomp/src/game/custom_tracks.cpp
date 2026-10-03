@@ -1,5 +1,7 @@
 #include "custom_tracks.hpp"
 
+#include "custom_music_sequence.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -1313,50 +1315,26 @@ bool locate_unpacked_track(const std::filesystem::path& root,
     return true;
 }
 
-// Reads manifest.music into track.music. The descriptor is the addon's
-// (dkrmap.TrackPackage.set_music); everything it states that the runtime acts
-// on is checked here, so a bad package is named at scan rather than going
-// silent at the starting line. Needs the track's header already parsed: the
-// carrier must be the song that header actually starts.
-bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
-                 Track& track, std::string& error) {
-    namespace ct = dkr::runtime::custom_tracks;
-    if (!music.is_object()) {
-        error = "the descriptor is not an object";
-        return false;
+// The level header a track ships, if any (the last LEVEL_HEADERS entry).
+const Entry* level_header_of(const Track& track) {
+    const Entry* header = nullptr;
+    for (const Entry& entry : track.entries) {
+        if (entry.section == Section::LevelHeaders) {
+            header = &entry;
+        }
     }
-    const auto text = [&music](const char* key) {
-        const auto found = music.find(key);
-        return found != music.end() && found->is_string() ? found->get<std::string>()
-                                                          : std::string{};
-    };
-    const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
-        const auto found = music.find(key);
-        return found != music.end() && found->is_number_integer()
-            ? found->get<std::int64_t>() : fallback;
-    };
+    return header;
+}
 
-    if (text("format") != ct::kMusicFormat) {
-        error = "unknown format \"" + text("format") + "\"";
-        return false;
-    }
-    ct::MusicInfo info;
-    const std::string codec = text("codec");
-    const char* extension = nullptr;
-    if (codec == "mp3") {
-        info.codec = ct::MusicCodec::Mp3;
-        extension = ".mp3";
-    } else if (codec == "wav") {
-        info.codec = ct::MusicCodec::Wav;
-        extension = ".wav";
-    } else {
-        error = "unknown codec \"" + codec + "\"; expected mp3 or wav";
-        return false;
-    }
-
-    // The file stays inside the track: no absolute path, no "..", and after
-    // resolving symlinks it must still be under the resolved track directory.
-    const std::string file = text("file");
+// The file a music descriptor names. It stays inside the track: no absolute
+// path, no "..", and after resolving symlinks it must still be under the
+// resolved track directory. It must end in `extension`, exist, be no larger
+// than `limit` and have the size the manifest records.
+bool resolve_music_file(const std::string& file, const char* extension,
+                        std::int64_t recorded, std::uint64_t limit,
+                        const std::filesystem::path& root,
+                        std::filesystem::path& resolved, std::uint64_t& bytes,
+                        std::string& error) {
     if (file.empty() || file.find("..") != std::string::npos ||
         std::filesystem::path(file).is_absolute() ||
         file.find(':') != std::string::npos || file.front() == '/' ||
@@ -1370,8 +1348,7 @@ bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
     }
     std::error_code code;
     const std::filesystem::path base = std::filesystem::weakly_canonical(root, code);
-    const std::filesystem::path resolved =
-        std::filesystem::weakly_canonical(root / std::filesystem::u8path(file), code);
+    resolved = std::filesystem::weakly_canonical(root / std::filesystem::u8path(file), code);
     const auto mismatch =
         std::mismatch(base.begin(), base.end(), resolved.begin(), resolved.end());
     if (code || mismatch.first != base.end() || resolved == base) {
@@ -1382,16 +1359,89 @@ bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
         error = "could not find " + file;
         return false;
     }
-    info.file = resolved;
-    info.bytes = std::filesystem::file_size(resolved, code);
-    if (code || info.bytes == 0 || info.bytes > ct::kMaxMusicBytes) {
-        error = file + " is empty, unreadable or over 64 MB";
+    bytes = std::filesystem::file_size(resolved, code);
+    if (code || bytes == 0 || bytes > limit) {
+        error = file + " is empty, unreadable or over " +
+                (limit >= 1024U * 1024U ? std::to_string(limit / (1024U * 1024U)) + " MB"
+                                        : std::to_string(limit / 1024U) + " KB");
         return false;
     }
-    if (number("bytes", -1) != static_cast<std::int64_t>(info.bytes)) {
+    if (recorded != static_cast<std::int64_t>(bytes)) {
         error = file + " is not the size the manifest records; export again";
         return false;
     }
+    return true;
+}
+
+bool is_sha256_hex(const std::string& digest) {
+    return digest.size() == 64 &&
+           std::all_of(digest.begin(), digest.end(), [](char c) {
+               return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+           });
+}
+
+// The carrier is the song this track's header starts. A descriptor naming
+// another would never activate, so the contradiction is refused.
+bool check_carrier(std::int64_t carrier, const Track& track, std::uint8_t& out,
+                   std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    const Entry* header = level_header_of(track);
+    if (header == nullptr || header->bytes.size() <= ct::kHeaderInstruments + 1) {
+        error = "a track with music must ship a level header";
+        return false;
+    }
+    if (carrier <= 0 || carrier > 255) {
+        error = "carrierSequence must be a game song (1-255)";
+        return false;
+    }
+    if (header->bytes[ct::kHeaderMusic] != carrier) {
+        error = "carrierSequence " + std::to_string(carrier) +
+                " is not the header's music (" +
+                std::to_string(header->bytes[ct::kHeaderMusic]) + ")";
+        return false;
+    }
+    out = static_cast<std::uint8_t>(carrier);
+    return true;
+}
+
+// manifest.music with format "audio-stream-v1": an MP3 or WAV the runtime
+// decodes and mixes over the silent carrier.
+bool parse_recording(const nlohmann::json& music, const std::filesystem::path& root,
+                     Track& track, std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    const auto text = [&music](const char* key) {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_string() ? found->get<std::string>()
+                                                          : std::string{};
+    };
+    const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_number_integer()
+            ? found->get<std::int64_t>() : fallback;
+    };
+
+    ct::MusicInfo info;
+    info.kind = ct::MusicKind::Recording;
+    const std::string codec = text("codec");
+    const char* extension = nullptr;
+    if (codec == "mp3") {
+        info.codec = ct::MusicCodec::Mp3;
+        extension = ".mp3";
+    } else if (codec == "wav") {
+        info.codec = ct::MusicCodec::Wav;
+        extension = ".wav";
+    } else {
+        error = "unknown codec \"" + codec + "\"; expected mp3 or wav";
+        return false;
+    }
+
+    const std::string file = text("file");
+    std::filesystem::path resolved;
+    if (!resolve_music_file(file, extension, number("bytes", -1), ct::kMaxMusicBytes, root,
+                            resolved, info.bytes, error)) {
+        return false;
+    }
+    info.file = resolved;
 
     // The leading bytes must be the codec claimed. Decoding waits for a race,
     // but a renamed or truncated file is caught here.
@@ -1416,10 +1466,7 @@ bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
     }
 
     info.sha256 = text("sha256");
-    if (info.sha256.size() != 64 ||
-        !std::all_of(info.sha256.begin(), info.sha256.end(), [](char c) {
-            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-        })) {
+    if (!is_sha256_hex(info.sha256)) {
         error = "sha256 is not 64 lowercase hex digits";
         return false;
     }
@@ -1462,32 +1509,129 @@ bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
         return false;
     }
 
-    // The carrier is the song this track's header starts. A descriptor naming
-    // another would never activate, so the contradiction is refused.
-    const std::int64_t carrier = number("carrierSequence", 0);
-    const Entry* header = nullptr;
-    for (const Entry& entry : track.entries) {
-        if (entry.section == Section::LevelHeaders) {
-            header = &entry;
-        }
-    }
-    if (header == nullptr || header->bytes.size() <= ct::kHeaderMusic) {
-        error = "a track with music must ship a level header";
+    if (!check_carrier(number("carrierSequence", 0), track, info.carrier, error)) {
         return false;
     }
-    if (carrier <= 0 || carrier > 255) {
-        error = "carrierSequence must be a game song (1-255)";
-        return false;
-    }
-    if (header->bytes[ct::kHeaderMusic] != carrier) {
-        error = "carrierSequence " + std::to_string(carrier) +
-                " is not the header's music (" +
-                std::to_string(header->bytes[ct::kHeaderMusic]) + ")";
-        return false;
-    }
-    info.carrier = static_cast<std::uint8_t>(carrier);
     track.music = std::move(info);
     return true;
+}
+
+// manifest.music with format "dkr-alcseq-v1": a native sequence the game's
+// own player runs. It is read and validated here - structure, loops, back
+// references and the 13 KB music buffer - so a song the player would mishandle
+// is refused at scan; which programs exist is only known in game, and is
+// checked again when the song is copied in.
+bool parse_sequence(const nlohmann::json& music, const std::filesystem::path& root,
+                    Track& track, std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    namespace cm = dkr::runtime::custom_music;
+    const auto text = [&music](const char* key) {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_string() ? found->get<std::string>()
+                                                          : std::string{};
+    };
+    const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_number_integer()
+            ? found->get<std::int64_t>() : fallback;
+    };
+
+    ct::MusicInfo info;
+    info.kind = ct::MusicKind::Sequence;
+    if (text("bank") != ct::kSequenceBank) {
+        error = "unknown instrument bank \"" + text("bank") + "\"; expected " +
+                ct::kSequenceBank;
+        return false;
+    }
+    const std::string file = text("file");
+    std::filesystem::path resolved;
+    if (!resolve_music_file(file, ".cseq", number("bytes", -1), ct::kMaxSequenceBytes, root,
+                            resolved, info.bytes, error)) {
+        return false;
+    }
+    info.file = resolved;
+    info.sha256 = text("sha256");
+    if (!is_sha256_hex(info.sha256)) {
+        error = "sha256 is not 64 lowercase hex digits";
+        return false;
+    }
+    auto bytes = std::make_shared<std::vector<std::uint8_t>>();
+    if (!read_file(resolved, *bytes) || bytes->size() != info.bytes) {
+        error = "could not read " + file;
+        return false;
+    }
+    const cm::SequenceCheck check = cm::validate_sequence(*bytes);
+    if (!check.ok()) {
+        error = file + ": " + check.message + " (" + check.code + ")";
+        return false;
+    }
+    info.sequence = std::move(bytes);
+
+    const std::int64_t tempo = number("tempoBpm", 0);
+    if (tempo < 1 || tempo > 255) {
+        // gSeqSoundTable holds a byte, and the final lap multiplies
+        // music_tempo() & 0xFF: a faster song would speed up wrongly.
+        error = "tempoBpm must be 1-255";
+        return false;
+    }
+    info.tempo_bpm = static_cast<std::uint8_t>(tempo);
+    const std::int64_t volume = number("volume", 110);
+    if (volume < 0 || volume > static_cast<std::int64_t>(ct::kMaxSequenceVolume)) {
+        // Over 127, base * slider overflows the player's 16-bit volume.
+        error = "volume must be 0-127";
+        return false;
+    }
+    info.volume = static_cast<std::uint32_t>(volume);
+    const std::int64_t reverb = number("reverb", 1);
+    if (reverb < 0 || reverb > 1) {
+        error = "reverb must be 0 or 1";
+        return false;
+    }
+    info.reverb = static_cast<std::uint8_t>(reverb);
+
+    if (!check_carrier(number("carrierSequence", 0), track, info.carrier, error)) {
+        return false;
+    }
+    // The header's channel mask is what the race enables when it starts the
+    // song (music_dynamic_set); one that disagrees with the descriptor would
+    // silently drop parts of the composition.
+    const std::int64_t mask = number("channelMask", 0xFFFF);
+    const Entry* header = level_header_of(track);
+    const std::uint16_t header_mask = static_cast<std::uint16_t>(
+        (header->bytes[ct::kHeaderInstruments] << 8) | header->bytes[ct::kHeaderInstruments + 1]);
+    if (mask < 0 || mask > 0xFFFF || mask != header_mask) {
+        error = "channelMask " + std::to_string(mask) +
+                " is not the header's instruments (" + std::to_string(header_mask) + ")";
+        return false;
+    }
+    info.channel_mask = static_cast<std::uint16_t>(mask);
+    track.music = std::move(info);
+    return true;
+}
+
+// Reads manifest.music into track.music. The descriptor is the addon's
+// (dkrmap.TrackPackage.set_music / set_sequence); everything it states that
+// the runtime acts on is checked here, so a bad package is named at scan
+// rather than going silent at the starting line. Needs the track's header
+// already parsed: the carrier must be the song that header actually starts.
+bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
+                 Track& track, std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    if (!music.is_object()) {
+        error = "the descriptor is not an object";
+        return false;
+    }
+    const auto format = music.find("format");
+    const std::string name = format != music.end() && format->is_string()
+        ? format->get<std::string>() : std::string{};
+    if (name == ct::kMusicFormat) {
+        return parse_recording(music, root, track, error);
+    }
+    if (name == ct::kSequenceFormat) {
+        return parse_sequence(music, root, track, error);
+    }
+    error = "unknown format \"" + name + "\"";
+    return false;
 }
 
 // Parses one unpacked track. `.dkrmap` archives are unpacked into this form by

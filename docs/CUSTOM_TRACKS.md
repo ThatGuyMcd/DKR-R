@@ -67,7 +67,10 @@ ancient-lake-remix.dkrmap/
     texture.bin
     sprite.bin
   music/
-    main.mp3          (schema 2 only: the track's own music)
+    main.mp3          (schema 2 only: the track's own music - or main.wav,
+                       or main.cseq for a converted MIDI song)
+  source/
+    music.mid         (the MIDI file main.cseq came from; never read)
 ```
 
 ```json
@@ -134,6 +137,44 @@ The scan refuses a descriptor whose file escapes the track (symlinks resolved),
 whose size or leading bytes disagree with it, or whose carrier is not the
 header's; the digest is checked when the file is decoded for a race. How the
 runtime plays it is in `docs/CUSTOM_MUSIC_PLAN.md`, "Recorded music".
+
+#### A native song (MIDI)
+
+The music can instead be a native DKR sequence (libultra's compact `ALCSeq`),
+which the game plays itself on its own instruments. The Blender addon makes one
+from a Standard MIDI File with no other input (instruments, drums, tempo and
+loop are chosen by `midi_import.py`) and writes it as `music/main.cseq`:
+
+```json
+{
+  "schemaVersion": 2,
+  "music": {
+    "format": "dkr-alcseq-v1",
+    "bank": "dkr-stock-v1",
+    "file": "music/main.cseq",
+    "sha256": "<64 lowercase hex digits>",
+    "bytes": 12137,
+    "carrierSequence": 42,
+    "tempoBpm": 128,
+    "volume": 110,
+    "reverb": 1,
+    "channelMask": 65535
+  }
+}
+```
+
+Whenever the game starts `carrierSequence` (the header's `/music`) on its music
+player, the runtime copies the song into the music buffer in place of the
+retail one, so it starts, loops, fades, speeds up on the final lap and answers
+MidiFade/MidiChSet objects exactly as a retail song does. `tempoBpm` (1-255),
+`volume` (DKR's base volume, 0-127; most race songs use 110) and `reverb` (0 or
+1) take the place of the carrier's own row in the game's song table. The scan
+reads and validates the bytes the way the player will (structure, loops, back
+references, and the 13,032-byte music buffer of US 1.0 and 1.1), and refuses a
+`channelMask` that differs from the header's `/instruments` (0x54); the addon
+writes 65535 to both. The first time the song starts, it is checked again
+against the ROM actually running - its buffer size and which programs its bank
+holds - and a song that fails is logged and the carrier plays instead.
 
 Section payloads are produced by the matching decomp's asset tool
 (`tools/dkr_assets_tool_src`), which is what the `Hint((...))` annotations in

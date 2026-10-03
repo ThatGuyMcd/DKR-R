@@ -293,6 +293,12 @@ class AssetTree:
     def is_usable(self) -> bool:
         return os.path.isfile(os.path.join(self.root, META_OBJECTS))
 
+    def music_bank_path(self) -> Optional[str]:
+        """The musical instrument bank (audio record 0, the B1 control bank
+        :mod:`.music_bank` reads), if this tree has it."""
+        path = os.path.join(self.root, "audio", "unknown", "asset_audio_0.bin")
+        return path if os.path.isfile(path) else None
+
     # -- manifests -------------------------------------------------------
 
     def _meta(self, name: str) -> dict:

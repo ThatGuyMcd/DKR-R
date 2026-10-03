@@ -1,10 +1,21 @@
-"""Choose the recorded music a track ships, and check it before export.
+"""Choose the music a track ships, and check it before export.
+
+Two kinds: a recording (MP3/WAV) the runtime plays over a silent game song,
+and a MIDI file converted into the game's own music format, which DKR then
+plays on its own instruments in that song's place.
 
 The format side - which files are music the runtime decodes, how long they are,
-whether a loop fits - is :mod:`..music_audio`, tested without Blender. The
-package side is :meth:`..dkrmap.TrackPackage.set_music`. This module is only
-the Blender half: picking a file, keeping its path portable, and telling the
-author what was found while there is still time to fix it.
+whether a loop fits, how a MIDI file becomes a native sequence - is
+:mod:`..music_audio` and :mod:`..midi_import`, tested without Blender. The
+package side is :meth:`..dkrmap.TrackPackage.set_music` and
+:meth:`~..dkrmap.TrackPackage.set_sequence`. This module is only the Blender
+half: picking a file, keeping its path portable, and telling the author what
+was found while there is still time to fix it.
+
+A MIDI file needs nothing else from the author: instruments, drums, tempo and
+loop are all chosen by the converter. The conversion runs when the file is
+chosen (for the report) and again at export (for the bytes), so a file saved
+over in between is exported as it is now.
 
 A track with its own music still names a game song in its header. That song is
 the *carrier*: it plays silently, and the runtime follows its volume and tempo,
@@ -23,7 +34,7 @@ import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 
-from .. import music_audio
+from .. import dkrmap, midi_import, music_audio, music_bank, music_sequence
 
 #: The object types that act on the music's channels: they fade or switch
 #: individual channels of the playing sequence. A recorded file has none.
@@ -38,13 +49,104 @@ def uses_file(settings) -> bool:
     return settings.music_source == "FILE"
 
 
+def uses_midi(settings) -> bool:
+    return settings.music_source == "MIDI"
+
+
 def file_path(settings) -> str:
     """The chosen file as an absolute path, or ``""``."""
     return bpy.path.abspath(settings.music_file) if settings.music_file else ""
 
 
-def refresh_report(settings) -> None:
+def midi_path(settings) -> str:
+    """The chosen MIDI file as an absolute path, or ``""``."""
+    return bpy.path.abspath(settings.music_midi) if settings.music_midi else ""
+
+
+def sequence_volume(settings) -> int:
+    """DKR's own base volume for a converted song. 100% is 110, the level of
+    most retail race songs; the game's ceiling is 127, so above about 115% the
+    slider changes nothing."""
+    level = dkrmap.DEFAULT_SEQUENCE_VOLUME * settings.music_volume / 100.0
+    return max(0, min(dkrmap.MAX_SEQUENCE_VOLUME, int(round(level))))
+
+
+_bank_cache = {"key": None, "bank": None}
+
+
+def instrument_bank(context=None):
+    """The game's instrument bank from the configured decomp assets, or
+    ``None``. With it the conversion also checks every note reaches a sound;
+    without it the song is still converted and checked against the buffer."""
+    from .. import prefs  # noqa: PLC0415
+
+    try:
+        tree = prefs.resolve(context)
+    except Exception:  # noqa: BLE001 - no assets is an ordinary state
+        tree = None
+    path = tree.music_bank_path() if tree is not None else None
+    if not path:
+        return None
+    try:
+        key = (path, os.path.getmtime(path))
+    except OSError:
+        return None
+    if _bank_cache["key"] != key:
+        try:
+            with open(path, "rb") as handle:
+                _bank_cache["bank"] = music_bank.parse_bank(handle.read())
+        except (OSError, music_bank.BankError):
+            _bank_cache["bank"] = None
+        _bank_cache["key"] = key
+    return _bank_cache["bank"]
+
+
+def convert_midi(settings, context=None) -> "midi_import.Conversion":
+    """Convert the chosen MIDI file. Raises MidiError or SequenceError with a
+    message for the author."""
+    path = midi_path(settings)
+    if not path:
+        raise midi_import.MidiError("Choose a MIDI file.")
+    try:
+        if os.path.getsize(path) > midi_import.MAX_FILE_BYTES:
+            raise midi_import.MidiError("%s is over 4 MB; that is not a song DKR could hold."
+                                        % os.path.basename(path))
+        with open(path, "rb") as handle:
+            data = handle.read()
+    except OSError as error:
+        raise midi_import.MidiError("Could not read %s: %s"
+                                    % (os.path.basename(path), error.strerror or error))
+    return midi_import.convert(data, bank=instrument_bank(context))
+
+
+def describe(conversion) -> str:
+    """One line for the panel: size against the buffer, channels, notes,
+    tempo and loop."""
+    report = conversion.report
+    return "%d of %d bytes · %d channel(s) · %d note(s) · %.1f BPM · %s" % (
+        len(conversion.data), music_sequence.RETAIL_CAPACITY, len(conversion.channels),
+        report.notes if report else 0, conversion.bpm,
+        "loops" if conversion.loop else "plays once")
+
+
+def refresh_report(settings, context=None) -> None:
     """Inspect the chosen file and remember what was found."""
+    settings.music_warnings = ""
+    if uses_midi(settings):
+        if not settings.music_midi:
+            settings.music_report = ""
+            settings.music_ok = False
+            return
+        try:
+            conversion = convert_midi(settings, context)
+        except (midi_import.MidiError, music_sequence.SequenceError) as error:
+            settings.music_report = str(error)
+            settings.music_ok = False
+            return
+        settings.music_report = describe(conversion)
+        settings.music_warnings = "\n".join(conversion.warnings)
+        settings.music_ok = True
+        return
     if not uses_file(settings):
         settings.music_report = ""
         settings.music_ok = False
@@ -98,20 +200,55 @@ class DKR_OT_choose_music(bpy.types.Operator, ImportHelper):
             settings.music_loop_end = 0.0
         if settings.music_loop_start >= (settings.music_loop_end or info.seconds):
             settings.music_loop_start = 0.0
-        refresh_report(settings)
+        refresh_report(settings, context)
         self.report({"INFO"}, "music: %s" % info.summary())
         return {"FINISHED"}
 
 
+class DKR_OT_choose_midi(bpy.types.Operator, ImportHelper):
+    """Choose a MIDI file for this track. It is converted to the game's own
+    music format and played on DKR's instruments - nothing else to set"""
+
+    bl_idname = "dkr.choose_midi"
+    bl_label = "Choose MIDI File"
+    bl_options = {"REGISTER", "UNDO"}
+
+    filter_glob: StringProperty(default="*.mid;*.midi", options={"HIDDEN"})
+
+    def execute(self, context):
+        settings = context.scene.dkr
+        path = self.filepath
+        if bpy.data.filepath:
+            try:
+                path = bpy.path.relpath(path)
+            except ValueError:
+                pass  # another drive on Windows: keep it absolute
+        settings.music_midi = path
+        settings.music_source = "MIDI"
+        refresh_report(settings, context)
+        if not settings.music_ok:
+            self.report({"ERROR"}, "%s: %s" % (os.path.basename(self.filepath),
+                                               settings.music_report))
+            return {"CANCELLED"}
+        self.report({"INFO"}, "music: %s" % settings.music_report)
+        return {"FINISHED"}
+
+
 class DKR_OT_check_music(bpy.types.Operator):
-    """Read the music file again and check the loop against it"""
+    """Read the music file again and check it"""
 
     bl_idname = "dkr.check_music"
     bl_label = "Check Music"
 
     def execute(self, context):
         settings = context.scene.dkr
-        refresh_report(settings)
+        refresh_report(settings, context)
+        if uses_midi(settings):
+            if not settings.music_ok:
+                self.report({"ERROR"}, settings.music_report or "no MIDI file chosen")
+                return {"CANCELLED"}
+            self.report({"INFO"}, "music: %s" % settings.music_report)
+            return {"FINISHED"}
         if not settings.music_ok:
             self.report({"ERROR"}, settings.music_report or "no music file chosen")
             return {"CANCELLED"}
@@ -141,6 +278,7 @@ class DKR_OT_clear_music(bpy.types.Operator):
 
 CLASSES = (
     DKR_OT_choose_music,
+    DKR_OT_choose_midi,
     DKR_OT_check_music,
     DKR_OT_clear_music,
 )

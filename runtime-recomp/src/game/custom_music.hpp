@@ -11,6 +11,14 @@
 // menu's halving, the options slider and the final-lap speed-up are read back
 // from the carrier and applied to the file. Jingles keep their own player and
 // are never touched. See docs/CUSTOM_MUSIC_PLAN.md.
+//
+// A track can instead carry a native sequence (usually a converted MIDI
+// file). That one the game plays itself: when the carrier is about to start,
+// music_sequence_init has just loaded its bytes into the music buffer, and
+// they are replaced with the track's song before the player is given them.
+// Its tempo, volume and reverb come from the track too, through the carrier's
+// gSeqSoundTable row, which is swapped in for the few instructions that read
+// it and put back before anything else can.
 
 #include <cstddef>
 #include <cstdint>
@@ -18,9 +26,23 @@
 namespace dkr::runtime::custom_music {
 
 // Game thread, every level load (custom_tracks' level-load observer). Binds
-// the music of the custom track that owns `level`, starting its decode on a
-// worker thread, or clears the binding for any other level.
+// the music of the custom track that owns `level` - starting a recording's
+// decode on a worker thread - or clears the binding for any other level.
 void on_level_load(std::int32_t level);
+
+// Game thread, inside music_sequence_init once a song's bytes are in `buffer`
+// and before alCSeqNew reads them (dkr_custom_music_sequence_loaded). When the
+// music player is starting the bound track's carrier, the track's sequence
+// replaces those bytes - on every start, because the player rewrites loop
+// counters in the buffer as it plays - and the carrier's tempo, volume and
+// reverb row is swapped for the track's. Anything else is left alone, and so
+// is a song this ROM's bank or buffer could not play (it is logged once).
+void sequence_loaded(std::uint8_t* rdram, std::uint32_t player, std::uint32_t buffer,
+                     std::uint32_t sequence_id_address);
+
+// Game thread, in the same call once the row has been read
+// (dkr_custom_music_sequence_started): puts the carrier's own row back.
+void sequence_started(std::uint8_t* rdram);
 
 // Game thread, at alCSPSetVol on the music player. `requested` is the volume
 // about to be set (after the launcher's music slider). Returns true when the
@@ -40,5 +62,8 @@ void render(float* out, std::size_t frames, std::uint32_t output_rate);
 
 // Whether a music file is bound to the loaded level (for the log and the UI).
 [[nodiscard]] bool active();
+
+// Whether a native sequence is bound to the loaded level.
+[[nodiscard]] bool sequence_active();
 
 } // namespace dkr::runtime::custom_music

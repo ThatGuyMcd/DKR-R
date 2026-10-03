@@ -70,6 +70,20 @@ Listen in Track Lab; the Play button stays unavailable. MP3 encoders add a
 little silence at the edges, so a seamless loop is easiest from a WAV or an MP3
 with a LAME/Xing header (which almost all encoders write).
 
+Or choose **MIDI File** and pick a **.mid** - that is all. It is converted to
+the game's own music format and DKR plays it on its own instruments, in place
+of the game song chosen below it, so fades, the final-lap speed-up and
+MidiFade/MidiChSet objects all work on it. The converter picks the instruments
+(General MIDI families map to the DKR programs retail songs use in those
+roles; channel 10 drums go to DKR's drum kits), plays a song with tempo changes
+at its main tempo, and loops at `loopStart`/`loopEnd` marker events or, without
+them, the whole song. The panel shows the result - its size against the game's
+13,032-byte music buffer, channels, notes, tempo - and anything the author
+should know (notes moved or dropped, tempo flattened). A song too large for the
+buffer, or faster than 255 BPM, is an export error. **Volume** sets DKR's own
+level for the song (100% is a retail song's; the game stops at about 115%).
+The `.mid` itself is kept in the package under `source/music.mid`.
+
 **Choose the Level Type first.** A new scene shows one panel, *Level Type*,
 asking what kind of level this is: Race, Boss Race, Challenge (Battle, Bananas
 or Eggs), Hub, or the advanced *Special* group (Cutscene, Menu Backdrop, Test
@@ -506,8 +520,9 @@ the one rule about sharing it.
 `textures/`, and the glTF sources beside them. A track with pictures of its own
 (textures, or a minimap drawn from its edges) also gets `<track>-hd.zip` next
 to the directory - the high-resolution pack, the minimap at 8 times its size. A
-track with its own music carries it as `music/main.mp3` (or `.wav`) and a
-`music` entry in a schema 2 manifest; see `docs/CUSTOM_TRACKS.md`. It
+track with its own music carries it as `music/main.mp3` (or `.wav`, or
+`.cseq` for a converted MIDI song) and a `music` entry in a schema 2 manifest;
+see `docs/CUSTOM_TRACKS.md`. It
 stays a separate file (a track can be shared without it), but DKR-R's installer
 treats the two as one gesture: import the folder that holds both and the pack
 goes in with the track.
@@ -578,6 +593,9 @@ tools/blender/
     validate.py             pre-export checks
     dkrmap.py               the .dkrmap container
     music_audio.py          recognise and measure a track's MP3/WAV music
+    midi_import.py          a MIDI file -> a native DKR song, automatically
+    music_sequence.py       validate a native song the way the game reads it
+    music_bank.py           read the game's instrument bank
     textures.py             the ROM's 3D textures, and encoding your own
     scene.py                object map <-> Blender scene
     props.py                scene settings
@@ -588,7 +606,7 @@ tools/blender/
     operators/custom_textures.py   an image -> a texture the track ships
     operators/race_ai.py           the bot lines overlay, Copy Difficulty
     operators/water.py             Add Water, Select/Remove Water, presets
-    operators/music.py             choose and check the track's music file
+    operators/music.py             choose and check the track's music (file or MIDI)
     ui/panels.py            the sidebar
     data/catalog.json       generated; do not edit by hand
   tests/
@@ -607,6 +625,8 @@ tools/blender/
     test_blender_roundtrip.py   byte-exact through a real Blender scene
     test_blender_operators.py   the operators actually work
     test_music.py               MP3/WAV recognition and the music in a package
+    test_music_sequence.py      the native-song validator, vs the shared fixtures
+    test_midi_import.py         MIDI -> native song conversion
     test_blender_music.py       the music controls, save/reopen and export
     fixtures/                   two short test tones (generated, original)
 ```

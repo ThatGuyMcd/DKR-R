@@ -202,11 +202,18 @@ class DKR_ValidationEntry(bpy.types.PropertyGroup):
     objects: StringProperty(default="")
 
 
+#: A music path is kept relative to the .blend ("//..."). Blender 4.5 warns
+#: when such a path is assigned to a property that does not declare it; older
+#: versions do not know the option.
+_RELATIVE_PATH = ({"PATH_SUPPORTS_BLEND_RELATIVE"}
+                  if bpy.app.version >= (4, 5, 0) else {"ANIMATABLE"})
+
+
 def _music_changed(settings, context):
     """Re-check the chosen file whenever the source or path changes."""
     from .operators import music  # noqa: PLC0415 - registered after this module
 
-    music.refresh_report(settings)
+    music.refresh_report(settings, context)
 
 
 def _redraw_views(context):
@@ -391,8 +398,10 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
     #
     # An MP3 or WAV the runtime plays over a silent retail song (the header's
     # /music, the "carrier"), which keeps the game's fades and final-lap
-    # speed-up driving it. See music_audio and operators/music.py. A .blend
-    # saved before these existed opens on "Game Music", which is what it had.
+    # speed-up driving it; or a MIDI file converted to a native sequence that
+    # the game plays in that song's place. See music_audio, midi_import and
+    # operators/music.py. A .blend saved before these existed opens on "Game
+    # Music", which is what it had.
 
     music_source: EnumProperty(
         name="Music Source",
@@ -403,6 +412,10 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
              "Your own MP3 or WAV, played over the game song chosen below, "
              "which stays silent and only drives fades and the final-lap "
              "speed-up"),
+            ("MIDI", "MIDI File",
+             "Your own .mid, converted to the game's music format and played "
+             "by DKR itself, on its own instruments, in place of the game "
+             "song chosen below"),
         ],
         default="GAME",
         update=_music_changed,
@@ -413,12 +426,23 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
                     ".blend when it is saved",
         default="",
         subtype="FILE_PATH",
+        options=_RELATIVE_PATH,
+        update=_music_changed,
+    )
+    music_midi: StringProperty(
+        name="MIDI File",
+        description="The .mid the track's music is converted from. Kept "
+                    "relative to the .blend when it is saved",
+        default="",
+        subtype="FILE_PATH",
+        options=_RELATIVE_PATH,
         update=_music_changed,
     )
     music_volume: IntProperty(
         name="Volume",
-        description="Level of the file in the game's mix. 100% plays it as "
-                    "recorded; the game's music slider and fades still apply",
+        description="Level of the music in the game's mix. 100% plays a file "
+                    "as recorded, and a MIDI song at a retail song's level "
+                    "(up to 115%); the game's music slider and fades still apply",
         default=100, min=0, max=200, subtype="PERCENTAGE",
     )
     music_loop_start: FloatProperty(
@@ -451,6 +475,8 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
     #: large file; the export checks the file again regardless.
     music_report: StringProperty(default="")
     music_ok: BoolProperty(default=False)
+    #: A MIDI conversion's notes for the author, one per line.
+    music_warnings: StringProperty(default="")
 
     slot: EnumProperty(
         name="Object Map",

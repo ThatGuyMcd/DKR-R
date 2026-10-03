@@ -35,8 +35,8 @@ import shutil
 from typing import Dict, List, Optional
 
 from . import (gltf_io, level_header, level_model_encoder,
-               minimap as minimap_module, music_audio, object_map_encoder,
-               rice_pack, textures as texture_module)
+               minimap as minimap_module, music_audio, music_sequence,
+               object_map_encoder, rice_pack, textures as texture_module)
 from .gltf_io import ObjectMap
 
 MANIFEST_NAME = "manifest.json"
@@ -108,6 +108,26 @@ FINAL_LAP_MODES = (FINAL_LAP_SPEEDUP, FINAL_LAP_CONSTANT)
 #: runtime clamps the mixed sample, so the ceiling only bounds how hard.
 MAX_MUSIC_VOLUME = 200
 
+#: The other kind of music: a native DKR sequence (``ALCSeq``), normally
+#: converted from a MIDI file by :mod:`.midi_import`. The game plays it itself,
+#: through its own instruments: the runtime copies it into the music buffer
+#: when the carrier starts, so fades, the final-lap speed-up and the
+#: MidiFade/MidiChSet objects all act on it. ``dkr-stock-v1`` is the program
+#: and drum-key layout of the retail bank, the same in US 1.0 and 1.1.
+SEQUENCE_FORMAT = "dkr-alcseq-v1"
+SEQUENCE_BANK = "dkr-stock-v1"
+SEQUENCE_EXTENSION = ".cseq"
+#: The MIDI file a sequence was converted from, kept under ``source/`` for the
+#: author. The runtime never reads it.
+SEQUENCE_SOURCE_FILE = "music.mid"
+#: DKR's own base volume for a song (gSeqSoundTable): most retail race songs
+#: use 110. Over 127, base times the options slider overflows the player.
+DEFAULT_SEQUENCE_VOLUME = 110
+MAX_SEQUENCE_VOLUME = 127
+#: The header's /instruments for a track with its own sequence: every channel
+#: the song uses must start enabled, whatever an inherited header said.
+SEQUENCE_CHANNEL_MASK = 0xFFFF
+
 #: Where the addon leaves asset-tool input inside the track directory.
 SOURCE_DIR = "source"
 
@@ -164,8 +184,10 @@ class TrackPackage:
         #: section -> absolute path, for the minimap's picture and sprite.
         self.minimap: Dict[str, str] = {}
         #: ``(source path, manifest descriptor)`` for the track's own music,
-        #: set by :meth:`set_music`, else ``None``.
+        #: set by :meth:`set_music` or :meth:`set_sequence`, else ``None``.
         self.music: Optional[tuple] = None
+        #: A native sequence's bytes (set_sequence), written as they are.
+        self.sequence: Optional[bytes] = None
         self.notes: List[str] = []
 
     # -- sources ---------------------------------------------------------
@@ -360,16 +382,8 @@ class TrackPackage:
             music_audio.check_loop(info, loop_start, loop_end)
         except music_audio.AudioError as error:
             raise DkrMapError("the track's music cannot be used: %s" % error) from error
-        try:
-            carrier = int(carrier)
-        except (TypeError, ValueError):
-            carrier = 0
-        if not 0 < carrier < 256:
-            raise DkrMapError(
-                "the track's music needs a game song under it to follow (the "
-                "header's music is \"none\"). Pick any race song in Music; it "
-                "stays silent and only drives the fades and the final-lap speed-up"
-            )
+        carrier = self._check_carrier(
+            carrier, "it stays silent and only drives the fades and the final-lap speed-up")
         if final_lap not in FINAL_LAP_MODES:
             raise DkrMapError("unknown final-lap behaviour %r" % final_lap)
         volume = max(0, min(int(volume), MAX_MUSIC_VOLUME))
@@ -394,25 +408,91 @@ class TrackPackage:
             "finalLap": final_lap,
         }
         self.music = (os.path.abspath(source_path), descriptor)
+        self.sequence = None
         self.notes.append("music: %s, loop %.2f s to %s" % (
             info.summary(), loop_start,
             "%.2f s" % loop_end if loop_end > 0 else "the end"))
         return info
 
+    def set_sequence(self, data: bytes, carrier: int, tempo_bpm: float,
+                     volume: int = DEFAULT_SEQUENCE_VOLUME, reverb: int = 1,
+                     source_path: Optional[str] = None) -> "music_sequence.Report":
+        """Ship ``data``, a native DKR sequence, as the track's music.
+
+        The game plays it in place of ``carrier``, the header's ``/music``: it
+        is copied into the music buffer whenever that song starts, so the song
+        starts, loops, fades and speeds up on the final lap exactly as a
+        retail one does. ``tempo_bpm`` is the song's own tempo, which the game
+        must also be told - it scales that number on the final lap - so it has
+        to round into 1-255. The header's /instruments must enable every
+        channel (:data:`SEQUENCE_CHANNEL_MASK`); the runtime refuses a package
+        whose header says otherwise. ``source_path``, the MIDI file it came
+        from, is kept under ``source/`` for the author.
+
+        Checked here against the music buffer, before anything is written.
+        """
+        try:
+            report = music_sequence.validate(bytes(data))
+        except music_sequence.SequenceError as error:
+            raise DkrMapError("the track's music cannot be used: %s" % error) from error
+        carrier = self._check_carrier(
+            carrier, "your song plays in its place and keeps its fades and final-lap speed-up")
+        tempo = int(round(float(tempo_bpm)))
+        if not 1 <= tempo <= 255:
+            raise DkrMapError(
+                "the song plays at %.1f BPM; the game keeps a song's tempo in one "
+                "byte and its final-lap speed-up only works up to 255 BPM. Halve "
+                "the tempo (and double the note lengths) in your MIDI file"
+                % float(tempo_bpm))
+        volume = max(0, min(int(volume), MAX_SEQUENCE_VOLUME))
+        reverb = 1 if reverb else 0
+        descriptor = {
+            "format": SEQUENCE_FORMAT,
+            "bank": SEQUENCE_BANK,
+            "file": "%s/%s%s" % (MUSIC_DIR, MUSIC_STEM, SEQUENCE_EXTENSION),
+            "sha256": hashlib.sha256(bytes(data)).hexdigest(),
+            "bytes": len(data),
+            "carrierSequence": carrier,
+            "tempoBpm": tempo,
+            "volume": volume,
+            "reverb": reverb,
+            "channelMask": SEQUENCE_CHANNEL_MASK,
+        }
+        self.music = (os.path.abspath(source_path) if source_path else None, descriptor)
+        self.sequence = bytes(data)
+        self.notes.append("music: %s" % report.summary())
+        return report
+
+    def _check_carrier(self, carrier, role: str) -> int:
+        try:
+            carrier = int(carrier)
+        except (TypeError, ValueError):
+            carrier = 0
+        if not 0 < carrier < 256:
+            raise DkrMapError(
+                "the track's music needs a game song under it (the header's "
+                "music is \"none\"). Pick any race song in Music; %s" % role
+            )
+        return carrier
+
     def drop_music(self) -> None:
         """Forget the track's music and remove what an earlier export wrote.
 
-        Only the generated copy under ``music/`` goes; the author's own file,
-        wherever it lives, is never touched.
+        Only the generated copies under ``music/`` and ``source/`` go; the
+        author's own file, wherever it lives, is never touched.
         """
         self.music = None
+        self.sequence = None
         self._remove_music_copies(keep=None)
 
     def _remove_music_copies(self, keep: Optional[str]) -> None:
+        source = os.path.join(self.directory, SOURCE_DIR, SEQUENCE_SOURCE_FILE)
+        if self.sequence is None and os.path.isfile(source):
+            os.remove(source)
         folder = os.path.join(self.directory, MUSIC_DIR)
         if not os.path.isdir(folder):
             return
-        for extension in music_audio.EXTENSIONS.values():
+        for extension in list(music_audio.EXTENSIONS.values()) + [SEQUENCE_EXTENSION]:
             name = MUSIC_STEM + extension
             path = os.path.join(folder, name)
             if name != keep and os.path.isfile(path):
@@ -521,7 +601,21 @@ class TrackPackage:
         # against the digest recorded when it was validated: an author who
         # saves over the file mid-export gets an error, not a package whose
         # manifest describes different bytes.
-        if self.music:
+        if self.music and self.sequence is not None:
+            # A converted sequence: the bytes are the addon's own, and the MIDI
+            # file they came from goes under source/ for the author.
+            source_path, descriptor = self.music
+            destination = os.path.join(self.directory, *descriptor["file"].split("/"))
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            with open(destination, "wb") as handle:
+                handle.write(self.sequence)
+            if source_path and os.path.isfile(source_path):
+                kept = os.path.join(self.directory, SOURCE_DIR, SEQUENCE_SOURCE_FILE)
+                os.makedirs(os.path.dirname(kept), exist_ok=True)
+                if os.path.abspath(source_path) != os.path.abspath(kept):
+                    shutil.copyfile(source_path, kept)
+            self._remove_music_copies(keep=os.path.basename(destination))
+        elif self.music:
             source_path, descriptor = self.music
             destination = os.path.join(self.directory, *descriptor["file"].split("/"))
             os.makedirs(os.path.dirname(destination), exist_ok=True)

@@ -1314,6 +1314,88 @@ int main() {
         set_enabled("song", true);
     }
 
+    // A native sequence (schema 2, dkr-alcseq-v1). Read and validated at scan;
+    // the header's /music is the carrier and its /instruments the channel mask.
+    std::filesystem::remove_all(root);
+    {
+        std::string header(0xC8, '\0');
+        header[0x37] = 1;
+        header[0xBB] = 1;
+        header[kHeaderMusic] = 12;
+        header[kHeaderInstruments] = '\xFF';
+        header[kHeaderInstruments + 1] = '\xFF';
+        // One track, program 1, two notes inside an endless loop (the shared
+        // fixture "loop-forever").
+        const std::string hex =
+            "00000044000000000000000000000000000000000000000000000000000000000000"
+            "00000000000000000000000000000000000000000000000000000000000000000180"
+            "00ff5107a12000c00100ff2e00ff00903c648140830090436481408300ff2dffff00"
+            "00001700ff2f";
+        std::string song;
+        for (std::size_t i = 0; i < hex.size(); i += 2) {
+            song.push_back(static_cast<char>(std::stoi(hex.substr(i, 2), nullptr, 16)));
+        }
+        std::string broken = song;
+        broken[3] = '\xF0';   // track 1 starts outside the sequence
+        const auto sequence_track = [&](const std::string& id, const std::string& extra,
+                                        const std::string& bytes, std::size_t recorded,
+                                        const std::string& name = "music/main.cseq",
+                                        char mask_low = '\xFF') {
+            const std::filesystem::path dir = root / (id + ".dkrmap");
+            std::filesystem::create_directories(dir / "music");
+            std::string own_header = header;
+            own_header[kHeaderInstruments + 1] = mask_low;
+            write_file(dir / "h.bin", own_header);
+            write_file(dir / name, bytes);
+            write_file(dir / "manifest.json",
+                       "{\"schemaVersion\":2,\"id\":\"" + id + "\",\"name\":\"" + id + "\","
+                       "\"music\":{\"format\":\"dkr-alcseq-v1\",\"sha256\":\"" +
+                           std::string(64, 'b') + "\",\"bytes\":" + std::to_string(recorded) +
+                           "," + extra + "},"
+                       "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
+        };
+        const std::string ok =
+            "\"bank\":\"dkr-stock-v1\",\"file\":\"music/main.cseq\",\"carrierSequence\":12,"
+            "\"tempoBpm\":120,\"volume\":110,\"reverb\":1,\"channelMask\":65535";
+        sequence_track("tune", ok, song, song.size());
+        // Refused: an unknown bank, no tempo, a tempo the final lap cannot
+        // scale, an overflowing volume, a mask the header contradicts, bytes
+        // the player would misread, a size that disagrees and a wrong suffix.
+        std::string bank = ok;
+        bank.replace(bank.find("dkr-stock-v1"), 12, "gm-v1");
+        sequence_track("bank", bank, song, song.size());
+        std::string no_tempo = ok;
+        no_tempo.replace(no_tempo.find("\"tempoBpm\":120,"), 15, "");
+        sequence_track("notempo", no_tempo, song, song.size());
+        std::string fast = ok;
+        fast.replace(fast.find(":120,"), 5, ":256,");
+        sequence_track("fast", fast, song, song.size());
+        std::string loud = ok;
+        loud.replace(loud.find(":110,"), 5, ":128,");
+        sequence_track("loud", loud, song, song.size());
+        sequence_track("mask", ok, song, song.size(), "music/main.cseq", '\x0F');
+        sequence_track("broken", ok, broken, broken.size());
+        sequence_track("resized", ok, song, song.size() + 2);
+        std::string mid = ok;
+        mid.replace(mid.find("main.cseq"), 9, "main.mid");
+        sequence_track("suffix", mid, song, song.size(), "music/main.mid");
+
+        scan(root);
+        std::vector<std::string> ids;
+        for (const Track& track : tracks()) {
+            ids.push_back(track.id);
+        }
+        assert((ids == std::vector<std::string>{"tune"}));
+        (void) build_extended_table(Section::LevelHeaders, kRetail);
+        const auto music = music_for_level(resolved_level_id("tune"));
+        assert(music.has_value() && music->kind == MusicKind::Sequence);
+        assert(music->carrier == 12 && music->tempo_bpm == 120 && music->volume == 110);
+        assert(music->reverb == 1 && music->channel_mask == 0xFFFF);
+        assert(music->sequence && music->sequence->size() == song.size());
+        assert(std::equal(song.begin(), song.end(), music->sequence->begin(),
+                          [](char a, std::uint8_t b) { return static_cast<std::uint8_t>(a) == b; }));
+    }
+
     std::printf("custom_tracks_tests: ok\n");
     return 0;
 }

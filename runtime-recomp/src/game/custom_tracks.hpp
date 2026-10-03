@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -239,10 +240,24 @@ inline constexpr const char* kMusicFormat = "audio-stream-v1";
 inline constexpr std::uint64_t kMaxMusicBytes = 64ULL * 1024ULL * 1024ULL;
 inline constexpr std::uint32_t kMaxMusicVolume = 200;   // percent
 inline constexpr std::size_t kHeaderMusic = 0x52;        // level header /music
+inline constexpr std::size_t kHeaderInstruments = 0x54;  // level header /instruments (u16)
 
+// The other kind of music a track can carry: a native DKR sequence (compact
+// ALCSeq, `music/main.cseq`), usually converted from a MIDI file by the addon.
+// The game plays it itself, through its own instrument bank: custom_music
+// copies it into the music buffer when the carrier starts, so the player, the
+// fades, the final-lap speed-up and the MidiFade/MidiChSet objects all work on
+// it unchanged. Validated at scan the way the player will read it.
+inline constexpr const char* kSequenceFormat = "dkr-alcseq-v1";
+inline constexpr const char* kSequenceBank = "dkr-stock-v1";
+inline constexpr std::uint32_t kMaxSequenceBytes = 64U * 1024U;
+inline constexpr std::uint32_t kMaxSequenceVolume = 127;  // gMusicBaseVolume
+
+enum class MusicKind : std::uint8_t { Recording, Sequence };
 enum class MusicCodec : std::uint8_t { Mp3, Wav };
 
 struct MusicInfo {
+    MusicKind kind = MusicKind::Recording;
     MusicCodec codec = MusicCodec::Mp3;
     std::filesystem::path file;          // absolute, inside the track directory
     std::string sha256;                  // lowercase hex, as the manifest says
@@ -255,6 +270,14 @@ struct MusicInfo {
     std::uint64_t loop_start = 0;        // sample frames
     std::uint64_t loop_end = 0;          // sample frames; 0 is the end of file
     bool final_lap_speedup = true;       // follow the carrier's tempo changes
+
+    // MusicKind::Sequence only. The bytes are read at scan (they are small),
+    // so a race never touches the disk; `volume` is then DKR's own base
+    // volume (0-127), not a percentage.
+    std::shared_ptr<const std::vector<std::uint8_t>> sequence;
+    std::uint8_t tempo_bpm = 0;          // the song's tempo, as gSeqSoundTable holds it
+    std::uint8_t reverb = 1;             // alFxReverbSet's setting
+    std::uint16_t channel_mask = 0xFFFF; // header /instruments
 };
 
 struct Track {

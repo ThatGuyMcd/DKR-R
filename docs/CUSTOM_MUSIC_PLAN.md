@@ -3,60 +3,78 @@
 Status: implementation plan, based on the current checkout, 2026-09-23.
 Updated 2026-10-02: recorded music (MP3/WAV) is implemented end to end - see
 "Recorded music" below. It is format- and unit-tested and has been heard in a
-race; the rest of the in-game matrix below is still open. The
-native-sequence and MIDI stages below are unchanged and still unimplemented.
+race; the rest of the in-game matrix below is still open.
+Updated 2026-10-03: the MIDI path is implemented end to end - pick a `.mid`,
+export, race. See "Native songs (MIDI)" below.
 
-## Next steps (handoff, 2026-10-03)
+## Native songs (MIDI): state, 2026-10-03
 
 Goal set by the author: **pick a `.mid`, export, race** - no instrument
-mapping, no listening session, no manual tempo or loop work. Recorded music
-(MP3/WAV) is finished and committed (9cbab70). The MIDI path is converted and
-validated but **not yet audible in game**.
+mapping, no listening session, no manual tempo or loop work. That works.
 
-Done (format- and unit-tested; uncommitted at the time of writing):
+Done:
 
-- `tools/blender/dkr_track_editor/music_bank.py` - reads the B1 instrument bank.
-- `tools/blender/dkr_track_editor/music_sequence.py` - validates a native
-  sequence by emulating `cseq.c`/`csplayer.c`; C++ twin
-  `runtime-recomp/src/game/custom_music_sequence.{hpp,cpp}`; both held to
-  `tools/blender/tests/fixtures/music_sequences.txt`.
-- `tools/blender/dkr_track_editor/midi_import.py` - SMF to ALCSeq, fully
-  automatic: instruments, drum kits split over free channels, dominant tempo,
-  loop markers or whole-song loop, back-reference compression.
-- Tests: `test_music_sequence.py`, `test_midi_import.py` (in `run_tests.py`),
-  `DKRCustomMusicSequence` (ctest).
-- Real check: the author's `Downloads/test_tropical.mid` (70 bars, Latin
-  drums, tempo map) converts with no input to 12,137 of 13,032 bytes, no
-  notes dropped, valid against both revisions' banks.
+- **Converter and validators** (commit 73dff0b): `music_bank.py`,
+  `music_sequence.py` (+ C++ twin `custom_music_sequence.cpp`, shared
+  fixtures), `midi_import.py`.
+- **Package** (`dkrmap.TrackPackage.set_sequence`): schema 2, format
+  `dkr-alcseq-v1`, bank `dkr-stock-v1`, `music/main.cseq`, `tempoBpm`
+  (rounded, 1-255), `volume` (DKR base volume, default 110, max 127),
+  `reverb`, `channelMask` 65535. The `.mid` is kept as `source/music.mid`.
+- **Runtime** (`custom_tracks.cpp: parse_sequence`, `custom_music.cpp`):
+  the scan reads and validates the bytes and refuses a mask that differs from
+  the header's `/instruments`. Two new hooks in `music_sequence_init`, same
+  address in v77 and v80:
+  - `0x800023B4` (`dkr_custom_music_sequence_loaded`), after `asset_load`
+    filled the buffer and before `alCSeqNew`: when the music player starts the
+    bound track's carrier, the song is copied over the buffer (every start;
+    odd length padded) and the carrier's `gSeqSoundTable` row is swapped for
+    the track's volume/tempo/reverb. The tempo swap is required: almost every
+    race song has a row tempo, and `music_tempo_set` would otherwise force it.
+    The first start also checks the song against the running ROM (buffer =
+    longest entry of `gSeqLengthTable`; program slots from the player's bank).
+  - `0x8000247C` (`dkr_custom_music_sequence_started`), after
+    `sound_reverb_set`: the retail row is put back before the jingle player's
+    call. The loaded hook also restores defensively, so a swap never outlives
+    one start.
+  A hook in `music_sequence_init` rather than the existing `asset_load` end
+  hook, because a legacy-mod session routes `asset_load` past that hook.
+  New guest addresses: `gSequenceTable`, `gSeqLengthTable`, `gSeqSoundTable`
+  (`revision_addresses`). Payload regenerated (only `funcs_13.c` changed).
+- **Blender**: Music source **MIDI File** - a file picker, the conversion
+  report and its warnings in the panel, Volume; export converts, writes the
+  `.cseq`, the descriptor and `/instruments = 0xFFFF`. Save/reopen keeps it.
+- **Tests**: `test_music.py` (package), `test_blender_music.py` (choose,
+  save/reopen, panel, export, errors), `custom_tracks_tests.cpp` (descriptor
+  accepted and refused), `custom_music_runtime_tests.cpp` (the hooks against
+  simulated guest memory: copy, pad, row swap and restore, restart recopy,
+  jingle and other songs untouched, missing program and small buffer fall back
+  to the carrier). Those two C++ suites now build with asserts on in Release
+  (`/UNDEBUG`); before, Release silently compiled their asserts out.
 
-Unrelated working-tree edits seen at handoff (README, assets.py, catalog.py,
-preview.py, scene.py, ui/panels.py, test_assets.py, test_blender_operators.py)
-are not part of this work; leave them to their owner.
+Verified in game (Track Lab arm + auto boot, `etapa03` with
+`test_tropical.mid`, 12,137 of 13,032 bytes, 128 BPM, carrier 42): on v77 the
+author heard it play; a capture of the game's own output measured its beat at
+about 129 BPM against about 92 for the stock carrier on the same track. On v80
+(decomp-built ROM) the log shows the same check, copy and start; not listened
+to.
 
-To do, in order:
+Still open:
 
-1. **Commit** the files above (English message, repository style, no
-   co-author line).
-2. **Runtime adapter (stage 2, "Runtime design" below).** Package descriptor
-   (schema 2, `dkr-alcseq-v1`, file `music/main.cseq`) parsed in
-   `custom_tracks.cpp`; hook `music_sequence_init` in both recomp policies;
-   when the bound track's carrier starts and the player is stopped, copy the
-   validated sequence into the music buffer (recopy on every restart - loop
-   counters are rewritten while playing) and run the original init path.
-   Validate with `validate_sequence` (pass the bank's non-null program slots).
-   Regenerate the composed payload (see memory note on the v80 ELF hash
-   wrapper). Consider a larger buffer in expansion RAM to lift the 13 KB cap.
-3. **Hear it.** Hand-build a schema-2 package from the tropical conversion,
-   race it (Track Lab arm + auto boot), on v77 and v80: start, loop seam,
-   restart, final lap, pause, results, a jingle over it, custom -> stock.
-   Judge the automatic instrument choices by ear; adjust `FAMILY_PROGRAMS` or
-   `DRUM_PIECES` numbers if a part sounds wrong.
-4. **Blender UI (stage 3).** Music source "MIDI file": a file picker and the
-   conversion report (warnings, size, loop). Export writes `music/main.cseq`
-   and the descriptor; nothing else to set. Save/reopen must keep it.
-5. **Later:** MidiFade/MidiChSet objects against the converted channels
-   (stage 5), the remaining in-game matrix, docs in `CUSTOM_TRACKS.md` and
-   the addon README.
+1. **The in-game matrix**: loop seam, restart, final lap, pause, results, a
+   jingle over it, custom -> stock -> custom, Track Select preview -> race,
+   multiplayer.
+2. **Loudness**: the converted song measured about half the RMS of the
+   stock carrier song (5,620 against 10,570 with effects muted). Volume tops
+   out at base 127 (+1.3 dB over 110), so if it sounds quiet the fix is in the
+   converter (scale channel volumes toward the retail songs' levels), not the
+   slider.
+3. **Instrument choices by ear**: adjust `FAMILY_PROGRAMS` / `DRUM_PIECES` if
+   a part sounds wrong.
+4. **Larger songs**: the 13,032-byte buffer is the cap; a bigger buffer in
+   expansion RAM would need the buffer pointer and its lifetime handled.
+5. **Stage 5**: friendly MidiFade/MidiChSet controls against the converted
+   channels.
 
 The first deliverable is one author-supplied native DKR sequence per `.dkrmap`,
 played through the game's existing instrument bank. Standard MIDI import follows

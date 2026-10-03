@@ -866,15 +866,17 @@ def _attach_music(operator, context, package, header):
     """Ship the track's own music, or remove what an earlier export left.
 
     The carrier is the header's ``/music``: the game song that plays silently
-    under the file so its fades and final-lap speed-up still reach it. Checked
-    here, with the file and its loop, so a broken song is an export error and
-    never a silent fall-back to the game song in the race.
+    under a recording so its fades and final-lap speed-up still reach it, or
+    that a converted MIDI song plays in place of. Checked here, with the file
+    (and a recording's loop), so a broken song is an export error and never a
+    silent fall-back to the game song in the race.
     """
     from .. import level_header_template as template  # noqa: PLC0415
+    from .. import midi_import, music_sequence  # noqa: PLC0415
     from . import music  # noqa: PLC0415
 
     settings = context.scene.dkr
-    if not music.uses_file(settings):
+    if not music.uses_file(settings) and not music.uses_midi(settings):
         package.drop_music()
         return
     if header is None:
@@ -882,6 +884,27 @@ def _attach_music(operator, context, package, header):
             "the track's music needs a level header to bind to; this track "
             "exports none"
         )
+    if music.uses_midi(settings):
+        try:
+            conversion = music.convert_midi(settings, context)
+        except (midi_import.MidiError, music_sequence.SequenceError) as error:
+            raise dkrmap.DkrMapError(
+                "the track's MIDI music cannot be used: %s" % error) from error
+        # Every channel the song uses must start enabled; an inherited
+        # header's mask belongs to another composition.
+        template.apply_overrides(header, {"/instruments": dkrmap.SEQUENCE_CHANNEL_MASK})
+        package.set_sequence(
+            conversion.data,
+            carrier=template.lookup(header, "/music") or 0,
+            tempo_bpm=conversion.bpm,
+            volume=music.sequence_volume(settings),
+            source_path=music.midi_path(settings),
+        )
+        package.notes += ["music: %s" % line for line in conversion.warnings]
+        settings.music_report = music.describe(conversion)
+        settings.music_warnings = "\n".join(conversion.warnings)
+        settings.music_ok = True
+        return
     package.set_music(
         music.file_path(settings),
         carrier=template.lookup(header, "/music") or 0,

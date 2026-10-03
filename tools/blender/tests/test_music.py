@@ -1,4 +1,5 @@
-"""Check the recorded-music path: recognising files and packaging them.
+"""Check the music paths: recognising recordings, packaging them and native
+sequences.
 
 A track can ship an MP3 or WAV in place of a retail song. What this suite pins
 down is the part an author meets before the game: which files are accepted,
@@ -217,6 +218,76 @@ def test_package():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def _fixture_sequence(name):
+    """A sequence from the fixtures the Python and C++ validators share."""
+    with open(os.path.join(FIXTURES, "music_sequences.txt"), encoding="utf-8") as handle:
+        for line in handle:
+            parts = line.split()
+            if len(parts) == 3 and parts[1] == name:
+                return bytes.fromhex(parts[2])
+    raise KeyError(name)
+
+
+def test_sequence_package():
+    print("the package carries a native sequence and says so")
+    root = tempfile.mkdtemp(prefix="dkr-sequence-")
+    try:
+        directory = os.path.join(root, "tune-test.dkrmap")
+        package = dkrmap.TrackPackage(directory, "tune-test", "Tune Test")
+        package.payloads["LEVEL_HEADERS"] = _header_file(root)
+        song = _fixture_sequence("loop-forever")
+        midi = os.path.join(root, "tune.mid")
+        with open(midi, "wb") as handle:
+            handle.write(b"MThd")
+
+        check("song under it" in (refused(package.set_sequence, song, 0, 120) or ""),
+              "a carrier of 0 (no music) is refused")
+        check("255 BPM" in (refused(package.set_sequence, song, 12, 300.0) or ""),
+              "a tempo the final lap cannot scale is refused")
+        check(refused(package.set_sequence, _fixture_sequence("no-end-of-track"), 12, 120)
+              is not None, "bytes the player would misread are refused")
+        package.set_sequence(song, carrier=12, tempo_bpm=127.97, volume=200,
+                             source_path=midi)
+        package.write()
+
+        with open(os.path.join(directory, "manifest.json"), encoding="utf-8") as handle:
+            written = json.load(handle)
+        music = written.get("music", {})
+        import hashlib
+        check(written["schemaVersion"] == 2, "with a sequence the package is schema 2")
+        check(music.get("format") == dkrmap.SEQUENCE_FORMAT and
+              music.get("bank") == dkrmap.SEQUENCE_BANK, "the format and bank are named")
+        path = os.path.join(directory, "music", "main.cseq")
+        with open(path, "rb") as handle:
+            check(handle.read() == song, "the bytes go to music/main.cseq unchanged")
+        check(music.get("bytes") == len(song) and
+              music.get("sha256") == hashlib.sha256(song).hexdigest(),
+              "size and digest are the song's")
+        check(music.get("tempoBpm") == 128, "the tempo is rounded to the game's whole BPM")
+        check(music.get("volume") == dkrmap.MAX_SEQUENCE_VOLUME,
+              "the volume is clamped to the game's 127")
+        check(music.get("channelMask") == 0xFFFF and music.get("reverb") == 1,
+              "every channel enabled, reverb on")
+        check(os.path.isfile(os.path.join(directory, "source", dkrmap.SEQUENCE_SOURCE_FILE)),
+              "the MIDI file is kept under source/")
+
+        # A recording replaces the sequence, and the game's music removes both.
+        package.set_music(os.path.join(FIXTURES, "sine_stereo_44k.mp3"), carrier=12)
+        package.write()
+        check(not os.path.isfile(path) and
+              os.path.isfile(os.path.join(directory, "music", "main.mp3")) and
+              not os.path.isfile(os.path.join(directory, "source", dkrmap.SEQUENCE_SOURCE_FILE)),
+              "a recording replaces the sequence and its MIDI copy")
+        package.set_sequence(song, carrier=12, tempo_bpm=120)
+        package.drop_music()
+        package.write()
+        check(not os.path.isdir(os.path.join(directory, "music")),
+              "back to game music: no music folder")
+        check(os.path.isfile(midi), "the author's own MIDI file is untouched")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _header_file(root):
     path = os.path.join(root, "header.bin")
     with open(path, "wb") as handle:
@@ -231,6 +302,7 @@ def main():
     test_not_audio()
     test_loop()
     test_package()
+    test_sequence_package()
     if FAILURES:
         print("\n%d failure(s)" % len(FAILURES))
         return 1

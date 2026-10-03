@@ -1341,17 +1341,24 @@ if(BUILD_TESTING)
         add_executable(DKRCustomTracksTests
             tests/custom_tracks_tests.cpp
             src/game/custom_tracks.cpp
+            src/game/custom_music_sequence.cpp
             "${DKR_RT64_SOURCE}/src/contrib/miniz/miniz.c"
         )
         target_include_directories(DKRCustomTracksTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
             "${DKR_RT64_SOURCE}/src/contrib"
         )
+        if(MSVC)
+            target_compile_options(DKRCustomTracksTests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(DKRCustomTracksTests PRIVATE -UNDEBUG)
+        endif()
         add_test(NAME DKRCustomTracks COMMAND DKRCustomTracksTests)
         add_executable(DKRCustomTracksRuntimeTests
             tests/custom_tracks_runtime_tests.cpp
             src/game/custom_tracks_hooks.cpp
             src/game/custom_tracks.cpp
+            src/game/custom_music_sequence.cpp
             "${DKR_RT64_SOURCE}/src/contrib/miniz/miniz.c"
         )
         target_include_directories(DKRCustomTracksRuntimeTests PRIVATE
@@ -1359,18 +1366,30 @@ if(BUILD_TESTING)
             "${DKR_RT64_SOURCE}/src/contrib"
             "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include"
         )
+        if(MSVC)
+            target_compile_options(DKRCustomTracksRuntimeTests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(DKRCustomTracksRuntimeTests PRIVATE -UNDEBUG)
+        endif()
         add_test(NAME DKRCustomTracksRuntime COMMAND DKRCustomTracksRuntimeTests)
         add_executable(DKRCustomTracksGuestTests
             tests/custom_tracks_guest_tests.cpp
             src/game/custom_tracks.cpp src/game/custom_tracks_hooks.cpp
+            src/game/custom_music_sequence.cpp
             "${DKR_RT64_SOURCE}/src/contrib/miniz/miniz.c")
         target_include_directories(DKRCustomTracksGuestTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_RT64_SOURCE}/src/contrib"
             "${DKR_RECOMP_SOURCE}/include")
+        if(MSVC)
+            target_compile_options(DKRCustomTracksGuestTests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(DKRCustomTracksGuestTests PRIVATE -UNDEBUG)
+        endif()
         add_test(NAME DKRCustomTracksGuest COMMAND DKRCustomTracksGuestTests)
         add_executable(DKRCustomMusicRuntimeTests
             tests/custom_music_runtime_tests.cpp
             src/game/custom_music.cpp src/game/custom_music_decode.cpp
+            src/game/custom_music_sequence.cpp
             src/game/custom_tracks.cpp src/game/custom_tracks_hooks.cpp
             "${DKR_RT64_SOURCE}/src/contrib/miniz/miniz.c")
         target_include_directories(DKRCustomMusicRuntimeTests PRIVATE
@@ -1381,6 +1400,11 @@ if(BUILD_TESTING)
             DKR_MUSIC_FIXTURES="${DKRPORT_ROOT}/tools/blender/tests/fixtures")
         find_package(Threads REQUIRED)
         target_link_libraries(DKRCustomMusicRuntimeTests PRIVATE Threads::Threads)
+        if(MSVC)
+            target_compile_options(DKRCustomMusicRuntimeTests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(DKRCustomMusicRuntimeTests PRIVATE -UNDEBUG)
+        endif()
         add_test(NAME DKRCustomMusicRuntime COMMAND DKRCustomMusicRuntimeTests)
     endif()
     add_executable(DKRPresentationMarkerPolicyTests
