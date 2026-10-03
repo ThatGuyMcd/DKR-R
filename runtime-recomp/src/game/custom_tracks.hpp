@@ -193,7 +193,7 @@ inline constexpr std::size_t kMaxSpritePayload = 512;
 // player's cartridge knows, so the exporter writes these and the runtime
 // substitutes them, exactly as it does kCustomTextureIdBase. 0x7000 fits the
 // s16 both ids travel in. Kept identical in
-// tools/blender/dkr_track_editor/minimap.py.
+// tools/blender/track_lab/minimap.py.
 inline constexpr std::int32_t kCustomSpriteIdBase = 0x7000;
 inline constexpr std::int32_t kCustomSpriteIdCount = 16;
 inline constexpr std::int32_t kCustomTexture2DIdBase = 0x7000;
@@ -538,7 +538,7 @@ void set_auto_boot(bool enabled);
 // below the mask. The count is the ceiling on a model's texture table, which is
 // indexed by a u8 with 0xFF meaning "none".
 //
-// Kept identical in tools/blender/dkr_track_editor/textures.py.
+// Kept identical in tools/blender/track_lab/textures.py.
 inline constexpr std::int32_t kCustomTextureIdBase = 0x7000;
 inline constexpr std::int32_t kCustomTextureIdCount = 255;
 

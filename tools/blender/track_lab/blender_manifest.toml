@@ -1,8 +1,8 @@
 schema_version = "1.0.0"
 
-id = "dkr_track_editor"
-version = "0.2.0"
-name = "DKR Track Editor"
+id = "track_lab"
+version = "0.1.0"
+name = "Track Lab"
 tagline = "Author Diddy Kong Racing tracks and export .dkrmap packages"
 maintainer = "DKR-R contributors"
 type = "add-on"

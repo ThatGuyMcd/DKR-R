@@ -2,7 +2,7 @@
 
 The author draws the line they want the AI to follow; this samples it into
 ``ASSET_OBJECT_AINODE`` objects with the adjacency already wired. The graph
-rules live in :mod:`dkr_track_editor.ai_graph`; this file is the Blender end of
+rules live in :mod:`track_lab.ai_graph`; this file is the Blender end of
 it - reading a curve's shape, and writing the nodes back into the scene.
 """
 

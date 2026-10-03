@@ -26,7 +26,7 @@ import tempfile
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import dkrmap, music_audio  # noqa: E402
+from track_lab import dkrmap, music_audio  # noqa: E402
 
 FIXTURES = os.path.join(_HERE, "fixtures")
 FAILURES = []

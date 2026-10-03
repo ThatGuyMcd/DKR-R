@@ -33,10 +33,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 
-from dkr_track_editor import level_header  # noqa: E402
+from track_lab import level_header  # noqa: E402
 
 VANILLA = os.path.join(REPO_ROOT, "extern", "dkr-decomp", "assets", ".vanilla")
-OUTPUT = os.path.join(HERE, "dkr_track_editor", "data",
+OUTPUT = os.path.join(HERE, "track_lab", "data",
                       "level_header_defaults.json")
 
 #: A value has to appear in at least this many of the retail headers to be

@@ -13,7 +13,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor.checkpoint_order import Chain, ChainError  # noqa: E402
+from track_lab.checkpoint_order import Chain, ChainError  # noqa: E402
 
 FAILURES = []
 

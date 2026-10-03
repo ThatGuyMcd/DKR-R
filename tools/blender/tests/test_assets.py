@@ -20,7 +20,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     assets, catalog as catalog_module, object_model,
 )
 

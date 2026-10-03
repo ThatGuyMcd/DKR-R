@@ -49,7 +49,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)
 
-from dkr_track_editor import minimap, rice_identity, rice_pack, textures  # noqa: E402
+from track_lab import minimap, rice_identity, rice_pack, textures  # noqa: E402
 from test_custom_textures import solid_rgba, write_png  # noqa: E402
 from test_roundtrip import VANILLA  # noqa: E402
 

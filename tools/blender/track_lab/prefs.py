@@ -40,7 +40,7 @@ MISS_SECONDS = 2.0
 
 def package_name() -> str:
     """The identifier Blender registered this addon under."""
-    return __package__ or "dkr_track_editor"
+    return __package__ or "track_lab"
 
 
 class DKR_AddonPreferences(bpy.types.AddonPreferences):

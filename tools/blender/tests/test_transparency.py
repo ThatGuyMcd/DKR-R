@@ -43,7 +43,7 @@ import zlib
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import assets, level_model, textures, transparency  # noqa: E402
+from track_lab import assets, level_model, textures, transparency  # noqa: E402
 
 REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 VANILLA = os.path.join(REPO_ROOT, "extern", "dkr-decomp", "assets", ".vanilla")
@@ -344,7 +344,7 @@ def test_opacity():
     if not found:
         print("  skip: no extracted assets for the file round trip")
         return
-    from dkr_track_editor import level_model_encoder  # noqa: PLC0415
+    from track_lab import level_model_encoder  # noqa: PLC0415
     path = sorted(glob.glob(os.path.join(found[0].root, "levels", "models",
                                          "*", "*.bin")))[0]
     model = level_model.load(path)

@@ -33,10 +33,10 @@ for argument in sys.argv:
 sys.path.insert(0, os.path.abspath(os.path.join(_HERE, "..")))
 sys.path.insert(0, _HERE)
 
-import dkr_track_editor  # noqa: E402
-from dkr_track_editor import prefs, rom_extract  # noqa: E402
-from dkr_track_editor.operators import rom_assets  # noqa: E402
-from dkr_track_editor.ui import panels  # noqa: E402
+import track_lab  # noqa: E402
+from track_lab import prefs, rom_extract  # noqa: E402
+from track_lab.operators import rom_assets  # noqa: E402
+from track_lab.ui import panels  # noqa: E402
 
 from test_roundtrip import REPO_ROOT  # noqa: E402
 
@@ -187,7 +187,7 @@ def test_known_roms():
 
 
 def main():
-    dkr_track_editor.register()
+    track_lab.register()
     scratch, fake = setup_scratch()
     try:
         test_registration()
@@ -204,7 +204,7 @@ def main():
                 test_use_folder(scratch, fake, tree_root)
     finally:
         rom_assets.teardown()
-        dkr_track_editor.unregister()
+        track_lab.unregister()
         shutil.rmtree(scratch, ignore_errors=True)
 
     if FAILURES:

@@ -114,7 +114,7 @@ class Node:
 
 
 def node_from(map_object, source=None) -> Node:
-    """A :class:`Node` from a :class:`~dkr_track_editor.gltf_io.MapObject`."""
+    """A :class:`Node` from a :class:`~track_lab.gltf_io.MapObject`."""
     fields = map_object.fields
     return Node(
         map_object.translation,

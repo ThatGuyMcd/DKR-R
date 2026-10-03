@@ -29,8 +29,8 @@ for argument in sys.argv:
 
 sys.path.insert(0, os.path.abspath(os.path.join(_HERE, "..")))
 
-import dkr_track_editor  # noqa: E402
-from dkr_track_editor import dkrmap, music_sequence  # noqa: E402
+import track_lab  # noqa: E402
+from track_lab import dkrmap, music_sequence  # noqa: E402
 
 sys.path.insert(0, _HERE)
 from test_midi_import import MidiTrack, midi_file  # noqa: E402
@@ -116,7 +116,7 @@ def test_choose_and_persist(root):
 
 def test_panel_draws():
     print("the header panel draws in both modes")
-    from dkr_track_editor.ui import panels
+    from track_lab.ui import panels
 
     class Layout:
         """Enough of UILayout for a draw call to run end to end."""
@@ -146,7 +146,7 @@ def test_panel_draws():
 def test_export_attaches(root):
     print("the export step attaches the music with the header's song")
     fresh()
-    from dkr_track_editor.operators import pack
+    from track_lab.operators import pack
 
     settings = bpy.context.scene.dkr
     settings.music_source = "FILE"
@@ -248,7 +248,7 @@ def test_midi_choose_and_persist(root):
 def test_midi_export(root):
     print("the export step converts the MIDI file and enables every channel")
     fresh()
-    from dkr_track_editor.operators import pack
+    from track_lab.operators import pack
 
     song = os.path.join(root, "export.mid")
     _write_midi(song, bpm=140)
@@ -314,7 +314,7 @@ def _header(root):
 
 
 def main():
-    dkr_track_editor.register()
+    track_lab.register()
     root = tempfile.mkdtemp(prefix="dkr-blender-music-")
     try:
         test_defaults()
@@ -328,7 +328,7 @@ def main():
         FAILURES.append("uncaught exception")
     finally:
         shutil.rmtree(root, ignore_errors=True)
-        dkr_track_editor.unregister()
+        track_lab.unregister()
     if FAILURES:
         print("\n%d failure(s)" % len(FAILURES))
         return 1

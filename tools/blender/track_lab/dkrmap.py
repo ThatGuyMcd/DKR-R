@@ -644,7 +644,7 @@ class TrackPackage:
         lines = [
             "# %s" % self.name,
             "",
-            "Written by the DKR track editor Blender addon.",
+            "Written by the Track Lab Blender addon.",
             "",
             "`%s/` holds the authored object map as the glTF pair that the" % SOURCE_DIR,
             "decomp's `dkr_assets_tool` consumes. The addon stops there: that tool",

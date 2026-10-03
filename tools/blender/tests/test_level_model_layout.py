@@ -51,7 +51,7 @@ from collections import Counter
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     level_model, level_model_encoder, level_model_layout,
 )
 
@@ -510,7 +510,7 @@ def check_collision_pressure(path):
 
 
 def _has_waves(model):
-    from dkr_track_editor import water
+    from track_lab import water
 
     return water.has_waves(model)
 
@@ -550,7 +550,7 @@ def check_crowded_wave_batches(_path=None):
     batches into one wave tile. Rendering fields differ one at a time so the
     test also catches merging batches that do not draw alike.
     """
-    from dkr_track_editor import water
+    from track_lab import water
 
     layout = level_model_layout
     model = layout.blank_model([
@@ -808,7 +808,7 @@ def check_resegment_relieves_pressure(path):
     if not moved:
         return None
 
-    from dkr_track_editor import level_model_edit
+    from track_lab import level_model_edit
     level_model_edit.recompute_bounds(model)
     if not level_model_layout.check_collision_pressure(model):
         return None  # this model did not end up crowded; nothing to relieve
@@ -820,7 +820,7 @@ def check_resegment_relieves_pressure(path):
         # Cut into the wave grid: triangles are split, not lost, and a wave
         # track stretched past 127 squares joins its dry ones instead of
         # failing. What matters is that the waves still work.
-        from dkr_track_editor import water
+        from track_lab import water
 
         found = water.problems(model)
         if found:

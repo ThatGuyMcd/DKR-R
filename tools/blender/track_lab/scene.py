@@ -142,7 +142,7 @@ def create_empty(context, obj: MapObject, catalog, root, tree=None,
                  slot: str = SLOT_STRUCTURE) -> bpy.types.Object:
     """Build the Blender object representing one placed object.
 
-    ``tree`` is an :class:`~dkr_track_editor.assets.AssetTree`. When one is
+    ``tree`` is an :class:`~track_lab.assets.AssetTree`. When one is
     given the object is drawn with the artwork the game uses - a sprite
     billboard, or the decoded object model - instead of a bare Empty. That is
     what lets an author tell a balloon from a checkpoint at a glance.

@@ -1,4 +1,4 @@
-"""The DKR sidebar: Level Type first, everything else after it.
+"""The Track Lab sidebar: Level Type first, everything else after it.
 
 Before even that comes *Game Assets*, while the addon has no extracted asset
 tree: it offers to extract one from the author's ROM (or to use a folder, or to
@@ -35,7 +35,7 @@ from ..operators import start_grid
 from ..operators.edit import DKR_OT_place_object
 from ..operators.edit import object_type_items  # noqa: F401 - kept for callers
 
-CATEGORY = "DKR"
+CATEGORY = "Track Lab"
 
 
 class DkrPanel:
@@ -982,7 +982,7 @@ class DKR_PT_place(DkrPanel, bpy.types.Panel):
             box = info_box(layout, context,
                            "No decomp assets found. Objects will be plain "
                            "markers. Set the path in Preferences > Add-ons > "
-                           "DKR Track Editor.", icon="ERROR")
+                           "Track Lab.", icon="ERROR")
             box.operator("dkr.refresh_artwork", icon="FILE_REFRESH")
         else:
             row = layout.row(align=True)

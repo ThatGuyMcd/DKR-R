@@ -23,7 +23,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import music_bank, music_sequence  # noqa: E402
+from track_lab import music_bank, music_sequence  # noqa: E402
 
 FIXTURES = os.path.join(_HERE, "fixtures", "music_sequences.txt")
 REPO = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))

@@ -373,7 +373,7 @@ class DKR_OT_import_level(bpy.types.Operator):
             self.report(
                 {"ERROR"},
                 "no extracted decomp assets found; set the path in this dialog "
-                "or in Preferences > Add-ons > DKR Track Editor",
+                "or in Preferences > Add-ons > Track Lab",
             )
             return {"CANCELLED"}
 

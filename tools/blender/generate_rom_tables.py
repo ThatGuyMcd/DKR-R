@@ -1,7 +1,7 @@
-"""Generate ``dkr_track_editor/data/rom_tables.json.gz`` from the DKR decomp.
+"""Generate ``track_lab/data/rom_tables.json.gz`` from the DKR decomp.
 
 The addon can extract its asset tree straight from the author's ROM
-(:mod:`dkr_track_editor.rom_extract`), so nobody needs a decomp checkout just to
+(:mod:`track_lab.rom_extract`), so nobody needs a decomp checkout just to
 see a coin as a coin. What the ROM does not hold is the *names*: a record is
 only bytes, and ``ASSET_OBJECT_PALMTREETOP`` / ``palm_tree_top_0.png`` come from
 the decomp's ``tools/dkr_assets_tool_extract.json``, which identifies every
@@ -42,7 +42,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 DEFAULT_DECOMP = os.path.join(REPO_ROOT, "extern", "dkr-decomp")
-DEFAULT_OUTPUT = os.path.join(HERE, "dkr_track_editor", "data", "rom_tables.json.gz")
+DEFAULT_OUTPUT = os.path.join(HERE, "track_lab", "data", "rom_tables.json.gz")
 
 SCHEMA_VERSION = 1
 

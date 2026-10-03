@@ -1,4 +1,4 @@
-# DKR track editor - Blender addon
+# Track Lab - Blender addon
 
 Author a Diddy Kong Racing track in Blender: place objects, items and the AI
 AI node graph over a track's geometry, reshape the geometry itself, then write
@@ -18,12 +18,12 @@ python tools/blender/package_addon.py
 ```
 
 Then in Blender: **Edit > Preferences > Add-ons > Install from Disk**, pick
-`tools/blender/dkr_track_editor.zip`, and enable *DKR Track Editor*. The panels
-appear in the 3D viewport sidebar (`N`) under a **DKR** tab.
+`tools/blender/track_lab.zip`, and enable *Track Lab*. The panels
+appear in the 3D viewport sidebar (`N`) under a **Track Lab** tab.
 
 **Give it the game's assets.** Object artwork, retail textures and retail
 tracks live in an extracted asset tree, not inside the addon. Until it has one,
-the DKR tab opens on **Game Assets** and nothing else:
+the Track Lab tab opens on **Game Assets** and nothing else:
 
 - **Extract from DKR-R's ROM** - offered when DKR-R already has a ROM (its
   `rom-cache`, `last-rom.txt` or `rom-catalog.txt` in `%APPDATA%\DKRPort`, or
@@ -602,7 +602,7 @@ tools/blender/
   generate_rom_tables.py    builds data/rom_tables.json.gz from the decomp
   package_addon.py          builds the installable zip
   run_tests.py              runs every suite
-  dkr_track_editor/
+  track_lab/
     __init__.py             registration; imports bpy only inside register()
     gltf_io.py              object-map reader and writer
     catalog.py              the generated catalogue, and value coercion

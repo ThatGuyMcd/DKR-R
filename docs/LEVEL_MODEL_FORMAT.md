@@ -154,7 +154,7 @@ table, an array of 8-byte `DkrTextureInfo` whose `id` indexes the global
 `ASSET_TEXTURES_3D` list - the same indirection object models use.
 
 Decoding all of that is what lets the Blender addon show a track as it looks
-rather than as a grey shell; see `tools/blender/dkr_track_editor/level_model.py`.
+rather than as a grey shell; see `tools/blender/track_lab/level_model.py`.
 
 ## The texture table
 
@@ -379,7 +379,7 @@ splits on both vertex and triangle counts, and the encoder refuses an oversized
 draw batch. Exporting a mesh based on an older oversized model rebuilds its
 batches instead of patching that layout in place.
 
-`tools/blender/dkr_track_editor/level_model_encoder.py` implements the
+`tools/blender/track_lab/level_model_encoder.py` implements the
 layout-preserving half of this table, and
 `tools/blender/tests/test_level_model_roundtrip.py` holds every extracted model
 to byte equality through it.
@@ -470,7 +470,7 @@ its wave tracks into equal squares, one segment each, with the wave segment
 first. That holds in 21 of the 22 retail models that have waves;
 `ocean_track`, which no header loads, is the exception. The tile mask is
 `s32 D_8012A0E8[64]`, so wave tiles sit in columns 0-31 and rows 0-63.
-`tools/blender/dkr_track_editor/water.py` transcribes all of it.
+`tools/blender/track_lab/water.py` transcribes all of it.
 
 ## Two shapes Blender cannot round trip
 

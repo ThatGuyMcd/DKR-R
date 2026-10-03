@@ -32,8 +32,8 @@ for argument in sys.argv:
 sys.path.insert(0, os.path.abspath(os.path.join(_HERE, "..")))
 sys.path.insert(0, _HERE)
 
-import dkr_track_editor  # noqa: E402
-from dkr_track_editor import (  # noqa: E402
+import track_lab  # noqa: E402
+from track_lab import (  # noqa: E402
     dkrmap, level_header, level_model, level_model_encoder, minimap, prefs,
     rice_pack, textures,
 )
@@ -50,7 +50,7 @@ def check(condition, message):
 
 
 def _ops():
-    from dkr_track_editor.operators import minimap as minimap_ops
+    from track_lab.operators import minimap as minimap_ops
     return minimap_ops
 
 
@@ -87,7 +87,7 @@ def _header_byte(target, offset):
 
 
 def _geometry():
-    from dkr_track_editor.operators import geometry as geometry_ops
+    from track_lab.operators import geometry as geometry_ops
     objects = geometry_ops.geometry_objects(bpy.context)
     return objects[0] if objects else None
 
@@ -375,7 +375,7 @@ class _Layout:
 
 
 def _draw_panels():
-    from dkr_track_editor.ui import panels
+    from track_lab.ui import panels
     seen = []
     context = bpy.context
     for panel in (panels.DKR_PT_minimap, panels.DKR_PT_minimap_appearance,
@@ -440,7 +440,7 @@ def test_overlay_corners():
 
 
 def main():
-    dkr_track_editor.register()
+    track_lab.register()
     temporary = tempfile.mkdtemp(prefix="dkr-minimap-")
     try:
         test_registration()
@@ -451,7 +451,7 @@ def main():
         test_overlay_corners()
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
-        dkr_track_editor.unregister()
+        track_lab.unregister()
     print()
     if FAILURES:
         print("FAIL: %d check(s)" % len(FAILURES))

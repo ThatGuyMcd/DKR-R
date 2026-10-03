@@ -1,6 +1,6 @@
 """The race AI in the viewport and the sidebar.
 
-The line is :mod:`dkr_track_editor.race_ai`'s, drawn as an overlay rather than
+The line is :mod:`track_lab.race_ai`'s, drawn as an overlay rather than
 built into scene objects: it is a view of the checkpoints, never something to
 export, select or save, and an overlay follows a checkpoint while it is being
 dragged where a generated curve would lag until someone rebuilt it.
@@ -209,7 +209,7 @@ def _draw():
         message = traceback.format_exc()
         if message != _LAST_ERROR[0]:
             _LAST_ERROR[0] = message
-            print("DKR track editor: could not draw the AI lines\n" + message)
+            print("Track Lab: could not draw the AI lines\n" + message)
 
 
 def register_overlay():
@@ -592,7 +592,7 @@ def _draw_labels():
         message = traceback.format_exc()
         if message != _LAST_ERROR[0]:
             _LAST_ERROR[0] = message
-            print("DKR track editor: could not draw the checkpoint numbers\n" + message)
+            print("Track Lab: could not draw the checkpoint numbers\n" + message)
 
 
 def register_labels():

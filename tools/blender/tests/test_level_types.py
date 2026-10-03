@@ -22,11 +22,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     assets, catalog as catalog_module, gltf_io, level_header,
     level_header_template as template, level_types as lt, validate,
 )
-from dkr_track_editor.gltf_io import ObjectMap  # noqa: E402
+from track_lab.gltf_io import ObjectMap  # noqa: E402
 
 from test_roundtrip import REPO_ROOT  # noqa: E402
 

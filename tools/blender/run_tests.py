@@ -1,4 +1,4 @@
-"""Run every test for the track editor.
+"""Run every test for Track Lab.
 
 The suites split by what they need. Two run on any Python 3.8+ because the
 format, catalogue, AI-graph and validation modules deliberately avoid ``bpy``.

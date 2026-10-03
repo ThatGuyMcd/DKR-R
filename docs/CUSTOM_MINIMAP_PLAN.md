@@ -472,7 +472,7 @@ minimap per track, animated minimaps.
 | Sprite anchor | `src/textures_sprites.c` → `load_sprite_info` |
 | Racer spawning, humans vs CPU | `src/objects.c` → the setup-point loop and `racerEntry->playerIndex = …` |
 | Header fields | `include/structs.h` → `LevelModel` 0x20–0x46 |
-| Addon header fields | `tools/blender/dkr_track_editor/level_model.py` → `HEADER_FIELDS` |
+| Addon header fields | `tools/blender/track_lab/level_model.py` → `HEADER_FIELDS` |
 | Blank model (zeros) | `level_model_layout.py` → `blank_model` |
 | Bounds recalculated on export | `level_model_layout.py` → `_rebuild_boxes`, `level_model_edit.recompute_bounds` |
 | Placeholder to replace | `operators/placeholders.py` → `DKR_OT_minimap_fit`; `ui/panels.py` → `DKR_PT_minimap` |
@@ -484,10 +484,10 @@ minimap per track, animated minimaps.
 
 **New code, suggested split**
 
-- `dkr_track_editor/minimap.py`, no `bpy`: the dot formula, the automatic
+- `track_lab/minimap.py`, no `bpy`: the dot formula, the automatic
   numbers, the even-odd fill, the checkered flag, the IA8 conversion. Testable
   headless like `dkrmap.py` and `level_model_layout.py`.
-- `dkr_track_editor/operators/minimap.py`: *Draw Edge*, *Start from AI Path*,
+- `track_lab/operators/minimap.py`: *Draw Edge*, *Start from AI Path*,
   *Close*, *Clear*, *Show on Track*, *Save PNG…*, *Use My PNG…*.
 
 **The dot formula** (normal play; `W`/`D` are the bounds' X and Z spans,
@@ -521,8 +521,8 @@ is the record of what the code actually does and where it chose differently.
 
 | What | Where |
 |---|---|
-| The dot formula, fitting, the even-odd fill, the flag, IA8 + line swap, both payloads, PNG in/out, retail lookup | `tools/blender/dkr_track_editor/minimap.py` (no `bpy`) |
-| Edges on Grease Pencil, the track's state, the picture cache, preview, overlay, the eight operators | `dkr_track_editor/operators/minimap.py` |
+| The dot formula, fitting, the even-odd fill, the flag, IA8 + line swap, both payloads, PNG in/out, retail lookup | `tools/blender/track_lab/minimap.py` (no `bpy`) |
+| Edges on Grease Pencil, the track's state, the picture cache, preview, overlay, the eight operators | `track_lab/operators/minimap.py` |
 | Panel, Appearance and Numbers sub-panels | `ui/panels.py` → `DKR_PT_minimap*` |
 | Settings (size, rotation, colour, soft edge, flag, overlay, own PNG) | `props.py` → `minimap_*` |
 | Export: header bit, model numbers, `minimap/texture.bin` + `sprite.bin` | `operators/pack.py` → `_plan_minimap`, `_encode_minimap`; `dkrmap.py` |

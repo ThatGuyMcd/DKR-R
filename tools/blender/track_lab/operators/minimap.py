@@ -752,7 +752,7 @@ def _overlay_draw():
         message = traceback.format_exc()
         if message != _OVERLAY_ERROR[0]:
             _OVERLAY_ERROR[0] = message
-            print("DKR track editor: could not draw the minimap\n" + message)
+            print("Track Lab: could not draw the minimap\n" + message)
 
 
 def register_overlay():

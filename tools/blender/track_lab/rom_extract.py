@@ -1307,7 +1307,7 @@ def extract(rom_path: str, destination: str,
 
 
 def main(argv=None):
-    """``python -m dkr_track_editor.rom_extract ROM DESTINATION``"""
+    """``python -m track_lab.rom_extract ROM DESTINATION``"""
     import argparse
     import sys
     import time

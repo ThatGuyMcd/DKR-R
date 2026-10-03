@@ -7,7 +7,7 @@
 // its track and a loop over no ticks never lets a frame end. This reads a song
 // the way cseq.c and csplayer.c will and refuses what they would mishandle.
 //
-// It is the twin of the addon's tools/blender/dkr_track_editor/music_sequence.py:
+// It is the twin of the addon's tools/blender/track_lab/music_sequence.py:
 // the same rules and the same error codes, held together by the shared
 // fixtures in tools/blender/tests/fixtures/music_sequences.txt. Whether a note
 // reaches a sound of its program is checked by the addon only - a dropped note

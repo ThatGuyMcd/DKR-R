@@ -1,6 +1,6 @@
 """Extract the asset tree from a ROM and hold it to the decomp's own extraction.
 
-:mod:`dkr_track_editor.rom_extract` is a port of the decomp's asset tool, so the
+:mod:`track_lab.rom_extract` is a port of the decomp's asset tool, so the
 decomp's extracted tree is the reference it has to reproduce. For every ROM
 found in ``extern/dkr-decomp/baseroms`` this extracts into a temporary folder
 and compares, for the asset types the addon reads:
@@ -31,7 +31,7 @@ import time
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import assets, rom_extract, textures  # noqa: E402
+from track_lab import assets, rom_extract, textures  # noqa: E402
 
 from test_roundtrip import REPO_ROOT, VANILLA  # noqa: E402
 

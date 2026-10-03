@@ -1,4 +1,4 @@
-"""Scene-level settings for the track editor."""
+"""Scene-level settings for Track Lab."""
 
 from __future__ import annotations
 

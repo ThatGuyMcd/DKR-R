@@ -101,7 +101,7 @@ so the addon hashes the payload's texels in that swapped order - a pack
 exported before it did (every one written before this note) names textures
 the game never asks for, and has to be exported again. The addon computes it
 offline from the payload it has just written
-(`tools/blender/dkr_track_editor/rice_identity.py`), and
+(`tools/blender/track_lab/rice_identity.py`), and
 `tools/blender/tests/test_rice_identity.py` holds that to the source: the
 patch's own `riceCRC32` and `reverseDXT`, compiled from
 `patches/rt64/0011-enable-runtime-rice-texture-aliases.patch` and compared over

@@ -1,4 +1,4 @@
-# DKR track editor - Blender addon plan
+# Track Lab - Blender addon plan
 
 Working plan for a Blender addon that lets a creator author a Diddy Kong Racing
 track and export a `.dkrmap` that DKR-R loads from `custom-tracks/`.
@@ -54,7 +54,7 @@ buffers, materials or animations, just one root node named `objects` whose
 children carry a `translation` and an `extras` dict. Blender's stock exporter
 rewrites all of that - axis conversion, node reordering, mesh and buffer
 boilerplate - and coerces integer `extras` to float, which is the one thing the
-format cannot survive. `tools/blender/dkr_track_editor/gltf_io.py` reads and
+format cannot survive. `tools/blender/track_lab/gltf_io.py` reads and
 writes these documents directly instead, in about 200 lines, and that is what
 makes the round trip exact.
 
@@ -167,7 +167,7 @@ triangles of every batch that does not opt out.
 ## Proposed addon architecture
 
 ```
-dkr_track_editor/
+track_lab/
   __init__.py            registration, panels
   catalog.py             object type schema, loaded from a generated JSON
   operators/

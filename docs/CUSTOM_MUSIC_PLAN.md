@@ -85,7 +85,7 @@ installation workflow.
 
 | Area | Evidence in this checkout | Consequence |
 | --- | --- | --- |
-| Addon music selection | `tools/blender/dkr_track_editor/operators/header.py`: `MUSIC`, `music_index`, `DKR_OT_step_music`; `ui/panels.py`: `_draw_music` | Currently selects a retail sequence ID only. |
+| Addon music selection | `tools/blender/track_lab/operators/header.py`: `MUSIC`, `music_index`, `DKR_OT_step_music`; `ui/panels.py`: `_draw_music` | Currently selects a retail sequence ID only. |
 | Preview | `operators/placeholders.py`: `DKR_OT_play_music` always fails `poll` | In-Blender listening needs a separate renderer; it is not an existing feature to connect. |
 | Header | `level_header.py`: `/music` at 0x52, `/instruments` at 0x54 | The latter is a 16-bit channel-enable mask, not an instrument-bank ID. |
 | Packages | `dkrmap.py`: `TrackPackage.manifest`; `runtime-recomp/src/game/custom_tracks.cpp`: `parse_track` | Schema 1 has no music payload. Runtime sections currently cover headers, names, models, object maps and textures. |
@@ -166,7 +166,7 @@ inaudible on such a track (the addon warns, and leaves them in place). Speed Up
 raises the pitch with the tempo, like a sequence does not; a time-stretch is a
 possible later option.
 
-Code: `tools/blender/dkr_track_editor/music_audio.py`, `operators/music.py`,
+Code: `tools/blender/track_lab/music_audio.py`, `operators/music.py`,
 `dkrmap.TrackPackage.set_music`; `runtime-recomp/src/game/custom_music*.{hpp,cpp}`,
 `custom_tracks.cpp: parse_music`. Tests: `tools/blender/tests/test_music.py`,
 `test_blender_music.py`, `runtime-recomp/tests/custom_music_policy_tests.cpp`,

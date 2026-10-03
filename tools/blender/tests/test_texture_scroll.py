@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from dkr_track_editor import assets, gltf_io, level_model, texture_scroll as scroll, textures
+from track_lab import assets, gltf_io, level_model, texture_scroll as scroll, textures
 
 
 def loop(raw, width, height, speed, steps=4096):

@@ -1,4 +1,4 @@
-"""DKR track editor - a Blender addon for authoring Diddy Kong Racing tracks.
+"""Track Lab - a Blender addon for authoring Diddy Kong Racing tracks.
 
 Places objects, items and the AI racing line over a track's geometry and writes
 the object map back out, plus the ``.dkrmap`` package DKR-R loads from
@@ -13,11 +13,11 @@ tested outside it. Only :func:`register` reaches for ``bpy``.
 from __future__ import annotations
 
 bl_info = {
-    "name": "DKR Track Editor",
+    "name": "Track Lab",
     "author": "DKR-R",
-    "version": (0, 2, 0),
+    "version": (0, 1, 0),
     "blender": (4, 2, 0),
-    "location": "View3D > Sidebar > DKR",
+    "location": "View3D > Sidebar > Track Lab",
     "description": "Author Diddy Kong Racing tracks and export .dkrmap packages",
     "category": "Import-Export",
     "doc_url": "https://github.com/ThatGuyMcd/DKR-R/blob/main/docs/BLENDER_ADDON_PLAN.md",
@@ -32,7 +32,7 @@ def _module_classes():
     """Every class to register, in dependency order.
 
     Imported here rather than at module scope so that ``import
-    dkr_track_editor`` works without Blender, which is what lets the tests run
+    track_lab`` works without Blender, which is what lets the tests run
     on a plain Python.
     """
     from . import prefs, props
@@ -143,7 +143,7 @@ def _same_addon_registered_class(bpy, cls):
     if old is None:
         return None
     module = getattr(old, "__module__", "") or ""
-    package = __package__ or "dkr_track_editor"
+    package = __package__ or "track_lab"
     if module == package or module.startswith(package + "."):
         return old
     return None

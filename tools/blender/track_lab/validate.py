@@ -3,7 +3,7 @@
 These are the cheap checks that catch the failures which are confusing to
 diagnose in game: an AI graph the racers cannot follow, a track with nowhere to
 start, an exit pointing at a level that does not exist. Everything here runs on
-an :class:`~dkr_track_editor.gltf_io.ObjectMap`, so it can be run over retail
+an :class:`~track_lab.gltf_io.ObjectMap`, so it can be run over retail
 maps as a sanity check on the rules themselves.
 
 Severities are separated on purpose. An ``error`` means the map is structurally

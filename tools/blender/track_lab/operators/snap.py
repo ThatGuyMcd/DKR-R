@@ -434,7 +434,7 @@ def _draw_marker():
         message = traceback.format_exc()
         if message != _LAST_ERROR[0]:
             _LAST_ERROR[0] = message
-            print("DKR track editor: could not draw the placing marker\n" + message)
+            print("Track Lab: could not draw the placing marker\n" + message)
 
 
 _LAST_ERROR = [None]

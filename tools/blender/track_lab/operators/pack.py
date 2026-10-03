@@ -54,7 +54,7 @@ class DKR_OT_export_dkrmap(bpy.types.Operator, ExportHelper):
         key = level_types.current_key(settings)
         if key is None:
             self.report({"ERROR"}, "choose the level type first, at the top of "
-                        "the DKR sidebar; the header's race type comes from it")
+                        "the Track Lab sidebar; the header's race type comes from it")
             return {"CANCELLED"}
 
         if self.validate_first:
@@ -957,7 +957,7 @@ def _require_header_asset_index(document, tree):
     raise dkrmap.DkrMapError(
         "the level header contains asset names that must be resolved to numeric "
         "indices, but no decomp asset tree is configured (%s). Set Decomp "
-        "Assets in Preferences > Add-ons > DKR Track Editor to the extracted "
+        "Assets in Preferences > Add-ons > Track Lab to the extracted "
         "assets/.vanilla/<region>.<version>/ folder, or clear those asset-backed "
         "header choices before exporting" % preview
     )
