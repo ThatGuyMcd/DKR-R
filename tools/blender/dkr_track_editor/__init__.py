@@ -38,13 +38,14 @@ def _module_classes():
     from . import prefs, props
     from .operators import (ai, checks, custom_textures, edit, geometry,
                             header, io_objects, level_type, minimap, music,
-                            new_track, pack, placeholders, race_ai, skybox,
-                            start_grid, textures, water, waterfall)
+                            new_track, pack, placeholders, race_ai, rom_assets,
+                            skybox, start_grid, textures, water, waterfall)
     from .ui import panels
 
     classes = []
     classes += list(prefs.CLASSES)
     classes += list(props.CLASSES)
+    classes += list(rom_assets.CLASSES)
     classes += list(level_type.CLASSES)
     classes += list(start_grid.CLASSES)
     classes += list(placeholders.CLASSES)
@@ -239,6 +240,14 @@ def unregister():
     _safe_remove_menu(bpy.types.TOPBAR_MT_file_import, _menu_import)
     try:
         props.unregister_pointers()
+    except Exception:  # noqa: BLE001 - unregistering must not fail
+        pass
+
+    # A running extraction keeps a timer; stop both with the addon.
+    try:
+        from .operators import rom_assets
+
+        rom_assets.teardown()
     except Exception:  # noqa: BLE001 - unregistering must not fail
         pass
 

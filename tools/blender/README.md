@@ -13,6 +13,7 @@ geometry can be added and removed.
 
 ```
 python tools/blender/generate_catalog.py     # needs the decomp checked out
+python tools/blender/generate_rom_tables.py  # needs the decomp checked out
 python tools/blender/package_addon.py
 ```
 
@@ -20,11 +21,35 @@ Then in Blender: **Edit > Preferences > Add-ons > Install from Disk**, pick
 `tools/blender/dkr_track_editor.zip`, and enable *DKR Track Editor*. The panels
 appear in the 3D viewport sidebar (`N`) under a **DKR** tab.
 
-**Point it at your decomp assets.** Object artwork lives in an extracted decomp
-tree, not inside the addon. When the addon is run from a checkout of this
-repository it finds `extern/dkr-decomp/assets/.vanilla/<version>` on its own; an
-installed copy cannot, so set **Decomp Assets** in the addon's preferences. The
-Place panel shows which tree is in use, and warns when there is none.
+**Give it the game's assets.** Object artwork, retail textures and retail
+tracks live in an extracted asset tree, not inside the addon. Until it has one,
+the DKR tab opens on **Game Assets** and nothing else:
+
+- **Extract from DKR-R's ROM** - offered when DKR-R already has a ROM (its
+  `rom-cache`, `last-rom.txt` or `rom-catalog.txt` in `%APPDATA%\DKRPort`, or
+  `~/.config/dkr-port`). One click; about ten seconds.
+- **Extract from ROM... / Choose Another ROM...** - any clean USA 1.0 or 1.1
+  dump, as `.z64`, `.v64` or `.n64` (the byte order is read from the header,
+  not the extension). PAL, Japanese and modified ROMs are refused by name.
+- **I Already Have Extracted Assets** - a decomp's `assets/.vanilla/<version>`
+  (or any folder above it), as before.
+- **Continue Without Assets** - objects are drawn as markers; retail textures,
+  skyboxes and Import Retail Track stay unavailable. A small *Game Assets*
+  panel stays to set them up later.
+
+The extraction (`rom_extract.py`) is a port of the decomp's `dkr_assets_tool
+extract` for the asset types the addon reads, so no decomp, Linux tool or
+`extract.sh` is needed. It writes the very tree that tool writes -
+`test_rom_extract.py` holds it to the decomp's own extraction: every JSON and
+glTF byte-identical, every `.bin` identical, every PNG identical pixel for
+pixel, for both revisions. The tree goes into the extension's user folder
+(Blender's user data folder for a legacy install), is built in a staging
+folder and only moved into place when complete, and **Decomp Assets** in the
+preferences is pointed at it. The preferences can extract again or switch to
+another folder at any time.
+
+When the addon is run from a checkout of this repository it also finds
+`extern/dkr-decomp/assets/.vanilla/<version>` on its own.
 
 Verified against Blender 5.2. The manifest declares 4.2 as the minimum, and the
 zip carries both `blender_manifest.toml` and `bl_info` so it installs as an
@@ -574,6 +599,7 @@ Modern, which custom tracks need, and tells you it did.
 ```
 tools/blender/
   generate_catalog.py       builds data/catalog.json from the decomp
+  generate_rom_tables.py    builds data/rom_tables.json.gz from the decomp
   package_addon.py          builds the installable zip
   run_tests.py              runs every suite
   dkr_track_editor/
@@ -585,6 +611,7 @@ tools/blender/
     object_map_encoder.py   object map -> section bytes
     level_header.py         level header -> its 200 bytes
     assets.py               resolve an asset name to a file in the decomp tree
+    rom_extract.py          the decomp tree, extracted straight from a ROM
     preview.py              build the artwork an object is drawn with
     ai_graph.py             sampling, adjacency and the format's limits
     race_ai.py              the race bots' lanes and the header's AI bytes
@@ -599,7 +626,7 @@ tools/blender/
     textures.py             the ROM's 3D textures, and encoding your own
     scene.py                object map <-> Blender scene
     props.py                scene settings
-    prefs.py                where to find the decomp assets
+    prefs.py                where to find the decomp assets, and where to extract
     operators/              import, export, place, AI, validate, package
     operators/geometry_export.py   the mesh's edits -> a level model
     operators/textures.py          pick, apply and map a texture
@@ -607,8 +634,10 @@ tools/blender/
     operators/race_ai.py           the bot lines overlay, Copy Difficulty
     operators/water.py             Add Water, Select/Remove Water, presets
     operators/music.py             choose and check the track's music (file or MIDI)
+    operators/rom_assets.py        Extract from ROM (worker thread), Use Folder, skip
     ui/panels.py            the sidebar
     data/catalog.json       generated; do not edit by hand
+    data/rom_tables.json.gz generated: record names by SHA1, enums, struct layouts
   tests/
     test_roundtrip.py           byte-exact read/write, no Blender needed
     test_validate.py            the rules, checked against retail tracks
@@ -628,11 +657,13 @@ tools/blender/
     test_music_sequence.py      the native-song validator, vs the shared fixtures
     test_midi_import.py         MIDI -> native song conversion
     test_blender_music.py       the music controls, save/reopen and export
+    test_rom_extract.py         ROM -> asset tree, vs the decomp's extraction
+    test_blender_rom_assets.py  the Game Assets setup: gate, extract, skip, folder
     fixtures/                   two short test tones (generated, original)
 ```
 
-Everything except `scene.py`, `preview.py`, `props.py`, `operators/` and `ui/`
-avoids `bpy`, so the formats and rules can be tested on a plain Python.
+Everything except `scene.py`, `preview.py`, `props.py`, `prefs.py`,
+`operators/` and `ui/` avoids `bpy`, so the formats and rules can be tested on a plain Python.
 
 ## Tests
 
@@ -665,4 +696,19 @@ moves:
 ```
 python tools/blender/generate_catalog.py
 python tools/blender/generate_catalog.py --check   # fail if stale, for CI
+```
+
+## Regenerating the ROM tables
+
+`data/rom_tables.json.gz` is what lets the addon name what it extracts: the ROM
+holds bytes, and `ASSET_OBJECT_PALMTREETOP` or `palm_tree_top_0.png` come from
+the decomp's `tools/dkr_assets_tool_extract.json`, which identifies each record
+by its SHA1. The same file carries the enums of `include/enums.h` and
+`include/object_behaviors.h` and the `LevelObjectEntry_*` layouts - packed, as
+the asset tool lays them out, not C-aligned - that object maps and headers are
+decoded with. None of it is ROM content. Rebuild it when the decomp moves:
+
+```
+python tools/blender/generate_rom_tables.py
+python tools/blender/generate_rom_tables.py --check   # fail if stale, for CI
 ```

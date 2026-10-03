@@ -1,5 +1,9 @@
 """The DKR sidebar: Level Type first, everything else after it.
 
+Before even that comes *Game Assets*, while the addon has no extracted asset
+tree: it offers to extract one from the author's ROM (or to use a folder, or to
+go on without), and hides every other panel until the author answers.
+
 The layout is the one ``tools/blender/ui_mockup.html`` draws. A new scene has no
 level type and shows only the *Level Type* card, because nothing can be placed,
 checked or exported before the addon knows what the track is; once chosen, the
@@ -13,6 +17,7 @@ the sidebar as it is resized.
 
 from __future__ import annotations
 
+import os
 import textwrap
 
 import bpy
@@ -24,6 +29,7 @@ from ..operators import header as header_ops
 from ..operators import level_type as level_type_ops
 from ..operators import new_track as new_track_ops
 from ..operators import race_ai as race_ai_ops
+from ..operators import rom_assets as rom_assets_ops
 from ..operators import skybox as skybox_ops
 from ..operators import start_grid
 from ..operators.edit import DKR_OT_place_object
@@ -43,7 +49,8 @@ class LevelPanel(DkrPanel):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.dkr.level_type != level_types.NONE
+        return (context.scene.dkr.level_type != level_types.NONE
+                and not prefs.setup_pending(context))
 
 
 def _catalog_or_none():
@@ -187,6 +194,92 @@ class DKR_MT_default_vehicle(bpy.types.Menu):
 
 
 # ---------------------------------------------------------------------------
+# Game Assets
+# ---------------------------------------------------------------------------
+
+class DKR_PT_assets(DkrPanel, bpy.types.Panel):
+    """The game's assets: extracted from the ROM once, then used everywhere.
+    Until there are some - or the author chooses to go on without - this is
+    the only panel, because without them the addon cannot show what it places"""
+
+    bl_label = "Game Assets"
+    bl_idname = "DKR_PT_assets"
+    bl_order = 0
+
+    @classmethod
+    def poll(cls, context):
+        job = rom_assets_ops.current_job()
+        return (job is not None and job.running) or prefs.resolve(context) is None
+
+    def draw(self, context):
+        layout = self.layout
+        job = rom_assets_ops.current_job()
+        if job is not None and job.running:
+            self._running(context, job)
+        elif prefs.setup_pending(context):
+            self._setup(context, job)
+        else:
+            self._declined(context)
+
+    def _running(self, context, job):
+        layout = self.layout
+        layout.label(text="Extracting from %s" % job.label, icon="IMPORT")
+        layout.progress(factor=job.fraction, type="BAR",
+                        text="%s - %d%%" % (job.message, job.fraction * 100))
+        lines(layout, context, "A few seconds. Blender stays usable meanwhile.",
+              dim=True)
+        layout.operator("dkr.cancel_rom_extraction", icon="CANCEL")
+
+    def _setup(self, context, job):
+        layout = self.layout
+        lines(layout, context, "The addon draws objects, textures and tracks "
+              "from your Diddy Kong Racing ROM - the one DKR-R plays. Extract "
+              "them once; they stay with the addon.")
+
+        if job is not None and job.error:
+            info_box(layout, context, job.error, icon="ERROR", alert=True)
+
+        known = rom_assets_ops.known_roms()
+        column = layout.column(align=True)
+        if known:
+            path, identity = known[0]
+            button = column.row()
+            button.scale_y = 1.8
+            op = button.operator("dkr.extract_rom_assets",
+                                 text="Extract from DKR-R's ROM", icon="IMPORT")
+            op.filepath = path
+            detail = column.row()
+            detail.alignment = "CENTER"
+            detail.active = False
+            detail.label(text="%s - %s" % (identity.name, os.path.basename(path)))
+            layout.operator("dkr.extract_rom_assets", text="Choose Another ROM...",
+                            icon="FILE_FOLDER").filepath = ""
+        else:
+            button = column.row()
+            button.scale_y = 1.8
+            button.operator("dkr.extract_rom_assets", text="Extract from ROM...",
+                            icon="IMPORT").filepath = ""
+            detail = column.row()
+            detail.alignment = "CENTER"
+            detail.active = False
+            detail.label(text="USA 1.0 or 1.1 - .z64, .v64 or .n64")
+
+        _rule(layout)
+        layout.operator("dkr.use_asset_folder", text="I Already Have Extracted Assets",
+                        icon="FILE_FOLDER")
+        row = layout.row()
+        row.operator("dkr.decline_assets", text="Continue Without Assets", emboss=False)
+        lines(layout, context, "Objects become plain markers; retail textures, "
+              "skyboxes and Import Retail Track need the assets.", dim=True)
+
+    def _declined(self, context):
+        layout = self.layout
+        lines(layout, context, "No game assets: objects are drawn as markers.",
+              icon="INFO", dim=True)
+        layout.operator("dkr.setup_assets", text="Set Up Assets", icon="IMPORT")
+
+
+# ---------------------------------------------------------------------------
 # Level Type
 # ---------------------------------------------------------------------------
 
@@ -197,6 +290,10 @@ class DKR_PT_level_type(DkrPanel, bpy.types.Panel):
     bl_label = "Level Type"
     bl_idname = "DKR_PT_level_type"
     bl_order = 0
+
+    @classmethod
+    def poll(cls, context):
+        return not prefs.setup_pending(context)
 
     def draw_header_preset(self, context):
         key = _key(context)
@@ -1910,6 +2007,7 @@ CLASSES = (
     DKR_MT_challenge,
     DKR_MT_special,
     DKR_MT_default_vehicle,
+    DKR_PT_assets,
     DKR_PT_level_type,
     DKR_PT_track,
     DKR_PT_geometry,
