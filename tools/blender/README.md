@@ -9,7 +9,43 @@ This is Phase 1 of `docs/BLENDER_ADDON_PLAN.md` - remixing an existing track -
 plus all three steps of Phase 2: the track's own geometry can be reshaped, and
 geometry can be added and removed.
 
+## Where this lives
+
+Track Lab is developed inside [DKR-R](https://github.com/ThatGuyMcd/DKR-R), in
+`tools/blender/`, next to the runtime that plays the tracks it makes: the
+`.dkrmap` format, the minimap, the textures and the music are implemented on
+both sides and change together. The
+[Track Lab repository](https://github.com/leite-matheus/track-lab) is a mirror
+of that folder, kept in sync by `.github/workflows/sync.yml`, and is where the
+releases are published.
+
+- **Download** `track_lab.zip` from the Track Lab releases. Each release says
+  which DKR-R it needs; `CHANGELOG.md` has the same notes.
+- **Issues** can go to either repository.
+- **Changes** go to DKR-R as pull requests. The mirror is rebuilt from DKR-R
+  and cannot keep commits of its own.
+
+The commands in this file are run from a DKR-R checkout; in the mirror, drop
+the `tools/blender/` prefix.
+
+**Releasing a version.** Bump `version` in `track_lab/blender_manifest.toml`
+and `bl_info` in `track_lab/__init__.py`, and add its section at the top of
+`CHANGELOG.md`, in one commit (`test_version.py` holds the three together).
+Once that reaches DKR-R's `main`, the next sync releases it. There is nothing
+to tag.
+
+**Pushing the mirror by hand** - the first time, and whenever `sync.yml`
+itself changes, since the workflow's token may not push a workflow file:
+
+```
+git fetch origin                     # origin = ThatGuyMcd/DKR-R
+git subtree split --prefix=tools/blender origin/main -b track-lab-mirror
+git push https://github.com/leite-matheus/track-lab.git track-lab-mirror:main
+```
+
 ## Install
+
+Download `track_lab.zip` from the Track Lab releases, or build it:
 
 ```
 python tools/blender/generate_catalog.py     # needs the decomp checked out
@@ -58,7 +94,7 @@ extension or as a legacy addon.
 ## Use
 
 **Waterfalls.** Select sloping or vertical track faces in Edit Mode, then use
-**DKR > Water > Waterfalls > Add Waterfall**. Choose a game preset or **Use
+**Track Lab > Water > Waterfalls > Add Waterfall**. Choose a game preset or **Use
 Selected Texture** to use the image picked in Textures, including a custom PNG.
 Set speed in texels/s (default 44.53), Down/Up and the repetitions over the
 selected height. Under Appearance, choose Blended or Cutout, Pass-through
@@ -602,6 +638,8 @@ tools/blender/
   generate_rom_tables.py    builds data/rom_tables.json.gz from the decomp
   package_addon.py          builds the installable zip
   run_tests.py              runs every suite
+  CHANGELOG.md              each version's release notes
+  .github/workflows/sync.yml  the mirror's sync and release (runs in Track Lab only)
   track_lab/
     __init__.py             registration; imports bpy only inside register()
     gltf_io.py              object-map reader and writer
@@ -659,6 +697,7 @@ tools/blender/
     test_blender_music.py       the music controls, save/reopen and export
     test_rom_extract.py         ROM -> asset tree, vs the decomp's extraction
     test_blender_rom_assets.py  the Game Assets setup: gate, extract, skip, folder
+    test_version.py             one version in manifest, bl_info and CHANGELOG.md
     fixtures/                   two short test tones (generated, original)
 ```
 

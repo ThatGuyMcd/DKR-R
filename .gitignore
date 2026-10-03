@@ -110,14 +110,12 @@ runtime-recomp/RecompiledPatches/
 build/runtime-tools/
 runtime-recomp/build/
 
-# tools/blender holds the Track Lab addon and tools/launcher-html the
-# HTML/CSS/JS study of the launcher UI; both are tracked. Everything else
+# tools/blender holds the Track Lab addon and is tracked. Everything else
 # under tools/ is not. Git does not descend into an excluded directory, so the
 # directory itself must stay un-excluded for any rule inside it to apply - do
-# not restore a bare /tools/ rule, it makes these folders invisible again.
+# not restore a bare /tools/ rule, it makes this folder invisible again.
 /tools/*
 !/tools/blender/
-!/tools/launcher-html/
 
 # Blender addon build output, rebuilt by tools/blender/package_addon.py
 /tools/blender/track_lab.zip

@@ -36,6 +36,7 @@ PLAIN_SUITES = [
     "test_transparency.py", "test_water.py", "test_texture_scroll.py",
     "test_minimap.py", "test_music.py", "test_music_sequence.py",
     "test_midi_import.py", "test_checkpoint_order.py", "test_rom_extract.py",
+    "test_version.py",
 ]
 BLENDER_SUITES = ["test_blender_roundtrip.py", "test_blender_operators.py",
                   "test_blender_waterfalls.py", "test_blender_minimap.py",

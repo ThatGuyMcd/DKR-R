@@ -94,10 +94,10 @@ def _poll_job():
             found.asset_root = job.result  # invalidates via the update callback
             found.assets_declined = False
         prefs.invalidate()
-        print("DKR: extracted %s into %s in %.1f s"
+        print("Track Lab: extracted %s into %s in %.1f s"
               % (job.label, job.result, time.monotonic() - job.started))
     elif job.error:
-        print("DKR: extraction failed: %s" % job.error)
+        print("Track Lab: extraction failed: %s" % job.error)
     _redraw()
     return None
 
