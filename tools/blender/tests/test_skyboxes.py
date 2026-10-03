@@ -18,7 +18,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)
 
-from dkr_track_editor import assets, object_model, skyboxes  # noqa: E402
+from track_lab import assets, object_model, skyboxes  # noqa: E402
 
 from test_roundtrip import REPO_ROOT  # noqa: E402
 

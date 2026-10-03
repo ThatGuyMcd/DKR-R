@@ -112,6 +112,14 @@ struct PlayPageContext {
     bool& launch_requested;
 };
 
+// The launcher's ROM selection while a launcher frame is being drawn; the
+// in-game overlay has none.
+const PlayPageContext* g_launcher_rom = nullptr;
+
+enum class RomSelectResult { None, Switched, Add };
+// Defined in runtime_settings_ui.inl.
+RomSelectResult DrawRomSelect(const char* id, float width, bool compact, bool disabled, const char* reason);
+
 // Something that changes what START does, shown right above it.
 struct PlayNotice {
     std::string key;
@@ -126,14 +134,17 @@ struct PlayPageState {
     int last_frame = -100;
     bool was_ready = false;
     double arrived_at = -10.0;             // a ROM was just loaded (PaddockClock)
-    std::filesystem::path forgotten;       // FORGET can be undone while the page stays open
+    // The last ROM removed from the list and where it sat, so Remove can be
+    // undone while the page stays open.
+    std::filesystem::path removed;
+    std::size_t removed_index = 0;
     bool notices_known = false;            // nothing animates on page load
     std::set<std::string> shown;
     std::map<std::string, double> entered;
     std::optional<PlayNotice> leaving;
     float leaving_height = 0.0F;
     double leaving_at = -10.0;
-    enum class Focus { None, Start, Browse } focus = Focus::None;
+    enum class Focus { None, Start, Browse, Rom } focus = Focus::None;
 };
 PlayPageState g_play_page;
 
@@ -307,20 +318,28 @@ void DrawPlayLights(ImDrawList* draw, ImVec2 at, bool ready, double arrived_at) 
                           PaddockApply(green), 24);
 }
 
-void ForgetSelectedRom(const PlayPageContext& play) {
+void RemoveSelectedRom(const PlayPageContext& play) {
     const std::string key = RomPathKey(play.selected_rom);
+    const auto found = std::find_if(play.rom_catalog.begin(), play.rom_catalog.end(),
+                                    [&](const RomCatalogEntry& entry) { return entry.key == key; });
+    g_play_page.removed_index = found == play.rom_catalog.end()
+        ? play.rom_catalog.size() : static_cast<std::size_t>(found - play.rom_catalog.begin());
+    g_play_page.removed = play.selected_rom;
     std::erase_if(play.rom_catalog, [&](const RomCatalogEntry& entry) { return entry.key == key; });
     SaveRomCatalog(play.rom_catalog);
-    SaveLastRom({});
-    g_play_page.forgotten = play.selected_rom;
     play.selected_rom.clear();
     play.rom_ready = false;
     play.rom_status = kRomChoosePrompt;
     g_mod_browser_revision = 0U;
+    while (!play.rom_catalog.empty() && !play.rom_ready) {
+        const RomCatalogEntry next = play.rom_catalog.front();
+        play.rom_ready = SelectCatalogRom(next, play.selected_rom, play.rom_catalog, play.rom_status);
+    }
+    if (!play.rom_ready) SaveLastRom({});
 }
 
-void UndoForgetRom(const PlayPageContext& play) {
-    const std::filesystem::path path = std::exchange(g_play_page.forgotten, {});
+void UndoRemoveRom(const PlayPageContext& play) {
+    const std::filesystem::path path = std::exchange(g_play_page.removed, {});
     std::string error;
     dkr::runtime::rom::Identity identity{};
     if (!dkr::runtime::ValidateRomForLauncher(path, identity, error)) {
@@ -328,6 +347,17 @@ void UndoForgetRom(const PlayPageContext& play) {
         return;
     }
     CommitRomSelection(path, identity, play.selected_rom, play.rom_catalog, play.rom_status);
+    // Back where it was in the list.
+    const std::string key = RomPathKey(play.selected_rom);
+    const auto found = std::find_if(play.rom_catalog.begin(), play.rom_catalog.end(),
+                                    [&](const RomCatalogEntry& entry) { return entry.key == key; });
+    if (found != play.rom_catalog.end()) {
+        const RomCatalogEntry entry = *found;
+        play.rom_catalog.erase(found);
+        const std::size_t index = std::min(g_play_page.removed_index, play.rom_catalog.size());
+        play.rom_catalog.insert(play.rom_catalog.begin() + static_cast<std::ptrdiff_t>(index), entry);
+        SaveRomCatalog(play.rom_catalog);
+    }
     play.rom_ready = true;
 }
 
@@ -384,7 +414,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
                          state.last_frame != frame - 1;
     if (entered) {
         state.context = ImGui::GetCurrentContext();
-        state.forgotten.clear();
+        state.removed.clear();
         state.notices_known = false;
         state.shown.clear();
         state.entered.clear();
@@ -396,7 +426,6 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     state.last_frame = frame;
     if (play.rom_ready && !state.was_ready) {
         state.arrived_at = PaddockClock();
-        state.forgotten.clear();
         state.focus = PlayPageState::Focus::Start;
     }
     state.was_ready = play.rom_ready;
@@ -416,9 +445,10 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
                 "Load your ROM, then jump into the race.", width);
     PaddockGap(16.0F);
 
-    // The ROM pass: status, the file it points at, and the actions for it.
+    // The ROM pass: status, the ROM list, and the actions for it.
     {
         const bool ready = play.rom_ready;
+        const std::size_t count = play.rom_catalog.size();
         const ImVec2 at = ImGui::GetCursorScreenPos();
         ImDrawList* draw = ImGui::GetWindowDrawList();
         const float body_x = at.x + 2.0F + 24.0F + 42.0F + 20.0F;
@@ -426,34 +456,38 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         const PaddockType heading = PaddockSign(19.0F, 1.0F, 0.0F);
         const PaddockType file_type = PaddockReading(15.0F, true, 1.5F);
         const PaddockType meta_type = PaddockReading(14.0F, false, 1.5F);
-        std::string file;
+        PaddockType pick_label = PaddockReading(11.0F, true, 1.0F);
+        pick_label.tracking = 11.0F * 0.12F;
+        const std::string removed_note = state.removed.empty()
+            ? std::string{} : "Removed " + PathUtf8(state.removed.filename()) + " from your list.";
         std::string meta;
         unsigned meta_colour = 0x45595F;
-        if (ready) {
-            file = PathUtf8(play.selected_rom.filename());
-            meta = std::string("ROM version: v 1.") + (g_mod_browser_revision == 2U ? "1" : "0");
+        if (!removed_note.empty()) {
+            meta = removed_note;
+        } else if (!ready && !play.rom_status.empty() && play.rom_status != kRomChoosePrompt) {
+            meta = play.rom_status;
+            meta_colour = 0x8A2A17;
+        } else if (count == 1U) {
+            meta = "Add your other Game Pak revision to switch between them here.";
+        } else if (count > 1U) {
+            meta = std::to_string(count) + " ROMs in your list. Switch any time before you start.";
         } else {
-            file = "Load an original Diddy Kong Racing ROM to continue.";
-            if (!state.forgotten.empty()) {
-                meta = "Forgot " + PathUtf8(state.forgotten.filename()) + ".";
-            } else if (!play.rom_status.empty() && play.rom_status != kRomChoosePrompt) {
-                meta = play.rom_status;
-                meta_colour = 0x8A2A17;
-            } else {
-                meta = "Accepted files: .z64, .n64, .v64";
-            }
+            meta = "Accepted files: .z64, .n64, .v64";
         }
-        const char* primary = ready ? "CHANGE ROM...##rom" : "BROWSE FOR ROM...##rom";
-        const char* secondary = ready ? "Forget ROM##rom"
-                                      : (!state.forgotten.empty() ? "Undo##rom" : nullptr);
+        const char* primary = count > 0U ? "ADD A ROM...##rom" : "BROWSE FOR ROM...##rom";
+        const char* secondary = !state.removed.empty() ? "Undo##rom"
+                              : count > 0U && ready ? "Remove from list##rom" : nullptr;
         const float primary_width = std::max(240.0F, PaddockRaceButtonWidth(primary, 19.0F, 0.12F));
         const float secondary_width = secondary != nullptr ? PlayTextButtonWidth(secondary) : 0.0F;
         const bool actions_row = secondary == nullptr ||
                                  primary_width + 16.0F + secondary_width <= body_width;
         const float actions_height = actions_row ? 46.0F : 46.0F + 8.0F + 44.0F;
-        const float file_height = PaddockTextHeight(file_type, file, body_width);
+        const float pick_width = std::min(body_width, 560.0F);
+        const float pick_height = 4.0F + pick_label.line + 6.0F + 60.0F + 8.0F;
+        const std::string_view no_rom = "Load an original Diddy Kong Racing ROM to continue.";
+        const float detail_height = count > 0U ? pick_height : PaddockTextHeight(file_type, no_rom, body_width);
         const float meta_height = PaddockTextHeight(meta_type, meta, body_width);
-        const float body_height = 6.0F + heading.line + 8.0F + file_height + 2.0F +
+        const float body_height = 6.0F + heading.line + 8.0F + detail_height + 2.0F +
                                   meta_height + 16.0F + actions_height;
         const float height = 2.0F + 20.0F + std::max(112.0F, body_height) + 20.0F + 2.0F;
         const ImVec2 end{at.x + width, at.y + height};
@@ -478,28 +512,45 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         PaddockDrawRun(draw, heading, {body_x, y}, PaddockCol(ready ? 0x037A47U : 0xC0261BU),
                        title.data(), title.data() + title.size());
         y += heading.line + 8.0F;
-        PaddockTextStyle file_style;
-        file_style.colour = PaddockCol(0x091B24);
-        PaddockTextAt(draw, file_type, {body_x, y}, body_width, file, file_style);
-        if (ready && ImGui::IsMouseHoveringRect({body_x, y}, {body_x + body_width, y + file_height}) &&
-            ImGui::IsWindowHovered()) {
-            ImGui::SetTooltip("%s", PathUtf8(play.selected_rom).c_str());
+        // Focus rings on the cream pass are dark, like the study's outline.
+        ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0x091B24));
+        if (count > 0U) {
+            // The ROM list: every Game Pak DKR-R has accepted, one pick away.
+            y += 4.0F;
+            PaddockDrawRun(draw, pick_label, {body_x, y}, PaddockCol(0x3F5359), "GAME ROM", "GAME ROM" + 8);
+            y += pick_label.line + 6.0F;
+            ImGui::SetCursorScreenPos({body_x, y});
+            if (state.focus == PlayPageState::Focus::Rom) {
+                if (nav) ImGui::SetKeyboardFocusHere();
+                state.focus = PlayPageState::Focus::None;
+            }
+            const RomSelectResult picked = DrawRomSelect("play-rom", pick_width, false, lobby || launch_modal,
+                                                         "Locked while you are in a lobby.");
+            if (picked == RomSelectResult::Switched) {
+                state.removed.clear();
+                if (play.rom_ready) state.arrived_at = PaddockClock();
+                state.focus = PlayPageState::Focus::Rom;
+            }
+            y += 60.0F + 8.0F;
+        } else {
+            PaddockTextStyle file_style;
+            file_style.colour = PaddockCol(0x091B24);
+            PaddockTextAt(draw, file_type, {body_x, y}, body_width, no_rom, file_style);
+            y += detail_height;
         }
-        y += file_height + 2.0F;
+        y += 2.0F;
         PaddockTextStyle meta_style;
         meta_style.colour = PaddockCol(meta_colour);
         PaddockTextAt(draw, meta_type, {body_x, y}, body_width, meta, meta_style);
         y += meta_height + 16.0F;
 
-        // Focus rings on the cream pass are dark, like the study's outline.
-        ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0x091B24));
         ImGui::SetCursorScreenPos({body_x, y});
         if (state.focus == PlayPageState::Focus::Browse && !ready) {
             if (nav) ImGui::SetKeyboardFocusHere();
             state.focus = PlayPageState::Focus::None;
         }
         RaceButtonLook look;
-        look.fill = ready ? 0x0A6EA1U : 0x1AC2A3U;
+        look.fill = count > 0U ? 0x0A6EA1U : 0x1AC2A3U;
         look.hover_in = 0.12F;
         look.ellipsis_spread = 0.12F;
         if (PaddockRaceButton(primary, {primary_width, 46.0F}, look)) {
@@ -509,16 +560,18 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
             ImGui::SetCursorScreenPos(actions_row
                 ? ImVec2{body_x + primary_width + 16.0F, y + 1.0F}
                 : ImVec2{body_x - 8.0F, y + 46.0F + 8.0F});
-            if (ready) {
+            if (state.removed.empty()) {
                 ImGui::BeginDisabled(lobby || launch_modal);
                 if (PlayTextButton(secondary, true)) {
-                    ForgetSelectedRom(play);
-                    state.was_ready = false;
-                    state.focus = PlayPageState::Focus::Browse;
+                    RemoveSelectedRom(play);
+                    state.was_ready = play.rom_ready;
+                    state.focus = play.rom_ready ? PlayPageState::Focus::Rom : PlayPageState::Focus::Browse;
                 }
                 ImGui::EndDisabled();
             } else if (PlayTextButton(secondary, false)) {
-                UndoForgetRom(play);
+                UndoRemoveRom(play);
+                state.arrived_at = PaddockClock();
+                state.focus = PlayPageState::Focus::Rom;
             }
         }
         ImGui::PopStyleColor();

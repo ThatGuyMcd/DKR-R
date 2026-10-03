@@ -1,0 +1,73 @@
+# Runs in the Track Lab repository, where this folder is the root. In DKR-R it
+# sits under tools/blender/, where GitHub never reads it.
+#
+# The Track Lab repository is a read-only mirror of DKR-R's tools/blender/;
+# development happens in DKR-R. Every hour this splits that folder out of
+# DKR-R's main, fast-forwards main here to it, and releases the version the
+# manifest names if there is no release for it yet. The split is deterministic,
+# so the same DKR-R history always gives the same commits here.
+#
+# GITHUB_TOKEN may not push a change to a workflow file, so the run that would
+# bring an edit of this file fails. Push the mirror once by hand then (README,
+# "Where this lives"). GitHub also pauses scheduled workflows after 60 days
+# without a commit; re-enable it in the Actions tab.
+name: Sync from DKR-R
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: https://github.com/ThatGuyMcd/DKR-R.git
+  PREFIX: tools/blender
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Split tools/blender out of DKR-R
+        run: |
+          git clone --quiet --no-checkout "$UPSTREAM" upstream
+          cd upstream
+          git subtree split --prefix="$PREFIX" origin/main -b mirror
+          git checkout --quiet mirror
+
+      - name: Fast-forward main
+        working-directory: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Not forced: if main here ever has a commit DKR-R does not, stop
+        # rather than throw it away.
+        run: git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" mirror:refs/heads/main
+
+      - name: Release the manifest's version
+        working-directory: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' track_lab/blender_manifest.toml)
+          tag="v$version"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$tag is already released"
+            exit 0
+          fi
+          python3 tests/test_version.py
+          python3 package_addon.py --output dist
+          awk -v version="$version" '
+            index($0, "## " version) == 1 { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          gh release create "$tag" dist/track_lab.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$(git rev-parse HEAD)" \
+            --title "Track Lab $version" \
+            --notes-file notes.md

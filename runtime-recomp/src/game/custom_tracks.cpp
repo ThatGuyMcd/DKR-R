@@ -1,5 +1,7 @@
 #include "custom_tracks.hpp"
 
+#include "custom_music_sequence.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -21,7 +23,7 @@ using dkr::runtime::custom_tracks::MapSlot;
 using dkr::runtime::custom_tracks::Section;
 using dkr::runtime::custom_tracks::Track;
 
-constexpr std::size_t kSectionCount = 5U;
+constexpr std::size_t kSectionCount = 7U;
 
 std::size_t section_slot(Section section) {
     return static_cast<std::size_t>(section);
@@ -158,8 +160,32 @@ void write_be32(std::uint8_t* bytes, std::uint32_t value) {
 }
 
 // Declared here, defined after the section state it reads.
+std::int32_t own_entry_index(Section section, const std::string& track_id,
+                             std::uint32_t ordinal);
+
 std::int32_t own_texture_index(const std::string& track_id,
-                              std::uint32_t ordinal);
+                               std::uint32_t ordinal) {
+    return own_entry_index(Section::Textures3D, track_id, ordinal);
+}
+
+// The stored prefix's length when `bytes` is a LEVEL_MODELS payload whose
+// front the exporter left uncompressed, else 0. See resolve_model_textures.
+std::uint32_t stored_prefix(const std::uint8_t* bytes, std::size_t size) {
+    if (size < kStoredPrefixAt || bytes[4] != kContainerTag) {
+        return 0;
+    }
+    const std::uint32_t length =
+        static_cast<std::uint32_t>(bytes[6]) |
+        (static_cast<std::uint32_t>(bytes[7]) << 8);
+    const std::uint32_t complement =
+        static_cast<std::uint32_t>(bytes[8]) |
+        (static_cast<std::uint32_t>(bytes[9]) << 8);
+    if ((bytes[5] & 0x07U) != 0x00U || complement != ((~length) & 0xFFFFU) ||
+        kStoredPrefixAt + length > size) {
+        return 0;
+    }
+    return length;
+}
 
 // Substitute the real texture indices into one model payload, in place.
 //
@@ -249,6 +275,74 @@ void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
     }
 }
 
+// Point a model at the minimap sprite its own track shipped, in place.
+//
+// minimapSpriteIndex is in the model's header, inside the same stored prefix
+// as the texture table. A placeholder that cannot be resolved - the track was
+// installed after the once-per-boot sprite table was published - becomes
+// sprite 0 rather than an index load_sprite_info refuses, and the header that
+// names this model is served with its "no minimap" bit set (minimap_hidden),
+// so the HUD draws no minimap rather than a stray one.
+void resolve_model_minimap(std::uint8_t* bytes, std::size_t size,
+                           const std::string& track_id) {
+    const std::uint32_t length = stored_prefix(bytes, size);
+    if (length < dkr::runtime::custom_tracks::kModelMinimapSprite + 4U) {
+        return;
+    }
+    std::uint8_t* at = bytes + kStoredPrefixAt +
+                       dkr::runtime::custom_tracks::kModelMinimapSprite;
+    const auto identifier = static_cast<std::int32_t>(read_be32(at));
+    if (identifier < dkr::runtime::custom_tracks::kCustomSpriteIdBase ||
+        identifier >= dkr::runtime::custom_tracks::kCustomSpriteIdBase +
+                          dkr::runtime::custom_tracks::kCustomSpriteIdCount) {
+        return; // A retail sprite: the track kept the minimap it had.
+    }
+    const auto ordinal = static_cast<std::uint32_t>(
+        identifier - dkr::runtime::custom_tracks::kCustomSpriteIdBase);
+    const std::int32_t index =
+        own_entry_index(Section::Sprites, track_id, ordinal);
+    if (index < 0) {
+        write_be32(at, 0U);
+        std::fprintf(stderr,
+                     "[custom-tracks] %s: its minimap is not in this session's "
+                     "sprite table (installed after boot?); relaunch to show it\n",
+                     track_id.c_str());
+        return;
+    }
+    write_be32(at, static_cast<std::uint32_t>(index));
+    std::fprintf(stderr, "[custom-tracks] %s: minimap sprite resolved to %d\n",
+                 track_id.c_str(), index);
+}
+
+// Point a sprite at the 2D textures its own track shipped, in place. The
+// sprite table is published after the 2D texture table (tex_init_textures
+// loads them in that order), so the texture's index is known here.
+void resolve_sprite_texture(std::uint8_t* bytes, std::size_t size,
+                            const std::string& track_id) {
+    if (size < 2U) {
+        return;
+    }
+    const auto identifier = static_cast<std::int16_t>(
+        (static_cast<std::uint16_t>(bytes[0]) << 8) | bytes[1]);
+    if (identifier < dkr::runtime::custom_tracks::kCustomTexture2DIdBase ||
+        identifier >= dkr::runtime::custom_tracks::kCustomTexture2DIdBase +
+                          dkr::runtime::custom_tracks::kCustomTexture2DIdCount) {
+        return; // A retail texture; the author meant exactly that one.
+    }
+    const auto ordinal = static_cast<std::uint32_t>(
+        identifier - dkr::runtime::custom_tracks::kCustomTexture2DIdBase);
+    const std::int32_t index =
+        own_entry_index(Section::Textures2D, track_id, ordinal);
+    const std::uint32_t value = index < 0 ? 0U : static_cast<std::uint32_t>(index);
+    bytes[0] = static_cast<std::uint8_t>((value >> 8) & 0xFFU);
+    bytes[1] = static_cast<std::uint8_t>(value & 0xFFU);
+    if (index < 0) {
+        std::fprintf(stderr,
+                     "[custom-tracks] %s: its minimap sprite names a 2D texture "
+                     "that is not published\n", track_id.c_str());
+    }
+}
+
 const Track* track_owning(Section section, const Entry* entry) {
     for (const Track& track : g_tracks) {
         for (const Entry& candidate : track.entries) {
@@ -260,25 +354,24 @@ const Track* track_owning(Section section, const Entry* entry) {
     return nullptr;
 }
 
-// The index a track's `ordinal`-th own texture received in the published
-// texture table, or -1. Assumes g_mutex is held, which it is: the only caller
-// is resolve_model_textures, from inside build_extended_table.
-std::int32_t own_texture_index(const std::string& track_id,
-                              std::uint32_t ordinal) {
-    const SectionState& textures =
-        g_sections[section_slot(Section::Textures3D)];
-    if (!textures.built || track_id.empty()) {
-        // The texture table is published once, at boot. Not built means this
-        // level load is the first thing to grow a section, so there is no
-        // custom texture to name and saying so is the only safe answer.
+// The index a track's `ordinal`-th own entry in `section` received in the
+// published table, or -1. Assumes g_mutex is held, which it is: every caller
+// runs inside build_extended_table or takes the lock itself.
+std::int32_t own_entry_index(Section section, const std::string& track_id,
+                             std::uint32_t ordinal) {
+    const SectionState& table = g_sections[section_slot(section)];
+    if (!table.built || track_id.empty()) {
+        // The texture and sprite tables are published once, at boot. Not
+        // built means nothing of this track's is in them, and saying so is the
+        // only safe answer.
         return -1;
     }
-    for (const AddedEntry& texture : textures.added) {
-        if (texture.track_id == track_id && texture.within_track == ordinal) {
-            return static_cast<std::int32_t>(texture.index);
+    for (const AddedEntry& added : table.added) {
+        if (added.track_id == track_id && added.within_track == ordinal) {
+            return static_cast<std::int32_t>(added.index);
         }
     }
-    return -1; // The track ships fewer textures than the model names.
+    return -1; // The track ships fewer entries than it names.
 }
 
 } // namespace
@@ -315,6 +408,21 @@ std::int32_t resolved_level_id(const std::string& track_id) {
     std::scoped_lock lock(g_mutex);
     const auto found = g_resolved_level_ids.find(track_id);
     return found == g_resolved_level_ids.end() ? -1 : found->second;
+}
+
+std::optional<MusicInfo> music_for_level(std::int32_t level_id) {
+    std::scoped_lock lock(g_mutex);
+    if (level_id < 0) {
+        return std::nullopt;
+    }
+    for (const Track& track : g_tracks) {
+        const auto resolved = g_resolved_level_ids.find(track.id);
+        if (track.enabled && track.music && resolved != g_resolved_level_ids.end() &&
+            resolved->second == level_id) {
+            return track.music;
+        }
+    }
+    return std::nullopt;
 }
 
 std::vector<TrackSelectEntry> track_select_entries() {
@@ -457,6 +565,105 @@ bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
     return true;
 }
 
+bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes,
+                            SpriteInfo& info, std::string& error) {
+    // SpriteHeader in the asset tool's fileTypes/sprite.hpp.
+    constexpr std::size_t kHeaderSize = 12U;
+    info = SpriteInfo{};
+    if (bytes.size() < kHeaderSize + 2U) {
+        error = std::to_string(bytes.size()) + " bytes; a sprite is at least " +
+                std::to_string(kHeaderSize + 2U);
+        return false;
+    }
+    if (bytes.size() > kMaxSpritePayload) {
+        error = std::to_string(bytes.size()) + " bytes, and asset_load copies a "
+                "sprite whole into a " + std::to_string(kMaxSpritePayload) +
+                "-byte buffer";
+        return false;
+    }
+    const auto be16 = [&bytes](std::size_t at) {
+        return static_cast<std::uint16_t>((bytes[at] << 8) | bytes[at + 1U]);
+    };
+    info.base_texture = static_cast<std::int16_t>(be16(0));
+    info.frames = be16(2);
+    info.anchor_x = static_cast<std::int16_t>(be16(4));
+    info.anchor_y = static_cast<std::int16_t>(be16(6));
+    if (info.frames == 0U || info.frames > 0x7FFFU) {
+        error = "the sprite says it has " + std::to_string(info.frames) +
+                " frames";
+        return false;
+    }
+    if (kHeaderSize + info.frames + 1U > bytes.size()) {
+        error = "the sprite's frame table runs past the end of the payload";
+        return false;
+    }
+    if (bytes[kHeaderSize] != 0U) {
+        error = "the sprite's first frame does not start at its first texture";
+        return false;
+    }
+    for (std::uint32_t frame = 0; frame < info.frames; ++frame) {
+        if (bytes[kHeaderSize + frame + 1U] <= bytes[kHeaderSize + frame]) {
+            error = "sprite frame " + std::to_string(frame + 1U) +
+                    " has no textures";
+            return false;
+        }
+    }
+    info.textures = bytes[kHeaderSize + info.frames];
+    if (info.base_texture < 0) {
+        error = "the sprite's first texture is " +
+                std::to_string(info.base_texture);
+        return false;
+    }
+    return true;
+}
+
+std::int64_t model_minimap_sprite(const std::vector<std::uint8_t>& bytes) {
+    const std::uint32_t length = stored_prefix(bytes.data(), bytes.size());
+    if (length < kModelMinimapSprite + 4U) {
+        return -1;
+    }
+    return static_cast<std::int32_t>(
+        read_be32(bytes.data() + kStoredPrefixAt + kModelMinimapSprite));
+}
+
+bool minimap_hidden(std::uint32_t header_offset) {
+    std::scoped_lock lock(g_mutex);
+    const SectionState& headers = g_sections[section_slot(Section::LevelHeaders)];
+    const AddedEntry* header = nullptr;
+    for (const AddedEntry& added : headers.added) {
+        if (header_offset >= added.offset &&
+            header_offset < added.offset + added.size) {
+            header = &added;
+            break;
+        }
+    }
+    if (header == nullptr || header->track_id.empty()) {
+        return false; // Retail, or not a track's header.
+    }
+    const Track* track = nullptr;
+    for (const Track& candidate : g_tracks) {
+        if (candidate.id == header->track_id) {
+            track = &candidate;
+        }
+    }
+    if (track == nullptr || track->sprites.empty()) {
+        return false; // Keeps whatever minimap its model names.
+    }
+    for (std::uint32_t ordinal = 0; ordinal < track->sprites.size(); ++ordinal) {
+        if (own_entry_index(Section::Sprites, track->id, ordinal) < 0) {
+            return true;
+        }
+        const SpriteInfo& sprite = track->sprites[ordinal];
+        if (sprite.base_texture >= kCustomTexture2DIdBase &&
+            own_entry_index(Section::Textures2D, track->id,
+                            static_cast<std::uint32_t>(
+                                sprite.base_texture - kCustomTexture2DIdBase)) < 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 ArtworkSummary artwork(const std::string& track_id) {
     std::lock_guard lock(g_mutex);
     ArtworkSummary summary;
@@ -469,6 +676,7 @@ ArtworkSummary artwork(const std::string& track_id) {
             summary.translucent += texture.translucent ? 1U : 0U;
             summary.animated += texture.frames > 1U ? 1U : 0U;
         }
+        summary.minimap = !track.sprites.empty();
         break;
     }
     return summary;
@@ -879,6 +1087,14 @@ std::vector<std::int32_t> build_extended_table(
             resolve_model_textures(state.blob.data() + state.blob.size() -
                                        entry_size,
                                    entry_size, owner_id);
+            resolve_model_minimap(state.blob.data() + state.blob.size() -
+                                      entry_size,
+                                  entry_size, owner_id);
+        }
+        if (section == Section::Sprites && entry_size != 0U) {
+            resolve_sprite_texture(state.blob.data() + state.blob.size() -
+                                       entry_size,
+                                   entry_size, owner_id);
         }
         running += entry_size;
         result.push_back(static_cast<std::int32_t>(running));
@@ -950,6 +1166,8 @@ const std::unordered_map<std::string, Section>& section_names() {
         {"LEVEL_NAMES", Section::LevelNames},
         {"LEVEL_MODELS", Section::LevelModels},
         {"TEXTURES_3D", Section::Textures3D},
+        {"TEXTURES_2D", Section::Textures2D},
+        {"SPRITES", Section::Sprites},
     };
     return names;
 }
@@ -1097,6 +1315,325 @@ bool locate_unpacked_track(const std::filesystem::path& root,
     return true;
 }
 
+// The level header a track ships, if any (the last LEVEL_HEADERS entry).
+const Entry* level_header_of(const Track& track) {
+    const Entry* header = nullptr;
+    for (const Entry& entry : track.entries) {
+        if (entry.section == Section::LevelHeaders) {
+            header = &entry;
+        }
+    }
+    return header;
+}
+
+// The file a music descriptor names. It stays inside the track: no absolute
+// path, no "..", and after resolving symlinks it must still be under the
+// resolved track directory. It must end in `extension`, exist, be no larger
+// than `limit` and have the size the manifest records.
+bool resolve_music_file(const std::string& file, const char* extension,
+                        std::int64_t recorded, std::uint64_t limit,
+                        const std::filesystem::path& root,
+                        std::filesystem::path& resolved, std::uint64_t& bytes,
+                        std::string& error) {
+    if (file.empty() || file.find("..") != std::string::npos ||
+        std::filesystem::path(file).is_absolute() ||
+        file.find(':') != std::string::npos || file.front() == '/' ||
+        file.front() == '\\') {
+        error = "unsafe file path";
+        return false;
+    }
+    if (lower_extension(file) != extension) {
+        error = "file \"" + file + "\" does not end in " + extension;
+        return false;
+    }
+    std::error_code code;
+    const std::filesystem::path base = std::filesystem::weakly_canonical(root, code);
+    resolved = std::filesystem::weakly_canonical(root / std::filesystem::u8path(file), code);
+    const auto mismatch =
+        std::mismatch(base.begin(), base.end(), resolved.begin(), resolved.end());
+    if (code || mismatch.first != base.end() || resolved == base) {
+        error = "file \"" + file + "\" resolves outside the track";
+        return false;
+    }
+    if (!std::filesystem::is_regular_file(resolved, code)) {
+        error = "could not find " + file;
+        return false;
+    }
+    bytes = std::filesystem::file_size(resolved, code);
+    if (code || bytes == 0 || bytes > limit) {
+        error = file + " is empty, unreadable or over " +
+                (limit >= 1024U * 1024U ? std::to_string(limit / (1024U * 1024U)) + " MB"
+                                        : std::to_string(limit / 1024U) + " KB");
+        return false;
+    }
+    if (recorded != static_cast<std::int64_t>(bytes)) {
+        error = file + " is not the size the manifest records; export again";
+        return false;
+    }
+    return true;
+}
+
+bool is_sha256_hex(const std::string& digest) {
+    return digest.size() == 64 &&
+           std::all_of(digest.begin(), digest.end(), [](char c) {
+               return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+           });
+}
+
+// The carrier is the song this track's header starts. A descriptor naming
+// another would never activate, so the contradiction is refused.
+bool check_carrier(std::int64_t carrier, const Track& track, std::uint8_t& out,
+                   std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    const Entry* header = level_header_of(track);
+    if (header == nullptr || header->bytes.size() <= ct::kHeaderInstruments + 1) {
+        error = "a track with music must ship a level header";
+        return false;
+    }
+    if (carrier <= 0 || carrier > 255) {
+        error = "carrierSequence must be a game song (1-255)";
+        return false;
+    }
+    if (header->bytes[ct::kHeaderMusic] != carrier) {
+        error = "carrierSequence " + std::to_string(carrier) +
+                " is not the header's music (" +
+                std::to_string(header->bytes[ct::kHeaderMusic]) + ")";
+        return false;
+    }
+    out = static_cast<std::uint8_t>(carrier);
+    return true;
+}
+
+// manifest.music with format "audio-stream-v1": an MP3 or WAV the runtime
+// decodes and mixes over the silent carrier.
+bool parse_recording(const nlohmann::json& music, const std::filesystem::path& root,
+                     Track& track, std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    const auto text = [&music](const char* key) {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_string() ? found->get<std::string>()
+                                                          : std::string{};
+    };
+    const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_number_integer()
+            ? found->get<std::int64_t>() : fallback;
+    };
+
+    ct::MusicInfo info;
+    info.kind = ct::MusicKind::Recording;
+    const std::string codec = text("codec");
+    const char* extension = nullptr;
+    if (codec == "mp3") {
+        info.codec = ct::MusicCodec::Mp3;
+        extension = ".mp3";
+    } else if (codec == "wav") {
+        info.codec = ct::MusicCodec::Wav;
+        extension = ".wav";
+    } else {
+        error = "unknown codec \"" + codec + "\"; expected mp3 or wav";
+        return false;
+    }
+
+    const std::string file = text("file");
+    std::filesystem::path resolved;
+    if (!resolve_music_file(file, extension, number("bytes", -1), ct::kMaxMusicBytes, root,
+                            resolved, info.bytes, error)) {
+        return false;
+    }
+    info.file = resolved;
+
+    // The leading bytes must be the codec claimed. Decoding waits for a race,
+    // but a renamed or truncated file is caught here.
+    std::array<std::uint8_t, 12> head{};
+    {
+        std::ifstream in(resolved, std::ios::binary);
+        in.read(reinterpret_cast<char*>(head.data()), head.size());
+        if (in.gcount() != static_cast<std::streamsize>(head.size())) {
+            error = "could not read " + file;
+            return false;
+        }
+    }
+    const bool riff = std::memcmp(head.data(), "RIFF", 4) == 0 &&
+                      std::memcmp(head.data() + 8, "WAVE", 4) == 0;
+    const bool mpeg = std::memcmp(head.data(), "ID3", 3) == 0 ||
+                      (head[0] == 0xFF && (head[1] & 0xE0) == 0xE0);
+    if ((info.codec == ct::MusicCodec::Wav && !riff) ||
+        (info.codec == ct::MusicCodec::Mp3 && !mpeg)) {
+        error = file + " is not a" + std::string(info.codec == ct::MusicCodec::Wav
+                                                      ? " WAV" : "n MP3") + " file";
+        return false;
+    }
+
+    info.sha256 = text("sha256");
+    if (!is_sha256_hex(info.sha256)) {
+        error = "sha256 is not 64 lowercase hex digits";
+        return false;
+    }
+
+    const std::int64_t rate = number("sampleRate", 0);
+    const std::int64_t channels = number("channels", 0);
+    const std::int64_t frames = number("frames", 0);
+    if (rate < 8000 || rate > 192000 || channels < 1 || channels > 2 || frames <= 0) {
+        error = "sampleRate, channels or frames is missing or out of range";
+        return false;
+    }
+    info.sample_rate = static_cast<std::uint32_t>(rate);
+    info.channels = static_cast<std::uint32_t>(channels);
+    info.frames = static_cast<std::uint64_t>(frames);
+
+    const std::int64_t volume = number("volume", 100);
+    if (volume < 0 || volume > static_cast<std::int64_t>(ct::kMaxMusicVolume)) {
+        error = "volume must be 0-200";
+        return false;
+    }
+    info.volume = static_cast<std::uint32_t>(volume);
+
+    const std::int64_t loop_start = number("loopStartFrame", 0);
+    const std::int64_t loop_end = number("loopEndFrame", 0);
+    const std::int64_t end = loop_end > 0 ? loop_end : frames;
+    if (loop_start < 0 || loop_end < 0 || loop_end > frames || loop_start >= end) {
+        error = "the loop does not fit inside the music";
+        return false;
+    }
+    info.loop_start = static_cast<std::uint64_t>(loop_start);
+    info.loop_end = static_cast<std::uint64_t>(loop_end);
+
+    const std::string final_lap = text("finalLap");
+    if (final_lap == "speedup" || final_lap.empty()) {
+        info.final_lap_speedup = true;
+    } else if (final_lap == "constant") {
+        info.final_lap_speedup = false;
+    } else {
+        error = "unknown finalLap \"" + final_lap + "\"";
+        return false;
+    }
+
+    if (!check_carrier(number("carrierSequence", 0), track, info.carrier, error)) {
+        return false;
+    }
+    track.music = std::move(info);
+    return true;
+}
+
+// manifest.music with format "dkr-alcseq-v1": a native sequence the game's
+// own player runs. It is read and validated here - structure, loops, back
+// references and the 13 KB music buffer - so a song the player would mishandle
+// is refused at scan; which programs exist is only known in game, and is
+// checked again when the song is copied in.
+bool parse_sequence(const nlohmann::json& music, const std::filesystem::path& root,
+                    Track& track, std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    namespace cm = dkr::runtime::custom_music;
+    const auto text = [&music](const char* key) {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_string() ? found->get<std::string>()
+                                                          : std::string{};
+    };
+    const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
+        const auto found = music.find(key);
+        return found != music.end() && found->is_number_integer()
+            ? found->get<std::int64_t>() : fallback;
+    };
+
+    ct::MusicInfo info;
+    info.kind = ct::MusicKind::Sequence;
+    if (text("bank") != ct::kSequenceBank) {
+        error = "unknown instrument bank \"" + text("bank") + "\"; expected " +
+                ct::kSequenceBank;
+        return false;
+    }
+    const std::string file = text("file");
+    std::filesystem::path resolved;
+    if (!resolve_music_file(file, ".cseq", number("bytes", -1), ct::kMaxSequenceBytes, root,
+                            resolved, info.bytes, error)) {
+        return false;
+    }
+    info.file = resolved;
+    info.sha256 = text("sha256");
+    if (!is_sha256_hex(info.sha256)) {
+        error = "sha256 is not 64 lowercase hex digits";
+        return false;
+    }
+    auto bytes = std::make_shared<std::vector<std::uint8_t>>();
+    if (!read_file(resolved, *bytes) || bytes->size() != info.bytes) {
+        error = "could not read " + file;
+        return false;
+    }
+    const cm::SequenceCheck check = cm::validate_sequence(*bytes);
+    if (!check.ok()) {
+        error = file + ": " + check.message + " (" + check.code + ")";
+        return false;
+    }
+    info.sequence = std::move(bytes);
+
+    const std::int64_t tempo = number("tempoBpm", 0);
+    if (tempo < 1 || tempo > 255) {
+        // gSeqSoundTable holds a byte, and the final lap multiplies
+        // music_tempo() & 0xFF: a faster song would speed up wrongly.
+        error = "tempoBpm must be 1-255";
+        return false;
+    }
+    info.tempo_bpm = static_cast<std::uint8_t>(tempo);
+    const std::int64_t volume = number("volume", 110);
+    if (volume < 0 || volume > static_cast<std::int64_t>(ct::kMaxSequenceVolume)) {
+        // Over 127, base * slider overflows the player's 16-bit volume.
+        error = "volume must be 0-127";
+        return false;
+    }
+    info.volume = static_cast<std::uint32_t>(volume);
+    const std::int64_t reverb = number("reverb", 1);
+    if (reverb < 0 || reverb > 1) {
+        error = "reverb must be 0 or 1";
+        return false;
+    }
+    info.reverb = static_cast<std::uint8_t>(reverb);
+
+    if (!check_carrier(number("carrierSequence", 0), track, info.carrier, error)) {
+        return false;
+    }
+    // The header's channel mask is what the race enables when it starts the
+    // song (music_dynamic_set); one that disagrees with the descriptor would
+    // silently drop parts of the composition.
+    const std::int64_t mask = number("channelMask", 0xFFFF);
+    const Entry* header = level_header_of(track);
+    const std::uint16_t header_mask = static_cast<std::uint16_t>(
+        (header->bytes[ct::kHeaderInstruments] << 8) | header->bytes[ct::kHeaderInstruments + 1]);
+    if (mask < 0 || mask > 0xFFFF || mask != header_mask) {
+        error = "channelMask " + std::to_string(mask) +
+                " is not the header's instruments (" + std::to_string(header_mask) + ")";
+        return false;
+    }
+    info.channel_mask = static_cast<std::uint16_t>(mask);
+    track.music = std::move(info);
+    return true;
+}
+
+// Reads manifest.music into track.music. The descriptor is the addon's
+// (dkrmap.TrackPackage.set_music / set_sequence); everything it states that
+// the runtime acts on is checked here, so a bad package is named at scan
+// rather than going silent at the starting line. Needs the track's header
+// already parsed: the carrier must be the song that header actually starts.
+bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
+                 Track& track, std::string& error) {
+    namespace ct = dkr::runtime::custom_tracks;
+    if (!music.is_object()) {
+        error = "the descriptor is not an object";
+        return false;
+    }
+    const auto format = music.find("format");
+    const std::string name = format != music.end() && format->is_string()
+        ? format->get<std::string>() : std::string{};
+    if (name == ct::kMusicFormat) {
+        return parse_recording(music, root, track, error);
+    }
+    if (name == ct::kSequenceFormat) {
+        return parse_sequence(music, root, track, error);
+    }
+    error = "unknown format \"" + name + "\"";
+    return false;
+}
+
 // Parses one unpacked track. `.dkrmap` archives are unpacked into this form by
 // the importer; the directory form is also what an author edits in place, so
 // reload() can pick up an editor's save without a repack.
@@ -1114,8 +1651,17 @@ bool parse_track(const std::filesystem::path& root, Track& track,
         error = "manifest.json is not valid JSON";
         return false;
     }
-    if (manifest.value("schemaVersion", 0) != 1) {
+    // Schema 2 is schema 1 plus a "music" descriptor, and only a package that
+    // carries music uses it - so a runtime that predates music refuses such a
+    // track instead of quietly playing the carrier song in its place.
+    const int schema = manifest.value("schemaVersion", 0);
+    if (schema != 1 && schema != 2) {
         error = "unsupported schemaVersion";
+        return false;
+    }
+    if ((schema == 2) != manifest.contains("music")) {
+        error = schema == 2 ? "schemaVersion 2 without a music descriptor"
+                            : "a music descriptor needs schemaVersion 2";
         return false;
     }
 
@@ -1203,7 +1749,77 @@ bool parse_track(const std::filesystem::path& root, Track& track,
             }
             track.textures.push_back(info);
         }
+        // The minimap's picture is a texture like any other to load_texture,
+        // and its sprite is copied whole into a fixed buffer.
+        if (entry.section == Section::Textures2D) {
+            dkr::runtime::custom_tracks::TextureInfo info;
+            std::string reason;
+            if (!dkr::runtime::custom_tracks::inspect_texture_payload(
+                    entry.bytes, info, reason)) {
+                error = file + ": " + reason;
+                return false;
+            }
+            track.textures_2d.push_back(info);
+        }
+        if (entry.section == Section::Sprites) {
+            dkr::runtime::custom_tracks::SpriteInfo info;
+            std::string reason;
+            if (!dkr::runtime::custom_tracks::inspect_sprite_payload(
+                    entry.bytes, info, reason)) {
+                error = file + ": " + reason;
+                return false;
+            }
+            track.sprites.push_back(info);
+        }
         track.entries.push_back(std::move(entry));
+    }
+
+    // A placeholder that names more than the track ships would resolve to
+    // nothing, and the HUD would draw some other sprite or texture in its
+    // place. Refuse it here, where the author can be told which.
+    for (std::size_t index = 0; index < track.sprites.size(); ++index) {
+        const auto& sprite = track.sprites[index];
+        const std::int32_t base = sprite.base_texture;
+        if (base < dkr::runtime::custom_tracks::kCustomTexture2DIdBase) {
+            continue;
+        }
+        const std::int32_t first =
+            base - dkr::runtime::custom_tracks::kCustomTexture2DIdBase;
+        if (first >= dkr::runtime::custom_tracks::kCustomTexture2DIdCount ||
+            static_cast<std::size_t>(first) + sprite.textures >
+                track.textures_2d.size()) {
+            error = "sprite " + std::to_string(index + 1U) + " draws the track's "
+                    "2D texture " + std::to_string(first + 1) + " onward, and "
+                    "the track ships " + std::to_string(track.textures_2d.size());
+            return false;
+        }
+    }
+    for (const Entry& entry : track.entries) {
+        if (entry.section != Section::LevelModels) {
+            continue;
+        }
+        const std::int64_t named =
+            dkr::runtime::custom_tracks::model_minimap_sprite(entry.bytes);
+        if (named < dkr::runtime::custom_tracks::kCustomSpriteIdBase ||
+            named >= dkr::runtime::custom_tracks::kCustomSpriteIdBase +
+                         dkr::runtime::custom_tracks::kCustomSpriteIdCount) {
+            continue;
+        }
+        const std::int64_t ordinal =
+            named - dkr::runtime::custom_tracks::kCustomSpriteIdBase;
+        if (static_cast<std::size_t>(ordinal) >= track.sprites.size()) {
+            error = "the model names minimap sprite " +
+                    std::to_string(ordinal + 1) + " of the track's own, and the "
+                    "track ships " + std::to_string(track.sprites.size()) +
+                    " - its minimap would point nowhere";
+            return false;
+        }
+    }
+
+    if (manifest.contains("music") &&
+        !parse_music(manifest["music"], root, track, error)) {
+        error = "music: " + error;
+        return false;
     }
 
     // A header carries 0 in both object map fields, because the real indices

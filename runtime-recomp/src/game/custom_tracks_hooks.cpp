@@ -43,6 +43,11 @@ constexpr std::uint32_t kLevelHeadersSection = 23U;
 // pairs. textures_sprites.c reaches it as
 // asset_table_load(ASSET_TEXTURES_3D_TABLE) at boot and asset_load with
 // ASSET_TEXTURES_3D per texture, which is the same pair of hooks below.
+//
+// A minimap is the next two pairs along, data-then-table as well:
+// ASSET_TEXTURES_2D and its table are 4/5, and after the game text, menu text
+// and screens, ASSET_SPRITES and its table are 12/13. tex_init_textures loads
+// all three tables at boot, 2D first and sprites last.
 using dkr::runtime::custom_tracks::Section;
 
 struct SectionMapping {
@@ -53,6 +58,8 @@ struct SectionMapping {
 
 constexpr SectionMapping kSectionMappings[] = {
     {3U, 2U, Section::Textures3D},
+    {5U, 4U, Section::Textures2D},
+    {13U, 12U, Section::Sprites},
     {20U, 21U, Section::LevelObjectMaps},
     {22U, 23U, Section::LevelHeaders},
     {24U, 25U, Section::LevelNames},
@@ -415,6 +422,20 @@ bool apply_custom_payload(std::uint8_t* rdram,const AssetLoadRequest& request) {
                      "%d\n",
                      request.offset, fixup.label, index);
     }
+
+    // A track whose own minimap is not in this session's sprite table - it
+    // was installed after boot, and that table is published once - would draw
+    // sprite 0 with its dots placed for another picture. The header's own
+    // "no minimap" bit, the one hubs use, hides it until the next launch.
+    namespace tracks = dkr::runtime::custom_tracks;
+    if (request.size > static_cast<std::int32_t>(tracks::kHeaderMinimapFlags) &&
+        tracks::minimap_hidden(request.offset)) {
+        const auto at = static_cast<std::int32_t>(tracks::kHeaderMinimapFlags);
+        MEM_BU(at, rdram_address(request.destination)) |= tracks::kHeaderNoMinimap;
+        std::fprintf(stderr,
+                     "[custom-tracks] header at offset %u hides its minimap: "
+                     "relaunch to load it\n", request.offset);
+    }
     return true;
 }
 } // namespace
@@ -687,6 +708,14 @@ static void size_menu_display_lists(std::uint8_t* rdram) {
                  static_cast<int>(batches), static_cast<int>(g_menu_commands));
 }
 
+namespace {
+dkr::runtime::custom_tracks::LevelLoadObserver g_level_load_observer = nullptr;
+} // namespace
+
+void dkr::runtime::custom_tracks::set_level_load_observer(LevelLoadObserver observer) {
+    g_level_load_observer = observer;
+}
+
 // Called by the existing level_load scene-reset hook, before the level
 // allocates anything. Every load passes here - races, Track Lab and restarts,
 // and also the Track Select previews that load_level_game's hook never sees -
@@ -696,6 +725,9 @@ extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram,
     const auto level = static_cast<std::int32_t>(context->r4);
     grow_main_pool_for_level(rdram, level);
     prepare_track_heap(level);
+    if (g_level_load_observer != nullptr) {
+        g_level_load_observer(level);
+    }
 
     // A preview that outgrows the display list it is drawn into runs over the
     // matrices behind it. The boot sizing covers every course Track Select

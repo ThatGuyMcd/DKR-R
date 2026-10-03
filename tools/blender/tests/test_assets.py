@@ -20,7 +20,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     assets, catalog as catalog_module, object_model,
 )
 
@@ -273,6 +273,115 @@ def test_balloon_variants(tree):
     print("  balloon sprites: %s" % ", ".join(sorted(seen)))
 
 
+def test_sprite_frames(tree):
+    """A sprite frame is every tile of it, placed where the game puts it.
+
+    The N64 holds 4 KB of texture at a time, so a tree is cut into strips: a
+    palm top is five, a balloon three. Each strip's quad is one pixel short of
+    its texture each way and the next starts on its last row, so strips that
+    are drawn the way ``sprite_init_frame`` draws them meet exactly.
+    """
+    expectations = [
+        ("ASSET_OBJECT_PALMTREETOP", 5),
+        ("ASSET_OBJECT_WEAPONBALLOON", 3),
+        ("ASSET_OBJECT_GOLDENBALLOON", 3),
+        ("ASSET_OBJECT_BEACHTREE", 3),
+        ("ASSET_OBJECT_BLUEBERRYBUSH", 6),
+        ("ASSET_OBJECT_COIN", 1),
+    ]
+    for object_id, tiles in expectations:
+        model_id = tree.model_id_for(object_id)
+        frame = tree.sprite_frame(model_id) if model_id else None
+        label = object_id.replace("ASSET_OBJECT_", "")
+        if not check(frame is not None, "%s resolves a sprite frame" % label):
+            continue
+        check(len(frame.tiles) == tiles,
+              "%s draws %d tiles (got %d)" % (label, tiles, len(frame.tiles)))
+        left, right, bottom, top = frame.bounds()
+        check(left < 0 < right and bottom < top,
+              "%s's anchor sits inside its width (%r)" % (label, frame.bounds()))
+        print("  %-16s %d tile(s), %d x %d px, anchor %d,%d"
+              % (label, len(frame.tiles), right - left, top - bottom,
+                 frame.anchor_x, frame.anchor_y))
+
+    # Palm strips stack straight down: each top is the previous bottom.
+    frame = tree.sprite_frame(tree.model_id_for("ASSET_OBJECT_PALMTREETOP"))
+    if frame:
+        quads = [t.quad(frame.anchor_x, frame.anchor_y) for t in frame.tiles]
+        seams = [(quads[i][2], quads[i + 1][3]) for i in range(len(quads) - 1)]
+        check(all(a == b for a, b in seams),
+              "palm strips meet without a gap or an overlap (%r)" % seams)
+
+    # A balloon hangs from the end of its string, so the anchor is below it.
+    frame = tree.sprite_frame(tree.model_id_for("ASSET_OBJECT_WEAPONBALLOON"))
+    if frame:
+        check(frame.bounds()[2] >= 0,
+              "a balloon is drawn above its anchor (%r)" % (frame.bounds(),))
+
+
+def test_ground_zipper_decal(tree):
+    """A ground zipper is drawn as its shadow, the arrow on the road."""
+    header = tree.object_header("ASSET_OBJECT_GROUNDZIPPER")
+    if not check(header is not None, "the ground zipper has a header"):
+        return
+    shadow = tree.shadow_png(header)
+    check(shadow is not None and "ground_zipper" in os.path.basename(shadow).lower(),
+          "the ground zipper's shadow is its arrow (got %s)" % shadow)
+    check(abs(header.shadow_scale - 4.5) < 1e-6,
+          "its shadow scale is 4.5 (got %r)" % header.shadow_scale)
+    # Shadow group 0 loads no texture, whatever the header word says.
+    check(tree.shadow_png(tree.object_header("ASSET_OBJECT_PALMTREETOP")) is None,
+          "a palm top has no shadow texture to draw")
+
+
+def test_scale_rules():
+    """A size byte scales an object exactly as its ``obj_init_*`` does."""
+    catalog = catalog_module.load()
+    expected = {
+        "ASSET_OBJECT_PALMTREETOP": "radius",
+        "ASSET_OBJECT_WEAPONBALLOON": "scale",
+        "ASSET_OBJECT_GOLDENBALLOON": "scale",
+        "ASSET_OBJECT_GROUNDZIPPER": "scale",
+        "ASSET_OBJECT_AIRZIPPERS": "radius",
+        "ASSET_OBJECT_TTDOOR": "scale",
+    }
+    for object_id, name in expected.items():
+        object_type = catalog.get(object_id)
+        rule = object_type.scale_rule if object_type else None
+        if not check(rule is not None, "%s has a scale rule" % object_id):
+            continue
+        check(rule.field.name == name,
+              "%s is sized by %s (got %s)" % (object_id, name, rule.field.name))
+
+    for object_id in ("ASSET_OBJECT_CHECKPOINT", "ASSET_OBJECT_TRIGGER",
+                      "ASSET_OBJECT_EXIT", "ASSET_OBJECT_MIDIFADE"):
+        object_type = catalog.get(object_id)
+        check(object_type is None or object_type.scale_rule is None,
+              "%s's size byte is a gate, not a drawing scale" % object_id)
+
+    rule = catalog.get("ASSET_OBJECT_PALMTREETOP").scale_rule
+    check(rule.factor(64) == 1.0 and rule.factor(128) == 2.0,
+          "radius 64 is the header size and 128 twice it")
+    check(rule.factor(0) == 10 / 64.0, "a radius under 10 is drawn as 10")
+    check(rule.value_for(rule.factor(0), 0) == 0,
+          "a byte that already gives the scale is kept, even below the floor")
+    check(rule.value_for(1.5, 64) == 96, "scaling by 1.5 writes 96")
+    check(rule.value_for(9.0, 64) == 255, "a scale past the byte clamps to 255")
+    check(rule.value_for(0.01, 64) == 10, "a scale under the floor writes the floor")
+    # Every retail value survives the trip through a factor and back.
+    check(all(rule.value_for(rule.factor(v), v) == v for v in range(256)),
+          "every byte survives factor and back")
+
+    # A balloon's byte is catalogued already divided by 64, as 1.0 for 64.
+    rule = catalog.get("ASSET_OBJECT_WEAPONBALLOON").scale_rule
+    check(rule.factor(1.0) == 1.0 and rule.factor(2.0) == 2.0,
+          "a balloon's scale 1.0 is the header size (got %r)" % rule.factor(1.0))
+    check(rule.value_for(1.5, 1.0) == 1.5, "scaling a balloon by 1.5 writes 1.5")
+    check(all(rule.value_for(rule.factor(v / 64.0), v / 64.0) == v / 64.0
+              for v in range(256)),
+          "every balloon byte survives factor and back")
+
+
 def main():
     tree = find_tree()
     if tree is None:
@@ -289,6 +398,10 @@ def main():
     print()
     test_known_objects(tree)
     test_balloon_variants(tree)
+    print()
+    test_sprite_frames(tree)
+    test_ground_zipper_decal(tree)
+    test_scale_rules()
 
     print()
     if FAILURES:

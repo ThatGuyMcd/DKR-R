@@ -1,0 +1,6 @@
+# Only takes effect in the Track Lab repository, a mirror of this folder; in
+# DKR-R the root .gitignore already covers these.
+__pycache__/
+*.pyc
+/track_lab.zip
+/dist/

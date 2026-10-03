@@ -1,5 +1,6 @@
 #include "runtime_audio_controls.hpp"
 #include "audio_mix_policy.hpp"
+#include "custom_music.hpp"
 #include "game_payload.hpp"
 #include "runtime_enhancements.hpp"
 #include "revision_addresses.hpp"
@@ -64,13 +65,26 @@ void dkr::runtime::audio::set_nature_volume(float volume) {
 
 extern "C" void dkr_scale_sequence_player_volume(std::uint8_t* rdram,
                                                     recomp_context* context) {
-    if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
-        return;
-    }
     const std::uint32_t music_player = static_cast<std::uint32_t>(
         MEM_W(0, RdramAddress(kMusicPlayerAddress)));
-    if (music_player != 0U &&
-        static_cast<std::uint32_t>(context->r4) == music_player) {
+    if (music_player == 0U ||
+        static_cast<std::uint32_t>(context->r4) != music_player) {
+        return;
+    }
+    const bool modern = dkr::runtime::enhancements::modern_presentation_enabled();
+    const std::uint32_t authored = static_cast<std::uint32_t>(context->r5) & 0xFFFFU;
+    const std::uint32_t scaled = modern
+        ? dkr::runtime::audio::scale_authored_volume(
+              authored, g_music_applied.load(std::memory_order_acquire))
+        : authored;
+    // A custom track's music file takes the volume its silent carrier song
+    // would have had - every fade and slider included - in any presentation.
+    if (dkr::runtime::custom_music::intercept_music_volume(
+            rdram, static_cast<std::int16_t>(scaled))) {
+        context->r5 = 0;
+        return;
+    }
+    if (modern) {
         context->r5 = dkr::runtime::audio::scale_authored_volume(
             static_cast<std::uint32_t>(context->r5),
             g_music_applied.load(std::memory_order_acquire));

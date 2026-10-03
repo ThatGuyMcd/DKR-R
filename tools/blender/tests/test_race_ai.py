@@ -31,7 +31,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     catalog, gltf_io, level_header, level_header_template as template, race_ai,
 )
 

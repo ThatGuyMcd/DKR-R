@@ -20,6 +20,12 @@ at half and spreads colour into its holes; a blend keeps its soft alpha unless
 the format cannot; an opaque texture is solid; and a texture with no look - one
 added before transparency existed - encodes exactly as it always did.
 
+**A faded face is drawn in the second pass.** In the first it would hide what
+is behind it, and retail never asks it to: every faded batch retail leaves there
+fades to nothing. A texture of the track's own that is faded is written
+see-through with its pixels unchanged; faded calm water is flagged
+``RENDER_WATER``; anything else is counted so the export can say so.
+
 Run with any Python 3.8+; it does not need Blender.
 
     python tools/blender/tests/test_transparency.py
@@ -37,7 +43,7 @@ import zlib
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import assets, level_model, textures, transparency  # noqa: E402
+from track_lab import assets, level_model, textures, transparency  # noqa: E402
 
 REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 VANILLA = os.path.join(REPO_ROOT, "extern", "dkr-decomp", "assets", ".vanilla")
@@ -296,8 +302,206 @@ def test_encoding():
               "an IA8 texture asked to be opaque is a blend, which it is")
 
 
+def _loader_alpha(colour):
+    """What ``track_init_level_model`` makes of a vertex: ``(alpha, faded)``."""
+    r, g, b, a = colour
+    return (b, True) if r == 1 and g == 1 else (a, False)
+
+
+def test_opacity():
+    print("opacity, through the loader's vertex alpha")
+    check(transparency.opacity_byte(1.0) == 255
+          and transparency.opacity_byte(0.5) == 128
+          and transparency.opacity_byte(0.0) == 0
+          and transparency.opacity_byte(2.0) == 255,
+          "an opacity becomes a byte, clamped")
+    check(_loader_alpha(transparency.vertex_alpha_colour(77)) == (77, True),
+          "the colour written is the one the loader reads as that alpha")
+
+    from types import SimpleNamespace as NS
+    lit = (200, 180, 160, 255)
+    segment = NS(
+        colours=[lit] * 7,
+        batches=[NS(texture_index=0, vertex_offset=0, vertex_count=3, flags=0),
+                 NS(texture_index=1, vertex_offset=3, vertex_count=4, flags=0)])
+    model = NS(segments=[segment])
+    faded = transparency.apply_opacity(
+        model, lambda batch: {1: 100}.get(batch.texture_index))
+    check(faded == (1, 4), "only the faded batch is touched: %r" % (faded,))
+    check(segment.colours[:3] == [lit] * 3,
+          "the other batch keeps its baked light")
+    check(all(_loader_alpha(c) == (100, True) for c in segment.colours[3:]),
+          "every vertex of the faded one reads back as its alpha")
+    check(transparency.apply_opacity(model, lambda batch: 255) == (0, 0)
+          and transparency.apply_opacity(model, lambda batch: None) == (0, 0),
+          "full opacity, or none asked for, changes nothing")
+    check(transparency.draws_in_opaque_pass(transparency.RENDER_VTX_ALPHA,
+                                            False),
+          "the game still draws a faded batch over an opaque texture in the "
+          "first pass, so the export has to move it")
+
+    found = trees()
+    if not found:
+        print("  skip: no extracted assets for the file round trip")
+        return
+    from track_lab import level_model_encoder  # noqa: PLC0415
+    path = sorted(glob.glob(os.path.join(found[0].root, "levels", "models",
+                                         "*", "*.bin")))[0]
+    model = level_model.load(path)
+    target = model.segments[0].batches[0]
+    transparency.apply_opacity(
+        model, lambda batch: 64 if batch is target else None)
+    with tempfile.TemporaryDirectory() as folder:
+        out = os.path.join(folder, "faded.bin")
+        with open(out, "wb") as handle:
+            handle.write(level_model_encoder.pack(model))
+        again = level_model.load(out)
+    segment = again.segments[0]
+    window = segment.colours[target.vertex_offset:
+                             target.vertex_offset + target.vertex_count]
+    check(window and all(_loader_alpha(c) == (64, True) for c in window),
+          "the fade survives being written and read back")
+
+
+def test_faded_pass():
+    print("a faded face reaches the second pass")
+    codes = textures.FORMAT_CODES
+    check(transparency.faded_render_mode("OPAQUE", codes["RGBA16"])
+          == "TRANSPARENT"
+          and transparency.faded_render_mode("OPAQUE", codes["CI4"])
+          == "TRANSPARENT",
+          "an opaque texture the render mode decides for is written "
+          "see-through")
+    check(transparency.faded_render_mode("TRANSPARENT_2", codes["RGBA32"])
+          == "TRANSPARENT_2",
+          "a see-through one keeps its own render mode")
+    check(transparency.faded_render_mode("OPAQUE", codes["IA8"]) == "OPAQUE",
+          "IA8 is see-through whatever it says, so it is left alone")
+    check(transparency.faded_render_mode("OPAQUE", codes["I8"]) == "OPAQUE"
+          and transparency.faded_render_mode("OPAQUE", codes["CI8"])
+          == "OPAQUE",
+          "and a format no render mode makes see-through cannot be moved")
+
+    water = transparency.SURFACE_WATER_CALM
+    moved = transparency.faded_flags(0x1, False, water)
+    check(moved == 0x1 | transparency.RENDER_WATER
+          and not transparency.draws_in_opaque_pass(moved, False),
+          "faded calm water over an opaque texture is flagged RENDER_WATER, "
+          "which draws it in the second pass")
+    check(transparency.faded_flags(0x1, False, 0) == 0x1,
+          "anything but water keeps its flags - RENDER_WATER does more than "
+          "move it")
+    check(transparency.faded_flags(0x1, True, water) == 0x1,
+          "water over a see-through texture is already in the second pass")
+    check(transparency.faded_flags(transparency.RENDER_DECAL, False, water)
+          == transparency.RENDER_DECAL,
+          "a decal is drawn in the first pass whatever it carries, so it is "
+          "left alone")
+    check(transparency.faded_flags(-1, False, 0) == 0xFFFFFFFF,
+          "the flags come back unsigned, as the file stores them")
+
+    stays = transparency.fade_stays_in_first_pass
+    check(stays(codes["RGBA16"], "OPAQUE", False, 0),
+          "the panel warns about a faded opaque ROM texture on dry ground")
+    check(not stays(codes["RGBA16"], "OPAQUE", False, water)
+          and not stays(codes["RGBA16"], "TRANSPARENT", False, 0)
+          and not stays(codes["RGBA16"], "OPAQUE", True, 0),
+          "but not about calm water, a see-through texture, or one of the "
+          "track's own")
+    check(stays(codes["I8"], "OPAQUE", True, 0),
+          "an I8 texture of the track's own cannot be moved, so it warns")
+
+    from types import SimpleNamespace as NS
+    first = NS(texture_index=0, flags=0)
+    second = NS(texture_index=1, flags=0)
+    segment = NS(batches=[first, NS(texture_index=2, flags=0), second],
+                 opaque_batches=2)
+    model = NS(segments=[segment])
+    fades = {0: 100, 1: 100, 2: 255}
+    check(transparency.faded_in_opaque_pass(
+        model, lambda batch: fades.get(batch.texture_index)) == 1,
+          "a faded batch counts only while it sits in the first pass, and full "
+          "opacity is no fade")
+
+    found = trees()
+    if not found:
+        print("  skip: no extracted assets for retail's faded batches")
+        return
+    for tree in found:
+        first_pass = vanishing = 0
+        for path in sorted(glob.glob(os.path.join(tree.root, "levels", "models",
+                                                  "*", "*.bin"))):
+            model = level_model.load(path)
+            for segment in model.segments:
+                for index, batch in enumerate(segment.batches[
+                        :segment.opaque_batches]):
+                    window = segment.colours[batch.vertex_offset:
+                                             batch.vertex_offset
+                                             + batch.vertex_count]
+                    faded = [_loader_alpha(c)[0] for c in window
+                             if _loader_alpha(c)[1]]
+                    if faded:
+                        first_pass += 1
+                        vanishing += all(alpha == 0 for alpha in faded)
+        label = os.path.basename(tree.root)
+        check(first_pass > 0 and vanishing == first_pass,
+              "%s: all %d faded batches retail draws in the first pass fade to "
+              "nothing (%d do) - none is a see-through surface"
+              % (label, first_pass, vanishing))
+
+
+def test_faded_own_texture():
+    print("a faded texture of the track's own")
+    codes = textures.FORMAT_CODES
+    rgba = bytes([255, 255, 255, 255] * 2 + [255, 255, 255, 60] * 2
+                 + [0, 0, 0, 0] * 12)
+    with tempfile.TemporaryDirectory() as folder:
+        path = os.path.join(folder, "lake.png")
+        write_png(path, 4, 4, rgba)
+
+        solid = textures.CustomTexture(0, "lake", path, 4, 4, codes["RGBA16"],
+                                       transparency_mode=transparency.OPAQUE)
+        faded = textures.CustomTexture(0, "lake", path, 4, 4, codes["RGBA16"],
+                                       transparency_mode=transparency.OPAQUE,
+                                       faded=True)
+        check(faded.render_mode == "TRANSPARENT" and faded.translucent,
+              "faded, an opaque texture is see-through to the game")
+        check(faded.transparency == transparency.OPAQUE,
+              "while the look the author picked is still opaque")
+        payload = faded.encode()
+        check(payload[2] == 0x01 and solid.encode()[2] == 0x11,
+              "the header says TRANSPARENT RGBA16 only when faded")
+        check(payload[32:] == solid.encode()[32:]
+              and faded.texels() == solid.texels(),
+              "and the pixels are the opaque look's, so the HD pack keeps its "
+              "name")
+
+        legacy = textures.CustomTexture(0, "lake", path, 4, 4, codes["RGBA16"],
+                                        faded=True)
+        check(legacy.render_mode == "TRANSPARENT"
+              and legacy.pixel_mode == transparency.OPAQUE,
+              "a faded texture from before transparency is written "
+              "see-through and made solid")
+        check(legacy.encode()[32:] == solid.encode()[32:],
+              "so its alpha does not start to cut holes")
+        check(textures.CustomTexture(0, "lake", path, 4, 4,
+                                     codes["RGBA16"]).pixel_mode is None,
+              "unfaded, it still encodes exactly as it always did")
+
+        blend = textures.CustomTexture(0, "lake", path, 4, 4, codes["RGBA32"],
+                                       transparency_mode=transparency.BLEND,
+                                       faded=True)
+        check(blend.encode() == textures.CustomTexture(
+                  0, "lake", path, 4, 4, codes["RGBA32"],
+                  transparency_mode=transparency.BLEND).encode(),
+              "a texture already see-through is written as it was")
+
+
 def main():
     test_material_init_table()
+    test_opacity()
+    test_faded_pass()
+    test_faded_own_texture()
     test_pass_rule()
     test_flags_and_modes()
     test_suggest()

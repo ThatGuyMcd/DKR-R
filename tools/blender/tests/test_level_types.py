@@ -22,11 +22,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     assets, catalog as catalog_module, gltf_io, level_header,
     level_header_template as template, level_types as lt, validate,
 )
-from dkr_track_editor.gltf_io import ObjectMap  # noqa: E402
+from track_lab.gltf_io import ObjectMap  # noqa: E402
 
 from test_roundtrip import REPO_ROOT  # noqa: E402
 
@@ -158,6 +158,25 @@ def test_visibility_rules(catalog):
           "the coloured balloon is the rainbow magnet")
     check(lt.preset_for(lt.WEAPON_BALLOON, {"balloonType": "BALLOON_TYPE_TRAP"}) is green,
           "a placed balloon is named by its colour")
+
+    labels = [entry.label for entry in structure]
+    check("Loop Entry" in labels and "Loop Exit" in labels,
+          "the Structure tab offers the loop's entry and exit")
+    check("Modechange" not in labels and "modechange" not in labels,
+          "the mode changer is offered as the loop's two ends, not one generic row")
+    check(lt.preset("LOOP_ENTRY").fields == {"vehicleID": "VEHICLE_LOOPDELOOP"},
+          "the loop entry switches racers to the loop physics")
+    check(lt.preset_for(lt.MODECHANGE, {"vehicleID": "VEHICLE_CAR", "radius": 200})
+          is lt.preset("LOOP_EXIT"), "a placed mode changer back to the car is a loop exit")
+    entry_type = catalog.get(lt.MODECHANGE)
+    allowed = {value for field in entry_type.fields if field.name == "vehicleID"
+               for value in field.values}
+    check(all(value in allowed for p in lt.PRESETS if p.object_id == lt.MODECHANGE
+              for value in p.fields.values()),
+          "both loop presets write a vehicleID the catalogue knows")
+    text = lt.place_description(entry_type, lt.RACE, lt.preset("LOOP_ENTRY"))
+    check("vehicleID = VEHICLE_LOOPDELOOP" in text,
+          "a preset's tooltip names the fields it sets")
 
     text = lt.place_description(catalog.get("ASSET_OBJECT_EGGCREATOR"), lt.RACE)
     check("Egg Creator" in text or "eggs" in text, "a tooltip says what the type is")

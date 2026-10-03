@@ -10,10 +10,10 @@ import bpy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [os.path.dirname(HERE), HERE]
-import dkr_track_editor
-from dkr_track_editor import assets, catalog, gltf_io, level_model, scene, texture_scroll as scroll
-from dkr_track_editor.operators import custom_textures, geometry, geometry_export, textures, waterfall
-from dkr_track_editor.ui import panels
+import track_lab
+from track_lab import assets, catalog, gltf_io, level_model, scene, texture_scroll as scroll
+from track_lab.operators import custom_textures, geometry, geometry_export, textures, waterfall
+from track_lab.ui import panels
 from test_blender_operators import fresh, _draw_panel, _write_alpha_image, _refused, _select_faces
 
 
@@ -190,7 +190,7 @@ def run(directory):
 
 def retail():
     fresh()
-    from dkr_track_editor import prefs
+    from track_lab import prefs
     bpy.context.scene.dkr.asset_root = os.path.abspath(os.path.join(HERE, "../../../extern/dkr-decomp/assets/.vanilla/us.v77"))
     prefs.invalidate()
     tree = prefs.resolve(bpy.context)
@@ -208,7 +208,7 @@ def retail():
 
 
 def main():
-    dkr_track_editor.register()
+    track_lab.register()
     try:
         with tempfile.TemporaryDirectory(prefix="dkr-waterfalls-") as directory:
             try:
@@ -217,7 +217,7 @@ def main():
                 fresh()
         retail()
     finally:
-        dkr_track_editor.unregister()
+        track_lab.unregister()
 
 
 if __name__ == "__main__":

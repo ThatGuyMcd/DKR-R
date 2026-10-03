@@ -467,7 +467,7 @@ void DrawModCardBrowser(float requested_width, bool characters,
         return advanced != 0 ? "Filters (" + std::to_string(advanced) + ")" : std::string("Filters");
     }();
     const std::string filters_id = filters_label + "##filters";
-    const float filters_width = PaddockButtonWidth(filters_id.c_str(), PaddockButtonKind::Plain);
+    const float filters_width = PaddockButtonWidth(filters_id.c_str(), PaddockButtonKind::Settings);
     const float field_label = PaddockReading(11.0F, true, 1.5F).line + 6.0F;
     static const std::vector<std::string> kStates{"All", "Active", "Inactive"};
     static const std::vector<std::string> kSorts{"Name A-Z", "Name Z-A", "Largest first",
@@ -490,8 +490,8 @@ void DrawModCardBrowser(float requested_width, bool characters,
     };
     const auto filters_button = [&](float x, float y, float w) {
         ImGui::SetCursorScreenPos({x, y});
-        if (PaddockButton(filters_id.c_str(), g_mods_page.filters_open ? PaddockButtonKind::Selected
-                                                                       : PaddockButtonKind::Plain, w)) {
+        if (PaddockButton(filters_id.c_str(), g_mods_page.filters_open ? PaddockButtonKind::SettingsSelected
+                                                                       : PaddockButtonKind::Settings, w)) {
             g_mods_page.filters_open = !g_mods_page.filters_open;
             g_mods_page.filters_entered_at = PaddockClock();
         }
@@ -1100,10 +1100,13 @@ bool PaddockImportButton(const char* label, float forced_width = 0.0F) {
     const ImVec2 symbol{left, press.min.y + 13.0F};
     PaddockFill(draw, symbol, {symbol.x + 30.0F, symbol.y + 30.0F}, PaddockRound(5.0F),
                 PaddockCol(0x6F2B11));
-    const PaddockType plus = PaddockReading(26.0F, false, 1.0F);
-    const float plus_width = PaddockMeasure(plus, "+");
-    PaddockDrawRun(draw, plus, {symbol.x + (30.0F - plus_width) * 0.5F, symbol.y + 2.0F},
-                   PaddockCol(0xFFF3C9), "+", "+" + 1);
+    // Two centred strokes, which a font glyph's baseline would not give
+    // (.import-button-symbol).
+    const ImU32 ink = PaddockCol(0xFFF3C9);
+    PaddockFill(draw, {symbol.x + 8.0F, symbol.y + 14.0F}, {symbol.x + 22.0F, symbol.y + 16.0F},
+                PaddockRound(1.0F), ink);
+    PaddockFill(draw, {symbol.x + 14.0F, symbol.y + 8.0F}, {symbol.x + 16.0F, symbol.y + 22.0F},
+                PaddockRound(1.0F), ink);
     const float text_top = press.min.y + (56.0F - type.line) * 0.5F;
     PaddockDrawRun(draw, type, {symbol.x + 42.0F, text_top + 2.0F}, PaddockCol(0x632706),
                    label, end);

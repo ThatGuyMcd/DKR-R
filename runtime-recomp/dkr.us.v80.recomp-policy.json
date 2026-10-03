@@ -693,10 +693,22 @@
       "reason": "Attenuate the music sequence at its final player boundary without modifying DKR's authored base, slider or fade state. The 100 percent path remains bit-exact."
     },
     {
+      "function": "music_sequence_init",
+      "beforeVram": "0x800023B4",
+      "text": "extern void dkr_custom_music_sequence_loaded(uint8_t*, recomp_context*); dkr_custom_music_sequence_loaded(rdram, ctx);",
+      "reason": "After asset_load has filled the sequence buffer and before alCSeqNew reads it (s0 player, s1 buffer, s3 pending id). When the music player starts the carrier of a custom track that ships a native sequence, its bytes replace the retail song's, and the carrier's gSeqSoundTable row is swapped for the track's tempo, volume and reverb. Every other start is untouched."
+    },
+    {
+      "function": "music_sequence_init",
+      "beforeVram": "0x8000247C",
+      "text": "extern void dkr_custom_music_sequence_started(uint8_t*, recomp_context*); dkr_custom_music_sequence_started(rdram, ctx);",
+      "reason": "In the music-player branch, once sound_reverb_set has returned: the carrier's gSeqSoundTable row has been read for the last time in this call, so the retail row is restored before the jingle player's call or any later start can see the swap."
+    },
+    {
       "function": "sound_update_queue",
-      "beforeVram": "0x80000FBC",
+      "beforeVram": "0x80000FC4",
       "text": "extern void dkr_audio_mix_tick(uint8_t*, recomp_context*); dkr_audio_mix_tick(rdram, ctx);",
-      "reason": "Advance click-free live music gain ramps once per authored audio update and resubmit the current authored mix so launcher changes no longer wait for a new map."
+      "reason": "Advance click-free live music gain ramps once per authored audio update (in the shared epilogue, which both early exits and the BPM re-read reach) and resubmit the current authored mix so launcher changes no longer wait for a new map."
     },
     {
       "function": "sndp_set_param",
