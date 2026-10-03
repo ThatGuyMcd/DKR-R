@@ -1188,6 +1188,15 @@ class DKR_PT_object(LevelPanel, bpy.types.Panel):
             note = layout.box()
             note.label(text="Rotate in the viewport to set %s" % angle_field.name,
                        icon="DRIVER_ROTATIONAL_DIFFERENCE")
+        scale_rule = object_type.scale_rule
+        if scale_rule is not None:
+            factor = scene.world_scale(obj)
+            note = layout.box()
+            note.label(text="Scale in the viewport to set %s" % scale_rule.field.name,
+                       icon="FULLSCREEN_ENTER")
+            note.label(text="%s %s  (x%.3f of the header size)"
+                       % (scale_rule.field.name, scale_rule.value_for(
+                           factor, obj.get(scale_rule.field.name)), factor))
 
         from .. import texture_scroll
         is_scroll = object_id == texture_scroll.OBJECT_ID
@@ -1203,6 +1212,8 @@ class DKR_PT_object(LevelPanel, bpy.types.Panel):
             if is_hidden_raw(field, settings.show_raw):
                 continue
             if angle_field is not None and field is angle_field:
+                continue
+            if scale_rule is not None and field is scale_rule.field:
                 continue
             _draw_field(column, obj, field, object_type)
             drawn += 1
@@ -1376,11 +1387,23 @@ class DKR_PT_race_ai(LevelPanel, bpy.types.Panel):
                 info_box(layout, context, "With fewer than three checkpoints "
                          "the line folds back on itself.", icon="ERROR")
 
+        if race_ai_ops.set_counts(context):
+            box = layout.box()
+            box.operator("dkr.renumber_checkpoints", icon="LINENUMBERS_ON")
+            active = context.view_layer.objects.active
+            if race_ai_ops.is_checkpoint(active) and not int(active.get("isAltCheckpoint", 0)):
+                _dim_label(box, "From %s (%d): click the next ones in order"
+                           % (active.name, int(active.get("index", 0))), icon="INFO")
+            else:
+                lines(box, context, "Select a checkpoint whose number is right, "
+                      "then click the ones that follow it, in order: each "
+                      "becomes the next number.", dim=True)
+
         if route.duplicates:
             info_box(layout, context,
                      "Index %s is on more than one checkpoint. The game prints "
                      "an error over the race, and which one the bots take is "
-                     "down to spawn order." % ", ".join(
+                     "down to spawn order. Renumber Checkpoints fixes it." % ", ".join(
                          str(i if i < race_ai.ALTERNATE_OFFSET
                              else "%d (alternate)" % (i - race_ai.ALTERNATE_OFFSET))
                          for i in route.duplicates[:6]),

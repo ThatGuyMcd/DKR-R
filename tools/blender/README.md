@@ -383,10 +383,20 @@ How an object is drawn comes from its own header, so it matches the game:
 |---|---|
 | sprite billboard | 49 of the 85 types - trees, balloons, coins, bushes |
 | textured mesh | 32 types, built from the decoded object model |
-| marker | 4 types whose header points at a debug sphere, such as AI nodes |
+| ground decal | the ground zipper, whose arrow on the road is its shadow |
+| marker | types whose header points at a debug sphere, such as AI nodes |
 
 A weapon balloon reads its `balloonType` and shows that weapon's sprite, so a
 boost balloon and a trap balloon look different the way they do in game.
+
+Everything is drawn at the size the game draws it. A sprite frame is every
+strip of texture it is cut into - five for a palm top, three for a balloon -
+each placed where `sprite_init_frame` puts it, and a sprite pixel is
+`4/3 * tan(30°)` world units at the header's scale (the billboard is added in
+clip space under the default 60° camera). On top of the header's `scale`, the
+object's own size byte - `radius` on scenery, `scale` on balloons, zippers and
+doors - is the Blender object's scale, as each `obj_init_*` reads it:
+`max(byte, 10) / 64`.
 
 *Refresh Object Artwork* redraws everything, which is what to press after
 setting the asset path for the first time.
@@ -394,7 +404,9 @@ setting the asset path for the first time.
 **Edit fields.** Select an object and the DKR Object panel shows its fields with
 the right widget for each: a slider bounded by what the C type can hold, or a
 dropdown of an enum's members. Where a type has an angle, rotate the object in
-the viewport and the field follows.
+the viewport and the field follows; where it has a size byte, scale it with S
+and the byte follows the same way (a byte that already gives the scale shown is
+kept as it was, so an untouched retail object exports unchanged).
 
 `pad*` and `unk*` fields are hidden behind the **Show Raw Bytes** toggle. They
 exist so an entry encodes to the bytes the game expects, and nobody has
@@ -424,6 +436,25 @@ along. The line follows a checkpoint while you drag it, and the faint lines are
 the alternate route. The panel says when the vehicle shown loads a set with no
 checkpoints, when an index sits on two checkpoints, and when a set passes the 60
 the game loads.
+
+With the bot lines shown, every checkpoint of the set has its index drawn over
+it, so the order can be read straight off the track.
+
+**Renumber Checkpoints.** The game drives the gates in `index` order, wherever
+they are, so a checkpoint placed between two others only counts there once its
+index does - and the Place button gives it the lowest index free, which is
+usually somewhere else in the lap. Nothing guesses the order; you click it.
+Select a checkpoint whose number is right - say 22 - press *Renumber
+Checkpoints* (in the same panel), and click the checkpoint that should come
+next: it becomes 23. Keep clicking and each becomes the next number after the
+last. The checkpoints not clicked yet stay in their order after the clicked
+ones, renumbered on, so the set is one valid route at every click and the bot
+line shows it; the ones before the start keep their numbers. Alternate-route
+checkpoints follow the main checkpoint they pair with. While it runs, the
+numbered checkpoints show green, the one the next click follows yellow and the
+one under the mouse blue, with the number it would get. Backspace takes back
+the last click; Esc, Enter or right-click finishes, and Ctrl+Z afterwards
+undoes the whole pass.
 
 *Difficulty* sets the header's behaviour levels, 0 to 9, one for each point a
 save can be at (not won yet, race won, silver coins, Tracks mode, trophy race)

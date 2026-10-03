@@ -12,6 +12,12 @@ Two representations, decided by the object's header:
   object headers against 211 real models.
 * **3D model** - a mesh built from the decoded ``ObjectModel``, with the baked
   vertex colours it ships with.
+* **decal** - a flat square on the ground, for the one type whose look is its
+  shadow: a ground zipper's arrow.
+
+All three come out at the size the game draws them: the header's ``scale`` is
+built into the shared mesh, and the object's own size byte - ``radius / 64`` on
+a tree, ``scale / 64`` on a balloon - is the Blender object's scale.
 
 A type whose header points at a debug placeholder keeps the addon's own marker
 instead, because an AI node is a marker rather than a thing and a row of
@@ -29,6 +35,7 @@ a map with two hundred trees holds one tree mesh.
 
 from __future__ import annotations
 
+import math
 import os
 import traceback
 from typing import Dict, Optional
@@ -45,10 +52,29 @@ PROP_PREVIEW = "dkr_preview"
 #: here purely as a tuning hook.
 MODEL_SCALE = 1.0
 
-#: Sprite quads are sized from their texture. Retail sprites are 32-64 pixels
-#: for something a couple of car-widths across, so this converts pixels into
-#: world units that read correctly against track geometry.
-SPRITE_PIXELS_TO_UNITS = 1.6
+#: How many world units one sprite pixel covers, at a header scale of 1.
+#:
+#: Not a tuning value: it falls out of how the game draws a billboard.
+#: ``render_sprite_billboard`` loads ``mtxf_billboard(scale, aspect)`` in place
+#: of the whole model-view-projection matrix and the microcode adds each corner
+#: to the anchor's *clip-space* position, so a pixel is ``scale`` clip units
+#: across and ``scale * 4/3`` high. Undoing the projection - ``guPerspectiveF``
+#: at 60 degrees with a 4:3 aspect - turns both into the same world size at the
+#: anchor's depth: ``scale * 4/3 * tan(30 degrees)``, square pixels.
+#:
+#: The 60 is ``CAMERA_DEFAULT_FOV``, which 61 of the 65 retail level headers
+#: keep. A level with a narrower field of view draws its sprites smaller on
+#: screen than this, but the world they sit in shrinks with them.
+SPRITE_FOV_DEGREES = 60.0
+SPRITE_UNITS_PER_PIXEL = (320.0 / 240.0) * math.tan(math.radians(SPRITE_FOV_DEGREES) / 2.0)
+
+#: ``shadow_generate``: a shadow's half width is ``10 * shadow scale``, and the
+#: texture fills ``1 / sqrt(2)`` of that so it can turn with the object and
+#: still fit the square the game searches for ground in.
+SHADOW_HALF_WIDTH = 10.0 / math.sqrt(2.0)
+
+#: The game lays a shadow 2 units above the surface it is projected onto.
+SHADOW_LIFT = 2.0
 
 _mesh_cache: Dict[str, Optional[bpy.types.Mesh]] = {}
 _image_cache: Dict[str, Optional[bpy.types.Image]] = {}
@@ -132,44 +158,110 @@ def _in_rom_rows(image) -> bpy.types.Image:
     return copy
 
 
-def sprite_mesh(path: str, scale: float) -> Optional[bpy.types.Mesh]:
-    """An upright, texture-mapped quad showing one sprite.
+def sprite_mesh(frame, scale: float, name: str = "sprite") -> Optional[bpy.types.Mesh]:
+    """Upright, texture-mapped quads showing one sprite frame, at game size.
 
     A real mesh rather than an Empty with an image: an Empty's image is drawn
     only in the viewport, so a track rendered to a picture would lose every tree
     and balloon on it. A quad also takes a material, so the sprite's alpha cuts
     the background out properly.
 
-    The quad stands in the object's local XZ plane with its base at the origin,
-    which is where DKR anchors scenery, and Blender's XYZ euler applies Z last,
-    so the object's yaw still lives in ``rotation_euler.z`` and the angle field
-    keeps working untouched.
+    One quad per tile of the frame (:class:`assets.SpriteFrame`), each with its
+    own texture and placed where ``sprite_init_frame`` puts it, so a palm tree
+    shows all five of its strips rather than the top one. The object's origin is
+    the sprite's anchor, as in game - a balloon hangs from the end of its string.
+
+    The quads stand in the object's local XZ plane, and Blender's XYZ euler
+    applies Z last, so the object's yaw still lives in ``rotation_euler.z`` and
+    the angle field keeps working untouched.
     """
-    image = _image(path)
-    if image is None:
+    if frame is None or not frame.tiles:
         return None
 
-    key = "sprite:%s@%.4f" % (path, scale)
+    key = "sprite:%s@%.4f" % ("|".join(t.png for t in frame.tiles), scale)
     cached = _mesh_cache.get(key)
     if _alive(cached):
         return cached
 
-    width = (image.size[0] or 32) * SPRITE_PIXELS_TO_UNITS * scale
-    height = (image.size[1] or 32) * SPRITE_PIXELS_TO_UNITS * scale
-    half = width / 2.0
+    unit = SPRITE_UNITS_PER_PIXEL * scale
+    vertices, faces, uvs, materials, slots = [], [], [], [], []
+    for tile in frame.tiles:
+        image = _image(tile.png)
+        if image is None:
+            continue
+        left, right, bottom, top = tile.quad(frame.anchor_x, frame.anchor_y)
+        base = len(vertices)
+        vertices += [(left * unit, 0.0, bottom * unit), (right * unit, 0.0, bottom * unit),
+                     (right * unit, 0.0, top * unit), (left * unit, 0.0, top * unit)]
+        faces.append((base, base + 1, base + 2, base + 3))
+        # The game samples texels 0 to width - 1 across the quad, top row at
+        # the top: the last row and column sit on the edge, where the next tile
+        # starts on a copy of them.
+        u = (tile.width - 1) / float(tile.width)
+        v = 1.0 / tile.height
+        uvs.append(((0.0, v), (u, v), (u, 1.0), (0.0, 1.0)))
+        material = _sprite_material(image)
+        if material not in materials:
+            materials.append(material)
+        slots.append(materials.index(material))
+    if not faces:
+        return None
 
-    mesh = bpy.data.meshes.new("sprite_" + os.path.splitext(os.path.basename(path))[0])
-    mesh.from_pydata(
-        [(-half, 0.0, 0.0), (half, 0.0, 0.0), (half, 0.0, height), (-half, 0.0, height)],
-        [],
-        [(0, 1, 2, 3)],
-    )
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(vertices, [], faces)
     mesh.update()
+    for material in materials:
+        mesh.materials.append(material)
 
     uv = mesh.uv_layers.new(name="UVMap")
-    for index, coordinate in enumerate(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))):
-        uv.data[index].uv = coordinate
+    for polygon, corners, slot in zip(mesh.polygons, uvs, slots):
+        polygon.material_index = slot
+        for loop_index, coordinate in zip(polygon.loop_indices, corners):
+            uv.data[loop_index].uv = coordinate
 
+    _mesh_cache[key] = mesh
+    return mesh
+
+
+def decal_mesh(path: str, shadow_scale: float) -> Optional[bpy.types.Mesh]:
+    """A flat square on the ground showing a shadow texture, at game size.
+
+    For a ground zipper this is the whole object: the arrow on the road is its
+    shadow, projected onto the track by ``shadow_generate``. The texture there
+    is mapped by the object's yaw-relative position, so it turns with the
+    object; a quad in the object's local plane does the same.
+
+    The game drapes it over whatever track lies within 100 units below; this
+    lays it flat at the object's own height instead, lifted the 2 units the
+    game lifts it, so it reads on a flat road and never hides under one.
+    """
+    image = _image(path)
+    if image is None or shadow_scale <= 0.0:
+        return None
+    key = "decal:%s@%.4f" % (path, shadow_scale)
+    cached = _mesh_cache.get(key)
+    if _alive(cached):
+        return cached
+
+    half = SHADOW_HALF_WIDTH * shadow_scale
+    width, height = image.size[0] or 32, image.size[1] or 32
+    corners = ((-half, -half), (half, -half), (half, half), (-half, half))
+    # Map (x, z) as the game does: texel = local * (width / (2 * half)) + width / 2,
+    # for both axes, with texel row 0 at the picture's top.
+    vertices, coordinates = [], []
+    for x, z in corners:
+        vertices.append(tuple(scene.to_blender((x, SHADOW_LIFT, z))))
+        coordinates.append(((x / (2.0 * half)) + 0.5,
+                            1.0 - ((z * width / (2.0 * half)) + width / 2.0) / height))
+    # ``to_blender`` mirrors Z, which flips the winding; keep the face looking up.
+    order = (0, 3, 2, 1)
+
+    mesh = bpy.data.meshes.new("decal_" + os.path.splitext(os.path.basename(path))[0])
+    mesh.from_pydata(vertices, [], [order])
+    mesh.update()
+    uv = mesh.uv_layers.new(name="UVMap")
+    for loop_index, vertex in zip(mesh.polygons[0].loop_indices, order):
+        uv.data[loop_index].uv = coordinates[vertex]
     mesh.materials.append(_sprite_material(image))
     _mesh_cache[key] = mesh
     return mesh
@@ -464,41 +556,62 @@ DEBUG_TEXTURE_PREFIX = "debug_"
 
 
 def _resolve(object_id, fields, tree, catalog):
-    """``(kind, path, header)`` for one placed object, variant included."""
+    """``(kind, path, header, model_id)`` for one placed object, variant included.
+
+    A type whose model is a debug placeholder but which has a shadow texture is
+    drawn as that shadow - a ``"decal"`` - because that is all the game shows of
+    it: a ground zipper is an arrow on the road and nothing else.
+    """
     try:
         variant = variant_for(object_id, fields, catalog)
         kind, path, header = tree.preview_for(object_id, variant)
+        model_id = tree.model_id_for(object_id, variant)
     except Exception:  # noqa: BLE001 - artwork must never stop an import
         traceback.print_exc()
-        return "none", None, None
+        return "none", None, None, None
 
     if kind == "sprite" and path:
         if os.path.basename(path).startswith(DEBUG_TEXTURE_PREFIX):
-            return "none", None, header
-    return kind, path, header
+            shadow = tree.shadow_png(header)
+            if shadow:
+                return "decal", shadow, header, model_id
+            return "none", None, header, model_id
+    return kind, path, header, model_id
 
 
 def mesh_for(object_id: str, fields, tree, catalog):
     """The shared mesh datablock for this object, and what it is.
 
     Returns ``(mesh, kind)``. ``kind`` is ``"mesh"`` for a decoded object model,
-    ``"sprite"`` for a billboard quad, or ``"none"`` when the type has no artwork
-    - an AI node or a trigger, which are markers rather than things and stay
-    Empties.
+    ``"sprite"`` for a billboard, ``"decal"`` for a shadow laid on the ground,
+    or ``"none"`` when the type has no artwork - an AI node or a trigger, which
+    are markers rather than things and stay Empties.
 
-    Datablocks are shared between every instance of a type, so a map with two
+    Everything is built at the header's ``scale``. The per-object part of the
+    size - a tree's ``radius``, a balloon's ``scale`` - is the object's own
+    Blender scale (:func:`scene._apply_scale`), so the mesh can be shared:
+    datablocks are shared between every instance of a type, and a map with two
     hundred trees holds one tree mesh and one material.
     """
     if tree is None:
         return None, "none"
-    kind, path, header = _resolve(object_id, fields, tree, catalog)
+    kind, path, header, model_id = _resolve(object_id, fields, tree, catalog)
     if not path:
         return None, "none"
     scale = header.scale if header else 1.0
 
     if kind == "sprite":
-        mesh = sprite_mesh(path, scale)
+        try:
+            frame = tree.sprite_frame(model_id) if model_id else None
+        except Exception:  # noqa: BLE001 - artwork must never stop an import
+            traceback.print_exc()
+            frame = None
+        name = "sprite_" + (model_id or "").replace("ASSET_SPRITE_", "").lower()
+        mesh = sprite_mesh(frame, scale, name)
         return (mesh, "sprite") if mesh is not None else (None, "none")
+    if kind == "decal":
+        mesh = decal_mesh(path, header.shadow_scale if header else 0.0)
+        return (mesh, "decal") if mesh is not None else (None, "none")
     if kind == "mesh":
         mesh = _mesh(path, scale * MODEL_SCALE, tree)
         return (mesh, "mesh") if mesh is not None else (None, "none")

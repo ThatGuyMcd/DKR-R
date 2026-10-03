@@ -125,6 +125,85 @@ class Field:
         return list(self.default) if self.kind == "list" else self.default
 
 
+class ScaleRule:
+    """How one byte of a placed object sizes it in game.
+
+    Every ``obj_init_*`` below reads it the same way - mask, floor, divide - and
+    multiplies the header's own ``scale`` by the result::
+
+        radius = max(entry->radius & 0xFF, 10) / 64;
+        obj->trans.scale = obj->header->scale * radius;
+
+    So a tree with ``radius`` 128 is twice the size of one with 64, and anything
+    under 10 is drawn as 10.
+
+    The catalogue writes some of these bytes as they are (a tree's ``radius:
+    64``) and some already divided, through the field's ``divideBy`` hint (a
+    weapon balloon's ``scale: 1.0``). Both are the same byte underneath, and
+    the rule works on that byte.
+    """
+
+    __slots__ = ("field", "floor", "divisor")
+
+    def __init__(self, field: "Field", floor: int, divisor: float):
+        self.field = field
+        self.floor = floor
+        self.divisor = divisor
+
+    @property
+    def _stored_per_byte(self) -> float:
+        return float(self.field.hint.get("divideBy") or 1)
+
+    def raw(self, value: Any) -> int:
+        """The byte a stored field value holds."""
+        try:
+            return int(round(float(value) * self._stored_per_byte)) & 0xFF
+        except (TypeError, ValueError):
+            return DEFAULT_SCALE_BYTE
+
+    def factor(self, value: Any) -> float:
+        """The multiplier the game applies for a stored value."""
+        return max(self.raw(value), self.floor) / self.divisor
+
+    def value_for(self, factor: float, stored: Any = None) -> Any:
+        """The field value that gives ``factor``, keeping ``stored`` when it already does.
+
+        Keeping it is what makes an untouched object come back byte for byte: a
+        retail ``radius`` of 0 is drawn at the floor, and rewriting it as the
+        floor would change the entry without changing anything on screen.
+        """
+        if stored is not None and abs(self.factor(stored) - factor) < 0.5 / self.divisor:
+            return self.field.coerce(stored)
+        raw = max(self.floor, int(round(factor * self.divisor)))
+        if self.field.maximum is not None:
+            raw = min(int(round(self.field.maximum * self._stored_per_byte)), raw)
+        raw = min(0xFF, raw)
+        return self.field.coerce(raw / self._stored_per_byte)
+
+
+#: What a fresh object's scale byte means: the header's size, unchanged.
+DEFAULT_SCALE_BYTE = 64
+
+#: Which entry structs size their object from a byte, read off the decomp's
+#: ``obj_init_*``. Only these: a checkpoint's ``scale`` or a trigger's
+#: ``radius`` is the size of an invisible gate, not of anything drawn, and a
+#: MIDI fade's is a 16 bit region extent.
+SCALE_RULES = {
+    "LevelObjectEntry_Scenery": ("radius", 10),
+    "LevelObjectEntry_Torch_Mist": ("radius", 10),
+    "LevelObjectEntry_Lighthouse_RocketSignpost": ("radius", 10),
+    "LevelObjectEntry_AirZippers_WaterZippers": ("radius", 10),
+    "LevelObjectEntry_GroundZipper": ("scale", 10),
+    "LevelObjectEntry_CharacterFlag": ("radius", 10),
+    "LevelObjectEntry_Animation": ("scale", 1),
+    "LevelObjectEntry_GoldenBalloon": ("scale", 10),
+    "LevelObjectEntry_Door": ("scale", 10),
+    "LevelObjectEntry_TTDoor": ("scale", 10),
+    "LevelObjectEntry_WeaponBalloon": ("scale", 10),
+    "LevelObjectEntry_Log": ("radius", 10),
+}
+
+
 class ObjectType:
     """One of the 85 object types a retail track can contain."""
 
@@ -165,6 +244,17 @@ class ObjectType:
             if field.is_angle:
                 return field
         return None
+
+    @property
+    def scale_rule(self) -> Optional[ScaleRule]:
+        """How a viewport scale maps onto this type's size byte, if it has one."""
+        rule = SCALE_RULES.get(self.struct or "")
+        if rule is None:
+            return None
+        field = self.field(rule[0])
+        if field is None or field.kind not in ("int", "float"):
+            return None
+        return ScaleRule(field, rule[1], 64.0)
 
     def fresh_fields(self) -> Dict[str, Any]:
         """The ``extras`` a newly placed object of this type should carry.

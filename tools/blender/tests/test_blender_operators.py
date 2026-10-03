@@ -763,6 +763,174 @@ def _texture_names(obj):
     return ", ".join(names) or "<none>"
 
 
+def test_artwork_at_game_size():
+    """Sprites show every tile, at the size the game draws them, and scale.
+
+    A palm top is five strips of texture and a balloon three; drawing only the
+    first left a sliver. The size comes from the header scale, the game's pixel
+    to world ratio, and the object's own size byte - which the Blender scale
+    now carries both ways.
+    """
+    print("artwork at game size")
+    from dkr_track_editor import prefs, preview
+
+    fresh()
+    tree = prefs.resolve(bpy.context)
+    if tree is None:
+        print("  skip: no extracted decomp assets to draw from")
+        return
+    catalog = catalog_module.load()
+
+    bpy.ops.dkr.place_object(object_id="ASSET_OBJECT_PALMTREETOP")
+    palm = bpy.context.active_object
+    check(len(palm.data.polygons) == 5,
+          "a palm top draws its five strips (got %d)" % len(palm.data.polygons))
+    frame = tree.sprite_frame(tree.model_id_for("ASSET_OBJECT_PALMTREETOP"))
+    left, right, _bottom, _top = frame.bounds()
+    expected = (right - left) * preview.SPRITE_UNITS_PER_PIXEL * 3.0
+    xs = [v.co.x for v in palm.data.vertices]
+    check(abs((max(xs) - min(xs)) - expected) < 1e-3,
+          "a palm top is %.1f units across (got %.1f)" % (expected, max(xs) - min(xs)))
+    check(tuple(palm.scale) == (1.0, 1.0, 1.0),
+          "a fresh palm top's radius 64 is the header size (got %r)" % (tuple(palm.scale),))
+
+    bpy.ops.dkr.place_object(object_id="ASSET_OBJECT_WEAPONBALLOON")
+    balloon = bpy.context.active_object
+    check(len(balloon.data.polygons) == 3,
+          "a balloon draws its three strips (got %d)" % len(balloon.data.polygons))
+    check(min(v.co.z for v in balloon.data.vertices) >= 0.0,
+          "a balloon hangs above its anchor, string at the bottom")
+
+    bpy.ops.dkr.place_object(object_id="ASSET_OBJECT_GROUNDZIPPER")
+    zipper = bpy.context.active_object
+    check(zipper.get("dkr_preview") == "decal",
+          "a ground zipper is drawn as its arrow decal (got %s)"
+          % zipper.get("dkr_preview"))
+    if zipper.type == "MESH":
+        check("ground_zipper" in _texture_names(zipper),
+              "the decal shows the zipper arrow (got %s)" % _texture_names(zipper))
+        xs = [v.co.x for v in zipper.data.vertices]
+        check(abs((max(xs) - min(xs)) - 2 * preview.SHADOW_HALF_WIDTH * 4.5) < 1e-3,
+              "the arrow is %.1f units across (got %.1f)"
+              % (2 * preview.SHADOW_HALF_WIDTH * 4.5, max(xs) - min(xs)))
+        check(all(abs(v.co.z - preview.SHADOW_LIFT) < 1e-6 for v in zipper.data.vertices),
+              "the arrow lies flat on the ground")
+
+    # Scaling in the viewport is what writes the size byte; untouched objects
+    # keep theirs exactly.
+    palm.scale = (2.0, 2.0, 2.0)
+    balloon.scale = (1.5, 1.5, 1.5)
+    bpy.context.view_layer.update()
+    exported = {o.object_id: o for o in scene.export_object_map(bpy.context, catalog).objects}
+    check(exported["ASSET_OBJECT_PALMTREETOP"].fields.get("radius") == 128,
+          "a palm top scaled 2x writes radius 128 (got %r)"
+          % exported["ASSET_OBJECT_PALMTREETOP"].fields.get("radius"))
+    check(exported["ASSET_OBJECT_WEAPONBALLOON"].fields.get("scale") == 1.5,
+          "a balloon scaled 1.5x writes scale 1.5 (got %r)"
+          % exported["ASSET_OBJECT_WEAPONBALLOON"].fields.get("scale"))
+    zipper_type = catalog.get("ASSET_OBJECT_GROUNDZIPPER")
+    check(exported["ASSET_OBJECT_GROUNDZIPPER"].fields.get("scale")
+          == zipper_type.field("scale").fresh(),
+          "an unscaled zipper keeps its fresh scale byte")
+
+    # And the byte comes back as the scale on the way in.
+    placed = scene.read_object(palm, catalog)
+    root = scene.ensure_root(bpy.context)
+    again = scene.create_empty(bpy.context, placed, catalog, root, tree)
+    check(abs(again.scale.x - 2.0) < 1e-9,
+          "radius 128 imports as a 2x scale (got %r)" % again.scale.x)
+
+
+def test_renumber_checkpoints():
+    """Renumber a set by naming the gates in order, from one that is right.
+
+    The click session hands the operator exactly this: the gate to start from
+    and the gates clicked after it. Each becomes the next number; the gates not
+    clicked follow in their order; the ones before keep theirs.
+    """
+    print("renumber checkpoints")
+    from dkr_track_editor import prefs, race_ai, validate
+    from dkr_track_editor.operators import race_ai as race_ai_ops
+
+    fresh()
+    check(race_ai_ops._LABEL_HANDLE is not None,
+          "the checkpoint numbers' draw handler is registered")
+    tree = prefs.resolve(bpy.context)
+    if tree is None:
+        print("  skip: no extracted decomp assets")
+        return
+    lake = next((l for l in tree.levels() if l.label == "Ancient Lake"), None)
+    if lake is None:
+        print("  skip: no Ancient Lake")
+        return
+    bpy.ops.dkr.import_level(level=lake.name, with_geometry=False)
+    catalog = catalog_module.load()
+
+    def car_set():
+        gates = [o for o in race_ai_ops.checkpoint_empties(bpy.context)
+                 if int(o.get("vehicleType", 0)) == 0 and not int(o.get("isAltCheckpoint", 0))]
+        return sorted(gates, key=lambda o: int(o["index"]))
+
+    def unpaired():
+        exported = scene.export_object_map(bpy.context, catalog)
+        return len(race_ai.build_route(exported.objects, 0).unpaired)
+
+    bpy.context.view_layer.objects.active = None
+    check(not bpy.ops.dkr.renumber_checkpoints.poll(),
+          "it needs a checkpoint selected to start from")
+
+    gates = car_set()
+    paired_before = unpaired()
+    anchor, after = gates[5], gates[6]
+    before_numbers = {o.name: int(o["index"]) for o in gates[:6]}
+    bpy.context.scene.cursor.location = (anchor.matrix_world.translation
+                                         + after.matrix_world.translation) / 2
+    bpy.ops.dkr.place_object(object_id=race_ai.CHECKPOINT)
+    new = bpy.context.active_object
+    check(car_set().index(new) != 6,
+          "the Place button's index puts it elsewhere in the lap (%d)" % int(new["index"]))
+
+    bpy.context.view_layer.objects.active = anchor
+    check(bpy.ops.dkr.renumber_checkpoints.poll(), "a selected checkpoint can start it")
+    base = int(anchor["index"])
+    bpy.ops.dkr.renumber_checkpoints(anchor=anchor.name, sequence=new.name)
+    order = [o.name for o in car_set()]
+    check(int(new["index"]) == base + 1,
+          "the checkpoint clicked after %d becomes %d (got %d)"
+          % (base, base + 1, int(new["index"])))
+    check(order[order.index(new.name) + 1] == after.name and int(after["index"]) == base + 2,
+          "the one that followed the start comes next, as %d (got %d)"
+          % (base + 2, int(after["index"])))
+    check({o.name: int(o["index"]) for o in car_set()[:6]} == before_numbers,
+          "the checkpoints before the start keep their numbers")
+    check(len({int(o["index"]) for o in car_set()}) == len(car_set()),
+          "no number is used twice")
+
+    exported = scene.export_object_map(bpy.context, catalog)
+    issues = [i for i in validate.validate(exported) if i.severity == validate.ERROR
+              and i.object_id == race_ai.CHECKPOINT]
+    check(not issues, "no checkpoint errors after renumbering (%s)"
+          % [i.message for i in issues])
+    check(unpaired() == paired_before,
+          "alternate checkpoints keep their pairs (%d unpaired, %d before)"
+          % (unpaired(), paired_before))
+
+    # Iterating: the next named goes after the last one, not after the start.
+    second, third = car_set()[9], car_set()[8]
+    bpy.ops.dkr.renumber_checkpoints(anchor=new.name,
+                                     sequence="%s,%s" % (second.name, third.name))
+    check((int(second["index"]), int(third["index"])) == (base + 2, base + 3),
+          "each one named goes after the last (%d, %d)"
+          % (int(second["index"]), int(third["index"])))
+
+    # A gate on the alternate route cannot start a pass; its main gate does.
+    alternate = next((o for o in race_ai_ops.checkpoint_empties(bpy.context)
+                      if int(o.get("isAltCheckpoint", 0))), None)
+    if alternate is not None:
+        result = bpy.ops.dkr.renumber_checkpoints(anchor=alternate.name, sequence=new.name)
+        check(result == {"CANCELLED"}, "an alternate checkpoint is refused as the start")
+
+
 def test_balloon_variants():
     """A balloon's type has to pick the matching sprite, not a neighbouring one.
 
@@ -5028,6 +5196,8 @@ def main():
         test_snapping_to_elements()
         test_place_shows_artwork()
         test_balloon_variants()
+        test_artwork_at_game_size()
+        test_renumber_checkpoints()
         test_slots()
         test_partial_export_is_safe()
         test_geometry_colour_edit()

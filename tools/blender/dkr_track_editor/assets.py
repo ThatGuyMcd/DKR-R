@@ -55,7 +55,7 @@ class ObjectHeader:
     """One entry from ``objects/headers/*.json``."""
 
     __slots__ = ("asset_id", "name", "model_type", "models", "scale", "behavior",
-                 "shadow_scale", "path")
+                 "shadow_scale", "shadow_group", "shadow_texture", "path")
 
     def __init__(self, asset_id, raw, path):
         self.asset_id = asset_id
@@ -66,6 +66,11 @@ class ObjectHeader:
         self.scale = float(raw.get("scale", 1.0) or 1.0)
         self.behavior = raw.get("behavior", "")
         self.shadow_scale = float(raw.get("shadow-scale", 0.0) or 0.0)
+        #: ``init_object_shadow`` loads a shadow texture only for a non-zero
+        #: group, from the header word at 0x34 the extraction has not named.
+        self.shadow_group = int(raw.get("shadow-group", 0) or 0)
+        unknown = raw.get("unknown") or {}
+        self.shadow_texture = int(unknown.get("unk34", -1)) if "unk34" in unknown else -1
 
     @property
     def is_sprite(self) -> bool:
@@ -79,6 +84,75 @@ class ObjectHeader:
         return "ObjectHeader(%r, %s, %d model(s))" % (
             self.name, self.model_type, len(self.models)
         )
+
+
+class SpriteTile:
+    """One texture of a sprite frame, where the game puts it.
+
+    ``x`` and ``y`` are the tile's top left corner in the frame's own pixel
+    space, from the texture's ``sprite-x`` and ``sprite-y``: Y grows downwards,
+    as in the picture.
+    """
+
+    __slots__ = ("png", "x", "y", "width", "height")
+
+    def __init__(self, png, x, y, width, height):
+        self.png = png
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+
+    def quad(self, anchor_x: int, anchor_y: int):
+        """``(left, right, bottom, top)`` in pixels from the anchor, Y up.
+
+        Exactly the corners ``sprite_init_frame`` writes, which is one pixel
+        short of the texture each way: the quad spans ``width - 1`` by
+        ``height - 1``. That is not a slip to correct - the next tile down
+        starts on the last row of this one, and the shortfall is what makes the
+        two meet without a seam or an overlap.
+        """
+        left = self.x - anchor_x
+        top = anchor_y - self.y
+        return (left, left + self.width - 1, top - self.height, top - 1)
+
+
+class SpriteFrame:
+    """Everything one frame of an ``ASSET_SPRITE_*`` draws.
+
+    A frame is not one picture. A palm tree is five textures stacked down its
+    height and a balloon is three - two halves and the string - because the
+    N64's texture memory holds 4 KB, so anything bigger is cut into strips.
+    Drawing only the first strip is what left a tree as a sliver of canopy.
+    """
+
+    __slots__ = ("anchor_x", "anchor_y", "tiles")
+
+    def __init__(self, anchor_x, anchor_y, tiles):
+        self.anchor_x = anchor_x
+        self.anchor_y = anchor_y
+        self.tiles: List[SpriteTile] = tiles
+
+    def bounds(self):
+        """``(left, right, bottom, top)`` of the whole frame, Y up."""
+        quads = [t.quad(self.anchor_x, self.anchor_y) for t in self.tiles]
+        return (min(q[0] for q in quads), max(q[1] for q in quads),
+                min(q[2] for q in quads), max(q[3] for q in quads))
+
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def png_size(path: str):
+    """``(width, height)`` from a PNG's header, without decoding it."""
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(24)
+    except OSError:
+        return None
+    if len(head) < 24 or head[:8] != PNG_SIGNATURE or head[12:16] != b"IHDR":
+        return None
+    return (int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big"))
 
 
 class Level:
@@ -432,6 +506,88 @@ class AssetTree:
             if texture:
                 found.append(texture)
         return found
+
+    def sprite_frame(self, asset_id: str, frame: int = 0) -> Optional[SpriteFrame]:
+        """One frame of an ``ASSET_SPRITE_*``, every tile of it in place.
+
+        ``frame-tex-count`` is the number of textures **in each frame**, not a
+        frame count: a palm tree's ``[5]`` is one frame of five strips, a
+        banana's ``[1, 1, 1]`` three frames of one. The frame is placed on the
+        object by its anchor (the asset's ``unk4``/``unk6``,
+        ``SpriteAsset.anchor``), which is usually near the bottom - a balloon
+        hangs from the end of its string.
+
+        A frame with no textures - a lava spurt's first is empty - falls
+        through to the next one that has some, since an empty preview helps
+        nobody.
+        """
+        path = self._lookup(META_SPRITES, asset_id)
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                sprite = json.load(handle)
+        except (ValueError, OSError):
+            return None
+
+        start = sprite.get("start-texture")
+        counts = [int(c) for c in (sprite.get("frame-tex-count") or [1])]
+        order = self.order(META_TEXTURES_2D)
+        if not start or start not in order:
+            return None
+        base = order.index(start)
+
+        offsets = [0]
+        for count in counts:
+            offsets.append(offsets[-1] + count)
+        frames = [f for f in range(len(counts)) if counts[f] > 0]
+        if not frames:
+            return None
+        frame = frame if frame in frames else frames[0]
+
+        tiles = []
+        for index in range(base + offsets[frame], base + offsets[frame + 1]):
+            if index >= len(order):
+                break
+            sidecar = self._lookup(META_TEXTURES_2D, order[index])
+            png = _texture_image(sidecar)
+            size = png_size(png) if png else None
+            if not size:
+                continue
+            try:
+                with open(sidecar, "r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+            except (ValueError, OSError):
+                data = {}
+            tiles.append(SpriteTile(png, int(data.get("sprite-x", 0) or 0),
+                                    int(data.get("sprite-y", 0) or 0), *size))
+        if not tiles:
+            return None
+        return SpriteFrame(int(sprite.get("unk4", 0) or 0),
+                           int(sprite.get("unk6", 0) or 0), tiles)
+
+    def shadow_png(self, header: Optional[ObjectHeader]) -> Optional[str]:
+        """The texture a header's shadow is drawn with, if it has one.
+
+        For most objects that is a dark blob under a tree. A ground zipper has
+        nothing else: its model is the debug sphere, never drawn in a race, and
+        the arrow on the road *is* its shadow, projected onto the track.
+        """
+        if header is None or not header.shadow_group or header.shadow_texture < 0:
+            return None
+        if header.shadow_texture & 0x8000:
+            return None  # a 3D texture; no retail shadow uses one
+        order = self.order(META_TEXTURES_2D)
+        if header.shadow_texture >= len(order):
+            return None
+        return self.texture_png(order[header.shadow_texture])
+
+    def model_id_for(self, asset_id: str, variant: int = 0) -> Optional[str]:
+        """Which of the header's models a variant draws."""
+        header = self.object_header(asset_id)
+        if header is None or not header.models:
+            return None
+        return header.models[variant if 0 <= variant < len(header.models) else 0]
 
     def texture_png(self, asset_id: str) -> Optional[str]:
         """The PNG an ``ASSET_TEX2D_*`` id refers to, if it was extracted."""

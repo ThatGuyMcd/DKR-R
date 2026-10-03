@@ -199,6 +199,7 @@ def create_empty(context, obj: MapObject, catalog, root, tree=None,
         empty[PROP_UNKNOWN] = json.dumps(unknown, sort_keys=True)
 
     _apply_rotation(empty, object_type, obj.fields)
+    _apply_scale(empty, object_type, obj.fields)
 
     collection_for(category, root).objects.link(empty)
     return empty
@@ -272,6 +273,31 @@ def _apply_rotation(empty, object_type, fields):
         pass
 
 
+def _apply_scale(empty, object_type, fields):
+    """Size the object the way the game does, from the type's scale byte.
+
+    The artwork is built at the header's own scale and shared by every instance
+    of the type, so the per-object part - ``radius / 64`` on a tree, ``scale /
+    64`` on a balloon - goes on the object. That is also what lets an author
+    resize a tree with S and have the byte follow, as R does for the angle.
+    """
+    rule = object_type.scale_rule if object_type else None
+    if rule is None or rule.field.name not in fields:
+        return
+    factor = rule.factor(fields[rule.field.name])
+    empty.scale = (factor, factor, factor)
+
+
+def world_scale(obj) -> float:
+    """The uniform scale an object is drawn at, through its parents.
+
+    A size byte holds one number, so a non-uniform scale is averaged rather than
+    taking whichever axis happened to be dragged.
+    """
+    scale = obj.matrix_world.to_scale()
+    return (abs(scale[0]) + abs(scale[1]) + abs(scale[2])) / 3.0
+
+
 def import_object_map(context, object_map: ObjectMap, catalog=None, tree=None,
                       slot: str = SLOT_STRUCTURE,
                       order_base: int = 0) -> List[bpy.types.Object]:
@@ -341,6 +367,7 @@ def read_object(empty: bpy.types.Object, catalog) -> MapObject:
 
     if object_type:
         angle_field = object_type.angle_field
+        scale_rule = object_type.scale_rule
         for field in object_type.fields:
             if field.name in absent or field.name not in empty:
                 continue
@@ -352,6 +379,11 @@ def read_object(empty: bpy.types.Object, catalog) -> MapObject:
                 value = value.to_list()
             elif hasattr(value, "__len__") and not isinstance(value, (str, bytes)):
                 value = list(value)
+            if scale_rule is not None and field is scale_rule.field:
+                # The viewport scale is authoritative too, as the angle is. A
+                # byte that already gives the scale shown is kept as it was.
+                fields[field.name] = scale_rule.value_for(world_scale(empty), value)
+                continue
             if angle_field is not None and field is angle_field:
                 # The viewport rotation is authoritative, so an object turned
                 # with R writes the angle it now points at. Coercion snaps it

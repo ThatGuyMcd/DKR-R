@@ -1285,6 +1285,23 @@ if(BUILD_TESTING)
         DKR_MUSIC_FIXTURES="${DKRPORT_ROOT}/tools/blender/tests/fixtures")
     add_test(NAME DKRCustomMusicDecode COMMAND DKRCustomMusicDecodeTests)
 
+    add_executable(DKRCustomMusicSequenceTests
+        tests/custom_music_sequence_tests.cpp
+        src/game/custom_music_sequence.cpp
+    )
+    target_include_directories(DKRCustomMusicSequenceTests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src/game"
+    )
+    # The cases are the addon's, so both validators read the same songs.
+    target_compile_definitions(DKRCustomMusicSequenceTests PRIVATE
+        DKR_MUSIC_FIXTURES="${DKRPORT_ROOT}/tools/blender/tests/fixtures")
+    if(MSVC)
+        target_compile_options(DKRCustomMusicSequenceTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRCustomMusicSequenceTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME DKRCustomMusicSequence COMMAND DKRCustomMusicSequenceTests)
+
     add_executable(DKRCountdownTonePolicyTests
         tests/countdown_tone_policy_tests.cpp
     )
@@ -1517,6 +1534,7 @@ if(BUILD_TESTING)
         DKRAudioMixPolicyTests
         DKRCustomMusicPolicyTests
         DKRCustomMusicDecodeTests
+        DKRCustomMusicSequenceTests
         DKRCountdownTonePolicyTests
         DKRRendererSnapshotTests
         DKRPresentationIdentityTests

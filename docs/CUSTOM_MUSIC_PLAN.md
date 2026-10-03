@@ -6,6 +6,58 @@ Updated 2026-10-02: recorded music (MP3/WAV) is implemented end to end - see
 race; the rest of the in-game matrix below is still open. The
 native-sequence and MIDI stages below are unchanged and still unimplemented.
 
+## Next steps (handoff, 2026-10-03)
+
+Goal set by the author: **pick a `.mid`, export, race** - no instrument
+mapping, no listening session, no manual tempo or loop work. Recorded music
+(MP3/WAV) is finished and committed (9cbab70). The MIDI path is converted and
+validated but **not yet audible in game**.
+
+Done (format- and unit-tested; uncommitted at the time of writing):
+
+- `tools/blender/dkr_track_editor/music_bank.py` - reads the B1 instrument bank.
+- `tools/blender/dkr_track_editor/music_sequence.py` - validates a native
+  sequence by emulating `cseq.c`/`csplayer.c`; C++ twin
+  `runtime-recomp/src/game/custom_music_sequence.{hpp,cpp}`; both held to
+  `tools/blender/tests/fixtures/music_sequences.txt`.
+- `tools/blender/dkr_track_editor/midi_import.py` - SMF to ALCSeq, fully
+  automatic: instruments, drum kits split over free channels, dominant tempo,
+  loop markers or whole-song loop, back-reference compression.
+- Tests: `test_music_sequence.py`, `test_midi_import.py` (in `run_tests.py`),
+  `DKRCustomMusicSequence` (ctest).
+- Real check: the author's `Downloads/test_tropical.mid` (70 bars, Latin
+  drums, tempo map) converts with no input to 12,137 of 13,032 bytes, no
+  notes dropped, valid against both revisions' banks.
+
+Unrelated working-tree edits seen at handoff (README, assets.py, catalog.py,
+preview.py, scene.py, ui/panels.py, test_assets.py, test_blender_operators.py)
+are not part of this work; leave them to their owner.
+
+To do, in order:
+
+1. **Commit** the files above (English message, repository style, no
+   co-author line).
+2. **Runtime adapter (stage 2, "Runtime design" below).** Package descriptor
+   (schema 2, `dkr-alcseq-v1`, file `music/main.cseq`) parsed in
+   `custom_tracks.cpp`; hook `music_sequence_init` in both recomp policies;
+   when the bound track's carrier starts and the player is stopped, copy the
+   validated sequence into the music buffer (recopy on every restart - loop
+   counters are rewritten while playing) and run the original init path.
+   Validate with `validate_sequence` (pass the bank's non-null program slots).
+   Regenerate the composed payload (see memory note on the v80 ELF hash
+   wrapper). Consider a larger buffer in expansion RAM to lift the 13 KB cap.
+3. **Hear it.** Hand-build a schema-2 package from the tropical conversion,
+   race it (Track Lab arm + auto boot), on v77 and v80: start, loop seam,
+   restart, final lap, pause, results, a jingle over it, custom -> stock.
+   Judge the automatic instrument choices by ear; adjust `FAMILY_PROGRAMS` or
+   `DRUM_PIECES` numbers if a part sounds wrong.
+4. **Blender UI (stage 3).** Music source "MIDI file": a file picker and the
+   conversion report (warnings, size, loop). Export writes `music/main.cseq`
+   and the descriptor; nothing else to set. Save/reopen must keep it.
+5. **Later:** MidiFade/MidiChSet objects against the converted channels
+   (stage 5), the remaining in-game matrix, docs in `CUSTOM_TRACKS.md` and
+   the addon README.
+
 The first deliverable is one author-supplied native DKR sequence per `.dkrmap`,
 played through the game's existing instrument bank. Standard MIDI import follows
 on the same package/runtime contract. Music remains part of the track export and
@@ -222,6 +274,21 @@ and audio-lifetime change.
 
 ### 1. Instrument profile and native validation
 
+Status 2026-10-02: implemented. `music_bank.py` reads the B1 bank and prints the
+per-program report; `music_sequence.py` validates a sequence by emulating
+`cseq.c`/`csplayer.c` (byte reader, back references, loops, running status,
+track merge) and, given the bank, follows each channel's program and checks
+every note against the game's binary-search lookup. Its C++ twin is
+`runtime-recomp/src/game/custom_music_sequence.cpp` (program-slot check only;
+note regions are an authoring concern). Both read the 32 synthetic cases in
+`tools/blender/tests/fixtures/music_sequences.txt` by stable error code, and
+agree on all 66 retail songs of both revisions. Findings from the retail
+corpus: program 0 (every channel's default) is silent, several retail songs
+drop notes or exceed 24 voices, some loop tracks over slightly different spans,
+and bytes after an endless loop end are unreachable (and sometimes garbage), so
+voice count, loop-span mismatch and ignored controllers are warnings, not
+errors.
+
 Add pure Python `music.py` and `music_bank.py` modules, plus a reusable C++ native
 sequence validator. Extend `assets.py` to resolve the audio assets through the
 extracted asset metadata.
@@ -281,6 +348,60 @@ race without editing the manifest by hand. Re-export/restart picks up a changed
 song. A missing or invalid source produces an error, not a silent stock fallback.
 
 ### 4. Add Standard MIDI import
+
+Status 2026-10-02: converter implemented as `midi_import.py` (format- and
+unit-tested, not yet heard in game - that needs stage 2's runtime adapter).
+Decisions taken where this section left room:
+
+- One native track per MIDI channel, tempo in the first, `FF 2E 00 FF` loop
+  starts and running status, as the retail songs are laid out.
+- A key retriggered while held ends the held note there; a note still held at
+  the end ends at the end; a note under a tick lasts one tick. All are reported.
+- SysEx (GM/GS resets) is ignored with a warning rather than refused.
+- Expression (CC 11) is folded into volume. DKR's own channel fade (CC 8) is
+  written by the game (music zones, Taj, character menu), so a song never
+  writes it.
+- DKR's program change resets channel volume and pan to the instrument's own
+  (`__setInstChanState`), unlike General MIDI, so both are written again after
+  every program change.
+- Loop from `loopStart`/`loopEnd` marker or cue events, else the whole song
+  rounded up to a bar. Each channel's program, volume, pan, reverb, sustain
+  and bend are restated after the loop start; the tempo stays before it.
+- A channel that plays before any program change gets `program_map[0]`,
+  because every channel starts on DKR's silent program 0.
+
+- Back-reference compression is implemented and needed in practice: a real
+  70-bar, 5-channel DAW export (7,434 notes) is 20,182 bytes plain and 12,781
+  packed, against the 13,032-byte buffer. The player copies source bytes raw
+  (it never expands a reference inside a reference), so only literal runs can
+  be copied; encoding tries several minimum match lengths with lazy matching
+  and keeps the smallest. Literal 0xFE bytes in getTrackByte-read data (a
+  varlen such as 16128 = FE 00) are doubled; the loop-end payload is not.
+- `single_tempo` converts a song with a tempo map at the tempo heard longest
+  (the same real export carries 59 tempo events between 125 and 128 BPM).
+- Doubled notes (same key twice at one tick on one channel, each with its own
+  note-off) merge into one note held to the last note-off; at one tick,
+  note-offs are paired before note-ons.
+- `program_suggestions` ranks DKR programs by the share of a part's notes
+  they reach. It rules out programs that would drop notes, but most DKR
+  programs are one full-range sample, so it cannot choose a timbre.
+
+- Instruments are chosen automatically, so an author only picks the `.mid`
+  (this replaces the plan's per-program mapping as the default; `program_map`
+  remains as an override). DKR's kits turned out to sit on the General MIDI
+  drum map: program 116 is the main kit (kick 36, snare 38, hats 42/44/46,
+  toms, crash 49, ride 51, china 52, tambourine 54) and smaller kits hold the
+  Latin pieces on their GM keys (88, 47, 14, 63, 18, 44, 41). Channel 10 is
+  split by kit onto free channels (`DRUM_PIECES`). Melodic parts take, per GM
+  family, the DKR program the retail songs use in that role - bass lines,
+  chords, held pads, single-line melodies - measured over all 66 songs
+  (`FAMILY_PROGRAMS`), preferring one no other part has taken. Nobody has
+  listened to these choices; the first converted song heard in game is the
+  check. A test verifies every table entry sounds in both revisions' banks.
+- Tempo maps convert at the dominant tempo by default (`single_tempo`).
+
+Still open in this stage: hearing a converted song in game (needs stage 2),
+and the Blender UI (a file picker and the conversion report).
 
 Add a pure Python `midi_import.py` converter. Initially support SMF types 0/1,
 PPQN timing and constant tempo. Merge MIDI tracks by channel, retain stable
