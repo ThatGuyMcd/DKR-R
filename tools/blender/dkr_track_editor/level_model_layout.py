@@ -40,6 +40,7 @@ Deliberately free of ``bpy``.
 
 from __future__ import annotations
 
+import math
 import struct
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -346,6 +347,12 @@ def check_windows(model: LevelModel) -> List[str]:
 #: The game's own test, ``NEARBY`` in ``object_models.c:656``.
 EDGE_TOLERANCE = 3
 
+#: A triangle folded back onto its neighbour further than this - the dot of
+#: their normals - is not its neighbour. The plane between two such triangles
+#: lies almost in each of them, and the game's four-unit tolerance against it
+#: reaches tens of units past the edge at -0.95 and without end at -1.
+FOLD_LIMIT = -0.95
+
 
 def collision_facets(segment: Segment) -> bytes:
     """The ``CollisionFacetPlanes`` array for one segment, as the file holds it.
@@ -359,15 +366,36 @@ def collision_facets(segment: Segment) -> bytes:
     one's plane and every edge at nothing useful, and a racer falls through a
     floor with no hole in it.
 
-    The rule is the one the game itself uses when it builds facets for an
-    object model (``object_models.c:559-676``): planes are numbered by
-    triangle, skipping those flagged not to collide; an edge's neighbour is the
-    first triangle, in a batch that collides, with an edge whose corners are
-    the same vertices or within :data:`EDGE_TOLERANCE` of them, either way
-    round; an edge with none names its own triangle. Held to the 55 retail
-    level models it reproduces 99.6% of their 90,617 facets exactly - exact
-    positions alone give 99.3%, and refusing folds sharper than a right angle
-    drops it to 88%, so that is not what retail did either.
+    Planes are numbered by triangle, skipping those flagged not to collide; an
+    edge's neighbour is the first triangle, in a batch that collides, that runs
+    the same edge **the other way round** - corners the same vertices or within
+    :data:`EDGE_TOLERANCE` of them - and is not folded back onto it past
+    :data:`FOLD_LIMIT`. An edge with none names its own triangle, which the
+    loader turns into a wall straight up from the edge: always safe.
+
+    That is stricter than the rule the game itself uses for object models
+    (``object_models.c:559-676``), which takes either direction and any fold,
+    and which this function followed until it put an invisible wall across a
+    custom track. Two things in the loader make that rule unsafe:
+
+    * The plane for a shared edge is made once, by whichever triangle comes
+      first, and handed to the other **negated** (``| 0x8000``). Negating is
+      right only when the two run the edge in opposite directions - when
+      their normals agree. Across a flipped face it puts the triangle on the
+      wrong side of its own edge: it stops colliding where it is, and collides
+      across the far side instead.
+    * The plane leans by the sum of the two normals. A double-sided face - the
+      same corners again, wound backwards - sums to nothing, the plane comes
+      out zero, and a zero plane passes every point: the triangle collides
+      over its whole plane. A sign standing by the road becomes a wall across
+      it.
+
+    Transcribing the loader and ``resolve_collisions`` and holding every
+    triangle to its own outline (``tests/test_level_model_layout.py``): retail's
+    facets leave 113 triangles of the 55 US models that do not collide inside
+    themselves and 195 edges that collide 60 units past themselves; the game's
+    rule written by this function, 277 and 358; this one, none. It agrees with
+    96.7% of retail's facets, the rest being pairs the loader mishandles.
     """
     ordinal: Dict[int, int] = {}
     faces = []
@@ -386,6 +414,14 @@ def collision_facets(segment: Segment) -> bytes:
 
     def at(index):
         return segment.vertices[index][:3]
+
+    def normal(corners):
+        (x1, y1, z1), (x2, y2, z2), (x3, y3, z3) = (at(i) for i in corners)
+        nx = y1 * (z2 - z3) + y2 * (z3 - z1) + y3 * (z1 - z2)
+        ny = z1 * (x2 - x3) + z2 * (x3 - x1) + z3 * (x1 - x2)
+        nz = x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)
+        length = math.sqrt(nx * nx + ny * ny + nz * nz)
+        return (nx / length, ny / length, nz / length) if length else (0.0, 0.0, 0.0)
 
     def cell(index):
         # Wider than twice the tolerance, so near corners share a cell or
@@ -409,11 +445,14 @@ def collision_facets(segment: Segment) -> bytes:
             for corner in {cell(p), cell(q)}:
                 edges.setdefault(corner, []).append((face, p, q))
 
+    normals = {face: normal(corners) for face, corners, _c in faces if face in ordinal}
+
     out = bytearray(len(segment.triangles) * FACET_SIZE)
     for face, corners, _collides in faces:
         if face not in ordinal:
             continue  # derives no plane, and the loader skips its facet
         own = ordinal[face]
+        mine = normals[face]
         row = [own]
         for side in range(3):
             a, b = corners[side], corners[(side + 1) % 3]
@@ -425,8 +464,13 @@ def collision_facets(segment: Segment) -> bytes:
                         for other, p, q in edges.get((cx + dx, cy + dy, cz + dz), ()):
                             if other == face or (best is not None and other >= best):
                                 continue
-                            if (near(a, p) and near(b, q)) or (near(a, q) and near(b, p)):
-                                best = other
+                            if not (near(a, q) and near(b, p)):
+                                continue  # the same way round: a flipped face
+                            theirs = normals[other]
+                            if (mine[0] * theirs[0] + mine[1] * theirs[1]
+                                    + mine[2] * theirs[2]) < FOLD_LIMIT:
+                                continue  # folded back: a double-sided face
+                            best = other
             row.append(ordinal[best] if best is not None else own)
         struct.pack_into(ENDIAN + "4H", out, face * FACET_SIZE, *row)
     return bytes(out)

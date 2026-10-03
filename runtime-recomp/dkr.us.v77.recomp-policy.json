@@ -694,9 +694,9 @@
     },
     {
       "function": "sound_update_queue",
-      "beforeVram": "0x80000FBC",
+      "beforeVram": "0x80000FC4",
       "text": "extern void dkr_audio_mix_tick(uint8_t*, recomp_context*); dkr_audio_mix_tick(rdram, ctx);",
-      "reason": "Advance click-free live music gain ramps once per authored audio update and resubmit the current authored mix so launcher changes no longer wait for a new map."
+      "reason": "Advance click-free live music gain ramps once per authored audio update (in the shared epilogue, which both early exits and the BPM re-read reach) and resubmit the current authored mix so launcher changes no longer wait for a new map."
     },
     {
       "function": "sndp_set_param",

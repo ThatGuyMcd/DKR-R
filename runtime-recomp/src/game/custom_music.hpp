@@ -29,9 +29,9 @@ void on_level_load(std::int32_t level);
 [[nodiscard]] bool intercept_music_volume(std::uint8_t* rdram, std::int32_t requested);
 
 // Game thread, once per authored frame (main_game_loop's frame-begin hook):
-// follows the carrier's play state and tempo. The sound_update_queue hook
-// is not used: it sits on the branch that only runs when DKR re-reads the
-// song's BPM, which skips it on every other update.
+// follows the carrier's play state and tempo. It does not depend on the
+// sound_update_queue hook, which until 2026-10-02 sat on the branch that only
+// runs when DKR re-reads the song's BPM.
 void tick(std::uint8_t* rdram);
 
 // Audio output, with the platform audio lock held: adds `frames` stereo frames

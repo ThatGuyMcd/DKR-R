@@ -2,9 +2,9 @@
 
 Status: implementation plan, based on the current checkout, 2026-09-23.
 Updated 2026-10-02: recorded music (MP3/WAV) is implemented end to end - see
-"Recorded music" below. It is format- and unit-tested; it has **not** yet been
-heard in game on either revision. The native-sequence and MIDI stages below
-are unchanged and still unimplemented.
+"Recorded music" below. It is format- and unit-tested and has been heard in a
+race; the rest of the in-game matrix below is still open. The
+native-sequence and MIDI stages below are unchanged and still unimplemented.
 
 The first deliverable is one author-supplied native DKR sequence per `.dkrmap`,
 played through the game's existing instrument bank. Standard MIDI import follows
@@ -59,8 +59,8 @@ the instrument bank - so it is played on the host:
   song's base back out leaves the options slider, every fade and the pause
   menu's halving, which then scale the file. The launcher's music slider is
   applied first, so it reaches the file too.
-- **Play state and tempo.** Once per DKR audio update (the existing
-  `dkr_audio_mix_tick` hook at `sound_update_queue`), the runtime reads
+- **Play state and tempo.** Once per game frame (the existing
+  `dkr_presentation_frame_begin` hook in `main_game_loop`), the runtime reads
   `gMusicPlayer->state` (offset 0x2C), `gCurrentSequenceID` and `sMusicTempo`.
   The file starts from the top whenever the carrier starts, stops (with a short
   ramp) when it stops or another song takes over, and - when the author chose
@@ -78,10 +78,17 @@ the instrument bank - so it is played on the host:
   `source rate / output rate * tempo`, with the loop seam interpolated, before
   the equaliser and master volume.
 
-No new recompiler hook was needed: the two hooks above already existed in both
+No new recompiler hook was needed: the hooks above already existed in both
 policies, and the only new guest address is `gCurrentSequenceID`
 (`revision_addresses::CurrentSequence`: 0x80115D04 in v77, 0x80116284 in v80,
-from the decomp's symbol files).
+from the decomp's symbol files; the first version had them swapped).
+
+The launcher slider's live ramp (`dkr_audio_mix_tick`) used to sit at
+`sound_update_queue` 0x80000FBC, after the BPM re-read. Both earlier exits jump
+past it to the epilogue, so it ran only when `sMusicTempo == -1`. It now sits
+at 0x80000FC4 inside that shared epilogue (same address in both revisions), so
+it runs on every audio update. The generated payload must be regenerated for
+the change to take effect.
 
 What a recording cannot do: the MidiFade/MidiFadePoint/MidiChSet objects switch
 or fade channels of the playing sequence, and a recording has none, so they are

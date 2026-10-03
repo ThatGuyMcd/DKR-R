@@ -289,8 +289,30 @@ Its neighbour search (`func_80060AC8` / `func_80060C58`) is also the best
 account of the rule the level model tool used: the first triangle in a
 collidable batch with an edge on the same vertices or on corners within 3
 units per axis, either way round. Applied to the 55 retail level models it
-reproduces 99.6% of their 90,617 facets; `level_model_layout.collision_facets`
-implements it.
+reproduces 99.6% of their 90,617 facets.
+
+`level_model_layout.collision_facets` used to implement it and no longer does,
+because the loader handles two kinds of pair badly:
+
+- **A neighbour that runs the edge the same way round**, which means a flipped
+  face. The loader hands it the first triangle's edge plane negated (the
+  `| 0x8000`), and that puts it on the wrong side of its own edge. It stops
+  colliding where it is and collides past the edge instead.
+- **A neighbour folded back onto the triangle**, which means a double-sided
+  face. The edge plane leans by the sum of the two normals, which is zero
+  here. A zero plane passes every point, so the triangle collides over its
+  whole plane. On a custom track, a double-sided sign by the road became an
+  invisible wall across it.
+
+The addon only pairs an edge with a triangle that runs it the other way round
+and whose normal is no further than a dot of -0.95 from its own. Otherwise the
+edge names its own triangle, which gives a wall straight up from the edge.
+Under a transcription of `track_init_collision` and `resolve_collisions`, this
+rule leaves no triangle of the 55 US models that fails to collide inside
+itself, and no edge that collides 60 units past itself. Retail's own facets
+have 113 of the first and 195 of the second. The new rule still agrees with
+96.7% of retail's facets
+(`tools/blender/tests/test_level_model_layout.py`).
 
 **An encoder therefore has to write the facet array** — adjacency, not
 collision planes — and correct offsets to it, and decide which batches are
