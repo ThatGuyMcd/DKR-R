@@ -19,7 +19,7 @@ public:
                                      std::string display_name,
                                      const CompatibilityManifest& manifest,
                                      std::string& error);
-    bool leave(std::string_view peer_id);
+    bool leave(std::string_view peer_id, bool compact_slots = true);
     bool move_client(std::string_view host_peer_id,
                      std::string_view client_peer_id,
                      std::uint8_t destination_slot, std::string& error);
@@ -33,6 +33,8 @@ public:
     bool begin_loading(std::string_view host_peer_id, std::string& error);
     bool begin_running(std::string_view host_peer_id, std::string& error);
     void return_to_waiting();
+    // Only the ended experimental match may refresh its isolated save seed.
+    void refresh_online_save_hash(std::uint64_t hash);
 
     const Room& room() const { return room_; }
     bool can_start(std::string* reason = nullptr) const;

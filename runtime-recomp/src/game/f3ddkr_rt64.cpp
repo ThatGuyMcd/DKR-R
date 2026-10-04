@@ -15,6 +15,9 @@
 #include "water_uv_rt64.hpp"
 #include "water_performance.hpp"
 #include "water_scroll_policy.hpp"
+#include "local_scenery_rt64.hpp"
+#include "local_scenery_policy.hpp"
+#include "netplay/experimental_performance.hpp"
 
 #include "gbi/rt64_f3d.h"
 #include "gbi/rt64_gbi_f3d.h"
@@ -210,7 +213,8 @@ void SelectInterpolationGroup(RT64::RSP& rsp, std::uint32_t id,
                               bool interpolate_tiles = false,
                               std::uint8_t aspect_mode = G_EX_ASPECT_AUTO,
                               bool preserve_vertex_interpolation = false,
-                              std::uint8_t water_scroll_tag = 0U) {
+                              std::uint8_t water_scroll_tag = 0U,
+                              bool native_visual = false) {
     auto current_menu = ReadU32(rsp.state->RDRAM, kCurrentMenuIdAddress);
 #if defined(DKR_WATER_QUALIFICATION)
     // The automatic preview is hosted by the title frontend, which normally
@@ -232,6 +236,8 @@ void SelectInterpolationGroup(RT64::RSP& rsp, std::uint32_t id,
         interpolate_tiles = false;
     }
     const bool interpolation_disabled = id == G_EX_ID_IGNORE;
+    if(!native_visual && dkr::runtime::presentation::task_is_owned())
+        id=dkr::runtime::local_scenery::canonical_identity(id);
     // A finish-camera cut must snap its combined MVP, but a canonical shadow
     // page still owns a safe, fixed vertex stream. Preserve only that stream's
     // interpolation identity so camera/scenery policy cannot make the shadow
@@ -352,6 +358,7 @@ struct dkr::runtime::F3DDKRRT64Bridge::StateData {
     };
 
     std::uint32_t matrix_offset = 0;
+    LocalSceneryRT64Pass* local_scenery=nullptr;
     std::uint32_t vertex_offset = 0;
     std::uint32_t texture_offset = 0;
     std::uint32_t texture_shift = 0;
@@ -1751,10 +1758,12 @@ void dkr::runtime::F3DDKRRT64Bridge::FinishShadowScope(
 }
 
 void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application,
-                                             const OSTask& task) {
+                                             const OSTask& task,
+                                             LocalSceneryRT64Pass* scenery) {
     active_ = this;
     StateData fresh{};
     fresh.task_count = data_->task_count + 1;
+    fresh.local_scenery=scenery;
     *data_ = fresh;
 
     RT64::State* state = application.state.get();
@@ -1939,6 +1948,30 @@ void dkr::runtime::F3DDKRRT64Bridge::Dispatch(
         }
         if (trace) { last_trace_task = data.task_count; ++trace_count; }
     }
+    if(opcode==kFullSyncOpcode && active_->data_->local_scenery &&
+       dkr::runtime::netplay::experimental::performance::enabled()) {
+        // Sample only producer-owned data BEFORE fullSync transfers it to the
+        // worker queues. Reading this workload after process() returns would
+        // race with rendering/reuse. No diagnostic flush, GPU wait or RAM copy.
+        namespace profile=dkr::runtime::netplay::experimental::performance;
+        const auto& workload=state->ext.workloadQueue->workloads[
+            state->ext.workloadQueue->writeCursor];
+        profile::event(profile::Event::DecodedWorkloads);
+        profile::event(profile::Event::DecodedVertices,workload.drawData.vertexCount()+
+            std::uint64_t(workload.drawData.rawTriVertexCount()));
+        profile::event(profile::Event::DecodedTriangles,workload.drawData.faceIndices.size()/3+
+            std::uint64_t(workload.drawData.rawTriVertexCount()/3));
+        profile::event(profile::Event::DecodedTransforms,workload.drawData.worldTransforms.size());
+        profile::event(profile::Event::DecodedTextureLoads,workload.drawData.loadOperations.size());
+        std::uint64_t projections=0,calls=workload.gameCallCount;
+        // The not-yet-flushed draw is already represented by the vertex/index
+        // counts. Include its one pending call without forcing a state change.
+        if(state->drawCall.triangleCount)++calls;
+        for(unsigned pair=0;pair<workload.fbPairCount;++pair)
+            projections+=workload.fbPairs[pair].projectionCount;
+        profile::event(profile::Event::DecodedProjections,projections);
+        profile::event(profile::Event::DecodedDrawCalls,calls);
+    }
     handler(state, display_list);
     AdjustSplitViewportCommand(state, command, opcode);
 }
@@ -2018,6 +2051,15 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationMarkers(
     if (command < rdram_begin ||
         command > rdram_begin + kRDRAMSize - sizeof(RT64::DisplayList)) {
         return;
+    }
+    if(auto* scenery=active_->data_->local_scenery) {
+        scenery->draw_at(*state,static_cast<std::uint32_t>(command-rdram_begin),
+            [](RT64::RSP& rsp,std::uint32_t id){
+                const auto& data=*active_->data_;
+                SelectInterpolationGroup(rsp,id,false,false,false,
+                    ActiveAspectMode(data.interpolation_groups,
+                        data.matrix_aspect_override_active,data.matrix_aspect_override),false,0U,true);
+            });
     }
     const auto markers =
         dkr::runtime::presentation::active_presentation_markers(

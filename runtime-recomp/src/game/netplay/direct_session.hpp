@@ -1,5 +1,7 @@
 #pragma once
 
+#include "experimental_network.hpp"
+
 #include "datagram_socket.hpp"
 #include "../atomic_snapshot.hpp"
 #include "session_transport.hpp"
@@ -168,6 +170,7 @@ struct SessionView {
     std::uint64_t superseded_local_samples = 0;
     // Rows are player slots, columns are the seven application send lanes.
     std::array<std::array<QueueLaneSummary, 7>, kMaximumPlayers> outbound_lanes{};
+    bool owned_match_ending = false;
 };
 
 // Fresh O(players) state for the authored scheduler, deliberately excluding
@@ -193,6 +196,7 @@ struct RuntimeSessionView {
     std::uint32_t online_save_generation = 0U;
     std::uint64_t online_save_hash = 0U;
     std::string status;
+    bool owned_match_ending = false;
 };
 
 struct RollbackPacket {
@@ -231,6 +235,8 @@ public:
     using SaveInstaller = std::function<bool(
         std::uint64_t, std::span<const std::uint8_t>,
         std::filesystem::path&, std::string&)>;
+    using SaveReader = std::function<bool(bool, std::uint64_t,
+        std::vector<std::uint8_t>&, std::filesystem::path&, std::string&)>;
     DirectSession();
     ~DirectSession();
     DirectSession(const DirectSession&) = delete;
@@ -238,7 +244,7 @@ public:
 
     void configure_manifest(const CompatibilityManifest& manifest);
     void configure_session_save(std::vector<std::uint8_t> canonical_save,
-                                SaveInstaller installer);
+                                SaveInstaller installer, SaveReader reader = {});
     void configure_artifact_directory(std::filesystem::path directory);
     bool host(std::uint16_t port, std::string advertised_host,
               std::string room_name, ConnectionMethod method,
@@ -268,7 +274,7 @@ public:
     bool consume_launch_request();
     void mark_game_loaded(std::uint64_t bootstrap_hash,
                           std::uint32_t online_save_generation,
-                          std::uint64_t online_save_hash);
+                          std::uint64_t online_save_hash,std::uint64_t expected_launch_hash=0);
     void fail_runtime_start(std::string reason);
     bool wait_until_running(std::chrono::milliseconds timeout);
     bool synchronize_inputs(std::uint32_t frame, PackedInput local,
@@ -408,8 +414,63 @@ public:
     bool active() const;
     bool running() const;
 
+    // Explicit application capability, installed before lobby admission. A
+    // generic driver or an old executable cannot enable a live experiment.
+    bool enable_owned_backend(bool available);
+    bool owned_backend_available() const;
+    bool owned_game_active() const;
+    struct OwnedPacket {
+        std::uint8_t source = 0;
+        TransportTrafficClass traffic = TransportTrafficClass::Control;
+        std::vector<std::uint8_t> bytes;
+    };
+    DatagramSendStatus send_owned_packet(std::uint8_t target,
+        std::span<const std::uint8_t> bytes, TransportTrafficClass traffic,
+        std::string& error);
+    bool take_owned_packet(OwnedPacket& packet);
+    bool owned_network_configuration(const secure::Key& incarnation,
+        experimental::NetworkConfiguration& configuration, std::string& error) const;
+    static PeerAddress owned_peer_address(std::uint8_t slot);
+    // Retire an immutable experimental roster, not the retained lobby/keys.
+    void request_owned_match_end(std::string reason);
+    bool complete_owned_match_end(std::uint64_t launch_hash,
+        std::span<const std::uint8_t> confirmed_save, std::string& error);
+
 private:
     friend struct DirectSessionTestAccess;
+    bool owned_backend_available_ = false;
+    struct OwnedMatchEnd {
+        std::uint64_t hash = 0;
+        std::string message;
+        bool runtime_returned = false;
+        bool resume_prepared = false;
+        bool resumed = false;
+        std::chrono::steady_clock::time_point started{}, last_send{};
+    };
+    std::optional<OwnedMatchEnd> owned_match_end_;
+    std::uint64_t retired_owned_generation_ = 0;
+    std::chrono::steady_clock::time_point owned_last_host_packet_{};
+    void begin_owned_match_end_locked(std::string reason);
+    void service_owned_match_end_locked(std::chrono::steady_clock::time_point now);
+    bool handle_owned_match_end_locked(std::uint64_t sender, const protocol::Datagram& packet);
+    void remove_owned_peer_locked(std::uint64_t sender, std::string reason);
+    std::deque<OwnedPacket> owned_inbound_;
+    std::size_t owned_inbound_bytes_ = 0;
+    bool receive_owned_packet_locked(std::uint8_t source, const protocol::Datagram& packet);
+    void send_loaded_locked();
+    void begin_countdown_locked();
+    enum class SaveJobKind { Join, Resume, Resync, HostSeal };
+    struct PeerRecord;
+    struct SaveResult {bool ok=false;std::vector<std::uint8_t> bytes;std::filesystem::path path;std::string error;};
+    struct SaveJob {
+        SaveJobKind kind;std::uint64_t token,match,hash,launch;std::uint32_t generation;std::uint8_t slot;
+        std::chrono::steady_clock::time_point started;
+        std::future<SaveResult> result;
+    };
+    bool queue_save_locked(SaveJobKind kind, std::vector<std::uint8_t> bytes,
+        std::uint32_t generation,std::uint64_t hash,std::uint8_t slot,std::uint64_t launch=0);
+    void service_save_jobs_locked();
+    void offer_online_save_locked(PeerRecord& peer);
     SessionView view_locked() const;
     enum class RecoveryStage : std::uint8_t {
         Idle,
@@ -443,6 +504,9 @@ private:
         float loss_percent = 0.0F;
         bool requires_save_sync = false;
         bool online_save_ready = false;
+        bool owned_runtime_returned = false;
+        bool owned_lobby_resumed = false;
+        std::chrono::steady_clock::time_point owned_last_packet{};
         std::array<double, 32U> rtt_samples{};
         std::array<std::chrono::steady_clock::time_point, 32U> rtt_sample_times{};
         std::size_t rtt_sample_count = 0U;
@@ -930,6 +994,13 @@ private:
     ReplayRecorder replay_;
     SocialExecutor replay_writer_;
     SocialExecutor transport_closer_;
+    SocialExecutor save_executor_;
+    bool save_executor_started_ = false;
+    std::deque<SaveJob> save_jobs_;
+    std::uint64_t save_job_token_ = 1;
+    bool host_start_verified_ = false;
+    std::array<std::chrono::steady_clock::time_point,kMaximumPlayers> last_save_offer_{};
+    std::chrono::steady_clock::time_point last_save_request_{};
     bool transport_closer_started_ = false;
     bool replay_writer_started_ = false;
     std::vector<std::future<std::string>> replay_writes_;
@@ -937,6 +1008,7 @@ private:
     std::filesystem::path artifact_directory_;
     std::vector<std::uint8_t> session_save_;
     SaveInstaller save_installer_;
+    SaveReader save_reader_;
     std::uint32_t session_save_generation_ = 0U;
     bool local_online_save_ready_ = false;
     bool local_online_save_acknowledged_ = false;

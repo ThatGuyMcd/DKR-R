@@ -14,6 +14,7 @@ struct State;
 }
 
 namespace dkr::runtime {
+class LocalSceneryRT64Pass;
 
 std::uint64_t completed_f3ddkr_task_count();
 
@@ -25,7 +26,8 @@ public:
     F3DDKRRT64Bridge(const F3DDKRRT64Bridge&) = delete;
     F3DDKRRT64Bridge& operator=(const F3DDKRRT64Bridge&) = delete;
 
-    void process(RT64::Application& application, const OSTask& task);
+    void process(RT64::Application& application, const OSTask& task,
+                 LocalSceneryRT64Pass* scenery=nullptr);
 
 private:
     using Handler = void (*)(RT64::State*, RT64::DisplayList**);

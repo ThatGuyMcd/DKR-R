@@ -29,6 +29,12 @@ if ([IO.Path]::IsPathRooted($BuildDirectory)) {
 }
 $stage = Join-Path $distRoot "DKR-R-$Version-Windows-x64"
 if (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) {
+    if (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_EXPERIMENTAL_RENDER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
+        throw 'Refusing to package private experimental GPU retirement qualification. Reconfigure and rebuild with DKR_EXPERIMENTAL_RENDER_QUALIFICATION=OFF.'
+    }
+    if (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_REPLAY_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
+        throw 'Refusing to package private replay fixture capture.'
+    }
     if (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_ANDROID_RENDER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
         throw 'Refusing to package private Android renderer qualification.'
     }
@@ -43,8 +49,13 @@ if (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) {
     }
 }
 $zip = "$stage.zip"
-$deniedExtensions = @('.z64', '.v64', '.n64', '.eep', '.mpk', '.sra', '.fla', '.o2r', '.otr')
+$deniedExtensions = @('.z64', '.v64', '.n64', '.eep', '.mpk', '.sra', '.fla', '.o2r', '.otr', '.dkr-probe', '.dkr-bootstrap', '.dkr-component')
 $runtimeFiles = @('DKR-R.exe', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll')
+$experimentalRaceTest = (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) -and
+    (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_EXPERIMENTAL_RACE_TEST:BOOL=(ON|1|TRUE|YES)$' -Quiet)
+if ($experimentalRaceTest) {
+    if ($Version -notmatch 'experimental|rollback-test|^1\.0\.5-beta\.15(?:-playtest\.[2345678])?$') { throw 'Experimental backend builds must use a distinctly labelled experimental version or an approved Beta 15 playtest candidate.' }
+}
 $inputHostFiles = @('DKR-R-InputHost.exe', 'SDL3.dll', 'DKR-R-ModWorker.exe')
 
 if (Test-Path -LiteralPath $stage) {
@@ -57,6 +68,9 @@ if (Test-Path -LiteralPath $zip) {
 $bin = Join-Path $resolvedBuild "bin\$Configuration"
 if (Test-Path -LiteralPath (Join-Path $bin 'DKR-R.exe')) {
     $imageText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $bin 'DKR-R.exe')))
+    if ($imageText.Contains('DKR_REPLAY_CAPTURE_FILE')) {
+        throw 'Release executable still contains private replay fixture capture.'
+    }
     if ($imageText.Contains('DKR_WATER_TEST_MAP') -or $imageText.Contains('[perf][private-water-preview]')) {
         throw 'Release executable still contains private water qualification; rebuild after disabling it.'
     }
@@ -89,6 +103,33 @@ foreach ($name in $inputHostFiles) {
 }
 $stagedRuntime = Join-Path $stage 'DKR-R.exe'
 $stagedInputHost = Join-Path $stagedInputHostDirectory 'DKR-R-InputHost.exe'
+if ($experimentalRaceTest) {
+    # Playtest 8 has its own current connection/scope guide. The older file
+    # describes Playtest 2 and must not label this candidate as that release.
+    if ($Version -ne '1.0.5-beta.15-playtest.8') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-ROLLBACK-TESTING.txt') -Destination (Join-Path $stage 'EXPERIMENTAL-ROLLBACK-TESTING.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.3') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST3-PARITY.txt') -Destination (Join-Path $stage 'PLAYTEST3-NOTES.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.4') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST4-PERFORMANCE.txt') -Destination (Join-Path $stage 'PLAYTEST4-NOTES.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.5') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST5-BOSS-DIAGNOSTICS.txt') -Destination (Join-Path $stage 'PLAYTEST5-NOTES.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.6') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST6-PERFORMANCE.txt') -Destination (Join-Path $stage 'PLAYTEST6-NOTES.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.7') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST7-CPU.txt') -Destination (Join-Path $stage 'PLAYTEST7-NOTES.txt')
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt') -Destination (Join-Path $stage 'LOCAL-SCENERY-STATUS.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.8') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST8-SCENERY.txt') -Destination (Join-Path $stage 'PLAYTEST8-NOTES.txt')
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt') -Destination (Join-Path $stage 'LOCAL-SCENERY-STATUS.txt')
+    }
+}
 $logoDirectory = Join-Path $stage 'assets\ui\Icons'
 New-Item -ItemType Directory -Path $logoDirectory -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\ui\Icons\DKR-R-Logo.bmp') `

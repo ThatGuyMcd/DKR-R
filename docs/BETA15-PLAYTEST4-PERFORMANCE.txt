@@ -1,0 +1,71 @@
+DKR-R 1.0.5 Beta 15 Playtest 4 - bounded output-efficiency candidate
+Date: 2026-10-03
+
+IMPLEMENTED
+1. Private audio RSP DMA now validates the entire RAM and DMEM transfer once
+   before copying. Preserve the reviewed hardware 24-bit/8-byte normalization,
+   inclusive lengths and byte-lane layout. Reject overflow, invalid invocation,
+   DMEM overflow, RAM overflow and partial final byte-lane words before writes.
+   Keep operation-budget checkpoints at DMA entry and generated RSP labels.
+   Only NEW Patch Pipeline output changes; protected RSP/runtime inputs stay
+   untouched. This removes per-byte scalar trap calls, not the safety boundary.
+2. Compute the immutable render-image diagnostic hash on first request, with
+   concurrent-reader once-only initialization. Ordinary frame publication no
+   longer hashes an additional 16 MiB. Network checkpoint, journal and initial
+   transfer hashes, immutable copies and GPU retirement gates are unchanged.
+3. Query the actual complete draw-observation count before sizing its vector.
+   Avoid zero-initializing the full 8192-record (~608 KiB) capacity every tick.
+   Preserve all-or-nothing sidecar rejection and reject inconsistent capture.
+4. Reuse the confirmed audio conversion buffer instead of allocating it for
+   every block. Device output remains confirmed-only; stereo order, frequency,
+   local master gain and output EQ are unchanged.
+5. Explain and disable only unsupported live camera/scenery and sound-category
+   controls during an active experimental match. Preserve saved preferences;
+   normal single-player and legacy online controls are unchanged. Renderer,
+   texture-pack, HUD, master-volume and output-EQ controls remain independent.
+
+REVISED SCOPE / NOT CLAIMED FINISHED
+The user chose performance first and explicitly deferred the independent scene-
+construction and sound-category-mixer redesigns. The owned CPU continues using
+canonical camera/scenery defaults and an authored category mix. No peer's local
+preferences are imposed on another participant, or written into shared replay.
+Full local scenery/category parity is deferred, NOT implemented by this build.
+
+The earlier alAdpcmPull out-of-range guest-address failure has not recurred in
+the latest supplied/local logs. Its precise bad operand and origin remain
+unknown: do NOT call it fixed by the DMA optimization. Existing bad-address,
+register, generated source/line and guest-stack diagnostics remain intact. If
+it recurs, close the game and preserve both participants' newest runtime.log.
+
+BASELINE / PERFORMANCE EVIDENCE
+The accepted Playtest 3 ZIP, AppImage, hashes and pre-edit sources are preserved
+outside the public packages in playtest3-local-parity-baseline-20261003.
+The latest real user log contains a three-owner sample near 179 rendered FPS,
+matching frame/confirmed counters, zero replay corrections and no rejected
+packets in that sample. It is evidence about that session, NOT a WAN or every-
+scene qualification. No FPS improvement is measured or claimed for this build;
+the changes above remove source-identified redundant work without quality cuts.
+
+UNCHANGED
+Legacy backend algorithms; vanilla boot/menus and scene-epoch authorization;
+save verification and online-only save/Pak storage; initial-state transfer;
+texture-pack activation; 3/4-player viewport/music and HUD fixes; departure and
+return-to-lobby flow. No direct edits to submodules, RecompiledFuncs or
+RecompiledPatches. No gameplay shortcut, fake scene acknowledgement, pointer
+masking recovery, skipped audio voice or default quality reduction.
+
+VALIDATION / TEAM CHECKS
+Compilation and static source/package/contract checks only. Regression cases
+for DMA lanes/range rejection and concurrent lazy-image hashing are authored
+and compiled, NOT executed. No gameplay windows, self-tests, CTest or automated
+multiplayer tests are run, following the user's instruction.
+
+Install the exact Playtest 4 packages on EVERY experimental participant; the
+owned contract changes and rejects prior packages. Team testing must check:
+- Initial launch and saves with two, three and four participants.
+- Character/Track Select, previews, all race modes, Adventure bosses, finish,
+  rewards/key consecutive cutscenes and return to menus.
+- Normal audio, no static/pops/missing voices, local master volume and EQ.
+- HUD, original/pack textures, interpolation, water and transition framing.
+- Client exit, return to lobby, launch again and unchanged single-player saves.
+Compilation is not proof of gameplay, DSP equivalence or Internet stability.

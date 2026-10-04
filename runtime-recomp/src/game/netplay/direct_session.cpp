@@ -118,6 +118,7 @@ std::size_t receive_sequence_lane(protocol::MessageType type) {
     case protocol::MessageType::Input:
     case protocol::MessageType::InputAck:
     case protocol::MessageType::RollbackData:
+    case protocol::MessageType::ExperimentalInput:
     case protocol::MessageType::SimulationProgress:
     case protocol::MessageType::RacerOrientation:
     case protocol::MessageType::PreflightRealtimeProbe:
@@ -150,6 +151,11 @@ std::size_t receive_sequence_lane(protocol::MessageType type) {
     case protocol::MessageType::PreflightResult:
     case protocol::MessageType::OnlineSaveReady:
     case protocol::MessageType::OnlineSaveReadyAck:
+    case protocol::MessageType::ExperimentalControl:
+    case protocol::MessageType::ExperimentalMatchEnd:
+    case protocol::MessageType::ExperimentalLoaded:
+    case protocol::MessageType::ExperimentalSaveOffer:
+    case protocol::MessageType::ExperimentalSaveRequest:
         return 2U; // lifecycle/control traffic
     case protocol::MessageType::StateHash:
     case protocol::MessageType::StateSnapshot:
@@ -157,6 +163,8 @@ std::size_t receive_sequence_lane(protocol::MessageType type) {
     case protocol::MessageType::StateRequest:
     case protocol::MessageType::StateAcknowledge:
     case protocol::MessageType::InputRepair:
+    case protocol::MessageType::ExperimentalRepair:
+    case protocol::MessageType::ExperimentalCheckpoint:
     case protocol::MessageType::PreflightAuthorityProbe:
     case protocol::MessageType::PreflightCheckpointProbe:
         return 3U; // authority/recovery traffic
@@ -181,6 +189,7 @@ DirectSession::~DirectSession() {
     }
     state_changed_.notify_all();
     if (network_worker_.joinable()) network_worker_.join();
+    save_executor_.stop();
     replay_writer_.stop();
     transport_closer_.stop();
 }
@@ -191,11 +200,13 @@ void DirectSession::configure_manifest(const CompatibilityManifest& manifest) {
 }
 
 void DirectSession::configure_session_save(
-    std::vector<std::uint8_t> canonical_save, SaveInstaller installer) {
+    std::vector<std::uint8_t> canonical_save, SaveInstaller installer, SaveReader reader) {
     std::scoped_lock lock(mutex_);
     if (state_ != ConnectionState::Offline) return;
     session_save_ = std::move(canonical_save);
     save_installer_ = std::move(installer);
+    save_reader_ = std::move(reader);
+    ++save_job_token_;save_jobs_.clear();host_start_verified_=false;last_save_request_={};
     if (session_save_.size() == 512U) {
         manifest_.session_save_hash = stable_hash(std::string_view(
             reinterpret_cast<const char*>(session_save_.data()),
@@ -228,6 +239,112 @@ void DirectSession::retire_transport_locked() {
     transport_closer_.post([retired] { retired->close(); });
 }
 
+bool DirectSession::queue_save_locked(SaveJobKind kind,std::vector<std::uint8_t> bytes,
+    std::uint32_t generation,std::uint64_t hash,std::uint8_t slot,std::uint64_t launch) {
+    if(!match_id_||!generation||!hash||bytes.size()!=512)return false;
+    for(const auto& job:save_jobs_)if(job.token==save_job_token_&&job.match==match_id_&&
+        job.kind==kind&&job.generation==generation&&job.hash==hash&&job.launch==launch)return true;
+    if(save_jobs_.size()>=4||(!save_installer_&&kind!=SaveJobKind::HostSeal)||
+       (kind==SaveJobKind::HostSeal&&!save_reader_))return false;
+    if(!save_executor_started_) {save_executor_.start([]{},[]{});save_executor_started_=true;}
+    auto completion=std::make_shared<std::promise<SaveResult>>();auto future=completion->get_future();
+    const auto installer=save_installer_;const auto reader=save_reader_;const auto match=match_id_;
+    // The storage worker owns copies only: never a session pointer or mutex.
+    // Its serialized writes finish before a newer generation is installed.
+    if(!save_executor_.post([completion,installer,reader,match,kind,bytes=std::move(bytes)]() mutable {
+        SaveResult result;result.bytes=std::move(bytes);
+        try {
+            if(kind==SaveJobKind::HostSeal)result.ok=reader(true,match,result.bytes,result.path,result.error);
+            else result.ok=installer(match,result.bytes,result.path,result.error);
+        }catch(const std::exception& e){result.error=e.what();}
+         catch(...){result.error="Online save storage failed unexpectedly.";}
+        completion->set_value(std::move(result));
+    }))return false;
+    save_jobs_.push_back({kind,save_job_token_,match_id_,hash,launch,generation,slot,std::chrono::steady_clock::now(),std::move(future)});
+    worker_wake_=true;state_changed_.notify_all();return true;
+}
+
+void DirectSession::offer_online_save_locked(PeerRecord& peer) {
+    if(!peer.active||!save_sync_available()||lobby_.room().rules.synchronization!=SynchronizationMode::ExperimentalRollback||
+       (state_!=ConnectionState::Hosting&&state_!=ConnectionState::Lobby)||launch_countdown_active_||
+       (owned_match_end_&&!owned_match_end_->resumed))return;
+    const auto now=std::chrono::steady_clock::now();
+    if(last_save_offer_[peer.slot].time_since_epoch().count()&&now-last_save_offer_[peer.slot]<std::chrono::milliseconds(500))return;
+    protocol::MatchEndPayload offer{match_id_,protocol::MatchEndStage::Resume,peer.slot,{}};
+    offer.save_generation=session_save_generation_;offer.save_hash=manifest_.session_save_hash;offer.save=session_save_;
+    send_to(peer.address,protocol::MessageType::ExperimentalSaveOffer,protocol::encode_match_end(offer));
+    last_save_offer_[peer.slot]=now;
+}
+
+void DirectSession::service_save_jobs_locked() {
+    for(auto it=save_jobs_.begin();it!=save_jobs_.end();) {
+        if(it->result.wait_for(std::chrono::seconds(0))!=std::future_status::ready) {
+            if(it->token==save_job_token_&&state_!=ConnectionState::Offline&&state_!=ConnectionState::Failed&&
+               std::chrono::steady_clock::now()-it->started>std::chrono::seconds(30)) {
+                fail_locked("Online save storage did not finish within 30 seconds. Your single-player saves were not changed.");
+            }
+            ++it;continue;
+        }
+        SaveJob job=std::move(*it);it=save_jobs_.erase(it);auto result=job.result.get();
+        if(job.token!=save_job_token_||job.match!=match_id_||state_==ConnectionState::Offline||state_==ConnectionState::Failed)continue;
+        const auto actual=result.bytes.size()==512?stable_hash(std::string_view(reinterpret_cast<const char*>(result.bytes.data()),result.bytes.size())):0;
+        if(job.kind==SaveJobKind::HostSeal) {
+            if(!is_host_||launch_stage_!=LaunchStage::Idle||launch_countdown_active_||
+               (owned_match_end_&&!owned_match_end_->resumed)||
+               (state_!=ConnectionState::Hosting&&state_!=ConnectionState::Lobby)||job.generation!=session_save_generation_||
+               job.launch!=lobby_.room().generation) {
+                if(is_host_&&launch_stage_==LaunchStage::Idle&&!launch_countdown_active_)
+                    status_="The lobby changed during save verification. Ready and start again.";
+                continue;
+            }
+            if(!result.ok||!actual) {local_online_save_ready_=false;status_="Player 1's online save could not be verified: "+result.error;continue;}
+            if(actual!=job.hash) {
+                session_save_=std::move(result.bytes);manifest_.session_save_hash=actual;
+                ++session_save_generation_;if(!session_save_generation_)++session_save_generation_;
+                lobby_.refresh_online_save_hash(actual);room_view_=lobby_.room();online_save_status_.reset();
+                for(auto& peer:peers_)if(peer.active) {peer.online_save_ready=false;offer_online_save_locked(peer);}
+                status_="The latest online save is being synchronized. Ready again once every racer verifies it.";
+                broadcast_lobby();continue;
+            }
+            std::string reason;const bool peers_ready=std::all_of(peers_.begin(),peers_.end(),[](const auto& p){return !p.active||p.online_save_ready;});
+            if(!peers_ready||!lobby_.can_start(&reason)) {status_=reason.empty()?"The roster changed during save verification. Ready and start again.":reason;continue;}
+            if(pending_invitation_||connection_test_active_||pending_launch_prepare_) {
+                status_="Another lobby operation began during save verification. Start again when it finishes.";
+                continue;
+            }
+            bool routes_ready=true;
+            for(const auto& peer:peers_)if(peer.active)
+                for(const auto traffic:{TransportTrafficClass::Checkpoint,TransportTrafficClass::Control,
+                    TransportTrafficClass::Authoritative,TransportTrafficClass::Realtime,TransportTrafficClass::Replica})
+                    routes_ready=routes_ready&&transport_->traffic_ready(peer.address,traffic);
+            if(!routes_ready) {status_="A racer's network lanes are still warming up. Start again shortly.";continue;}
+            std::fprintf(stderr,"[online][save] host-sealed match=%llu generation=%u hash=%llu bytes=512\n",
+                static_cast<unsigned long long>(match_id_),session_save_generation_,static_cast<unsigned long long>(actual));
+            host_start_verified_=true;begin_countdown_locked();continue;
+        }
+        if(is_host_||(job.kind!=SaveJobKind::Join&&job.generation<session_save_generation_))continue;
+        if(job.kind==SaveJobKind::Join&&!admission_pending(state_))continue;
+        if(job.kind==SaveJobKind::Resync&&state_!=ConnectionState::Lobby)continue;
+        if(job.kind==SaveJobKind::Resume&&(!owned_match_end_||owned_match_end_->hash!=job.launch||
+           !owned_match_end_->runtime_returned||owned_match_end_->resumed))continue;
+        if(!result.ok||actual!=job.hash) {fail_locked("The isolated online save could not be installed and verified: "+result.error);continue;}
+        session_save_=std::move(result.bytes);session_save_generation_=job.generation;manifest_.session_save_hash=actual;
+        room_view_.manifest=manifest_;local_slot_=job.slot;local_online_save_ready_=true;local_online_save_acknowledged_=false;online_save_status_.reset();
+        if(job.kind==SaveJobKind::Join) {transport_->retain_peer_route(host_address_);state_=ConnectionState::Lobby;}
+        if(job.kind==SaveJobKind::Resume) {
+            owned_match_end_->resumed=true;
+            send_to(host_address_,protocol::MessageType::ExperimentalMatchEnd,
+                protocol::encode_match_end({job.launch,protocol::MatchEndStage::ResumeAck,local_slot_,{}}));
+        }
+        send_to(host_address_,protocol::MessageType::OnlineSaveReady,
+            protocol::encode_online_save_ready({local_slot_,session_save_generation_,actual}));
+        last_client_request_=std::chrono::steady_clock::now();status_="Isolated online save installed and verified; waiting for Player 1's acknowledgement.";
+        std::fprintf(stderr,"[online][save] installed phase=%u match=%llu generation=%u hash=%llu bytes=512\n",
+            unsigned(job.kind),static_cast<unsigned long long>(match_id_),session_save_generation_,static_cast<unsigned long long>(actual));
+        worker_wake_=true;state_changed_.notify_all();
+    }
+}
+
 void DirectSession::configure_artifact_directory(std::filesystem::path directory) {
     std::scoped_lock lock(mutex_);
     artifact_directory_ = directory;
@@ -238,7 +355,7 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
                          std::string room_name, ConnectionMethod method,
                          std::string player_name, const Rules& rules,
                          std::string& error) {
-    if (const char* reason = experimental::runtime_admission_error(rules.synchronization)) {
+    if (const char* reason = experimental::runtime_admission_error(rules.synchronization, owned_backend_available())) {
         error = reason;
         return false;
     }
@@ -611,6 +728,13 @@ void DirectSession::disconnect(std::string_view reason) {
     normal_priority_outbound_.clear();
     bulk_outbound_.clear();
     rollback_inbound_.clear();
+    owned_inbound_.clear();
+    owned_inbound_bytes_ = 0;
+    owned_match_end_.reset();
+    ++save_job_token_;save_jobs_.clear();host_start_verified_=false;
+    last_save_offer_={};
+    retired_owned_generation_ = 0;
+    owned_last_host_packet_ = {};
     authoritative_phase_active_ = false;
     authority_lifecycle_ = AuthorityLifecycle::Inactive;
     finish_seal_frame_.reset();
@@ -770,7 +894,11 @@ void DirectSession::network_loop() {
         if (state_ != ConnectionState::Failed) worker_fault = false;
         if (!worker_fault) {
             try {
+                service_save_jobs_locked();
                 if (transport_->is_open()) pump_locked();
+                else if ((launch_descriptor_ && launch_descriptor_->synchronization == SynchronizationMode::ExperimentalRollback) ||
+                         (owned_match_end_ && !owned_match_end_->resumed))
+                    fail_locked("The experimental connection closed. The game ended; return to Online to reconnect.");
             } catch (const std::exception& exception) {
                 worker_fault = true;
                 fail_locked(std::string("The online transport failed safely: ") + exception.what());
@@ -787,7 +915,9 @@ void DirectSession::network_loop() {
             presentation_view_.store(std::make_shared<const SessionView>(view_locked()), std::memory_order_release);
             last_view_publication_ = now;
         }
-        if (state_ == ConnectionState::Running) {
+        if (state_ == ConnectionState::Running &&
+            (!launch_descriptor_ || launch_descriptor_->synchronization !=
+                SynchronizationMode::ExperimentalRollback)) {
             if (next_commit_frame_ != observed_commit_frame) {
                 observed_commit_frame = next_commit_frame_;
                 last_commit_progress = now;
@@ -837,7 +967,7 @@ void DirectSession::network_loop() {
                 return worker_stop_.load(std::memory_order_acquire) || worker_wake_;
             });
             consecutive_receive_drains = 0;
-        } else if (state_ == ConnectionState::Offline && replay_writes_.empty()) {
+        } else if (state_ == ConnectionState::Offline && replay_writes_.empty() && save_jobs_.empty()) {
             // No socket, heartbeat or replay-completion deadline exists here.
             // host/join/disconnect/quit publish the wake under the same mutex.
             state_changed_.wait(lock, wake);
@@ -854,6 +984,10 @@ void DirectSession::network_loop() {
 
 bool DirectSession::set_ready(bool ready, std::string& error) {
     std::scoped_lock lock(mutex_);
+    if (owned_match_end_ && !owned_match_end_->resumed) {
+        error = "Wait for every remaining racer to return to the lobby and verify the online save.";
+        return false;
+    }
     if (connection_test_active_) {
         error = "Wait for the connection pre-flight check to finish.";
         return false;
@@ -896,6 +1030,9 @@ bool DirectSession::approve_join(std::uint64_t request_id, std::string& error) {
 
 bool DirectSession::approve_join_locked(std::uint64_t request_id,
                                         std::string& error) {
+    if (owned_match_end_ && !owned_match_end_->resumed) {
+        error = "Wait for the previous match to return to the lobby."; return false;
+    }
     if (connection_test_active_) {
         error = "Wait for the connection pre-flight check to finish.";
         return false;
@@ -1139,7 +1276,11 @@ bool DirectSession::revoke_invitation(std::string& error) {
 
 bool DirectSession::request_start(std::string& error) {
     std::scoped_lock lock(mutex_);
-    if (const char* reason = experimental::runtime_admission_error(lobby_.room().rules.synchronization)) {
+    if (owned_match_end_ && !owned_match_end_->resumed) {
+        error = "Wait for every remaining racer to return to the lobby and verify the online save.";
+        return false;
+    }
+    if (const char* reason = experimental::runtime_admission_error(lobby_.room().rules.synchronization, owned_backend_available_)) {
         error = reason;
         return false;
     }
@@ -1190,6 +1331,18 @@ bool DirectSession::request_start(std::string& error) {
         return false;
     }
     if (!lobby_.can_start(&error)) return false;
+    if(lobby_.room().rules.synchronization==SynchronizationMode::ExperimentalRollback&&save_reader_&&!host_start_verified_) {
+        if(!queue_save_locked(SaveJobKind::HostSeal,session_save_,session_save_generation_,manifest_.session_save_hash,local_slot_,lobby_.room().generation)) {
+            error="The online save verification worker is busy. Try starting again shortly.";return false;
+        }
+        status_="Verifying Player 1's online save before the countdown...";
+        error.clear();return true;
+    }
+    begin_countdown_locked();error.clear();return true;
+}
+
+void DirectSession::begin_countdown_locked() {
+    host_start_verified_=false;
     reset_launch_transaction_locked();
     committed_launch_epoch_ = 0U;
     launch_commit_rebroadcast_until_ = {};
@@ -1203,8 +1356,6 @@ bool DirectSession::request_start(std::string& error) {
     countdown_acks_[local_slot_] = true;
     status_ = "DKR-R Online starts in five seconds.";
     broadcast_lobby();
-    error.clear();
-    return true;
 }
 
 bool DirectSession::request_connection_test(std::string& error) {
@@ -1538,6 +1689,10 @@ void DirectSession::cancel_launch_locked(std::string_view reason) {
 }
 
 bool DirectSession::prepare_launch_locked(std::string& error) {
+    if (owned_match_end_ && !owned_match_end_->resumed) {
+        error = "The previous experimental match is still returning to the lobby.";
+        return false;
+    }
     if (!is_host_ || (state_ != ConnectionState::Hosting &&
                       state_ != ConnectionState::Lobby)) {
         error = "Only Player 1 can begin a synchronized lobby start.";
@@ -1556,6 +1711,12 @@ bool DirectSession::prepare_launch_locked(std::string& error) {
     clear_friend_admissions_locked();
     room_view_ = lobby_.room();
     launch_descriptor_ = make_launch_descriptor();
+    if (launch_descriptor_->synchronization == SynchronizationMode::ExperimentalRollback) {
+        const auto now = std::chrono::steady_clock::now();
+        for (auto& peer : peers_) if (peer.active) peer.owned_last_packet = now;
+        owned_last_host_packet_ = now;
+        owned_inbound_.clear(); owned_inbound_bytes_ = 0;
+    }
     if (!valid_launch_descriptor(*launch_descriptor_)) {
         lobby_.return_to_waiting();
         room_view_ = lobby_.room();
@@ -1781,10 +1942,14 @@ bool DirectSession::consume_launch_request() {
 
 void DirectSession::mark_game_loaded(std::uint64_t bootstrap_hash,
                                      std::uint32_t online_save_generation,
-                                     std::uint64_t online_save_hash) {
+                                     std::uint64_t online_save_hash,std::uint64_t expected_launch_hash) {
     std::scoped_lock lock(mutex_);
+    if(expected_launch_hash&&(!launch_descriptor_||launch_descriptor_hash(*launch_descriptor_)!=expected_launch_hash||
+       state_!=ConnectionState::Loading||(owned_match_end_&&!owned_match_end_->resumed)))return;
     if (local_loaded_ || state_ == ConnectionState::Offline ||
         state_ == ConnectionState::Failed || bootstrap_hash == 0U) return;
+    if(owned_backend_available_&&((owned_match_end_&&!owned_match_end_->resumed)||
+       (launch_descriptor_&&launch_descriptor_->synchronization==SynchronizationMode::ExperimentalRollback&&state_!=ConnectionState::Loading)))return;
     if (online_save_generation != session_save_generation_ ||
         online_save_hash == 0U ||
         online_save_hash != manifest_.session_save_hash ||
@@ -1809,12 +1974,17 @@ void DirectSession::mark_game_loaded(std::uint64_t bootstrap_hash,
         room_view_ = lobby_.room();
         broadcast_lobby();
     } else {
-        send_to(host_address_, protocol::MessageType::Loaded,
-                protocol::encode_loaded({local_slot_, bootstrap_hash,
-                                         online_save_generation,
-                                         online_save_hash}));
+        send_loaded_locked();
         last_client_request_ = std::chrono::steady_clock::now();
     }
+}
+
+void DirectSession::send_loaded_locked() {
+    const protocol::LoadedPayload loaded{local_slot_,local_bootstrap_hash_,local_runtime_save_generation_,local_runtime_save_hash_};
+    if(launch_descriptor_&&launch_descriptor_->synchronization==SynchronizationMode::ExperimentalRollback) {
+        send_to(host_address_,protocol::MessageType::ExperimentalLoaded,
+            protocol::encode_experimental_loaded({launch_descriptor_hash(*launch_descriptor_),loaded}));
+    }else send_to(host_address_,protocol::MessageType::Loaded,protocol::encode_loaded(loaded));
 }
 
 void DirectSession::fail_runtime_start(std::string reason) {
@@ -2858,6 +3028,334 @@ bool DirectSession::send_rollback_packet(
     return peer.active &&
            send_with_key(peer.address, peer.key,
                          protocol::MessageType::RollbackData, payload);
+}
+
+bool DirectSession::enable_owned_backend(bool available) {
+    std::scoped_lock lock(mutex_);
+    if (state_ != ConnectionState::Offline) return false;
+    owned_backend_available_ = available;
+    owned_inbound_.clear(); owned_inbound_bytes_ = 0;
+    return true;
+}
+
+bool DirectSession::owned_backend_available() const {
+    std::scoped_lock lock(mutex_);
+    return owned_backend_available_;
+}
+
+bool DirectSession::owned_game_active() const {
+    std::scoped_lock lock(mutex_);
+    return launch_descriptor_ && launch_descriptor_->synchronization == SynchronizationMode::ExperimentalRollback &&
+        (state_ == ConnectionState::Loading || state_ == ConnectionState::Running);
+}
+
+PeerAddress DirectSession::owned_peer_address(std::uint8_t slot) {
+    PeerAddress address{};
+    address.size = 4;
+    address.storage[0] = 'D'; address.storage[1] = 'K';
+    address.storage[2] = 'X'; address.storage[3] = slot;
+    return address;
+}
+
+DatagramSendStatus DirectSession::send_owned_packet(std::uint8_t target,
+    std::span<const std::uint8_t> bytes, TransportTrafficClass traffic,
+    std::string& error) {
+    std::scoped_lock lock(mutex_);
+    if (!owned_backend_available_ || !launch_descriptor_ ||
+        launch_descriptor_->synchronization != SynchronizationMode::ExperimentalRollback ||
+        (state_ != ConnectionState::Loading && state_ != ConnectionState::Running) ||
+        target >= kMaximumPlayers || target == local_slot_ || !launch_descriptor_->occupied(target) ||
+        (!is_host_ && target != 0) || bytes.empty() || bytes.size() > 12352) {
+        error = "The authenticated experimental route is unavailable.";
+        return DatagramSendStatus::Error;
+    }
+    const auto& address = is_host_ ? peers_[target].address : host_address_;
+    if ((is_host_ && !peers_[target].active) || !transport_ ||
+        !transport_->traffic_ready(address, traffic)) return DatagramSendStatus::WouldBlock;
+    // Retain backpressure in the owned sender rather than overflowing a stable
+    // outbound queue. These are complete packets, never fragments to discard.
+    const auto type = traffic == TransportTrafficClass::Realtime
+        ? protocol::MessageType::ExperimentalInput
+        : traffic == TransportTrafficClass::Authoritative
+            ? protocol::MessageType::ExperimentalRepair
+            : traffic == TransportTrafficClass::Checkpoint ? protocol::MessageType::ExperimentalCheckpoint
+            : protocol::MessageType::ExperimentalControl;
+    const auto& queue=traffic==TransportTrafficClass::Checkpoint?bulk_outbound_:
+        traffic==TransportTrafficClass::Realtime?high_priority_outbound_:
+        traffic==TransportTrafficClass::Authoritative?repair_outbound_:critical_outbound_;
+    if(std::count_if(queue.begin(),queue.end(),[&](const auto& p){return p.destination==address&&p.type==type;})>=16)
+        return DatagramSendStatus::WouldBlock;
+    // SCTP can still deliver old, already-transmitted packets after a match
+    // retires. Bind every owned lane to this launch, before admission sees it.
+    std::vector<std::uint8_t> scoped_bytes;
+    scoped_bytes.reserve(8U+bytes.size());
+    const auto launch_hash=launch_descriptor_hash(*launch_descriptor_);
+    for(int shift=56;shift>=0;shift-=8)scoped_bytes.push_back(static_cast<std::uint8_t>(launch_hash>>shift));
+    scoped_bytes.insert(scoped_bytes.end(),bytes.begin(),bytes.end());
+    if (!send_with_key(address, is_host_ ? peers_[target].key : key_, type, scoped_bytes)) {
+        error = "Could not queue the authenticated experimental packet.";
+        return DatagramSendStatus::Error;
+    }
+    worker_wake_ = true; state_changed_.notify_all(); error.clear();
+    return DatagramSendStatus::Sent;
+}
+
+void DirectSession::begin_owned_match_end_locked(std::string reason) {
+    if (!launch_descriptor_ || launch_descriptor_->synchronization != SynchronizationMode::ExperimentalRollback ||
+        (state_ != ConnectionState::Loading && state_ != ConnectionState::Running)) return;
+    for (char& c : reason) if (static_cast<unsigned char>(c) < 32 || c == 127) c = ' ';
+    if (reason.empty()) reason = "A racer stopped the game. The match has ended.";
+    reason.resize((std::min)(reason.size(), std::size_t(240)));
+    const auto hash = launch_descriptor_hash(*launch_descriptor_);
+    retired_owned_generation_ = (std::max)(retired_owned_generation_, launch_descriptor_->lobby_generation);
+    owned_match_end_ = OwnedMatchEnd{hash, reason, false, false, false, std::chrono::steady_clock::now(), {}};
+    for (auto& peer : peers_) { peer.owned_runtime_returned = false; peer.owned_lobby_resumed = false; }
+    reset_launch_transaction_locked(); committed_launch_epoch_ = 0;
+    launch_requested_ = false; launch_descriptor_.reset();
+    local_loaded_ = false; run_signal_sent_ = false;
+    local_bootstrap_hash_ = 0; bootstrap_hashes_ = {}; bootstrap_hash_present_ = {};
+    runtime_save_present_ = {}; local_runtime_save_generation_ = 0; local_runtime_save_hash_ = 0;
+    desired_ready_.reset(); pending_ready_request_id_ = 0;
+    owned_inbound_.clear(); owned_inbound_bytes_ = 0;
+    // Only retire the experimental packet lanes. Keep lobby authentication,
+    // receive sequence windows, the invitation and the independent transport.
+    for (auto* queue : {&critical_outbound_, &repair_outbound_, &high_priority_outbound_,
+                       &commit_outbound_,&authority_outbound_,&normal_priority_outbound_,&bulk_outbound_}) {
+        std::erase_if(*queue, [](const OutboundPacket& p) {
+            return p.type == protocol::MessageType::ExperimentalControl ||
+                p.type == protocol::MessageType::ExperimentalInput ||
+                p.type == protocol::MessageType::ExperimentalRepair ||
+                p.type == protocol::MessageType::ExperimentalCheckpoint || p.type == protocol::MessageType::ExperimentalLoaded ||
+                p.type == protocol::MessageType::ExperimentalSaveOffer || p.type == protocol::MessageType::ExperimentalSaveRequest ||
+                p.type == protocol::MessageType::Start || p.type == protocol::MessageType::Loaded ||
+                p.type == protocol::MessageType::LaunchPrepare || p.type == protocol::MessageType::LaunchCommit ||
+                p.type == protocol::MessageType::LaunchRelease || p.type == protocol::MessageType::LaunchPrepareAck ||
+                p.type == protocol::MessageType::LaunchCommitAck || p.type == protocol::MessageType::LaunchReleaseAck ||
+                p.type == protocol::MessageType::LaunchCancel;
+        });
+    }
+    if (is_host_) { lobby_.return_to_waiting(); room_view_ = lobby_.room(); }
+    else for (auto& player : room_view_.players) { player.ready = false; player.loaded = false; }
+    state_ = is_host_ ? ConnectionState::Hosting : ConnectionState::Lobby;
+    status_ = reason + " Returning to the lobby...";
+    std::fprintf(stderr, "[rollback][match-end] begin host=%d launch=%llu reason=%s\n", is_host_,
+        static_cast<unsigned long long>(hash), reason.c_str());
+    worker_wake_ = true; state_changed_.notify_all();
+}
+
+void DirectSession::request_owned_match_end(std::string reason) {
+    std::scoped_lock lock(mutex_);
+    begin_owned_match_end_locked(std::move(reason));
+    service_owned_match_end_locked(std::chrono::steady_clock::now());
+}
+
+bool DirectSession::complete_owned_match_end(std::uint64_t hash,
+    std::span<const std::uint8_t> confirmed_save, std::string& error) {
+    std::scoped_lock lock(mutex_);
+    if (!owned_match_end_ || owned_match_end_->hash != hash) {
+        error = "The experimental match-end identity no longer matches."; return false;
+    }
+    if (state_ == ConnectionState::Offline || state_ == ConnectionState::Failed) {
+        error = "The lobby closed while the experimental match was ending."; return false;
+    }
+    if (owned_match_end_->runtime_returned) { error.clear(); return true; }
+    if (is_host_) {
+        // The owned worker has already committed this checksum-valid confirmed
+        // EEPROM. Do not touch a single-player save or speculative game state.
+        if (confirmed_save.size() != 512) { error = "The confirmed online save is incomplete."; return false; }
+        session_save_.assign(confirmed_save.begin(), confirmed_save.end());
+        manifest_.session_save_hash = stable_hash(std::string_view(
+            reinterpret_cast<const char*>(session_save_.data()), session_save_.size()));
+        ++session_save_generation_; if (!session_save_generation_) ++session_save_generation_;
+        lobby_.refresh_online_save_hash(manifest_.session_save_hash); room_view_ = lobby_.room();
+        local_online_save_ready_ = true; local_online_save_acknowledged_ = true;
+        online_save_status_.reset();
+        for (auto& peer : peers_) if (peer.active) peer.online_save_ready = false;
+    }
+    owned_match_end_->runtime_returned = true;
+    owned_match_end_->last_send = {};
+    service_owned_match_end_locked(std::chrono::steady_clock::now());
+    error.clear(); return true;
+}
+
+void DirectSession::remove_owned_peer_locked(std::uint64_t sender, std::string reason) {
+    auto* peer = peer_by_sender(sender);
+    if (!is_host_ || !peer) return;
+    begin_owned_match_end_locked(std::move(reason));
+    const auto address = peer->address;
+    // Keep survivor slots stable until the next immutable launch. Compact N64
+    // ownership is rebuilt there; moving a live lobby slot invalidates Ready
+    // and save acknowledgements already in transit from the other racers.
+    lobby_.leave(std::to_string(sender), false);
+    transport_->release_peer_route(address); *peer = {};
+    for (auto* queue : {&critical_outbound_, &repair_outbound_, &high_priority_outbound_,
+                       &commit_outbound_, &authority_outbound_, &normal_priority_outbound_, &bulk_outbound_})
+        std::erase_if(*queue, [&](const OutboundPacket& p) { return p.destination == address; });
+    synchronize_peer_slots(); room_view_ = lobby_.room();
+    broadcast_lobby(); worker_wake_ = true; state_changed_.notify_all();
+}
+
+void DirectSession::service_owned_match_end_locked(std::chrono::steady_clock::time_point now) {
+    // Only negotiated experimental games use this liveness policy. Ordinary
+    // packet loss and temporary ICE recovery still have 30 seconds to recover.
+    if (launch_descriptor_ && launch_descriptor_->synchronization == SynchronizationMode::ExperimentalRollback &&
+        (state_ == ConnectionState::Loading || state_ == ConnectionState::Running)) {
+        if (is_host_) {
+            for (const auto& peer : peers_) if (peer.active && peer.owned_last_packet.time_since_epoch().count() &&
+                now - peer.owned_last_packet >= std::chrono::seconds(30)) {
+                const auto name = lobby_.room().players[peer.slot].display_name;
+                remove_owned_peer_locked(peer.sender_id, name + " stopped responding. The match has ended.");
+                break;
+            }
+        } else if (owned_last_host_packet_.time_since_epoch().count() &&
+                   now - owned_last_host_packet_ >= std::chrono::seconds(30)) {
+            fail_locked("The host stopped responding. The lobby has closed; return to Online to reconnect."); return;
+        }
+    }
+    if (!owned_match_end_ || owned_match_end_->resumed || state_ == ConnectionState::Failed || state_ == ConnectionState::Offline) return;
+    auto& end = *owned_match_end_;
+    if (is_host_) {
+        // Never let a killed process strand the remaining launchers waiting for
+        // its runtime-return acknowledgement. Removal is by authenticated ID,
+        // not by a slot that may move when the lobby compacts its roster.
+        if (now - end.started >= std::chrono::seconds(30)) {
+            for (const auto& peer : peers_) if (peer.active &&
+                (!peer.owned_runtime_returned || (end.resume_prepared && !peer.owned_lobby_resumed))) {
+                if (now - end.started >= std::chrono::seconds(60) ||
+                    !peer.owned_last_packet.time_since_epoch().count() ||
+                    now - peer.owned_last_packet >= std::chrono::seconds(30)) {
+                    remove_owned_peer_locked(peer.sender_id, {}); break;
+                }
+            }
+        }
+        const bool returned = end.runtime_returned && std::all_of(peers_.begin(), peers_.end(),
+            [](const PeerRecord& p) { return !p.active || p.owned_runtime_returned; });
+        if (returned && !end.resume_prepared) {
+            end.resume_prepared = true; end.last_send = {};
+            status_ = "Match ended. Verifying the latest online save before the next start...";
+            broadcast_lobby();
+        }
+        if (end.resume_prepared && std::all_of(peers_.begin(), peers_.end(),
+            [](const PeerRecord& p) { return !p.active || (p.owned_lobby_resumed && p.online_save_ready); })) {
+            end.resumed = true; status_ = "Match ended. The remaining racers can Ready and start again.";
+            broadcast_lobby(); state_changed_.notify_all(); return;
+        }
+    } else if (now - end.started >= std::chrono::seconds(30) &&
+               now - owned_last_host_packet_ >= std::chrono::seconds(30)) {
+        fail_locked("The host left while returning to the lobby. Create or join another lobby."); return;
+    }
+    if (end.last_send.time_since_epoch().count() && now - end.last_send < std::chrono::milliseconds(250)) return;
+    end.last_send = now;
+    if (is_host_) {
+        for (const auto& peer : peers_) if (peer.active && !peer.owned_lobby_resumed) {
+            protocol::MatchEndPayload payload{end.hash,
+                end.resume_prepared ? protocol::MatchEndStage::Resume : protocol::MatchEndStage::Stop,
+                peer.slot, end.message};
+            if (end.resume_prepared) {
+                payload.save_generation = session_save_generation_; payload.save_hash = manifest_.session_save_hash;
+                payload.save = session_save_;
+            }
+            send_to(peer.address, protocol::MessageType::ExperimentalMatchEnd, protocol::encode_match_end(payload));
+        }
+    } else {
+        send_to(host_address_, protocol::MessageType::ExperimentalMatchEnd,
+            protocol::encode_match_end({end.hash, end.runtime_returned ? protocol::MatchEndStage::Returned :
+                protocol::MatchEndStage::Request, local_slot_, {}}));
+    }
+}
+
+bool DirectSession::handle_owned_match_end_locked(std::uint64_t sender, const protocol::Datagram& packet) {
+    if (packet.header.type != protocol::MessageType::ExperimentalMatchEnd) return false;
+    protocol::MatchEndPayload payload;
+    if (!owned_backend_available_ || !protocol::decode_match_end(packet.payload, payload)) return true;
+    const bool current = launch_descriptor_ && launch_descriptor_->synchronization == SynchronizationMode::ExperimentalRollback &&
+        launch_descriptor_hash(*launch_descriptor_) == payload.launch_hash;
+    const bool ending = owned_match_end_ && owned_match_end_->hash == payload.launch_hash;
+    if (launch_descriptor_ && !current) return true;
+    if (!current && !ending) return true; // delayed previous-match traffic cannot stop a new match
+    if (is_host_) {
+        auto* peer = peer_by_sender(sender); if (!peer) return true;
+        if (payload.stage == protocol::MatchEndStage::Request || payload.stage == protocol::MatchEndStage::Returned) {
+            if (current) begin_owned_match_end_locked(lobby_.room().players[peer->slot].display_name +
+                " stopped the game. The match has ended.");
+            if (payload.stage == protocol::MatchEndStage::Returned) peer->owned_runtime_returned = true;
+        } else if (payload.stage == protocol::MatchEndStage::ResumeAck && ending && owned_match_end_->resume_prepared) {
+            peer->owned_lobby_resumed = true;
+        }
+    } else if (payload.stage == protocol::MatchEndStage::Stop) {
+        if (current) begin_owned_match_end_locked(payload.message);
+    } else if (payload.stage == protocol::MatchEndStage::Resume && ending && owned_match_end_->runtime_returned) {
+        if (!owned_match_end_->resumed) {
+            const auto hash = stable_hash(std::string_view(reinterpret_cast<const char*>(payload.save.data()), payload.save.size()));
+            if(hash!=payload.save_hash||!queue_save_locked(SaveJobKind::Resume,payload.save,payload.save_generation,hash,payload.player_slot,payload.launch_hash)) {
+                fail_locked("The updated isolated online save could not be queued safely.");return true;
+            }
+            local_online_save_ready_=false;local_online_save_acknowledged_=false;
+            status_="Match ended. Installing and verifying the latest online save...";return true;
+        } else if (payload.save_hash != manifest_.session_save_hash || payload.save_generation != session_save_generation_) return true;
+        send_to(host_address_, protocol::MessageType::ExperimentalMatchEnd,
+            protocol::encode_match_end({payload.launch_hash, protocol::MatchEndStage::ResumeAck, local_slot_, {}}));
+        send_to(host_address_, protocol::MessageType::OnlineSaveReady,
+            protocol::encode_online_save_ready({local_slot_, session_save_generation_, manifest_.session_save_hash}));
+        last_client_request_ = std::chrono::steady_clock::now();
+    }
+    worker_wake_ = true; state_changed_.notify_all(); return true;
+}
+
+bool DirectSession::receive_owned_packet_locked(std::uint8_t source,
+    const protocol::Datagram& packet) {
+    const auto type = packet.header.type;
+    if (type != protocol::MessageType::ExperimentalControl &&
+        type != protocol::MessageType::ExperimentalInput &&
+        type != protocol::MessageType::ExperimentalRepair &&
+        type != protocol::MessageType::ExperimentalCheckpoint) return false;
+    if (!owned_backend_available_ || !launch_descriptor_ ||
+        launch_descriptor_->synchronization != SynchronizationMode::ExperimentalRollback ||
+        (state_ != ConnectionState::Loading && state_ != ConnectionState::Running) ||
+        source >= kMaximumPlayers || !launch_descriptor_->occupied(source) || source == local_slot_ ||
+        packet.payload.size() <= 8U || packet.payload.size() > 12360U) return true;
+    std::uint64_t launch_hash=0;
+    for(std::size_t index=0;index<8U;++index)launch_hash=(launch_hash<<8U)|packet.payload[index];
+    if(launch_hash!=launch_descriptor_hash(*launch_descriptor_))return true;
+    const auto payload_size=packet.payload.size()-8U;
+    if (owned_inbound_.size() >= 256 || owned_inbound_bytes_ + payload_size > 2U*1024U*1024U) {
+        fail_locked("The experimental packet consumer stopped servicing its bounded receive queue.");
+        return true;
+    }
+    const auto traffic = type == protocol::MessageType::ExperimentalInput ? TransportTrafficClass::Realtime
+        : type == protocol::MessageType::ExperimentalRepair ? TransportTrafficClass::Authoritative
+        : type == protocol::MessageType::ExperimentalCheckpoint ? TransportTrafficClass::Checkpoint
+        : TransportTrafficClass::Control;
+    owned_inbound_.push_back({source, traffic,
+        std::vector<std::uint8_t>(packet.payload.begin()+8,packet.payload.end())});
+    owned_inbound_bytes_ += payload_size;
+    return true;
+}
+
+bool DirectSession::take_owned_packet(OwnedPacket& packet) {
+    std::scoped_lock lock(mutex_);
+    if (owned_inbound_.empty()) return false;
+    packet = std::move(owned_inbound_.front()); owned_inbound_.pop_front();
+    owned_inbound_bytes_ -= packet.bytes.size();
+    return true;
+}
+
+bool DirectSession::owned_network_configuration(const secure::Key& incarnation,
+    experimental::NetworkConfiguration& configuration, std::string& error) const {
+    std::scoped_lock lock(mutex_);
+    configuration = {};
+    if (!owned_backend_available_ || !launch_descriptor_ ||
+        launch_descriptor_->synchronization != SynchronizationMode::ExperimentalRollback ||
+        (state_ != ConnectionState::Loading && state_ != ConnectionState::Running)) {
+        error = "No negotiated experimental launch is active."; return false;
+    }
+    configuration.match_id = match_id_; configuration.local_sender_id = sender_id_;
+    configuration.incarnation = incarnation;
+    if (!is_host_) configuration.peers[0] = {owned_peer_address(0),host_sender_id_,key_};
+    else for (std::uint8_t slot=1; slot<kMaximumPlayers; ++slot)
+        if (launch_descriptor_->occupied(slot) && peers_[slot].active)
+            configuration.peers[slot] = {owned_peer_address(slot),peers_[slot].sender_id,peers_[slot].key};
+    error.clear(); return true;
 }
 
 std::vector<RollbackPacket> DirectSession::take_rollback_packets() {
@@ -4331,6 +4829,7 @@ SessionView DirectSession::view_locked() const {
                        last_verified_frame_, last_authoritative_frame_,
                        authoritative_corrections_, input_delay_, method_,
                        match_id_, lobby_locked_};
+    result.owned_match_ending = owned_match_end_ && !owned_match_end_->resumed;
     result.input_stalls = input_stalls_;
     result.longest_input_stall_ms = longest_input_stall_ms_;
     result.packets_sent = packets_sent_;
@@ -4553,6 +5052,7 @@ RuntimeSessionView DirectSession::runtime_view() const {
     result.online_save_generation = session_save_generation_;
     result.online_save_hash = manifest_.session_save_hash;
     result.status = status_;
+    result.owned_match_ending = owned_match_end_ && !owned_match_end_->resumed;
     if (!replay_write_error_.empty()) result.status += " Replay: " + replay_write_error_;
     return result;
 }
@@ -4795,9 +5295,13 @@ bool DirectSession::send_with_key(const PeerAddress& address,
         type == protocol::MessageType::LaunchRelease ||
         type == protocol::MessageType::LaunchReleaseAck ||
         type == protocol::MessageType::Disconnect ||
+        type == protocol::MessageType::ExperimentalMatchEnd ||
+        type == protocol::MessageType::ExperimentalCheckpoint || type == protocol::MessageType::ExperimentalLoaded ||
+        type == protocol::MessageType::ExperimentalSaveOffer || type == protocol::MessageType::ExperimentalSaveRequest ||
+        type == protocol::MessageType::ExperimentalControl ||
         type == protocol::MessageType::FrameCommitRequest;
     if (coalescible) {
-        for (const auto* queue : {&critical_outbound_, &repair_outbound_, &authority_outbound_, &normal_priority_outbound_}) {
+        for (const auto* queue : {&critical_outbound_, &repair_outbound_, &authority_outbound_, &normal_priority_outbound_, &bulk_outbound_}) {
             if (std::any_of(queue->begin(), queue->end(), [&](const auto& queued) {
                     return queued.type == type && queued.destination == address &&
                         queued.frame == frame && queued.retry_identity.size() == payload.size() &&
@@ -4839,6 +5343,9 @@ bool DirectSession::enqueue_outbound(PeerAddress destination,
     constexpr std::size_t maximum_bulk = 96U;
     OutboundPacket packet{destination, type, frame, std::move(bytes), std::move(retry_identity)};
     const bool critical = type == protocol::MessageType::Disconnect ||
+        type == protocol::MessageType::ExperimentalMatchEnd ||
+        type == protocol::MessageType::ExperimentalLoaded ||
+        type == protocol::MessageType::ExperimentalSaveOffer || type == protocol::MessageType::ExperimentalSaveRequest ||
         type == protocol::MessageType::Start ||
         type == protocol::MessageType::ReadyRequest ||
         type == protocol::MessageType::ReadyAck ||
@@ -4865,12 +5372,15 @@ bool DirectSession::enqueue_outbound(PeerAddress destination,
         type == protocol::MessageType::FrameCorrectionAck ||
         type == protocol::MessageType::FrameCommitRequest ||
         type == protocol::MessageType::StateRequest ||
-        type == protocol::MessageType::StateAcknowledge;
+        type == protocol::MessageType::StateAcknowledge ||
+        type == protocol::MessageType::ExperimentalControl;
     const bool reliable_repair =
-        type == protocol::MessageType::InputRepair;
+        type == protocol::MessageType::InputRepair ||
+        type == protocol::MessageType::ExperimentalRepair;
     const bool high_priority = type == protocol::MessageType::Input ||
         type == protocol::MessageType::InputAck ||
         type == protocol::MessageType::RollbackData ||
+        type == protocol::MessageType::ExperimentalInput ||
         type == protocol::MessageType::SimulationProgress ||
         type == protocol::MessageType::RacerOrientation ||
         type == protocol::MessageType::PreflightRealtimeProbe;
@@ -4998,6 +5508,9 @@ bool DirectSession::enqueue_outbound(PeerAddress destination,
             }
         }
         authority_outbound_.push_back(std::move(packet));
+    } else if(type==protocol::MessageType::ExperimentalCheckpoint) {
+        if(bulk_outbound_.size()>=maximum_bulk)return false;
+        bulk_outbound_.push_back(std::move(packet));
     } else if (type == protocol::MessageType::StateSnapshot) {
         if (authority_outbound_.size() >= maximum_authority) {
             ++outbound_packets_dropped_;
@@ -5054,6 +5567,7 @@ void DirectSession::flush_outbound_locked() {
     const auto traffic_class = [](protocol::MessageType type) {
         return
             (type == protocol::MessageType::StateSnapshot ||
+             type == protocol::MessageType::ExperimentalCheckpoint ||
              type == protocol::MessageType::PreflightCheckpointProbe)
                 ? TransportTrafficClass::Checkpoint
                 :
@@ -5063,11 +5577,13 @@ void DirectSession::flush_outbound_locked() {
                     ? TransportTrafficClass::Replica
                 : (type == protocol::MessageType::FrameCommit ||
                    type == protocol::MessageType::InputRepair ||
+                   type == protocol::MessageType::ExperimentalRepair ||
                    type == protocol::MessageType::PreflightAuthorityProbe)
                     ? TransportTrafficClass::Authoritative
                 : (type == protocol::MessageType::Input ||
                    type == protocol::MessageType::InputAck ||
                    type == protocol::MessageType::RollbackData ||
+                   type == protocol::MessageType::ExperimentalInput ||
                    type == protocol::MessageType::SimulationProgress ||
                    type == protocol::MessageType::RacerOrientation ||
                    type == protocol::MessageType::PreflightRealtimeProbe)
@@ -5158,7 +5674,7 @@ void DirectSession::flush_outbound_locked() {
     flush_queue(commit_outbound_, 64U, 24U << 10U);
     flush_queue(authority_outbound_, 8U, 32U << 10U);
     flush_queue(normal_priority_outbound_, 8U, 16U << 10U);
-    flush_queue(bulk_outbound_, 2U, 32U << 10U);
+    flush_queue(bulk_outbound_, 8U, 64U << 10U);
 }
 
 std::uint64_t& DirectSession::outbound_sequence(
@@ -5203,7 +5719,27 @@ void DirectSession::broadcast(protocol::MessageType type,
 }
 
 void DirectSession::pump_locked() {
+    PeerAddress departed{};
+    while(transport_->take_peer_departure(departed)) {
+        // Only the experimental backend changes departure policy. Use the
+        // authenticated admitted roster, never an unapproved incoming route.
+        const bool owned_live=launch_descriptor_&&
+            launch_descriptor_->synchronization==SynchronizationMode::ExperimentalRollback&&
+            (state_==ConnectionState::Loading||state_==ConnectionState::Running);
+        if(!owned_live&&(!owned_match_end_||owned_match_end_->resumed))continue;
+        if(is_host_) {
+            for(const auto& peer:peers_)if(peer.active&&peer.address==departed) {
+                const auto name=room_view_.players[peer.slot].display_name;
+                std::fprintf(stderr,"[rollback][match-end] admitted client transport closed slot=%u\n",unsigned(peer.slot));
+                remove_owned_peer_locked(peer.sender_id,name+" disconnected. The match has ended.");break;
+            }
+        } else if(departed==host_address_) {
+            std::fprintf(stderr,"[rollback][match-end] admitted host transport closed\n");
+            fail_locked("The host disconnected. The lobby has closed.");return;
+        }
+    }
     transport_->service();
+    if(is_host_)for(auto& peer:peers_)if(peer.active&&!peer.online_save_ready)offer_online_save_locked(peer);
     if (pending_invitation_) {
         const auto rekey = transport_->rekey_status();
         if (rekey == QuickJoinRekeyStatus::Committed) {
@@ -5296,6 +5832,7 @@ void DirectSession::pump_locked() {
     state_changed_.notify_all();
     const auto now = std::chrono::steady_clock::now();
     constexpr auto control_retry = std::chrono::milliseconds(250);
+    service_owned_match_end_locked(now);
     // The outer runtime can apply lead backpressure before requesting input,
     // so its pending-input timer is not necessarily armed. Expire genuine
     // lack of native peer progress here on the independent network worker.
@@ -5464,6 +6001,7 @@ void DirectSession::pump_locked() {
         return;
     }
     if (!is_host_ && state_ == ConnectionState::AwaitingApproval &&
+        save_jobs_.empty() &&
         last_admission_response_.time_since_epoch().count() != 0 &&
         now - last_admission_response_ >= std::chrono::seconds(20)) {
         fail_locked("The host stopped responding while approval was pending. Leave and retry when the host is reachable.");
@@ -5491,11 +6029,7 @@ void DirectSession::pump_locked() {
         (local_slot_ >= room_view_.players.size() ||
          !room_view_.players[local_slot_].loaded) &&
         now - last_client_request_ >= control_retry) {
-        send_to(host_address_, protocol::MessageType::Loaded,
-                protocol::encode_loaded(
-                    {local_slot_, local_bootstrap_hash_,
-                     local_runtime_save_generation_,
-                     local_runtime_save_hash_}));
+        send_loaded_locked();
         last_client_request_ = now;
     }
     if (is_host_) expire_pending_joins();
@@ -5815,8 +6349,13 @@ void DirectSession::handle_host_packet(const PeerAddress& source,
     std::string error;
     PeerRecord* peer = peer_by_sender(packet_sender);
     if (peer == nullptr || !(peer->address == source)) return;
+    peer->owned_last_packet = std::chrono::steady_clock::now();
+    if (handle_owned_match_end_locked(packet_sender, packet)) return;
+    if (receive_owned_packet_locked(peer->slot, packet)) return;
     const std::string peer_id = std::to_string(packet_sender);
-    if (packet.header.type == protocol::MessageType::OnlineSaveReady) {
+    if(packet.header.type==protocol::MessageType::ExperimentalSaveRequest) {
+        offer_online_save_locked(*peer);return;
+    } else if (packet.header.type == protocol::MessageType::OnlineSaveReady) {
         protocol::OnlineSaveReadyPayload ready{};
         if (!protocol::decode_online_save_ready(packet.payload, ready, error) ||
             ready.player_slot != peer->slot) {
@@ -5833,9 +6372,14 @@ void DirectSession::handle_host_packet(const PeerAddress& source,
                     protocol::encode_online_save_ready({
                         peer->slot, session_save_generation_,
                         manifest_.session_save_hash}));
+        } else {
+            // Never turn a stale ACK into a failure for the newer generation.
+            // A genuine missing/current save is repaired while still in lobby.
+            offer_online_save_locked(*peer);
         }
         state_changed_.notify_all();
     } else if (packet.header.type == protocol::MessageType::ReadyRequest) {
+        if (owned_match_end_ && !owned_match_end_->resumed) return;
         protocol::ReadyRequestPayload request{};
         if (!protocol::decode_ready_request(packet.payload, request, error) ||
             request.player_slot != peer->slot || request.request_id == 0U) {
@@ -5944,12 +6488,18 @@ void DirectSession::handle_host_packet(const PeerAddress& source,
             !connection_test_echoes_[peer->slot][*lane].insert(probe.sequence).second) return;
         ++connection_test_received_[peer->slot][*lane];
         connection_test_rtt_samples_[peer->slot][*lane].push_back(rtt_ms);
-    } else if (packet.header.type == protocol::MessageType::Loaded) {
+    } else if (packet.header.type == protocol::MessageType::Loaded || packet.header.type==protocol::MessageType::ExperimentalLoaded) {
         protocol::LoadedPayload loaded{};
-        if (!protocol::decode_loaded(packet.payload, loaded, error) ||
-            loaded.player_slot != peer->slot) {
-            return;
-        }
+        const bool experimental=lobby_.room().rules.synchronization==SynchronizationMode::ExperimentalRollback;
+        if(experimental) {
+            protocol::ExperimentalLoadedPayload proof;
+            if(packet.header.type!=protocol::MessageType::ExperimentalLoaded||state_!=ConnectionState::Loading||
+               !launch_descriptor_||(owned_match_end_&&!owned_match_end_->resumed)||
+               !protocol::decode_experimental_loaded(packet.payload,proof)||
+               proof.launch_hash!=launch_descriptor_hash(*launch_descriptor_))return;
+            loaded=proof.loaded;
+        }else if(packet.header.type!=protocol::MessageType::Loaded||!protocol::decode_loaded(packet.payload,loaded,error))return;
+        if(loaded.player_slot!=peer->slot)return;
         if (!peer->online_save_ready ||
             loaded.online_save_generation != session_save_generation_ ||
             loaded.online_save_hash != manifest_.session_save_hash) {
@@ -6424,6 +6974,11 @@ void DirectSession::handle_host_packet(const PeerAddress& source,
         if (decode_probe(packet.payload, token)) update_peer_metrics(*peer, token);
     } else if (packet.header.type == protocol::MessageType::Disconnect) {
         const std::string departed = lobby_.room().players[peer->slot].display_name;
+        if ((launch_descriptor_ && launch_descriptor_->synchronization == SynchronizationMode::ExperimentalRollback) ||
+            (owned_match_end_ && !owned_match_end_->resumed)) {
+            remove_owned_peer_locked(packet_sender, departed + " left the session. The match has ended.");
+            return;
+        }
         if (state_ == ConnectionState::Loading || state_ == ConnectionState::Running) {
             const std::string remote_reason = packet.payload.empty()
                 ? "The racer disconnected without a diagnostic reason."
@@ -6441,6 +6996,9 @@ void DirectSession::handle_host_packet(const PeerAddress& source,
 }
 
 void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
+    owned_last_host_packet_ = std::chrono::steady_clock::now();
+    if (state_ != ConnectionState::Failed && handle_owned_match_end_locked(host_sender_id_, packet)) return;
+    if (receive_owned_packet_locked(0, packet)) return;
     // Failed is terminal until the player explicitly leaves the session.
     // Delayed LobbyState/Start retries must never revive a halted client into
     // Loading or Running after a determinism or bootstrap failure.
@@ -6478,29 +7036,33 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
             status_ = "The authenticated online save hash did not match its payload.";
             return;
         }
-        std::filesystem::path installed_path;
-        if (!save_installer_(match_id_, acknowledgement.synchronized_save,
-                             installed_path, error)) {
-            state_ = ConnectionState::Failed;
-            status_ = "The host online save could not be installed safely: " + error;
-            return;
-        }
-        session_save_ = acknowledgement.synchronized_save;
-        session_save_generation_ = acknowledgement.online_save_generation;
-        manifest_.session_save_hash = supplied_hash;
-        room_view_.manifest = manifest_;
-        local_online_save_ready_ = true;
-        local_online_save_acknowledged_ = false;
-        online_save_status_.reset();
         local_slot_ = acknowledgement.player_slot;
-        transport_->retain_peer_route(host_address_);
-        state_ = ConnectionState::Lobby;
-        status_ = "Isolated online save installed and verified at " +
-                  installed_path.string() + ".";
-        send_to(host_address_, protocol::MessageType::OnlineSaveReady,
-                protocol::encode_online_save_ready({
-                    local_slot_, session_save_generation_, supplied_hash}));
-        last_client_request_ = std::chrono::steady_clock::now();
+        if(!queue_save_locked(SaveJobKind::Join,acknowledgement.synchronized_save,acknowledgement.online_save_generation,supplied_hash,local_slot_)) {
+            fail_locked("The host online save could not be queued safely.");return;
+        }
+        local_online_save_ready_=false;local_online_save_acknowledged_=false;
+        last_admission_response_=std::chrono::steady_clock::now();state_=ConnectionState::AwaitingApproval;
+        status_="Host approved the join. Installing and verifying the isolated online save...";
+    } else if(packet.header.type==protocol::MessageType::ExperimentalSaveOffer) {
+        protocol::MatchEndPayload offer;
+        if(state_!=ConnectionState::Lobby||!protocol::decode_match_end(packet.payload,offer)||
+           (owned_match_end_&&!owned_match_end_->resumed)||
+           offer.launch_hash!=match_id_||offer.stage!=protocol::MatchEndStage::Resume||offer.player_slot!=local_slot_||
+           offer.save_generation<session_save_generation_)return;
+        if(offer.save_generation==session_save_generation_&&offer.save_hash==manifest_.session_save_hash&&local_online_save_ready_) {
+            send_to(host_address_,protocol::MessageType::OnlineSaveReady,protocol::encode_online_save_ready({local_slot_,session_save_generation_,manifest_.session_save_hash}));return;
+        }
+        if(offer.save_generation==session_save_generation_&&offer.save_hash!=manifest_.session_save_hash) {
+            fail_locked("The host supplied conflicting online saves for the same generation. Leave and rejoin; your single-player saves were not changed.");return;
+        }
+        if(launch_countdown_active_||launch_stage_!=LaunchStage::Idle)return;
+        const auto hash=stable_hash(std::string_view(reinterpret_cast<const char*>(offer.save.data()),offer.save.size()));
+        if(hash!=offer.save_hash||!queue_save_locked(SaveJobKind::Resync,offer.save,offer.save_generation,hash,local_slot_)) {
+            fail_locked("The host online save resynchronization could not be verified.");return;
+        }
+        local_online_save_ready_=false;local_online_save_acknowledged_=false;
+        desired_ready_.reset();pending_ready_request_id_=0;
+        status_="Synchronizing and verifying the host's latest online save...";
     } else if (packet.header.type == protocol::MessageType::OnlineSaveReadyAck) {
         protocol::OnlineSaveReadyPayload ready{};
         if (!local_online_save_ready_ || !protocol::decode_online_save_ready(packet.payload, ready, error) ||
@@ -6606,7 +7168,10 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
         protocol::LaunchPreparePayload preparation{};
         const bool decoded = protocol::decode_launch_prepare(
             packet.payload, preparation, error);
-        if (!decoded || preparation.launch_epoch == 0U) return;
+        if (!decoded || preparation.launch_epoch == 0U ||
+            (preparation.start.descriptor.synchronization == SynchronizationMode::ExperimentalRollback &&
+             (preparation.start.descriptor.lobby_generation <= retired_owned_generation_ ||
+              (owned_match_end_ && !owned_match_end_->resumed)))) return;
 
         // LobbyState and lifecycle traffic use separate receive lanes. A
         // LaunchPrepare can therefore arrive just before the LobbyState that
@@ -6700,6 +7265,10 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
         }
     } else if (packet.header.type == protocol::MessageType::Start) {
         protocol::StartPayload start{};
+        if (protocol::decode_start(packet.payload, start, error) &&
+            start.descriptor.synchronization == SynchronizationMode::ExperimentalRollback &&
+            (start.descriptor.lobby_generation <= retired_owned_generation_ ||
+             (owned_match_end_ && !owned_match_end_->resumed))) return;
         if (!protocol::decode_start(packet.payload, start, error) ||
             !accept_start_descriptor(start, error)) {
             fail_locked(error.empty() ? "The synchronized start roster was rejected."
@@ -7315,6 +7884,19 @@ void DirectSession::broadcast_lobby() {
 }
 
 void DirectSession::apply_online_save_status_locked(const protocol::OnlineSaveStatusPayload& payload) {
+    // Recover a missed save offer in an idle lobby. Never replace a running
+    // game's EEPROM or turn a stale status into a new save generation.
+    if(!is_host_&&state_==ConnectionState::Lobby&&
+       room_view_.rules.synchronization==SynchronizationMode::ExperimentalRollback&&
+       payload.room_generation>=room_view_.generation&&payload.save_generation>session_save_generation_&&
+       !launch_countdown_active_&&launch_stage_==LaunchStage::Idle&&
+       (!owned_match_end_||owned_match_end_->resumed)) {
+        const auto now=std::chrono::steady_clock::now();
+        if(!last_save_request_.time_since_epoch().count()||now-last_save_request_>=std::chrono::milliseconds(500)) {
+            send_to(host_address_,protocol::MessageType::ExperimentalSaveRequest,{});
+            last_save_request_=now;
+        }
+    }
     if (is_host_ || state_ != ConnectionState::Lobby || !local_online_save_ready_ ||
         payload.save_generation != session_save_generation_ || payload.save_hash != manifest_.session_save_hash ||
         payload.room_generation < room_view_.generation ||
@@ -7359,6 +7941,7 @@ protocol::LobbyStatePayload DirectSession::lobby_payload() const {
 }
 
 void DirectSession::apply_lobby_payload(const protocol::LobbyStatePayload& payload) {
+    if (retired_owned_generation_ && payload.generation <= retired_owned_generation_) return;
     if (payload.generation < room_view_.generation) return;
     const bool semantic_update = payload.generation > room_view_.generation;
     if (semantic_update) {
@@ -8512,7 +9095,7 @@ LaunchDescriptor DirectSession::make_launch_descriptor() const {
 bool DirectSession::validate_start_descriptor(
     const protocol::StartPayload& payload, std::string& error) const {
     const LaunchDescriptor& descriptor = payload.descriptor;
-    if (const char* reason = experimental::runtime_admission_error(descriptor.synchronization)) {
+    if (const char* reason = experimental::runtime_admission_error(descriptor.synchronization, owned_backend_available_)) {
         error = reason;
         return false;
     }
@@ -8555,6 +9138,10 @@ bool DirectSession::accept_start_descriptor(
     launch_descriptor_ = descriptor;
     input_delay_ = descriptor.input_delay_frames;
     if (first_descriptor) {
+        if (descriptor.synchronization == SynchronizationMode::ExperimentalRollback) {
+            owned_last_host_packet_ = std::chrono::steady_clock::now();
+            owned_inbound_.clear(); owned_inbound_bytes_ = 0;
+        }
         timeline_.reset();
         clear_input_history_locked();
         frame_commits_.clear();

@@ -1,0 +1,84 @@
+DKR-R 1.0.5 Beta 15 - Playtest 6 performance candidate
+====================================================
+
+IMPORTANT SCOPE
+This is a bounded performance/diagnostics candidate, NOT a declaration that
+all five approved phases or independent Camera & Scenery parity are complete.
+The accepted Playtest 5 Windows and Linux packages remain the rollback point.
+Every participant in an Experimental Rollback match must use this same build.
+
+Changes in this candidate
+-------------------------
+* Routine five-second renderer reporting no longer drains the GPU/WSI queues
+  or locks the render-target manager. Exact render-target inspection is an
+  explicitly intrusive developer diagnostic, disabled by default.
+* Owned draw-sidecar conversion reuses decoder-owned vectors and avoids the
+  temporary per-frame hash-set nodes used for background matrix deduplication.
+  Sidecars are still copied into the identity consumer before reuse. No GPU
+  consumer is allowed to borrow live simulation RAM or temporary vectors.
+* Graphics -> Camera and scenery now has an Experimental performance
+  diagnostics checkbox. It is process-local, not a lobby/gameplay setting.
+  It enables bounded cumulative timing/counter summaries in runtime.log.
+* Timings separate metadata conversion, CPU upload waits, frame matching,
+  render setup, and successful swapchain-present-call intervals. These are
+  CPU-side observations, NOT GPU timestamps or physical monitor scanout.
+* Interpolation history-reset counters distinguish first frame, scene/epoch,
+  correction/generation, hidden frame and repeated/non-forward history.
+  Requested/rendered display-frame and skipped-workload counters are included.
+* Scene summaries include actual level/type, input owners, viewport count,
+  finished-racer count and the three-player TT-camera selection, so the same
+  race can be compared before/after a racer finishes.
+
+Preserved safety and functionality
+---------------------------------
+The Playtest 5 boss/victory-scene fix, full-game startup, existing HUD layout,
+widescreen, enabled texture packs, sound/music policy and online save isolation
+remain in place. This pass does not alter stable online backends, prediction
+depth, frame/input ownership, checkpoint hashes, scene confirmation or rollback
+history admission. Mandatory CPU uploader waits, whole-workload/present
+completion, error-path drains and resource/shutdown retirement remain intact.
+No submodule, RecompiledFuncs or RecompiledPatches source was edited. RT64
+changes are authored Patch Pipeline inputs applied to new build-owned copies.
+
+Five-phase status / remaining work
+---------------------------------
+1. Baseline preservation and measurement infrastructure: implemented. Actual
+   three/four-player user measurements are still required.
+2. Proven avoidable reporting/allocation overhead: changes implemented.
+   Magnitude of the improvement has not been measured on the user's session.
+3. Independently local scenery construction: NOT implemented in this candidate.
+   Preferences remain preserved but gated in Experimental Rollback. The CPU
+   discards some multiplayer objects at scene construction and culls other
+   geometry before display commands exist. Decoder-only edits cannot restore
+   absent geometry; using local preferences in checkpointed RAM would break
+   determinism. A new visual asset/construction representation is still needed.
+4. Cutscene/correction pacing: diagnostic coverage implemented. No speculative
+   relaxation of history, confirmation or resource gates has been shipped.
+   Targeted pacing changes still require the new scene/correction timing data.
+5. Windows/Linux compilation and packaging: this candidate is provided for
+   user playtesting, not claimed as gameplay-qualified or regression-free.
+
+Qualification
+-------------
+No game, launcher, private probe, CTest or packaged-runtime self-test was run
+autonomously for this pass, in accordance with the user's testing instructions.
+Compilation, Patch Pipeline application and non-executing package/source checks
+are separate from gameplay qualification. Test sources may be compiled; a
+successful compile is not reported as a passing executed test.
+
+Suggested user check
+--------------------
+Enable Experimental performance diagnostics before starting a normal three-
+player match. Use the same track, resolution, AA and 180 FPS target as before.
+Play through a cutscene and let one racer finish while the others keep racing.
+Close normally and share runtime.log from host and a client. Look for
+[rollback][timing], [rollback][counter], [rollback][scene-budget],
+[rollback][draw-budget] and [rollback][fps] summaries. They do not log friend
+codes or network endpoints. Samples are cumulative over the process lifetime;
+start a fresh process for a clean comparison. Disable profiling afterward.
+
+Developer-only switches
+-----------------------
+DKR_ROLLBACK_PROFILE=1 enables the same bounded telemetry at startup.
+DKR_ROLLBACK_INSPECT_RENDER_TARGET=1 re-enables intrusive target inspection
+and its diagnostic drain; do NOT use it for frame-pacing measurements.

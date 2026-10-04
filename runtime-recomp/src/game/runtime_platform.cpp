@@ -13,6 +13,9 @@
 #include "sdl3_input_client.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include "virtual_pak_policy.hpp"
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "netplay/experimental_runtime.hpp"
+#endif
 
 #if DKR_RUNTIME_HAS_RT64
 #include "runtime_ui.hpp"
@@ -136,6 +139,12 @@ struct ControllerMappingSession {
 };
 ControllerMappingSession g_mapping_session;
 SDL_Window* g_window = nullptr;
+#if defined(_WIN32)
+// Set only at the experimental return-to-launcher boundary. The returned SDL
+// D3D11 renderer/window surface must not share its HWND with a new D3D12 owner.
+// Accessed exclusively by the main SDL thread after all game workers retire.
+bool g_retire_launcher_window_for_game = false;
+#endif
 std::uint32_t g_audio_frequency = 0;
 std::vector<std::int16_t> g_audio_swap_buffer;
 dkr::runtime::audio::StereoEqualizer g_audio_equalizer;
@@ -1478,6 +1487,9 @@ void dkr::runtime::platform::shutdown() {
         SDL_DestroyWindow(g_window);
         g_window = nullptr;
     }
+#if defined(_WIN32)
+    g_retire_launcher_window_for_game = false;
+#endif
     SDL_DelEventWatch(ControllerInventoryEvent, nullptr);
     SDL_Quit();
 #endif
@@ -1517,6 +1529,41 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
 }
 
 ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_game() {
+#if defined(_WIN32)
+    if (g_window && g_retire_launcher_window_for_game) {
+        // run_startup_screen has destroyed ImGui and SDL's launcher renderer.
+        // DXGI can still retain the window surface: give the game a new HWND
+        // rather than attempting a second flip-model swap chain on that HWND.
+        if (SDL_GetRenderer(g_window) != nullptr) {
+            std::fprintf(stderr,"[boot][window] refused handoff with a live launcher renderer\n");
+            return {};
+        }
+        int x,y,width,height;
+        SDL_GetWindowPosition(g_window,&x,&y);SDL_GetWindowSize(g_window,&width,&height);
+        const Uint32 flags=SDL_GetWindowFlags(g_window);
+        const Uint32 old_id=SDL_GetWindowID(g_window);
+        auto* replacement=SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",x,y,width,height,
+            SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_HIDDEN);
+        if (!replacement) {
+            std::fprintf(stderr,"[boot][window] game handoff recreation failed: %s\n",SDL_GetError());
+            return {};
+        }
+        // Allocate before retiring so failure cannot destroy the old window.
+        // Transfer fullscreen only after releasing the previous SDL ownership.
+        if (flags&SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window,0);
+        SDL_DestroyWindow(g_window);g_window=replacement;
+        g_retire_launcher_window_for_game=false;
+        SDL_SetWindowMinimumSize(g_window,800,600);
+        if (flags&SDL_WINDOW_MAXIMIZED) SDL_MaximizeWindow(g_window);
+        const auto fullscreen=flags&(SDL_WINDOW_FULLSCREEN|SDL_WINDOW_FULLSCREEN_DESKTOP);
+        if (fullscreen&&SDL_SetWindowFullscreen(g_window,fullscreen)!=0)
+            std::fprintf(stderr,"[boot][window] game fullscreen restore failed: %s\n",SDL_GetError());
+        if (!(flags&SDL_WINDOW_HIDDEN)) SDL_ShowWindow(g_window);
+        if (flags&SDL_WINDOW_MINIMIZED) SDL_MinimizeWindow(g_window);
+        std::fprintf(stderr,"[boot][window] retired launcher window=%u; fresh game window=%u\n",
+            unsigned(old_id),unsigned(SDL_GetWindowID(g_window)));
+    }
+#endif
 #if defined(__linux__)
     if (g_window != nullptr) {
         const Uint32 existing_flags = SDL_GetWindowFlags(g_window);
@@ -1572,7 +1619,40 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
     return create_window();
 }
 
-void* dkr::runtime::platform::prepare_window_for_launcher() {
+void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surface) {
+#if defined(_WIN32)
+    if(retire_game_surface&&g_window) {
+        // Called only after both owned runtime workers and their GPU owners
+        // have fully retired. Do not paint SDL's window framebuffer into the
+        // HWND/surface previously owned by the game's native swap chains.
+        int x,y,width,height;
+        SDL_GetWindowPosition(g_window,&x,&y);SDL_GetWindowSize(g_window,&width,&height);
+        const Uint32 flags=SDL_GetWindowFlags(g_window);
+        const Uint32 old_id=SDL_GetWindowID(g_window);
+        auto* replacement=SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",x,y,width,height,
+            SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_HIDDEN);
+        if(!replacement) {
+            std::fprintf(stderr,"[rollback][window-return] replacement creation failed: %s\n",SDL_GetError());
+            return nullptr;
+        }
+        // Release SDL's old fullscreen ownership before assigning it to the
+        // replacement. No game renderer or overlay still references the HWND.
+        if(flags&SDL_WINDOW_FULLSCREEN)SDL_SetWindowFullscreen(g_window,0);
+        SDL_DestroyWindow(g_window);g_window=replacement;
+        g_retire_launcher_window_for_game=true;
+        SDL_SetWindowMinimumSize(g_window,800,600);
+        if(flags&SDL_WINDOW_MAXIMIZED)SDL_MaximizeWindow(g_window);
+        const auto fullscreen=flags&(SDL_WINDOW_FULLSCREEN|SDL_WINDOW_FULLSCREEN_DESKTOP);
+        if(fullscreen&&SDL_SetWindowFullscreen(g_window,fullscreen)!=0)
+            std::fprintf(stderr,"[rollback][window-return] fullscreen restore failed: %s\n",SDL_GetError());
+        if(!(flags&SDL_WINDOW_HIDDEN))SDL_ShowWindow(g_window);
+        if(flags&SDL_WINDOW_MINIMIZED)SDL_MinimizeWindow(g_window);
+        std::fprintf(stderr,"[rollback][window-return] retired SDL window=%u; fresh launcher window=%u\n",
+            unsigned(old_id),unsigned(SDL_GetWindowID(g_window)));
+    }
+#else
+    (void)retire_game_surface;
+#endif
 #if defined(__linux__) && !defined(__ANDROID__)
     // Qualification switch: never allow SDL/OpenGL to convert a live Vulkan
     // window. Both renderers have been destroyed at this launcher boundary.
@@ -1613,6 +1693,13 @@ void dkr::runtime::platform::pump_window_events(void*) {
         update_fullscreen_cursor(&event);
         if (event.type == SDL_QUIT ||
             (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE)) {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+            if(netplay::experimental::runtime_view().active) {
+                std::fprintf(stderr,"[rollback][window] close event type=%u window-event=%u\n",event.type,
+                    event.type==SDL_WINDOWEVENT?unsigned(event.window.event):0U);
+                netplay::experimental::request_runtime_stop();
+            }
+#endif
             ultramodern::quit();
             return;
         }
@@ -1623,6 +1710,12 @@ void dkr::runtime::platform::pump_window_events(void*) {
         const bool keyboard_toggle = event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
             (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE ||
              event.key.keysym.scancode == SDL_SCANCODE_F1);
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        if(keyboard_toggle&&netplay::experimental::runtime_view().active) {
+            std::fprintf(stderr,"[rollback][window] overlay key=%u capture=%d\n",unsigned(event.key.keysym.scancode),
+                int(dkr::runtime::ui::input_capture_active()));
+        }
+#endif
         if (dkr::runtime::ui::input_capture_active()) {
             dkr::runtime::ui::handle_runtime_event(&event);
             continue;

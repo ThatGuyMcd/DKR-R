@@ -1,4 +1,6 @@
 #include "presentation_identity.hpp"
+#include "retained_metadata_table.hpp"
+#include "netplay/experimental_performance.hpp"
 #include "revision_addresses.hpp"
 #include "water_scroll_policy.hpp"
 
@@ -23,6 +25,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <stdexcept>
 
 namespace {
 
@@ -177,6 +180,15 @@ thread_local std::uint32_t g_recording_buffer = 0U;
 thread_local std::uint32_t g_current_camera_identity = 0U;
 thread_local bool g_recording_interpolation_allowed = false;
 thread_local bool g_active_task_interpolation_allowed = false;
+thread_local bool g_active_owned_task = false;
+thread_local dkr::runtime::presentation::RetainedMetadataTable<std::uint64_t,
+    dkr::runtime::presentation::RigidShadowOwnerPolicy> g_active_owned_shadow_policies;
+thread_local dkr::runtime::presentation::RetainedMetadataTable<std::uint32_t,
+    MatrixBinding> g_active_owned_matrices;
+thread_local dkr::runtime::presentation::RetainedMetadataTable<std::uint32_t,
+    dkr::runtime::presentation::PresentationMarkerList> g_active_owned_markers;
+thread_local dkr::runtime::presentation::RetainedMetadataTable<std::uint64_t,
+    dkr::runtime::presentation::ShadowOwnerMotionSample> g_active_owned_shadow_motion;
 thread_local std::uint32_t g_active_task_scene_generation = 0U;
 thread_local std::unordered_map<std::uint32_t, MatrixBinding>
     g_active_matrix_map;
@@ -649,23 +661,28 @@ dkr::runtime::presentation::MatrixInterpolation
 dkr::runtime::presentation::matrix_interpolation(
     std::uint32_t physical_matrix_address) {
     const std::uint32_t address = physical_matrix_address & kRdramMask;
-    const auto it = g_active_matrix_map.find(address);
+    const MatrixBinding* binding = nullptr;
+    if (g_active_owned_task) binding = g_active_owned_matrices.find(address);
+    else {
+        const auto it = g_active_matrix_map.find(address);
+        if (it != g_active_matrix_map.end()) binding = &it->second;
+    }
     if (InterpolationTraceEnabled()) {
         g_interpolation_trace.matrix_lookups.fetch_add(
             1U, std::memory_order_relaxed);
-        if (it == g_active_matrix_map.end()) {
+        if (binding == nullptr) {
             g_interpolation_trace.matrix_misses.fetch_add(
                 1U, std::memory_order_relaxed);
         }
     }
-    if (it != g_active_matrix_map.end()) {
+    if (binding != nullptr) {
         return {
-            it->second.matrix_identity,
-            it->second.interpolate_vertices,
-            it->second.interpolate_texcoords,
-            it->second.interpolate_tiles,
-            it->second.procedural_water,
-            it->second.water_scroll_tag,
+            binding->matrix_identity,
+            binding->interpolate_vertices,
+            binding->interpolate_texcoords,
+            binding->interpolate_tiles,
+            binding->procedural_water,
+            binding->water_scroll_tag,
         };
     }
     return {};
@@ -864,6 +881,7 @@ dkr::runtime::presentation::shadow_presentation_key(
 bool dkr::runtime::presentation::shadow_owner_uses_rigid_actor_proxy(
     std::uint64_t shadow_history_key) {
     if (shadow_history_key == 0U) return false;
+    if(g_active_owned_task){const auto* found=g_active_owned_shadow_policies.find(shadow_history_key);return found&&found->required();}
     std::scoped_lock lock(g_identity_mutex);
     return g_rigid_actor_shadow_keys.contains(shadow_history_key);
 }
@@ -871,6 +889,7 @@ bool dkr::runtime::presentation::shadow_owner_uses_rigid_actor_proxy(
 bool dkr::runtime::presentation::shadow_owner_is_taj_carpet_actor(
     std::uint64_t shadow_history_key) {
     if (shadow_history_key == 0U) return false;
+    if(g_active_owned_task){const auto* found=g_active_owned_shadow_policies.find(shadow_history_key);return found&&found->terrain_conforming_actor();}
     std::scoped_lock lock(g_identity_mutex);
     return g_taj_carpet_shadow_keys.contains(shadow_history_key);
 }
@@ -879,6 +898,7 @@ dkr::runtime::presentation::RigidShadowOwnerPolicy
 dkr::runtime::presentation::shadow_owner_rigid_policy(
     std::uint64_t shadow_history_key) {
     if (shadow_history_key == 0U) return {};
+    if(g_active_owned_task){const auto* found=g_active_owned_shadow_policies.find(shadow_history_key);return found?*found:RigidShadowOwnerPolicy{};}
     std::scoped_lock lock(g_identity_mutex);
     const auto found =
         g_rigid_shadow_owner_policies.find(shadow_history_key);
@@ -891,6 +911,10 @@ dkr::runtime::presentation::ShadowOwnerMotionSample
 dkr::runtime::presentation::shadow_owner_motion_sample(
     std::uint64_t shadow_history_key) {
     if (shadow_history_key == 0U) return {};
+    if (g_active_owned_task) {
+        const auto* found = g_active_owned_shadow_motion.find(shadow_history_key);
+        return found ? *found : ShadowOwnerMotionSample{};
+    }
     const auto found =
         g_active_shadow_owner_motion.find(shadow_history_key);
     return found != g_active_shadow_owner_motion.end()
@@ -905,6 +929,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
     g_active_shadow_owner_motion.clear();
     g_active_task_interpolation_allowed = false;
     g_active_task_scene_generation = 0U;
+    g_active_owned_task=false;g_active_owned_shadow_policies.clear();
     if (rdram_snapshot == nullptr) {
         return;
     }
@@ -967,10 +992,77 @@ dkr::runtime::presentation::TaskIdentityScope::~TaskIdentityScope() {
     g_active_shadow_owner_motion.clear();
     g_active_task_interpolation_allowed = false;
     g_active_task_scene_generation = 0U;
+    g_active_owned_task=false;g_active_owned_shadow_policies.clear();
+    g_active_owned_matrices.clear();g_active_owned_markers.clear();g_active_owned_shadow_motion.clear();
+}
+
+dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
+    std::span<const LocatedPresentationMarker> markers)
+    :TaskIdentityScope(markers,{},{},0,false) {}
+
+dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
+    std::span<const LocatedPresentationMarker> markers,std::span<const OwnedMatrixBinding> matrices,
+    std::span<const OwnedShadowBinding> shadows,std::uint32_t scene,bool allowed) {
+    dkr::runtime::netplay::experimental::performance::Scope identity_timing(
+        dkr::runtime::netplay::experimental::performance::Stage::Identity);
+    g_active_matrix_map.clear();g_active_marker_map.clear();g_active_shadow_owner_motion.clear();
+    g_active_owned_task=true;
+    if(markers.size()>8192 || matrices.size()>8192 || shadows.size()>8192) {
+        g_active_owned_matrices.clear();g_active_owned_markers.clear();
+        g_active_owned_shadow_policies.clear();g_active_owned_shadow_motion.clear();
+        g_active_task_interpolation_allowed=false;g_active_task_scene_generation=0;
+        std::fprintf(stderr,"[rollback][presentation] oversized owned metadata; discrete task fallback\n");
+        return;
+    }
+    g_active_owned_matrices.begin(matrices.size());
+    g_active_owned_markers.begin(markers.size());
+    g_active_owned_shadow_policies.begin(shadows.size());
+    g_active_owned_shadow_motion.begin(shadows.size());
+    g_active_task_interpolation_allowed=allowed&&scene!=0;g_active_task_scene_generation=scene;
+    for(const auto& binding:matrices) {
+        if(!ValidRange(binding.address,64))continue;
+        const auto& i=binding.interpolation;
+        const MatrixBinding value{i.identity,0,i.interpolate_vertices,i.interpolate_texcoords,i.interpolate_tiles,i.procedural_water,i.water_scroll_tag};
+        if(binding.weak)g_active_owned_matrices.try_emplace(Physical(binding.address),value);
+        else g_active_owned_matrices.insert_or_assign(Physical(binding.address),value);
+    }
+    for(const auto& binding:shadows) {
+        if(!binding.token||!scene)continue;
+        const auto key=(std::uint64_t(scene)<<16)|binding.token;
+        if(binding.policy.required())g_active_owned_shadow_policies.insert_or_assign(key,binding.policy);
+        if(binding.motion.valid)g_active_owned_shadow_motion.insert_or_assign(key,binding.motion);
+    }
+    for(const auto& located:markers) {
+        const auto& marker=located.marker;
+        if(!ValidRange(located.address,8) ||
+           !valid_presentation_marker(marker.kind,marker.mode,marker.variant)) {
+            // A malformed optional sidecar must not tear down a healthy
+            // multiplayer simulation. Drop this whole task's metadata,
+            // including its matrix/shadow identities, and render discrete.
+            g_active_owned_markers.clear();g_active_owned_matrices.clear();
+            g_active_owned_shadow_motion.clear();g_active_owned_shadow_policies.clear();
+            g_active_task_interpolation_allowed=false;g_active_task_scene_generation=0;
+            std::fprintf(stderr,"[rollback][presentation] invalid owned marker transaction; metadata disabled for this task\n");
+            return;
+        }
+        auto* destination=g_active_owned_markers.try_emplace(Physical(located.address)).first;
+        if(destination->count==kMaximumMarkersPerCommand) {
+            g_active_owned_markers.clear();g_active_owned_matrices.clear();
+            g_active_owned_shadow_motion.clear();g_active_owned_shadow_policies.clear();
+            g_active_task_interpolation_allowed=false;g_active_task_scene_generation=0;
+            std::fprintf(stderr,"[rollback][presentation] invalid owned marker transaction; metadata disabled for this task\n");
+            return;
+        }
+        destination->markers[destination->count++]=marker;
+    }
 }
 
 bool dkr::runtime::presentation::task_interpolation_allowed() {
     return g_active_task_interpolation_allowed;
+}
+
+bool dkr::runtime::presentation::task_is_owned() {
+    return g_active_owned_task;
 }
 
 std::uint32_t dkr::runtime::presentation::task_scene_generation() {
@@ -1126,6 +1218,10 @@ dkr::runtime::presentation::PresentationMarkerList
 dkr::runtime::presentation::active_presentation_markers(
     std::uint32_t command_address) {
     PresentationMarkerList result{};
+    if (g_active_owned_task) {
+        const auto* found = g_active_owned_markers.find(Physical(command_address));
+        return found ? *found : result;
+    }
     const auto found = g_active_marker_map.find(Physical(command_address));
     if (found == g_active_marker_map.end()) {
         return result;

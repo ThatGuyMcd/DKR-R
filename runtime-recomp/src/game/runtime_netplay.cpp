@@ -1,4 +1,7 @@
 #include "runtime_netplay.hpp"
+#if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "replay_probe_capture.hpp"
+#endif
 
 #include "determinism_hash_policy.hpp"
 #include "determinism_state_hash.hpp"
@@ -2331,6 +2334,9 @@ RollbackMetrics rollback_metrics() {
 }
 
 int drive_authored_tick(std::uint8_t* rdram, recomp_context* context) {
+#if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
+    dkr_private_replay_capture(rdram, context);
+#endif
     const RuntimeSessionView view = g_session.runtime_view();
     if (view.active && view.launch_descriptor) {
         if (const char* reason = experimental::runtime_admission_error(view.launch_descriptor->synchronization)) {

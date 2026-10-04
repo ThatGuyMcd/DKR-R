@@ -1,0 +1,132 @@
+DKR-R v1.0.5 Beta 15 Playtest 2 - EXPERIMENTAL ROLLBACK
+====================================================
+
+PLAYTEST 2: INITIAL TRANSFER AND SAVE LIFECYCLE
+This rebuild separates initial checkpoint chunks from lifecycle/control traffic.
+Each guest has its own rotating send budget, queued-byte cursor and acknowledged
+cursor. Partial acknowledgements do not resend the entire in-flight window.
+Checkpoint chunks are 4 KiB with a bounded 256 KiB per-guest in-flight window;
+SCTP handles ordinary reliable delivery, with only an infrequent oldest-hole
+retry. Host progress distinguishes download, local verification and waiting
+for other racers. Loaded/Start still require every real verification proof.
+
+Every experimental packet and Loaded proof belongs to its exact launch. Old
+traffic cannot enter a restarted match or trigger a retired save/hash check.
+Client save installs and read-back verification run on a serialized worker,
+outside the networking lock. Readiness is published only after verification.
+Before countdown, the host seals the current isolated online save; if it has
+changed, readiness is invalidated and clients install the new generation.
+Post-match resumption also installs and acknowledges the current save before
+another start is permitted. Missed lobby save offers can be requested again.
+Staged host seeds are bound to their lobby. Single-player saves remain separate.
+
+Startup is bounded: transfer requires continuing byte progress, with a separate
+coordinator heartbeat while waiting for other racers. The later Loaded/Start
+deadline begins after all racers have prepared, not while a different guest is
+still downloading. A startup failure uses the existing graceful match-end path.
+These are implementation changes, NOT measured four-player WAN timings.
+NO game or networking tests were run for this package, at the user's request.
+Every participant must update to this exact Playtest 2 package.
+
+This candidate removes the forced Ancient Lake bootstrap from normal online
+launches. After the usual lobby countdown, retail initialization runs with the
+verified online save, neutral virtual controllers and no game-frame output.
+At the first pre-INTRO CPU boundary, all native workers retire before the owned
+runtime copies its state. The actual retail INTRO, boot logos, title, character
+selection, file selection and track selection then run from that checkpoint.
+There is no scripted menu navigation, preset race or extra rollback launcher.
+
+BETA 15 LAUNCH CORRECTION
+The initial Beta 15 client log stopped before frame 0 with "Local bootstrap
+has an invalid retail logic rate." The constructor incorrectly applied its
+running-race rate range (1..6) to retail's pre-INTRO rate (LOGIC_5FPS = 12).
+This rebuild admits exactly 12 for normal cold boot, retains the separate
+INTRO/empty-world/roster checks, and initializes only the owned cadence to 2.
+Running-race fixture and incoming checkpoint validation are not relaxed.
+It also prevents a partially clipped lobby countdown from drawing a second
+fallback countdown, and ensures an empty worker error cannot become success.
+These corrections were compiled and statically reviewed, not game-tested.
+
+CONNECT
+1. All racers must install this exact Beta 15 candidate. The owned-state
+   contract changed; mixed older/corrected Beta 15 experimental sessions are
+   refused. Update EVERY racer, not just the host or client.
+2. Import/select your own unmodified US v 1.0 ROM in Play.
+3. DKR-R Online > Host settings > synchronization/backend:
+   select Experimental rollback, then create your ordinary lobby.
+4. Friends join through the existing Quick Join code or friend invitation.
+   Approve them, mark everyone ready and use the normal countdown.
+5. Navigate the game's normal title and menus. The accepted lobby roster is
+   retained independently of each scene's number of visible racers/viewports.
+   The chosen host-control policy also applies to the owned menu input path.
+6. Use your existing controls and overlay shortcut. Leaving the game returns
+   to the same launcher. The previous two backends are still selectable for
+   the next lobby; changing ownership during a match is not supported.
+
+ROLLBACK AND SAFETY
+Gameplay still uses immutable owner inputs, predicted remote inputs, full
+owned checkpoints, restoration and replay when a prediction proves wrong.
+This is not Host prediction or Strict input sync behind a different label.
+Menus and resource-changing transitions require confirmed inputs and drained
+render leases; this is intentional, not a claim of speculative menu loading.
+Audio, online EEPROM and other external effects remain confirmation-gated.
+The verified online EEPROM is active before the first retail save read.
+Single-player saves are not overwritten. No ROM, RAM fixture or profile is
+included in these packages. Protected submodules/generated inputs are unchanged.
+
+The earlier bounded-render and performance changes are retained: at most two
+owned submissions, immutable image leases, isolated mutable decode workspace,
+generation retirement before correction, reused checkpoint buffers and the
+retail VI origin/gamma configuration. No forced lower-resolution preset is
+introduced by this update. Legacy backend algorithms are not replaced.
+
+QUALIFICATION STATUS
+Windows and Linux x86-64 are compiled and packaged. At the user's request,
+NO game windows, runtime self-tests, CTest or networking/integration tests are
+run for this candidate. Static review, compilation and package scans are not
+proof of runtime correctness or WAN performance. The team must qualify it.
+
+Experimental admission still requires the unmodified US v 1.0 owned payload.
+v 1.1 and online custom mods are not enabled by this update. Native ARM/Android
+replay is not qualified here. All Adventure/boss/chained-cutscene combinations,
+full presentation-policy parity and real-world 3/4-player stability remain
+unqualified. This is a Beta candidate, not a production-readiness guarantee.
+
+SUGGESTED TEAM CHECKS (NOT RUN AUTOMATICALLY)
+- Normal boot/title: no direct Ancient Lake start, no auto-selected character.
+- Character select: every assigned racer can select and ready their character;
+  unassigned controller slots must not become extra human racers.
+- Tracks mode: navigate Dino Domain and other worlds, choose different tracks,
+  cars/hovercraft/planes, race, finish and return to track selection repeatedly.
+- Two-player Adventure: fresh and existing online saves, initials, hub visits,
+  regular races, boss races, rewards and consecutive balloon/key cutscenes.
+- Three/four-player: title/character/track flow, controls and split-screen HUD.
+- Overlay: open during initial verification, input waits and transitions.
+- Correction: runtime.log should show confirmed progress plus nonzero
+  corrections/replayed frames when late remote inputs differ from prediction.
+  Zero corrections alone does not prove rollback was exercised.
+- Return to launcher: host a new lobby with each legacy backend and confirm
+  the ordinary single-player save still loads after leaving online play.
+
+REPORTS
+Beta 15 state-transfer correction: initial owned checkpoints now use lossless
+compression when smaller than raw state. Both racers must use this same rebuild
+(the experimental wire version/owned contract reject mixed candidates). The
+decoded checkpoint, integrity proof and normal Loaded/Start gate are unchanged.
+The spinner distinguishes initial transfer from later scene waits and shows
+transfer progress. runtime.log records [rollback][admission] stages every two
+seconds, including raw/wire sizes, readiness and Start release. A verified
+checkpoint waiting for Start is bounded to 120 seconds; no safety gate is skipped.
+This addresses a proven raw-transfer bottleneck, not a claim that a particular
+WAN launch has been reproduced or that all black-screen causes are resolved.
+
+Send both peers' runtime.log, OS/hardware, ROM revision, game mode and scene,
+chosen delay/window, connection distance and exact symptoms. Include whether
+the overlay remains responsive. Do not send ROMs, profile keys or private codes.
+Optional profiling: DKR_ROLLBACK_PROFILE=1; DKR_POWER_PROFILE=1 adds presentation
+interval statistics. Neither is required for normal play.
+
+ROLLBACK POINT
+The approved Beta 15 Playtest Release ZIP/AppImage remain unchanged in
+beta15-playtest-release-20261002. The scoped pre-edit source copies for this
+update are retained in beta15-playtest2-source-backup-20261003.

@@ -102,7 +102,31 @@ enum class MessageType : std::uint8_t {
     // Advisory roster status; appended so existing gameplay IDs stay stable.
     // Older peers safely discard this unknown message and retain Ready/Ack.
     OnlineSaveStatus,
+    // Authenticated, backend-specific lanes. Never enter the stable commit,
+    // snapshot or transition ledgers. IDs are appended, not renumbered.
+    ExperimentalControl,
+    ExperimentalInput,
+    ExperimentalRepair,
+    // Match lifecycle only; never feed this into the rollback simulation.
+    ExperimentalMatchEnd,
+    ExperimentalCheckpoint,
+    ExperimentalLoaded,
+    ExperimentalSaveOffer,
+    ExperimentalSaveRequest,
 };
+
+enum class MatchEndStage : std::uint8_t { Request, Stop, Returned, Resume, ResumeAck };
+struct MatchEndPayload {
+    std::uint64_t launch_hash = 0;
+    MatchEndStage stage = MatchEndStage::Request;
+    std::uint8_t player_slot = 0;
+    std::string message;
+    std::uint32_t save_generation = 0;
+    std::uint64_t save_hash = 0;
+    std::vector<std::uint8_t> save;
+};
+std::vector<std::uint8_t> encode_match_end(const MatchEndPayload& payload);
+bool decode_match_end(std::span<const std::uint8_t> bytes, MatchEndPayload& payload);
 
 struct Header {
     MessageType type = MessageType::Hello;
@@ -373,6 +397,15 @@ struct LoadedPayload {
     std::uint32_t online_save_generation = 0U;
     std::uint64_t online_save_hash = 0U;
 };
+
+// Experimental-only extensions. Stable Loaded and save packet layouts retain
+// their original wire contract. Every proof names its immutable launch.
+struct ExperimentalLoadedPayload {
+    std::uint64_t launch_hash = 0;
+    LoadedPayload loaded{};
+};
+std::vector<std::uint8_t> encode_experimental_loaded(const ExperimentalLoadedPayload& payload);
+bool decode_experimental_loaded(std::span<const std::uint8_t> bytes, ExperimentalLoadedPayload& payload);
 
 struct StartPayload {
     std::uint8_t stage = 0U;

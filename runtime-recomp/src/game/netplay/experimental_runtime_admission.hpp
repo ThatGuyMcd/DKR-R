@@ -23,8 +23,8 @@ constexpr bool select_mode(int choice, int& stable_choice, bool& experimental_en
 // capture_authoritative_state() or RuntimeState's raw native-thread RAM dump.
 // This is checked BEFORE creating a profile/transport/countdown, and again on
 // received start descriptors. There is no environment-variable bypass.
-inline constexpr const char* runtime_admission_error(SynchronizationMode mode) {
-    if (mode != SynchronizationMode::ExperimentalRollback) return nullptr;
+inline constexpr const char* runtime_admission_error(SynchronizationMode mode, bool owned_adapter_available = false) {
+    if (mode != SynchronizationMode::ExperimentalRollback || owned_adapter_available) return nullptr;
     return "Experimental rollback is still in development: the complete game-state replay adapter is not ready. "
            "Select Host prediction or Strict input sync to play using the existing implementation.";
 }

@@ -17,12 +17,22 @@ public:
 
     RollbackStateStore(std::size_t state_bytes, std::size_t capacity,
                        std::size_t checkpoint_interval = 4U);
+    // Explicit spare-capacity policy for independent experimental callers.
+    // The existing three-argument constructor retains its original policy.
+    RollbackStateStore(std::size_t state_bytes, std::size_t capacity,
+                       std::size_t checkpoint_interval, std::size_t max_spares,
+                       bool contiguous_checkpoints = false);
 
     bool save(std::uint32_t frame, std::span<const std::uint8_t> state,
               std::uint64_t checksum);
     bool load(std::uint32_t frame, std::span<std::uint8_t> state,
               std::uint64_t* checksum = nullptr) const;
     void discard_after(std::uint32_t frame);
+    // Only a caller with an irreversible confirmation cursor may use this.
+    // Keep the checkpoint at/before frame and all later deltas intact.
+    void retire_before(std::uint32_t frame);
+    // Experimental-only memory reclamation; never discards live checkpoints.
+    void trim_spares(std::size_t allocation_budget);
     void clear();
 
     std::size_t state_bytes() const { return state_bytes_; }
@@ -53,6 +63,8 @@ private:
     std::size_t state_bytes_ = 0U;
     std::size_t capacity_ = 0U;
     std::size_t checkpoint_interval_ = 0U;
+    std::size_t max_spares_ = 0U;
+    bool contiguous_checkpoints_ = false;
     std::deque<Entry> entries_;
     std::vector<Entry> spare_entries_;
     std::vector<std::uint8_t> latest_state_;

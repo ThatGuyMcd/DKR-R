@@ -15,6 +15,12 @@
 #include <thread>
 #include <vector>
 
+#if defined(_MSC_VER)
+#define DKR_TEST_NOINLINE __declspec(noinline)
+#else
+#define DKR_TEST_NOINLINE __attribute__((noinline))
+#endif
+
 namespace dkr::runtime::netplay {
 
 class BlockingRealtimeTransport : public SessionTransport {
@@ -45,13 +51,82 @@ public:
 };
 
 struct DirectSessionTestAccess {
+    DKR_TEST_NOINLINE static void owned_lane_isolation() {
+        DirectSession receiver;
+        // This fixture injects state without a real transport. Keep the normal
+        // worker from observing that deliberately incomplete session.
+        receiver.worker_stop_.store(true, std::memory_order_release);
+        receiver.state_changed_.notify_all();
+        receiver.network_worker_.join();
+        assert(receiver.enable_owned_backend(true));
+        assert(receiver.owned_backend_available());
+        {
+            std::scoped_lock lock(receiver.mutex_);
+            receiver.state_=ConnectionState::Loading;receiver.local_slot_=0;receiver.is_host_=true;
+            LaunchDescriptor descriptor{};descriptor.occupied_mask=3;descriptor.player_count=2;
+            descriptor.synchronization=SynchronizationMode::Lockstep;receiver.launch_descriptor_=descriptor;
+            protocol::Datagram packet{};packet.header.type=protocol::MessageType::ExperimentalInput;packet.payload={1,2,3};
+            assert(receiver.receive_owned_packet_locked(1,packet)&&receiver.owned_inbound_.empty());
+            receiver.launch_descriptor_->synchronization=SynchronizationMode::ExperimentalRollback;
+            assert(receiver.receive_owned_packet_locked(2,packet)&&receiver.owned_inbound_.empty());
+            assert(receiver.receive_owned_packet_locked(255,packet)&&receiver.owned_inbound_.empty());
+            assert(receiver.receive_owned_packet_locked(0,packet)&&receiver.owned_inbound_.empty());
+            for(auto type:{protocol::MessageType::ExperimentalInput,protocol::MessageType::ExperimentalControl,protocol::MessageType::ExperimentalRepair}) {
+                packet.header.type=type;assert(receiver.receive_owned_packet_locked(1,packet));
+            }
+            assert(receiver.owned_inbound_.size()==3&&receiver.owned_inbound_bytes_==9);
+        }
+        DirectSession::OwnedPacket taken;
+        assert(receiver.take_owned_packet(taken)&&taken.source==1&&taken.traffic==TransportTrafficClass::Realtime);
+        assert(receiver.take_owned_packet(taken)&&taken.traffic==TransportTrafficClass::Control);
+        assert(receiver.take_owned_packet(taken)&&taken.traffic==TransportTrafficClass::Authoritative);
+        assert(!receiver.take_owned_packet(taken));
+        std::string error;
+        assert(receiver.send_owned_packet(255,std::array<std::uint8_t,1>{1},TransportTrafficClass::Realtime,error)==DatagramSendStatus::Error);
+        assert(!receiver.enable_owned_backend(false)); // capability is immutable during a launch
+        receiver.disconnect();assert(!receiver.take_owned_packet(taken));
+        assert(receiver.enable_owned_backend(false)&&!receiver.owned_backend_available());
+    }
+    DKR_TEST_NOINLINE static void experimental_admission_isolation() {
+        DirectSession receiver;
+        protocol::StartPayload start{};
+        start.descriptor.synchronization = SynchronizationMode::ExperimentalRollback;
+        std::string error;
+        std::scoped_lock lock(receiver.mutex_);
+        assert(!receiver.accept_start_descriptor(start, error));
+        assert(error.find("still in development") != std::string::npos);
+        assert(!receiver.launch_descriptor_);
+        assert(receiver.launch_stage_ == LaunchStage::Idle);
+    }
+    DKR_TEST_NOINLINE static void experimental_host_preserves_lobby(DirectSession& host,
+                                                                   const Rules& rules) {
+        // Keep these large view temporaries out of main's existing multi-peer
+        // fixture stack frame, particularly on Windows' 1 MiB default stack.
+        const auto before = host.view();
+        Rules experiment = rules;
+        experiment.synchronization = SynchronizationMode::ExperimentalRollback;
+        std::string error;
+        assert(!host.host(0U, "127.0.0.1", "Experiment", ConnectionMethod::Lan,
+                          "Host", experiment, error));
+        assert(error.find("still in development") != std::string::npos);
+        const auto after = host.view();
+        assert(after.state == before.state);
+        assert(after.match_id == before.match_id);
+        assert(after.invite == before.invite);
+        assert(after.local_port == before.local_port);
+        assert(after.room.rules == before.room.rules);
+        assert(after.online_save_ready == before.online_save_ready);
+    }
     static std::uint32_t authority_epoch(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.authority_epoch();
     }
     static void input_freshness_regression() {
         DirectSession client;
-        client.worker_stop_.store(true);
+        {
+            std::scoped_lock lock(client.mutex_);
+            client.worker_stop_.store(true, std::memory_order_release);
+        }
         client.state_changed_.notify_all();
         client.network_worker_.join();
         prepare_fast_forward_guest(client, 100U, 1U);
@@ -925,6 +1000,17 @@ struct DirectSessionTestAccess {
     }
     static BlockingRealtimeTransport* install_blocking_transport(
         DirectSession& session) {
+        // This case explicitly drives flush_outbound_locked itself. A live
+        // worker could concurrently send through the fake and race its plain
+        // counters (particularly under ARM emulation). Stop it for this one
+        // deterministic unit case; pump-free admission below still tests the
+        // real workers. Keep every exact-count assertion unchanged.
+        {
+            std::scoped_lock lock(session.mutex_);
+            session.worker_stop_.store(true, std::memory_order_release);
+        }
+        session.state_changed_.notify_all();
+        session.network_worker_.join();
         auto transport = std::make_unique<BlockingRealtimeTransport>();
         BlockingRealtimeTransport* result = transport.get();
         session.transport_ = std::move(transport);
@@ -1079,6 +1165,8 @@ void pump_sessions(
 } // namespace
 
 int main() {
+    dkr::runtime::netplay::DirectSessionTestAccess::owned_lane_isolation();
+    dkr::runtime::netplay::DirectSessionTestAccess::experimental_admission_isolation();
     dkr::runtime::netplay::DirectSessionTestAccess::input_freshness_regression();
     dkr::runtime::netplay::DirectSessionTestAccess::online_save_status_regression();
     dkr::runtime::netplay::DirectSessionTestAccess::remaining_gaps_regression();
@@ -1608,10 +1696,16 @@ int main() {
         // and one client, so a slot-3/slot-4 relay or acknowledgement defect
         // could survive every automated test and appear only when several
         // people began steering in a minigame.
-        DirectSession four_host;
-        DirectSession four_client_2;
-        DirectSession four_client_3;
-        DirectSession four_client_4;
+        // Keep multi-peer transport fixtures off Windows' 1 MiB stack. Their
+        // bounded queues are intentionally large even when they are empty.
+        auto four_host_storage = std::make_unique<DirectSession>();
+        auto four_client_2_storage = std::make_unique<DirectSession>();
+        auto four_client_3_storage = std::make_unique<DirectSession>();
+        auto four_client_4_storage = std::make_unique<DirectSession>();
+        auto& four_host = *four_host_storage;
+        auto& four_client_2 = *four_client_2_storage;
+        auto& four_client_3 = *four_client_3_storage;
+        auto& four_client_4 = *four_client_4_storage;
         const std::array<DirectSession*, 4U> available_sessions{
             &four_host, &four_client_2, &four_client_3, &four_client_4};
         std::array<DirectSession*, PlayerCount> sessions{};
@@ -1993,6 +2087,9 @@ int main() {
     assert(host.host(0U, test_host_address(), "Loopback Lobby", ConnectionMethod::Lan,
                      "Host", rules, error));
     assert(host.view().invite.starts_with("dkr-r://v7/"));
+    // Experimental admission failure must not retire the already working
+    // stable lobby, rotate its invite, change its rules, or touch its save.
+    DirectSessionTestAccess::experimental_host_preserves_lobby(host, rules);
     assert(client.join(host.view().invite, "Client", error));
     pump_pair(host, client);
     assert(client.view().state == ConnectionState::AwaitingApproval);
@@ -2100,7 +2197,16 @@ int main() {
     assert(client.begin_gameplay_handoff(frontend_frames, 42U, error));
     std::uint32_t host_transition_frame = frontend_frames;
     InputSynchronizationResult parked_result = parked_host.get();
+    const auto handoff_deadline = std::chrono::steady_clock::now() +
+        std::chrono::seconds(2);
     while (parked_result == InputSynchronizationResult::Committed) {
+        // This fixture has no 30 Hz game clock. Yield to BOTH transport
+        // workers before another authored frame, rather than generating
+        // thousands of unpaced frontend commits while the requesting peer's
+        // queued handoff has not had a chance to leave its worker. Preserve
+        // the real assertion: only an authenticated Suspended result passes.
+        assert(std::chrono::steady_clock::now() < handoff_deadline);
+        pump_pair(host, client, 1);
         ++host_transition_frame;
         parked_result = host.synchronize_inputs_result(
             host_transition_frame, {0x8000U, 25, -5}, parked_host_inputs,

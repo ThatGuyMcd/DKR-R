@@ -1,4 +1,5 @@
 #include "presentation_identity.hpp"
+#include "retained_metadata_table.hpp"
 
 #include <array>
 #include <cassert>
@@ -168,6 +169,33 @@ static_assert(!submitted_task_matches(7U, 0x80123400U,
 static_assert(!submitted_task_matches(7U, 0x80123400U,
                                       7U, 0x00124400U));
 int main() {
+    // Compile-only regression coverage in this pass; user qualification owns
+    // execution. First weak wins, strong replaces, duplicate marker order and
+    // cold task reset must match the previous unordered_map implementation.
+    RetainedMetadataTable<std::uint32_t, unsigned> retained;
+    retained.begin(8192);
+    for(unsigned i=0;i<8192;++i)assert(retained.try_emplace(i*64,i).second);
+    for(unsigned i=0;i<8192;++i)assert(*retained.find(i*64)==i);
+    assert(!retained.find(8192*64));
+    assert(!retained.try_emplace(0,99).second && *retained.find(0)==0);
+    retained.insert_or_assign(0,99);assert(*retained.find(0)==99);
+    bool exhausted=false;
+    try {retained.try_emplace(8192*64,0);}catch(const std::length_error&){exhausted=true;}
+    assert(exhausted);
+    const auto entries_capacity=retained.entry_capacity(),slots_capacity=retained.slot_capacity();
+    retained.begin(2);
+    assert(!retained.find(0) && retained.size()==0);
+    assert(retained.entry_capacity()==entries_capacity && retained.slot_capacity()==slots_capacity);
+    retained.try_emplace(0,10);retained.try_emplace(64,11);
+    retained.clear();assert(!retained.find(0));
+    RetainedMetadataTable<std::uint64_t,PresentationMarkerList> marker_table;
+    marker_table.begin(3);
+    const auto key=(std::uint64_t(0xABCDEFFF)<<16)|2;
+    auto* list=marker_table.try_emplace(key).first;
+    list->markers[list->count++].token=7;
+    marker_table.try_emplace(key).first->markers[list->count++].token=8;
+    assert(marker_table.find(key)->count==2 && marker_table.find(key)->markers[0].token==7 &&
+           marker_table.find(key)->markers[1].token==8 && !marker_table.find(key+1));
     constexpr std::array<ShadowTexcoordSample,
                          kCanonicalShadowBatchVertices> empty_shadow_slots{};
     constexpr std::array<ShadowTexcoordSample, 4> initial_shadow_uvs{{

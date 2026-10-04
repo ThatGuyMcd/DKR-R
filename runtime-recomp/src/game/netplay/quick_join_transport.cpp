@@ -188,6 +188,7 @@ public:
             peers.swap(peers_);
             remote_to_identifier_.clear();
             pinned_routes_.clear();
+            departed_peers_.clear();
             retired.swap(retired_peers_);
             control_inbound_.clear();
             authority_inbound_.clear();
@@ -235,6 +236,20 @@ public:
         std::erase_if(pinned_routes_, [&](const auto& entry) {
             return entry.second.second == address;
         });
+    }
+    bool take_peer_departure(PeerAddress& address) override {
+        std::scoped_lock lock(mutex_);
+        while(!departed_peers_.empty()) {
+            const auto peer=departed_peers_.front().lock();departed_peers_.pop_front();
+            // A late callback from a replaced route cannot end a new match.
+            if(!peer||!peer->current.load(std::memory_order_acquire))continue;
+            const auto current=peers_.find(peer->identifier);
+            const auto pinned=pinned_routes_.find(peer->remote_id);
+            if(current==peers_.end()||current->second!=peer||pinned==pinned_routes_.end()||
+               !(pinned->second.second==peer->address))continue;
+            address=peer->address;return true;
+        }
+        return false;
     }
     std::size_t maximum_plaintext_datagram_bytes() const override {
         return protocol::kMaximumQuickJoinDatagramBytes;
@@ -632,6 +647,7 @@ private:
         PeerAddress address{};
         std::atomic<bool> current{true};
         std::atomic<bool> route_ready{false};
+        bool departure_reported = false; // mutex_ protected
         std::chrono::steady_clock::time_point created = std::chrono::steady_clock::now();
         std::size_t queued_bytes = 0U;
         std::shared_ptr<rtc::PeerConnection> connection;
@@ -767,6 +783,19 @@ private:
         }
     }
 
+    void report_peer_departure(const std::shared_ptr<Peer>& peer,
+                              const std::shared_ptr<rtc::DataChannel>& control = {}) {
+        std::scoped_lock lock(mutex_);
+        if(!peer||!peer->current.load(std::memory_order_acquire)||closing_.load()||peer->departure_reported)return;
+        const auto current=peers_.find(peer->identifier);
+        if(current==peers_.end()||current->second!=peer||!pinned_routes_.contains(peer->remote_id))return;
+        if(control&&peer->control_channel!=control)return;
+        peer->departure_reported=true;
+        std::erase_if(departed_peers_,[](const auto& p){const auto live=p.lock();return !live||!live->current.load();});
+        if(departed_peers_.size()<4U)departed_peers_.push_back(peer);
+        if(receive_signal_)receive_signal_->notify();
+    }
+
     void request_route_retry(const std::shared_ptr<Peer>& peer) {
         if (!peer || !peer->current.load(std::memory_order_acquire) ||
             closing_.load(std::memory_order_acquire) ||
@@ -895,6 +924,7 @@ private:
                 } else if (state == rtc::PeerConnection::State::Disconnected ||
                            state == rtc::PeerConnection::State::Failed ||
                            state == rtc::PeerConnection::State::Closed) {
+                    if(state!=rtc::PeerConnection::State::Disconnected)report_peer_departure(locked);
                     request_route_retry(locked);
                 }
             }));
@@ -1039,8 +1069,13 @@ private:
                 send_bootstrap(locked->control_channel);
             }
         }));
-        bound->onClosed(callbacks_.wrap([this, weak_peer] {
+        const std::weak_ptr<rtc::DataChannel> weak_channel(bound);
+        bound->onClosed(callbacks_.wrap([this, weak_peer, weak_channel, label] {
             if (const auto locked = weak_peer.lock()) {
+                if(label!="dkr-r-authority"&&label!="dkr-r-checkpoint"&&
+                   label!="dkr-r-realtime"&&label!="dkr-r-replica") {
+                    if(const auto control=weak_channel.lock())report_peer_departure(locked,control);
+                }
                 request_route_retry(locked);
             }
         }));
@@ -1231,6 +1266,7 @@ private:
     std::map<std::string, std::uint64_t> remote_to_identifier_;
     std::map<std::string, std::pair<std::uint64_t, PeerAddress>> pinned_routes_;
     std::vector<std::shared_ptr<Peer>> retired_peers_;
+    std::deque<std::weak_ptr<Peer>> departed_peers_;
     SocialExecutor connection_closer_;
     std::atomic<unsigned> pending_retirements_{0U};
     // Independent receive queues mirror the SCTP traffic classes. Reliable

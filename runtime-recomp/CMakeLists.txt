@@ -45,6 +45,12 @@ set(DKRPORT_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." CACHE PATH "Root of the DKR Port
 option(DKR_RUNTIME_BUILD_GENERATED "Compile N64Recomp-generated DKR CPU functions" ON)
 option(DKR_RUNTIME_BUILD_RT64 "Also configure and compile the pinned RT64 renderer" OFF)
 option(DKR_LEGACY_QUALIFICATION "Build private real-runtime legacy scene qualification hooks (not for packaging)" OFF)
+option(DKR_REPLAY_QUALIFICATION "Private real-game replay fixtures; never package" OFF)
+option(DKR_EXPERIMENTAL_RENDER_QUALIFICATION "PRIVATE generation-retirement GPU probe; never package" OFF)
+option(DKR_EXPERIMENTAL_RACE_TEST "Opt-in owned rollback backend in the existing launcher (x64)" OFF)
+if(DKR_EXPERIMENTAL_RACE_TEST AND (ANDROID OR APPLE OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$"))
+    message(FATAL_ERROR "The first experimental race test is Windows/Linux x64 only")
+endif()
 set(DKR_PATCH_POLICY_V77
     "${CMAKE_CURRENT_LIST_DIR}/dkr.us.v77.recomp-policy.json")
 set(DKR_PATCH_POLICY_V80
@@ -234,6 +240,19 @@ add_library(DKRNetplayCore STATIC
     src/game/netplay/rollback_simulation_state.cpp
     src/game/netplay/rollback_state_store.cpp
     src/game/netplay/experimental_rollback.cpp
+    src/game/netplay/experimental_checkpoint_hash.cpp
+    src/game/netplay/experimental_owner_inputs.cpp
+    src/game/netplay/experimental_timeline.cpp
+    src/game/netplay/experimental_epoch.cpp
+    src/game/netplay/experimental_session.cpp
+    src/game/netplay/experimental_network.cpp
+    src/game/netplay/experimental_launch.cpp
+    src/game/netplay/experimental_lobby_admission.cpp
+    src/game/netplay/experimental_pump.cpp
+    src/game/netplay/experimental_eeprom.cpp
+    src/game/netplay/experimental_presentation.cpp
+    src/game/netplay/local_scenery.cpp
+    src/game/netplay/experimental_present_gate.cpp
     src/game/netplay/replay_qualification.cpp
     src/game/netplay/runtime_state.cpp
     src/game/netplay/secure_channel.cpp
@@ -245,6 +264,7 @@ target_include_directories(DKRNetplayCore PUBLIC
     "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay"
     "${DKR_RECOMP_SOURCE}/include"
 )
+target_include_directories(DKRNetplayCore PRIVATE "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty")
 target_link_libraries(DKRNetplayCore PUBLIC GekkoNet DKRNetplayCrypto)
 if(DKR_NETPLAY_WEBRTC)
     target_link_libraries(DKRNetplayCore PUBLIC datachannel)
@@ -454,6 +474,19 @@ if(DKR_RUNTIME_BUILD_RT64)
         set_source_files_properties("${CMAKE_BINARY_DIR}/generated/android-present-ownership/src/hle/rt64_present_queue.cpp"
             TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
     endif()
+    if(DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
+        if(ANDROID)
+            message(FATAL_ERROR "Private rollback GPU qualification is desktop only")
+        endif()
+        # OFF for distributable builds. Isolated copies, not vendor edits.
+        dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/performance-present-wait" experimental-present-queue
+            "${DKRPORT_ROOT}/patches/netplay/experimental-present-queue.patch" src/hle/rt64_present_queue.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/experimental-present-queue/src/hle/rt64_present_queue.cpp"
+            TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
+            "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+        dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" experimental-present-state
+            "${DKRPORT_ROOT}/patches/netplay/experimental-present-state.patch" src/hle/rt64_state.cpp)
+    endif()
     dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" performance-workload-wait
         "${DKRPORT_ROOT}/patches/performance/workload-queue-wait.patch" src/hle/rt64_workload_queue.cpp)
     dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/performance-workload-wait" water-renderer-history
@@ -461,6 +494,13 @@ if(DKR_RUNTIME_BUILD_RT64)
     set_source_files_properties("${CMAKE_BINARY_DIR}/generated/water-renderer-history/src/hle/rt64_workload_queue.cpp"
         TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
         "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+    if(DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
+        dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/water-renderer-history" experimental-workload-history
+            "${DKRPORT_ROOT}/patches/netplay/experimental-workload-history.patch" src/hle/rt64_workload_queue.cpp)
+        set_source_files_properties("${CMAKE_BINARY_DIR}/generated/experimental-workload-history/src/hle/rt64_workload_queue.cpp"
+            TARGET_DIRECTORY rt64 PROPERTIES INCLUDE_DIRECTORIES
+            "${DKR_RT64_SOURCE}/src/hle;${CMAKE_CURRENT_LIST_DIR}/src/game")
+    endif()
     if(ANDROID)
         dkr_stage_patch(rt64 "${CMAKE_BINARY_DIR}/generated/water-renderer-history" android-render-idle-priority
             "${DKRPORT_ROOT}/patches/android/render-idle-priority.patch" src/hle/rt64_workload_queue.cpp)
@@ -670,10 +710,21 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     if(DKR_LEGACY_QUALIFICATION)
         list(APPEND DKR_GAME_SOURCES src/game/legacy_runtime_qualification.cpp)
     endif()
+    if(DKR_REPLAY_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
+        list(APPEND DKR_GAME_SOURCES src/game/replay_probe_capture.cpp)
+    endif()
+    if(DKR_REPLAY_QUALIFICATION)
+        set_property(SOURCE src/game/runtime_netplay.cpp src/game/custom_tracks_hooks.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS DKR_REPLAY_QUALIFICATION=1)
+    endif()
+    if(DKR_EXPERIMENTAL_RACE_TEST)
+        list(APPEND DKR_GAME_SOURCES src/game/netplay/experimental_runtime.cpp)
+    endif()
     if(DKR_RUNTIME_BUILD_RT64)
         list(APPEND DKR_GAME_SOURCES
             src/game/hud_basic_settings.cpp
             src/game/f3ddkr_rt64.cpp
+            src/game/local_scenery_rt64.cpp
             src/game/generated/jumpman_font.c
             src/game/generated/racing_banana_font.c
             src/game/generated/selawik_font.c
@@ -724,6 +775,9 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         DKR_PATCH_POLICY_SHA256="${DKR_PATCH_POLICY_SHA256}"
         NOMINMAX
     )
+    if(DKR_EXPERIMENTAL_RACE_TEST)
+        target_compile_definitions(DKRPortGame PRIVATE DKR_EXPERIMENTAL_RACE_TEST=1)
+    endif()
     if(NOT MSVC AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
         # librecomp's generated RSP vector implementation uses SSE4.1
         # intrinsics on x86-64. GCC and Clang require the target feature to be
@@ -864,6 +918,179 @@ if(DKR_RUNTIME_BUILD_GENERATED)
 endif()
 
 add_executable(DKRRuntimeProbe src/runtime_probe.cpp)
+
+set(DKR_EXPERIMENTAL_OWNED_GENERATED "" CACHE PATH "NEW isolated owned CPU Patch Pipeline output; integration targets only")
+if(DKR_EXPERIMENTAL_OWNED_GENERATED)
+    include(cmake/ExperimentalOwnedGame.cmake)
+    dkr_add_experimental_owned_game(DKRExperimentalOwnedGame "${DKR_EXPERIMENTAL_OWNED_GENERATED}")
+    if(DKR_NETPLAY_WEBRTC)
+        add_executable(DKRExperimentalOwnedQuickJoinTests EXCLUDE_FROM_ALL tests/experimental_owned_quick_join_tests.cpp)
+        target_link_libraries(DKRExperimentalOwnedQuickJoinTests PRIVATE DKRExperimentalOwnedGame)
+        target_include_directories(DKRExperimentalOwnedQuickJoinTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
+        file(READ "${DKR_EXPERIMENTAL_OWNED_GENERATED}/manifest.json" DKR_OWNED_MANIFEST)
+        string(JSON DKR_OWNED_REVISION GET "${DKR_OWNED_MANIFEST}" revision)
+        string(JSON DKR_OWNED_FULL_SCENES ERROR_VARIABLE DKR_OWNED_FULL_SCENES_ERROR GET "${DKR_OWNED_MANIFEST}" full_scenes)
+        if(DKR_OWNED_FULL_SCENES_ERROR OR NOT DKR_OWNED_FULL_SCENES)
+            set(DKR_OWNED_FULL_SCENES 0)
+        else()
+            set(DKR_OWNED_FULL_SCENES 1)
+        endif()
+        if(DKR_EXPERIMENTAL_RACE_TEST AND DKR_OWNED_FULL_SCENES)
+            set_property(SOURCE src/game/runtime_ui.cpp APPEND PROPERTY
+                COMPILE_DEFINITIONS DKR_EXPERIMENTAL_FULL_SCENES=1)
+        endif()
+        if(DKR_EXPERIMENTAL_RACE_TEST AND NOT DKR_OWNED_REVISION EQUAL 77)
+            message(FATAL_ERROR "The first distributable race test requires the qualified v77 owned payload")
+        endif()
+        if(DKR_EXPERIMENTAL_RACE_TEST AND NOT DKR_OWNED_FULL_SCENES)
+            message(FATAL_ERROR "Integrated rollback requires the full-scene Patch Pipeline; race-only payloads cannot be shipped here")
+        endif()
+        target_compile_definitions(DKRExperimentalOwnedQuickJoinTests PRIVATE DKR_OWNED_TEST_REVISION=${DKR_OWNED_REVISION} DKR_OWNED_FULL_SCENES=${DKR_OWNED_FULL_SCENES})
+        if(MSVC)
+            target_compile_options(DKRExperimentalOwnedQuickJoinTests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(DKRExperimentalOwnedQuickJoinTests PRIVATE -UNDEBUG)
+        endif()
+    endif()
+endif()
+
+# Private real-GPU qualification only. It does not start the launcher, guest
+# scheduler, live lobby, or save workers, and is never a release/package target.
+# Reuse the reviewed DKR bridge and the exact staged RT64 build; do not create
+# a substitute renderer or edit dependency/generated sources for this probe.
+if(TARGET DKRPortGame AND (DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST))
+    # Private RT64 references arrive after the static core on ELF. An explicit
+    # object keeps its retirement seam available without changing stable links.
+    target_sources(DKRPortGame PRIVATE src/game/netplay/experimental_present_gate.cpp)
+    # RT64's staged retirement seam is also used by renderer regression tests.
+    # Propagate the narrow implementation, not the whole online core, to every
+    # RT64 consumer so static-link order cannot leave unresolved gate symbols.
+    target_sources(rt64 INTERFACE "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/experimental_present_gate.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/experimental_presentation.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/experimental_checkpoint_hash.cpp")
+    target_include_directories(rt64 INTERFACE "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty")
+endif()
+if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT ANDROID AND NOT APPLE)
+    set(DKR_PRESENTATION_PROBE_SOURCES ${DKR_GAME_SOURCES})
+    list(REMOVE_ITEM DKR_PRESENTATION_PROBE_SOURCES src/game/game_main.cpp)
+    add_executable(DKRExperimentalGpuProbe EXCLUDE_FROM_ALL
+        tests/experimental_gpu_probe.cpp ${DKR_PRESENTATION_PROBE_SOURCES}
+        src/game/netplay/experimental_checkpoint_hash.cpp)
+    target_include_directories(DKRExperimentalGpuProbe PRIVATE
+        "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>"
+        "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe")
+    target_compile_definitions(DKRExperimentalGpuProbe PRIVATE
+        "$<TARGET_PROPERTY:DKRPortGame,COMPILE_DEFINITIONS>" SDL_MAIN_HANDLED=1)
+    if(DKR_EXPERIMENTAL_RENDER_QUALIFICATION)
+        target_compile_definitions(DKRExperimentalGpuProbe PRIVATE DKR_EXPERIMENTAL_RENDER_QUALIFICATION=1)
+    endif()
+    target_compile_options(DKRExperimentalGpuProbe PRIVATE
+        "$<TARGET_PROPERTY:DKRPortGame,COMPILE_OPTIONS>")
+    target_link_directories(DKRExperimentalGpuProbe PRIVATE
+        "$<TARGET_PROPERTY:DKRPortGame,LINK_DIRECTORIES>")
+    target_link_libraries(DKRExperimentalGpuProbe PRIVATE
+        "$<TARGET_PROPERTY:DKRPortGame,LINK_LIBRARIES>")
+    # PRIVATE interactive owner/renderer handoff qualification, never packaged.
+    if(TARGET DKRExperimentalOwnedGame AND DKR_NETPLAY_WEBRTC AND (DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST))
+        if(DKR_EXPERIMENTAL_RACE_TEST)
+            set(DKR_INTERACTIVE_TARGET DKRExperimentalRaceTest)
+            set(DKR_INTERACTIVE_SOURCE src/game/netplay/experimental_race_frontend.cpp)
+            set(DKR_PRIVATE_PRESENTATION_SOURCES ${DKR_PRESENTATION_PROBE_SOURCES})
+            add_executable(${DKR_INTERACTIVE_TARGET} EXCLUDE_FROM_ALL ${DKR_INTERACTIVE_SOURCE} ${DKR_PRIVATE_PRESENTATION_SOURCES}
+                src/game/netplay/experimental_process.cpp
+                src/game/netplay/experimental_present_gate.cpp)
+            set_target_properties(${DKR_INTERACTIVE_TARGET} PROPERTIES OUTPUT_NAME "DKR-R-RollbackTest"
+                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+            foreach(config Debug Release RelWithDebInfo MinSizeRel)
+                string(TOUPPER "${config}" config_upper)
+                set_target_properties(${DKR_INTERACTIVE_TARGET} PROPERTIES
+                    RUNTIME_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/bin/${config}")
+            endforeach()
+        else()
+            set(DKR_INTERACTIVE_TARGET DKRExperimentalInteractiveProbe)
+            set(DKR_INTERACTIVE_SOURCE tests/experimental_interactive_probe.cpp)
+        add_executable(DKRExperimentalInteractiveProbe EXCLUDE_FROM_ALL
+            tests/experimental_interactive_probe.cpp ${DKR_PRESENTATION_PROBE_SOURCES})
+        endif()
+        target_include_directories(${DKR_INTERACTIVE_TARGET} PRIVATE
+            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+        target_compile_definitions(${DKR_INTERACTIVE_TARGET} PRIVATE
+            "$<TARGET_PROPERTY:DKRPortGame,COMPILE_DEFINITIONS>"
+            SDL_MAIN_HANDLED=1
+            DKR_OWNED_TEST_REVISION=${DKR_OWNED_REVISION}
+            DKR_OWNED_FULL_SCENES=${DKR_OWNED_FULL_SCENES})
+        set(DKR_OWNED_ID_PARTS "")
+        # Bind the negotiated identity to the COMPLETE linked owned closure,
+        # not just the driver. Audio/input/Pak/policy changes must reject mixed
+        # packages too. Content hashes (not absolute paths) remain cross-OS.
+        file(GLOB DKR_OWNED_CLOSURE_ID_FILES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.c"
+            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.cpp"
+            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.h"
+            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.hpp"
+            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.cpp"
+            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.h"
+            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.hpp"
+            "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.c"
+            "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.cpp"
+            "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.h")
+        foreach(DKR_OWNED_ID_FILE
+                "${DKR_EXPERIMENTAL_OWNED_GENERATED}/manifest.json"
+                ${DKR_INTERACTIVE_SOURCE} tests/replay_probe/probe_driver.cpp
+                tests/replay_probe/probe_bridge.h tests/replay_probe/probe_native.c
+                tests/replay_probe/probe_presentation.c tests/replay_probe/probe_presentation.h
+                tests/replay_probe/probe_policies.cpp
+                tests/replay_probe/probe_audio_rsp.cpp src/game/netplay/runtime_state.hpp
+                src/game/netplay/experimental_rollback.cpp src/game/netplay/experimental_launch.cpp
+                src/game/netplay/experimental_timeline.cpp src/game/netplay/experimental_network.cpp
+                src/game/netplay/experimental_session.cpp src/game/netplay/experimental_pump.cpp
+                src/game/netplay/experimental_pcm.hpp
+                src/game/save_manager.cpp src/game/save_manager.hpp
+                ${DKR_OWNED_CLOSURE_ID_FILES})
+            get_filename_component(DKR_OWNED_ID_FILE "${DKR_OWNED_ID_FILE}" ABSOLUTE
+                BASE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+            file(SHA256 "${DKR_OWNED_ID_FILE}" DKR_OWNED_ID_PART)
+            string(APPEND DKR_OWNED_ID_PARTS "${DKR_OWNED_ID_PART}|")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DKR_OWNED_ID_FILE}")
+        endforeach()
+        string(SHA256 DKR_OWNED_BUILD_ID "${DKR_OWNED_ID_PARTS}")
+        message(STATUS "Owned rollback contract: ${DKR_OWNED_BUILD_ID}")
+        if(DKR_EXPERIMENTAL_RACE_TEST)
+            target_link_libraries(DKRPortGame PRIVATE DKRExperimentalOwnedGame)
+            set_property(SOURCE src/game/netplay/experimental_runtime.cpp APPEND PROPERTY
+                COMPILE_DEFINITIONS DKR_OWNED_BUILD_ID="${DKR_OWNED_BUILD_ID}")
+        endif()
+        # Only the frontend consumes this manifest. A protocol-identity change
+        # must not recompile every unrelated launcher/renderer translation unit.
+        set_property(SOURCE ${DKR_INTERACTIVE_SOURCE} APPEND PROPERTY
+            COMPILE_DEFINITIONS DKR_OWNED_BUILD_ID="${DKR_OWNED_BUILD_ID}")
+        target_compile_options(${DKR_INTERACTIVE_TARGET} PRIVATE
+            "$<TARGET_PROPERTY:DKRPortGame,COMPILE_OPTIONS>")
+        target_link_directories(${DKR_INTERACTIVE_TARGET} PRIVATE
+            "$<TARGET_PROPERTY:DKRPortGame,LINK_DIRECTORIES>")
+        target_link_libraries(${DKR_INTERACTIVE_TARGET} PRIVATE
+            DKRExperimentalOwnedGame "$<TARGET_PROPERTY:DKRPortGame,LINK_LIBRARIES>")
+    endif()
+    if(WIN32)
+        foreach(DKR_PROBE_DLL
+            "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
+            "${DKR_RT64_SOURCE}/src/contrib/dxc/bin/x64/dxcompiler.dll"
+            "${DKR_RT64_SOURCE}/src/contrib/dxc/bin/x64/dxil.dll")
+            add_custom_command(TARGET DKRExperimentalGpuProbe POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${DKR_PROBE_DLL}" "$<TARGET_FILE_DIR:DKRExperimentalGpuProbe>" VERBATIM)
+            if(DKR_INTERACTIVE_TARGET AND TARGET ${DKR_INTERACTIVE_TARGET})
+                add_custom_command(TARGET ${DKR_INTERACTIVE_TARGET} POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "${DKR_PROBE_DLL}" "$<TARGET_FILE_DIR:${DKR_INTERACTIVE_TARGET}>" VERBATIM)
+            endif()
+        endforeach()
+    endif()
+endif()
+
+if(DKR_EXPERIMENTAL_RACE_TEST AND NOT TARGET DKRExperimentalRaceTest)
+    message(FATAL_ERROR "Experimental race test requires RT64, WebRTC and the reviewed isolated owned Patch Pipeline output")
+endif()
 target_include_directories(DKRRuntimeProbe PRIVATE
     "${DKR_RECOMP_SOURCE}/include"
     "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
@@ -1169,6 +1396,85 @@ if(BUILD_TESTING)
     add_executable(DKRExperimentalRollbackTests tests/experimental_rollback_tests.cpp)
     target_link_libraries(DKRExperimentalRollbackTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRExperimentalRollback COMMAND DKRExperimentalRollbackTests)
+    add_executable(DKRLocalSceneryTests tests/local_scenery_tests.cpp)
+    target_link_libraries(DKRLocalSceneryTests PRIVATE DKRNetplayCore)
+    if(MSVC)
+        target_compile_options(DKRLocalSceneryTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRLocalSceneryTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME DKRLocalScenery COMMAND DKRLocalSceneryTests)
+    if(DKR_EXPERIMENTAL_OWNED_GENERATED)
+        add_executable(DKRCheckedMemoryTests
+            tests/replay_probe/checked_memory_tests.cpp tests/replay_probe/probe_bridge.c)
+        target_include_directories(DKRCheckedMemoryTests BEFORE PRIVATE
+            "${DKR_EXPERIMENTAL_OWNED_GENERATED}" tests/replay_probe src/game)
+        target_compile_features(DKRCheckedMemoryTests PRIVATE c_std_11 cxx_std_20)
+        if(MSVC)
+            target_compile_options(DKRCheckedMemoryTests PRIVATE /UNDEBUG /fp:strict)
+        else()
+            target_compile_options(DKRCheckedMemoryTests PRIVATE -UNDEBUG -fno-strict-aliasing)
+            target_link_libraries(DKRCheckedMemoryTests PRIVATE m)
+        endif()
+        add_test(NAME DKRCheckedMemory COMMAND DKRCheckedMemoryTests)
+    endif()
+    add_executable(DKRPresentationOwnershipTests tests/experimental_presentation_tests.cpp src/game/renderer_snapshot.cpp)
+    target_link_libraries(DKRPresentationOwnershipTests PRIVATE DKRNetplayCore)
+    if(MSVC)
+        target_compile_options(DKRPresentationOwnershipTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRPresentationOwnershipTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME DKRPresentationOwnership COMMAND DKRPresentationOwnershipTests)
+    add_executable(DKRExperimentalOwnerInputTests tests/experimental_owner_input_tests.cpp)
+    target_link_libraries(DKRExperimentalOwnerInputTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRExperimentalOwnerInput COMMAND DKRExperimentalOwnerInputTests)
+    add_executable(DKRExperimentalTimelineTests tests/experimental_timeline_tests.cpp)
+    target_link_libraries(DKRExperimentalTimelineTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRExperimentalTimeline COMMAND DKRExperimentalTimelineTests)
+    add_executable(DKRExperimentalEpochTests tests/experimental_epoch_tests.cpp)
+    target_link_libraries(DKRExperimentalEpochTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRExperimentalEpoch COMMAND DKRExperimentalEpochTests)
+    add_executable(DKRExperimentalSessionTests tests/experimental_session_tests.cpp)
+    target_link_libraries(DKRExperimentalSessionTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRExperimentalSession COMMAND DKRExperimentalSessionTests)
+    add_executable(DKRExperimentalNetworkTests tests/experimental_network_tests.cpp)
+    target_link_libraries(DKRExperimentalNetworkTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRExperimentalNetwork COMMAND DKRExperimentalNetworkTests)
+    add_executable(DKRExperimentalLaunchTests tests/experimental_launch_tests.cpp)
+    target_link_libraries(DKRExperimentalLaunchTests PRIVATE DKRNetplayCore)
+    add_executable(DKRExperimentalLobbyAdmissionTests tests/experimental_lobby_admission_tests.cpp)
+    target_link_libraries(DKRExperimentalLobbyAdmissionTests PRIVATE DKRNetplayCore)
+    if(MSVC)
+        target_compile_options(DKRExperimentalLobbyAdmissionTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRExperimentalLobbyAdmissionTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME DKRExperimentalLobbyAdmission COMMAND DKRExperimentalLobbyAdmissionTests)
+    add_test(NAME DKRExperimentalLaunch COMMAND DKRExperimentalLaunchTests)
+    add_executable(DKRExperimentalPcmTests tests/experimental_pcm_tests.cpp)
+    target_link_libraries(DKRExperimentalPcmTests PRIVATE DKRNetplayCore)
+    if(MSVC)
+        target_compile_options(DKRExperimentalPcmTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(DKRExperimentalPcmTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME DKRExperimentalPcm COMMAND DKRExperimentalPcmTests)
+    if(WIN32 OR (UNIX AND NOT ANDROID AND NOT APPLE))
+        add_executable(DKRExperimentalProcessTests tests/experimental_process_tests.cpp src/game/netplay/experimental_process.cpp)
+        target_include_directories(DKRExperimentalProcessTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+        add_test(NAME DKRExperimentalProcess COMMAND DKRExperimentalProcessTests)
+        set_tests_properties(DKRExperimentalProcess PROPERTIES TIMEOUT 15)
+    endif()
+    set_tests_properties(DKRExperimentalNetwork PROPERTIES TIMEOUT 60)
+    add_executable(DKRExperimentalCheckpointHashTests tests/experimental_checkpoint_hash_tests.cpp)
+    target_link_libraries(DKRExperimentalCheckpointHashTests PRIVATE DKRNetplayCore)
+    target_include_directories(DKRExperimentalCheckpointHashTests PRIVATE "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty")
+    add_test(NAME DKRExperimentalCheckpointHash COMMAND DKRExperimentalCheckpointHashTests)
+    set_tests_properties(DKRExperimentalSession PROPERTIES TIMEOUT 60)
+    add_executable(DKRExperimentalEepromTests tests/experimental_eeprom_tests.cpp)
+    target_link_libraries(DKRExperimentalEepromTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRExperimentalEeprom COMMAND DKRExperimentalEepromTests)
 
     add_executable(DKRSecureChannelTests
         tests/secure_channel_tests.cpp
@@ -1204,6 +1510,17 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME DKRQuickJoinLifecycle COMMAND DKRQuickJoinLifecycleTests)
         set_tests_properties(DKRQuickJoinLifecycle PROPERTIES TIMEOUT 90)
+        add_executable(DKRExperimentalQuickJoinTests tests/experimental_network_tests.cpp)
+        target_link_libraries(DKRExperimentalQuickJoinTests PRIVATE DKRNetplayCore)
+        target_include_directories(DKRExperimentalQuickJoinTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
+        target_compile_definitions(DKRExperimentalQuickJoinTests PRIVATE DKR_EXPERIMENTAL_QUICKJOIN_TEST=1)
+        if(MSVC)
+            target_compile_options(DKRExperimentalQuickJoinTests PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(DKRExperimentalQuickJoinTests PRIVATE -UNDEBUG)
+        endif()
+        add_test(NAME DKRExperimentalQuickJoin COMMAND DKRExperimentalQuickJoinTests)
+        set_tests_properties(DKRExperimentalQuickJoin PROPERTIES TIMEOUT 90)
     endif()
 
     add_executable(DKRDatagramSocketTests
@@ -1825,9 +2142,17 @@ if(BUILD_TESTING)
     # test primitive. RelWithDebInfo normally defines NDEBUG, which used to turn
     # every assertion into a no-op in the exact configuration shipped to users.
     set(DKR_ASSERT_TEST_TARGETS
+        DKRExperimentalCheckpointHashTests
         DKRNetplayCoreTests
         DKRRollbackDriverTests
         DKRExperimentalRollbackTests
+        DKRExperimentalOwnerInputTests
+        DKRExperimentalTimelineTests
+        DKRExperimentalEpochTests
+        DKRExperimentalSessionTests
+        DKRExperimentalNetworkTests
+        DKRExperimentalLaunchTests
+        DKRExperimentalEepromTests
         DKRRuntimeStateTests
         DKRSecureChannelTests
         DKRDatagramSocketTests

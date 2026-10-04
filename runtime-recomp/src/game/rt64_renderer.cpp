@@ -12,8 +12,14 @@
 #include "game_registration.hpp"
 #include "presentation_identity.hpp"
 #include "renderer_snapshot.hpp"
+#include "local_scenery_rt64.hpp"
 #include "revision_addresses.hpp"
 #include "runtime_enhancements.hpp"
+#include "widescreen_policy.hpp"
+#include "interpolation_state_policy.hpp"
+#include "runtime_hud_layout.hpp"
+#include "hud_reference_layout.hpp"
+#include <bit>
 #include "runtime_netplay.hpp"
 #include "netplay/failure_recorder.hpp"
 #include "runtime_telemetry.hpp"
@@ -22,10 +28,18 @@
 #include "vi_presentation_policy.hpp"
 #include "runtime_platform.hpp"
 #include "runtime_ui.hpp"
-
 #if defined(_WIN32)
 #include <Unknwn.h>
 #include <oaidl.h>
+#endif
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "netplay/experimental_present_gate.hpp"
+#include "netplay/experimental_performance.hpp"
+#include "netplay/experimental_presentation.hpp"
+#include "hle/rt64_workload_queue.h"
+#include "hle/rt64_present_queue.h"
+#include "render/rt64_framebuffer_renderer.h"
+#include "render/rt64_buffer_uploader.h"
 #endif
 
 #include "common/rt64_enhancement_configuration.h"
@@ -52,9 +66,26 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <mutex>
+#include <stdexcept>
 #include <tuple>
 #include <utility>
+
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+namespace dkr::runtime {
+// One decoder thread owns these buffers. TaskIdentityScope copies its bindings
+// into RT64 before reuse; no queued GPU consumer retains these vectors.
+struct OwnedDecodeScratch {
+    LocalSceneryRT64Pass local_scenery;
+    std::vector<presentation::LocatedPresentationMarker> markers;
+    std::vector<presentation::OwnedMatrixBinding> matrices;
+    std::vector<presentation::OwnedShadowBinding> shadows;
+    std::vector<std::uint32_t> covered_matrices;
+    void clear() {markers.clear();matrices.clear();shadows.clear();covered_matrices.clear();}
+};
+}
+#endif
 
 namespace {
 
@@ -135,8 +166,10 @@ bool ExperimentalInterpolationEnabled() {
     return dkr::runtime::enhancements::modern_presentation_enabled();
 }
 
-RT64::EnhancementConfiguration::Presentation::Mode PresentationMode() {
-    return RT64::EnhancementConfiguration::Presentation::Mode::PresentEarly;
+RT64::EnhancementConfiguration::Presentation::Mode PresentationMode(bool owned_frame = false) {
+    using Mode=RT64::EnhancementConfiguration::Presentation::Mode;
+    return dkr::runtime::presentation::present_from_vi_history(owned_frame)
+        ? Mode::PresentEarly : Mode::Console;
 }
 
 void CheckInterrupts() {}
@@ -317,7 +350,8 @@ ultramodern::renderer::GraphicsApi MapGraphicsAPI(
 dkr::runtime::RT64Renderer::RT64Renderer(
     std::uint8_t* rdram,
     ultramodern::renderer::WindowHandle window_handle,
-    bool developer_mode) {
+    bool developer_mode, bool owned_mode) : owned_mode_(owned_mode) {
+    if(owned_mode_)netplay::experimental::performance::begin_report_window();
     const auto renderer_started_at =
         dkr::runtime::startup_performance::Clock::now();
     // RT64Renderer can be created more than once while the DKR-R process and
@@ -445,7 +479,11 @@ dkr::runtime::RT64Renderer::RT64Renderer(
         // has been approved for interpolation, yielding an entirely black Modern
         // frame. PresentEarly follows the current VI buffer and remains valid both
         // before and after RT64 enables interpolation for that framebuffer.
-        application_->enhancementConfig.presentation.mode = PresentationMode();
+        // Owned frames carry their own exact framebuffer and VI-black state.
+        // PresentEarly uses historical VIs during DL decode and ignores the
+        // explicit updateScreen below. That native scheduler policy must not
+        // choose an obsolete buffer after an owned scene/rollback boundary.
+        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_);
         dkr::runtime::startup_performance::report(
             "rt64-application-create", application_started_at);
     };
@@ -503,6 +541,19 @@ dkr::runtime::RT64Renderer::RT64Renderer(
         application_.reset();
         return;
     }
+    // setup/fallback creates a fresh texture cache. Reapply persisted enabled
+    // packs on its first presentation, even if the retired renderer had already
+    // consumed this library generation. Do not change users' enabled settings.
+    dkr::runtime::texture_packs::renderer_started();
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    if(owned_mode_) {
+        owned_registration_=std::make_unique<netplay::experimental::present_gate::Registration>(application_->state.get());
+        // Native workers have retired. Until the first owned frame arrives,
+        // present a black host surface with the preparation UI, not stale VI
+        // registers/framebuffers left over from the local bootstrap.
+        *application_->core.VI_H_START_REG=0;
+    }
+#endif
     const bool fullscreen =
         config.wm_option == ultramodern::renderer::WindowMode::Fullscreen;
     application_->setFullScreen(fullscreen);
@@ -550,6 +601,9 @@ bool dkr::runtime::RT64Renderer::update_config(
     const bool multisampling_changed =
         old_config.msaa_option != new_config.msaa_option;
     ApplyConfig(*application_, new_config);
+    if (owned_mode_) {
+        application_->enhancementConfig.presentation.mode = PresentationMode(true);
+    }
     // RT64's multisample resources (shader cache, render targets and frame
     // buffers) must be rebuilt while the new sample count is staged locally,
     // before that configuration is published to the present queues. Publishing
@@ -584,7 +638,7 @@ bool dkr::runtime::RT64Renderer::update_config(
 void dkr::runtime::RT64Renderer::enable_instant_present() {
     std::scoped_lock presentation_lock(presentation_mutex_);
     if (application_ != nullptr) {
-        application_->enhancementConfig.presentation.mode = PresentationMode();
+        application_->enhancementConfig.presentation.mode = PresentationMode(owned_mode_);
         application_->updateEnhancementConfig();
     }
 }
@@ -763,7 +817,7 @@ void dkr::runtime::RT64Renderer::update_screen() {
             metrics.presented_fps, metrics.simulation_hz, metrics.graphics_hz,
             metrics.vi_hz, g_effective_refresh_target, get_resolution_scale());
     }
-    if (present_count_ == 1) {
+    if (present_count_ == 1 && !owned_mode_) {
         dkr::runtime::startup_performance::mark("first-vi-received");
         std::fprintf(stderr, "[boot] VI initialized; starting recompiled DKR entrypoint\n");
         recomp::start_game(kGameId);
@@ -901,6 +955,10 @@ void dkr::runtime::RT64Renderer::shutdown() {
     if (application_ != nullptr) {
         dkr::runtime::ui::detach(*application_);
         application_->end();
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        owned_submissions_.clear(); // Actual workers joined, not just first-target notification.
+        owned_registration_.reset(); // After the actual RT64 consumers joined.
+#endif
         // end() releases RT64's backend resources but leaves the Application
         // object alive. Destroy it here so the next in-process game session
         // receives a genuinely fresh renderer and so the destructor cannot
@@ -908,6 +966,319 @@ void dkr::runtime::RT64Renderer::shutdown() {
         application_.reset();
     }
 }
+
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+void dkr::runtime::RT64Renderer::reap_owned() {
+    if(!owned_registration_)return;
+    while(!owned_submissions_.empty() && owned_registration_->completed(
+            owned_submissions_.front().workload,owned_submissions_.front().present))
+        owned_submissions_.pop_front();
+}
+bool dkr::runtime::RT64Renderer::owned_capacity_available() {
+    reap_owned();
+    return owned_submissions_.size()<2;
+}
+void dkr::runtime::RT64Renderer::present_owned(
+    std::shared_ptr<const netplay::experimental::RenderSnapshot> lease,
+    netplay::experimental::PresentationMailbox& mailbox) {
+    if(!owned_mode_||!application_||!owned_registration_||!mailbox.is_current(lease))return;
+    reap_owned();
+    // The render loop leaves the latest mailbox image pending until capacity
+    // returns; it never blocks on an unbounded completion wait or adds debt.
+    // Defend the bound for any other caller without changing queue lifetimes.
+    if(owned_submissions_.size()>=2)return;
+    auto workspace=netplay::experimental::DecodeWorkspace::create(lease);
+    if(!workspace)throw std::runtime_error("Owned frame already has a decode consumer.");
+    // No native CPU/VI worker exists in this mode. RAM is read synchronously
+    // by State/RSP/TMEM; async uploaders read copied DrawData/transform/tile
+    // vectors, framebuffer storage and owned texture buffers, NOT guest RAM.
+    // Their CPU completion remains mandatory. GPU queues consume those RT64
+    // resources; retain the immutable generation lease until BOTH full queue
+    // callbacks complete (not RT64's early first-target notification).
+    const auto drain=[&] {
+        netplay::experimental::performance::Scope timing(netplay::experimental::performance::Stage::Drain);
+        auto& a=*application_;a.drawDataUploader->wait();a.transformsUploader->wait();a.tilesUploader->wait();
+        a.state->framebufferRenderer->waitForUploaders();
+        a.workloadQueue->waitForWorkloadId(a.state->workloadId);a.presentQueue->waitForPresentId(a.state->presentId);
+        a.workloadQueue->waitForIdle();a.presentQueue->waitForIdle();
+    };
+    RendererSnapshotScope snapshot(application_->core.RDRAM,application_->state->RDRAM,workspace->bytes().data());
+    bool queued=false;
+    struct DrainOnExit {decltype(drain)& run;bool& queued;~DrainOnExit(){if(!queued)run();}} consumers{drain,queued};
+    netplay::experimental::present_gate::Scope submission(*owned_registration_,lease);
+    if(!mailbox.is_current(lease))return;
+    const auto& d=lease->descriptor();OSTask task{};task.t.type=M_GFXTASK;task.t.data_ptr=d.display_start;task.t.data_size=d.display_end-d.display_start;
+    // Local quality/aspect settings must never enter rollback RAM or hashes.
+    // Interpret audited draw-site observations against the MUTABLE DECODE COPY
+    // and the same typed marker consumer used by the normal Patch Pipeline.
+    if(!owned_decode_scratch_)owned_decode_scratch_=std::make_unique<OwnedDecodeScratch>();
+    owned_decode_scratch_->clear();
+    auto& owned_markers=owned_decode_scratch_->markers;
+    auto& owned_matrices=owned_decode_scratch_->matrices;
+    auto& owned_shadows=owned_decode_scratch_->shadows;
+    auto& covered_matrices=owned_decode_scratch_->covered_matrices;
+    const bool modern=enhancements::modern_presentation_enabled();
+    // One immutable local layout policy for this decode. Never consulted by
+    // the rewindable CPU or included in peer/checkpoint fingerprints.
+    const auto hud_mode=hud::mode();
+    const bool expanded=enhancements::modern_presentation_enabled() &&
+        ultramodern::renderer::get_graphics_config().ar_option==ultramodern::renderer::AspectRatio::Expand;
+    int width=0,height=0;
+    if(auto* window=static_cast<SDL_Window*>(platform::sdl_window()))SDL_GetWindowSize(window,&width,&height);
+    const float cover=expanded && width>0 && height>0 ?
+        (std::max)(1.0F,float(width)/float(height)/(4.0F/3.0F)):1.0F;
+    const auto read_vertex=[&](std::uint32_t address) {
+        std::int16_t value;
+        std::memcpy(&value,workspace->bytes().data()+((address-0x80000000U)^2U),2);
+        return value;
+    };
+    const auto write_vertex=[&](std::uint32_t address,float value) {
+        if(!std::isfinite(value))throw std::runtime_error("Invalid owned background coordinate.");
+        const auto clamped=std::int16_t(std::lround(std::clamp(value,-32768.0F,32767.0F)));
+        std::memcpy(workspace->bytes().data()+((address-0x80000000U)^2U),&clamped,2);
+    };
+    std::uint32_t scene=0;
+    {
+    netplay::experimental::performance::Scope metadata_timing(netplay::experimental::performance::Stage::Metadata);
+    for(const auto& event:lease->draw_events())if(event.kind==DKR_OWNED_FRAME_METADATA) {
+        scene=presentation::normalise_identity(event.parameters[0]^presentation::mix_identity(std::uint32_t(lease->epoch()))^
+            presentation::mix_identity(std::uint32_t(lease->generation())));
+    }
+    for(const auto& event:lease->draw_events()) {
+        if(event.kind==DKR_OWNED_FRAME_METADATA||event.kind==DKR_OWNED_LOCAL_SCENERY)continue;
+        if(event.kind==DKR_OWNED_MATRIX) {
+            const auto flags=event.parameters[0];
+            const auto identity=event.token?presentation::normalise_identity(event.token^presentation::mix_identity(scene)):0U;
+            owned_matrices.push_back({event.address,{identity,(flags&1)!=0,(flags&2)!=0,(flags&4)!=0,(flags&8)!=0,std::uint8_t(event.parameters[3])},event.parameters[1]!=0});
+            continue;
+        }
+        if(event.kind==DKR_OWNED_SKY_MATRIX || event.kind==DKR_OWNED_TRANSITION) {
+            // Only skydome-produced combined matrices: mirror the legacy
+            // row-vector projection-column cover, on the decode copy only.
+            const bool already_covered=std::find(covered_matrices.begin(),covered_matrices.end(),event.address)!=covered_matrices.end();
+            if(cover>1.0001F && !already_covered) {
+            covered_matrices.push_back(event.address);
+            for(unsigned row=0;row<4;++row)for(unsigned column=0;column<2;++column) {
+                const auto p=event.address-0x80000000U+(row*4+column)*2;
+                std::int16_t whole;std::uint16_t fraction;
+                std::memcpy(&whole,workspace->bytes().data()+(p^2U),2);
+                std::memcpy(&fraction,workspace->bytes().data()+((p+32)^2U),2);
+                const double value=(double(whole)+double(fraction)/65536.0)*
+                    (column==0||event.kind==DKR_OWNED_TRANSITION?cover:enhancements::sky_vertical_cover_scale(cover));
+                if(!std::isfinite(value))continue;
+                const auto fixed=std::int32_t(std::clamp(std::round(value*65536.0),double(INT32_MIN),double(INT32_MAX)));
+                const auto integer=std::int16_t(std::uint32_t(fixed)>>16);
+                const auto decimal=std::uint16_t(fixed);
+                std::memcpy(workspace->bytes().data()+(p^2U),&integer,2);
+                std::memcpy(workspace->bytes().data()+((p+32)^2U),&decimal,2);
+            }
+            }
+            continue;
+        }
+        if(event.kind==DKR_OWNED_BACKGROUND_QUAD) {
+            const auto half=std::clamp(std::lround(160.0F*cover),160L,32767L);
+            for(unsigned v=0;v<4;++v) {
+                const auto x=std::int16_t((v&1)?half:-half);
+                std::memcpy(workspace->bytes().data()+((event.address-0x80000000U+v*10U)^2U),&x,2);
+            }
+            continue;
+        }
+        if(event.kind==DKR_OWNED_SPLIT_SKY_QUAD) {
+            // Three/four-player CPU vertices remain canonical (cover=1).
+            // Apply the accepted gradient-cover policy only to this image.
+            const float horizontal=enhancements::split_sky_horizontal_cover_scale(cover,int(event.token));
+            const float vertical=enhancements::split_sky_vertical_cover_scale(cover,int(event.token));
+            for(unsigned v=0;v<4;++v) {
+                const auto address=event.address+v*10U;
+                write_vertex(address,float(read_vertex(address))*horizontal);
+                write_vertex(address+2,float(read_vertex(address+2))*vertical);
+            }
+            continue;
+        }
+        if(event.kind==DKR_OWNED_SPLIT_VOID_QUAD) {
+            float basis[4];std::memcpy(basis,event.parameters,sizeof(basis));
+            const float lx=basis[0],lz=basis[1],cx=basis[2],cz=basis[3];
+            const float length=lx*lx+lz*lz;
+            // Same healthy-geometry guard as the legacy Patch Pipeline hook.
+            if(!std::isfinite(lx)||!std::isfinite(lz)||!std::isfinite(cx)||!std::isfinite(cz)||
+               length<0.5F||length>1.5F)continue;
+            const float horizontal=enhancements::split_sky_horizontal_cover_scale(cover,int(event.token));
+            for(unsigned v=0;v<4;++v) {
+                const auto address=event.address+v*10U;
+                const float x=read_vertex(address),z=read_vertex(address+4);
+                const float expansion=((x-cx)*lx+(z-cz)*lz)/length*(horizontal-1.0F);
+                write_vertex(address,x+expansion*lx);write_vertex(address+4,z+expansion*lz);
+            }
+            continue;
+        }
+        presentation::PresentationMarker marker{};marker.token=std::uint16_t(event.token);
+        switch(event.kind) {
+        case DKR_OWNED_GEOMETRY:
+            if(!modern)continue;
+            marker.mode=std::uint8_t(event.parameters[0]);marker.variant=std::uint8_t(event.parameters[1]);break;
+        case DKR_OWNED_SHADOW: {
+            if(!modern)continue;
+            marker.mode=2;marker.variant=std::uint8_t(event.parameters[0]);
+            const auto& p=event.parameters;
+            const auto policy=presentation::rigid_shadow_owner_policy(std::uint16_t(p[1]),std::int8_t(p[3]),std::uint8_t(p[4]),std::uint16_t(p[2]));
+            const float x=std::bit_cast<float>(p[5]),y=std::bit_cast<float>(p[6]),z=std::bit_cast<float>(p[7]);
+            owned_shadows.push_back({std::uint16_t(event.token),policy,{{x,y,z},std::int16_t(p[8]),std::isfinite(x)&&std::isfinite(y)&&std::isfinite(z)}});break;
+        }
+        case DKR_OWNED_HUD_PASS:
+            marker.kind=presentation::PresentationMarkerKind::HudPass;marker.mode=std::uint8_t(event.parameters[0]);marker.variant=std::uint8_t(event.token);
+            marker.token=marker.mode?hud::encode_hud_viewport_cover(cover*4.0F/3.0F):0;
+            break;
+        case DKR_OWNED_HUD_RECT:
+            marker.kind=presentation::PresentationMarkerKind::HudRect;marker.mode=std::uint8_t(event.token);marker.token=0;marker.variant=std::uint8_t(event.parameters[0]);break;
+        case DKR_OWNED_HUD_WIDGET: {
+            marker.kind=presentation::PresentationMarkerKind::HudWidget;marker.mode=std::uint8_t(event.token);marker.token=0;
+            const auto& p=event.parameters;
+            if(marker.mode&&modern) {
+                if(p[10])marker.hud_transform.x=(p[10]==2?1:-1)*hud::fullscreen_gutter_authored(cover*4.0F/3.0F);
+                else if(p[0]<=1&&p[1]<=1&&p[3]<=std::uint32_t(hud::Widget::TimerGlyphs)) {
+                    const auto scenario=p[5]?hud::groups::Scenario::TimeTrial:p[4]==1?hud::groups::Scenario::Adventure:hud::groups::scenario_for(int(p[4]),false);
+                    marker.hud_transform=hud::reference::transform(hud_mode,cover*4.0F/3.0F,
+                        hud::reference::anchor(p[2],hud::Widget(p[3]),scenario,p[0]==1,p[6]!=0,std::bit_cast<float>(p[7])),float(std::int32_t(p[8])),p[9]!=0);
+                }
+            }
+            break;
+        }
+        case DKR_OWNED_BACKGROUND_BEGIN: marker.kind=presentation::PresentationMarkerKind::BackgroundAspect;marker.mode=1;break;
+        case DKR_OWNED_BACKGROUND_END: marker.kind=presentation::PresentationMarkerKind::BackgroundAspect;break;
+        case DKR_OWNED_POSTRACE_FULL_VIEWPORT: marker.kind=presentation::PresentationMarkerKind::PostraceFullViewport;break;
+        case DKR_OWNED_FRAMED_BEGIN: marker.kind=presentation::PresentationMarkerKind::FramedResults;marker.mode=1;break;
+        case DKR_OWNED_FRAMED_END: marker.kind=presentation::PresentationMarkerKind::FramedResults;break;
+        case DKR_OWNED_LENS_BEGIN: marker.kind=presentation::PresentationMarkerKind::TrackSelectLensFlare;marker.mode=1;break;
+        case DKR_OWNED_LENS_END: marker.kind=presentation::PresentationMarkerKind::TrackSelectLensFlare;break;
+        case DKR_OWNED_SPLIT_VIEWPORT:
+            marker.kind=presentation::PresentationMarkerKind::SplitViewport;
+            // Same 1/1024 cover encoding consumed by the legacy draw bridge.
+            marker.token=std::uint16_t((std::clamp(std::lround(cover*1024.0F),0L,0x3FFFL)<<2U)|event.token);
+            break;
+        case DKR_OWNED_SPLIT_WORLD_BEGIN:
+            marker.mode=interpolation::kAspectAdjustScopeMode;break;
+        case DKR_OWNED_SPLIT_WORLD_END:
+            marker.mode=0;break;
+        default: throw std::runtime_error("Unsupported owned presentation observation.");
+        }
+        owned_markers.push_back({event.address,marker});
+    }
+    }
+    owned_decode_scratch_->local_scenery.prepare(lease->local_scenery().get(),
+        lease->draw_events(),workspace->bytes(),scene);
+    const auto present_cursor=application_->presentQueue->writeCursor;
+    {std::scoped_lock lock(presentation_mutex_);
+        presentation::TaskIdentityScope identity{owned_markers,owned_matrices,owned_shadows,scene,modern};
+        application_->state->setRefreshRate(30);
+        {netplay::experimental::performance::Scope timing(netplay::experimental::performance::Stage::Process);
+         f3ddkr_.process(*application_,task,&owned_decode_scratch_->local_scenery);}
+        auto& c=application_->core;
+        *c.VI_STATUS_REG=presentation::kRetailNtscViStatus;
+        *c.VI_ORIGIN_REG=presentation::retail_ntsc_vi_origin(d.framebuffer);*c.VI_WIDTH_REG=320;
+        *c.VI_INTR_REG=2;*c.VI_V_CURRENT_LINE_REG=0;*c.VI_TIMING_REG=0x03E52239;*c.VI_V_SYNC_REG=0x20D;
+        *c.VI_H_SYNC_REG=0xC15;*c.VI_LEAP_REG=0x0C150C15;*c.VI_H_START_REG=d.black?0:0x006C02EC;
+        *c.VI_V_START_REG=0x2501FF;*c.VI_V_BURST_REG=0xE0204;*c.VI_X_SCALE_REG=0x200;*c.VI_Y_SCALE_REG=0x400;
+        application_->state->lastScreenVI=RT64::VI{};
+    }
+    {netplay::experimental::performance::Scope timing(netplay::experimental::performance::Stage::Present);
+     update_screen();}
+    {
+        netplay::experimental::performance::Scope upload_timing(netplay::experimental::performance::Stage::UploadWait);
+        application_->drawDataUploader->wait();application_->transformsUploader->wait();application_->tilesUploader->wait();
+        application_->state->framebufferRenderer->waitForUploaders();
+    }
+    owned_submissions_.push_back({application_->state->workloadId,application_->state->presentId,lease});
+    // Restore core/state RAM BEFORE recycling this one mutable workspace.
+    // The snapshot scope destructor restores again harmlessly on every exit.
+    snapshot.restore();
+    workspace.reset();
+    if(!mailbox.finish_decode(lease))throw std::runtime_error("Owned decoder lease could not retire its CPU readers.");
+    queued=true;
+    const auto now=std::chrono::steady_clock::now();
+    if(now-last_owned_report_>=std::chrono::seconds(5)) {
+        // Routine reporting MUST NOT synchronize WSI/GPU workers. Exact target
+        // inspection is an explicitly intrusive developer diagnostic only.
+        static const bool inspect_targets=[] {
+            const char* flag=std::getenv("DKR_ROLLBACK_INSPECT_RENDER_TARGET");
+            return flag && flag[0]=='1' && !flag[1];
+        }();
+        reap_owned();
+        auto& resources=*application_->sharedQueueResources;
+        if(inspect_targets) {
+        drain();
+        std::scoped_lock manager_lock(resources.managerMutex);
+        const auto& present=application_->presentQueue->presents[present_cursor];
+        const auto* framebuffer=resources.framebufferManager.find(present.screenVI.fbAddress());
+        unsigned writes=0;
+        for(const auto& operation:present.fbOperations)
+            writes+=operation.type==RT64::FramebufferOperation::Type::WriteChanges;
+        if(framebuffer) {
+            auto& target=resources.renderTargetManager.get(RT64::RenderTargetKey(
+                framebuffer->addressStart,framebuffer->width,framebuffer->siz,RT64::Framebuffer::Type::Color),true);
+            std::fprintf(stderr,"[rollback][render-target] native=%ux%u size=%u target=%ux%u scale=%.1f/%.1f cpu-writes=%u interpolation=%u vi-base=%08X gamma=%.3f\n",
+                framebuffer->width,framebuffer->height,framebuffer->siz,target.width,target.height,
+                float(target.resolutionScale.x),float(target.resolutionScale.y),writes,framebuffer->interpolationEnabled,
+                present.screenVI.fbAddress(),present.screenVI.gamma());
+        } else {
+            std::fprintf(stderr,"[rollback][render-target] native-RAM fallback framebuffer=%08X cpu-writes=%u\n",d.framebuffer,writes);
+        }
+        }
+        const auto stats=owned_registration_->statistics();
+        const auto completed=application_->sharedQueueResources->totalPresentations.load(std::memory_order_relaxed);
+        const auto interpolated=application_->sharedQueueResources->totalInterpolatedPresentations.load(std::memory_order_relaxed);
+        std::fprintf(stderr,"[rollback][render] epoch=%llu frame=%u black=%u framebuffer=%08X dl=%08X..%08X presented=%llu tagged=%llu accepted=%llu retired=%llu\n",
+            static_cast<unsigned long long>(lease->epoch()),d.frame,d.black,d.framebuffer,d.display_start,d.display_end,
+            static_cast<unsigned long long>(completed),static_cast<unsigned long long>(stats.tagged),
+            static_cast<unsigned long long>(stats.accepted),static_cast<unsigned long long>(stats.rejected));
+        if(last_owned_report_.time_since_epoch().count()) {
+            const auto seconds=std::chrono::duration<double>(now-last_owned_report_).count();
+            std::fprintf(stderr,"[rollback][fps] seconds=%.3f presents=%llu interpolated=%llu fps=%.2f interpolation-fps=%.2f\n",
+                seconds,static_cast<unsigned long long>(completed-last_owned_presentations_),
+                static_cast<unsigned long long>(interpolated-last_owned_interpolated_),
+                double(completed-last_owned_presentations_)/seconds,double(interpolated-last_owned_interpolated_)/seconds);
+        }
+        last_owned_presentations_=completed;last_owned_interpolated_=interpolated;
+        netplay::experimental::performance::report();
+        std::fprintf(stderr,"[rollback][draw-budget] events=%zu matrices=%zu shadows=%zu dl-bytes=%u in-flight=%zu diagnostic-drain=%u\n",
+            lease->draw_events().size(),owned_matrices.size(),owned_shadows.size(),d.display_end-d.display_start,
+            owned_submissions_.size(),unsigned(inspect_targets));
+        if(netplay::experimental::performance::enabled()) {
+            // Read bounded allocation counters, never inspect worker-owned
+            // vectors or synchronize the GPU for routine profiling.
+            const auto buffers=mailbox.buffer_statistics();
+            std::fprintf(stderr,"[rollback][buffers] images=%zu decoders=%zu metadata=%zu image-reuses=%zu decode-reuses=%zu metadata-reuses=%zu ram-cap-bytes=%zu metadata-cap-bytes=%zu\n",
+                buffers.image_allocations,buffers.decode_allocations,buffers.metadata_allocations,
+                buffers.image_reuses,buffers.decode_reuses,buffers.metadata_reuses,
+                netplay::experimental::PresentationMailbox::kPeakDecodePayloadBytes,
+                netplay::experimental::PresentationMailbox::kPeakDrawEventBytes);
+        }
+        last_owned_report_=now;
+    }
+}
+void dkr::runtime::RT64Renderer::repeat_owned() {
+    if(!owned_mode_||!application_)return;
+    reap_owned();
+    // Let an in-flight real presentation draw the fresh overlay. Resubmitting
+    // a paused workload would stall/reset interpolation and race its slot.
+    if(!owned_submissions_.empty())return;
+    const auto now=std::chrono::steady_clock::now();
+    if(now-last_wait_presentation_<std::chrono::milliseconds(33))return;
+    std::scoped_lock lock(presentation_mutex_);
+    ui::draw(*application_);
+    if(!present_count_&&application_->presentQueue->inspector) {
+        // No guest workload or RAM is borrowed here. A hidden VI submits only
+        // the host's clear/overlay; force a fresh UI present during admission.
+        application_->state->lastScreenVI=RT64::VI{};
+        application_->updateScreen();
+        application_->presentQueue->waitForPresentId(application_->state->presentId);
+        application_->presentQueue->waitForIdle();
+    } else if(present_count_&&application_->presentQueue->inspector) {
+        const bool paused=application_->state->debuggerInspector.paused;
+        application_->state->debuggerInspector.paused=true;application_->updateScreen();application_->state->debuggerInspector.paused=paused;
+    }
+    last_wait_presentation_=now;
+}
+#endif
 
 std::uint32_t dkr::runtime::RT64Renderer::get_display_framerate() const {
     if (application_ == nullptr || application_->presentQueue == nullptr ||

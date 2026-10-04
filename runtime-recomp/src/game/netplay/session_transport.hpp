@@ -73,6 +73,10 @@ public:
     // replacement. An unapproved connection must retain its bounded lifetime.
     virtual void retain_peer_route(const PeerAddress&) {}
     virtual void release_peer_route(const PeerAddress&) {}
+    // Terminal close of a currently admitted route, not an ICE Disconnected
+    // notification or signaling-service outage. The session decides whether
+    // its selected backend must end the match. UDP has no such close event.
+    virtual bool take_peer_departure(PeerAddress&) { return false; }
     virtual std::size_t buffered_bytes(TransportTrafficClass) const {
         return 0U;
     }

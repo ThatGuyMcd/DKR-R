@@ -1,0 +1,26 @@
+diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
+--- a/librecomp/src/recomp.cpp
++++ b/librecomp/src/recomp.cpp
+@@ -541,4 +541,12 @@
+ std::atomic_bool exited = false;
+ moodycamel::LightweightSemaphore graphics_shutdown_ready;
++
++// Experimental owner handoff: registered only by an explicitly armed local
++// bootstrap. Never lend live RAM to a second simulation owner.
++using DkrQuiescedCallback = void (*)(uint8_t*, size_t);
++static std::atomic<DkrQuiescedCallback> dkr_quiesced_callback{nullptr};
++extern "C" void dkr_set_quiesced_bootstrap_callback(DkrQuiescedCallback callback) {
++    dkr_quiesced_callback.store(callback, std::memory_order_release);
++}
+ 
+ void ultramodern::quit() {
+@@ -849,4 +857,9 @@
+     ultramodern::join_thread_cleaner_thread();
+     ultramodern::join_saving_thread();
++
++    // All native CPU, graphics, audio, timer and save owners have joined.
++    if (auto callback = dkr_quiesced_callback.exchange(nullptr, std::memory_order_acq_rel)) {
++        callback(rdram, mem_size);
++    }
+ 
+     game_status.store(GameStatus::None);

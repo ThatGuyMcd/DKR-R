@@ -48,6 +48,10 @@ dkr_stage_patch(ultramodern "${CMAKE_BINARY_DIR}/generated/host-task-lifetime" v
     "${DKRPORT_ROOT}/patches/performance/runtime-vi-bootstrap.patch" ultramodern/src/events.cpp)
 dkr_stage_patch(librecomp "${DKR_MODERN_RUNTIME_SOURCE}" session-bootstrap
     "${DKRPORT_ROOT}/patches/performance/runtime-session-bootstrap.patch" librecomp/src/recomp.cpp)
+if(DKR_REPLAY_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
+    dkr_stage_patch(librecomp "${CMAKE_BINARY_DIR}/generated/session-bootstrap" experimental-quiesced-bootstrap
+        "${DKRPORT_ROOT}/patches/netplay/experimental-quiesced-bootstrap.patch" librecomp/src/recomp.cpp)
+endif()
 if(BUILD_TESTING AND NOT ANDROID)
     add_executable(DKRViBootstrapTests "${DKRPORT_ROOT}/runtime-recomp/tests/vi_bootstrap_tests.cpp")
     target_compile_definitions(DKRViBootstrapTests PRIVATE

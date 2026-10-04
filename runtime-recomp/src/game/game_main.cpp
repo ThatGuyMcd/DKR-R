@@ -11,6 +11,12 @@
 #include "virtual_pak.hpp"
 #include "runtime_legacy_mods.hpp"
 #include "host_task_lifetime.hpp"
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "replay_probe_capture.hpp"
+#include "runtime_enhancements.hpp"
+#include "netplay/experimental_runtime.hpp"
+#include <cwchar>
+#endif
 #if defined(__ANDROID__)
 #include "graphics_health.hpp"
 #include "../android/android_platform.hpp"
@@ -39,6 +45,7 @@
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -60,6 +67,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <DbgHelp.h>
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "netplay/experimental_arguments.hpp"
+#endif
 #endif
 
 extern RspUcodeFunc dkrAspMain;
@@ -337,6 +347,12 @@ struct LaunchOptions {
     std::filesystem::path rom_path;
     std::filesystem::path config_directory;
     unsigned timeout_seconds = 0;
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    std::filesystem::path bootstrap_output;
+    std::filesystem::path owned_check_invite;
+    bool owned_check_host=false;
+    unsigned owned_check_players=2;
+#endif
 };
 
 bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options,
@@ -364,6 +380,21 @@ bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options,
                 return false;
             }
             options.config_directory = std::filesystem::u8path(value);
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        } else if (argument == "--rollback-bootstrap-output") {
+            const char* value=require_value("--rollback-bootstrap-output");
+            if (!value) return false;
+            options.bootstrap_output=std::filesystem::u8path(value);
+        } else if(argument=="--self-test-owned-host"||argument=="--self-test-owned-join") {
+            const char* value=require_value(argv[index]);if(!value)return false;
+            if(!options.owned_check_invite.empty()){error="Only one owned check role is allowed.";return false;}
+            options.owned_check_host=argument=="--self-test-owned-host";
+            options.owned_check_invite=std::filesystem::u8path(value);
+        } else if(argument=="--self-test-owned-players") {
+            const char* value=require_value("--self-test-owned-players");if(!value)return false;
+            if(value[0]<'2'||value[0]>'4'||value[1]){error="Owned check requires 2, 3 or 4 players.";return false;}
+            options.owned_check_players=unsigned(value[0]-'0');
+#endif
         } else if (argument == "--timeout") {
             const char* value = require_value("--timeout");
             if (value == nullptr) {
@@ -654,6 +685,26 @@ int DkrMain(int argc, char** argv) {
     std::shared_ptr<const dkr::mods::PreparedModLaunch> prepared_mods;
     const std::filesystem::path& config_directory = launch.config_directory;
     const unsigned timeout_seconds = launch.timeout_seconds;
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    const bool rollback_bootstrap = !launch.bootstrap_output.empty();
+    const bool owned_check=!launch.owned_check_invite.empty();
+    if(owned_check&&(rollback_bootstrap||rom_path.empty()||!config_directory.is_absolute()||
+        std::filesystem::exists(config_directory)||!launch.owned_check_invite.is_absolute()||
+        timeout_seconds<20||timeout_seconds>180)) {
+        std::fprintf(stderr,"[rollback][check] Requires a ROM, NEW absolute profile, absolute invitation file, and a 20-180 second timeout.\n");return 2;
+    }
+    if (rollback_bootstrap) {
+        // Reject BEFORE any config/save/profile writes. Only a fresh directory
+        // beside the requested image is accepted, never a normal user profile.
+        if (rom_path.empty() || !config_directory.is_absolute() ||
+            std::filesystem::exists(config_directory) ||
+            launch.bootstrap_output.lexically_normal().parent_path()!=config_directory.lexically_normal() ||
+            !dkr_experimental_bootstrap_arm(launch.bootstrap_output,rom_error)) {
+            std::fprintf(stderr,"[rollback-test][prepare] Refusing nonisolated bootstrap directory: %s\n",rom_error.c_str());
+            return 2;
+        }
+    }
+#endif
     std::filesystem::create_directories(config_directory);
     {
         dkr::runtime::startup_performance::ScopedPhase phase(
@@ -759,6 +810,15 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::startup_performance::ScopedPhase phase("ui-configure");
         dkr::runtime::ui::configure(config_directory);
     }
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    if (rollback_bootstrap) {
+        dkr::runtime::enhancements::set_presentation_profile(dkr::runtime::enhancements::PresentationProfile::Accurate);
+        graphics_config.res_option=ultramodern::renderer::Resolution::Original2x;
+        graphics_config.api_option=ultramodern::renderer::GraphicsApi::Vulkan;
+        ultramodern::renderer::set_graphics_config(graphics_config);
+        dkr::runtime::platform::set_master_volume(0.0F);
+    }
+#endif
     dkr::runtime::ui::reset_lifecycle_request();
     const auto window_started_at =
         dkr::runtime::startup_performance::Clock::now();
@@ -774,6 +834,51 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::platform::shutdown();
         return 4;
     }
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    if(owned_check) {
+        auto& online=dkr::runtime::netplay::session();
+        if(!dkr::runtime::ui::configure_owned_online_check(rom_identity,launch.owned_check_host,launch.owned_check_players,rom_error)) {
+            std::fprintf(stderr,"[rollback][check] %s\n",rom_error.c_str());dkr::runtime::platform::shutdown();return 5;
+        }
+        bool joined=launch.owned_check_host,invitation_written=false,ready=false,started=false,accepted=false;
+        auto report_at=std::chrono::steady_clock::now();
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(60);
+        while(std::chrono::steady_clock::now()<deadline&&!accepted) {
+            dkr::runtime::platform::pump_window_events(nullptr);
+            const auto state=online.view();
+            if(std::chrono::steady_clock::now()>=report_at) {
+                std::fprintf(stderr,"[rollback][check] lobby state=%d local=%u status=%s\n",int(state.state),unsigned(state.local_slot),state.status.c_str());
+                report_at=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+            }
+            if(state.state==dkr::runtime::netplay::ConnectionState::Failed){rom_error=state.status;break;}
+            if(launch.owned_check_host&&!invitation_written&&dkr::runtime::netplay::valid_quick_join_code(state.invite)) {
+                std::ofstream file(launch.owned_check_invite,std::ios::trunc);file<<state.invite;file.close();
+                if(!file){rom_error="Cannot write the isolated invitation.";break;}invitation_written=true;
+            }
+            if(!joined) {
+                std::ifstream file(launch.owned_check_invite);std::string invitation;file>>invitation;
+                if(dkr::runtime::netplay::valid_quick_join_code(invitation)) {
+                    if(!online.join(invitation,"Owned check client",rom_error))break;joined=true;
+                }
+            }
+            if(launch.owned_check_host)for(const auto& pending:state.pending_joins)if(!online.approve_join(pending.request_id,rom_error))break;
+            // Roster/save admission can clear Ready after the first call.
+            ready=state.local_slot<state.room.players.size()&&state.room.players[state.local_slot].ready;
+            if(!ready&&(state.state==dkr::runtime::netplay::ConnectionState::Hosting||state.state==dkr::runtime::netplay::ConnectionState::Lobby)) {
+                ready=online.set_ready(true,rom_error);
+            }
+            if(launch.owned_check_host&&ready&&!started) {
+                unsigned occupants=0;bool all_ready=true;
+                for(const auto& racer:state.room.players)if(racer.occupied){++occupants;all_ready=all_ready&&racer.ready;}
+                if(occupants==launch.owned_check_players&&all_ready)started=online.request_start(rom_error);
+            }
+            accepted=online.consume_launch_request();
+            if(!accepted)std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        if(!accepted){std::fprintf(stderr,"[rollback][check] normal lobby launch failed: %s\n",rom_error.c_str());online.disconnect();dkr::runtime::platform::shutdown();return 5;}
+        std::fprintf(stderr,"[rollback][check] normal Quick Join/countdown accepted; owners=%u\n",launch.owned_check_players);
+    }
+#endif
     if (rom_path.empty()) {
         const auto startup = dkr::runtime::ui::run_startup_screen(
             static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()));
@@ -837,6 +942,12 @@ int DkrMain(int argc, char** argv) {
         return 3;
     }
     const dkr::runtime::rom::Revision registered_revision = rom_identity.revision;
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    if (rollback_bootstrap && registered_revision!=dkr::runtime::rom::Revision::UsV77) {
+        std::fprintf(stderr,"[rollback-test] This first race test requires US v1.0.\n");
+        dkr::runtime::platform::shutdown(); return 3;
+    }
+#endif
     dkr::runtime::startup_performance::mark("game-registered");
     std::fprintf(stderr, "[boot][rom] validated and registered\n");
 
@@ -855,7 +966,7 @@ int DkrMain(int argc, char** argv) {
             return dkr::runtime::netplay::external_side_effects_allowed();
         },
     };
-    const ultramodern::input::callbacks_t input_callbacks{
+    ultramodern::input::callbacks_t input_callbacks{
         .poll_input = dkr::runtime::platform::poll_input,
         .frame_boundary = dkr::runtime::netplay::on_frame_boundary,
         .physical_poll_allowed = []() {
@@ -865,6 +976,20 @@ int DkrMain(int argc, char** argv) {
         .set_rumble = dkr::runtime::platform::set_rumble,
         .get_connected_device_info = dkr::runtime::platform::get_connected_device_info,
     };
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    if (rollback_bootstrap) {
+        input_callbacks.poll_input=+[](){};
+        input_callbacks.get_input=+[](int port,std::uint16_t* buttons,float* x,float* y){
+            *buttons=0;*x=*y=0.0F;return port>=0&&port<2;
+        };
+        input_callbacks.set_rumble=+[](int,bool){};
+        input_callbacks.get_connected_device_info=+[](int port){
+            return ultramodern::input::connected_device_info_t{
+                port>=0&&port<2?ultramodern::input::Device::Controller:ultramodern::input::Device::None,
+                ultramodern::input::Pak::None};
+        };
+    }
+#endif
     const ultramodern::renderer::callbacks_t unused_renderer_callbacks = renderer_callbacks;
     (void)unused_renderer_callbacks;
     // SDL's window event queue is serviced explicitly on DkrMain's thread
@@ -878,12 +1003,15 @@ int DkrMain(int argc, char** argv) {
                 authored_simulation_pacing_scale_milli();
         },
         .presentation_allowed_callback = []() {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+            if(dkr_experimental_bootstrap_active())return false;
+#endif
             return dkr::runtime::netplay::external_side_effects_allowed();
         }};
     const ultramodern::error_handling::callbacks_t error_callbacks{.message_box = MessageBox};
     const ultramodern::threads::callbacks_t thread_callbacks{.get_game_thread_name = GetThreadName};
 
-    const recomp::Configuration configuration{
+    recomp::Configuration configuration{
         .project_version = {.major = 1, .minor = 0, .patch = 0,
                             .suffix = DKR_RELEASE_VERSION},
         .window_handle = window_handle,
@@ -894,6 +1022,9 @@ int DkrMain(int argc, char** argv) {
         .gfx_callbacks = gfx_callbacks,
         .events_callbacks = events_callbacks,
         .save_write_allowed_callback = []() {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+            if(dkr_experimental_bootstrap_active())return false;
+#endif
             return dkr::runtime::netplay::external_side_effects_allowed();
         },
         .error_handling_callbacks = error_callbacks,
@@ -983,6 +1114,43 @@ int DkrMain(int argc, char** argv) {
         bool graphics_failure_reported = false;
 #endif
         std::exception_ptr runtime_failure;
+        bool return_from_owned = false;
+        bool owned_failed = false;
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        auto* admitted_lobby=&dkr::runtime::netplay::session();
+        const auto owned_descriptor=admitted_lobby->launch_descriptor();
+        const bool owned_launch=owned_descriptor && owned_descriptor->synchronization==
+            dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback;
+        std::unique_ptr<dkr::runtime::netplay::DirectSession> local_bootstrap_session;
+        auto session_configuration=configuration;
+        if(owned_launch) {
+            const auto initial_online=admitted_lobby->runtime_view();
+            if(!dkr::runtime::netplay::experimental::runtime_available(registered_revision) ||
+               !dkr_experimental_bootstrap_arm_memory(owned_descriptor->player_count,
+                   initial_online.host,owned_descriptor->match_id,initial_online.online_save_hash,rom_error)) {
+                admitted_lobby->fail_runtime_start(rom_error.empty()?"This ROM does not have an owned rollback payload.":rom_error);
+                dkr::runtime::platform::shutdown();return 5;
+            }
+            local_bootstrap_session=std::make_unique<dkr::runtime::netplay::DirectSession>();
+            dkr::runtime::netplay::bind_external_session(local_bootstrap_session.get());
+            // Local construction has neutral virtual controls. It may neither
+            // accept network inputs nor write the user's single-player save.
+            session_configuration.input_callbacks.poll_input=+[](){};
+            session_configuration.input_callbacks.get_input=+[](int port,std::uint16_t* buttons,float* x,float* y) {
+                *buttons=0;*x=*y=0;return port>=0&&port<dkr_experimental_bootstrap_players();
+            };
+            session_configuration.input_callbacks.set_rumble=+[](int,bool){};
+            session_configuration.input_callbacks.get_connected_device_info=+[](int port) {
+                return ultramodern::input::connected_device_info_t{
+                    port>=0&&port<dkr_experimental_bootstrap_players()
+                        ? ultramodern::input::Device::Controller:ultramodern::input::Device::None,
+                    ultramodern::input::Pak::None};
+            };
+            session_configuration.audio_callbacks.queue_samples=+[](std::int16_t*,std::size_t){};
+        }
+#else
+        const auto& session_configuration=configuration;
+#endif
 #if defined(__ANDROID__)
         const auto report_gpu_failure = [&] {
             const auto gpu_failure = dkr::runtime::graphics_health::failure.load(std::memory_order_relaxed);
@@ -1002,7 +1170,7 @@ int DkrMain(int argc, char** argv) {
 #endif
         std::thread runtime_thread([&] {
             try {
-                recomp::start(configuration);
+                recomp::start(session_configuration);
             } catch (...) {
                 runtime_failure = std::current_exception();
             }
@@ -1079,6 +1247,28 @@ int DkrMain(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         runtime_thread.join();
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        if(owned_launch) {
+            dkr::runtime::netplay::bind_external_session(admitted_lobby);
+            local_bootstrap_session.reset();
+            auto bootstrap=dkr_experimental_bootstrap_take_memory();
+            if(runtime_failure==nullptr) {
+                std::string owned_error;
+                bool owned_ok=false;
+                try {
+                    owned_ok=dkr::runtime::netplay::experimental::run_runtime(window_handle,rom_path,std::move(bootstrap),*admitted_lobby,*owned_descriptor,timeout_seconds,owned_error,owned_check);
+                } catch(const std::exception& exception) {owned_error=exception.what();}
+                catch(...) {owned_error="The owned runtime could not start safely.";}
+                if(!owned_ok) {
+                    owned_failed=true;
+                    std::fprintf(stderr,"[rollback][owned] %s\n",owned_error.c_str());
+                    admitted_lobby->fail_runtime_start(owned_error);
+                    dkr::runtime::ui::report_mod_error("Experimental online play stopped safely: "+owned_error);
+                }
+            }
+            return_from_owned=true;
+        }
+#endif
 #if defined(__ANDROID__)
         // Setup can finish with an error before the event loop observes it.
         report_gpu_failure();
@@ -1116,15 +1306,26 @@ int DkrMain(int argc, char** argv) {
             return 5;
         }
 #if DKR_RUNTIME_HAS_RT64
-        if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty()) {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        if(owned_check){dkr::runtime::platform::shutdown();return owned_failed?5:0;}
+#endif
+        if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty() ||
+            (return_from_owned && lifecycle_request==dkr::runtime::ui::LifecycleRequest::None)) {
             if(!mod_failure.empty())dkr::runtime::ui::report_mod_error("Custom content stopped safely: "+mod_failure);
             std::fprintf(stderr,
                          "[boot][stop] game stopped; returning to launcher\n");
             dkr::runtime::ui::reset_lifecycle_request();
+            bool software_launcher_return = owned_failed;
+#if defined(_WIN32)
+            // Both owned exit paths replace the retired game HWND and request
+            // an explicitly non-D3D9 launcher (D3D11 or bounded GDI fallback).
+            // Initial startup and legacy returns keep their existing path.
+            software_launcher_return = software_launcher_return || return_from_owned;
+#endif
             const auto startup = dkr::runtime::ui::run_startup_screen(
                 static_cast<SDL_Window*>(
                     dkr::runtime::platform::sdl_window()),
-                rom_path);
+                rom_path, software_launcher_return);
             if (!startup.start_game) {
                 dkr::runtime::platform::shutdown();
                 if (startup.lifecycle_request ==
@@ -1156,6 +1357,19 @@ int DkrMain(int argc, char** argv) {
             rom_path = std::move(next_rom_path);
             prepared_mods = startup.mods;
             rom_identity = next_identity;
+            // The return launcher may have replaced the native window. No
+            // previous runtime is alive: refresh BOTH the owned renderer handle
+            // and the normal bootstrap configuration before the next launch.
+            window_handle=dkr::runtime::platform::prepare_window_for_game();
+#if defined(_WIN32) || defined(__APPLE__)
+            if(window_handle.window==nullptr) {
+#else
+            if(window_handle==nullptr) {
+#endif
+                std::fprintf(stderr,"[boot][window] failed to prepare the next game window\n");
+                dkr::runtime::platform::shutdown();return 4;
+            }
+            configuration.window_handle=window_handle;
             std::fprintf(stderr,
                          "[boot][start] launching a new game session\n");
             continue;
@@ -1168,12 +1382,24 @@ int DkrMain(int argc, char** argv) {
 #endif
         dkr::runtime::platform::shutdown();
         std::fprintf(stderr, "[boot] runtime stopped cleanly\n");
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        if (rollback_bootstrap && !dkr_experimental_bootstrap_completed()) return 5;
+#endif
         return 0;
     }
 }
 
 #if defined(_WIN32)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    // Keep the existing normal-launch path intact. Only the explicit local
+    // bootstrap child needs UTF-8 argv, including non-ASCII profile paths.
+    if(std::wcsstr(GetCommandLineW(),L"--rollback-bootstrap-output")) {
+        dkr::runtime::netplay::experimental::WindowsUtf8Arguments unicode;
+        if(!unicode.valid)return 2;
+        return DkrMain(int(unicode.values.size()),unicode.values.data());
+    }
+#endif
     return DkrMain(__argc, __argv);
 }
 #else

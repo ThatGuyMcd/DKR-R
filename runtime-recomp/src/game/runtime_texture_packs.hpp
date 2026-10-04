@@ -108,6 +108,9 @@ bool toggle_last_selected(std::string& status);
 bool set_hidden(const std::string& id, bool hidden, std::string& status);
 bool delete_managed(const std::string& id, std::string& status);
 void request_reload();
+// Called on the renderer thread after a fresh RT64 Application is ready.
+// Applied-cache bookkeeping belongs to that instance, not the saved settings.
+void renderer_started();
 void apply_pending(RT64::Application& application, bool modern_profile);
 std::string status();
 

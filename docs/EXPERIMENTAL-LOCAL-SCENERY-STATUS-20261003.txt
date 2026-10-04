@@ -1,0 +1,214 @@
+Experimental Rollback local graphics: restored implementation status
+===================================================================
+Updated: 4 October 2026. This records the restored source, not a gameplay-
+qualified release. The user's latest request is for a build to test; Playtest 8
+packages the implemented subset below. This does NOT mark the remaining phases
+complete. The accepted Playtest 5 packages remain the rollback point.
+The earlier Playtest 6/7 package notes describe those historical packages only.
+
+Confirmed target and cause
+--------------------------
+The user reports missing tree tops most clearly in Whale Bay/Pirate Lagoon.
+Read-only source and extracted retail v77 assets establish:
+
+* extern/dkr-decomp/src/objects.h: OBJECT_HEADER_NO_MULTIPLATER is 0x40.
+* extern/dkr-decomp/src/objects.c, "Remove unwanted objects depending on race
+  type": two or more players cause flagged objects to be freed at scene setup.
+* objects/headers/{PalmTreeTop,PalmTreeTopChea,Beachtree}.json: BHV_SCENERY,
+  FLAG_0040, sprite billboard, retail ranges 6000/6000/5000 respectively.
+* levels/headers/WhaleBay.json: map-2 = ASSET_LEVEL_OBJECT_MAPS_8.
+  objectMaps/unknown/asset_level_object_maps_8.gltf: 12 PalmTreeTopChea entries,
+  one with solid=1.
+* levels/headers/PirateLagoon.json: map-2 = ASSET_LEVEL_OBJECT_MAPS_4.
+  objectMaps/unknown/asset_level_object_maps_4.gltf: 11 Beachtree entries, all
+  with nonzero solid. Other object families also exist in these maps; those
+  counts are specifically the identified tree family, not total scenery.
+* object_functions.c: obj_init_scenery uses entry scale/radius/model/yaw;
+  nonzero solid enables interaction with a radius-20 hitbox. obj_loop_scenery
+  can change rotation, play SOUND_TWANG and trigger particles/RNG. Beachtree
+  also has a shadow group. Restoring its actor is not purely visual.
+* tracks.c: check_if_in_draw_range halves ranges for multiplayer and updates
+  object opacity. Other CPU-side segment/region and model-detail decisions
+  remove geometry before the decoder sees commands.
+
+These establish concrete removal mechanisms, not pixel-perfect identification
+of every missing tree in a screenshot or a measured performance bottleneck.
+Extracted v80 assets are not available in this checkout, so the corresponding
+v80 resource identities/placements need qualification before cross-revision
+feature support can be claimed.
+
+Why the existing renderer-only hooks cannot fix this
+---------------------------------------------------
+The owned CPU adapter deliberately keeps camera/scenery hooks canonical. Normal
+local enhancements change guest registers, opacity, camera planes, object
+construction or LOD-selected animation; those values are checkpointed. Reading
+independent preferences there would make replay state differ between peers.
+By decode time the flagged actors and their resources have already been freed.
+
+A previous frame's borrowed guest pointers are not a cache: subsequent loader
+or rollback activity can reuse the same addresses. High-detail vertices are
+not automatically available when the guest animated a lower-detail model.
+Turning off culling globally also risks the finite guest matrix/vertex/DL
+heaps. A second whole-guest draw pass would add CPU cost and is not included in
+this performance-first implementation.
+
+The bridge's counted RunCommands path requires commands inside its admitted
+RDRAM image and validates branch targets/command traversal. Feeding an arbitrary
+native display-list pointer through that entry point is unsupported. Those
+guards must not be weakened to make a visual cache appear to work.
+
+Native scenery work now implemented in restored source
+-----------------------------------------------------
+1. Read-only pre-deletion capture is registered in the playable owned adapter.
+   It admits only removed BHV_SCENERY sprite billboards during the confirmed
+   scene constructor. NO_TIME_TRIAL exclusions remain respected. No actors,
+   collision, RNG, particles, sounds or shadow behaviors are reinstated.
+2. local_scenery.cpp owns placements, frame vertices, texture commands/bytes,
+   external CI palettes and materials. Limits are 128 sprites and 4 MiB per
+   scene, 32 frames, 128 textures, 512 commands/frame and 128 tiles/frame.
+   Texture loads are bounds checked; arbitrary commands/recursive DLs fail
+   closed. Copy-on-write preserves previously published immutable generations.
+3. The generator pins the v77 and v80 world-render caller hashes and observes
+   two exact boundaries: before object sorting and after water/before particles.
+   Removing the two added calls recovers the original function byte-for-byte.
+   It copies actual per-viewport camera/roll/aspect/BSP flags and continuity
+   epochs into canonical observations. No local preferences enter that CPU path.
+4. local_scenery_rt64.cpp submits typed native texture/vertex/triangle calls,
+   not unrestricted native-pointer display lists. Only the owned 16 MiB decoder
+   image has an 8-12 MiB texture arena and separate vertex scratch. Guest DMA
+   and counted display lists remain bounded to their original 8 MiB domain.
+5. Opaque visuals use the earlier world boundary; faded/translucent visuals
+   use the post-water boundary, ordered far-to-near with stable placement ties.
+   Matrix/vertex/RSP/RDP state is restored, including deferred TMEM/Rice state
+   after texture conversion through experimental-present-state.patch. The
+   existing pack/mipmap lookup remains used. Cross-ordering with canonical
+   translucent actors and visual parity still require user qualification.
+   Pending MVP/projection/viewport/fog/light/look-at flags and vertex indices
+   are restored exactly after native draws, not forced into recomputation.
+   Inserted MVP values must survive; appended native workload records remain
+   retained until normal workload retirement.
+6. Local keep-scenery, view-distance and retention preferences apply to these
+   cached billboards only. Preferences are sampled once per rendered workload
+   so a live change cannot split its opaque/faded passes across two settings.
+   The alpha fade avoids sqrt for the fully opaque inner 80% of the range.
+   Camera-facing matrices follow the retail billboard/accepted bridge form.
+   Workload preparation now builds a fixed-capacity selection for each actual
+   viewport/pass. It copies only textures referenced by the selected animation
+   frames, deduplicated across those views. The draw passes use that same plan,
+   rather than independently selecting against another live preference read.
+   Out-of-range, excluded-region and inactive-frame resources remain retained
+   in the immutable scene but no longer incur a texture copy in that workload.
+   Canonical guest RAM and the native vertex arena are not written by upload.
+   Texture replay scopes continue to restore canonical TMEM/Rice state.
+7. Native IDs use a disjoint upper-bit namespace, placement and viewport bits,
+   and scene/camera continuity. The immutable scene is attached to the owned
+   presentation lease and survives exact workload plus present retirement.
+   Malformed/unsupported optional resources produce bounded diagnostics and
+   do not loosen admission or abort canonical gameplay at capture/preparation.
+
+These items are wired and compile-checked, NOT a claim of visual/gameplay
+qualification. The tests have been compiled only; none were executed.
+
+Graphics work still not complete
+-------------------------------
+* Maximum vehicle detail: render_3d_model animates only the selected model;
+  it also updates animation timers, colors, head/tumble and attachments.
+  Selecting another LOD through guest registers would change checkpointed
+  state. A native high-detail asset/pose/shading/attachment builder remains
+  required. Copying an unanimated high-LOD vertex allocation is not a fix.
+* Broad scene retention/draw distances: native tree billboards do not recover
+  other removed actors or culled world meshes. World segments/materials and
+  other scenery forms need their own bounded native representation; ordinary
+  camera-plane rejection must remain, not a forced draw of everything behind.
+* FOV, animated/effect ranges, persistent water detail and CPU-culling settings
+  still use canonical values in this backend. Their saved local preferences
+  remain preserved for single player and legacy backends. The UI explains the
+  implemented subset and keeps the unimplemented controls disabled in-session.
+* The immutable removed-tree cache intentionally has no actor animation loop
+  or interactive bending/shadows. That behavior must not be recreated in
+  simulation just to match a visual enhancement toggle.
+
+No second whole-guest draw pass has been added. These are unfinished features,
+not hidden enabled settings or completed phases awaiting only packaging.
+
+Pacing phase: current limits
+---------------------------
+At 180 display FPS the frame budget is 5.56 ms. Earlier reporting, duplicate
+private RAM scans and per-task allocations are concrete redundant work and
+have bounded changes in Playtests 6/7. Source inspection alone cannot establish
+whether the user's three-player 100-FPS dip is dominated by GPU world draws,
+replay/guest CPU, confirmed-audio DSP, history resets or workload admission.
+The existing diagnostics distinguish these stages. Reports now retain lifetime
+samples AND reader-owned recent intervals (count/mean/p95/p99). They do not
+reset live counters, drain the GPU, allocate per sample or enter checkpoints.
+Histogram boundaries round up, so sub-microsecond timing is not understated.
+Opt-in counters also sample producer-owned workloads just before full sync:
+vertices, triangles, transforms, projections, draw calls and texture loads.
+These are CPU-decoded workload counts, not GPU timing. The sampler neither
+flushes a draw nor borrows a worker's live vectors after queue hand-off.
+A first finisher does not prove a viewport vanished or that lowering detail
+is the solution. In particular,
+we have not removed the TT camera, skipped simulation ticks, changed delay or
+prediction depth, or relaxed scene/resource/history safety gates.
+
+Additional bounded CPU work in restored source
+---------------------------------------------
+* Width-specialized checked-memory entry points retain address sign extension,
+  byte/halfword lanes, alignment, bounds, budgets and counters. Failure metadata
+  is written only on failure; private watchpoint tracking remains available.
+* Experimental delta frames update their comparison base from the completed
+  changed-page journal rather than recopying every unchanged byte of 16 MiB.
+  Full checkpoints still copy the complete state. Comparison, state capture,
+  checksums and tail-page bytes remain intact. Legacy callers keep their path.
+* Draw observations now reuse storage with their immutable image owner. At
+  most four metadata buffers reserve the 8192-event limit (2,490,368 bytes
+  total), separately from the existing 80 MiB RAM-payload bound. Retained
+  images cannot share mutable metadata; empty frames clear old observations.
+  Failed publication still preserves the previous pending frame. Opt-in
+   five-second buffer summaries expose allocation/reuse counts without GPU
+   inspection or per-frame logging.
+* Scenery preparation/drawing use one checked workload plan and a bounded
+  texture-union copier. Opt-in counters distinguish selected billboards from
+  actual draws and report copied native texture bytes. Compiled fixtures cover
+  per-viewport exclusions, fade-pass partitioning, stable sorting, animation
+  selection, texture deduplication, scratch boundaries, stale-binding clearing
+  and invalid resource/arena/view budgets. They have not been executed.
+* The CMake include path for the standalone checked-memory target and the
+  standalone owned-closure scenery link input were restored/fixed. Runtime
+  source dependencies are included in the negotiated owned build contract.
+
+Five-phase completion gates
+---------------------------
+1. Baseline/diagnostics: source is restored and saved separately; accepted PT5
+   packages remain untouched. User profiles are still needed for the actual dip.
+2. Proven overhead: changes are implemented; compilation is not a performance
+   measurement or executed replay proof. Equivalence fixtures cover sparse and
+   empty deltas, rewinds, changed tails, ownership and checked-memory failures.
+3. Native local scenery: removed retail sprite family is implemented. The
+   graphics features listed above still need distinct construction paths.
+4. Pacing: diagnostics/known redundant work are addressed. The user's 180-to-
+   100 FPS dip has NOT been measured or proven fixed. Need a user-run profile
+   before/after the first finisher and through a cutscene; no autonomous tests.
+5. Validation/release: Windows/Linux game and check targets compile. Source
+   checks are separate from gameplay and GPU qualification. The Playtest 8
+   candidate includes Windows and Linux AppImage artifacts for user testing;
+   no candidate is described as completion of the unfinished graphics work.
+
+The current available runtime.log identifies Playtest 5 and contains no new
+timing/scene-budget report. It cannot establish the remaining pacing cause.
+Do not claim all five phases complete, all graphics settings restored, or
+steady 180 FPS on three/four-player hardware based on compilation alone.
+
+Resumption checks (4 October 2026)
+--------------------------------
+The restored source remains in place, with no current stash or merge conflict.
+Windows and Linux compile the game plus scenery, presentation-ownership,
+state-store and checked-memory fixtures. This is compile evidence only; no
+fixture executable, launcher, game, CTest or runtime packaging test was run.
+The accepted PT5 Windows ZIP and Linux AppImage hashes remain unchanged.
+
+The Linux build cache had CMAKE_SUPPRESS_REGENERATION=ON. A normal incremental
+compile could therefore retain an old negotiated contract even after source
+headers changed. Explicit regeneration fixes that stale contract, and automatic
+regeneration is enabled for this working Linux build. Confirm the final owned
+contract matches Windows before producing any cross-platform package.

@@ -190,6 +190,63 @@ struct QuickJoinTestAccess {
         });
         std::cout << "SCTP checkpoint saturation reached after " << checkpoint_sent
                   << " packets; control and all accepted checkpoints delivered\n";
+        // Real SDK mixed-stream latency, not just eventual delivery. Bulk and
+        // input share one SCTP association; send timestamps stay on this host.
+        auto wake_signal = std::make_shared<TransportReceiveSignal>();
+        host.set_receive_signal(wake_signal);
+        std::array<std::chrono::steady_clock::time_point, 60> input_times{};
+        std::set<unsigned> inputs_received;
+        std::vector<unsigned> input_age_ms;
+        unsigned inputs_sent = 0, bulk_accepted = 0;
+        const auto mixed_start = std::chrono::steady_clock::now();
+        auto next_input = mixed_start;
+        const auto mixed_end = mixed_start + std::chrono::seconds(6);
+        while (inputs_received.size() < input_times.size() &&
+               std::chrono::steady_clock::now() < mixed_end) {
+            host.service(); client.service();
+            const auto now = std::chrono::steady_clock::now();
+            if (inputs_sent < input_times.size() && now >= next_input) {
+                std::vector<std::uint8_t> input(64, 0xE1);
+                input[0] = static_cast<std::uint8_t>(inputs_sent);
+                if (input_times[inputs_sent] == std::chrono::steady_clock::time_point{}) input_times[inputs_sent] = now;
+                const auto status = client.send_status(address, input, TransportTrafficClass::Realtime, error);
+                assert(status != DatagramSendStatus::Error);
+                if (status == DatagramSendStatus::Sent) { ++inputs_sent; next_input = now + std::chrono::milliseconds(33); }
+            }
+            if (inputs_sent < input_times.size()) {
+                std::vector<std::uint8_t> bulk(14000, 0xA7);
+                const auto status = client.send_status(address, bulk,
+                    bulk_accepted % 2 ? TransportTrafficClass::Checkpoint : TransportTrafficClass::Replica, error);
+                assert(status != DatagramSendStatus::Error);
+                if (status == DatagramSendStatus::Sent) ++bulk_accepted;
+            }
+            PeerAddress source; std::vector<std::uint8_t> packet;
+            while (host.receive(source, packet, error)) {
+                if (packet.size() != 64) { assert(packet.size() == 14000); continue; }
+                const auto id = packet[0];
+                assert(id < input_times.size());
+                assert(inputs_received.insert(id).second);
+                input_age_ms.push_back(static_cast<unsigned>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - input_times[id]).count()));
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        assert(inputs_received.size() == input_times.size() && bulk_accepted > 10);
+        assert(wake_signal->generation.load() >= input_times.size());
+        std::sort(input_age_ms.begin(), input_age_ms.end());
+        std::cout << "Mixed SCTP: inputs=" << inputs_received.size() << " bulk=" << bulk_accepted
+            << " input p95/max(ms)=" << input_age_ms[56] << '/' << input_age_ms.back() << '\n';
+        assert(input_age_ms[56] < 150 && input_age_ms.back() < 500);
+        // Detaching releases the session-independent notification object; old
+        // callbacks never dereference a destroyed DirectSession.
+        host.set_receive_signal({});
+        // Drain all accepted bulk before the route replacement checks below.
+        wait([&] {
+            PeerAddress source; std::vector<std::uint8_t> packet;
+            while (host.receive(source, packet, error)) assert(packet.size() == 14000);
+            return client.buffered_bytes(TransportTrafficClass::Checkpoint) == 0 &&
+                client.buffered_bytes(TransportTrafficClass::Replica) == 0;
+        });
         // An admitted route must outlive its disposable ICE connection. Age
         // it without sleeping, then force a real local WebRTC replacement.
         std::shared_ptr<QuickJoinTransport::Peer> old_client, old_host;

@@ -1,4 +1,5 @@
 #include "save_manager.hpp"
+#include "netplay/experimental_pak.hpp"
 #include "dkr_save_codec.hpp"
 
 #include <algorithm>
@@ -44,6 +45,7 @@ constexpr std::size_t kMaximumBundleSize =
 std::filesystem::path g_config_directory;
 std::mutex g_save_manager_mutex;
 std::vector<std::uint8_t> g_staged_host_online_save;
+std::uint64_t g_staged_host_online_match_id=0;
 
 std::filesystem::path AdventurePath() {
     return g_config_directory / "saves" / "dkr.us.v77.bin";
@@ -421,6 +423,7 @@ void dkr::runtime::saves::configure(
     std::scoped_lock lock(g_save_manager_mutex);
     g_config_directory = config_directory;
     g_staged_host_online_save.clear();
+    g_staged_host_online_match_id=0;
 }
 
 dkr::runtime::saves::SaveInfo dkr::runtime::saves::adventure_info() {
@@ -681,8 +684,22 @@ bool dkr::runtime::saves::prepare_host_online_adventure(
     // Creating a lobby is not a commit point: registration/approval may fail.
     // Keep the validated seed in memory until actual host game-save activation.
     g_staged_host_online_save = bytes;
+    g_staged_host_online_match_id=0;
     error.clear();
     return true;
+}
+
+bool dkr::runtime::saves::bind_staged_host_online_adventure(std::uint64_t match_id,std::string& error) {
+    std::scoped_lock lock(g_save_manager_mutex);
+    if(!match_id||g_staged_host_online_save.empty()||
+       (g_staged_host_online_match_id&&g_staged_host_online_match_id!=match_id)) {
+        error="The staged host save does not belong to this lobby.";return false;
+    }
+    g_staged_host_online_match_id=match_id;error.clear();return true;
+}
+void dkr::runtime::saves::discard_staged_host_online_adventure() {
+    std::scoped_lock lock(g_save_manager_mutex);
+    g_staged_host_online_save.clear();g_staged_host_online_match_id=0;
 }
 
 bool dkr::runtime::saves::install_synchronized_online_adventure(
@@ -723,6 +740,9 @@ bool dkr::runtime::saves::read_online_adventure(
     bytes.clear();
     path = OnlineAdventurePath(host, match_id);
     if (host && !g_staged_host_online_save.empty()) {
+        if(g_staged_host_online_match_id&&g_staged_host_online_match_id!=match_id) {
+            error="The staged online save belongs to a different lobby.";return false;
+        }
         std::vector<std::uint8_t> previous;
         const bool had_previous = ReadAdventure(path, previous);
         if (had_previous && previous != g_staged_host_online_save &&
@@ -738,6 +758,7 @@ bool dkr::runtime::saves::read_online_adventure(
             return false;
         }
         g_staged_host_online_save.clear();
+        g_staged_host_online_match_id=0;
     }
     if ((!host && match_id == 0U) || !ReadAdventure(path, bytes)) {
         error = "The expected checksum-valid online Adventure save is unavailable.";
@@ -751,6 +772,38 @@ bool dkr::runtime::saves::read_online_adventure(
 std::filesystem::path dkr::runtime::saves::online_adventure_subfolder(
     bool host, std::uint64_t match_id) {
     return OnlineAdventureSubfolder(host, match_id);
+}
+namespace {
+bool ReadExperimentalOnlinePaks(const std::filesystem::path& path,std::vector<std::uint8_t>& bytes) {
+    using dkr::runtime::netplay::experimental::Paks;
+    if(!ReadFileBounded(path,Paks::kImagesBytes,bytes)||bytes.size()!=Paks::kImagesBytes)return false;
+    Paks owner;return owner.start(1,15,bytes);
+}
+}
+bool dkr::runtime::saves::read_experimental_online_paks(bool host,std::uint64_t match_id,std::vector<std::uint8_t>& images,std::string& error) {
+    std::scoped_lock lock(g_save_manager_mutex);
+    using netplay::experimental::Paks;
+    if(!match_id){error="Online MemPak storage requires an authenticated match.";return false;}
+    const auto path=OnlineAdventureSubfolder(host,match_id)/"experimental-controller-paks.bin";
+    std::error_code ec;const bool exists=std::filesystem::exists(path,ec);
+    if(ec){error="Cannot inspect online MemPak storage: "+ec.message();return false;}
+    if(!exists){images=Paks::blank_images();error.clear();return true;}
+    if(!ReadExperimentalOnlinePaks(path,images)){error="The online MemPak image is invalid; it has been left untouched.";return false;}
+    error.clear();return true;
+}
+bool dkr::runtime::saves::commit_experimental_online_paks(bool host,std::uint64_t match_id,std::span<const std::uint8_t> images,std::string& error) {
+    std::scoped_lock lock(g_save_manager_mutex);
+    using netplay::experimental::Paks;
+    Paks owner;if(!match_id||!owner.start(1,15,images)){error="Invalid confirmed online MemPak image; no file was changed.";return false;}
+    return WriteAtomic(OnlineAdventureSubfolder(host,match_id)/"experimental-controller-paks.bin",{images.begin(),images.end()},ReadExperimentalOnlinePaks,error);
+}
+bool dkr::runtime::saves::commit_online_adventure(bool host,std::uint64_t match_id,
+    std::span<const std::uint8_t> bytes,std::string& error) {
+    std::scoped_lock lock(g_save_manager_mutex);
+    if(!match_id||bytes.size()!=kAdventureSaveSize||!codec::validate(bytes,&error)) {
+        error="The confirmed online EEPROM cannot be persisted: "+error;return false;
+    }
+    return WriteAtomic(OnlineAdventurePath(host,match_id),{bytes.begin(),bytes.end()},ReadAdventure,error);
 }
 
 dkr::runtime::saves::SaveInfo dkr::runtime::saves::controller_pak_info(

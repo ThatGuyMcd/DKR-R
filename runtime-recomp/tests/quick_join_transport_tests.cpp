@@ -2,6 +2,7 @@
 #include "netplay_protocol.hpp"
 #include "session_transport.hpp"
 #include "transport_send_policy.hpp"
+#include "local_presentation_prototype.hpp"
 
 #if DKR_NETPLAY_WEBRTC
 #include <rtc/rtc.hpp>
@@ -79,10 +80,38 @@ bool wait_until(Predicate predicate, std::chrono::seconds timeout) {
 int main() {
     using namespace dkr::runtime::netplay;
     static_assert(quick_join_send_accepted(true, false, false, false));
+    static_assert(!LocalPresentationPrototype::kRendererQualified);
+    LocalPresentationPrototype prototype;
+    VisualPredictionSample sample{{1, 1, 1, 1, 1, 1}, 1000, 0, 0, 1, true, true, false};
+    assert(prototype.update(sample, 1).x == 0); // off by default
+    assert(prototype.update(sample, 1, true).x == 0); // new identity
+    assert(prototype.update(sample, 1, true).x > 0);
+    for (unsigned i = 0; i < 100; ++i) assert(prototype.update(sample, 100, true).x <= 32);
+    ++sample.identity.scene;
+    assert(prototype.update(sample, 1, true).x == 0);
+    sample.discontinuity = true;
+    assert(prototype.update(sample, 1, true).x == 0);
+    sample.discontinuity = false; sample.local_owner = false;
+    assert(prototype.update(sample, 1, true).x == 0);
     static_assert(quick_join_send_accepted(false, true, true, true));
     static_assert(!quick_join_send_accepted(false, false, true, true));
     static_assert(!quick_join_send_accepted(false, true, false, true));
     static_assert(!quick_join_send_accepted(false, true, true, false));
+    static_assert(quick_join_admit(TransportTrafficClass::Replica, 0, 0, 15000));
+    static_assert(!quick_join_admit(TransportTrafficClass::Replica, 0, 32000, 15000));
+    static_assert(quick_join_admit(TransportTrafficClass::Realtime, 0, 32000, 1024));
+    static_assert(quick_join_admit(TransportTrafficClass::Authoritative, 0, 32000, 1024));
+    static_assert(quick_join_admit(TransportTrafficClass::Control, 0, 32000, 1024));
+    static_assert(!quick_join_admit(TransportTrafficClass::Checkpoint, 16000, 16000, 1024));
+    static_assert(!quick_join_admit(TransportTrafficClass::Control, 0, SIZE_MAX, 1024));
+    LatencyHistogram histogram;
+    assert(histogram.summary().samples == 0);
+    for (unsigned i = 0; i < 100; ++i) histogram.observe(i);
+    auto summary = histogram.summary();
+    assert(summary.samples == 100 && summary.p50_ms == 51 && summary.p95_ms == 95);
+    assert(summary.p99_ms == 99 && summary.maximum_ms == 99);
+    histogram.observe(5000);
+    assert(histogram.summary().maximum_ms == 5000);
     assert(valid_quick_join_code("ABCDE"));
     assert(valid_quick_join_code("ab-c de"));
     assert(!valid_quick_join_code("ABCDO"));
@@ -178,7 +207,8 @@ int main() {
         }
         const std::string admitted_code = host.view().invite;
         if (!host.revoke_invitation(error) ||
-            host.view().invite == admitted_code ||
+            !wait_until([&] { return host.view().invite != admitted_code; },
+                        std::chrono::seconds(10)) ||
             client.view().state != ConnectionState::Lobby) {
             std::cerr << "connected rekey cycle " << cycle << ": "
                       << error << '\n';

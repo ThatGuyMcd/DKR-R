@@ -1,0 +1,34 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -5,2 +5,4 @@
+ #include "performance_trace.hpp"
++#include "netplay/experimental_present_gate.hpp"
++#include "netplay/experimental_performance.hpp"
+ #include "rt64_present_queue.h"
+@@ -410,3 +412,4 @@
+                     ext.sharedResources->totalPresentations.fetch_add(
+                         1, std::memory_order_relaxed);
++                    dkr::runtime::netplay::experimental::performance::presented();
+                 }
+@@ -520,6 +522,15 @@
+                 if (!presentThreadRunning) {
+                     continue;
+                 }
+ 
++                // PRIVATE opt-in qualification only. Check the immutable
++                // frame's non-rewinding generation at queue consumption.
++                // Rejection still runs the ORIGINAL completion/barrier path.
++                auto rollbackAdmission = dkr::runtime::netplay::experimental::present_gate::acquire(
++                    &present, present.presentId, present.workloadId);
++                dkr::runtime::netplay::experimental::performance::PresentScope rollbackTelemetry(
++                    rollbackAdmission.experimental && rollbackAdmission.allowed, rollbackAdmission.epoch);
++                skipPresent = skipPresent || !rollbackAdmission.allowed;
+                 if (skipPresent) {
+                     skipInterpolation();
+@@ -543,3 +554,5 @@
++                dkr::runtime::netplay::experimental::present_gate::complete_present(
++                    &present, present.presentId, present.workloadId);
+                 if (!present.paused) {
+                     if (!present.fbOperations.empty()) {
+                         const std::scoped_lock lock(screenFbChangePoolMutex);

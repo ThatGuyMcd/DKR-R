@@ -1,0 +1,96 @@
+DKR-R 1.0.5 Beta 15 Playtest 2 - Implementation / handoff
+Date: 2026-10-03
+
+SCOPE
+Improve Experimental Rollback initial-state transfer and isolated-online-save
+readiness without replacing the working gameplay rollback, legacy simulation
+backends, normal launcher, countdown or full-game initialization.
+
+IMPLEMENTED
+1. Startup checkpoint transfer
+   - New ExperimentalCheckpoint message uses the existing reliable checkpoint
+     SCTP lane, independent of lifecycle/control traffic.
+   - Keep lossless compression, decoded-size bounds and checkpoint digest.
+   - 4 KiB chunks; 256 KiB sliding window per guest. Next queued offset is
+     separate from acknowledged offset, preventing partial ACK duplicate floods.
+   - Rotate four-new-chunk scheduling between guests each admission service.
+   - Bound local queued packets per destination/type rather than applying one
+     busy guest's queue watermark to every experimental lane and guest.
+   - Coalesce identical queued retries. A 3-second oldest-hole retry supplements
+     reliable SCTP delivery instead of continuously resending the entire window.
+   - Explicit Offer acknowledgement precedes bulk chunks on another SCTP lane.
+   - Control queues retain priority. Bulk drain budget increased to 8 packets /
+     64 KiB per pass; transport congestion/backpressure limits are retained.
+
+2. Startup lifecycle
+   - Admission wire v3 scopes chunks and ACKs to the checkpoint incarnation.
+   - All authenticated owned packets also carry the immutable launch hash.
+     Already-transmitted old-match packets are discarded before admission/replay.
+   - Experimental Loaded proof includes launch hash; only an active Loading
+     transaction may validate it. Local callbacks also require their exact launch.
+   - Retiring a match purges owned traffic and launch retries from every outbound
+     queue, retaining lobby authentication and the graceful-return transaction.
+   - Coordinator heartbeat distinguishes download progress, local verification
+     and waiting for remaining guests. Log each guest's queued / acknowledged
+     offsets and preparation stage every two seconds during startup.
+   - 60-second no-progress timeout for active transfers; 120 seconds waiting for
+     a guest's initial consumer; 180-second total unprepared-startup budget.
+   - The later 120-second Loaded/Start wait begins after all guests prepare.
+     Startup deadlines are explicitly disabled at normal game Start release.
+   - Startup exceptions request the existing graceful match-end transaction;
+     integrity gates are not bypassed to make a failed start appear successful.
+
+3. Online-save lifecycle
+   - Serialize client Join/Resume/Resync installs on a bounded storage worker.
+     Atomic writes, EEPROM checksum validation and read-back verification stay
+     in save_manager; disk I/O no longer holds the DirectSession network mutex.
+   - Publish save readiness / acknowledgement only after verified completion.
+     Completion requires the current session token, match, phase and generation.
+   - Duplicate install retries coalesce; storage operation wait is bounded.
+   - Before experimental countdown, read/verify the current host online EEPROM
+     on the storage worker. If changed, adopt a new generation, clear readiness
+     and synchronize it with the clients before another Start is allowed.
+   - Recheck roster, readiness and network lanes after asynchronous host sealing.
+   - Idle experimental lobbies retry missing save offers; clients can request a
+     newer advertised save generation. Never resync a running game's EEPROM.
+   - Match-end Resume installs the host's current confirmed EEPROM before Ready.
+   - Bind staged host seed to the lobby and discard it after failed lobby setup.
+   - Before Loaded, compare the owned confirmed seed hash with the verified
+     launch save. Full checkpoint integrity separately covers working RAM/state.
+   - Single-player saves remain separate. Copy/Fresh/Previous-session choices
+     and confirmed-effect persistence are retained.
+
+PRESERVED
+No edits to protected submodules or RecompiledFuncs/RecompiledPatches. Existing
+Patch Pipeline outputs are rebuilt, not hand-edited. No forced Ancient Lake
+start, extra launcher, quality reduction, custom-online-mod enablement or
+rollback-window reduction. Gameplay algorithms, render retirement and native
+window recreation from the approved Beta 15 return-to-lobby fix are retained.
+
+PACKAGE / CONTRACT
+Display/package version: 1.0.5-beta.15-playtest.2
+Owned contract (same Windows/Linux):
+83aa5bf223459b760b4884d857b8f0c23fb293274ba8631d2f15216dbd1c8f7e
+Use the same Playtest 2 package on EVERY participant. Mixing earlier Beta 15
+experimental builds is intentionally rejected. Existing base network release
+identity is retained for the legacy backends; new wire extensions are appended.
+
+VALIDATION BOUNDARY
+Windows Release and Linux x86_64 Release compiled. Static source/delta review,
+whitespace checks, release-version checks and packaging content checks performed.
+NO game windows, CTest, self-tests or multiplayer/runtime tests run, per user
+instruction. Compilation is not proof of WAN throughput, four-player stability
+or runtime correctness. Do not treat this candidate as runtime-qualified.
+
+TEAM CHECKS
+Use 2 players then 4 players on the same Playtest 2 build. Record countdown-to-
+game timing and host/client runtime.log. Verify fresh, copied and continued
+online save file-select states match across all instances. Repeat start, exit
+one guest, return to lobby, Ready and restart. Check ordinary single-player
+saves remain unchanged. Include slow / distant connections in the comparison.
+
+ROLLBACK
+Approved packages remain unchanged in beta15-playtest-release-20261002:
+Windows SHA256: 39789cf068593a2bfedddddd04ee89859128bc6e288d16fd61ab195085904f0f
+Linux SHA256: 180a8a7ecb1007ffe8b9a36b2155334796b883aeF0c40d38ce878495850aad44
+Scoped pre-edit sources: beta15-playtest2-source-backup-20261003.

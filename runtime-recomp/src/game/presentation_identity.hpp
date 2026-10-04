@@ -2383,6 +2383,9 @@ struct PresentationMarkerList {
     std::array<PresentationMarker, kMaximumMarkersPerCommand> markers{};
     std::size_t count = 0U;
 };
+struct LocatedPresentationMarker {std::uint32_t address;PresentationMarker marker;};
+struct OwnedMatrixBinding {std::uint32_t address;MatrixInterpolation interpolation;bool weak=false;};
+struct OwnedShadowBinding {std::uint16_t token;RigidShadowOwnerPolicy policy;ShadowOwnerMotionSample motion;};
 
 // DKR flips gSPTaskNum immediately after gfxtask_run_xbus returns. A renderer
 // snapshot may therefore contain the parity of the next display-list buffer,
@@ -2418,6 +2421,12 @@ class TaskIdentityScope {
 public:
     TaskIdentityScope(std::uint8_t* rdram_snapshot,
                       std::uint32_t display_list_address);
+    // Private copied-image decode only. Does not consume the stable producer's
+    // submission queue or install metadata from rewindable/live CPU globals.
+    explicit TaskIdentityScope(std::span<const LocatedPresentationMarker> owned_markers);
+    TaskIdentityScope(std::span<const LocatedPresentationMarker> owned_markers,
+        std::span<const OwnedMatrixBinding> matrices,std::span<const OwnedShadowBinding> shadows,
+        std::uint32_t scene,bool interpolation_allowed);
     ~TaskIdentityScope();
 
     TaskIdentityScope(const TaskIdentityScope&) = delete;
@@ -2429,6 +2438,7 @@ public:
 // abrupt cuts and can rebuild display-list topology between consecutive
 // frames, so those tasks deliberately stay at DKR's authored cadence.
 bool task_interpolation_allowed();
+bool task_is_owned();
 
 // Full scene generation captured with the graphics task currently being
 // decoded. Zero means no immutable presentation sidecar matched the task.

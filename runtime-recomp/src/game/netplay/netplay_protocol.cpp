@@ -52,7 +52,7 @@ bool Take64(std::span<const std::uint8_t> bytes, std::size_t& cursor,
 bool ValidType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
            type <=
-               static_cast<std::uint8_t>(MessageType::OnlineSaveStatus);
+               static_cast<std::uint8_t>(MessageType::ExperimentalSaveRequest);
 }
 
 bool PutString(std::vector<std::uint8_t>& out, std::string_view value,
@@ -1248,6 +1248,18 @@ bool decode_loaded(std::span<const std::uint8_t> bytes,
     return true;
 }
 
+std::vector<std::uint8_t> encode_experimental_loaded(const ExperimentalLoadedPayload& payload) {
+    auto proof=encode_loaded(payload.loaded);
+    if(!payload.launch_hash||proof.empty())return {};
+    std::vector<std::uint8_t> out;Put64(out,payload.launch_hash);
+    out.insert(out.end(),proof.begin(),proof.end());return out;
+}
+bool decode_experimental_loaded(std::span<const std::uint8_t> bytes, ExperimentalLoadedPayload& payload) {
+    payload={};std::size_t cursor=0;std::string error;
+    return bytes.size()==29&&Take64(bytes,cursor,payload.launch_hash)&&payload.launch_hash&&
+        decode_loaded(bytes.subspan(cursor),payload.loaded,error);
+}
+
 std::vector<std::uint8_t> encode_start(const StartPayload& payload) {
     if (payload.stage > 1U || !valid_launch_descriptor(payload.descriptor) ||
         payload.descriptor_hash != launch_descriptor_hash(payload.descriptor)) {
@@ -1571,6 +1583,43 @@ std::vector<std::uint8_t> encode_launch_cancel(
     out.reserve(4U);
     Put32(out, payload.launch_epoch);
     return out;
+}
+
+std::vector<std::uint8_t> encode_match_end(const MatchEndPayload& payload) {
+    if (!payload.launch_hash || payload.player_slot >= kMaximumPlayers ||
+        payload.stage > MatchEndStage::ResumeAck || payload.message.size() > 240 ||
+        (payload.stage == MatchEndStage::Resume
+            ? (payload.save.size() != 512 || !payload.save_generation || !payload.save_hash)
+            : (!payload.save.empty() || payload.save_generation || payload.save_hash))) return {};
+    std::vector<std::uint8_t> out;
+    Put64(out, payload.launch_hash);
+    out.push_back(static_cast<std::uint8_t>(payload.stage));
+    out.push_back(payload.player_slot);
+    if (!PutString(out, payload.message, 240)) return {};
+    if (payload.stage == MatchEndStage::Resume) {
+        Put32(out, payload.save_generation); Put64(out, payload.save_hash);
+        out.insert(out.end(), payload.save.begin(), payload.save.end());
+    }
+    return out;
+}
+
+bool decode_match_end(std::span<const std::uint8_t> bytes, MatchEndPayload& payload) {
+    payload = {};
+    std::size_t cursor = 0;
+    if (!Take64(bytes, cursor, payload.launch_hash) || !payload.launch_hash || cursor + 2 > bytes.size()) return false;
+    payload.stage = static_cast<MatchEndStage>(bytes[cursor++]);
+    payload.player_slot = bytes[cursor++];
+    if (payload.stage > MatchEndStage::ResumeAck || payload.player_slot >= kMaximumPlayers ||
+        !TakeString(bytes, cursor, payload.message, 240)) return false;
+    // Warning text is never markup or terminal control input.
+    if (std::any_of(payload.message.begin(), payload.message.end(), [](unsigned char c) { return c < 32 || c == 127; })) return false;
+    if (payload.stage == MatchEndStage::Resume) {
+        if (!Take32(bytes, cursor, payload.save_generation) || !payload.save_generation ||
+            !Take64(bytes, cursor, payload.save_hash) || !payload.save_hash || cursor + 512 != bytes.size()) return false;
+        payload.save.assign(bytes.begin() + cursor, bytes.end());
+        cursor = bytes.size();
+    }
+    return cursor == bytes.size();
 }
 
 bool decode_launch_cancel(std::span<const std::uint8_t> bytes,

@@ -1,0 +1,86 @@
+DKR-R 1.0.5 Beta 15 Playtest 3 - restoration candidate
+Date: 2026-10-03
+
+STARTUP CORRECTION / REPACKAGE
+- The host log rejected launch before initial checkpoint capture: construction
+  had already started the private blank MemPak owner, but seed installation
+  incorrectly called its one-shot start() again. Install a transactionally
+  validated fresh owner at the matching zero-frame epoch instead. Keep the
+  one-shot Pak guard, image checksums and single-player save isolation intact.
+- A Windows retry after that cancellation logged CreateSwapChainForHwnd failure
+  (0x80070005), then crashed in partial D3D12 swap-chain cleanup. An exact-code
+  symbol map identifies the cleanup stack; its .text hash matches the shipped
+  binary. Retire the returned D3D11 launcher's HWND before handing a fresh window
+  to the game, after the launcher renderer is destroyed. Preserve window bounds,
+  fullscreen and controller services. Initial startup and legacy-only window
+  handoffs keep their existing paths; no submodule cleanup code is hand-edited.
+- Replace the earlier Playtest 3 package on EVERY participant. The corrected
+  owned build fingerprint deliberately differs from the earlier package.
+- Compilation/static inspection only. The team must verify initial launch,
+  quit-to-lobby and launch again; this correction is not runtime-qualified here.
+
+IMPLEMENTED IN THIS PASS
+- Checkpoint-owned, revision-addressed Patch Pipeline presentation observations.
+  Immutable render frames carry their own camera/object/wave matrix identities,
+  segment/surface/billboard/vehicle-part/shadow scopes and HUD draw scopes.
+  Replay never reads the legacy renderer's mutable submission registry.
+- Reuse the existing presentation policies/consumer for finish-camera continuity,
+  procedural-water topology/UV tagging, terrain-shadow ownership, unscaled HUD
+  groups, minimap/background-marker grouping and 3/4-player quadrant anchors.
+- Apply local HUD layout, window/aspect-dependent sky and transition cover ONLY
+  to the renderer's writable decode copy, never to checkpointed gameplay RAM.
+- Bounded metadata capture: invalid/overflowing observations discard the complete
+  frame sidecar instead of publishing truncated scopes or stopping gameplay.
+- Deliver rumble only from fully validated, confirmed effect journals; route it
+  to this peer's controller and stop it on teardown. No speculative motor output.
+- Persist confirmed experimental MemPak images in online-only session storage.
+  Seed the host's image before initial checkpoint admission; clients receive that
+  image through the checkpoint. Single-player MemPak/EEPROM paths are not touched.
+- Preserve Playtest 2 startup transfer/save readiness, vanilla boot, 3/4-player
+  viewport/music restoration, enabled texture-pack startup and graceful departure.
+
+LOCAL SETTINGS REQUIREMENT / REMAINING WORK
+No host camera/scenery settings or individual category sound gains are imposed
+on clients. Preferences are left intact. Renderer settings, HUD layout and master
+output volume remain local.
+
+Full independent Camera & Scenery and per-category sound-gain parity is NOT
+finished. Those existing hooks alter checkpointed guest/audio state; applying
+each peer's preferences there would desynchronize replay. The experimental CPU
+still uses canonical defaults for those hooks. They need a separate render/output
+implementation before they can safely work independently. This package does not
+claim otherwise and is not completion of the entire parity roadmap.
+
+The earlier out-of-range guest-address report in alAdpcmPull is also NOT proven
+resolved. Detailed failing address/register/source diagnostics are retained;
+the supplied older log lacks that information. The memory safety fence is not
+disabled or replaced with guessed audio data. Send a new runtime.log if it recurs.
+
+PACKAGE / ROLLBACK
+Use Playtest 3 on EVERY experimental-session participant. The owned contract
+changes with checkpoint/presentation state and intentionally rejects older builds.
+The verified Playtest 2 widescreen/music package and pre-edit source snapshot are
+retained outside the public package as the rollback point.
+Protected submodules and RecompiledFuncs/RecompiledPatches were not hand-edited.
+Legacy backend algorithms, online custom-content restrictions and quality settings
+are not replaced or reduced in this pass.
+
+VALIDATION BOUNDARY
+Compilation, static source checks, cross-platform contract/version comparison and
+package-content checks only. NO gameplay windows, CTest, self-tests or multiplayer
+runtime tests, per the user's instruction. Compilation is not proof of visual
+correctness, audio correctness or WAN stability. Team runtime qualification remains.
+
+TEAM CHECKS
+1. Two players, then three/four, using the same unmodded Playtest 3 packages.
+2. Character select, Track Select previews, start/finish, results zoom/wooden frame,
+   return to menus, Adventure hub/boss and consecutive reward/key cutscenes.
+3. Independently select 4:3 vs Fit to Window HUD and different window shapes on
+   peers. Check position/item counters, GET READY/GO, minimap and racer markers.
+4. Confirm 3/4-player music, accepted split-screen proportions and texture packs
+   enabled before session launch, without toggling packs after launch.
+5. Check ordinary scenery, billboards, vehicle parts, water scrolling and Taj's
+   carpet shadow for interpolation/geometry regressions.
+6. Confirm local rumble and online-only MemPak persistence, and unchanged normal
+   single-player saves. Exit a guest, return to lobby and start another match.
+7. Save both host and client logs after any guest-address fence or visual failure.

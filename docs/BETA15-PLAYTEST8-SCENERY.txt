@@ -1,0 +1,84 @@
+DKR-R 1.0.5 Beta 15 - Playtest 8: local scenery/performance candidate
+=================================================================
+
+This is a user-test candidate, NOT completion of all five graphics phases.
+The accepted Playtest 5 ZIP and AppImage remain untouched as the rollback point.
+Every participant in an Experimental Rollback session must use this build;
+the owned CPU contract is checked at admission. Do not mix playtest versions.
+
+Connect
+-------
+1. Every racer installs this same Playtest 8 package and selects their own
+   unmodified US v1.0 Game Pak. Experimental v1.1/online mods are not enabled.
+2. Host settings -> backend/synchronization -> Experimental rollback. Create
+   a normal lobby; others join through Quick Join or a friend invitation.
+3. Mark racers ready and start the ordinary countdown. The normal intro,
+   title and menus should appear: no separate launcher or forced test track.
+4. Use the normal overlay/controls. Host Prediction and Strict Input Sync
+   remain available for the next lobby; don't change backend during a match.
+   Single-player saves remain separate from the isolated online session save.
+
+Late remote inputs use checkpoint restoration/replay in gameplay. Menus and
+resource-changing transitions remain confirmed and retirement-gated; audio,
+EEPROM and external effects remain confirmation-gated. Those safety checks are
+not removed for performance. No ROM, save, profile or RAM fixture is supplied.
+
+Implemented changes since the accepted baseline
+----------------------------------------------
+* Bounded RAM/observation pools reuse storage after ownership retirement. No
+  rewindable live guest RAM is exposed to the renderer. Pool/queue limits and
+  stale-work rejection remain enforced.
+* Delta checkpoints update their comparison base from changed pages instead
+  of recopying unchanged RAM. State hashes, full snapshots and rewind checks
+  remain active. Successful checked-memory accesses no longer update failure-
+  only diagnostics on their hot path; bounds/alignment/budget checks remain.
+* Removed retail BHV_SCENERY sprite billboards are captured before deletion,
+  retained as immutable visual resources, and drawn in native per-viewport
+  passes. This targets the removed tree-top families in Whale Bay and Pirate
+  Lagoon. Collision, interaction, sounds, RNG and guest actor loops are NOT
+  reinstated. No second whole-guest scene draw is performed.
+* Local keep-scenery, view distance and retention apply to that billboard
+  subset. Settings are sampled once per workload. Only textures referenced by
+  selected animation frames are copied, deduplicated across views/passes.
+* Native rendering restores canonical RSP/RDP/vertex and deferred TMEM state.
+  It uses a separate identity/scratch namespace and existing pack/mipmap
+  resolution. Resources remain owned through workload/present retirement.
+* Opt-in performance diagnostics separate guest, audio, hashing, copying,
+  decoding and presentation costs, with recent interval percentiles and
+  workload counts. No periodic GPU drain or per-frame diagnostic logging is
+  introduced. Normal diagnostic collection stays off.
+
+Still incomplete -- do not infer parity from the enabled scenery controls
+-----------------------------------------------------------------------
+* Native high-detail animated vehicle pose/shading/head/attachment construction.
+* Broad level-mesh and non-billboard actor retention/draw-distance parity.
+* Independent FOV, animated/effect ranges, persistent water detail and guest-
+  side culling settings. They remain canonical in Experimental Rollback.
+* Independent sound-category mixing remains deferred; master volume is local.
+* A demonstrated steady 180 FPS for three/four-player races and cutscenes.
+* Cross-revision visual qualification and translucent depth/order parity.
+
+Existing preferences are preserved for single-player and legacy modes. Those
+unsupported local controls remain disabled in an experimental session rather
+than being made to write differing values into checkpointed simulation state.
+
+Verification performed
+----------------------
+Windows/Linux compilation and static source/package checks only. The compiled
+scenery, presentation-ownership, state-store and checked-memory fixtures were
+NOT executed. No launcher, game, private probe, CTest or runtime packaging
+self-test was run. Gameplay/GPU/network qualification is left to the user.
+Compilation alone does not prove improved FPS, boss rewards, WAN stability or
+absence of visual defects. Protected dependencies/generated sources were not
+edited. See LOCAL-SCENERY-STATUS.txt for the detailed scope and evidence.
+
+Suggested user check
+--------------------
+Use the same settings/FPS target on all test runs. Enable Graphics -> Camera
+and scenery -> Experimental performance diagnostics before a three-player
+session. In Whale Bay and Pirate Lagoon, compare tree tops, depth/fading and
+seams; then compare frame pacing before/after the first racer finishes and
+during cutscenes. Close normally and share host/client runtime.log files.
+These measurements determine the remaining bottleneck without guessing or
+lowering image quality. Also check a boss finish, menu transitions and a client
+leaving; their working flow is intended to remain intact, not newly qualified.

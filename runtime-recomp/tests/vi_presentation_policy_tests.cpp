@@ -6,6 +6,15 @@
 int main() {
     using namespace dkr::runtime::presentation;
 
+    static_assert(present_from_vi_history(false)); // Stable/native unchanged.
+    static_assert(!present_from_vi_history(true)); // Owned VI is authoritative.
+    static_assert((kRetailNtscViStatus & 3U) == 2U); // 16-bit progressive.
+    static_assert((kRetailNtscViStatus & 8U) == 0U); // Retail gamma is OFF.
+    static_assert((kRetailNtscViStatus & 0x10010U) == 0x10010U);
+    static_assert(retail_ntsc_vi_origin(0x80137900U) == 0x00137B80U);
+    static_assert(retail_ntsc_vi_origin(0x80182980U) - 320U * 2U ==
+                  (0x80182980U & 0x007FFFFFU));
+
     // A common 480 half-line DKR signal is rounded by RT64 to 244 rows.
     constexpr std::uint32_t padded_region = (32U << 16U) | 512U;
     static_assert(inferred_vi_height(padded_region, 0x400U) == 244U);

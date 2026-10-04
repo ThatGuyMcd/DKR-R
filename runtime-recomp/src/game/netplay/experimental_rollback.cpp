@@ -1,5 +1,6 @@
 #include "experimental_rollback.hpp"
-#include "rollback_ring.hpp"
+#include "experimental_checkpoint_hash.hpp"
+#include "experimental_performance.hpp"
 
 #include <algorithm>
 #include <exception>
@@ -21,6 +22,7 @@ bool Driver::fail(std::string message) {
     // Never fall through into the stable simulation at a speculative cursor.
     // Returning to a different mode is an explicit new lobby/scene operation.
     if (error_.empty()) error_ = std::move(message);
+    prepared_restore_.reset();
     return false;
 }
 
@@ -41,10 +43,10 @@ bool Driver::start(Configuration configuration, std::string& error) {
         // Stage allocations and the initial checkpoint before replacing the
         // active history. The adapter is unchanged if admission fails.
         auto checkpoints = std::make_unique<RollbackStateStore>(
-            contract.state_bytes, configuration.prediction_window + 8U, 4U);
+            contract.state_bytes, configuration.prediction_window + 8U, 4U, 2U, true);
         std::vector<std::uint8_t> scratch(contract.state_bytes);
         if (!simulation_.capture(scratch, error)) return false;
-        if (!checkpoints->save(0U, scratch, state_checksum(scratch)) ||
+        if (!checkpoints->save(0U, scratch, checkpoint_hash(scratch)) ||
             checkpoints->allocated_bytes() + scratch.capacity() > configuration.checkpoint_budget_bytes) {
             error = "Experimental rollback checkpoint budget is insufficient.";
             return false;
@@ -53,6 +55,7 @@ bool Driver::start(Configuration configuration, std::string& error) {
         contract_ = contract;
         checkpoints_ = std::move(checkpoints);
         scratch_ = std::move(scratch);
+        prepared_restore_.reset();
         for (auto& frame : frames_) frame = {};
         confirmed_inputs_ = {};
         statistics_ = {};
@@ -78,7 +81,12 @@ Driver::Frame* Driver::find(std::uint32_t frame) {
 Driver::Frame& Driver::entry(std::uint32_t frame) {
     auto& value = frames_[frame % kHistory];
     if (!value.valid || value.number != frame) {
+        // Reuse only storage, never the old ring entry's input/effect contents.
+        // start() still releases all capacities at a new scene epoch.
+        auto effects=std::move(value.output.effects);
+        effects.clear();
         value = {};
+        value.output.effects=std::move(effects);
         value.number = frame;
         value.valid = true;
     }
@@ -130,24 +138,46 @@ FrameInputs Driver::predict(const Frame& frame) {
 }
 
 bool Driver::save(std::uint32_t frame) {
+    prepared_restore_.reset(); // capture overwrites the sole staged checkpoint.
     std::string detail;
-    if (!simulation_.capture(scratch_, detail)) return fail("Checkpoint capture failed: " + detail);
-    if (!checkpoints_->save(frame, scratch_, state_checksum(scratch_)))
+    {performance::Scope timing(performance::Stage::Capture);
+     if (!simulation_.capture(scratch_, detail)) return fail("Checkpoint capture failed: " + detail);}
+    std::uint64_t hash;
+    {performance::Scope timing(performance::Stage::Hash);hash=checkpoint_hash(scratch_);}
+    performance::Scope store_timing(performance::Stage::Store);
+    if (!checkpoints_->save(frame, scratch_, hash))
         return fail("The experimental checkpoint store rejected a frame.");
+    checkpoints_->trim_spares(configuration_.checkpoint_budget_bytes-scratch_.capacity());
     statistics_.checkpoint_bytes = checkpoints_->allocated_bytes() + scratch_.capacity();
     if (statistics_.checkpoint_bytes > configuration_.checkpoint_budget_bytes)
         return fail("Experimental rollback exceeded its bounded checkpoint budget.");
     return true;
 }
 
-bool Driver::restore(std::uint32_t frame) {
-    std::uint64_t hash = 0U;
-    if (!checkpoints_->load(frame, scratch_, &hash) || state_checksum(scratch_) != hash)
-        return fail("Experimental correction has no intact checkpoint; gameplay was not rewound.");
+RestoreStep Driver::restore(std::uint32_t frame) {
+    if(prepared_restore_!=frame) {
+        performance::Scope timing(performance::Stage::Load);
+        prepared_restore_.reset();
+        std::uint64_t hash = 0U;
+        if (!checkpoints_->load(frame, scratch_, &hash) || checkpoint_hash(scratch_) != hash) {
+            fail("Experimental correction has no intact checkpoint; gameplay was not rewound.");return RestoreStep::Failed;
+        }
+        prepared_restore_=frame;++statistics_.restore_checkpoint_loads;
+    }
+    // Pending performs no simulation/capture/store mutation. Keep this intact
+    // private staging buffer, not a RAM pointer, while GPU/WSI drains. Earlier
+    // late input changes `frame` and therefore reconstructs/revalidates once.
     std::string detail;
-    if (!simulation_.restore(scratch_, detail)) return fail("Transactional restore failed: " + detail);
+    const auto readiness=simulation_.prepare_restore(configuration_.epoch,frame,detail);
+    if(readiness==RestoreStep::Pending)return readiness;
+    if(readiness!=RestoreStep::Ready) {
+        fail("Speculative output retirement failed; gameplay was not rewound: " + detail);return RestoreStep::Failed;
+    }
+    {performance::Scope timing(performance::Stage::Restore);
+     if (!simulation_.restore(scratch_, detail)) {fail("Transactional restore failed: " + detail);return RestoreStep::Failed;}}
+    prepared_restore_.reset();
     checkpoints_->discard_after(frame);
-    return true;
+    return RestoreStep::Ready;
 }
 
 bool Driver::confirm() {
@@ -171,6 +201,12 @@ bool Driver::confirm() {
             break;
         }
     }
+    // Experimental history needs no recovery frame older than confirmation.
+    // Reclaim those groups and their capacities rather than allowing spare
+    // full-RAM checkpoints from repeated correction to accumulate. Stable
+    // callers keep their original retention/reuse policy and do not use this.
+    checkpoints_->retire_before(statistics_.confirmed_frames);
+    checkpoints_->trim_spares(configuration_.checkpoint_budget_bytes-scratch_.capacity());
     return true;
 }
 
@@ -178,7 +214,7 @@ bool Driver::correcting() const {
     return active() && (dirty_frame_ != UINT32_MAX || statistics_.next_frame < replay_goal_);
 }
 
-Step Driver::step() {
+Step Driver::step(bool allow_advance) {
     if (!active()) return Step::Failed;
     if (committed_boundary_) return Step::ConfirmedBoundary;
     try {
@@ -189,7 +225,9 @@ Step Driver::step() {
                 return Step::Failed;
             }
             const auto end = (std::max)(statistics_.next_frame, replay_goal_);
-            if (!restore(from)) return Step::Failed;
+            const auto restored=restore(from);
+            if(restored==RestoreStep::Pending)return Step::WaitingForPresentation;
+            if(restored!=RestoreStep::Ready)return Step::Failed;
             for (auto frame = from; frame < end; ++frame) {
                 if (auto* value = find(frame)) {
                     value->simulated = false;
@@ -216,12 +254,27 @@ Step Driver::step() {
             return Step::Failed;
         }
         const bool replay = statistics_.next_frame < replay_goal_;
+        if (!allow_advance && !replay) return Step::WaitingForLocalInput;
         auto& frame = entry(statistics_.next_frame);
+        const auto all = static_cast<std::uint8_t>((1U << configuration_.players) - 1U);
+        const bool agreed = frame.actual_mask == all &&
+                            statistics_.next_frame == statistics_.confirmed_frames;
+        if (simulation_.requires_confirmed_tick() && !agreed)
+            return Step::WaitingForConfirmedInput;
+        std::string detail;
+        const auto readiness = simulation_.prepare_tick(configuration_.epoch, frame.number, agreed, detail);
+        if (readiness == RestoreStep::Pending) return Step::WaitingForPresentation;
+        if (readiness != RestoreStep::Ready) {
+            fail("Tick resource admission failed: " + detail);
+            return Step::Failed;
+        }
         frame.used = predict(frame);
         frame.output.effects.clear();
         frame.output.scene_boundary = false;
-        std::string detail;
-        if (!simulation_.tick(frame.number, frame.used, frame.output, detail)) {
+        bool tick_ok;
+        {performance::Scope timing(performance::Stage::Tick);
+         tick_ok=simulation_.tick(frame.number, frame.used, frame.output, detail);}
+        if (!tick_ok) {
             // The adapter may already have modified its reversible world.
             // Recover this tick's starting state, then terminate this mode.
             const auto tick_error = "Replay-safe tick failed: " + detail;

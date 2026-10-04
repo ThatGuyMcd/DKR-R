@@ -1410,6 +1410,19 @@ void request_reload() {
     ++g_generation;
 }
 
+void renderer_started() {
+    std::scoped_lock lock(g_mutex);
+    // A launcher-to-owned-online handoff (or renderer recreation) has a new
+    // texture cache. The previous cache's consumed generation must not suppress
+    // applying the enabled packs. Keep library/settings and deletion tombstones;
+    // only clear facts about resources held by the now-retired Application.
+    g_applied_ids.clear();
+    g_applied_replacements.clear();
+    g_applied_generation = 0;
+    g_applied_modern = false;
+    g_force_replacement_reload = true;
+}
+
 void apply_pending(RT64::Application& application, bool modern_profile) {
     std::vector<RT64::ReplacementDirectory> replacements;
     std::vector<RT64::ReplacementDirectory> previous_replacements;

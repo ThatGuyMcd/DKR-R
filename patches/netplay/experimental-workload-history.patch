@@ -1,0 +1,64 @@
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -5,2 +5,4 @@
++#include "netplay/experimental_present_gate.hpp"
++#include "netplay/experimental_performance.hpp"
+ #include "rt64_workload_queue.h"
+ #include "water_performance.hpp"
+@@ -888,2 +889,3 @@
+         int processCursor = -1;
++        dkr::runtime::netplay::experimental::present_gate::WorkloadFrame previousOwnedFrame;
+         bool frameReduction = false;
+@@ -922,3 +924,13 @@
+                 GameFrame &curFrame = gameFrames[curFrameIndex];
+                 const GameFrame &prevFrame = gameFrames[prevFrameIndex];
++                const auto ownedFrame = dkr::runtime::netplay::experimental::present_gate::workload_frame(&workload, workload.workloadId);
++                const bool sameOwnedHistory = dkr::runtime::netplay::experimental::present_gate::same_visual_history(previousOwnedFrame, ownedFrame);
++                if (ownedFrame.owned && !workload.paused && !sameOwnedHistory) {
++                    using dkr::runtime::netplay::experimental::performance::Event;
++                    auto reason = !previousOwnedFrame.owned ? Event::HistoryInitial :
++                        previousOwnedFrame.epoch != ownedFrame.epoch ? Event::HistoryEpoch :
++                        previousOwnedFrame.generation != ownedFrame.generation ? Event::HistoryRestore :
++                        !previousOwnedFrame.visible || !ownedFrame.visible ? Event::HistoryHidden : Event::HistoryRepeat;
++                    dkr::runtime::netplay::experimental::performance::event(reason);
++                    // No matching across rollback correction or scene replacement.
++                    // An empty prior frame uses RT64's existing unmatched path.
++                    gameFrames[prevFrameIndex] = GameFrame{};
++                    logicalTicks = displayTicks = 0;
++                    frameReduction = false;
++                }
++                if (!workload.paused) previousOwnedFrame = ownedFrame;
+                 uint32_t workloadIndex = processCursor;
+@@ -979,1 +991,2 @@
+-                        const bool interpolationApproved = workloadApproved || ((interpolationFb != nullptr) && interpolationFb->interpolationEnabled);
++                        const bool interpolationApproved = ownedFrame.owned ? (ownedFrame.visible && workloadApproved) :
++                            (workloadApproved || ((interpolationFb != nullptr) && interpolationFb->interpolationEnabled));
+                         // An exact workload approval does not require the framebuffer to
+@@ -1000,3 +1000,6 @@
+                     matchingProfiler.start();
++                    {
++                    dkr::runtime::netplay::experimental::performance::Scope timing(
++                        dkr::runtime::netplay::experimental::performance::Stage::Matching, ownedFrame.owned);
+                     curFrame.match(ext.workloadGraphicsWorker, *this, prevFrame, ext.workloadVelocityUploader, velocityUploaderUsed, tileInterpolationUsed, lookAtInterpolationUsed);
++                    }
+                     matchingProfiler.end();
+@@ -1074,3 +1074,5 @@
+                 const int64_t setupTimeMicro = workloadTimer.elapsedMicroseconds();
++                if (ownedFrame.owned) dkr::runtime::netplay::experimental::performance::record(
++                    dkr::runtime::netplay::experimental::performance::Stage::RenderSetup, uint64_t(std::max(int64_t(0), setupTimeMicro)) * 1000);
+                 const int64_t adjustedTimeWindowMicro = originalTimeMicro - setupTimeMicro;
+                 const int64_t maxTimePerFrameMicro = adjustedTimeWindowMicro / displayFrames;
+@@ -1180,3 +1194,5 @@
++                if (ownedFrame.owned && !workload.paused) {
++                    using dkr::runtime::netplay::experimental::performance::Event;
++                    dkr::runtime::netplay::experimental::performance::event(Event::RequestedFrames, displayFrames);
++                    dkr::runtime::netplay::experimental::performance::event(Event::RenderedFrames, framesRendered);
++                    if (skippedFrames || skipWorkloadNow)
++                        dkr::runtime::netplay::experimental::performance::event(Event::SkippedWorkloads);
++                }
+                 threadConfigurationValidate();
+ 
++                dkr::runtime::netplay::experimental::present_gate::complete_workload(
++                    &workload, workload.workloadId);
+                 if (!workload.paused) {

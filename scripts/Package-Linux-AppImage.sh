@@ -4,6 +4,16 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIRECTORY="${DKR_LINUX_BUILD_DIR:-${PROJECT_ROOT}/build/dkr-runtime-linux}"
 if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
+   grep -Eq '^DKR_EXPERIMENTAL_RENDER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
+  echo 'Refusing to package private experimental GPU retirement qualification. Reconfigure and rebuild with DKR_EXPERIMENTAL_RENDER_QUALIFICATION=OFF.' >&2
+  exit 1
+fi
+if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
+   grep -Eq '^DKR_REPLAY_QUALIFICATION:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
+  echo 'Refusing to package private replay fixture capture.' >&2
+  exit 1
+fi
+if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
    grep -Eq '^DKR_ANDROID_RENDER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
   echo 'Refusing to package private Android renderer qualification.' >&2
   exit 1
@@ -24,12 +34,21 @@ if [[ -f "${BUILD_DIRECTORY}/CMakeCache.txt" ]] &&
   exit 1
 fi
 BINARY="${BUILD_DIRECTORY}/bin/Release/DKR-R"
+if [[ -f "${BINARY}" ]] && grep -aFq 'DKR_REPLAY_CAPTURE_FILE' "${BINARY}"; then
+  echo 'Release executable still contains private replay fixture capture.' >&2
+  exit 1
+fi
 INPUT_HOST_DIRECTORY="${BUILD_DIRECTORY}/bin/Release/libexec/dkr-r"
 INPUT_HOST="${INPUT_HOST_DIRECTORY}/DKR-R-InputHost"
 MOD_WORKER="${INPUT_HOST_DIRECTORY}/DKR-R-ModWorker"
 SDL3_LIBRARY="${INPUT_HOST_DIRECTORY}/libSDL3.so.0"
 VERSION_FILE_VALUE="$(tr -d '\r\n' < "${PROJECT_ROOT}/VERSION")"
 VERSION="${DKR_RELEASE_VERSION:-${VERSION_FILE_VALUE}}"
+EXPERIMENTAL_RACE_TEST=0
+if grep -Eq '^DKR_EXPERIMENTAL_RACE_TEST:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
+  EXPERIMENTAL_RACE_TEST=1
+  [[ "${VERSION}" == *experimental* || "${VERSION}" == *rollback-test* || "${VERSION}" == 1.0.5-beta.15 || "${VERSION}" == 1.0.5-beta.15-playtest.[2345678] ]] || { echo 'Experimental builds require a distinct experimental version or an approved Beta 15 playtest candidate.' >&2; exit 1; }
+fi
 # Explicit beta qualification deferral; normal release packaging still runs all checks.
 SKIP_RUNTIME_TESTS="${DKR_SKIP_RUNTIME_TESTS:-0}"
 [[ "${SKIP_RUNTIME_TESTS}" == 0 || "${SKIP_RUNTIME_TESTS}" == 1 ]] || {
@@ -60,7 +79,7 @@ validate_release_tree() {
     extension="${file##*.}"
     extension="${extension,,}"
     case "${extension}" in
-      z64|v64|n64|eep|mpk|sra|fla|o2r|otr)
+      z64|v64|n64|eep|mpk|sra|fla|o2r|otr|dkr-probe|dkr-bootstrap|dkr-component)
         echo "Release staging contains prohibited game data: ${file}" >&2
         return 1
         ;;
@@ -140,6 +159,34 @@ mkdir -p "${APPDIR}/usr/share/doc/dkr-port/licenses" "$(dirname "${OUTPUT}")"
 mkdir -p "${APPDIR}/usr/share/metainfo"
 install -m 0644 "${ICON_FILE}" "${ICON_STAGE}/dkr-r.png"
 install -m 0755 "${BINARY}" "${BINARY_STAGE}/DKR-R"
+EXPERIMENTAL_DEPLOY_ARGS=()
+if [[ "${EXPERIMENTAL_RACE_TEST}" == 1 ]]; then
+  # The earlier generic file describes Playtest 2; Playtest 8 ships its own
+  # current connection/scope guide instead of contradictory version guidance.
+  if [[ "${VERSION}" != 1.0.5-beta.15-playtest.8 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/EXPERIMENTAL-ROLLBACK-TESTING.txt" "${APPDIR}/usr/share/doc/dkr-port/EXPERIMENTAL-ROLLBACK-TESTING.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.3 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST3-PARITY.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST3-NOTES.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.4 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST4-PERFORMANCE.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST4-NOTES.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.5 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST5-BOSS-DIAGNOSTICS.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST5-NOTES.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.6 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST6-PERFORMANCE.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST6-NOTES.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.7 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST7-CPU.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST7-NOTES.txt"
+    install -m 0644 "${PROJECT_ROOT}/docs/EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt" "${APPDIR}/usr/share/doc/dkr-port/LOCAL-SCENERY-STATUS.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.8 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST8-SCENERY.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST8-NOTES.txt"
+    install -m 0644 "${PROJECT_ROOT}/docs/EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt" "${APPDIR}/usr/share/doc/dkr-port/LOCAL-SCENERY-STATUS.txt"
+  fi
+fi
 install -m 0644 "${PROJECT_ROOT}/LICENSE.md" "${APPDIR}/usr/share/doc/dkr-port/LICENSE.md"
 install -m 0644 "${PROJECT_ROOT}/THIRD_PARTY.md" "${APPDIR}/usr/share/doc/dkr-port/THIRD_PARTY.md"
 install -m 0644 "${PROJECT_ROOT}/docs/ONLINE_MULTIPLAYER.md" "${APPDIR}/usr/share/doc/dkr-port/ONLINE_MULTIPLAYER.md"
@@ -192,6 +239,7 @@ run_appimage() {
 run_appimage "${LINUXDEPLOY}" --appimage-extract-and-run \
   --appdir "${APPDIR}" \
   --executable "${BINARY_STAGE}/DKR-R" \
+  "${EXPERIMENTAL_DEPLOY_ARGS[@]}" \
   --desktop-file "${PROJECT_ROOT}/packaging/linux/dkr-port.desktop" \
   --icon-file "${ICON_STAGE}/dkr-r.png"
 

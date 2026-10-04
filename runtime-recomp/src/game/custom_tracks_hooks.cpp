@@ -1,4 +1,7 @@
 #include "custom_tracks.hpp"
+#if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "replay_probe_capture.hpp"
+#endif
 
 #include "game_payload.hpp"
 #include "revision_addresses.hpp"
@@ -180,6 +183,14 @@ constexpr std::int32_t kCommandLimit = 0x20000;
 // needs, decided at boot. 0 when Track Select offers none.
 std::int32_t g_menu_commands = 0;
 
+bool owned_vanilla_bootstrap() {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    return dkr_experimental_bootstrap_active();
+#else
+    return false;
+#endif
+}
+
 // thread3_main.c's display-list globals, verified against
 // ver/symbols/symbol_addrs.us.v{77,80}.txt.
 struct DisplayListGlobals {
@@ -245,6 +256,18 @@ static void publish_extended_table(std::uint8_t* rdram, recomp_context* context,
 // appended levels need - the sizing is idempotent past boot.
 extern "C" void dkr_custom_tracks_extend_table(std::uint8_t* rdram, recomp_context* context,
                                                std::uint32_t requested) {
+    // The normal experimental lobby temporarily binds an offline constructor
+    // while parking retail pre-INTRO state. Installed offline .dkrmap tracks
+    // must not enter that checkpoint or resize its retail display-list heaps.
+    // Leave the catalogue and the user's enabled-mod settings untouched.
+    if (owned_vanilla_bootstrap()) {
+        if (requested == kLevelHeadersTableSection) {
+            g_menu_commands = 0;
+            g_track_heap_bytes = 0;
+            std::fprintf(stderr, "[rollback][boot] retained vanilla asset tables and display-list budgets\n");
+        }
+        return;
+    }
     publish_extended_table(rdram, context, requested);
     if (requested == kLevelHeadersTableSection) {
         size_menu_display_lists(rdram);
@@ -357,6 +380,7 @@ extern "C" void dkr_custom_tracks_asset_load_end(std::uint8_t* rdram,
 
 namespace {
 bool apply_custom_payload(std::uint8_t* rdram,const AssetLoadRequest& request) {
+    if (owned_vanilla_bootstrap()) return false;
     Section section = Section::LevelHeaders;
     if (!section_for_data(request.section, section) || request.size <= 0 ||
         !addressable(request.destination) || std::uint32_t(request.size)>kRdramHigh-request.destination+1U) {
@@ -427,6 +451,7 @@ bool apply_custom_payload(std::uint8_t* rdram,const AssetLoadRequest& request) {
 // them or introducing a second way to pick a level.
 extern "C" void dkr_custom_tracks_track_id_override(std::uint8_t*,
                                                      recomp_context* context) {
+    if (owned_vanilla_bootstrap()) return;
     const std::int32_t armed = dkr::runtime::custom_tracks::track_override();
     if (armed == dkr::runtime::custom_tracks::kNoTrackOverride) {
         return;
@@ -439,7 +464,11 @@ extern "C" void dkr_custom_tracks_track_id_override(std::uint8_t*,
 // runs its own start sequence - vehicle default, entrance, cutscene, game mode
 // and load_level_game - instead of this file reproducing it.
 extern "C" void dkr_custom_tracks_auto_boot(std::uint8_t* rdram,
-                                             recomp_context* context) {
+                                              recomp_context* context) {
+    if (owned_vanilla_bootstrap()) return;
+#if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
+    if (dkr_private_replay_boot(rdram, context)) return;
+#endif
     namespace tracks_ns = dkr::runtime::custom_tracks;
     if (!tracks_ns::auto_boot_enabled()) {
         return;
@@ -693,6 +722,7 @@ static void size_menu_display_lists(std::uint8_t* rdram) {
 // so this is where a .dkrmap level gets its pool and its model heap.
 extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram,
                                                  recomp_context* context) {
+    if (owned_vanilla_bootstrap()) return;
     const auto level = static_cast<std::int32_t>(context->r4);
     grow_main_pool_for_level(rdram, level);
     prepare_track_heap(level);
@@ -729,6 +759,7 @@ extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram,
 // keeps the retail heap instead of having a register it misread overwritten.
 extern "C" void dkr_custom_tracks_track_heap(std::uint8_t*,
                                              recomp_context* context) {
+    if (owned_vanilla_bootstrap()) return;
     const std::int32_t wanted = g_track_heap_bytes;
     g_track_heap_bytes = 0;
     if (wanted <= dkr::runtime::custom_tracks::kRetailTrackHeap) {
@@ -762,6 +793,7 @@ extern "C" void dkr_custom_tracks_track_heap(std::uint8_t*,
 // heap is left to level_load's hook, which this load reaches next.
 extern "C" void dkr_custom_tracks_prepare_level(std::uint8_t* rdram,
                                                 recomp_context* context) {
+    if (owned_vanilla_bootstrap()) return;
     const auto level = static_cast<std::int32_t>(context->r4);
     // The heap alloc_displaylist_heap is about to build comes out of the pool.
     grow_main_pool_for_level(rdram, level);
@@ -786,6 +818,7 @@ extern "C" void dkr_custom_tracks_prepare_level(std::uint8_t* rdram,
 // Track Select retain their choices. Also covers L+Z and switching test tracks.
 extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram,
                                                   recomp_context* context) {
+    if (owned_vanilla_bootstrap()) return;
     namespace addresses = dkr::runtime::revision_addresses;
     const auto level = static_cast<std::int32_t>(context->r4);
     const auto players_minus_one = static_cast<std::int32_t>(context->r5);

@@ -6,6 +6,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -46,12 +47,40 @@ struct TickOutput {
     // performed while speculation is running. Do not simulate beyond it.
     bool scene_boundary = false;
 };
+enum class RestoreStep { Ready, Pending, Failed };
 
 class Simulation {
 public:
     virtual ~Simulation() = default;
     virtual SimulationContract contract() const = 0;
+    // Some scenes run resource loaders inside their next CPU tick (menus and
+    // chained cinematics). They may only run with agreed input AND no older
+    // speculative history. This is an adapter policy, not a global lockstep
+    // setting: the default gameplay policy retains prediction and rollback.
+    virtual bool requires_confirmed_tick() const { return false; }
+    // Called only after input admission, before tick/checkpoint mutation.
+    // Resource-changing ticks can retire render work and wait without blocking
+    // networking/UI. Pending must not change the checkpointed world.
+    virtual RestoreStep prepare_tick(std::uint64_t epoch, std::uint32_t frame,
+                                     bool confirmed, std::string& error) {
+        return RestoreStep::Ready;
+    }
     virtual bool capture(std::span<std::uint8_t> state, std::string& error) = 0;
+    // Called after checkpoint integrity validation, BEFORE any rewind writes.
+    // An adapter publishing speculative render work must retire its generation
+    // here. Existing leases keep immutable bytes until the consumer drains;
+    // this hook must not block for a worker or send fake SP/DP completion.
+    // The default is only for worlds which publish no speculative output.
+    virtual bool before_restore(std::uint64_t epoch, std::uint32_t first_frame,
+                                std::string& error) { return true; }
+    // An owned GPU/WSI participant may already have begun consuming immutable
+    // output. Retire queued work immediately, then return Pending until that
+    // started work drains; NEVER block the owner/UI/network in this callback.
+    // Ready means the original before_restore contract has also been fulfilled.
+    virtual RestoreStep prepare_restore(std::uint64_t epoch,std::uint32_t first_frame,
+                                        std::string& error) {
+        return before_restore(epoch,first_frame,error)?RestoreStep::Ready:RestoreStep::Failed;
+    }
     // Validate all participants before mutating any of them. Failure leaves
     // the entire world unchanged; native stacks/OS queues are not checkpoints.
     virtual bool restore(std::span<const std::uint8_t> state,
@@ -73,10 +102,13 @@ struct Configuration {
 enum class Step {
     Advanced,
     Replayed,
+    WaitingForLocalInput,
     PredictionLimit,
     AwaitingBoundaryConfirmation,
     ConfirmedBoundary,
     Failed,
+    WaitingForPresentation,
+    WaitingForConfirmedInput,
 };
 enum class InputResult { Accepted, Duplicate, StaleEpoch, OutOfRange, Conflict, Failed };
 
@@ -87,6 +119,9 @@ struct Statistics {
     std::uint32_t replayed_frames = 0U;
     std::uint32_t largest_rollback = 0U;
     std::uint32_t predicted_frames = 0U;
+    // Non-rewinding diagnostic: a pending presentation wait must not rebuild
+    // and hash the same full checkpoint at the UI/polling frequency.
+    std::uint32_t restore_checkpoint_loads = 0U;
     std::size_t checkpoint_bytes = 0U;
 };
 
@@ -100,11 +135,15 @@ public:
                         std::uint32_t frame, PackedInput input);
     // At most one simulated tick per call, including correction replay. The
     // caller controls a wall-clock/replay budget and can always service UI.
-    Step step();
+    // Confirmation and correction remain serviceable when the caller has no
+    // new local sample. False prevents only a NEW speculative tick, not replay
+    // of an already-sampled tick or confirmation of a scene boundary.
+    Step step(bool allow_advance = true);
     const Statistics& statistics() const { return statistics_; }
     const std::string& error() const { return error_; }
     bool active() const { return active_ && error_.empty(); }
     bool correcting() const;
+    bool scene_boundary_pending() const { return boundary_frame_ != UINT32_MAX || committed_boundary_; }
     static bool valid_contract(const SimulationContract& contract);
 
 private:
@@ -124,7 +163,7 @@ private:
     Frame& entry(std::uint32_t frame);
     FrameInputs predict(const Frame& frame);
     bool save(std::uint32_t frame);
-    bool restore(std::uint32_t frame);
+    RestoreStep restore(std::uint32_t frame);
     bool confirm();
     bool fail(std::string message);
     Simulation& simulation_;
@@ -134,6 +173,7 @@ private:
     FrameInputs confirmed_inputs_{};
     std::unique_ptr<RollbackStateStore> checkpoints_;
     std::vector<std::uint8_t> scratch_;
+    std::optional<std::uint32_t> prepared_restore_;
     Statistics statistics_{};
     std::uint32_t dirty_frame_ = UINT32_MAX;
     std::uint32_t replay_goal_ = 0U;

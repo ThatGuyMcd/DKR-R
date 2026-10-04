@@ -1,0 +1,57 @@
+DKR-R v1.0.5 Beta 15 Playtest 5 - boss victory scene correction
+
+PURPOSE
+The host's diagnostic playtest identified a stale scene-ID limit in the
+Experimental Rollback constructor. Tricky's victory successfully marked the
+reward/save and queued retail cutscene 57 (hex 39). The scene handoff then
+failed with unowned-confirmed-scene-constructor because its cap was 53.
+The retail level-header table has 65 entries: valid scene IDs are 0..64.
+This rebuild corrects that specific rejection. Actual boss/cutscene gameplay
+verification remains with the playtesters; it is not claimed fully qualified.
+
+WHAT CHANGED
+Full-game experimental scene admission now accepts the complete reviewed
+retail level-ID range, including boss cinematics and endings. Non-full-scene
+closures retain their original 0..53 limit. Negative/out-of-range IDs and
+all other constructor ownership, service and argument checks still reject.
+The two private constructor/fixture helpers use the same shared boundary.
+Compile-time assertions cover the first/last IDs, boss cutscene 57 and invalid
+IDs. No retail cutscene/reward sequence is skipped or rewritten.
+
+Bounded boss-finish logging records entry/exit, the original music, reward,
+transition, lead-player and save-marking calls, plus a short audio tail.
+If an owned safety gate rejects an operation in this window, the log records
+the reason, guest address/source, register values and guest call stack.
+Milestones are flushed to runtime.log before continuing. Tracing is capped
+at 160 milestone lines per finish and 300 logical tick changes afterward;
+rollback duplicates also consume that cap. Unavailable raw fields appear
+as 4294967295; the valid mask identifies the available global fields.
+The extended window covers the observed six-second post-victory transition.
+
+UNCHANGED
+Retail instructions, registers, control flow, music, rewards, EEPROM,
+cutscenes, boss AI, topology, transport, prediction and synchronization are
+unchanged apart from the scene-ID admission boundary described above.
+No second barrier, new signal handler, separate launcher,
+test-track redirect or graphics-quality reduction has been added.
+Diagnostics are outside checkpointed state and never influence gameplay.
+All current Playtest 4 functionality and its explicit deferrals are retained.
+The accepted Playtest 4 packages remain the rollback point.
+
+YOUR PLAYTEST
+Every participant must install this exact Playtest 5 build; do not mix
+experimental packages. Use the normal launcher Backend dropdown and your
+normal 2P Adventure session. No diagnostic switch needs to be enabled.
+Attempt the previously failing boss finish. If practical, also check losing,
+winning again, the following reward/cutscene and returning to the hub.
+If it fails, keep the newest runtime.log and runtime-previous.log from BOTH
+host and client before repeatedly restarting (startup rotates the log).
+Use About/Support's existing log export or Open Logs location action.
+For default Windows profiles: %APPDATA%\DKRPort\logs\runtime.log.
+Include the boss name, win/loss and whether the host or client failed first.
+Logs may contain connection information; share them privately for diagnosis.
+
+VERIFICATION SCOPE
+Compilation, source invariance, version/contract and package-content checks
+only. No gameplay, self-test or online runtime qualification was performed,
+following your instruction to leave all gameplay testing to you.

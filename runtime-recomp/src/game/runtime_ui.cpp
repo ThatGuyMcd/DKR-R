@@ -36,6 +36,11 @@
 #include "netplay/friend_service.hpp"
 #include "netplay/netplay_build_identity.hpp"
 #include "netplay/experimental_runtime_admission.hpp"
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "netplay/experimental_runtime.hpp"
+#include "netplay/experimental_performance.hpp"
+#include "netplay/secure_channel.hpp"
+#endif
 #include "netplay/netplay_pacing_policy.hpp"
 #include "runtime_platform.hpp"
 #include "runtime_support.hpp"
@@ -574,6 +579,12 @@ int g_online_maximum_players = 2;
 int g_online_synchronization = static_cast<int>(
     dkr::runtime::netplay::SynchronizationMode::Rollback);
 bool g_online_experimental_rollback = false;
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+std::filesystem::path g_online_experimental_rom;
+#if defined(DKR_EXPERIMENTAL_FULL_SCENES)
+bool g_online_experimental_adventure = false;
+#endif
+#endif
 dkr::runtime::netplay::SynchronizationMode CurrentOnlineSynchronization() {
     return dkr::runtime::netplay::experimental::selected_mode(
         g_online_synchronization, g_online_experimental_rollback);
@@ -851,7 +862,8 @@ void PrepareLauncherBackground(LauncherBackgroundTexture& background,
     SDL_FreeSurface(scaled);
 }
 
-LauncherBackgroundTexture LoadLauncherBackground(SDL_Renderer* renderer) {
+LauncherBackgroundTexture LoadLauncherBackground(SDL_Renderer* renderer,
+                                                  bool software_return = false) {
     LauncherBackgroundTexture result{};
     if (renderer == nullptr) return result;
 
@@ -891,7 +903,9 @@ LauncherBackgroundTexture LoadLauncherBackground(SDL_Renderer* renderer) {
         result.height = 0;
     } else {
         SDL_SetTextureBlendMode(result.texture, SDL_BLENDMODE_NONE);
-#if defined(__linux__)
+#if !defined(__linux__)
+        if (software_return) {
+#endif
         result.source = SDL_CreateRGBSurfaceWithFormat(
             0, result.width, result.height, 32, SDL_PIXELFORMAT_RGBA32);
         if (result.source != nullptr) {
@@ -902,6 +916,8 @@ LauncherBackgroundTexture LoadLauncherBackground(SDL_Renderer* renderer) {
             }
             SDL_SetSurfaceBlendMode(result.source, SDL_BLENDMODE_NONE);
             result.mirrored = MirroredBackgroundTexture(renderer, result.source);
+        }
+#if !defined(__linux__)
         }
 #endif
     }
@@ -1713,6 +1729,9 @@ void SaveSettings() {
         output << "online_maximum_players=" << g_online_maximum_players << '\n';
         output << "online_synchronization=" << g_online_synchronization << '\n';
         output << "online_experimental_rollback=" << (g_online_experimental_rollback ? 1 : 0) << '\n';
+#if defined(DKR_EXPERIMENTAL_FULL_SCENES)
+        output << "online_experimental_adventure=" << (g_online_experimental_adventure ? 1 : 0) << '\n';
+#endif
         output << "online_rollback_window=" << g_online_rollback_window << '\n';
         output << "online_automatic_delay=" << (g_online_automatic_delay ? 1 : 0) << '\n';
         output << "online_manual_delay=" << g_online_manual_delay << '\n';
@@ -1994,6 +2013,12 @@ void LoadSettings() {
                 g_online_experimental_rollback = number == 1;
                 continue;
             }
+#if defined(DKR_EXPERIMENTAL_FULL_SCENES)
+            if (key == "online_experimental_adventure") {
+                g_online_experimental_adventure = number == 1;
+                continue;
+            }
+#endif
             bool shortcut_setting = false;
             for (std::size_t index = 0; index < kShortcutSettingNames.size(); ++index) {
                 const std::string prefix =
@@ -3413,10 +3438,172 @@ struct CachedLauncherPanelDraw {
     }
 };
 
+void RenderRecoveryDrawData(SDL_Renderer* renderer,ImDrawData* data) {
+    // SDL 2.26.3's software triangle sampler stores texture_coordinate*area
+    // in a signed 32-bit SDL_Point BEFORE its 64-bit interpolation. A large
+    // cloud/atlas triangle at high resolution can overflow and read outside
+    // the texture during SDL_RenderPresent. Bound the input geometry here;
+    // never modify the dependency or the normal accelerated launcher.
+    if(!data || data->DisplaySize.x<=0 || data->DisplaySize.y<=0)return;
+    SDL_Rect previous_view{},previous_clip{};
+    SDL_RenderGetViewport(renderer,&previous_view);SDL_RenderGetClipRect(renderer,&previous_clip);
+    const bool clipped=SDL_RenderIsClipEnabled(renderer)==SDL_TRUE;
+    SDL_BlendMode previous_blend{};SDL_GetRenderDrawBlendMode(renderer,&previous_blend);
+    SDL_RenderSetViewport(renderer,nullptr);SDL_SetRenderDrawBlendMode(renderer,SDL_BLENDMODE_BLEND);
+    struct Vertex {SDL_FPoint position;SDL_Color color;SDL_FPoint uv;};
+    // Axis-aligned images are copies, not a reason to rasterize thousands of
+    // tiny triangles. Validate BOTH triangles and their shared diagonal before
+    // taking this path; glyphs, gradients and rotated images remain geometry.
+    const auto copy_quad=[&](SDL_Texture* texture,int tw,int th,const std::array<Vertex,6>& v,
+                            auto&& flush_geometry) {
+        if(!texture || tw<=0 || th<=0)return false;
+        float left=v[0].position.x,right=left,top=v[0].position.y,bottom=top;
+        for(const auto& vertex:v) {
+            left=(std::min)(left,vertex.position.x);right=(std::max)(right,vertex.position.x);
+            top=(std::min)(top,vertex.position.y);bottom=(std::max)(bottom,vertex.position.y);
+            if(std::memcmp(&vertex.color,&v[0].color,sizeof(SDL_Color))!=0)return false;
+        }
+        if(right<=left || bottom<=top)return false;
+        std::array<SDL_FPoint,4> uv{};unsigned corners=0,triangles[2]{};
+        for(unsigned i=0;i<v.size();++i) {
+            const auto p=v[i].position;
+            if((p.x!=left && p.x!=right) || (p.y!=top && p.y!=bottom))return false;
+            const unsigned corner=p.y==top?(p.x==left?0:1):(p.x==right?2:3);
+            const unsigned bit=1U<<corner;
+            if(triangles[i/3]&bit)return false;
+            triangles[i/3]|=bit;
+            if(corners&bit) {
+                if(uv[corner].x!=v[i].uv.x || uv[corner].y!=v[i].uv.y)return false;
+            } else uv[corner]=v[i].uv;
+            corners|=bit;
+        }
+        const unsigned diagonal=triangles[0]&triangles[1];
+        if(corners!=15 || (diagonal!=5 && diagonal!=10) ||
+           uv[0].x!=uv[3].x || uv[1].x!=uv[2].x ||
+           uv[0].y!=uv[1].y || uv[2].y!=uv[3].y)return false;
+        const float u0=(std::min)(uv[0].x,uv[1].x),u1=(std::max)(uv[0].x,uv[1].x);
+        const float v0=(std::min)(uv[0].y,uv[3].y),v1=(std::max)(uv[0].y,uv[3].y);
+        const int x0=int(std::round(u0*tw)),x1=int(std::round(u1*tw));
+        const int y0=int(std::round(v0*th)),y1=int(std::round(v1*th));
+        // Copy sampling has integer source texels, like SDL's ordinary software
+        // image-copy path. Backgrounds are pre-scaled to window resolution, so
+        // clipping rounds by at most half a screen pixel (no resolution drop).
+        // The font atlas never uses this path: keep sub-texel glyph sampling.
+        if(x0<0 || x1>tw || y0<0 || y1>th || x1<=x0 || y1<=y0)return false;
+        SDL_Rect source{x0,y0,x1-x0,y1-y0};SDL_FRect destination{left,top,right-left,bottom-top};
+        Uint8 r=255,g=255,b=255,a=255;
+        if(SDL_GetTextureColorMod(texture,&r,&g,&b)!=0 || SDL_GetTextureAlphaMod(texture,&a)!=0)return false;
+        flush_geometry();
+        const auto color=v[0].color;
+        SDL_SetTextureColorMod(texture,color.r,color.g,color.b);SDL_SetTextureAlphaMod(texture,color.a);
+        const auto flip=static_cast<SDL_RendererFlip>((uv[0].x>uv[1].x?SDL_FLIP_HORIZONTAL:0) |
+                                                     (uv[0].y>uv[3].y?SDL_FLIP_VERTICAL:0));
+        const bool copied=(flip==SDL_FLIP_NONE
+            ? SDL_RenderCopyF(renderer,texture,&source,&destination)
+            : SDL_RenderCopyExF(renderer,texture,&source,&destination,0,nullptr,flip))==0;
+        SDL_SetTextureColorMod(texture,r,g,b);SDL_SetTextureAlphaMod(texture,a);
+        return copied;
+    };
+    const auto midpoint=[](const Vertex& a,const Vertex& b) {
+        return Vertex{{(a.position.x+b.position.x)*0.5F,(a.position.y+b.position.y)*0.5F},
+            {Uint8((unsigned(a.color.r)+b.color.r)/2),Uint8((unsigned(a.color.g)+b.color.g)/2),
+             Uint8((unsigned(a.color.b)+b.color.b)/2),Uint8((unsigned(a.color.a)+b.color.a)/2)},
+            {(a.uv.x+b.uv.x)*0.5F,(a.uv.y+b.uv.y)*0.5F}};
+    };
+    std::vector<Vertex> batch;batch.reserve(1536);
+    for(int n=0;n<data->CmdListsCount;++n) {
+        const auto* list=data->CmdLists[n];
+        for(const auto& command:list->CmdBuffer) {
+            if(command.UserCallback) {
+                if(command.UserCallback==ImDrawCallback_ResetRenderState) {
+                    SDL_RenderSetViewport(renderer,nullptr);SDL_RenderSetClipRect(renderer,nullptr);
+                } else command.UserCallback(list,&command);
+                continue;
+            }
+            if(command.IdxOffset>unsigned(list->IdxBuffer.Size) ||
+               command.ElemCount>unsigned(list->IdxBuffer.Size)-command.IdxOffset || command.ElemCount%3)continue;
+            const auto scale=data->FramebufferScale,origin=data->DisplayPos;
+            const float left=(std::max)(0.0F,(command.ClipRect.x-origin.x)*scale.x);
+            const float top=(std::max)(0.0F,(command.ClipRect.y-origin.y)*scale.y);
+            const float right=(std::min)(data->DisplaySize.x*scale.x,(command.ClipRect.z-origin.x)*scale.x);
+            const float bottom=(std::min)(data->DisplaySize.y*scale.y,(command.ClipRect.w-origin.y)*scale.y);
+            if(right<=left || bottom<=top)continue;
+            SDL_Rect clip{int(left),int(top),int(right-left),int(bottom-top)};SDL_RenderSetClipRect(renderer,&clip);
+            auto* texture=reinterpret_cast<SDL_Texture*>(command.TextureId);
+            int tw=0,th=0;
+            if(texture && (SDL_QueryTexture(texture,nullptr,nullptr,&tw,&th)!=0 || tw>65535 || th>65535))continue;
+            const auto flush=[&] {
+                if(batch.empty())return;
+                SDL_RenderGeometryRaw(renderer,texture,&batch[0].position.x,sizeof(Vertex),
+                    &batch[0].color,sizeof(Vertex),&batch[0].uv.x,sizeof(Vertex),int(batch.size()),nullptr,0,0);
+                batch.clear();
+            };
+            const auto emit=[&](auto&& self,Vertex a,Vertex b,Vertex c,unsigned depth)->void {
+                const float span=(std::max)({std::abs(a.position.x-b.position.x),std::abs(a.position.y-b.position.y),
+                    std::abs(a.position.x-c.position.x),std::abs(a.position.y-c.position.y),
+                    std::abs(b.position.x-c.position.x),std::abs(b.position.y-c.position.y)});
+                if(texture && span>64.0F) {
+                    if(depth==12)return; // Bounded failure, never an unsafe triangle.
+                    const auto ab=midpoint(a,b),bc=midpoint(b,c),ca=midpoint(c,a);
+                    self(self,a,ab,ca,depth+1);self(self,ab,b,bc,depth+1);
+                    self(self,ca,bc,c,depth+1);self(self,ab,bc,ca,depth+1);return;
+                }
+                batch.push_back(a);batch.push_back(b);batch.push_back(c);
+                if(batch.size()>=1536)flush();
+            };
+            for(unsigned i=0;i<command.ElemCount;i+=3) {
+                if(texture && command.TextureId!=ImGui::GetIO().Fonts->TexID && command.ElemCount-i>=6) {
+                    std::array<Vertex,6> quad{};bool valid=true;
+                    for(unsigned j=0;j<quad.size();++j) {
+                        const auto index=std::uint64_t(list->IdxBuffer[command.IdxOffset+i+j])+command.VtxOffset;
+                        if(index>=unsigned(list->VtxBuffer.Size)) {valid=false;break;}
+                        const auto& source=list->VtxBuffer[int(index)];
+                        quad[j]={{(source.pos.x-origin.x)*scale.x,(source.pos.y-origin.y)*scale.y},
+                            {Uint8(source.col),Uint8(source.col>>8),Uint8(source.col>>16),Uint8(source.col>>24)},
+                            {source.uv.x,source.uv.y}};
+                        valid=valid && std::isfinite(quad[j].position.x) && std::isfinite(quad[j].position.y) &&
+                            std::abs(quad[j].position.x)<32768 && std::abs(quad[j].position.y)<32768 &&
+                            std::isfinite(quad[j].uv.x) && std::isfinite(quad[j].uv.y) &&
+                            quad[j].uv.x>=0 && quad[j].uv.x<=1 && quad[j].uv.y>=0 && quad[j].uv.y<=1;
+                    }
+                    // Flush earlier geometry first: image copies must keep the
+                    // original ImGui ordering, clipping and alpha composition.
+                    if(valid && copy_quad(texture,tw,th,quad,flush)) {i+=3;continue;}
+                }
+                Vertex v[3];bool valid=true;
+                for(unsigned j=0;j<3;++j) {
+                    const auto index=std::uint64_t(list->IdxBuffer[command.IdxOffset+i+j])+command.VtxOffset;
+                    if(index>=unsigned(list->VtxBuffer.Size)) {valid=false;break;}
+                    const auto& source=list->VtxBuffer[int(index)];
+                    v[j]={{(source.pos.x-origin.x)*scale.x,(source.pos.y-origin.y)*scale.y},
+                        {Uint8(source.col),Uint8(source.col>>8),Uint8(source.col>>16),Uint8(source.col>>24)},
+                        {source.uv.x,source.uv.y}};
+                    valid=valid && std::isfinite(v[j].position.x) && std::isfinite(v[j].position.y) &&
+                        std::abs(v[j].position.x)<32768 && std::abs(v[j].position.y)<32768 &&
+                        std::isfinite(v[j].uv.x) && std::isfinite(v[j].uv.y) &&
+                        (!texture || (v[j].uv.x>=0 && v[j].uv.x<=1 && v[j].uv.y>=0 && v[j].uv.y<=1));
+                }
+                if(valid)emit(emit,v[0],v[1],v[2],0);
+            }
+            flush();
+        }
+    }
+    SDL_RenderSetViewport(renderer,&previous_view);SDL_RenderSetClipRect(renderer,clipped?&previous_clip:nullptr);
+    SDL_SetRenderDrawBlendMode(renderer,previous_blend);
+}
+
 void RenderLauncherDrawData(SDL_Renderer* renderer, ImDrawData* data,
                            dkr::runtime::launcher::Profile& profile,
-                           dkr::runtime::launcher::PanelCache& panel_cache) {
-#if defined(__linux__)
+                           dkr::runtime::launcher::PanelCache& panel_cache,
+                           bool software_failure_recovery=false) {
+#if defined(__linux__) || defined(_WIN32)
+#if defined(_WIN32)
+    // Share the proven software solid/panel adapter only on the returned
+    // recovery launcher. Initial/ordinary Windows launchers stay accelerated.
+    if(!software_failure_recovery) {
+        ImGui_ImplSDLRenderer2_RenderDrawData(data);return;
+    }
+#endif
     // SDL supports untextured geometry with the same per-vertex colours and
     // alpha. Avoid the software texture sampler for ImGui's solid shapes.
     // This adapter is launcher-only; the shared backend and RT64 stay intact.
@@ -3511,7 +3698,8 @@ void RenderLauncherDrawData(SDL_Renderer* renderer, ImDrawData* data,
     SDL_BlendMode old_blend{};
     SDL_GetRenderDrawBlendMode(renderer, &old_blend);
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    ImGui_ImplSDLRenderer2_RenderDrawData(data);
+    if(software_failure_recovery)RenderRecoveryDrawData(renderer,data);
+    else ImGui_ImplSDLRenderer2_RenderDrawData(data);
     SDL_SetRenderDrawBlendMode(renderer, old_blend);
     for (int i = 0; i < data->CmdListsCount; ++i) {
         data->CmdLists[i]->CmdBuffer.swap(original_commands[i]);
@@ -3520,7 +3708,8 @@ void RenderLauncherDrawData(SDL_Renderer* renderer, ImDrawData* data,
     (void)renderer;
     (void)profile;
     (void)panel_cache;
-    ImGui_ImplSDLRenderer2_RenderDrawData(data);
+    if(software_failure_recovery)RenderRecoveryDrawData(renderer,data);
+    else ImGui_ImplSDLRenderer2_RenderDrawData(data);
 #endif
 }
 
@@ -3666,7 +3855,8 @@ bool BeginMainWindow(const char* name, ImGuiWindowFlags extra = 0) {
 }
 
 void DrawLauncherBackdrop(LauncherBackgroundTexture& background,
-                          SDL_Renderer* renderer, double scroll_distance) {
+                          SDL_Renderer* renderer, double scroll_distance,
+                          bool software_return = false) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ImVec2 origin = ImGui::GetWindowPos();
     const ImVec2 size = ImGui::GetWindowSize();
@@ -3693,13 +3883,15 @@ void DrawLauncherBackdrop(LauncherBackgroundTexture& background,
     const float tile_height = static_cast<float>(background.height) * scale;
     if (tile_width <= 0.0F || tile_height <= 0.0F) return;
 
-#if defined(__linux__)
+#if !defined(__linux__)
+    if (software_return) {
+#endif
     const ImVec2 pixel_scale = ImGui::GetIO().DisplayFramebufferScale;
     PrepareLauncherBackground(background, renderer,
         static_cast<int>(std::ceil(tile_width * std::max(pixel_scale.x, 1.0F))),
         static_cast<int>(std::ceil(tile_height * std::max(pixel_scale.y, 1.0F))));
-#else
-    (void)renderer;
+#if !defined(__linux__)
+    }
 #endif
     draw->PushClipRect(origin, viewport_max, true);
     for (const auto& tile : dkr::runtime::launcher::background_tiles(
@@ -4640,7 +4832,7 @@ bool CreateOnlineLobby() {
     rules.synchronization = CurrentOnlineSynchronization();
     // Fail before creating/changing an online save directory. A new label
     // must never silently start the old implementation under an experiment.
-    if (const char* reason = experimental::runtime_admission_error(rules.synchronization)) {
+    if (const char* reason = experimental::runtime_admission_error(rules.synchronization,session().owned_backend_available())) {
         g_online_action_status = reason;
         return false;
     }
@@ -4661,12 +4853,18 @@ bool CreateOnlineLobby() {
     }
     session().configure_session_save(
         std::move(online_save),
-        dkr::runtime::saves::install_synchronized_online_adventure);
+        dkr::runtime::saves::install_synchronized_online_adventure,
+        dkr::runtime::saves::read_online_adventure);
     if (!session().host(0U, {}, g_online_room_name,
                         ConnectionMethod::QuickJoin, g_online_player_name,
                         rules, error)) {
+        dkr::runtime::saves::discard_staged_host_online_adventure();
         g_online_action_status = error;
         return false;
+    }
+    if(!dkr::runtime::saves::bind_staged_host_online_adventure(session().view().match_id,error)) {
+        session().disconnect(error);dkr::runtime::saves::discard_staged_host_online_adventure();
+        g_online_action_status=error;return false;
     }
     return true;
 }
@@ -5723,6 +5921,22 @@ bool DrawGraphicsSettings(bool live) {
         }
         ImGui::Spacing();
         ImGui::SeparatorText("Camera and scenery");
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        bool rollback_profile=dkr::runtime::netplay::experimental::performance::enabled();
+        if(ImGui::Checkbox("Experimental performance diagnostics", &rollback_profile))
+            dkr::runtime::netplay::experimental::performance::set_enabled(rollback_profile);
+        ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
+        ImGui::TextWrapped("Records bounded timing summaries in runtime.log. Does not change game speed or graphics quality; no GPU diagnostic drain. Enable before the match for a complete capture.");
+        ImGui::PopStyleColor();
+#endif
+        const bool owned_camera_settings_deferred =
+            dkr::runtime::netplay::experimental::runtime_view().active;
+        if (owned_camera_settings_deferred) {
+            ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
+            ImGui::TextWrapped("Experimental Rollback: keep-scenery, view-distance and retention preferences apply locally to restored retail scenery billboards, including removed tree tops. They do not yet extend all actors or level geometry. Vehicle LOD, FOV, animated/effect ranges, water detail and CPU culling remain canonical; those preferences are preserved for single-player and legacy online modes.");
+            ImGui::PopStyleColor();
+        }
+        ImGui::BeginDisabled(owned_camera_settings_deferred);
         bool maximum_detail =
             dkr::runtime::enhancements::maximum_detail_requested();
         if (ImGui::Checkbox("Maximum vehicle detail", &maximum_detail)) {
@@ -5748,6 +5962,7 @@ bool DrawGraphicsSettings(bool live) {
         ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
         ImGui::TextWrapped("Adjusts each gameplay level from its authored camera value. Menus, character select and cutscenes keep their original framing.");
         ImGui::PopStyleColor();
+        ImGui::EndDisabled();
 
         int view_distance =
             dkr::runtime::enhancements::view_distance_multiplier();
@@ -5804,6 +6019,7 @@ bool DrawGraphicsSettings(bool live) {
             changed = true;
         }
 
+        ImGui::BeginDisabled(owned_camera_settings_deferred);
         int animated_scenery =
             dkr::runtime::enhancements::animated_scenery_distance_multiplier();
         ImGui::TextUnformatted("Animated scenery distance");
@@ -5878,6 +6094,7 @@ bool DrawGraphicsSettings(bool live) {
         ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
         ImGui::TextWrapped("Expands DKR's original CPU visibility planes to the active viewport and adds a small guard band. Objects directly behind the camera still cull normally.");
         ImGui::PopStyleColor();
+        ImGui::EndDisabled();
 
     }
     changed = dkr::runtime::hud::editor::draw_settings(modern_profile,setting_width,
@@ -6112,6 +6329,24 @@ void DrawNetworkOverlay() {
     const SessionView view = session().presentation_view();
     std::vector<std::string> fields;
     char buffer[192]{};
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    const auto owned = experimental::runtime_view();
+    if (owned.active) {
+        std::snprintf(buffer, sizeof(buffer), "ONLINE EXPERIMENTAL  %u MS  DELAY %u",
+            view.network_rtt_ms, view.input_delay_frames);
+        fields.emplace_back(buffer);
+        if (g_network_overlay_detail >= 1) {
+            std::snprintf(buffer, sizeof(buffer), "SCENE EPOCH %llu  FRAME %u  CONFIRMED %u",
+                static_cast<unsigned long long>(owned.epoch), owned.frame, owned.confirmed);
+            fields.emplace_back(buffer);
+        }
+        if (g_network_overlay_detail >= 2) {
+            std::snprintf(buffer, sizeof(buffer), "ROLLBACKS %u  REPLAYED %u  WAIT %d",
+                owned.corrections, owned.replayed, int(owned.wait));
+            fields.emplace_back(buffer);
+        }
+    } else {
+#endif
     std::snprintf(buffer, sizeof(buffer), "ONLINE %s  %u MS",
         view.room.rules.synchronization == SynchronizationMode::ExperimentalRollback
             ? "EXPERIMENTAL"
@@ -6239,6 +6474,9 @@ void DrawNetworkOverlay() {
             static_cast<unsigned long long>(view.packets_received));
         fields.emplace_back(buffer);
     }
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    }
+#endif
     if (g_network_overlay_single_row && fields.size() > 1U) {
         std::string row = fields.front();
         for (std::size_t index = 1; index < fields.size(); ++index) {
@@ -6627,6 +6865,11 @@ bool OnlineWaitingActive(
         (view.launch_countdown_active &&
          view.launch_countdown_remaining_ms == 0U);
     return launch_wait ||
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        (dkr::runtime::netplay::experimental::runtime_view().active &&
+         dkr::runtime::netplay::experimental::runtime_view().wait!=dkr::runtime::netplay::experimental::PumpWait::None &&
+         dkr::runtime::netplay::experimental::runtime_view().wait!=dkr::runtime::netplay::experimental::PumpWait::FramePacing) ||
+#endif
         dkr::runtime::netplay::online_wait_reason() !=
             dkr::runtime::netplay::OnlineWaitReason::None;
 }
@@ -6664,6 +6907,22 @@ void DrawOnlineWaitingNotification(
         }
     }
 
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+    const auto owned=dkr::runtime::netplay::experimental::runtime_view();
+    if(owned.active) {
+        using dkr::runtime::netplay::experimental::PumpWait;
+        if(owned.initial_admission) {
+            reason=owned.status.c_str();
+            launch_wait=true;
+        } else switch(owned.wait) {
+        case PumpWait::OwnerInput: case PumpWait::Confirmation:reason="WAITING FOR CONFIRMED RACER INPUT";break;
+        case PumpWait::ScenePeers:reason="WAITING FOR RACERS AT THE SAME SCENE";break;
+        case PumpWait::ScenePreparation:reason="PREPARING THE SYNCHRONIZED SCENE";break;
+        case PumpWait::PresentationDrain:reason="RETIRING THE CORRECTED FRAME";break;
+        default:reason=nullptr;break;
+        }
+    }
+#endif
     static auto pending_since = std::chrono::steady_clock::time_point{};
     static dkr::runtime::netplay::OnlineWaitReason observed_reason =
         dkr::runtime::netplay::OnlineWaitReason::None;
@@ -9585,6 +9844,14 @@ void DrawAudioSettings(float width) {
 
     ImGui::Spacing();
     ImGui::SeparatorText("Island mix");
+    const bool owned_category_mix_deferred =
+        dkr::runtime::netplay::experimental::runtime_view().active;
+    if (owned_category_mix_deferred) {
+        ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
+        ImGui::TextWrapped("Experimental Rollback keeps the authored category mix. Your category preferences are preserved for single-player and legacy online modes. Master volume and output EQ remain local and live; independent category mixing is deferred.");
+        ImGui::PopStyleColor();
+    }
+    ImGui::BeginDisabled(owned_category_mix_deferred);
     const auto volume_slider = [&](const char* label, const char* id,
                                    float value, auto setter) {
         float percent = value * 100.0F;
@@ -9607,6 +9874,7 @@ void DrawAudioSettings(float width) {
     volume_slider("Nature and ambience", "##audio-nature",
                   dkr::runtime::audio::nature_volume(),
                   dkr::runtime::audio::set_nature_volume);
+    ImGui::EndDisabled();
 
     if (dkr::runtime::enhancements::modern_options_visible(
             dkr::runtime::enhancements::presentation_profile())) {
@@ -10852,14 +11120,15 @@ void dkr::runtime::ui::persist_graphics_api_fallback() {
 }
 
 dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
-    SDL_Window* window, const std::filesystem::path& preselected_rom) {
+    SDL_Window* window, const std::filesystem::path& preselected_rom,
+    bool software_failure_recovery) {
     StartupResult result{};
     if (window == nullptr) {
         return result;
     }
     dkr::runtime::startup_performance::mark("launcher-enter");
 
-    window = static_cast<SDL_Window*>(dkr::runtime::platform::prepare_window_for_launcher());
+    window = static_cast<SDL_Window*>(dkr::runtime::platform::prepare_window_for_launcher(software_failure_recovery));
     if (!window) return result;
     SDL_SetWindowTitle(window, "DKR-R - Diddy Kong Racing Recompiled");
     const auto launcher_renderer_started_at =
@@ -10871,17 +11140,59 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     // on the software backend and let RT64 take over the same window directly.
     SDL_Renderer* renderer = nullptr;
     const char* accelerated_launcher = SDL_getenv("DKR_LINUX_ACCELERATED_LAUNCHER");
-    if (accelerated_launcher && std::string_view(accelerated_launcher) == "1" &&
+    if (!software_failure_recovery && accelerated_launcher && std::string_view(accelerated_launcher) == "1" &&
         !(SDL_GetWindowFlags(window) & SDL_WINDOW_VULKAN)) {
         renderer = SDL_CreateRenderer(window, -1,
             SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     }
     if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
 #else
-    SDL_Renderer* renderer = SDL_CreateRenderer(
-        window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    SDL_Renderer* renderer = nullptr;
+    struct ReturnFramebufferHint {
+        std::optional<std::string> previous;
+        bool active=false;
+        void disable_acceleration() {
+            const char* hint=SDL_GetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION);
+            if(hint)previous=hint;
+            active=true;
+            SDL_SetHintWithPriority(SDL_HINT_FRAMEBUFFER_ACCELERATION,"0",SDL_HINT_OVERRIDE);
+        }
+        ~ReturnFramebufferHint() {
+            if(!active)return;
+            if(previous)SDL_SetHintWithPriority(SDL_HINT_FRAMEBUFFER_ACCELERATION,previous->c_str(),SDL_HINT_OVERRIDE);
+            else SDL_ResetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION);
+        }
+    } return_framebuffer_hint;
+    // An experimental return (graceful or failed) has retired both native GPU
+    // owners. Do not recreate the D3D9 presentation path that an injected RTSS
+    // hook crashed on in the Oct 2 host dumps. Initial startup, legacy returns
+    // and RT64 settings are unaffected.
+    if (!software_failure_recovery) {
+        renderer = SDL_CreateRenderer(
+            window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    }
+#if defined(_WIN32)
+    else {
+        // Select D3D11 explicitly on the FRESH return window, never D3D9.
+        // Passing -1 for software is not enough: SDL may accelerate its window
+        // framebuffer internally with the same D3D9 path that crashed before.
+        for(int driver=0;driver<SDL_GetNumRenderDrivers();++driver) {
+            SDL_RendererInfo info{};
+            if(SDL_GetRenderDriverInfo(driver,&info)==0&&info.name&&std::string_view(info.name)=="direct3d11") {
+                renderer=SDL_CreateRenderer(window,driver,SDL_RENDERER_ACCELERATED|SDL_RENDERER_PRESENTVSYNC);
+                break;
+            }
+        }
+    }
+#endif
     if (renderer == nullptr) {
+        // Retain the hint through resize and renderer destruction, not just
+        // initial creation: SDL can recreate its framebuffer after a resize.
+        if(software_failure_recovery)return_framebuffer_hint.disable_acceleration();
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+        // The software window surface is created on first drawing, not
+        // necessarily in CreateRenderer. Materialize it under the GDI hint.
+        if(renderer&&software_failure_recovery)SDL_GetWindowSurface(window);
     }
 #endif
     dkr::runtime::startup_performance::report(
@@ -10899,6 +11210,11 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                      (renderer_info.flags & SDL_RENDERER_ACCELERATED) != 0 ? "yes" : "no",
                      static_cast<unsigned>(SDL_GetWindowFlags(window)));
     }
+    const bool bounded_software_return=software_failure_recovery&&
+        (renderer_info.flags&SDL_RENDERER_ACCELERATED)==0;
+    if(software_failure_recovery)std::fprintf(stderr,
+        "[rollback][recovery] fresh launcher return renderer=%s bounded-software=%d\n",
+        renderer_info.name?renderer_info.name:"unknown",int(bounded_software_return));
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -10931,7 +11247,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                  launcher_quiet_refresh_rate);
 
     LauncherBackgroundTexture launcher_background =
-        LoadLauncherBackground(renderer);
+        LoadLauncherBackground(renderer, bounded_software_return);
     dkr::runtime::startup_performance::report(
         "launcher-assets-load", launcher_assets_started_at);
     const auto launcher_animation_epoch = std::chrono::steady_clock::now();
@@ -10957,6 +11273,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     std::uint64_t launcher_peak_vertices = 0U;
     std::uint64_t launcher_ui_build_microseconds = 0U;
     std::uint64_t launcher_present_microseconds = 0U;
+    auto launcher_recovery_reported_at = launcher_animation_epoch;
+    std::uint64_t launcher_recovery_reported_frames = 0U;
+    std::uint64_t launcher_recovery_reported_present_us = 0U;
 
     std::filesystem::path selected_rom;
     g_mod_browser_revision=0;
@@ -11107,6 +11426,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                             online.disconnect(
                                 "Applying the authenticated host compatibility offer.");
                             online.configure_manifest(candidate);
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+                            online.enable_owned_backend(dkr::runtime::netplay::experimental::runtime_available(matching_rom->second.revision));
+#endif
                             std::vector<std::uint8_t> canonical_save;
                             std::string save_error;
                             dkr::runtime::saves::canonical_adventure_bytes(
@@ -11182,6 +11504,11 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         // launcher, its window, input routing and online session alive for
         // every supported revision; the matching game engine is selected only
         // after the player explicitly starts the game.
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        if (rom_ready && online_manifest_identity.supported() &&
+            dkr::runtime::netplay::session().view().state == dkr::runtime::netplay::ConnectionState::Offline)
+            dkr::runtime::netplay::session().enable_owned_backend(dkr::runtime::netplay::experimental::runtime_available(online_manifest_identity.revision));
+#endif
         if (rom_ready && !online_manifest &&
             online_manifest_identity.supported() &&
             dkr::runtime::netplay::session().view().state ==
@@ -11406,7 +11733,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         // it wastes a full software-rendered viewport every frame.
         BeginMainWindow("DKR-R Startup", ImGuiWindowFlags_NoBackground);
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::begin, &background_profile);
-        DrawLauncherBackdrop(launcher_background, renderer, launcher_background_scroll);
+        DrawLauncherBackdrop(launcher_background, renderer, launcher_background_scroll,
+                             bounded_software_return);
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::end, &background_profile);
 #if defined(__ANDROID__)
         dkr::runtime::mobile::menu(page, false, request_restart_popup, request_quit_popup);
@@ -11559,6 +11887,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             ImGui::Dummy({0.0F, 12.0F});
             DrawSaveManager(false);
         } else if (page == kPageOnlineMp) {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+            g_online_experimental_rom=selected_rom;
+#endif
             DrawOnlinePage(right_inner_width, true, rom_ready);
         } else if (page == kPageModsHacks) {
             DrawModsHacks(right_inner_width);
@@ -11663,7 +11994,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         SDL_SetRenderDrawColor(renderer, 6, 9, 14, 255);
         SDL_RenderClear(renderer);
         RenderLauncherDrawData(renderer, launcher_draw_data, launcher_profile,
-                               launcher_panel_cache);
+                               launcher_panel_cache, bounded_software_return);
         // SDL's software backend normally executes its queued drawing inside
         // Present. Flush only in the opt-in profiler to separate those costs.
         if (launcher_profile.enabled()) SDL_RenderFlush(renderer);
@@ -11677,8 +12008,24 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                                            launcher_present_started).count());
         ++launcher_rendered_frames;
         if (launcher_rendered_frames == 1U) {
+            if(software_failure_recovery&&!(SDL_GetWindowFlags(window)&(SDL_WINDOW_HIDDEN|SDL_WINDOW_MINIMIZED))) {
+                SDL_RaiseWindow(window);SDL_PumpEvents();
+            }
             dkr::runtime::startup_performance::mark(
                 "launcher-first-frame-presented");
+        }
+        if (software_failure_recovery && launcher_present_finished - launcher_recovery_reported_at >=
+            std::chrono::seconds{5}) {
+            const auto frames = launcher_rendered_frames - launcher_recovery_reported_frames;
+            const auto draw_us = launcher_present_microseconds - launcher_recovery_reported_present_us;
+            std::fprintf(stderr,
+                "[rollback][recovery] launcher-responsive frames=%llu avg-draw=%.3fms panel-cache-hits=%llu\n",
+                static_cast<unsigned long long>(frames),
+                frames ? double(draw_us)/double(frames)/1000.0 : 0.0,
+                static_cast<unsigned long long>(launcher_panel_cache.hits()));
+            launcher_recovery_reported_at = launcher_present_finished;
+            launcher_recovery_reported_frames = launcher_rendered_frames;
+            launcher_recovery_reported_present_us = launcher_present_microseconds;
         }
         if (ImGui::IsAnyItemActive()) {
             launcher_last_activity = launcher_present_finished;
@@ -11817,6 +12164,12 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         online_session_view.launch_countdown_remaining_ms > 0U;
     const bool show_online_waiting = OnlineWaitingActive(online_session_view);
     const bool show_mipmap_loading = RT64::mipLoadingVisible();
+    const bool keep_owned_ui =
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        dkr::runtime::netplay::experimental::runtime_view().active;
+#else
+        false;
+#endif
     if (
 #if defined(__ANDROID__)
         false && // Touch Menu remains available, even when all other overlays are off.
@@ -11825,7 +12178,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         !show_online_failure_modal &&
         !show_online_notification &&
         !show_network && !show_controller_input && !show_online_countdown &&
-        !show_online_waiting && !show_mipmap_loading) {
+        !show_online_waiting && !show_mipmap_loading && !keep_owned_ui) {
         if (application.presentQueue->inspector != nullptr) {
             detach(application);
         }
@@ -12217,3 +12570,54 @@ void dkr::runtime::ui::reset_lifecycle_request() {
 void dkr::runtime::ui::report_mod_error(std::string error) {
     g_mod_launch.report_error(std::move(error));
 }
+
+void dkr::runtime::ui::report_online_game_end(std::string message, bool lobby_retained) {
+    g_page_navigation_request = kPageOnlineMp;
+    g_online_page.section = lobby_retained ? OlSection::Lobby : OlSection::Play;
+    g_online_page.was_active = lobby_retained;
+    g_online_page.was_joining = false;
+    g_online_page.open_match_end = true;
+    g_online_page.match_end_lobby_retained = lobby_retained;
+    g_online_page.match_end_notice = std::move(message);
+    g_online_error_notification.clear();
+    g_online_failure_modal_requested = false;
+    g_online_failure_modal_active = false;
+}
+
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identity,bool host,unsigned players,std::string& error) {
+    auto& online=netplay::session();
+    if(!identity.supported()||players<2||players>4||!online.enable_owned_backend(netplay::experimental::runtime_available(identity.revision))) {
+        error="Invalid isolated owned online check.";return false;
+    }
+    // This function is reachable only after the NEW isolated-profile check.
+    // Compare the public Modern preset without altering a real user's setup.
+    if(const char* modern=std::getenv("DKR_OWNED_CHECK_MODERN");modern&&std::string_view(modern)=="1") {
+        auto config=ultramodern::renderer::get_graphics_config();
+        enhancements::set_presentation_profile(enhancements::PresentationProfile::Modern);
+        ApplyProfileGraphics(config,enhancements::PresentationProfile::Modern);
+        if(const char* api=std::getenv("DKR_OWNED_CHECK_API");api&&std::string_view(api)=="Vulkan")
+            config.api_option=GraphicsApi::Vulkan;
+        // Private isolated checks only: an explicit comparable FPS target.
+        if(const char* rate=std::getenv("DKR_OWNED_CHECK_FPS")) {
+            const std::string_view text(rate);
+            if(text=="60"||text=="120"||text=="180") {
+                config.rr_option=ultramodern::renderer::RefreshRate::Manual;
+                config.rr_manual_value=std::atoi(rate);
+            }
+        }
+        ultramodern::renderer::set_graphics_config(config);
+    }
+    online.configure_manifest(BuildNetplayManifest(identity));
+    // The diagnostic requires a new, empty profile. Seed only the in-memory
+    // session save; never create or replace a single-player save for this check.
+    auto bytes=saves::codec::blank_bytes();
+    online.configure_session_save(std::move(bytes),saves::install_synchronized_online_adventure);
+    if(!host)return true;
+    g_online_experimental_rollback=true;g_online_maximum_players=int(players);
+    g_online_automatic_delay=false;g_online_manual_delay=1;g_online_rollback_window=6;
+    g_online_save_seed_mode=int(saves::OnlineSaveSeedMode::Fresh);
+    if(!CreateOnlineLobby()){error=g_online_action_status;return false;}
+    return true;
+}
+#endif

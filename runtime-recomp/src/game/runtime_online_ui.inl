@@ -865,6 +865,9 @@ struct OnlinePageState {
     bool open_block = false;
     bool open_remove = false;
     bool open_results = false;
+    bool open_match_end = false;
+    bool match_end_lobby_retained = false;
+    std::string match_end_notice;
     std::uint32_t observed_test_generation = 0U;
     std::uint32_t countdown_second = 0U;
     double countdown_changed_at = -10.0;
@@ -1929,7 +1932,11 @@ void DrawOlHostSettings(float width) {
             "Host guides menus until character select", "Host controls shared menus", "Every assigned port"};
         static const std::vector<std::string> racers{"2", "3", "4"};
         static const std::vector<std::string> modes{"Host prediction (legacy Rollback)", "Strict input sync (Lockstep)",
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+                                                     "Experimental rollback"};
+#else
                                                      "Experimental rollback (in development)"};
+#endif
         PaddockGap(16.0F);
         changed |= OlSelect("menu-ownership", "Menu ownership", &g_online_host_control, ownership, inner);
         PaddockGap(16.0F);
@@ -1949,8 +1956,16 @@ void DrawOlHostSettings(float width) {
         }
         PaddockGap(16.0F);
         if (CurrentOnlineSynchronization() == SynchronizationMode::ExperimentalRollback) {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+            changed |= OlRange("experimental-window", "Rollback prediction window (frames)", &g_online_rollback_window, 2, 20, inner);
+            OlParagraph("Uses this lobby, Quick Join, friend invites, countdown, controls and online-only save. "
+                        "Late actual inputs are corrected by replaying owned game state. The previous backends remain available. "
+                        "This candidate currently requires US v 1.0 and unmodded gameplay; whole-game release qualification is pending.",
+                        14.0F,kOlSoft,inner,true);
+#else
             OlParagraph(dkr::runtime::netplay::experimental::runtime_admission_error(SynchronizationMode::ExperimentalRollback),
                         14.0F, kOlError, inner, true);
+#endif
             PaddockGap(8.0F);
             if (OlButton("Use previous online mode", OlTone::Plain, inner)) {
                 g_online_experimental_rollback = false;
@@ -3006,7 +3021,9 @@ void DrawOlStartBar(float width, const OnlineFrame& frame) {
     const bool input_available = dkr::runtime::platform::player_controller_status(profile).connected ||
                                  dkr::runtime::input::keyboard_player() == static_cast<int>(profile);
     std::string hint;
-    if (!local_ready && !input_available) {
+    if (view.owned_match_ending) {
+        hint = "Ending the previous match and verifying its online save. Please wait...";
+    } else if (!local_ready && !input_available) {
         hint = "Connect a controller or assign the keyboard to Player " + std::to_string(profile + 1U) +
                " before readying.";
     } else if (total < 2U) {
@@ -3109,9 +3126,12 @@ void DrawOlCountdown(ImVec2 a, ImVec2 b, const OnlineFrame& frame) {
     for (std::uint32_t light = 0U; light < 5U; ++light) lights.push_back(light < 5U - second ? 3 : 0);
     const float lights_width = 12.0F * 2.0F + 28.0F * 5.0F + 12.0F * 4.0F;
     DrawOlLights(draw, {std::round((a.x + b.x - lights_width) * 0.5F), y}, lights, 28.0F, 12.0F);
-    // The lobby shows the countdown; the launcher-wide window can stay away.
+    // A partially clipped lobby countdown still owns this frame. Requiring
+    // the entire panel inside the clip rectangle also drew the fallback popup
+    // on shorter/scrolled windows, leaving two countdowns on screen.
+    // Keep the fallback when the lobby countdown is completely off screen.
     const ImRect clip(draw->GetClipRectMin(), draw->GetClipRectMax());
-    if (clip.Contains(ImRect(a, b))) g_online_countdown_panel_frame = ImGui::GetFrameCount();
+    if (clip.Overlaps(ImRect(a, b))) g_online_countdown_panel_frame = ImGui::GetFrameCount();
 }
 
 void DrawOlLobby(float width, const OnlineFrame& frame) {
@@ -3455,11 +3475,24 @@ void DrawOlModals(const OnlineFrame& frame) {
     constexpr const char* kRemove = "Remove friend?";
     constexpr const char* kResults = "Session pre-flight results";
     constexpr const char* kManage = "###online-manage-friend";
+    constexpr const char* kMatchEnd = "Online match ended";
+    if (std::exchange(state.open_match_end, false)) ImGui::OpenPopup(kMatchEnd);
     if (std::exchange(state.open_close, false)) ImGui::OpenPopup(kClose);
     if (std::exchange(state.open_block, false)) ImGui::OpenPopup(kBlock);
     if (std::exchange(state.open_remove, false)) ImGui::OpenPopup(kRemove);
     if (std::exchange(state.open_results, false)) ImGui::OpenPopup(kResults);
     if (std::exchange(state.open_manage, false)) ImGui::OpenPopup(kManage);
+
+    if (BeginOlDialog(kMatchEnd)) {
+        ImGui::TextWrapped("%s", state.match_end_notice.c_str());
+        ImGui::Dummy({0.0F, 12.0F});
+        ImGui::TextWrapped("%s", state.match_end_lobby_retained
+            ? "The remaining racers are back in this lobby. Once the online save is verified, everyone can Ready and the host can start again. Single-player saves are unchanged."
+            : "The host's lobby has closed. You can create or join another lobby without restarting DKR-R. Single-player saves are unchanged.");
+        if (DrawOlDialogActions({{state.match_end_lobby_retained ? "BACK TO LOBBY" : "BACK TO ONLINE"}}) >= 0)
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (BeginOlDialog(kClose)) {
         ImGui::TextWrapped("Everyone in the lobby will be disconnected and the code will stop working.");
@@ -3732,7 +3765,7 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     const bool joining = active && !view.host &&
                          (view.state == ConnectionState::Connecting || view.state == ConnectionState::AwaitingApproval);
     const bool in_lobby = active && !joining;
-    const bool busy = view.connection_test_active || view.launch_countdown_active ||
+    const bool busy = view.owned_match_ending || view.connection_test_active || view.launch_countdown_active ||
                       view.launch_stage != LaunchStage::Idle || view.state == ConnectionState::Loading ||
                       view.state == ConnectionState::Running;
     const int maximum = std::clamp<int>(view.room.rules.maximum_players, 2, static_cast<int>(view.room.players.size()));

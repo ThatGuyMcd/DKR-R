@@ -1,0 +1,61 @@
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -5,1 +5,2 @@
++#include "netplay/experimental_present_gate.hpp"
++#include "local_scenery_texture_scope.hpp"
+ #include "rt64_state.h"
+@@ -644,4 +646,9 @@
+     void State::fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor) {
++        dkr::runtime::local_scenery::TextureReplayScope localTextures(*rdp,
++            dkr::runtime::netplay::experimental::present_gate::scoped_color_address(this) != 0);
+         auto loadOperation = [&](uint32_t loadOpIndex) {
+             const auto &loadOp = workload.drawData.loadOperations[loadOpIndex];
++            // Only native resources occupy this range in an owned decoder.
++            // Ordinary guest loads still use the unmodified texture path.
++            localTextures.before_load(loadOp.texture.address);
+ 
+             // For emulating how Rice hashes textures, we need information about the load operation that was performed in the particular TMEM address.
+@@ -778,3 +785,4 @@
+                         rdpTileCursor++;
+                     }
+                 }
++                localTextures.after_call();
+             }
+         }
+@@ -1820,2 +1821,16 @@
++        // Owned Console presentation has an explicit reviewed VI target.
++        // Capture it on this workload instead of consulting a prior async VI.
++        const uint32_t ownedColorAddress = dkr::runtime::netplay::experimental::present_gate::scoped_color_address(this);
++        if (ownedColorAddress != 0) {
++            for (int32_t f = workload.fbPairCount - 1; f >= 0; f--) {
++                const FramebufferPair &pair = workload.fbPairs[f];
++                if (pair.earlyPresentCandidate() && !pair.drawColorRect.isEmpty() &&
++                    pair.colorImage.address == ownedColorAddress &&
++                    pair.colorImage.width == 320 && pair.colorImage.siz == G_IM_SIZ_16b) {
++                    workload.earlyPresentApproved = true;
++                    workload.earlyPresentColorAddress = ownedColorAddress;
++                    break;
++                }
++            }
++        }
+         // Advance the workload queue at the end of a full synchronization.
+         advanceWorkload(workload, false);
+@@ -1916,3 +1931,3 @@
+-        if (fromEarlyPresent) {
++        if (fromEarlyPresent || dkr::runtime::netplay::experimental::present_gate::scoped_color_address(this) != 0) {
+             // Bind the presentation decision to the exact workload that
+             // produced this early-present event. A global latest-workload
+@@ -2719,3 +2734,5 @@
+     void State::advanceWorkload(Workload &workload, bool paused) {
+         workload.workloadId = ++workloadId;
++        dkr::runtime::netplay::experimental::present_gate::tag_workload(
++            this, &workload, workload.workloadId, paused);
+         workload.presentId = presentId;
+@@ -2726,4 +2727,6 @@
+     void State::advancePresent(Present &present, bool paused) {
+         present.presentId = ++presentId;
+         present.workloadId = workloadId;
++        dkr::runtime::netplay::experimental::present_gate::tag(
++            this, &present, present.presentId, present.workloadId);
+         present.paused = paused;

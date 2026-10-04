@@ -63,7 +63,7 @@ std::optional<std::uint8_t> Lobby::join(
     return std::nullopt;
 }
 
-bool Lobby::leave(std::string_view peer_id) {
+bool Lobby::leave(std::string_view peer_id, bool compact_slots) {
     Player* player = find(peer_id);
     if (!player) {
         return false;
@@ -78,7 +78,7 @@ bool Lobby::leave(std::string_view peer_id) {
         return true;
     }
     *player = {};
-    normalize_slots();
+    if (compact_slots) normalize_slots();
     invalidate_ready();
     return true;
 }
@@ -222,6 +222,12 @@ bool Lobby::begin_running(std::string_view host_peer_id, std::string& error) {
 
 void Lobby::return_to_waiting() {
     room_.phase = RoomPhase::Waiting;
+    invalidate_ready();
+}
+
+void Lobby::refresh_online_save_hash(std::uint64_t hash) {
+    if (room_.phase != RoomPhase::Waiting || !hash) return;
+    room_.manifest.session_save_hash = hash;
     invalidate_ready();
 }
 

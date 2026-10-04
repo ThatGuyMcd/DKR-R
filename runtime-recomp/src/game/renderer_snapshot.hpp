@@ -16,6 +16,7 @@ public:
                           std::uint8_t*& state_rdram,
                           std::uint8_t* submission_rdram);
     ~RendererSnapshotScope();
+    void restore() noexcept;
 
     RendererSnapshotScope(const RendererSnapshotScope&) = delete;
     RendererSnapshotScope& operator=(const RendererSnapshotScope&) = delete;
@@ -25,6 +26,7 @@ private:
     std::uint8_t*& state_rdram_;
     std::uint8_t* original_core_ = nullptr;
     std::uint8_t* original_state_ = nullptr;
+    bool restored_=false;
 };
 
 } // namespace dkr::runtime

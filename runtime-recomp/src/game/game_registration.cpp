@@ -5,6 +5,9 @@
 #include "runtime_netplay.hpp"
 #include "runtime_save_routing.hpp"
 #include "runtime_legacy_mods.hpp"
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "replay_probe_capture.hpp"
+#endif
 
 #include "librecomp/game.hpp"
 #include "ultramodern/ultramodern.hpp"
@@ -41,7 +44,22 @@ void RunDkrEntrypoint(std::uint8_t* rdram, recomp_context* context) {
 
     dkr::runtime::saves::reset_runtime_online_save_status();
     const auto online = dkr::runtime::netplay::session().runtime_view();
-    if (online.active) {
+    if (
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        dkr_experimental_bootstrap_active()
+#else
+        false
+#endif
+    ) {
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        std::string error;
+        if (!dkr_experimental_bootstrap_activate_save(error)) {
+            std::fprintf(stderr,"[rollback][boot] Online EEPROM activation refused: %s\n",error.c_str());
+            ultramodern::quit();return;
+        }
+        std::fprintf(stderr,"[rollback][boot] verified online EEPROM active before retail initialization\n");
+#endif
+    } else if (online.active) {
         if (!online.launch_descriptor) {
             dkr::runtime::netplay::session().fail_runtime_start(
                 "The online launch has no authenticated match descriptor.");

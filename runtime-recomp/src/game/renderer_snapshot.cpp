@@ -10,6 +10,11 @@ dkr::runtime::RendererSnapshotScope::RendererSnapshotScope(
 }
 
 dkr::runtime::RendererSnapshotScope::~RendererSnapshotScope() {
+    restore();
+}
+void dkr::runtime::RendererSnapshotScope::restore() noexcept {
+    if(restored_)return;
     state_rdram_ = original_state_;
     core_rdram_ = original_core_;
+    restored_=true;
 }

@@ -7,6 +7,22 @@ namespace dkr::runtime::presentation {
 inline constexpr std::uint32_t kCanonicalViWidth = 320U;
 inline constexpr std::uint32_t kCanonicalViHeight = 240U;
 
+// DKR's NTSC LPN1 VI uses ORIGIN(640), then fb_init_vi enables divot and
+// dither filtering and disables gamma (libultra also clears the AA mode).
+// VI origin is a scanout pointer, NOT the color-image base: RT64::VI::fbAddress
+// removes this one 16-bit scanline before finding the high-resolution target.
+inline constexpr std::uint32_t kRetailNtscViStatus = 0x00013016U;
+constexpr std::uint32_t retail_ntsc_vi_origin(std::uint32_t color_image) {
+    return (color_image & 0x007FFFFFU) + kCanonicalViWidth * 2U;
+}
+
+// Native VI scheduling owns a live buffer history. An immutable owned frame
+// instead specifies the exact VI it must present; history-based early present
+// can select another scene's buffer and bypass that explicit VI entirely.
+constexpr bool present_from_vi_history(bool owned_frame) {
+    return !owned_frame;
+}
+
 // gDPSetScissor stores its lower-right corner in quarter-pixel units and
 // treats that corner as exclusive. DKR's full-frame clear incorrectly emits
 // (width - 1, height - 1), which leaves the final framebuffer row and column

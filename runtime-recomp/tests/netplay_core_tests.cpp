@@ -176,10 +176,10 @@ int main() {
     assert(!live_replica_within_recovery_window(100U, 149U));
 
     assert(rollback_replica_target_debt(0U, 0U, 5U) == 2U);
-    assert(rollback_replica_target_debt(100U, 10U, 5U) == 4U);
+    assert(rollback_replica_target_debt(100U, 10U, 5U) == 2U);
     assert(rollback_replica_target_debt(500U, 100U, 5U) == 7U);
     assert(authored_timeline_target_debt(0U, 0U, 2U) == 2U);
-    assert(authored_timeline_target_debt(100U, 10U, 5U) == 4U);
+    assert(authored_timeline_target_debt(100U, 10U, 5U) == 2U);
     assert(authored_timeline_target_debt(500U, 100U, 5U) == 7U);
     assert(authored_catch_up_budget(1U, 2U, 6U, 6U) == 1U);
     // A client may be several commits behind after an OS/GPU scheduling
@@ -271,7 +271,7 @@ int main() {
     assert(host_authoritative_input_delay_frames(
                0.0, 0.0, 0.0F, true) == 2U);
     assert(host_authoritative_input_delay_frames(
-               0.0, 0.0, 0.0F, false) == 3U);
+               0.0, 0.0, 0.0F, false) == 2U);
     assert(host_authoritative_input_delay_frames(
                100.0, 10.0, 0.0F, false) == 5U);
     assert(host_authoritative_input_delay_frames(

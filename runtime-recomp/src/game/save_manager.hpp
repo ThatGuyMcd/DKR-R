@@ -51,12 +51,19 @@ bool install_synchronized_online_adventure(
     std::span<const std::uint8_t> bytes,
     std::filesystem::path& installed_path,
     std::string& error);
+bool bind_staged_host_online_adventure(std::uint64_t match_id,std::string& error);
+void discard_staged_host_online_adventure();
 bool read_online_adventure(bool host, std::uint64_t match_id,
                            std::vector<std::uint8_t>& bytes,
                            std::filesystem::path& path,
                            std::string& error);
 std::filesystem::path online_adventure_subfolder(bool host,
                                                   std::uint64_t match_id);
+// Confirmed-only owned backend persistence. Never resolves a SP path.
+bool commit_online_adventure(bool host,std::uint64_t match_id,
+                             std::span<const std::uint8_t> bytes,std::string& error);
+bool read_experimental_online_paks(bool host,std::uint64_t match_id,std::vector<std::uint8_t>& images,std::string& error);
+bool commit_experimental_online_paks(bool host,std::uint64_t match_id,std::span<const std::uint8_t> images,std::string& error);
 
 SaveInfo controller_pak_info(int channel);
 std::vector<std::filesystem::path> controller_pak_backups(int channel);

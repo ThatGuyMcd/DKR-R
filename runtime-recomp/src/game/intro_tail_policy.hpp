@@ -18,6 +18,32 @@ class TailGate {
 public:
     static constexpr std::uint32_t kTailUpdateUnits = 30U;
 
+    // Canonical checkpoint fields, not this object's padded host representation.
+    // The live runtime's update/reset behaviour is unchanged. The isolated
+    // rollback owner uses these fields to rewind the latched completion edge.
+    struct Snapshot {
+        std::uint32_t phase = 0U;
+        std::uint32_t held_update_units = 0U;
+    };
+
+    [[nodiscard]] constexpr Snapshot capture() const {
+        return {static_cast<std::uint32_t>(state_), held_update_units_};
+    }
+
+    [[nodiscard]] static constexpr bool valid(Snapshot value) {
+        return (value.phase == 0U && value.held_update_units == 0U) ||
+               (value.phase == 1U && value.held_update_units >= 1U &&
+                                    value.held_update_units <= kTailUpdateUnits) ||
+               (value.phase == 2U && value.held_update_units == kTailUpdateUnits);
+    }
+
+    [[nodiscard]] constexpr bool restore(Snapshot value) {
+        if (!valid(value)) return false;
+        state_ = static_cast<State>(value.phase);
+        held_update_units_ = value.held_update_units;
+        return true;
+    }
+
     [[nodiscard]] constexpr TailAction update(bool cinematic_complete,
                                                bool first_title_demo,
                                                bool title_revealed,

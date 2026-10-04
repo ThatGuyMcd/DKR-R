@@ -1,0 +1,80 @@
+DKR-R 1.0.5 Beta 15 - Playtest 7 CPU follow-up
+===========================================
+
+Scope and honesty
+-----------------
+This is another bounded performance candidate, NOT completion of the approved
+five-phase graphics plan. In particular, independent Camera & Scenery parity
+and restoration of discarded tree tops are NOT implemented here. Playtest 5
+remains the user-accepted rollback point; Playtest 6 packages are preserved too.
+Every participant in an Experimental Rollback match must use this same build.
+
+Changes
+-------
+1. Normal experimental ticks no longer calculate two unused PRIVATE rendering
+   qualification hashes. One scanned all 16 MiB of guest RAM per authored tick
+   and again per correction. At 30 ticks/s this duplicate scan alone read
+   480 MiB/s before corrections. That is a source-derived amount of redundant
+   work removed, NOT a measured FPS or CPU-temperature improvement.
+   The playable adapter already disables retention of private proof journals.
+   Private qualification mode still computes both hashes. Full rollback state
+   capture, checkpoint/network hashes, confirmation and replay checks remain.
+   The DKGV descriptor retains its original length and field offsets; production
+   writes and validates zero in the two private proof fields.
+2. Checked guest memory accesses no longer write then clear failure-only address
+   and source-location fields on every successful access. The failure path sets
+   them before returning through the existing failure boundary. Sign extension,
+   bounds, lane/alignment, operation budgets and counters are still checked.
+   Watchpoint source tracking remains when the private watchpoint is enabled.
+3. The owned presentation identity consumer reuses bounded contiguous hash-table
+   storage rather than allocating/deleting hash-map nodes and marker vectors
+   each task. Values remain owned, duplicate precedence and marker order remain
+   unchanged, and malformed optional sidecars still fall back to discrete draw.
+   The normal offline/legacy identity path is unchanged.
+4. Composite effect journals reserve their required sizes before writing, and
+   the initial object-event encoding uses the existing output vector's capacity.
+   Nested output/save/Pak/magic/rumble ordering and admission checks are unchanged.
+   This does NOT remove every journal copy or every allocation in the backend.
+5. Optional timing now separates guest tick, audio DSP, effect-journal assembly,
+   private video proof and identity construction. It remains off by default.
+   Nested timings overlap and must not be added together as independent stages.
+6. The existing owned backend contract includes the checked-memory bridge and
+   driver sources. A participant with the older implementation cannot join a
+   new-build session. Stable backend protocol/version behavior is unchanged.
+
+Remaining scenery work: concrete evidence
+----------------------------------------
+The user identified Whale Bay and Pirate Lagoon. Read-only retail v77 assets
+confirm PalmTreeTop, PalmTreeTopChea and Beachtree headers carry FLAG_0040.
+The retail object loader treats this as NO_MULTIPLATER and frees these objects
+for two or more active players, before renderer commands can contain them.
+
+Whale Bay's object map 8 contains 12 PalmTreeTopChea entries; one has solid=1.
+Pirate Lagoon's object map 4 contains 11 Beachtree entries; all have nonzero
+solid values. Scenery initialization creates an interaction hitbox when solid
+is nonzero, and the scenery loop can trigger collision feedback/sound/particles.
+Simply bypassing the deletion or forcing these guest actors to stay alive would
+not be a visual-only fix. These counts describe the extracted v77 assets only;
+the corresponding v80 resource mapping is not yet qualified.
+
+A safe restoration must own immutable visual resources, handle their native
+sprite/model/material forms, and submit them per viewport without adding actor
+collision/update logic or reading local preferences into checkpointed state.
+Resource deletion/reuse, transparency/depth order, animated textures, camera
+identity, texture packs and corrected/changed scene retirement must all be
+handled. No second whole-guest draw pass has been added to increase CPU load.
+See the included LOCAL-SCENERY-STATUS.txt for the evidence and remaining work.
+
+Qualification and next user check
+--------------------------------
+This pass uses compilation/static checks only. No launcher/game/probe/test
+executable or packaged-runtime self-test is run autonomously. User gameplay
+qualification is still required; compilation cannot prove visual correctness,
+real WAN stability, or a steady 180 FPS.
+
+Enable Graphics -> Camera and scenery -> Experimental performance diagnostics
+before a fresh three-player session. Compare the same track, graphics settings
+and 180 FPS target before/after the first racer finishes, and through a cutscene.
+Close normally and share host and client runtime.log files. The retained scene,
+frame-interval, history and new guest-tick/audio/identity timings separate CPU
+cost from presentation skips/corrections. All players must use Playtest 7.
