@@ -414,7 +414,14 @@ def audio_rsp_payload(rsp_source=None):
         source_path = (rsp_source / Path(name).name) if rsp_source is not None and name.startswith("runtime-recomp/RecompiledRSP/") else root/name
         raw = source_path.read_bytes()
         if hashlib.sha256(raw).hexdigest() != expected:
-            raise ValueError(f"Unreviewed private audio RSP input: {name}")
+            # The reviewed Windows-generated input uses CRLF, whereas a Git
+            # checkout may contain LF. Admit only newline-equivalent bytes
+            # that reconstruct the SAME existing pinned input; never relax
+            # the source-content gate or rewrite a protected input file.
+            pinned_newlines = raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+            if hashlib.sha256(pinned_newlines).hexdigest() != expected:
+                raise ValueError(f"Unreviewed private audio RSP input: {name}")
+            raw = pinned_newlines
         sources[Path(name).name] = raw.decode()
     header = sources["rsp.hpp"]
     header = header.replace('#include "ultramodern/ultra64.h"',

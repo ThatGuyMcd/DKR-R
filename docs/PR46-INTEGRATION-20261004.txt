@@ -53,6 +53,11 @@ Both retail CPU revisions and the owned v77 payload are regenerated into NEW
 build-owned output directories. Protected dependency and generated-source
 inputs are read-only. Source hash gates remain enabled.
 
+The RSP input gate accepts LF checkouts only when converting their line endings
+back to CRLF reconstructs the exact existing pinned bytes. Protected files are
+never rewritten. Regeneration from the fresh checkout is compared byte-for-byte
+with the payload used for both builds; this does not admit new RSP source code.
+
 The two new custom-music hooks have explicit no-custom-content identities in
 the owned world. This is NOT support for online custom mods/music. Unknown
 native imports remain blocked. The source audit pins the reviewed custom
