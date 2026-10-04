@@ -23,7 +23,7 @@ import traceback
 import bpy
 
 _HERE = os.path.dirname(os.path.abspath(bpy.data.filepath or __file__))
-if not os.path.isdir(os.path.join(_HERE, "..", "dkr_track_editor")):
+if not os.path.isdir(os.path.join(_HERE, "..", "track_lab")):
     # Blender does not set __file__ the way a normal run does; fall back to the
     # path the script was invoked from.
     for argument in sys.argv:
@@ -35,8 +35,8 @@ ADDON_ROOT = os.path.abspath(os.path.join(_HERE, ".."))
 sys.path.insert(0, ADDON_ROOT)
 sys.path.insert(0, _HERE)
 
-import dkr_track_editor  # noqa: E402
-from dkr_track_editor import catalog as catalog_module, gltf_io, scene  # noqa: E402
+import track_lab  # noqa: E402
+from track_lab import catalog as catalog_module, gltf_io, scene  # noqa: E402
 
 from test_roundtrip import find_object_maps  # noqa: E402
 
@@ -103,7 +103,7 @@ def main():
     arguments = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     want_all = "--all" in arguments
 
-    dkr_track_editor.register()
+    track_lab.register()
     try:
         catalog = catalog_module.load()
         paths = find_object_maps()
@@ -121,7 +121,7 @@ def main():
                 failures.append("markers %s: %s" % (os.path.basename(path), problem))
 
         # The same maps again, this time built with the artwork an author sees.
-        from dkr_track_editor import assets  # noqa: PLC0415 - optional path
+        from track_lab import assets  # noqa: PLC0415 - optional path
 
         with_artwork = 0
         for path in selected:
@@ -146,7 +146,7 @@ def main():
         print("PASS         : byte-exact through a Blender scene, markers and artwork")
         return 0
     finally:
-        dkr_track_editor.unregister()
+        track_lab.unregister()
 
 
 if __name__ == "__main__":

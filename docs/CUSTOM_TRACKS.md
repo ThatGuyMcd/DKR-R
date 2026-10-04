@@ -63,6 +63,14 @@ ancient-lake-remix.dkrmap/
   textures/
     0.bin
     1.bin
+  minimap/
+    texture.bin
+    sprite.bin
+  music/
+    main.mp3          (schema 2 only: the track's own music - or main.wav,
+                       or main.cseq for a converted MIDI song)
+  source/
+    music.mid         (the MIDI file main.cseq came from; never read)
 ```
 
 ```json
@@ -77,16 +85,96 @@ ancient-lake-remix.dkrmap/
     { "section": "LEVEL_NAMES",       "file": "name.bin" },
     { "section": "LEVEL_MODELS",      "file": "model.bin" },
     { "section": "TEXTURES_3D",       "file": "textures/0.bin" },
-    { "section": "TEXTURES_3D",       "file": "textures/1.bin" }
+    { "section": "TEXTURES_3D",       "file": "textures/1.bin" },
+    { "section": "TEXTURES_2D",       "file": "minimap/texture.bin" },
+    { "section": "SPRITES",           "file": "minimap/sprite.bin" }
   ]
 }
 ```
 
 `TEXTURES_3D` is the one section a track adds **many** entries to, and their
 order in `adds` is their identity - see "A track's own artwork" below.
+`TEXTURES_2D` and `SPRITES` are the track's own minimap - see "A track's own
+minimap".
 
 Payload paths are confined to the track directory: absolute paths and `..`
 are rejected, so a manifest can never name an arbitrary file on the machine.
+
+### A track's own music (schema 2)
+
+A track can ship an MP3 or WAV as its music. It is not an asset-table section -
+DKR never sees these bytes - so it is described by its own `music` key, and a
+package carrying one says `"schemaVersion": 2`. A package without music stays
+schema 1. Runtimes that predate music refuse schema 2 rather than quietly play
+the wrong song.
+
+```json
+{
+  "schemaVersion": 2,
+  "music": {
+    "format": "audio-stream-v1",
+    "codec": "mp3",
+    "file": "music/main.mp3",
+    "sha256": "<64 lowercase hex digits>",
+    "bytes": 4183219,
+    "sampleRate": 44100,
+    "channels": 2,
+    "frames": 7709184,
+    "carrierSequence": 12,
+    "volume": 100,
+    "loopStartFrame": 352800,
+    "loopEndFrame": 0,
+    "finalLap": "speedup"
+  }
+}
+```
+
+`carrierSequence` must equal the header's `/music` byte (0x52): that retail song
+still plays, silently, and the runtime follows its volume and tempo. Loop points
+are in sample frames; `loopEndFrame` 0 is the end of the file. `finalLap` is
+`speedup` (follow the game's 1.12x final-lap tempo, pitch rising) or `constant`.
+The scan refuses a descriptor whose file escapes the track (symlinks resolved),
+whose size or leading bytes disagree with it, or whose carrier is not the
+header's; the digest is checked when the file is decoded for a race. How the
+runtime plays it is in `docs/CUSTOM_MUSIC_PLAN.md`, "Recorded music".
+
+#### A native song (MIDI)
+
+The music can instead be a native DKR sequence (libultra's compact `ALCSeq`),
+which the game plays itself on its own instruments. The Blender addon makes one
+from a Standard MIDI File with no other input (instruments, drums, tempo and
+loop are chosen by `midi_import.py`) and writes it as `music/main.cseq`:
+
+```json
+{
+  "schemaVersion": 2,
+  "music": {
+    "format": "dkr-alcseq-v1",
+    "bank": "dkr-stock-v1",
+    "file": "music/main.cseq",
+    "sha256": "<64 lowercase hex digits>",
+    "bytes": 12137,
+    "carrierSequence": 42,
+    "tempoBpm": 128,
+    "volume": 110,
+    "reverb": 1,
+    "channelMask": 65535
+  }
+}
+```
+
+Whenever the game starts `carrierSequence` (the header's `/music`) on its music
+player, the runtime copies the song into the music buffer in place of the
+retail one, so it starts, loops, fades, speeds up on the final lap and answers
+MidiFade/MidiChSet objects exactly as a retail song does. `tempoBpm` (1-255),
+`volume` (DKR's base volume, 0-127; most race songs use 110) and `reverb` (0 or
+1) take the place of the carrier's own row in the game's song table. The scan
+reads and validates the bytes the way the player will (structure, loops, back
+references, and the 13,032-byte music buffer of US 1.0 and 1.1), and refuses a
+`channelMask` that differs from the header's `/instruments` (0x54); the addon
+writes 65535 to both. The first time the song starts, it is checked again
+against the ROM actually running - its buffer size and which programs its bank
+holds - and a song that fails is logged and the carrier plays instead.
 
 Section payloads are produced by the matching decomp's asset tool
 (`tools/dkr_assets_tool_src`), which is what the `Hint((...))` annotations in
@@ -363,13 +451,16 @@ aspects work through one mechanism (`AssetSectionsEnum` in the decomp's
 | Table / data | Section | Manifest name |
 |---|---|---|
 | 3 / 2 | 3D textures | `TEXTURES_3D` |
+| 5 / 4 | 2D textures (the minimap picture) | `TEXTURES_2D` |
+| 13 / 12 | sprites (the minimap sprite) | `SPRITES` |
 | 20 / 21 | object maps | `LEVEL_OBJECT_MAPS` |
 | 22 / 23 | headers | `LEVEL_HEADERS` |
 | 24 / 25 | names | `LEVEL_NAMES` |
 | 26 / 27 | models | `LEVEL_MODELS` |
 
-The texture pair is the same numbering read from the other end of the enum, and
-note its order is data-then-table, the reverse of the four level pairs.
+The texture pairs and the sprite pair are the same numbering read from the
+other end of the enum, and note their order is data-then-table, the reverse of
+the four level pairs.
 
 ## A track's own artwork
 
@@ -530,6 +621,62 @@ blender --background --factory-startup \
 That script drives the same operators the sidebar does, in the same order, and
 prints the package back from its own bytes. In Blender, the Textures panel's
 "This track's own artwork" section is the same four steps by hand.
+
+## A track's own minimap
+
+The minimap is two things drawn over each other that never consult one another:
+a small greyscale **picture** of the road - a 2D texture inside a sprite - and a
+**dot** per racer, which `minimap_marker_pos` (`game_ui.c`) places from nine
+numbers in the `LevelModel` header (`0x20`-`0x3B`) and the model's bounds. A
+remix that inherits another track's numbers inherits its picture, and its dots
+land wherever those numbers send them. `docs/CUSTOM_MINIMAP_PLAN.md` has the
+investigation; this is what shipped.
+
+**Two more tables, the same mechanism.** `tex_init_textures` loads
+`ASSET_TEXTURES_2D_TABLE`, then the 3D table, then `ASSET_SPRITES_TABLE`, each
+counted to its terminator, and `load_texture`, `tex_load_sprite` and
+`load_sprite_info` read an entry by table difference. So a picture appended to
+the 2D table and a sprite appended to the sprite table load exactly as a
+`TEXTURES_3D` payload does, and like it they are **published once, at boot**.
+
+**What the payloads are.** `TEXTURES_2D` is a texture payload like any other,
+checked by the same `inspect_texture_payload`; the addon writes the retail
+minimap recipe - IA8, render mode `TRANSPARENT`, `posX`/`posY` 15/2, cut-out,
+clamped both ways and `RENDER_LINE_SWAP` with its odd rows pre-swapped so
+`material_init` loads it with `gDPLoadTextureBlockS` as it loads every retail
+minimap. `SPRITES` is what `BuildSprite` writes: a 12-byte `SpriteHeader`
+(`s16 baseTextureId, s16 numberOfFrames, s16 anchor x, s16 anchor y, s32 0`),
+the frame boundaries, padded to 16. `inspect_sprite_payload` refuses one with
+no frames, frame boundaries that do not start at 0 and climb, or more than the
+512 bytes `gCurrentSpriteAsset` holds.
+
+**Two placeholders.** The real indices are the ROM's counts plus an ordinal -
+193 sprites and 906 2D textures in US v1.0 - so, as for textures, the exporter
+writes placeholders and DKR-R substitutes them as the tables are built:
+
+| Where | Placeholder | Becomes |
+|---|---|---|
+| model `minimapSpriteIndex` (`0x20`, inside the stored prefix) | `0x7000 + n` | the sprite table index of the track's `n`th sprite |
+| sprite `baseTextureId` | `0x7000 + n` | the 2D table index of the track's `n`th 2D texture |
+
+The sprite is patched in the sprite blob when that table is built, which is
+after the 2D table at boot; the model is patched with its textures when the
+level model table is built. A scan refuses a package whose model names a sprite
+it does not ship, or whose sprite names a 2D texture past its own - the HUD
+would otherwise draw another track's picture.
+
+**Installed after boot.** Like its textures, a track's minimap only exists in a
+session that booted with it. A track added by a rescan has its model's
+placeholder reset to sprite 0, and its header is served with the **"no
+minimap" bit** - byte `0xBC`, bit 0, the one hubs and cutscenes set, which
+makes `hud_render_general` return before the minimap. The HUD shows no minimap
+rather than a stray one until DKR-R is relaunched (`minimap_hidden`).
+
+**Tracks without one.** The addon sets that same bit itself for a track that
+ships no minimap and has no retail one to keep: a reshaped remix with no road
+edges drawn, or a track built from a mesh. An imported retail track whose
+geometry was not reshaped keeps its own minimap - no bit, no payloads. Track
+Lab lists *own minimap* beside a track's artwork.
 
 ## A level has two object maps, and they must stay separate
 

@@ -23,6 +23,12 @@ available is stronger than it sounds:
   face to its batch through the batch windows, so a gap or an overlap
   mis-assigns render flags with nothing raised. Checked on retail and on
   everything this module builds.
+* **Every triangle collides inside itself and nowhere else.** The collision
+  facets are run through a transcription of the loader that turns them into
+  planes (``track_init_collision``) and of the test that uses them
+  (``resolve_collisions``): each triangle's centre has to collide, and a point
+  60 units past each of its edges must not. A double-sided sign and a flipped
+  face are built from nothing and held to the same.
 
 The four retail models holding a degenerate triangle go through this path
 untouched, because nothing here involves Blender - which is the point of
@@ -36,14 +42,16 @@ Run with any Python 3.8+; it does not need Blender.
 from __future__ import annotations
 
 import glob
+import math
 import os
+import struct
 import sys
 from collections import Counter
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     level_model, level_model_encoder, level_model_layout,
 )
 
@@ -155,14 +163,17 @@ def check_rebuilt_round_trip(path):
 
 
 def check_facets_match_retail(path):
-    """The generated collision facets are the ones retail ships.
+    """The generated collision facets are mostly the ones retail ships.
 
     They are authored adjacency the loader reads, not scratch it fills, so a
-    rebuilt layout has to write them - and writing them wrongly would bound
-    every triangle wrongly. The rule is held to retail's own data: 99.6% of
-    all facets match, and the lowest single model, Snowflake Mountain Hub, is
-    at 91% - 167 edges it leaves as walls where the game's rule joins them, for
-    a reason not found yet. Ninety per cent per model is the floor.
+    rebuilt layout has to write them. The rule refuses the pairs the loader
+    mishandles - a neighbour running the edge the same way round, or folded
+    back onto the triangle (see ``collision_facets``) - so it no longer
+    reproduces retail exactly: 96.7% of all facets match, and the lowest
+    model, the unused Temple track, is at 87.9%. Whether what it writes is
+    *right* is :func:`check_facets_bound_their_triangles`'s question; this one
+    keeps it from drifting from retail. Eighty-five per cent per model is the
+    floor.
     """
     with open(path, "rb") as handle:
         blob = level_model.decompress(handle.read())
@@ -176,8 +187,187 @@ def check_facets_match_retail(path):
             at = segment.collision_facets_ptr + face * level_model_layout.FACET_SIZE
             total += 1
             same += blob[at:at + 8] == mine[face * 8:face * 8 + 8]
-    if total and same < 0.90 * total:
+    if total and same < 0.85 * total:
         return "only %d of %d facets match retail" % (same, total)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# The game's collision, transcribed
+# ---------------------------------------------------------------------------
+
+def _plane(p1, p2, p3):
+    """The normalised plane through three points, as ``track_init_collision``
+    computes it - a zero normal stays zero."""
+    (x1, y1, z1), (x2, y2, z2), (x3, y3, z3) = p1, p2, p3
+    nx = y1 * (z2 - z3) + y2 * (z3 - z1) + y3 * (z1 - z2)
+    ny = z1 * (x2 - x3) + z2 * (x3 - x1) + z3 * (x1 - x2)
+    nz = x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)
+    length = math.sqrt(nx * nx + ny * ny + nz * nz)
+    if length > 0.0:
+        nx, ny, nz = nx / length, ny / length, nz / length
+    return [nx, ny, nz, -(x1 * nx + y1 * ny + z1 * nz)]
+
+
+def game_collision(segment, facets_bytes):
+    """``(planes, facets, corners)`` as ``track_init_collision``
+    (``tracks.c:3064``) leaves them: a plane per collidable triangle, then one
+    per edge, leaning by the two normals' sum - made once per shared edge and
+    handed to the neighbour negated (``| 0x8000``)."""
+    planes, corners = [], {}
+    for batch in segment.batches:
+        for face in range(batch.face_offset, batch.face_offset + batch.face_count):
+            flags, a, b, c = segment.triangles[face][:4]
+            if flags & level_model_layout.TRI_FLAG_NO_COLLISION:
+                continue
+            points = [tuple(float(v) for v in segment.vertices[batch.vertex_offset + i][:3])
+                      for i in (a, b, c)]
+            planes.append(_plane(*points))
+            corners[face] = points
+    count = len(planes)
+    facets = [list(struct.unpack_from(">4H", facets_bytes, face * 8))
+              for face in range(len(segment.triangles))]
+    face_of_plane = {facets[face][0]: face for face in corners}
+    for batch in segment.batches:
+        if not batch.collidable:
+            continue
+        for face in range(batch.face_offset, batch.face_offset + batch.face_count):
+            if face not in corners:
+                continue
+            base = facets[face][0]
+            n = planes[base]
+            for side in range(3):
+                other = facets[face][1 + side]
+                if other >= count:
+                    continue
+                lean = [n[k] + planes[other][k] for k in range(3)]
+                p1, p2 = corners[face][side], corners[face][(side + 1) % 3]
+                p3 = tuple(lean[k] * 10.0 + p1[k] for k in range(3))
+                if other != base and other in face_of_plane:
+                    row = facets[face_of_plane[other]]
+                    for j in range(3):
+                        if row[1 + j] == base:
+                            row[1 + j] = len(planes) | 0x8000
+                facets[face][1 + side] = len(planes)
+                planes.append(_plane(p1, p2, p3))
+    return planes, facets, corners
+
+
+def collides_at(planes, facet, point):
+    """``resolve_collisions``' test that a point on the triangle's plane is
+    inside it: under four units past every edge plane (``collision.c:345``)."""
+    for side in range(3):
+        index = facet[1 + side]
+        a, b, c, d = planes[index & 0x7FFF]
+        distance = point[0] * a + point[1] * b + point[2] * c + d
+        if index & 0x8000:
+            distance = -distance
+        if distance >= 4.0:
+            return False
+    return True
+
+
+def collision_faults(segment, facets_bytes, reach=60.0):
+    """``(holes, leaks)``: triangles whose centre does not collide, and edges
+    that collide ``reach`` units past themselves on the triangle's plane."""
+    planes, facets, corners = game_collision(segment, facets_bytes)
+    holes, leaks = [], []
+    for batch in segment.batches:
+        if not batch.collidable:
+            continue
+        for face in range(batch.face_offset, batch.face_offset + batch.face_count):
+            points = corners.get(face)
+            if points is None:
+                continue
+            normal = planes[facets[face][0]][:3]
+            if normal == [0.0, 0.0, 0.0]:
+                continue  # degenerate: no plane to collide with
+            centre = tuple(sum(p[k] for p in points) / 3.0 for k in range(3))
+            if not collides_at(planes, facets[face], centre):
+                holes.append(face)
+            for side in range(3):
+                p1, p2 = points[side], points[(side + 1) % 3]
+                mid = tuple((p1[k] + p2[k]) / 2.0 for k in range(3))
+                edge = tuple(p2[k] - p1[k] for k in range(3))
+                away = (edge[1] * normal[2] - edge[2] * normal[1],
+                        edge[2] * normal[0] - edge[0] * normal[2],
+                        edge[0] * normal[1] - edge[1] * normal[0])
+                length = math.sqrt(sum(c * c for c in away))
+                if length == 0.0:
+                    continue
+                third = points[(side + 2) % 3]
+                if sum((third[k] - mid[k]) * away[k] for k in range(3)) > 0:
+                    length = -length
+                probe = tuple(mid[k] + away[k] / length * reach for k in range(3))
+                if collides_at(planes, facets[face], probe):
+                    leaks.append((face, side))
+    return holes, leaks
+
+
+def check_facets_bound_their_triangles(path):
+    """Under the game's own collision, every triangle collides inside itself
+    and not 60 units past its edges. Retail's own facets fail this 113 and
+    195 times over the 55 US models; the game's rule for object models,
+    applied to level models, 277 and 358."""
+    model = load(path)
+    holes = leaks = 0
+    example = None
+    for segment in model.segments:
+        found = collision_faults(segment, level_model_layout.collision_facets(segment))
+        holes += len(found[0])
+        leaks += len(found[1])
+        if example is None and (found[0] or found[1]):
+            example = (segment.index, (found[0] or [f for f, _s in found[1]])[0])
+    if holes or leaks:
+        return ("%d triangle(s) do not collide inside themselves and %d edge(s) "
+                "collide past themselves (first: segment %d triangle %d)"
+                % (holes, leaks, example[0], example[1]))
+    return None
+
+
+def _segment(points, triangles):
+    """A one-batch collidable segment: ``points`` and ``(a, b, c)`` faces."""
+    segment = level_model.Segment(0)
+    segment.vertices = [tuple(p) for p in points]
+    segment.triangles = [(0, a, b, c) for a, b, c in triangles]
+    batch = level_model.Batch(0, 0, 0, 0)
+    batch.vertex_count = len(points)
+    batch.face_count = len(triangles)
+    segment.batches = [batch]
+    return segment
+
+
+def check_double_sided_sign(_path=None):
+    """A sign standing by the road, both sides modelled: the same corners
+    again, wound backwards. Pairing each face with its own back gives the edge
+    a zero plane, and the sign collides over its whole plane - across the
+    road. Taken from the custom track that found it."""
+    sign = [(-266, 46, -1458), (-336, 46, -1458), (-336, 116, -1458), (-266, 116, -1458)]
+    front = [(0, 1, 2), (0, 2, 3)]
+    back = [(3, 2, 1), (3, 1, 0)]
+    segment = _segment(sign, front + back)
+    facets = level_model_layout.collision_facets(segment)
+    holes, leaks = collision_faults(segment, facets)
+    if holes or leaks:
+        return ("the sign leaves %d hole(s) and %d edge(s) colliding past "
+                "themselves" % (len(holes), len(leaks)))
+    planes, rows, _corners = game_collision(segment, facets)
+    road = (-1000.0, 11.0, -1458.0)  # on the sign's plane, far down the road
+    if any(collides_at(planes, rows[face], road) for face in range(4)):
+        return "the sign still collides 700 units away on its own plane"
+    return None
+
+
+def check_flipped_neighbour(_path=None):
+    """Two floor triangles sharing an edge, one wound the wrong way. Handing
+    the second the first's plane negated puts it on the wrong side of its own
+    edge; the edge has to be a wall of its own instead."""
+    floor = [(0, 0, 0), (100, 0, 0), (100, 0, 100), (0, 0, 100)]
+    segment = _segment(floor, [(0, 2, 1), (0, 2, 3)])
+    holes, leaks = collision_faults(segment, level_model_layout.collision_facets(segment))
+    if holes or leaks:
+        return ("a flipped neighbour leaves %d hole(s) and %d edge(s) "
+                "colliding past themselves" % (len(holes), len(leaks)))
     return None
 
 
@@ -320,7 +510,7 @@ def check_collision_pressure(path):
 
 
 def _has_waves(model):
-    from dkr_track_editor import water
+    from track_lab import water
 
     return water.has_waves(model)
 
@@ -360,7 +550,7 @@ def check_crowded_wave_batches(_path=None):
     batches into one wave tile. Rendering fields differ one at a time so the
     test also catches merging batches that do not draw alike.
     """
-    from dkr_track_editor import water
+    from track_lab import water
 
     layout = level_model_layout
     model = layout.blank_model([
@@ -618,7 +808,7 @@ def check_resegment_relieves_pressure(path):
     if not moved:
         return None
 
-    from dkr_track_editor import level_model_edit
+    from track_lab import level_model_edit
     level_model_edit.recompute_bounds(model)
     if not level_model_layout.check_collision_pressure(model):
         return None  # this model did not end up crowded; nothing to relieve
@@ -630,7 +820,7 @@ def check_resegment_relieves_pressure(path):
         # Cut into the wave grid: triangles are split, not lost, and a wave
         # track stretched past 127 squares joins its dry ones instead of
         # failing. What matters is that the waves still work.
-        from dkr_track_editor import water
+        from track_lab import water
 
         found = water.problems(model)
         if found:
@@ -702,6 +892,7 @@ CASES = (
     ("an added face is built, not patched", check_added_triangle),
     ("every model fits the memory budget", check_budget),
     ("collision facets follow retail's rule", check_facets_match_retail),
+    ("collision stays inside each triangle", check_facets_bound_their_triangles),
     ("a rebuilt layout writes the facets", check_rebuilt_facets),
     ("degenerate triangles survive", check_degenerate_carried),
     ("out-of-range values are refused", check_range_refusals),
@@ -722,6 +913,8 @@ def main():
         ("a model builds from nothing", check_blank_model),
         ("crowded wave batches merge", check_crowded_wave_batches),
         ("every triangle reaches the renderer", check_draw_triangle_count),
+        ("a double-sided sign is no wall", check_double_sided_sign),
+        ("a flipped neighbour is no hole", check_flipped_neighbour),
     ):
         problem = case()
         print("%-38s %s" % (label, "FAIL" if problem else "PASS"))

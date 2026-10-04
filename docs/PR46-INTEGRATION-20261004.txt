@@ -1,0 +1,83 @@
+DKR-R: PR46 integration rebuild (2026-10-04)
+==========================================
+
+Source lineage
+--------------
+Local starting HEAD: 534e0e30f6d232c5e7784886a69f705470b15484.
+Exact local working-content checkpoint: fbed584.
+Merged remote main: c8be5c2514f92aa94dcf8c527d040edf19730d72.
+Contributor PR: https://github.com/ThatGuyMcd/DKR-R/pull/46.
+Integration branch: codex/integrate-pr46.
+
+The checkpoint includes the local Android, performance, water, HUD and online
+work that was not in remote main. Both parent histories are retained. There
+is no force push, rebase, stash replacement or dependency checkout reset.
+
+What was combined
+-----------------
+* Contributor's rebuilt launcher pages and shared settings widgets, including
+  the ROM selector, removal/undo, ordering and controller navigation.
+* Track Lab 0.1.0, its renamed Blender package, ROM asset extraction,
+  minimaps, native music sequences/MIDI import and MP3/WAV output playback.
+* Existing local stable online backends, full-scene experimental rollback,
+  boss finish handling, disconnect-to-launcher lifecycle, local visual
+  scenery cache, water scrolling, HUD and Android patch inputs.
+* Android touch-layout controls, support/log export, performance reporting
+  and optional graphics presets carried into the new page files.
+* Existing experimental controls remain gated: local scenery billboard
+  retention is available; guest-mutating FOV, LOD, effect/water ranges and
+  CPU culling are not silently admitted into the rollback world.
+* Master volume and output EQ remain local/live. Category gain preferences
+  remain saved for single-player and legacy modes, not applied to replay.
+
+Resolution details
+------------------
+presentation_identity.cpp: preserve local retained-metadata/performance
+includes and frame logic; add the contributor's custom-music tick.
+
+revision_addresses.hpp: preserve both revisions' water UV masks; append all
+four contributor music globals in matching struct/initializer/select order.
+
+runtime_play_ui.inl: use the contributor's shared ROM selector and remove/undo
+state; retain local validation/status and online locking. Remove the obsolete
+catalog_error reference rather than reintroducing the duplicate old selector.
+
+runtime_ui.cpp: use extracted contributor page modules, not duplicate old
+page functions. Preserve the Android menu/content lifecycle and the launcher
+and overlay recovery/presentation paths. Scope the shared ROM context to the
+launcher draw; never retain a reference to its temporary frame context.
+
+Build/pipeline boundary
+-----------------------
+Both retail CPU revisions and the owned v77 payload are regenerated into NEW
+build-owned output directories. Protected dependency and generated-source
+inputs are read-only. Source hash gates remain enabled.
+
+The two new custom-music hooks have explicit no-custom-content identities in
+the owned world. This is NOT support for online custom mods/music. Unknown
+native imports remain blocked. The source audit pins the reviewed custom
+music implementation and the combined track hooks/address table.
+
+Vanilla owned bootstrap clears a previous offline Track Lab music binding.
+Inactive custom music does not allocate or clear a mix buffer every block.
+The save-manager check target now links its existing experimental Pak codec.
+
+Two generated imgui.ini layout files are excluded from source control. Their
+contents are saved in the integration backup and the PR's Git history.
+Fetched dependencies, including read-only worktree aliases, stay ignored.
+
+Scope and verification
+----------------------
+This is an integration rebuild of 1.0.5-beta.15-playtest.8, not a claim that
+the deferred scenery-construction/category-mixer redesigns are completed.
+Windows x64 and Linux x86_64 AppImage are the requested rebuild targets.
+Track Lab is also packaged separately as track_lab.zip for Blender.
+
+Only compilation and static/package checks are performed. No game windows,
+runtime self-tests, CTest, private probes or gameplay tests are executed.
+The project owner will test UI, offline custom music/minimaps, both retail
+revisions and real multi-peer online transitions/disconnects.
+
+Keep the earlier accepted playtest packages and integration backup intact.
+All connected testers must use the SAME integration rebuild: the owned
+contract changes when merged policies/hooks are regenerated.

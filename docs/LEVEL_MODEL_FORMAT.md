@@ -154,7 +154,7 @@ table, an array of 8-byte `DkrTextureInfo` whose `id` indexes the global
 `ASSET_TEXTURES_3D` list - the same indirection object models use.
 
 Decoding all of that is what lets the Blender addon show a track as it looks
-rather than as a grey shell; see `tools/blender/dkr_track_editor/level_model.py`.
+rather than as a grey shell; see `tools/blender/track_lab/level_model.py`.
 
 ## The texture table
 
@@ -289,8 +289,30 @@ Its neighbour search (`func_80060AC8` / `func_80060C58`) is also the best
 account of the rule the level model tool used: the first triangle in a
 collidable batch with an edge on the same vertices or on corners within 3
 units per axis, either way round. Applied to the 55 retail level models it
-reproduces 99.6% of their 90,617 facets; `level_model_layout.collision_facets`
-implements it.
+reproduces 99.6% of their 90,617 facets.
+
+`level_model_layout.collision_facets` used to implement it and no longer does,
+because the loader handles two kinds of pair badly:
+
+- **A neighbour that runs the edge the same way round**, which means a flipped
+  face. The loader hands it the first triangle's edge plane negated (the
+  `| 0x8000`), and that puts it on the wrong side of its own edge. It stops
+  colliding where it is and collides past the edge instead.
+- **A neighbour folded back onto the triangle**, which means a double-sided
+  face. The edge plane leans by the sum of the two normals, which is zero
+  here. A zero plane passes every point, so the triangle collides over its
+  whole plane. On a custom track, a double-sided sign by the road became an
+  invisible wall across it.
+
+The addon only pairs an edge with a triangle that runs it the other way round
+and whose normal is no further than a dot of -0.95 from its own. Otherwise the
+edge names its own triangle, which gives a wall straight up from the edge.
+Under a transcription of `track_init_collision` and `resolve_collisions`, this
+rule leaves no triangle of the 55 US models that fails to collide inside
+itself, and no edge that collides 60 units past itself. Retail's own facets
+have 113 of the first and 195 of the second. The new rule still agrees with
+96.7% of retail's facets
+(`tools/blender/tests/test_level_model_layout.py`).
 
 **An encoder therefore has to write the facet array** — adjacency, not
 collision planes — and correct offsets to it, and decide which batches are
@@ -357,7 +379,7 @@ splits on both vertex and triangle counts, and the encoder refuses an oversized
 draw batch. Exporting a mesh based on an older oversized model rebuilds its
 batches instead of patching that layout in place.
 
-`tools/blender/dkr_track_editor/level_model_encoder.py` implements the
+`tools/blender/track_lab/level_model_encoder.py` implements the
 layout-preserving half of this table, and
 `tools/blender/tests/test_level_model_roundtrip.py` holds every extracted model
 to byte equality through it.
@@ -419,6 +441,20 @@ ones. `RENDER_CUTOUT` (bit 4) is independent of the side: it makes the batch
 alpha-tested (`G_RM_AA_ZB_TEX_EDGE`), and retail sets it on 302 batches, all
 over see-through textures.
 
+Vertex alpha does not move a batch either, and it only works in the second
+pass. `track_init_level_model` reads a vertex coloured `(1, 1, b)` as alpha `b`
+and flags its batch `RENDER_VTX_ALPHA` (bit 27), and `material_set` then draws
+it with `dRenderSettingsVtxAlpha`, whose entries blend **and write depth**. The
+no-write half is chosen by `RENDER_Z_UPDATE`, bit 8, which on a batch is
+`RENDER_HIDDEN`. The first pass walks the segments front to back, so a faded
+batch there is drawn before what stands behind it, blends with the sky and then
+hides the rest from the depth buffer. Retail leaves 195 faded batches in the
+first pass, and in both revisions every one of them fades to alpha 0: an edge
+vanishing into nothing, never a see-through surface. The second pass runs back
+to front, after the solid track and the objects. The addon's material opacity
+therefore writes a faded texture of the track's own as `TRANSPARENT` and flags
+faded calm water `RENDER_WATER`, which is what retail's own water carries.
+
 ## Waves
 
 A segment with `hasWaves` non-zero (retail writes -1) is a wave tile, and the
@@ -434,7 +470,7 @@ its wave tracks into equal squares, one segment each, with the wave segment
 first. That holds in 21 of the 22 retail models that have waves;
 `ocean_track`, which no header loads, is the exception. The tile mask is
 `s32 D_8012A0E8[64]`, so wave tiles sit in columns 0-31 and rows 0-63.
-`tools/blender/dkr_track_editor/water.py` transcribes all of it.
+`tools/blender/track_lab/water.py` transcribes all of it.
 
 ## Two shapes Blender cannot round trip
 

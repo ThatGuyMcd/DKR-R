@@ -20,7 +20,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import catalog as catalog_module, gltf_io, validate  # noqa: E402
+from track_lab import catalog as catalog_module, gltf_io, validate  # noqa: E402
 
 from test_roundtrip import REPO_ROOT, find_object_maps  # noqa: E402
 

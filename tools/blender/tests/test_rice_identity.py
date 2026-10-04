@@ -25,6 +25,12 @@ cannot land on - rows narrower than a word of texture memory - must be refused
 with the reason, because their identity would be a hash of memory the addon
 never wrote.
 
+**The line-swapped load is retail's.** A minimap is loaded with
+``gDPLoadTextureBlockS`` - a DXT of zero, odd rows swapped in RDRAM. Every
+retail minimap is re-encoded from the extracted tree and must come out under the
+name a published Rice pack (DKR REMASTERED) gives its replacement; skipped
+without the tree.
+
     python tools/blender/tests/test_rice_identity.py
 """
 
@@ -43,8 +49,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)
 
-from dkr_track_editor import rice_identity, rice_pack, textures  # noqa: E402
+from track_lab import minimap, rice_identity, rice_pack, textures  # noqa: E402
 from test_custom_textures import solid_rgba, write_png  # noqa: E402
+from test_roundtrip import VANILLA  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 PATCH = os.path.join(REPO, "patches", "rt64",
@@ -218,6 +225,98 @@ def test_named_cases():
         check(False, "a colour-indexed format has no three-part identity")
     except rice_identity.IdentityError:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Line-swapped textures: the minimap
+# ---------------------------------------------------------------------------
+
+#: The CRC in each retail minimap's file name in DKR REMASTERED V0.2.0
+#: (SR.GU's), ``Maps/Diddy Kong Racing#<crc>#3#1_all.png`` - a pack made on an
+#: emulator, by Rice's own arithmetic, with no knowledge of this addon. The
+#: three ``unused`` maps are not in it; the game never draws them.
+RETAIL_MINIMAPS = {
+    "ancient_lake": "328bf13c",
+    "bluey": "0cb0c140",
+    "boulder_canyon": "3ec8adf9",
+    "bubbler": "8fb99a2d",
+    "central_area": "a1818eb7",
+    "crescent_island": "f3b43063",
+    "darkmoon_caverns": "ffd2bd3d",
+    "darkwater_beach": "dc5b3910",
+    "everfrost_peak": "b8258f58",
+    "fire_mountain": "aaa6fb06",
+    "fossil_canyon": "bcb5cd36",
+    "frosty_village": "818011de",
+    "greenwood_village": "6bedc17b",
+    "haunted_woods": "63c11aa7",
+    "hot_top_volcano": "344f86e0",
+    "icicle_pyramid": "147df67d",
+    "jungle_falls": "ad85155c",
+    "npc": "6690a158",
+    "pirate_lagoon": "4e2a0b0a",
+    "player": "d9fd385b",
+    "smokey": "fdd7a53f",
+    "smokey_castle": "5caf47f4",
+    "snowball_valley": "781db064",
+    "space_port_alpha": "11efe9bf",
+    "spacedust_alley": "d6008756",
+    "star_city": "f6d18432",
+    "treasure_caves": "31dd1166",
+    "trickytops": "7ecf700e",
+    "walrus_cove": "5ed9a2a0",
+    "whale_bay": "cec4c946",
+    "windmill_plains": "98422f42",
+    "wizpig1": "6fce8413",
+    "wizpig2": "4d2adbe7",
+}
+
+
+def test_swapped_rectangle():
+    """A DXT of zero takes the row from the render tile, and any clamped size
+    the header holds is fine - the minimap's sizes are not powers of two."""
+    ia8 = textures.FORMAT_CODES["IA8"]
+    tiles = rice_identity.load_texture_block(80, 50, ia8, True, True, swapped=True)
+    equal(tiles.load_lrt, 0, "gDPLoadTextureBlockS passes gDPLoadBlock a DXT of 0")
+    equal(rice_identity.derive(80, 50, ia8, True, True, swapped=True),
+          (3, 1, 80, 50, 80), "an 80x50 IA8 minimap is its own rectangle")
+    check(rice_identity.hd_problem(80, 50, ia8, True, True) is not None,
+          "and the level-texture rules would refuse it")
+    problem = rice_identity.hd_problem(12, 4, ia8, True, True, swapped=True)
+    check(problem is not None and "stride of 16" in problem,
+          "a row that is not whole TMEM words is read past its end (%r)" % problem)
+    problem = rice_identity.hd_problem(80, 60, ia8, True, True, swapped=True)
+    check(problem is not None and "texture memory" in problem,
+          "past 4096 bytes does not fit TMEM (%r)" % problem)
+
+
+def test_retail_minimaps():
+    folder = None
+    for version in ("us.v77", "us.v80"):
+        candidate = os.path.join(VANILLA, version, "textures", "2d", "minimap")
+        if os.path.isdir(candidate):
+            folder = candidate
+            break
+    if folder is None:
+        print("  skip: no extracted asset tree for the retail minimaps")
+        return
+    found = 0
+    for name, crc in sorted(RETAIL_MINIMAPS.items()):
+        try:
+            with open(os.path.join(folder, name + ".json"), "r",
+                      encoding="utf-8") as handle:
+                meta = json.load(handle)
+            width, height, rgba = textures.read_png(
+                os.path.join(folder, meta["images"][0]))
+        except (OSError, ValueError, KeyError) as error:
+            check(False, "%s could not be read: %s" % (name, error))
+            continue
+        payload = minimap.texture_payload(rgba, width, height)
+        equal(minimap.texture_identity(payload), "%s#3#1" % crc,
+              "%s (%dx%d) is named as the published pack names it"
+              % (name, width, height))
+        found += 1
+    equal(found, len(RETAIL_MINIMAPS), "every retail minimap was checked")
 
 
 # ---------------------------------------------------------------------------
@@ -528,6 +627,8 @@ def main(argv):
         test_rice_identity_reads_the_rdram_view()
         test_rectangle_is_the_image()
         test_named_cases()
+        test_swapped_rectangle()
+        test_retail_minimaps()
         test_nudge()
         test_custom_texture_texels_are_the_payloads(tmp)
         test_pack(tmp)

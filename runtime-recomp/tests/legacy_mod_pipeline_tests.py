@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import struct
 import unittest
 from unittest.mock import patch
@@ -107,12 +108,20 @@ class PipelineTests(unittest.TestCase):
 
     def test_sidebar_visual_and_navigation_order_match(self):
         source = (ROOT / 'runtime-recomp/src/game/runtime_ui.cpp').read_text()
-        self.assertIn('kSidebarOrder{0,1,2,3,4,8,6,5,7,9,10}', source.replace(' ', ''))
+        pages = {name: int(value) for name, value in re.findall(r'constexpr int (kPage\w+) = (\d+);', source)}
+        order = re.search(r'kSidebarOrder\{([\d,\s]+)\}', source).group(1)
+        order = [int(page) for page in order.split(',')][:len(pages)]
+        # Launcher and in-game overlay draw their buttons in the order the D-pad walks.
+        for button in ('LauncherSidebarButton', 'SidebarButton'):
+            drawn = [int(page) if page.isdigit() else pages[page]
+                     for page in re.findall(r'\b' + button + r'\("[^"]+",\s*(\w+)', source)]
+            self.assertEqual(drawn, order, button)
 
     def test_track_lab_is_in_mods_and_keeps_its_texture_modal(self):
         source=(ROOT/'runtime-recomp/src/game/runtime_ui.cpp').read_text()
-        mods=source.split('void DrawModsHacks(',1)[1].split('void DrawTextures(',1)[0]
-        textures=source.split('void DrawTextures(float width) {',1)[1].split('std::string FormatRecordTime',1)[0]
+        details=(ROOT/'runtime-recomp/src/game/runtime_details_ui.inl').read_text()
+        mods=source.split('void DrawModsHacks(',1)[1].split('std::string FormatRecordTime',1)[0]
+        textures=details.split('void DrawTexturesPage(float width) {',1)[1].split('\n}\n',1)[0]
         # Track Lab is a section of the mods page and never of the textures page.
         self.assertIn('kModsSectionTrackLab',mods)
         self.assertIn('DrawTrackLabSection(',mods)

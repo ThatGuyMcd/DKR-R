@@ -33,7 +33,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import (  # noqa: E402
+from track_lab import (  # noqa: E402
     assets, level_model, level_model_encoder, level_model_layout as layout,
     water,
 )
@@ -220,7 +220,7 @@ def pit_model(depth=-200, squares=6, pit=(2, 3)):
             for a, b, c in ((0, 3, 2), (0, 2, 1)):
                 faces.append(layout.Face(key, (base + a, base + b, base + c),
                                          ((0, 0), (0, 0), (0, 0))))
-    from dkr_track_editor import level_model as lm
+    from track_lab import level_model as lm
     model = layout.blank_model([lm.TextureRef(5, 32, 32, 1, 0)])
     layout.rebatch_segment(model.segments[0], faces, positions, colours)
     layout.resegment(model)

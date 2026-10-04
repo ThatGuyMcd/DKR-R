@@ -1,4 +1,4 @@
-"""Generate ``dkr_track_editor/data/catalog.json`` from the DKR decomp.
+"""Generate ``track_lab/data/catalog.json`` from the DKR decomp.
 
 The addon needs to know, for all 85 object types that appear in retail tracks,
 which fields each one carries, what type each field is and which enum members
@@ -35,7 +35,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 DEFAULT_DECOMP = os.path.join(REPO_ROOT, "extern", "dkr-decomp")
-DEFAULT_OUTPUT = os.path.join(HERE, "dkr_track_editor", "data", "catalog.json")
+DEFAULT_OUTPUT = os.path.join(HERE, "track_lab", "data", "catalog.json")
 
 SCHEMA_VERSION = 1
 
@@ -307,7 +307,7 @@ def survey_level_modes(decomp_root):
     Returns ``({object_id: Counter(key)}, {object_id: Counter(slot)})``.
     """
     sys.path.insert(0, HERE)
-    from dkr_track_editor import assets, gltf_io, level_types  # noqa: PLC0415
+    from track_lab import assets, gltf_io, level_types  # noqa: PLC0415
 
     by_mode = collections.defaultdict(collections.Counter)
     by_slot = collections.defaultdict(collections.Counter)

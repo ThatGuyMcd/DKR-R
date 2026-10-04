@@ -168,7 +168,10 @@ target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRLegacyModCore DKRLegacyMo
 add_library(DKRLegacyModLaunch STATIC "${_dkr_mod_src}/legacy_mod_launch.cpp")
 # .dkrmap table logic. A mod launch publishes the tracks' artwork into the
 # character-augmented boot bank, so the launch owns this dependency.
-add_library(DKRCustomTracksCore STATIC "${_dkr_mod_src}/../custom_tracks.cpp")
+# A track's native music sequence is validated at scan, so its checker
+# (custom_music_sequence.cpp, no dependencies of its own) comes along.
+add_library(DKRCustomTracksCore STATIC "${_dkr_mod_src}/../custom_tracks.cpp"
+    "${_dkr_mod_src}/../custom_music_sequence.cpp")
 target_include_directories(DKRCustomTracksCore PUBLIC "${_dkr_mod_src}/.."
     "${DKRPORT_ROOT}/extern/rt64/src/contrib")
 target_compile_features(DKRCustomTracksCore PUBLIC cxx_std_20)

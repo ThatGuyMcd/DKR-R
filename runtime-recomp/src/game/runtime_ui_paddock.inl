@@ -817,14 +817,16 @@ inline PaddockPress PaddockBeginPress(const char* id, ImVec2 size,
     return press;
 }
 
+// `ring` false leaves the focus ring to the caller, for controls whose ring
+// frames only part of the item.
 inline void PaddockEndPress(const PaddockPress& press, float radius,
-                            float scale_to = 0.96F) {
+                            float scale_to = 0.96F, bool ring = true) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ImVec2 centre{(press.min.x + press.max.x) * 0.5F,
                         (press.min.y + press.max.y) * 0.5F};
     PaddockScaleVertices(draw, press.first_vertex, centre,
                          1.0F - (1.0F - scale_to) * press.press);
-    if (press.focused) PaddockFocusRing(draw, press.min, press.max, radius);
+    if (ring && press.focused) PaddockFocusRing(draw, press.min, press.max, radius);
 }
 
 inline const char* PaddockLabelEnd(const char* label) {
@@ -841,6 +843,8 @@ enum class PaddockButtonKind {
     Selected,  // .mods-button.is-selected
     Flat,      // a launcher race button in the paddock
     Stop,      // Track Lab's STOP TESTING
+    Settings,          // .settings-button
+    SettingsSelected,  // .settings-button.is-selected
 };
 
 struct PaddockButtonLook {
@@ -850,6 +854,8 @@ struct PaddockButtonLook {
     float padding_x = 15.0F;
     float padding_y = 9.0F;
     float line = 1.4F;
+    float font_px = 13.0F;
+    float radius = 9.0F;
 };
 
 inline PaddockButtonLook PaddockLook(PaddockButtonKind kind) {
@@ -871,6 +877,12 @@ inline PaddockButtonLook PaddockLook(PaddockButtonKind kind) {
     case PaddockButtonKind::Stop:
         return {0xEB6E0F, 0x2C5060, 0x3C5864, 0x3C5864, 0xFFF6DA, 0xFFF6DA,
                 255U, 255U, 255U, 255U, 16.0F, 10.0F, 1.5F};
+    case PaddockButtonKind::Settings:
+        return {0x173A4E, 0x234E65, 0x476373, 0xB9CDD7, 0xFFF6DA, 0xFFF6DA,
+                255U, 255U, 255U, 255U, 14.0F, 10.0F, 1.35F, 14.0F, 8.0F};
+    case PaddockButtonKind::SettingsSelected:
+        return {0xFFD078, 0xFFDC99, 0xFFD078, 0xFFDC99, 0x053373, 0x053373,
+                255U, 255U, 255U, 255U, 14.0F, 10.0F, 1.35F, 14.0F, 8.0F};
     case PaddockButtonKind::Plain:
     default:
         return {0x162E3C, 0x244353, 0x34505E, 0x7A9BA7, 0xEAF3F5, 0xEAF3F5};
@@ -879,7 +891,7 @@ inline PaddockButtonLook PaddockLook(PaddockButtonKind kind) {
 
 inline float PaddockButtonWidth(const char* label, PaddockButtonKind kind) {
     const PaddockButtonLook look = PaddockLook(kind);
-    const PaddockType type = PaddockReading(13.0F, true, look.line);
+    const PaddockType type = PaddockReading(look.font_px, true, look.line);
     return std::ceil(PaddockMeasure(type, label, PaddockLabelEnd(label)) +
                      look.padding_x * 2.0F + 2.0F);
 }
@@ -889,16 +901,19 @@ inline bool PaddockButton(const char* label,
                           PaddockButtonKind kind = PaddockButtonKind::Plain,
                           float width = 0.0F, float min_height = 42.0F) {
     const PaddockButtonLook look = PaddockLook(kind);
-    const PaddockType type = PaddockReading(13.0F, true, look.line);
+    const PaddockType type = PaddockReading(look.font_px, true, look.line);
     const char* end = PaddockLabelEnd(label);
     if (width <= 0.0F) width = PaddockButtonWidth(label, kind);
+    if (kind == PaddockButtonKind::Settings || kind == PaddockButtonKind::SettingsSelected) {
+        min_height = std::max(min_height, 44.0F);
+    }
     const float wrap = std::max(width - look.padding_x * 2.0F - 2.0F, 1.0F);
     const auto lines = PaddockWrap(type, std::string_view(label, end - label), wrap);
     const float height = std::max(
         min_height, type.line * lines.size() + look.padding_y * 2.0F + 2.0F);
     const PaddockPress press = PaddockBeginPress(label, {width, height});
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const PaddockRadii radii = PaddockRound(9.0F);
+    const PaddockRadii radii = PaddockRound(look.radius);
     if (kind == PaddockButtonKind::Primary) {
         for (int layer = 3; layer >= 1; --layer) {
             const float spread = static_cast<float>(layer) * 3.0F;
@@ -924,7 +939,7 @@ inline bool PaddockButton(const char* label,
                      {press.min.x + look.padding_x + 1.0F,
                       press.min.y + std::round((height - text_height) * 0.5F)},
                      wrap, lines, style);
-    PaddockEndPress(press, 9.0F);
+    PaddockEndPress(press, look.radius);
     return press.pressed;
 }
 
@@ -957,10 +972,11 @@ inline float PaddockSectionTabHeight() {
 }
 
 // A launcher-lettered tab with a turning chevron (.mods-section-nav button).
-inline bool PaddockSectionTab(const char* label, bool open) {
+// `stretch` > 0 widens it, label left-aligned (.texture-disclosure).
+inline bool PaddockSectionTab(const char* label, bool open, float stretch = 0.0F) {
     const PaddockType type = PaddockSign(19.0F, 1.4F);
     const char* end = PaddockLabelEnd(label);
-    const float width = PaddockSectionTabWidth(label);
+    const float width = std::max(PaddockSectionTabWidth(label), stretch);
     const float height = PaddockSectionTabHeight();
     const PaddockPress press = PaddockBeginPress(label, {width, height});
     const float opened = PaddockEase(PaddockTween(
@@ -997,12 +1013,36 @@ inline bool PaddockSectionTab(const char* label, bool open) {
 
 // ------------------------------------------------------------------ inputs
 
-// A pill switch with its On / Off label (.mods-toggle).
+// .ui-checkbox at `at`: a 24 px well and an amber tick, the CSS L of 3 px
+// borders turned -45 degrees and lifted 2 px.
+inline void PaddockCheckBox(ImDrawList* draw, ImVec2 at, bool checked) {
+    const ImVec2 end{at.x + 24.0F, at.y + 24.0F};
+    PaddockFill(draw, at, end, PaddockRound(5.0F), PaddockCol(0x102C3C));
+    PaddockStroke(draw, at, end, PaddockRound(5.0F), PaddockCol(0x6D8998), 1.0F);
+    if (!checked) return;
+    const ImVec2 centre{at.x + 12.0F, at.y + 12.0F - 2.0F};
+    const auto turn = [&](float x, float y) {
+        constexpr float kHalf = 0.70710678F;
+        return ImVec2{centre.x + (x + y) * kHalf, centre.y + (y - x) * kHalf};
+    };
+    const std::array<ImVec2, 3> tick{{turn(-4.5F, -3.0F), turn(-4.5F, 1.5F),
+                                      turn(6.0F, 1.5F)}};
+    draw->AddPolyline(tick.data(), 3, PaddockCol(0xFFD078), 0, 3.0F);
+}
+
+// The checkbox's own focus ring (.ui-checkbox:focus-visible): 3 px, 3 px out.
+inline void PaddockCheckFocus(ImDrawList* draw, ImVec2 at) {
+    draw->AddRect({at.x - 4.5F, at.y - 4.5F}, {at.x + 28.5F, at.y + 28.5F},
+                  PaddockCol(0xFFD078), 9.5F, 0, 3.0F);
+}
+
+// An On / Off toggle (.mods-toggle): the launcher's checkbox with its state
+// as a small label.
 inline bool PaddockSwitch(const char* id, bool* value, const char* on_label,
                           const char* off_label, const char* description = nullptr) {
     const PaddockType type = PaddockReading(12.0F, false, 1.5F);
     const char* label = *value ? on_label : off_label;
-    const float width = 38.0F + 10.0F + std::ceil(std::max(
+    const float width = 24.0F + 12.0F + std::ceil(std::max(
         PaddockMeasure(type, on_label), PaddockMeasure(type, off_label)));
     const PaddockPress press = PaddockBeginPress(id, {width, 42.0F});
     if (description != nullptr && ImGui::IsItemHovered()) {
@@ -1013,27 +1053,18 @@ inline bool PaddockSwitch(const char* id, bool* value, const char* on_label,
         *value = !*value;
         changed = true;
     }
-    const float on = PaddockEase(PaddockTween(
-        PaddockKey("switch", press.id), *value, 0.15F, 0.15F));
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ImVec2 track_min{press.min.x, press.min.y + 10.0F};
-    const ImVec2 track_max{track_min.x + 38.0F, track_min.y + 22.0F};
-    const ImU32 fill = PaddockMix(PaddockRgb(0x123E58), PaddockRgb(0xFFC453), on);
-    const ImU32 edge = PaddockMix(PaddockRgb(0x7AA9BC), PaddockRgb(0xFFC453), on);
-    PaddockFill(draw, track_min, track_max, PaddockRound(11.0F), PaddockApply(fill));
-    PaddockStroke(draw, track_min, track_max, PaddockRound(11.0F), PaddockApply(edge), 1.0F);
-    const ImVec2 knob{track_min.x + 11.0F + 16.0F * on, track_min.y + 11.0F};
-    draw->AddCircleFilled(knob, 7.0F,
-                          PaddockApply(PaddockMix(PaddockRgb(0xDBE7ED),
-                                                PaddockRgb(0x513815), on)), 20);
-    PaddockDrawRun(draw, type, {track_max.x + 10.0F, press.min.y + (42.0F - type.line) * 0.5F},
+    const ImVec2 box{press.min.x, press.min.y + 9.0F};
+    PaddockCheckBox(draw, box, *value);
+    PaddockDrawRun(draw, type, {box.x + 36.0F, press.min.y + (42.0F - type.line) * 0.5F},
                    PaddockCol(0xFFF6DA), label, label + std::strlen(label));
-    PaddockEndPress(press, 11.0F, 1.0F);
+    PaddockEndPress(press, 6.0F, 1.0F, false);
+    if (press.focused) PaddockCheckFocus(draw, box);
     return changed;
 }
 
 enum class PaddockCheckKind {
-    Plain,  // 24 px, the launcher's frame colours
+    Plain,  // 24 px, the launcher's one checkbox skin (.ui-checkbox)
     Magic,  // Magic Code sign: thick light rim, dark well
 };
 
@@ -1057,27 +1088,24 @@ inline bool PaddockCheckbox(const char* id, const char* label, bool* value,
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ImVec2 box_min{press.min.x, press.min.y + std::round((height - 24.0F) * 0.5F)};
     const ImVec2 box_max{box_min.x + 24.0F, box_min.y + 24.0F};
-    const PaddockRadii radii = PaddockRound(6.0F);
     if (kind == PaddockCheckKind::Magic) {
+        const PaddockRadii radii = PaddockRound(6.0F);
         PaddockFill(draw, {box_min.x, box_min.y + 2.0F}, {box_max.x, box_max.y + 2.0F},
                     radii, PaddockCol(0x02121D));
         PaddockFill(draw, box_min, box_max, radii,
                     PaddockCol(*value ? 0x073C36U : 0x04263CU));
         PaddockStroke(draw, box_min, box_max, radii,
                       PaddockCol(*value ? 0xFFE293U : 0x7DB9CEU), 2.0F);
+        if (*value) {
+            const float unit = 24.0F / 41.0F;
+            const std::array<ImVec2, 3> tick{{
+                {box_min.x + 7.45F * unit, box_min.y + 20.5F * unit},
+                {box_min.x + 16.15F * unit, box_min.y + 29.2F * unit},
+                {box_min.x + 33.55F * unit, box_min.y + 11.8F * unit}}};
+            draw->AddPolyline(tick.data(), 3, PaddockCol(0x1AC2A3), 0, 5.8F * unit);
+        }
     } else {
-        PaddockFill(draw, box_min, box_max, radii,
-                    PaddockApply(PaddockMix(PaddockRgb(0x142C3B), PaddockRgb(0x174754),
-                                          press.hover)));
-        PaddockStroke(draw, box_min, box_max, radii, PaddockCol(0x34505E), 1.0F);
-    }
-    if (*value) {
-        const float unit = 24.0F / 41.0F;
-        const std::array<ImVec2, 3> tick{{
-            {box_min.x + 7.45F * unit, box_min.y + 20.5F * unit},
-            {box_min.x + 16.15F * unit, box_min.y + 29.2F * unit},
-            {box_min.x + 33.55F * unit, box_min.y + 11.8F * unit}}};
-        draw->AddPolyline(tick.data(), 3, PaddockCol(0x1AC2A3), 0, 5.8F * unit);
+        PaddockCheckBox(draw, box_min, *value);
     }
     PaddockTextStyle style;
     style.colour = PaddockCol(label_colour);
@@ -1085,7 +1113,12 @@ inline bool PaddockCheckbox(const char* id, const char* label, bool* value,
     PaddockDrawLines(draw, type,
                      {press.min.x + 34.0F, press.min.y + std::round((height - text_height) * 0.5F)},
                      text_width, lines, style);
-    PaddockEndPress(press, 6.0F, 1.0F);
+    if (kind == PaddockCheckKind::Magic) {
+        PaddockEndPress(press, 6.0F, 1.0F);
+    } else {
+        PaddockEndPress(press, 6.0F, 1.0F, false);
+        if (press.focused) PaddockCheckFocus(draw, box_min);
+    }
     return changed;
 }
 
@@ -1204,6 +1237,102 @@ inline bool PaddockSelect(const char* id, const char* label, int* value,
     ImGui::PopStyleVar(4);
     ImGui::PopID();
     return changed;
+}
+
+// A level slider (.snd-range): a groove whose fill shows the value, and a
+// ringed thumb that travels inside it.
+struct PaddockRangeLook {
+    float groove = 10.0F;      // track height
+    float thumb = 26.0F;       // thumb diameter, ring included
+    unsigned fill = 0xFFAB14;  // --snd-fill
+    unsigned ring = 0xFFAB14;  // --snd-thumb
+    unsigned track = 0x245A70; // --snd-track
+    bool bipolar = false;      // the fill grows out of a centre mark
+};
+
+struct PaddockRangeResult {
+    bool changed = false;
+    bool activated = false;    // A or Enter: the caller's quick action
+    bool reset = false;        // a double click
+    bool focused = false;
+    bool hovered = false;
+};
+
+// Left and right adjust the slider as soon as it has focus, like a browser
+// range input, so A and Enter stay free for the row's quick action.
+inline PaddockRangeResult PaddockRange(const char* id, int* value, int minimum,
+                                       int maximum, float width,
+                                       const PaddockRangeLook& look = {},
+                                       float height = 44.0F) {
+    PaddockRangeResult result;
+    const ImGuiID item = ImGui::GetID(id);
+    const bool nav_activate = GImGui->NavActivatePressedId == item;
+    const bool pressed = ImGui::InvisibleButton(id, {std::max(width, 1.0F), height});
+    const ImVec2 min = ImGui::GetItemRectMin();
+    const ImVec2 max = ImGui::GetItemRectMax();
+    result.hovered = ImGui::IsItemHovered();
+    result.focused = ImGui::IsItemFocused() && ImGui::GetIO().NavVisible;
+    result.activated = pressed && nav_activate;
+    result.reset = result.hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+    const int before = *value;
+    const float span = std::max(static_cast<float>(maximum - minimum), 1.0F);
+    const float travel = std::max(width - look.thumb, 1.0F);
+    if (ImGui::IsItemActive() && GImGui->ActiveIdSource == ImGuiInputSource_Mouse) {
+        const float t = (ImGui::GetIO().MousePos.x - min.x - look.thumb * 0.5F) / travel;
+        *value = minimum + static_cast<int>(std::lround(std::clamp(t, 0.0F, 1.0F) * span));
+    }
+    if (ImGui::IsItemFocused()) {
+        constexpr std::array<ImGuiKey, 4> kKeys{{
+            ImGuiKey_GamepadDpadLeft, ImGuiKey_LeftArrow,
+            ImGuiKey_GamepadDpadRight, ImGuiKey_RightArrow}};
+        // Owning left and right keeps navigation from leaving the row sideways.
+        for (const ImGuiKey key : kKeys) ImGui::SetKeyOwner(key, item);
+        for (std::size_t index = 0; index < kKeys.size(); ++index) {
+            if (ImGui::IsKeyPressed(kKeys[index], item, ImGuiInputFlags_Repeat)) {
+                *value += index < 2U ? -1 : 1;
+            }
+        }
+    }
+    *value = std::clamp(*value, minimum, maximum);
+    result.changed = *value != before;
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const float t = static_cast<float>(*value - minimum) / span;
+    const float mid_y = std::round((min.y + max.y) * 0.5F);
+    const ImVec2 groove_min{min.x, mid_y - look.groove * 0.5F};
+    const ImVec2 groove_max{max.x, mid_y + look.groove * 0.5F};
+    const PaddockRadii groove_radii = PaddockRound(look.groove * 0.5F);
+    PaddockFill(draw, groove_min, groove_max, groove_radii, PaddockCol(look.track));
+    const auto fill_between = [&](float from, float to) {
+        if (to - from < 0.5F) return;
+        draw->PushClipRect({groove_min.x + from, groove_min.y},
+                           {groove_min.x + to, groove_max.y}, true);
+        PaddockFill(draw, groove_min, groove_max, groove_radii, PaddockCol(look.fill));
+        draw->PopClipRect();
+    };
+    if (look.bipolar) {
+        const float centre = width * 0.5F;
+        fill_between(std::min(centre, width * t), std::max(centre, width * t));
+        draw->AddRectFilled({std::round(groove_min.x + centre - 1.0F), groove_min.y},
+                            {std::round(groove_min.x + centre + 1.0F), groove_max.y},
+                            PaddockCol(0xD8EBF1));
+    } else {
+        fill_between(0.0F, width * t);
+    }
+    // box-shadow: inset 0 1px 2px #00000059
+    draw->PushClipRect(groove_min, {groove_max.x, groove_min.y + 2.0F}, true);
+    PaddockStroke(draw, groove_min, groove_max, groove_radii, PaddockCol(0x000000, 70U), 1.0F);
+    draw->PopClipRect();
+
+    const bool grown = (ImGui::IsItemActive() && result.hovered) || result.focused;
+    const float scale = 1.0F + 0.12F * PaddockEase(PaddockTween(
+        PaddockKey("thumb", item), grown, 0.15F, 0.15F));
+    const float radius = look.thumb * 0.5F * scale;
+    const ImVec2 thumb{min.x + look.thumb * 0.5F + travel * t, mid_y};
+    draw->AddCircleFilled({thumb.x, thumb.y + 2.0F}, radius + 1.5F, PaddockCol(0x000000, 60U), 32);
+    draw->AddCircleFilled(thumb, radius, PaddockCol(look.ring), 32);
+    draw->AddCircleFilled(thumb, radius - 5.0F * scale, PaddockCol(0xFFF6DA), 32);
+    return result;
 }
 
 // A help disclosure (.mods-help-disclosure). Draw the body between Begin and

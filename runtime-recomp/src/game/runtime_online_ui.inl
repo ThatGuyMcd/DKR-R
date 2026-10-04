@@ -281,15 +281,17 @@ inline float OlFieldLabel(const char* label, float width) {
     return height + 6.0F;
 }
 
-// A pill switch with its title and explanation (.ol-switch).
+// A described setting (.ol-switch): the launcher's checkbox, its title and
+// its explanation.
 bool OlSwitchRow(const char* id, const char* title, const char* description, bool* value,
                  float width, bool rule_above, bool disabled = false) {
     const PaddockType strong = OlRead(15.0F, true, 1.5F);
     const PaddockType caption = OlRead(13.0F, false, 1.4F);
-    const float text_width = std::max(width - 44.0F - 12.0F, 1.0F);
+    const float text_width = std::max(width - 24.0F - 12.0F, 1.0F);
     const float text_height = PaddockTextHeight(strong, title, text_width) +
                               PaddockTextHeight(caption, description, text_width);
-    const float height = 12.0F + std::max(27.0F, text_height) + 12.0F;
+    const float content = std::max(44.0F, text_height);
+    const float height = 12.0F + content + 12.0F;
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     ImDrawList* draw = ImGui::GetWindowDrawList();
     if (rule_above) {
@@ -303,26 +305,21 @@ bool OlSwitchRow(const char* id, const char* title, const char* description, boo
         *value = !*value;
         changed = true;
     }
-    const float on = PaddockEase(PaddockTween(PaddockKey("switch", press.id), *value, 0.15F, 0.15F));
     const int first = draw->VtxBuffer.Size;
-    const ImVec2 track{origin.x, origin.y + 13.0F};
-    const ImVec2 track_end{track.x + 44.0F, track.y + 26.0F};
-    PaddockFill(draw, track, track_end, PaddockRound(13.0F),
-                PaddockMix(PaddockRgb(0x123E58), PaddockRgb(kOlGo), on));
-    PaddockStroke(draw, track, track_end, PaddockRound(13.0F),
-                  PaddockMix(PaddockRgb(0x7AA9BC), PaddockRgb(kOlGo), on), 1.0F);
-    draw->AddCircleFilled({track.x + 13.0F + 18.0F * on, track.y + 13.0F}, 9.0F,
-                          PaddockMix(PaddockRgb(0xDBE7ED), PaddockRgb(0x07332C), on), 24);
-    OlFade(draw, first, disabled ? 0.5F : 1.0F);
-    if (press.focused) PaddockFocusRing(draw, track, track_end, 13.0F);
+    // align-items: center, so the box sits mid-row beside the text.
+    const ImVec2 box{origin.x, std::round(origin.y + 12.0F + (content - 24.0F) * 0.5F)};
+    PaddockCheckBox(draw, box, *value);
+    const float text_top = std::round(origin.y + 12.0F + (content - text_height) * 0.5F);
     PaddockTextStyle title_style;
     title_style.colour = PaddockCol(0xFFFFFF);
-    const float title_height = PaddockTextAt(draw, strong, {track_end.x + 12.0F, origin.y + 12.0F},
+    const float title_height = PaddockTextAt(draw, strong, {box.x + 36.0F, text_top},
                                              text_width, title, title_style);
     PaddockTextStyle small_style;
     small_style.colour = PaddockCol(kOlSoft);
-    PaddockTextAt(draw, caption, {track_end.x + 12.0F, origin.y + 12.0F + title_height},
+    PaddockTextAt(draw, caption, {box.x + 36.0F, text_top + title_height},
                   text_width, description, small_style);
+    OlFade(draw, first, disabled ? 0.6F : 1.0F);
+    if (press.focused) PaddockCheckFocus(draw, box);
     return changed;
 }
 
@@ -3816,10 +3813,53 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     if (indent > 0.0F) ImGui::Indent(indent);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
 
-    DrawPageHeading("ONLINE");
-    PaddockGap(6.0F);
-    OlParagraph("Race friends over the internet. No account, no port forwarding: just share a code.", 16.0F, kOlSoft,
-                page);
+    // The header (.ol-header): the title and lede, and in the launcher the
+    // Game ROM beside them (flex 1 1 340px / 0 1 360px), wrapping under them
+    // on a narrow panel.
+    {
+        const bool rom_slot = launcher && g_launcher_rom != nullptr;
+        const bool side = rom_slot && page >= 340.0F + 28.0F + 280.0F;
+        const float slot_width = !rom_slot ? 0.0F
+                               : side ? std::clamp(page - 340.0F - 28.0F, 280.0F, 360.0F)
+                                      : std::min(page, 360.0F);
+        const float text_width = side ? page - slot_width - 28.0F : page;
+        const ImVec2 head = ImGui::GetCursorScreenPos();
+        ImGui::BeginGroup();
+        DrawPageHeading("ONLINE");
+        PaddockGap(6.0F);
+        OlParagraph("Race friends over the internet. No account, no port forwarding: just share a code.", 16.0F,
+                    kOlSoft, text_width);
+        ImGui::EndGroup();
+        float bottom = ImGui::GetItemRectMax().y;
+        if (rom_slot) {
+            const PlayPageContext& rom = *g_launcher_rom;
+            const bool known = !rom.rom_catalog.empty();
+            const PaddockType label = OlSignType(15.0F, 1.0F, 0.08F);
+            const PaddockType note = OlRead(12.5F, false, 1.4F);
+            const float field = known ? 55.0F : 56.0F;
+            const float slot_height = label.line + 6.0F + field + 6.0F + note.line;
+            const float top = side ? std::max(head.y, bottom - slot_height) : bottom + 16.0F;
+            const float x = side ? head.x + page - slot_width : head.x;
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            PaddockDrawRun(draw, label, {x, top}, PaddockCol(kOlAmber), "GAME ROM", "GAME ROM" + 8);
+            ImGui::SetCursorScreenPos({x, top + label.line + 6.0F});
+            if (known) {
+                DrawRomSelect("online-rom", slot_width, true, active,
+                              "Locked while you are in a lobby. Everyone races on the same revision.");
+            } else if (PaddockImportButton("Choose a ROM...##online-rom")) {
+                OpenRomBrowser(rom.selected_rom);
+            }
+            const std::string_view hint = active ? "Locked while you are in a lobby."
+                                        : known ? "Everyone in a lobby needs the same revision."
+                                                : "You need a ROM to host or join.";
+            PaddockTextStyle hint_style;
+            hint_style.colour = PaddockCol(kOlSoft);
+            PaddockTextAt(draw, note, {x, top + label.line + 6.0F + field + 6.0F}, slot_width, hint, hint_style);
+            bottom = std::max(bottom, top + slot_height);
+        }
+        ImGui::SetCursorScreenPos({head.x, bottom});
+        ImGui::Dummy({page, 0.0F});
+    }
     PaddockGap(22.0F);
     DrawOlTabs(tabs, page);
     if (!valid_section()) state.section = tabs.front().id;
@@ -3886,5 +3926,4 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     DrawFriendCodeKeyboard();
     DrawFriendSearchKeyboard();
     DrawOnlineGuideModal();
-    DrawOlToast();
 }

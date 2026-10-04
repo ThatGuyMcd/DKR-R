@@ -109,6 +109,10 @@ struct AddressTable {
     std::uint32_t PostraceFinishState;
     std::uint32_t WaveTexUVMaskX;
     std::uint32_t WaveTexUVMaskY;
+    std::uint32_t CurrentSequence;
+    std::uint32_t SequenceTable;       // gSequenceTable (ALSeqFile *)
+    std::uint32_t SequenceLengths;     // gSeqLengthTable (u32 *)
+    std::uint32_t SequenceSoundTable;  // gSeqSoundTable (MusicData *)
 };
 
 inline constexpr AddressTable kUsV77{
@@ -210,6 +214,10 @@ inline constexpr AddressTable kUsV77{
     0x80126C28U,
     0x8012A094U, // gWaveTexUVMaskX, verified v77 ELF symbol
     0x8012A098U, // gWaveTexUVMaskY
+    0x80115D04U,
+    0x80115CF8U,
+    0x80115D0CU,
+    0x80115D1CU,
 };
 
 inline constexpr AddressTable kUsV80{
@@ -311,6 +319,10 @@ inline constexpr AddressTable kUsV80{
     0x801271E8U,
     0x8012A654U, // gWaveTexUVMaskX, verified v80 ELF symbol
     0x8012A658U, // gWaveTexUVMaskY
+    0x80116284U,
+    0x80116278U,
+    0x8011628CU,
+    0x8011629CU,
 };
 
 inline rom::Revision gSelectedRevision = rom::Revision::UsV77;
@@ -412,6 +424,10 @@ inline std::uint32_t GameMode = kUsV77.GameMode;
 inline std::uint32_t MenuStage = kUsV77.MenuStage;
 inline std::uint32_t MenuDelay = kUsV77.MenuDelay;
 inline std::uint32_t PostraceFinishState = kUsV77.PostraceFinishState;
+inline std::uint32_t CurrentSequence = kUsV77.CurrentSequence;
+inline std::uint32_t SequenceTable = kUsV77.SequenceTable;
+inline std::uint32_t SequenceLengths = kUsV77.SequenceLengths;
+inline std::uint32_t SequenceSoundTable = kUsV77.SequenceSoundTable;
 
 inline const AddressTable& table_for(const rom::Revision revision) {
     return revision == rom::Revision::UsV80 ? kUsV80 : kUsV77;
@@ -521,6 +537,10 @@ inline bool select(const rom::Revision revision) {
     PostraceFinishState = table.PostraceFinishState;
     WaveTexUVMaskX = table.WaveTexUVMaskX;
     WaveTexUVMaskY = table.WaveTexUVMaskY;
+    CurrentSequence = table.CurrentSequence;
+    SequenceTable = table.SequenceTable;
+    SequenceLengths = table.SequenceLengths;
+    SequenceSoundTable = table.SequenceSoundTable;
     gSelectedRevision = revision;
     return true;
 }

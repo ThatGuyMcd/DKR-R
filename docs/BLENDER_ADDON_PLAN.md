@@ -1,4 +1,4 @@
-# DKR track editor - Blender addon plan
+# Track Lab - Blender addon plan
 
 Working plan for a Blender addon that lets a creator author a Diddy Kong Racing
 track and export a `.dkrmap` that DKR-R loads from `custom-tracks/`.
@@ -54,7 +54,7 @@ buffers, materials or animations, just one root node named `objects` whose
 children carry a `translation` and an `extras` dict. Blender's stock exporter
 rewrites all of that - axis conversion, node reordering, mesh and buffer
 boilerplate - and coerces integer `extras` to float, which is the one thing the
-format cannot survive. `tools/blender/dkr_track_editor/gltf_io.py` reads and
+format cannot survive. `tools/blender/track_lab/gltf_io.py` reads and
 writes these documents directly instead, in about 200 lines, and that is what
 makes the round trip exact.
 
@@ -77,7 +77,7 @@ all three are built; see "Phase 2: the geometry encoder".
 | Reshape shipped track geometry | | step 2 | built |
 | Invisible walls | | step 2 | built |
 | Collision tuning | | step 2 | built, and free — the game derives collision from the triangles, so reshaping the road moves what is drivable |
-| Minimap parameters | | step 2 | built — they live in the `LevelModel` header, so they ship with a model payload |
+| Minimap parameters | | step 2 | built — they live in the `LevelModel` header, so they ship with a model payload. A track's own minimap (picture, sprite and all nine numbers) is built from Grease Pencil road edges: see `docs/CUSTOM_MINIMAP_PLAN.md` |
 | Add or remove geometry | | step 3 | built |
 | Vertex colours and UVs an author edits | | after step 3 | not built — both are display-only in each direction; the export uses the raw values, so unwrapping or repainting in Blender does not reach the track |
 | Track geometry from a new Blender mesh | | beyond step 3 | not built, and needs three things, not one — see "What a track from scratch actually needs" |
@@ -167,7 +167,7 @@ triangles of every batch that does not opt out.
 ## Proposed addon architecture
 
 ```
-dkr_track_editor/
+track_lab/
   __init__.py            registration, panels
   catalog.py             object type schema, loaded from a generated JSON
   operators/
@@ -817,7 +817,10 @@ an encoder already exists. It is a large piece of work to duplicate.
   the id in the model is a placeholder the runtime substitutes. See "Artwork a
   track brings with it".
 - Minimap parameters live in the `LevelModel` header, so a Phase 1 remix cannot
-  change the minimap. Confirm whether that matters to creators.
+  change the minimap. It mattered: every remix of Ancient Lake showed Ancient
+  Lake's map. Answered by `docs/CUSTOM_MINIMAP_PLAN.md` - a track now ships its
+  own minimap from road edges, keeps the retail one while unreshaped, and ships
+  none otherwise.
 - `elevation` on an AI node is not a height. Retail values (-1, 0, 1, 3) do not
   track the node's Y position, and 143 of 208 nodes leave it 0. It reads like a
   route tier. Worth identifying before the AI operator tries to set it

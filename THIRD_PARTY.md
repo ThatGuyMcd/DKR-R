@@ -25,6 +25,7 @@ N64ModernRuntime must also satisfy GPL-3.0; see
 | SDL_GameControllerDB | Community controller mappings loaded before user mappings | Zlib |
 | Dear ImGui | Launcher and in-game settings UI | MIT |
 | DirectX Shader Compiler | Windows shader compilation | University of Illinois/NCSA and bundled notices |
+| dr_mp3 / dr_wav (mackron/dr_libs) | Decoding a custom track's own MP3/WAV music; vendored in `runtime-recomp/third_party/dr_libs` | Public domain (Unlicense) or MIT-0 |
 
 Exact dependency commits are recorded in `dependencies.lock.json`. Windows
 packages include applicable notices in `ThirdPartyLicenses`. Linux AppImages

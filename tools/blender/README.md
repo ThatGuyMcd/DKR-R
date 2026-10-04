@@ -1,4 +1,4 @@
-# DKR track editor - Blender addon
+# Track Lab - Blender addon
 
 Author a Diddy Kong Racing track in Blender: place objects, items and the AI
 AI node graph over a track's geometry, reshape the geometry itself, then write
@@ -9,22 +9,83 @@ This is Phase 1 of `docs/BLENDER_ADDON_PLAN.md` - remixing an existing track -
 plus all three steps of Phase 2: the track's own geometry can be reshaped, and
 geometry can be added and removed.
 
+## Where this lives
+
+Track Lab is developed inside [DKR-R](https://github.com/ThatGuyMcd/DKR-R), in
+`tools/blender/`, next to the runtime that plays the tracks it makes: the
+`.dkrmap` format, the minimap, the textures and the music are implemented on
+both sides and change together. The
+[Track Lab repository](https://github.com/leite-matheus/track-lab) is a mirror
+of that folder, kept in sync by `.github/workflows/sync.yml`, and is where the
+releases are published.
+
+- **Download** `track_lab.zip` from the Track Lab releases. Each release says
+  which DKR-R it needs; `CHANGELOG.md` has the same notes.
+- **Issues** can go to either repository.
+- **Changes** go to DKR-R as pull requests. The mirror is rebuilt from DKR-R
+  and cannot keep commits of its own.
+
+The commands in this file are run from a DKR-R checkout; in the mirror, drop
+the `tools/blender/` prefix.
+
+**Releasing a version.** Bump `version` in `track_lab/blender_manifest.toml`
+and `bl_info` in `track_lab/__init__.py`, and add its section at the top of
+`CHANGELOG.md`, in one commit (`test_version.py` holds the three together).
+Once that reaches DKR-R's `main`, the next sync releases it. There is nothing
+to tag.
+
+**Pushing the mirror by hand** - the first time, and whenever `sync.yml`
+itself changes, since the workflow's token may not push a workflow file:
+
+```
+git fetch origin                     # origin = ThatGuyMcd/DKR-R
+git subtree split --prefix=tools/blender origin/main -b track-lab-mirror
+git push https://github.com/leite-matheus/track-lab.git track-lab-mirror:main
+```
+
 ## Install
+
+Download `track_lab.zip` from the Track Lab releases, or build it:
 
 ```
 python tools/blender/generate_catalog.py     # needs the decomp checked out
+python tools/blender/generate_rom_tables.py  # needs the decomp checked out
 python tools/blender/package_addon.py
 ```
 
 Then in Blender: **Edit > Preferences > Add-ons > Install from Disk**, pick
-`tools/blender/dkr_track_editor.zip`, and enable *DKR Track Editor*. The panels
-appear in the 3D viewport sidebar (`N`) under a **DKR** tab.
+`tools/blender/track_lab.zip`, and enable *Track Lab*. The panels
+appear in the 3D viewport sidebar (`N`) under a **Track Lab** tab.
 
-**Point it at your decomp assets.** Object artwork lives in an extracted decomp
-tree, not inside the addon. When the addon is run from a checkout of this
-repository it finds `extern/dkr-decomp/assets/.vanilla/<version>` on its own; an
-installed copy cannot, so set **Decomp Assets** in the addon's preferences. The
-Place panel shows which tree is in use, and warns when there is none.
+**Give it the game's assets.** Object artwork, retail textures and retail
+tracks live in an extracted asset tree, not inside the addon. Until it has one,
+the Track Lab tab opens on **Game Assets** and nothing else:
+
+- **Extract from DKR-R's ROM** - offered when DKR-R already has a ROM (its
+  `rom-cache`, `last-rom.txt` or `rom-catalog.txt` in `%APPDATA%\DKRPort`, or
+  `~/.config/dkr-port`). One click; about ten seconds.
+- **Extract from ROM... / Choose Another ROM...** - any clean USA 1.0 or 1.1
+  dump, as `.z64`, `.v64` or `.n64` (the byte order is read from the header,
+  not the extension). PAL, Japanese and modified ROMs are refused by name.
+- **I Already Have Extracted Assets** - a decomp's `assets/.vanilla/<version>`
+  (or any folder above it), as before.
+- **Continue Without Assets** - objects are drawn as markers; retail textures,
+  skyboxes and Import Retail Track stay unavailable. A small *Game Assets*
+  panel stays to set them up later.
+
+The extraction (`rom_extract.py`) is a port of the decomp's `dkr_assets_tool
+extract` for the asset types the addon reads, so no decomp, Linux tool or
+`extract.sh` is needed. It writes the very tree that tool writes -
+`test_rom_extract.py` holds it to the decomp's own extraction: every JSON and
+glTF byte-identical, every `.bin` identical, every PNG identical pixel for
+pixel, for both revisions. The tree goes into the extension's user folder
+(Blender's user data folder for a legacy install), is built in a staging
+folder and only moved into place when complete, and **Decomp Assets** in the
+preferences is pointed at it. The preferences can extract again or switch to
+another folder at any time.
+
+When the addon is run from a checkout of this repository it also finds
+`extern/dkr-decomp/assets/.vanilla/<version>` on its own.
 
 Verified against Blender 5.2. The manifest declares 4.2 as the minimum, and the
 zip carries both `blender_manifest.toml` and `bl_info` so it installs as an
@@ -33,7 +94,7 @@ extension or as a legacy addon.
 ## Use
 
 **Waterfalls.** Select sloping or vertical track faces in Edit Mode, then use
-**DKR > Water > Waterfalls > Add Waterfall**. Choose a game preset or **Use
+**Track Lab > Water > Waterfalls > Add Waterfall**. Choose a game preset or **Use
 Selected Texture** to use the image picked in Textures, including a custom PNG.
 Set speed in texels/s (default 44.53), Down/Up and the repetitions over the
 selected height. Under Appearance, choose Blended or Cutout, Pass-through
@@ -54,6 +115,35 @@ wrap modes. Re-segment and Add Water preserve the links. Motion uses the game's
 TexScroll; animated viewport preview is not included yet. Custom-texture motion,
 Modern/Accurate interpolation, HD replacements and Track Lab reloads still need
 manual verification in game.
+
+**Music.** Under *Export > Header > Music*, choose **Game Music** to use one of
+the game's songs, or **Music File** to ship your own **MP3 or WAV** (mono or
+stereo, 8-192 kHz, 1 s to 15 min, up to 64 MB; compressed WAV is refused). The
+file is checked by its bytes when you pick it, and again at export. Set
+**Volume**, **Loop Start** and **Loop End** (0 loops at the end of the file;
+whatever is before Loop Start plays once as an intro) and what happens on the
+**Final Lap** - *Speed Up* like the game's songs, pitch rising, or *Keep Speed*.
+The game song chosen below the file still matters: it plays silently under your
+music, and its fades, the pause menu and the final-lap speed-up are what your
+music follows - so pick a race song. MidiFade/MidiChSet objects switch channels
+of a game song and do nothing with a file; the panel and the export say so.
+Listen in Track Lab; the Play button stays unavailable. MP3 encoders add a
+little silence at the edges, so a seamless loop is easiest from a WAV or an MP3
+with a LAME/Xing header (which almost all encoders write).
+
+Or choose **MIDI File** and pick a **.mid** - that is all. It is converted to
+the game's own music format and DKR plays it on its own instruments, in place
+of the game song chosen below it, so fades, the final-lap speed-up and
+MidiFade/MidiChSet objects all work on it. The converter picks the instruments
+(General MIDI families map to the DKR programs retail songs use in those
+roles; channel 10 drums go to DKR's drum kits), plays a song with tempo changes
+at its main tempo, and loops at `loopStart`/`loopEnd` marker events or, without
+them, the whole song. The panel shows the result - its size against the game's
+13,032-byte music buffer, channels, notes, tempo - and anything the author
+should know (notes moved or dropped, tempo flattened). A song too large for the
+buffer, or faster than 255 BPM, is an export error. **Volume** sets DKR's own
+level for the song (100% is a retail song's; the game stops at about 115%).
+The `.mid` itself is kept in the package under `source/music.mid`.
 
 **Choose the Level Type first.** A new scene shows one panel, *Level Type*,
 asking what kind of level this is: Race, Boss Race, Challenge (Battle, Bananas
@@ -368,10 +458,20 @@ How an object is drawn comes from its own header, so it matches the game:
 |---|---|
 | sprite billboard | 49 of the 85 types - trees, balloons, coins, bushes |
 | textured mesh | 32 types, built from the decoded object model |
-| marker | 4 types whose header points at a debug sphere, such as AI nodes |
+| ground decal | the ground zipper, whose arrow on the road is its shadow |
+| marker | types whose header points at a debug sphere, such as AI nodes |
 
 A weapon balloon reads its `balloonType` and shows that weapon's sprite, so a
 boost balloon and a trap balloon look different the way they do in game.
+
+Everything is drawn at the size the game draws it. A sprite frame is every
+strip of texture it is cut into - five for a palm top, three for a balloon -
+each placed where `sprite_init_frame` puts it, and a sprite pixel is
+`4/3 * tan(30°)` world units at the header's scale (the billboard is added in
+clip space under the default 60° camera). On top of the header's `scale`, the
+object's own size byte - `radius` on scenery, `scale` on balloons, zippers and
+doors - is the Blender object's scale, as each `obj_init_*` reads it:
+`max(byte, 10) / 64`.
 
 *Refresh Object Artwork* redraws everything, which is what to press after
 setting the asset path for the first time.
@@ -379,7 +479,9 @@ setting the asset path for the first time.
 **Edit fields.** Select an object and the DKR Object panel shows its fields with
 the right widget for each: a slider bounded by what the C type can hold, or a
 dropdown of an enum's members. Where a type has an angle, rotate the object in
-the viewport and the field follows.
+the viewport and the field follows; where it has a size byte, scale it with S
+and the byte follows the same way (a byte that already gives the scale shown is
+kept as it was, so an untouched retail object exports unchanged).
 
 `pad*` and `unk*` fields are hidden behind the **Show Raw Bytes** toggle. They
 exist so an entry encodes to the bytes the game expects, and nobody has
@@ -409,6 +511,25 @@ along. The line follows a checkpoint while you drag it, and the faint lines are
 the alternate route. The panel says when the vehicle shown loads a set with no
 checkpoints, when an index sits on two checkpoints, and when a set passes the 60
 the game loads.
+
+With the bot lines shown, every checkpoint of the set has its index drawn over
+it, so the order can be read straight off the track.
+
+**Renumber Checkpoints.** The game drives the gates in `index` order, wherever
+they are, so a checkpoint placed between two others only counts there once its
+index does - and the Place button gives it the lowest index free, which is
+usually somewhere else in the lap. Nothing guesses the order; you click it.
+Select a checkpoint whose number is right - say 22 - press *Renumber
+Checkpoints* (in the same panel), and click the checkpoint that should come
+next: it becomes 23. Keep clicking and each becomes the next number after the
+last. The checkpoints not clicked yet stay in their order after the clicked
+ones, renumbered on, so the set is one valid route at every click and the bot
+line shows it; the ones before the start keep their numbers. Alternate-route
+checkpoints follow the main checkpoint they pair with. While it runs, the
+numbered checkpoints show green, the one the next click follows yellow and the
+one under the mouse blue, with the number it would get. Backspace takes back
+the last click; Esc, Enter or right-click finishes, and Ctrl+Z afterwards
+undoes the whole pass.
 
 *Difficulty* sets the header's behaviour levels, 0 to 9, one for each point a
 save can be at (not won yet, race won, silver coins, Tracks mode, trophy race)
@@ -458,7 +579,11 @@ the one rule about sharing it.
 `Export .dkrmap` writes a directory holding the manifest, a compiled
 `header.bin`, both compiled object maps, any textures the track ships in
 `textures/`, and the glTF sources beside them. A track with pictures of its own
-also gets `<track>-hd.zip` next to the directory - the high-resolution pack. It
+(textures, or a minimap drawn from its edges) also gets `<track>-hd.zip` next
+to the directory - the high-resolution pack, the minimap at 8 times its size. A
+track with its own music carries it as `music/main.mp3` (or `.wav`, or
+`.cseq` for a converted MIDI song) and a `music` entry in a schema 2 manifest;
+see `docs/CUSTOM_TRACKS.md`. It
 stays a separate file (a track can be shared without it), but DKR-R's installer
 treats the two as one gesture: import the folder that holds both and the pack
 goes in with the track.
@@ -510,9 +635,12 @@ Modern, which custom tracks need, and tells you it did.
 ```
 tools/blender/
   generate_catalog.py       builds data/catalog.json from the decomp
+  generate_rom_tables.py    builds data/rom_tables.json.gz from the decomp
   package_addon.py          builds the installable zip
   run_tests.py              runs every suite
-  dkr_track_editor/
+  CHANGELOG.md              each version's release notes
+  .github/workflows/sync.yml  the mirror's sync and release (runs in Track Lab only)
+  track_lab/
     __init__.py             registration; imports bpy only inside register()
     gltf_io.py              object-map reader and writer
     catalog.py              the generated catalogue, and value coercion
@@ -521,6 +649,7 @@ tools/blender/
     object_map_encoder.py   object map -> section bytes
     level_header.py         level header -> its 200 bytes
     assets.py               resolve an asset name to a file in the decomp tree
+    rom_extract.py          the decomp tree, extracted straight from a ROM
     preview.py              build the artwork an object is drawn with
     ai_graph.py             sampling, adjacency and the format's limits
     race_ai.py              the race bots' lanes and the header's AI bytes
@@ -528,18 +657,25 @@ tools/blender/
     water.py                the wave grid, as the game builds it
     validate.py             pre-export checks
     dkrmap.py               the .dkrmap container
+    music_audio.py          recognise and measure a track's MP3/WAV music
+    midi_import.py          a MIDI file -> a native DKR song, automatically
+    music_sequence.py       validate a native song the way the game reads it
+    music_bank.py           read the game's instrument bank
     textures.py             the ROM's 3D textures, and encoding your own
     scene.py                object map <-> Blender scene
     props.py                scene settings
-    prefs.py                where to find the decomp assets
+    prefs.py                where to find the decomp assets, and where to extract
     operators/              import, export, place, AI, validate, package
     operators/geometry_export.py   the mesh's edits -> a level model
     operators/textures.py          pick, apply and map a texture
     operators/custom_textures.py   an image -> a texture the track ships
     operators/race_ai.py           the bot lines overlay, Copy Difficulty
     operators/water.py             Add Water, Select/Remove Water, presets
+    operators/music.py             choose and check the track's music (file or MIDI)
+    operators/rom_assets.py        Extract from ROM (worker thread), Use Folder, skip
     ui/panels.py            the sidebar
     data/catalog.json       generated; do not edit by hand
+    data/rom_tables.json.gz generated: record names by SHA1, enums, struct layouts
   tests/
     test_roundtrip.py           byte-exact read/write, no Blender needed
     test_validate.py            the rules, checked against retail tracks
@@ -555,10 +691,18 @@ tools/blender/
     test_water.py               the wave grid, vs every retail wave track
     test_blender_roundtrip.py   byte-exact through a real Blender scene
     test_blender_operators.py   the operators actually work
+    test_music.py               MP3/WAV recognition and the music in a package
+    test_music_sequence.py      the native-song validator, vs the shared fixtures
+    test_midi_import.py         MIDI -> native song conversion
+    test_blender_music.py       the music controls, save/reopen and export
+    test_rom_extract.py         ROM -> asset tree, vs the decomp's extraction
+    test_blender_rom_assets.py  the Game Assets setup: gate, extract, skip, folder
+    test_version.py             one version in manifest, bl_info and CHANGELOG.md
+    fixtures/                   two short test tones (generated, original)
 ```
 
-Everything except `scene.py`, `preview.py`, `props.py`, `operators/` and `ui/`
-avoids `bpy`, so the formats and rules can be tested on a plain Python.
+Everything except `scene.py`, `preview.py`, `props.py`, `prefs.py`,
+`operators/` and `ui/` avoids `bpy`, so the formats and rules can be tested on a plain Python.
 
 ## Tests
 
@@ -591,4 +735,19 @@ moves:
 ```
 python tools/blender/generate_catalog.py
 python tools/blender/generate_catalog.py --check   # fail if stale, for CI
+```
+
+## Regenerating the ROM tables
+
+`data/rom_tables.json.gz` is what lets the addon name what it extracts: the ROM
+holds bytes, and `ASSET_OBJECT_PALMTREETOP` or `palm_tree_top_0.png` come from
+the decomp's `tools/dkr_assets_tool_extract.json`, which identifies each record
+by its SHA1. The same file carries the enums of `include/enums.h` and
+`include/object_behaviors.h` and the `LevelObjectEntry_*` layouts - packed, as
+the asset tool lays them out, not C-aligned - that object maps and headers are
+decoded with. None of it is ROM content. Rebuild it when the decomp moves:
+
+```
+python tools/blender/generate_rom_tables.py
+python tools/blender/generate_rom_tables.py --check   # fail if stale, for CI
 ```

@@ -737,6 +737,11 @@ static int canonical_identity_hook(const char* name) {
         "dkr_custom_tracks_track_id_override", // Explicit no-custom-content contract: kNoTrackOverride.
         "dkr_water_private_scene", // Exact non-DKR_WATER_QUALIFICATION branch: no diagnostic map override.
         "dkr_audio_mix_tick", "dkr_scale_sequence_player_volume", // Canonical default unity gain.
+        // PR46 music_sequence_init hooks: this owner admits no custom content,
+        // so there is no sequence binding or swapped carrier row to restore.
+        // Keep retail music and all registers/RAM unchanged, not a generic
+        // native-call fallback. Custom-track sessions remain inadmissible.
+        "dkr_custom_music_sequence_loaded", "dkr_custom_music_sequence_started",
         "dkr_hud_element_begin", "dkr_hud_element_end", "dkr_hud_minimap_begin", "dkr_hud_minimap_end",
         "dkr_hud_player_pass_begin", "dkr_hud_player_pass_end", "dkr_hud_general_pass_begin", "dkr_hud_general_pass_end",
         "dkr_hud_dialogue_pass_begin", "dkr_hud_dialogue_pass_end", "dkr_hud_text_begin", "dkr_hud_text_end",

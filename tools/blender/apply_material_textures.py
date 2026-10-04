@@ -92,12 +92,12 @@ MATCH_TOLERANCE = 1.0
 def _addon():
     """The installed extension if it is loaded, else the copy beside this file."""
     for name, module in list(sys.modules.items()):
-        if name == "dkr_track_editor" or name.endswith(".dkr_track_editor"):
+        if name == "track_lab" or name.endswith(".track_lab"):
             return module
     here = os.path.dirname(os.path.abspath(__file__))
     if here not in sys.path:
         sys.path.insert(0, here)
-    return importlib.import_module("dkr_track_editor")
+    return importlib.import_module("track_lab")
 
 
 _ROOT = _addon().__name__

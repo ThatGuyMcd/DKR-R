@@ -1,4 +1,4 @@
-"""Build the installable ``dkr_track_editor.zip``.
+"""Build the installable ``track_lab.zip``.
 
 Blender takes the addon either way: as an extension, which is the path Blender
 4.2 and later prefer and which reads ``blender_manifest.toml``, or as a legacy
@@ -18,8 +18,8 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(HERE, ".."))
-PACKAGE_DIR = os.path.join(HERE, "dkr_track_editor")
-PACKAGE_NAME = "dkr_track_editor"
+PACKAGE_DIR = os.path.join(HERE, "track_lab")
+PACKAGE_NAME = "track_lab"
 
 #: Never ship these.
 EXCLUDE_DIRS = {"__pycache__", ".git"}

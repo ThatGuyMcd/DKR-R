@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -69,12 +71,24 @@ namespace dkr::runtime::custom_tracks {
 //     cannot be renumbered after the fact, so a track discovered later has no
 //     textures in the published table at all. Its model's ids are reset to
 //     texture 0 rather than left pointing past the end of the table.
+//
+// Textures2D and Sprites are a track's own MINIMAP, and they arrive the same
+// way. tex_init_textures loads ASSET_TEXTURES_2D_TABLE, then the 3D table, then
+// ASSET_SPRITES_TABLE, each counted to its terminator exactly like the level
+// tables, and load_texture / tex_load_sprite / load_sprite_info read an entry
+// by table difference. So a picture appended to the 2D table and a sprite
+// appended to the sprite table load with no new mechanism, published once at
+// boot like Textures3D. Two ids are placeholders the runtime substitutes, in
+// the stored prefix of the model (minimapSpriteIndex, 0x20) and in the sprite
+// itself (baseTextureId); see kCustomSpriteIdBase below.
 enum class Section {
     LevelHeaders,
     LevelObjectMaps,
     LevelNames,
     LevelModels,
     Textures3D,
+    Textures2D,
+    Sprites,
 };
 
 // A level owns two object maps, and init_track spawns from both:
@@ -150,6 +164,122 @@ struct TextureInfo {
     }
 }
 
+// ---------------------------------------------------------------------------
+// A track's own minimap
+// ---------------------------------------------------------------------------
+//
+// A SPRITES payload is what dkr_assets_tool's BuildSprite writes: a 12-byte
+// SpriteHeader - s16 baseTextureId, s16 numberOfFrames, s16 anchor x, s16
+// anchor y, s32 the game fills - then numberOfFrames + 1 bytes of frame
+// boundaries, padded to 16. tex_load_sprite loads frameTexOffsets[frames]
+// textures from ASSET_TEXTURES_2D starting at baseTextureId, and
+// minimap_marker_pos places every racer's dot relative to the anchor.
+struct SpriteInfo {
+    std::int16_t base_texture = 0;   // baseTextureId as the payload holds it
+    std::uint16_t frames = 0;
+    std::int16_t anchor_x = 0;
+    std::int16_t anchor_y = 0;
+    std::uint16_t textures = 0;      // frameTexOffsets[frames]
+};
+
+// gCurrentSpriteAsset is a 512-byte buffer (MAX_SPRITE_ASSET_SIZE), and
+// asset_load copies a whole sprite into it before anything is checked.
+inline constexpr std::size_t kMaxSpritePayload = 512;
+
+// The placeholder a model's minimapSpriteIndex (LevelModel 0x20) holds for the
+// track's own minimap sprite, and the one that sprite's baseTextureId holds for
+// the track's own 2D texture. The real indices are the ROM's counts plus an
+// ordinal - 193 sprites and 906 2D textures in US v1.0 - which only the
+// player's cartridge knows, so the exporter writes these and the runtime
+// substitutes them, exactly as it does kCustomTextureIdBase. 0x7000 fits the
+// s16 both ids travel in. Kept identical in
+// tools/blender/track_lab/minimap.py.
+inline constexpr std::int32_t kCustomSpriteIdBase = 0x7000;
+inline constexpr std::int32_t kCustomSpriteIdCount = 16;
+inline constexpr std::int32_t kCustomTexture2DIdBase = 0x7000;
+inline constexpr std::int32_t kCustomTexture2DIdCount = 255;
+
+// Where minimapSpriteIndex sits in a LevelModel (include/structs.h).
+inline constexpr std::size_t kModelMinimapSprite = 0x20;
+// Level header byte 0xBC, bit 0: hud_render_general draws no minimap at all.
+// Hubs and cutscenes set it.
+inline constexpr std::size_t kHeaderMinimapFlags = 0xBC;
+inline constexpr std::uint8_t kHeaderNoMinimap = 0x01;
+
+// Reads a SPRITES payload into `info`. False, with the reason in `error`, for
+// one the loader would misread: shorter than its own header and frame table,
+// longer than the buffer asset_load copies it into, no frames, or frame
+// boundaries that do not start at 0 and climb.
+[[nodiscard]] bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes,
+                                          SpriteInfo& info, std::string& error);
+
+// The minimapSpriteIndex a LEVEL_MODELS payload carries in its stored prefix,
+// or -1 when the payload has no readable stored prefix (an older exporter's,
+// which predates own minimaps and so names a retail sprite anyway).
+[[nodiscard]] std::int64_t model_minimap_sprite(const std::vector<std::uint8_t>& bytes);
+
+// Whether the header served at `header_offset` must hide the minimap: its
+// track ships a minimap of its own that the once-per-boot sprite or 2D texture
+// table does not hold - installed after boot - so the model's placeholder could
+// not be resolved and the HUD would draw a stray sprite with the dots scattered
+// round it. Nothing is hidden for a track without one, or for a retail header.
+[[nodiscard]] bool minimap_hidden(std::uint32_t header_offset);
+
+// A track's own recorded music: manifest schema 2, key "music". DKR cannot
+// play it - its music player runs sequences against the ROM's instrument bank
+// from a 13 KB buffer - so custom_music decodes the file on the host and mixes
+// it into the audio output while the retail song the header names, the
+// carrier, plays silently. Following the carrier is how the game's own fades,
+// pause and final-lap speed-up reach the file. See docs/CUSTOM_MUSIC_PLAN.md.
+//
+// Everything here was checked at scan: the file sits inside the track
+// directory (symlinks resolved), has the size the manifest records and starts
+// like the codec it claims, and the carrier is the header's own /music byte.
+// The bytes are only decoded, and their digest checked, when a race needs them.
+inline constexpr const char* kMusicFormat = "audio-stream-v1";
+inline constexpr std::uint64_t kMaxMusicBytes = 64ULL * 1024ULL * 1024ULL;
+inline constexpr std::uint32_t kMaxMusicVolume = 200;   // percent
+inline constexpr std::size_t kHeaderMusic = 0x52;        // level header /music
+inline constexpr std::size_t kHeaderInstruments = 0x54;  // level header /instruments (u16)
+
+// The other kind of music a track can carry: a native DKR sequence (compact
+// ALCSeq, `music/main.cseq`), usually converted from a MIDI file by the addon.
+// The game plays it itself, through its own instrument bank: custom_music
+// copies it into the music buffer when the carrier starts, so the player, the
+// fades, the final-lap speed-up and the MidiFade/MidiChSet objects all work on
+// it unchanged. Validated at scan the way the player will read it.
+inline constexpr const char* kSequenceFormat = "dkr-alcseq-v1";
+inline constexpr const char* kSequenceBank = "dkr-stock-v1";
+inline constexpr std::uint32_t kMaxSequenceBytes = 64U * 1024U;
+inline constexpr std::uint32_t kMaxSequenceVolume = 127;  // gMusicBaseVolume
+
+enum class MusicKind : std::uint8_t { Recording, Sequence };
+enum class MusicCodec : std::uint8_t { Mp3, Wav };
+
+struct MusicInfo {
+    MusicKind kind = MusicKind::Recording;
+    MusicCodec codec = MusicCodec::Mp3;
+    std::filesystem::path file;          // absolute, inside the track directory
+    std::string sha256;                  // lowercase hex, as the manifest says
+    std::uint64_t bytes = 0;
+    std::uint32_t sample_rate = 0;       // what the addon measured
+    std::uint32_t channels = 0;
+    std::uint64_t frames = 0;            // decoded sample frames
+    std::uint8_t carrier = 0;            // header /music, never 0
+    std::uint32_t volume = 100;          // percent of the file's own level
+    std::uint64_t loop_start = 0;        // sample frames
+    std::uint64_t loop_end = 0;          // sample frames; 0 is the end of file
+    bool final_lap_speedup = true;       // follow the carrier's tempo changes
+
+    // MusicKind::Sequence only. The bytes are read at scan (they are small),
+    // so a race never touches the disk; `volume` is then DKR's own base
+    // volume (0-127), not a percentage.
+    std::shared_ptr<const std::vector<std::uint8_t>> sequence;
+    std::uint8_t tempo_bpm = 0;          // the song's tempo, as gSeqSoundTable holds it
+    std::uint8_t reverb = 1;             // alFxReverbSet's setting
+    std::uint16_t channel_mask = 0xFFFF; // header /instruments
+};
+
 struct Track {
     std::string id;
     std::string name;
@@ -159,6 +289,9 @@ struct Track {
     // One per TEXTURES_3D entry, in manifest order - the order that is each
     // texture's identity.
     std::vector<TextureInfo> textures;
+    // One per TEXTURES_2D and SPRITES entry, in manifest order.
+    std::vector<TextureInfo> textures_2d;
+    std::vector<SpriteInfo> sprites;
     bool enabled = true;
     // manifest.hdTexturePack, and the sibling archive resolved at scan time.
     // See "A track's high-resolution texture pack" below.
@@ -166,6 +299,7 @@ struct Track {
     std::string hd_pack_digest;               // hdTexturePack.textureDigest
     std::filesystem::path hd_pack_sibling;    // matched <track>-hd.zip, else empty
     bool hd_pack_sibling_mismatch = false;    // sibling present, digest differs
+    std::optional<MusicInfo> music;           // manifest.music (schema 2)
 };
 
 // Scans `directory` for *.dkrmap archives and parses their manifests. Invalid
@@ -235,6 +369,15 @@ void reload();
 // when the track is disabled or contributes no header.
 [[nodiscard]] std::int32_t resolved_level_id(const std::string& track_id);
 [[nodiscard]] bool owns_level_id(std::int32_t level_id);
+// Called with the level id at every level load - races, restarts and the Track
+// Select previews alike - from the level_load scene-reset hook. custom_music
+// registers here so this module, and the tests that build it alone, never
+// depend on the audio code.
+using LevelLoadObserver = void (*)(std::int32_t level_id);
+void set_level_load_observer(LevelLoadObserver observer);
+// The recorded music of the enabled track that owns `level_id`, if it has any.
+// Asked at every level load, so it copies only the descriptor.
+[[nodiscard]] std::optional<MusicInfo> music_for_level(std::int32_t level_id);
 
 // WORLD_CUSTOM_TRACKS in the Blender addon. Track Select appends these races
 // to the same logical category as legacy courses, outside retail world arrays.
@@ -395,7 +538,7 @@ void set_auto_boot(bool enabled);
 // below the mask. The count is the ceiling on a model's texture table, which is
 // indexed by a u8 with 0xFF meaning "none".
 //
-// Kept identical in tools/blender/dkr_track_editor/textures.py.
+// Kept identical in tools/blender/track_lab/textures.py.
 inline constexpr std::int32_t kCustomTextureIdBase = 0x7000;
 inline constexpr std::int32_t kCustomTextureIdCount = 255;
 
@@ -421,6 +564,7 @@ struct ArtworkSummary {
     std::size_t textures = 0;
     std::size_t translucent = 0;
     std::size_t animated = 0;
+    bool minimap = false;   // ships a minimap of its own
 };
 [[nodiscard]] ArtworkSummary artwork(const std::string& track_id);
 

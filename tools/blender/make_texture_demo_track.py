@@ -44,8 +44,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import dkr_track_editor  # noqa: E402
-from dkr_track_editor import level_model, textures as texture_module  # noqa: E402
+import track_lab  # noqa: E402
+from track_lab import level_model, textures as texture_module  # noqa: E402
 
 
 def arguments(argv):
@@ -80,7 +80,7 @@ def main(argv):
     workspace = os.path.dirname(out) or os.getcwd()
     os.makedirs(workspace, exist_ok=True)
 
-    dkr_track_editor.register()
+    track_lab.register()
     try:
         bpy.ops.wm.read_factory_settings(use_empty=True)
         # Saved first, because the addon keeps a track's resampled pictures
@@ -99,7 +99,7 @@ def main(argv):
         say(bpy.ops.dkr.track_from_mesh_blank(keep_source=False),
             "track_from_mesh_blank")
 
-        from dkr_track_editor.operators import geometry as geometry_ops
+        from track_lab.operators import geometry as geometry_ops
 
         built = geometry_ops.geometry_objects(bpy.context)
         if not built:
@@ -147,7 +147,7 @@ def main(argv):
             "export_dkrmap")
         bpy.ops.wm.save_mainfile()
     finally:
-        dkr_track_editor.unregister()
+        track_lab.unregister()
 
     report(out)
     return 0
@@ -160,7 +160,7 @@ def enum_member(subject):
     header template's two unanswerable questions can be answered on a machine
     that has never seen a ROM.
     """
-    from dkr_track_editor import catalog as catalog_module
+    from track_lab import catalog as catalog_module
 
     members = sorted(catalog_module.load().raw.get("enumValues", {})
                      .get(subject, {}))
@@ -168,7 +168,7 @@ def enum_member(subject):
 
 
 def header_key(pointer):
-    from dkr_track_editor.operators import header as header_ops
+    from track_lab.operators import header as header_ops
 
     return header_ops.key_for(pointer)
 

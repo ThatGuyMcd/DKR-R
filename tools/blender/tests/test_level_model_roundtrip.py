@@ -34,7 +34,7 @@ import sys
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 
-from dkr_track_editor import level_model, level_model_encoder  # noqa: E402
+from track_lab import level_model, level_model_encoder  # noqa: E402
 
 REPO_ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 VANILLA = os.path.join(REPO_ROOT, "extern", "dkr-decomp", "assets", ".vanilla")

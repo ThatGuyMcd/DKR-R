@@ -363,9 +363,10 @@ INPUT_NATIVE_HASH = {
     # Oct 1 reviewed opt-in capture hook; stable drive/input branches unchanged.
     "runtime-recomp/src/game/runtime_netplay.cpp": "aaeee3894a0087e9512cf426a65f044cfd76f7aee82dac713b2969f12126160c",
     "runtime-recomp/src/game/runtime_magic_codes.cpp": "e7d661472bb041991b3e8cfc6373c1d647b0fa300281d21448ed74efdb01021f",
-    # Oct 2: installed .dkrmap hooks remain disabled only during the owned
-    # vanilla cold bootstrap; offline/legacy settings and behavior unchanged.
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "0f6854a71db58f6eab8f808bd34ca3e6b3cf2bbc39fb3245bcf5302b35725d09",
+    # Oct 4 PR46 merge: added minimap table pairs and music load observer.
+    # Owned vanilla bootstrap still bypasses mod assets and clears an old
+    # offline music binding through the observer's no-level native branch.
+    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "a1c21cf25e28f8a2d1eedabadc85c77b3f9eb4ef0528fa7687b6cdc4a2dcb6f0",
     "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eff1460b853514ac2b200735c6085b1089585019b8ac1f0d11130c50b999e0ed",
 }
 
@@ -377,7 +378,12 @@ FULL_SCENE_NATIVE_HASH = {
     "runtime-recomp/src/game/runtime_stubs.cpp": "2552788db2decd11c30ae8d6609c42d51d3072578118e4a1d1f3bbd7cec34f31",
     "runtime-recomp/src/game/intro_tail_policy.hpp": "5f5362ff5de40f5f9aa3a653c6e3849b8f27997b9db4592abd833022b9d47a36",
     "runtime-recomp/src/game/water_profile.cpp": "d04da9797b34f8001e9304ccbd76171ead1eef8acc4fe2a1c215406b71064efb",
-    "runtime-recomp/src/game/revision_addresses.hpp": "9f08f7bfc926a8ece5e0c3595dd53f12f2d123ffd4ea7f67ee94303ff95de666",
+    # Both revisions keep the water UV masks and append PR46's music globals.
+    "runtime-recomp/src/game/revision_addresses.hpp": "d8dd9d0f964082f69c86b8a9486ca12ecd47272702d141b03ab9de9cb898d43e",
+    # sequence_loaded/started are identities only under the existing no-mods
+    # owner contract: no bound sequence or saved carrier row. Not admission
+    # of custom music into the checkpointed simulation.
+    "runtime-recomp/src/game/custom_music.cpp": "3954cb3188645663ff15c51eec02ead2805b25bfc39837c71693303a41aaa137",
     "runtime-recomp/src/game/online_roster_policy.hpp": "3c914fdcad650d62839eed84f76ea22d5743a2fbf1d30512b88d2317e38892f4",
     "runtime-recomp/src/game/runtime_enhancements.cpp": "7a868375b1a8e4e0f3e5e1c60036795fa2630e7d4b3cd6e954308495743918de",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "ab8a0f4220c00ce1b5726ff75953f0c4944b5b4e24eba942b442e07268ad04da",
@@ -400,12 +406,13 @@ def input_native_audit():
             raise ValueError(f"Unreviewed native input/Pak/rumble boundary: {name}")
 
 
-def audio_rsp_payload():
+def audio_rsp_payload(rsp_source=None):
     """Read only; return checked private copies, never modify the RSP/runtime."""
     root = Path(__file__).resolve().parents[1]
     sources = {}
     for name, expected in RSP_INPUT_HASH.items():
-        raw = (root/name).read_bytes()
+        source_path = (rsp_source / Path(name).name) if rsp_source is not None and name.startswith("runtime-recomp/RecompiledRSP/") else root/name
+        raw = source_path.read_bytes()
         if hashlib.sha256(raw).hexdigest() != expected:
             raise ValueError(f"Unreviewed private audio RSP input: {name}")
         sources[Path(name).name] = raw.decode()
@@ -778,7 +785,7 @@ def audio_isolation_header(revision):
         "RspUcodeFunc"), (), revision)
 
 
-def generate(source_dir: Path, header_path: Path, output: Path, roots, revision, scene_cuts=False, audio_services=False, input_services=False, authored_cpu=False, isolate_symbols=False, full_scenes=False, boss_finish_diagnostics=False):
+def generate(source_dir: Path, header_path: Path, output: Path, roots, revision, scene_cuts=False, audio_services=False, input_services=False, authored_cpu=False, isolate_symbols=False, full_scenes=False, boss_finish_diagnostics=False, rsp_source=None):
     source_dir, header_path, output = source_dir.resolve(), header_path.resolve(), output.resolve()
     if output.exists() or output == source_dir or source_dir in output.parents or header_path.parent in output.parents:
         raise ValueError("Probe output must be a new, separate directory; protected inputs are never rewritten")
@@ -856,7 +863,7 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
                     "floorf", "floor", "ceilf", "ceil", "fmodf", "fmod", "abs", "assert"))
     dispatch = audio_dispatch(functions, revision) if audio_services else {}
     menu_callbacks = menu_dispatch(functions, revision) if full_scenes else {}
-    rsp_headers, rsp_source = audio_rsp_payload() if audio_services else ({}, None)
+    rsp_headers, rsp_source = audio_rsp_payload(rsp_source) if audio_services else ({}, None)
     roots = list(roots)
     if authored_cpu:
         roots.append("dkr_probe_authored_main_cpu")
@@ -984,5 +991,6 @@ if __name__ == "__main__":
     p.add_argument("--isolate-symbols", action="store_true", help="Revision-specific C link isolation; preserves all native fences, NOT live admission")
     p.add_argument("--full-scenes", action="store_true", help="Confirmed menu continuations and constructors; release qualification remains separate")
     p.add_argument("--boss-finish-diagnostics", action="store_true", help="Bounded observation-only boss-finish tracing; no gameplay changes")
+    p.add_argument("--rsp-source", type=Path, help="Read-only RSP input directory for an isolated worktree; original SHA-256 pins remain mandatory")
     a = p.parse_args()
-    generate(a.generated, a.header, a.output, a.roots, a.revision, a.scene_cuts, a.audio_services, a.input_services, a.authored_cpu, a.isolate_symbols, a.full_scenes, a.boss_finish_diagnostics)
+    generate(a.generated, a.header, a.output, a.roots, a.revision, a.scene_cuts, a.audio_services, a.input_services, a.authored_cpu, a.isolate_symbols, a.full_scenes, a.boss_finish_diagnostics, a.rsp_source)

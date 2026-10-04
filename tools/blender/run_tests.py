@@ -1,4 +1,4 @@
-"""Run every test for the track editor.
+"""Run every test for Track Lab.
 
 The suites split by what they need. Two run on any Python 3.8+ because the
 format, catalogue, AI-graph and validation modules deliberately avoid ``bpy``.
@@ -34,8 +34,13 @@ PLAIN_SUITES = [
     "test_textures.py", "test_custom_textures.py", "test_rice_identity.py",
     "test_level_types.py", "test_skyboxes.py", "test_race_ai.py",
     "test_transparency.py", "test_water.py", "test_texture_scroll.py",
+    "test_minimap.py", "test_music.py", "test_music_sequence.py",
+    "test_midi_import.py", "test_checkpoint_order.py", "test_rom_extract.py",
+    "test_version.py",
 ]
-BLENDER_SUITES = ["test_blender_roundtrip.py", "test_blender_operators.py", "test_blender_waterfalls.py"]
+BLENDER_SUITES = ["test_blender_roundtrip.py", "test_blender_operators.py",
+                  "test_blender_waterfalls.py", "test_blender_minimap.py",
+                  "test_blender_music.py", "test_blender_rom_assets.py"]
 
 
 def find_blender(explicit=None):

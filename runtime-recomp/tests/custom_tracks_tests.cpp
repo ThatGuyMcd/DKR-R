@@ -87,6 +87,75 @@ std::vector<std::uint8_t> as_bytes(const std::string& text) {
     return std::vector<std::uint8_t>(text.begin(), text.end());
 }
 
+// A SPRITES payload as BuildSprite writes one: a 12-byte SpriteHeader, the
+// frame boundaries, padded to 16.
+std::string sprite_payload(std::int32_t base_texture, std::uint16_t frames = 1,
+                           std::int16_t anchor_x = 61, std::int16_t anchor_y = 62) {
+    std::string out(16U, '\0');
+    out[0] = static_cast<char>((base_texture >> 8) & 0xFF);
+    out[1] = static_cast<char>(base_texture & 0xFF);
+    out[2] = static_cast<char>((frames >> 8) & 0xFF);
+    out[3] = static_cast<char>(frames & 0xFF);
+    out[4] = static_cast<char>((anchor_x >> 8) & 0xFF);
+    out[5] = static_cast<char>(anchor_x & 0xFF);
+    out[6] = static_cast<char>((anchor_y >> 8) & 0xFF);
+    out[7] = static_cast<char>(anchor_y & 0xFF);
+    for (std::uint16_t frame = 0; frame <= frames && 12U + frame < out.size(); ++frame) {
+        out[12U + frame] = static_cast<char>(frame);
+    }
+    return out;
+}
+
+// The same model with minimapSpriteIndex (0x20, inside the stored prefix) set.
+std::string with_minimap(std::string payload, std::int32_t sprite) {
+    const std::size_t at = 10U + 0x20U;
+    const auto value = static_cast<std::uint32_t>(sprite);
+    payload[at] = static_cast<char>((value >> 24) & 0xFF);
+    payload[at + 1U] = static_cast<char>((value >> 16) & 0xFF);
+    payload[at + 2U] = static_cast<char>((value >> 8) & 0xFF);
+    payload[at + 3U] = static_cast<char>(value & 0xFF);
+    return payload;
+}
+
+std::int32_t served_minimap_sprite(std::uint32_t offset, std::int32_t size) {
+    const std::uint8_t* bytes = payload_for(Section::LevelModels, offset, size);
+    assert(bytes != nullptr);
+    const std::uint8_t* at = bytes + 10U + 0x20U;
+    return static_cast<std::int32_t>((static_cast<std::uint32_t>(at[0]) << 24) |
+                                     (static_cast<std::uint32_t>(at[1]) << 16) |
+                                     (static_cast<std::uint32_t>(at[2]) << 8) | at[3]);
+}
+
+// A header that names retail object maps, so a track needs ship none.
+std::string minimal_header() {
+    std::string header(200U, '\0');
+    header[0x37] = 73;
+    header[0xBB] = 5;
+    return header;
+}
+
+void write_minimap_track(const std::filesystem::path& root, const std::string& id,
+                         const std::string& sprite, const std::string& model,
+                         bool texture = true) {
+    std::filesystem::create_directories(root / "minimap");
+    std::string adds =
+        "{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"},"
+        "{\"section\":\"LEVEL_MODELS\",\"file\":\"m.bin\"}";
+    if (texture) {
+        adds += ",{\"section\":\"TEXTURES_2D\",\"file\":\"minimap/texture.bin\"}";
+        write_file(root / "minimap" / "texture.bin", texture_payload(48, 60, 5, 0));
+    }
+    if (!sprite.empty()) {
+        adds += ",{\"section\":\"SPRITES\",\"file\":\"minimap/sprite.bin\"}";
+        write_file(root / "minimap" / "sprite.bin", sprite);
+    }
+    write_file(root / "manifest.json",
+               "{\"schemaVersion\":1,\"id\":\"" + id + "\",\"name\":\"" + id +
+                   "\",\"adds\":[" + adds + "]}");
+    write_file(root / "h.bin", minimal_header());
+    write_file(root / "m.bin", model);
+}
+
 void write_track(const std::filesystem::path& root, const std::string& id,
                  std::size_t payload_size) {
     std::filesystem::create_directories(root);
@@ -1031,6 +1100,302 @@ int main() {
         assert(track_select_entries().empty());
     }
     std::filesystem::remove_all(root);
+    // A track's own minimap: a picture in the 2D texture table and a sprite in
+    // the sprite table, both published once at boot like the 3D textures, and
+    // named by placeholders the runtime substitutes as it serves them - the
+    // model's minimapSpriteIndex and the sprite's baseTextureId.
+    std::filesystem::remove_all(root);
+    const std::string mapped_model =
+        with_minimap(model_payload({1234}), kCustomSpriteIdBase);
+    write_minimap_track(root / "mapped.dkrmap", "mapped",
+                        sprite_payload(kCustomTexture2DIdBase), mapped_model);
+    scan(root);
+    assert(tracks().size() == 1U);
+    assert(tracks().front().textures_2d.size() == 1U);
+    assert(tracks().front().sprites.size() == 1U);
+    assert(tracks().front().sprites.front().anchor_x == 61);
+    assert(artwork("mapped").minimap && !artwork("nobody").minimap);
+    {
+        std::vector<std::uint8_t> bytes = as_bytes(mapped_model);
+        assert(model_minimap_sprite(bytes) == kCustomSpriteIdBase);
+        assert(model_minimap_sprite(as_bytes(std::string(8U, 'x'))) == -1);
+    }
+
+    // Boot: tex_init_textures publishes the 2D table, then the sprite table.
+    constexpr std::int32_t kTextures2D[] = {0x0, 0x100, 0x200, -1};           // 2 retail
+    constexpr std::int32_t kSprites[] = {0x0, 0x10, 0x20, 0x30, -1};          // 3 retail
+    const std::vector<std::int32_t> table_2d =
+        build_extended_table(Section::Textures2D, kTextures2D);
+    assert(level_count(table_2d) == 3 && table_2d[2] == 0x200);
+    const std::vector<std::int32_t> sprite_table =
+        build_extended_table(Section::Sprites, kSprites);
+    assert(level_count(sprite_table) == 4 && sprite_table[3] == 0x30);
+    {
+        // The sprite now draws the 2D texture the track shipped: retail count
+        // + 0, and its anchor is untouched.
+        const std::uint8_t* sprite = payload_for(Section::Sprites, 0x30, 16);
+        assert(sprite != nullptr);
+        assert(sprite[0] == 0 && sprite[1] == 2);
+        assert(sprite[4] == 0 && sprite[5] == 61);
+    }
+
+    // Level load: the model now names the track's sprite, retail count + 0.
+    const std::vector<std::int32_t> mapped_headers =
+        build_extended_table(Section::LevelHeaders, kRetail);
+    const std::vector<std::int32_t> mapped_models =
+        build_extended_table(Section::LevelModels, kRetail);
+    assert(served_minimap_sprite(0x400, static_cast<std::int32_t>(mapped_model.size())) == 3);
+    // Rebuilding substitutes into the file's bytes again, not into the blob.
+    (void) build_extended_table(Section::LevelModels, kRetail);
+    assert(served_minimap_sprite(0x400, static_cast<std::int32_t>(mapped_model.size())) == 3);
+    assert(!minimap_hidden(static_cast<std::uint32_t>(mapped_headers[3])));
+    assert(!minimap_hidden(0x250));   // a retail header is never touched
+    (void) mapped_models;
+
+    // Installed after boot: the level tables are rebuilt and take the track,
+    // the sprite and 2D tables are not. Its model falls back to sprite 0 and
+    // its header is served with the "no minimap" bit, until a relaunch.
+    write_minimap_track(root / "zlate.dkrmap", "zlate",
+                        sprite_payload(kCustomTexture2DIdBase), mapped_model);
+    scan(root);
+    assert(tracks().size() == 2U);
+    const std::vector<std::int32_t> late_headers =
+        build_extended_table(Section::LevelHeaders, kRetail);
+    const std::vector<std::int32_t> late_models =
+        build_extended_table(Section::LevelModels, kRetail);
+    {
+        std::uint32_t mapped_header = 0;
+        std::uint32_t late_header = 0;
+        for (std::size_t index = 3; index + 2U < late_headers.size(); ++index) {
+            const auto offset = static_cast<std::uint32_t>(late_headers[index]);
+            const auto size = late_headers[index + 1] - late_headers[index];
+            (void) size;
+            if (resolved_level_id("mapped") == static_cast<std::int32_t>(index)) {
+                mapped_header = offset;
+            }
+            if (resolved_level_id("zlate") == static_cast<std::int32_t>(index)) {
+                late_header = offset;
+            }
+        }
+        assert(mapped_header != 0U && late_header != 0U);
+        assert(!minimap_hidden(mapped_header));
+        assert(minimap_hidden(late_header));
+        const auto model_size = static_cast<std::int32_t>(mapped_model.size());
+        const std::int32_t a = served_minimap_sprite(static_cast<std::uint32_t>(late_models[3]), model_size);
+        const std::int32_t b = served_minimap_sprite(static_cast<std::uint32_t>(late_models[4]), model_size);
+        assert((a == 3 && b == 0) || (a == 0 && b == 3));
+    }
+
+    // Refused at scan: a model naming a minimap its track does not ship, a
+    // sprite drawing a 2D texture past the track's own, and sprites the loader
+    // would misread - no frames, or too long for the buffer it is copied into.
+    std::filesystem::remove_all(root);
+    write_minimap_track(root / "nosprite.dkrmap", "nosprite", std::string{},
+                        mapped_model);
+    write_minimap_track(root / "overreach.dkrmap", "overreach",
+                        sprite_payload(kCustomTexture2DIdBase + 1), mapped_model);
+    write_minimap_track(root / "frameless.dkrmap", "frameless",
+                        sprite_payload(kCustomTexture2DIdBase, 0), mapped_model);
+    write_minimap_track(root / "huge.dkrmap", "huge",
+                        sprite_payload(kCustomTexture2DIdBase) + std::string(512U, '\0'),
+                        mapped_model);
+    // A sprite naming one of the ROM's own 2D textures needs none of its own.
+    write_minimap_track(root / "borrowed.dkrmap", "borrowed", sprite_payload(12),
+                        with_minimap(model_payload({1234}), 1), false);
+    scan(root);
+    assert(tracks().size() == 1U);
+    assert(tracks().front().id == "borrowed");
+    {
+        SpriteInfo info;
+        std::string reason;
+        assert(inspect_sprite_payload(as_bytes(sprite_payload(12)), info, reason));
+        assert(info.frames == 1U && info.textures == 1U && info.base_texture == 12);
+        assert(!inspect_sprite_payload(as_bytes(std::string(10U, '\0')), info, reason));
+    }
+
+    // Recorded music (schema 2). The header's /music byte is the carrier, the
+    // file must be inside the track and look like its codec, and the manifest
+    // must not contradict itself.
+    std::filesystem::remove_all(root);
+    {
+        std::string header(0xC8, '\0');
+        header[0x37] = 1;            // collectables map: a real retail index
+        header[0xBB] = 1;            // structure map likewise
+        header[kHeaderMusic] = 12;   // the carrier
+        const std::string mp3 = std::string("ID3\x04\0\0\0\0\0\0", 10) +
+                                std::string(4096, '\x55');
+        const std::string wav = std::string("RIFF\0\0\0\0WAVEfmt ", 16) +
+                                std::string(2048, '\0');
+        const auto descriptor = [&](const std::string& extra, std::size_t bytes) {
+            return std::string("\"music\":{\"format\":\"audio-stream-v1\","
+                               "\"sha256\":\"") + std::string(64, 'a') +
+                   "\",\"bytes\":" + std::to_string(bytes) +
+                   ",\"sampleRate\":44100,\"channels\":2,\"frames\":441000," + extra + "},";
+        };
+        const auto music_track = [&](const std::string& id, int schema,
+                                     const std::string& music_json,
+                                     const std::string& name,
+                                     const std::string& bytes) {
+            const std::filesystem::path dir = root / (id + ".dkrmap");
+            std::filesystem::create_directories(dir / "music");
+            write_file(dir / "h.bin", header);
+            if (!name.empty()) {
+                write_file(dir / name, bytes);
+            }
+            write_file(dir / "manifest.json",
+                       "{\"schemaVersion\":" + std::to_string(schema) +
+                           ",\"id\":\"" + id + "\",\"name\":\"" + id + "\"," +
+                           music_json +
+                           "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
+        };
+        const std::string ok_mp3 =
+            "\"codec\":\"mp3\",\"file\":\"music/main.mp3\",\"carrierSequence\":12,"
+            "\"volume\":90,\"loopStartFrame\":44100,\"loopEndFrame\":0,"
+            "\"finalLap\":\"constant\"";
+        music_track("song", 2, descriptor(ok_mp3, mp3.size()), "music/main.mp3", mp3);
+        music_track("wave", 2,
+                    descriptor("\"codec\":\"wav\",\"file\":\"music/main.wav\","
+                               "\"carrierSequence\":12", wav.size()),
+                    "music/main.wav", wav);
+        // Refused: schema 1 with music, schema 2 without, a carrier that is
+        // not the header's, a file outside the track, a renamed file, a size
+        // that disagrees, and a loop past the end.
+        music_track("old", 1, descriptor(ok_mp3, mp3.size()), "music/main.mp3", mp3);
+        music_track("bare", 2, "", "", "");
+        std::string other = ok_mp3;
+        other.replace(other.find(":12,"), 4, ":13,");
+        music_track("carrier", 2, descriptor(other, mp3.size()), "music/main.mp3", mp3);
+        std::string escape = ok_mp3;
+        escape.replace(escape.find("music/main.mp3"), 14, "../song.dkrmap/x.mp3");
+        music_track("escape", 2, descriptor(escape, mp3.size()), "music/main.mp3", mp3);
+        music_track("renamed", 2, descriptor(ok_mp3, wav.size()), "music/main.mp3", wav);
+        music_track("resized", 2, descriptor(ok_mp3, mp3.size() + 1), "music/main.mp3", mp3);
+        std::string long_loop = ok_mp3;
+        long_loop.replace(long_loop.find("\"loopEndFrame\":0"), 16, "\"loopEndFrame\":441001");
+        music_track("loop", 2, descriptor(long_loop, mp3.size()), "music/main.mp3", mp3);
+
+        // A symlink that leads out of the track is refused even with a clean
+        // name. Skipped where the platform will not create one.
+        bool linked = false;
+        {
+            const std::filesystem::path dir = root / "linked.dkrmap";
+            music_track("linked", 2, descriptor(ok_mp3, mp3.size()), "", "");
+            write_file(root / "outside.mp3", mp3);
+            std::error_code link_error;
+            std::filesystem::create_symlink(root / "outside.mp3",
+                                            dir / "music" / "main.mp3", link_error);
+            linked = !link_error;
+        }
+
+        scan(root);
+        std::vector<std::string> ids;
+        for (const Track& track : tracks()) {
+            ids.push_back(track.id);
+        }
+        std::sort(ids.begin(), ids.end());
+        assert((ids == std::vector<std::string>{"song", "wave"}));
+        (void) linked;
+
+        (void) build_extended_table(Section::LevelHeaders, kRetail);
+        const std::int32_t song_level = resolved_level_id("song");
+        const auto music = music_for_level(song_level);
+        assert(music.has_value());
+        assert(music->codec == MusicCodec::Mp3 && music->carrier == 12);
+        assert(music->volume == 90 && music->loop_start == 44100U && music->loop_end == 0U);
+        assert(!music->final_lap_speedup);
+        assert(music->file.filename() == "main.mp3" && music->bytes == mp3.size());
+        assert(music_for_level(resolved_level_id("wave"))->codec == MusicCodec::Wav);
+        assert(music_for_level(resolved_level_id("wave"))->final_lap_speedup);
+        assert(!music_for_level(0).has_value());
+        set_enabled("song", false);
+        (void) build_extended_table(Section::LevelHeaders, kRetail);
+        assert(!music_for_level(song_level).has_value() ||
+               resolved_level_id("wave") == song_level);
+        set_enabled("song", true);
+    }
+
+    // A native sequence (schema 2, dkr-alcseq-v1). Read and validated at scan;
+    // the header's /music is the carrier and its /instruments the channel mask.
+    std::filesystem::remove_all(root);
+    {
+        std::string header(0xC8, '\0');
+        header[0x37] = 1;
+        header[0xBB] = 1;
+        header[kHeaderMusic] = 12;
+        header[kHeaderInstruments] = '\xFF';
+        header[kHeaderInstruments + 1] = '\xFF';
+        // One track, program 1, two notes inside an endless loop (the shared
+        // fixture "loop-forever").
+        const std::string hex =
+            "00000044000000000000000000000000000000000000000000000000000000000000"
+            "00000000000000000000000000000000000000000000000000000000000000000180"
+            "00ff5107a12000c00100ff2e00ff00903c648140830090436481408300ff2dffff00"
+            "00001700ff2f";
+        std::string song;
+        for (std::size_t i = 0; i < hex.size(); i += 2) {
+            song.push_back(static_cast<char>(std::stoi(hex.substr(i, 2), nullptr, 16)));
+        }
+        std::string broken = song;
+        broken[3] = '\xF0';   // track 1 starts outside the sequence
+        const auto sequence_track = [&](const std::string& id, const std::string& extra,
+                                        const std::string& bytes, std::size_t recorded,
+                                        const std::string& name = "music/main.cseq",
+                                        char mask_low = '\xFF') {
+            const std::filesystem::path dir = root / (id + ".dkrmap");
+            std::filesystem::create_directories(dir / "music");
+            std::string own_header = header;
+            own_header[kHeaderInstruments + 1] = mask_low;
+            write_file(dir / "h.bin", own_header);
+            write_file(dir / name, bytes);
+            write_file(dir / "manifest.json",
+                       "{\"schemaVersion\":2,\"id\":\"" + id + "\",\"name\":\"" + id + "\","
+                       "\"music\":{\"format\":\"dkr-alcseq-v1\",\"sha256\":\"" +
+                           std::string(64, 'b') + "\",\"bytes\":" + std::to_string(recorded) +
+                           "," + extra + "},"
+                       "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
+        };
+        const std::string ok =
+            "\"bank\":\"dkr-stock-v1\",\"file\":\"music/main.cseq\",\"carrierSequence\":12,"
+            "\"tempoBpm\":120,\"volume\":110,\"reverb\":1,\"channelMask\":65535";
+        sequence_track("tune", ok, song, song.size());
+        // Refused: an unknown bank, no tempo, a tempo the final lap cannot
+        // scale, an overflowing volume, a mask the header contradicts, bytes
+        // the player would misread, a size that disagrees and a wrong suffix.
+        std::string bank = ok;
+        bank.replace(bank.find("dkr-stock-v1"), 12, "gm-v1");
+        sequence_track("bank", bank, song, song.size());
+        std::string no_tempo = ok;
+        no_tempo.replace(no_tempo.find("\"tempoBpm\":120,"), 15, "");
+        sequence_track("notempo", no_tempo, song, song.size());
+        std::string fast = ok;
+        fast.replace(fast.find(":120,"), 5, ":256,");
+        sequence_track("fast", fast, song, song.size());
+        std::string loud = ok;
+        loud.replace(loud.find(":110,"), 5, ":128,");
+        sequence_track("loud", loud, song, song.size());
+        sequence_track("mask", ok, song, song.size(), "music/main.cseq", '\x0F');
+        sequence_track("broken", ok, broken, broken.size());
+        sequence_track("resized", ok, song, song.size() + 2);
+        std::string mid = ok;
+        mid.replace(mid.find("main.cseq"), 9, "main.mid");
+        sequence_track("suffix", mid, song, song.size(), "music/main.mid");
+
+        scan(root);
+        std::vector<std::string> ids;
+        for (const Track& track : tracks()) {
+            ids.push_back(track.id);
+        }
+        assert((ids == std::vector<std::string>{"tune"}));
+        (void) build_extended_table(Section::LevelHeaders, kRetail);
+        const auto music = music_for_level(resolved_level_id("tune"));
+        assert(music.has_value() && music->kind == MusicKind::Sequence);
+        assert(music->carrier == 12 && music->tempo_bpm == 120 && music->volume == 110);
+        assert(music->reverb == 1 && music->channel_mask == 0xFFFF);
+        assert(music->sequence && music->sequence->size() == song.size());
+        assert(std::equal(song.begin(), song.end(), music->sequence->begin(),
+                          [](char a, std::uint8_t b) { return static_cast<std::uint8_t>(a) == b; }));
+    }
+
     std::printf("custom_tracks_tests: ok\n");
     return 0;
 }

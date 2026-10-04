@@ -21,6 +21,12 @@ int main() {
     assert(MenuStage == 0x80126980U);
     assert(MenuDelay == 0x800DF9FCU);
     assert(PostraceFinishState == 0x801271E8U);
+    assert(CurrentSequence == 0x80116284U);
+    assert(SequenceTable == 0x80116278U);
+    assert(SequenceLengths == 0x8011628CU);
+    assert(SequenceSoundTable == 0x8011629CU);
+    assert(WaveTexUVMaskX == 0x8012A654U);
+    assert(WaveTexUVMaskY == 0x8012A658U);
 
     assert(select(dkr::runtime::rom::Revision::UsV77));
     assert(selected_revision() == dkr::runtime::rom::Revision::UsV77);
@@ -37,6 +43,12 @@ int main() {
     assert(MenuStage == 0x801263E0U);
     assert(MenuDelay == 0x800DF47CU);
     assert(PostraceFinishState == 0x80126C28U);
+    assert(CurrentSequence == 0x80115D04U);
+    assert(SequenceTable == 0x80115CF8U);
+    assert(SequenceLengths == 0x80115D0CU);
+    assert(SequenceSoundTable == 0x80115D1CU);
+    assert(WaveTexUVMaskX == 0x8012A094U);
+    assert(WaveTexUVMaskY == 0x8012A098U);
 
     assert(!select(dkr::runtime::rom::Revision::Unsupported));
     assert(selected_revision() == dkr::runtime::rom::Revision::UsV77);

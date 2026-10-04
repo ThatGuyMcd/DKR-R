@@ -1,0 +1,24 @@
+schema_version = "1.0.0"
+
+id = "track_lab"
+version = "0.1.0"
+name = "Track Lab"
+tagline = "Author Diddy Kong Racing tracks and export .dkrmap packages"
+maintainer = "DKR-R contributors"
+type = "add-on"
+
+website = "https://github.com/ThatGuyMcd/DKR-R"
+
+tags = ["Import-Export", "Object"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:MIT"]
+
+# The catalogue is generated data the addon cannot work without, so it has to
+# travel inside the extension.
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.*",
+]
