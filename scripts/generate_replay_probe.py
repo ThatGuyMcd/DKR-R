@@ -414,7 +414,10 @@ INPUT_NATIVE_HASH = {
     "runtime-recomp/src/game/custom_tracks_hooks.cpp": "d6f79bfd1fb03d735f7e85375c43ba132b2138ecd11b933027259324caafa704",
     # Online mod owner: same no-session returns, explicit TLS namespace and
     # closed private guest callback table; no live/default dispatch fallback.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4b2091316095e555bc953a51bfafd5b295e199e6bb6a201d81f1594e8d34e522",
+    # Oct 6: bounded sparse model-slot scan and pre-dereference allocation
+    # fences. Pure guest-memory checks only; no live I/O or pointer repair.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "f46d550853e6ab9f049b0328b6fda6487cc870285d37eec639c2efd97abed84a",
+    "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "64520d21f6721b9caf40ee51f88548266ffaf5bc8821a7c17e6bdc72fa244bb7",
     # Expanded character identities, sparse retained presentation and one
     # immutable sample mount are shared by offline and replay-owned sessions.
     "runtime-recomp/src/game/mods/legacy_character_limits.hpp": "d74576f3bcd7aa61283ac4e8e68d3a234e9182dca5f09f6398f285ca9353c55a",

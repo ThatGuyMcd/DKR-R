@@ -97,6 +97,7 @@ void dkr_probe_profile_disabled(const char* name);
 int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* context);
 uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_context* context,
                               const uint64_t* args, unsigned count);
+int dkr_probe_model_safety(uint8_t* ram,unsigned operation,uint32_t address);
 int dkr_probe_native_fields(const char* name, uint8_t* ram, struct recomp_context* context,
                             unsigned event, const uint32_t* fields);
 uint64_t dkr_probe_cop0_read(struct recomp_context* context);

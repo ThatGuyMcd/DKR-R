@@ -1,0 +1,43 @@
+DKR-R 1.0.5-beta.15-playtest.14 - model-reference safety candidate
+2026-10-06
+
+Evidence
+The supplied 20261006-103131 dump faults in retail init_object_shading,
+US v1.0 guest instruction 0x8000F858. A model instance at 0x802E9FB0
+contains the invalid model pointer 0x00100010. The corresponding log is an
+offline launch with 19 custom characters enabled and Mumbo Jumbo selected.
+This is separate from the earlier rollback finish/output-thread correction.
+The small dump does not contain the affected guest heap allocations. The
+original cause of that invalid model pointer is not yet established.
+
+Changes
+- Bound the retail shading search to the declared model-slot count. Earlier
+  NULL slots remain valid; an entirely empty array takes the normal unshaded
+  four-byte result instead of scanning into unrelated behavior memory.
+- Validate model/instance/vertex/normal references before model-instance
+  creation, after creation, before object-property setup and before shading.
+- Do not mask, guess, silently replace or rebind corrupt model pointers.
+  If corruption is still present, stop through the existing controlled error
+  boundary and record the failed operation and pointer chain in runtime.log.
+- Both retail ROM revisions receive the hooks through the Patch Pipeline.
+  Authored native and owned rollback paths use the same pure memory checks.
+  Submodules and existing generated source trees were not manually edited.
+- No changes to installed mods, offline saves or gameplay graphics settings.
+  Prior online mod, save-protection, HUD, Track Lab and finish-output work is
+  retained in this candidate.
+
+Qualification and limitations
+Actual regenerated guest shading/model-cache functions pass fault-injection
+checks for both revisions, including sparse slots, all-NULL arrays, invalid
+pointers, allocation failures and caller ABI preservation. Both platforms
+pass 37 legacy-mod suites and 16 selected rollback/save/HUD/presentation suites.
+The real native ModWorld boundary also rejects the dump's bad pointer without
+mutating guest memory or checkpoint bytes, using read-only installed assets.
+No gameplay windows or scripted multiplayer matches were launched.
+
+This is a safety correction candidate, not proof that the underlying bad
+allocation has been eliminated. Please repeat the same offline Mumbo selection
+and subsequent menu transition with the same enabled mod set. If it stops with
+'Invalid model allocation', send the new runtime.log: its model-reference line
+will distinguish creation, object setup and shading failures. Keep this ZIP/
+AppImage separate from previous candidates with the same version label.

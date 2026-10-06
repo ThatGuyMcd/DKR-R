@@ -64,10 +64,26 @@ int main(int argc,char** argv) {
         check(!client.commit_checkpoint(std::move(foreign)));
         check(host.commit_checkpoint(std::move(first)) && host.checkpoint()==baseline);
         check(!host.commit_checkpoint(std::move(stale)));
-        auto pending=host.stage_checkpoint(baseline);
         std::vector<std::uint8_t> ram(8U*MiB);recomp_context ctx{};std::uint64_t result=0;
         const auto put=[&](std::uint32_t address,std::uint32_t word){for(unsigned i=0;i<4;++i)ram[((address&0x7fffff)+i)^3]=std::uint8_t(word>>(24-i*8));};
         const auto word=[&](std::uint32_t address){std::uint32_t value=0;for(unsigned i=0;i<4;++i)value=(value<<8)|ram[((address&0x7fffff)+i)^3];return value;};
+        // Model fences share the immutable guest namespace. They must work
+        // through the owned dispatch boundary without altering checkpoints.
+        put(0x802E9FB0U,0x80400000U);
+        const std::uint64_t model_check[]{3,0x802E9FB0U};
+        const auto intact_models=ram;
+        check(host.dispatch("dkr_legacy_model_safety",ram.data(),&ctx,model_check,2,nullptr,0,result)==1 && result==0);
+        check(ram==intact_models && host.checkpoint()==baseline);
+        put(0x802E9FB0U,0x00100010U); // Exact invalid model from the supplied dump.
+        const auto damaged_models=ram;
+        check(host.dispatch("dkr_legacy_model_safety",ram.data(),&ctx,model_check,2,nullptr,0,result)==-1);
+        check(ram==damaged_models && host.checkpoint()==baseline && !host.error().empty());
+        const std::uint64_t bad_operation[]{4,0x80400000U},bad_width[]{2,0x180400000ULL};
+        check(host.dispatch("dkr_legacy_model_safety",ram.data(),&ctx,bad_operation,2,nullptr,0,result)==-1);
+        check(host.dispatch("dkr_legacy_model_safety",ram.data(),&ctx,bad_width,2,nullptr,0,result)==-1);
+        check(host.dispatch("dkr_legacy_model_safety",ram.data(),&ctx,model_check,1,nullptr,0,result)==-1);
+        std::fill(ram.begin(),ram.end(),0);
+        auto pending=host.stage_checkpoint(baseline);
         check(host.dispatch("unknown",ram.data(),&ctx,nullptr,0,nullptr,0,result)==0);
         check(host.commit_checkpoint(std::move(pending)));
         ctx.r15=0x80400000U;

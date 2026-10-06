@@ -1295,6 +1295,12 @@ uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_con
     dkr_probe_checkpoint();
     uint64_t mod_result=0;
     if(dkr_probe_mod_dispatch(name,ram,context,args,count,0,0,&mod_result))return mod_result;
+    if(offline && count==2 && args[0]<=3 && args[1]<=UINT32_MAX &&
+       strcmp(name,"dkr_legacy_model_safety")==0) {
+        const int checked=dkr_probe_model_safety(ram,(unsigned)args[0],(uint32_t)args[1]);
+        if(checked<0)dkr_probe_block("invalid-model-reference");
+        return (uint64_t)checked;
+    }
     if(offline && canonical_presentation && count==1 && strcmp(name,"dkr_resolve_follow_camera")==0) {
         /* Same checked guest-only decision as the native Patch Pipeline. No
            live callback or local display/graphics preference enters replay. */

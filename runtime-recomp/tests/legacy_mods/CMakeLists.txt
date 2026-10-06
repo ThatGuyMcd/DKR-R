@@ -190,7 +190,8 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
         set(target DKRLegacyModelCacheGuestV${rev})
         set(generated "${DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT}/RecompiledFuncs-v${rev}")
         add_executable(${target} ../legacy_model_cache_guest_tests.cpp
-            "${generated}/object_model_init.c" "${generated}/model_instance_init.c" "${generated}/mempool_init_main.c")
+            "${generated}/object_model_init.c" "${generated}/model_instance_init.c" "${generated}/mempool_init_main.c"
+            "${generated}/init_object_shading.c")
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})

@@ -12,8 +12,23 @@
 #include "presentation_identity.hpp"
 #include "hud_layout_policy.hpp"
 #include "water_scroll_policy.hpp"
+#include "mods/legacy_model_safety.hpp"
 #include <bit>
 #include <cmath>
+#include <cstdio>
+
+// No ModWorld is installed in an unmodded owned session. Apply the same pure,
+// checked reference policy there; never fall through to a live runtime service.
+extern "C" int dkr_probe_model_safety(uint8_t* ram,unsigned operation,uint32_t address) {
+    const auto check=dkr::mods::check_model_operation({ram,8U*1024*1024},operation,address);
+    if(check.failure){
+        std::fprintf(stderr,"[legacy][model-reference] operation=%u failed=%s object=%08X header=%08X slots=%08X count=%u index=%u instance=%08X model=%08X normals=%08X\n",
+            operation,check.failure,check.object,check.header,check.slots,check.count,
+            check.index,check.instance,check.model,check.normals);
+        return -1;
+    }
+    return check.no_shading?1:0;
+}
 
 // Compile-time admission boundaries; no game window or test process required.
 static_assert(0U<DKR_PROBE_SCENE_LEVEL_COUNT && 53U<DKR_PROBE_SCENE_LEVEL_COUNT);

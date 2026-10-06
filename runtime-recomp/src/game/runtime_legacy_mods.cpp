@@ -13,6 +13,7 @@
 #include "mods/legacy_character_presentation.hpp"
 #include "mods/legacy_heap_policy.hpp"
 #include "mods/legacy_asset_capacity.hpp"
+#include "mods/legacy_model_safety.hpp"
 #include "mods/legacy_checkpoint.hpp"
 #include "mods/online_mod_runtime.hpp"
 #include "mods/online_course_policy.hpp"
@@ -455,6 +456,17 @@ extern "C" void dkr_legacy_asset_cache_guard(std::uint8_t* ram,recomp_context* c
 extern "C" void dkr_legacy_racer_spawn_failed(std::uint8_t*,recomp_context*) {
     dkr::runtime::legacy::fail("Race setup could not allocate a racer; stopped before a null guest-address write. Please report the active mods and runtime.log.");
 }
+extern "C" int dkr_legacy_model_safety(std::uint8_t* ram,recomp_context*,unsigned operation,std::uint32_t address) {
+    using namespace dkr::runtime;
+    const std::span<const std::uint8_t> memory{ram,legacy::guest_memory_size()};
+    const auto check=dkr::mods::check_model_operation(memory,operation,address);
+    if(check.failure){
+        std::fprintf(stderr,"[legacy][model-reference] operation=%u failed=%s object=%08X header=%08X slots=%08X count=%u index=%u instance=%08X model=%08X normals=%08X\n",
+            operation,check.failure,check.object,check.header,check.slots,check.count,check.index,check.instance,check.model,check.normals);
+        legacy::fail("Invalid model allocation detected before a guest-memory access. The game was stopped safely; installed mods and saves were retained. Please send runtime.log.");
+    }
+    return check.no_shading?1:0;
+}
 extern "C" std::uint32_t dkr_legacy_character_portrait_lookup(std::uint8_t* rdram,recomp_context* ctx,std::uint32_t racer_base) {
     using namespace dkr::runtime;
     const auto state=legacy::characters.load(); // Hold ownership through guest callbacks.
@@ -803,6 +815,7 @@ int ModWorld::dispatch(const char* operation,std::uint8_t* ram,recomp_context* c
             state_->pending_course_heap=0;
         }
         else if(name=="dkr_legacy_heap_capacity"){arity(0);dkr_legacy_heap_capacity(ram,ctx);}
+        else if(name=="dkr_legacy_model_safety"){arity(2);if(args[0]>3 || args[1]>0xffffffffULL)throw mods::Error("Invalid owned model-safety ABI.");result=dkr_legacy_model_safety(ram,ctx,static_cast<unsigned>(args[0]),static_cast<std::uint32_t>(args[1]));}
         else if(name=="dkr_legacy_asset_cache_capacity"){arity(1);if(args[0]>=4)throw mods::Error("Unknown owned asset cache kind.");result=dkr_legacy_asset_cache_capacity(ram,ctx,static_cast<unsigned>(args[0]));}
         else if(name=="dkr_legacy_asset_cache_guard"){
             arity(2);if(args[0]>=4 || args[1]>UINT32_MAX)throw mods::Error("Invalid owned asset cache bound.");
