@@ -3,14 +3,18 @@
 #include <stdexcept>
 #include <fstream>
 bool dkr_experimental_v77_dkr_probe_owned_adapter_check(std::span<const std::uint8_t>,std::span<const std::uint8_t>,unsigned);
+bool dkr_experimental_v77_dkr_probe_menu_flow_check(std::span<const std::uint8_t>,bool);
+extern "C" void dkr_experimental_v77_dkr_probe_rom(const std::uint8_t*,std::size_t);
 #if DKR_OWNED_EXPECT_V80
 bool dkr_experimental_v80_dkr_probe_owned_adapter_check(std::span<const std::uint8_t>,std::span<const std::uint8_t>,unsigned);
+bool dkr_experimental_v80_dkr_probe_menu_flow_check(std::span<const std::uint8_t>,bool);
+extern "C" void dkr_experimental_v80_dkr_probe_rom(const std::uint8_t*,std::size_t);
 #endif
-int main(int argc,char** argv) {
+int main(int argc,char** argv) try {
     using namespace dkr::runtime::netplay::experimental;
     using dkr::runtime::rom::Revision;
     unsigned checks=0;
-    const auto check=[&](bool ok){if(!ok)throw std::runtime_error("Owned revision registry failed");++checks;};
+    const auto check=[&](bool ok){if(!ok)throw std::runtime_error("Owned revision registry failed at check "+std::to_string(checks+1));++checks;};
     check(owned_adapter_available(Revision::UsV77));
     check(owned_adapter_available(Revision::UsV80)==bool(DKR_OWNED_EXPECT_V80));
     check(!owned_adapter_available(Revision::Unsupported));
@@ -26,7 +30,7 @@ int main(int argc,char** argv) {
         check(!error.empty());
     }
     check(!make_owned_game({},{},91,box,{},error));
-    if(argc==5) {
+    if(argc==5 || argc==6) {
         const auto read=[](const char* path) {
             std::ifstream stream(std::filesystem::u8path(path),std::ios::binary|std::ios::ate);
             if(!stream || stream.tellg()<=0 || stream.tellg()>32*1024*1024)throw std::runtime_error("Private fixture size invalid");
@@ -35,6 +39,19 @@ int main(int argc,char** argv) {
             return bytes;
         };
         const auto fixture77=read(argv[1]),rom77=read(argv[2]),fixture80=read(argv[3]),rom80=read(argv[4]);
+        if(argc==6 && std::string(argv[5])=="--menu-flow") {
+            dkr_experimental_v77_dkr_probe_rom(rom77.data(),rom77.size());
+#if DKR_OWNED_EXPECT_V80
+            dkr_experimental_v80_dkr_probe_rom(rom80.data(),rom80.size());
+#endif
+            check(dkr_experimental_v77_dkr_probe_menu_flow_check(fixture77,false));
+            check(dkr_experimental_v77_dkr_probe_menu_flow_check(fixture77,true));
+#if DKR_OWNED_EXPECT_V80
+            check(dkr_experimental_v80_dkr_probe_menu_flow_check(fixture80,false));
+#endif
+            std::cout<<"Production CPU menu prediction/resource fences: race and Adventure flow passed.\n";
+            return 0;
+        }
         const auto sink=[](ConfirmedAudio,std::string&){return true;};
         check(!make_owned_game_for_revision(Revision::UsV77,fixture80,rom77,91,box,sink,error));
         check(!make_owned_game_for_revision(Revision::UsV80,fixture77,rom80,91,box,sink,error));
@@ -67,4 +84,7 @@ int main(int argc,char** argv) {
         std::cout<<"Both production revision engines: real gameplay corrections, exact state/PCM and interleaved replay isolation passed.\n";
     } else if(argc!=1)throw std::runtime_error("Expected zero or four private fixture paths");
     std::cout<<checks<<" production owned revision dispatch checks passed.\n";
+} catch(const std::exception& error) {
+    std::cerr<<error.what()<<'\n';
+    return 1;
 }

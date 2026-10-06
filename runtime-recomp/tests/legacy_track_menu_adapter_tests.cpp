@@ -1,6 +1,11 @@
 #include "legacy_track_menu_adapter.hpp"
+#include "legacy_checkpoint.hpp"
 #include <bit>
 #include <iostream>
+#if defined(DKR_TRACK_MENU_ROLLBACK_TEST)
+#include "netplay/experimental_rollback.hpp"
+#include <cstring>
+#endif
 
 using namespace dkr::mods;
 namespace {
@@ -49,6 +54,89 @@ struct Fixture {
             get(MenuField::StickY,8,2)==static_cast<std::uint16_t>(y),"Input was not restored");
     }
 };
+#if defined(DKR_TRACK_MENU_ROLLBACK_TEST)
+// Real production rollback driver plus real native track adapter, with synthetic
+// guest fields only. This is a state/lifecycle regression, not a gameplay test.
+void rollback_stock_preview() {
+    using namespace dkr::runtime::netplay;
+    using namespace dkr::runtime::netplay::experimental;
+    struct MenuWorld final:Simulation {
+        Fixture fixture;
+        bool fence=false,agreed=false;
+        unsigned ticks=0,consumed=0,restores=0;
+        explicit MenuWorld(bool guarded):fence(guarded){}
+        SimulationContract contract()const override {return {0x545241434B,MiB+4096,kRequiredStateDomains,true,true,true};}
+        RestoreStep prepare_tick(std::uint64_t,std::uint32_t,bool actual,std::string&)override {
+            agreed=actual;return RestoreStep::Ready;
+        }
+        bool capture(std::span<std::uint8_t> output,std::string&)override {
+            const auto menu=fixture.adapter.checkpoint();
+            if(output.size()!=contract().state_bytes || menu.size()>4084)return false;
+            std::fill(output.begin(),output.end(),0);std::copy(fixture.memory.begin(),fixture.memory.end(),output.begin());
+            const auto size=static_cast<unsigned>(menu.size());
+            std::memcpy(output.data()+MiB,&ticks,4);std::memcpy(output.data()+MiB+4,&consumed,4);
+            std::memcpy(output.data()+MiB+8,&size,4);std::copy(menu.begin(),menu.end(),output.begin()+MiB+12);return true;
+        }
+        bool restore(std::span<const std::uint8_t> input,std::string& error)override {
+            if(input.size()!=contract().state_bytes)return false;
+            unsigned size=0;std::memcpy(&size,input.data()+MiB+8,4);if(size>4084)return false;
+            try {
+                auto menu=fixture.adapter.stage_checkpoint(input.subspan(MiB+12,size));
+                std::copy_n(input.begin(),MiB,fixture.memory.begin());fixture.adapter=std::move(menu);
+                std::memcpy(&ticks,input.data()+MiB,4);std::memcpy(&consumed,input.data()+MiB+4,4);++restores;return true;
+            }catch(const Error& failure){error=failure.what();return false;}
+        }
+        bool tick(std::uint32_t frame,const FrameInputs& input,TickOutput& output,std::string&)override {
+            check(frame==ticks,"Track adapter rollback lost its frame.");output={};
+            if(frame==0){fixture.event(6,5);fixture.event(7,0,1);}
+            if(frame==1) {
+                if(input[1].buttons)fixture.select(4,0);
+                if(fence && !agreed){output.confirmation_required=true;return true;}
+            }
+            if(frame==(fence?1U:2U)) {
+                const auto request=fixture.event(8,5);
+                check(request.scene && request.scene->id.empty() && request.scene->carrier==5,
+                      "A corrected stock preview was rebound to the custom cursor.");++consumed;
+            }
+            ++ticks;return true;
+        }
+        bool commit(std::uint64_t,std::uint32_t,std::span<const std::uint8_t>,bool,std::string&)override{return true;}
+    };
+    for(bool fence:{false,true}) {
+        MenuWorld delayed(fence),reference(fence);Driver driver(delayed),truth(reference);std::string error;
+        check(driver.start({91,2,14},error) && truth.start({91,2,14},error),"Cannot start adapter rollback regression.");
+        const auto receive=[&](Driver& owner,unsigned frame,unsigned player,PackedInput input) {
+            check(owner.receive(91,static_cast<std::uint8_t>(player),frame,input)==InputResult::Accepted,"Adapter input rejected.");
+        };
+        for(unsigned frame=0;frame<4;++frame) {
+            receive(truth,frame,0,{});receive(truth,frame,1,frame==1?PackedInput{1,0,0}:PackedInput{});
+            check(truth.step()==Step::Advanced,"Reference stock preview did not advance.");
+        }
+        receive(driver,0,0,{});receive(driver,0,1,{});check(driver.step()==Step::Advanced,"Stock preview did not queue.");
+        receive(driver,1,0,{});
+        check(driver.step()==(fence?Step::WaitingForConfirmedInput:Step::Advanced),"Pending stock preview did not survive speculation/fence.");
+        if(!fence) {
+            receive(driver,2,0,{});check(driver.step()==Step::Advanced,"Speculative stock load did not advance.");
+        }
+        receive(driver,1,1,{1,0,0});
+        if(fence)check(driver.step()==Step::Advanced,"Confirmed stock preview did not retry.");
+        else {
+            receive(driver,2,1,{});
+            check(driver.step()==Step::Replayed && driver.step()==Step::Replayed,"Late input could not restore/replay stock preview.");
+        }
+        for(unsigned frame=fence?2U:3U;frame<4;++frame) {
+            receive(driver,frame,0,{});
+            receive(driver,frame,1,{});
+            if(driver.statistics().next_frame==frame)check(driver.step()==Step::Advanced,"Corrected menu did not advance.");
+        }
+        Bytes actual(delayed.contract().state_bytes),expected(reference.contract().state_bytes);
+        check(delayed.capture(actual,error) && reference.capture(expected,error) && actual==expected,
+              "Corrected stock preview differs from confirmed-only state.");
+        check(delayed.restores>0 && delayed.consumed==1 && driver.statistics().confirmed_frames==4,
+              "Stock rollback did not restore, confirm and consume exactly once.");
+    }
+}
+#endif
 void run() {
     Fixture f;const auto stock=f.memory;
     const auto boot_sidecar=f.adapter.checkpoint();
@@ -117,6 +205,48 @@ void run() {
     Fixture original;original.select(4,0);original.event(6,5);original.event(7,0,1);original.event(8,5);
     original.select(0,0);original.event(5);check(original.get(MenuField::LoadedCarrier)==0xffffffff,"Stock carrier reused a custom preview");
     original.event(6,5);original.event(7,0,1);effect=original.event(8,5);check(effect.scene && effect.scene->id.empty(),"Stock selection did not explicitly restore original assets");
+    // Prediction/resource fences may rewind while a STOCK preview is queued
+    // in a menu with custom tracks installed. Empty ID means retail restoration;
+    // dropping the pending request or requiring a custom ID breaks Track Select.
+    for(unsigned carrier=0;carrier<65;++carrier) {
+        Fixture vanilla;vanilla.put(MenuField::PreviewCarrier,carrier);
+        vanilla.event(6,carrier);vanilla.event(7,0,1);
+        const auto pending=vanilla.adapter.checkpoint();
+        auto restored=vanilla.adapter.stage_checkpoint(pending);
+        check(restored.checkpoint()==pending,"Stock pending preview did not round-trip.");
+        const auto consumed=restored.apply(8,vanilla.memory,vanilla.fields,carrier);
+        check(consumed.scene && consumed.scene->id.empty() && consumed.scene->carrier==carrier,
+              "Restored stock request lost its original asset identity.");
+        check(!restored.apply(8,vanilla.memory,vanilla.fields,carrier).scene,"Stock request was consumed twice after restore.");
+        const auto completed=restored.checkpoint();
+        check(restored.stage_checkpoint(completed).checkpoint()==completed,"Completed stock preview did not round-trip.");
+    }
+    // Exercise stock -> custom -> stock with the SAME carrier. Restoring must
+    // retain the accepted load, not bind it to the newly highlighted cell.
+    Fixture alternating;
+    for(unsigned round=0;round<12;++round) {
+        const bool custom=(round%2)==1;
+        alternating.select(custom?4:0,0);alternating.event(6,5);alternating.event(7,0,1);
+        const auto saved=alternating.adapter.checkpoint();
+        alternating.select(custom?0:4,0);
+        alternating.adapter=alternating.adapter.stage_checkpoint(saved);
+        effect=alternating.event(8,5);
+        check(effect.scene && effect.scene->id==(custom?std::string(64,'a'):std::string{}) && effect.scene->carrier==5,
+              "Correction rebound an accepted preview to a later stock/custom selection.");
+    }
+    const auto forged_scene=[&](std::string_view id,unsigned carrier,bool race) {
+        CheckpointWriter out;out.u32(1);const auto roots=Fixture::roots();out.u32(static_cast<unsigned>(roots.size()));
+        for(const auto& root:roots)out.text(root.content_id,64);
+        out.u32(0x80010000);out.flag(true);out.flag(true);out.flag(false);out.flag(false);
+        out.flag(!race);if(!race){out.text(id,64);out.u32(carrier);}
+        out.flag(race);if(race){out.text(id,64);out.u32(carrier);}
+        out.text({},64);return std::move(out).finish();
+    };
+    for(unsigned carrier:{65U,127U,0xffffffffU})
+        rejects([&]{alternating.adapter.stage_checkpoint(forged_scene({},carrier,false));});
+    rejects([&]{alternating.adapter.stage_checkpoint(forged_scene({},5,true));});
+    rejects([&]{alternating.adapter.stage_checkpoint(forged_scene(std::string(64,'z'),5,false));});
+    rejects([&]{alternating.adapter.stage_checkpoint(forged_scene(std::string(64,'a'),6,false));});
     Fixture guarded(false);guarded.select(4,0);guarded.event(6,5);guarded.event(7,0,1);guarded.event(8,5);
     guarded.put(MenuField::Buttons,0x9000,16);guarded.event(2);check(guarded.get(MenuField::Buttons,16)==0,"Unqualified custom race passed its activation gate");guarded.event(3);
     rejects([&]{guarded.event(12,2);});
@@ -158,6 +288,9 @@ void run() {
     check(effect.scene && effect.scene->carrier==65,"Authored retry lost its selection");
     authored.event(0);authored.event(1);authored.input(-1,0);
     check(authored.get(MenuField::PreviewCarrier)==5,"Cannot navigate back to a legacy course");
+#if defined(DKR_TRACK_MENU_ROLLBACK_TEST)
+    rollback_stock_preview();
+#endif
 }
 }
 int main(){try{run();std::cout<<checks<<" native custom-menu adapter checks passed\n";return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

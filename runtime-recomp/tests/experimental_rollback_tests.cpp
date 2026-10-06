@@ -1,6 +1,7 @@
 #include "netplay/experimental_rollback.hpp"
 #include "netplay/replay_qualification.hpp"
 #include "netplay/experimental_runtime_admission.hpp"
+#include "netplay/experimental_latency.hpp"
 #include "netplay/netplay_protocol.hpp"
 
 #include <algorithm>
@@ -46,11 +47,16 @@ struct Model final : Simulation {
     unsigned hidden_counter = 0U;
     unsigned confirmed_from = UINT32_MAX, tick_waits = 0, tick_preparations = 0;
     bool reject_tick_preparation = false;
+    unsigned resource_frame=UINT32_MAX;
+    bool agreed_tick=false;
+    std::uint8_t dependencies=15;
+    std::uint8_t input_dependencies()const override {return dependencies;}
     SimulationContract contract() const override { return declared; }
     bool requires_confirmed_tick() const override { return world.ticks >= confirmed_from; }
     RestoreStep prepare_tick(std::uint64_t, std::uint32_t frame, bool confirmed, std::string& error) override {
         assert(frame == world.ticks);
         ++tick_preparations;
+        agreed_tick=confirmed;
         if (requires_confirmed_tick()) assert(confirmed);
         if (reject_tick_preparation) { error="injected tick admission failure";return RestoreStep::Failed; }
         if (tick_waits) { --tick_waits;return RestoreStep::Pending; }
@@ -90,8 +96,12 @@ struct Model final : Simulation {
     bool tick(std::uint32_t frame, const FrameInputs& inputs, TickOutput& output, std::string& error) override {
         assert(frame == world.ticks);
         ++ticks;
+        if(frame==resource_frame && !agreed_tick) {
+            ++world.random;output.effects={99};output.confirmation_required=true;return true;
+        }
         if (hidden_native_state) world.random += ++hidden_counter;
         for (std::size_t slot = 0; slot < inputs.size(); ++slot) {
+            if(!(dependencies&(1U<<slot)))continue;
             const auto pressed = inputs[slot].buttons & ~world.buttons[slot];
             world.buttons[slot] = inputs[slot].buttons;
             world.positions[slot] += inputs[slot].stick_x * 7 + inputs[slot].stick_y;
@@ -465,6 +475,32 @@ void confirmed_checkpoint_retirement() {
 } // namespace
 
 int main() {
+    {
+        Model model;model.dependencies=1;Driver driver(model);std::string error;
+        assert(driver.start({17,2,6},error));
+        assert(driver.receive(17,0,0,{})==InputResult::Accepted && driver.step()==Step::Advanced);
+        assert(driver.receive(17,1,0,{3,80,80})==InputResult::Accepted);
+        assert(driver.step(false)==Step::WaitingForLocalInput);
+        assert(driver.statistics().rollbacks==0&&driver.statistics().confirmed_frames==1&&model.world.positions[1]==0);
+    }
+    assert(automatic_delay(0,6)==1&&automatic_delay(100,6)==1);
+    assert(automatic_delay(100,2)==4&&automatic_delay(1000,20)==9);
+    {
+        Model model;model.resource_frame=1;Driver driver(model);std::string error;
+        assert(driver.start({19,2,6},error));
+        assert(driver.receive(19,0,0,{})==InputResult::Accepted);
+        assert(driver.step()==Step::Advanced);
+        const auto before=model.world;
+        assert(driver.receive(19,0,1,{})==InputResult::Accepted);
+        assert(driver.step()==Step::WaitingForConfirmedInput && model.world==before);
+        const auto ticks=model.ticks;
+        for(unsigned i=0;i<1000;++i)assert(driver.step()==Step::WaitingForConfirmedInput);
+        assert(model.ticks==ticks&&driver.statistics().resource_fences==1&&model.commits==0);
+        assert(driver.receive(19,1,0,{})==InputResult::Accepted);
+        assert(driver.receive(19,1,1,{})==InputResult::Accepted);
+        assert(driver.step()==Step::Advanced&&driver.statistics().confirmed_frames==2&&model.commits==2);
+        assert(driver.start({20,2,6},error)); // Fences cannot leak into a new epoch.
+    }
     predictions_never_confirm();
     corrected_boundary();
     prediction_removed_boundary();

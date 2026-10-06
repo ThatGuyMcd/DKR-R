@@ -425,7 +425,9 @@ INPUT_NATIVE_HASH = {
     "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "2c9b955225098954793ac86d1ab16f225ad70d63602955dcc5074939fc78898b",
     "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "789cbb5ddef03614452b6e2ff356c4973bd4938e6817122c669f889127fec374",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "247afd7092df00267d15150f1a0fee7c8783b0ec2ba1882c74e0d072adbbca33",
-    "runtime-recomp/src/game/mods/legacy_runtime_session.cpp": "6283f5e155e55a62c2e5d7bd23d0e0cef17e35965f330f0ab3470800c4809154",
+    # Prepared immutable-template instantiation preserves mount/allocation
+    # order and owns a separate mutable bus for every replay world.
+    "runtime-recomp/src/game/mods/legacy_runtime_session.cpp": "f1f3785b95e01292706448bc82aad89bc870d33bea4303b6c76f6bc6a881bdcb",
     # Pure immutable namespace capacities; stock limits retained. Guards stop
     # before cache stores/null racer writes and cannot mutate replay state.
     "runtime-recomp/src/game/mods/legacy_asset_capacity.hpp": "bc6bc05cd6702a80c8e841dafc56348335a0baee3a47d48e88b219944a21386d",
@@ -877,7 +879,7 @@ def runtime_isolation_header(guest_names, import_names, revision):
     return isolation_header(names, (), revision)
 
 
-def generate(source_dir: Path, header_path: Path, output: Path, roots, revision, scene_cuts=False, audio_services=False, input_services=False, authored_cpu=False, isolate_symbols=False, full_scenes=False, boss_finish_diagnostics=False, rsp_source=None, mod_services=False):
+def generate(source_dir: Path, header_path: Path, output: Path, roots, revision, scene_cuts=False, audio_services=False, input_services=False, authored_cpu=False, isolate_symbols=False, full_scenes=False, boss_finish_diagnostics=False, rsp_source=None, mod_services=False, inline_memory=False):
     source_dir, header_path, output = source_dir.resolve(), header_path.resolve(), output.resolve()
     if output.exists() or output == source_dir or source_dir in output.parents or header_path.parent in output.parents:
         raise ValueError("Probe output must be a new, separate directory; protected inputs are never rewritten")
@@ -997,11 +999,16 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
     # after its ordinary native headers; C translation units retain the
     # closed private import names from their first header.
     insert = ('#ifndef __cplusplus\n#include "isolated_symbols.h"\n#endif\n' if isolate_symbols else '') + '#include "probe_bridge.h"\n'
+    if inline_memory:
+        insert += '#include "probe_memory_inline.h"\n'
     header = header.replace("// Compiler definition", insert + "// Compiler definition", 1)
     for name, typ, width in (("W", "int32_t", 4), ("H", "int16_t", 2),
                             ("B", "int8_t", 1), ("HU", "uint16_t", 2), ("BU", "uint8_t", 1)):
         pattern = r"#define MEM_" + name + r"\(offset, reg\) \\\n[^\n]*"
         replacement = f"#define MEM_{name}(offset, reg) (*({typ}*)dkr_probe_memory_{width}_at(rdram, (uint64_t)(reg) + (uint64_t)(offset), __FILE__, __LINE__))"
+        if inline_memory:
+            lane = 3 if width == 1 else 2 if width == 2 else 0
+            replacement = f"#define MEM_{name}(offset, reg) (*({typ}*)dkr_probe_memory_inline_at(rdram, (uint64_t)(reg) + (uint64_t)(offset), {width}, {lane}, __FILE__, __LINE__))"
         header, count = re.subn(pattern, replacement, header)
         if count != 1: raise ValueError(f"Memory macro mismatch MEM_{name}")
     header, count = re.subn(r"#define SD\(val, offset, reg\) \{ \\\n.*?\n\}",
@@ -1062,6 +1069,7 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
     (output / "manifest.json").write_text(json.dumps({"revision": revision, "roots": roots, "scene_cuts": scene_cuts, "full_scenes": full_scenes,
         "boss_finish_diagnostics": boss_finish_diagnostics,
         "owned_mod_services": mod_services,
+        "checked_inline_memory": inline_memory,
         "owned_mod_calls": OWNED_MOD_CALLS if mod_services else {},
         "local_world_observations": full_scenes,
         "local_world_observation_source": origins["render_level_geometry_and_objects"] if full_scenes else {},
@@ -1091,6 +1099,7 @@ if __name__ == "__main__":
     p.add_argument("header", type=Path)
     p.add_argument("output", type=Path)
     p.add_argument("--revision", type=int, choices=(77, 80), required=True)
+    p.add_argument("--inline-memory", action="store_true", help="Inline the fully checked guest-memory fast path; retain all fault/budget/watch gates")
     p.add_argument("--roots", nargs="+", default=["main_game_loop", "obj_update", "input_swap_id"])
     p.add_argument("--scene-cuts", action="store_true", help="Private audited resumable mode_game unload intents; not live scene admission")
     p.add_argument("--audio-services", action="store_true", help="Private retail audio CPU closure and exact callback map; not live audio admission")
@@ -1102,4 +1111,4 @@ if __name__ == "__main__":
     p.add_argument("--mod-services", action="store_true", help="Reviewed private mod callback closure; session/runtime admission remains separately gated")
     p.add_argument("--rsp-source", type=Path, help="Read-only RSP input directory for an isolated worktree; original SHA-256 pins remain mandatory")
     a = p.parse_args()
-    generate(a.generated, a.header, a.output, a.roots, a.revision, a.scene_cuts, a.audio_services, a.input_services, a.authored_cpu, a.isolate_symbols, a.full_scenes, a.boss_finish_diagnostics, a.rsp_source, a.mod_services)
+    generate(a.generated, a.header, a.output, a.roots, a.revision, a.scene_cuts, a.audio_services, a.input_services, a.authored_cpu, a.isolate_symbols, a.full_scenes, a.boss_finish_diagnostics, a.rsp_source, a.mod_services, a.inline_memory)

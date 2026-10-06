@@ -89,7 +89,8 @@ void DrawGraphicsPage(float available_width, bool live) {
     int hpfb = static_cast<int>(config.hpfb_option);
     int downsample = std::clamp(config.ds_option, 1, 4);
 
-    const float width = std::min(available_width, 1240.0F);
+    // Both menu surfaces use the same full-width responsive cards.
+    const float width = std::max(available_width, 1.0F);
     // Container queries on the content panel.
     const bool stacked = available_width <= 850.0F;
     const bool single = available_width <= 540.0F;

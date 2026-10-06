@@ -48,6 +48,8 @@ def main() -> int:
     policy = compose_asset_capacity(policy, arguments.elf, revision)
     from legacy_model_reference_policy import compose_model_references
     policy = compose_model_references(policy, arguments.elf, revision)
+    from legacy_spawn_asset_type_policy import compose_spawn_asset_type
+    policy = compose_spawn_asset_type(policy, arguments.elf, revision)
     if arguments.water_profile:
         from water_profile_policy import compose_water_profile
         policy = compose_water_profile(policy, arguments.elf)

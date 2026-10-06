@@ -142,7 +142,7 @@ void Upload::request(const Message& message,std::size_t chunk) {
     default:throw Error("Invalid online mod upload operation.");
     }
     payload_=message.payload;offset_=message.offset;chunk_=chunk;
-    end_=static_cast<std::uint32_t>(offset_+(std::min)(source_->size()-offset_,std::size_t(64*1024)));
+    end_=static_cast<std::uint32_t>(offset_+(std::min)(source_->size()-offset_,transfer_window_bytes(chunk)));
 }
 std::optional<Message> Upload::next()const {
     if(!source_ || offset_>=end_)return {};
@@ -153,5 +153,33 @@ std::optional<Message> Upload::next()const {
 void Upload::sent() {
     if(!source_ || offset_>=end_)throw Error("No mod chunk was pending transmission.");
     offset_+=static_cast<std::uint32_t>((std::min)(chunk_,std::size_t(end_-offset_)));
+}
+bool ChunkInbox::push(const Message& chunk,const Message& request) {
+    if(payload_!=request.payload){clear();payload_=request.payload;}
+    if(chunk.operation!=(request.payload.empty()?Operation::ManifestChunk:Operation::PayloadChunk) ||
+       chunk.manifest!=request.manifest || chunk.payload!=request.payload || chunk.total!=request.total ||
+       chunk.bytes.empty() || chunk.bytes.size()>MaxChunkBytes || chunk.offset<request.offset ||
+       chunk.offset>=chunk.total || chunk.bytes.size()>chunk.total-chunk.offset ||
+       chunk.offset-request.offset>=TransferWindowBytes)return false;
+    auto next=chunks_.lower_bound(chunk.offset);
+    if(next!=chunks_.end() && next->first==chunk.offset) {
+        if(next->second!=chunk)throw Error("Conflicting online mod chunks at the same offset.");
+        return false;
+    }
+    if((next!=chunks_.end() && chunk.bytes.size()>next->first-chunk.offset) ||
+       (next!=chunks_.begin() && std::prev(next)->second.bytes.size()>chunk.offset-std::prev(next)->first))
+        throw Error("Overlapping online mod chunks.");
+    if(chunks_.size()>=512 || chunk.bytes.size()>TransferWindowBytes-bytes_)return false;
+    bytes_+=chunk.bytes.size();chunks_.emplace_hint(next,chunk.offset,chunk);return true;
+}
+std::optional<Message> ChunkInbox::take(const Message& request) {
+    if(payload_!=request.payload){clear();payload_=request.payload;}
+    while(!chunks_.empty() && chunks_.begin()->first<request.offset) {
+        bytes_-=chunks_.begin()->second.bytes.size();chunks_.erase(chunks_.begin());
+    }
+    const auto found=chunks_.find(request.offset);if(found==chunks_.end())return {};
+    auto value=std::move(found->second);bytes_-=value.bytes.size();chunks_.erase(found);
+    if(value.manifest!=request.manifest || value.payload!=request.payload || value.total!=request.total)return {};
+    return value;
 }
 }

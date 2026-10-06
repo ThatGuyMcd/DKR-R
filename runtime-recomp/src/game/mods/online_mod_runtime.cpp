@@ -4,33 +4,52 @@
 #include "online_course_policy.hpp"
 #include <algorithm>
 #include <set>
+#include <chrono>
 
 namespace dkr::mods::online {
 namespace {
 constexpr std::array<unsigned,7> Data{23,21,25,27,2,4,12};
 constexpr std::array<unsigned,7> Tables{22,20,24,26,3,5,13};
 void cancelled(std::stop_token stop){if(stop.stop_requested())throw Error("Online game resource preparation cancelled.");}
+// One bounded, in-process cache. Its prepared world is never run and only
+// immutable assets are instantiated into fresh per-game mutable owners.
+std::mutex resource_cache_mutex;
+std::string resource_cache_key;
+std::shared_ptr<const RuntimeResources> resource_cache;
 }
 std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_ptr<const Profile> profile,
     const std::filesystem::path& rom,std::stop_token stop) {
+    const auto began=std::chrono::steady_clock::now();
     if(!profile)throw Error("Online resources require a verified host profile.");
-    cancelled(stop);validate_profile(*profile);check_storage(rom,false);
+    cancelled(stop);const auto sources=profile_sources(*profile);check_storage(rom,false);
     auto out=std::shared_ptr<RuntimeResources>(new RuntimeResources);out->profile_=std::move(profile);
-    auto bytes=read_file(rom,MaxImage);canonicalize_rom(bytes);out->stock_=AssetBank::stock(std::move(bytes));
+    auto bytes=read_file(rom,MaxImage);canonicalize_rom(bytes);
+    const auto key=out->profile_->digest+":"+sha256(bytes);
+    {
+        std::lock_guard lock(resource_cache_mutex);
+        if(resource_cache && resource_cache_key==key) {
+            cancelled(stop);
+            std::fprintf(stderr,"[online-mods][runtime] immutable-cache-hit=1 elapsed-ms=%lld\n",
+                static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-began).count()));
+            return resource_cache;
+        }
+        // Do not keep an unrelated collection while preparing a new one.
+        resource_cache.reset();resource_cache_key.clear();
+    }
+    out->stock_=AssetBank::stock(std::move(bytes));
     if(out->stock_->revision()!=out->profile_->manifest.revision)
         throw Error("The locally imported Game Pak revision does not match this lobby.");
-    const auto library=out->profile_->directory/"legacy";
     cancelled(stop);
-    auto characters=TrackCatalog::load_enabled_characters(library,out->stock_);
+    auto characters=TrackCatalog::load_selected_characters(sources.characters,out->stock_);
     if(!characters.empty())out->characters_=std::make_shared<const CharacterNamespace>(allocate_characters(out->stock_,std::move(characters)));
-    cancelled(stop);out->tracks_=TrackCatalog::load_enabled(library,out->stock_);
+    cancelled(stop);out->tracks_=TrackCatalog::load_selected(sources.tracks,out->stock_);
     // Runtime ordering is content identity, not a translated/display name or
     // filesystem scan. The native character namespace already sorts IDs.
     std::sort(out->tracks_.begin(),out->tracks_.end(),[](const auto& a,const auto& b){return a.root.content_id<b.root.content_id;});
     std::map<std::string,dkr::runtime::custom_tracks::Track> labs;
-    for(const auto& entry:std::filesystem::directory_iterator(out->profile_->directory/"tracks")) {
+    for(const auto& course:sources.courses) {
         cancelled(stop);dkr::runtime::custom_tracks::Track track;std::string error;
-        if(!dkr::runtime::custom_tracks::inspect_package(entry.path(),track,error))throw Error(error);
+        if(!dkr::runtime::custom_tracks::inspect_package(course,track,error))throw Error(error);
         const auto name=std::string("dkrmap:")+track.id;
         const auto id=sha256(View(reinterpret_cast<const std::uint8_t*>(name.data()),name.size()));
         if(!labs.emplace(id,std::move(track)).second)throw Error("Duplicate online Track Lab identity.");
@@ -92,10 +111,26 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
     // Fully prepare every route NOW, before proof/readiness. Scene switches
     // subsequently select immutable banks and never decode/hash/read a file.
     auto prepared=out->new_session();
+    out->prepared_world_=prepared;
     std::string identity="dkr-online-runtime-2\n"+out->profile_->digest+"\n"+prepared->boot_bank()->fingerprint()+music_identity;
     for(const auto& track:out->tracks_)identity+="\n"+track.root.content_id+":"+track.bank->fingerprint();
     out->fingerprint_=sha256(View(reinterpret_cast<const std::uint8_t*>(identity.data()),identity.size()));
-    cancelled(stop);return out;
+    cancelled(stop);
+    std::size_t cache_bytes=prepared->prepared_bytes()+128*MiB-music_budget;
+    for(const auto& [key,data]:out->additions_)cache_bytes+=data.size();
+    for(const auto& section:out->authored_->additions)for(const auto& data:section)cache_bytes+=data.size();
+    for(const auto& track:out->authored_->tracks)for(const auto& entry:track.entries)cache_bytes+=entry.bytes.size();
+    if(out->characters_) {
+        for(const auto& [key,data]:out->characters_->additions)cache_bytes+=data.size();
+        for(const auto& c:out->characters_->characters)cache_bytes+=c.audio.samples.size()+c.audio.control.size()+c.race_audio.samples.size()+c.race_audio.control.size();
+    }
+    if(cache_bytes<=256*MiB) {
+        std::lock_guard lock(resource_cache_mutex);resource_cache_key=key;resource_cache=out;
+    }
+    std::fprintf(stderr,"[online-mods][runtime] roots=%zu immutable-cache-hit=0 cache-bytes=%zu cache-retained=%u elapsed-ms=%lld\n",
+        out->profile_->manifest.content.size(),cache_bytes,unsigned(cache_bytes<=256*MiB),
+        static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-began).count()));
+    return out;
 }
 std::shared_ptr<const AssetBank> RuntimeResources::augment(std::shared_ptr<const AssetBank> bank)const {
     for(unsigned i=0;i<Data.size();++i)if(bank->record_count(Data[i])!=base_counts_[i])
@@ -103,6 +138,7 @@ std::shared_ptr<const AssetBank> RuntimeResources::augment(std::shared_ptr<const
     return AssetBank::append_courses(std::move(bank),additions_);
 }
 std::shared_ptr<RuntimeSession> RuntimeResources::new_session()const {
+    if(prepared_world_)return prepared_world_->instantiate();
     // Capture immutable additions/counts by value; the session may outlive the
     // caller without retaining a dangling RuntimeResources pointer.
     const auto additions=std::make_shared<const AssetBank::Overrides>(additions_);

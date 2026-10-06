@@ -35,16 +35,17 @@ bool DirectSession::send_mod_packet(std::uint64_t target,std::span<const std::ui
     if(!transport_ || bytes.empty() || bytes.size()>MaxModPacket ||
        bytes.size()+32>transport_->maximum_plaintext_datagram_bytes()) {error="Invalid online mod packet budget.";return false;}
     const auto traffic=data?TransportTrafficClass::Checkpoint:TransportTrafficClass::Control;
-    // One request/response is in flight per recipient. Do not grow the general
-    // reliable queue behind a slow import worker or stalled WebRTC channel.
+    // A bounded burst per recipient; control stays ahead of bulk, and transport
+    // backpressure still prevents growth behind a stalled WebRTC channel.
     PeerAddress address{};const secure::Key* key=nullptr;
     if(is_host_ && waiting(state_)) {
         auto* pending=pending_by_sender(target);
         if(pending && pending->mods_approved && !pending->mods_verified){address=pending->address;key=&pending->key;}
     } else if(!is_host_ && joining(state_) && mod_offer_ && (target==0 || target==host_sender_id_)) {address=host_address_;key=&key_;}
     if(!key) {error="Mod transfers are restricted to approved provisional lobby admission.";return false;}
-    const auto queued=[&](const auto& queue){return std::any_of(queue.begin(),queue.end(),[&](const auto& packet){return packet.destination==address && (packet.type==protocol::MessageType::ModControl || packet.type==protocol::MessageType::ModData);});};
-    if(!transport_->traffic_ready(address,traffic) || queued(normal_priority_outbound_) || queued(bulk_outbound_)) {error.clear();return false;}
+    const auto queued=[&](const auto& queue){return std::count_if(queue.begin(),queue.end(),[&](const auto& packet){return packet.destination==address && (packet.type==protocol::MessageType::ModControl || packet.type==protocol::MessageType::ModData);});};
+    if(!transport_->traffic_ready(address,traffic) || queued(normal_priority_outbound_) ||
+       (data && queued(bulk_outbound_)>=8)) {error.clear();return false;}
     const bool sent=send_with_key(address,*key,data?protocol::MessageType::ModData:protocol::MessageType::ModControl,bytes);
     if(sent){worker_wake_=true;state_changed_.notify_all();}error.clear();return sent;
 }
@@ -93,6 +94,7 @@ bool DirectSession::handle_mod_packet_locked(std::uint64_t sender,const protocol
     // Drop/retry rather than grow a queue or terminate unrelated lobby peers.
     if(packet.payload.empty() || packet.payload.size()>MaxModPacket || packet.payload.size()>MaxModQueue-mod_inbound_bytes_ || mod_inbound_.size()>=32)return true;
     const auto* pending=is_host_?pending_by_sender(sender):nullptr;
+    if(is_host_)pending_by_sender(sender)->last_seen=std::chrono::steady_clock::now();
     mod_inbound_bytes_+=packet.payload.size();
     mod_inbound_.push_back({sender,type==protocol::MessageType::ModData,packet.payload,pending?pending->sender_id:0});return true;
 }

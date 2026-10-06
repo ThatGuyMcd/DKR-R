@@ -62,6 +62,9 @@ PayloadFile::PayloadFile(const std::filesystem::path& partial,const Payload& exp
 PayloadFile::~PayloadFile(){close();}
 void PayloadFile::close()noexcept {
     if(handle_==-1)return;
+    // Best effort on cancellation; a partial file is never trusted as content.
+    // Full SHA-256 verification remains mandatory after any resumed download.
+    try{flush();}catch(...){}
 #ifdef _WIN32
     CloseHandle(reinterpret_cast<HANDLE>(handle_));
 #else
@@ -74,8 +77,8 @@ void PayloadFile::append(View bytes) {
         throw Error("Online mod write is outside its declared payload.");
 #ifdef _WIN32
     DWORD count=0;const auto file=reinterpret_cast<HANDLE>(handle_);
-    if(!WriteFile(file,bytes.data(),static_cast<DWORD>(bytes.size()),&count,nullptr) || count!=bytes.size() || !FlushFileBuffers(file))
-        throw Error("The online mod chunk could not be written durably.");
+    if(!WriteFile(file,bytes.data(),static_cast<DWORD>(bytes.size()),&count,nullptr) || count!=bytes.size())
+        throw Error("The online mod chunk could not be written completely.");
 #else
     std::size_t at=0;const int file=static_cast<int>(handle_);
     while(at<bytes.size()) {
@@ -84,12 +87,22 @@ void PayloadFile::append(View bytes) {
         if(count<=0)throw Error("The online mod chunk could not be written completely.");
         at+=static_cast<std::size_t>(count);
     }
-    if(fsync(file)!=0)throw Error("The online mod chunk could not be written durably.");
 #endif
     size_+=bytes.size();
+    if(size_-flushed_>=64*1024)flush();
+}
+void PayloadFile::flush() {
+    if(handle_==-1 || size_==flushed_)return;
+#ifdef _WIN32
+    if(!FlushFileBuffers(reinterpret_cast<HANDLE>(handle_)))throw Error("The online mod batch could not be flushed durably.");
+#else
+    if(fsync(static_cast<int>(handle_))!=0)throw Error("The online mod batch could not be flushed durably.");
+#endif
+    flushed_=size_;
 }
 void PayloadFile::publish(const std::filesystem::path& target) {
     if(size_!=expected_.size)throw Error("An incomplete online mod cannot be published.");
+    flush(); // A flush failure must never publish even a correctly hashed file.
     close();check_storage(path_,false);
     if(sha256(read_file(path_,static_cast<std::size_t>(expected_.size)))!=expected_.digest)
         throw Error("The completed online download failed SHA-256 verification. No mod was activated.");

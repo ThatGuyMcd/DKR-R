@@ -15,10 +15,12 @@ public:
     void append(View bytes);
     void publish(const std::filesystem::path& target);
 private:
+    void flush();
     void close() noexcept;
     std::filesystem::path path_;
     Payload expected_;
     std::uint64_t size_=0;
+    std::uint64_t flushed_=0;
     std::intptr_t handle_=-1;
 };
 bool cached_payload(const std::filesystem::path& directory,const Payload& expected);

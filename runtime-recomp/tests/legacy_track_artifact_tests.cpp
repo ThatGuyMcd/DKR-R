@@ -39,7 +39,20 @@ void session_tests(const std::shared_ptr<const AssetBank>& stock, const std::vec
     const auto original_memory=memory;
     RuntimeSession session(stock);
     for(const auto& track:tracks)session.admit(track);
+    {
+        auto first=session.instantiate(),second=session.instantiate();
+        check(first!=second && &first->bus()!=&second->bus());
+        const auto initial=second->checkpoint();check(initial==first->checkpoint());
+        auto first_memory=original_memory;
+        first->request(tracks.front().root.content_id,tracks.front().root.carrier);
+        first->begin_scene(first_memory,tracks.front().root.carrier);
+        check(first->checkpoint()!=initial && second->checkpoint()==initial);
+        auto foreign_restore=first->stage_checkpoint(first->checkpoint());
+        check(!second->commit_checkpoint(std::move(foreign_restore)));
+        rejects([&]{first->instantiate();});
+    }
     session.begin_scene(memory,5);
+    rejects([&]{session.instantiate();});
     check(session.current_content().empty());check(memory==original_memory);
     const auto stock_checkpoint=session.checkpoint();
     // A rejected sidecar never changes its owner or guest memory. Include

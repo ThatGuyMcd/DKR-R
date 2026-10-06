@@ -596,7 +596,7 @@ ImVec2 DrawOlTag(ImDrawList* draw, ImVec2 at, std::string_view text, bool you) {
     for (const char character : text) {
         width += PaddockMeasure(type, std::string_view(&character, 1U)) + tracking;
     }
-    const ImVec2 size{std::ceil(width - tracking + 12.0F), 17.0F};
+    const ImVec2 size{std::ceil(width - tracking + 12.0F), std::ceil(type.line + 6.0F)};
     PaddockFill(draw, at, {at.x + size.x, at.y + size.y}, PaddockRound(4.0F),
                 PaddockCol(you ? 0x8FD3EAU : kOlAmber));
     float x = at.x + 6.0F;
@@ -899,8 +899,7 @@ std::string OlSaveSeedDescription(bool previous_available) {
     case dkr::runtime::saves::OnlineSaveSeedMode::Fresh:
         return "Start a new online Adventure. Your single-player save is kept.";
     case dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession:
-        return previous_available ? "Continue the last host-owned online Adventure save."
-                                  : "No previous online session save is available yet.";
+        return "Continue the host-owned online save for this exact mod set. Availability is checked when creating the lobby.";
     case dkr::runtime::saves::OnlineSaveSeedMode::CopySinglePlayer:
     default:
         return "Copy your progress into a separate online save. Your single-player file is kept.";
@@ -1495,7 +1494,7 @@ float OlJoinNaturalHeight(float inner, const std::string& error) {
 }
 
 void OlRequestJoin(const OnlineFrame& frame) {
-    if (!frame.launcher || !frame.rom_ready || frame.active) return;
+    if (!frame.launcher || !frame.rom_ready || frame.active || OnlineModSelectionLocked()) return;
     const std::string code = NormalizeOnlineInvite(g_online_invite);
     if (code.size() < 5U) {
         g_online_page.join_error = "Enter all 5 characters of the code.";
@@ -1544,13 +1543,9 @@ void DrawOlHostCard(ImVec2 at, float width, float height, const OnlineFrame& fra
     PaddockGap(14.0F + 10.0F);
     if (OlButton("Host settings")) g_online_page.section = OlSection::Settings;
     ImGui::EndGroup();
-    const bool continue_unavailable =
-        g_online_save_seed_mode ==
-            static_cast<int>(dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession) &&
-        !previous_save;
     ImGui::SetCursorScreenPos({x, at.y + height - 2.0F - board.pad_bottom - 52.0F});
     if (OlCta("CREATE LOBBY", OlCtaColour::Green, inner,
-              !frame.launcher || !frame.rom_ready || continue_unavailable || frame.active)) {
+              !frame.launcher || !frame.rom_ready || frame.active || OnlineModSelectionLocked())) {
         g_online_page.join_attempted = false;
         g_online_page.join_error.clear();
         CreateOnlineLobby();
@@ -1957,7 +1952,9 @@ void DrawOlHostSettings(float width) {
             changed |= OlRange("experimental-window", "Rollback prediction window (frames)", &g_online_rollback_window, 2, 20, inner);
             OlParagraph("Uses this lobby, Quick Join, friend invites, countdown, controls and online-only save. "
                         "Late actual inputs are corrected by replaying owned game state. The previous backends remain available. "
-                        "This candidate currently requires US v 1.0 and unmodded gameplay; whole-game release qualification is pending.",
+                        "Supports the admitted US v 1.0/v 1.1 revisions and synchronized session mods. "
+                        "For distant players, start with automatic delay and a 10-frame prediction window. "
+                        "A two-frame window may be too short for the route. Real-device playtest qualification is ongoing.",
                         14.0F,kOlSoft,inner,true);
 #else
             OlParagraph(dkr::runtime::netplay::experimental::runtime_admission_error(SynchronizationMode::ExperimentalRollback),
@@ -2659,9 +2656,11 @@ void DrawOlConnection(float width, const OnlineFrame& frame) {
                         14.0F, kOlAmber, inner, true);
         }
         if (!view.room.rules.automatic_input_delay && view.network_rtt_ms > 0U) {
-            const auto recommended = host_authoritative_input_delay_frames(
-                view.network_rtt_ms, view.network_jitter_ms, view.network_loss_percent,
-                view.method == ConnectionMethod::Lan);
+            const auto recommended = view.room.rules.synchronization==SynchronizationMode::ExperimentalRollback ?
+                dkr::runtime::netplay::experimental::automatic_delay(view.network_rtt_ms,view.room.rules.rollback_window):
+                host_authoritative_input_delay_frames(
+                    view.network_rtt_ms, view.network_jitter_ms, view.network_loss_percent,
+                    view.method == ConnectionMethod::Lan);
             if (view.input_delay_frames < recommended) {
                 PaddockGap(16.0F);
                 OlParagraph("Manual delay is below the current route estimate (" + std::to_string(recommended) +
@@ -2944,7 +2943,8 @@ void DrawOlGate(float width, const OnlineFrame& frame) {
     for (const PendingJoinView& pending : view.pending_joins) {
         ImGui::PushID(static_cast<int>(pending.request_id & 0x7FFFFFFFU));
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        const std::string reason = !pending.compatible ? pending.compatibility
+        const std::string reason = pending.preparing_mods ? "Preparing required session mods"
+                                 : !pending.compatible ? pending.compatibility
                                  : frame.has_space ? "Used your lobby code" : "Lobby is full";
         struct Button {
             const char* label;
@@ -2952,7 +2952,7 @@ void DrawOlGate(float width, const OnlineFrame& frame) {
             bool disabled;
         };
         const std::array<Button, 3> buttons{{
-            {"Let in", OlTone::Go, !frame.has_space || !pending.compatible || view.lobby_locked},
+            {"Let in", OlTone::Go, pending.preparing_mods || !frame.has_space || !pending.compatible || view.lobby_locked},
             {"Decline", OlTone::Plain, frame.busy},
             {"Block for session", OlTone::Plain, frame.busy},
         }};
@@ -2988,6 +2988,20 @@ void DrawOlGate(float width, const OnlineFrame& frame) {
         }
         ImGui::SetCursorScreenPos(at);
         ImGui::Dummy({inner, 6.0F + line + (wrap ? 50.0F : 0.0F) + 6.0F});
+        if(pending.preparing_mods && g_online_mod_sync) {
+            const auto mods=g_online_mod_sync->snapshot();
+            const auto progress=std::find_if(mods.peers.begin(),mods.peers.end(),[&](const auto& peer){return peer.request==pending.request_id;});
+            if(progress!=mods.peers.end()) {
+                ImGui::TextWrapped("%s",progress->stage.c_str());
+                if(progress->total) {
+                    char label[96]{};
+                    std::snprintf(label,sizeof(label),"%.1f / %.1f MiB%s",double(progress->received)/(1024*1024),
+                        double(progress->total)/(1024*1024),progress->phase>=dkr::mods::online::ProgressPhase::Preparing?" - verifying/preparing":"");
+                    ImGui::ProgressBar(std::clamp(float(progress->received)/float(progress->total),0.0F,1.0F),{inner,24},label);
+                }
+            } else ImGui::TextWrapped("Waiting for the racer to review the mod download.");
+            ImGui::Dummy({0,8});
+        }
         ImGui::PopID();
     }
     box.End([&](ImDrawList* target, ImVec2 a, ImVec2 b) { PaintOlPanel(target, a, b, look); });
@@ -3145,6 +3159,24 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
         ++total;
         if (player.host) host_name = player.display_name;
     }
+    OlParagraph("ONLINE SESSION SAVE - supplied by " + host_name, 16.0F, kOlCream, width);
+    OlParagraph("Adventure progress and Controller Paks are isolated from your offline files. This session does not update personal offline progress.",
+        15.0F, kOlSoft, width);
+    if (!view.room.manifest.mod_manifest_hash.empty() && g_online_mod_sync) {
+        const auto mods = g_online_mod_sync->snapshot();
+        const auto count = [&](dkr::mods::online::Kind kind) {
+            return mods.manifest ? std::count_if(mods.manifest->content.begin(), mods.manifest->content.end(),
+                [&](const auto& entry) { return entry.kind == kind; }) : 0;
+        };
+        PaddockGap(8.0F);
+        OlParagraph("SESSION MODS - Host managed and verified: " +
+            std::to_string(count(dkr::mods::online::Kind::Track) + count(dkr::mods::online::Kind::TrackLab)) +
+            " tracks, " + std::to_string(count(dkr::mods::online::Kind::Character)) + " characters.",
+            16.0F, kOlGoText, width);
+        OlParagraph("This temporary mod set applies to every racer. Leave the lobby to restore your offline selection. Modded host progress uses a separate save for this exact mod set.",
+            15.0F, kOlSoft, width);
+    }
+    PaddockGap(14.0F);
     OlPanelLook look;
     look.radii = {12.0F, 28.0F, 12.0F, 12.0F};
     look.fill = 0x0B304B;
@@ -3807,7 +3839,7 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
         state.open_results = true;
     }
 
-    const float page = std::min(available_width, 1400.0F);
+    const float page = std::max(available_width, 1.0F);
     g_ol_page_width = available_width;
     const float indent = std::floor((available_width - page) * 0.5F);
     if (indent > 0.0F) ImGui::Indent(indent);

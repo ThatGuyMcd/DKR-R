@@ -5,11 +5,17 @@
 
 namespace dkr::runtime::netplay::experimental {
 namespace {
-constexpr unsigned kHeader = 36;
+constexpr unsigned kHeader = 52;
 bool valid(const OwnerInputPacket& p) {
     if (!p.epoch || p.players < 2 || p.players > 4 || p.owner >= p.players || p.count > kOwnerInputBatch ||
         (!p.count && p.first_frame) || std::uint64_t(p.first_frame) + p.count > UINT32_MAX) return false;
-    for (unsigned owner = p.players; owner < 4; ++owner) if (p.received_next[owner]) return false;
+    for (unsigned owner = p.players; owner < 4; ++owner)
+        if (p.received_next[owner] || p.received_bits[owner]) return false;
+    for(unsigned owner=0;owner<p.players;++owner) {
+        if(p.received_bits[owner]&1U)return false; // Contiguous cursor must have consumed bit zero.
+        for(unsigned bit=1;bit<32;++bit)if((p.received_bits[owner]&(1U<<bit)) &&
+            std::uint64_t(p.received_next[owner])+bit>=UINT32_MAX)return false;
+    }
     return true;
 }
 void put(std::vector<std::uint8_t>& bytes, std::uint64_t value, unsigned width) {
@@ -23,10 +29,11 @@ std::uint64_t get(std::span<const std::uint8_t> bytes, unsigned at, unsigned wid
 }
 std::vector<std::uint8_t> encode_owner_inputs(const OwnerInputPacket& p) {
     if (!valid(p)) return {};
-    std::vector<std::uint8_t> result{'D','K','R','X',1,p.players,p.owner,p.count};
+    std::vector<std::uint8_t> result{'D','K','R','X',2,p.players,p.owner,p.count};
     result.reserve(kHeader + p.count * 4);
     put(result, p.epoch, 8); put(result, p.first_frame, 4);
     for (auto ack : p.received_next) put(result, ack, 4);
+    for (auto bits : p.received_bits) put(result,bits,4);
     for (unsigned i = 0; i < p.count; ++i) {
         put(result, p.inputs[i].buttons, 2);
         result.push_back(std::bit_cast<std::uint8_t>(p.inputs[i].stick_x));
@@ -36,12 +43,13 @@ std::vector<std::uint8_t> encode_owner_inputs(const OwnerInputPacket& p) {
 }
 std::optional<OwnerInputPacket> decode_owner_inputs(std::span<const std::uint8_t> bytes) {
     if (bytes.size() < kHeader || bytes[0] != 'D' || bytes[1] != 'K' || bytes[2] != 'R' ||
-        bytes[3] != 'X' || bytes[4] != 1 || bytes[7] > kOwnerInputBatch ||
+        bytes[3] != 'X' || bytes[4] != 2 || bytes[7] > kOwnerInputBatch ||
         bytes.size() != kHeader + bytes[7] * 4U) return {};
     OwnerInputPacket p;
     p.players = bytes[5]; p.owner = bytes[6]; p.count = bytes[7];
     p.epoch = get(bytes, 8, 8); p.first_frame = std::uint32_t(get(bytes, 16, 4));
     for (unsigned i = 0; i < 4; ++i) p.received_next[i] = std::uint32_t(get(bytes, 20 + i * 4, 4));
+    for (unsigned i = 0; i < 4; ++i) p.received_bits[i] = std::uint32_t(get(bytes,36+i*4,4));
     for (unsigned i = 0; i < p.count; ++i) {
         p.inputs[i] = {std::uint16_t(get(bytes, kHeader + i * 4, 2)),
             std::bit_cast<std::int8_t>(bytes[kHeader + i * 4 + 2]),
@@ -51,7 +59,8 @@ std::optional<OwnerInputPacket> decode_owner_inputs(std::span<const std::uint8_t
 }
 bool OwnerInputHistory::begin(std::uint64_t epoch, std::uint8_t players, std::uint8_t local) {
     if (!epoch || epoch <= epoch_ || players < 2 || players > 4 || local >= players) return false;
-    samples_ = {}; next_ = {}; ack_next_ = {}; sent_next_ = {};
+    samples_ = {}; next_ = {}; newest_next_ = {}; received_bits_ = {};
+    ack_next_ = {}; ack_bits_ = {}; sent_next_ = {};
     epoch_ = epoch; players_ = players; local_ = local; cursor_ = 0; conflict_ = false;
     return true;
 }
@@ -88,7 +97,15 @@ bool OwnerInputHistory::may_replace(std::uint8_t owner, std::uint32_t frame) con
 }
 void OwnerInputHistory::insert(std::uint8_t owner, std::uint32_t frame, PackedInput input) {
     samples_[owner][frame % kHistory] = {frame, input, true};
+    newest_next_[owner]=(std::max)(newest_next_[owner],frame+1);
     while (actual(owner, next_[owner])) ++next_[owner];
+    // Receipt maps change only when actual input arrives, not on every hot
+    // network poll for every owner/peer/lane. Rebuild the one changed map so
+    // holes beyond the bitmap correctly enter it when its base advances.
+    received_bits_[owner]=0;
+    if(next_[owner]<newest_next_[owner]) for(unsigned bit=1;bit<32;++bit)
+        if(std::uint64_t(next_[owner])+bit<UINT32_MAX && actual(owner,next_[owner]+bit))
+            received_bits_[owner]|=1U<<bit;
 }
 OwnerInputResult OwnerInputHistory::publish(std::uint32_t frame, PackedInput input) {
     if (!epoch_ || conflict_) return OwnerInputResult::Rejected;
@@ -114,6 +131,10 @@ OwnerInputResult OwnerInputHistory::receive_authenticated(std::uint8_t peer, con
     for (unsigned owner = 0; owner < players_; ++owner) {
         if (sent_next_[peer][owner] && p.received_next[owner] > sent_next_[peer][owner])
             return OwnerInputResult::Rejected;
+        if(sent_next_[peer][owner]) for(unsigned bit=0;bit<32;++bit) if(p.received_bits[owner]&(1U<<bit)) {
+            const auto frame=std::uint64_t(p.received_next[owner])+bit;
+            if(frame>=sent_next_[peer][owner])return OwnerInputResult::Rejected;
+        }
     }
     for (unsigned i = 0; i < p.count; ++i) {
         const auto frame = p.first_frame + i;
@@ -132,8 +153,13 @@ OwnerInputResult OwnerInputHistory::receive_authenticated(std::uint8_t peer, con
             insert(p.owner, frame, p.inputs[i]); received.push_back({p.owner, frame, p.inputs[i]});
         }
     }
-    for (unsigned owner = 0; owner < players_; ++owner) if (sent_next_[peer][owner])
-        ack_next_[peer][owner] = (std::max)(ack_next_[peer][owner], p.received_next[owner]);
+    for (unsigned owner = 0; owner < players_; ++owner) if (sent_next_[peer][owner]) {
+        auto& base=ack_next_[peer][owner];auto& bits=ack_bits_[peer][owner];
+        const auto incoming=p.received_next[owner];
+        if(incoming>base) {const auto shift=incoming-base;bits=shift>=32 ? 0:bits>>shift;base=incoming;}
+        const auto shift=base-incoming;
+        if(shift<32)bits|=p.received_bits[owner]>>shift;
+    }
     return received.empty() ? OwnerInputResult::Duplicate : OwnerInputResult::Accepted;
 }
 std::optional<OwnerInputPacket> OwnerInputHistory::packet_for(std::uint8_t owner, std::uint8_t peer, OwnerInputSend send) {
@@ -141,21 +167,32 @@ std::optional<OwnerInputPacket> OwnerInputHistory::packet_for(std::uint8_t owner
         (local_ != 0 && (owner != local_ || peer != 0))) return {};
     OwnerInputPacket p;
     p.epoch = epoch_; p.players = players_; p.owner = owner; p.received_next = next_;
+    p.received_bits=received_bits_;
     // Never make latency-first input stop-and-wait. Oldest-only batches cap
     // throughput at batch_size / RTT and build debt even without packet loss.
     // Live data carries the newest contiguous samples with redundancy. The
     // independently scheduled repair lane starts at the oldest unacked hole.
     const auto ack = ack_next_[peer][owner];
-    const auto live = next_[owner] > kOwnerInputBatch ? next_[owner] - kOwnerInputBatch : 0;
-    const auto first = send == OwnerInputSend::Repair ? ack : (std::max)(ack,live);
-    if (first < next_[owner]) {
+    const auto end = newest_next_[owner];
+    // A gap in a client's earlier packet must not hold all newer actual input
+    // hostage at the host relay. Forward the newest complete run; repair still
+    // uses cumulative ACKs and retains the missing prefix until every peer has it.
+    auto live=end;
+    while(live>ack && end-live<kOwnerInputBatch && actual(owner,live-1)) --live;
+    auto first=send==OwnerInputSend::Repair ? ack : live;
+    if(send==OwnerInputSend::Repair)
+        while(first<end && first-ack<32 && (ack_bits_[peer][owner]&(1U<<(first-ack))))++first;
+    if (first < end) {
         p.first_frame = first;
-        for (unsigned i = 0; i < kOwnerInputBatch && std::uint64_t(first) + i < next_[owner]; ++i) {
+        for (unsigned i = 0; i < kOwnerInputBatch && std::uint64_t(first) + i < end; ++i) {
             const auto sample = actual(owner, first + i);
-            if (!sample) return {}; // Never fabricate missing owner input.
+            if (!sample) break; // Relay cannot repair bytes it has not received.
+            if(send==OwnerInputSend::Repair && i && first+i-ack<32 &&
+               (ack_bits_[peer][owner]&(1U<<(first+i-ack))))break;
             p.inputs[p.count++] = *sample;
         }
-        sent_next_[peer][owner] = (std::max)(sent_next_[peer][owner], first + p.count);
+        if(p.count)sent_next_[peer][owner] = (std::max)(sent_next_[peer][owner], first + p.count);
+        else p.first_frame=0;
     }
     return p;
 }

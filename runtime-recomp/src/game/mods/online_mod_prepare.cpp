@@ -38,8 +38,10 @@ void prepare_library(const Manifest& input,const std::filesystem::path& input_pa
     const auto destination=private_storage_path(input_destination);
     if(owned_roms.empty() || owned_roms.size()>8 || std::filesystem::exists(destination))throw Error("Online preparation needs imported original Game Paks and fresh staging.");
     check_storage(payload_directory,true);check_storage(destination.parent_path(),true);
+    for(const auto& path:owned_roms)check_storage(path,false);
+    auto preparation=load_import_sources(owned_roms);
     std::set<std::string> revisions;
-    for(const auto& path:owned_roms) {check_storage(path,false);auto rom=read_file(path,MaxImage);canonicalize_rom(rom);revisions.insert(verified_revision(rom));}
+    for(const auto& [revision,bytes]:preparation.bases)revisions.insert(revision);
     if(!revisions.contains(manifest.revision))throw Error("Import the lobby's original Game Pak revision before preparing these mods.");
     for(const auto& payload:manifest.payloads)if(payload.kind==PayloadKind::Xdelta && !revisions.contains(payload.source_revision))
         throw Error("A required patch source Game Pak revision is not imported. No ROM will be downloaded from the host.");
@@ -78,7 +80,8 @@ void prepare_library(const Manifest& input,const std::filesystem::path& input_pa
         const auto patch=job/(payload.digest+".xdelta");write_new_file(patch,bytes);
         std::map<std::string,std::string> labels;if(!payload.source_label.empty())labels.emplace(payload.digest,payload.source_label);
         report("Reconstructing mods against locally imported Game Paks");
-        stage_import(patch,owned_roms,job/"review",progress,labels);
+        reconstruct_import(preparation,bytes);
+        stage_import(patch,owned_roms,job/"review",progress,labels,&preparation);
         const auto review_bytes=read_file(job/"review"/"review.json",8*MiB);const auto review_hash=sha256(review_bytes);
         const auto review=root/"reviews"/review_hash;
         if(std::filesystem::exists(review))throw Error("Duplicate online review publication.");
@@ -88,8 +91,8 @@ void prepare_library(const Manifest& input,const std::filesystem::path& input_pa
             if(!required)continue;
             report(kind==Kind::Track?"Preparing exact custom course selection":"Preparing exact custom character selection");
             const auto prepared=job/(kind==Kind::Track?"tracks":"characters");
-            if(kind==Kind::Track)prepare_imported_tracks(review,owned_roms,prepared,progress);
-            else prepare_imported_characters(review,owned_roms,prepared,progress);
+            if(kind==Kind::Track)prepare_imported_tracks(review,owned_roms,prepared,progress,&preparation);
+            else prepare_imported_characters(review,owned_roms,prepared,progress,&preparation);
             const auto receipt=read(prepared/"prepared.json");
             for(const auto& item:receipt.at(kind==Kind::Track?"tracks":"characters")) {
                 if(kind==Kind::Track && item.at("revision")!=manifest.revision)continue;

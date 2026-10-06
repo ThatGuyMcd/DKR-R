@@ -1,6 +1,7 @@
 #include "legacy_runtime_session.hpp"
 #include "legacy_checkpoint.hpp"
 #include <limits>
+#include <algorithm>
 
 namespace dkr::mods {
 RuntimeSession::RuntimeSession(std::shared_ptr<const AssetBank> stock,std::shared_ptr<const CharacterNamespace> characters,
@@ -31,6 +32,36 @@ RuntimeSession::RuntimeSession(std::shared_ptr<const AssetBank> stock,std::share
         const auto bank=AssetBank::derive(stock_,digest,{{{39,3},std::move(samples)}});
         character_samples_=bus_.mount(AssetDirectory::build(bank));
     }
+}
+RuntimeSession::RuntimeSession(const RuntimeSession& source,PreparedCopy)
+    :stock_(source.stock_),characters_(source.characters_),boot_(source.boot_),
+     original_(ResidentBank::instantiate(*source.original_,bus_)),resident_(original_) {
+    character_audio_offsets_=source.character_audio_offsets_;
+    character_race_audio_offsets_=source.character_race_audio_offsets_;
+    if(source.character_samples_) {
+        character_samples_=bus_.mount(source.character_samples_->directory());
+        for(unsigned section=0;section<50;++section)
+            if(character_samples_->address(section)!=source.character_samples_->address(section))throw Error("Prepared audio address order changed.");
+    }
+    std::vector<const Entry*> order;
+    for(const auto& [id,entry]:source.admitted_)order.push_back(&entry);
+    std::sort(order.begin(),order.end(),[](const auto* a,const auto* b){return a->resident->allocation_address()<b->resident->allocation_address();});
+    for(const auto* entry:order)
+        admitted_.emplace(entry->track.root.content_id,Entry{entry->track,ResidentBank::instantiate(*entry->resident,bus_)});
+    // Allocation templates may not subsequently admit unrelated content.
+    mutation_=source.mutation_;shared_textures_=source.shared_textures_;courses_=source.courses_;
+}
+std::shared_ptr<RuntimeSession> RuntimeSession::instantiate()const {
+    std::lock_guard lock(mutex_);
+    if(scenes_ || requested_ || !current_.empty())throw Error("Cannot instantiate a world after gameplay has started.");
+    return std::shared_ptr<RuntimeSession>(new RuntimeSession(*this,PreparedCopy{}));
+}
+std::size_t RuntimeSession::prepared_bytes()const {
+    std::lock_guard lock(mutex_);
+    std::size_t bytes=MaxImage+boot_->owned_override_bytes()+original_->owned_bytes();
+    for(const auto& [id,entry]:admitted_)bytes+=entry.resident->owned_bytes()+entry.track.bank->owned_override_bytes();
+    if(character_samples_)bytes+=character_samples_->directory()->section_size(39);
+    return bytes;
 }
 std::uint32_t RuntimeSession::character_sample_address(unsigned index)const {
     std::size_t offset=0;for(unsigned i=0;i<3;++i)offset+=stock_->record(39,i).size();

@@ -17,6 +17,7 @@ static int reset_poll;
 static int audio_owned;
 static unsigned scene_authorization;
 static int confirmed_menu_tick;
+static int active_menu_tick;
 static int inline_menu_preview;
 static dkr_owned_draw_event draw_events[DKR_OWNED_MAX_DRAW_EVENTS];
 static unsigned draw_count;
@@ -431,6 +432,7 @@ int dkr_probe_scene_unload_authorize(unsigned site) {
     return 1;
 }
 void dkr_probe_scene_unload_begin(void) {
+    if(active_menu_tick && !confirmed_menu_tick)dkr_probe_block("resource-confirmation-required");
     dkr_probe_checkpoint();
     if(DKR_PROBE_HAS_FULL_SCENES && offline && canonical_presentation && scene_cuts &&
        state.video_enabled && !scene_authorization &&
@@ -458,6 +460,7 @@ void dkr_probe_scene_unload_end(void) {
     dkr_probe_scene_unload_render_drained();state.scene_unload_phase=2;
 }
 void dkr_probe_scene_load_begin(uint8_t* rdram,recomp_context* ctx) {
+    if(active_menu_tick && !confirmed_menu_tick)dkr_probe_block("resource-confirmation-required");
     dkr_probe_checkpoint();
     if(!offline || !canonical_presentation || !scene_cuts || !state.video_enabled ||
        state.scene_unload_phase!=2 || (!state.pending_scene_site && !confirmed_menu_tick) || scene_authorization ||
@@ -479,6 +482,7 @@ void dkr_probe_scene_load_begin(uint8_t* rdram,recomp_context* ctx) {
     state.scene_unload_phase=3;
 }
 void dkr_probe_menu_construct_begin(void) {
+    if(active_menu_tick && !confirmed_menu_tick)dkr_probe_block("resource-confirmation-required");
     dkr_probe_checkpoint();
     // init_game creates display heaps/video but has not loaded ANY level.
     // The retail INTRO's first menu constructor therefore has no previous
@@ -525,24 +529,29 @@ void dkr_probe_menu_construct_ready(uint8_t* rdram,recomp_context* ctx) {
 }
 void dkr_probe_menu_tick_configure(int enabled) {
     confirmed_menu_tick=DKR_PROBE_HAS_FULL_SCENES && offline && canonical_presentation && scene_cuts && enabled;
+    active_menu_tick=confirmed_menu_tick;
     if(!confirmed_menu_tick)inline_menu_preview=0;
 }
+void dkr_probe_menu_prediction_configure(int predicting) {
+    if(predicting && active_menu_tick)confirmed_menu_tick=0;
+}
 void dkr_probe_menu_preview_configure(int enabled) {
-    inline_menu_preview=confirmed_menu_tick && enabled;
+    inline_menu_preview=active_menu_tick && enabled;
 }
 int dkr_probe_menu_callback_enabled(void) {
     return DKR_PROBE_HAS_FULL_SCENES && offline && canonical_presentation && scene_cuts &&
-        (confirmed_menu_tick || (state.pending_scene_site && state.scene_unload_phase==4));
+        (active_menu_tick || (state.pending_scene_site && state.scene_unload_phase==4));
 }
 void dkr_probe_menu_tick_finish(void) {
     dkr_probe_checkpoint();
-    if(!confirmed_menu_tick || scene_authorization ||
+    if(!active_menu_tick || scene_authorization ||
        (state.scene_unload_phase && state.scene_unload_phase!=4) ||
        (state.scene_unload_phase && state.pending_scene_site))
         dkr_probe_block("incomplete-confirmed-menu-tick");
     state.scene_unload_phase=0;state.scene_load_resets=0;
 }
 void dkr_probe_menu_level_change_begin(uint8_t* rdram,recomp_context* ctx) {
+    if(active_menu_tick && !confirmed_menu_tick)dkr_probe_block("resource-confirmation-required");
     (void)ctx;dkr_probe_checkpoint();
     const int background=state.pending_scene_site==7 && !state.scene_unload_phase && scene_authorization==7;
     const int construction=state.pending_scene_site && !scene_authorization &&
@@ -575,7 +584,7 @@ void dkr_probe_menu_level_change_ready(uint8_t* rdram,recomp_context* ctx) {
 }
 static gpr background_globals(void) {return guest_address(DKR_PROBE_REVISION==77 ? 0x800E3770U:0x800E3D00U);}
 static int inline_track_preview(uint8_t* rdram) {
-    if(!inline_menu_preview || !confirmed_menu_tick)return 0;
+    if(!inline_menu_preview || !active_menu_tick)return 0;
     const gpr mode=guest_address(DKR_PROBE_REVISION==77 ? 0x801234ECU:0x80123A6CU);
     const gpr menu=guest_address(DKR_PROBE_REVISION==77 ? 0x800DF470U:0x800DF9F0U);
     return MEM_W(0,mode)==1 && MEM_W(0,menu)==15;
@@ -584,6 +593,7 @@ void dkr_probe_menu_preview_begin(uint8_t* rdram,recomp_context* ctx) {
     if(!inline_track_preview(rdram) || state.pending_scene_site)return;
     const gpr globals=background_globals();
     if(MEM_W(0,globals)!=1 || MEM_W(12,globals))return;
+    if(!confirmed_menu_tick)dkr_probe_block("resource-confirmation-required");
     dkr_probe_checkpoint();
     if(state.scene_unload_phase || scene_authorization || !state.video_enabled || state.preview_loads==UINT32_MAX)
         dkr_probe_block("unowned-confirmed-track-preview");
@@ -609,7 +619,7 @@ void dkr_probe_menu_background_request(uint8_t* rdram,recomp_context* ctx) {
     dkr_probe_checkpoint();
     const gpr globals=background_globals();
     const uint32_t queue=DKR_PROBE_REVISION==77 ? 0x8012ACA0U:0x8012B260U;
-    if(!confirmed_menu_tick || !state.video_enabled || state.pending_scene_site || state.scene_unload_phase ||
+    if(!active_menu_tick || !state.video_enabled || state.pending_scene_site || state.scene_unload_phase ||
        (uint32_t)ctx->r4!=queue || ctx->r5!=10 || ctx->r6 || MEM_W(0,globals)!=1 || MEM_W(12,globals))
         dkr_probe_block("unowned-menu-background-request");
     // No worker is signalled here. The request remains outstanding in owned
@@ -617,7 +627,7 @@ void dkr_probe_menu_background_request(uint8_t* rdram,recomp_context* ctx) {
     ctx->r2=0;
 }
 void dkr_probe_menu_background_cut(uint8_t* rdram) {
-    if(!confirmed_menu_tick || state.pending_scene_site)return;
+    if(!active_menu_tick || state.pending_scene_site)return;
     // Track previews use the next fully confirmed tick. All other menu loads,
     // gameplay transitions and the conservative private proof retain epochs.
     if(inline_track_preview(rdram))return;
@@ -628,7 +638,7 @@ void dkr_probe_menu_background_cut(uint8_t* rdram) {
     }
 }
 void dkr_probe_menu_tick_end(uint8_t* rdram) {
-    if(!confirmed_menu_tick)return;
+    if(!active_menu_tick)return;
     dkr_probe_menu_tick_finish();
     dkr_probe_menu_background_cut(rdram);
 }
@@ -980,7 +990,7 @@ static void void_primitive(uint8_t* rdram,recomp_context* ctx) {
     }
 }
 dkr_probe_native_state dkr_probe_native_capture(void) { return state; }
-void dkr_probe_native_restore(dkr_probe_native_state value) { state = value; scene_authorization=0; confirmed_menu_tick=0; inline_menu_preview=0; }
+void dkr_probe_native_restore(dkr_probe_native_state value) { state = value; scene_authorization=0; confirmed_menu_tick=0; active_menu_tick=0; inline_menu_preview=0; }
 int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* context) {
     (void)ram; (void)context;
     dkr_probe_checkpoint();
@@ -1024,7 +1034,7 @@ int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* cont
             strcmp(name,"dkr_character_select_animation_tick")==0 ||
             strcmp(name,"dkr_character_select_animation_fraction")==0)) {
             uint8_t* rdram=ram;
-            if((!confirmed_menu_tick && !(state.pending_scene_site && state.scene_unload_phase==4)) ||
+            if((!active_menu_tick && !(state.pending_scene_site && state.scene_unload_phase==4)) ||
                !dkr_probe_character_animation_valid(
                state.character_animation_active,state.character_animation_phase))
                 dkr_probe_block("unowned-character-music-animation");
@@ -1049,7 +1059,7 @@ int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* cont
             strcmp(name,"dkr_netplay_character_select_lock")==0 ||
             strcmp(name,"dkr_netplay_character_select_ai_seed")==0)) {
             uint8_t* rdram=ram;
-            if((!confirmed_menu_tick && !(state.pending_scene_site && state.scene_unload_phase==4)) || !state.owner_mask ||
+            if((!active_menu_tick && !(state.pending_scene_site && state.scene_unload_phase==4)) || !state.owner_mask ||
                state.owner_mask>15 || (state.owner_mask&(state.owner_mask+1)))
                 dkr_probe_block("unowned-character-roster-admission");
             // This backend owns the complete authored RNG stream, including

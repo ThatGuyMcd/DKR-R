@@ -2,9 +2,15 @@
 #include "online_mod_manifest.hpp"
 #include "online_mod_bundle.hpp"
 #include <optional>
+#include <map>
 
 namespace dkr::mods::online {
 inline constexpr std::size_t MaxChunkBytes=8192;
+inline constexpr std::size_t TransferWindowBytes=256*1024;
+inline constexpr unsigned UploadBurstPackets=8;
+inline constexpr std::size_t transfer_window_bytes(std::size_t chunk) {
+    return chunk && chunk<=MaxChunkBytes?(TransferWindowBytes/chunk)*chunk:0;
+}
 enum class Operation : std::uint8_t {
     Offer=1,ManifestRequest,ManifestChunk,Consent,PayloadRequest,PayloadChunk,
     Preparing,Verified,Cancel,ConsentAck,PreparingAck,Progress
@@ -34,12 +40,13 @@ public:
     void cancel() noexcept;
     // The worker may skip a payload only after checking its full cached hash.
     void cached(std::string_view digest,std::uint64_t size);
-    // Rejoin may reuse a durably written prefix only after renewed consent.
+    // Rejoin may reuse a saved prefix only after renewed consent.
     // Its complete SHA is still mandatory; a prefix is never an asset proof.
     void resume_prefix(std::string_view digest,std::uint64_t bytes);
     Message request(std::size_t chunk_bytes)const;
     bool accept_payload_chunk(const Message& message)const;
-    // Called ONLY after the staging writer has durably accepted these bytes.
+    // Called ONLY after the staging writer has completely accepted these bytes.
+    // The writer flushes bounded batches and always flushes before publication.
     // Partial data never counts as a verified/prepared mod.
     void persisted(std::size_t bytes);
     // Called ONLY after the completed staging file's size and SHA-256 match.
@@ -56,7 +63,7 @@ private:
     std::size_t payload_=0;
     std::uint64_t received_=0;
 };
-// Worker-owned per-recipient window. Each request opens at most 64 KiB, not
+// Worker-owned per-recipient window. Each request opens at most 256 KiB, not
 // an unbounded stream. A receiver retries its first missing offset; reordering
 // and loss cannot silently advance it. The coordinator schedules peers fairly.
 class Upload {
@@ -75,5 +82,19 @@ private:
     std::uint32_t offset_=0,end_=0;
     std::size_t chunk_=0;
     bool consented_=false,preparing_=false,cancelled_=false;
+};
+// SCTP's bulk lane is reliable but unordered. Keep a bounded window instead of
+// discarding all later chunks when one arrives late. No chunk advances the
+// download until its exact preceding offset has been written/verified.
+class ChunkInbox {
+public:
+    bool push(const Message& chunk,const Message& request);
+    std::optional<Message> take(const Message& request);
+    void clear(){chunks_.clear();bytes_=0;payload_.clear();}
+    std::size_t bytes()const{return bytes_;}
+private:
+    std::map<std::uint32_t,Message> chunks_;
+    std::size_t bytes_=0;
+    std::string payload_;
 };
 }

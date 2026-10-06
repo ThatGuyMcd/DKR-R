@@ -34,8 +34,8 @@ class Session final {
 public:
     explicit Session(SceneSimulation& world) : world_(world), timeline_(world) {}
     bool start(TimelineConfiguration configuration, std::string& error);
-    bool needs_local_input() const;
-    OwnerInputResult sample_local(PackedInput input);
+    bool needs_local_input(bool live_lead=false) const;
+    OwnerInputResult sample_local(PackedInput input,bool live_lead=false);
     SessionInputResult receive_input(std::uint8_t peer, std::span<const std::uint8_t> bytes);
     bool service_inputs(); // Owner-only ledger admission, never a simulation tick.
     EpochResult receive_control(std::uint8_t peer, std::span<const std::uint8_t> bytes);
@@ -46,6 +46,7 @@ public:
     SessionStep step(bool allow_advance = true);
     const Statistics& statistics() const { return timeline_.statistics(); }
     std::uint32_t frontier() const { return timeline_.frontier(); }
+    std::uint8_t missing_input_mask() const {return timeline_.missing_input_mask();}
     std::uint64_t epoch() const { return configuration_.simulation.epoch; }
     std::uint8_t local_owner() const { return configuration_.local_owner; }
     std::uint8_t player_count() const { return configuration_.simulation.players; }

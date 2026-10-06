@@ -47,7 +47,7 @@ VERSION="${DKR_RELEASE_VERSION:-${VERSION_FILE_VALUE}}"
 EXPERIMENTAL_RACE_TEST=0
 if grep -Eq '^DKR_EXPERIMENTAL_RACE_TEST:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
   EXPERIMENTAL_RACE_TEST=1
-  [[ "${VERSION}" == *experimental* || "${VERSION}" == *rollback-test* || "${VERSION}" == 1.0.5-beta.15 || "${VERSION}" == 1.0.5-beta.15-playtest.[23456789] || "${VERSION}" == 1.0.5-beta.15-playtest.10 || "${VERSION}" == 1.0.5-beta.15-playtest.11 || "${VERSION}" == 1.0.5-beta.15-playtest.12 || "${VERSION}" == 1.0.5-beta.15-playtest.14 ]] || { echo 'Experimental builds require a distinct experimental version or an approved Beta 15 playtest candidate.' >&2; exit 1; }
+  [[ "${VERSION}" == *experimental* || "${VERSION}" == *rollback-test* || "${VERSION}" == 1.0.5-beta.15 || "${VERSION}" == 1.0.5-beta.15-playtest.[23456789] || "${VERSION}" == 1.0.5-beta.15-playtest.10 || "${VERSION}" == 1.0.5-beta.15-playtest.11 || "${VERSION}" == 1.0.5-beta.15-playtest.12 || "${VERSION}" == 1.0.5-beta.15-playtest.14 || "${VERSION}" == 1.0.5-beta.15-playtest.15 || "${VERSION}" == 1.0.5-beta.15-playtest.15-fix.[12] ]] || { echo 'Experimental builds require a distinct experimental version or an approved Beta 15 playtest candidate.' >&2; exit 1; }
 fi
 # Explicit beta qualification deferral; normal release packaging still runs all checks.
 SKIP_RUNTIME_TESTS="${DKR_SKIP_RUNTIME_TESTS:-0}"
@@ -163,7 +163,7 @@ EXPERIMENTAL_DEPLOY_ARGS=()
 if [[ "${EXPERIMENTAL_RACE_TEST}" == 1 ]]; then
   # The earlier generic file describes Playtest 2; current playtests ship their own
   # current connection/scope guide instead of contradictory version guidance.
-  if [[ "${VERSION}" != 1.0.5-beta.15-playtest.8 && "${VERSION}" != 1.0.5-beta.15-playtest.9 && "${VERSION}" != 1.0.5-beta.15-playtest.10 && "${VERSION}" != 1.0.5-beta.15-playtest.11 && "${VERSION}" != 1.0.5-beta.15-playtest.12 && "${VERSION}" != 1.0.5-beta.15-playtest.14 ]]; then
+  if [[ "${VERSION}" != 1.0.5-beta.15-playtest.8 && "${VERSION}" != 1.0.5-beta.15-playtest.9 && "${VERSION}" != 1.0.5-beta.15-playtest.10 && "${VERSION}" != 1.0.5-beta.15-playtest.11 && "${VERSION}" != 1.0.5-beta.15-playtest.12 && "${VERSION}" != 1.0.5-beta.15-playtest.14 && "${VERSION}" != 1.0.5-beta.15-playtest.15 && "${VERSION}" != 1.0.5-beta.15-playtest.15-fix.[12] ]]; then
     install -m 0644 "${PROJECT_ROOT}/docs/EXPERIMENTAL-ROLLBACK-TESTING.txt" "${APPDIR}/usr/share/doc/dkr-port/EXPERIMENTAL-ROLLBACK-TESTING.txt"
   fi
   if [[ "${VERSION}" == 1.0.5-beta.15-playtest.3 ]]; then
@@ -201,9 +201,19 @@ if [[ "${EXPERIMENTAL_RACE_TEST}" == 1 ]]; then
   if [[ "${VERSION}" == 1.0.5-beta.15-playtest.12 ]]; then
     install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST12-ONLINE-MODS.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST12-NOTES.txt"
   fi
-  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.14 ]]; then
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.14 || "${VERSION}" == 1.0.5-beta.15-playtest.15 || "${VERSION}" == 1.0.5-beta.15-playtest.15-fix.[12] ]]; then
     install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST14-ONLINE-REVISIONS.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST14-NOTES.txt"
     install -m 0644 "${PROJECT_ROOT}/docs/PLAYTEST14-ONLINE-RETENTION-AND-PROGRESS.txt" "${APPDIR}/usr/share/doc/dkr-port/ONLINE-MOD-ADMISSION-REBUILD.txt"
+    install -m 0644 "${PROJECT_ROOT}/docs/PLAYTEST14-MOD-SYNC-PERFORMANCE-20261006.txt" "${APPDIR}/usr/share/doc/dkr-port/ONLINE-MOD-SYNC-PERFORMANCE.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.15 || "${VERSION}" == 1.0.5-beta.15-playtest.15-fix.[12] ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST15-ROLLBACK.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST15-NOTES.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.15-fix.[12] ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST15-FIX1.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST15-FIX1-NOTES.txt"
+  fi
+  if [[ "${VERSION}" == 1.0.5-beta.15-playtest.15-fix.2 ]]; then
+    install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST15-FIX2.txt" "${APPDIR}/usr/share/doc/dkr-port/PLAYTEST15-FIX2-NOTES.txt"
   fi
 fi
 install -m 0644 "${PROJECT_ROOT}/LICENSE.md" "${APPDIR}/usr/share/doc/dkr-port/LICENSE.md"

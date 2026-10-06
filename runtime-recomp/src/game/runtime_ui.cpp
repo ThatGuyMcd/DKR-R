@@ -44,6 +44,7 @@
 #include "netplay/experimental_runtime_admission.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "netplay/experimental_runtime.hpp"
+#include "netplay/experimental_latency.hpp"
 #include "netplay/experimental_performance.hpp"
 #include "netplay/secure_channel.hpp"
 #endif
@@ -6045,7 +6046,7 @@ void DrawOnlineWaitingNotification(
     const dkr::runtime::netplay::SessionView& view) {
     using dkr::runtime::netplay::LaunchStage;
     const auto runtime_reason = dkr::runtime::netplay::online_wait_reason();
-    const std::uint64_t runtime_generation =
+    std::uint64_t runtime_generation =
         dkr::runtime::netplay::online_wait_episode();
     const char* reason = nullptr;
     bool launch_wait = true;
@@ -6074,11 +6075,13 @@ void DrawOnlineWaitingNotification(
     const auto owned=dkr::runtime::netplay::experimental::runtime_view();
     if(owned.active) {
         using dkr::runtime::netplay::experimental::PumpWait;
+        runtime_generation=owned.epoch*16+unsigned(owned.wait);
         if(owned.initial_admission) {
             reason=owned.status.c_str();
             launch_wait=true;
         } else switch(owned.wait) {
-        case PumpWait::OwnerInput: case PumpWait::Confirmation:reason="WAITING FOR CONFIRMED RACER INPUT";break;
+        case PumpWait::OwnerInput:reason="NETWORK INPUT BUFFER EXHAUSTED - WAITING FOR RACER INPUT";break;
+        case PumpWait::Confirmation:reason="CONFIRMING INPUT BEFORE A SCENE RESOURCE CHANGE";break;
         case PumpWait::ScenePeers:reason="WAITING FOR RACERS AT THE SAME SCENE";break;
         case PumpWait::ScenePreparation:reason="PREPARING THE SYNCHRONIZED SCENE";break;
         case PumpWait::PresentationDrain:reason="RETIRING THE CORRECTED FRAME";break;

@@ -71,6 +71,14 @@ public:
         const auto index=owner(p.source);if(index==255){e="Owned packet is outside the immutable lobby roster.";return false;}
         a=LobbyAdmission::address(index);b=std::move(p.bytes);return true;
     }
+    DatagramSendStatus send_live_status(const PeerAddress& a,std::span<const std::uint8_t> b,
+        std::uint8_t owner,std::string& e) override {
+        if(a.size!=4 || a.storage[0]!='D' || a.storage[1]!='K' || a.storage[2]!='X' ||
+           a.storage[3]>=count_ || owner>=count_) {
+            e="Invalid owned live-input route.";return DatagramSendStatus::Error;
+        }
+        return lobby_.send_owned_packet(slots_[a.storage[3]],b,TransportTrafficClass::Realtime,e,owner);
+    }
 };
 enum class OwnerStage : unsigned {Idle,Pump,Construct,Admit,PrepareTick,Capture,Restore,Tick,
     Commit,Boundary,PrepareScene,Publish,SaveSnapshot,SaveWrite};
@@ -105,6 +113,7 @@ public:
     ObservedOwnedGame(std::unique_ptr<OwnedGame> game,OwnerActivity& activity):game_(std::move(game)),activity_(activity) {}
     SimulationContract contract() const override {return game_->contract();}
     bool requires_confirmed_tick() const override {return game_->requires_confirmed_tick();}
+    std::uint8_t input_dependencies() const override {return game_->input_dependencies();}
     RestoreStep prepare_tick(std::uint64_t epoch,std::uint32_t frame,bool confirmed,std::string& error) override {
         OwnerActivity::Scope stage(activity_,OwnerStage::PrepareTick);return game_->prepare_tick(epoch,frame,confirmed,error);
     }
@@ -439,6 +448,13 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                     const auto& stats=session.statistics();
                     if(now>=report_at) {
                         const auto& packets=network.statistics();
+                        std::fprintf(stderr,"[rollback][flow] frontier=%u lead=%u window=%u missing-frame=%u missing-mask=0x%X resource-fences=%u pending=%zu pending-age-ms=%llu max-pending-age-ms=%llu catchup=%llu replay-slices=%llu input-wait-ms=%llu confirmation-wait-ms=%llu checkpoint-bytes=%zu\n",
+                            session.frontier(),stats.next_frame-stats.confirmed_frames,unsigned(accepted_launch.rollback_window),
+                            stats.confirmed_frames,unsigned(session.missing_input_mask()),stats.resource_fences,packets.pending_packets,
+                            static_cast<unsigned long long>(packets.oldest_pending_age_ms),static_cast<unsigned long long>(packets.maximum_pending_age_ms),
+                            static_cast<unsigned long long>(pump.view().catchup_ticks),static_cast<unsigned long long>(pump.view().replay_slices),
+                            static_cast<unsigned long long>(pump.view().wait_nanoseconds[unsigned(PumpWait::OwnerInput)]/1000000),
+                            static_cast<unsigned long long>(pump.view().wait_nanoseconds[unsigned(PumpWait::Confirmation)]/1000000),stats.checkpoint_bytes);
                         std::fprintf(stderr,"[rollback][progress] epoch=%llu frame=%u confirmed=%u corrections=%u replayed=%u received=%llu rejected=%llu wait=%d\n",
                             static_cast<unsigned long long>(session.epoch()),stats.next_frame,stats.confirmed_frames,stats.rollbacks,stats.replayed_frames,
                             static_cast<unsigned long long>(packets.received),static_cast<unsigned long long>(packets.rejected),int(pump.view().wait));
@@ -464,7 +480,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                     const auto next_view=std::tuple{pump.view().wait,session.epoch(),
                         stats.next_frame,stats.confirmed_frames,stats.rollbacks,stats.replayed_frames};
                     if(!reported_view||*reported_view!=next_view) {
-                        report({true,pump.view().wait,session.epoch(),stats.next_frame,stats.confirmed_frames,stats.rollbacks,stats.replayed_frames,"Experimental rollback"});
+                        report({true,pump.view().wait,session.epoch(),stats.next_frame,stats.confirmed_frames,stats.rollbacks,stats.replayed_frames,"Experimental rollback",false,session.missing_input_mask()});
                         reported_view=next_view;
                     }
                     if(now>=next_save) {

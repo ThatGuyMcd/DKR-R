@@ -1049,7 +1049,8 @@ void dkr::runtime::RT64Renderer::present_owned(
         if(event.kind==DKR_OWNED_MATRIX) {
             const auto flags=event.parameters[0];
             const auto identity=event.token?presentation::normalise_identity(event.token^presentation::mix_identity(scene)):0U;
-            owned_matrices.push_back({event.address,{identity,(flags&1)!=0,(flags&2)!=0,(flags&4)!=0,(flags&8)!=0,std::uint8_t(event.parameters[3])},event.parameters[1]!=0});
+            owned_matrices.push_back({event.address,{identity,(flags&1)!=0,(flags&2)!=0,(flags&4)!=0,(flags&8)!=0,std::uint8_t(event.parameters[3]),
+                {float(event.parameters[4]),std::bit_cast<float>(event.parameters[5]),std::uint8_t(event.parameters[6])}},event.parameters[1]!=0});
             continue;
         }
         if(event.kind==DKR_OWNED_SKY_MATRIX || event.kind==DKR_OWNED_TRANSITION) {

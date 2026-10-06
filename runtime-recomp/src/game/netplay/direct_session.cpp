@@ -1,5 +1,6 @@
 #include "direct_session.hpp"
 #include "experimental_runtime_admission.hpp"
+#include "experimental_latency.hpp"
 #include "online_lobby_policy.hpp"
 
 #include "authoritative_state_codec.hpp"
@@ -371,6 +372,7 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
     runtime_save_generations_ = {};
     runtime_save_present_ = {};
     retire_transport_locked();
+    reset_connection_launch_locked();
     quick_join_bootstrap_pending_ = false;
     critical_outbound_.clear();
     repair_outbound_.clear();
@@ -537,6 +539,7 @@ bool DirectSession::join_friend_invite(std::string_view invite,
         return false;
     }
     retire_transport_locked();
+    reset_connection_launch_locked();
     critical_outbound_.clear();
     repair_outbound_.clear();
     high_priority_outbound_.clear();
@@ -1671,6 +1674,29 @@ std::chrono::milliseconds DirectSession::launch_control_timeout_locked(
     const auto adaptive = minimum + std::chrono::milliseconds(
         static_cast<std::int64_t>(std::ceil(worst_route_budget_ms)));
     return std::clamp(adaptive, minimum, maximum);
+}
+
+void DirectSession::reset_connection_launch_locked() {
+    // A fresh authenticated connection must not inherit a failed match's
+    // immutable roster, retired generations, queued native packets or save
+    // completions. Keep same-lobby retirement separate: its stale-packet gates
+    // remain in effect until an explicit new host/join connection is created.
+    launch_descriptor_.reset();
+    launch_requested_ = false;
+    local_loaded_ = false;
+    local_bootstrap_hash_ = 0;
+    bootstrap_hashes_ = {};
+    bootstrap_hash_present_ = {};
+    run_signal_sent_ = false;
+    owned_match_end_.reset();
+    retired_owned_generation_ = 0;
+    owned_last_host_packet_ = {};
+    owned_inbound_.clear();
+    owned_inbound_bytes_ = 0;
+    ++save_job_token_;
+    save_jobs_.clear();
+    host_start_verified_ = false;
+    last_save_offer_ = {};
 }
 
 void DirectSession::reset_launch_transaction_locked() {
@@ -3087,7 +3113,7 @@ PeerAddress DirectSession::owned_peer_address(std::uint8_t slot) {
 
 DatagramSendStatus DirectSession::send_owned_packet(std::uint8_t target,
     std::span<const std::uint8_t> bytes, TransportTrafficClass traffic,
-    std::string& error) {
+    std::string& error,std::uint8_t live_owner) {
     std::scoped_lock lock(mutex_);
     if (!owned_backend_available_ || !launch_descriptor_ ||
         launch_descriptor_->synchronization != SynchronizationMode::ExperimentalRollback ||
@@ -3120,7 +3146,7 @@ DatagramSendStatus DirectSession::send_owned_packet(std::uint8_t target,
     const auto launch_hash=launch_descriptor_hash(*launch_descriptor_);
     for(int shift=56;shift>=0;shift-=8)scoped_bytes.push_back(static_cast<std::uint8_t>(launch_hash>>shift));
     scoped_bytes.insert(scoped_bytes.end(),bytes.begin(),bytes.end());
-    if (!send_with_key(address, is_host_ ? peers_[target].key : key_, type, scoped_bytes)) {
+    if (!send_with_key(address, is_host_ ? peers_[target].key : key_, type, scoped_bytes,live_owner)) {
         error = "Could not queue the authenticated experimental packet.";
         return DatagramSendStatus::Error;
     }
@@ -5479,6 +5505,13 @@ bool DirectSession::enqueue_outbound(PeerAddress destination,
         }
         commit_outbound_.push_back(std::move(packet));
     } else if (high_priority) {
+        if(type==protocol::MessageType::ExperimentalInput && frame<4) {
+            const auto before=high_priority_outbound_.size();
+            std::erase_if(high_priority_outbound_,[&](const OutboundPacket& p) {
+                return p.type==type && p.destination==destination && p.frame==frame;
+            });
+            duplicate_retries_coalesced_+=before-high_priority_outbound_.size();
+        }
         if (type == protocol::MessageType::Input ||
             type == protocol::MessageType::InputAck ||
             type == protocol::MessageType::SimulationProgress ||
@@ -5652,7 +5685,8 @@ void DirectSession::flush_outbound_locked() {
             if ((packet.type == protocol::MessageType::Input ||
                  packet.type == protocol::MessageType::InputAck ||
                  packet.type == protocol::MessageType::SimulationProgress ||
-                 packet.type == protocol::MessageType::RacerOrientation) &&
+                 packet.type == protocol::MessageType::RacerOrientation ||
+                 packet.type == protocol::MessageType::ExperimentalInput) &&
                 std::chrono::steady_clock::now() - packet.enqueued >
                     std::chrono::milliseconds(250)) {
                 ++outbound_packets_dropped_;
@@ -6203,7 +6237,8 @@ void DirectSession::pump_locked() {
     // peer's measured result for the launch so all racers share one timeline.
     if (is_host_ && !launch_descriptor_ &&
         lobby_.room().rules.automatic_input_delay) {
-        std::uint8_t calculated_delay = 2U;
+        const bool experiment=lobby_.room().rules.synchronization==SynchronizationMode::ExperimentalRollback;
+        std::uint8_t calculated_delay = experiment ? 1U : 2U;
         for (const PeerRecord& peer : peers_) {
             if (!peer.active) continue;
             std::array<double, 32U> ordered{};
@@ -6219,11 +6254,12 @@ void DirectSession::pump_locked() {
                 : ordered[(fresh_count * 99U + 99U) / 100U - 1U];
             const double p50 = fresh_count == 0U ? peer.rtt_ms
                 : ordered[(fresh_count - 1U) / 2U];
-            if (fresh_count < 4U && method_ != ConnectionMethod::Lan)
+            if (!experiment && fresh_count < 4U && method_ != ConnectionMethod::Lan)
                 calculated_delay = (std::max<std::uint8_t>)(calculated_delay, 3U);
             calculated_delay = (std::max)(
                 calculated_delay,
-                host_authoritative_input_delay_frames(
+                experiment ? experimental::automatic_delay(fresh_count<4U && method_!=ConnectionMethod::Lan ?
+                    (std::max)(p99,100.0):p99,lobby_.room().rules.rollback_window) : host_authoritative_input_delay_frames(
                     p99, (std::max)(peer.jitter_ms, p99 - p50), peer.loss_percent,
                     method_ == ConnectionMethod::Lan));
         }

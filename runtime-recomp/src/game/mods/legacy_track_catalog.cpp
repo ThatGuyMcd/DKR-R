@@ -492,10 +492,21 @@ std::vector<PreparedTrack> TrackCatalog::load_enabled(const std::filesystem::pat
     const auto root=private_storage_path(path);
     if(!stock || !stock->digest().empty())throw Error("Enabled custom tracks require a verified original bank.");
     if(!std::filesystem::exists(root) || enabled_ids(root).empty())return {};
-    const auto items=scan(root);std::vector<PreparedTrack> result;std::set<std::string> expected,loaded;
-    std::size_t total=0;
+    const auto items=scan(root);std::vector<CatalogSource> sources;std::set<std::string> expected,loaded;
     for(const auto& item:items)if(item.enabled) {
         expected.insert(item.id);if(item.revision!=stock->revision())continue;
+        sources.push_back({root,item});loaded.insert(item.id);
+    }
+    if(expected!=loaded)throw Error("An enabled course is not prepared for the selected Game Pak revision. Prepare that revision or disable the course before starting.");
+    return load_selected(sources,std::move(stock));
+}
+std::vector<PreparedTrack> TrackCatalog::load_selected(std::span<const CatalogSource> sources,std::shared_ptr<const AssetBank> stock) {
+    if(!stock || !stock->digest().empty())throw Error("Custom tracks require a verified original bank.");
+    std::vector<PreparedTrack> result;std::set<std::string> loaded;std::size_t total=0;
+    for(const auto& source:sources) {
+        const auto root=private_storage_path(source.library);const auto& item=source.item;
+        if(!digest(item.group) || !digest(item.storage) || !digest(item.artifact))throw Error("Invalid frozen course source identity.");
+        if(item.revision!=stock->revision() || !loaded.insert(item.id).second)throw Error("Frozen course selection has conflicting revision/identity.");
         auto track=read_track_artifact(root/"prepared"/item.group/item.storage,item.artifact,stock);
         if(track.bank->owned_override_bytes()>MaxStaged-total)
             throw Error("Enabled course assets exceed this beta's 256 MiB preparation budget. Disable some tracks before starting.");
@@ -503,9 +514,8 @@ std::vector<PreparedTrack> TrackCatalog::load_enabled(const std::filesystem::pat
         if(track.root.content_id!=item.id || track.bank->fingerprint()!=item.bank || track.patch_digest!=item.patch ||
            track.root.carrier!=item.carrier || track.root.name!=item.name || track.root.vehicles!=item.vehicles || track.root.race_type!=item.race_type)
             throw Error("Prepared course does not match its catalogue entry.");
-        loaded.insert(item.id);result.push_back(std::move(track));
+        result.push_back(std::move(track));
     }
-    if(expected!=loaded)throw Error("An enabled course is not prepared for the selected Game Pak revision. Prepare that revision or disable the course before starting.");
     return result;
 }
 std::vector<TrackCatalogItem> TrackCatalog::selected_items(const std::filesystem::path& path,
@@ -531,12 +541,32 @@ std::vector<TrackCatalogItem> TrackCatalog::selected_items(const std::filesystem
     std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){return a.id<b.id;});
     return result;
 }
+std::vector<TrackCatalogItem> TrackCatalog::installed_items(const std::filesystem::path& path,
+    std::string_view revision,Kind kind) {
+    if(revision!="us.v77" && revision!="us.v80")throw Error("Unsupported online Game Pak revision.");
+    auto items=scan(private_storage_path(path),{},kind==Kind::Character);
+    std::erase_if(items,[&](const auto& item){return kind==Kind::Track && item.revision!=revision;});
+    return items;
+}
 std::vector<PreparedCharacter> TrackCatalog::load_enabled_characters(const std::filesystem::path& path,std::shared_ptr<const AssetBank> stock) {
     const auto root=private_storage_path(path);
     if(!stock || !stock->digest().empty() || stock->augmented())throw Error("Characters need the verified original Game Pak.");
     if(!std::filesystem::exists(root) || enabled_ids(root,true).empty())return {};
-    const auto items=scan(root,{},true);std::vector<PreparedCharacter> result;
-    for(const auto& item:items)if(item.enabled) {
+    const auto items=scan(root,{},true);std::vector<CatalogSource> sources;
+    for(const auto& item:items)if(item.enabled)sources.push_back({root,item});
+    return load_selected_characters(sources,std::move(stock));
+}
+std::vector<PreparedCharacter> TrackCatalog::load_selected_characters(std::span<const CatalogSource> sources,std::shared_ptr<const AssetBank> stock) {
+    if(!stock || !stock->digest().empty() || stock->augmented())throw Error("Characters need the verified original Game Pak.");
+    std::vector<PreparedCharacter> result;std::set<std::string> loaded;
+    std::map<std::filesystem::path,json> reviews;
+    std::map<std::filesystem::path,Bytes> audio_blobs;
+    std::size_t cached_audio_bytes=0;
+    std::array<View,3> originals{};bool audio_checked=false;
+    for(const auto& selected_source:sources) {
+        const auto root=private_storage_path(selected_source.library);const auto& item=selected_source.item;
+        if(!digest(item.group) || !digest(item.storage) || !digest(item.artifact) || (!item.review.empty() && !digest(item.review)))throw Error("Invalid frozen character source identity.");
+        if(!loaded.insert(item.id).second)throw Error("Frozen character selection has duplicate identity.");
         auto character=read_character_artifact(root/"prepared-characters"/item.group/item.storage,item.artifact,*stock);
         if(character.root.content_id!=item.id || character.root.name!=item.name || character.root.base_character!=item.base_character || item.vehicles!=7)
             throw Error("Character artifact disagrees with its catalogue metadata.");
@@ -548,13 +578,18 @@ std::vector<PreparedCharacter> TrackCatalog::load_enabled_characters(const std::
             ordinary(source);ordinary(source/"blobs");
             if(std::filesystem::is_symlink(source/"review.json") || !std::filesystem::is_regular_file(source/"review.json"))
                 throw Error("Character source review is missing or linked.");
+            auto cached=reviews.find(source);
+            if(cached==reviews.end()) {
             const auto bytes=read_file(source/"review.json",8*MiB);
             if(sha256(bytes)!=item.review)throw Error("Character source review has changed.");
-            const auto review=json::parse(bytes.begin(),bytes.end(),[](int depth,json::parse_event_t,json&) {
+            auto review=json::parse(bytes.begin(),bytes.end(),[](int depth,json::parse_event_t,json&) {
                 if(depth>12)throw Error("Character source review exceeds its nesting limit.");return true;
             }); // Parse the exact bytes whose digest was checked, not a second read.
             if(review.at("schema")!=Schema || !review.at("packages").is_array() || review.at("packages").size()>32)
                 throw Error("Invalid retained character source review.");
+            cached=reviews.emplace(source,std::move(review)).first;
+            }
+            const auto& review=cached->second;
             const json* package=nullptr;
             for(const auto& p:review.at("packages"))if(p.at("patch_sha256")==item.patch && p.at("source_revision")==item.revision) {
                 if(package)throw Error("Ambiguous character source audio.");package=&p;
@@ -570,10 +605,13 @@ std::vector<PreparedCharacter> TrackCatalog::load_enabled_characters(const std::
             const auto table_hash=stock->revision()=="us.v77"?"3f49a943f552fbbc80c4639c6459f5f76388db7b29332ac1d8aab99769dc2446":
                 "346a420ba543af1f562db5dbc1b3bba169f382764ea17f9d9fbcc3e18975fba6";
             for(unsigned i=0;i<3;++i) {
-                const auto original=stock->record(39,ids[i]);
-                if(sha256(original)!=(i<2?hashes[i]:table_hash))throw Error("Original character audio portability check failed.");
-                audio[i]=Bytes(original.begin(),original.end());
+                if(!audio_checked) {
+                    originals[i]=stock->record(39,ids[i]);
+                    if(sha256(originals[i])!=(i<2?hashes[i]:table_hash))throw Error("Original character audio portability check failed.");
+                }
+                audio[i]=Bytes(originals[i].begin(),originals[i].end());
             }
+            audio_checked=true;
             const auto& records=package->at("records");
             if(!records.is_array() || records.size()>65536)throw Error("Character source audio record list is invalid.");
             std::set<unsigned> seen_audio;
@@ -582,9 +620,19 @@ std::vector<PreparedCharacter> TrackCatalog::load_enabled_characters(const std::
                 if(!digest(hash) || !seen_audio.insert(ids[i]).second)throw Error("Ambiguous character audio record.");
                 const auto file=source/"blobs"/hash;
                 if(std::filesystem::is_symlink(file) || !std::filesystem::is_regular_file(file))throw Error("Character audio blob is missing or linked.");
-                audio[i]=read_file(file,i==1?16*MiB:4*MiB);
-                if(audio[i].size()!=record.at("size").get<std::size_t>() || sha256(audio[i])!=hash)
-                    throw Error("Character audio blob verification failed.");
+                auto blob=audio_blobs.find(file);
+                if(blob==audio_blobs.end()) {
+                    auto data=read_file(file,i==1?16*MiB:4*MiB);
+                    if(sha256(data)!=hash)throw Error("Character audio blob verification failed.");
+                    if(data.size()>32*MiB-cached_audio_bytes) {
+                        if(data.size()!=record.at("size").get<std::size_t>())throw Error("Character audio blob size differs from review.");
+                        audio[i]=std::move(data);continue;
+                    }
+                    cached_audio_bytes+=data.size();
+                    blob=audio_blobs.emplace(file,std::move(data)).first;
+                }
+                if(blob->second.size()>(i==1?16*MiB:4*MiB) || blob->second.size()!=record.at("size").get<std::size_t>())throw Error("Character audio blob size differs from review.");
+                audio[i]=blob->second;
             }
             const auto selected=prepare_character_audio(audio[0],audio[1],audio[2],item.base_character);
             if(character_audio_identity(selected)!=character_audio_identity(character.audio))

@@ -6,7 +6,7 @@
 namespace dkr::runtime::netplay::experimental {
 namespace {
 constexpr std::array<std::uint8_t,5> kPrefix{'D','K','X','N',1};
-constexpr std::size_t kMaximumWireBytes = 44 + 6 + 68;
+constexpr std::size_t kMaximumWireBytes = 44 + 6 + kOwnerInputMaximumBytes;
 bool nonzero(const secure::Key& key) {
     return std::any_of(key.begin(),key.end(),[](auto byte){return byte!=0;});
 }
@@ -60,7 +60,7 @@ bool Network::queue(unsigned peer,unsigned lane,unsigned kind,std::vector<std::u
                     TransportTrafficClass traffic, Clock::time_point now) {
     auto& pending=pending_[peer][lane];
     if(payload.empty()) return true;
-    if(payload.size()>68) return fail("Experimental wire bound exceeded.");
+    if(payload.size()>kOwnerInputMaximumBytes) return fail("Experimental wire bound exceeded.");
     std::vector<std::uint8_t> plain(kPrefix.begin(),kPrefix.end());
     plain.push_back(std::uint8_t(kind)); plain.insert(plain.end(),payload.begin(),payload.end());
     if(!pending.bytes.empty()) {
@@ -76,6 +76,7 @@ bool Network::queue(unsigned peer,unsigned lane,unsigned kind,std::vector<std::u
         if(pending.sent && pending.last_sent_plain==plain && now-pending.sent_at<interval) {
             ++statistics_.suppressed_resends; return true;
         }
+        pending.queued_at=now;
     }
     if(sequences_[peer]==UINT64_MAX) return fail("Experimental nonce exhausted.");
     pending.bytes=secure::seal(plain,keys_[peer],configuration_.local_sender_id,
@@ -142,8 +143,19 @@ bool Network::service(Clock::time_point now) {
                     repair ? OwnerInputSend::Repair : OwnerInputSend::Live);
                 // The live lane already carries cumulative actual-input ACKs.
                 // Do not send a second ACK-only repair when there is no hole.
-                if(packet && (!repair || packet->count) && !queue(peer,lane,0,encode_owner_inputs(*packet),
-                    repair ? TransportTrafficClass::Authoritative : TransportTrafficClass::Realtime,now)) return false;
+                if(!packet || (repair && !packet->count))continue;
+                auto& pending=pending_[peer][lane];
+                const auto interval=std::chrono::milliseconds(repair ? 50:33);
+                if(pending.input_key && *pending.input_key==*packet &&
+                   (!pending.bytes.empty() || (pending.sent && now-pending.sent_at<interval))) {
+                    // Compare the bounded value first: unchanged hot-loop polls
+                    // need no codec vector, plaintext allocation or encryption.
+                    ++statistics_.suppressed_resends;continue;
+                }
+                ++statistics_.encoded_input_packets;
+                if(!queue(peer,lane,0,encode_owner_inputs(*packet),
+                    repair ? TransportTrafficClass::Authoritative : TransportTrafficClass::Realtime,now))return false;
+                pending.input_key=*packet;
             }
         }
         // Round-robin both dimensions; control goes first on the first pass,
@@ -161,7 +173,9 @@ bool Network::service(Clock::time_point now) {
                 if(++attempts>32) break;
                 packet.attempted=true; packet.attempted_at=now;
                 std::string error;
-                const auto result=transport_.send_status(configuration_.peers[peer].address,packet.bytes,packet.traffic,error);
+                const auto result=packet.traffic==TransportTrafficClass::Realtime ?
+                    transport_.send_live_status(configuration_.peers[peer].address,packet.bytes,std::uint8_t((lane-2)/2),error):
+                    transport_.send_status(configuration_.peers[peer].address,packet.bytes,packet.traffic,error);
                 if(result==DatagramSendStatus::Sent) {
                     ++statistics_.sent; packet.bytes.clear(); packet.last_sent_plain=std::move(packet.plain);
                     packet.sent=true; packet.sent_at=now; packet.attempted=false;
@@ -173,7 +187,13 @@ bool Network::service(Clock::time_point now) {
         }
         next_route_=(next_route_+1)%players; next_lane_=(next_lane_+1)%kLanes;
         statistics_.pending_packets=0;
-        for(const auto& route:pending_) for(const auto& packet:route) statistics_.pending_packets+=!packet.bytes.empty();
+        statistics_.oldest_pending_age_ms=0;
+        for(const auto& route:pending_) for(const auto& packet:route) if(!packet.bytes.empty()) {
+            ++statistics_.pending_packets;
+            statistics_.oldest_pending_age_ms=(std::max)(statistics_.oldest_pending_age_ms,
+                std::uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(now-packet.queued_at).count()));
+        }
+        statistics_.maximum_pending_age_ms=(std::max)(statistics_.maximum_pending_age_ms,statistics_.oldest_pending_age_ms);
         return true;
     } catch(const std::exception& exception) {
         return fail(std::string("Experimental transport exception: ")+exception.what());

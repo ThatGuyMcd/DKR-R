@@ -215,28 +215,39 @@ public:
         // GPU uploads are separate immutable/copied images; their admitted
         // generation may finish without blocking this rewind. Menu/scene
         // resource mutation keeps the conservative drain and quiescence gates.
-        if(independent_restore_ && !requires_confirmed_tick() && !native_.pending_scene_site)
+        if(independent_restore_ && !native_.pending_scene_site)
             return RestoreStep::Ready;
         return presentation_->submissions_drained()?RestoreStep::Ready:RestoreStep::Pending;
     }
     bool requires_confirmed_tick() const override {
+        return menu_tick_active() && !speculative_menus_;
+    }
+    bool menu_tick_active() const {
         if(!DKR_PROBE_HAS_FULL_SCENES || !authored_cpu_)return false;
         std::uint32_t mode=0;
         std::memcpy(&mode,ram_.data()+(DKR_PROBE_REVISION==77 ? 0x1234EC:0x123A6C),4);
         return mode!=0; // Menu/intro, never ordinary racing or hub gameplay.
     }
+    void enable_menu_prediction_for_test() {speculative_menus_=true;}
+    std::uint8_t input_dependencies() const override {
+        const bool host_only=menu_tick_active() && host_control_!=unsigned(HostControlPolicy::EveryAssignedPort) &&
+            (!native_.assigned_ports_released ||
+             (host_control_==unsigned(HostControlPolicy::HostSharedMenus) && menu_for_test()!=3));
+        return std::uint8_t(host_only ? 1:owner_mask_ ? owner_mask_:15);
+    }
     RestoreStep prepare_tick(std::uint64_t epoch,std::uint32_t frame,bool agreed,std::string& error) override {
-        if(!requires_confirmed_tick())return RestoreStep::Ready;
-        if(!agreed || epoch!=current_epoch_ || frame!=confirmed_count_ || native_.pending_scene_site) {
-            error="Menu resource tick requires the confirmed input frontier.";return RestoreStep::Failed;
+        if(!menu_tick_active())return RestoreStep::Ready;
+        if(epoch!=current_epoch_ || (agreed && frame!=confirmed_count_) || native_.pending_scene_site) {
+            error="Menu tick has invalid owned admission.";return RestoreStep::Failed;
         }
         // Copied-image presentation owns ALL bytes read by F3DDKR. A menu
         // constructor changes only private CPU RAM; it cannot free a decoder's
         // image, upload vector or GPU resource. Do not retire interpolation and
         // serialize GPU completion on every ordinary menu animation tick.
         // Restore and agreed scene-epoch transitions retain their separate
-        // retirement gates. Confirmed menu input admission remains mandatory.
-        prepared_menu_tick_=frame;return RestoreStep::Ready;
+        // retirement gates. Resource entry points require agreed input; ordinary
+        // menu animation retains the same prediction/rollback contract as racing.
+        prepared_menu_tick_=frame;prepared_menu_agreed_=agreed;return RestoreStep::Ready;
     }
     bool capture(std::span<std::uint8_t> output, std::string& error) override {
         if(input_phases_ && (!valid_input(input_) || output.size()!=contract().state_bytes ||
@@ -305,7 +316,7 @@ public:
     bool tick(std::uint32_t frame, const FrameInputs& inputs, TickOutput& output, std::string& error) override {
         dkr_probe_boss_diagnostic_tick(current_epoch_,frame);
         if(audio_phases_ && (frame!=audio_.next_frame || frame==UINT32_MAX)) return false;
-        const bool menu_tick=requires_confirmed_tick();
+        const bool menu_tick=menu_tick_active();
         if(menu_tick && prepared_menu_tick_!=frame) {
             error="A resource-changing menu tick bypassed confirmed admission.";return false;
         }
@@ -327,6 +338,7 @@ public:
         dkr_probe_canonical_presentation(mode_phases_);
         dkr_probe_scene_configure(mode_phases_ && DKR_PROBE_HAS_SCENE_CUTS);
         dkr_probe_menu_tick_configure(menu_tick);
+        dkr_probe_menu_prediction_configure(menu_tick && !prepared_menu_agreed_);
         dkr_probe_menu_preview_configure(menu_tick && scene_sessions_ && independent_restore_);
         dkr_probe_effects_begin();
         dkr_probe_draw_begin();
@@ -370,6 +382,12 @@ public:
         }
         if (!result.completed || native_.vehicle_audio_scope || native_.nature_audio_scope) {
             error = result.blocked ? result.blocked : "unbalanced audio scope";
+            if(error=="resource-confirmation-required") {
+                // Driver restores all guest/native participants and the open
+                // save/pak/magic journals before retry. No DSP or external
+                // effect is emitted from this incomplete speculative tick.
+                output.confirmation_required=true;error.clear();return true;
+            }
 #if DKR_PROBE_HAS_MOD_SERVICES
             // The C fence deliberately waits for the native callback to
             // unwind. Preserve its concrete fault after that safe boundary,
@@ -647,7 +665,7 @@ public:
         const bool rev80=DKR_PROBE_REVISION==80;
         const auto header=word(rev80 ? 0x1216E8:0x121168);
         const auto views=word(rev80 ? 0xDFA3C:0xDF4BC);
-        OwnedSceneView view{requires_confirmed_tick(),menu_for_test(),std::uint8_t(owner_count_for_test())};
+        OwnedSceneView view{menu_tick_active(),menu_for_test(),std::uint8_t(owner_count_for_test())};
         view.level=std::int32_t(word(rev80 ? 0x1216E4:0x121164));
         if(header>=0x80000000U && header<=0x80FFFFB3U)
             view.race_type=std::int8_t(ram_[((header-0x80000000U)+0x4C)^3]);
@@ -1066,6 +1084,7 @@ private:
     bool input_phases_ = false;
     bool authored_cpu_ = false;
     bool independent_restore_ = false; // Only the copied-image renderer opts in.
+    bool speculative_menus_=false;
     Eeprom save_;
     Paks paks_;
     MagicCodes magic_;
@@ -1080,6 +1099,7 @@ private:
     std::optional<std::pair<std::uint64_t,std::uint32_t>> retiring_; // Non-rewinding retirement transaction.
     std::optional<std::pair<std::uint64_t,std::uint32_t>> preparing_tick_;
     std::optional<std::uint32_t> prepared_menu_tick_;
+    bool prepared_menu_agreed_=false;
 };
 // This façade is the only reusable entry into the checked CPU payload. Its
 // effects and ownership policy are separate from the private proof runner and
@@ -1131,7 +1151,8 @@ public:
         return world_.scene_view();
     }
     SimulationContract contract() const override {return world_.contract();}
-    bool requires_confirmed_tick() const override {return world_.requires_confirmed_tick();}
+    bool requires_confirmed_tick() const override {return false;}
+    std::uint8_t input_dependencies() const override {return world_.input_dependencies();}
     RestoreStep prepare_tick(std::uint64_t epoch,std::uint32_t frame,bool agreed,std::string& error) override {
         return check(error)?world_.prepare_tick(epoch,frame,agreed,error):RestoreStep::Failed;
     }
@@ -1217,7 +1238,7 @@ public:
     DatagramSendStatus send_status(const PeerAddress& destination,std::span<const std::uint8_t> bytes,
                                    TransportTrafficClass traffic,std::string&) override {
         if(pending_.size()+3>128) return DatagramSendStatus::WouldBlock;
-        assert(bytes.size()<=118); ++sends_;
+        assert(bytes.size()<=50+kOwnerInputMaximumBytes); ++sends_;
         if(sends_%5==0) return DatagramSendStatus::Sent; // 20% simulated network loss
         const auto now=Network::Clock::now();
         const auto due=now+std::chrono::milliseconds(100+(sends_%7)*8);
@@ -1376,7 +1397,7 @@ bool dkr_probe_owned_title_check(std::span<const std::uint8_t> fixture,std::span
             pcm[p].emplace_back(audio.pcm.begin(),audio.pcm.end());return true;
         },error,true);
         if(!worlds[p]){std::cerr<<error<<'\n';return false;}
-        if(!worlds[p]->requires_confirmed_tick() || worlds[p]->confirmed_count() || !pcm[p].empty())return false;
+        if(!worlds[p]->scene_view().menu || worlds[p]->confirmed_count() || !pcm[p].empty())return false;
     }
     std::vector<std::uint8_t> state(worlds[0]->contract().state_bytes),copy(state.size());
     if(!worlds[0]->capture(state,error) || !worlds[1]->admit_initial(state,error) ||
@@ -1392,9 +1413,11 @@ bool dkr_probe_owned_title_check(std::span<const std::uint8_t> fixture,std::span
         Driver driver(*worlds[p]);
         if(!driver.start({91,2,6},error))return false;
         for(unsigned f=0;f<12;++f) {
-            if(driver.receive(91,0,f,{})!=InputResult::Accepted ||
-               driver.step()!=Step::WaitingForConfirmedInput ||
-               driver.receive(91,1,f,{})!=InputResult::Accepted || driver.step()!=Step::Advanced) {
+            if(driver.receive(91,0,f,{})!=InputResult::Accepted)return false;
+            const auto first=driver.step();
+            if(first!=Step::Advanced && first!=Step::WaitingForConfirmedInput)return false;
+            if(driver.receive(91,1,f,{})!=InputResult::Accepted ||
+               driver.step(first!=Step::Advanced)!=(first==Step::Advanced ? Step::WaitingForLocalInput:Step::Advanced)) {
                 std::cerr<<driver.error()<<'\n';return false;
             }
         }
@@ -1738,9 +1761,11 @@ bool dkr_probe_menu_flow_check(std::span<const std::uint8_t> fixture,bool advent
     PresentationMailbox box;Component world(fixture,false,true,true,true,91,true,adventure ? (1U<<24):0);
     if(!box.begin_epoch(91))return false;
     world.configure_owned_output(box,{});
+    world.enable_menu_prediction_for_test();
     Driver driver(world);std::string error;
     std::uint64_t epoch=91;
     const auto players=world.owner_count_for_test();
+    std::cout<<"Real menu fixture owners="<<players<<" adventure="<<adventure<<'\n';
     if(players<2 || (adventure && players!=2) || !driver.start({epoch,std::uint8_t(players),6},error))return false;
     unsigned old_menu=UINT32_MAX,boundaries=0,confirmed_waits=0,menu_age=0;
     bool selected_character=false,selected_track=false,selected_save=false,cinematic=false;
@@ -1783,12 +1808,12 @@ bool dkr_probe_menu_flow_check(std::span<const std::uint8_t> fixture,bool advent
         }
         for(unsigned p=0;p<players-1;++p)
             if(driver.receive(epoch,p,frame,input[p])!=InputResult::Accepted)return false;
-        if(world.requires_confirmed_tick()) {
-            if(driver.step()!=Step::WaitingForConfirmedInput)return false;
-            ++confirmed_waits;
-        }
+        const auto first=driver.step();
+        if(first==Step::WaitingForConfirmedInput)++confirmed_waits;
+        else if(first!=Step::Advanced) {std::cerr<<"Menu speculation: "<<driver.error()<<'\n';return false;}
         if(driver.receive(epoch,players-1,frame,input[players-1])!=InputResult::Accepted)return false;
-        const auto step=driver.step();
+        auto step=driver.step(first!=Step::Advanced);
+        if(first==Step::Advanced && (step==Step::WaitingForLocalInput || step==Step::Replayed))step=Step::Advanced;
         if(step==Step::Failed) {std::cerr<<"Menu flow failed at tick="<<time<<": "<<driver.error()<<'\n';return false;}
         if(step==Step::ConfirmedBoundary) {
             BoundaryIntent intent;std::uint64_t baseline=0;
@@ -1800,15 +1825,17 @@ bool dkr_probe_menu_flow_check(std::span<const std::uint8_t> fixture,bool advent
             ++epoch;++boundaries;
             if(!driver.start({epoch,std::uint8_t(players),6},error))return false;
         } else if(step!=Step::Advanced)return false;
-        if(world.requires_confirmed_tick() && old_menu!=world.menu_for_test()) {
+        if(world.menu_tick_active() && old_menu!=world.menu_for_test()) {
             old_menu=world.menu_for_test();menu_age=0;std::cout<<"Real menu id="<<old_menu<<" tick="<<time<<'\n';
         }
         ++menu_age;
         if(world.owner_count_for_test()!=players)return false;
-        if(!world.requires_confirmed_tick() &&
+        if(!world.menu_tick_active() &&
            (adventure ? selected_save && cinematic && boundaries>=2 && world.scene_view().race_type==5 : selected_track && boundaries>=2))break;
     }
-    std::cout<<"Real controller menu flow boundaries="<<boundaries<<" confirmed_waits="<<confirmed_waits<<'\n';
+    std::cout<<"Real controller menu flow boundaries="<<boundaries<<" confirmed_waits="<<confirmed_waits
+             <<" menu="<<world.menu_tick_active()<<" character="<<selected_character<<" track="<<selected_track
+             <<" save="<<selected_save<<" cinematic="<<cinematic<<'\n';
     if(adventure) {
         const auto scene=world.scene_view();
         std::cout<<"Real Adventure final level="<<scene.level<<" type="<<scene.race_type
@@ -1821,7 +1848,7 @@ bool dkr_probe_menu_flow_check(std::span<const std::uint8_t> fixture,bool advent
     }
     return boundaries>=2 && confirmed_waits && selected_character &&
            (adventure ? selected_save && cinematic : selected_track) &&
-           !world.requires_confirmed_tick();
+           !world.menu_tick_active();
 }
 bool dkr_probe_driver_check(std::span<const std::uint8_t> fixture,unsigned players,unsigned frames,bool water_phases,bool mode_phases,bool audio_phases,bool input_phases,bool authored_cpu) {
     if (players<2 || players>4 || frames<12 || frames>300 || (audio_phases && (!mode_phases || !DKR_PROBE_HAS_AUDIO))) return false;

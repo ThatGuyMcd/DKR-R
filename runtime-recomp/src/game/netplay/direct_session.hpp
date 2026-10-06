@@ -444,7 +444,7 @@ public:
     };
     DatagramSendStatus send_owned_packet(std::uint8_t target,
         std::span<const std::uint8_t> bytes, TransportTrafficClass traffic,
-        std::string& error);
+        std::string& error,std::uint8_t live_owner=255);
     bool take_owned_packet(OwnedPacket& packet);
     bool owned_network_configuration(const secure::Key& incarnation,
         experimental::NetworkConfiguration& configuration, std::string& error) const;
@@ -701,6 +701,7 @@ private:
         std::chrono::milliseconds minimum,
         std::chrono::milliseconds maximum) const;
     void reset_launch_transaction_locked();
+    void reset_connection_launch_locked();
     void cancel_launch_locked(std::string_view reason);
     bool prepare_launch_locked(std::string& error);
     bool commit_launch_locked(const protocol::StartPayload& start,

@@ -1,6 +1,7 @@
 #ifndef DKR_EXPERIMENTAL_DRAW_EVENTS_H
 #define DKR_EXPERIMENTAL_DRAW_EVENTS_H
 #include <stdint.h>
+#include "../camera_clearance_metadata.h"
 /* Canonical, bounded observations of Patch Pipeline draw sites. No window,
    renderer, live identity registry or local graphics setting is read by CPU
    replay. The immutable frame owner applies them ONLY to its decode copy. */
@@ -36,7 +37,8 @@ static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
         switch(e->kind) {
         case DKR_OWNED_MATRIX:
             if(e->address>0x807FFFC0U || e->parameters[0]>15U || e->parameters[1]>1U || e->parameters[3]>255U)return 0;
-            used=4;break;
+            if(!dkr_world_projection_metadata_valid(e->parameters[4],e->parameters[5],e->parameters[6]))return 0;
+            used=7;break;
         case DKR_OWNED_SKY_MATRIX:case DKR_OWNED_TRANSITION:
             if(e->address>0x807FFFC0U || e->token)return 0;break;
         case DKR_OWNED_GEOMETRY:

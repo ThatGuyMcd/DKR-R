@@ -194,7 +194,7 @@ bool LobbyAdmission::service_admission(Clock::time_point now) {
         }
         else {
             // Early input on the unordered lane must survive Loaded/Start.
-            if(bytes.size()>118||gameplay_.size()>=128)return fail("Owned gameplay receive queue exceeded its limit.");
+            if(bytes.size()>50+kOwnerInputMaximumBytes||gameplay_.size()>=128)return fail("Owned gameplay receive queue exceeded its limit.");
             if(!host_&&local_ready_&&source.storage[3]==0)release_seen_=true;
             gameplay_.push_back({source,std::move(bytes)});
         }

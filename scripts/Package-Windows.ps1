@@ -54,7 +54,7 @@ $runtimeFiles = @('DKR-R.exe', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll')
 $experimentalRaceTest = (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) -and
     (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_EXPERIMENTAL_RACE_TEST:BOOL=(ON|1|TRUE|YES)$' -Quiet)
 if ($experimentalRaceTest) {
-    if ($Version -notmatch 'experimental|rollback-test|^1\.0\.5-beta\.15(?:-playtest\.(?:[23456789]|10|11|12|14))?$') { throw 'Experimental backend builds must use a distinctly labelled experimental version or an approved Beta 15 playtest candidate.' }
+    if ($Version -notmatch 'experimental|rollback-test|^1\.0\.5-beta\.15(?:-playtest\.(?:[23456789]|10|11|12|14|15(?:-fix\.[12])?))?$') { throw 'Experimental backend builds must use a distinctly labelled experimental version or an approved Beta 15 playtest candidate.' }
 }
 $inputHostFiles = @('DKR-R-InputHost.exe', 'SDL3.dll', 'DKR-R-ModWorker.exe')
 
@@ -106,7 +106,7 @@ $stagedInputHost = Join-Path $stagedInputHostDirectory 'DKR-R-InputHost.exe'
 if ($experimentalRaceTest) {
     # Current playtests have their own connection/scope guides. The older file
     # describes Playtest 2 and must not label this candidate as that release.
-    if ($Version -notin @('1.0.5-beta.15-playtest.8', '1.0.5-beta.15-playtest.9', '1.0.5-beta.15-playtest.10', '1.0.5-beta.15-playtest.11', '1.0.5-beta.15-playtest.12', '1.0.5-beta.15-playtest.14')) {
+    if ($Version -notin @('1.0.5-beta.15-playtest.8', '1.0.5-beta.15-playtest.9', '1.0.5-beta.15-playtest.10', '1.0.5-beta.15-playtest.11', '1.0.5-beta.15-playtest.12', '1.0.5-beta.15-playtest.14', '1.0.5-beta.15-playtest.15', '1.0.5-beta.15-playtest.15-fix.1', '1.0.5-beta.15-playtest.15-fix.2')) {
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-ROLLBACK-TESTING.txt') -Destination (Join-Path $stage 'EXPERIMENTAL-ROLLBACK-TESTING.txt')
     }
     if ($Version -eq '1.0.5-beta.15-playtest.3') {
@@ -144,9 +144,19 @@ if ($experimentalRaceTest) {
     if ($Version -eq '1.0.5-beta.15-playtest.12') {
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST12-ONLINE-MODS.txt') -Destination (Join-Path $stage 'PLAYTEST12-NOTES.txt')
     }
-    if ($Version -eq '1.0.5-beta.15-playtest.14') {
+    if ($Version -in @('1.0.5-beta.15-playtest.14','1.0.5-beta.15-playtest.15','1.0.5-beta.15-playtest.15-fix.1','1.0.5-beta.15-playtest.15-fix.2')) {
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST14-ONLINE-REVISIONS.txt') -Destination (Join-Path $stage 'PLAYTEST14-NOTES.txt')
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PLAYTEST14-ONLINE-RETENTION-AND-PROGRESS.txt') -Destination (Join-Path $stage 'ONLINE-MOD-ADMISSION-REBUILD.txt')
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PLAYTEST14-MOD-SYNC-PERFORMANCE-20261006.txt') -Destination (Join-Path $stage 'ONLINE-MOD-SYNC-PERFORMANCE.txt')
+    }
+    if ($Version -in @('1.0.5-beta.15-playtest.15','1.0.5-beta.15-playtest.15-fix.1','1.0.5-beta.15-playtest.15-fix.2')) {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST15-ROLLBACK.txt') -Destination (Join-Path $stage 'PLAYTEST15-NOTES.txt')
+    }
+    if ($Version -in @('1.0.5-beta.15-playtest.15-fix.1','1.0.5-beta.15-playtest.15-fix.2')) {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST15-FIX1.txt') -Destination (Join-Path $stage 'PLAYTEST15-FIX1-NOTES.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.15-fix.2') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST15-FIX2.txt') -Destination (Join-Path $stage 'PLAYTEST15-FIX2-NOTES.txt')
     }
 }
 $logoDirectory = Join-Path $stage 'assets\ui\Icons'

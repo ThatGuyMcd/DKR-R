@@ -19,6 +19,8 @@ struct TrackCatalogView {
     unsigned completed=0,total=0;
     std::vector<TrackCatalogItem> tracks;
 };
+// Exact frozen selection, independent of a library's mutable enabled/hidden UI.
+struct CatalogSource {std::filesystem::path library;TrackCatalogItem item;};
 // Immutable UI snapshots; all decoding/preparation and catalogue I/O happens
 // on the worker/job thread. Activation is only legal while the guest is stopped.
 class TrackCatalog {
@@ -40,6 +42,10 @@ public:
     // Worker-only, validated catalogue metadata for an immutable lobby export.
     static std::vector<TrackCatalogItem> selected_items(const std::filesystem::path& root,
         std::string_view revision,Kind kind);
+    // Background-only read of validated installed metadata, including inactive
+    // mods. Reuse never changes their activation or visibility settings.
+    static std::vector<TrackCatalogItem> installed_items(const std::filesystem::path& root,
+        std::string_view revision,Kind kind);
     // Worker-only preflight for keeping verified online assets. Does not
     // publish content or change activation/visibility metadata.
     static void validate_retained_merge(const std::filesystem::path& root,
@@ -47,6 +53,10 @@ public:
     static std::vector<PreparedTrack> load_enabled(const std::filesystem::path& root,
         std::shared_ptr<const AssetBank> stock);
     static std::vector<PreparedCharacter> load_enabled_characters(const std::filesystem::path& root,
+        std::shared_ptr<const AssetBank> stock);
+    static std::vector<PreparedTrack> load_selected(std::span<const CatalogSource> sources,
+        std::shared_ptr<const AssetBank> stock);
+    static std::vector<PreparedCharacter> load_selected_characters(std::span<const CatalogSource> sources,
         std::shared_ptr<const AssetBank> stock);
 private:
     const Kind kind_;

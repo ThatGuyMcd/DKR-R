@@ -180,7 +180,7 @@ private:
     float offset_;
 };
 
-// .play-text-button: an underlined action on the cream pass.
+// .play-text-button: an underlined action on the dark ROM card.
 float PlayTextButtonWidth(const char* label) {
     return std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.0F), label,
                                     PaddockLabelEnd(label)) + 16.0F);
@@ -192,8 +192,8 @@ bool PlayTextButton(const char* label, bool destructive) {
     const PaddockPress press = PaddockBeginPress(label, {PlayTextButtonWidth(label), 44.0F});
     ImDrawList* draw = ImGui::GetWindowDrawList();
     PaddockFill(draw, press.min, press.max, PaddockRound(6.0F),
-                PaddockCol(0x091B24, static_cast<unsigned>(16.0F * press.hover)));
-    const ImU32 colour = PaddockCol(destructive ? 0x8A2A17U : 0x0B5963U);
+                PaddockCol(0xFFFFFF, static_cast<unsigned>(16.0F * press.hover)));
+    const ImU32 colour = PaddockCol(destructive ? 0xFFAA97U : 0x54C9ADU);
     const float top = std::round(press.min.y + (44.0F - type.line) * 0.5F);
     PaddockDrawRun(draw, type, {press.min.x + 8.0F, top}, colour, label, end);
     const float baseline = top + (type.line - type.content) * 0.5F + type.ascent;
@@ -437,7 +437,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     const bool lobby = dkr::runtime::netplay::session().active();
     const bool nav = ImGui::GetIO().NavVisible;
 
-    const float width = std::min(available_width, 1100.0F);
+    const float width = std::max(available_width, 1.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
 
     DrawPageHeading("PLAY");
@@ -452,8 +452,14 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         const std::size_t count = play.rom_catalog.size();
         const ImVec2 at = ImGui::GetCursorScreenPos();
         ImDrawList* draw = ImGui::GetWindowDrawList();
-        const float body_x = at.x + 2.0F + 24.0F + 42.0F + 20.0F;
-        const float body_width = std::max(width - 2.0F * 2.0F - 24.0F * 2.0F - 42.0F - 20.0F, 1.0F);
+        // The pass fills the panel, but its lights and ROM controls remain a
+        // readable, centred group. Narrow panels retain their existing layout.
+        constexpr float pass_chrome = 2.0F * 2.0F + 24.0F * 2.0F + 42.0F + 20.0F;
+        constexpr float rom_picker_width = 560.0F;
+        const float content_width = std::min(width, rom_picker_width + pass_chrome);
+        const float content_x = at.x + std::floor((width - content_width) * 0.5F);
+        const float body_x = content_x + 2.0F + 24.0F + 42.0F + 20.0F;
+        const float body_width = std::max(content_width - pass_chrome, 1.0F);
         const PaddockType heading = PaddockSign(19.0F, 1.0F, 0.0F);
         const PaddockType file_type = PaddockReading(15.0F, true, 1.5F);
         const PaddockType meta_type = PaddockReading(14.0F, false, 1.5F);
@@ -462,12 +468,12 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         const std::string removed_note = state.removed.empty()
             ? std::string{} : "Removed " + PathUtf8(state.removed.filename()) + " from your list.";
         std::string meta;
-        unsigned meta_colour = 0x45595F;
+        unsigned meta_colour = 0xB0C9CC;
         if (!removed_note.empty()) {
             meta = removed_note;
         } else if (!ready && !play.rom_status.empty() && play.rom_status != kRomChoosePrompt) {
             meta = play.rom_status;
-            meta_colour = 0x8A2A17;
+            meta_colour = 0xFFAA97;
         } else if (count == 1U) {
             meta = "Add your other Game Pak revision to switch between them here.";
         } else if (count > 1U) {
@@ -483,7 +489,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         const bool actions_row = secondary == nullptr ||
                                  primary_width + 16.0F + secondary_width <= body_width;
         const float actions_height = actions_row ? 46.0F : 46.0F + 8.0F + 44.0F;
-        const float pick_width = std::min(body_width, 560.0F);
+        const float pick_width = std::min(body_width, rom_picker_width);
         const float pick_height = 4.0F + pick_label.line + 6.0F + 60.0F + 8.0F;
         const std::string_view no_rom = "Load an original Diddy Kong Racing ROM to continue.";
         const float detail_height = count > 0U ? pick_height : PaddockTextHeight(file_type, no_rom, body_width);
@@ -502,23 +508,23 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         }
         PaddockPanelStyle panel;
         panel.radii = PaddockRound(18.0F);
-        panel.fill = PaddockRgb(0xFFF0C2);
+        panel.fill = PaddockRgb(0x0B2E40, 245U);
         panel.border = border;
         panel.border_width = 2.0F;
         PaddockPanel(draw, at, end, panel);
-        DrawPlayLights(draw, {at.x + 2.0F + 24.0F, at.y + 2.0F + 20.0F}, ready, state.arrived_at);
+        DrawPlayLights(draw, {content_x + 2.0F + 24.0F, at.y + 2.0F + 20.0F}, ready, state.arrived_at);
 
         float y = at.y + 2.0F + 20.0F + 6.0F;
         const std::string_view title = ready ? "Ready to race" : "ROM not loaded";
-        PaddockDrawRun(draw, heading, {body_x, y}, PaddockCol(ready ? 0x037A47U : 0xC0261BU),
+        PaddockDrawRun(draw, heading, {body_x, y}, PaddockCol(ready ? 0x1AC2A3U : 0xFFAA97U),
                        title.data(), title.data() + title.size());
         y += heading.line + 8.0F;
-        // Focus rings on the cream pass are dark, like the study's outline.
-        ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0x091B24));
+        // Use the same readable controller focus accent as the other tabs.
+        ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0xFFD11F));
         if (count > 0U) {
             // The ROM list: every Game Pak DKR-R has accepted, one pick away.
             y += 4.0F;
-            PaddockDrawRun(draw, pick_label, {body_x, y}, PaddockCol(0x3F5359), "GAME ROM", "GAME ROM" + 8);
+            PaddockDrawRun(draw, pick_label, {body_x, y}, PaddockCol(0xB0C9CC), "GAME ROM", "GAME ROM" + 8);
             y += pick_label.line + 6.0F;
             ImGui::SetCursorScreenPos({body_x, y});
             if (state.focus == PlayPageState::Focus::Rom) {
@@ -535,7 +541,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
             y += 60.0F + 8.0F;
         } else {
             PaddockTextStyle file_style;
-            file_style.colour = PaddockCol(0x091B24);
+            file_style.colour = PaddockCol(0xFFF6DA);
             PaddockTextAt(draw, file_type, {body_x, y}, body_width, no_rom, file_style);
             y += detail_height;
         }
@@ -654,8 +660,46 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     }
     // START.
     PaddockGap(16.0F);
+    if (dkr::runtime::portable::supported()) {
+        // Inspect only on page entry or an explicit click, never per-frame I/O.
+        static bool portable_enabled = false;
+        static std::string portable_status;
+        if (entered) portable_enabled = dkr::runtime::portable::enabled();
+        if (PaddockCheckbox("##portable-mode", "Portable mode", &portable_enabled, width)) {
+            std::string error;
+            if (!dkr::runtime::portable::set_enabled(portable_enabled, error)) {
+                portable_enabled = dkr::runtime::portable::enabled();
+                portable_status = std::move(error);
+            } else {
+                portable_status = "Portable mode preference saved. Existing saves and settings were not moved or replaced.";
+            }
+        }
+        PaddockGap(8.0F);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+            "Uses portable.txt beside the application. On next launch, portable mode stores data in dkr-runtime-data beside it; otherwise your normal user profile is used. A command-line config override takes priority. Switching does not transfer saves.", width);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+            "Current data folder: " + PathUtf8(g_config_directory), width);
+        if (portable_enabled != dkr::runtime::portable::enabled_at_startup()) {
+            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14),
+                "Restart DKR-R to apply the portable mode change. This session keeps using its current data folder.", width);
+        }
+        if (!portable_status.empty()) {
+            PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xFFAB14), portable_status, width);
+        }
+        PaddockGap(16.0F);
+    }
     {
-        const bool can_start = play.rom_ready && !imports_busy && !launch_modal;
+        const auto& save = CachedSaveManagerView();
+        PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(0xFFF6DA), "YOUR OFFLINE ADVENTURE", width);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+            save.preview.empty() ? "No readable offline Adventure yet. Existing invalid files will not be overwritten on launch." : save.preview, width);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), PathUtf8(save.adventure.path), width);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+            "Online sessions use separate saves. Enabled custom mods use a separate mod-set save, listed in Save Manager.", width);
+        PaddockGap(12.0F);
+    }
+    {
+        const bool can_start = play.rom_ready && !imports_busy && !launch_modal && !g_play_offline_after_leave;
         RaceButtonLook look;
         look.hover_in = 0.12F;
         if (can_start) {
@@ -677,11 +721,25 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         }
         ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
         ImGui::BeginDisabled(!can_start);
-        if (PaddockRaceButton("START Diddy Kong Racing - Recompiled", {width, 68.0F}, look)) {
-            play.launch_requested = true;
+        if (PaddockRaceButton(lobby ? "LEAVE LOBBY & PLAY OFFLINE" : "PLAY OFFLINE - Diddy Kong Racing", {width, 68.0F}, look)) {
+            if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");
+            else play.launch_requested = true;
         }
         ImGui::EndDisabled();
         ImGui::PopStyleVar();
+    }
+    if (BeginSettingsDialog("Leave lobby and play offline?", "LEAVE LOBBY & PLAY OFFLINE?", 620.0F, 0x06336E)) {
+        PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(0xB0C9CC),
+            "This leaves the online lobby before starting offline play. If you are the host, your lobby closes for everyone. Online progress is not copied into your offline save.", SettingsDialogInner());
+        PaddockGap(20.0F);
+        if (PlayNoticeButton("CANCEL")) ImGui::CloseCurrentPopup();
+        ImGui::SameLine();
+        if (PlayNoticeButton("LEAVE & PLAY OFFLINE")) {
+            dkr::runtime::netplay::session().disconnect("Left the lobby to play offline.");
+            g_play_offline_after_leave = true;
+            ImGui::CloseCurrentPopup();
+        }
+        EndSettingsDialog();
     }
     if (!play.rom_ready) {
         PaddockGap(8.0F);

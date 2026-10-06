@@ -13,6 +13,7 @@ struct DkrLibraryTrack {
     std::string source;          // the .dkrmap folder name
     std::uint64_t bytes = 0;     // payload size
     bool enabled = true;
+    bool kept_online = false;
     bool hd_textures = false;    // an installed, enabled HD pack
     std::string hd_pack_id;      // installed HD pack, for its Manage modal
     bool installed = false;     // managed copy, safe to uninstall
@@ -114,6 +115,7 @@ struct LibraryEntry {
 
 struct LibraryCardView {
     bool native = false;
+    bool native_toggle = false;
     std::string title;
     std::string byline;
     std::string info;
@@ -145,6 +147,14 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
         view.note = "Installed. Available automatically in the in-game track menu.";
         view.status = "Installed";
         view.tone = PaddockTone::On;
+        if (track.kept_online) {
+            view.native_toggle = true; view.enabled = track.enabled;
+            view.toggle_allowed = !locked; view.gold = track.enabled;
+            view.note = track.enabled ? "Kept from online. Enabled for offline play."
+                                      : "Kept from online. Turn on to use offline.";
+            view.status = track.enabled ? "On" : "Off";
+            view.tone = track.enabled ? PaddockTone::On : PaddockTone::Neutral;
+        }
         return view;
     }
     const browser::Card& card = *entry.legacy;
@@ -188,7 +198,7 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
     } else if (mismatch) {
         view.note = "Prepare this legacy mod for the ROM version you have loaded.";
     } else if (characters && !item.enabled && active >= MaxActiveStageCharacters) {
-        view.note = "Both character slots are in use. Turn one off first.";
+        view.note = "The native character identity range is full. Installed mods remain available.";
     } else if (!item.details.empty()) {
         view.note = item.details;
     } else {
@@ -301,14 +311,17 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
     PaddockDashes(draw, {left, footer}, inner, PaddockCol(0x39718A), 2.0F);
     const float row = footer + 14.0F;
     bool card_focused = false;
-    if (!view.native) {
+    if (!view.native || view.native_toggle) {
         ImGui::SetCursorScreenPos({left, row});
         bool enabled = view.enabled;
         ImGui::BeginDisabled(!view.toggle_allowed);
         if (PaddockSwitch("##enabled", &enabled, "On", "Off")) {
-            const auto kind = characters ? TrackCatalog::Kind::Character
-                                         : TrackCatalog::Kind::Track;
-            g_legacy_imports.set_enabled(kind, view.id, enabled);
+            if (view.native) {
+                dkr::runtime::custom_tracks::set_kept_enabled(view.id, enabled, g_legacy_import_status);
+            } else {
+                const auto kind = characters ? TrackCatalog::Kind::Character : TrackCatalog::Kind::Track;
+                g_legacy_imports.set_enabled(kind, view.id, enabled);
+            }
         }
         card_focused |= ImGui::IsItemFocused();
         ImGui::EndDisabled();
@@ -468,7 +481,7 @@ void DrawModCardBrowser(float requested_width, bool characters,
     }();
     const std::string filters_id = filters_label + "##filters";
     const float filters_width = PaddockButtonWidth(filters_id.c_str(), PaddockButtonKind::Settings);
-    const float field_label = PaddockReading(11.0F, true, 1.5F).line + 6.0F;
+    const float field_label = PaddockFieldLabelType().line + 6.0F;
     static const std::vector<std::string> kStates{"All", "Active", "Inactive"};
     static const std::vector<std::string> kSorts{"Name A-Z", "Name Z-A", "Largest first",
                                                  "Smallest first", "Newest first", "Oldest first"};
@@ -613,12 +626,11 @@ void DrawModCardBrowser(float requested_width, bool characters,
         ImGui::Dummy({width, 52.0F});
     }
     if (characters) {
-        const std::string slots = std::to_string(active) + " / " +
-            std::to_string(MaxActiveStageCharacters) + " character slots selected";
+        const std::string slots = std::to_string(active) + " custom characters enabled";
         PaddockInlineNote(slots,
                           active >= MaxActiveStageCharacters
-                              ? "Turn off a character before choosing another."
-                              : "Up to two custom racers can join the original character selection.",
+                              ? "The native identity range is full. Installed mods remain available."
+                              : "Enable your collection; memory and asset limits are checked before launch. Four custom racers appear on the original stage. Highlight one and press L / R to browse extras. Mods without a custom portrait retain their original face.",
                           width);
         PaddockGap(18.0F);
     }
@@ -799,7 +811,7 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
             }
             const unsigned active = browser::active_count(browser.all);
             if (characters && !item.enabled && active >= MaxActiveStageCharacters) {
-                PaddockModalText("Two custom characters are already active. Deactivate one before enabling another.");
+                PaddockModalText("The native character identity range is full. Installed mods remain available.");
             }
             const bool can_enable = browser::can_activate(*card, characters, active,
                                                           g_mod_browser_revision, locked);
@@ -1039,7 +1051,8 @@ void DrawDkrTrackDetails(const std::vector<DkrLibraryTrack>& tracks, bool rom_re
             PaddockText(body, PaddockRgb(0xFFF6DA), text, width);
         };
         paragraph(found->author.empty() ? std::string("Native .dkrmap track") : "By " + found->author);
-        paragraph(found->installed
+        paragraph(found->kept_online ? (found->enabled ? "Kept from an online session. Enabled for offline play."
+                                                     : "Kept from an online session. Inactive until you turn it on in My Mods.") : found->installed
             ? "Installed. This course appears automatically in the in-game track menu."
             : "Read from your working folder. Source files are managed in Track Lab.");
         paragraph("Use Track Lab to test work in progress from your working folder. "

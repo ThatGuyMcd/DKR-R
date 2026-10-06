@@ -24,12 +24,13 @@ struct NetworkConfiguration {
 struct NetworkStatistics {
     std::uint64_t received = 0, rejected = 0, duplicate = 0, sent = 0,
                   backpressure = 0, send_errors = 0, suppressed_resends = 0,
-                  superseded_live = 0;
+                  superseded_live = 0, encoded_input_packets = 0;
     std::size_t pending_packets = 0;
+    std::uint64_t oldest_pending_age_ms = 0, maximum_pending_age_ms = 0;
 };
 
-// Non-blocking experimental transport adapter. It is NOT wired into live
-// DirectSession or an unqualified DKR world. Run on the Session's sole owner,
+// Non-blocking experimental transport adapter. Used by the admitted owned
+// DKR world through its lobby route. Run on the Session's sole owner,
 // never from an SDK callback. service() does not sample or simulate a frame.
 // Each call processes at most 32 datagrams and 32 bounded sends. WouldBlock
 // retains exact scene/repair packets; an unsent live packet may be replaced
@@ -54,8 +55,9 @@ private:
         std::vector<std::uint8_t> bytes;
         std::vector<std::uint8_t> plain;
         std::vector<std::uint8_t> last_sent_plain;
+        std::optional<OwnerInputPacket> input_key;
         TransportTrafficClass traffic = TransportTrafficClass::Control;
-        Clock::time_point sent_at{}, attempted_at{};
+        Clock::time_point sent_at{}, attempted_at{},queued_at{};
         bool sent = false, attempted = false;
     };
     static constexpr unsigned kLanes = 2 + 4 * 2;

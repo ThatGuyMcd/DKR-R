@@ -19,10 +19,28 @@ Bytes representation(View canonical,unsigned byte_order) {
     return out;
 }
 }
+ImportPreparation load_import_sources(const std::vector<std::filesystem::path>& roms) {
+    if(roms.empty() || roms.size()>8)throw Error("Select imported original Game Paks before preparing patches.");
+    ImportPreparation result;
+    for(const auto& path:roms) {
+        auto base=read_file(path,MaxImage);canonicalize_rom(base);
+        result.bases.try_emplace(verified_revision(base),std::move(base));
+    }
+    return result;
+}
+void reconstruct_import(ImportPreparation& preparation,View patch) {
+    preparation.target.clear();preparation.analysis={};
+    const auto id=sha256(patch);
+    for(const auto& [revision,base]:preparation.bases)for(unsigned order=0;order<3;++order) {
+        try{preparation.target=decode_patch(representation(base,order),patch);}catch(const Error&){continue;}
+        preparation.analysis=analyze(base,preparation.target,id);return;
+    }
+    throw Error("No imported original Game Pak satisfied the patch checksum.");
+}
 void stage_import(const std::filesystem::path& source,
     const std::vector<std::filesystem::path>& owned_roms,
     const std::filesystem::path& destination,const ProgressCallback& progress,
-    const std::map<std::string,std::string>& source_labels) {
+    const std::map<std::string,std::string>& source_labels,const ImportPreparation* preparation) {
     if(owned_roms.empty() || owned_roms.size()>8)
         throw Error("Select an imported original Game Pak before importing patches.");
     if(destination.empty() || destination.filename().empty()) throw Error("A generated staging directory is required.");
@@ -30,13 +48,8 @@ void stage_import(const std::filesystem::path& source,
     if(!std::filesystem::is_directory(parent) || std::filesystem::is_symlink(parent))
         throw Error("The private staging parent must already exist and must not be a link.");
     report(progress,0,0,"Matching original Game Paks");
-    std::map<std::string,Bytes> bases;
-    for(const auto& path : owned_roms) {
-        auto base=read_file(path,MaxImage);
-        canonicalize_rom(base);
-        const auto revision=verified_revision(base);
-        bases.try_emplace(revision,std::move(base));
-    }
+    auto local=preparation?ImportPreparation{}:load_import_sources(owned_roms);
+    const auto& bases=preparation?preparation->bases:local.bases;
     report(progress,0,0,"Reading and checking archive");
     const auto patches=read_patch_inputs(source);
     // create_directory (not create_directories) refuses existing transactions.
@@ -62,24 +75,31 @@ void stage_import(const std::filesystem::path& source,
     for(const auto& patch : patches) {
         ++index;
         report(progress,index,static_cast<unsigned>(patches.size()),"Decoding patch against verified Game Paks");
-        Bytes target;
+        Bytes reconstructed;View target;
         const Bytes* matched=nullptr;
+        const auto patch_id=sha256(patch.data);
+        if(preparation && preparation->analysis.patch_digest==patch_id && !preparation->target.empty()) {
+            const auto found=bases.find(preparation->analysis.source_revision);
+            if(found==bases.end())throw Error("Shared reconstruction lost its verified source revision.");
+            matched=&found->second;target=preparation->target;
+        }
         for(const auto& [revision,base] : bases) {
+            if(matched)break;
             for(unsigned order=0;order<3;++order) {
                 report(progress,index,static_cast<unsigned>(patches.size()),"Verifying patch source and checksum");
-                try {target=decode_patch(representation(base,order),patch.data);matched=&base;break;}
-                catch(const Error&) {target.clear();}
+                try {reconstructed=decode_patch(representation(base,order),patch.data);target=reconstructed;matched=&base;break;}
+                catch(const Error&) {reconstructed.clear();target={};}
             }
             if(matched) break;
         }
-        const auto patch_id=sha256(patch.data);
         if(!matched) {
             failures.push_back({{"patch_sha256",patch_id},{"reason",
                 "No imported original Game Pak satisfied the patch checksum. Import its required revision; chained patches need an explicit recipe."}});
             continue;
         }
         report(progress,index,static_cast<unsigned>(patches.size()),"Finding tracks and checking dependencies");
-        const auto analysis=analyze(*matched,target,patch_id);
+        const auto analysis=preparation && preparation->analysis.patch_digest==patch_id
+            ?preparation->analysis:analyze(*matched,target,patch_id);
         if(auto duplicate=editions.find(analysis.asset_digest);duplicate!=editions.end()) {
             packages[duplicate->second]["editions"].push_back(patch_id);
             store(destination/"patches"/(patch_id+".xdelta"),patch.data);

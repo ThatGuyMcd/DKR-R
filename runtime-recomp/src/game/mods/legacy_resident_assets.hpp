@@ -14,11 +14,14 @@ class ResidentBank {
 public:
     static std::shared_ptr<const ResidentBank> prepare(std::shared_ptr<const AssetBank> stock,
         std::shared_ptr<const AssetBank> candidate,AssetBus& bus);
+    static std::shared_ptr<const ResidentBank> instantiate(const ResidentBank& prepared,AssetBus& bus);
     const std::array<Bytes,8>& tables() const {return tables_;}
     // Without a boot-owned additive namespace, restoration takes the untouched
     // cartridge path. With one, the same namespace stays installed all session.
     std::shared_ptr<const AssetBus::Mount> route() const {return stock_?nullptr:mount_;}
     const std::string& fingerprint() const {return bank_->fingerprint();}
+    std::size_t owned_bytes()const{return bank_->owned_override_bytes();}
+    std::uint32_t allocation_address()const{return mount_->address(0);}
 private:
     friend class ResidentAssetState;
     bool stock_=false,boot_=false;

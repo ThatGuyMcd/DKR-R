@@ -8,9 +8,9 @@ namespace dkr::mods {
 void prepare_imported_tracks(const std::filesystem::path& review,
     const std::vector<std::filesystem::path>& owned_roms,
     const std::filesystem::path& fresh_destination,
-    const ProgressCallback& progress={});
+    const ProgressCallback& progress={},const ImportPreparation* preparation=nullptr);
 void prepare_imported_characters(const std::filesystem::path& review,
     const std::vector<std::filesystem::path>& owned_roms,
     const std::filesystem::path& fresh_destination,
-    const ProgressCallback& progress={});
+    const ProgressCallback& progress={},const ImportPreparation* preparation=nullptr);
 }

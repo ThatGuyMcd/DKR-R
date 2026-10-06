@@ -159,10 +159,19 @@ TrackMenuAdapter TrackMenuAdapter::stage_checkpoint(View bytes)const {
     if(next.allow_races_!=allow_races_)throw Error("Track sidecar changes the admitted race policy.");
     if(next.name_address_ && names_.size()>0x80800000U-next.name_address_)throw Error("Track name allocation is outside guest RAM.");
     const auto cursor=[&]()->std::optional<TrackCursor>{if(!in.flag())return {};const auto row=in.bounded(5U+static_cast<unsigned>((tracks_.size()+3)/4)-1);const auto column=in.bounded(3);return TrackCursor{static_cast<int>(row),static_cast<int>(column)};};
-    const auto scene=[&]()->std::optional<TrackSceneChoice>{if(!in.flag())return {};TrackSceneChoice value{in.text(64),in.u32()};
-        if(std::ranges::none_of(tracks_,[&](const auto& t){return t.content_id==value.id && t.carrier==value.carrier;}))
-            throw Error("Track sidecar refers to an unadmitted course.");return value;};
-    next.move_=cursor();next.restore_=cursor();next.pending_=scene();next.race_=scene();next.preview_id_=in.text(64);in.end();
+    const auto scene=[&](bool stock_preview)->std::optional<TrackSceneChoice>{
+        if(!in.flag())return {};
+        TrackSceneChoice value{in.text(64),in.u32()};
+        // A stock preview is an explicit request to restore retail assets,
+        // not an absent scene. The adapter queues it with an empty mod ID.
+        // Only pending previews may use that form, and only for retail IDs;
+        // authored levels and custom race/retry identities stay catalog-bound.
+        const bool retail=stock_preview && value.id.empty() && value.carrier<65;
+        if(!retail && std::ranges::none_of(tracks_,[&](const auto& t){return t.content_id==value.id && t.carrier==value.carrier;}))
+            throw Error("Track sidecar refers to an unadmitted course.");
+        return value;
+    };
+    next.move_=cursor();next.restore_=cursor();next.pending_=scene(true);next.race_=scene(false);next.preview_id_=in.text(64);in.end();
     if(!next.preview_id_.empty() && std::ranges::none_of(tracks_,[&](const auto& t){return t.content_id==next.preview_id_;}))
         throw Error("Track sidecar preview is not admitted.");
     next.masked_=false;next.saved_x_=next.saved_y_=0;next.saved_buttons_=0;next.candidate_.reset();next.background_y_.reset();return next;

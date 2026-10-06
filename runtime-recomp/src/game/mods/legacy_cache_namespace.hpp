@@ -1,5 +1,6 @@
 #pragma once
 #include "legacy_asset_bus.hpp"
+#include "legacy_asset_capacity.hpp"
 
 namespace dkr::mods {
 enum class CacheKind { Texture, Sprite, Model };
@@ -38,6 +39,11 @@ class CacheNamespace {
     using Slot=std::pair<CacheKind,unsigned>;
 public:
     static constexpr std::uint32_t Hidden=0x40000000U;
+    CacheNamespace()=default;
+    // Match the guest Patch Pipeline's allocation policy exactly. Only the
+    // verified boot bank owns these limits; neither a scene nor a checkpoint
+    // may enlarge them. The default retains unmodified retail allocations.
+    explicit CacheNamespace(const AssetBank& boot);
     struct Plan {
     private:
         friend class CacheNamespace;
@@ -62,6 +68,8 @@ public:
     CacheNamespace stage_checkpoint(View bytes,
         const std::map<std::string,std::shared_ptr<CacheContent>>& owners)const;
 private:
+    std::uint32_t capacity(CacheKind kind)const;
+    std::array<std::uint32_t,4> capacities_=legacy_asset_cache_capacities(false,0,0,0,0);
     std::map<Slot,Entry> entries_;
     std::uint64_t generation_=0;
 };

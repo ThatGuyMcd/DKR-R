@@ -61,6 +61,7 @@ bool Driver::start(Configuration configuration, std::string& error) {
         statistics_ = {};
         statistics_.checkpoint_bytes = checkpoints_->allocated_bytes() + scratch_.capacity();
         dirty_frame_ = boundary_frame_ = UINT32_MAX;
+        resource_frame_=UINT32_MAX;resource_restore_pending_=false;
         replay_goal_ = 0U;
         committed_boundary_ = false;
         active_ = true;
@@ -115,7 +116,7 @@ InputResult Driver::receive(std::uint64_t epoch, std::uint8_t owner,
     auto& value = entry(frame);
     value.actual[owner] = input;
     value.actual_mask |= mask;
-    if (value.simulated && value.used[owner] != input) {
+    if (value.simulated && (value.dependencies&mask) && value.used[owner] != input) {
         dirty_frame_ = (std::min)(dirty_frame_, frame);
     }
     return InputResult::Accepted;
@@ -187,7 +188,10 @@ bool Driver::confirm() {
         if (!frame || !frame->simulated || frame->actual_mask != all) break;
         // Real inputs may arrive between step() calls. They cannot become
         // irreversible before a correction has actually been simulated.
-        if (frame->used != frame->actual) break;
+        bool corrected=true;
+        for(unsigned owner=0;owner<configuration_.players;++owner)
+            if((frame->dependencies&(1U<<owner)) && frame->used[owner]!=frame->actual[owner])corrected=false;
+        if(!corrected)break;
         std::string detail;
         if (!simulation_.commit(configuration_.epoch, frame->number,
                                 frame->output.effects, frame->output.scene_boundary, detail)) {
@@ -213,11 +217,23 @@ bool Driver::confirm() {
 bool Driver::correcting() const {
     return active() && (dirty_frame_ != UINT32_MAX || statistics_.next_frame < replay_goal_);
 }
+std::uint8_t Driver::missing_input_mask() const {
+    const auto frame=statistics_.confirmed_frames;
+    const auto& value=frames_[frame%kHistory];
+    const auto actual=value.valid && value.number==frame ? value.actual_mask:0;
+    return std::uint8_t(((1U<<configuration_.players)-1U)&~actual);
+}
 
 Step Driver::step(bool allow_advance) {
     if (!active()) return Step::Failed;
     if (committed_boundary_) return Step::ConfirmedBoundary;
     try {
+        if(resource_restore_pending_) {
+            const auto restored=restore(resource_frame_);
+            if(restored==RestoreStep::Pending)return Step::WaitingForPresentation;
+            if(restored!=RestoreStep::Ready)return Step::Failed;
+            resource_restore_pending_=false;
+        }
         if (dirty_frame_ != UINT32_MAX) {
             const auto from = dirty_frame_;
             if (from < statistics_.confirmed_frames || from >= statistics_.next_frame) {
@@ -239,6 +255,7 @@ Step Driver::step(bool allow_advance) {
             statistics_.largest_rollback = (std::max)(statistics_.largest_rollback, end - from);
             statistics_.next_frame = from;
             replay_goal_ = end;
+            resource_frame_=UINT32_MAX;resource_restore_pending_=false;
             dirty_frame_ = UINT32_MAX;
             boundary_frame_ = UINT32_MAX;
         }
@@ -259,7 +276,7 @@ Step Driver::step(bool allow_advance) {
         const auto all = static_cast<std::uint8_t>((1U << configuration_.players) - 1U);
         const bool agreed = frame.actual_mask == all &&
                             statistics_.next_frame == statistics_.confirmed_frames;
-        if (simulation_.requires_confirmed_tick() && !agreed)
+        if ((simulation_.requires_confirmed_tick() || resource_frame_==frame.number) && !agreed)
             return Step::WaitingForConfirmedInput;
         std::string detail;
         const auto readiness = simulation_.prepare_tick(configuration_.epoch, frame.number, agreed, detail);
@@ -269,8 +286,10 @@ Step Driver::step(bool allow_advance) {
             return Step::Failed;
         }
         frame.used = predict(frame);
+        frame.dependencies=simulation_.input_dependencies()&all;
         frame.output.effects.clear();
         frame.output.scene_boundary = false;
+        frame.output.confirmation_required = false;
         bool tick_ok;
         {performance::Scope timing(performance::Stage::Tick);
          tick_ok=simulation_.tick(frame.number, frame.used, frame.output, detail);}
@@ -282,6 +301,22 @@ Step Driver::step(bool allow_advance) {
             fail(tick_error);
             return Step::Failed;
         }
+        if(frame.output.confirmation_required) {
+            if(agreed) {
+                (void)restore(frame.number);
+                fail("Confirmed tick unexpectedly requested resource confirmation.");
+                return Step::Failed;
+            }
+            frame.output.effects.clear();frame.output.scene_boundary=false;
+            resource_frame_=frame.number;resource_restore_pending_=true;
+            ++statistics_.resource_fences;
+            const auto restored=restore(frame.number);
+            if(restored==RestoreStep::Pending)return Step::WaitingForPresentation;
+            if(restored!=RestoreStep::Ready)return Step::Failed;
+            resource_restore_pending_=false;
+            return Step::WaitingForConfirmedInput;
+        }
+        resource_frame_=UINT32_MAX;
         if (frame.output.effects.size() > kMaximumEffectBytes) {
             (void)restore(frame.number);
             fail("Experimental effect journal exceeded its per-frame budget.");

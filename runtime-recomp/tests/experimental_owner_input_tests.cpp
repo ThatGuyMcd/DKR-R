@@ -17,7 +17,7 @@ void codec_tests() {
     p.received_next = {2,3,5,7};
     for (unsigned i = 0; i < 8; ++i) p.inputs[i] = sample(3, i);
     const auto bytes = encode_owner_inputs(p);
-    assert(bytes.size() == 68 && bytes[8] == 0xF0 && bytes[15] == 0x12);
+    assert(bytes.size() == kOwnerInputMaximumBytes && bytes[8] == 0xF0 && bytes[15] == 0x12);
     const auto decoded = decode_owner_inputs(bytes);
     assert(decoded && decoded->epoch == p.epoch && decoded->inputs == p.inputs && decoded->received_next == p.received_next);
     for (unsigned length = 0; length < bytes.size(); ++length) assert(!decode_owner_inputs(std::span(bytes).first(length)));
@@ -26,7 +26,7 @@ void codec_tests() {
         invalid = bytes; invalid[at] = 255; assert(!decode_owner_inputs(invalid));
     }
     p.players = 2; p.owner = 1; p.received_next = {}; p.count = 0; p.first_frame = 0;
-    assert(encode_owner_inputs(p).size() == 36);
+    assert(encode_owner_inputs(p).size() == 52);
     p.received_next[2] = 1; assert(encode_owner_inputs(p).empty());
     p.received_next = {}; p.count = 8; p.first_frame = UINT32_MAX - 3; assert(encode_owner_inputs(p).empty());
 }
@@ -163,7 +163,28 @@ void star_network(unsigned players, unsigned delay) {
     std::cout << "owner lane players=" << players << " delay=" << delay << " delivered=" << deliveries << '\n';
 }
 }
+void relay_does_not_wait_for_a_gap() {
+    OwnerInputHistory host,client;std::vector<FinalOwnerInput> received;
+    assert(host.begin(19,3,0)&&client.begin(19,3,2));
+    OwnerInputPacket late;late.epoch=19;late.players=3;late.owner=1;late.first_frame=4;late.count=4;
+    for(unsigned i=0;i<4;++i)late.inputs[i]=sample(1,4+i);
+    assert(host.receive_authenticated(1,late,received)==OwnerInputResult::Accepted);
+    assert(host.received_next(1)==0);
+    const auto live=host.packet_for(1,2);assert(live&&live->first_frame==4&&live->count==4);
+    assert(client.receive_authenticated(0,*live,received)==OwnerInputResult::Accepted);
+    assert(client.actual(1,7)==sample(1,7)&&client.received_next(1)==0);
+    const auto receipts=client.packet_for(2,0);
+    assert(receipts&&receipts->received_bits[1]==0xF0);
+    assert(host.receive_authenticated(2,*receipts,received)==OwnerInputResult::Duplicate);
+    late.first_frame=0;for(unsigned i=0;i<4;++i)late.inputs[i]=sample(1,i);
+    assert(host.receive_authenticated(1,late,received)==OwnerInputResult::Accepted);
+    const auto repair=host.packet_for(1,2,OwnerInputSend::Repair);
+    assert(repair&&repair->first_frame==0&&repair->count==4); // No resend of selectively ACKed 4..7.
+    assert(client.receive_authenticated(0,*repair,received)==OwnerInputResult::Accepted);
+    assert(client.received_next(1)==8);
+}
 int main() {
+    relay_does_not_wait_for_a_gap();
     codec_tests(); immutability_and_admission(); atomic_ack_and_holes(); retention_backpressure();
     for (unsigned players : {2,3,4}) for (unsigned delay : {0,2,6,12}) star_network(players,delay);
     std::cout << "Experimental owner-input checks passed; not live netplay admission.\n";

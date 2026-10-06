@@ -19,6 +19,45 @@ spec.loader.exec_module(presentation)
 
 
 class PipelineTests(unittest.TestCase):
+    def test_spawn_asset_type_is_hash_pinned_and_branch_scoped(self):
+        import sys
+        with patch.object(sys, 'path', [str(ROOT/'scripts'), *sys.path]):
+            import legacy_spawn_asset_type_policy as spawn
+        class Elf:
+            def read_bytes(self): return b'isolated trophy signpost fixture'
+        elf=Elf()
+        pc=0x8000ed8c
+        for rev in ('us.v77', 'us.v80'):
+            base={'functionHooks': [], 'instructionPatches': []}
+            symbols={'spawn_object': {(0x8000ea54, 0xbdc)}}
+            sections=[(pc, struct.pack('>I', 0xa246003a))]
+            with self.assertRaises(ValueError): spawn.compose_spawn_asset_type(base, elf, rev)
+            with patch.dict(spawn.ELFS, {rev: hashlib.sha256(elf.read_bytes()).hexdigest()}), \
+                 patch.object(spawn, 'elf_sections', return_value=sections), \
+                 patch.object(spawn, 'elf_functions', return_value=symbols):
+                result=spawn.compose_spawn_asset_type(base, elf, rev)
+                self.assertEqual(base, {'functionHooks': [], 'instructionPatches': []})
+                self.assertEqual(len(result['functionHooks']), 1)
+                self.assertEqual(result['instructionPatches'], [])
+                hook=result['functionHooks'][0]
+                self.assertEqual(int(hook['beforeVram'], 0), pc)
+                self.assertIn('MEM_W(0x64, ctx->r29)', hook['text'])
+                self.assertIn('MEM_B(0x53, MEM_W(0x40, ctx->r18))', hook['text'])
+                self.assertEqual(result, spawn.compose_spawn_asset_type(result, elf, rev))
+                conflicting_result=copy.deepcopy(result)
+                conflicting_result['instructionPatches'].append({'vram': hex(pc), 'value': '0x0'})
+                with self.assertRaises(ValueError): spawn.compose_spawn_asset_type(conflicting_result, elf, rev)
+                with patch.object(spawn, 'elf_sections', return_value=[(pc, struct.pack('>I', 0xa246003b))]):
+                    with self.assertRaises(ValueError): spawn.compose_spawn_asset_type(base, elf, rev)
+                for bad_symbols in ({'spawn_object': set()}, {'spawn_object': {(pc,4),(pc+4,4)}},
+                                    {'spawn_object': {(pc+4,4)}}):
+                    with patch.object(spawn, 'elf_functions', return_value=bad_symbols):
+                        with self.assertRaises(ValueError): spawn.compose_spawn_asset_type(base, elf, rev)
+                for kind, value in [('functionHooks', {**hook, 'text': 'unknown owner'}),
+                                    ('instructionPatches', {'vram': hex(pc), 'value': '0x0'})]:
+                    conflict=copy.deepcopy(base); conflict[kind].append(value)
+                    with self.assertRaises(ValueError): spawn.compose_spawn_asset_type(conflict, elf, rev)
+
     def test_asset_capacity_pairs_allocation_limit_and_prewrite_guards(self):
         import sys
         with patch.object(sys,'path',[str(ROOT/'scripts'),*sys.path]):

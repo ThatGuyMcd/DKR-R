@@ -17,15 +17,21 @@ Bundle export_legacy(const std::filesystem::path& input_path,std::string revisio
     const auto path=private_storage_path(input_path);
     if(!std::filesystem::exists(path))return out;
     check_storage(path,true);
+    std::map<std::filesystem::path,json> reviews;
     for(const auto kind:{TrackCatalog::Kind::Track,TrackCatalog::Kind::Character}) {
         for(const auto& item:TrackCatalog::selected_items(path,out.manifest.revision,kind)) {
             cancelled(stop);
             if(!valid_digest(item.review))throw Error("This enabled mod has no retained source patch. Reimport it before hosting a modded lobby.");
             const auto review=path/"reviews"/item.review;check_storage(review,true);check_storage(review/"review.json",false);
+            auto cached=reviews.find(review);
+            if(cached==reviews.end()) {
             const auto bytes=read_file(review/"review.json",8*MiB);
             if(sha256(bytes)!=item.review)throw Error("Retained mod review verification failed.");
-            const auto doc=document(bytes);const json* package=nullptr;
+            auto doc=document(bytes);
             if(doc.at("schema")!=Schema || !doc.at("packages").is_array() || doc.at("packages").size()>32)throw Error("Invalid retained mod review.");
+            cached=reviews.emplace(review,std::move(doc)).first;
+            }
+            const auto& doc=cached->second;const json* package=nullptr;
             for(const auto& p:doc.at("packages"))if(p.at("patch_sha256")==item.patch) {
                 if(package)throw Error("Ambiguous online mod source patch.");package=&p;
             }

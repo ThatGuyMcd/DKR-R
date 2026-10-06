@@ -26,6 +26,15 @@ extern "C" {
 #define DKR_PROBE_NORETURN _Noreturn
 #endif
 struct recomp_context;
+typedef struct dkr_probe_memory_guard {
+    uint8_t* ram;
+    size_t bytes;
+    uint64_t budget;
+    uint64_t* operations;
+    uint64_t* accesses;
+    int watching;
+} dkr_probe_memory_guard;
+extern dkr_probe_memory_guard* dkr_probe_memory_guard_current;
 typedef void (*dkr_probe_entry)(uint8_t*, struct recomp_context*);
 typedef struct dkr_probe_result {
     int completed;
@@ -183,6 +192,7 @@ void dkr_probe_menu_construct_ready(uint8_t* ram, struct recomp_context* context
 // reads a separate owned image; actual epoch/restore drains are independent.
 // Cleared before checkpoint capture; never enabled by a guest/native import.
 void dkr_probe_menu_tick_configure(int confirmed);
+void dkr_probe_menu_prediction_configure(int predicting);
 // Copied-image runtime only: service Track Select's pending background before
 // the next confirmed CPU draw, without creating a gameplay scene epoch.
 void dkr_probe_menu_preview_configure(int enabled);

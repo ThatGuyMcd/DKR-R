@@ -11,16 +11,20 @@ namespace dkr::runtime::netplay::experimental {
 // Experimental-only lane. Unlike the stable future-sample refresh protocol,
 // every published owner sample is final. Transport encryption/authentication
 // belongs to SecureChannel; this codec is its bounded plaintext payload only.
-// It is not connected to live DirectSession until the game adapter qualifies.
 inline constexpr unsigned kOwnerInputBatch = 8;
+inline constexpr unsigned kOwnerInputMaximumBytes = 52+4*kOwnerInputBatch;
 struct OwnerInputPacket {
     std::uint64_t epoch = 0;
     std::uint32_t first_frame = 0;
     std::array<std::uint32_t, 4> received_next{};
+    // Selective actual-input receipts relative to received_next, never
+    // predictions or simulation ACKs. Bit zero names the first missing frame.
+    std::array<std::uint32_t, 4> received_bits{};
     std::array<PackedInput, kOwnerInputBatch> inputs{};
     std::uint8_t players = 0;
     std::uint8_t owner = 0;
     std::uint8_t count = 0;
+    bool operator==(const OwnerInputPacket&) const = default;
 };
 std::vector<std::uint8_t> encode_owner_inputs(const OwnerInputPacket& packet);
 std::optional<OwnerInputPacket> decode_owner_inputs(std::span<const std::uint8_t> bytes);
@@ -54,7 +58,10 @@ private:
     void insert(std::uint8_t owner, std::uint32_t frame, PackedInput input);
     std::array<std::array<Sample, kHistory>, 4> samples_{};
     std::array<std::uint32_t, 4> next_{};
+    std::array<std::uint32_t, 4> newest_next_{};
+    std::array<std::uint32_t, 4> received_bits_{};
     std::array<std::array<std::uint32_t, 4>, 4> ack_next_{}; // peer, owner
+    std::array<std::array<std::uint32_t, 4>, 4> ack_bits_{};
     std::array<std::array<std::uint32_t, 4>, 4> sent_next_{};
     std::uint64_t epoch_ = 0;
     std::uint32_t cursor_ = 0;

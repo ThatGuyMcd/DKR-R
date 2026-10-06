@@ -21,7 +21,7 @@ Message response(const Message& request,const Bytes& source,unsigned chunk) {
 int main() {
     try {
         Manifest manifest;manifest.revision="us.v77";
-        Bytes payload(25001);for(unsigned i=0;i<payload.size();++i)payload[i]=i%251;
+        Bytes payload(600001);for(unsigned i=0;i<payload.size();++i)payload[i]=i%251;
         const auto hash=sha256(payload),id=sha256(bytes("character")),artifact=sha256(bytes("artifact"));
         manifest.payloads.push_back({PayloadKind::Xdelta,hash,"us.v77",payload.size(),"Example"});
         manifest.content.push_back({Kind::Character,id,"Example",hash,artifact,id,CharacterAdapterVersion});
@@ -100,6 +100,36 @@ int main() {
         upload.request({Operation::Verified,digest},768);check(upload.preparing()&&!upload.next());
         upload.request({Operation::Cancel,digest},768);check(upload.cancelled());
         rejects([&]{upload.request({Operation::ManifestRequest,digest,{},0,static_cast<std::uint32_t>(metadata.size())},768);});
+        // Reliable/unordered bulk packets, including a lost first-window chunk,
+        // must not discard the rest of that window or exceed its memory budget.
+        Download ordered;ordered.offer(digest,metadata.size());
+        check(ordered.manifest_chunk(response(ordered.request(768),metadata,MaxChunkBytes)));ordered.consent();
+        Upload batched(bundle);batched.request({Operation::Consent,digest},768);
+        ChunkInbox inbox;Bytes ordered_bytes;bool delayed=false;unsigned windows=0;
+        while(ordered.phase()==TransferPhase::Payloads) {
+            batched.request(ordered.request(768),768);++windows;
+            std::vector<Message> chunks;
+            while(auto chunk=batched.next()){chunks.push_back(*chunk);batched.sent();}
+            check(chunks.size()<=TransferWindowBytes/768+1);
+            std::reverse(chunks.begin(),chunks.end());
+            for(const auto& chunk:chunks) {
+                if(!delayed && chunk.offset==768){delayed=true;continue;}
+                const auto request=ordered.request(768);
+                inbox.push(chunk,request);check(inbox.bytes()<=TransferWindowBytes);
+                while(auto ready=inbox.take(ordered.request(768))) {
+                    check(ordered.accept_payload_chunk(*ready));
+                    ordered_bytes.insert(ordered_bytes.end(),ready->bytes.begin(),ready->bytes.end());ordered.persisted(ready->bytes.size());
+                    if(ordered.offset()==payload.size()){ordered.payload_verified();break;}
+                }
+            }
+        }
+        check(ordered_bytes==payload && delayed && windows==4 && inbox.bytes()==0);
+        const Message request{Operation::PayloadRequest,digest,hash,0,static_cast<std::uint32_t>(payload.size())};
+        auto good=response(request,payload,768);check(inbox.push(good,request));check(!inbox.push(good,request));
+        auto bad=good;bad.bytes[0]^=1;rejects([&]{inbox.push(bad,request);});
+        bad=good;bad.offset=10;rejects([&]{inbox.push(bad,request);});
+        bad=good;bad.offset=TransferWindowBytes;check(!inbox.push(bad,request));
+        bad=good;bad.manifest=id;check(!inbox.push(bad,request));inbox.clear();check(!inbox.bytes());
         const auto cache=private_storage_path(std::filesystem::current_path()/("online-cache-check-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())));
         check(std::filesystem::create_directory(cache));std::filesystem::create_directory(cache/"partials");std::filesystem::create_directory(cache/"payloads");
         const auto descriptor=manifest.payloads.front();

@@ -22,14 +22,14 @@ bool Session::start(TimelineConfiguration configuration, std::string& error) {
     gate_=std::move(gate); phase_=Phase::Running;
     error_.clear(); error.clear(); return true;
 }
-bool Session::needs_local_input() const { return phase_==Phase::Running && timeline_.needs_local_input(); }
+bool Session::needs_local_input(bool live_lead) const { return phase_==Phase::Running && timeline_.needs_local_input(live_lead); }
 bool Session::service_inputs() {
     if(phase_==Phase::Inactive || phase_==Phase::Failed)return false;
     if(phase_==Phase::Running && !timeline_.service_inputs())return fail(timeline_.error());
     return true;
 }
-OwnerInputResult Session::sample_local(PackedInput input) {
-    return needs_local_input() ? timeline_.sample_local(input) : OwnerInputResult::Rejected;
+OwnerInputResult Session::sample_local(PackedInput input,bool live_lead) {
+    return needs_local_input(live_lead) ? timeline_.sample_local(input,live_lead) : OwnerInputResult::Rejected;
 }
 SessionInputResult Session::receive_input(std::uint8_t peer, std::span<const std::uint8_t> bytes) {
     if (phase_==Phase::Inactive || phase_==Phase::Failed || peer>=configuration_.simulation.players ||

@@ -102,6 +102,7 @@ struct ObjectCapture {
     std::uint32_t first_matrix = 0;
     std::uint32_t buffer = 0;
     std::uint16_t presentation_token = 0;
+    dkr::runtime::presentation::WorldProjection world_projection{};
 };
 
 struct ObjectOwner {
@@ -120,6 +121,7 @@ struct MatrixBinding {
     bool interpolate_tiles = false;
     bool procedural_water = false;
     std::uint8_t water_scroll_tag = 0U;
+    dkr::runtime::presentation::WorldProjection world_projection{};
 };
 
 struct SubmittedFrame {
@@ -343,6 +345,25 @@ bool ValidRange(std::uint32_t address, std::uint32_t size) {
     const std::uint32_t physical = Physical(address);
     return address >= 0x80000000U && address <= 0x807FFFFFU &&
         physical <= kRdramMask && size <= kRdramMask + 1U - physical;
+}
+
+dkr::runtime::presentation::WorldProjection ReadWorldProjection(std::uint8_t* rdram) {
+    using namespace dkr::runtime::revision_addresses;
+    const std::uint32_t header = ReadU32(rdram, CurrentLevelHeader);
+    if (!ValidRange(header, 0xA0U)) return {};
+    const std::uint32_t layout = ReadU32(rdram, ViewportLayout);
+    const float wx = ReadF32(rdram, ViewProjectionMatrix + 0x0CU);
+    const float wy = ReadF32(rdram, ViewProjectionMatrix + 0x1CU);
+    const float wz = ReadF32(rdram, ViewProjectionMatrix + 0x2CU);
+    const bool perspective = std::isfinite(wx) && std::isfinite(wy) &&
+        std::isfinite(wz) && (wx * wx + wy * wy + wz * wz) > 0.01F;
+    if (!dkr_world_projection_eligible(static_cast<std::int32_t>(ReadU32(rdram, GameMode)),
+        ReadU8(rdram, header + 0x4CU), layout, perspective)) return {};
+    const std::uint32_t authored = ReadU8(rdram, header + 0x9CU);
+    const std::uint32_t effective = ReadU32(rdram, CurrentCameraFov);
+    if (!authored || !dkr_world_projection_metadata_valid(authored, effective, layout)) return {};
+    return {static_cast<float>(authored), std::bit_cast<float>(effective),
+        static_cast<std::uint8_t>(layout)};
 }
 
 bool ActiveLogicalCamera(std::uint8_t* rdram, std::uint32_t& camera_id) {
@@ -649,7 +670,9 @@ void RegisterCameraMatrix(std::uint8_t* rdram,
         dkr::runtime::presentation::make_camera_matrix_identity(
             scene, camera_id, matrix_role, continuity.epoch);
     g_matrix_maps[g_recording_buffer & 1U].insert_or_assign(
-        Physical(matrix_address), MatrixBinding{identity, 0U, false, false});
+        Physical(matrix_address), MatrixBinding{identity, 0U, false, false,
+            false, false, 0U, matrix_role == 1U ? ReadWorldProjection(rdram) :
+                dkr::runtime::presentation::WorldProjection{}});
     if (InterpolationTraceEnabled()) {
         g_interpolation_trace.camera_roots.fetch_add(
             1U, std::memory_order_relaxed);
@@ -684,6 +707,7 @@ dkr::runtime::presentation::matrix_interpolation(
             binding->interpolate_tiles,
             binding->procedural_water,
             binding->water_scroll_tag,
+            binding->world_projection,
         };
     }
     return {};
@@ -774,7 +798,7 @@ std::uint32_t dkr::runtime::presentation::register_active_vehicle_part_matrix(
     g_matrix_maps[capture.buffer & 1U].insert_or_assign(
         matrix, MatrixBinding{
             with_camera_continuity(identity, capture.camera_identity),
-            capture.identity, false, false});
+            capture.identity, false, false, false, false, 0U, capture.world_projection});
     return identity;
 }
 
@@ -1023,7 +1047,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
     for(const auto& binding:matrices) {
         if(!ValidRange(binding.address,64))continue;
         const auto& i=binding.interpolation;
-        const MatrixBinding value{i.identity,0,i.interpolate_vertices,i.interpolate_texcoords,i.interpolate_tiles,i.procedural_water,i.water_scroll_tag};
+        const MatrixBinding value{i.identity,0,i.interpolate_vertices,i.interpolate_texcoords,i.interpolate_tiles,i.procedural_water,i.water_scroll_tag,i.world_projection};
         if(binding.weak)g_active_owned_matrices.try_emplace(Physical(binding.address),value);
         else g_active_owned_matrices.insert_or_assign(Physical(binding.address),value);
     }
@@ -1444,7 +1468,8 @@ extern "C" void dkr_presentation_wave_matrix(
             0U, true, true, true, true,
             dkr::runtime::water::scroll_tag(
                 ReadU32(rdram, dkr::runtime::revision_addresses::WaveTexUVMaskX),
-                ReadU32(rdram, dkr::runtime::revision_addresses::WaveTexUVMaskY))});
+                ReadU32(rdram, dkr::runtime::revision_addresses::WaveTexUVMaskY)),
+            ReadWorldProjection(rdram)});
 }
 
 extern "C" void dkr_presentation_object_spawned(std::uint8_t*,
@@ -1548,6 +1573,7 @@ extern "C" void dkr_presentation_object_begin(std::uint8_t* rdram,
     capture.object = object;
     capture.identity = ObjectIdentityLocked(rdram, object);
     capture.camera_identity = g_current_camera_identity;
+    capture.world_projection = ReadWorldProjection(rdram);
     capture.first_matrix = Physical(first_matrix);
     const auto lifetime = g_lifetimes.find(object);
     capture.presentation_token =
@@ -1595,7 +1621,7 @@ extern "C" void dkr_presentation_object_end(std::uint8_t* rdram,
                 dkr::runtime::presentation::make_matrix_identity(
                     capture.identity, ordinal),
                 capture.camera_identity),
-            capture.identity, false, false});
+            capture.identity, false, false, false, false, 0U, capture.world_projection});
     }
     g_matrix_ranges.fetch_add(1U, std::memory_order_relaxed);
     if (InterpolationTraceEnabled()) {

@@ -79,7 +79,7 @@ struct Transport final : SessionTransport {
     void service() override { if(throw_service) throw std::runtime_error("test SDK fault"); }
     DatagramSendStatus send_status(const PeerAddress& destination,std::span<const std::uint8_t> bytes,
                                    TransportTrafficClass traffic,std::string&) override {
-        assert(destination.size==1 && bytes.size()<=118); ++attempts; ++lanes[unsigned(traffic)];
+        assert(destination.size==1 && bytes.size()<=50+kOwnerInputMaximumBytes); ++attempts; ++lanes[unsigned(traffic)];
         if(block_live && traffic==TransportTrafficClass::Realtime) {
             retained.emplace_back(bytes.begin(),bytes.end()); ++blocks; return DatagramSendStatus::WouldBlock;
         }
@@ -167,7 +167,7 @@ void owner_pump() {
         const auto old_frontier=client.frontier();
         const auto old_samples=sampled[1].size();
         assert(client_pump.pulse(at(5000),client_sample));
-        assert(client.frontier()-old_frontier<=1 && sampled[1].size()-old_samples<=1 && client_pump.view().ticks_this_pulse<=4);
+        assert(client.frontier()-old_frontier<=2 && sampled[1].size()-old_samples<=1 && client_pump.view().ticks_this_pulse<=4);
         assert(host_pump.pulse(at(5000),host_sample));
         bus.time=5004; // deliver pending model datagrams; monotonic pulse clock stays 5000
     }
@@ -213,14 +213,16 @@ void presentation_drain_keeps_network_live() {
     for(unsigned pulse=1;pulse<=1000;++pulse) {
         bus.time=2000+pulse;assert(host_pump.pulse(at(bus.time),local));
         assert(host_pump.view().wait==PumpWait::PresentationDrain&&host_pump.view().ticks_this_pulse==0);
-        assert(host.frontier()==3&&samples.size()==3&&host_world.state==parked&&host_world.ticks==ticks&&host_world.committed.empty());
+        // The live input clock continues with at most two final samples of
+        // lead while the world stays parked; never resample historical frames.
+        assert(host.frontier()==3&&samples.size()<=5&&host_world.state==parked&&host_world.ticks==ticks&&host_world.committed.empty());
     }
     assert(host_network.statistics().received>received&&host_world.retirement_pulses>=1001);
     assert(host.statistics().restore_checkpoint_loads==1);
     host_world.presentation_pending=false;
     for(unsigned pulse=0;pulse<10&&host.statistics().confirmed_frames<3;++pulse)
-        assert(host_pump.pulse(at(3000),local));
-    assert(host.frontier()==3&&samples.size()==3&&host.statistics().confirmed_frames==3);
+        assert(host_pump.pulse(at(3000),local,false));
+    assert(host.frontier()==3&&samples.size()<=5&&host.statistics().confirmed_frames==3);
     World reference;reference.boundary_frame=UINT32_MAX;
     for(unsigned frame=0;frame<3;++frame) {
         FrameInputs inputs{};inputs[0]=sample(frame,0);inputs[1]=sample(frame,1);TickOutput out;
@@ -333,8 +335,10 @@ void cadence_and_freshness() {
     // remains serviced on every call and no world tick happens in service.
     for(unsigned n=0;n<1000;++n) assert(host_network.service(at(0)));
     assert(host_transport.attempts==1 && host_world.ticks==0 && host_network.statistics().suppressed_resends>=1000);
+    assert(host_network.statistics().encoded_input_packets==1);
     assert(host_network.service(at(32)) && host_transport.attempts==1);
     assert(host_network.service(at(33)) && host_transport.attempts==2);
+    assert(host_network.statistics().encoded_input_packets==2);
     host_transport.block_live=true;
     for(unsigned frame=0;frame<6;++frame) {
         assert(host.sample_local(sample(frame,0))==OwnerInputResult::Accepted);
@@ -460,6 +464,7 @@ struct QuickJoinTestAccess {
                 host.service(); client.service(); std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             if(!predicate()) throw std::runtime_error(std::string("Quick Join fixture timed out at: ")+stage);
+            std::cout<<"Quick Join loopback stage complete: "<<stage<<'\n';
         };
         wait("host registration",[&]{return host.signaling_ready_.load();});
         host.set_quick_join_bootstrap("experimental-private-test"); assert(client.open(0,error));
@@ -529,6 +534,7 @@ struct QuickJoinTestAccess {
         }
         assert(host_world.state==reference.state && client_world.state==reference.state &&
                host_world.committed==reference.committed && client_world.committed==reference.committed);
+        std::cout<<"Quick Join loopback exact replay complete; closing private routes.\n";
         host_launch.close();client_launch.close();host.close(); client.close();
         std::cout<<"Experimental real LOOPBACK QUICK JOIN / MODEL world: authenticated_launch=1 owned_baseline=1 peers=2 scene_epochs=3 exact=1\n";
     }
@@ -537,6 +543,7 @@ struct QuickJoinTestAccess {
 #endif
 int main() {
 #if defined(DKR_EXPERIMENTAL_QUICKJOIN_TEST)
+    std::cout<<std::unitbuf;
     dkr::runtime::netplay::QuickJoinTestAccess::run();
 #else
     boundaries();

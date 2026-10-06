@@ -72,8 +72,8 @@ void DrawTexturePackLibrary(float width) {
     using namespace dkr::runtime;
     using namespace dkr::runtime::texture_browser;
     texture_packs::request_background_refresh();
-    DetailText("Search, arrange and activate managed RT64 and Rice texture packs. Technical import details stay "
-               "out of the library cards.",
+    DetailText("Enable several packs to mix textures. Priority 1 wins clashes; missing textures come from the "
+               "next enabled pack. Use Higher / Lower to reorder. Changes apply live.",
                width, kSetMuted);
 
     // Search (.field): a field that opens the on-screen keyboard.
@@ -107,7 +107,7 @@ void DrawTexturePackLibrary(float width) {
         };
         const std::array<Filter, 5> kFilters{{
             {"sort", "Sort", &g_texture_pack_sort,
-             {"Name A-Z", "Name Z-A", "Largest first", "Smallest first", "Newest first", "Oldest first", "Type"}},
+             {"Name A-Z", "Name Z-A", "Largest first", "Smallest first", "Newest first", "Oldest first", "Type", "Priority"}},
             {"state", "State", &g_texture_pack_state_filter, {{"All", {}, false}, {"Active", {}, false}, {"Inactive", {}, false}}},
             {"compatibility", "Compatibility", &g_texture_pack_compatibility_filter,
              {"All", "Compatible", "Incompatible"}},
@@ -158,7 +158,7 @@ void DrawTexturePackLibrary(float width) {
     };
     static LibraryCache cache;
     const std::uint64_t generation = texture_packs::generation();
-    const std::array<int, 5> current{std::clamp(g_texture_pack_sort, 0, 6),
+    const std::array<int, 5> current{std::clamp(g_texture_pack_sort, 0, 7),
                                      std::clamp(g_texture_pack_state_filter, 0, 2),
                                      std::clamp(g_texture_pack_compatibility_filter, 0, 2),
                                      std::clamp(g_texture_pack_type_filter, 0, 4),
@@ -197,16 +197,25 @@ void DrawTexturePackLibrary(float width) {
         const int columns = std::max(1, static_cast<int>((width + 14.0F) / (260.0F + 14.0F)));
         const float column = std::floor((width - 14.0F * static_cast<float>(columns - 1)) / static_cast<float>(columns));
         const PaddockType name_type = PaddockReading(16.0F, true, 1.5F);
+        const PaddockType detail_type = PaddockReading(16.0F, false, 1.5F);
+        const bool priority_stacked = column - 32.0F <
+            PaddockRaceButtonWidth("HIGHER", 16.0F) +
+            PaddockRaceButtonWidth("LOWER", 16.0F) + 8.0F;
+        const float priority_actions_height = priority_stacked ? 96.0F : 44.0F;
         const ImVec2 at = ImGui::GetCursorScreenPos();
         float row_top = at.y;
         for (std::size_t first = 0; first < cache.shown.size(); first += static_cast<std::size_t>(columns)) {
             const std::size_t last = std::min(cache.shown.size(), first + static_cast<std::size_t>(columns));
             float name_height = 44.0F;
+            float type_height = detail_type.line;
             for (std::size_t index = first; index < last; ++index) {
                 name_height = std::max(name_height,
                                        PaddockTextHeight(name_type, cache.shown[index].name, column - 32.0F - 36.0F));
+                type_height = std::max(type_height, PaddockTextHeight(detail_type,
+                    texture_packs::format_name(cache.shown[index].format), column - 32.0F));
             }
-            const float card_height = std::max(166.0F, 16.0F + name_height + 8.0F + 24.0F + 13.0F + 44.0F + 16.0F);
+            const float card_height = 16.0F + name_height + 8.0F + type_height + 10.0F +
+                detail_type.line + 8.0F + priority_actions_height + 12.0F + 44.0F + 16.0F;
             for (std::size_t index = first; index < last; ++index) {
                 const auto& pack = cache.shown[index];
                 ImGui::PushID(pack.id.c_str());
@@ -222,9 +231,35 @@ void DrawTexturePackLibrary(float width) {
                 }
                 ImGui::SetCursorScreenPos({card.x + 16.0F, card.y + 16.0F + name_height + 8.0F});
                 const std::string type = texture_packs::format_name(pack.format);
-                PaddockText(PaddockReading(16.0F, false, 1.5F), PaddockRgb(pack.compatible ? 0x1AC2A3U : kSetWarm),
+                PaddockText(detail_type, PaddockRgb(pack.compatible ? 0x1AC2A3U : kSetWarm),
                             type, column - 32.0F);
                 if (!pack.compatible && ImGui::IsItemHovered()) ImGui::SetTooltip("Incompatible with live activation");
+                const float priority_y = card.y + 16.0F + name_height + 8.0F + type_height + 10.0F;
+                ImGui::SetCursorScreenPos({card.x + 16.0F, priority_y});
+                PaddockText(detail_type, PaddockRgb(pack.priority == 1U ? kSetWarm : kSetText),
+                            "Priority " + std::to_string(pack.priority), column - 32.0F);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Lower number = higher priority. Sorting and filtering do not change priority.");
+                }
+                const ImVec2 actions{card.x + 16.0F, priority_y + detail_type.line + 8.0F};
+                const float action_width = priority_stacked ? column - 32.0F
+                    : std::floor((column - 32.0F - 8.0F) * 0.5F);
+                RaceButtonLook priority_look;
+                priority_look.font_px = 16.0F;
+                const auto priority_button = [&](const char* label, ImVec2 position, bool disabled) {
+                    ImGui::SetCursorScreenPos(position);
+                    OlDisabled scope(disabled, 0.6F);
+                    return PaddockRaceButton(label, {action_width, 44.0F}, priority_look) && !disabled;
+                };
+                if (priority_button("HIGHER", actions, busy || pack.priority <= 1U)) {
+                    texture_packs::set_priority(pack.id, pack.priority - 1U, g_texture_pack_status);
+                }
+                const ImVec2 lower_at = priority_stacked
+                    ? ImVec2{actions.x, actions.y + 52.0F}
+                    : ImVec2{actions.x + action_width + 8.0F, actions.y};
+                if (priority_button("LOWER", lower_at, busy || pack.priority == 0U || pack.priority >= cache.all.size())) {
+                    texture_packs::set_priority(pack.id, pack.priority + 1U, g_texture_pack_status);
+                }
                 ImGui::SetCursorScreenPos({card.x + 16.0F, card.y + card_height - 16.0F - 44.0F});
                 if (DetailRaceButton("MANAGE...", column - 32.0F)) {
                     g_texture_pack_manage_id = pack.id;

@@ -13,6 +13,7 @@ struct RuntimeView {
     std::uint32_t frame=0,confirmed=0,corrections=0,replayed=0;
     std::string status;
     bool initial_admission=false;
+    std::uint8_t missing_owners=0;
 };
 bool runtime_available(rom::Revision revision);
 RuntimeView runtime_view();

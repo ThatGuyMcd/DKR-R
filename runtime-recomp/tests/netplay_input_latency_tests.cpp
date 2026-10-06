@@ -245,6 +245,59 @@ struct DirectSessionTestAccess {
                 << " sink=" << sink << '\n';
         }
     }
+    static void failed_connection_retry() {
+        TimedWire wire;
+        const auto key=secure::generate_key();
+        DirectSession host,client;
+        initialize(host,wire,0,2,1,key);
+        initialize(client,wire,1,2,1,key);
+        const auto poison=[](DirectSession& session) {
+            session.state_=ConnectionState::Failed;
+            session.launch_requested_=session.local_loaded_=session.run_signal_sent_=true;
+            session.local_bootstrap_hash_=99;
+            session.bootstrap_hashes_[0]=99;session.bootstrap_hash_present_[0]=true;
+            session.owned_match_end_=DirectSession::OwnedMatchEnd{99,"previous failure"};
+            session.retired_owned_generation_=1000000;
+            session.owned_last_host_packet_=std::chrono::steady_clock::now();
+            session.owned_inbound_bytes_=42;
+            session.host_start_verified_=true;
+        };
+        const auto clean=[](const DirectSession& session) {
+            assert(!session.launch_descriptor_ && !session.launch_requested_ && !session.local_loaded_ && !session.run_signal_sent_);
+            assert(!session.local_bootstrap_hash_ && !session.bootstrap_hash_present_[0]);
+            assert(!session.owned_match_end_ && !session.retired_owned_generation_);
+            assert(!session.owned_last_host_packet_.time_since_epoch().count());
+            assert(session.owned_inbound_.empty() && !session.owned_inbound_bytes_ && !session.host_start_verified_);
+        };
+        poison(host);poison(client);
+        const auto host_token=host.save_job_token_,client_token=client.save_job_token_;
+        host.owned_backend_available_=client.owned_backend_available_=true;
+        Rules rules{};rules.synchronization=SynchronizationMode::ExperimentalRollback;rules.rollback_window=14;
+        std::string error;
+        assert(host.host(0,"127.0.0.1","retry",ConnectionMethod::Lan,"host",rules,error));
+        clean(host);assert(host.save_job_token_>host_token);
+        assert(client.join(host.invite_,"client",error));
+        clean(client);assert(client.save_job_token_>client_token);
+        // Model the newly admitted roster, then run the production descriptor
+        // acceptance twice. An old failure must not block a fresh launch;
+        // genuinely conflicting duplicate starts must still be rejected.
+        client.local_slot_=1;client.room_view_=host.lobby_.room();
+        client.room_view_.players[1].occupied=true;
+        LaunchDescriptor descriptor{};
+        descriptor.match_id=client.match_id_;descriptor.lobby_generation=client.room_view_.generation;
+        descriptor.compatibility_hash=manifest_hash(client.manifest_);
+        descriptor.occupied_mask=3;descriptor.player_count=2;descriptor.input_delay_frames=1;
+        descriptor.rollback_window=14;descriptor.synchronization=SynchronizationMode::ExperimentalRollback;
+        descriptor.host_control=rules.host_control;
+        protocol::StartPayload start{0,descriptor,launch_descriptor_hash(descriptor)};
+        assert(client.accept_start_descriptor(start,error));
+        assert(client.accept_start_descriptor(start,error));
+        ++start.descriptor.input_delay_frames;
+        start.descriptor_hash=launch_descriptor_hash(start.descriptor);
+        assert(!client.accept_start_descriptor(start,error));
+        assert(error=="Player 1 sent conflicting synchronized start rosters.");
+        std::cout<<"Failed-session host/join retry: fresh launch accepted; conflicting duplicate still rejected.\n";
+    }
     static void run(unsigned players, unsigned up, unsigned down, unsigned jitter,
                     unsigned loss, bool automatic, bool outage,
                     bool lockstep = false, bool quick_join = false) {
@@ -470,6 +523,7 @@ int main() {
     std::cout << std::unitbuf;
     using dkr::runtime::netplay::DirectSessionTestAccess;
     DirectSessionTestAccess::revisions_and_bounds();
+    DirectSessionTestAccess::failed_connection_retry();
     for (unsigned players : {2U, 3U, 4U}) {
         for (unsigned rtt : {0U, 20U, 60U, 100U, 150U, 200U})
             DirectSessionTestAccess::paced(players, rtt, false, false, false, false);

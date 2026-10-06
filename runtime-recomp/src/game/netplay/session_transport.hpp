@@ -67,6 +67,13 @@ public:
     virtual bool receive(PeerAddress& source,
                          std::vector<std::uint8_t>& bytes,
                          std::string& error) = 0;
+    // Local scheduling hint ONLY. Immutable input remains in the sender's
+    // repair ledger; transport can retire unsent live batches for this owner.
+    // Never applied to control, save, checkpoint or repair traffic.
+    virtual DatagramSendStatus send_live_status(const PeerAddress& destination,
+        std::span<const std::uint8_t> bytes,std::uint8_t owner,std::string& error) {
+        return send_status(destination,bytes,TransportTrafficClass::Realtime,error);
+    }
     virtual void service() {}
     virtual void set_receive_signal(std::shared_ptr<TransportReceiveSignal>) {}
     // Only authenticated session admission may pin a logical route across ICE

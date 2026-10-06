@@ -125,8 +125,21 @@ ResidentAssetState::Lease::~Lease(){if(state_) --state_->readers;}
 std::shared_ptr<const AssetBus::Mount> ResidentAssetState::Lease::route() const {
     if(!state_) throw Error("Asset API requires an active resident lease.");return state_->bank->route();
 }
+std::shared_ptr<const ResidentBank> ResidentBank::instantiate(const ResidentBank& source,AssetBus& bus) {
+    auto out=std::shared_ptr<ResidentBank>(new ResidentBank);
+    out->stock_=source.stock_;out->boot_=source.boot_;out->bank_=source.bank_;
+    out->mount_=bus.mount(source.mount_->directory());
+    // Relocated audio tables are valid only with the exact deterministic
+    // mount order used when qualifying the immutable template.
+    for(unsigned section=0;section<50;++section)
+        if(out->mount_->address(section)!=source.mount_->address(section))throw Error("Prepared world asset address order changed.");
+    out->tables_=source.tables_;
+    out->cache_=std::make_shared<CacheContent>(out->bank_,out->mount_);
+    return out;
+}
 ResidentAssetState::ResidentAssetState(std::shared_ptr<const ResidentBank> stock) {
     if(!stock || !stock->boot_) throw Error("Resident routing must start from its verified boot content.");
+    cache_=CacheNamespace(*stock->bank_);
     layout_=resident_asset_layout(stock->bank_->revision());current_=std::make_shared<State>(std::move(stock));
 }
 ResidentAssetState::Lease ResidentAssetState::acquire() {std::lock_guard lock(mutex_);return Lease(current_);}

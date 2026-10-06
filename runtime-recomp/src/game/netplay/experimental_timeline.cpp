@@ -12,7 +12,7 @@ bool Timeline::start(TimelineConfiguration configuration, std::string& error) {
     // Driver validates the state contract and stages its allocations before it
     // replaces an existing history. Do not clear a live timeline on rejection.
     if (!driver_.start(configuration.simulation,error)) return false;
-    configuration_=configuration; pending_={}; frontier_=0; error_.clear(); started_=true;
+    configuration_=configuration; pending_={}; pending_counts_={}; frontier_=0; error_.clear(); started_=true;
     if (!inputs_.begin(configuration.simulation.epoch,configuration.simulation.players,configuration.local_owner)) {
         error_=error="Experimental owner history could not begin."; return false;
     }
@@ -25,14 +25,17 @@ bool Timeline::start(TimelineConfiguration configuration, std::string& error) {
     }
     return true;
 }
-bool Timeline::needs_local_input() const {
-    if (!started_ || !error().empty() || driver_.correcting() || driver_.scene_boundary_pending()) return false;
-    const auto next=std::uint64_t(frontier_)+configuration_.input_delay;
-    return next < UINT32_MAX && inputs_.received_next(configuration_.local_owner)==next;
+bool Timeline::needs_local_input(bool live_lead) const {
+    if (!started_ || !error().empty() || driver_.scene_boundary_pending()) return false;
+    // Physical time must not rewind with the simulation. Permit a small,
+    // bounded live lead while correcting or waiting, not an unbounded queue
+    // of old controls after an outage. Historical samples remain immutable.
+    const auto limit=std::uint64_t(frontier_)+configuration_.input_delay+(live_lead ? 2 : 1);
+    return inputs_.received_next(configuration_.local_owner)<limit && limit<UINT32_MAX;
 }
-OwnerInputResult Timeline::sample_local(PackedInput input) {
-    if (!needs_local_input()) return OwnerInputResult::Rejected;
-    const auto frame=frontier_+configuration_.input_delay;
+OwnerInputResult Timeline::sample_local(PackedInput input,bool live_lead) {
+    if (!needs_local_input(live_lead)) return OwnerInputResult::Rejected;
+    const auto frame=inputs_.received_next(configuration_.local_owner);
     const auto result=inputs_.publish(frame,input);
     if (result==OwnerInputResult::Accepted && !stage(configuration_.local_owner,frame,input))
         return OwnerInputResult::Rejected;
@@ -44,6 +47,7 @@ bool Timeline::stage(std::uint8_t owner,std::uint32_t frame,PackedInput input) {
     if (pending.valid && (pending.frame!=frame || pending.input!=input)) {
         error_="Experimental pending input history conflicted or exceeded its bound."; return false;
     }
+    if(!pending.valid)++pending_counts_[owner];
     pending={frame,input,true}; return true;
 }
 OwnerInputResult Timeline::receive_authenticated(std::uint8_t peer,std::span<const std::uint8_t> bytes) {
@@ -65,15 +69,15 @@ bool Timeline::feed() {
     // temporary cursor. Keep them bounded in owner history, and feed when its
     // real admission window reaches them instead of dropping/re-dating them.
     const auto& state=driver_.statistics();
-    for (unsigned owner=0;owner<configuration_.simulation.players;++owner)
+    for (unsigned owner=0;owner<configuration_.simulation.players;++owner) if(pending_counts_[owner])
         for (auto& pending:pending_[owner]) if (pending.valid) {
-            if (pending.frame<state.confirmed_frames) { pending.valid=false; continue; }
+            if (pending.frame<state.confirmed_frames) { pending.valid=false;--pending_counts_[owner]; continue; }
             if (std::uint64_t(pending.frame)>std::uint64_t(state.next_frame)+48) continue;
             const auto result=driver_.receive(configuration_.simulation.epoch,owner,pending.frame,pending.input);
             if (result!=InputResult::Accepted && result!=InputResult::Duplicate) {
                 error_="Experimental driver rejected admitted owner input."; return false;
             }
-            pending.valid=false;
+            pending.valid=false;--pending_counts_[owner];
         }
     return true;
 }

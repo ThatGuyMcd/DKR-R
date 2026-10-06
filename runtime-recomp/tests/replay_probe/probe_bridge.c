@@ -23,10 +23,12 @@ typedef struct {
     unsigned last_line;
     unsigned inherited_depth;
     unsigned native_callbacks;
+    dkr_probe_memory_guard memory_guard;
 } ProbeFrame;
 enum { DKR_PROBE_NATIVE_DEPTH = 4 };
 static ProbeFrame probe_frames[DKR_PROBE_NATIVE_DEPTH];
 static unsigned probe_frame;
+dkr_probe_memory_guard* dkr_probe_memory_guard_current;
 #define probe probe_frames[probe_frame]
 static dkr_probe_mod_service mod_service;
 static void* mod_user;
@@ -71,7 +73,10 @@ static void check_watch(void) {
 void dkr_probe_block(const char* operation) {
     if (!probe.active) abort();
     probe.result.blocked = operation;
-    dkr_probe_boss_diagnostic_failure(&probe.result, probe.context);
+    // This is a normal transactional prediction fence, not a guest fault.
+    // Do not consume the bounded boss-failure diagnostics on an expected retry.
+    if(strcmp(operation,"resource-confirmation-required")!=0)
+        dkr_probe_boss_diagnostic_failure(&probe.result, probe.context);
     longjmp(probe.boundary, 1);
 }
 int dkr_probe_diagnostic_read(uint8_t* ram, uint32_t address, unsigned width, uint32_t* value) {
@@ -204,6 +209,9 @@ static dkr_probe_result run_frame(dkr_probe_entry entry, uint8_t* ram, size_t by
         return rejected;
     }
     probe.active = 1;
+    probe.memory_guard=(dkr_probe_memory_guard){ram,bytes,budget,&probe.result.operations,
+        &probe.result.memory_accesses,probe.watch_address!=0};
+    dkr_probe_memory_guard_current=&probe.memory_guard;
     if (setjmp(probe.boundary) == 0) {
         entry(ram, context);
         check_watch();
@@ -211,6 +219,7 @@ static dkr_probe_result run_frame(dkr_probe_entry entry, uint8_t* ram, size_t by
         probe.result.completed = 1;
     }
     probe.active = 0;
+    dkr_probe_memory_guard_current=NULL;
     if (fesetenv(&probe.environment) != 0) {
         probe.result.completed = 0;
         probe.result.blocked = "floating-environment-restore-failed";
@@ -237,6 +246,7 @@ dkr_probe_result dkr_probe_run_native(dkr_probe_entry entry,uint8_t* ram,struct 
     probe.native_callbacks=0;probe.watch_address=parent->watch_address;
     const dkr_probe_result result=run_frame(entry,ram,bytes,context,remaining);
     --probe_frame;
+    dkr_probe_memory_guard_current=&parent->memory_guard;
     // Charge the SAME root budget. Recursing through native callbacks cannot
     // obtain another budget or bypass the aggregate guest-stack bound.
     parent->result.operations+=result.operations;

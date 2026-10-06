@@ -46,6 +46,9 @@ struct TickOutput {
     // A scene change is a reversible intent until commit, never a load/free
     // performed while speculation is running. Do not simulate beyond it.
     bool scene_boundary = false;
+    // Stop BEFORE a resource operation; restore the partial tick and retry
+    // only after its input and all previous ticks have been confirmed.
+    bool confirmation_required = false;
 };
 enum class RestoreStep { Ready, Pending, Failed };
 
@@ -58,6 +61,10 @@ public:
     // speculative history. This is an adapter policy, not a global lockstep
     // setting: the default gameplay policy retains prediction and rollback.
     virtual bool requires_confirmed_tick() const { return false; }
+    // Dependencies of THIS next tick, derived only from checkpointed state.
+    // Actual receipt/confirmation still covers every owner. Ignored controller
+    // ports need not trigger a correction of a host-controlled menu animation.
+    virtual std::uint8_t input_dependencies() const {return 15;}
     // Called only after input admission, before tick/checkpoint mutation.
     // Resource-changing ticks can retire render work and wait without blocking
     // networking/UI. Pending must not change the checkpointed world.
@@ -122,6 +129,7 @@ struct Statistics {
     // Non-rewinding diagnostic: a pending presentation wait must not rebuild
     // and hash the same full checkpoint at the UI/polling frequency.
     std::uint32_t restore_checkpoint_loads = 0U;
+    std::uint32_t resource_fences = 0U;
     std::size_t checkpoint_bytes = 0U;
 };
 
@@ -143,6 +151,7 @@ public:
     const std::string& error() const { return error_; }
     bool active() const { return active_ && error_.empty(); }
     bool correcting() const;
+    std::uint8_t missing_input_mask() const;
     bool scene_boundary_pending() const { return boundary_frame_ != UINT32_MAX || committed_boundary_; }
     static bool valid_contract(const SimulationContract& contract);
 
@@ -155,6 +164,7 @@ private:
         bool valid = false;
         bool simulated = false;
         std::uint8_t actual_mask = 0U;
+        std::uint8_t dependencies = 15U;
         FrameInputs actual{};
         FrameInputs used{};
         TickOutput output{};
@@ -178,6 +188,8 @@ private:
     std::uint32_t dirty_frame_ = UINT32_MAX;
     std::uint32_t replay_goal_ = 0U;
     std::uint32_t boundary_frame_ = UINT32_MAX;
+    std::uint32_t resource_frame_ = UINT32_MAX;
+    bool resource_restore_pending_ = false;
     bool active_ = false;
     bool committed_boundary_ = false;
     std::string error_;

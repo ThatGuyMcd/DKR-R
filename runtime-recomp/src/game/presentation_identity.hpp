@@ -2,6 +2,7 @@
 
 #include "presentation_marker_policy.hpp"
 #include "hud_group_layout.hpp"
+#include "camera_clearance_policy.hpp"
 
 #include <algorithm>
 #include <array>
@@ -2322,6 +2323,7 @@ struct MatrixInterpolation {
     bool interpolate_tiles = false;
     bool procedural_water = false;
     std::uint8_t water_scroll_tag = 0U;
+    WorldProjection world_projection{};
 };
 
 MatrixInterpolation matrix_interpolation(

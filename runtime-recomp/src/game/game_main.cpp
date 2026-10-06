@@ -13,6 +13,7 @@
 #include "virtual_pak.hpp"
 #include "runtime_legacy_mods.hpp"
 #include "host_task_lifetime.hpp"
+#include "launcher_recovery_policy.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
 #include "runtime_enhancements.hpp"
@@ -1411,13 +1412,8 @@ int DkrMain(int argc, char** argv) {
             std::fprintf(stderr,
                          "[boot][stop] game stopped; returning to launcher\n");
             dkr::runtime::ui::reset_lifecycle_request();
-            bool software_launcher_return = owned_failed;
-#if defined(_WIN32)
-            // Both owned exit paths replace the retired game HWND and request
-            // an explicitly non-D3D9 launcher (D3D11 or bounded GDI fallback).
-            // Initial startup and legacy returns keep their existing path.
-            software_launcher_return = software_launcher_return || return_from_owned;
-#endif
+            const bool software_launcher_return = dkr::runtime::launcher_surface_recovery(
+                owned_failed, return_from_owned, !mod_failure.empty() || !save_failure.empty());
             const auto startup = dkr::runtime::ui::run_startup_screen(
                 static_cast<SDL_Window*>(
                     dkr::runtime::platform::sdl_window()),

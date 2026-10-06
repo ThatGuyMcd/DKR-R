@@ -28,6 +28,7 @@ private:
     std::array<std::size_t,7> base_counts_{};
     std::string fingerprint_;
     std::shared_ptr<const MusicLibrary> music_;
+    std::shared_ptr<const RuntimeSession> prepared_world_;
     std::shared_ptr<const AssetBank> augment(std::shared_ptr<const AssetBank>)const;
 };
 }

@@ -62,10 +62,24 @@ struct DirectSessionTestAccess {
             check(host.approve_join(p.sender_id,error));check(p.mods_approved && !p.mods_verified);
         }
         check(host.occupied_players()==1 && counters->retained==3);
+        // Bounded independent bursts; control remains ahead of bulk packets.
+        std::vector<std::uint8_t> mod_bytes(826,7);
+        for(auto sender:{201U,202U,203U}) {
+            for(unsigned packet=0;packet<8;++packet) {
+                mod_bytes[0]=static_cast<std::uint8_t>(packet); // Distinct offsets, not coalesced retries.
+                check(host.send_mod_packet(sender,mod_bytes,true,error));
+            }
+            check(!host.send_mod_packet(sender,mod_bytes,true,error) && error.empty());
+            check(host.send_mod_packet(sender,mod_bytes,false,error));
+            check(!host.send_mod_packet(sender,mod_bytes,false,error) && error.empty());
+        }
+        check(host.bulk_outbound_.size()==24);
+        host.bulk_outbound_.clear();host.normal_priority_outbound_.clear();
         check(!host.complete_mod_admission(201,wrong,error));check(host.occupied_players()==1);
         protocol::Datagram data;data.header.type=protocol::MessageType::ModControl;data.payload={1,2,3};
         check(host.handle_mod_packet_locked(999,data));check(host.mod_inbound_.empty());
         for(unsigned i=0;i<100;++i)check(host.handle_mod_packet_locked(201,data));
+        check(host.pending_by_sender(201)->last_seen.time_since_epoch().count()!=0);
         check(host.mod_inbound_.size()==32 && host.state_==ConnectionState::Hosting);
         DirectSession::ModPacket taken;check(host.take_mod_packet(taken)&&taken.sender==201&&!taken.data);
         check(host.complete_mod_admission(201,digest,error));check(host.occupied_players()==2);

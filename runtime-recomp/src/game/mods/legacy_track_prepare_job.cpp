@@ -31,7 +31,7 @@ Bytes reconstruct(View source,View patch) {
 }
 static void prepare_imported_content(const std::filesystem::path& review,
     const std::vector<std::filesystem::path>& owned_roms,
-    const std::filesystem::path& destination,const ProgressCallback& progress,bool characters) {
+    const std::filesystem::path& destination,const ProgressCallback& progress,bool characters,const ImportPreparation* preparation) {
     using nlohmann::json;
     if(owned_roms.empty() || owned_roms.size()>8)throw Error("Track preparation needs its imported source Game Pak.");
     directory(review);directory(review/"patches");directory(destination.parent_path());
@@ -46,11 +46,8 @@ static void prepare_imported_content(const std::filesystem::path& review,
         throw Error("Unsupported saved review state.");
     const auto& packages=parsed.at("packages");
     if(!packages.is_array() || packages.empty() || packages.size()>32)throw Error("Invalid saved package count.");
-    std::map<std::string,Bytes> bases;
-    for(const auto& path:owned_roms) {
-        auto rom=read_file(path,MaxImage);canonicalize_rom(rom);
-        bases.try_emplace(verified_revision(rom),std::move(rom));
-    }
+    auto local=preparation?ImportPreparation{}:load_import_sources(owned_roms);
+    const auto& bases=preparation?preparation->bases:local.bases;
     if(!std::filesystem::create_directory(destination))throw Error("Refusing to overwrite prepared content.");
     bool complete=false;
     struct Cleanup {
@@ -71,8 +68,11 @@ static void prepare_imported_content(const std::filesystem::path& review,
         if(sha256(patch)!=patch_id)throw Error("The saved patch failed its integrity check.");
         if(!bases.contains(revision))throw Error("Import the exact source revision before preparing this content.");
         const auto& base=bases.at(revision);
-        const auto target=reconstruct(base,patch);
-        const auto analysis=analyze(base,target,patch_id);
+        const bool shared=preparation && preparation->analysis.patch_digest==patch_id &&
+            preparation->analysis.source_revision==revision && !preparation->target.empty();
+        const auto reconstructed=shared?Bytes{}:reconstruct(base,patch);
+        const View target=shared?View(preparation->target):View(reconstructed);
+        const auto analysis=shared?preparation->analysis:analyze(base,target,patch_id);
         std::string details;
         for(const auto& note:analysis.notes){if(!details.empty())details+=' ';details+=note;}
         if(details.empty())details="Asset-only conversion; native game behaviour is retained.";
@@ -150,11 +150,11 @@ static void prepare_imported_content(const std::filesystem::path& review,
     complete=true;
 }
 void prepare_imported_tracks(const std::filesystem::path& review,const std::vector<std::filesystem::path>& roms,
-    const std::filesystem::path& destination,const ProgressCallback& progress) {
-    prepare_imported_content(review,roms,destination,progress,false);
+    const std::filesystem::path& destination,const ProgressCallback& progress,const ImportPreparation* preparation) {
+    prepare_imported_content(review,roms,destination,progress,false,preparation);
 }
 void prepare_imported_characters(const std::filesystem::path& review,const std::vector<std::filesystem::path>& roms,
-    const std::filesystem::path& destination,const ProgressCallback& progress) {
-    prepare_imported_content(review,roms,destination,progress,true);
+    const std::filesystem::path& destination,const ProgressCallback& progress,const ImportPreparation* preparation) {
+    prepare_imported_content(review,roms,destination,progress,true,preparation);
 }
 }

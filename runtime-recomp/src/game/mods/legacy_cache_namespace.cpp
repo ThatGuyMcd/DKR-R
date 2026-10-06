@@ -6,10 +6,6 @@
 
 namespace dkr::mods {
 namespace {
-std::uint32_t capacity(CacheKind kind) {
-    switch(kind) {case CacheKind::Texture:return 700;case CacheKind::Sprite:return 100;case CacheKind::Model:return 70;}
-    throw Error("Unknown guest cache type.");
-}
 std::size_t physical(View words,std::uint32_t address,std::size_t length) {
     const auto start=std::size_t(address&0x1fffffff);
     if((address&0xe0000000U)!=0x80000000U || address%4 || words.size()%4 ||
@@ -25,6 +21,17 @@ std::uint32_t word(View words,std::uint32_t address) {
 std::string text_hash(const std::string& value) {
     return sha256(View(reinterpret_cast<const std::uint8_t*>(value.data()),value.size()));
 }
+}
+CacheNamespace::CacheNamespace(const AssetBank& boot)
+    :capacities_(legacy_asset_cache_capacities(boot.augmented(),
+        boot.record_count(2),boot.record_count(4),boot.record_count(12),boot.record_count(29))) {}
+std::uint32_t CacheNamespace::capacity(CacheKind kind)const {
+    switch(kind) {
+    case CacheKind::Texture:return capacities_[0];
+    case CacheKind::Sprite:return capacities_[1];
+    case CacheKind::Model:return capacities_[2];
+    }
+    throw Error("Unknown guest cache type.");
 }
 CacheContent::CacheContent(std::shared_ptr<const AssetBank> bank,std::shared_ptr<const AssetBus::Mount> mount)
     :bank_(std::move(bank)),mount_(std::move(mount)) {
@@ -70,7 +77,9 @@ CacheNamespace::Plan CacheNamespace::prepare(View words,std::span<const GuestCac
     for(const auto& table:tables) {
         if(!kinds.insert(table.kind).second) throw Error("Duplicate guest cache table.");
         const auto count=word(words,table.count_address),base=word(words,table.pointer_address);
-        if(count>capacity(table.kind)) throw Error("Guest cache exceeds its allocated capacity.");
+        const auto allocated=capacity(table.kind);
+        if(count>allocated) throw Error("Guest cache kind "+std::to_string(static_cast<unsigned>(table.kind))+
+            " count "+std::to_string(count)+" exceeds its boot-allocated capacity "+std::to_string(allocated)+".");
         remember(table.count_address,count,count);remember(table.pointer_address,base,base);
         if(!count) continue;
         physical(words,base,count*8);
@@ -125,9 +134,9 @@ Bytes CacheNamespace::checkpoint()const {
 CacheNamespace CacheNamespace::stage_checkpoint(View bytes,
     const std::map<std::string,std::shared_ptr<CacheContent>>& owners)const {
     CheckpointReader in(bytes);if(in.u32()!=1)throw Error("Unsupported cache checkpoint schema.");
-    CacheNamespace staged;staged.generation_=in.u64();
+    CacheNamespace staged;staged.capacities_=capacities_;staged.generation_=in.u64();
     if(staged.generation_==std::numeric_limits<std::uint64_t>::max())throw Error("Cache checkpoint generation is exhausted.");
-    const auto count=in.bounded(870);
+    const auto count=in.bounded(capacities_[0]+capacities_[1]+capacities_[2]);
     for(unsigned i=0;i<count;++i) {
         const auto kind=static_cast<CacheKind>(in.bounded(2));const auto slot=in.u32();
         Entry entry;entry.pointer=in.u32();entry.legacy_id=in.u32();entry.identity=in.text(64);const auto owner=in.text(64);

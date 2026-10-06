@@ -17,6 +17,10 @@ public:
         std::vector<Bytes> shared_textures={},CourseAugmentation courses={});
     const std::shared_ptr<const AssetBank>& boot_bank()const{return boot_;}
     void admit(PreparedTrack track);
+    // A stopped, pristine preparation world can supply immutable assets only.
+    // The new world has its own bus, resident state, caches and replay fencing.
+    std::shared_ptr<RuntimeSession> instantiate()const;
+    std::size_t prepared_bytes()const;
     // Explicit identity is required even if the carrier matches a loaded scene.
     // An empty identity means the ORIGINAL course, never "keep the last mod".
     void request(std::string content_id,unsigned carrier);
@@ -43,6 +47,8 @@ public:
     ReplayRestore stage_checkpoint(View bytes)const;
     bool commit_checkpoint(ReplayRestore&&);
 private:
+    struct PreparedCopy {};
+    RuntimeSession(const RuntimeSession& source,PreparedCopy);
     std::shared_ptr<const AssetBank> stock_;
     std::shared_ptr<const CharacterNamespace> characters_;
     std::vector<Bytes> shared_textures_;
