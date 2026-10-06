@@ -1,14 +1,16 @@
 #include "recomp.h"
 #include "probe_bridge.h"
 #include "probe_presentation.h"
+#include "../../src/game/camera_clearance_metadata.h"
 #include <string.h>
 #include <math.h>
 
 /* Patch Pipeline hook adapter. Observations are private/checkpoint-owned;
    no local setting, native submission registry, scheduler or device is read. */
 static uint32_t a[24];
+static uint32_t presentation_addresses[8];
 static unsigned depth,overflow,camera_identity,sky;
-static struct {uint32_t object,identity,first,camera;dkr_owned_lifetime* life;} objects[DKR_OWNED_OBJECT_DEPTH];
+static struct {uint32_t object,identity,first,camera,projection[3];dkr_owned_lifetime* life;} objects[DKR_OWNED_OBJECT_DEPTH];
 static unsigned wave,viewport,block,selection,selection_valid;
 static uint32_t transition_matrix;
 static uint32_t segment=UINT32_MAX,segment_pass;
@@ -31,14 +33,30 @@ static void marker(uint8_t* rdram,uint32_t holder,unsigned mode,unsigned token,u
     dkr_owned_draw_event e={DKR_OWNED_GEOMETRY,p,token,{0}};
     e.parameters[0]=mode;e.parameters[1]=variant;emit(&e);
 }
-static void matrix(uint32_t p,uint32_t identity,unsigned flags,unsigned weak,uint32_t scene,unsigned tag,dkr_owned_emit emit) {
+static void world_projection(uint8_t* rdram,uint32_t out[3]) {
+    memset(out,0,3*sizeof(*out));
+    const uint32_t header=read32(rdram,a[8]);if(!valid(header,0xA0,4))return;
+    float w[3];
+    for(unsigned i=0;i<3;++i){const uint32_t bits=read32(rdram,a[23]+i*16+12);memcpy(&w[i],&bits,4);}
+    const int perspective=isfinite(w[0])&&isfinite(w[1])&&isfinite(w[2])&&
+        (w[0]*w[0]+w[1]*w[1]+w[2]*w[2])>0.01f;
+    const uint32_t layout=read32(rdram,a[4]);
+    if(!dkr_world_projection_eligible((int32_t)read32(rdram,presentation_addresses[1]),
+        MEM_BU(0x4C,addr(header)),layout,perspective))return;
+    const uint32_t authored=MEM_BU(0x9C,addr(header)),effective=read32(rdram,a[15]);
+    if(!authored||!dkr_world_projection_metadata_valid(authored,effective,layout))return;
+    out[0]=authored;out[1]=effective;out[2]=layout;
+}
+static void matrix(uint32_t p,uint32_t identity,unsigned flags,unsigned weak,uint32_t scene,unsigned tag,
+    const uint32_t projection[3],dkr_owned_emit emit) {
     if(!valid(p,64,8))return;
     dkr_owned_draw_event e={DKR_OWNED_MATRIX,p,identity,{0}};
-    e.parameters[0]=flags;e.parameters[1]=weak;e.parameters[2]=scene;e.parameters[3]=tag;emit(&e);
+    e.parameters[0]=flags;e.parameters[1]=weak;e.parameters[2]=scene;e.parameters[3]=tag;
+    if(projection)memcpy(e.parameters+4,projection,3*sizeof(*projection));emit(&e);
     if(sky){e.kind=DKR_OWNED_SKY_MATRIX;e.token=0;memset(e.parameters,0,sizeof(e.parameters));emit(&e);}
 }
 void dkr_probe_parity_begin(void) {
-    dkr_probe_parity_addresses(a);depth=overflow=camera_identity=sky=0;
+    dkr_probe_parity_addresses(a);dkr_probe_presentation_addresses(presentation_addresses);depth=overflow=camera_identity=sky=0;
     wave=viewport=block=selection=selection_valid=0;segment=UINT32_MAX;transition_matrix=0;
     segment_active=surface_active=shadow_active=billboard_active=0;
     widget_active=map_active=rect_active=colour_changed=text_active=text_bias=0;
@@ -89,7 +107,8 @@ static void camera(uint8_t* rdram,uint32_t ref,unsigned role,dkr_owned_identity_
     /* FinishCameraShot stores zero observations outside its finish camera. */
     c->shot_owner=mode==7?c->owner:0;c->shot_node=mode==7?c->node:0;c->mode=mode;
     camera_identity=dkr_probe_camera_identity(s->scene,(unsigned)slot,c->epoch,2);
-    matrix(p,dkr_probe_camera_identity(s->scene,(unsigned)slot,c->epoch,role),0,0,s->scene,0,emit);
+    uint32_t projection[3]={0};if(role==1)world_projection(rdram,projection);
+    matrix(p,dkr_probe_camera_identity(s->scene,(unsigned)slot,c->epoch,role),0,0,s->scene,0,projection,emit);
 }
 static void hud_frame(uint8_t* rdram) {
     hud_layout=read32(rdram,a[5]);unsigned players=MEM_BU(0,addr(a[6])),session=read32(rdram,a[7]);
@@ -155,13 +174,14 @@ int dkr_probe_parity_hook(const char* name,uint8_t* rdram,recomp_context* ctx,dk
         uint32_t ref=(uint32_t)MEM_W(0x24,ctx->r29);if(!valid(ref,4,4))return 1;
         uint32_t first=read32(rdram,ref);if(!valid(first,64,8))return 1;
         objects[n].object=object;objects[n].life=l;objects[n].first=first;objects[n].camera=camera_identity;
+        world_projection(rdram,objects[n].projection);
         objects[n].identity=dkr_probe_object_identity(s->scene,object,l->generation,MEM_HU(0x4A,addr(object)),MEM_HU(0x48,addr(object)));return 1;
     }
     if(strcmp(name,"dkr_presentation_object_end")==0) {
         if(overflow){--overflow;return 1;}if(!depth)return 1;unsigned n=--depth;
         uint32_t end=read32(rdram,a[12]),first=objects[n].first;
         if(!objects[n].identity||end<first||(end-first)%64||(end-first)/64>256)return 1;
-        for(unsigned i=0;i<(end-first)/64;++i)matrix(first+i*64,dkr_probe_matrix_identity(objects[n].identity,i,objects[n].camera),0,1,s->scene,0,emit);return 1;
+        for(unsigned i=0;i<(end-first)/64;++i)matrix(first+i*64,dkr_probe_matrix_identity(objects[n].identity,i,objects[n].camera),0,1,s->scene,0,objects[n].projection,emit);return 1;
     }
     if(strcmp(name,"dkr_presentation_wave_begin")==0){wave=1;viewport=(uint32_t)ctx->r6;block=selection_valid=0;return 1;}
     if(strcmp(name,"dkr_presentation_wave_end")==0){wave=block=selection_valid=0;return 1;}
@@ -170,9 +190,10 @@ int dkr_probe_parity_hook(const char* name,uint8_t* rdram,recomp_context* ctx,dk
     if(strcmp(name,"dkr_presentation_wave_matrix")==0) {
         unsigned selected=selection_valid;selection_valid=0;uint32_t ref=(uint32_t)ctx->r5,t=(uint32_t)ctx->r6;
         if(wave&&block&&selected&&valid(ref,4,4)&&valid(t,16,4)){
+            uint32_t projection[3];world_projection(rdram,projection);
             uint32_t f[7]={read32(rdram,a[17]),read32(rdram,a[17]+0x28),selection,read32(rdram,t+0xC),read32(rdram,t),read32(rdram,t+4),read32(rdram,t+8)};
             matrix(read32(rdram,ref),dkr_probe_wave_identity(s->scene,viewport,block,f,camera_identity),15,0,s->scene,
-                dkr_probe_water_tag(read32(rdram,a[18]),read32(rdram,a[19])),emit);}
+                dkr_probe_water_tag(read32(rdram,a[18]),read32(rdram,a[19])),projection,emit);}
         return 1;
     }
     if(strcmp(name,"dkr_level_segment_interpolation_begin")==0){segment=(uint32_t)ctx->r4;segment_pass=ctx->r5!=0;segment_active=0;return 1;}
@@ -195,7 +216,7 @@ int dkr_probe_parity_hook(const char* name,uint8_t* rdram,recomp_context* ctx,dk
         if(token){marker(rdram,(uint32_t)ctx->r17,mode,token,variant,emit);billboard_active=1;}return 1;
     }
     if(strcmp(name,"dkr_vehicle_part_matrix_identity")==0) {
-        if(depth&&!overflow&&objects[depth-1].life){uint32_t ref=(uint32_t)MEM_W(0x64,ctx->r29);if(valid(ref,4,4))matrix(read32(rdram,ref),dkr_probe_part_identity(objects[depth-1].identity,0,(uint32_t)ctx->r16,MEM_W(0x30,ctx->r29)==0,objects[depth-1].camera),0,0,s->scene,0,emit);}return 1;
+        if(depth&&!overflow&&objects[depth-1].life){uint32_t ref=(uint32_t)MEM_W(0x64,ctx->r29);if(valid(ref,4,4))matrix(read32(rdram,ref),dkr_probe_part_identity(objects[depth-1].identity,0,(uint32_t)ctx->r16,MEM_W(0x30,ctx->r29)==0,objects[depth-1].camera),0,0,s->scene,0,objects[depth-1].projection,emit);}return 1;
     }
     if(strcmp(name,"dkr_vehicle_part_interpolation_end")==0){if(billboard_active)marker(rdram,(uint32_t)ctx->r17,0,0,0,emit);billboard_active=0;return 1;}
     if(strcmp(name,"dkr_shadow_interpolation_begin")==0) {

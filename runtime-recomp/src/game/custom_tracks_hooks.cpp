@@ -4,6 +4,7 @@
 #endif
 
 #include "game_payload.hpp"
+#include "runtime_legacy_mods.hpp"
 #include "revision_addresses.hpp"
 #include "rom_revision.hpp"
 
@@ -263,6 +264,9 @@ static void publish_extended_table(std::uint8_t* rdram, recomp_context* context,
 // appended levels need - the sizing is idempotent past boot.
 extern "C" void dkr_custom_tracks_extend_table(std::uint8_t* rdram, recomp_context* context,
                                                std::uint32_t requested) {
+    // This namespace is already extended against the frozen host manifest.
+    // Never append the local offline catalogue a second time.
+    if(dkr::runtime::legacy::frozen_online_resources())return;
     // The normal experimental lobby temporarily binds an offline constructor
     // while parking retail pre-INTRO state. Installed offline .dkrmap tracks
     // must not enter that checkpoint or resize its retail display-list heaps.
@@ -387,6 +391,7 @@ extern "C" void dkr_custom_tracks_asset_load_end(std::uint8_t* rdram,
 
 namespace {
 bool apply_custom_payload(std::uint8_t* rdram,const AssetLoadRequest& request) {
+    if(dkr::runtime::legacy::frozen_online_resources())return false;
     if (owned_vanilla_bootstrap()) return false;
     Section section = Section::LevelHeaders;
     if (!section_for_data(request.section, section) || request.size <= 0 ||
@@ -472,6 +477,7 @@ bool apply_custom_payload(std::uint8_t* rdram,const AssetLoadRequest& request) {
 // them or introducing a second way to pick a level.
 extern "C" void dkr_custom_tracks_track_id_override(std::uint8_t*,
                                                      recomp_context* context) {
+    if (dkr::runtime::legacy::frozen_online_resources()) return;
     if (owned_vanilla_bootstrap()) return;
     const std::int32_t armed = dkr::runtime::custom_tracks::track_override();
     if (armed == dkr::runtime::custom_tracks::kNoTrackOverride) {
@@ -486,6 +492,7 @@ extern "C" void dkr_custom_tracks_track_id_override(std::uint8_t*,
 // and load_level_game - instead of this file reproducing it.
 extern "C" void dkr_custom_tracks_auto_boot(std::uint8_t* rdram,
                                               recomp_context* context) {
+    if (dkr::runtime::legacy::frozen_online_resources()) return;
     if (owned_vanilla_bootstrap()) return;
 #if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
     if (dkr_private_replay_boot(rdram, context)) return;
@@ -751,6 +758,7 @@ void dkr::runtime::custom_tracks::set_level_load_observer(LevelLoadObserver obse
 // so this is where a .dkrmap level gets its pool and its model heap.
 extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram,
                                                  recomp_context* context) {
+    if(dkr::runtime::legacy::frozen_course_hook("prepare_memory",rdram,context))return;
     if (owned_vanilla_bootstrap()) {
         // A previous offline Track Lab song must not survive a vanilla online
         // boot. The observer's no-level branch clears only native bindings.
@@ -794,8 +802,9 @@ extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram,
 // rmonPrintf. Anything other than the retail constant in s5 means this is not
 // the instruction this code believes it is - a revision whose prologue differs
 // keeps the retail heap instead of having a register it misread overwritten.
-extern "C" void dkr_custom_tracks_track_heap(std::uint8_t*,
+extern "C" void dkr_custom_tracks_track_heap(std::uint8_t* rdram,
                                              recomp_context* context) {
+    if(dkr::runtime::legacy::frozen_course_hook("track_heap",rdram,context))return;
     if (owned_vanilla_bootstrap()) return;
     const std::int32_t wanted = g_track_heap_bytes;
     g_track_heap_bytes = 0;
@@ -830,6 +839,7 @@ extern "C" void dkr_custom_tracks_track_heap(std::uint8_t*,
 // heap is left to level_load's hook, which this load reaches next.
 extern "C" void dkr_custom_tracks_prepare_level(std::uint8_t* rdram,
                                                 recomp_context* context) {
+    if(dkr::runtime::legacy::frozen_course_hook("prepare_level",rdram,context))return;
     if (owned_vanilla_bootstrap()) return;
     const auto level = static_cast<std::int32_t>(context->r4);
     // The heap alloc_displaylist_heap is about to build comes out of the pool.
@@ -855,6 +865,7 @@ extern "C" void dkr_custom_tracks_prepare_level(std::uint8_t* rdram,
 // Track Select retain their choices. Also covers L+Z and switching test tracks.
 extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram,
                                                   recomp_context* context) {
+    if(dkr::runtime::legacy::frozen_online_resources())return;
     if (owned_vanilla_bootstrap()) return;
     namespace addresses = dkr::runtime::revision_addresses;
     const auto level = static_cast<std::int32_t>(context->r4);

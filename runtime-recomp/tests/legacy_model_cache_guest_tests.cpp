@@ -2,6 +2,7 @@
 #include "legacy_character_menu.hpp"
 #include "recomp.h"
 #include "legacy_heap_policy.hpp"
+#include "legacy_asset_capacity.hpp"
 #include <iostream>
 using namespace dkr::mods;
 extern "C" void object_model_init(std::uint8_t*,recomp_context*);
@@ -48,6 +49,8 @@ extern "C" void model_anim_init(std::uint8_t*,recomp_context* c){c->r2=fail==Ani
 extern "C" void free_model_data(std::uint8_t*,recomp_context*){++cleanups;}
 extern "C" void stubbed_printf(std::uint8_t*,recomp_context*){}
 extern "C" void dkr_legacy_heap_capacity(std::uint8_t*,recomp_context* c){c->r15=std::int32_t(legacy_heap_end(unsigned(c->r15),memory.size(),custom_session));}
+extern "C" std::uint32_t dkr_legacy_asset_cache_capacity(std::uint8_t*,recomp_context*,unsigned kind){return legacy_asset_cache_capacities(custom_session,512,512,100,512).at(kind);}
+extern "C" void dkr_legacy_asset_cache_guard(std::uint8_t* ram,recomp_context* c,unsigned kind,std::uint32_t index){if(index>=dkr_legacy_asset_cache_capacity(ram,c,kind))throw Error("Model cache guard");}
 extern "C" void mempool_init(std::uint8_t*,recomp_context* c){heap_base=unsigned(c->r4);heap_bytes=unsigned(c->r5);heap_slots=unsigned(c->r6);}
 extern "C" void mempool_free_timer(std::uint8_t*,recomp_context*){}
 extern "C" void do_break(std::uint32_t){throw Error("Native arithmetic break");}
@@ -69,6 +72,10 @@ int main(){try{
  }
  auto c=context();c.r4=0;model_instance_init(memory.data(),&c);
  check(c.r2==0 && unsigned(c.r29)==Stack,"NULL model did not fail safely");
+ custom_session=true;reset(false);fail=None;
+ for(unsigned id=0;id<100;++id){c=context();c.r4=id;object_model_init(memory.data(),&c);
+  check(c.r2!=0 && g.read(Count)==id+1,"Expanded model cache stopped at the retail 70-model limit");}
+ check(g.read(Cache+99*8)==99,"Expanded model identity was corrupted");
  for(bool custom:{false,true}){
   custom_session=custom;c=context();mempool_init_main(memory.data(),&c);
   check(heap_base+heap_bytes==(custom?0x80800000U:0x80400000U),"Wrong native main-pool extent");

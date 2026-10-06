@@ -126,6 +126,7 @@ int main(){try {
  roster=std::make_unique<CharacterRoster>(assets);roster->request(0,assets->characters[0].id);roster->request(1,assets->characters[1].id);
  roster->commit(std::array<std::uint8_t,4>{3,3,3,3},4);auto c=context();
  presentation.initialize(memory,c,calls,assets->characters,std::array<std::uint32_t,2>{0x18000000,0x19000000});
+ for(unsigned i=0;i<2;++i)presentation.prepare(memory,c,calls,assets->characters,i,0x18000000+i*0x1000000,true);
  for(unsigned i=0;i<8;++i){g.write(Settings+0x59+24*i,5,1);g.write(Settings+0x5a+24*i,i,1);}
  for(unsigned selected=0;selected<4;++selected)for(bool time_trial:{false,true}) {
   trial=time_trial;g.write(Settings+0x114,selected,1);g.write(PostRace,10);g.write(ResultObjects,0xffff,2);
@@ -218,5 +219,25 @@ int main(){try {
   check(g.read(hud+12)==0x42480000 && g.read(hud+16)==0x42700000,"HUD draw leaked a coordinate adjustment");
   check(g.read(Cache+asset*4)!=0,"HUD asset retry was not cached");
  }
+ // Exercise the high u16 token range through the actual native voice entry,
+ // spatial wrapper and direct playback, not only a synthetic encoder.
+ for(unsigned i=2;i<MaxEnabledCharacters;++i) {
+  auto a=assets->characters[1];const auto label=std::to_string(i);
+  a.id=sha256(View(reinterpret_cast<const std::uint8_t*>(label.data()),label.size()));assets->characters.push_back(std::move(a));
+ }
+ roster=std::make_unique<CharacterRoster>(assets);roster->request(0,assets->characters.back().id);
+ roster->commit(std::array<std::uint8_t,1>{3},1);
+ std::vector<std::uint32_t> samples(assets->characters.size(),0x18000000);
+ presentation=CharacterPresentation{};c=context();presentation.initialize(memory,c,calls,assets->characters,samples);
+ presentation.prepare(memory,c,calls,assets->characters,MaxEnabledCharacters-1,samples.back(),true);
+ g.write(Racer,0,2);g.write(Racer+0x24,0);g.write(Racer+0x28,0,2);g.write(Racer+0x108,0);random_value=7;
+ c=context();c.r4=ptr(Object);c.r5=0x1c2;c.r6=8;c.r7=0;play_random_character_voice(memory.data(),&c);
+ const auto token=character_race_sound(MaxEnabledCharacters-1,15);
+ check(last_sound==token && token>0x8000,"High library ordinal was truncated by native spatial voice dispatch");
+ g.write(0x80330000,token,2);c=context();c.r4=g.read(0x80330000,2);c.r5=ptr(0x80330004);sound_play_direct(memory.data(),&c);
+ check(last_sound==16,"Queued high u16 sound token did not reach its private voice bank");
+ check(presentation.cinematic_id(*roster,assets->characters,0,3)==64,"Cinematic token leaked a large library ordinal into a byte");
+ check(presentation.cinematic_portrait(64)==presentation.portrait(*roster,assets->characters,0),"Large library lost its cinematic portrait");
+ const auto saved=presentation.checkpoint();check(presentation.stage_checkpoint(saved,assets->characters.size()).checkpoint()==saved,"Sparse guest presentation lost rollback ownership");
  std::cout<<checks<<" native portrait/voice/HUD pipeline checks passed (v"<<DKR_TEST_REVISION<<").\n";return 0;
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

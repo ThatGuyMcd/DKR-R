@@ -45,8 +45,8 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     const std::filesystem::path& config,const std::filesystem::path& rom,bool online,
     const LaunchProgress& progress,std::stop_token stop) {
     auto out=std::make_shared<PreparedModLaunch>();
-    // No catalogue reads or asset allocation online. The accepted network
-    // manifest, topology, saves and rollback system remain entirely stock.
+    // The offline catalog is never consulted for online launches. The lobby's
+    // separately verified, frozen RuntimeResources supply online assets.
     if(online)return out;
     const auto root=config/"mods"/"legacy";
     if(!TrackCatalog::has_enabled(root))return out;
@@ -56,7 +56,7 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     const auto stock=AssetBank::stock(std::move(bytes));
     report("Checking enabled character assets");
     auto characters=TrackCatalog::load_enabled_characters(root,stock);
-    if(characters.size()>MaxActiveStageCharacters)throw Error("This beta supports two extra active characters. Disable other characters in Mods / Hacks before starting.");
+    if(characters.size()>MaxActiveStageCharacters)throw Error("The character library exceeds the native presentation identity range.");
     std::shared_ptr<const CharacterNamespace> names;
     if(!characters.empty())names=std::make_shared<const CharacterNamespace>(allocate_characters(stock,std::move(characters)));
     report("Checking enabled custom courses");

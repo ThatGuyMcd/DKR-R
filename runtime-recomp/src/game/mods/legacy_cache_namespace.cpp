@@ -1,5 +1,6 @@
 #include "legacy_cache_namespace.hpp"
 #include "legacy_mod_dependencies.hpp"
+#include "legacy_checkpoint.hpp"
 #include <limits>
 #include <set>
 
@@ -111,5 +112,32 @@ bool CacheNamespace::apply(std::span<std::uint8_t> words,Plan&& plan) {
     }
     entries_.swap(plan.entries);++generation_;plan.authority=nullptr;
     return true;
+}
+Bytes CacheNamespace::checkpoint()const {
+    CheckpointWriter out;out.u32(1);out.u64(generation_);out.u32(static_cast<std::uint32_t>(entries_.size()));
+    for(const auto& [slot,entry]:entries_) {
+        if(!entry.owner)throw Error("Cache entry has lost its immutable owner.");
+        out.u32(static_cast<unsigned>(slot.first));out.u32(slot.second);out.u32(entry.pointer);out.u32(entry.legacy_id);
+        out.text(entry.identity,64);out.text(entry.owner->fingerprint(),64);
+    }
+    return std::move(out).finish();
+}
+CacheNamespace CacheNamespace::stage_checkpoint(View bytes,
+    const std::map<std::string,std::shared_ptr<CacheContent>>& owners)const {
+    CheckpointReader in(bytes);if(in.u32()!=1)throw Error("Unsupported cache checkpoint schema.");
+    CacheNamespace staged;staged.generation_=in.u64();
+    if(staged.generation_==std::numeric_limits<std::uint64_t>::max())throw Error("Cache checkpoint generation is exhausted.");
+    const auto count=in.bounded(870);
+    for(unsigned i=0;i<count;++i) {
+        const auto kind=static_cast<CacheKind>(in.bounded(2));const auto slot=in.u32();
+        Entry entry;entry.pointer=in.u32();entry.legacy_id=in.u32();entry.identity=in.text(64);const auto owner=in.text(64);
+        const auto found=owners.find(owner);
+        if(slot>=capacity(kind) || entry.pointer<0x80000000U || entry.pointer>0x807FFFFCU || (entry.pointer&3) ||
+           !checkpoint_digest(entry.identity) || found==owners.end() || !found->second ||
+           found->second->fingerprint()!=owner || found->second->identity(kind,entry.legacy_id)!=entry.identity ||
+           !staged.entries_.emplace(Slot{kind,slot},Entry{entry.pointer,entry.legacy_id,entry.identity,found->second}).second)
+            throw Error("Cache checkpoint refers to invalid or unadmitted content.");
+    }
+    in.end();return staged;
 }
 } // namespace dkr::mods

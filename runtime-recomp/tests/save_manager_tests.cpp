@@ -192,6 +192,56 @@ int main() {
     assert(dkr::runtime::saves::adventure_backups().size() ==
            backups_before_online);
 
+    // Modded host progress is keyed by the frozen manifest, never retail or
+    // another mod set; clients still use their authenticated session folder.
+    const std::string mod_a(64,'a'),mod_b(64,'b');
+    assert(!dkr::runtime::saves::prepare_host_online_adventure(
+        dkr::runtime::saves::OnlineSaveSeedMode::Fresh,seeded_online,error,"../escape"));
+    assert(!dkr::runtime::saves::prepare_host_online_adventure(
+        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error,mod_a));
+    assert(dkr::runtime::saves::prepare_host_online_adventure(
+        dkr::runtime::saves::OnlineSaveSeedMode::CopySinglePlayer,seeded_online,error,mod_a));
+    assert(seeded_online==single_player_before_online);
+    assert(dkr::runtime::saves::bind_staged_host_online_adventure(20,error));
+    assert(dkr::runtime::saves::read_online_adventure(true,20,activated_host,activated_host_path,error));
+    assert(activated_host_path==root/"saves"/"online"/"host"/"mod-profiles"/mod_a/"dkr.us.v77.bin");
+    assert(dkr::runtime::saves::commit_online_adventure(true,20,host_save,error));
+    assert(dkr::runtime::saves::previous_online_adventure_info(mod_a).valid);
+    assert(!dkr::runtime::saves::previous_online_adventure_info(mod_b).exists);
+    assert(dkr::runtime::saves::prepare_host_online_adventure(
+        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error,mod_a));
+    assert(seeded_online==host_save && read_bytes(host_online_info.path)==host_save);
+    dkr::runtime::saves::discard_staged_host_online_adventure();
+    assert(dkr::runtime::saves::prepare_host_online_adventure(
+        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error));
+    assert(seeded_online==host_save);
+    assert(read_bytes(dkr::runtime::saves::adventure_info().path)==single_player_before_online);
+
+    // Joining cannot grant any operation permission to replace personal saves.
+    dkr::runtime::saves::set_online_save_protection(true);
+    assert(!dkr::runtime::saves::reset_adventure(error));
+    assert(!dkr::runtime::saves::import_adventure(host_online_info.path, error));
+    assert(!dkr::runtime::saves::export_stored_adventure(host_online_info.path,
+        dkr::runtime::saves::adventure_info().path, error));
+    assert(!dkr::runtime::saves::export_bundle(dkr::runtime::saves::adventure_info().path, error));
+    assert(!dkr::runtime::saves::export_bundle(root / "save-history" / "controller-pak-1.mpk" / "history.bin", error));
+    assert(read_bytes(dkr::runtime::saves::adventure_info().path) == single_player_before_online);
+    std::vector<std::uint8_t> online_paks;
+    assert(dkr::runtime::saves::read_experimental_online_paks(false, match_id, online_paks, error));
+    assert(dkr::runtime::saves::commit_experimental_online_paks(false, match_id, online_paks, error));
+    // The deliberately rejected zero-id install cleared its output argument;
+    // the successful readback remains the authoritative client session path.
+    assert(std::filesystem::exists(readback_path.parent_path() / "experimental-controller-paks.bin"));
+    const auto inventory = dkr::runtime::saves::stored_adventures();
+    assert(std::any_of(inventory.begin(), inventory.end(), [](const auto& record) {
+        return record.scope == 1 && record.info.valid;
+    }));
+    assert(std::any_of(inventory.begin(), inventory.end(), [](const auto& record) {
+        return record.scope == 1 && record.info.valid &&
+            record.kind == dkr::runtime::saves::StoredSaveKind::ExperimentalPaks;
+    }));
+    dkr::runtime::saves::set_online_save_protection(false);
+
     dkr::runtime::saves::codec::SaveImage editable{};
     assert(dkr::runtime::saves::load_adventure(editable, error));
     editable.slots[0].name = "DKR";
@@ -216,6 +266,7 @@ int main() {
     assert(!dkr::runtime::saves::controller_pak_backups(0).empty());
     const auto exported_pak = root / "exported.mpk";
     assert(dkr::runtime::saves::export_controller_pak(0, exported_pak, error));
+    assert(!dkr::runtime::saves::export_controller_pak(0, dkr::runtime::saves::adventure_info().path, error));
 
     auto damaged_pak = valid_pak();
     damaged_pak[128] ^= 0x5A;

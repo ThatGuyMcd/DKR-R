@@ -1,5 +1,6 @@
 #include "legacy_track_artifact.hpp"
 #include "legacy_runtime_session.hpp"
+#include "legacy_checkpoint.hpp"
 #include <iostream>
 #include <chrono>
 
@@ -40,6 +41,24 @@ void session_tests(const std::shared_ptr<const AssetBank>& stock, const std::vec
     for(const auto& track:tracks)session.admit(track);
     session.begin_scene(memory,5);
     check(session.current_content().empty());check(memory==original_memory);
+    const auto stock_checkpoint=session.checkpoint();
+    // A rejected sidecar never changes its owner or guest memory. Include
+    // every truncated length, an alien boot identity and trailing fields.
+    for(std::size_t cut=0;cut<stock_checkpoint.size();++cut)
+        rejects([&]{session.stage_checkpoint(View(stock_checkpoint).first(cut));});
+    auto malformed=stock_checkpoint;malformed.push_back(0);
+    rejects([&]{session.stage_checkpoint(malformed);});
+    malformed=stock_checkpoint;malformed[8]=malformed[8]=='a'?'b':'a';
+    rejects([&]{session.stage_checkpoint(malformed);});
+    check(session.checkpoint()==stock_checkpoint && memory==original_memory);
+    {
+        auto lease=session.acquire();
+        rejects([&]{session.checkpoint();});
+        rejects([&]{session.stage_checkpoint(stock_checkpoint);});
+    }
+    RuntimeSession foreign(stock);
+    auto foreign_plan=foreign.stage_checkpoint(foreign.checkpoint());
+    check(!session.commit_checkpoint(std::move(foreign_plan)));
     rejects([&]{session.admit(tracks.front());});
     rejects([&]{session.request(std::string(64,'0'),5);});
     for(const auto& track:tracks) {
@@ -55,10 +74,37 @@ void session_tests(const std::shared_ptr<const AssetBank>& stock, const std::vec
         session.begin_scene(memory,track.root.carrier);
         check(session.current_content()==track.root.content_id);
         check(session.acquire().route()->directory()->fingerprint()==track.bank->fingerprint());
+        const auto custom_checkpoint=session.checkpoint(),custom_memory=memory;
+        const auto custom_scenes=session.published_scenes();
         // No request must return to stock, even for the exact same retail carrier.
         session.begin_scene(memory,track.root.carrier);
         check(session.current_content().empty());check(!session.acquire().route());
         check(memory==original_memory);
+        auto restore=session.stage_checkpoint(custom_checkpoint);
+        // Only the exclusive owned CPU caller restores RAM; committing this
+        // validated native sidecar cannot free/rewrite retained guest assets.
+        memory=custom_memory;
+        check(session.commit_checkpoint(std::move(restore)));
+        check(session.current_content()==track.root.content_id && session.published_scenes()==custom_scenes);
+        check(session.checkpoint()==custom_checkpoint && memory==custom_memory);
+        check(!session.commit_checkpoint(std::move(restore))); // exactly once
+        auto invalidated=session.stage_checkpoint(stock_checkpoint);
+        session.request("",track.root.carrier);
+        check(!session.commit_checkpoint(std::move(invalidated))); // request changed
+        check(memory==custom_memory && session.current_content()==track.root.content_id);
+        const auto requested_checkpoint=session.checkpoint();
+        session.begin_scene(memory,track.root.carrier);
+        check(memory==original_memory);
+        auto requested_restore=session.stage_checkpoint(requested_checkpoint);
+        memory=custom_memory;check(session.commit_checkpoint(std::move(requested_restore)));
+        check(session.checkpoint()==requested_checkpoint);
+        session.begin_scene(memory,track.root.carrier);
+        check(memory==original_memory);
+        auto stale=session.stage_checkpoint(stock_checkpoint);
+        auto latest=session.stage_checkpoint(stock_checkpoint);
+        check(session.commit_checkpoint(std::move(latest)));
+        check(!session.commit_checkpoint(std::move(stale))); // identical restored counters cannot revive old plans
+        check(session.checkpoint()==stock_checkpoint && memory==original_memory);
     }
     // Direct A -> B for the same carrier, then explicit stock, must not reuse A.
     for(const auto& a:tracks)for(const auto& b:tracks) {

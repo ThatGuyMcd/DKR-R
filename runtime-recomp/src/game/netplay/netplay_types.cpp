@@ -119,7 +119,11 @@ std::uint64_t manifest_hash(const CompatibilityManifest& manifest) {
     HashInteger(hash, manifest.simulation_rate);
     HashText(hash, manifest.architecture);
     HashText(hash, manifest.floating_point_mode);
+    HashText(hash, manifest.mod_manifest_hash);
     return hash;
+}
+bool valid_mod_manifest_hash(std::string_view hash) {
+    return hash.empty() || (hash.size()==64 && std::all_of(hash.begin(),hash.end(),[](char c){return (c>='0'&&c<='9') || (c>='a'&&c<='f');}));
 }
 
 std::string incompatibility_reason(const CompatibilityManifest& expected,
@@ -146,6 +150,10 @@ std::string incompatibility_reason(const CompatibilityManifest& expected,
     if (candidate.gameplay_settings_hash != expected.gameplay_settings_hash) {
         return "Gameplay settings do not match.";
     }
+    if (!valid_mod_manifest_hash(expected.mod_manifest_hash) || !valid_mod_manifest_hash(candidate.mod_manifest_hash) ||
+        candidate.mod_manifest_hash != expected.mod_manifest_hash) {
+        return "Gameplay mod manifests do not match.";
+    }
     if (candidate.session_save_hash != expected.session_save_hash) {
         return "Adventure save contents differ.";
     }
@@ -162,6 +170,16 @@ std::string incompatibility_reason(const CompatibilityManifest& expected,
 std::string online_failure_display_message(std::string_view message) {
     const std::size_t metadata = message.find('|');
     return std::string(message.substr(0U, metadata));
+}
+
+std::string session_content_sync_incompatibility(const CompatibilityManifest& expected,
+    const CompatibilityManifest& candidate,bool host_offers_mods) {
+    auto comparable=candidate;
+    comparable.session_save_hash=expected.session_save_hash;
+    if(host_offers_mods && !expected.mod_manifest_hash.empty() &&
+       valid_mod_manifest_hash(comparable.mod_manifest_hash))
+        comparable.mod_manifest_hash=expected.mod_manifest_hash;
+    return incompatibility_reason(expected,comparable);
 }
 
 OnlineFailure classify_online_failure(std::string_view message) {

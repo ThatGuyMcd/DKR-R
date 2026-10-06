@@ -26,6 +26,11 @@ public:
     // at those same IDs in every legacy scene, including its cache identities.
     static std::shared_ptr<const AssetBank> append_textures(
         std::shared_ptr<const AssetBank> bank,const std::vector<Bytes>& textures);
+    // Launch-only Track Lab namespace. Records must be contiguous after each
+    // current table; no existing record, executable or global data is replaced.
+    static std::shared_ptr<const AssetBank> append_courses(
+        std::shared_ptr<const AssetBank> bank,Overrides additions);
+    bool appended_courses()const{return courses_;}
     bool augmented() const {return augmented_;}
     std::size_t owned_override_bytes() const {
         std::size_t total=0;for(const auto& [key,bytes]:overrides_)total+=bytes.size();return total;
@@ -48,6 +53,7 @@ private:
     std::array<View,50> sections_;
     Overrides overrides_;
     bool augmented_=false;
+    bool courses_=false;
     std::array<std::size_t,50> counts_{};
 };
 

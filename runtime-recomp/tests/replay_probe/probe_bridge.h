@@ -43,6 +43,17 @@ typedef struct dkr_probe_result {
    no C++ objects/destructors may live across its setjmp/longjmp boundary. */
 dkr_probe_result dkr_probe_run(dkr_probe_entry entry, uint8_t* ram, size_t bytes,
                                struct recomp_context* context, uint64_t budget);
+/* A native mod adapter may invoke ONLY reviewed private guest callbacks. A
+   nested C trampoline catches guest traps before returning to its C++ caller,
+   so no longjmp crosses C++ locks, leases or destructors. Failed adapters must
+   unwind normally and return -1; dispatch then traps on the C side. */
+typedef int (*dkr_probe_mod_service)(void* user,const char* operation,uint8_t* ram,
+    struct recomp_context* context,const uint64_t* args,unsigned count,
+    const uint32_t* fields,unsigned event,uint64_t* result);
+int dkr_probe_bind_mod_service(dkr_probe_mod_service service,void* user);
+int dkr_probe_mod_dispatch(const char* operation,uint8_t* ram,struct recomp_context* context,
+    const uint64_t* args,unsigned count,const uint32_t* fields,unsigned event,uint64_t* result);
+dkr_probe_result dkr_probe_run_native(dkr_probe_entry entry,uint8_t* ram,struct recomp_context* context);
 void* dkr_probe_memory(uint8_t* ram, uint64_t address, unsigned width, unsigned lane_xor);
 void* dkr_probe_memory_at(uint8_t* ram, uint64_t address, unsigned width, unsigned lane_xor,
                           const char* file, unsigned line);

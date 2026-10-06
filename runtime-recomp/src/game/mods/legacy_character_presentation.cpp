@@ -29,7 +29,7 @@ public:
     }
 };
 std::size_t selected(const CharacterRoster& roster,const std::vector<AllocatedCharacter>& entries,unsigned racer) {
-    if(racer>=4)return entries.size();
+    if(racer>=8)return entries.size();
     const auto& id=roster.active(racer);
     if(id.empty())return entries.size();
     for(std::size_t i=0;i<entries.size();++i)if(entries[i].id==id)return i;
@@ -40,25 +40,53 @@ void CharacterPresentation::initialize(std::span<std::uint8_t> memory,const reco
     const CharacterPresentationCalls& f,const std::vector<AllocatedCharacter>& entries,
     std::span<const std::uint32_t> samples) {
     if(ready_)return;
-    if(!banks_.empty() || !portrait_cells_.empty() || entries.size()!=samples.size() || entries.size()>16)
+    if(!banks_.empty() || !portrait_cells_.empty() || entries.empty() || entries.size()!=samples.size() || entries.size()>MaxEnabledCharacters)
         throw Error("Invalid custom presentation resource ownership.");
+    portrait_cells_.resize(entries.size());banks_.resize(entries.size());selection_banks_.resize(entries.size());
+    ready_=true;
+}
+void CharacterPresentation::prepare(std::span<std::uint8_t> memory,const recomp_context& ctx,
+    const CharacterPresentationCalls& f,const std::vector<AllocatedCharacter>& entries,
+    unsigned i,std::uint32_t sample_address,bool audio) {
+    if(!ready_ || entries.size()!=banks_.size() || i>=entries.size())throw Error("Unadmitted custom presentation resource.");
+    const auto& c=entries[i];
+    if(portrait_cells_[i] && (!audio || c.race_audio.control.empty() || banks_[i]))return;
     Calls call(memory,ctx);auto& g=call.guest;
-    for(unsigned i=0;i<entries.size();++i) {
-        const auto& c=entries[i];
+    if(!portrait_cells_[i] && !c.portrait_identity.empty())for(unsigned j=0;j<entries.size();++j)
+        if(portrait_cells_[j] && entries[j].portrait_identity==c.portrait_identity) {portrait_cells_[i]=portrait_cells_[j];break;}
+    if(!portrait_cells_[i]) {
         const auto texture=call.call(f.texture_load,{c.portrait});
         if(!texture || !g.read(texture,1) || !g.read(texture+1,1))throw Error("Custom result portrait failed to load.");
         const auto draw=call.call(f.allocate,{24,0x7f7f7fff});
         if(!draw)throw Error("No guest memory for a custom result portrait.");
         g.bytes(draw,Bytes(24));g.write(draw,texture);g.write(draw+16,draw);
-        portrait_cells_.push_back(draw+16);
-        if(c.race_audio.control.empty()){banks_.push_back(0);continue;}
-        if(!samples[i])throw Error("Custom race sample mount is missing.");
+        portrait_cells_[i]=draw+16;
+    }
+    if(audio && !c.race_audio.control.empty() && !banks_[i]) {
+        if(!c.race_audio_identity.empty())for(unsigned j=0;j<entries.size();++j)
+            if(banks_[j] && entries[j].race_audio_identity==c.race_audio_identity) {banks_[i]=banks_[j];break;}
+        if(banks_[i])return;
+        if(!sample_address)throw Error("Custom race sample mount is missing.");
         const auto control=call.call(f.allocate,{unsigned(c.race_audio.control.size()),0x7f7f7fff});
         if(!control)throw Error("No guest memory for custom race audio.");
         g.bytes(control,c.race_audio.control);
-        call.call(f.bank_relocate,{control,samples[i]});banks_.push_back(g.read(control+4));
+        call.call(f.bank_relocate,{control,sample_address});banks_[i]=g.read(control+4);
     }
-    ready_=true;
+}
+std::uint32_t CharacterPresentation::selection_bank(std::span<std::uint8_t> memory,const recomp_context& ctx,
+    const CharacterPresentationCalls& f,const std::vector<AllocatedCharacter>& entries,unsigned i,std::uint32_t samples) {
+    if(!ready_ || entries.size()!=selection_banks_.size() || i>=entries.size() || !samples)
+        throw Error("Unadmitted custom selection voice.");
+    if(selection_banks_[i])return selection_banks_[i];
+    const auto& c=entries[i];
+    if(!c.selection_audio_identity.empty())for(unsigned j=0;j<entries.size();++j)
+        if(selection_banks_[j] && entries[j].selection_audio_identity==c.selection_audio_identity)
+            return selection_banks_[i]=selection_banks_[j];
+    Calls call(memory,ctx);auto& g=call.guest;
+    const auto base=call.call(f.allocate,{unsigned(c.audio.control.size()),0x7f7f7fff});
+    if(!base)throw Error("Not enough guest memory for the selected custom voice.");
+    g.bytes(base,c.audio.control);call.call(f.bank_relocate,{base,samples});
+    return selection_banks_[i]=g.read(base+4);
 }
 std::uint32_t CharacterPresentation::portrait(const CharacterRoster& roster,
     const std::vector<AllocatedCharacter>& entries,unsigned racer)const {
@@ -78,7 +106,7 @@ void CharacterPresentation::bind_hud(std::uint32_t stack,std::uint32_t hud,const
     const std::vector<AllocatedCharacter>& entries,unsigned racer) {
     unbind_hud(stack);
     if(!ready_)return;
-    const auto i=selected(roster,entries,racer);if(i==entries.size())return;
+    const auto i=selected(roster,entries,racer);if(i==entries.size() || !portrait_cells_.at(i))return;
     if(hud_bindings_.size()>=16)throw Error("Custom portrait draw nesting exceeds its budget.");
     hud_bindings_.push_back({stack,hud,portrait_cells_.at(i)-16,56+entries[i].base_character});
 }
@@ -90,17 +118,21 @@ std::uint32_t CharacterPresentation::hud_lookup(std::uint32_t stack,std::uint32_
     return 0;
 }
 unsigned CharacterPresentation::cinematic_id(const CharacterRoster& roster,const std::vector<AllocatedCharacter>& entries,
-    unsigned racer,unsigned native_id)const {
+    unsigned racer,unsigned native_id) {
     if(!ready_)return native_id;
     const auto i=selected(roster,entries,racer);
     // This byte belongs exclusively to the transient trophy portrait list;
     // never put it in Settings, racer behaviour, saves or ghost recordings.
-    return i<entries.size()?64U+unsigned(i):native_id;
+    if(i==entries.size())return native_id;
+    if(!portrait_cells_.at(i))throw Error("Cinematic portrait was not prepared by its racer owner.");
+    // The retail list stores a byte: tokens name participants, not library
+    // ordinals. Entry 1500 is as representable as entry zero.
+    cinematic_cells_.at(racer)=portrait_cells_[i];return 64U+racer;
 }
 std::uint32_t CharacterPresentation::cinematic_portrait(unsigned id)const {
-    if(id<64 || id>=80)return 0;
-    if(!ready_ || id-64>=portrait_cells_.size())throw Error("Unowned cinematic portrait identity.");
-    return portrait_cells_[id-64];
+    if(id<64 || id>=72)return 0;
+    if(!ready_ || !cinematic_cells_[id-64])throw Error("Unowned cinematic portrait identity.");
+    return cinematic_cells_[id-64];
 }
 bool CharacterPresentation::play(std::span<std::uint8_t> memory,const recomp_context& ctx,
     const CharacterPresentationCalls& f,const std::vector<AllocatedCharacter>& entries,unsigned kind)const {

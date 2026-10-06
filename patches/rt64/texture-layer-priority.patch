@@ -1,0 +1,54 @@
+diff --git a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
+--- a/src/hle/rt64_rdp_tmem.cpp
++++ b/src/hle/rt64_rdp_tmem.cpp
+@@ -8,3 +8,4 @@
+ #include <cinttypes>
+ #include <cstdio>
+ #include <cstring>
++#include <mutex>
+ 
+ #include "xxHash/xxh3.h"
+@@ -17,3 +17,36 @@
+ namespace RT64 {
+     namespace {
++        // Packs are submitted low-to-high priority. Resolve BOTH identities
++        // inside each layer before considering a lower layer. A Rice alias
++        // must not unconditionally beat a higher-priority native replacement.
++        // This runs only on a selected-hash cache miss, not every draw.
++        uint64_t selectLayerHash(TextureCache *cache, uint64_t nativeHash,
++                                 uint64_t riceHash, const uint8_t *tmem,
++                                 const LoadTile &tile, uint16_t width,
++                                 uint16_t height, uint32_t tlut) {
++            if (riceHash == 0) return nativeHash;
++            std::unique_lock lock(cache->textureMapMutex);
++            const auto &map = cache->textureMap.replacementMap;
++            uint64_t nativeHashes[TMEMHasher::CurrentHashVersion + 1] = {};
++            for (uint32_t version : map.resolvedHashVersions) {
++                nativeHashes[version] = version < TMEMHasher::CurrentHashVersion
++                    ? TMEMHasher::hash(tmem, tile, width, height, tlut, version)
++                    : nativeHash;
++            }
++            for (size_t end = map.fileSystemResolvedPaths.size(); end > 0; --end) {
++                const size_t layer = end - 1;
++                const auto &paths = map.fileSystemResolvedPaths[layer];
++                const uint32_t version = map.fileSystemHashVersions[layer];
++                // Within one pack, prefer an exact native identity. Older
++                // native hash versions remain supported by the upload path.
++                if (paths.find(nativeHashes[version]) != paths.end()) return nativeHash;
++                if (version == TMEMHasher::CurrentHashVersion &&
++                    paths.find(riceHash) != paths.end()) return riceHash;
++            }
++            return nativeHash;
++        }
++
+         uint32_t calculateDXT(uint32_t txl2words) {
+@@ -282,4 +315,2 @@
+                 aliasIt = riceAliasMap.emplace(nativeHash, riceAlias).first;
+             }
+-            hash = (aliasIt->second != 0 &&
+-                textureCache->hasReplacement(aliasIt->second))
+-                ? aliasIt->second : nativeHash;
++            hash = selectLayerHash(textureCache, nativeHash, aliasIt->second,
++                                   TMEM, loadTile, width, height, tlut);
+             riceSelectedHashMap.emplace(nativeHash, hash);
+         }

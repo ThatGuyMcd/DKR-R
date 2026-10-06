@@ -21,7 +21,8 @@ Bytes representation(View canonical,unsigned byte_order) {
 }
 void stage_import(const std::filesystem::path& source,
     const std::vector<std::filesystem::path>& owned_roms,
-    const std::filesystem::path& destination,const ProgressCallback& progress) {
+    const std::filesystem::path& destination,const ProgressCallback& progress,
+    const std::map<std::string,std::string>& source_labels) {
     if(owned_roms.empty() || owned_roms.size()>8)
         throw Error("Select an imported original Game Pak before importing patches.");
     if(destination.empty() || destination.filename().empty()) throw Error("A generated staging directory is required.");
@@ -88,6 +89,12 @@ void stage_import(const std::filesystem::path& source,
         auto label=utf8_path(patch.name).stem().u8string();
         if(label.size()>120)label.resize(120);
         package["display_name"]=std::string(label.begin(),label.end());
+        if(const auto found=source_labels.find(patch_id);found!=source_labels.end()) {
+            const auto& text=found->second;
+            if(text.empty() || text.size()>120 || std::any_of(text.begin(),text.end(),[](unsigned char c){return c<32 || c==127;}))
+                throw Error("Invalid retained patch display label.");
+            package["display_name"]=text;
+        }
         package["editions"]=json::array({patch_id});
         package["status"]="review-required";
         package["enabled"]=false;

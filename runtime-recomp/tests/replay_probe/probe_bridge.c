@@ -5,9 +5,10 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Intentionally no live native runtime dependency. Static state survives the
-   C longjmp; it must never be used concurrently or recursively. */
-static struct {
+/* Intentionally no live native runtime dependency. Bounded nested C-only
+   frames never copy jmp_buf and never jump over a native C++ adapter. The
+   exclusive owned CPU thread remains the only allowed caller. */
+typedef struct {
     uint8_t* ram;
     struct recomp_context* context;
     size_t bytes;
@@ -20,7 +21,34 @@ static struct {
     uint32_t watch_value;
     const char* last_file;
     unsigned last_line;
-} probe;
+    unsigned inherited_depth;
+    unsigned native_callbacks;
+} ProbeFrame;
+enum { DKR_PROBE_NATIVE_DEPTH = 4 };
+static ProbeFrame probe_frames[DKR_PROBE_NATIVE_DEPTH];
+static unsigned probe_frame;
+#define probe probe_frames[probe_frame]
+static dkr_probe_mod_service mod_service;
+static void* mod_user;
+
+int dkr_probe_bind_mod_service(dkr_probe_mod_service service,void* user) {
+    if(probe_frame || probe.active || ((service==NULL)!=(user==NULL)))return 0;
+    mod_service=service;mod_user=user;return 1;
+}
+int dkr_probe_mod_dispatch(const char* operation,uint8_t* ram,struct recomp_context* context,
+    const uint64_t* args,unsigned count,const uint32_t* fields,unsigned event,uint64_t* result) {
+    if(!mod_service)return 0;
+    if(!probe.active || ram!=probe.ram || !operation || !context || !result || count>16 || (count && !args))
+        dkr_probe_block("invalid-owned-mod-service");
+    ++probe.native_callbacks;
+    /* The callback catches all C++ exceptions and returns. It MUST NOT call
+       unchecked guest functions or any trapping probe API itself. */
+    const int handled=mod_service(mod_user,operation,ram,context,args,count,fields,event,result);
+    --probe.native_callbacks;
+    if(handled<0)dkr_probe_block("owned-mod-service-failure");
+    if(handled>1)dkr_probe_block("invalid-owned-mod-service-result");
+    return handled;
+}
 
 void dkr_probe_watch_word(uint64_t address) {
     if (probe.active) abort();
@@ -62,7 +90,7 @@ void dkr_probe_checkpoint(void) {
 void dkr_probe_enter(const char* function) {
     dkr_probe_checkpoint();
     ++probe.result.guest_entries;
-    if (probe.result.stack_depth == 128) dkr_probe_block("guest-stack-budget");
+    if (probe.inherited_depth + probe.result.stack_depth >= 128) dkr_probe_block("guest-stack-budget");
     probe.result.stack[probe.result.stack_depth++] = function;
 }
 void dkr_probe_leave(void) {
@@ -152,7 +180,7 @@ void dkr_probe_audio_dma(uint8_t* ram, uint8_t* dmem, uint32_t dmem_address,
     probe.result.bad_address = 0;
     probe.result.source_file = NULL; probe.result.source_line = 0;
 }
-dkr_probe_result dkr_probe_run(dkr_probe_entry entry, uint8_t* ram, size_t bytes,
+static dkr_probe_result run_frame(dkr_probe_entry entry, uint8_t* ram, size_t bytes,
                                struct recomp_context* context, uint64_t budget) {
     dkr_probe_result rejected = {0};
     if (probe.active || !entry || !ram || !bytes || !context || !budget) {
@@ -188,4 +216,31 @@ dkr_probe_result dkr_probe_run(dkr_probe_entry entry, uint8_t* ram, size_t bytes
         probe.result.blocked = "floating-environment-restore-failed";
     }
     return probe.result;
+}
+dkr_probe_result dkr_probe_run(dkr_probe_entry entry,uint8_t* ram,size_t bytes,
+    struct recomp_context* context,uint64_t budget) {
+    if(probe_frame || probe.active){dkr_probe_result rejected={0};rejected.blocked="invalid-probe-invocation";return rejected;}
+    probe.inherited_depth=0;probe.native_callbacks=0;
+    return run_frame(entry,ram,bytes,context,budget);
+}
+dkr_probe_result dkr_probe_run_native(dkr_probe_entry entry,uint8_t* ram,struct recomp_context* context) {
+    dkr_probe_result rejected={0};
+    if(!probe.active || !probe.native_callbacks || !mod_service || ram!=probe.ram || !entry || !context ||
+       probe_frame+1>=DKR_PROBE_NATIVE_DEPTH || probe.result.operations>=probe.budget) {
+        rejected.blocked="invalid-owned-native-invocation";return rejected;
+    }
+    ProbeFrame* parent=&probe;
+    const uint64_t remaining=parent->budget-parent->result.operations;
+    const size_t bytes=parent->bytes;
+    ++probe_frame;
+    probe.inherited_depth=parent->inherited_depth+parent->result.stack_depth;
+    probe.native_callbacks=0;probe.watch_address=parent->watch_address;
+    const dkr_probe_result result=run_frame(entry,ram,bytes,context,remaining);
+    --probe_frame;
+    // Charge the SAME root budget. Recursing through native callbacks cannot
+    // obtain another budget or bypass the aggregate guest-stack bound.
+    parent->result.operations+=result.operations;
+    parent->result.memory_accesses+=result.memory_accesses;
+    parent->result.guest_entries+=result.guest_entries;
+    return result;
 }

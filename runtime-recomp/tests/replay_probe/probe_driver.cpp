@@ -14,7 +14,6 @@
 #include "netplay/experimental_performance.hpp"
 #include "netplay/experimental_effect_envelope.hpp"
 #include "netplay/experimental_presentation.hpp"
-#include "funcs.h"
 #include "netplay/experimental_rollback.hpp"
 #include "netplay/experimental_timeline.hpp"
 #include "netplay/experimental_network.hpp"
@@ -22,6 +21,11 @@
 #include "netplay/experimental_pcm.hpp"
 #include "netplay/replay_qualification.hpp"
 #include "netplay/runtime_state.hpp"
+#if DKR_PROBE_HAS_MOD_SERVICES
+#include "runtime_legacy_mods.hpp"
+#include "mods/online_mod_runtime.hpp"
+#include "mods/legacy_checkpoint.hpp"
+#endif
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -34,6 +38,10 @@
 #include <chrono>
 #include <stdexcept>
 #include <thread>
+#include "funcs.h"
+#if DKR_PROBE_HAS_MOD_SERVICES
+#include "owned_mod_calls.hpp"
+#endif
 
 namespace {
 using namespace dkr::runtime::netplay;
@@ -83,7 +91,7 @@ public:
             std::uint32_t seed=0; std::memcpy(&seed,ram_.data()+offset,4);
             dkr_probe_clock_start(seed);
         }
-        if(authored_cpu_)assert(dkr_probe_run(start_owned_video,ram_.data(),ram_.size(),&context_,10000).completed);
+        if(authored_cpu_)assert(run_private(start_owned_video,ram_.data(),ram_.size(),&context_,10000).completed);
         native_ = dkr_probe_native_capture();
         native_.restore_multiplayer_music=boot.normal_boot && boot.restore_multiplayer_music;
         if(DKR_PROBE_HAS_FULL_SCENES && input_phases_) {
@@ -141,6 +149,23 @@ public:
             assert(magic_.start(save_epoch,magic_codes,true));
             dkr_probe_input_initialize(); input_=dkr_probe_input_capture();
         }
+        if(boot.mods) {
+#if DKR_PROBE_HAS_MOD_SERVICES
+            if(!authored_cpu_ || !input_phases_ || !boot.normal_boot ||
+               boot.mods->profile()->manifest.revision!=(DKR_PROBE_REVISION==77?"us.v77":"us.v80"))
+                throw std::runtime_error("Custom owned resources differ from the admitted normal boot.");
+            mod_identity_=boot.mods->fingerprint();
+            if(mod_identity_.size()!=64)throw std::runtime_error("Custom owned resource identity is invalid.");
+            mods_=std::make_unique<dkr::runtime::legacy::ModWorld>(boot.mods->new_session(),
+                dkr_owned_mod_calls::payload(),dkr_owned_mod_calls::call_dkr_character_select_animation_fraction,
+                boot.mods->authored(),boot.mods->profile()->manifest.custom_ai,dkr_owned_mod_calls::call_rand_range,boot.mods->music());
+            if(boot.mod_bootstrap.empty() || boot.mod_bootstrap.size()>256U*1024U ||
+               !mods_->commit_checkpoint(mods_->stage_checkpoint(boot.mod_bootstrap)))
+                throw std::runtime_error("Custom native bootstrap ownership could not be admitted.");
+#else
+            throw std::runtime_error("The private mod service closure is not present in this build.");
+#endif
+        } else if(!boot.mod_bootstrap.empty())throw std::runtime_error("A native mod bootstrap requires its exact pinned resources.");
     }
     ~Component() { dkr_probe_scenery_observe(nullptr,nullptr);dkr_probe_input_configure(0); dkr_probe_bind_eeprom(nullptr);dkr_probe_bind_paks(nullptr);dkr_probe_bind_magic(nullptr); }
     std::span<const std::uint8_t> confirmed_save() const {return save_.confirmed_image();}
@@ -167,7 +192,7 @@ public:
         // Complete only for THIS closed component: all reachable native imports
         // are audited private services or traps. No live participant exists.
         // Passing this contract must never advertise complete DKR replay.
-        return {0x434F4D504F4E454EULL+unsigned(mode_phases_)*4+unsigned(water_phases_)+unsigned(DKR_PROBE_HAS_SCENE_CUTS)*8+unsigned(audio_phases_)*4096+unsigned(input_phases_)*128+unsigned(authored_cpu_)*768+unsigned(DKR_PROBE_HAS_FULL_SCENES)*8192+16384+32768+65536, state_.snapshot_size() + sizeof(native_) + (audio_phases_ ? sizeof(audio_):0) + (input_phases_ ? sizeof(input_)+Eeprom::kCheckpointBytes+Paks::kCheckpointBytes+MagicCodes::kCheckpointBytes:0),
+        return {0x434F4D504F4E454EULL+unsigned(mode_phases_)*4+unsigned(water_phases_)+unsigned(DKR_PROBE_HAS_SCENE_CUTS)*8+unsigned(audio_phases_)*4096+unsigned(input_phases_)*128+unsigned(authored_cpu_)*768+unsigned(DKR_PROBE_HAS_FULL_SCENES)*8192+16384+32768+65536+mod_contract(), state_.snapshot_size() + sizeof(native_) + (audio_phases_ ? sizeof(audio_):0) + (input_phases_ ? sizeof(input_)+Eeprom::kCheckpointBytes+Paks::kCheckpointBytes+MagicCodes::kCheckpointBytes:0)+mod_bytes(),
                 kRequiredStateDomains, true, true, true};
     }
     void attach_presentation_for_test(PresentationMailbox& box,bool independent_restore=false) {
@@ -213,7 +238,7 @@ public:
         // retirement gates. Confirmed menu input admission remains mandatory.
         prepared_menu_tick_=frame;return RestoreStep::Ready;
     }
-    bool capture(std::span<std::uint8_t> output, std::string&) override {
+    bool capture(std::span<std::uint8_t> output, std::string& error) override {
         if(input_phases_ && (!valid_input(input_) || output.size()!=contract().state_bytes ||
            !save_.capture(output.last(Eeprom::kCheckpointBytes+Paks::kCheckpointBytes).first(Eeprom::kCheckpointBytes)) ||
            !paks_.capture(output.last(Paks::kCheckpointBytes)))) return false;
@@ -224,9 +249,18 @@ public:
             std::memcpy(output.data()+output.size()-Eeprom::kCheckpointBytes-Paks::kCheckpointBytes-sizeof(input_),&input_,sizeof(input_));
             if(!magic_.capture(output.subspan(state_.snapshot_size()+sizeof(native_)+sizeof(audio_),MagicCodes::kCheckpointBytes)))return false;
         }
+#if DKR_PROBE_HAS_MOD_SERVICES
+        if(mods_)try {
+            const auto native=mods_->checkpoint();if(native.size()>dkr::mods::CheckpointWriter::Budget)return false;
+            auto block=output.subspan(mod_offset(),mod_bytes());std::fill(block.begin(),block.end(),0);
+            std::copy(mod_identity_.begin(),mod_identity_.end(),block.begin());
+            for(unsigned i=0;i<4;++i)block[64+i]=std::uint8_t(native.size()>>(24-i*8));
+            std::copy(native.begin(),native.end(),block.begin()+68);
+        }catch(const std::exception& e){error=e.what();return false;}
+#endif
         return true;
     }
-    bool restore(std::span<const std::uint8_t> input, std::string&) override {
+    bool restore(std::span<const std::uint8_t> input, std::string& error) override {
         if (input.size() != contract().state_bytes) return false;
         dkr_probe_native_state value{};
         std::memcpy(&value,input.data()+state_.snapshot_size(),sizeof(value));
@@ -244,8 +278,26 @@ public:
                !staged_paks.restore(input.last(Paks::kCheckpointBytes)) ||
                !staged_magic.restore(input.subspan(state_.snapshot_size()+sizeof(native_)+sizeof(audio_),MagicCodes::kCheckpointBytes))) return false;
         }
+#if DKR_PROBE_HAS_MOD_SERVICES
+        std::unique_ptr<dkr::runtime::legacy::ModWorld::Restore> staged_mods;
+        if(mods_)try {
+            const auto block=input.subspan(mod_offset(),mod_bytes());
+            if(!std::equal(mod_identity_.begin(),mod_identity_.end(),block.begin()))return false;
+            const auto count=dkr::mods::be32(block,64);
+            if(count>dkr::mods::CheckpointWriter::Budget ||
+               !std::all_of(block.begin()+68+count,block.end(),[](auto byte){return byte==0;}))return false;
+            staged_mods=mods_->stage_checkpoint(block.subspan(68,count));
+        }catch(const std::exception& e){error=e.what();return false;}
+#endif
         unsigned frame = 0;
         if (!state_.restore(ram_.data(),input.first(state_.snapshot_size()),frame)) return false;
+#if DKR_PROBE_HAS_MOD_SERVICES
+        // All validation/allocation happened above. This exclusively owned
+        // transaction cannot mutate its mod owner between stage and commit.
+        if(staged_mods && !mods_->commit_checkpoint(std::move(staged_mods))) {
+            error="Owned native mod checkpoint commit lost its exclusive owner.";return false;
+        }
+#endif
         native_ = value; if(audio_phases_) audio_=audio;
         if(input_phases_) { input_=pads;save_=std::move(staged_save);paks_=std::move(staged_paks);magic_=std::move(staged_magic); }
         draw_events_.clear();retiring_.reset();preparing_tick_.reset();prepared_menu_tick_.reset();return true;
@@ -293,7 +345,7 @@ public:
         dkr_probe_result result;
         {
             performance::Scope timing(performance::Stage::GuestTick);
-            result = dkr_probe_run(authored_cpu_ ? dkr_probe_authored_component_tick : mode_phases_ ? dkr_probe_mode_component_tick : water_phases_ ? dkr_probe_water_component_tick : dkr_probe_component_tick,
+            result = run_private(authored_cpu_ ? dkr_probe_authored_component_tick : mode_phases_ ? dkr_probe_mode_component_tick : water_phases_ ? dkr_probe_water_component_tick : dkr_probe_component_tick,
                                   ram_.data(),ram_.size(),&context_,menu_tick ? 40000000:5000000);
         }
         dkr_probe_menu_tick_configure(0);
@@ -318,6 +370,13 @@ public:
         }
         if (!result.completed || native_.vehicle_audio_scope || native_.nature_audio_scope) {
             error = result.blocked ? result.blocked : "unbalanced audio scope";
+#if DKR_PROBE_HAS_MOD_SERVICES
+            // The C fence deliberately waits for the native callback to
+            // unwind. Preserve its concrete fault after that safe boundary,
+            // rather than hiding every asset/mod failure behind one label.
+            if(mods_ && error=="owned-mod-service-failure" && !mods_->error().empty())
+                error += ": "+mods_->error();
+#endif
             std::cerr << "component tick blocked: " << error << " address=0x" << std::hex << result.bad_address
                       << std::dec << " operations=" << result.operations << '\n';
             if (result.source_file) std::cerr << "  site=" << result.source_file << ':' << result.source_line << '\n';
@@ -357,7 +416,7 @@ public:
                 dkr_probe_result dsp;
                 {
                     performance::Scope timing(performance::Stage::AudioDsp);
-                    dsp=dkr_probe_run(dkr_probe_audio_tick,ram_.data(),ram_.size(),&audio_context_,5000000);
+                    dsp=run_private(dkr_probe_audio_tick,ram_.data(),ram_.size(),&audio_context_,5000000);
                 }
                 dkr_probe_audio_configure(0); dkr_probe_audio_dmem_capture(audio_.dmem.data());
                 dkr_probe_audio_guards_capture(audio_.guards.data()); native_=dkr_probe_native_capture();
@@ -394,6 +453,10 @@ public:
             const auto pcm_start=output.effects.size();output.effects.resize(pcm_start+samples*4);
             if(!pcm_s16le_from_guest(ram_,DKR_PROBE_AUDIO_OUTPUT-0x80000000U,
                 std::span(output.effects).subspan(pcm_start))) {error="Owned PCM source range invalid.";return false;}
+#if DKR_PROBE_HAS_MOD_SERVICES
+            if(mods_)try{mods_->mix_music(ram_.data(),std::span(output.effects).subspan(pcm_start),audio_.rate);}
+                catch(const std::exception& e){error=e.what();return false;}
+#endif
         }
         if(input_phases_) {
             // A versioned envelope preserves the original gameplay/audio
@@ -638,7 +701,7 @@ public:
             dkr_probe_input_restore(input_);dkr_probe_input_configure(1);
             dkr_probe_bind_magic(&magic_);
         }
-        const auto result=dkr_probe_run(authored_cpu_ ? dkr_probe_authored_component_tick:mode_game,ram_.data(),ram_.size(),&context_,5000000);
+        const auto result=run_private(authored_cpu_ ? dkr_probe_authored_component_tick:mode_game,ram_.data(),ram_.size(),&context_,5000000);
         if(authored_cpu_) {dkr_probe_input_configure(0);dkr_probe_bind_magic(nullptr);}
         native_=dkr_probe_native_capture();
         // The real loader's FIRST native ownership boundary must still fence.
@@ -663,7 +726,7 @@ public:
             error="Confirmed teardown ownership was not admitted.";return PreparationStep::Failed;
         }
         dkr_probe_effects_begin();const auto stack=context_.r29;
-        const auto result=dkr_probe_run(dkr_probe_scene_unload_cpu,ram_.data(),ram_.size(),&context_,5000000);
+        const auto result=run_private(dkr_probe_scene_unload_cpu,ram_.data(),ram_.size(),&context_,5000000);
         native_=dkr_probe_native_capture();
         if(!result.completed || native_.scene_unload_phase!=2 || context_.r29!=stack) {
             error=result.blocked ? result.blocked:"Incomplete private teardown";
@@ -698,7 +761,7 @@ public:
         dkr_probe_audio_guards_restore(audio_.guards.data());dkr_probe_effects_begin();
         const auto stack=context_.r29;
         context_.r4=map;context_.r5=players_minus_one;context_.r6=0;context_.r7=0;
-        const auto result=dkr_probe_run(dkr_probe_scene_load_cpu,ram_.data(),ram_.size(),&context_,20000000);
+        const auto result=run_private(dkr_probe_scene_load_cpu,ram_.data(),ram_.size(),&context_,20000000);
         native_=dkr_probe_native_capture();input_=dkr_probe_input_capture();
         dkr_probe_audio_guards_capture(audio_.guards.data());
         dkr_probe_input_configure(0);dkr_probe_bind_eeprom(nullptr);dkr_probe_bind_paks(nullptr);dkr_probe_bind_magic(nullptr);
@@ -758,7 +821,7 @@ public:
         background_context.r29=std::int32_t(0x80FE0000U);
         const auto loaded_site=confirmed_scene_;
         const auto loader_started=std::chrono::steady_clock::now();
-        const auto result=dkr_probe_run(background ? dkr_probe_menu_background_resume : dkr_probe_authored_scene_resume,
+        const auto result=run_private(background ? dkr_probe_menu_background_resume : dkr_probe_authored_scene_resume,
             ram_.data(),ram_.size(),background ? &background_context:&context_,40000000);
         const auto loader_us=std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now()-loader_started).count();
@@ -941,6 +1004,46 @@ private:
         return !value.clock_enabled || (base<=UINT64_MAX-3125000 && count>=base &&
             ((value.pending_scene_site || DKR_PROBE_HAS_FULL_SCENES) ? count<=base+1562500 : count==base));
     }
+    std::size_t mod_offset()const {
+        return state_.snapshot_size()+sizeof(native_)+sizeof(audio_)+MagicCodes::kCheckpointBytes;
+    }
+    std::size_t mod_bytes()const {
+#if DKR_PROBE_HAS_MOD_SERVICES
+        return mods_?68+dkr::mods::CheckpointWriter::Budget:0;
+#else
+        return 0;
+#endif
+    }
+    std::uint64_t mod_contract()const {
+#if DKR_PROBE_HAS_MOD_SERVICES
+        return mods_ ? checkpoint_hash(std::span(reinterpret_cast<const std::uint8_t*>(mod_identity_.data()),mod_identity_.size())):0;
+#else
+        return 0;
+#endif
+    }
+    dkr_probe_result run_private(dkr_probe_entry entry,std::uint8_t* ram,std::size_t bytes,
+        recomp_context* ctx,std::uint64_t budget) {
+#if DKR_PROBE_HAS_MOD_SERVICES
+        struct Binding {
+            static int dispatch(void* owner,const char* name,std::uint8_t* ram,recomp_context* ctx,
+                const std::uint64_t* args,unsigned count,const std::uint32_t* fields,unsigned event,std::uint64_t* result) noexcept {
+                return static_cast<dkr::runtime::legacy::ModWorld*>(owner)->dispatch(name,ram,ctx,args,count,fields,event,*result);
+            }
+            ~Binding(){if(!dkr_probe_bind_mod_service(nullptr,nullptr))std::abort();}
+        };
+        if(mods_) {
+            if(!dkr_probe_bind_mod_service(Binding::dispatch,mods_.get())) {
+                dkr_probe_result failure{};failure.blocked="owned-mod-binding-not-quiescent";return failure;
+            }
+            Binding binding;return dkr_probe_run(entry,ram,bytes,ctx,budget);
+        }
+#endif
+        return dkr_probe_run(entry,ram,bytes,ctx,budget);
+    }
+#if DKR_PROBE_HAS_MOD_SERVICES
+    std::unique_ptr<dkr::runtime::legacy::ModWorld> mods_;
+    std::string mod_identity_;
+#endif
     RuntimeState state_;
     recomp_context context_{};
     recomp_context audio_context_{};

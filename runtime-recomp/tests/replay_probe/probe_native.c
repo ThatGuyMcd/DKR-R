@@ -5,6 +5,7 @@
 #include "probe_input.h"
 #include "probe_pak.h"
 #include "probe_magic.h"
+#include "../../src/game/camera_obstruction_guest.h"
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
@@ -270,8 +271,9 @@ static void rom_dma(uint8_t* rdram,recomp_context* context) {
     const uint32_t physical=((uint32_t)context->r7|0x10000000U)&0x1FFFFFFFU;
     const uint32_t offset=physical-0x10000000U;
     if(!rom || !rom_bytes) dkr_probe_block("immutable-retail-rom-not-installed");
-    if(context->r6 || physical<0x10000000U || (physical&1) || (destination&7) ||
-       !size || size>0x5000 || offset>rom_bytes || size>rom_bytes-offset)
+    const int virtual_asset=(((uint32_t)context->r7&0xc0000000U)==0x40000000U);
+    if(context->r6 || (destination&7) || !size || size>0x5000 ||
+       (!virtual_asset && (physical<0x10000000U || (physical&1) || offset>rom_bytes || size>rom_bytes-offset)))
         dkr_probe_block("invalid-owned-rom-dma");
     const int audio=audio_owned && address==audio_dma_queue();
     if(address!=dma_queue() && !audio) dkr_probe_block("unowned-rom-dma-completion");
@@ -282,7 +284,15 @@ static void rom_dma(uint8_t* rdram,recomp_context* context) {
     const gpr target=guest_address(destination);
     dkr_probe_memory(rdram,target,1,3);
     dkr_probe_memory(rdram,target+size-1,1,3);
-    for(unsigned i=0;i<size;++i) MEM_B(i,target)=rom[offset+i];
+    if(virtual_asset) {
+        // Resolve the tagged namespace BEFORE physical cartridge masking.
+        // All queue/destination validation above remains on the C trap side;
+        // the C++ resource owner must unwind before a failure is raised here.
+        const uint64_t args[3]={(uint32_t)context->r7,destination,size};
+        uint64_t result=0;
+        if(!dkr_probe_mod_dispatch("dkr_owned_asset_dma",rdram,context,args,3,0,0,&result))
+            dkr_probe_block("unowned-virtual-asset-dma");
+    } else for(unsigned i=0;i<size;++i) MEM_B(i,target)=rom[offset+i];
     // librecomp/src/pi.cpp::do_dma sends the literal zero for a ROM read.
     // This completion belongs to the private synchronous copy, not a worker.
     queue_send(rdram,address,0);
@@ -451,16 +461,20 @@ void dkr_probe_scene_load_begin(uint8_t* rdram,recomp_context* ctx) {
     dkr_probe_checkpoint();
     if(!offline || !canonical_presentation || !scene_cuts || !state.video_enabled ||
        state.scene_unload_phase!=2 || (!state.pending_scene_site && !confirmed_menu_tick) || scene_authorization ||
-       state.scene_load_resets || (uint32_t)ctx->r4>=DKR_PROBE_SCENE_LEVEL_COUNT || (uint32_t)ctx->r5>3 ||
+       state.scene_load_resets || (uint32_t)ctx->r5>3 ||
        (uint32_t)ctx->r6>255 || (uint32_t)ctx->r7>2 || !dkr_probe_input_enabled() ||
        !dkr_probe_eeprom_enabled() || !dkr_probe_paks_enabled() || !dkr_probe_magic_enabled())
         dkr_probe_block("unowned-confirmed-scene-constructor");
+    uint64_t admission=0;const uint64_t scene_args[]={(uint32_t)ctx->r4};
+    const int mod_owned=dkr_probe_mod_dispatch("dkr_owned_scene_admission",rdram,ctx,scene_args,1,0,0,&admission);
+    if(mod_owned ? !admission : (uint32_t)ctx->r4>=DKR_PROBE_SCENE_LEVEL_COUNT)
+        dkr_probe_block("unadmitted-confirmed-scene-id");
     // Reviewed no-custom-track branch in custom_tracks_hooks.cpp. A retail
     // table needs no write or allocator invalidation. Refuse a changed table,
     // rather than silently undoing the user's .dkrmap display-list budget.
     const gpr table=guest_address(DKR_PROBE_REVISION==77 ? 0x800DD3B0U:0x800DD920U);
     const int32_t sizes[4]={4500,7000,11000,11000};
-    for(unsigned i=0;i<4;++i)if(MEM_W(i*4,table)!=sizes[i])
+    for(unsigned i=0;!mod_owned && i<4;++i)if(MEM_W(i*4,table)!=sizes[i])
         dkr_probe_block("non-retail-scene-display-list-budget");
     state.scene_unload_phase=3;
 }
@@ -637,6 +651,9 @@ void dkr_probe_scene_load_reset(uint8_t* rdram,recomp_context* ctx) {
        state.vehicle_audio_scope || state.nature_audio_scope || state.requested_table!=UINT32_MAX ||
        state.load_section!=UINT32_MAX || state.load_destination || state.load_offset || state.load_size)
         dkr_probe_block("unowned-confirmed-scene-reset");
+    uint64_t ignored=0;
+    dkr_probe_mod_dispatch("dkr_legacy_scene_begin",rdram,ctx,0,0,0,0,&ignored);
+    dkr_probe_mod_dispatch("dkr_owned_course_prepare",rdram,ctx,0,0,0,0,&ignored);
     // Accurate/4:3 private world has no live interpolation registry and every
     // reversible drawing scope is balanced. No mod session exists here. The
     // native reset DOES clear audio guards even in that profile: retain this
@@ -737,10 +754,8 @@ static int canonical_identity_hook(const char* name) {
         "dkr_custom_tracks_track_id_override", // Explicit no-custom-content contract: kNoTrackOverride.
         "dkr_water_private_scene", // Exact non-DKR_WATER_QUALIFICATION branch: no diagnostic map override.
         "dkr_audio_mix_tick", "dkr_scale_sequence_player_volume", // Canonical default unity gain.
-        // PR46 music_sequence_init hooks: this owner admits no custom content,
-        // so there is no sequence binding or swapped carrier row to restore.
-        // Keep retail music and all registers/RAM unchanged, not a generic
-        // native-call fallback. Custom-track sessions remain inadmissible.
+        // No-mods identity only. A pinned ModWorld handles these hooks first
+        // with its own checkpointed song/row and confirmed-only PCM journal.
         "dkr_custom_music_sequence_loaded", "dkr_custom_music_sequence_started",
         "dkr_hud_element_begin", "dkr_hud_element_end", "dkr_hud_minimap_begin", "dkr_hud_minimap_end",
         "dkr_hud_player_pass_begin", "dkr_hud_player_pass_end", "dkr_hud_general_pass_begin", "dkr_hud_general_pass_end",
@@ -969,6 +984,8 @@ void dkr_probe_native_restore(dkr_probe_native_state value) { state = value; sce
 int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* context) {
     (void)ram; (void)context;
     dkr_probe_checkpoint();
+    uint64_t mod_result=0;
+    if(dkr_probe_mod_dispatch(name,ram,context,0,0,0,0,&mod_result))return (int)mod_result;
     if (offline) {
         if(DKR_PROBE_HAS_FULL_SCENES && canonical_presentation &&
            owned_presentation_hook(name,ram,context))return 0;
@@ -1276,9 +1293,31 @@ uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_con
                               const uint64_t* args, unsigned count) {
     (void)ram; (void)context;
     dkr_probe_checkpoint();
+    uint64_t mod_result=0;
+    if(dkr_probe_mod_dispatch(name,ram,context,args,count,0,0,&mod_result))return mod_result;
+    if(offline && canonical_presentation && count==1 && strcmp(name,"dkr_resolve_follow_camera")==0) {
+        /* Same checked guest-only decision as the native Patch Pipeline. No
+           live callback or local display/graphics preference enters replay. */
+#if DKR_PROBE_REVISION == 77
+        const uint32_t fields[8]={0x801234ECU,0x80121168U,0x80120CE0U,0x80120D14U,
+            0x800DC918U,0x8011D508U,0x8011D586U,0x8011D55CU};
+#else
+        const uint32_t fields[8]={0x80123A6CU,0x801216E8U,0x80121260U,0x80121294U,
+            0x800DCE88U,0x8011DA88U,0x8011DB06U,0x8011DADCU};
+#endif
+        dkr_cam_resolve(ram,(uint32_t)args[0],fields);return 0;
+    }
     /* These private captures use fresh profiles with no custom characters.
        Match runtime_legacy_mods.cpp's explicit no-character-state paths. */
     if (offline) {
+        if(count==1 && args[0]<4 && strcmp(name,"dkr_legacy_asset_cache_capacity")==0) {
+            const uint32_t capacities[4]={700,100,70,100};return capacities[args[0]];
+        }
+        if(count==2 && args[0]<4 && strcmp(name,"dkr_legacy_asset_cache_guard")==0) {
+            const uint32_t capacities[4]={700,100,70,100};
+            if(args[1]<capacities[args[0]])return 0;
+            dkr_probe_block("asset-cache-overflow");
+        }
         // runtime_legacy_mods.cpp:404, no legacy session returns before any
         // operation. Private fixtures explicitly have no installed mods.
         if(count==1 && args[0]<=3 && strcmp(name,"dkr_legacy_asset_api")==0) return 0;
@@ -1299,6 +1338,8 @@ int dkr_probe_native_fields(const char* name, uint8_t* ram, struct recomp_contex
                             unsigned event, const uint32_t* fields) {
     (void)ram; (void)context; (void)event; (void)fields;
     dkr_probe_checkpoint();
+    uint64_t mod_result=0;
+    if(dkr_probe_mod_dispatch(name,ram,context,0,0,fields,event,&mod_result))return (int)mod_result;
     /* runtime_legacy_mods.cpp:122-125 returns 0 before inspecting fields/event
        when the character state/selector is absent. Fresh private profiles have
        no custom content. A horn reaches event 8 through sound_play even during

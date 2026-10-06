@@ -113,7 +113,18 @@ enum class MessageType : std::uint8_t {
     ExperimentalLoaded,
     ExperimentalSaveOffer,
     ExperimentalSaveRequest,
+    ModOffer,
+    ModControl,
+    ModData,
 };
+
+struct ModOfferPayload {
+    std::string manifest_hash;
+    std::uint32_t manifest_bytes=0;
+    bool operator==(const ModOfferPayload&)const=default;
+};
+std::vector<std::uint8_t> encode_mod_offer(const ModOfferPayload& payload);
+bool decode_mod_offer(std::span<const std::uint8_t> bytes,ModOfferPayload& payload);
 
 enum class MatchEndStage : std::uint8_t { Request, Stop, Returned, Resume, ResumeAck };
 struct MatchEndPayload {

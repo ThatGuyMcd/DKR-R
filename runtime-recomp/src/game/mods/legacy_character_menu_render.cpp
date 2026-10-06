@@ -20,6 +20,7 @@ public:
         if(!fn)throw Error("Native character menu callback is unavailable.");
         if(args.size()>8)throw Error("Character menu callback argument budget exceeded.");
         auto ctx=saved;ctx.r29=ptr(stack);unsigned i=0;
+        ctx.f_odd=ctx.mips3_float_mode?&ctx.f1.u32l:&ctx.f0.u32h;
         for(auto v:args) {
             switch(i){case 0:ctx.r4=ptr(v);break;case 1:ctx.r5=ptr(v);break;case 2:ctx.r6=ptr(v);break;case 3:ctx.r7=ptr(v);break;
             default:guest.write(stack+i*4,v);break;}++i;
@@ -27,6 +28,31 @@ public:
         fn(memory.data(),&ctx);return static_cast<std::uint32_t>(ctx.r2);
     }
 };
+}
+void CharacterMenuRenderer::draw_hint(std::span<std::uint8_t> memory,const CharacterMenuFields& fields,recomp_context& ctx,
+    const CharacterMenuDrawCalls& f,const std::vector<AllocatedCharacter>& entries,const CharacterMenuView& view) {
+    if(!view.visible)return;
+    Calls call(memory,fields,ctx);auto& g=call.guest;
+    // Text-only footer. No page, portrait grid, projection or stock text moves.
+    // Scratch is on a separate reserved call frame and never retained.
+    const auto scratch=call.stack+0x100;
+    auto text=[&](std::string value,unsigned x,unsigned y,unsigned colour) {
+        if(value.size()>255)throw Error("Character hint exceeds its scratch budget.");
+        Bytes bytes;for(unsigned char c:value)bytes.push_back(c>=32&&c<127?c:'?');bytes.push_back(0);g.bytes(scratch,bytes);
+        call.call(f.font,{1});call.call(f.background,{0,0,0,180});
+        call.call(f.colour,{colour>>24,(colour>>16)&255,(colour>>8)&255,0,255});
+        call.call(f.text,{g.address(CharacterMenuField::DisplayList),x,y,scratch,0});
+    };
+    constexpr unsigned colours[]{0xffdc42ff,0x69d8ffff,0xff8f96ff,0x8dff83ff};
+    bool custom=false;
+    for(unsigned p=0;p<4;++p)if(view.active[p]&&view.custom[p]) {
+        custom=true;auto name=entries.at(*view.custom[p]).name;
+        if(name.size()>11)name=name.substr(0,10)+".";
+        text("P"+std::to_string(p+1)+" "+name+(view.ready[p]?" OK":""),8+76*p,220,colours[p]);
+    }
+    if(custom&&entries.size()>CustomStageSlots)text("L / R: CHANGE CUSTOM RACER",65,231,0xffe29aff);
+    call.call(f.font,{2});call.call(f.background,{0,0,0,0});call.call(f.colour,{255,255,255,0,255});
+    call.call(f.reset,{g.address(CharacterMenuField::DisplayList)});
 }
 void CharacterMenuRenderer::initialize(std::span<std::uint8_t> memory,const CharacterMenuFields& fields,recomp_context& ctx,
     const CharacterMenuDrawCalls& f,const std::vector<AllocatedCharacter>& entries) {

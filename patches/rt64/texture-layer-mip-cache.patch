@@ -1,0 +1,25 @@
+diff --git a/src/render/rt64_texture_cache.cpp b/src/render/rt64_texture_cache.cpp
+--- a/src/render/rt64_texture_cache.cpp
++++ b/src/render/rt64_texture_cache.cpp
+@@ -1139,1 +1139,4 @@
+                     // Look for the low mip cache version if it exists if we can't use the real replacement yet.
+                     if ((replacementTexture == nullptr) && (resolvedPath.resolvedOperation == ReplacementOperation::Stream)) {
+-                        auto lowMipCacheIt = textureMap.replacementMap.lowMipCacheTextures.find(resolvedPath.relativePath);
++                        // Identical filenames in different packs are not the
++                        // same texture. Keep streaming placeholders per layer.
++                        const std::string mipKey = std::to_string(resolvedPath.fileSystemIndex) + ":" + resolvedPath.relativePath;
++                        auto lowMipCacheIt = textureMap.replacementMap.lowMipCacheTextures.find(mipKey);
+                         if (lowMipCacheIt != textureMap.replacementMap.lowMipCacheTextures.end()) {
+                             lowMipCacheTexture = lowMipCacheIt->second.texture;
+@@ -1576,5 +1579,11 @@
+                     uploadBuffers.emplace_back();
+-                    if (!setLowMipCache(copyWorker->device, loaderCommandList.get(), mipCacheBytes.data(), mipCacheBytes.size(), uploadBuffers.back(), textureMap.replacementMap.lowMipCacheTextures, totalMemory)) {
++                    std::unordered_map<std::string, LowMipCacheTexture> packMipCache;
++                    if (!setLowMipCache(copyWorker->device, loaderCommandList.get(), mipCacheBytes.data(), mipCacheBytes.size(), uploadBuffers.back(), packMipCache, totalMemory)) {
+                         fprintf(stderr, "Failed to load low mip cache.\n");
+                     }
++                    for (const auto &entry : packMipCache) {
++                        textureMap.replacementMap.lowMipCacheTextures.emplace(
++                            std::to_string(i) + ":" + entry.first, entry.second);
++                    }
+                 }

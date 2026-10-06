@@ -12,6 +12,33 @@ spec.loader.exec_module(generator)
 
 
 class InstrumentationTests(unittest.TestCase):
+    def test_private_runtime_capsules_do_not_share_bridge_or_factory_symbols(self):
+        for revision in (77,80):
+            emitted=generator.runtime_isolation_header({'dkr_probe_authored_main_cpu'},set(),revision)
+            for name in ('make_owned_game','dkr_owned_mod_calls','dkr_probe_rom','dkr_probe_native_state','dkr_probe_bind_paks','dkr_probe_audio_rsp'):
+                self.assertIn(f'#define {name} dkr_experimental_v{revision}_{name}',emitted)
+            self.assertNotIn('#define dkr_probe_authored_main_cpu ',emitted)
+            self.assertNotIn('#define OwnedGame ',emitted)
+            self.assertNotIn('#define RuntimeState ',emitted)
+
+    def test_owned_mod_callbacks_are_closed_and_fault_contained(self):
+        emitted=generator.owned_mod_calls_header()
+        self.assertNotIn('active_payload',emitted)
+        for target in set(generator.OWNED_MOD_CALLS.values()) | {'rand_range','dkr_character_select_animation_fraction'}:
+            self.assertIn(f'dkr_probe_run_native({target},ram,ctx)',emitted)
+        self.assertIn('throw dkr::mods::Error',emitted)
+        self.assertIn('#undef get_settings',emitted)
+
+    def test_custom_track_observation_and_ai_callback_keep_exact_abi(self):
+        sig=('int',['uint8_t*','recomp_context*','unsigned','const uint32_t*','unsigned'])
+        emitted=generator.native_stub('dkr_legacy_track_menu',sig,True)
+        self.assertIn('args[]={p4}',emitted)
+        self.assertIn('args,1,p3,p2',emitted)
+        emitted=generator.native_stub('dkr_legacy_character_ai_event',generator.PROJECT_IMPORTS['dkr_legacy_character_ai_event'],True)
+        self.assertIn('p3!=rand_range',emitted)
+        self.assertIn('args[]={p2}',emitted)
+        with self.assertRaises(ValueError):
+            generator.native_stub('dkr_legacy_character_ai_event',('void',['uint8_t*','recomp_context*','unsigned','void*']),True)
     def test_local_world_observations_preserve_exact_caller(self):
         for revision in (77,80):
             body=self.reviewed_bodies(revision)["render_level_geometry_and_objects"]
@@ -455,9 +482,13 @@ class InstrumentationTests(unittest.TestCase):
         headers,source=generator.audio_rsp_payload()
         self.assertIn("static_assert(std::is_trivially_destructible_v<RSP>)",source)
         self.assertIn("do_indirect_jump: dkr_probe_checkpoint();",source)
-        for name in ("rd_len","wr_len"):
-            header=headers["rsp.hpp"]
-            self.assertLess(header.index(f"{name} >= 0x1000 - dmem_addr"),header.index(f"{name} += 1"))
+        for name,write in (("rd_len",0),("wr_len",1)):
+            self.assertIn(f'dkr_probe_audio_dma(rdram, dmem, dmem_addr, dram_addr & 0xFFFFF8U, {name}, {write}, __FILE__, __LINE__)',headers["rsp.hpp"])
+        # The C fault boundary owns the inclusive-length check, before any
+        # copy or +1. The generated RSP may not duplicate/evade that boundary.
+        boundary=(Path(__file__).parent/"probe_bridge.c").read_text()
+        self.assertLess(boundary.index('inclusive_length >= 4096 - dmem_address'),boundary.index('const unsigned bytes = inclusive_length + 1'))
+        self.assertLess(boundary.index('inclusive_length >= probe.bytes - dram_address'),boundary.index('if (write) ram[dram_lane]'))
         self.assertNotIn('#include "ultramodern/ultra64.h"',headers["rsp.hpp"])
 
     def test_audited_native_source_contracts_do_not_drift(self):
@@ -466,14 +497,19 @@ class InstrumentationTests(unittest.TestCase):
             "runtime-recomp/src/game/runtime_stubs.cpp":"2552788db2decd11c30ae8d6609c42d51d3072578118e4a1d1f3bbd7cec34f31",
             "runtime-recomp/src/game/runtime_enhancements.cpp":"7a868375b1a8e4e0f3e5e1c60036795fa2630e7d4b3cd6e954308495743918de",
             "runtime-recomp/src/game/runtime_hud_layout.cpp":"9ec1d648e835dfb6b61495f888a6685d10ce75daf3137c7308e368709ab4d7ad",
-            "runtime-recomp/src/game/presentation_identity.cpp":"88c1fdb4a2ab180af9fdfb552e1052f3c01260b3793c29304dc77be11d7a51ed",
+            # Audited camera-clearance metadata: read-only guest observations
+            # and local matrix bindings; no simulation/checkpoint writes.
+            "runtime-recomp/src/game/presentation_identity.cpp":"b145359db534a8ac4aa2d2c3a39a2dde91a0ef409b1b77e6e19fc10679297a42",
             "runtime-recomp/src/game/widescreen_policy.hpp":"b926703163fa542f8fbd7af1aee297595c1a58a74c61a82d457c8fbae4ccbb62",
             "extern/dkr-decomp/src/save_data.c":"898df1a185c17e1d6ba11302fc5c140a1d7bd10ff3d8b86ff937c834bb13a607",
             "extern/dkr-decomp/src/thread3_main.c":"437434837706ee88e91578ce9e1aa2cd960e65e1e3a6f1aa47ae3b6289892d8e",
             "extern/dkr-decomp/src/audiomgr.c":"ba7b39838f59ede6eceb7406ce6f92518175458398bddd52cdef55b62a2d8055",
             "extern/dkr-decomp/libultra/src/audio/mips1/drvrnew.c":"adccd2a880176419d68edf400f4ebd3d39c40096a8ea34de2eecaa3932a84987",
             "extern/dkr-decomp/libultra/src/audio/mips1/synthesizer.c":"36ed1d2307122eb7b8664d73c97f349e9daf661d06ed5654bdd78ee6247d8b1d",
-            "extern/n64-modern-runtime/librecomp/src/pi.cpp":"325fed80c6d8780c5173d7604898afc905640bbbb71c8b0b30aaf17e9d82c8e3",
+            # Pipeline patches 0027/0028 freeze live save ownership and flush
+            # joined producers. The owned EEPROM uses its own memory backend;
+            # ROM DMA/PIO semantics in this source remain unchanged.
+            "extern/n64-modern-runtime/librecomp/src/pi.cpp":"658f386eaa8ec1e40b15c7c653a4c8399f11176f06d861a1efcfdcd80cb4fe7e",
             "extern/n64-modern-runtime/ultramodern/src/misc_ultra.cpp":"61786922d547210c4d974845bb88776f06e935f2daa1e0d112364c63e0a96eec",
             "extern/n64-modern-runtime/librecomp/src/math_routines.cpp":"c8a64f63870418e80eb8e3f5d4beb5bfca426768c404a3a67c2706a6a79bda42",
             "extern/n64-modern-runtime/librecomp/src/ultra_translation.cpp":"e42a884a40253863ce9acfa57756af8c43e9114609afaf28c4883360b06c5324",

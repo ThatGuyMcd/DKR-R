@@ -279,6 +279,54 @@ inline void LoadPaddockMonoFonts(ImFontAtlas* atlas) {
 
 // ------------------------------------------------------------------ type
 
+// Shared menu reading scale for launcher and live-overlay tabs. Scopes are
+// context-owned and exclude gameplay HUD/diagnostic overlays; display-sized
+// numbers/signs remain distinct from prose.
+constexpr float PaddockLauncherReadingPx(float requested) {
+    return requested <= 13.0F ? 14.0F
+         : requested <= 17.0F ? 16.0F : requested;
+}
+
+constexpr float PaddockLauncherSignPx(float requested) {
+    return requested < 18.0F ? 16.0F
+         : requested >= 22.0F && requested <= 26.0F ? 26.0F : requested;
+}
+
+static_assert(PaddockLauncherReadingPx(11.0F) == 14.0F);
+static_assert(PaddockLauncherReadingPx(12.5F) == 14.0F);
+static_assert(PaddockLauncherReadingPx(14.0F) == 16.0F);
+static_assert(PaddockLauncherReadingPx(16.0F) == 16.0F);
+static_assert(PaddockLauncherReadingPx(18.0F) == 18.0F);
+static_assert(PaddockLauncherSignPx(12.0F) == 16.0F);
+static_assert(PaddockLauncherSignPx(19.0F) == 19.0F);
+static_assert(PaddockLauncherSignPx(24.0F) == 26.0F);
+static_assert(PaddockLauncherSignPx(32.0F) == 32.0F);
+
+thread_local ImGuiContext* g_paddock_launcher_typography_context = nullptr;
+
+inline bool PaddockLauncherTypographyActive() {
+    return g_paddock_launcher_typography_context != nullptr &&
+           g_paddock_launcher_typography_context == ImGui::GetCurrentContext();
+}
+
+class PaddockLauncherTypographyScope {
+public:
+    explicit PaddockLauncherTypographyScope(bool enabled = true)
+        : previous_(g_paddock_launcher_typography_context) {
+        if (enabled) {
+            g_paddock_launcher_typography_context = ImGui::GetCurrentContext();
+        }
+    }
+    ~PaddockLauncherTypographyScope() {
+        g_paddock_launcher_typography_context = previous_;
+    }
+    PaddockLauncherTypographyScope(const PaddockLauncherTypographyScope&) = delete;
+    PaddockLauncherTypographyScope& operator=(const PaddockLauncherTypographyScope&) = delete;
+
+private:
+    ImGuiContext* previous_;
+};
+
 struct PaddockType {
     ImFont* font = nullptr;
     float size = 0.0F;      // Dear ImGui size: the face's ascent - descent.
@@ -290,6 +338,7 @@ struct PaddockType {
 
 inline PaddockType PaddockReading(float px, bool semibold = false,
                                   float line_height = 1.5F) {
+    if (PaddockLauncherTypographyActive()) px = PaddockLauncherReadingPx(px);
     PaddockType type;
     const auto& faces = g_paddock_reading[semibold ? 1U : 0U];
     std::size_t best = kPaddockReadingSizes.size();
@@ -318,6 +367,7 @@ inline PaddockType PaddockReading(float px, bool semibold = false,
 
 inline PaddockType PaddockSign(float px, float line_height = 1.2F,
                                float tracking_em = 0.015F) {
+    if (PaddockLauncherTypographyActive()) px = PaddockLauncherSignPx(px);
     PaddockType type;
     ImFont* body = ImGui::GetIO().FontDefault;
     float best_size = 19.0F;
@@ -343,6 +393,8 @@ inline PaddockType PaddockSign(float px, float line_height = 1.2F,
 // the semibold reading face when no monospaced face was loaded.
 inline PaddockType PaddockMono(float px, bool bold = false, float line_height = 1.5F,
                                float tracking_em = 0.0F) {
+    const float requested_px = px;
+    if (PaddockLauncherTypographyActive()) px = PaddockLauncherReadingPx(px);
     const auto& faces = g_paddock_mono[bold ? 1U : 0U];
     std::size_t best = kPaddockMonoSizes.size();
     for (std::size_t index = 0U; index < kPaddockMonoSizes.size(); ++index) {
@@ -354,7 +406,9 @@ inline PaddockType PaddockMono(float px, bool bold = false, float line_height = 
         }
     }
     if (best == kPaddockMonoSizes.size()) {
-        PaddockType type = PaddockReading(px, true, line_height);
+        // Resolve the original request once, including on platforms that use
+        // the reading face instead of a system monospace font.
+        PaddockType type = PaddockReading(requested_px, true, line_height);
         type.tracking = px * tracking_em;
         return type;
     }
@@ -1129,7 +1183,8 @@ enum class PaddockFieldResult { None, Edited, GamepadActivated };
 inline PaddockFieldResult PaddockSearch(const char* id, char* buffer,
                                         std::size_t capacity, const char* hint,
                                         float width) {
-    const PaddockType type = PaddockReading(13.0F, false, 1.4F);
+    const PaddockType type = PaddockReading(PaddockLauncherTypographyActive() ? 16.0F : 13.0F,
+                                           false, 1.4F);
     ImGui::PushFont(type.font);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 9.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
@@ -1164,11 +1219,17 @@ inline PaddockFieldResult PaddockSearch(const char* id, char* buffer,
     return edited ? PaddockFieldResult::Edited : PaddockFieldResult::None;
 }
 
+inline PaddockType PaddockFieldLabelType() {
+    return PaddockReading(PaddockLauncherTypographyActive() ? 16.0F : 11.0F,
+                          true, 1.5F);
+}
+
 // A labelled drop-down (.mods-field select). Returns true when changed.
 inline bool PaddockSelect(const char* id, const char* label, int* value,
                           const std::vector<std::string>& items, float width) {
-    const PaddockType label_type = PaddockReading(11.0F, true, 1.5F);
-    const PaddockType type = PaddockReading(13.0F, false, 1.4F);
+    const PaddockType label_type = PaddockFieldLabelType();
+    const PaddockType type = PaddockReading(PaddockLauncherTypographyActive() ? 16.0F : 13.0F,
+                                           false, 1.4F);
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     if (label != nullptr && *label != '\0') {

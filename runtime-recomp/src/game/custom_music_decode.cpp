@@ -102,7 +102,7 @@ void append_stereo(std::vector<std::int16_t>& out, const std::int16_t* pcm,
 
 bool decode_mp3(const std::uint8_t* data, std::size_t size,
                 dkr::runtime::custom_music::DecodedMusic& out, std::string& error,
-                const std::atomic<bool>* cancel) {
+                const std::atomic<bool>* cancel, std::size_t budget) {
     drmp3 mp3;
     if (!drmp3_init_memory(&mp3, data, size, nullptr)) {
         error = "the MP3 could not be opened";
@@ -127,6 +127,9 @@ bool decode_mp3(const std::uint8_t* data, std::size_t size,
         if (read == 0U) {
             break;
         }
+        if (read > budget / 4 - out.samples.size() / 2) {
+            drmp3_uninit(&mp3); error = "decoded music exceeds the session memory budget"; return false;
+        }
         append_stereo(out.samples, chunk.data(), read, channels);
         if (out.samples.size() / 2U > limit) {
             drmp3_uninit(&mp3);
@@ -142,7 +145,7 @@ bool decode_mp3(const std::uint8_t* data, std::size_t size,
 
 bool decode_wav(const std::uint8_t* data, std::size_t size,
                 dkr::runtime::custom_music::DecodedMusic& out, std::string& error,
-                const std::atomic<bool>* cancel) {
+                const std::atomic<bool>* cancel, std::size_t budget) {
     drwav wav;
     if (!drwav_init_memory(&wav, data, size, nullptr)) {
         error = "the WAV could not be opened";
@@ -160,9 +163,9 @@ bool decode_wav(const std::uint8_t* data, std::size_t size,
         error = "only uncompressed PCM or float WAV is supported";
         return false;
     }
-    if (wav.totalPCMFrameCount > kMaxSeconds * rate) {
+    if (wav.totalPCMFrameCount > kMaxSeconds * rate || wav.totalPCMFrameCount > budget / 4) {
         drwav_uninit(&wav);
-        error = "the music is longer than 15 minutes";
+        error = "the music exceeds the duration or session memory budget";
         return false;
     }
     std::vector<std::int16_t> chunk(static_cast<std::size_t>(kChunkFrames * channels));
@@ -177,6 +180,9 @@ bool decode_wav(const std::uint8_t* data, std::size_t size,
         const drwav_uint64 read = drwav_read_pcm_frames_s16(&wav, kChunkFrames, chunk.data());
         if (read == 0U) {
             break;
+        }
+        if (read > budget / 4 - out.samples.size() / 2) {
+            drwav_uninit(&wav); error = "decoded music exceeds the session memory budget"; return false;
         }
         append_stereo(out.samples, chunk.data(), read, channels);
     }
@@ -224,10 +230,10 @@ std::string sha256_hex(const std::uint8_t* data, std::size_t size) {
 
 bool decode_bytes(const std::uint8_t* data, std::size_t size,
                   custom_tracks::MusicCodec codec, DecodedMusic& out,
-                  std::string& error, const std::atomic<bool>* cancel) {
+                  std::string& error, const std::atomic<bool>* cancel, std::size_t budget) {
     const bool ok = codec == custom_tracks::MusicCodec::Wav
-        ? decode_wav(data, size, out, error, cancel)
-        : decode_mp3(data, size, out, error, cancel);
+        ? decode_wav(data, size, out, error, cancel, budget)
+        : decode_mp3(data, size, out, error, cancel, budget);
     if (ok && out.frames == 0U) {
         error = "the file decodes to no audio";
         return false;

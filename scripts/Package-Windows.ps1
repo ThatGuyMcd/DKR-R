@@ -54,7 +54,7 @@ $runtimeFiles = @('DKR-R.exe', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll')
 $experimentalRaceTest = (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) -and
     (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_EXPERIMENTAL_RACE_TEST:BOOL=(ON|1|TRUE|YES)$' -Quiet)
 if ($experimentalRaceTest) {
-    if ($Version -notmatch 'experimental|rollback-test|^1\.0\.5-beta\.15(?:-playtest\.[2345678])?$') { throw 'Experimental backend builds must use a distinctly labelled experimental version or an approved Beta 15 playtest candidate.' }
+    if ($Version -notmatch 'experimental|rollback-test|^1\.0\.5-beta\.15(?:-playtest\.(?:[23456789]|10|11|12|14))?$') { throw 'Experimental backend builds must use a distinctly labelled experimental version or an approved Beta 15 playtest candidate.' }
 }
 $inputHostFiles = @('DKR-R-InputHost.exe', 'SDL3.dll', 'DKR-R-ModWorker.exe')
 
@@ -104,9 +104,9 @@ foreach ($name in $inputHostFiles) {
 $stagedRuntime = Join-Path $stage 'DKR-R.exe'
 $stagedInputHost = Join-Path $stagedInputHostDirectory 'DKR-R-InputHost.exe'
 if ($experimentalRaceTest) {
-    # Playtest 8 has its own current connection/scope guide. The older file
+    # Current playtests have their own connection/scope guides. The older file
     # describes Playtest 2 and must not label this candidate as that release.
-    if ($Version -ne '1.0.5-beta.15-playtest.8') {
+    if ($Version -notin @('1.0.5-beta.15-playtest.8', '1.0.5-beta.15-playtest.9', '1.0.5-beta.15-playtest.10', '1.0.5-beta.15-playtest.11', '1.0.5-beta.15-playtest.12', '1.0.5-beta.15-playtest.14')) {
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-ROLLBACK-TESTING.txt') -Destination (Join-Path $stage 'EXPERIMENTAL-ROLLBACK-TESTING.txt')
     }
     if ($Version -eq '1.0.5-beta.15-playtest.3') {
@@ -128,6 +128,25 @@ if ($experimentalRaceTest) {
     if ($Version -eq '1.0.5-beta.15-playtest.8') {
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST8-SCENERY.txt') -Destination (Join-Path $stage 'PLAYTEST8-NOTES.txt')
         Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt') -Destination (Join-Path $stage 'LOCAL-SCENERY-STATUS.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.9') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST9-CAMERA.txt') -Destination (Join-Path $stage 'PLAYTEST9-NOTES.txt')
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt') -Destination (Join-Path $stage 'LOCAL-SCENERY-STATUS.txt')
+    }
+    if ($Version -in @('1.0.5-beta.15-playtest.10', '1.0.5-beta.15-playtest.11', '1.0.5-beta.15-playtest.12', '1.0.5-beta.15-playtest.14')) {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST10-SAVE-PROTECTION.txt') -Destination (Join-Path $stage 'PLAYTEST10-NOTES.txt')
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\CONTROLLER-STUTTER-AND-LAUNCHER-OPTIONS-20261004.txt') -Destination (Join-Path $stage 'LAUNCHER-OPTIONS-AND-CONTROLLERS.txt')
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt') -Destination (Join-Path $stage 'LOCAL-SCENERY-STATUS.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.11') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST11-CUSTOM-ROSTER.txt') -Destination (Join-Path $stage 'PLAYTEST11-NOTES.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.12') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST12-ONLINE-MODS.txt') -Destination (Join-Path $stage 'PLAYTEST12-NOTES.txt')
+    }
+    if ($Version -eq '1.0.5-beta.15-playtest.14') {
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-PLAYTEST14-ONLINE-REVISIONS.txt') -Destination (Join-Path $stage 'PLAYTEST14-NOTES.txt')
+        Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PLAYTEST14-ONLINE-RETENTION-AND-PROGRESS.txt') -Destination (Join-Path $stage 'ONLINE-MOD-ADMISSION-REBUILD.txt')
     }
 }
 $logoDirectory = Join-Path $stage 'assets\ui\Icons'
@@ -201,6 +220,15 @@ try {
         throw 'The staged legacy importer self-test timed out.'
     }
     if ($modWorkerTest.ExitCode -ne 0) { throw 'The staged legacy importer self-test failed.' }
+} finally { $modWorkerTest.Dispose() }
+$modWorkerTestInfo.Arguments = '--online-capability'
+$modWorkerTestInfo.RedirectStandardOutput = $true
+$modWorkerTest = [Diagnostics.Process]::Start($modWorkerTestInfo)
+try {
+    if (-not $modWorkerTest.WaitForExit(15000)) { $modWorkerTest.Kill(); throw 'The staged online importer capability check timed out.' }
+    if ($modWorkerTest.ExitCode -ne 0 -or $modWorkerTest.StandardOutput.ReadToEnd().Trim() -ne 'DKR-R online-prepare protocol 1') {
+        throw 'The staged ModWorker cannot prepare online mods. Do not package a mismatched helper.'
+    }
 } finally { $modWorkerTest.Dispose() }
 $inputHostTest = [Diagnostics.Process]::Start(
     $stagedInputHost,

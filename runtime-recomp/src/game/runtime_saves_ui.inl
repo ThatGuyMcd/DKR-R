@@ -12,6 +12,7 @@ struct SavesPageState {
     ImGuiContext* context = nullptr;
     int last_frame = -100;
     int section = 0;  // Overview, Edit progress, Transfer & Paks
+    int scope = 0;    // Offline, Online, Modded, Recovery
     int tab = 0;      // Slot 1-3, Unlocks, Records
     std::array<bool, 3> courses_open{};
     std::array<bool, 2> records_open{};
@@ -679,14 +680,14 @@ void DrawSavesOverview(SavesPageState& state, float width, float panel, const Sa
 // ------------------------------------------------------------ transfer
 
 void DrawSavesTransfer(float width, float panel, const SaveManagerViewCache& view) {
-    SavesSeparator("Move all your saves", width, false);
-    SavesNote("Transfer Adventure progress and all available Controller Paks together between Windows and Steam Deck.",
+    SavesSeparator("Move your offline saves", width, false);
+    SavesNote("Transfer ordinary offline Adventure progress and offline Controller Paks. Online and mod-set saves are separate and are not included.",
               width);
     const bool stacked = panel <= 540.0F;
     const float half = stacked ? width : std::floor((width - 10.0F) * 0.5F);
-    if (SavesRaceButton("EXPORT COMPLETE GARAGE", half)) ExportSaveBundleWithDialog();
+    if (SavesRaceButton("EXPORT OFFLINE GARAGE", half)) ExportSaveBundleWithDialog();
     if (!stacked) ImGui::SameLine(0.0F, 10.0F); else PaddockGap(10.0F);
-    if (SavesRaceButton("IMPORT COMPLETE GARAGE", half)) ImportSaveBundleWithDialog();
+    if (SavesRaceButton("IMPORT OFFLINE GARAGE", half)) ImportSaveBundleWithDialog();
     PaddockGap(18.0F);
     SavesSeparator("Virtual Controller Paks", width, false);
     SavesNote("Four virtual memory cards. Each card is included in a complete garage export when available.", width);
@@ -756,7 +757,7 @@ void DrawSavesConfirmations(SavesPageState& state) {
             break;
         case Ask::Restore:
             heading = "Restore this backup?";
-            paragraphs = {PathUtf8(state.restore.filename()),
+            paragraphs = {PathUtf8(state.restore),
                           "Your current save will be backed up before it is replaced.",
                           dirty ? "Your unapplied editor changes will be discarded."
                                 : "You can restore the replaced save from this list."};
@@ -798,6 +799,7 @@ void DrawSavesConfirmations(SavesPageState& state) {
         }
         return;
     }
+    paragraphs.insert(paragraphs.begin(), "Target: YOUR OFFLINE ADVENTURE. Online and modded progress are not changed.");
     const float inner = SettingsDialogInner();
     for (std::size_t index = 0; index < paragraphs.size(); ++index) {
         if (index > 0U) PaddockGap(13.0F);
@@ -896,6 +898,50 @@ void DrawSavesConfirmations(SavesPageState& state) {
 
 // ------------------------------------------------------------ page
 
+void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
+    using namespace dkr::runtime::saves;
+    if (!g_save_manager_status.empty()) SavesNote(g_save_manager_status, width, 16.0F, kSetWarm);
+    static std::future<std::vector<StoredAdventure>> pending;
+    static std::vector<StoredAdventure> records;
+    static bool loaded = false;
+    if ((!loaded || SavesRaceButton("REFRESH STORED SAVES")) && !pending.valid()) {
+        pending = std::async(std::launch::async, [] { return stored_adventures(); });
+        loaded = true;
+    }
+    if (pending.valid()) {
+        if (pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+            try { records = pending.get(); } catch (...) { g_save_manager_status = "Stored-save scan failed; no files were changed."; }
+        } else SavesNote("Reading stored saves... no files are being changed.", width);
+    }
+    SavesNote(state.scope == 1 ? "Host-owned online progress and isolated client copies. These are never automatically imported into offline play."
+        : state.scope == 2 ? "Each enabled mod set has separate progress. Changing your mod selection does not delete earlier saves."
+        : "Recovery candidates are shown as stored. Nothing is restored automatically. A missing original cannot be reconstructed without a surviving copy.", width);
+    bool found = false;
+    for (const auto& record : records) {
+        if (record.scope != state.scope) continue;
+        found = true; ImGui::PushID(PathUtf8(record.info.path).c_str());
+        PaddockBox box(width, {19.0F, 19.0F}); const float inner = box.Inner();
+        SavesNote(record.label, inner, 16.0F, kSetText);
+        SavesNote(record.preview, inner);
+        SavesNote(PathUtf8(record.info.path), inner, 14.0F);
+        if (SavesRaceButton("COPY SAVE LOCATION")) SDL_SetClipboardText(PathUtf8(record.info.path).c_str());
+        PaddockGap(8.0F);
+        if (SavesRaceButton("EXPORT STORED SAVE", 0, SavesTone::Plain, !record.info.valid)) ExportAdventureWithDialog(record.info.path, record.kind);
+        if (state.scope == 3 && record.kind == StoredSaveKind::Adventure && record.info.valid && !locked) {
+            PaddockGap(8.0F);
+            if (SavesRaceButton("RESTORE TO OFFLINE...", 0, SavesTone::Danger)) {
+                state.restore = record.info.path; state.ask = SavesPageState::Ask::Restore;
+                state.scope = 0;
+            }
+        }
+        box.End([](ImDrawList* draw, ImVec2 a, ImVec2 b) {
+            PaddockPanel(draw, a, b, {PaddockRound(16.0F), PaddockRgb(0x0B2E40, 245U), PaddockRgb(kSetBorder), 1.0F});
+        });
+        PaddockGap(14.0F); ImGui::PopID();
+    }
+    if (!found && !pending.valid()) SavesNote("No stored saves found in this category. Your files have not been moved or deleted.", width);
+}
+
 void DrawSaveManagerPage(float available_width, bool live) {
     SavesPageState& state = g_saves_page;
     const int frame = ImGui::GetFrameCount();
@@ -912,10 +958,23 @@ void DrawSaveManagerPage(float available_width, bool live) {
     PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetMuted),
                 "Keep your progress safe, edit adventures and move saves between devices.", width);
     PaddockGap(22.0F);
+    const bool lobby = dkr::runtime::netplay::session().active();
+    const int scope = SettingsSectionSigns({"OFFLINE", "ONLINE", "MODDED", "RECOVERY"}, state.scope, width);
+    if (scope >= 0) { state.scope = scope; state.ask = SavesPageState::Ask::None; }
+    PaddockGap(16.0F);
+    if (state.scope != 0) {
+        DrawStoredSaves(state, width, live || lobby);
+        ImGui::PopStyleVar(); return;
+    }
 
     if (live) {
         PaddockBox box(width, {19.0F, 19.0F});
         const float inner = box.Inner();
+        const auto owner = dkr::runtime::saves::runtime_save_selection();
+        const auto route = dkr::runtime::saves::runtime_save_path();
+        SavesNote(owner.online ? "ACTIVE: ONLINE SESSION SAVE" : route.parent_path().filename() == "saves"
+            ? "ACTIVE: YOUR OFFLINE ADVENTURE" : "ACTIVE: MOD-SET SAVE (OFFLINE)", inner, 16.0F, kSetText);
+        SavesNote(PathUtf8(route), inner, 14.0F);
         PaddockText(PaddockSign(19.0F, 1.45F, 0.0F), PaddockRgb(kSetText), "PIT LANE SAFETY LOCK", inner);
         PaddockGap(12.0F);
         PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetMuted),
@@ -963,7 +1022,7 @@ void DrawSaveManagerPage(float available_width, bool live) {
         const PaddockType badge = PaddockReading(15.0F, true, 1.4F);
         const float badge_width = PaddockMeasure(badge, status);
         const ImVec2 head = ImGui::GetCursorScreenPos();
-        PaddockText(PaddockSign(19.0F, 1.2F, 0.0F), PaddockRgb(kSetText), "ADVENTURE SAVE",
+        PaddockText(PaddockSign(19.0F, 1.2F, 0.0F), PaddockRgb(kSetText), "OFFLINE ADVENTURE",
                     inner - badge_width - 10.0F);
         PaddockDrawRun(ImGui::GetWindowDrawList(), badge, {head.x + inner - badge_width, head.y},
                        PaddockCol(status_colour), status.data(), status.data() + status.size());
@@ -973,7 +1032,7 @@ void DrawSaveManagerPage(float available_width, bool live) {
         PaddockText(PaddockReading(14.0F, false, 1.4F), PaddockRgb(kSetMuted), PathUtf8(info.path), inner);
         if (info.exists && info.size == dkr::runtime::saves::codec::kImageSize && !info.valid) {
             PaddockGap(13.0F);
-            if (SavesRaceButton("BACK UP & REPAIR SAVE", 0.0F, SavesTone::Primary)) {
+            if (SavesRaceButton("BACK UP & REPAIR SAVE", 0.0F, SavesTone::Primary, lobby)) {
                 state.ask = SavesPageState::Ask::Repair;
             }
         }
@@ -982,6 +1041,13 @@ void DrawSaveManagerPage(float available_width, bool live) {
         });
     }
     PaddockGap(24.0F);
+    if (lobby) {
+        SavesNote("Offline progress is protected while you are in an online lobby. Leave the lobby before editing, importing, repairing or restoring personal saves.", width, 16.0F, kSetWarm);
+        SavesNote(view.preview, width);
+        if (SavesRaceButton("EXPORT OFFLINE COPY", 0, SavesTone::Plain, !editable)) ExportAdventureWithDialog();
+        state.ask = SavesPageState::Ask::None;
+        ImGui::PopStyleVar(); return;
+    }
     const std::string edit_label = std::string("EDIT PROGRESS") + (SavesDraftDirty() ? " *" : "") + "##edit";
     const int picked = SettingsSectionSigns({"OVERVIEW##overview", edit_label.c_str(), "TRANSFER & PAKS##transfer"},
                                             state.section, width);

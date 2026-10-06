@@ -1,6 +1,7 @@
 #include "experimental_runtime.hpp"
 #include "experimental_lobby_admission.hpp"
 #include "experimental_checkpoint_hash.hpp"
+#include "experimental_confirmed_output.hpp"
 #include "owned_game.hpp"
 #include "runtime_platform.hpp"
 #include "runtime_ui.hpp"
@@ -71,8 +72,85 @@ public:
         a=LobbyAdmission::address(index);b=std::move(p.bytes);return true;
     }
 };
+enum class OwnerStage : unsigned {Idle,Pump,Construct,Admit,PrepareTick,Capture,Restore,Tick,
+    Commit,Boundary,PrepareScene,Publish,SaveSnapshot,SaveWrite};
+struct OwnerActivity {
+    std::atomic<std::uint64_t> stamp{0};
+    static std::uint64_t micros() {
+        return std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
+    }
+    struct Scope {
+        OwnerActivity& activity;std::uint64_t previous;
+        Scope(OwnerActivity& a,OwnerStage stage):activity(a),previous(a.stamp.exchange((micros()<<8)|unsigned(stage))) {}
+        ~Scope() {activity.stamp.store(previous);}
+    };
+    void report_stall(const char* owner) const {
+        const auto sample=stamp.load();const auto stage=unsigned(sample&255);
+        if(!stage)return;
+        const auto age=micros()-(sample>>8);
+        if(age<500000)return;
+        constexpr const char* names[]={"idle","network-pulse","construct","admit","prepare-tick",
+            "capture","restore","gameplay-audio-tick","confirmed-effects","boundary","scene-loader",
+            "publish","confirmed-save-copy","durable-save-write"};
+        std::fprintf(stderr,"[rollback][owner-stall] owner=%s stage=%s elapsed-ms=%llu\n",
+            owner,names[stage],static_cast<unsigned long long>(age/1000));
+    }
+};
+// Observe the actual operation still in flight, not just the last completed
+// frame. No watchdog values enter input, checkpoints, hashes or game state.
+class ObservedOwnedGame final:public OwnedGame {
+    std::unique_ptr<OwnedGame> game_;OwnerActivity& activity_;
+public:
+    ObservedOwnedGame(std::unique_ptr<OwnedGame> game,OwnerActivity& activity):game_(std::move(game)),activity_(activity) {}
+    SimulationContract contract() const override {return game_->contract();}
+    bool requires_confirmed_tick() const override {return game_->requires_confirmed_tick();}
+    RestoreStep prepare_tick(std::uint64_t epoch,std::uint32_t frame,bool confirmed,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::PrepareTick);return game_->prepare_tick(epoch,frame,confirmed,error);
+    }
+    bool capture(std::span<std::uint8_t> state,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Capture);return game_->capture(state,error);
+    }
+    bool before_restore(std::uint64_t epoch,std::uint32_t frame,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Restore);return game_->before_restore(epoch,frame,error);
+    }
+    RestoreStep prepare_restore(std::uint64_t epoch,std::uint32_t frame,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Restore);return game_->prepare_restore(epoch,frame,error);
+    }
+    bool restore(std::span<const std::uint8_t> state,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Restore);return game_->restore(state,error);
+    }
+    bool tick(std::uint32_t frame,const FrameInputs& inputs,TickOutput& output,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Tick);return game_->tick(frame,inputs,output,error);
+    }
+    bool commit(std::uint64_t epoch,std::uint32_t frame,std::span<const std::uint8_t> effects,bool boundary,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Commit);return game_->commit(epoch,frame,effects,boundary,error);
+    }
+    bool confirmed_boundary(BoundaryIntent& intent,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Boundary);return game_->confirmed_boundary(intent,error);
+    }
+    PreparationStep prepare_scene(std::uint64_t hash,std::uint64_t& baseline,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::PrepareScene);return game_->prepare_scene(hash,baseline,error);
+    }
+    OwnedSceneView scene_view() const override {return game_->scene_view();}
+    bool publish_current(std::uint64_t epoch,std::uint32_t frame,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Publish);return game_->publish_current(epoch,frame,error);
+    }
+    bool admit_initial(std::span<const std::uint8_t> state,std::string& error) override {
+        OwnerActivity::Scope stage(activity_,OwnerStage::Admit);return game_->admit_initial(state,error);
+    }
+    std::uint32_t confirmed_count() const override {return game_->confirmed_count();}
+    std::span<const std::uint8_t> confirmed_save() const override {return game_->confirmed_save();}
+    std::span<const std::uint8_t> confirmed_paks() const override {return game_->confirmed_paks();}
+    bool install_initial_paks(std::uint64_t epoch,std::span<const std::uint8_t> images,std::string& error) override {
+        return game_->install_initial_paks(epoch,images,error);
+    }
+    void set_confirmed_rumble_sink(ConfirmedRumbleSink sink) override {game_->set_confirmed_rumble_sink(std::move(sink));}
+};
 struct Shared {
     PresentationMailbox mailbox;
+    ConfirmedAudioMailbox audio;
+    OwnerActivity simulation_activity,save_activity;
     std::atomic<bool> stop{false},renderer_ready{false},simulation_done{false},renderer_done{false};
     std::atomic<std::uint32_t> input{0};
     std::atomic<int> confirmed_motor{-1};
@@ -95,10 +173,12 @@ struct WorkerCompletion {
 };
 struct RuntimeWorkers {
     Shared& shared;
+    ConfirmedSaveWriter& saves;
     std::thread render,simulation;
     void retire() {
-        if(!simulation.joinable()&&!render.joinable())return;
+        if(!simulation.joinable()&&!render.joinable()&&saves.done())return;
         shared.stop=true;
+        shared.audio.close();
         const auto started=std::chrono::steady_clock::now();auto next_report=started;
         std::fprintf(stderr,"[rollback][retire] stopping owned workers; servicing native window messages\n");
         // GPU/swap-chain destruction can synchronously send native window
@@ -106,20 +186,26 @@ struct RuntimeWorkers {
         // and can deadlock teardown. Do not invoke game/overlay callbacks here:
         // their owners are being retired. Completion is published only AFTER
         // each worker's owned objects (including the GPU) have been destroyed.
-        while((simulation.joinable()&&!shared.simulation_done.load(std::memory_order_acquire))||
-              (render.joinable()&&!shared.renderer_done.load(std::memory_order_acquire))) {
+        for(;;) {
+            const bool simulation_pending=simulation.joinable()&&!shared.simulation_done.load(std::memory_order_acquire);
+            const bool render_pending=render.joinable()&&!shared.renderer_done.load(std::memory_order_acquire);
+            if(!simulation_pending)saves.finish(); // The final confirmed copy has now been submitted.
+            if(!simulation_pending&&!render_pending&&saves.done())break;
             SDL_PumpEvents();
             const auto now=std::chrono::steady_clock::now();
             if(now>=next_report) {
-                std::fprintf(stderr,"[rollback][retire] elapsed-ms=%lld simulation-done=%d renderer-done=%d\n",
+                std::fprintf(stderr,"[rollback][retire] elapsed-ms=%lld simulation-done=%d renderer-done=%d save-done=%d\n",
                     static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(now-started).count()),
-                    int(shared.simulation_done.load()),int(shared.renderer_done.load()));
+                    int(shared.simulation_done.load()),int(shared.renderer_done.load()),int(saves.done()));
+                shared.simulation_activity.report_stall("simulation");shared.save_activity.report_stall("save");
                 next_report=now+std::chrono::seconds(2);
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         if(simulation.joinable())simulation.join();
         if(render.joinable())render.join();
+        saves.join();
+        if(const auto error=saves.error();!error.empty())shared.fail(error);
         std::fprintf(stderr,"[rollback][retire] both owned workers fully destroyed\n");
     }
     ~RuntimeWorkers() {
@@ -134,12 +220,13 @@ struct RuntimeWorkers {
 std::uint32_t pack(PackedInput p) {return p.buttons|(std::uint32_t(std::uint8_t(p.stick_x))<<16)|(std::uint32_t(std::uint8_t(p.stick_y))<<24);}
 PackedInput unpack(std::uint32_t p) {return {std::uint16_t(p),std::int8_t(p>>16),std::int8_t(p>>24)};}
 }
-bool runtime_available(rom::Revision revision) {return revision==rom::Revision::UsV77;}
+bool runtime_available(rom::Revision revision) {return owned_adapter_available(revision);}
 RuntimeView runtime_view() {std::scoped_lock lock(view_mutex);return view;}
 void request_runtime_stop() {requested_stop=true;}
 bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesystem::path& canonical_rom,
     std::vector<std::uint8_t> bootstrap,DirectSession& lobby,const LaunchDescriptor& accepted_launch,
-    unsigned timeout_seconds,std::string& error,bool scripted_check) {
+    unsigned timeout_seconds,std::string& error,bool scripted_check,
+    std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,std::vector<std::uint8_t> mod_bootstrap) {
     const std::optional<LaunchDescriptor> launch{accepted_launch};const auto initial=lobby.runtime_view();
     // A departure may retire the accepted descriptor during cold boot, or
     // between this caller and the worker startup. Validate against the caller's
@@ -168,7 +255,20 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
     }
     Shared shared;requested_stop=false;
     shared.confirmed_save=seed; // valid fallback when departure interrupts admission
-    RuntimeWorkers workers{shared};
+    ConfirmedSaveWriter save_writer([&,host=initial.host,match=launch->match_id,
+        last_save=seed,last_paks=std::vector<std::uint8_t>{}](const ConfirmedSaveSnapshot& snapshot,std::string& message) mutable {
+        OwnerActivity::Scope stage(shared.save_activity,OwnerStage::SaveWrite);
+        if(snapshot.eeprom!=last_save) {
+            if(!saves::commit_online_adventure(host,match,snapshot.eeprom,message))return false;
+            last_save=snapshot.eeprom;
+        }
+        if(snapshot.paks!=last_paks) {
+            if(!saves::commit_experimental_online_paks(host,match,snapshot.paks,message))return false;
+            last_paks=snapshot.paks;
+        }
+        std::scoped_lock lock(shared.mutex);shared.confirmed_save=snapshot.eeprom;return true;
+    });
+    RuntimeWorkers workers{shared,save_writer};
     report({true,PumpWait::ScenePreparation,0,0,0,0,0,"Preparing experimental rollback in the existing game window"});
     platform::set_online_input_routing(true,launch->occupied_mask,initial.local_slot);
     workers.render=std::thread([&] {
@@ -200,21 +300,17 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
             std::string message;auto rom_bytes=read_rom(canonical_rom);
             constexpr std::uint64_t epoch=91;
             if(!shared.mailbox.begin_epoch(epoch))throw std::runtime_error("Owned initial presentation epoch refused.");
-            world=make_owned_game(bootstrap,rom_bytes,epoch,shared.mailbox,
-                [pcm=std::vector<std::int16_t>{}](ConfirmedAudio audio,std::string& e) mutable {
-                    if(audio.rate<8000||audio.rate>48000||audio.pcm.size()%4||audio.pcm.size()>8192) {e="Invalid confirmed owned audio block.";return false;}
-                    // Confirmed output is sequential on the simulation owner.
-                    // Retain the conversion buffer, not one heap allocation per
-                    // block. queue_audio copies into its own device storage.
-                    pcm.resize(audio.pcm.size()/2);
-                    // platform::queue_audio accepts guest-native R,L pairs.
-                    // The owned sink carries conventional little-endian L,R.
-                    for(std::size_t i=0;i<pcm.size();++i){const auto v=std::uint16_t(audio.pcm[2*i])|(std::uint16_t(audio.pcm[2*i+1])<<8);pcm[i^1]=std::int16_t(v);}
-                    platform::set_audio_frequency(audio.rate);platform::queue_audio(pcm.data(),pcm.size());return true;
-                },message,false,std::uint32_t(lobby.view().room.manifest.magic_codes_hash),seed,
-                OwnedBootOptions{true,launch->player_count,launch->host_control,
-                    enhancements::multiplayer_race_music_enabled()});
+            const auto revision=lobby.view().room.manifest.revision==Revision::UsV80?rom::Revision::UsV80:rom::Revision::UsV77;
+            {
+                OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::Construct);
+                world=make_owned_game_for_revision(revision,bootstrap,rom_bytes,epoch,shared.mailbox,
+                    [&](ConfirmedAudio audio,std::string& e) {return shared.audio.push(audio.rate,audio.pcm,e);},
+                    message,false,std::uint32_t(lobby.view().room.manifest.magic_codes_hash),seed,
+                    OwnedBootOptions{true,launch->player_count,launch->host_control,
+                        enhancements::multiplayer_race_music_enabled(),mods,std::move(mod_bootstrap)});
+            }
             if(!world)throw std::runtime_error(message);
+            world=std::make_unique<ObservedOwnedGame>(std::move(world),shared.simulation_activity);
             if(initial.host) {
                 std::vector<std::uint8_t> pak_seed;
                 if(!saves::read_experimental_online_paks(true,launch->match_id,pak_seed,message)||
@@ -225,14 +321,15 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
             });
             if(world->scene_view().owners!=launch->player_count)throw std::runtime_error("Owned construction roster differs from the accepted lobby.");
             const auto contract=world->contract();std::vector<std::uint8_t> identity;
-            const std::string_view build=DKR_OWNED_BUILD_ID;
+            const std::string_view build=owned_adapter_identity(revision);
+            if(build.empty())throw std::runtime_error("The selected replay engine has no compatibility identity.");
             identity.insert(identity.end(),build.begin(),build.end());
             const auto rom_hash=digest(rom_bytes);identity.insert(identity.end(),rom_hash.begin(),rom_hash.end());
             put(identity,contract.schema,8);put(identity,contract.state_bytes,8);put(identity,launch_descriptor_hash(*launch),8);
             put(identity,initial.online_save_hash,8);put(identity,epoch,8);
             std::vector<std::uint8_t> baseline;
             std::fprintf(stderr,"[rollback][admission] owner=%u host=%d build=%s checkpoint=%zu capture-begin\n",
-                unsigned(local),initial.host,DKR_OWNED_BUILD_ID,contract.state_bytes);
+                unsigned(local),initial.host,build.data(),contract.state_bytes);
             if(initial.host) {
                 baseline.resize(contract.state_bytes);
                 if(!world->capture(baseline,message))throw std::runtime_error(
@@ -302,6 +399,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                 std::optional<std::tuple<PumpWait,std::uint64_t,std::uint32_t,
                     std::uint32_t,std::uint32_t,std::uint32_t>> reported_view;
                 while(!shared.stop) {
+                    OwnerActivity::Scope activity(shared.simulation_activity,OwnerStage::Pump);
                     if(!lobby.owned_game_active()){shared.stop=true;break;}
                     const auto now=Network::Clock::now();
                     const auto scene=world->scene_view();
@@ -370,14 +468,15 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                         reported_view=next_view;
                     }
                     if(now>=next_save) {
+                        OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::SaveSnapshot);
                         const auto confirmed=world->confirmed_save();
-                        if(!std::equal(confirmed.begin(),confirmed.end(),last_save_at.begin(),last_save_at.end())) {
-                            if(!saves::commit_online_adventure(initial.host,launch->match_id,confirmed,message))throw std::runtime_error(message);
-                            last_save_at.assign(confirmed.begin(),confirmed.end());
-                        }
                         const auto paks=world->confirmed_paks();
-                        if(!std::equal(paks.begin(),paks.end(),last_paks_at.begin(),last_paks_at.end())) {
-                            if(!saves::commit_experimental_online_paks(initial.host,launch->match_id,paks,message))throw std::runtime_error(message);
+                        if(!std::equal(confirmed.begin(),confirmed.end(),last_save_at.begin(),last_save_at.end())||
+                           !std::equal(paks.begin(),paks.end(),last_paks_at.begin(),last_paks_at.end())) {
+                            if(!save_writer.submit(confirmed,paks,message))throw std::runtime_error(message);
+                            // These are enqueued, not yet durable. The writer
+                            // owns the persistence proof and final return fence.
+                            last_save_at.assign(confirmed.begin(),confirmed.end());
                             last_paks_at.assign(paks.begin(),paks.end());
                         }
                         next_save=now+std::chrono::seconds(5);
@@ -396,21 +495,25 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                 std::fprintf(stderr,"[rollback][startup-cancel] %s\n",e.what());
                 lobby.request_owned_match_end(std::string("Startup stopped safely: ")+e.what());shared.stop=true;
             } else if(lifecycle.active&&!lifecycle.owned_match_ending)shared.fail(e.what());
-            else shared.stop=true;
+            else {
+                std::fprintf(stderr,"[rollback][retired-operation] %s\n",e.what());shared.stop=true;
+            }
         }catch(...){shared.fail("The owned simulation worker failed.");}
         // Also run on a departure that races a network/publish operation. Only
         // confirmed EEPROM is retained; never persist speculative simulation.
         if(world) try {
+            OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::SaveSnapshot);
             std::string message;
-            const auto confirmed=world->confirmed_save();
-            if(!saves::commit_online_adventure(initial.host,launch->match_id,confirmed,message))shared.fail(message);
-            else shared.confirmed_save.assign(confirmed.begin(),confirmed.end());
-            if(!saves::commit_experimental_online_paks(initial.host,launch->match_id,world->confirmed_paks(),message))shared.fail(message);
+            if(!save_writer.submit(world->confirmed_save(),world->confirmed_paks(),message))shared.fail(message);
         } catch(const std::exception& e){shared.fail(e.what());}
           catch(...){shared.fail("The confirmed online save could not be retained.");}
     });
     const auto started=Network::Clock::now();
     unsigned overlay_check=0;
+    ConfirmedAudioMailbox::Block audio_block;
+    std::array<std::int16_t,ConfirmedAudioMailbox::kMaximumBytes/2> pcm{};
+    std::uint64_t reported_audio_drops=0;
+    auto next_stall_report=started;
     std::fprintf(stderr,"[rollback][runtime] event loop started timeout=%u scripted=%d\n",timeout_seconds,scripted_check);
     while(!shared.stop&&!shared.simulation_done) {
         const auto motor=shared.confirmed_motor.exchange(-1,std::memory_order_acq_rel);
@@ -430,6 +533,25 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
         std::uint16_t buttons=0;float x=0,y=0;bool blocked=false;
         platform::get_local_online_input(&buttons,&x,&y,&blocked);
         shared.input=pack(blocked?PackedInput{}:PackedInput{buttons,std::int8_t(std::clamp(x,-1.0F,1.0F)*80),std::int8_t(std::clamp(y,-1.0F,1.0F)*80)});
+        // Device calls share SDL/input synchronization. Keep them on the event
+        // owner, AFTER input sampling, never on the rollback packet consumer.
+        for(unsigned i=0;i<ConfirmedAudioMailbox::kCapacity&&!shared.stop&&shared.audio.take(audio_block);++i) {
+            for(std::size_t sample=0;sample<audio_block.bytes/2;++sample) {
+                const auto value=std::uint16_t(audio_block.pcm[2*sample])|(std::uint16_t(audio_block.pcm[2*sample+1])<<8);
+                pcm[sample^1]=std::int16_t(value); // canonical L,R -> guest-native R,L
+            }
+            platform::set_audio_frequency(audio_block.rate);platform::queue_audio(pcm.data(),audio_block.bytes/2);
+        }
+        if(const auto message=save_writer.error();!message.empty())shared.fail(message);
+        if(Network::Clock::now()>=next_stall_report) {
+            shared.simulation_activity.report_stall("simulation");shared.save_activity.report_stall("save");
+            const auto dropped=shared.audio.dropped();
+            if(dropped!=reported_audio_drops) {
+                std::fprintf(stderr,"[rollback][audio-output] confirmed-device-backlog dropped-blocks=%llu\n",static_cast<unsigned long long>(dropped));
+                reported_audio_drops=dropped;
+            }
+            next_stall_report=Network::Clock::now()+std::chrono::seconds(1);
+        }
         const auto lifecycle=ui::lifecycle_request();
         if(!lobby.owned_game_active())shared.stop=true;
         const auto elapsed=Network::Clock::now()-started;

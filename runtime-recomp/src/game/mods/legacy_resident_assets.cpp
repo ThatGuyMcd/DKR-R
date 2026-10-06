@@ -1,4 +1,5 @@
 #include "legacy_resident_assets.hpp"
+#include "legacy_checkpoint.hpp"
 #include "legacy_audio_bank.hpp"
 #include <algorithm>
 #include <limits>
@@ -60,6 +61,18 @@ std::shared_ptr<const ResidentBank> ResidentBank::prepare(std::shared_ptr<const 
         if(!std::ranges::equal(stock->record(30,0),candidate->record(30,0)))
             throw Error("A scene changed live character animation ranges.");
     }
+    if(stock->appended_courses()!=candidate->appended_courses())
+        throw Error("A scene changed the boot-owned Track Lab namespace.");
+    if(stock->appended_courses())for(unsigned section:{21U,23U,25U,27U}) {
+        if(stock->record_count(section)!=candidate->record_count(section))
+            throw Error("A scene changed the boot-owned course namespace size.");
+        const auto table=stock->stock_section(section-1);
+        unsigned words=0;while(words*4+4<=table.size() && be32(table,words*4)!=0xffffffff)++words;
+        if(words<2 || words*4+4>table.size())throw Error("Original course lookup lacks its sentinel.");
+        for(unsigned id=words-1;id<stock->record_count(section);++id)
+            if(!std::ranges::equal(stock->record(section,id),candidate->record(section,id)))
+                throw Error("A scene changed a live Track Lab dependency.");
+    }
     auto result=std::shared_ptr<ResidentBank>(new ResidentBank);
     result->boot_=candidate->fingerprint()==stock->fingerprint();
     result->stock_=result->boot_ && !stock->augmented();result->bank_=std::move(candidate);
@@ -120,8 +133,8 @@ ResidentAssetState::Lease ResidentAssetState::acquire() {std::lock_guard lock(mu
 ResidentAssetState::Plan ResidentAssetState::prepare(View memory,std::shared_ptr<const ResidentBank> next) {
     std::lock_guard lock(mutex_);
     if(!next || current_->bank->bank_->base_fingerprint()!=next->bank_->base_fingerprint() ||
-       generation_==std::numeric_limits<std::uint64_t>::max()) throw Error("Invalid resident transition.");
-    Plan plan;plan.authority=this;plan.generation=generation_;plan.next=std::make_shared<State>(std::move(next));
+       generation_==std::numeric_limits<std::uint64_t>::max() || mutation_==std::numeric_limits<std::uint64_t>::max()) throw Error("Invalid resident transition.");
+    Plan plan;plan.authority=this;plan.generation=mutation_;plan.next=std::make_shared<State>(std::move(next));
     plan.guest_data=memory.data();plan.guest_size=memory.size();
     plan.cache=cache_.prepare(memory,layout_.caches,current_->bank->cache_,plan.next->bank->cache_);
     std::vector<std::pair<std::uint32_t,std::size_t>> ranges;
@@ -146,7 +159,8 @@ ResidentAssetState::Plan ResidentAssetState::prepare(View memory,std::shared_ptr
 }
 ResidentAssetState::Commit ResidentAssetState::commit(std::span<std::uint8_t> memory,Plan&& plan) {
     std::lock_guard lock(mutex_);
-    if(plan.authority!=this || plan.generation!=generation_ || memory.data()!=plan.guest_data || memory.size()!=plan.guest_size) return Commit::Stale;
+    if(plan.authority!=this || plan.generation!=mutation_ || mutation_==std::numeric_limits<std::uint64_t>::max() ||
+       memory.data()!=plan.guest_data || memory.size()!=plan.guest_size) return Commit::Stale;
     if(current_->readers.load()!=0) return Commit::Busy;
     for(const auto& change:plan.changes) if(!matches(memory,change.address,change.before)) return Commit::Stale;
     if(!cache_.apply(memory,std::move(plan.cache))) return Commit::Stale;
@@ -156,11 +170,40 @@ ResidentAssetState::Commit ResidentAssetState::commit(std::span<std::uint8_t> me
         const auto p=change.address&0x1fffffffU;
         for(std::size_t i=0;i<change.after.size();++i) memory[(p+i)^3]=change.after[i];
     }
-    current_.swap(plan.next);++generation_;plan.authority=nullptr;
+    current_.swap(plan.next);++generation_;++mutation_;plan.authority=nullptr;
     return Commit::Published;
 }
 void ResidentAssetState::cancel() {
     std::lock_guard lock(mutex_);
-    if(generation_==std::numeric_limits<std::uint64_t>::max()) throw Error("Resident generation exhausted.");++generation_;
+    if(generation_==std::numeric_limits<std::uint64_t>::max() || mutation_==std::numeric_limits<std::uint64_t>::max()) throw Error("Resident generation exhausted.");++generation_;++mutation_;
+}
+Bytes ResidentAssetState::checkpoint()const {
+    std::lock_guard lock(mutex_);
+    if(current_->readers.load()!=0)throw Error("Cannot checkpoint an outstanding custom asset read.");
+    CheckpointWriter out;out.u32(1);out.text(current_->bank->fingerprint(),64);out.u64(generation_);out.block(cache_.checkpoint());
+    return std::move(out).finish();
+}
+ResidentAssetState::ReplayRestore ResidentAssetState::stage_checkpoint(View bytes,
+    const std::map<std::string,std::shared_ptr<const ResidentBank>>& admitted)const {
+    std::lock_guard lock(mutex_);
+    if(current_->readers.load()!=0)throw Error("Cannot restore an outstanding custom asset read.");
+    CheckpointReader in(bytes);if(in.u32()!=1)throw Error("Unsupported resident checkpoint schema.");
+    const auto bank=in.text(64);const auto found=admitted.find(bank);
+    if(found==admitted.end() || !found->second || found->second->bank_->revision()!=current_->bank->bank_->revision() ||
+       found->second->bank_->base_fingerprint()!=current_->bank->bank_->base_fingerprint())
+        throw Error("Resident checkpoint refers to unadmitted content.");
+    ReplayRestore out;out.authority=this;out.expected=mutation_;out.generation=in.u64();
+    if(out.generation==std::numeric_limits<std::uint64_t>::max())throw Error("Resident checkpoint generation is exhausted.");
+    std::map<std::string,std::shared_ptr<CacheContent>> owners;
+    for(const auto& [id,value]:admitted) {
+        if(!value || !value->cache_ || value->fingerprint()!=id)throw Error("Invalid immutable resident registry.");
+        owners.emplace(id,value->cache_);
+    }
+    out.cache=cache_.stage_checkpoint(in.block(),owners);in.end();out.next=std::make_shared<State>(found->second);return out;
+}
+bool ResidentAssetState::commit_checkpoint(ReplayRestore&& staged) {
+    std::lock_guard lock(mutex_);
+    if(staged.authority!=this || staged.expected!=mutation_ || mutation_==std::numeric_limits<std::uint64_t>::max() || !staged.next || current_->readers.load()!=0)return false;
+    current_.swap(staged.next);cache_=std::move(staged.cache);generation_=staged.generation;++mutation_;staged.authority=nullptr;return true;
 }
 } // namespace dkr::mods

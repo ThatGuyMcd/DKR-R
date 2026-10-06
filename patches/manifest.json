@@ -109,6 +109,14 @@
         {
           "path": "patches/n64-modern-runtime/0026-client-authored-vi-catch-up-pacing.patch",
           "sha256": "40f4dc029a6a0db8719eb8f8f7a723d4158d6402d5e54fc48c6ee31e61b9765e"
+        },
+        {
+          "path": "patches/n64-modern-runtime/0027-freeze-save-ownership-and-flush.patch",
+          "sha256": "60280bfe74f5cc8354f66bf3e7fc432ef0c1d78459dae90d9978fd12fe4c704e"
+        },
+        {
+          "path": "patches/n64-modern-runtime/0028-flush-joined-save-owner.patch",
+          "sha256": "0233dcf21815a032caf85a282f8cdfadd494da479003f99439b7278e3c9be120"
         }
       ]
     },

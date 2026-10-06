@@ -5,6 +5,7 @@
 #include "custom_music_sequence.hpp"
 #include "custom_tracks.hpp"
 #include "revision_addresses.hpp"
+#include "runtime_legacy_mods.hpp"
 
 #include "recomp.h"
 
@@ -328,6 +329,7 @@ bool intercept_music_volume(std::uint8_t* rdram, std::int32_t requested) {
 }
 
 void tick(std::uint8_t* rdram) {
+    if(dkr::runtime::legacy::frozen_music_hook("tick",rdram,nullptr))return;
     const std::uint8_t carrier = g_carrier.load(std::memory_order_acquire);
     bool playing = false;
     if (carrier != 0U) {
@@ -361,6 +363,7 @@ void tick(std::uint8_t* rdram) {
 }
 
 void render(float* out, std::size_t frames, std::uint32_t output_rate) {
+    if(dkr::runtime::legacy::frozen_music_render(out,frames,output_rate))return;
     if (out == nullptr || frames == 0U || output_rate == 0U) {
         return;
     }
@@ -408,6 +411,7 @@ void render(float* out, std::size_t frames, std::uint32_t output_rate) {
 }
 
 bool active() {
+    if(dkr::runtime::legacy::frozen_online_resources())return true;
     std::scoped_lock lock(g_mutex);
     return static_cast<bool>(g_binding);
 }
@@ -481,6 +485,7 @@ void sequence_started(std::uint8_t* rdram) {
 // player, s1 the buffer and s3 the address of the pending song id (0x800023B4
 // in both US revisions).
 extern "C" void dkr_custom_music_sequence_loaded(std::uint8_t* rdram, recomp_context* ctx) {
+    if(dkr::runtime::legacy::frozen_music_hook("loaded",rdram,ctx))return;
     dkr::runtime::custom_music::sequence_loaded(rdram, static_cast<std::uint32_t>(ctx->r16),
                                                 static_cast<std::uint32_t>(ctx->r17),
                                                 static_cast<std::uint32_t>(ctx->r19));
@@ -488,6 +493,7 @@ extern "C" void dkr_custom_music_sequence_loaded(std::uint8_t* rdram, recomp_con
 
 // music_sequence_init, once sound_reverb_set has returned: the row has been
 // read for the last time in this call (0x8000247C in both US revisions).
-extern "C" void dkr_custom_music_sequence_started(std::uint8_t* rdram, recomp_context*) {
+extern "C" void dkr_custom_music_sequence_started(std::uint8_t* rdram, recomp_context* ctx) {
+    if(dkr::runtime::legacy::frozen_music_hook("started",rdram,ctx))return;
     dkr::runtime::custom_music::sequence_started(rdram);
 }

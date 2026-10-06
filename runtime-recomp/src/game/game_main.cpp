@@ -4,9 +4,11 @@
 #include "rev_a_asset_mutex.hpp"
 #include "runtime_magic_codes.hpp"
 #include "runtime_platform.hpp"
+#include "runtime_portable.hpp"
 #include "runtime_netplay.hpp"
 #include "runtime_support.hpp"
 #include "save_manager.hpp"
+#include "runtime_save_routing.hpp"
 #include "startup_performance.hpp"
 #include "virtual_pak.hpp"
 #include "runtime_legacy_mods.hpp"
@@ -125,13 +127,9 @@ bool ConfigurePersistentRuntimeLog(
 }
 
 std::filesystem::path DefaultConfigDirectory(const char* executable_argument) {
-    std::error_code error;
-    const std::filesystem::path executable = std::filesystem::absolute(
-        std::filesystem::u8path(executable_argument), error);
-    const std::filesystem::path executable_directory = error
-        ? std::filesystem::current_path()
-        : executable.parent_path();
-    if (std::filesystem::exists(executable_directory / "portable.txt")) {
+    (void)executable_argument;
+    const auto& executable_directory = dkr::runtime::portable::application_directory();
+    if (dkr::runtime::portable::enabled_at_startup()) {
         return executable_directory / "dkr-runtime-data";
     }
 #if defined(_WIN32)
@@ -148,6 +146,29 @@ std::filesystem::path DefaultConfigDirectory(const char* executable_argument) {
     }
 #endif
     return executable_directory / "dkr-runtime-data";
+}
+
+std::vector<std::filesystem::path> RecoverySaveLocations(const char* executable_argument) {
+    // Read-only, bounded discovery of the known legacy locations. In particular
+    // do not search the user's home directory or every previous download folder.
+    std::vector<std::filesystem::path> roots;
+    std::error_code ec;
+    const auto executable = std::filesystem::absolute(std::filesystem::u8path(executable_argument), ec);
+    if (!ec) roots.push_back(executable.parent_path() / "dkr-runtime-data");
+#if defined(_WIN32)
+    if (const char* app_data = std::getenv("APPDATA"); app_data && *app_data)
+        roots.emplace_back(std::filesystem::path(app_data) / "DKRPort");
+#else
+    if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg)
+        roots.emplace_back(std::filesystem::path(xdg) / "dkr-port");
+    if (const char* user_home = std::getenv("HOME"); user_home && *user_home)
+        roots.emplace_back(std::filesystem::path(user_home) / ".config" / "dkr-port");
+    if (const char* app_image = std::getenv("APPIMAGE"); app_image && *app_image)
+        roots.emplace_back(std::filesystem::path(app_image).parent_path() / "dkr-runtime-data");
+#endif
+    const auto working = std::filesystem::current_path(ec);
+    if (!ec) roots.push_back(working); // only known save subdirectories are scanned
+    return roots;
 }
 
 RspExitReason EmptyAudioTask(std::uint8_t*, std::uint32_t) {
@@ -509,6 +530,7 @@ bool RelaunchApplication(int argc, char** argv) {
 int DkrMain(int argc, char** argv) {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
+    dkr::runtime::portable::configure(argv[0]);
 #if defined(__ANDROID__)
     std::set_terminate([] {
         // Preserve the exception's cause in the user-exportable log, then let
@@ -683,7 +705,10 @@ int DkrMain(int argc, char** argv) {
     }
     std::filesystem::path& rom_path = launch.rom_path;
     std::shared_ptr<const dkr::mods::PreparedModLaunch> prepared_mods;
-    const std::filesystem::path& config_directory = launch.config_directory;
+    // Resolve an explicitly selected profile root once. Descendant save paths
+    // remain subject to the no-link policy; ordinary Android storage aliases
+    // and portable roots must not accidentally select another profile later.
+    const std::filesystem::path config_directory = std::filesystem::weakly_canonical(launch.config_directory);
     const unsigned timeout_seconds = launch.timeout_seconds;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     const bool rollback_bootstrap = !launch.bootstrap_output.empty();
@@ -760,6 +785,7 @@ int DkrMain(int argc, char** argv) {
             "pak-save-input-configure");
         dkr::runtime::pak::configure(config_directory);
         dkr::runtime::saves::configure(config_directory);
+        dkr::runtime::saves::configure_recovery_locations(RecoverySaveLocations(argv[0]));
         dkr::runtime::platform::configure_input(config_directory);
 #if DKR_RUNTIME_HAS_RT64
         // Custom tracks are user content beside the other imported assets, so
@@ -1025,7 +1051,8 @@ int DkrMain(int argc, char** argv) {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
             if(dkr_experimental_bootstrap_active())return false;
 #endif
-            return dkr::runtime::netplay::external_side_effects_allowed();
+            return dkr::runtime::saves::runtime_save_writes_allowed() &&
+                dkr::runtime::netplay::external_side_effects_allowed();
         },
         .error_handling_callbacks = error_callbacks,
         .threads_callbacks = thread_callbacks,
@@ -1063,17 +1090,79 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::netplay::reset_runtime_state();
         dkr::runtime::rev_a_asset_mutex::reset_statistics();
         dkr::runtime::legacy::begin_session(nullptr);
+        bool selecting_save_owner = false;
+        std::shared_ptr<const dkr::mods::online::RuntimeResources> online_mods;
         try {
+            selecting_save_owner=true; // resource admission failures also return safely to the launcher
             // Launcher preparation already ran on a worker with a progress
             // modal. Explicit command-line launches validate here instead.
             if(!prepared_mods)prepared_mods=dkr::mods::prepare_mod_launch(config_directory,rom_path,
                 dkr::runtime::netplay::session().active(),[](const char* stage){std::fprintf(stderr,"[legacy][launch] %s\n",stage);});
             if(prepared_mods->session && dkr::runtime::netplay::session().active())
                 throw dkr::mods::Error("Offline custom assets cannot enter an online runtime.");
-            dkr::runtime::legacy::begin_prepared(prepared_mods);
-            dkr::runtime::pak::begin_session_directory(prepared_mods->pak_directory);
+            if(dkr::runtime::netplay::session().active()) {
+#if DKR_RUNTIME_HAS_RT64
+                online_mods=dkr::runtime::ui::online_mod_resources();
+#endif
+                if(online_mods)dkr::runtime::legacy::begin_online(online_mods);
+                else dkr::runtime::legacy::begin_prepared(prepared_mods);
+            } else dkr::runtime::legacy::begin_prepared(prepared_mods);
+            const auto online_save = dkr::runtime::netplay::session().runtime_view();
+            selecting_save_owner = true;
+            if (!dkr::runtime::saves::prepare_runtime_save_context(config_directory,
+                    prepared_mods->save_subfolder, prepared_mods->pak_directory,
+                    online_save.active, online_save.host,
+                    online_save.launch_descriptor ? online_save.launch_descriptor->match_id : 0,
+                    online_save.online_save_hash, rom_error)) throw dkr::mods::Error(rom_error);
+            ultramodern::set_save_storage_callbacks({
+                dkr::runtime::saves::runtime_save_path,
+                dkr::runtime::saves::load_runtime_save,
+                dkr::runtime::saves::commit_runtime_save});
+            dkr::runtime::pak::begin_session_directory(dkr::runtime::saves::runtime_pak_directory());
         } catch(const std::exception& error) {
             std::fprintf(stderr,"[legacy][launch] %s\n",error.what());
+#if DKR_RUNTIME_HAS_RT64
+            if (selecting_save_owner) {
+                // No guest producer exists yet. A locked/invalid route is a
+                // recoverable refusal, never permission to open an offline fallback.
+                dkr::runtime::pak::begin_session_directory({});
+                dkr::runtime::saves::retire_runtime_save_context();
+                dkr::runtime::legacy::begin_session(nullptr);
+                prepared_mods.reset();
+                if (dkr::runtime::netplay::session().active())
+                    dkr::runtime::netplay::session().fail_runtime_start(std::string("Save protection: ") + error.what());
+                dkr::runtime::ui::report_mod_error(std::string("Save protection: ") + error.what());
+                const auto startup = dkr::runtime::ui::run_startup_screen(
+                    static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()), rom_path);
+                if (!startup.start_game) {
+                    dkr::runtime::platform::shutdown();
+                    return startup.lifecycle_request == dkr::runtime::ui::LifecycleRequest::Restart
+                        ? (RelaunchApplication(argc, argv) ? 0 : 6) : 0;
+                }
+                dkr::runtime::rom::Identity next_identity{};
+                auto next_rom = startup.rom_path;
+                if (!dkr::runtime::ValidateRomForLauncher(next_rom, next_identity, rom_error) ||
+                    !PrepareCanonicalRomPath(next_rom, next_identity, config_directory, rom_error)) {
+                    std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
+                    dkr::runtime::platform::shutdown(); return 3;
+                }
+                if (next_identity.revision != registered_revision) {
+                    dkr::runtime::platform::shutdown();
+                    return RelaunchApplication(argc, argv) ? 0 : 6;
+                }
+                rom_path = std::move(next_rom); rom_identity = next_identity; prepared_mods = startup.mods;
+                window_handle = dkr::runtime::platform::prepare_window_for_game();
+#if defined(_WIN32) || defined(__APPLE__)
+                if (!window_handle.window) {
+#else
+                if (!window_handle) {
+#endif
+                    dkr::runtime::platform::shutdown(); return 4;
+                }
+                configuration.window_handle = window_handle;
+                continue;
+            }
+#endif
             dkr::runtime::platform::shutdown();return 4;
         }
 #if DKR_LEGACY_QUALIFICATION
@@ -1256,7 +1345,9 @@ int DkrMain(int argc, char** argv) {
                 std::string owned_error;
                 bool owned_ok=false;
                 try {
-                    owned_ok=dkr::runtime::netplay::experimental::run_runtime(window_handle,rom_path,std::move(bootstrap),*admitted_lobby,*owned_descriptor,timeout_seconds,owned_error,owned_check);
+                    auto mod_bootstrap=online_mods?dkr::runtime::legacy::online_bootstrap_checkpoint():dkr::mods::Bytes{};
+                    owned_ok=dkr::runtime::netplay::experimental::run_runtime(window_handle,rom_path,std::move(bootstrap),*admitted_lobby,*owned_descriptor,timeout_seconds,owned_error,owned_check,
+                        online_mods,std::move(mod_bootstrap));
                 } catch(const std::exception& exception) {owned_error=exception.what();}
                 catch(...) {owned_error="The owned runtime could not start safely.";}
                 if(!owned_ok) {
@@ -1274,6 +1365,11 @@ int DkrMain(int argc, char** argv) {
         report_gpu_failure();
 #endif
         dkr::runtime::pak::begin_session_directory({});
+        const auto save_failure = dkr::runtime::saves::runtime_save_failure();
+        dkr::runtime::saves::retire_runtime_save_context();
+#if DKR_RUNTIME_HAS_RT64
+        if (!save_failure.empty()) dkr::runtime::ui::report_mod_error("Save protection: " + save_failure);
+#endif
         prepared_mods.reset();
         const auto mod_failure=dkr::runtime::legacy::failure();
         dkr::runtime::legacy::begin_session(nullptr);
@@ -1309,7 +1405,7 @@ int DkrMain(int argc, char** argv) {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
         if(owned_check){dkr::runtime::platform::shutdown();return owned_failed?5:0;}
 #endif
-        if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty() ||
+        if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty() || !save_failure.empty() ||
             (return_from_owned && lifecycle_request==dkr::runtime::ui::LifecycleRequest::None)) {
             if(!mod_failure.empty())dkr::runtime::ui::report_mod_error("Custom content stopped safely: "+mod_failure);
             std::fprintf(stderr,

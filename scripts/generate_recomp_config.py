@@ -39,6 +39,13 @@ def main() -> int:
         raise ValueError("unsupported Patch Pipeline policy schema")
     from host_task_policy import verify_host_task_policy
     verify_host_task_policy(policy, arguments.elf)
+    from camera_obstruction_policy import verify_camera_obstruction_policy
+    verify_camera_obstruction_policy(policy, arguments.elf)
+    from legacy_character_ai_policy import verify_character_ai_policy
+    verify_character_ai_policy(policy, arguments.elf)
+    from legacy_asset_capacity_policy import compose_asset_capacity
+    revision = 'us.v77' if arguments.entrypoint.lower() == '0x80065d40' else 'us.v80'
+    policy = compose_asset_capacity(policy, arguments.elf, revision)
     if arguments.water_profile:
         from water_profile_policy import compose_water_profile
         policy = compose_water_profile(policy, arguments.elf)

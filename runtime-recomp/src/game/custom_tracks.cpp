@@ -10,11 +10,21 @@
 #include <cstring>
 #include <fstream>
 #include <mutex>
+#include <set>
+#include <stdexcept>
+#include <tuple>
 #include <utility>
 
 #include <json/json.hpp>
 #include <miniz/miniz.h>
 #include <unordered_map>
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -82,9 +92,9 @@ bool g_rescan_pending = false;
 // manifest order within a track. The resulting level ids must not shift
 // between builds within a session, or a mid-session reload would move a track
 // out from under a level id the game is already holding.
-std::vector<const Entry*> enabled_entries(Section section) {
+std::vector<const Entry*> enabled_entries(Section section, const std::vector<Track>& tracks) {
     std::vector<const Entry*> result;
-    for (const Track& track : g_tracks) {
+    for (const Track& track : tracks) {
         if (!track.enabled) {
             continue;
         }
@@ -161,11 +171,11 @@ void write_be32(std::uint8_t* bytes, std::uint32_t value) {
 
 // Declared here, defined after the section state it reads.
 std::int32_t own_entry_index(Section section, const std::string& track_id,
-                             std::uint32_t ordinal);
+    std::uint32_t ordinal, const std::array<SectionState,kSectionCount>& sections=g_sections);
 
 std::int32_t own_texture_index(const std::string& track_id,
-                               std::uint32_t ordinal) {
-    return own_entry_index(Section::Textures3D, track_id, ordinal);
+    std::uint32_t ordinal, const std::array<SectionState,kSectionCount>& sections) {
+    return own_entry_index(Section::Textures3D, track_id, ordinal, sections);
 }
 
 // The stored prefix's length when `bytes` is a LEVEL_MODELS payload whose
@@ -195,7 +205,7 @@ std::uint32_t stored_prefix(const std::uint8_t* bytes, std::size_t size) {
 // on a failed check but still indexes with the unclamped value. Texture 0 is
 // wrong and visible, which is the better of the two.
 void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
-                           const std::string& track_id) {
+    const std::string& track_id, const std::array<SectionState,kSectionCount>& sections) {
     if (size < kStoredPrefixAt + kLevelModelTextureCount + 2U ||
         bytes[4] != kContainerTag) {
         return; // Not a container this can read.
@@ -251,7 +261,7 @@ void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
         }
         const auto ordinal = static_cast<std::uint32_t>(
             identifier - dkr::runtime::custom_tracks::kCustomTextureIdBase);
-        const std::int32_t index = own_texture_index(track_id, ordinal);
+        const std::int32_t index = own_texture_index(track_id, ordinal, sections);
         if (index < 0) {
             write_be32(at, 0U);
             ++lost;
@@ -284,7 +294,7 @@ void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
 // names this model is served with its "no minimap" bit set (minimap_hidden),
 // so the HUD draws no minimap rather than a stray one.
 void resolve_model_minimap(std::uint8_t* bytes, std::size_t size,
-                           const std::string& track_id) {
+    const std::string& track_id, const std::array<SectionState,kSectionCount>& sections) {
     const std::uint32_t length = stored_prefix(bytes, size);
     if (length < dkr::runtime::custom_tracks::kModelMinimapSprite + 4U) {
         return;
@@ -300,7 +310,7 @@ void resolve_model_minimap(std::uint8_t* bytes, std::size_t size,
     const auto ordinal = static_cast<std::uint32_t>(
         identifier - dkr::runtime::custom_tracks::kCustomSpriteIdBase);
     const std::int32_t index =
-        own_entry_index(Section::Sprites, track_id, ordinal);
+        own_entry_index(Section::Sprites, track_id, ordinal, sections);
     if (index < 0) {
         write_be32(at, 0U);
         std::fprintf(stderr,
@@ -318,7 +328,7 @@ void resolve_model_minimap(std::uint8_t* bytes, std::size_t size,
 // sprite table is published after the 2D texture table (tex_init_textures
 // loads them in that order), so the texture's index is known here.
 void resolve_sprite_texture(std::uint8_t* bytes, std::size_t size,
-                            const std::string& track_id) {
+    const std::string& track_id, const std::array<SectionState,kSectionCount>& sections) {
     if (size < 2U) {
         return;
     }
@@ -332,7 +342,7 @@ void resolve_sprite_texture(std::uint8_t* bytes, std::size_t size,
     const auto ordinal = static_cast<std::uint32_t>(
         identifier - dkr::runtime::custom_tracks::kCustomTexture2DIdBase);
     const std::int32_t index =
-        own_entry_index(Section::Textures2D, track_id, ordinal);
+        own_entry_index(Section::Textures2D, track_id, ordinal, sections);
     const std::uint32_t value = index < 0 ? 0U : static_cast<std::uint32_t>(index);
     bytes[0] = static_cast<std::uint8_t>((value >> 8) & 0xFFU);
     bytes[1] = static_cast<std::uint8_t>(value & 0xFFU);
@@ -343,8 +353,8 @@ void resolve_sprite_texture(std::uint8_t* bytes, std::size_t size,
     }
 }
 
-const Track* track_owning(Section section, const Entry* entry) {
-    for (const Track& track : g_tracks) {
+const Track* track_owning(Section section, const Entry* entry, const std::vector<Track>& tracks) {
+    for (const Track& track : tracks) {
         for (const Entry& candidate : track.entries) {
             if (&candidate == entry && candidate.section == section) {
                 return &track;
@@ -358,8 +368,8 @@ const Track* track_owning(Section section, const Entry* entry) {
 // published table, or -1. Assumes g_mutex is held, which it is: every caller
 // runs inside build_extended_table or takes the lock itself.
 std::int32_t own_entry_index(Section section, const std::string& track_id,
-                             std::uint32_t ordinal) {
-    const SectionState& table = g_sections[section_slot(section)];
+    std::uint32_t ordinal, const std::array<SectionState,kSectionCount>& sections) {
+    const SectionState& table = sections[section_slot(section)];
     if (!table.built || track_id.empty()) {
         // The texture and sprite tables are published once, at boot. Not
         // built means nothing of this track's is in them, and saying so is the
@@ -377,6 +387,7 @@ std::int32_t own_entry_index(Section section, const std::string& track_id,
 } // namespace
 
 namespace dkr::runtime::custom_tracks {
+
 
 // Defined below; all assume g_mutex is already held.
 void scan_locked(const std::filesystem::path& directory);
@@ -1001,18 +1012,11 @@ std::int32_t level_model_arena_bytes(std::int32_t level_id) {
     return -1;
 }
 
-std::vector<std::int32_t> build_extended_table(
-    Section section, const std::int32_t* retail_table) {
-    std::scoped_lock lock(g_mutex);
-
-    // A rescan asked for while a level was live waits here. This is a level
-    // load, so replacing the track list now cannot disturb anything that is
-    // already running.
-    if (g_rescan_pending) {
-        std::fprintf(stderr, "[custom-tracks] applying deferred rescan\n");
-        scan_locked(g_directory);
-    }
-
+namespace {
+std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* retail_table,
+    const std::vector<Track>& tracks, std::array<SectionState,kSectionCount>& sections,
+    std::unordered_map<std::string,std::int32_t>& resolved,
+    std::size_t table_words = 4096U) {
     std::vector<std::int32_t> result;
     if (retail_table == nullptr) {
         return result;
@@ -1022,19 +1026,21 @@ std::vector<std::int32_t> build_extended_table(
     // the terminator, then drop one, exactly as level_global_init does. The
     // dropped slot is the end offset that sizes the final retail entry.
     std::uint32_t counted = 0;
-    constexpr std::uint32_t kSanityLimit = 4096U;
-    while (counted < kSanityLimit && retail_table[counted] != -1) {
+    // Raw retail callers retain their original scan bound. Frozen online
+    // tables have an exact vector length and can include additive characters.
+    const auto sanity_limit = std::min<std::size_t>(table_words, 32768U);
+    while (counted < sanity_limit && retail_table[counted] != -1) {
         ++counted;
     }
-    if (counted == 0 || counted >= kSanityLimit) {
+    if (counted == 0 || counted >= sanity_limit) {
         std::fprintf(stderr,
                      "[custom-tracks] refusing an unterminated asset table\n");
         return result;
     }
     const std::uint32_t retail_count = counted - 1U;
 
-    const std::vector<const Entry*> entries = enabled_entries(section);
-    SectionState& state = g_sections[section_slot(section)];
+    const std::vector<const Entry*> entries = enabled_entries(section,tracks);
+    SectionState& state = sections[section_slot(section)];
     state.retail_count = retail_count;
     state.end_offset = static_cast<std::uint32_t>(retail_table[retail_count]);
     state.blob.clear();
@@ -1045,7 +1051,7 @@ std::vector<std::int32_t> build_extended_table(
         // track that has since been disabled would keep reporting the level id
         // it held in an earlier build, and the UI would offer to launch an
         // index the rebuilt table no longer defines.
-        g_resolved_level_ids.clear();
+        resolved.clear();
     }
     state.built = true;
 
@@ -1063,7 +1069,7 @@ std::vector<std::int32_t> build_extended_table(
     std::unordered_map<std::string, std::uint32_t> seen_per_track;
     for (std::uint32_t ordinal = 0; ordinal < entries.size(); ++ordinal) {
         const Entry* entry = entries[ordinal];
-        const Track* owner = track_owning(section, entry);
+        const Track* owner = track_owning(section, entry,tracks);
         const std::uint32_t entry_size =
             static_cast<std::uint32_t>(entry->bytes.size());
         const std::string owner_id =
@@ -1086,21 +1092,21 @@ std::vector<std::int32_t> build_extended_table(
             // than cumulative.
             resolve_model_textures(state.blob.data() + state.blob.size() -
                                        entry_size,
-                                   entry_size, owner_id);
+                                   entry_size, owner_id,sections);
             resolve_model_minimap(state.blob.data() + state.blob.size() -
                                       entry_size,
-                                  entry_size, owner_id);
+                                  entry_size, owner_id,sections);
         }
         if (section == Section::Sprites && entry_size != 0U) {
             resolve_sprite_texture(state.blob.data() + state.blob.size() -
                                        entry_size,
-                                   entry_size, owner_id);
+                                   entry_size, owner_id,sections);
         }
         running += entry_size;
         result.push_back(static_cast<std::int32_t>(running));
 
         if (section == Section::LevelHeaders && owner != nullptr) {
-            g_resolved_level_ids[owner->id] =
+            resolved[owner->id] =
                 static_cast<std::int32_t>(retail_count + ordinal);
         }
     }
@@ -1110,6 +1116,92 @@ std::vector<std::int32_t> build_extended_table(
                  "[custom-tracks] section %zu: %u retail + %zu added\n",
                  section_slot(section), retail_count, entries.size());
     return result;
+}
+} // namespace
+
+std::vector<std::int32_t> build_extended_table(
+    Section section, const std::int32_t* retail_table) {
+    std::scoped_lock lock(g_mutex);
+    if (g_rescan_pending) {
+        std::fprintf(stderr, "[custom-tracks] applying deferred rescan\n");
+        scan_locked(g_directory);
+    }
+    return assemble_table(section,retail_table,g_tracks,g_sections,g_resolved_level_ids);
+}
+
+PreparedTracks prepare_tracks(std::vector<Track> tracks,
+    const std::array<std::vector<std::int32_t>,7>& tables) {
+    // Caller supplies canonical order from the frozen manifest. Do not use
+    // directory iteration order or the launcher's enabled Track Lab list.
+    std::set<std::string> identities;
+    for(auto& track:tracks) {
+        if(track.id.empty() || !identities.insert(track.id).second)
+            throw std::runtime_error("Online Track Lab namespace has duplicate or empty identities.");
+        track.enabled=true;
+    }
+    std::array<SectionState,kSectionCount> sections{};
+    std::unordered_map<std::string,std::int32_t> resolved;
+    // Dependencies first: sprite -> 2D texture, model -> 3D/sprite, then header
+    // -> model and both object maps. This never touches the offline globals.
+    constexpr Section order[]{Section::Textures3D,Section::Textures2D,Section::Sprites,
+        Section::LevelObjectMaps,Section::LevelModels,Section::LevelNames,Section::LevelHeaders};
+    for(const auto section:order) {
+        const auto& table=tables[section_slot(section)];
+        if(table.size()<2 || table.size()>32768 || table.back()!=-1 || table.front()!=0)
+            throw std::runtime_error("Online Track Lab base table is malformed.");
+        for(std::size_t i=1;i+1<table.size();++i)if(table[i]<table[i-1])
+            throw std::runtime_error("Online Track Lab base table is not monotonic.");
+        const auto added=enabled_entries(section,tracks);
+        if(table.size()-2+added.size()>32766)
+            throw std::runtime_error("Online Track Lab namespace exceeds the asset ID range.");
+        std::uint64_t bytes=table[table.size()-2];
+        for(const auto* entry:added) {
+            bytes+=entry->bytes.size();
+            if(entry->bytes.empty() || bytes>64ULL*1024*1024)
+                throw std::runtime_error("Online Track Lab section exceeds its bounded address space.");
+        }
+        (void)assemble_table(section,table.data(),tracks,sections,resolved,table.size());
+    }
+    if(sections[section_slot(Section::LevelHeaders)].retail_count+tracks.size()>128)
+        throw std::runtime_error("This Game Pak has no more additive level IDs below the game's signed-byte limit.");
+    PreparedTracks out;
+    for(std::size_t i=0;i<sections.size();++i) {
+        const auto& section=sections[i];
+        for(const auto& added:section.added) {
+            const auto offset=added.offset-section.end_offset;
+            auto bytes=std::vector<std::uint8_t>(section.blob.begin()+offset,
+                section.blob.begin()+offset+added.size);
+            if(i==section_slot(Section::LevelHeaders)) {
+                if(bytes.size()<0xC8 || bytes[0]!=kCustomTrackWorld || bytes[0x4C]!=0 ||
+                   !bytes[0x4E] || (bytes[0x4E]&~7U))
+                    throw std::runtime_error("Online Track Lab course is not a playable Custom Tracks race.");
+                const auto found=std::find_if(tracks.begin(),tracks.end(),[&](const Track& t){return t.id==added.track_id;});
+                if(found==tracks.end())throw std::runtime_error("Online Track Lab header lost its owner.");
+                out.courses.push_back({found->id,found->name,static_cast<std::int32_t>(added.index),bytes[0x4E]});
+                // The sixth world is a menu category only. The game indexes
+                // fixed five-world save/background arrays; serve Dino Domain.
+                bytes[0]=1;
+                for(const auto [at,target,slot]:{
+                    std::tuple{0x34,Section::LevelModels,MapSlot::None},
+                    std::tuple{0x36,Section::LevelObjectMaps,MapSlot::Collectables},
+                    std::tuple{0xBA,Section::LevelObjectMaps,MapSlot::Structure}}) {
+                    const auto& siblings=sections[section_slot(target)].added;
+                    const auto sibling=std::find_if(siblings.begin(),siblings.end(),[&](const AddedEntry& s){
+                        return s.track_id==added.track_id && s.slot==slot;});
+                    if(sibling!=siblings.end()) {bytes[at]=sibling->index>>8;bytes[at+1]=sibling->index;}
+                }
+            }
+            out.additions[i].push_back(std::move(bytes));
+        }
+    }
+    for(const auto& course:out.courses) {
+        const auto found=std::find_if(tracks.begin(),tracks.end(),[&](const Track& t){return t.id==course.id;});
+        const auto model=std::find_if(found->entries.begin(),found->entries.end(),[](const Entry& e){return e.section==Section::LevelModels;});
+        out.model_arenas.push_back(model==found->entries.end()?-1:measure_level_model_arena(model->bytes.data(),model->bytes.size()));
+        out.model_batches.push_back(model==found->entries.end()?-1:count_level_model_batches(model->bytes.data(),model->bytes.size()));
+    }
+    if(out.courses.size()!=tracks.size())throw std::runtime_error("Each online Track Lab course must contribute exactly one playable header.");
+    out.tracks=std::move(tracks);return out;
 }
 
 const std::uint8_t* payload_for(Section section, std::uint32_t offset,
@@ -1174,19 +1266,23 @@ const std::unordered_map<std::string, Section>& section_names() {
 
 bool read_file(const std::filesystem::path& path,
                std::vector<std::uint8_t>& bytes) {
+    // Manifest entries use '/' separators. Windows extended paths do not
+    // translate those separators, and a narrow fopen also loses Unicode
+    // directory names. Retain the native path for both stat and file I/O.
+    auto native_path=path;
+    native_path.make_preferred();
     std::error_code code;
-    const auto size = std::filesystem::file_size(path, code);
+    const auto size = std::filesystem::file_size(native_path, code);
     if (code || size == 0 || size > (16U * 1024U * 1024U)) {
         return false;
     }
-    std::FILE* file = std::fopen(path.string().c_str(), "rb");
-    if (file == nullptr) {
+    std::ifstream file(native_path,std::ios::binary);
+    if (!file) {
         return false;
     }
     bytes.resize(static_cast<std::size_t>(size));
-    const std::size_t read = std::fread(bytes.data(), 1, bytes.size(), file);
-    std::fclose(file);
-    return read == bytes.size();
+    return bool(file.read(reinterpret_cast<char*>(bytes.data()),
+        static_cast<std::streamsize>(bytes.size())));
 }
 
 std::string lower_extension(const std::filesystem::path& path) {
@@ -1872,6 +1968,10 @@ bool parse_track(const std::filesystem::path& root, Track& track,
 
 namespace dkr::runtime::custom_tracks {
 
+bool inspect_package(const std::filesystem::path& directory,Track& track,std::string& error) {
+    return parse_track(directory,track,error);
+}
+
 namespace {
 
 std::filesystem::path working_setting_file() {
@@ -1968,6 +2068,18 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
                          item.path().filename().string().c_str(),
                          error.c_str());
             continue;
+        }
+        // Only installed library scanning reads local activation. Online pure
+        // inspection must not let an offline sidecar alter the host manifest.
+        const auto marker = item.path() / ".online-keep-state";
+        if (std::filesystem::exists(marker, code)) {
+            track.kept_online = true;
+            track.enabled = false;
+            if (std::filesystem::is_regular_file(std::filesystem::symlink_status(marker, code)) && !code) {
+                std::ifstream state(marker, std::ios::binary);
+                char value = 0, extra = 0;
+                if (state.get(value) && !state.get(extra)) track.enabled = value == '1';
+            }
         }
         if (!track.textures.empty()) {
             std::size_t translucent = 0;
@@ -2246,6 +2358,49 @@ bool installed_path_locked(const std::filesystem::path& source) {
 bool is_installed(const Track& track) {
     std::scoped_lock lock(g_mutex);
     return installed_path_locked(track.source);
+}
+
+bool set_kept_enabled(const std::string& id, bool enabled, std::string& error) {
+    std::scoped_lock lock(g_mutex);
+    const auto found = std::find_if(g_tracks.begin(), g_tracks.end(),
+        [&](const Track& track) { return track.id == id; });
+    if (found == g_tracks.end() || !found->kept_online || !installed_path_locked(found->source)) {
+        error = "This is not a managed offline copy of an online course."; return false;
+    }
+    const auto marker = found->source / ".online-keep-state";
+    std::error_code code;
+    if (!std::filesystem::is_regular_file(std::filesystem::symlink_status(marker, code)) || code) {
+        error = "The course's local activation file needs repair."; return false;
+    }
+    const auto temp = found->source / (".online-keep-" + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp");
+    const char value = enabled ? '1' : '0';
+    bool written = false;
+#if defined(_WIN32)
+    const auto attributes = GetFileAttributesW(marker.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        error = "The course activation file must be an ordinary local file."; return false;
+    }
+    HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file != INVALID_HANDLE_VALUE) {
+        DWORD count = 0;
+        written = WriteFile(file, &value, 1, &count, nullptr) && count == 1 && FlushFileBuffers(file);
+        CloseHandle(file);
+        if (written) written = MoveFileExW(temp.c_str(), marker.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    }
+#else
+    const int file = open(temp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+    if (file >= 0) {
+        written = write(file, &value, 1) == 1 && fsync(file) == 0;
+        close(file);
+        if (written) { std::filesystem::rename(temp, marker, code); written = !code; }
+    }
+#endif
+    if (!written) {
+        std::filesystem::remove(temp, code);
+        error = "Could not save the course's activation. Its existing state was kept."; return false;
+    }
+    found->enabled = enabled; error.clear(); return true;
 }
 
 bool uninstall(const std::string& id, std::string& error) {

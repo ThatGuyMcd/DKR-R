@@ -18,6 +18,12 @@ void unit() {
     rejects([]{allocate_characters(nullptr,{});});
     rejects([]{CharacterNamespace{}.apply(nullptr);});
     for(unsigned n=0;n<16;++n)rejects([&]{validate_character_animation(Bytes(n),10);});
+    Bytes face(40,0);face[0]=face[1]=2;face[2]=1;face[0x12]=1;
+    auto same=face;same.resize(48,0x55);same[0x16]=0;same[0x17]=48;
+    require(!character_portrait_changed(same,face),"Exporter padding was mistaken for a replacement face.");
+    auto changed=face;changed[32]=1;
+    require(character_portrait_changed(changed,face),"Replacement face pixels were not recognized.");
+    rejects([&]{character_portrait_changed(Bytes(32),face);});
     auto assets=std::make_shared<CharacterNamespace>();
     assets->characters={{std::string(64,'a'),"First",8,906,{304,305,306}},
                         {std::string(64,'b'),"Second",8,907,{310,311,312}}};

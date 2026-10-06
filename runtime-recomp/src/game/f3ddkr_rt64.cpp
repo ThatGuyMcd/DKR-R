@@ -10,6 +10,7 @@
 #include "presentation_identity.hpp"
 #include "revision_addresses.hpp"
 #include "runtime_enhancements.hpp"
+#include "runtime_platform.hpp"
 #include "widescreen_policy.hpp"
 #include "split_screen_rt64.hpp"
 #include "water_uv_rt64.hpp"
@@ -25,6 +26,7 @@
 #include "hle/rt64_application.h"
 #include "hle/rt64_rsp.h"
 #include "hle/rt64_state.h"
+#include <SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -358,6 +360,9 @@ struct dkr::runtime::F3DDKRRT64Bridge::StateData {
     };
 
     std::uint32_t matrix_offset = 0;
+    float world_window_aspect = 4.0F / 3.0F;
+    presentation::WorldProjection clearance_projection{};
+    presentation::WorldDepthRemap clearance_remap{};
     LocalSceneryRT64Pass* local_scenery=nullptr;
     std::uint32_t vertex_offset = 0;
     std::uint32_t texture_offset = 0;
@@ -1764,6 +1769,17 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application,
     StateData fresh{};
     fresh.task_count = data_->task_count + 1;
     fresh.local_scenery=scenery;
+    if (enhancements::modern_presentation_enabled()) {
+        if (application.userConfig.aspectRatio == RT64::UserConfiguration::AspectRatio::Expand) {
+            int width = 0, height = 0;
+            if (auto* window = static_cast<SDL_Window*>(platform::sdl_window()))
+                SDL_GetWindowSize(window, &width, &height);
+            if (width > 0 && height > 0) fresh.world_window_aspect = float(width) / float(height);
+        } else if (application.userConfig.aspectRatio == RT64::UserConfiguration::AspectRatio::Manual &&
+            std::isfinite(application.userConfig.aspectTarget) && application.userConfig.aspectTarget > 0.0) {
+            fresh.world_window_aspect = static_cast<float>(application.userConfig.aspectTarget);
+        }
+    }
     *data_ = fresh;
 
     RT64::State* state = application.state.get();
@@ -2552,6 +2568,22 @@ void dkr::runtime::F3DDKRRT64Bridge::Matrix(
                              active_group.procedural_water ? active_group.water_scroll_tag : 0U);
     rsp.matrix(address, static_cast<std::uint8_t>(
         active_->gbi_->constants[F3DENUM::G_MTX_LOAD]));
+    // F3DDKR submits combined MVPs as MODEL matrices. Adjust ONLY their clip-Z
+    // column after decoding, never guest RAM/the independent HUD projection.
+    // Each load starts from the authored fixed-point matrix; cached selects
+    // reuse this result and cannot accumulate the correction.
+    if (matrix_group.world_projection.authored_fov > 0.0F &&
+        !data.hud_alignment_depth && !data.hud_widget_depth &&
+        !data.matrix_aspect_override_active &&
+        !data.interpolation_groups.contains_mode(kPresentationGroupAspectOriginalMode)) {
+        if (data.clearance_projection != matrix_group.world_projection) {
+            data.clearance_projection = matrix_group.world_projection;
+            data.clearance_remap = presentation::world_depth_remap(data.clearance_projection,
+                data.world_window_aspect);
+        }
+        if (presentation::apply_world_depth_remap(rsp.modelMatrixStack[index], data.clearance_remap))
+            rsp.modelViewProjChanged = true;
+    }
 }
 
 void dkr::runtime::F3DDKRRT64Bridge::FillRect(

@@ -57,10 +57,12 @@ int main() {
             browser::Filters filter;filter.revision=2;filter.query="LONG";check(browser::select(cards,filter).size()==1);
             filter.query="";filter.compatibility=2;check(browser::select(cards,filter).size()==1);
             for(const auto& id:{a,b}){check(characters.set_enabled(id,true));wait(characters);}
-            check(characters.set_enabled(c,true));wait(characters,false);
-            check(browser::active_count(browser::cards(*characters.snapshot(),true))==2);
+            // The current same-stage roster admits more than the original
+            // two mods. Keep this fixture aligned with the existing feature.
+            check(characters.set_enabled(c,true));wait(characters);
+            check(browser::active_count(browser::cards(*characters.snapshot(),true))==3);
             check(characters.set_hidden(a,true));wait(characters);
-            check(browser::active_count(browser::cards(*characters.snapshot(),true))==1);
+            check(browser::active_count(browser::cards(*characters.snapshot(),true))==2);
             check(characters.set_enabled(a,true));wait(characters,false);
             check(characters.set_hidden(a,false));wait(characters);check(!characters.snapshot()->tracks[1].hidden); // names are sorted, not activation order.
             check(characters.set_enabled(c,true));wait(characters);
@@ -112,7 +114,7 @@ int main() {
         const auto cards=browser::cards(view,true);browser::Filters filter;filter.visibility=1;filter.sort=5;
         check(browser::select(cards,filter).front().item.id==b);check(browser::active_count(cards)==1);
         filter.visibility=2;check(browser::select(cards,filter).size()==1);
-        check(!browser::can_activate(cards[0],true,2,1,false));check(!browser::can_activate(cards[0],true,0,1,true));
+        check(!browser::can_activate(cards[0],true,MaxActiveStageCharacters,1,false));check(!browser::can_activate(cards[0],true,0,1,true));
         std::filesystem::remove_all(root);std::cout<<checks<<" management, recovery and browser checks passed.\n";return 0;
     }catch(const std::exception& e){std::cerr<<e.what()<<"; fixture retained at "<<root<<'\n';return 1;}
 }

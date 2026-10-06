@@ -71,6 +71,10 @@ struct DirectSessionTestAccess {
             assert(receiver.receive_owned_packet_locked(2,packet)&&receiver.owned_inbound_.empty());
             assert(receiver.receive_owned_packet_locked(255,packet)&&receiver.owned_inbound_.empty());
             assert(receiver.receive_owned_packet_locked(0,packet)&&receiver.owned_inbound_.empty());
+            const auto launch_hash=launch_descriptor_hash(*receiver.launch_descriptor_);
+            packet.payload.clear();
+            for(int shift=56;shift>=0;shift-=8)packet.payload.push_back(std::uint8_t(launch_hash>>shift));
+            packet.payload.insert(packet.payload.end(),{1,2,3});
             for(auto type:{protocol::MessageType::ExperimentalInput,protocol::MessageType::ExperimentalControl,protocol::MessageType::ExperimentalRepair}) {
                 packet.header.type=type;assert(receiver.receive_owned_packet_locked(1,packet));
             }

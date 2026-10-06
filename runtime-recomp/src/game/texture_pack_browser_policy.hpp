@@ -1,6 +1,7 @@
 #pragma once
 
 #include "runtime_texture_packs.hpp"
+#include "texture_pack_priority_policy.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -19,6 +20,7 @@ enum class SortMode : int {
     ImportNewest,
     ImportOldest,
     Type,
+    Priority,
 };
 
 enum class StateFilter : int {
@@ -117,6 +119,8 @@ inline void sort(std::vector<texture_packs::PackInfo>& packs, SortMode mode) {
         [&](const texture_packs::PackInfo& left,
             const texture_packs::PackInfo& right) {
             switch (mode) {
+            case SortMode::Priority:
+                return texture_priority::higher(left, right);
             case SortMode::NameDescending:
                 return name_less(right, left);
             case SortMode::SizeLargest:

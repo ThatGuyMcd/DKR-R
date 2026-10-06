@@ -1,4 +1,5 @@
 #include "netplay_protocol.hpp"
+#include "mods/online_mod_manifest.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -52,7 +53,7 @@ bool Take64(std::span<const std::uint8_t> bytes, std::size_t& cursor,
 bool ValidType(std::uint8_t type) {
     return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
            type <=
-               static_cast<std::uint8_t>(MessageType::ExperimentalSaveRequest);
+               static_cast<std::uint8_t>(MessageType::ModData);
 }
 
 bool PutString(std::vector<std::uint8_t>& out, std::string_view value,
@@ -75,6 +76,7 @@ bool TakeString(std::span<const std::uint8_t> bytes, std::size_t& cursor,
 
 bool PutManifest(std::vector<std::uint8_t>& out,
                  const CompatibilityManifest& manifest) {
+    if(!valid_mod_manifest_hash(manifest.mod_manifest_hash))return false;
     Put32(out, manifest.protocol_version);
     if (!PutString(out, manifest.release_version,
                    kMaximumReleaseVersionBytes) ||
@@ -90,7 +92,8 @@ bool PutManifest(std::vector<std::uint8_t>& out,
     Put64(out, manifest.session_save_hash);
     Put32(out, manifest.simulation_rate);
     return PutString(out, manifest.architecture, 32U) &&
-           PutString(out, manifest.floating_point_mode, 48U);
+           PutString(out, manifest.floating_point_mode, 48U) &&
+           PutString(out, manifest.mod_manifest_hash, 64U);
 }
 
 bool TakeManifest(std::span<const std::uint8_t> bytes, std::size_t& cursor,
@@ -113,7 +116,9 @@ bool TakeManifest(std::span<const std::uint8_t> bytes, std::size_t& cursor,
         !Take64(bytes, cursor, manifest.session_save_hash) ||
         !Take32(bytes, cursor, manifest.simulation_rate) ||
         !TakeString(bytes, cursor, manifest.architecture, 32U) ||
-        !TakeString(bytes, cursor, manifest.floating_point_mode, 48U)) {
+        !TakeString(bytes, cursor, manifest.floating_point_mode, 48U) ||
+        !TakeString(bytes, cursor, manifest.mod_manifest_hash, 64U) ||
+        !valid_mod_manifest_hash(manifest.mod_manifest_hash)) {
         return false;
     }
     manifest.revision = static_cast<Revision>(revision);
@@ -124,6 +129,18 @@ bool TakeManifest(std::span<const std::uint8_t> bytes, std::size_t& cursor,
 }
 
 } // namespace
+
+std::vector<std::uint8_t> encode_mod_offer(const ModOfferPayload& payload) {
+    if(payload.manifest_hash.empty() || !valid_mod_manifest_hash(payload.manifest_hash) ||
+       !payload.manifest_bytes || payload.manifest_bytes>dkr::mods::online::MaxManifestBytes)return {};
+    std::vector<std::uint8_t> out;PutString(out,payload.manifest_hash,64);Put32(out,payload.manifest_bytes);return out;
+}
+bool decode_mod_offer(std::span<const std::uint8_t> bytes,ModOfferPayload& payload) {
+    ModOfferPayload out;std::size_t at=0;
+    if(!TakeString(bytes,at,out.manifest_hash,64) || out.manifest_hash.empty() || !valid_mod_manifest_hash(out.manifest_hash) ||
+       !Take32(bytes,at,out.manifest_bytes) || !out.manifest_bytes || out.manifest_bytes>dkr::mods::online::MaxManifestBytes || at!=bytes.size())return false;
+    payload=std::move(out);return true;
+}
 
 std::vector<std::uint8_t> encode(
     const Datagram& datagram, std::size_t maximum_datagram_bytes) {

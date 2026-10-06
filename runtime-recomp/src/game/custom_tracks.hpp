@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -293,6 +294,7 @@ struct Track {
     std::vector<TextureInfo> textures_2d;
     std::vector<SpriteInfo> sprites;
     bool enabled = true;
+    bool kept_online = false; // Local offline copy; activation is a local sidecar, never part of its manifest.
     // manifest.hdTexturePack, and the sibling archive resolved at scan time.
     // See "A track's high-resolution texture pack" below.
     std::string hd_pack_file;                 // hdTexturePack.file, "" when none
@@ -357,8 +359,12 @@ void discard_install_temp(const std::filesystem::path& temp_root);
 // Returns a snapshot. The UI thread reads this while an authoring reload can
 // be replacing the backing vector, so a reference would dangle.
 [[nodiscard]] std::vector<Track> tracks();
+// Independent package validation for the isolated online import worker.
+// Does not change the installed library, activation, auto-boot or working path.
+bool inspect_package(const std::filesystem::path& directory,Track& track,std::string& error);
 [[nodiscard]] std::size_t enabled_count();
 void set_enabled(const std::string& id, bool enabled);
+bool set_kept_enabled(const std::string& id, bool enabled, std::string& error);
 
 // Re-reads every archive from disk. Paired with the retail restart path this
 // is the authoring hot-reload: save in the editor, restart the track, race the
@@ -387,6 +393,19 @@ struct TrackSelectEntry {
     std::int32_t level_id;
     std::uint8_t vehicles;
 };
+
+// Pure, launch-time Track Lab namespace. All tables and payloads are built
+// against the session's character-augmented bank, not the offline catalogue.
+// Once prepared, replay reads immutable records: no rescans, file I/O,
+// sticky boot overrides or mutable process-global table state are involved.
+struct PreparedTracks {
+    std::array<std::vector<std::vector<std::uint8_t>>,7> additions;
+    std::vector<TrackSelectEntry> courses;
+    std::vector<Track> tracks;
+    std::vector<std::int32_t> model_arenas,model_batches;
+};
+[[nodiscard]] PreparedTracks prepare_tracks(std::vector<Track> tracks,
+    const std::array<std::vector<std::int32_t>,7>& base_tables);
 [[nodiscard]] std::vector<TrackSelectEntry> track_select_entries();
 
 // Triangle batches in the level model the track at `level_id` ships, summed

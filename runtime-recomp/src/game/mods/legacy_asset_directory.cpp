@@ -9,7 +9,7 @@ void append_word(Bytes& bytes,std::uint32_t value) {
 int table_for(unsigned section) {
     switch(section) {
     case 2:case 4:case 12:return section+1;
-    case 21:case 23:case 27:case 29:case 32:case 34:case 39:return section-1;
+    case 21:case 23:case 25:case 27:case 29:case 32:case 34:case 39:return section-1;
     default:return -1;
     }
 }

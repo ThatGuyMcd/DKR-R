@@ -1,4 +1,5 @@
 #include "runtime_ui.hpp"
+#include "runtime_portable.hpp"
 #include "render_power_policy.hpp"
 #include "performance_trace.hpp"
 #include "mobile_graphics_preset.hpp"
@@ -22,9 +23,13 @@
 #include "magic_code_policy.hpp"
 #include "modern_camera_policy.hpp"
 #include "rom_revision.hpp"
+#include "mods/online_game_pak.hpp"
+#include "mods/online_preparation_notice.hpp"
 #include "mods/legacy_mod_library.hpp"
 #include "mods/legacy_mod_launch.hpp"
 #include "mods/legacy_mod_browser.hpp"
+#include "mods/online_mod_runtime.hpp"
+#include "netplay/online_mod_sync_link.hpp"
 #include "runtime_enhancements.hpp"
 #include "runtime_hud_layout.hpp"
 #include "hud_layout_editor.hpp"
@@ -49,6 +54,7 @@
 #include "runtime_telemetry.hpp"
 #include "runtime_texture_packs.hpp"
 #include "save_manager.hpp"
+#include "runtime_save_routing.hpp"
 #include "texture_pack_browser_policy.hpp"
 #include "ui_notification_policy.hpp"
 #include "virtual_pak.hpp"
@@ -399,6 +405,20 @@ using ultramodern::renderer::WindowMode;
 std::filesystem::path g_config_directory;
 dkr::mods::ModLibrary g_legacy_imports;
 dkr::mods::ModLaunch g_mod_launch;
+std::unique_ptr<dkr::runtime::netplay::DirectModSyncLink> g_online_mod_link;
+std::unique_ptr<dkr::mods::online::ModSync> g_online_mod_sync;
+dkr::mods::online::SyncSettings g_online_mod_settings;
+std::filesystem::path g_online_mod_selected_rom;
+dkr::runtime::rom::Identity g_online_mod_identity;
+struct OnlineHostRequest {
+    dkr::runtime::netplay::Rules rules;
+    dkr::runtime::netplay::CompatibilityManifest manifest;
+    dkr::runtime::saves::OnlineSaveSeedMode save_mode;
+    std::string room,name;
+};
+std::optional<OnlineHostRequest> g_online_mod_host_request;
+bool g_online_mod_watching=false;
+dkr::mods::online::PreparationNotice g_online_mod_notice;
 std::string g_legacy_import_status;
 std::atomic<bool> g_overlay_visible{false};
 // This is a one-shot navigation request, not a redraw flag. The overlay is
@@ -497,7 +517,7 @@ TextureImportState g_texture_import_state;
 // flag, and mutex it can still touch are destroyed during application exit.
 std::jthread g_texture_import_worker;
 char g_texture_pack_search[160]{};
-int g_texture_pack_sort = 0;
+int g_texture_pack_sort = static_cast<int>(dkr::runtime::texture_browser::SortMode::Priority);
 int g_texture_pack_state_filter = 0;
 int g_texture_pack_compatibility_filter = 0;
 int g_texture_pack_type_filter = 0;
@@ -674,6 +694,7 @@ std::array<int, 2> g_shortcut_capture_sources{
 int g_shortcut_capture_count = 0;
 std::chrono::steady_clock::time_point g_shortcut_capture_deadline{};
 std::string g_save_manager_status;
+bool g_play_offline_after_leave = false;
 struct SaveManagerViewCache {
     bool valid = false;
     std::chrono::steady_clock::time_point next_refresh{};
@@ -681,6 +702,7 @@ struct SaveManagerViewCache {
     std::array<dkr::runtime::saves::SaveInfo,
                dkr::runtime::saves::kControllerPakCount> controller_paks{};
     std::vector<std::filesystem::path> adventure_backups;
+    std::string preview;
 };
 SaveManagerViewCache g_save_manager_view_cache;
 
@@ -696,6 +718,17 @@ const SaveManagerViewCache& CachedSaveManagerView() {
     }
     g_save_manager_view_cache.adventure =
         dkr::runtime::saves::adventure_info();
+    g_save_manager_view_cache.preview.clear();
+    dkr::runtime::saves::codec::SaveImage summary;
+    std::string summary_error;
+    if (g_save_manager_view_cache.adventure.valid && dkr::runtime::saves::load_adventure(summary, summary_error)) {
+        for (std::size_t slot = 0; slot < summary.slots.size(); ++slot) {
+            if (slot) g_save_manager_view_cache.preview += " | ";
+            const auto& saved = summary.slots[slot];
+            g_save_manager_view_cache.preview += "Slot " + std::to_string(slot + 1) + ": " +
+                (saved.name.empty() ? "Empty" : saved.name) + " (" + std::to_string(saved.balloons[0]) + " balloons)";
+        }
+    }
     for (int channel = 0;
          channel < dkr::runtime::saves::kControllerPakCount; ++channel) {
         g_save_manager_view_cache.controller_paks[
@@ -751,6 +784,12 @@ constexpr ImVec4 kWarm{1.0F, 0.67F, 0.08F, 1.0F};
 constexpr ImVec4 kRaceRed{0.91F, 0.18F, 0.13F, 1.0F};
 constexpr ImVec4 kRaceBlue{0.04F, 0.43F, 0.63F, 1.0F};
 constexpr ImVec4 kCream{1.0F, 0.94F, 0.76F, 1.0F};
+// One visual shell for startup and the in-game menu. The backdrop remains
+// surface-specific; panel readability and borders must not drift apart.
+constexpr ImVec4 kMenuNavSurface{0.025F, 0.105F, 0.15F, 0.88F};
+constexpr ImVec4 kMenuNavBorder{1.0F, 0.67F, 0.08F, 0.92F};
+constexpr ImVec4 kMenuContentSurface{0.035F, 0.085F, 0.12F, 0.96F};
+constexpr ImVec4 kMenuContentBorder{0.12F, 0.62F, 0.58F, 0.88F};
 
 #include "runtime_ui_paddock.inl"
 
@@ -3124,26 +3163,30 @@ bool ImportAdventureWithDialog() {
     return imported;
 }
 
-bool ExportAdventureWithDialog() {
+bool ExportAdventureWithDialog(const std::filesystem::path& source = {},
+    dkr::runtime::saves::StoredSaveKind kind = dkr::runtime::saves::StoredSaveKind::Adventure) {
     if (NFD_Init() != NFD_OKAY) {
         g_save_manager_status = "The system file picker could not be initialized.";
         return false;
     }
     nfdu8char_t* result = nullptr;
-    const nfdfilteritem_t filters[] = {{"DKR Adventure save", "bin"}};
+    const bool pak = kind == dkr::runtime::saves::StoredSaveKind::ControllerPak;
+    const nfdfilteritem_t filters[] = {{pak ? "DKR Controller Pak" : "DKR stored save", pak ? "mpk" : "bin"}};
     const nfdresult_t dialog = NFD_SaveDialogU8(
-        &result, filters, 1, nullptr, "dkr-adventure-save.bin");
+        &result, filters, 1, nullptr, pak ? "dkr-controller-pak.mpk" :
+            kind == dkr::runtime::saves::StoredSaveKind::ExperimentalPaks ? "dkr-online-paks.bin" : "dkr-adventure-save.bin");
     bool exported = false;
     if (dialog == NFD_OKAY) {
         auto destination = std::filesystem::u8path(result);
         NFD_FreePathU8(result);
         if (destination.extension().empty()) {
-            destination += ".bin";
+            destination += pak ? ".mpk" : ".bin";
         }
         std::string error;
-        exported = dkr::runtime::saves::export_adventure(destination, error);
+        exported = dkr::runtime::saves::export_stored_save(source.empty()
+            ? dkr::runtime::saves::adventure_info().path : source, destination, kind, error);
         g_save_manager_status = exported
-            ? "Adventure save exported successfully."
+            ? "Stored save exported successfully. The original was not changed."
             : error;
     } else if (dialog == NFD_ERROR) {
         g_save_manager_status = NFD_GetError();
@@ -4038,6 +4081,32 @@ void BrandBlock(float available_width, float maximum_size = 230.0F,
     PopHeadingFont(true);
 }
 
+struct MenuPanelLayout {
+    float margin;
+    float height;
+    float sidebar_width;
+    float content_x;
+    float content_width;
+    float padding;
+    float inner_width;
+};
+
+MenuPanelLayout CalculateMenuPanelLayout(ImVec2 available) {
+    const float width = std::floor(available.x);
+    const float height = std::floor(available.y);
+    const float margin = std::round(std::clamp(width * 0.022F, 16.0F, 34.0F));
+    const float gap = std::round(std::clamp(width * 0.018F, 14.0F, 28.0F));
+    const float minimum_sidebar = available.x < 980.0F ? 190.0F : 230.0F;
+    const float sidebar = std::round(std::clamp(width * 0.235F, minimum_sidebar,
+        std::max(minimum_sidebar, std::min(340.0F, width * 0.34F))));
+    const float content_x = margin + sidebar + gap;
+    const float content_width = std::max(std::floor(width - content_x - margin), 320.0F);
+    const float padding = std::round(std::clamp(content_width * 0.045F, 20.0F, 44.0F));
+    return {margin, std::max(std::floor(height - margin * 2.0F), 1.0F),
+            sidebar, content_x, content_width, padding,
+            std::max(content_width - padding * 2.0F, 1.0F)};
+}
+
 struct SidebarLayout {
     float padding = 24.0F;
     float logo_size = 190.0F;
@@ -4469,30 +4538,25 @@ bool PasteOnlineInviteFromClipboard() {
     return true;
 }
 
-bool CreateOnlineLobby() {
+bool FinishOnlineLobby(const OnlineHostRequest& request,std::string mod_digest,std::uint32_t manifest_bytes) {
     using namespace dkr::runtime::netplay;
-    Rules rules{};
-    rules.host_control = static_cast<HostControlPolicy>(g_online_host_control);
-    rules.maximum_players = static_cast<std::uint8_t>(g_online_maximum_players);
-    rules.synchronization = CurrentOnlineSynchronization();
+    const auto& rules=request.rules;
     // Fail before creating/changing an online save directory. A new label
     // must never silently start the old implementation under an experiment.
     if (const char* reason = experimental::runtime_admission_error(rules.synchronization,session().owned_backend_available())) {
         g_online_action_status = reason;
         return false;
     }
-    rules.rollback_window = synchronization_has_prediction_window(rules.synchronization)
-        ? static_cast<std::uint8_t>(g_online_rollback_window)
-        : 0U;
-    rules.automatic_input_delay = g_online_automatic_delay;
-    rules.manual_input_delay = static_cast<std::uint8_t>(g_online_manual_delay);
-    rules.record_replay = g_online_record_replay;
     std::string error;
     std::vector<std::uint8_t> online_save;
-    const auto save_mode = static_cast<
-        dkr::runtime::saves::OnlineSaveSeedMode>(g_online_save_seed_mode);
+    auto manifest=request.manifest;manifest.mod_manifest_hash=mod_digest;
+    session().configure_manifest(manifest);
+    if(!session().configure_mod_admission(std::move(mod_digest),manifest_bytes)) {
+        g_online_action_status="The lobby changed while host mods were being prepared. Nothing was activated.";return false;
+    }
+    const auto save_mode = request.save_mode;
     if (!dkr::runtime::saves::prepare_host_online_adventure(
-            save_mode, online_save, error)) {
+            save_mode, online_save, error,manifest.mod_manifest_hash)) {
         g_online_action_status = error;
         return false;
     }
@@ -4500,8 +4564,8 @@ bool CreateOnlineLobby() {
         std::move(online_save),
         dkr::runtime::saves::install_synchronized_online_adventure,
         dkr::runtime::saves::read_online_adventure);
-    if (!session().host(0U, {}, g_online_room_name,
-                        ConnectionMethod::QuickJoin, g_online_player_name,
+    if (!session().host(0U, {}, request.room,
+                        ConnectionMethod::QuickJoin, request.name,
                         rules, error)) {
         dkr::runtime::saves::discard_staged_host_online_adventure();
         g_online_action_status = error;
@@ -4513,6 +4577,8 @@ bool CreateOnlineLobby() {
     }
     return true;
 }
+
+#include "runtime_online_mods_ui.inl"
 
 struct TextEntrySpec {
     char* value = nullptr;
@@ -5688,7 +5754,7 @@ const char* OnlineFailureRecoveryText(
         case OnlineFailureCode::MagicCodesMismatch:
             return "Match the host's enabled Magic Codes in MODS / HACKS, then reconnect. The exact differences are listed below.";
         case OnlineFailureCode::SaveMismatch:
-            return "Reload the synchronized session save. If the warning remains, repair or import the same valid 512-byte DKR EEPROM on both machines.";
+            return "Leave and rejoin the lobby to receive the host's isolated online save again. If it repeats, the host can check their Online save in Save Manager. Do not replace clients' offline saves to fix a lobby mismatch.";
         case OnlineFailureCode::SimulationRateMismatch:
             return "Use the same presentation preset and simulation rate on every machine, then reconnect.";
         case OnlineFailureCode::PlatformMismatch:
@@ -6263,6 +6329,8 @@ bool DrawTexturePackManagementModal(
             ImGui::TextWrapped("%s", value.c_str());
         };
         detail_row("TYPE", dkr::runtime::texture_packs::format_name(pack.format));
+        detail_row("PRIORITY", std::to_string(pack.priority) +
+                   (pack.priority == 1U ? " (highest)" : " (lower number wins)"));
         detail_row("MANAGED SIZE",
                    FormatManagedTexturePackSize(pack.managed_size_bytes));
         detail_row("TEXTURES", std::to_string(pack.image_count));
@@ -6774,6 +6842,7 @@ std::vector<DkrLibraryTrack> BuildDkrLibrary(
         entry.installed = tracks_ns::is_installed(track);
         for (const auto& payload : track.entries) entry.bytes += payload.bytes.size();
         entry.enabled = track.enabled;
+        entry.kept_online = track.kept_online;
         if (!track.hd_pack_file.empty()) {
             const packs_ns::TrackPackState pack =
                 packs_ns::track_pack_state(track.id, track.hd_pack_digest);
@@ -7412,14 +7481,15 @@ void DrawModsHacks(float available_width, bool game_running = false) {
     }
     g_mods_page.last_frame = frame;
 
-    const float width = std::min(available_width, 1400.0F);
+    const float width = game_running ? std::min(available_width, 1400.0F)
+                                      : std::max(available_width, 1.0F);
     const float indent = std::floor((available_width - width) * 0.5F);
     if (indent > 0.0F) ImGui::Indent(indent);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
 
     const auto mods = g_legacy_imports.snapshot();
     const bool lobby = dkr::runtime::netplay::session().active();
-    const bool mods_locked = game_running || lobby || g_mod_launch.snapshot().modal;
+    const bool mods_locked = game_running || lobby || g_mod_launch.snapshot().modal || OnlineModSelectionLocked();
     const bool picking = DialogJobRunning();
     const unsigned revision = g_mod_browser_revision;
     const std::vector<tracks_ns::Track> tracks = tracks_ns::tracks();
@@ -7437,8 +7507,7 @@ void DrawModsHacks(float available_width, bool game_running = false) {
         const bool stacked = width < 700.0F;
         const float text_width = stacked ? width : width - import_width - 24.0F;
         ImGui::BeginGroup();
-        PaddockGap(7.0F);
-        DrawPageHeading("MODS / HACKS", false, 48.0F);
+        DrawPageHeading("MODS / HACKS");
         PaddockGap(9.0F);
         PaddockText(PaddockReading(14.0F, false, 1.55F), PaddockRgb(0xABC0CC),
                     "Your tracks, racers and race modifiers.", text_width);
@@ -7668,6 +7737,9 @@ void DrawModsHacks(float available_width, bool game_running = false) {
     --g_paddock_modal_windows;
 }
 
+bool BeginSettingsDialog(const char*, std::string_view, float, unsigned);
+float SettingsDialogInner();
+void EndSettingsDialog();
 #include "runtime_play_ui.inl"
 #include "runtime_online_ui.inl"
 
@@ -7970,7 +8042,7 @@ void DrawOverlayContent(float content_width) {
     } else if (g_overlay_page == kPageGraphics) {
         DrawGraphicsPage(content_width, true);
     } else if (g_overlay_page == kPageSound) {
-        DrawSoundPage(content_width);
+        DrawSoundPage(content_width, true);
     } else if (g_overlay_page == kPageControls) {
         DrawControlsPage(content_width, true);
     } else if (g_overlay_page == kPageSaveManager) {
@@ -8023,6 +8095,10 @@ void dkr::runtime::ui::configure(const std::filesystem::path& config_directory) 
     }
 #endif
     g_legacy_imports.configure(config_directory / "mods" / "legacy", mod_worker);
+    shutdown_online_mods();
+    g_online_mod_settings={config_directory / "online-mods",mod_worker,{}};
+    g_online_mod_link=std::make_unique<dkr::runtime::netplay::DirectModSyncLink>(dkr::runtime::netplay::session());
+    g_online_mod_sync=std::make_unique<dkr::mods::online::ModSync>(*g_online_mod_link);
     dkr::runtime::hud::configure(config_directory);
     const auto adventure = dkr::runtime::saves::adventure_info();
     if (adventure.exists &&
@@ -8285,6 +8361,10 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     bool request_restart_popup = false;
     while (running) {
         g_legacy_imports.tick();
+        dkr::runtime::saves::set_online_save_protection(dkr::runtime::netplay::session().active());
+        if (g_play_offline_after_leave && !dkr::runtime::netplay::session().active()) {
+            g_play_offline_after_leave = false; launch_requested = true;
+        }
         const auto launcher_services_started = std::chrono::steady_clock::now();
         // Hash only the already-imported catalog on a worker. Applying the
         // authenticated offer still happens exclusively on this UI thread.
@@ -8372,11 +8452,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                         rom_ready = true;
                         auto candidate = BuildNetplayManifest(
                             matching_rom->second);
-                        auto comparable = candidate;
-                        comparable.session_save_hash = expected.session_save_hash;
                         const std::string remaining =
-                            dkr::runtime::netplay::incompatibility_reason(
-                                expected, comparable);
+                            dkr::runtime::netplay::session_content_sync_incompatibility(
+                                expected,candidate,!expected.mod_manifest_hash.empty());
                         if (!remaining.empty()) {
                             sync_error =
                                 "The host also differs in a setting that cannot be changed safely: " +
@@ -8490,6 +8568,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         }
         PumpDirectSessionIfDue();
         PumpFriendPresence();
+        g_online_mod_selected_rom=selected_rom;
+        g_online_mod_identity=rom_ready?online_manifest_identity:dkr::runtime::rom::Identity{};
+        PumpOnlineMods();
         if (rom_ready &&
             dkr::runtime::netplay::session().consume_launch_request()) {
             dkr::runtime::startup_performance::mark(
@@ -8625,15 +8706,16 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
 
         if (launch_requested) {
             launch_requested=false;
-            if(!g_legacy_imports.snapshot().busy && !g_mod_launch.snapshot().modal) {
+            if(!dkr::runtime::netplay::session().active() &&
+               !g_legacy_imports.snapshot().busy && !g_mod_launch.snapshot().modal) {
                 mod_launch_rom=selected_rom;
-                g_mod_launch.start(g_config_directory,mod_launch_rom,dkr::runtime::netplay::session().active());
+                g_mod_launch.start(g_config_directory,mod_launch_rom,false);
             }
         }
         if(const auto prepared=g_mod_launch.snapshot();prepared.modal && prepared.prepared && !prepared.busy) {
             // The modal owns the selection while preparing; do not admit a
             // local bank if an online session began in the meantime.
-            if(prepared.prepared->session && dkr::runtime::netplay::session().active()) {
+            if(dkr::runtime::netplay::session().active()) {
                 g_mod_launch.dismiss();rom_status="Custom launch cancelled because an online lobby became active.";
             } else {
                 dkr::runtime::startup_performance::mark("launcher-local-launch-requested");
@@ -8705,29 +8787,17 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             ImGui::SetScrollY(0); last_rendered_page = page;
         }
 #else
-        const ImVec2 available = ImGui::GetContentRegionAvail();
-        const float layout_width = std::floor(available.x);
-        const float layout_height = std::floor(available.y);
-        const float outer_margin = std::round(
-            std::clamp(layout_width * 0.022F, 16.0F, 34.0F));
-        const float content_height = std::max(
-            std::floor(layout_height - outer_margin * 2.0F), 1.0F);
-        const float panel_gap = std::round(
-            std::clamp(layout_width * 0.018F, 14.0F, 28.0F));
-        const float minimum_sidebar = available.x < 980.0F ? 190.0F : 230.0F;
-        const float sidebar_width = std::round(std::clamp(
-            layout_width * 0.235F, minimum_sidebar,
-            std::min(340.0F, layout_width * 0.34F)));
-        const float content_x =
-            outer_margin + sidebar_width + panel_gap;
-        const float right_width = std::max(
-            std::floor(layout_width - content_x - outer_margin), 320.0F);
-        const float panel_padding = std::round(
-            std::clamp(right_width * 0.045F, 20.0F, 44.0F));
-        const float right_inner_width = std::max(right_width - panel_padding * 2.0F, 1.0F);
+        const MenuPanelLayout menu = CalculateMenuPanelLayout(ImGui::GetContentRegionAvail());
+        const float outer_margin = menu.margin;
+        const float content_height = menu.height;
+        const float sidebar_width = menu.sidebar_width;
+        const float content_x = menu.content_x;
+        const float right_width = menu.content_width;
+        const float panel_padding = menu.padding;
+        const float right_inner_width = menu.inner_width;
         ImGui::SetCursorPos({outer_margin, outer_margin});
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, {0.025F, 0.105F, 0.15F, 0.88F});
-        ImGui::PushStyleColor(ImGuiCol_Border, {1.0F, 0.67F, 0.08F, 0.92F});
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuNavSurface);
+        ImGui::PushStyleColor(ImGuiCol_Border, kMenuNavBorder);
         const SidebarLayout sidebar_layout = CalculateSidebarLayout(
             content_height, sidebar_width);
         ImGui::BeginChild("launcher-nav", {sidebar_width, content_height}, true,
@@ -8799,17 +8869,14 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
         ImGui::SetCursorPos({content_x, outer_margin});
-        // MODS / HACKS reads best on an almost opaque panel.
-        // CONTROLS reads best on its own opaque surface (.content:has(.controls-page)).
-        const ImVec4 launcher_content_color = page == kPageControls
-            ? ImVec4{12.0F / 255.0F, 32.0F / 255.0F, 45.0F / 255.0F, 1.0F}
-            : ImVec4{0.035F, 0.085F, 0.12F, page == kPageModsHacks ? 0.98F : 0.90F};
+        // Every launcher tab shares the same translucent surface. Card and
+        // control colours stay independent so their contrast is unchanged.
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::begin, &underlay_profile);
         DrawLinuxSoftwarePanelUnderlay(
-            {right_width, content_height}, launcher_content_color);
+            {right_width, content_height}, kMenuContentSurface);
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::end, &underlay_profile);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, launcher_content_color);
-        ImGui::PushStyleColor(ImGuiCol_Border, {0.12F, 0.62F, 0.58F, 0.88F});
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuContentSurface);
+        ImGui::PushStyleColor(ImGuiCol_Border, kMenuContentBorder);
         ImGui::BeginChild("launcher-content", {right_width, content_height}, true,
                           ImGuiWindowFlags_NavFlattened);
         if (page != last_rendered_page) {
@@ -8825,6 +8892,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             focus_content = false;
         }
 #endif
+        const PaddockLauncherTypographyScope launcher_typography;
         const PlayPageContext play_context{selected_rom, rom_status, rom_ready, rom_catalog,
                                            launch_requested};
         g_launcher_rom = &play_context;
@@ -8904,6 +8972,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         DrawTexturePackImportModal();
         DrawPaddockLegacyModImportModal();
         DrawModLaunchModal();
+        DrawOnlineModModal();
         DrawTextEntryKeyboard();
         DrawOnlineNotification();
         DrawOlToast();
@@ -8995,6 +9064,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
 
     g_launcher_animation_seconds = -1.0;
     g_mod_launch.abandon();
+    if(!result.start_game)shutdown_online_mods();
 
     std::fprintf(stderr, "[perf][launcher-background] cache-rebuilds=%llu tiles=%llu\n",
         static_cast<unsigned long long>(launcher_background.cache_rebuilds),
@@ -9175,6 +9245,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         ImGui::End();
     } else if (show_overlay) {
     BeginMainWindow("DKR-R Overlay", ImGuiWindowFlags_NoBackground);
+        const PaddockLauncherTypographyScope overlay_typography;
         bool request_quit_popup = false;
         bool request_restart_popup = false;
         constexpr int overlay_sidebar_count = kMenuPageCount + 2;
@@ -9199,18 +9270,15 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         DrawOverlayContent(content_inner_width);
         dkr::runtime::mobile::end_content();
 #else
-        const float overlay_margin = std::clamp(ImGui::GetWindowWidth() * 0.025F, 12.0F, 38.0F);
-        const float overlay_gap = std::clamp(ImGui::GetWindowWidth() * 0.018F, 12.0F, 28.0F);
-        const float minimum_sidebar = ImGui::GetWindowWidth() < 1000.0F ? 190.0F : 220.0F;
-        const float maximum_sidebar = std::max(ImGui::GetWindowWidth() * 0.40F, minimum_sidebar);
-        const float sidebar_width = std::clamp(ImGui::GetWindowWidth() * 0.25F,
-                                               minimum_sidebar, std::min(370.0F, maximum_sidebar));
-        const float overlay_height = ImGui::GetWindowHeight() - overlay_margin * 2.0F;
-        const float content_x = overlay_margin + sidebar_width + overlay_gap;
-        const float content_panel_width = ImGui::GetWindowWidth() - content_x - overlay_margin;
+        const MenuPanelLayout menu = CalculateMenuPanelLayout(ImGui::GetContentRegionAvail());
+        const float overlay_margin = menu.margin;
+        const float sidebar_width = menu.sidebar_width;
+        const float overlay_height = menu.height;
+        const float content_x = menu.content_x;
+        const float content_panel_width = menu.content_width;
         ImGui::SetCursorPos({overlay_margin, overlay_margin});
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, {0.025F, 0.09F, 0.13F, 0.84F});
-        ImGui::PushStyleColor(ImGuiCol_Border, kWarm);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuNavSurface);
+        ImGui::PushStyleColor(ImGuiCol_Border, kMenuNavBorder);
         const SidebarLayout sidebar_layout = CalculateSidebarLayout(
             overlay_height, sidebar_width);
         ImGui::BeginChild("overlay-nav", {sidebar_width, overlay_height}, true,
@@ -9292,8 +9360,8 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
         ImGui::SetCursorPos({content_x, overlay_margin});
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, {0.035F, 0.085F, 0.12F, 0.84F});
-        ImGui::PushStyleColor(ImGuiCol_Border, kAccent);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuContentSurface);
+        ImGui::PushStyleColor(ImGuiCol_Border, kMenuContentBorder);
         ImGui::BeginChild("overlay-content", {content_panel_width, overlay_height}, true,
                           ImGuiWindowFlags_NavFlattened);
         const int overlay_content_page =
@@ -9303,8 +9371,8 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
             overlay_content_page) {
             ImGui::SetScrollY(0.0F);
         }
-        const float content_padding = std::clamp(content_panel_width * 0.045F, 20.0F, 44.0F);
-        const float content_inner_width = content_panel_width - content_padding * 2.0F;
+        const float content_padding = menu.padding;
+        const float content_inner_width = menu.inner_width;
         ImGui::SetCursorPos({content_padding, content_padding});
         ImGui::PushItemWidth(content_inner_width);
         ImGui::PushTextWrapPos(content_padding + content_inner_width);
@@ -9367,10 +9435,15 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         }
     ImGui::End();
     }
-    PumpDialogJob();
-    DrawTexturePackImportModal();
-    DrawPaddockLegacyModImportModal();
-    DrawTextEntryKeyboard();
+    {
+        // Match launcher modal text without enlarging FPS/network notifications
+        // or the game HUD. These dialogs render outside the content child.
+        const PaddockLauncherTypographyScope modal_typography(show_overlay);
+        PumpDialogJob();
+        DrawTexturePackImportModal();
+        DrawPaddockLegacyModImportModal();
+        DrawTextEntryKeyboard();
+    }
     DrawFpsOverlay(application);
     DrawNetworkOverlay();
     DrawControllerInputOverlay();
@@ -9523,6 +9596,24 @@ void dkr::runtime::ui::report_mod_error(std::string error) {
     g_mod_launch.report_error(std::move(error));
 }
 
+void dkr::runtime::ui::shutdown_online_mods() {
+    // Explicitly join while DirectSession is alive, outside any SDL/network
+    // locks. Never let cross-translation-unit static destruction own this.
+    g_online_mod_sync.reset();g_online_mod_link.reset();
+    g_online_mod_host_request.reset();g_online_mod_watching=false;
+}
+
+std::shared_ptr<const dkr::mods::online::RuntimeResources> dkr::runtime::ui::online_mod_resources() {
+    const auto network=netplay::session().view();const auto& digest=network.room.manifest.mod_manifest_hash;
+    if(digest.empty())return {};
+    if(!g_online_mod_sync)throw dkr::mods::Error("The accepted online mods have no local preparation owner.");
+    const auto proof=g_online_mod_sync->snapshot();
+    if((proof.phase!=dkr::mods::online::SyncPhase::HostReady && proof.phase!=dkr::mods::online::SyncPhase::Verified) ||
+       !proof.profile || !proof.runtime || proof.profile->digest!=digest)
+        throw dkr::mods::Error("The accepted lobby's mod resources are not locally verified. Rejoin the lobby.");
+    return std::static_pointer_cast<const dkr::mods::online::RuntimeResources>(proof.runtime);
+}
+
 void dkr::runtime::ui::report_online_game_end(std::string message, bool lobby_retained) {
     g_page_navigation_request = kPageOnlineMp;
     g_online_page.section = lobby_retained ? OlSection::Lobby : OlSection::Play;
@@ -9569,7 +9660,11 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
     g_online_experimental_rollback=true;g_online_maximum_players=int(players);
     g_online_automatic_delay=false;g_online_manual_delay=1;g_online_rollback_window=6;
     g_online_save_seed_mode=int(saves::OnlineSaveSeedMode::Fresh);
-    if(!CreateOnlineLobby()){error=g_online_action_status;return false;}
+    OnlineHostRequest request;request.manifest=BuildNetplayManifest(identity);
+    request.rules.maximum_players=std::uint8_t(players);request.rules.synchronization=netplay::SynchronizationMode::ExperimentalRollback;
+    request.rules.automatic_input_delay=false;request.rules.manual_input_delay=1;request.rules.rollback_window=6;
+    request.save_mode=saves::OnlineSaveSeedMode::Fresh;request.room=g_online_room_name;request.name=g_online_player_name;
+    if(!FinishOnlineLobby(request,{},0)){error=g_online_action_status;return false;}
     return true;
 }
 #endif

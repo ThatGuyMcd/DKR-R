@@ -1,5 +1,6 @@
 #include "legacy_character_materialize.hpp"
 #include "legacy_mod_dependencies.hpp"
+#include "legacy_asset_capacity.hpp"
 #include <miniz/miniz.h>
 #include <algorithm>
 #include <functional>
@@ -101,6 +102,26 @@ void validate_character_animation(View packed,unsigned vertices) {
     const std::uint64_t required=4ULL+12ULL*stored_frames+6ULL*vertices+3ULL*vertices*(stored_frames-1);
     if(required>raw.size())throw Error("Character animation stream is truncated for its model's animated vertices.");
 }
+bool character_portrait_changed(View replacement,View original) {
+    validate_texture_record(replacement);validate_texture_record(original);
+    const auto frames=be16(replacement,0x12)>>8;
+    if(frames!=(be16(original,0x12)>>8))return true;
+    const auto decoded_a=replacement[0x1d]?inflate_asset(replacement.subspan(32),4*MiB):Bytes{};
+    const auto decoded_b=original[0x1d]?inflate_asset(original.subspan(32),4*MiB):Bytes{};
+    const View a=replacement[0x1d]?View(decoded_a):replacement;
+    const View b=original[0x1d]?View(decoded_b):original;
+    constexpr unsigned bpp[]{32,16,8,4,16,8,4};
+    std::size_t at=0,bt=0;
+    for(unsigned frame=0;frame<frames;++frame) {
+        const auto ah=slice(a,at,32),bh=slice(b,bt,32);
+        const auto format=ah[2]&15;
+        if(ah[0]!=bh[0] || ah[1]!=bh[1] || format!=(bh[2]&15))return true;
+        const auto bytes=(std::size_t(ah[0])*ah[1]*bpp[format]+7)/8;
+        if(!std::ranges::equal(slice(a,at+32,bytes),slice(b,bt+32,bytes)))return true;
+        if(frame+1<frames){at+=be16(ah,0x16);bt+=be16(bh,0x16);}
+    }
+    return false;
+}
 PreparedCharacter prepare_character(View original,View target,std::string patch_digest,unsigned base_character) {
     const auto analysis=analyze(original,target,patch_digest);
     if(!analysis.blockers.empty())throw Error(analysis.blockers.front());
@@ -167,8 +188,8 @@ PreparedCharacter prepare_character(View original,View target,std::string patch_
     return result;
 }
 CharacterNamespace allocate_characters(std::shared_ptr<const AssetBank> stock,std::vector<PreparedCharacter> characters) {
-    if(!stock || !stock->digest().empty() || stock->augmented() || characters.empty() || characters.size()>16)
-        throw Error("Character boot namespace needs an original bank and 1-16 prepared characters.");
+    if(!stock || !stock->digest().empty() || stock->augmented() || characters.empty() || characters.size()>MaxEnabledCharacters)
+        throw Error("Character boot namespace requires an original bank and a representable character library.");
     CharacterNamespace result;result.base_fingerprint=stock->fingerprint();
     std::sort(characters.begin(),characters.end(),[](const auto& a,const auto& b){return a.root.content_id<b.root.content_id;});
     std::array<unsigned,50> next{};
@@ -176,6 +197,15 @@ CharacterNamespace allocate_characters(std::shared_ptr<const AssetBank> stock,st
     const auto original_ids=stock->stock_section(30);
     result.animation_ids=Bytes(original_ids.begin(),original_ids.begin()+(next[29]+1)*2);
     std::string previous;
+    std::map<std::pair<unsigned,std::string>,unsigned> shared_textures;
+    std::set<std::string> presentation_resources;
+    std::size_t presentation_bytes=0;
+    const auto retain=[&](std::string key,std::size_t bytes) {
+        if(!presentation_resources.insert(std::move(key)).second)return;
+        if(bytes>MaxCharacterPresentationBytes-presentation_bytes)
+            throw Error("Enabled characters exceed the safe retained portrait/audio memory budget. Reduce this collection or use lighter assets; installed mods are retained.");
+        presentation_bytes+=bytes;
+    };
     for(const auto& character:characters) {
         if(validate_prepared_character(character,*stock)!=character.root.content_id)
             throw Error("Prepared character content identity does not match its dependencies.");
@@ -186,14 +216,29 @@ CharacterNamespace allocate_characters(std::shared_ptr<const AssetBank> stock,st
             throw Error("Character assets have invalid original Game Pak provenance.");
         if(character.root.content_id==previous)continue;
         previous=character.root.content_id;
+        const auto& portrait=character.records.at({4,character.root.portrait});
+        const auto decoded_portrait=portrait[0x1d]?inflate_asset(View(portrait).subspan(32),4*MiB):Bytes{};
+        // Include display-list/palette/alignment overhead, not just packed PNG
+        // or ROM bytes. Banks stay resident for previously queued audio.
+        retain("portrait:"+sha256(portrait),2*(decoded_portrait.empty()?portrait.size():decoded_portrait.size())+1024);
+        retain("select:"+sha256(character.audio.control)+sha256(character.audio.samples),character.audio.control.size()+64);
+        if(!character.race_audio.control.empty())retain("race:"+sha256(character.race_audio.control)+sha256(character.race_audio.samples),character.race_audio.control.size()+64);
         std::map<std::pair<unsigned,unsigned>,unsigned> remap;
+        std::set<AssetKey> reused;
         for(const auto& [key,bytes]:character.records)if(key.first!=32) {
             if(key.first!=2 && key.first!=4 && key.first!=12 && key.first!=29 && key.first!=34)throw Error("Unowned additive character section.");
+            // Sprite frame ranges must remain contiguous. Only 3D textures
+            // are interned here; each 2D frame sequence retains its own IDs.
+            if(key.first==2) {
+                const auto hash=std::pair{key.first,sha256(bytes)};
+                if(const auto found=shared_textures.find(hash);found!=shared_textures.end()) {remap[key]=found->second;reused.insert(key);continue;}
+                shared_textures.emplace(hash,next[key.first]);
+            }
             if(next[key.first]>=32767)throw Error("Character asset namespace is full.");
             remap[key]=next[key.first]++;
         }
         for(const auto& [key,bytes]:character.records) {
-            if(key.first==32)continue; // Animation ranges are owned by each copied model.
+            if(key.first==32 || reused.contains(key))continue; // Animation ranges are owned by each copied model.
             Bytes copy=bytes;
             if(key.first==12) {
                 const auto textures=inspect_sprite_textures(bytes);
@@ -231,12 +276,35 @@ CharacterNamespace allocate_characters(std::shared_ptr<const AssetBank> stock,st
         slot.stage_source_header=character.stage_header;
         slot.audio=character.audio;
         slot.race_audio=character.race_audio;
+        // Presentation provenance is computed from verified records, not a mod
+        // name or a donor guess. Never change content IDs or isolated-save paths.
+        slot.custom_portrait=character_portrait_changed(portrait,stock->record(4,character.root.portrait));
+        slot.portrait_identity=sha256(portrait);
+        slot.selection_audio_identity=sha256(character.audio.control)+sha256(character.audio.samples);
+        slot.race_audio_identity=sha256(character.race_audio.control)+sha256(character.race_audio.samples);
         if(!slot.race_audio.control.empty())validate_character_race_audio(slot.race_audio);
         result.characters.push_back(std::move(slot));
     }
     // AssetBank owns the final table/count/size checks, even for callers that
     // construct a preparation result directly rather than using the worker.
-    result.apply(stock);
+    std::string roster_ids;for(const auto& c:result.characters)roster_ids+=c.id;
+    result.roster_identity=sha256(View(reinterpret_cast<const std::uint8_t*>(roster_ids.data()),roster_ids.size()));
+    const auto composite=result.apply(stock);
+    const auto caps=legacy_asset_cache_capacities(true,static_cast<unsigned>(composite->record_count(4)),static_cast<unsigned>(composite->record_count(2)),
+        static_cast<unsigned>(composite->record_count(12)),static_cast<unsigned>(composite->record_count(29)));
+    auto metadata=std::size_t(caps[0])*8+std::size_t(caps[1])*8+std::size_t(caps[2])*8+std::size_t(caps[3])*4;
+    // Native initialization retains these expanded lookup tables as well as
+    // the cache arrays. Account for their additional guest bytes, not only
+    // presentation resources, before admitting a large collection.
+    for(unsigned section:{2U,4U,12U,29U,34U}) {
+        const auto table=section<29?section+1:section-1;
+        // AssetDirectory emits zero + one end offset per record + sentinel.
+        const auto expanded=(composite->record_count(section)+2)*4,original=stock->stock_section(table).size();
+        if(expanded>original)metadata+=expanded-original;
+    }
+    if(result.animation_ids.size()>original_ids.size())metadata+=result.animation_ids.size()-original_ids.size();
+    if(metadata>MaxCharacterPresentationBytes-presentation_bytes)
+        throw Error("Enabled characters exceed the safe portrait/audio/cache memory budget. Reduce this collection or use lighter assets; installed mods are retained.");
     return result;
 }
 std::string validate_prepared_character(const PreparedCharacter& value,const AssetBank& stock) {

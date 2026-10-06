@@ -156,6 +156,8 @@ std::size_t receive_sequence_lane(protocol::MessageType type) {
     case protocol::MessageType::ExperimentalLoaded:
     case protocol::MessageType::ExperimentalSaveOffer:
     case protocol::MessageType::ExperimentalSaveRequest:
+    case protocol::MessageType::ModOffer:
+    case protocol::MessageType::ModControl:
         return 2U; // lifecycle/control traffic
     case protocol::MessageType::StateHash:
     case protocol::MessageType::StateSnapshot:
@@ -384,6 +386,7 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
     checkpoint_encoding_cache_hits_ = 0U;
     maximum_network_pump_us_ = 0U;
     pending_joins_ = {};
+    mod_offer_.reset();mod_inbound_.clear();mod_inbound_bytes_=0;
     next_ready_request_id_ = 1U;
     pending_ready_request_id_ = 0U;
     desired_ready_.reset();
@@ -543,6 +546,8 @@ bool DirectSession::join_friend_invite(std::string_view invite,
     bulk_outbound_.clear();
     peers_ = {};
     pending_joins_ = {};
+    mod_offer_.reset();mod_inbound_.clear();mod_inbound_bytes_=0;
+    mod_manifest_bytes_=0;manifest_.mod_manifest_hash.clear();
     // Completion/encoding caches belong to this authenticated session only.
     // A new room can reuse the same numeric scene and boundary identifiers.
     completed_releases_.clear();
@@ -699,6 +704,8 @@ void DirectSession::disconnect(std::string_view reason) {
     checkpoint_encoding_cache_hits_ = 0U;
     maximum_network_pump_us_ = 0U;
     pending_joins_ = {};
+    mod_offer_.reset();mod_inbound_.clear();mod_inbound_bytes_=0;
+    mod_manifest_bytes_=0;manifest_.mod_manifest_hash.clear();
     received_sequences_.clear();
     blocked_senders_.clear();
     blocked_sources_.clear();
@@ -1047,6 +1054,24 @@ bool DirectSession::approve_join_locked(std::uint64_t request_id,
         error = "That join request has expired.";
         return false;
     }
+    if (!manifest_.mod_manifest_hash.empty() && !pending->mods_verified) {
+        if (!mod_manifest_bytes_) {
+            error = "The host's immutable mod offer has not been prepared."; return false;
+        }
+        if (!pending->mods_approved) {
+            const auto reserved=std::count_if(pending_joins_.begin(),pending_joins_.end(),
+                [](const auto& p){return p.active && p.mods_approved;});
+            if (occupied_players()+reserved>=room_view_.rules.maximum_players) {
+                error = "This lobby has no unreserved racer slot."; return false;
+            }
+            pending->mods_approved=true;
+            transport_->retain_peer_route(pending->address);
+            pending->mod_route_retained=true;
+        }
+        send_mod_offer_locked(*pending);
+        status_=pending->display_name+" is reviewing/preparing the host's mods.";
+        error.clear(); return true;
+    }
     const std::string peer_id = std::to_string(pending->sender_id);
     CompatibilityManifest synchronized_manifest = pending->manifest;
     const bool requires_save_sync = true;
@@ -1063,7 +1088,7 @@ bool DirectSession::approve_join_locked(std::uint64_t request_id,
     peers_[*slot].next_sequence = pending->next_sequence;
     peers_[*slot].requires_save_sync = requires_save_sync;
     peers_[*slot].online_save_ready = false;
-    transport_->retain_peer_route(pending->address);
+    if (!pending->mod_route_retained) transport_->retain_peer_route(pending->address);
     room_view_ = lobby_.room();
     send_with_key(pending->address, pending->key,
                   protocol::MessageType::HelloAck,
@@ -1170,6 +1195,7 @@ bool DirectSession::reject_join(std::uint64_t request_id,
         if (!source_host.empty()) blocked_sources_.insert(source_host);
     }
     status_ = pending->display_name + " was not admitted.";
+    clear_pending_mod_route_locked(*pending);
     *pending = {};
     error.clear();
     return true;
@@ -1194,6 +1220,7 @@ bool DirectSession::set_lobby_locked(bool locked, std::string& error) {
             send_with_key(pending.address, pending.key,
                 protocol::MessageType::HelloAck,
                 protocol::encode_hello_ack({false, 0U, "The host locked this lobby."}));
+            clear_pending_mod_route_locked(pending);
             pending = {};
         }
     }
@@ -1266,6 +1293,7 @@ bool DirectSession::revoke_invitation(std::string& error) {
         invite_ = make_invite(advertised_host_);
     }
     clear_friend_admissions_locked();
+    for(auto& pending:pending_joins_)clear_pending_mod_route_locked(pending);
     pending_joins_ = {};
     status_ = method_ == ConnectionMethod::QuickJoin
         ? "Quick Join code replaced. The previous code can no longer join."
@@ -5015,6 +5043,7 @@ SessionView DirectSession::view_locked() const {
         result.network_jitter_ms = local.jitter_ms;
         result.network_loss_percent = local.packet_loss_percent;
     }
+    result.mod_offer=mod_offer_;
     if (is_host_) {
         for (const PendingRecord& pending : pending_joins_) {
             if (!pending.active) continue;
@@ -5025,11 +5054,13 @@ SessionView DirectSession::view_locked() const {
                 pending.manifest.session_save_hash != manifest_.session_save_hash;
             result.pending_joins.push_back({
                 pending.sender_id, pending.display_name, compatible,
-                compatible
+                pending.mods_approved
+                    ? "Host approved. Awaiting client mod consent and verification."
+                    : compatible
                     ? (save_sync
                         ? "Build, ROM and settings match. Player 1's session save will be synchronized after approval."
                         : "Build, ROM, save and gameplay settings match.")
-                    : reason});
+                    : reason, pending.mods_approved});
         }
     }
     return result;
@@ -5299,6 +5330,9 @@ bool DirectSession::send_with_key(const PeerAddress& address,
         type == protocol::MessageType::ExperimentalCheckpoint || type == protocol::MessageType::ExperimentalLoaded ||
         type == protocol::MessageType::ExperimentalSaveOffer || type == protocol::MessageType::ExperimentalSaveRequest ||
         type == protocol::MessageType::ExperimentalControl ||
+        type == protocol::MessageType::ModOffer ||
+        type == protocol::MessageType::ModControl ||
+        type == protocol::MessageType::ModData ||
         type == protocol::MessageType::FrameCommitRequest;
     if (coalescible) {
         for (const auto* queue : {&critical_outbound_, &repair_outbound_, &authority_outbound_, &normal_priority_outbound_, &bulk_outbound_}) {
@@ -5508,7 +5542,7 @@ bool DirectSession::enqueue_outbound(PeerAddress destination,
             }
         }
         authority_outbound_.push_back(std::move(packet));
-    } else if(type==protocol::MessageType::ExperimentalCheckpoint) {
+    } else if(type==protocol::MessageType::ExperimentalCheckpoint || type==protocol::MessageType::ModData) {
         if(bulk_outbound_.size()>=maximum_bulk)return false;
         bulk_outbound_.push_back(std::move(packet));
     } else if (type == protocol::MessageType::StateSnapshot) {
@@ -5568,6 +5602,7 @@ void DirectSession::flush_outbound_locked() {
         return
             (type == protocol::MessageType::StateSnapshot ||
              type == protocol::MessageType::ExperimentalCheckpoint ||
+             type == protocol::MessageType::ModData ||
              type == protocol::MessageType::PreflightCheckpointProbe)
                 ? TransportTrafficClass::Checkpoint
                 :
@@ -5721,6 +5756,9 @@ void DirectSession::broadcast(protocol::MessageType type,
 void DirectSession::pump_locked() {
     PeerAddress departed{};
     while(transport_->take_peer_departure(departed)) {
+        if(is_host_)for(auto& pending:pending_joins_)if(pending.active && pending.mod_route_retained && pending.address==departed) {
+            clear_pending_mod_route_locked(pending);pending={};
+        }
         // Only the experimental backend changes departure policy. Use the
         // authenticated admitted roster, never an unapproved incoming route.
         const bool owned_live=launch_descriptor_&&
@@ -5747,6 +5785,7 @@ void DirectSession::pump_locked() {
             host_key_pair_ = pending_invitation_->key_pair;
             invite_ = transport_->quick_join_code();
             clear_friend_admissions_locked();
+            for(auto& pending:pending_joins_)clear_pending_mod_route_locked(pending);
             pending_joins_ = {};
             pending_invitation_.reset();
             status_ = "Quick Join code replaced. Existing racers remain connected.";
@@ -5800,10 +5839,15 @@ void DirectSession::pump_locked() {
         if (!secure::inspect_packet(encrypted, packet_sender, packet_match) ||
             packet_match != match_id_) continue;
         const secure::Key* receive_key = &key_;
+        bool provisional_mod_peer=false;
         if (is_host_) {
             PeerRecord* peer = peer_by_sender(packet_sender);
-            if (peer == nullptr || !(peer->address == source)) continue;
-            receive_key = &peer->key;
+            if (peer && peer->address==source) receive_key = &peer->key;
+            else {
+                auto* pending=pending_by_sender(packet_sender);
+                if(!pending || !pending->mods_approved || !(pending->address==source))continue;
+                receive_key=&pending->key;provisional_mod_peer=true;
+            }
         } else if (packet_sender != host_sender_id_) {
             continue;
         }
@@ -5817,6 +5861,10 @@ void DirectSession::pump_locked() {
                 plain, packet, error,
                 transport_->maximum_plaintext_datagram_bytes()) ||
             packet.header.sequence != packet_sequence) continue;
+        // Provisional keys have mod-transfer privileges only. A guessed Ready,
+        // input, save or launch packet must never allocate a racer slot.
+        if(provisional_mod_peer && packet.header.type!=protocol::MessageType::ModControl &&
+           packet.header.type!=protocol::MessageType::ModData)continue;
         // A fragmented authority snapshot must not age a delayed rollback
         // input out of the replay window. Keep authenticated sequence windows
         // per traffic lane while retaining one globally unique encryption
@@ -5831,6 +5879,8 @@ void DirectSession::pump_locked() {
     flush_outbound_locked();
     state_changed_.notify_all();
     const auto now = std::chrono::steady_clock::now();
+    if(is_host_)for(auto& pending:pending_joins_)if(pending.active && pending.mods_approved &&
+        !pending.mods_verified && now-pending.last_acknowledgement>=std::chrono::seconds(1))send_mod_offer_locked(pending);
     constexpr auto control_retry = std::chrono::milliseconds(250);
     service_owned_match_end_locked(now);
     // The outer runtime can apply lead backpressure before requesting input,
@@ -6249,6 +6299,7 @@ void DirectSession::pump_locked() {
 void DirectSession::handle_packet(const PeerAddress& source,
                                   std::uint64_t packet_sender,
                                   const protocol::Datagram& packet) {
+    if(handle_mod_packet_locked(packet_sender,packet))return;
     if (is_host_) handle_host_packet(source, packet_sender, packet);
     else handle_client_packet(packet);
 }
@@ -6303,6 +6354,8 @@ void DirectSession::handle_join_request(
         return;
     }
     PendingRecord* pending = pending_by_sender(packet_sender);
+    if(pending && pending->mods_approved && (!(pending->address==source) ||
+       pending->key!=peer_key || pending->client_public!=client_public))return;
     if (pending == nullptr) {
         const auto available = std::find_if(pending_joins_.begin(), pending_joins_.end(),
             [](const PendingRecord& record) { return !record.active; });
@@ -6323,6 +6376,9 @@ void DirectSession::handle_join_request(
     pending->display_name = std::move(hello.display_name);
     pending->manifest = std::move(hello.manifest);
     pending->last_seen = std::chrono::steady_clock::now();
+    if(pending->mods_approved) {
+        send_mod_offer_locked(*pending);return;
+    }
     if (consume_friend_admission_locked(hello.friend_admission)) {
         const PeerAddress pending_address = pending->address;
         const secure::Key pending_key = pending->key;
@@ -6334,6 +6390,7 @@ void DirectSession::handle_join_request(
                     admission_error.empty()
                         ? "The invited place is no longer available."
                         : admission_error}));
+            clear_pending_mod_route_locked(*pending);
             *pending = {};
             status_ = admission_error;
         }
@@ -7017,9 +7074,15 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
             compatibility_sync_offer_ = acknowledgement.compatibility_offer;
             state_ = ConnectionState::Failed;
             status_ = acknowledgement.message;
+            std::fprintf(stderr,"[online][admission] rejected reason=%s settings-sync-offered=%u\n",
+                status_.c_str(),unsigned(compatibility_sync_offer_.has_value()));
+            std::fflush(stderr);
             return;
         }
         compatibility_sync_offer_.reset();
+        if(mod_offer_ && manifest_.mod_manifest_hash!=mod_offer_->manifest_hash) {
+            fail_locked("The host admitted this request before local mod preparation was verified.");return;
+        }
         if (acknowledgement.synchronized_save.size() != 512U ||
             acknowledgement.online_save_generation == 0U ||
             acknowledgement.online_save_hash == 0U || !save_installer_) {
@@ -8038,7 +8101,10 @@ void DirectSession::expire_pending_joins() {
     constexpr auto lifetime = std::chrono::seconds(30);
     const auto now = std::chrono::steady_clock::now();
     for (PendingRecord& pending : pending_joins_) {
-        if (pending.active && now - pending.last_seen > lifetime) pending = {};
+        if (pending.active && (now - pending.last_seen > lifetime ||
+            (pending.mods_approved && now-pending.first_seen>std::chrono::minutes(20)))) {
+            clear_pending_mod_route_locked(pending);pending = {};
+        }
     }
 }
 
@@ -9188,9 +9254,10 @@ bool DirectSession::save_sync_available() const {
 
 std::string DirectSession::admission_incompatibility(
     const CompatibilityManifest& candidate) const {
-    CompatibilityManifest after_save_sync = candidate;
-    after_save_sync.session_save_hash = manifest_.session_save_hash;
-    const std::string other = incompatibility_reason(manifest_, after_save_sync);
+    // This comparison only establishes eligibility to review/download. The
+    // actual slot allocation still requires complete_mod_admission's proof.
+    const std::string other = session_content_sync_incompatibility(manifest_,candidate,
+        mod_manifest_bytes_ && !manifest_.mod_manifest_hash.empty());
     if (!other.empty()) return other;
     if (candidate.session_save_hash != manifest_.session_save_hash &&
         !save_sync_available()) {

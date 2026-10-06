@@ -46,6 +46,7 @@ struct PackInfo {
     Origin origin = Origin::User;
     std::string owner_track_id;   // custom track id, when origin == TrackPack
     std::string texture_digest;   // digest shared with the track, TrackPack only
+    std::size_t priority = 0U;    // 1 is highest; assigned to every installed pack
 };
 
 struct ImportProgress {
@@ -104,6 +105,9 @@ TrackPackState track_pack_state(const std::string& track_id,
 bool forget_track_pack(const std::string& track_id, std::string& status);
 
 void set_enabled(const std::string& id, bool enabled);
+// Move a layer to a unique 1-based position, shifting intervening layers.
+// Persists the order and queues the existing renderer-thread live reload.
+bool set_priority(const std::string& id, std::size_t priority, std::string& status);
 bool toggle_last_selected(std::string& status);
 bool set_hidden(const std::string& id, bool hidden, std::string& status);
 bool delete_managed(const std::string& id, std::string& status);

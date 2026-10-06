@@ -465,7 +465,7 @@ void DrawSoundMultiplayerMusic(float width) {
     PaddockTextAt(front, tip, {a.x + 14.0F, a.y + 12.0F}, tip_width - 28.0F, kTip, style);
 }
 
-void DrawSoundPage(float available_width) {
+void DrawSoundPage(float available_width, bool live = false) {
     SoundPageState& state = g_sound_page;
     const int frame = ImGui::GetFrameCount();
     const bool entered = state.context != ImGui::GetCurrentContext() ||
@@ -479,7 +479,8 @@ void DrawSoundPage(float available_width) {
         dkr::runtime::enhancements::presentation_profile());
     const bool owned_category_mix_deferred =
         dkr::runtime::netplay::experimental::runtime_view().active;
-    const float width = std::min(available_width, 1240.0F);
+    // Both menu surfaces use the same full-width responsive cards.
+    const float width = std::max(available_width, 1.0F);
     // Container query: narrow panels put each slider under its label.
     const bool narrow = width <= 600.0F;
     // A focus request for the page (a new page, LB / RB) lands on Master,

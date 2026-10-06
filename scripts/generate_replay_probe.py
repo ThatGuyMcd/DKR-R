@@ -41,7 +41,51 @@ PROJECT_IMPORTS = {
     # Mixed native/guest signatures verified in runtime_legacy_mods.cpp.
     "dkr_legacy_character_cinematic_id": ("unsigned", ["uint8_t*", "recomp_context*", "unsigned", "unsigned"]),
     "dkr_legacy_character_race_sound": ("unsigned", ["uint8_t*", "recomp_context*", "uint32_t", "unsigned"]),
+    "dkr_legacy_character_ai_event": ("void", ["uint8_t*", "recomp_context*", "unsigned", "recomp_func_t*"]),
 }
+
+# The native mod owner may call ONLY these private, instrumented guest
+# entries. Keep the complete closure explicit: function-pointer arguments do
+# not appear as calls in the normal call scan. Never use active_payload().
+OWNED_MOD_CALLS = {
+    "get_settings": "get_settings", "asset_allocate": "mempool_alloc_safe",
+    "asset_release": "mempool_free", "asset_copy": "dmacopy",
+    "menu_sound_play": "sound_play", "menu_texture_load": "load_texture",
+    "menu_texture_free": "tex_free", "menu_texture_draw": "texrect_draw_scaled",
+    "menu_font": "set_text_font", "menu_colour": "set_text_colour",
+    "menu_background": "set_text_background_colour", "menu_text": "draw_text",
+    "menu_render_reset": "rendermode_reset", "filtered_cheats": "get_filtered_cheats",
+    "stage_spawn": "spawn_object", "stage_free": "free_object",
+    "stage_music_fraction": "music_animation_fraction", "stage_particles": "obj_spawn_particle",
+    "stage_camera": "cam_get_active_camera", "unlock_drumstick": "is_drumstick_unlocked",
+    "unlock_tt": "is_tt_unlocked", "sound_bank_relocate": "alBnkfNew",
+    "sound_bank_play": "sndp_play_with_priority", "sound_parameter": "sndp_set_param",
+    "sound_spatial_point": "audspat_point_create",
+}
+
+def owned_mod_calls_header():
+    lines=['// New Patch Pipeline output: private C fault trampolines only.', '#pragma once',
+           'extern "C" {', '#include "imports.h"', '}',
+           'namespace dkr_owned_mod_calls {']
+    names=set(OWNED_MOD_CALLS.values()) | {"dkr_character_select_animation_fraction", "rand_range"}
+    for name in sorted(names):
+        lines.append(f'inline void call_{name}(uint8_t* ram,recomp_context* ctx) {{')
+        lines.append('    ctx->f_odd=ctx->mips3_float_mode?&ctx->f1.u32l:&ctx->f0.u32h;')
+        lines.append(f'    const auto result=dkr_probe_run_native({name},ram,ctx);')
+        lines.append('    if(!result.completed)throw dkr::mods::Error(result.blocked?result.blocked:"Owned guest callback failed.");')
+        lines.append('}')
+    # Isolated-symbol macros also rename a few names used as C++ field names.
+    # Suspend those macros only AFTER the private wrapper bodies are emitted.
+    for field in sorted(OWNED_MOD_CALLS):
+        lines.extend([f'#pragma push_macro("{field}")', f'#undef {field}'])
+    lines.extend(['inline dkr::runtime::GamePayload payload() {', '    dkr::runtime::GamePayload out{};'])
+    for field,name in OWNED_MOD_CALLS.items():
+        lines.append(f'    out.{field}=call_{name};')
+    lines.extend(['    return out;', '}'])
+    for field in reversed(sorted(OWNED_MOD_CALLS)):
+        lines.append(f'#pragma pop_macro("{field}")')
+    lines.append('}')
+    return '\n'.join(lines)+'\n'
 
 # EXACT reviewed emitted mode_game bodies. Two unload call sites have no
 # live host local across the split: hi/lo/result/c1cs are declaration-only;
@@ -359,15 +403,32 @@ RSP_INPUT_HASH = {
 INPUT_NATIVE_HASH = {
     "extern/n64-modern-runtime/ultramodern/src/input.cpp": "57e14a451ddc7d571baf8d886c650a5efcbfab94749720bad36f1b6393693524",
     "extern/n64-modern-runtime/librecomp/src/cont.cpp": "84441a9fb63dbc992a771d3cf15ec452aee4db68cceff8c29235cc2a256e3352",
-    "runtime-recomp/src/game/virtual_pak.cpp": "42287fda7a76eb3864417a4c2863e761c1464cc3126e272bf6a83edaaf0194ee",
+    # Save-protection pass: disk leases/atomic publication only. The owned
+    # Pak path continues to use its separate checkpointed in-memory services.
+    "runtime-recomp/src/game/virtual_pak.cpp": "0dd5e4b81817f4d50db6e701d0d1ad517b47a94e721bf29d4ee94ae65d121747",
     # Oct 1 reviewed opt-in capture hook; stable drive/input branches unchanged.
     "runtime-recomp/src/game/runtime_netplay.cpp": "aaeee3894a0087e9512cf426a65f044cfd76f7aee82dac713b2969f12126160c",
     "runtime-recomp/src/game/runtime_magic_codes.cpp": "e7d661472bb041991b3e8cfc6373c1d647b0fa300281d21448ed74efdb01021f",
-    # Oct 4 PR46 merge: added minimap table pairs and music load observer.
-    # Owned vanilla bootstrap still bypasses mod assets and clears an old
-    # offline music binding through the observer's no-level native branch.
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "a1c21cf25e28f8a2d1eedabadc85c77b3f9eb4ef0528fa7687b6cdc4a2dcb6f0",
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eff1460b853514ac2b200735c6085b1089585019b8ac1f0d11130c50b999e0ed",
+    # Frozen online course sizing/ID routing bypasses the offline catalogue.
+    # The no-session path remains the prior offline/vanilla implementation.
+    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "d6f79bfd1fb03d735f7e85375c43ba132b2138ecd11b933027259324caafa704",
+    # Online mod owner: same no-session returns, explicit TLS namespace and
+    # closed private guest callback table; no live/default dispatch fallback.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4b2091316095e555bc953a51bfafd5b295e199e6bb6a201d81f1594e8d34e522",
+    # Expanded character identities, sparse retained presentation and one
+    # immutable sample mount are shared by offline and replay-owned sessions.
+    "runtime-recomp/src/game/mods/legacy_character_limits.hpp": "d74576f3bcd7aa61283ac4e8e68d3a234e9182dca5f09f6398f285ca9353c55a",
+    "runtime-recomp/src/game/mods/legacy_character_audio.cpp": "00fdd1fa4dbae442ee471cd4ef71631db95c4df6055ea092c9b368f1cf12d124",
+    "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "2c9b955225098954793ac86d1ab16f225ad70d63602955dcc5074939fc78898b",
+    "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "789cbb5ddef03614452b6e2ff356c4973bd4938e6817122c669f889127fec374",
+    "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "247afd7092df00267d15150f1a0fee7c8783b0ec2ba1882c74e0d072adbbca33",
+    "runtime-recomp/src/game/mods/legacy_runtime_session.cpp": "6283f5e155e55a62c2e5d7bd23d0e0cef17e35965f330f0ab3470800c4809154",
+    # Pure immutable namespace capacities; stock limits retained. Guards stop
+    # before cache stores/null racer writes and cannot mutate replay state.
+    "runtime-recomp/src/game/mods/legacy_asset_capacity.hpp": "bc6bc05cd6702a80c8e841dafc56348335a0baee3a47d48e88b219944a21386d",
+    # Fixed-point song cursor/gain, checked guest rows and pointer-free replay
+    # sidecar; no decoder/file/device access can be invoked by a replay tick.
+    "runtime-recomp/src/game/mods/online_mod_music.cpp": "220ff38aa88bb6453e0c7a4635193e55d42e90b2037184f263e0fe63a191faea",
 }
 
 # Additional native participants reached by full retail menus. The tail latch
@@ -380,10 +441,9 @@ FULL_SCENE_NATIVE_HASH = {
     "runtime-recomp/src/game/water_profile.cpp": "d04da9797b34f8001e9304ccbd76171ead1eef8acc4fe2a1c215406b71064efb",
     # Both revisions keep the water UV masks and append PR46's music globals.
     "runtime-recomp/src/game/revision_addresses.hpp": "d8dd9d0f964082f69c86b8a9486ca12ecd47272702d141b03ab9de9cb898d43e",
-    # sequence_loaded/started are identities only under the existing no-mods
-    # owner contract: no bound sequence or saved carrier row. Not admission
-    # of custom music into the checkpointed simulation.
-    "runtime-recomp/src/game/custom_music.cpp": "3954cb3188645663ff15c51eec02ead2805b25bfc39837c71693303a41aaa137",
+    # Frozen online binding diverts before offline decoder/global song reads.
+    # Without a ModWorld the private hooks retain their prior identity branch.
+    "runtime-recomp/src/game/custom_music.cpp": "66176450b2e98228da437b5ec36b203a64d831ef048f8172af90f3fc8437f4d2",
     "runtime-recomp/src/game/online_roster_policy.hpp": "3c914fdcad650d62839eed84f76ea22d5743a2fbf1d30512b88d2317e38892f4",
     "runtime-recomp/src/game/runtime_enhancements.cpp": "7a868375b1a8e4e0f3e5e1c60036795fa2630e7d4b3cd6e954308495743918de",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "ab8a0f4220c00ce1b5726ff75953f0c4944b5b4e24eba942b442e07268ad04da",
@@ -683,6 +743,12 @@ def instrument_function(name, body):
 def native_stub(name, signature, full_scenes=False):
     ret, types = signature
     params = ", ".join(f"{t} p{i}" for i, t in enumerate(types)) or "void"
+    if name == "dkr_legacy_character_ai_event":
+        if signature != PROJECT_IMPORTS[name]:
+            raise ValueError("Unreviewed character AI hook ABI")
+        # The caller cannot introduce an arbitrary host callback. The mod
+        # adapter uses its own fenced wrapper, not this raw function pointer.
+        return f'void {name}({params}) {{ if(p3!=rand_range) dkr_probe_block("unowned-character-rng"); uint64_t args[]={{p2}},result=0; if(!dkr_probe_mod_dispatch("{name}",p0,p1,args,1,0,0,&result)) {{ dkr_probe_profile_disabled("{name}"); }} }}'
     audited_assets = {
         "dkr_legacy_asset_api": ("int", ["uint8_t*", "recomp_context*", "unsigned"]),
         **{n: ("void", ["uint8_t*", "recomp_context*"]) for n in (
@@ -756,7 +822,7 @@ def native_stub(name, signature, full_scenes=False):
         # The private owner permits ONLY notification 14 with no observed
         # return, never the interactive track-menu or a native field pointer.
         observed_guard='' if full_scenes else 'if (p4) dkr_probe_block("unowned-track-menu-observation"); '
-        return f'int {name}({params}) {{ {observed_guard}return dkr_probe_native_fields("{name}", p0, p1, p2, p3); }}'
+        return f'int {name}({params}) {{ {observed_guard}uint64_t args[]={{p4}}, result=0; if(dkr_probe_mod_dispatch("{name}",p0,p1,args,1,p3,p2,&result))return (int)result; return dkr_probe_native_fields("{name}", p0, p1, p2, p3); }}'
     if types[:2] == ["uint8_t*", "recomp_context*"] and ret in ("void", "int", "unsigned", "uint32_t") and all(t in ("int", "unsigned", "uint32_t", "int32_t") for t in types[2:]):
         args = ", ".join(f"(uint64_t)p{i}" for i in range(2, len(types)))
         if args:
@@ -792,7 +858,23 @@ def audio_isolation_header(revision):
         "RspUcodeFunc"), (), revision)
 
 
-def generate(source_dir: Path, header_path: Path, output: Path, roots, revision, scene_cuts=False, audio_services=False, input_services=False, authored_cpu=False, isolate_symbols=False, full_scenes=False, boss_finish_diagnostics=False, rsp_source=None):
+def runtime_isolation_header(guest_names, import_names, revision):
+    """Two linked owned adapters must not share bridge/IO globals or inline ABI.
+
+    The forced include is confined to the private owned target. Retail guest
+    symbols keep their existing isolation map; shared application interfaces,
+    the OwnedGame vtable and netplay core are never renamed.
+    """
+    root = Path(__file__).resolve().parents[1] / "runtime-recomp/tests/replay_probe"
+    names = {"make_owned_game", "dkr_owned_mod_calls"}
+    for path in sorted(root.iterdir()):
+        if path.suffix in (".c", ".cpp", ".h", ".hpp"):
+            names.update(re.findall(r"\bdkr_probe_[A-Za-z_0-9]+\b", path.read_text(encoding="utf-8")))
+    names.difference_update(set(guest_names) | set(import_names))
+    return isolation_header(names, (), revision)
+
+
+def generate(source_dir: Path, header_path: Path, output: Path, roots, revision, scene_cuts=False, audio_services=False, input_services=False, authored_cpu=False, isolate_symbols=False, full_scenes=False, boss_finish_diagnostics=False, rsp_source=None, mod_services=False):
     source_dir, header_path, output = source_dir.resolve(), header_path.resolve(), output.resolve()
     if output.exists() or output == source_dir or source_dir in output.parents or header_path.parent in output.parents:
         raise ValueError("Probe output must be a new, separate directory; protected inputs are never rewritten")
@@ -800,6 +882,8 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
         input_native_audit()
     if full_scenes and not (authored_cpu and isolate_symbols):
         raise ValueError("Full scenes require an explicit isolated authored CPU owner")
+    if mod_services and not full_scenes:
+        raise ValueError("Owned mod services require the complete isolated scene owner")
     if boss_finish_diagnostics and not (full_scenes and authored_cpu and isolate_symbols):
         raise ValueError("Boss diagnostics require the isolated full-scene owned adapter")
     if full_scenes:
@@ -872,6 +956,8 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
     menu_callbacks = menu_dispatch(functions, revision) if full_scenes else {}
     rsp_headers, rsp_source = audio_rsp_payload(rsp_source) if audio_services else ({}, None)
     roots = list(roots)
+    if mod_services:
+        roots = list(dict.fromkeys(roots + list(OWNED_MOD_CALLS.values()) + ["rand_range"]))
     if authored_cpu:
         roots.append("dkr_probe_authored_main_cpu")
         roots.append("dkr_probe_authored_video_cpu")
@@ -902,7 +988,12 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
 
     # Substitute ALL direct header guest memory accesses, including inline
     # doubleword/unaligned helpers. Macro shape is protected by the header hash.
-    insert = ('#include "isolated_symbols.h"\n' if isolate_symbols else '') + '#include "probe_bridge.h"\n'
+    # Native C++ participants include recomp.h for its register ABI, not its
+    # guest names. Renaming here corrupts unrelated fields (get_settings,
+    # level_id, etc.). C++ adopts the private names explicitly at funcs.h,
+    # after its ordinary native headers; C translation units retain the
+    # closed private import names from their first header.
+    insert = ('#ifndef __cplusplus\n#include "isolated_symbols.h"\n#endif\n' if isolate_symbols else '') + '#include "probe_bridge.h"\n'
     header = header.replace("// Compiler definition", insert + "// Compiler definition", 1)
     for name, typ, width in (("W", "int32_t", 4), ("H", "int16_t", 2),
                             ("B", "int8_t", 1), ("HU", "uint16_t", 2), ("BU", "uint8_t", 1)):
@@ -931,6 +1022,9 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
     output.mkdir(parents=True)
     if isolate_symbols:
         (output / "isolated_symbols.h").write_text(isolated_header, encoding="utf-8")
+        (output / "isolated_runtime_symbols.h").write_text(runtime_isolation_header(used, blocked, revision), encoding="utf-8")
+    if mod_services:
+        (output / "owned_mod_calls.hpp").write_text(owned_mod_calls_header(), encoding="utf-8")
     if audio_services:
         if audio_isolated_header:
             (output / "isolated_audio_symbols.h").write_text(audio_isolated_header, encoding="utf-8")
@@ -940,7 +1034,8 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
         (output / "private_audio_rsp.cpp").write_text(rsp_source, encoding="utf-8")
     (output / "recomp.h").write_text(header, encoding="utf-8")
     extra = authored_declarations(full_scenes) if authored_cpu else ""
-    (output / "funcs.h").write_text((source_dir / "funcs.h").read_text(encoding="utf-8") + extra, encoding="utf-8")
+    private_names = '#include "isolated_symbols.h"\n' if isolate_symbols else ''
+    (output / "funcs.h").write_text(private_names + (source_dir / "funcs.h").read_text(encoding="utf-8") + extra, encoding="utf-8")
     ordered = sorted(used)
     checked_declarations = ['#include "recomp.h"']
     for name in sorted(blocked):
@@ -963,10 +1058,13 @@ def generate(source_dir: Path, header_path: Path, output: Path, roots, revision,
     (output / "blocked_imports.c").write_text("\n".join(stubs) + "\n", encoding="utf-8")
     (output / "manifest.json").write_text(json.dumps({"revision": revision, "roots": roots, "scene_cuts": scene_cuts, "full_scenes": full_scenes,
         "boss_finish_diagnostics": boss_finish_diagnostics,
+        "owned_mod_services": mod_services,
+        "owned_mod_calls": OWNED_MOD_CALLS if mod_services else {},
         "local_world_observations": full_scenes,
         "local_world_observation_source": origins["render_level_geometry_and_objects"] if full_scenes else {},
         "boss_finish_diagnostic_source": origins["racer_boss_finish"] if boss_finish_diagnostics else {},
         "symbol_prefix": f"dkr_experimental_v{revision}_" if isolate_symbols else "",
+        "runtime_symbol_isolation": bool(isolate_symbols),
         "audio_symbol_isolation": bool(audio_isolated_header),
         "audio_services": audio_services, "input_services": input_services, "authored_cpu": authored_cpu,
         "authored_cpu_source": origins["main_game_loop"] if authored_cpu else {},
@@ -998,6 +1096,7 @@ if __name__ == "__main__":
     p.add_argument("--isolate-symbols", action="store_true", help="Revision-specific C link isolation; preserves all native fences, NOT live admission")
     p.add_argument("--full-scenes", action="store_true", help="Confirmed menu continuations and constructors; release qualification remains separate")
     p.add_argument("--boss-finish-diagnostics", action="store_true", help="Bounded observation-only boss-finish tracing; no gameplay changes")
+    p.add_argument("--mod-services", action="store_true", help="Reviewed private mod callback closure; session/runtime admission remains separately gated")
     p.add_argument("--rsp-source", type=Path, help="Read-only RSP input directory for an isolated worktree; original SHA-256 pins remain mandatory")
     a = p.parse_args()
-    generate(a.generated, a.header, a.output, a.roots, a.revision, a.scene_cuts, a.audio_services, a.input_services, a.authored_cpu, a.isolate_symbols, a.full_scenes, a.boss_finish_diagnostics, a.rsp_source)
+    generate(a.generated, a.header, a.output, a.roots, a.revision, a.scene_cuts, a.audio_services, a.input_services, a.authored_cpu, a.isolate_symbols, a.full_scenes, a.boss_finish_diagnostics, a.rsp_source, a.mod_services)

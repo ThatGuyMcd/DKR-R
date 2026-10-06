@@ -38,7 +38,11 @@ namespace dkr::runtime::netplay {
 // v46 adds the checkpoint pre-flight lane and boundary-safe recovery admission.
 // v47 versions refreshed future input samples and bounds host prediction.
 // Mixing with older peers would silently restore stale-input behaviour.
-inline constexpr std::uint32_t kProtocolVersion = 47U;
+// v48 binds the immutable gameplay mod manifest into every launch and adds
+// consent-based, provisional mod admission. Older clients cannot skip it.
+// v49 expands private character sound tokens and versions sparse mod sidecars.
+// An older peer must never interpret these tokens/checkpoints as its roster.
+inline constexpr std::uint32_t kProtocolVersion = 49U;
 inline constexpr std::uint8_t kMaximumInputDelayFrames = 9U;
 inline constexpr std::size_t kMaximumPlayers = 4U;
 // Regular races/minigames support 2-4 peers. Adventure remains two-player.
@@ -118,6 +122,9 @@ struct CompatibilityManifest {
     std::uint32_t simulation_rate = 30U;
     std::string architecture;
     std::string floating_point_mode;
+    // Empty for vanilla sessions; otherwise lowercase SHA-256 of the exact
+    // canonical online mod manifest. Cosmetics are intentionally excluded.
+    std::string mod_manifest_hash;
 
     bool operator==(const CompatibilityManifest&) const = default;
 };
@@ -191,6 +198,7 @@ bool valid_room_name(std::string_view value);
 bool valid_rules(const Rules& rules);
 std::uint64_t stable_hash(std::string_view bytes);
 std::uint64_t manifest_hash(const CompatibilityManifest& manifest);
+bool valid_mod_manifest_hash(std::string_view hash);
 
 enum class OnlineFailureCode : std::uint8_t {
     None,
@@ -227,6 +235,10 @@ struct OnlineFailure {
 
 std::string incompatibility_reason(const CompatibilityManifest& expected,
                                    const CompatibilityManifest& candidate);
+// Eligibility only: neither manifest is modified. Actual save installation
+// and consent-based mod reconstruction remain mandatory before admission.
+std::string session_content_sync_incompatibility(const CompatibilityManifest& expected,
+    const CompatibilityManifest& candidate,bool host_offers_mods);
 OnlineFailure classify_online_failure(std::string_view message);
 std::string online_failure_display_message(std::string_view message);
 

@@ -53,7 +53,7 @@ std::set<std::string> enabled_ids(const std::filesystem::path& root,bool charact
     const auto path=root/(characters?"character-catalog.json":"track-catalog.json");
     if(!std::filesystem::exists(path))return {};
     const auto value=read_json(path);
-    if(value.at("schema")!=1 || !value.at("enabled").is_array() || value.at("enabled").size()>512)
+    if(value.at("schema")!=1 || !value.at("enabled").is_array() || value.at("enabled").size()>(characters?MaxActiveStageCharacters:512U))
         throw Error("Invalid custom track activation catalogue.");
     std::set<std::string> result;
     for(const auto& entry:value.at("enabled")) {
@@ -230,7 +230,7 @@ void remove_content(const std::filesystem::path& root,const std::string& id,bool
     try {
         json olds=json::array(),news=json::array();std::set<std::string> replacements;unsigned examined=0;
         for(const auto& folder:std::filesystem::directory_iterator(prepared)) {
-            if(++examined>1024)throw Error("Prepared directory exceeds its entry limit.");
+            if(++examined>(characters?MaxInstalledCharacterVariants:1024U))throw Error("Prepared directory exceeds its entry limit.");
             if(stop.stop_requested())throw Error("Removal cancelled before commit.");
             const auto hash=path_text(folder.path().filename());if(!digest(hash))continue;
             const auto items=group(folder.path(),hash,characters);
@@ -279,7 +279,7 @@ std::vector<TrackCatalogItem> scan(const std::filesystem::path& root,std::stop_t
     std::map<std::pair<std::string,std::string>,std::string> seen;unsigned examined=0;
     for(const auto& entry:std::filesystem::directory_iterator(prepared)) {
         if(stop.stop_requested())throw Error("Track catalogue operation cancelled.");
-        if(++examined>1024)throw Error("Prepared directory exceeds its entry limit.");
+        if(++examined>(characters?MaxInstalledCharacterVariants:1024U))throw Error("Prepared directory exceeds its entry limit.");
         const auto hash=path_text(entry.path().filename());if(!digest(hash))continue;
         for(auto& item:group(entry.path(),hash,characters)) {
             const auto key=std::make_pair(item.id,item.revision);
@@ -291,7 +291,7 @@ std::vector<TrackCatalogItem> scan(const std::filesystem::path& root,std::stop_t
             if(info.at("items").contains(item.id))item.imported_at=info.at("items").at(item.id).at("imported_at").get<std::uint64_t>();
             if(presentation)item.managed_bytes=checked_tree(entry.path()/item.storage);
             result.push_back(std::move(item));
-            if(result.size()>1024)throw Error("Prepared catalogue exceeds 512 courses per revision.");
+            if(result.size()>(characters?MaxInstalledCharacterVariants:1024U))throw Error("Prepared catalogue exceeds its metadata budget.");
         }
     }
     for(const auto& id:enabled)if(std::none_of(result.begin(),result.end(),[&](const auto& item){return item.id==id;}))
@@ -417,8 +417,8 @@ bool TrackCatalog::start(Action action,std::string id,std::vector<std::filesyste
                     auto enabled=enabled_ids(root_,characters);
                     if(action==Action::Enable && hidden_id(metadata(root_,characters),id))throw Error("Restore this mod to the library before activating it.");
                     if(action==Action::Enable)enabled.insert(id);else enabled.erase(id);
-                    if(enabled.size()>512)throw Error("The enabled course catalogue is full.");
-                    if(characters && enabled.size()>MaxActiveStageCharacters)throw Error("This beta supports two extra active characters on the original stage. Disable one before enabling another; installed characters remain in your library.");
+                    if(!characters && enabled.size()>512)throw Error("The enabled course catalogue is full.");
+                    if(characters && enabled.size()>MaxActiveStageCharacters)throw Error("The character library exceeds the native presentation identity range. Installed characters remain available.");
                     if(stop.stop_requested())throw Error("Activation change cancelled.");
                     save_enabled(root_,enabled,characters);items=scan(root_,{},characters,true);
                     result=action==Action::Enable?"Custom content enabled for the next game session.":"Custom content disabled. Its files and records were retained.";
@@ -460,6 +460,34 @@ bool TrackCatalog::has_enabled(const std::filesystem::path& path) {
     ordinary(root);
     return !enabled_ids(root).empty() || !enabled_ids(root,true).empty();
 }
+void TrackCatalog::validate_retained_merge(const std::filesystem::path& path,
+    const std::filesystem::path& input) {
+    const auto root=private_storage_path(path),incoming=private_storage_path(input);
+    for(const bool characters:{false,true}) {
+        if(std::filesystem::exists(journal_path(root,characters)))
+            throw Error("An offline mod removal is pending. Refresh the library before keeping downloaded mods.");
+        const auto installed=scan(root,{},characters),added=scan(incoming,{},characters);
+        std::set<std::string> groups;
+        for(const auto& library:{root,incoming}) {
+            const auto folder=library/(characters?"prepared-characters":"prepared");
+            if(std::filesystem::exists(folder))for(const auto& entry:std::filesystem::directory_iterator(folder)) {
+                const auto hash=path_text(entry.path().filename());if(digest(hash))groups.insert(hash);
+            }
+        }
+        if(groups.size()>(characters?MaxInstalledCharacterVariants:1024U))
+            throw Error("Keeping these groups would exceed the offline catalogue's storage limit.");
+        std::map<std::pair<std::string,std::string>,TrackCatalogItem> items;
+        for(const auto& item:installed)items.emplace(std::make_pair(item.id,item.revision),item);
+        for(const auto& item:added) {
+            const auto [at,inserted]=items.emplace(std::make_pair(item.id,item.revision),item);
+            if(!inserted && (at->second.bank!=item.bank || at->second.artifact!=item.artifact ||
+                at->second.patch!=item.patch))
+                throw Error("A downloaded mod conflicts with an installed offline identity. Existing files were not replaced.");
+        }
+        if(items.size()>(characters?MaxInstalledCharacterVariants:1024U))
+            throw Error("The offline mod library is full. The online session can still use its verified cache.");
+    }
+}
 std::vector<PreparedTrack> TrackCatalog::load_enabled(const std::filesystem::path& path,std::shared_ptr<const AssetBank> stock) {
     const auto root=private_storage_path(path);
     if(!stock || !stock->digest().empty())throw Error("Enabled custom tracks require a verified original bank.");
@@ -478,6 +506,29 @@ std::vector<PreparedTrack> TrackCatalog::load_enabled(const std::filesystem::pat
         loaded.insert(item.id);result.push_back(std::move(track));
     }
     if(expected!=loaded)throw Error("An enabled course is not prepared for the selected Game Pak revision. Prepare that revision or disable the course before starting.");
+    return result;
+}
+std::vector<TrackCatalogItem> TrackCatalog::selected_items(const std::filesystem::path& path,
+    std::string_view revision,Kind kind) {
+    if(revision!="us.v77" && revision!="us.v80")throw Error("Unsupported online Game Pak revision.");
+    const auto items=scan(private_storage_path(path),{},kind==Kind::Character);
+    std::set<std::string> expected,found;std::vector<TrackCatalogItem> result;
+    for(const auto& item:items)if(item.enabled) {
+        expected.insert(item.id);
+        // Character adapter assets are revision-independent; the existing
+        // character loader resolves their references against the lobby's stock
+        // bank. Course banks, in contrast, require the exact runtime revision.
+        if(item.revision==revision || kind==Kind::Character){
+            const auto previous=std::find_if(result.begin(),result.end(),[&](const auto& p){return p.id==item.id;});
+            if(previous!=result.end()) {
+                if(previous->artifact!=item.artifact || previous->patch!=item.patch || previous->bank!=item.bank)
+                    throw Error("Conflicting prepared variants claim the same online mod identity.");
+            } else result.push_back(item);
+            found.insert(item.id);
+        }
+    }
+    if(expected!=found)throw Error("An enabled mod is not prepared for the lobby's Game Pak revision.");
+    std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){return a.id<b.id;});
     return result;
 }
 std::vector<PreparedCharacter> TrackCatalog::load_enabled_characters(const std::filesystem::path& path,std::shared_ptr<const AssetBank> stock) {
@@ -541,7 +592,7 @@ std::vector<PreparedCharacter> TrackCatalog::load_enabled_characters(const std::
             character.race_audio=prepare_character_race_audio(audio[0],audio[1],audio[2],item.base_character);
         }
         result.push_back(std::move(character));
-        if(result.size()>16)throw Error("Too many characters enabled for this boot's asset budget.");
+        if(result.size()>MaxActiveStageCharacters)throw Error("The character library exceeds the native presentation identity range.");
     }
     return result;
 }

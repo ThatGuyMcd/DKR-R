@@ -1,0 +1,879 @@
+From: DKR-R Patch Pipeline <patch-pipeline@local.invalid>
+Subject: [PATCH] Bind managed save writes to a frozen launch owner and drain dirty state on exit
+
+diff --git a/ultramodern/include/ultramodern/ultramodern.hpp b/ultramodern/include/ultramodern/ultramodern.hpp
+--- a/ultramodern/include/ultramodern/ultramodern.hpp
++++ b/ultramodern/include/ultramodern/ultramodern.hpp
+@@ -7,154 +7,162 @@
+ #include <span>
+ #include <chrono>
+ #include <filesystem>
+-
+-#undef MOODYCAMEL_DELETE_FUNCTION
+-#define MOODYCAMEL_DELETE_FUNCTION = delete
+-#include "lightweightsemaphore.h"
+-
+-#include "ultra64.h"
+-
+-#include "ultramodern/error_handling.hpp"
+-#include "ultramodern/events.hpp"
+-#include "ultramodern/input.hpp"
+-#include "ultramodern/renderer_context.hpp"
+-#include "ultramodern/rsp.hpp"
+-#include "ultramodern/threads.hpp"
+-
+-struct UltraThreadContext {
+-    std::thread host_thread;
+-    moodycamel::LightweightSemaphore running;
+-    moodycamel::LightweightSemaphore initialized;
+-};
+-
+-namespace ultramodern {
+-
+-constexpr uint32_t save_size = 1024 * 1024 / 8; // Maximum save size, 1Mbit for flash
+-
+-// Initialization.
+-void preinit(RDRAM_ARG renderer::WindowHandle window_handle);
+-void init_saving(RDRAM_ARG1);
+-void init_events(RDRAM_ARG renderer::WindowHandle window_handle);
+-void init_timers(RDRAM_ARG1);
+-void init_thread_cleanup();
+-
+-// Saving
+-void change_save_file(const std::u8string& subfolder, const std::u8string& name);
+-std::filesystem::path get_save_file_path();
+-
+-// Thread queues.
+-constexpr PTR(PTR(OSThread)) running_queue = (PTR(PTR(OSThread)))-1;
+-
+-void thread_queue_insert(RDRAM_ARG PTR(PTR(OSThread)) queue, PTR(OSThread) toadd);
+-PTR(OSThread) thread_queue_pop(RDRAM_ARG PTR(PTR(OSThread)) queue);
+-bool thread_queue_remove(RDRAM_ARG PTR(PTR(OSThread)) queue_, PTR(OSThread) t_);
+-bool thread_queue_empty(RDRAM_ARG PTR(PTR(OSThread)) queue);
+-PTR(OSThread) thread_queue_peek(RDRAM_ARG PTR(PTR(OSThread)) queue);
+-
+-// Message queues.
+-enum class EventMessageSource : int {
+-    Timer,
+-    Sp,
+-    Si,
+-    Ai,
+-    Vi,
+-    Pi,
+-    Dp,
+-};
+-
+-struct MessageQueueControl {
+-    bool requeue_timer = true;
+-    bool requeue_sp = true;
+-    bool requeue_si = true;
+-    bool requeue_ai = false;
+-    bool requeue_vi = false;
+-    bool requeue_pi = false;
+-    bool requeue_dp = true;
+-};
+-void set_message_queue_control(const MessageQueueControl& mqc);
+-void enqueue_external_message_src(PTR(OSMesgQueue) mq, OSMesg msg, bool jam, EventMessageSource src);
+-bool enqueue_external_message_src_and_wait(PTR(OSMesgQueue) mq, OSMesg msg, bool jam, EventMessageSource src);
+-void acknowledge_external_message_src(EventMessageSource src);
+-void enqueue_external_message(PTR(OSMesgQueue) mq, OSMesg msg, bool jam, bool requeue_if_blocked);
+-void notify_external_message_waiters();
+-void wait_for_external_message(RDRAM_ARG1);
+-void wait_for_external_message_timed(RDRAM_ARG1, u32 millis);
+-
+-// Thread scheduling.
+-void check_running_queue(RDRAM_ARG1);
+-void run_next_thread_and_wait(RDRAM_ARG1);
+-void resume_thread_and_wait(RDRAM_ARG OSThread* t);
+-void schedule_running_thread(RDRAM_ARG PTR(OSThread) t);
+-void cleanup_thread(UltraThreadContext* thread_context);
+-struct thread_terminated : std::exception {};
+-
+-enum class ThreadPriority {
+-    Low,
+-    Normal,
+-    High,
+-    VeryHigh,
+-    Critical
+-};
+-
+-void set_native_thread_name(const std::string& name);
+-void set_native_thread_priority(ThreadPriority pri);
+-PTR(OSThread) this_thread();
+-void set_entrypoint_thread();
+-bool is_entrypoint_thread();
+-bool is_game_thread();
+-void submit_rsp_task(RDRAM_ARG PTR(OSTask) task);
+-void send_si_message();
+-uint32_t get_speed_multiplier();
+-
+-// Time
+-std::chrono::high_resolution_clock::time_point get_start();
+-std::chrono::high_resolution_clock::duration time_since_start();
+-void measure_input_latency();
+-void sleep_milliseconds(uint32_t millis);
+-void sleep_until(const std::chrono::high_resolution_clock::time_point& time_point);
+-
+-// Graphics
+-uint32_t get_target_framerate(uint32_t original);
+-uint32_t get_display_refresh_rate();
+-float get_resolution_scale();
+-void trigger_config_action();
+-
+-// Audio
+-void init_audio();
+-void set_audio_frequency(uint32_t freq);
+-void queue_audio_buffer(RDRAM_ARG PTR(s16) audio_data, uint32_t byte_count);
+-uint32_t get_remaining_audio_bytes();
+-
+-struct audio_callbacks_t {
+-    using queue_samples_t = void(int16_t*, size_t);
+-    using get_samples_remaining_t = size_t();
+-    using set_frequency_t = void(uint32_t);
+-    using external_work_allowed_t = bool(void);
+-    queue_samples_t* queue_samples;
+-    get_samples_remaining_t* get_frames_remaining;
+-    set_frequency_t* set_frequency;
+-    external_work_allowed_t* external_work_allowed;
+-};
+-
+-// TODO: Most of the members of this struct are not used by ultramodern. Should we move them to librecomp instead?
+-struct gfx_callbacks_t {
+-    using gfx_data_t = void*;
+-    using create_gfx_t = gfx_data_t();
+-    using create_window_t = renderer::WindowHandle(gfx_data_t);
+-    using update_gfx_t = void(gfx_data_t);
+-
+-    create_gfx_t* create_gfx;
+-    create_window_t* create_window;
+-    update_gfx_t* update_gfx;
+-};
+-
+-bool is_game_started();
+-void quit();
+-void reset_external_message_state();
+-void join_timer_thread();
+-void join_event_threads();
+-void join_thread_cleaner_thread();
+-void join_saving_thread();
++#include <vector>
++
++#undef MOODYCAMEL_DELETE_FUNCTION
++#define MOODYCAMEL_DELETE_FUNCTION = delete
++#include "lightweightsemaphore.h"
++
++#include "ultra64.h"
++
++#include "ultramodern/error_handling.hpp"
++#include "ultramodern/events.hpp"
++#include "ultramodern/input.hpp"
++#include "ultramodern/renderer_context.hpp"
++#include "ultramodern/rsp.hpp"
++#include "ultramodern/threads.hpp"
++
++struct UltraThreadContext {
++    std::thread host_thread;
++    moodycamel::LightweightSemaphore running;
++    moodycamel::LightweightSemaphore initialized;
++};
++
++namespace ultramodern {
++
++constexpr uint32_t save_size = 1024 * 1024 / 8; // Maximum save size, 1Mbit for flash
++
++// Initialization.
++void preinit(RDRAM_ARG renderer::WindowHandle window_handle);
++void init_saving(RDRAM_ARG1);
++void init_events(RDRAM_ARG renderer::WindowHandle window_handle);
++void init_timers(RDRAM_ARG1);
++void init_thread_cleanup();
++
++// Saving
++void change_save_file(const std::u8string& subfolder, const std::u8string& name);
++std::filesystem::path get_save_file_path();
++
++// Thread queues.
++constexpr PTR(PTR(OSThread)) running_queue = (PTR(PTR(OSThread)))-1;
++
++void thread_queue_insert(RDRAM_ARG PTR(PTR(OSThread)) queue, PTR(OSThread) toadd);
++PTR(OSThread) thread_queue_pop(RDRAM_ARG PTR(PTR(OSThread)) queue);
++bool thread_queue_remove(RDRAM_ARG PTR(PTR(OSThread)) queue_, PTR(OSThread) t_);
++bool thread_queue_empty(RDRAM_ARG PTR(PTR(OSThread)) queue);
++PTR(OSThread) thread_queue_peek(RDRAM_ARG PTR(PTR(OSThread)) queue);
++
++// Message queues.
++enum class EventMessageSource : int {
++    Timer,
++    Sp,
++    Si,
++    Ai,
++    Vi,
++    Pi,
++    Dp,
++};
++
++struct MessageQueueControl {
++    bool requeue_timer = true;
++    bool requeue_sp = true;
++    bool requeue_si = true;
++    bool requeue_ai = false;
++    bool requeue_vi = false;
++    bool requeue_pi = false;
++    bool requeue_dp = true;
++};
++void set_message_queue_control(const MessageQueueControl& mqc);
++void enqueue_external_message_src(PTR(OSMesgQueue) mq, OSMesg msg, bool jam, EventMessageSource src);
++bool enqueue_external_message_src_and_wait(PTR(OSMesgQueue) mq, OSMesg msg, bool jam, EventMessageSource src);
++void acknowledge_external_message_src(EventMessageSource src);
++void enqueue_external_message(PTR(OSMesgQueue) mq, OSMesg msg, bool jam, bool requeue_if_blocked);
++void notify_external_message_waiters();
++void wait_for_external_message(RDRAM_ARG1);
++void wait_for_external_message_timed(RDRAM_ARG1, u32 millis);
++
++// Thread scheduling.
++void check_running_queue(RDRAM_ARG1);
++void run_next_thread_and_wait(RDRAM_ARG1);
++void resume_thread_and_wait(RDRAM_ARG OSThread* t);
++void schedule_running_thread(RDRAM_ARG PTR(OSThread) t);
++void cleanup_thread(UltraThreadContext* thread_context);
++struct thread_terminated : std::exception {};
++
++enum class ThreadPriority {
++    Low,
++    Normal,
++    High,
++    VeryHigh,
++    Critical
++};
++
++void set_native_thread_name(const std::string& name);
++void set_native_thread_priority(ThreadPriority pri);
++PTR(OSThread) this_thread();
++void set_entrypoint_thread();
++bool is_entrypoint_thread();
++bool is_game_thread();
++void submit_rsp_task(RDRAM_ARG PTR(OSTask) task);
++void send_si_message();
++uint32_t get_speed_multiplier();
++
++// Time
++std::chrono::high_resolution_clock::time_point get_start();
++std::chrono::high_resolution_clock::duration time_since_start();
++void measure_input_latency();
++void sleep_milliseconds(uint32_t millis);
++void sleep_until(const std::chrono::high_resolution_clock::time_point& time_point);
++
++// Graphics
++uint32_t get_target_framerate(uint32_t original);
++uint32_t get_display_refresh_rate();
++float get_resolution_scale();
++void trigger_config_action();
++
++// Audio
++void init_audio();
++void set_audio_frequency(uint32_t freq);
++void queue_audio_buffer(RDRAM_ARG PTR(s16) audio_data, uint32_t byte_count);
++uint32_t get_remaining_audio_bytes();
++
++struct audio_callbacks_t {
++    using queue_samples_t = void(int16_t*, size_t);
++    using get_samples_remaining_t = size_t();
++    using set_frequency_t = void(uint32_t);
++    using external_work_allowed_t = bool(void);
++    queue_samples_t* queue_samples;
++    get_samples_remaining_t* get_frames_remaining;
++    set_frequency_t* set_frequency;
++    external_work_allowed_t* external_work_allowed;
++};
++
++// TODO: Most of the members of this struct are not used by ultramodern. Should we move them to librecomp instead?
++struct gfx_callbacks_t {
++    using gfx_data_t = void*;
++    using create_gfx_t = gfx_data_t();
++    using create_window_t = renderer::WindowHandle(gfx_data_t);
++    using update_gfx_t = void(gfx_data_t);
++
++    create_gfx_t* create_gfx;
++    create_window_t* create_window;
++    update_gfx_t* update_gfx;
++};
++
++bool is_game_started();
++void quit();
++void reset_external_message_state();
++void join_timer_thread();
++void join_event_threads();
++void join_thread_cleaner_thread();
++void join_saving_thread();
++struct save_storage_callbacks_t {
++    std::filesystem::path (*path)() = nullptr;
++    bool (*load)(const std::filesystem::path&, std::vector<char>&) = nullptr;
++    bool (*commit)(const std::filesystem::path&, const std::vector<char>&) = nullptr;
++};
++// Register only before start, after the previous runtime has fully joined.
++void set_save_storage_callbacks(const save_storage_callbacks_t& callbacks);
+ 
+ void set_audio_callbacks(const audio_callbacks_t& callbacks);
+ 
+diff --git a/librecomp/src/pi.cpp b/librecomp/src/pi.cpp
+--- a/librecomp/src/pi.cpp
++++ b/librecomp/src/pi.cpp
+@@ -4,260 +4,304 @@
+ #include <cstring>
+ #include <string>
+ #include <mutex>
+-#include "recomp.h"
+-#include "librecomp/addresses.hpp"
+-#include "librecomp/game.hpp"
+-#include "librecomp/files.hpp"
+-#include <ultramodern/ultra64.h>
+-#include <ultramodern/ultramodern.hpp>
+-
+-static std::vector<uint8_t> rom;
+-
+-bool recomp::is_rom_loaded() {
+-    return !rom.empty();
+-}
+-
+-void recomp::set_rom_contents(std::vector<uint8_t>&& new_rom) {
+-    rom = std::move(new_rom);
+-}
+-
+-std::span<const uint8_t> recomp::get_rom() {
+-    return rom;
+-}
+-
+-constexpr uint32_t k1_to_phys(uint32_t addr) {
+-    return addr & 0x1FFFFFFF;
+-}
+-
+-constexpr uint32_t phys_to_k1(uint32_t addr) {
+-    return addr | 0xA0000000;
+-}
+-
+-extern "C" void __osPiGetAccess_recomp(uint8_t* rdram, recomp_context* ctx) {
+-}
+-
+-extern "C" void __osPiRelAccess_recomp(uint8_t* rdram, recomp_context* ctx) {
+-}
+-
+-extern "C" void osCartRomInit_recomp(uint8_t* rdram, recomp_context* ctx) {
+-    OSPiHandle* handle = TO_PTR(OSPiHandle, recomp::cart_handle);
+-    handle->type = 0; // cart
+-    handle->baseAddress = phys_to_k1(recomp::rom_base);
+-    handle->domain = 0;
+-
+-    ctx->r2 = (gpr)recomp::cart_handle;
+-}
+-
+-extern "C" void osDriveRomInit_recomp(uint8_t * rdram, recomp_context * ctx) {
+-    OSPiHandle* handle = TO_PTR(OSPiHandle, recomp::drive_handle);
+-    handle->type = 1; // bulk
+-    handle->baseAddress = phys_to_k1(recomp::drive_base);
+-    handle->domain = 0;
+-
+-    ctx->r2 = (gpr)recomp::drive_handle;
+-}
+-
+-extern "C" void osCreatePiManager_recomp(uint8_t* rdram, recomp_context* ctx) {
+-    ;
+-}
+-
+-void recomp::do_rom_read(uint8_t* rdram, gpr ram_address, uint32_t physical_addr, size_t num_bytes) {
+-    // TODO use word copies when possible
+-
+-    // TODO handle misaligned DMA
+-    assert((physical_addr & 0x1) == 0 && "Only PI DMA from aligned ROM addresses is currently supported");
+-    assert((ram_address & 0x7) == 0 && "Only PI DMA to aligned RDRAM addresses is currently supported");
+-    uint8_t* rom_addr = rom.data() + physical_addr - recomp::rom_base;
+-    for (size_t i = 0; i < num_bytes; i++) {
+-        MEM_B(i, ram_address) = *rom_addr;
+-        rom_addr++;
+-    }
+-}
+-
+-void recomp::do_rom_pio(uint8_t* rdram, gpr ram_address, uint32_t physical_addr) {
+-    assert((physical_addr & 0x3) == 0 && "PIO not 4-byte aligned in device, currently unsupported");
+-    assert((ram_address & 0x3) == 0 && "PIO not 4-byte aligned in RDRAM, currently unsupported");
+-    uint8_t* rom_addr = rom.data() + physical_addr - recomp::rom_base;
+-    MEM_B(0, ram_address) = *rom_addr++;
+-    MEM_B(1, ram_address) = *rom_addr++;
+-    MEM_B(2, ram_address) = *rom_addr++;
+-    MEM_B(3, ram_address) = *rom_addr++;
+-}
+-
+-struct {
+-    std::vector<char> save_buffer;
+-    std::thread saving_thread;
+-    std::filesystem::path save_file_path;
+-    moodycamel::LightweightSemaphore write_sempahore;
+-    // Used to tell the saving thread that a file swap is pending.
+-    moodycamel::LightweightSemaphore swap_file_pending_sempahore;
+-    // Used to tell the consumer thread that the saving thread is ready for a file swap.
+-    moodycamel::LightweightSemaphore swap_file_ready_sempahore;
+-    std::mutex save_buffer_mutex;
+-} save_context;
+-
+-const std::u8string save_folder = u8"saves";
+-
+-extern std::filesystem::path config_path;
+-
+-std::filesystem::path ultramodern::get_save_file_path() {
+-    return save_context.save_file_path;
+-}
+-
+-void set_save_file_path(const std::u8string& subfolder, const std::u8string& name) {
+-    std::filesystem::path save_folder_path = config_path / save_folder;
+-    if (!subfolder.empty()) {
+-        save_folder_path = save_folder_path / subfolder;
+-    }
+-    save_context.save_file_path = save_folder_path / (name + u8".bin");
+-}
+-
+-void update_save_file() {
+-    bool saving_failed = false;
+-    {
+-        std::ofstream save_file = recomp::open_output_file_with_backup(ultramodern::get_save_file_path(), std::ios_base::binary);
+-
+-        if (save_file.good()) {
+-            std::lock_guard lock{ save_context.save_buffer_mutex };
+-            save_file.write(save_context.save_buffer.data(), save_context.save_buffer.size());
+-        }
+-        else {
+-            saving_failed = true;
+-        }
+-    }
+-    if (!saving_failed) {
+-        saving_failed = !recomp::finalize_output_file_with_backup(ultramodern::get_save_file_path());
+-    }
+-    if (saving_failed) {
+-        ultramodern::error_handling::message_box("Failed to write to the save file. Check your file permissions and whether the save folder has been moved to Dropbox or similar, as this can cause issues.");
+-    }
+-}
+-
+-extern std::atomic_bool exited;
+-
+-void saving_thread_func(RDRAM_ARG1) {
+-    while (!exited) {
+-        bool save_buffer_updated = false;
+-        // Repeatedly wait for a new action to be sent.
+-        constexpr int64_t wait_time_microseconds = 10000;
+-        constexpr int max_actions = 128;
+-        int num_actions = 0;
+-
+-        // Wait up to the given timeout for a write to come in. Allow multiple writes to coalesce together into a single save.
+-        // Cap the number of coalesced writes to guarantee that the save buffer eventually gets written out to the file even if the game
+-        // is constantly sending writes.
+-        while (save_context.write_sempahore.wait(wait_time_microseconds) && num_actions < max_actions) {
+-            save_buffer_updated = true;
+-            num_actions++;
+-        }
+-
+-        // If an action came through that affected the save file, save the updated contents.
+-        if (save_buffer_updated) {
+-            update_save_file();
+-        }
+-
+-        if (save_context.swap_file_pending_sempahore.tryWait()) {
+-            save_context.swap_file_ready_sempahore.signal();
+-        }
+-    }
+-}
+-
+-void save_write_ptr(const void* in, uint32_t offset, uint32_t count) {
+-    if (!recomp::save_write_allowed()) return;
+-    assert(offset + count <= save_context.save_buffer.size());
+-
+-    {
+-        std::lock_guard lock { save_context.save_buffer_mutex };
+-        memcpy(&save_context.save_buffer[offset], in, count);
+-    }
+-    
+-    save_context.write_sempahore.signal();
+-}
+-
+-void save_write(RDRAM_ARG PTR(void) rdram_address, uint32_t offset, uint32_t count) {
+-    if (!recomp::save_write_allowed()) return;
+-    assert(offset + count <= save_context.save_buffer.size());
+-
+-    {
+-        std::lock_guard lock { save_context.save_buffer_mutex };
+-        for (gpr i = 0; i < count; i++) {
+-            save_context.save_buffer[offset + i] = MEM_B(i, rdram_address);
+-        }
+-    }
+-
+-    save_context.write_sempahore.signal();
+-}
+-
+-void save_read(RDRAM_ARG PTR(void) rdram_address, uint32_t offset, uint32_t count) {
+-    assert(offset + count <= save_context.save_buffer.size());
+-
+-    std::lock_guard lock { save_context.save_buffer_mutex };
+-    for (gpr i = 0; i < count; i++) {
+-        MEM_B(i, rdram_address) = save_context.save_buffer[offset + i];
+-    }
+-}
+-
+-void save_clear(uint32_t start, uint32_t size, char value) {
+-    if (!recomp::save_write_allowed()) return;
+-    assert(start + size < save_context.save_buffer.size());
+-
+-    {
+-        std::lock_guard lock { save_context.save_buffer_mutex };
+-        std::fill_n(save_context.save_buffer.begin() + start, size, value);
+-    }
+-
+-    save_context.write_sempahore.signal();
+-}
+-
+-size_t get_save_size(recomp::SaveType save_type) {
+-    switch (save_type) {
+-        case recomp::SaveType::AllowAll:
+-        case recomp::SaveType::Flashram:
+-            return 0x20000;
+-        case recomp::SaveType::Sram:
+-            return 0x8000;
+-        case recomp::SaveType::Eep16k:
+-            return 0x800;
+-        case recomp::SaveType::Eep4k:
+-            return 0x200;
+-        case recomp::SaveType::None:
+-            return 0;
+-    }
+-    return 0;
+-}
+-
+-void read_save_file() {
+-    std::filesystem::path save_file_path = ultramodern::get_save_file_path();
+-
+-    // Ensure the save file directory exists.
+-    std::filesystem::create_directories(save_file_path.parent_path());
+-
+-    // Read the save file if it exists.
+-    std::ifstream save_file = recomp::open_input_file_with_backup(save_file_path, std::ios_base::binary);
+-    if (save_file.good()) {
+-        save_file.read(save_context.save_buffer.data(), save_context.save_buffer.size());
+-    }
+-    else {
+-        // Otherwise clear the save file to all zeroes.
+-        std::fill(save_context.save_buffer.begin(), save_context.save_buffer.end(), 0);
+-    }
+-}
+-
+-void ultramodern::init_saving(RDRAM_ARG1) {
+-    while (save_context.write_sempahore.tryWait()) {}
+-    while (save_context.swap_file_pending_sempahore.tryWait()) {}
+-    while (save_context.swap_file_ready_sempahore.tryWait()) {}
+-
+-    set_save_file_path(u8"", recomp::current_game_id());
+-
+-    save_context.save_buffer.resize(get_save_size(recomp::get_save_type()));
+-
+-    read_save_file();
+-
+-    save_context.saving_thread = std::thread{saving_thread_func, PASS_RDRAM};
+-}
+-
+-void ultramodern::change_save_file(const std::u8string& subfolder, const std::u8string& name) {
++#include <cstdio>
++#include "recomp.h"
++#include "librecomp/addresses.hpp"
++#include "librecomp/game.hpp"
++#include "librecomp/files.hpp"
++#include <ultramodern/ultra64.h>
++#include <ultramodern/ultramodern.hpp>
++
++static std::vector<uint8_t> rom;
++
++bool recomp::is_rom_loaded() {
++    return !rom.empty();
++}
++
++void recomp::set_rom_contents(std::vector<uint8_t>&& new_rom) {
++    rom = std::move(new_rom);
++}
++
++std::span<const uint8_t> recomp::get_rom() {
++    return rom;
++}
++
++constexpr uint32_t k1_to_phys(uint32_t addr) {
++    return addr & 0x1FFFFFFF;
++}
++
++constexpr uint32_t phys_to_k1(uint32_t addr) {
++    return addr | 0xA0000000;
++}
++
++extern "C" void __osPiGetAccess_recomp(uint8_t* rdram, recomp_context* ctx) {
++}
++
++extern "C" void __osPiRelAccess_recomp(uint8_t* rdram, recomp_context* ctx) {
++}
++
++extern "C" void osCartRomInit_recomp(uint8_t* rdram, recomp_context* ctx) {
++    OSPiHandle* handle = TO_PTR(OSPiHandle, recomp::cart_handle);
++    handle->type = 0; // cart
++    handle->baseAddress = phys_to_k1(recomp::rom_base);
++    handle->domain = 0;
++
++    ctx->r2 = (gpr)recomp::cart_handle;
++}
++
++extern "C" void osDriveRomInit_recomp(uint8_t * rdram, recomp_context * ctx) {
++    OSPiHandle* handle = TO_PTR(OSPiHandle, recomp::drive_handle);
++    handle->type = 1; // bulk
++    handle->baseAddress = phys_to_k1(recomp::drive_base);
++    handle->domain = 0;
++
++    ctx->r2 = (gpr)recomp::drive_handle;
++}
++
++extern "C" void osCreatePiManager_recomp(uint8_t* rdram, recomp_context* ctx) {
++    ;
++}
++
++void recomp::do_rom_read(uint8_t* rdram, gpr ram_address, uint32_t physical_addr, size_t num_bytes) {
++    // TODO use word copies when possible
++
++    // TODO handle misaligned DMA
++    assert((physical_addr & 0x1) == 0 && "Only PI DMA from aligned ROM addresses is currently supported");
++    assert((ram_address & 0x7) == 0 && "Only PI DMA to aligned RDRAM addresses is currently supported");
++    uint8_t* rom_addr = rom.data() + physical_addr - recomp::rom_base;
++    for (size_t i = 0; i < num_bytes; i++) {
++        MEM_B(i, ram_address) = *rom_addr;
++        rom_addr++;
++    }
++}
++
++void recomp::do_rom_pio(uint8_t* rdram, gpr ram_address, uint32_t physical_addr) {
++    assert((physical_addr & 0x3) == 0 && "PIO not 4-byte aligned in device, currently unsupported");
++    assert((ram_address & 0x3) == 0 && "PIO not 4-byte aligned in RDRAM, currently unsupported");
++    uint8_t* rom_addr = rom.data() + physical_addr - recomp::rom_base;
++    MEM_B(0, ram_address) = *rom_addr++;
++    MEM_B(1, ram_address) = *rom_addr++;
++    MEM_B(2, ram_address) = *rom_addr++;
++    MEM_B(3, ram_address) = *rom_addr++;
++}
++
++struct {
++    std::vector<char> save_buffer;
++    std::thread saving_thread;
++    std::filesystem::path save_file_path;
++    moodycamel::LightweightSemaphore write_sempahore;
++    // Used to tell the saving thread that a file swap is pending.
++    moodycamel::LightweightSemaphore swap_file_pending_sempahore;
++    // Used to tell the consumer thread that the saving thread is ready for a file swap.
++    moodycamel::LightweightSemaphore swap_file_ready_sempahore;
++    std::mutex save_buffer_mutex;
++    std::uint64_t generation = 0, persisted = 0;
++} save_context;
++
++static ultramodern::save_storage_callbacks_t save_storage_callbacks{};
++void ultramodern::set_save_storage_callbacks(const save_storage_callbacks_t& callbacks) {
++    // The application registers these only between joined runtime sessions.
++    save_storage_callbacks = callbacks;
++}
++
++const std::u8string save_folder = u8"saves";
++
++extern std::filesystem::path config_path;
++
++std::filesystem::path ultramodern::get_save_file_path() {
++    return save_context.save_file_path;
++}
++
++void set_save_file_path(const std::u8string& subfolder, const std::u8string& name) {
++    std::filesystem::path save_folder_path = config_path / save_folder;
++    if (!subfolder.empty()) {
++        save_folder_path = save_folder_path / subfolder;
++    }
++    save_context.save_file_path = save_folder_path / (name + u8".bin");
++}
++
++bool update_save_file() {
++    std::vector<char> snapshot;
++    std::uint64_t generation;
++    const auto path = ultramodern::get_save_file_path();
++    {
++        std::lock_guard lock{save_context.save_buffer_mutex};
++        generation = save_context.generation;
++        if (generation == save_context.persisted) return true;
++        snapshot = save_context.save_buffer;
++    }
++    bool good = false;
++    if (save_storage_callbacks.commit) {
++        good = save_storage_callbacks.commit(path, snapshot);
++    } else {
++        {
++            std::ofstream output = recomp::open_output_file_with_backup(path, std::ios_base::binary);
++            output.write(snapshot.data(), snapshot.size());
++            output.flush();
++            good = output.good();
++        }
++        good = good && recomp::finalize_output_file_with_backup(path);
++    }
++    if (good) {
++        std::lock_guard lock{save_context.save_buffer_mutex};
++        save_context.persisted = generation;
++    }
++    // Do not open a blocking message box on the save worker during netplay.
++    return good;
++}
++
++extern std::atomic_bool exited;
++
++void saving_thread_func(RDRAM_ARG1) {
++    for (;;) {
++        if (exited.load()) {
++            if (!update_save_file()) std::fprintf(stderr, "[save][shutdown] final commit refused; previous valid save retained\\n");
++            break;
++        }
++        bool save_buffer_updated = false;
++        // Repeatedly wait for a new action to be sent.
++        constexpr int64_t wait_time_microseconds = 10000;
++        constexpr int max_actions = 128;
++        int num_actions = 0;
++
++        // Wait up to the given timeout for a write to come in. Allow multiple writes to coalesce together into a single save.
++        // Cap the number of coalesced writes to guarantee that the save buffer eventually gets written out to the file even if the game
++        // is constantly sending writes.
++        while (save_context.write_sempahore.wait(wait_time_microseconds) && num_actions < max_actions) {
++            save_buffer_updated = true;
++            num_actions++;
++        }
++
++        // If an action came through that affected the save file, save the updated contents.
++        if (save_buffer_updated) {
++            update_save_file();
++        }
++
++        if (save_context.swap_file_pending_sempahore.tryWait()) {
++            save_context.swap_file_ready_sempahore.signal();
++        }
++    }
++}
++
++void save_write_ptr(const void* in, uint32_t offset, uint32_t count) {
++    if (!recomp::save_write_allowed()) return;
++    assert(offset + count <= save_context.save_buffer.size());
++
++    {
++        std::lock_guard lock { save_context.save_buffer_mutex };
++        memcpy(&save_context.save_buffer[offset], in, count);
++        ++save_context.generation;
++    }
++    
++    save_context.write_sempahore.signal();
++}
++
++void save_write(RDRAM_ARG PTR(void) rdram_address, uint32_t offset, uint32_t count) {
++    if (!recomp::save_write_allowed()) return;
++    assert(offset + count <= save_context.save_buffer.size());
++
++    {
++        std::lock_guard lock { save_context.save_buffer_mutex };
++        for (gpr i = 0; i < count; i++) {
++            save_context.save_buffer[offset + i] = MEM_B(i, rdram_address);
++        }
++        ++save_context.generation;
++    }
++
++    save_context.write_sempahore.signal();
++}
++
++void save_read(RDRAM_ARG PTR(void) rdram_address, uint32_t offset, uint32_t count) {
++    assert(offset + count <= save_context.save_buffer.size());
++
++    std::lock_guard lock { save_context.save_buffer_mutex };
++    for (gpr i = 0; i < count; i++) {
++        MEM_B(i, rdram_address) = save_context.save_buffer[offset + i];
++    }
++}
++
++void save_clear(uint32_t start, uint32_t size, char value) {
++    if (!recomp::save_write_allowed()) return;
++    assert(start + size < save_context.save_buffer.size());
++
++    {
++        std::lock_guard lock { save_context.save_buffer_mutex };
++        std::fill_n(save_context.save_buffer.begin() + start, size, value);
++        ++save_context.generation;
++    }
++
++    save_context.write_sempahore.signal();
++}
++
++size_t get_save_size(recomp::SaveType save_type) {
++    switch (save_type) {
++        case recomp::SaveType::AllowAll:
++        case recomp::SaveType::Flashram:
++            return 0x20000;
++        case recomp::SaveType::Sram:
++            return 0x8000;
++        case recomp::SaveType::Eep16k:
++            return 0x800;
++        case recomp::SaveType::Eep4k:
++            return 0x200;
++        case recomp::SaveType::None:
++            return 0;
++    }
++    return 0;
++}
++
++void read_save_file() {
++    std::filesystem::path save_file_path = ultramodern::get_save_file_path();
++
++    if (save_storage_callbacks.load) {
++        std::fill(save_context.save_buffer.begin(), save_context.save_buffer.end(), 0);
++        if (!save_storage_callbacks.load(save_file_path, save_context.save_buffer)) ultramodern::quit();
++        return;
++    }
++
++    // Ensure the save file directory exists.
++    std::filesystem::create_directories(save_file_path.parent_path());
++
++    // Read the save file if it exists.
++    std::ifstream save_file = recomp::open_input_file_with_backup(save_file_path, std::ios_base::binary);
++    if (save_file.good()) {
++        save_file.read(save_context.save_buffer.data(), save_context.save_buffer.size());
++    }
++    else {
++        // Otherwise clear the save file to all zeroes.
++        std::fill(save_context.save_buffer.begin(), save_context.save_buffer.end(), 0);
++    }
++}
++
++void ultramodern::init_saving(RDRAM_ARG1) {
++    while (save_context.write_sempahore.tryWait()) {}
++    while (save_context.swap_file_pending_sempahore.tryWait()) {}
++    while (save_context.swap_file_ready_sempahore.tryWait()) {}
++
++    if (save_storage_callbacks.path) {
++        save_context.save_file_path = save_storage_callbacks.path();
++    } else {
++        set_save_file_path(u8"", recomp::current_game_id());
++    }
++    save_context.generation = save_context.persisted = 0;
++
++    save_context.save_buffer.resize(get_save_size(recomp::get_save_type()));
++
++    read_save_file();
++
++    save_context.saving_thread = std::thread{saving_thread_func, PASS_RDRAM};
++}
++
++void ultramodern::change_save_file(const std::u8string& subfolder, const std::u8string& name) {
++    if (save_storage_callbacks.path) {
++        const auto requested = (config_path / save_folder / subfolder / (name + u8".bin")).lexically_normal();
++        // Managed games select once, before init_saving. No mutable route swap.
++        if (requested != save_context.save_file_path) {
++            std::fprintf(stderr, "[save][scope] refused mutable route switch\\n");
++            ultramodern::quit();
++        }
++        return;
++    }
+     // Tell the saving thread that a file swap is pending.
+     save_context.swap_file_pending_sempahore.signal();
+     // Wait until the saving thread indicates it's ready to swap files.

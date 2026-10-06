@@ -3,6 +3,7 @@
 
 #include "rice_texture_pack_policy.hpp"
 #include "runtime_rice_texture_import.hpp"
+#include "texture_pack_priority_policy.hpp"
 
 #include "common/rt64_filesystem.h"
 #include "common/rt64_filesystem_zip.h"
@@ -36,6 +37,7 @@ std::filesystem::path g_settings_path;
 std::filesystem::path g_index_path;
 std::vector<dkr::runtime::texture_packs::PackInfo> g_packs;
 std::set<std::string> g_enabled_ids;
+dkr::runtime::texture_priority::Preferences g_priorities;
 std::string g_last_selected_id;
 std::set<std::string> g_hidden_ids;
 std::map<std::string, std::int64_t> g_imported_at;
@@ -211,6 +213,7 @@ bool LooksLikeRiceName(const std::string& entry) {
 
 void LoadSettingsLocked() {
     g_enabled_ids.clear();
+    g_priorities.clear();
     g_hidden_ids.clear();
     g_imported_at.clear();
     g_managed_sizes.clear();
@@ -219,7 +222,9 @@ void LoadSettingsLocked() {
     std::ifstream input(g_settings_path);
     std::string line;
     while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
         constexpr const char* enabled_prefix = "enabled=";
+        constexpr const char* priority_prefix = "priority=";
         constexpr const char* hidden_prefix = "hidden=";
         constexpr const char* selected_prefix = "last_selected=";
         constexpr const char* imported_prefix = "imported_at=";
@@ -253,7 +258,19 @@ void LoadSettingsLocked() {
             }
             continue;
         }
-        if (line.rfind(enabled_prefix, 0) == 0 && line.size() > 8) {
+        if (line.rfind(priority_prefix, 0) == 0 && line.size() > 9) {
+            const std::string value = line.substr(9);
+            const auto separator = value.find('\t');
+            if (separator == std::string::npos || separator == 0U ||
+                separator + 1U >= value.size()) continue;
+            std::size_t priority = 0U;
+            const char* begin = value.data() + separator + 1U;
+            const char* end = value.data() + value.size();
+            const auto parsed = std::from_chars(begin, end, priority);
+            if (parsed.ec == std::errc{} && parsed.ptr == end && priority > 0U) {
+                g_priorities[Lower(value.substr(0, separator))] = priority;
+            }
+        } else if (line.rfind(enabled_prefix, 0) == 0 && line.size() > 8) {
             g_enabled_ids.insert(Lower(line.substr(8)));
         } else if (line.rfind(hidden_prefix, 0) == 0 && line.size() > 7) {
             g_hidden_ids.insert(Lower(line.substr(7)));
@@ -293,20 +310,23 @@ void LoadSettingsLocked() {
     for (const auto& id : g_hidden_ids) g_enabled_ids.erase(id);
 }
 
-void SaveSettingsLocked() {
+bool SaveSettingsLocked() {
     std::error_code error;
     std::filesystem::create_directories(g_settings_path.parent_path(), error);
     const auto temporary = g_settings_path.string() + ".tmp";
     std::ofstream output(temporary, std::ios::trunc);
     if (!output) {
         g_status = "Texture-pack preferences could not be saved.";
-        return;
+        return false;
     }
     output << "# DKR-R native texture-pack state\n";
     if (!g_last_selected_id.empty()) {
         output << "last_selected=" << g_last_selected_id << '\n';
     }
     for (const auto& id : g_enabled_ids) output << "enabled=" << id << '\n';
+    for (const auto& [id, priority] : g_priorities) {
+        output << "priority=" << id << '\t' << priority << '\n';
+    }
     for (const auto& id : g_hidden_ids) output << "hidden=" << id << '\n';
     for (const auto& [id, timestamp] : g_imported_at) {
         output << "imported_at=" << id << '\t' << timestamp << '\n';
@@ -319,6 +339,11 @@ void SaveSettingsLocked() {
                << owner.digest << '\t' << owner.fingerprint << '\n';
     }
     output.close();
+    if (!output) {
+        g_status = "Texture-pack preferences could not be written.";
+        std::filesystem::remove(temporary, error);
+        return false;
+    }
     std::filesystem::rename(temporary, g_settings_path, error);
     if (error) {
         std::filesystem::remove(g_settings_path, error);
@@ -326,6 +351,7 @@ void SaveSettingsLocked() {
         std::filesystem::rename(temporary, g_settings_path, error);
     }
     if (error) g_status = "Texture-pack preferences could not be committed.";
+    return !error;
 }
 
 void LoadPackIndexLocked() {
@@ -877,6 +903,7 @@ void ScanLibrary(bool cache_only, bool force_deep,
                 cached_info.path.clear();
                 cached_info.enabled = false;
                 cached_info.hidden = false;
+                cached_info.priority = 0U;
                 cached_info.managed_size_bytes = 0U;
                 cached_info.imported_at_unix_seconds = 0;
                 cached_info.origin = Origin::User;
@@ -912,13 +939,14 @@ void ScanLibrary(bool cache_only, bool force_deep,
         if (imported_metadata_changed) {
             g_imported_at = std::move(imported_at);
             g_managed_sizes = std::move(managed_sizes);
-            SaveSettingsLocked();
         }
         if (!cache_only) {
             g_pack_index = std::move(next_index);
             SavePackIndexLocked();
         }
         g_packs = std::move(scanned);
+        const bool priorities_changed = texture_priority::normalize(g_packs, g_priorities);
+        if (imported_metadata_changed || priorities_changed) SaveSettingsLocked();
         ++g_generation;
         if (error) g_status = "The texture-pack folder could not be scanned: " + error.message();
         else if (g_packs.empty()) g_status = "No texture packs imported yet.";
@@ -1038,6 +1066,7 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
     const std::string fingerprint =
         owner != nullptr ? ArchiveFingerprint(source) : std::string{};
     std::string stale_track_pack_id;
+    std::size_t stale_track_priority = 0U;
     if (owner != nullptr) {
         std::scoped_lock lock(g_mutex);
         for (const auto& pack : g_packs) {
@@ -1061,12 +1090,13 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
             }
             if (pack.owner_track_id == owner->track_id) {
                 stale_track_pack_id = pack.id;
+                stale_track_priority = pack.priority;
             }
         }
     }
     if (!stale_track_pack_id.empty()) {
         std::string ignored;
-        delete_managed(stale_track_pack_id, ignored);
+        if (!delete_managed(stale_track_pack_id, ignored)) stale_track_priority = 0U;
     }
 
     const auto record_track_pack = [&](const std::filesystem::path& dest) {
@@ -1155,6 +1185,10 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
         }
         record_track_pack(destination);
         refresh();
+        if (stale_track_priority > 0U) {
+            std::string ignored;
+            set_priority(StableId(destination), stale_track_priority, ignored);
+        }
         const auto imported = InspectDirectory(destination);
         status_text = "Imported " + source.filename().string() + " as " +
             format_name(imported.format) + ". " + imported.detail;
@@ -1240,6 +1274,10 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
     }
     record_track_pack(destination);
     refresh();
+    if (stale_track_priority > 0U) {
+        std::string ignored;
+        set_priority(StableId(destination), stale_track_priority, ignored);
+    }
     const auto imported = InspectArchive(destination);
     status_text = "Imported " + destination.filename().string() + " as " +
         format_name(imported.format) + ". " + imported.detail;
@@ -1264,6 +1302,35 @@ void set_enabled(const std::string& id, bool enabled) {
     ++g_generation;
     SaveSettingsLocked();
     g_status = match->name + (enabled ? " queued for live activation." : " queued for live removal.");
+}
+
+bool set_priority(const std::string& id, std::size_t priority, std::string& status_text) {
+    std::scoped_lock lock(g_mutex);
+    const std::string normalized = Lower(id);
+    const auto match = std::find_if(g_packs.begin(), g_packs.end(),
+        [&](const PackInfo& pack) { return pack.id == normalized; });
+    if (match == g_packs.end() || priority == 0U || priority > g_packs.size()) {
+        status_text = "Choose an available texture-pack priority.";
+        return false;
+    }
+    const std::string name = match->name;
+    if (match->priority == priority) {
+        status_text = name + " is already at priority " + std::to_string(priority) + ".";
+        return true;
+    }
+    const auto previous = g_priorities;
+    if (!texture_priority::move(g_packs, g_priorities, normalized, priority)) return false;
+    if (!SaveSettingsLocked()) {
+        g_priorities = previous;
+        texture_priority::normalize(g_packs, g_priorities);
+        status_text = g_status;
+        return false;
+    }
+    ++g_generation;
+    g_status = name + " moved to priority " + std::to_string(priority) +
+        ". Lower numbers win texture clashes; the order applies live.";
+    status_text = g_status;
+    return true;
 }
 
 bool toggle_last_selected(std::string& status) {
@@ -1355,9 +1422,11 @@ bool delete_managed(const std::string& id, std::string& status_text) {
             g_managed_sizes.erase(normalized);
         }
         g_track_pack_owners.erase(normalized);
+        g_priorities.erase(normalized);
         g_packs.erase(std::remove_if(g_packs.begin(), g_packs.end(),
             [&](const PackInfo& pack) { return pack.id == normalized; }),
             g_packs.end());
+        texture_priority::normalize(g_packs, g_priorities);
         ++g_generation;
         SaveSettingsLocked();
         g_status = defer_until_reload
@@ -1438,11 +1507,9 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
         if (generation == g_applied_generation && modern_profile == g_applied_modern) return;
         previous_replacements = g_applied_replacements;
         if (modern_profile) {
-            for (const auto& pack : g_packs) {
-                if (pack.enabled && pack.compatible) {
-                    replacements.emplace_back(pack.path, pack.zip_base_path);
-                    replacement_ids.insert(pack.id);
-                }
+            for (const auto* pack : texture_priority::load_order(g_packs)) {
+                replacements.emplace_back(pack->path, pack->zip_base_path);
+                replacement_ids.insert(pack->id);
             }
         }
         // Only a changed replacement set is worth handing to RT64. The reload
@@ -1500,7 +1567,7 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
             g_status = replacements.empty()
                 ? "Native texture replacements are disabled."
                 : std::to_string(replacements.size()) +
-                    " native texture pack(s) active. Existing textures were reloaded safely.";
+                    " texture pack(s) active. Lower priority numbers win clashes. Existing textures were reloaded safely.";
         } else {
             // Mark this generation as consumed so a rejected archive cannot
             // trigger an expensive reload on every presented frame.

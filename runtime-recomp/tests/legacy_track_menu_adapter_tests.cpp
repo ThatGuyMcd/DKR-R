@@ -51,6 +51,9 @@ struct Fixture {
 };
 void run() {
     Fixture f;const auto stock=f.memory;
+    const auto boot_sidecar=f.adapter.checkpoint();
+    check(f.adapter.stage_checkpoint(boot_sidecar).checkpoint()==boot_sidecar,"Initial Track Select sidecar differs.");
+    for(std::size_t cut=0;cut<boot_sidecar.size();++cut)rejects([&]{f.adapter.stage_checkpoint(View(boot_sidecar).first(cut));});
     check(!f.event(2).navigation_sound && !f.event(3).navigation_sound,"Stock navigation received a second ping");
     check(f.memory==stock,"Unrelated stock input changed guest memory");
     check(f.get(MenuField::CursorX)==0 && f.get(MenuField::CursorY)==0,"Fresh native entry did not retain Dino Domain");
@@ -60,6 +63,8 @@ void run() {
     check(f.real(MenuField::TargetY)==-960 && f.get(MenuField::PreviewCarrier)==5,"Custom navigation did not update preview/target");
     f.put(MenuField::Opacity,32);f.event(5);check(f.get(MenuField::LoadedCarrier)==0xffffffff,"Same-carrier custom preview was not reloaded");
     f.event(6,5);f.event(7,0,1);f.put(MenuField::BackgroundBusy,1);f.put(MenuField::LoadedCarrier,5);
+    const auto pending_sidecar=f.adapter.checkpoint();
+    check(f.adapter.stage_checkpoint(pending_sidecar).checkpoint()==pending_sidecar,"Confirmed preview identity lost during sidecar restore.");
     f.input(1,0);check(f.get(MenuField::CursorX)==1,"Second same-carrier track cannot be selected");
     auto effect=f.event(8,5);check(effect.scene && effect.scene->id==std::string(64,'a'),"Rapid navigation replaced the accepted loader identity");
     check(!f.event(8,5).scene,"A preview request was consumed twice");
@@ -77,7 +82,8 @@ void run() {
     check(f.get(MenuField::Details,middle+8,2)==0 && f.get(MenuField::Details,middle+10,2)==0,"Custom frame does not follow native scroll coordinates");
     check(f.get(MenuField::Details,middle+13,1)==80 && (f.get(MenuField::Details,middle+14,1)&128),"Native fade/live viewport flags are wrong");
     check(f.get(MenuField::Details,middle)==0x80010000,"Custom row header is not guest-owned");
-    f.event(16);check(f.real(MenuField::Y)==0,"Custom row accesses out-of-range background data");f.event(17);
+    f.event(16);check(f.real(MenuField::Y)==0,"Custom row accesses out-of-range background data");
+    rejects([&]{f.adapter.checkpoint();});f.event(17);
     check(f.real(MenuField::Y)==-960,"Background scope changed the viewport scroll");
     effect=f.event(9,5);check(effect.override_return && effect.return_value==f.get(MenuField::Details,middle+4),"Custom setup name differs from the frame title");
     check(!f.event(9,6).override_return,"Custom name replaced another stock level");
@@ -85,6 +91,8 @@ void run() {
     f.select(4,0);check(f.event(11,5).return_value==1 && f.event(10,5).return_value==0,"Unsupported aircraft enabled for a car-only custom course");
     f.put(MenuField::VoiceDelay,30);f.event(13);check(f.get(MenuField::VoiceDelay)==0,"T.T. speaks the stock carrier's name");
     f.event(12,2);effect=f.event(14,5);check(effect.scene && effect.scene->id==std::string(64,'a'),"Race launch lost custom identity");
+    const auto race_sidecar=f.adapter.checkpoint();
+    check(f.adapter.stage_checkpoint(race_sidecar).checkpoint()==race_sidecar,"Race/restart custom identity lost during restore.");
     check(f.event(14,5).scene.has_value(),"Custom restart reverted to stock");
     f.event(15,17);effect=f.event(14,5);
     check(effect.scene && effect.scene->id==std::string(64,'a'),"Results retry lost the custom course identity");

@@ -3,6 +3,7 @@
 #include "netplay/experimental_launch.hpp"
 #include "netplay/experimental_pump.hpp"
 #include "owned_game.hpp"
+#include "netplay/experimental_checkpoint_hash.hpp"
 #include <cassert>
 #include <fstream>
 #include <iostream>
@@ -122,7 +123,7 @@ struct QuickJoinTestAccess {
             },error,continuous,adventure ? (1U<<24):0);
             if(!worlds[owner])throw std::runtime_error(error);
         }
-        LaunchContract contract;contract.revision=DKR_OWNED_TEST_REVISION;
+        LaunchContract contract;contract.revision=checkpoint_hash(rom)==rom::kUsV80Xxh3?80:77;
         contract.schema=worlds[0]->contract().schema;contract.state_bytes=worlds[0]->contract().state_bytes;contract.epoch=91;
         contract.prediction_window=12;contract.input_delay=1;
         // Test identities only. The actual launcher must derive these digests

@@ -19,6 +19,41 @@ spec.loader.exec_module(presentation)
 
 
 class PipelineTests(unittest.TestCase):
+    def test_asset_capacity_pairs_allocation_limit_and_prewrite_guards(self):
+        import sys
+        with patch.object(sys,'path',[str(ROOT/'scripts'),*sys.path]):
+            import legacy_asset_capacity_policy as capacity
+        class Elf:
+            def read_bytes(self):return b'isolated capacity fixture'
+        elf=Elf()
+        for rev in ('us.v77','us.v80'):
+            words={};bounds={}
+            def put(name,pc,word):
+                words[pc]=word;lo,hi=bounds.get(name,(pc,pc));bounds[name]=(min(lo,pc),max(hi,pc))
+            for name,v77,v80,word,kind,stride in capacity.ALLOCATIONS:put(name,v77 if rev=='us.v77' else v80,word)
+            for name,pc,word,branch,*_ in capacity.COMPARISONS[rev]:put(name,pc,word);put(name,pc+4,branch)
+            for name,pc,word,*_ in capacity.STORES[rev]:put(name,pc,word)
+            put('track_setup_racers',0x8000d7a4,0xa44f0000)
+            symbols={n:{(lo,hi-lo+4)} for n,(lo,hi) in bounds.items()}
+            sections=[(pc,struct.pack('>I',word)) for pc,word in words.items()]
+            base={'functionHooks':[],'instructionPatches':[]}
+            with self.assertRaises(ValueError):capacity.compose_asset_capacity(base,elf,rev,sections,symbols)
+            with patch.dict(capacity.ELFS,{rev:hashlib.sha256(elf.read_bytes()).hexdigest()}):
+                result=capacity.compose_asset_capacity(base,elf,rev,sections,symbols)
+                self.assertEqual(base,{'functionHooks':[],'instructionPatches':[]})
+                self.assertEqual(len(result['functionHooks']),11)
+                self.assertEqual(len(result['instructionPatches']),4)
+                self.assertEqual(result,capacity.compose_asset_capacity(result,elf,rev,sections,symbols))
+                for i,(pc,data) in enumerate(sections):
+                    bad=sections.copy();bad[i]=(pc,struct.pack('>I',words[pc]^1))
+                    with self.assertRaises(ValueError):capacity.compose_asset_capacity(base,elf,rev,bad,symbols)
+                for h in result['functionHooks']:
+                    conflict=copy.deepcopy(base);conflict['functionHooks'].append({**h,'text':'unknown owner'})
+                    with self.assertRaises(ValueError):capacity.compose_asset_capacity(conflict,elf,rev,sections,symbols)
+                for p in result['instructionPatches']:
+                    conflict=copy.deepcopy(base);conflict['instructionPatches'].append({**p,'value':'0x0'})
+                    with self.assertRaises(ValueError):capacity.compose_asset_capacity(conflict,elf,rev,sections,symbols)
+
     def test_cache_failure_policy_is_hash_pinned_and_conflict_checked(self):
         import sys
         with patch.object(sys,'path',[str(ROOT/'scripts'),*sys.path]):

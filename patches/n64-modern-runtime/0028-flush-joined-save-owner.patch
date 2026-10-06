@@ -1,0 +1,38 @@
+From: DKR-R Patch Pipeline <patch-pipeline@local.invalid>
+Subject: [PATCH] Finish save ownership after guest producers join
+
+diff --git a/librecomp/src/pi.cpp b/librecomp/src/pi.cpp
+--- a/librecomp/src/pi.cpp
++++ b/librecomp/src/pi.cpp
+@@ -155,7 +155,7 @@
+ void saving_thread_func(RDRAM_ARG1) {
+     for (;;) {
+         if (exited.load()) {
+-            if (!update_save_file()) std::fprintf(stderr, "[save][shutdown] final commit refused; previous valid save retained\\n");
++            if (!update_save_file()) std::fprintf(stderr, "[save][shutdown] final commit refused; previous valid save retained\n");
+             break;
+         }
+         bool save_buffer_updated = false;
+@@ -294,10 +294,10 @@
+ 
+ void ultramodern::change_save_file(const std::u8string& subfolder, const std::u8string& name) {
+     if (save_storage_callbacks.path) {
+-        const auto requested = (config_path / save_folder / subfolder / (name + u8".bin")).lexically_normal();
++        const auto requested = std::filesystem::absolute(config_path / save_folder / subfolder / (name + u8".bin")).lexically_normal();
+         // Managed games select once, before init_saving. No mutable route swap.
+         if (requested != save_context.save_file_path) {
+-            std::fprintf(stderr, "[save][scope] refused mutable route switch\\n");
++            std::fprintf(stderr, "[save][scope] refused mutable route switch\n");
+             ultramodern::quit();
+         }
+         return;
+@@ -315,6 +315,9 @@
+     if (save_context.saving_thread.joinable()) {
+         save_context.saving_thread.join();
+     }
++    // All guest producers have joined before this call. Capture any final
++    // update that arrived after the worker observed the quit flag.
++    if (!update_save_file()) std::fprintf(stderr, "[save][shutdown] final joined-owner commit refused; previous save retained\n");
+     while (save_context.write_sempahore.tryWait()) {}
+     while (save_context.swap_file_pending_sempahore.tryWait()) {}
+     while (save_context.swap_file_ready_sempahore.tryWait()) {}

@@ -58,6 +58,7 @@ struct PendingJoinView {
     std::string display_name;
     bool compatible = false;
     std::string compatibility;
+    bool preparing_mods=false;
 };
 
 struct ConnectionTestResultView {
@@ -156,6 +157,7 @@ struct SessionView {
     std::array<ConnectionTestResultView, kMaximumPlayers>
         connection_test_results{};
     std::optional<CompatibilityManifest> compatibility_sync_offer;
+    std::optional<protocol::ModOfferPayload> mod_offer;
     bool local_online_save_ready = false;
     std::array<bool, kMaximumPlayers> online_save_ready{};
     std::vector<PendingJoinView> pending_joins;
@@ -243,6 +245,22 @@ public:
     DirectSession& operator=(const DirectSession&) = delete;
 
     void configure_manifest(const CompatibilityManifest& manifest);
+    bool configure_mod_admission(std::string manifest_hash,std::uint32_t manifest_bytes);
+    struct ModPacket {
+        std::uint64_t sender=0;
+        bool data=false;
+        std::vector<std::uint8_t> bytes;
+        // Host-assigned admission identity, never read from peer payloads.
+        std::uint64_t request_id=0;
+    };
+    // Provisional, authenticated lobby-only route. No player slot, input,
+    // checkpoint, save or launch privileges until exact preparation succeeds.
+    bool take_mod_packet(ModPacket& packet);
+    std::size_t mod_chunk_budget() const;
+    bool send_mod_packet(std::uint64_t target,std::span<const std::uint8_t> bytes,
+                         bool data,std::string& error);
+    bool complete_mod_admission(std::uint64_t request,std::string_view digest,std::string& error);
+    bool complete_local_mod_preparation(std::string_view digest,std::string& error);
     void configure_session_save(std::vector<std::uint8_t> canonical_save,
                                 SaveInstaller installer, SaveReader reader = {});
     void configure_artifact_directory(std::filesystem::path directory);
@@ -438,6 +456,14 @@ public:
 
 private:
     friend struct DirectSessionTestAccess;
+    struct PendingRecord;
+    std::uint32_t mod_manifest_bytes_=0;
+    std::optional<protocol::ModOfferPayload> mod_offer_;
+    std::deque<ModPacket> mod_inbound_;
+    std::size_t mod_inbound_bytes_=0;
+    bool handle_mod_packet_locked(std::uint64_t sender,const protocol::Datagram& packet);
+    void send_mod_offer_locked(PendingRecord& pending);
+    void clear_pending_mod_route_locked(PendingRecord& pending);
     bool owned_backend_available_ = false;
     struct OwnedMatchEnd {
         std::uint64_t hash = 0;
@@ -526,6 +552,7 @@ private:
         std::chrono::steady_clock::time_point first_seen{};
         std::chrono::steady_clock::time_point last_seen{};
         std::chrono::steady_clock::time_point last_acknowledgement{};
+        bool mods_approved=false,mods_verified=false,mod_route_retained=false;
     };
 
     struct FriendAdmissionRecord {

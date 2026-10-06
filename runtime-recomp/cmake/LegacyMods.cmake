@@ -65,6 +65,10 @@ target_link_libraries(DKRLegacyDelta PUBLIC liblzma)
 
 set(_dkr_mod_src "${DKRPORT_ROOT}/runtime-recomp/src/game/mods")
 add_library(DKRLegacyModCore STATIC
+    "${_dkr_mod_src}/online_mod_manifest.cpp"
+    "${_dkr_mod_src}/online_mod_package.cpp"
+    "${_dkr_mod_src}/online_mod_transfer.cpp"
+    "${_dkr_mod_src}/online_mod_cache.cpp"
     "${_dkr_mod_src}/legacy_mod_format.cpp"
     "${_dkr_mod_src}/legacy_mod_import.cpp"
     "${_dkr_mod_src}/legacy_mod_geometry.cpp"
@@ -130,6 +134,7 @@ add_library(DKRLegacyGuestIO STATIC "${_dkr_mod_src}/legacy_runtime_io.cpp"
     "${_dkr_mod_src}/legacy_character_menu_render.cpp"
     "${_dkr_mod_src}/legacy_character_stage.cpp"
     "${_dkr_mod_src}/legacy_character_presentation.cpp"
+    "${_dkr_mod_src}/legacy_guest_checkpoint.cpp"
     "${_dkr_mod_src}/legacy_runtime_assets.cpp")
 target_include_directories(DKRLegacyGuestIO PUBLIC
     "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include")
@@ -161,11 +166,18 @@ target_link_libraries(DKRLegacyWorkerCore PRIVATE DKRLegacyDelta DKRLegacyModMin
 target_link_libraries(DKRLegacyModWorker PRIVATE DKRLegacyWorkerCore DKRLegacyModProcess)
 
 add_library(DKRLegacyImportLibrary STATIC "${_dkr_mod_src}/legacy_import_library.cpp"
+    "${_dkr_mod_src}/online_mod_bundle.cpp"
+    "${_dkr_mod_src}/online_mod_profile.cpp"
+    "${_dkr_mod_src}/online_mod_sync.cpp"
     "${_dkr_mod_src}/legacy_mod_library.cpp"
     "${_dkr_mod_src}/legacy_track_catalog.cpp")
 target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRLegacyModCore DKRLegacyModProcess)
 
-add_library(DKRLegacyModLaunch STATIC "${_dkr_mod_src}/legacy_mod_launch.cpp")
+add_library(DKRLegacyModLaunch STATIC "${_dkr_mod_src}/legacy_mod_launch.cpp"
+    "${_dkr_mod_src}/online_mod_runtime.cpp"
+    "${_dkr_mod_src}/online_mod_music.cpp"
+    "${_dkr_mod_src}/../custom_music_decode.cpp")
+target_include_directories(DKRLegacyModLaunch PRIVATE "${DKRPORT_ROOT}/runtime-recomp/third_party/dr_libs")
 # .dkrmap table logic. A mod launch publishes the tracks' artwork into the
 # character-augmented boot bank, so the launch owns this dependency.
 # A track's native music sequence is validated at scan, so its checker
@@ -182,4 +194,14 @@ if(TARGET rt64)
 else()
     target_link_libraries(DKRCustomTracksCore PRIVATE DKRLegacyModMiniz)
 endif()
-target_link_libraries(DKRLegacyModLaunch PUBLIC DKRLegacyImportLibrary DKRCustomTracksCore)
+target_link_libraries(DKRLegacyModLaunch PUBLIC DKRLegacyImportLibrary DKRCustomTracksCore DKRLegacyGuestIO)
+# Separate worker archive: no renderer/window dependency is pulled into the
+# process that handles untrusted online patches and package metadata.
+add_library(DKROnlineModPreparation STATIC "${_dkr_mod_src}/online_mod_prepare.cpp")
+add_library(DKRCustomTracksWorkerCore STATIC $<TARGET_OBJECTS:DKRCustomTracksCore>)
+target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRCustomTracksCore)
+target_link_libraries(DKRCustomTracksWorkerCore PRIVATE DKRLegacyModMiniz)
+target_include_directories(DKRCustomTracksWorkerCore PUBLIC "${_dkr_mod_src}/..")
+target_link_libraries(DKROnlineModPreparation PUBLIC DKRLegacyWorkerCore DKRCustomTracksWorkerCore)
+target_include_directories(DKROnlineModPreparation PUBLIC "${_dkr_mod_src}")
+target_link_libraries(DKRLegacyModWorker PRIVATE DKROnlineModPreparation)

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "dkr_save_codec.hpp"
@@ -26,7 +27,23 @@ struct SaveInfo {
 constexpr int kControllerPakCount = 4;
 
 void configure(const std::filesystem::path& config_directory);
+// Explicit, known profile/portable locations only; never a whole-drive scan.
+void configure_recovery_locations(std::vector<std::filesystem::path> roots);
 SaveInfo adventure_info();
+void set_online_save_protection(bool enabled);
+enum class StoredSaveKind { Adventure, ControllerPak, ExperimentalPaks };
+struct StoredAdventure {
+    int scope = 0; // 0 offline, 1 online, 2 modded, 3 recovery candidates
+    StoredSaveKind kind = StoredSaveKind::Adventure;
+    SaveInfo info;
+    std::string label, preview;
+};
+// Bounded read-only inventory; callers scan on a worker, never at frame rate.
+std::vector<StoredAdventure> stored_adventures();
+bool export_stored_adventure(const std::filesystem::path& source,
+    const std::filesystem::path& destination, std::string& error);
+bool export_stored_save(const std::filesystem::path& source,
+    const std::filesystem::path& destination, StoredSaveKind kind, std::string& error);
 std::filesystem::path backup_directory();
 std::vector<std::filesystem::path> adventure_backups();
 bool backup_adventure(std::filesystem::path& created, std::string& error);
@@ -40,12 +57,12 @@ bool repair_adventure_checksums(bool& changed,
                                 std::string& error);
 bool canonical_adventure_bytes(std::vector<std::uint8_t>& bytes,
                                std::string& error);
-SaveInfo previous_online_adventure_info();
+SaveInfo previous_online_adventure_info(std::string_view mod_profile={});
 // Stages validated bytes without touching previous online progress. The host's
 // first read_online_adventure during game activation commits this seed.
 bool prepare_host_online_adventure(
     OnlineSaveSeedMode mode, std::vector<std::uint8_t>& bytes,
-    std::string& error);
+    std::string& error,std::string_view mod_profile={});
 bool install_synchronized_online_adventure(
     std::uint64_t match_id,
     std::span<const std::uint8_t> bytes,

@@ -1,4 +1,5 @@
 #pragma once
+#include "legacy_character_limits.hpp"
 #include "legacy_mod_format.hpp"
 
 namespace dkr::mods {

@@ -38,12 +38,16 @@ void CharacterMenuMemory::bytes(std::uint32_t address,View value) {
     for(std::size_t i=0;i<value.size();++i)memory_[(p+i)^3]=value[i];
 }
 CharacterMenuAdapter::CharacterMenuAdapter(std::shared_ptr<const CharacterNamespace> assets):assets_(std::move(assets)) {
-    if(!assets_ || assets_->characters.empty() || assets_->characters.size()>16)throw Error("Invalid admitted character menu library.");
+    if(!assets_ || assets_->characters.empty() || assets_->characters.size()>CustomCharacterLimit)throw Error("Invalid admitted character menu library.");
     std::set<std::string> ids;
     for(const auto& c:entries())if(c.base_character>=10 || c.id.size()!=64 || c.name.empty() || c.name.size()>255 || !ids.insert(c.id).second)
         throw Error("Invalid character menu identity.");
+    reset();
 }
-void CharacterMenuAdapter::reset(){custom_={};owner_=0;duplicates_=false;}
+void CharacterMenuAdapter::reset(){
+    custom_={};displayed_={};owner_=0;duplicates_=false;
+    for(unsigned s=0;s<std::min<std::size_t>(CustomStageSlots,entries().size());++s)displayed_[s]=s;
+}
 bool CharacterMenuAdapter::has_custom()const{return std::ranges::any_of(custom_,[](const auto& c){return c.has_value();});}
 std::vector<unsigned> CharacterMenuAdapter::input(CharacterMenuMemory& g,bool duplicates) {
     std::vector<unsigned> sounds;
@@ -54,11 +58,22 @@ std::vector<unsigned> CharacterMenuAdapter::input(CharacterMenuMemory& g,bool du
     std::vector<Point> positions{{-33,0},{-5,0},{20,0},{48,0},{-28,1},{-5,1},{15,1},{36,1}};
     if(drumstick_)positions.push_back({8,0});
     if(tt_)positions.push_back({8,1});
-    for(unsigned i=0;i<entries().size();++i)positions.push_back({i==0?-52:65,1});
+    for(const auto& anchor:CustomStageAnchors)positions.push_back({anchor.x,anchor.row});
+    auto slot_for=[&](std::size_t id) {
+        for(unsigned s=0;s<CustomStageSlots;++s)if(displayed_[s]==id)return s;
+        throw Error("Selected character lost its visible stage slot.");
+    };
+    auto set_custom=[&](unsigned p,std::size_t id) {
+        custom_[p]=id;
+        const auto base=entries()[id].base_character;unsigned placeholder=0;
+        for(unsigned n=0;n<stock_count;++n)
+            if(g.read(g.get(F::SelectTable)+14*n+12,2)==base){placeholder=n;break;}
+        g.set(F::NativeIndices,placeholder,p,1);
+    };
     auto taken=[&](unsigned p,unsigned logical) {
         if(duplicates)return false;
         for(unsigned i=0;i<4;++i)if(i!=p && g.get(F::Active,i,1)) {
-            const auto selected=custom_[i]?stock_count+unsigned(*custom_[i]):g.get(F::NativeIndices,i,1);
+            const auto selected=custom_[i]?stock_count+slot_for(*custom_[i]):g.get(F::NativeIndices,i,1);
             if(selected==logical)return true;
         }
         return false;
@@ -68,16 +83,40 @@ std::vector<unsigned> CharacterMenuAdapter::input(CharacterMenuMemory& g,bool du
         const auto buttons=g.get(F::Buttons,4*p),status=g.get(F::Status,p,1);
         const auto x=static_cast<std::int16_t>(g.get(F::StickX,2*p,2)),y=static_cast<std::int16_t>(g.get(F::StickY,2*p,2));
         if(status>2 || g.get(F::Ready)>4 || g.get(F::Players)>4)throw Error("Invalid native character ready state.");
-        // Native input/voice/ready remains authoritative for both sorts of
-        // character. Only directional selection is extended here. No R-page.
+        // Native confirmation/cancellation remains authoritative. L/R cycles
+        // only an unconfirmed custom identity, never a global roster page.
         if(status || (buttons&0xd000))continue;
+        const auto shoulders=buttons&0x30U;
+        if(custom_[p] && shoulders && shoulders!=0x30U && entries().size()>CustomStageSlots) {
+            const auto old_id=*custom_[p];const auto current=slot_for(old_id);bool moved=false;
+            // A shared DOUBLEVISION cursor cannot replace its actor without
+            // silently changing the other player's identity. Keep it pinned.
+            bool shared=false;
+            for(unsigned q=0;q<4;++q)if(q!=p && g.get(F::Active,q,1) && custom_[q]==old_id)shared=true;
+            for(std::size_t step=1;step<entries().size();++step) {
+                if(shared)break;
+                const auto id=(old_id+(shoulders==0x10U?step:entries().size()-step))%entries().size();
+                // Visible actors are reserved even without a human cursor.
+                // Browsing never changes the player's physical stage slot.
+                if(std::ranges::find(displayed_,std::optional<std::size_t>(id))!=displayed_.end())continue;
+                displayed_[current]=id;
+                set_custom(p,id);owner_=p;moved=true;break;
+            }
+            if(moved) {
+                g.set(F::CurrentMusic,entries()[*custom_[p]].base_character,0,1);
+                g.set(F::CurrentMusic,0,2,2);g.set(F::CurrentMusic,20,1,1);
+            }
+            sounds.push_back(moved?0xEC:0x15C);
+            g.set(F::Buttons,buttons&~0x30U,4*p);g.set(F::StickX,0,2*p,2);g.set(F::StickY,0,2*p,2);
+            continue;
+        }
         if(!x && !y)continue;
-        const unsigned old=custom_[p]?stock_count+unsigned(*custom_[p]):g.get(F::NativeIndices,p,1);
+        const unsigned old=custom_[p]?stock_count+slot_for(*custom_[p]):g.get(F::NativeIndices,p,1);
         if(old>=positions.size())throw Error("Invalid stage cursor identity.");
         const auto origin=positions[old];
         unsigned candidate=old;int best=1000000;
         for(unsigned n=0;n<positions.size();++n) {
-            if(n==old || taken(p,n))continue;
+            if(n==old || (n>=stock_count && !displayed_[n-stock_count]) || taken(p,n))continue;
             const auto point=positions[n];const int dx=point.x-origin.x,dy=point.y-origin.y;
             // Physical negative X is left; positive Y is up. Never reuse the
             // misleading leftInput/rightInput member names in the retail table.
@@ -87,14 +126,7 @@ std::vector<unsigned> CharacterMenuAdapter::input(CharacterMenuMemory& g,bool du
         }
         if(candidate!=old) {
             if(candidate>=stock_count) {
-                custom_[p]=candidate-stock_count;
-                // Keep a valid retail index for native voice/music/launch
-                // code. The stage-specific cursor hook hides this placeholder.
-                const auto base=entries()[*custom_[p]].base_character;
-                unsigned placeholder=0;
-                for(unsigned n=0;n<stock_count;++n)
-                    if(g.read(g.get(F::SelectTable)+14*n+12,2)==base){placeholder=n;break;}
-                g.set(F::NativeIndices,placeholder,p,1);
+                set_custom(p,*displayed_[candidate-stock_count]);owner_=p;
             } else {custom_[p].reset();g.set(F::NativeIndices,candidate,p,1);}
             // Directional input is consumed before native charselect_input.
             // Preserve its music-channel handoff and 20-tick fade request.
@@ -111,7 +143,7 @@ std::vector<unsigned> CharacterMenuAdapter::input(CharacterMenuMemory& g,bool du
     return sounds;
 }
 CharacterMenuView CharacterMenuAdapter::view(const CharacterMenuMemory& g)const {
-    CharacterMenuView v;v.owner=owner_;v.custom=custom_;
+    CharacterMenuView v;v.owner=owner_;v.custom=custom_;v.displayed=displayed_;
     const auto delay=static_cast<std::int32_t>(g.get(F::Delay));v.visible=delay>-23 && delay<23;
     for(unsigned p=0;p<4;++p) {v.active[p]=g.get(F::Active,p,1)!=0;v.ready[p]=g.get(F::Status,p,1)!=0;v.native[p]=g.get(F::NativeIndices,p,1);}
     if(v.active[owner_] && custom_[owner_]){v.custom_page=true;v.page=static_cast<unsigned>(*custom_[owner_]/8);}

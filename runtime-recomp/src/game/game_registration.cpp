@@ -43,7 +43,11 @@ void RunDkrEntrypoint(std::uint8_t* rdram, recomp_context* context) {
     }
 
     dkr::runtime::saves::reset_runtime_online_save_status();
-    const auto online = dkr::runtime::netplay::session().runtime_view();
+    if (!dkr::runtime::saves::runtime_save_context_ready()) {
+        std::fprintf(stderr, "[save][boot] %s\n", dkr::runtime::saves::runtime_save_failure().c_str());
+        ultramodern::quit(); return;
+    }
+    const auto online = dkr::runtime::saves::runtime_save_selection();
     if (
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
         dkr_experimental_bootstrap_active()
@@ -59,17 +63,10 @@ void RunDkrEntrypoint(std::uint8_t* rdram, recomp_context* context) {
         }
         std::fprintf(stderr,"[rollback][boot] verified online EEPROM active before retail initialization\n");
 #endif
-    } else if (online.active) {
-        if (!online.launch_descriptor) {
-            dkr::runtime::netplay::session().fail_runtime_start(
-                "The online launch has no authenticated match descriptor.");
-            ultramodern::quit();
-            return;
-        }
+    } else if (online.online) {
         std::string error;
         if (!dkr::runtime::saves::activate_online_save_for_runtime(
-                online.host, online.launch_descriptor->match_id,
-                online.online_save_hash, error)) {
+                online.host, online.match, online.hash, error)) {
             dkr::runtime::netplay::session().fail_runtime_start(
                 "The isolated online save could not be activated: " + error);
             std::fprintf(stderr, "[netplay][save] %s\n", error.c_str());

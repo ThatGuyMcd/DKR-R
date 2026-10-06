@@ -4,6 +4,7 @@
 #include "game_payload.hpp"
 #include "runtime_enhancements.hpp"
 #include "revision_addresses.hpp"
+#include "runtime_legacy_mods.hpp"
 
 #include "recomp.h"
 
@@ -79,8 +80,10 @@ extern "C" void dkr_scale_sequence_player_volume(std::uint8_t* rdram,
         : authored;
     // A custom track's music file takes the volume its silent carrier song
     // would have had - every fade and slider included - in any presentation.
-    if (dkr::runtime::custom_music::intercept_music_volume(
-            rdram, static_cast<std::int16_t>(scaled))) {
+    recomp_context frozen=*context;frozen.r5=scaled;
+    if (dkr::runtime::legacy::frozen_music_volume(rdram,&frozen) ||
+        (!dkr::runtime::legacy::frozen_online_resources() &&
+         dkr::runtime::custom_music::intercept_music_volume(rdram, static_cast<std::int16_t>(scaled)))) {
         context->r5 = 0;
         return;
     }

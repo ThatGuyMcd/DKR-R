@@ -80,6 +80,23 @@ add_executable(DKRGuestReplayProbe probe_bridge.c probe_native.c probe_eeprom.cp
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/rollback_state_store.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/rollback_ring.cpp")
 target_compile_features(DKRGuestReplayProbe PRIVATE c_std_11 cxx_std_20)
+string(JSON mod_services ERROR_VARIABLE mod_services_error GET "${manifest}" owned_mod_services)
+if(NOT mod_services_error AND mod_services)
+    get_filename_component(DKRPORT_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+    include("${DKRPORT_ROOT}/runtime-recomp/cmake/LegacyMods.cmake")
+    target_sources(DKRGuestReplayProbe PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/../../src/game/runtime_legacy_mods.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/../native_mod_world_test_boundaries.cpp")
+    target_link_libraries(DKRGuestReplayProbe PRIVATE DKRLegacyGuestIO DKRLegacyModLaunch)
+    target_include_directories(DKRGuestReplayProbe PRIVATE
+        "${DKRPORT_ROOT}/extern/n64-modern-runtime/librecomp/include"
+        "${DKRPORT_ROOT}/extern/n64-modern-runtime/ultramodern/include"
+        "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty/concurrentqueue")
+    target_compile_definitions(DKRGuestReplayProbe PRIVATE DKR_PROBE_HAS_MOD_SERVICES=1)
+    if(MSVC)
+        target_compile_options(DKRGuestReplayProbe PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+    endif()
+endif()
 if(symbol_isolation)
     target_sources(DKRGuestReplayProbe PRIVATE probe_link_canary.c)
 endif()
@@ -97,6 +114,9 @@ target_include_directories(DKRGuestReplayProbe PRIVATE "${DKR_PROBE_GENERATED}"
     "${CMAKE_CURRENT_LIST_DIR}" "${CMAKE_CURRENT_LIST_DIR}/../../src/game"
     "${CMAKE_CURRENT_LIST_DIR}/../../../extern/monocypher/src"
     "${CMAKE_CURRENT_LIST_DIR}/../../../extern/n64-modern-runtime/thirdparty")
+# Legacy native ABI headers must never take precedence over the generated
+# checked CPU/RSP headers. Link canaries intentionally fail on that mistake.
+target_include_directories(DKRGuestReplayProbe BEFORE PRIVATE "${DKR_PROBE_GENERATED}")
 if(MSVC)
     target_compile_options(DKRGuestReplayProbe PRIVATE /UNDEBUG /fp:strict)
 else()

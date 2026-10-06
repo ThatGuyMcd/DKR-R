@@ -1457,6 +1457,7 @@ bool dkr::runtime::platform::initialise() {
 
 void dkr::runtime::platform::shutdown() {
 #if DKR_RUNTIME_HAS_RT64
+    dkr::runtime::ui::shutdown_online_mods();
     CancelSdl3InputProbe();
     g_sdl3_input_client.stop();
     std::scoped_lock lock(g_platform_mutex);
@@ -1502,6 +1503,15 @@ void dkr::runtime::platform::shutdown() {
 ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
     if (g_window == nullptr) {
         Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+#if !defined(__ANDROID__)
+        // ui::configure restores the saved graphics config before this call.
+        // Use borderless desktop fullscreen, matching RT64's normal window
+        // mode, without changing the user's display mode or resolution.
+        if (ultramodern::renderer::get_graphics_config().wm_option ==
+            ultramodern::renderer::WindowMode::Fullscreen) {
+            flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+        }
+#endif
 #if defined(__linux__) && !defined(__ANDROID__)
         flags |= SDL_WINDOW_VULKAN;
 #endif

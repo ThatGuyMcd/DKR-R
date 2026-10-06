@@ -70,9 +70,11 @@ int main(int argc,char** argv){try{
  }
  for(unsigned id=0;id<65536;++id) {
   unsigned character=999,cue=999;const bool encoded=decode_character_race_sound(id,character,cue);
-  check(encoded==(id>=0x4000 && id<0x4200 && (id&31)<18));
+  check(encoded==(id>=CharacterSoundBegin && (id&31)<18));
   if(encoded)check(character_race_sound(character,cue)==id);
  }
+ rejects([&]{character_race_sound(MaxEnabledCharacters,0);});
+ unsigned outside=0,cue_outside=0;check(!decode_character_race_sound(0x10000,outside,cue_outside));
  auto bad_race=race;bad_race.cues[16].sound=1000;rejects([&]{validate_character_race_audio(bad_race);});
  bad_race=race;bad_race.samples.push_back(0);rejects([&]{validate_character_race_audio(bad_race);});
  bad_race=race;bad_race.cues[0].range=65536;rejects([&]{validate_character_race_audio(bad_race);});

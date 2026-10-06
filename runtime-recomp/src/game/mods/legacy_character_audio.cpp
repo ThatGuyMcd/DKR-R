@@ -126,12 +126,12 @@ int character_race_cue(unsigned sound,unsigned base) {
     return sound==0x156+base?16:sound==0x7b+base?17:-1;
 }
 unsigned character_race_sound(unsigned character,unsigned cue) {
-    if(character>=16 || cue>=18)throw Error("Invalid custom race sound identity.");
-    return 0x4000U|(character<<5)|cue;
+    if(character>=MaxEnabledCharacters || cue>=18)throw Error("Invalid custom race sound identity.");
+    return CharacterSoundBegin+character*CharacterSoundStride+cue;
 }
 bool decode_character_race_sound(unsigned sound,unsigned& character,unsigned& cue) {
-    if((sound&~0x1ffU)!=0x4000U || (sound&31)>=18)return false;
-    character=(sound>>5)&15;cue=sound&31;return true;
+    if(sound<CharacterSoundBegin || sound>0xffffU || (sound&31)>=18)return false;
+    character=(sound-CharacterSoundBegin)/CharacterSoundStride;cue=sound&31;return true;
 }
 CharacterRaceAudio prepare_character_race_audio(View control,View samples,View table,unsigned base) {
     if(base>=10)throw Error("Invalid race voice identity.");

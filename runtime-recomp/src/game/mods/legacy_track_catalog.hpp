@@ -5,7 +5,7 @@
 #include <thread>
 
 namespace dkr::mods {
-inline constexpr unsigned MaxActiveStageCharacters=2;
+inline constexpr unsigned MaxActiveStageCharacters=MaxEnabledCharacters;
 struct TrackCatalogItem {
     std::string id,name,revision,bank,artifact,group,patch;
     std::string storage,details,source_name,review;
@@ -37,6 +37,13 @@ public:
     void dismiss();
     std::shared_ptr<const TrackCatalogView> snapshot() const;
     static bool has_enabled(const std::filesystem::path& root);
+    // Worker-only, validated catalogue metadata for an immutable lobby export.
+    static std::vector<TrackCatalogItem> selected_items(const std::filesystem::path& root,
+        std::string_view revision,Kind kind);
+    // Worker-only preflight for keeping verified online assets. Does not
+    // publish content or change activation/visibility metadata.
+    static void validate_retained_merge(const std::filesystem::path& root,
+        const std::filesystem::path& incoming);
     static std::vector<PreparedTrack> load_enabled(const std::filesystem::path& root,
         std::shared_ptr<const AssetBank> stock);
     static std::vector<PreparedCharacter> load_enabled_characters(const std::filesystem::path& root,

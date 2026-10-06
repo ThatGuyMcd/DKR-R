@@ -26,6 +26,8 @@ public:
     void install_names(std::span<std::uint8_t> guest,std::uint32_t address);
     TrackMenuEffect apply(unsigned event,std::span<std::uint8_t> guest,
         const TrackMenuFields& fields,std::uint32_t argument=0,std::uint32_t returned=0);
+    Bytes checkpoint()const;
+    TrackMenuAdapter stage_checkpoint(View)const;
 private:
     std::vector<Root> tracks_;
     Bytes names_;

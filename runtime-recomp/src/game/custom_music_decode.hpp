@@ -39,6 +39,7 @@ struct DecodedMusic {
 [[nodiscard]] bool decode_bytes(const std::uint8_t* data, std::size_t size,
                                 custom_tracks::MusicCodec codec, DecodedMusic& out,
                                 std::string& error,
-                                const std::atomic<bool>* cancel = nullptr);
+                                const std::atomic<bool>* cancel = nullptr,
+                                std::size_t maximum_decoded_bytes = SIZE_MAX);
 
 } // namespace dkr::runtime::custom_music

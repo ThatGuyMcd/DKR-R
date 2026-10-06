@@ -5,6 +5,7 @@
 #include "ultramodern/ultra64.h"
 #include "runtime_platform.hpp"
 #include "virtual_pak_policy.hpp"
+#include "save_storage.hpp"
 
 #include <algorithm>
 #include <array>
@@ -50,6 +51,7 @@ struct PakFile {
 
 struct VirtualPak {
     std::mutex mutex;
+    std::shared_ptr<dkr::runtime::saves::storage::Lease> storage_lease;
     bool loaded = false;
     bool corrupt = false;
     std::uint32_t generation = 0;
@@ -174,6 +176,11 @@ bool DecodePak(const std::filesystem::path& path, VirtualPak& pak) {
     return true;
 }
 
+bool ReadPakImage(const std::filesystem::path& path, std::vector<std::uint8_t>& bytes) {
+    VirtualPak decoded;
+    return dkr::runtime::saves::storage::read_exact(path, kPakSize, bytes) && DecodePak(path, decoded);
+}
+
 bool SavePakLocked(int channel, VirtualPak& pak) {
     std::vector<std::uint8_t> bytes(kPakSize, 0U);
     std::copy(kMagic.begin(), kMagic.end(), bytes.begin());
@@ -207,48 +214,9 @@ bool SavePakLocked(int channel, VirtualPak& pak) {
     WriteU32(bytes, 20U, count);
     WriteU32(bytes, 16U, Checksum(bytes));
 
-    std::error_code error;
-    std::filesystem::create_directories(PakPath(channel).parent_path(), error);
-    const std::filesystem::path path = PakPath(channel);
-    const std::filesystem::path temporary = path.string() + ".tmp";
-    const std::filesystem::path backup = path.string() + ".bak";
-    {
-        std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
-        if (!output) {
-            return false;
-        }
-        output.write(reinterpret_cast<const char*>(bytes.data()),
-                     static_cast<std::streamsize>(bytes.size()));
-        output.flush();
-        if (!output) {
-            return false;
-        }
-    }
-    if (std::filesystem::exists(path, error)) {
-        std::filesystem::copy_file(path, backup,
-            std::filesystem::copy_options::overwrite_existing, error);
-        if (error) {
-            std::filesystem::remove(temporary, error);
-            return false;
-        }
-        error.clear();
-        std::filesystem::remove(path, error);
-        if (error) {
-            std::filesystem::remove(temporary, error);
-            return false;
-        }
-    }
-    error.clear();
-    std::filesystem::rename(temporary, path, error);
-    if (error) {
-        std::error_code recovery_error;
-        if (std::filesystem::exists(backup, recovery_error)) {
-            std::filesystem::copy_file(backup, path,
-                std::filesystem::copy_options::overwrite_existing, recovery_error);
-        }
-        recovery_error.clear();
-        std::filesystem::remove(temporary, recovery_error);
-        return false;
+    std::string error;
+    if (!dkr::runtime::saves::storage::write_atomic(PakPath(channel), bytes, ReadPakImage, error)) {
+        std::fprintf(stderr, "[save][pak] %s\n", error.c_str()); return false;
     }
     pak.loaded = true;
     pak.corrupt = false;
@@ -262,6 +230,13 @@ std::int32_t EnsureLoaded(int channel, VirtualPak*& result) {
     VirtualPak& pak = g_paks[static_cast<std::size_t>(channel)];
     result = &pak;
     std::scoped_lock lock(pak.mutex);
+    if (!pak.storage_lease) {
+        std::string error;
+        pak.storage_lease = dkr::runtime::saves::storage::acquire(PakPath(channel), error);
+        if (!pak.storage_lease) {
+            std::fprintf(stderr, "[save][pak] %s\n", error.c_str()); return kPfsBadData;
+        }
+    }
     if (pak.loaded) {
         return pak.corrupt ? kPfsBadData : kPfsOk;
     }
@@ -279,8 +254,7 @@ std::int32_t EnsureLoaded(int channel, VirtualPak*& result) {
                      channel + 1);
         // Do not overwrite the known-good backup with the corrupt primary
         // while promoting the recovered in-memory generation.
-        std::error_code remove_error;
-        std::filesystem::remove(path, remove_error);
+        // The atomic writer preserves an invalid original instead of deleting it.
         return SavePakLocked(channel, pak) ? kPfsOk : kPfsBadData;
     }
     pak.loaded = true;
@@ -347,6 +321,7 @@ void dkr::runtime::pak::begin_session_directory(const std::filesystem::path& dir
     for(auto& pak:g_paks) {
         std::lock_guard lock(pak.mutex);
         pak.loaded=false;pak.corrupt=false;pak.generation=0;pak.files={};
+        pak.storage_lease.reset();
     }
     g_session_directory=directory;
 }

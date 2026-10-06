@@ -12,6 +12,7 @@ public:
     CacheContent(std::shared_ptr<const AssetBank>,std::shared_ptr<const AssetBus::Mount>);
     const std::string& identity(CacheKind kind,std::uint32_t legacy_id);
     const std::string& revision() const {return bank_->revision();}
+    const std::string& fingerprint()const{return bank_->fingerprint();}
 private:
     std::shared_ptr<const AssetBank> bank_;
     std::shared_ptr<const AssetBus::Mount> mount_;
@@ -55,6 +56,11 @@ public:
     // scheduler call occurs once the first ID is published. Stale plans fail
     // without changes, including a replay of an already successful plan.
     bool apply(std::span<std::uint8_t> guest_words,Plan&& plan);
+    // Quiesced private-owner rollback. Parsing does not modify guest/native
+    // state; owners are resolved from pre-admitted immutable banks.
+    Bytes checkpoint()const;
+    CacheNamespace stage_checkpoint(View bytes,
+        const std::map<std::string,std::shared_ptr<CacheContent>>& owners)const;
 private:
     std::map<Slot,Entry> entries_;
     std::uint64_t generation_=0;

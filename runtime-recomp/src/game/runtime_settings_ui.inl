@@ -758,7 +758,7 @@ void EndSettingsDialog() {
 // ------------------------------------------------------------ ROM drop-down
 
 // The Game ROM field (.rom-select): the selected ROM, and a list of every ROM
-// DKR-R has accepted plus "Add a ROM...". The pass look sits on Play's cream
+// DKR-R has accepted plus "Add a ROM...". The roomy look sits on Play's dark
 // card; the compact one in Online's header.
 RomSelectResult DrawRomSelect(const char* id, float width, bool compact, bool disabled, const char* reason) {
     if (g_launcher_rom == nullptr) return RomSelectResult::None;
@@ -789,8 +789,8 @@ RomSelectResult DrawRomSelect(const char* id, float width, bool compact, bool di
     const int first = draw->VtxBuffer.Size;
     const float hover = disabled ? 0.0F : press.hover;
     const PaddockRadii radii = PaddockRound(compact ? 8.0F : 10.0F);
-    unsigned ink = 0x091B24;
-    unsigned soft = 0x45595F;
+    unsigned ink = kSetText;
+    unsigned soft = kSetMuted;
     if (compact) {
         PaddockFill(draw, press.min, press.max, radii,
                     PaddockMix(PaddockRgb(0x061D2C), PaddockRgb(0x0A2A3D), hover));
@@ -803,9 +803,10 @@ RomSelectResult DrawRomSelect(const char* id, float width, bool compact, bool di
         PaddockFill(draw, {press.min.x, press.min.y + 3.0F}, {press.max.x, press.max.y + 3.0F}, radii,
                     PaddockRgb(0x091B24, 56U));
         PaddockFill(draw, press.min, press.max, radii,
-                    PaddockMix(PaddockRgb(0xFFFFFF), PaddockRgb(0xF4FBFB), hover));
+                    PaddockMix(PaddockRgb(0x061D2C), PaddockRgb(0x0A2A3D), hover));
         PaddockStroke(draw, press.min, press.max, radii,
-                      PaddockMix(PaddockRgb(0x091B24), PaddockRgb(0x0B5963), hover), 2.0F);
+                      open ? PaddockRgb(kSetFocus) :
+                      PaddockMix(PaddockRgb(0x2F6A86), PaddockRgb(0x5A97B1), hover), 2.0F);
     }
     const float text_width = width - edge * 2.0F - pad_x * 2.0F - 14.0F - 12.0F;
     const std::string title = current >= 0 ? rom.rom_catalog[static_cast<std::size_t>(current)].label
@@ -829,7 +830,7 @@ RomSelectResult DrawRomSelect(const char* id, float width, bool compact, bool di
     PaddockEndPress(press, compact ? 8.0F : 10.0F, 0.98F, false);
     if (press.focused) {
         draw->AddRect({press.min.x - 4.5F, press.min.y - 4.5F}, {press.max.x + 4.5F, press.max.y + 4.5F},
-                      PaddockRgb(compact ? kSetFocus : 0x091B24), (compact ? 8.0F : 10.0F) + 4.5F, 0, 3.0F);
+                      PaddockRgb(kSetFocus), (compact ? 8.0F : 10.0F) + 4.5F, 0, 3.0F);
     }
     std::vector<SettingsChoice> choices;
     for (const RomCatalogEntry& entry : rom.rom_catalog) choices.push_back({entry.label, PathUtf8(entry.path), false});

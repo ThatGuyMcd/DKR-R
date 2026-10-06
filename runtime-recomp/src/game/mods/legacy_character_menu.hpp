@@ -2,6 +2,11 @@
 #include "legacy_character_roster.hpp"
 
 namespace dkr::mods {
+inline constexpr unsigned CustomStageSlots=4, CustomCharacterLimit=MaxEnabledCharacters;
+struct CustomStageAnchor {int x,y,z,row;};
+// Match the authored lower lawn and upper wooden shelf, without moving stock actors.
+inline constexpr std::array<CustomStageAnchor,CustomStageSlots> CustomStageAnchors{{
+    {-52,-34,35,1},{65,-34,35,1},{-57,-10,0,0},{78,-10,0,0}}};
 enum class CharacterMenuField : unsigned {
     Active,Status,NativeIndices,NativeIDs,Buttons,StickX,StickY,Ready,Players,
     Delay,DisplayList,SelectTable,DialogueBegin,DialogueModes,SoundHandles,CurrentMusic,ObjectCount,FreeListCount,Count
@@ -27,6 +32,7 @@ struct CharacterMenuView {
     unsigned owner=0,page=0;
     std::array<bool,4> active{},ready{};
     std::array<std::optional<std::size_t>,4> custom{};
+    std::array<std::optional<std::size_t>,CustomStageSlots> displayed{};
     std::array<unsigned,4> native{};
 };
 class CharacterMenuAdapter {
@@ -41,9 +47,12 @@ public:
     bool has_custom()const;
     bool native_move(CharacterMenuMemory& guest,unsigned player,std::uint32_t direction,unsigned bounds,bool duplicates);
     const std::vector<AllocatedCharacter>& entries()const{return assets_->characters;}
+    Bytes checkpoint()const;
+    CharacterMenuAdapter stage_checkpoint(View)const;
 private:
     std::shared_ptr<const CharacterNamespace> assets_;
     std::array<std::optional<std::size_t>,4> custom_{};
+    std::array<std::optional<std::size_t>,CustomStageSlots> displayed_{};
     unsigned owner_=0;
     bool duplicates_=false;
     bool drumstick_=false,tt_=false;

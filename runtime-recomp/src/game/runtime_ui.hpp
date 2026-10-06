@@ -6,6 +6,7 @@
 #include <string>
 
 namespace dkr::mods { struct PreparedModLaunch; }
+namespace dkr::mods::online { class RuntimeResources; }
 namespace dkr::runtime::rom { struct Identity; }
 
 struct SDL_Window;
@@ -32,6 +33,10 @@ struct StartupResult {
 };
 
 void configure(const std::filesystem::path& config_directory);
+void shutdown_online_mods();
+// Game stopped / launch admission only. Empty means a vanilla manifest.
+// Throws rather than silently launching if an accepted mod proof is missing.
+std::shared_ptr<const dkr::mods::online::RuntimeResources> online_mod_resources();
 void persist_settings();
 // Called only after an explicitly selected renderer backend fails and RT64
 // successfully recovers with Automatic. Persist the recovered choice so the

@@ -72,11 +72,27 @@ public:
     Commit commit(std::span<std::uint8_t> guest_words,Plan&&);
     // Cancellation invalidates prepared plans without changing guest state.
     void cancel();
+    struct ReplayRestore {
+    private:
+        friend class ResidentAssetState;
+        const ResidentAssetState* authority=nullptr;
+        std::uint64_t expected=0,generation=0;
+        CacheNamespace cache;
+        std::shared_ptr<State> next;
+    };
+    Bytes checkpoint()const;
+    ReplayRestore stage_checkpoint(View bytes,
+        const std::map<std::string,std::shared_ptr<const ResidentBank>>& admitted)const;
+    // Matching guest RAM must be restored in the same exclusive transaction.
+    // No scene loading, RAM-table rewrites or freeing retained assets occurs.
+    bool commit_checkpoint(ReplayRestore&&);
 private:
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::shared_ptr<State> current_;
     ResidentAssetLayout layout_;
     CacheNamespace cache_;
     std::uint64_t generation_=0;
+    // Never rewind transaction authority when restoring a replay generation.
+    std::uint64_t mutation_=0;
 };
 } // namespace dkr::mods

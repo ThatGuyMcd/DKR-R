@@ -81,6 +81,12 @@
   ],
   "functionHooks": [
     {
+      "function": "update_player_camera",
+      "beforeVram": "0x800580A8",
+      "text": "extern void dkr_resolve_follow_camera(uint8_t*, recomp_context*, uint32_t); dkr_resolve_follow_camera(rdram, ctx, (uint32_t)MEM_W(0x38, ctx->r29));",
+      "reason": "After the complete normal follow-camera update and before stack release, resolve bounded solid level geometry clearance. The saved original Object argument is still at sp+0x38. Preserve scripted/finish cameras, controls, gameplay physics and the retail void-cover fallback."
+    },
+    {
       "function": "__scMain",
       "beforeVram": "0x80079648",
       "text": "extern void dkr_scheduler_keep_host_tasks(uint8_t*, uint32_t, uint32_t, uint32_t); dkr_scheduler_keep_host_tasks(rdram, (uint32_t)ctx->r18, 0x800DE754U, 0x800DE758U);",
@@ -961,6 +967,30 @@
       "beforeVram": "0x8006DD70",
       "text": "extern void dkr_custom_tracks_auto_boot(uint8_t*, recomp_context*); dkr_custom_tracks_auto_boot(rdram, ctx);",
       "reason": "Immediately after mode_menu reads menu_loop result, before the MENU_RESULT_FLAGS_200 test. Track Lab auto boot answers with the same value the menus produce when a track is chosen, so retail performs its own start sequence rather than the host reproducing vehicle, entrance, cutscene and game mode by hand."
+    },
+    {
+      "function": "track_setup_racers",
+      "beforeVram": "0x8000cc7c",
+      "text": "extern void dkr_legacy_character_ai_event(uint8_t*, recomp_context*, unsigned, void (*)(uint8_t*, recomp_context*)); dkr_legacy_character_ai_event(rdram, ctx, 0U, rand_range);",
+      "reason": "Offline custom AI identities are selected after native topology and scoped to the primary racer spawn; boss, hub, demo and ghost paths remain stock."
+    },
+    {
+      "function": "track_setup_racers",
+      "beforeVram": "0x8000d0f0",
+      "text": "extern void dkr_legacy_character_ai_event(uint8_t*, recomp_context*, unsigned, void (*)(uint8_t*, recomp_context*)); dkr_legacy_character_ai_event(rdram, ctx, 1U, rand_range);",
+      "reason": "Offline custom AI identities are selected after native topology and scoped to the primary racer spawn; boss, hub, demo and ghost paths remain stock."
+    },
+    {
+      "function": "track_setup_racers",
+      "beforeVram": "0x8000d788",
+      "text": "extern void dkr_legacy_character_ai_event(uint8_t*, recomp_context*, unsigned, void (*)(uint8_t*, recomp_context*)); dkr_legacy_character_ai_event(rdram, ctx, 2U, rand_range);",
+      "reason": "Offline custom AI identities are selected after native topology and scoped to the primary racer spawn; boss, hub, demo and ghost paths remain stock."
+    },
+    {
+      "function": "track_setup_racers",
+      "beforeVram": "0x8000d790",
+      "text": "extern void dkr_legacy_character_ai_event(uint8_t*, recomp_context*, unsigned, void (*)(uint8_t*, recomp_context*)); dkr_legacy_character_ai_event(rdram, ctx, 3U, rand_range);",
+      "reason": "Offline custom AI identities are selected after native topology and scoped to the primary racer spawn; boss, hub, demo and ghost paths remain stock."
     }
   ],
   "stubs": [

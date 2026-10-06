@@ -172,8 +172,14 @@ void register_services_test() {
     dkr_probe_offline_services(1);
     for(const char* name:{"dkr_apply_gameplay_fov","dkr_hud_element_begin","dkr_presentation_object_begin"}) {
         assert(!call(name).completed); // audited identities require explicit profile.
-        dkr_probe_canonical_presentation(1); const auto saved=context;
-        assert(call(name).completed && std::memcmp(&saved,&context,sizeof(context))==0);
+        dkr_probe_canonical_presentation(1);
+        // Full-scene semantic hooks run inside a draw pass in production;
+        // initialise that pass's pinned revision addresses/scopes here too.
+        dkr_probe_draw_begin();const auto saved=context;
+        const auto result=call(name);
+        if(!result.completed || std::memcmp(&saved,&context,sizeof(context))!=0)
+            std::cerr<<"Default presentation service check failed: "<<name<<" ("<<(result.blocked?result.blocked:"register mutation")<<")\n";
+        assert(result.completed && std::memcmp(&saved,&context,sizeof(context))==0);
         dkr_probe_canonical_presentation(0);
     }
     dkr_probe_canonical_presentation(1);

@@ -1,6 +1,7 @@
 #pragma once
 #include "legacy_mod_format.hpp"
 #include <functional>
+#include <map>
 
 namespace dkr::mods {
 struct Progress {
@@ -15,5 +16,6 @@ using ProgressCallback=std::function<bool(const Progress&)>;
 void stage_import(const std::filesystem::path& source,
     const std::vector<std::filesystem::path>& owned_roms,
     const std::filesystem::path& fresh_destination,
-    const ProgressCallback& progress={});
+    const ProgressCallback& progress={},
+    const std::map<std::string,std::string>& source_labels={});
 } // namespace dkr::mods

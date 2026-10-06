@@ -2,6 +2,7 @@
 // No SDL window, renderer, user configuration, ROM or filesystem mutation.
 #include "mods/legacy_mod_library.hpp"
 #include "mods/legacy_mod_browser.hpp"
+#include "custom_tracks.hpp"
 #include "generated/racing_banana_font.h"
 #include "generated/jumpman_font.h"
 #include "generated/selawik_font.h"
