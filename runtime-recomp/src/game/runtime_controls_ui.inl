@@ -35,6 +35,10 @@ struct ControlsPageState {
     // or until the page is left.
     std::optional<ControlsSnapshot> undo;
     std::string undo_message;
+    // Explicit tester readings stay fixed between requests, separately for
+    // each local player. Live painted meters continue polling as before.
+    std::array<std::string, dkr::runtime::input::kPlayerCount> controller_readings{};
+    std::array<std::string, dkr::runtime::input::kPlayerCount> motion_readings{};
 };
 ControlsPageState g_controls_page;
 
@@ -111,11 +115,71 @@ std::string FriendlyBinding(const std::string& value) {
     return value;
 }
 
+// Capture diagnostics only on an explicit request. Numerical AX output is
+// never driven by the continuously updated visual meters.
+void DrawControlsInputReading(ControlsPageState& state, bool motion, bool live, float width) {
+    const std::size_t player = g_selected_player;
+    std::string& captured = motion ? state.motion_readings[player] : state.controller_readings[player];
+    const char* button = motion ? "Read current motion input" : "Read current controller input";
+    if (SettingsButton(button, 0.0F, false, SettingsButtonTone::Plain, false,
+                       "Hold the controller in the position to test, then activate this action. The captured reading stays fixed until you read again.")) {
+        const auto format_axis = [](float value) {
+            char text[16]{};
+            const float bounded = std::isfinite(value) ? std::clamp(value, -1.0F, 1.0F) : 0.0F;
+            std::snprintf(text, sizeof(text), "%.2f", static_cast<double>(bounded));
+            return std::string(text);
+        };
+        const std::string prefix = "Captured Player " + std::to_string(player + 1U) +
+                                   (motion ? " motion input: " : " controller input: ");
+        if (motion) {
+            const bool available = dkr::runtime::platform::gyro_available(player);
+            if (!live) captured = prefix + "Unavailable. Open the in-game overlay to test motion steering.";
+            else if (!available) captured = prefix + "Unavailable. No motion sensor was reported.";
+            else captured = prefix + "Horizontal " + format_axis(dkr::runtime::input::gyro_steering_position(player)) +
+                            ", vertical " + format_axis(dkr::runtime::input::gyro_steering_y_position(player)) +
+                            ". Axes range from minus one to one.";
+        } else {
+            const auto reading = dkr::runtime::platform::player_input_preview(player);
+            if (!reading.controller_connected) captured = prefix + "Unavailable. Connect and assign a controller first.";
+            else {
+                std::string buttons;
+                for (unsigned index = 0; index < 32U; ++index) {
+                    if ((reading.controller_buttons & (std::uint32_t{1} << index)) == 0U) continue;
+                    const std::string raw = dkr::runtime::input::controller_binding_name(static_cast<int>(index));
+                    const std::string name = raw == "Unbound" || raw == "Unknown button"
+                        ? "Button " + std::to_string(index + 1U) : FriendlyBinding(raw);
+                    if (!buttons.empty()) buttons += ", ";
+                    buttons += name;
+                }
+                captured = prefix + "Horizontal " + format_axis(reading.stick_x) + ", vertical " +
+                           format_axis(reading.stick_y) + ". Axes range from minus one to one. Pressed controller buttons: " +
+                           (buttons.empty() ? "None." : buttons + ".");
+            }
+        }
+    }
+    PaddockGap(8.0F);
+    const std::string text = captured.empty()
+        ? "No reading captured. Use Read current input while holding the controller in the position to test."
+        : captured;
+    PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetText), text, width);
+    dkr::runtime::accessibility::Node node;
+    node.id = motion ? "controls-motion-reading" : "controls-controller-reading";
+    node.role = dkr::runtime::accessibility::Role::StaticText;
+    node.label = text;
+    node.help = "Captured snapshot. Read again to refresh; live input does not change this reading.";
+    AccessibleWidget(std::move(node));
+}
+
 // .controls-scope: who a section applies to.
-void ControlsScope(bool shared, float width) {
+void ControlsScope(bool shared, float width, const char* id = "controls-settings-scope") {
     const std::string text = shared ? std::string("Applies to all players")
                                     : "Player " + std::to_string(g_selected_player + 1U) + " settings";
     PaddockText(PaddockReading(13.0F, true, 1.45F), PaddockRgb(kSetWarm), text, width);
+    dkr::runtime::accessibility::Node node;
+    node.id = id;
+    node.role = dkr::runtime::accessibility::Role::StaticText;
+    node.label = text;
+    AccessibleWidget(std::move(node));
     PaddockGap(12.0F);
 }
 
@@ -123,11 +187,21 @@ void ControlsScope(bool shared, float width) {
 void ControlsHeading(std::string_view text, float width, float top = 0.0F) {
     PaddockGap(top);
     PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), text, width);
+    dkr::runtime::accessibility::Node node;
+    node.id = "controls-heading-" + std::to_string(ImGui::GetID(text.data(), text.data() + text.size()));
+    node.role = dkr::runtime::accessibility::Role::StaticText;
+    node.label = text;
+    AccessibleWidget(std::move(node));
     PaddockGap(16.0F);
 }
 
 void ControlsNote(std::string_view text, float width, unsigned colour = kSetMuted) {
     PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(colour), text, width);
+    dkr::runtime::accessibility::Node node;
+    node.id = "controls-note-" + std::to_string(ImGui::GetID(text.data(), text.data() + text.size()));
+    node.role = dkr::runtime::accessibility::Role::StaticText;
+    node.label = text;
+    AccessibleWidget(std::move(node));
     PaddockGap(12.0F);
 }
 
@@ -139,7 +213,13 @@ bool ControlsDisclosure(const char* id, std::string_view label, bool& open, floa
     draw->AddRectFilled(at, {at.x + width, at.y + 1.0F}, PaddockCol(kCtlLine));
     ImGui::SetCursorScreenPos({at.x, at.y + 1.0F});
     const PaddockPress press = PaddockBeginPress(id, {width, 48.0F});
-    if (press.pressed) open = !open;
+    dkr::runtime::accessibility::Node node;
+    node.role = dkr::runtime::accessibility::Role::Disclosure;
+    node.label = label;
+    node.selected = open;
+    node.help = "Show or hide these additional controls.";
+    const auto action = AccessibleWidget(std::move(node));
+    if (press.pressed || (action && action->kind == dkr::runtime::accessibility::ActionKind::Press)) open = !open;
     const PaddockType type = PaddockReading(14.0F, true, 1.35F);
     const ImU32 ink = PaddockApply(PaddockMix(PaddockRgb(kSetText), PaddockRgb(0xFFFFFF), press.hover));
     const float top = std::round(press.min.y + (48.0F - type.line) * 0.5F);
@@ -200,6 +280,12 @@ void ControlsAxis(std::string_view label, float value, bool live, float width) {
     PaddockDrawRun(draw, type, {at.x + width - shown_width, std::round(mid - type.line * 0.5F)},
                    PaddockCol(kSetText), shown.data(), shown.data() + shown.size());
     ImGui::Dummy({width, 32.0F});
+    dkr::runtime::accessibility::Node node;
+    node.id = "controls-axis-" + std::to_string(ImGui::GetID(label.data(), label.data() + label.size()));
+    node.role = dkr::runtime::accessibility::Role::StaticText;
+    node.label = std::string(label) + " steering test: " + (live ? "Live input available" : "Unavailable");
+    node.help = "The visual meter displays the current steering input from minus one to one.";
+    AccessibleWidget(std::move(node));
 }
 
 void BeginControllerCapture(int action, CaptureDevice device, bool secondary = false) {
@@ -317,6 +403,8 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
                     std::string("Buttons: ") + (!status.connected ? "Unavailable"
                                                 : preview.buttons != 0U ? "Pressed" : "None pressed"),
                     inner);
+        PaddockGap(12.0F);
+        DrawControlsInputReading(state, false, true, inner);
         box.End([](ImDrawList* draw, ImVec2 a, ImVec2 b) {
             PaddockPanel(draw, a, b, {PaddockRound(8.0F), PaddockRgb(kCtlSurface), PaddockRgb(kCtlLine), 1.0F});
         });
@@ -331,7 +419,7 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
     ControlsNote("For this player only. Keyboard input requires the game to be focused.", width);
 
     if (ControlsDisclosure("##shared", "Shared settings", state.shared_open, width)) {
-        ControlsScope(true, width);
+        ControlsScope(true, width, "controls-shared-settings-scope");
         int keyboard_player = dkr::runtime::input::keyboard_player();
         if (SettingsDropdown("keyboard-player", "Keyboard player", &keyboard_player,
                              {"Player 1", "Player 2", "Player 3", "Player 4"}, width)) {
@@ -378,7 +466,7 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
     }
 
     if (ControlsDisclosure("##advanced", "Advanced compatibility", state.advanced_open, width)) {
-        ControlsScope(true, width);
+        ControlsScope(true, width, "controls-compatibility-scope");
         int backend = static_cast<int>(platform::requested_input_backend());
         if (SettingsDropdown("backend", "Preferred input backend", &backend,
                              {"Automatic (SDL3 on Steam Deck)", "SDL2 compatibility", "SDL3 native"}, width)) {
@@ -491,10 +579,16 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
                     is_keyboard ? input::keyboard_binding_name(source) : input::controller_binding_name(source));
                 ImGui::PushID(device_column);
                 const std::string label = name + "##binding";
+                const std::string accessible_label = "Player " + std::to_string(g_selected_player + 1U) +
+                    " " + input::action_label(action) + " " +
+                    (is_keyboard ? "keyboard binding" : secondary ? "alternate controller binding" : "controller binding");
+                const char* help = is_keyboard
+                    ? "Choose a new keyboard key. Press a key to save; Escape or Cancel leaves this binding unchanged."
+                    : "Choose a new controller button or axis. Escape or Cancel leaves this binding unchanged.";
                 if (SettingsButton(label.c_str(), cell_width, false,
                                    unbound ? SettingsButtonTone::Unbound
                                    : secondary ? SettingsButtonTone::Outline : SettingsButtonTone::Plain,
-                                   true, nullptr, 8.0F)) {
+                                   true, help, 8.0F, accessible_label, name)) {
                     BeginControllerCapture(index, is_keyboard ? CaptureDevice::Keyboard : CaptureDevice::Controller,
                                            secondary);
                 }
@@ -554,7 +648,9 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
     }
     PaddockGap(20.0F);
     const std::string player = std::to_string(g_selected_player + 1U);
-    if (SettingsButton("Restore this player\xE2\x80\x99s bindings")) {
+    if (SettingsButton("Restore this player\xE2\x80\x99s bindings", 0.0F, false,
+                       SettingsButtonTone::Plain, false,
+                       "Restore the selected player's default bindings. Undo is available after restoring.")) {
         ControlsSnapshot before = TakeControlsSnapshot();
         input::reset_defaults(g_selected_player);
         commit();
@@ -635,13 +731,15 @@ void DrawControlsDriving(ControlsPageState& state, float width, const std::funct
             ImGui::PushID(static_cast<int>(vehicle));
             bool invert_x = input::vehicle_stick_x_inverted(type);
             ImGui::SetCursorScreenPos({at.x + column + 8.0F, y + 8.0F});
-            if (SettingsCheck("##x", "Invert", &invert_x, column - 16.0F)) {
+            const std::string horizontal_label = std::string(kVehicles[vehicle]) + " invert horizontal stick";
+            if (SettingsCheck("##x", "Invert", &invert_x, column - 16.0F, {}, false, horizontal_label)) {
                 input::set_vehicle_stick_x_inverted(type, invert_x);
                 commit();
             }
             bool invert_y = input::vehicle_stick_y_inverted(type);
             ImGui::SetCursorScreenPos({at.x + column * 2.0F + 8.0F, y + 8.0F});
-            if (SettingsCheck("##y", "Invert", &invert_y, column - 16.0F)) {
+            const std::string vertical_label = std::string(kVehicles[vehicle]) + " invert vertical stick";
+            if (SettingsCheck("##y", "Invert", &invert_y, column - 16.0F, {}, false, vertical_label)) {
                 input::set_vehicle_stick_y_inverted(type, invert_y);
                 commit();
             }
@@ -708,7 +806,7 @@ void DrawControlsDriving(ControlsPageState& state, float width, const std::funct
 
 // ------------------------------------------------------------ motion
 
-void DrawControlsMotion(float width, bool live, const std::function<void()>& commit) {
+void DrawControlsMotion(ControlsPageState& state, float width, bool live, const std::function<void()>& commit) {
     namespace input = dkr::runtime::input;
     const std::size_t player = g_selected_player;
     ControlsScope(false, width);
@@ -772,20 +870,28 @@ void DrawControlsMotion(float width, bool live, const std::function<void()>& com
         PaddockGap(6.0F);
         ControlsAxis("Horizontal", input::gyro_steering_position(player), live && available, inner);
         ControlsAxis("Vertical", input::gyro_steering_y_position(player), live && available, inner);
+        PaddockGap(12.0F);
+        DrawControlsInputReading(state, true, live, inner);
         box.End([](ImDrawList* draw, ImVec2 a, ImVec2 b) {
             PaddockPanel(draw, a, b, {PaddockRound(8.0F), PaddockRgb(kCtlSurface), PaddockRgb(kCtlLine), 1.0F});
         });
     }
     PaddockGap(20.0F);
-    const char* reason = !live ? "Available from the in-game overlay." : "No motion sensor was reported.";
+    const bool calibrating = input::gyro_calibrating(player);
+    const char* unavailable_reason = !live ? "Available from the in-game overlay." : "No motion sensor was reported.";
+    const char* recenter_help = live && available
+        ? "Set the controller's current orientation as the steering center." : unavailable_reason;
+    const char* calibration_help = calibrating ? "Calibration is in progress. Keep the controller still."
+        : live && available ? "Begin motion sensor calibration. Keep the controller still until it finishes."
+                            : unavailable_reason;
     ControlsRow(width, [&](float cell) {
         if (SettingsButton("Recenter steering", cell, !live || !available, SettingsButtonTone::Plain, false,
-                           reason)) {
+                           recenter_help)) {
             input::recenter_gyro(player);
         }
     }, [&](float cell) {
-        if (SettingsButton("Calibrate controller", cell, !live || !available || input::gyro_calibrating(player),
-                           SettingsButtonTone::Plain, false, reason)) {
+        if (SettingsButton("Calibrate controller", cell, !live || !available || calibrating,
+                           SettingsButtonTone::Plain, false, calibration_help)) {
             input::begin_gyro_calibration(player);
         }
     });
@@ -835,22 +941,28 @@ void DrawControlsShortcuts(float width, const std::function<void()>& commit) {
             PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Keyboard", cell);
             PaddockGap(6.0F);
             const auto binding = input::shortcut_keyboard_binding(shortcut);
-            const std::string name =
-                FriendlyBinding(ShortcutBindingName(CaptureDevice::Keyboard, binding)) + "##keyboard";
+            const std::string current = FriendlyBinding(ShortcutBindingName(CaptureDevice::Keyboard, binding));
+            const std::string name = current + "##keyboard";
+            const std::string accessible_label = std::string(label) + " keyboard shortcut binding";
             if (SettingsButton(name.c_str(), cell, false,
                                binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
-                                                                  : SettingsButtonTone::Plain)) {
+                                                                  : SettingsButtonTone::Plain,
+                               false, "Choose one keyboard key, or hold the first key and press a second. The binding saves automatically. Escape or Cancel leaves it unchanged.",
+                               14.0F, accessible_label, current)) {
                 BeginShortcutCapture(CaptureDevice::Keyboard, shortcut);
             }
         }, [&](float cell) {
             PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Controller", cell);
             PaddockGap(6.0F);
             const auto binding = input::shortcut_controller_binding(shortcut);
-            const std::string name =
-                FriendlyBinding(ShortcutBindingName(CaptureDevice::Controller, binding)) + "##controller";
+            const std::string current = FriendlyBinding(ShortcutBindingName(CaptureDevice::Controller, binding));
+            const std::string name = current + "##controller";
+            const std::string accessible_label = std::string(label) + " controller shortcut binding";
             if (SettingsButton(name.c_str(), cell, false,
                                binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
-                                                                  : SettingsButtonTone::Plain)) {
+                                                                  : SettingsButtonTone::Plain,
+                               false, "Choose one button on Player 1's controller, or hold the first button and press a second. The binding saves automatically. Escape or Cancel leaves it unchanged.",
+                               14.0F, accessible_label, current)) {
                 BeginShortcutCapture(CaptureDevice::Controller, shortcut);
             }
         });
@@ -891,6 +1003,8 @@ void DrawControlsCaptureModal() {
     ImGui::PopStyleVar(4);
     if (!visible) return;
     g_paddock_modal_frame = ImGui::GetFrameCount();
+    AccessibilityScope(std::string(g_accessibility_scope.starts_with("overlay/") ? "overlay/modal/" : "modal/") +
+                       kCapturePopup, "Choose a new control", true);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
     const float inner = width - 52.0F;
     PaddockText(PaddockReading(20.0F, true, 1.4F), PaddockRgb(kSetText), "Choose a new control", inner);
@@ -916,6 +1030,10 @@ void DrawControlsCaptureModal() {
         heading = "Assign Player " + std::to_string(g_selected_player + 1U);
         help = "Press any button on the controller you want this player to use. Escape cancels.";
     }
+    if (g_accessibility_launcher) {
+        dkr::runtime::accessibility::add_text("capture-target", heading);
+        dkr::runtime::accessibility::add_text("capture-instructions", help);
+    }
     PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), heading, inner);
     PaddockGap(13.0F);
     PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetText), help, inner);
@@ -923,8 +1041,13 @@ void DrawControlsCaptureModal() {
         PaddockGap(12.0F);
         const dkr::runtime::input::ShortcutBinding pending{g_shortcut_capture_sources[0],
                                                            dkr::runtime::input::kUnbound};
-        PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(kSetWarm),
-                    "Captured: " + FriendlyBinding(ShortcutBindingName(g_capture_device, pending)), inner);
+        const std::string captured = "Captured: " + FriendlyBinding(ShortcutBindingName(g_capture_device, pending));
+        PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(kSetWarm), captured, inner);
+        dkr::runtime::accessibility::Node node;
+        node.id = "capture-pending";
+        node.role = dkr::runtime::accessibility::Role::StaticText;
+        node.label = captured;
+        AccessibleWidget(std::move(node));
     }
     PaddockGap(24.0F);
     const char* clear_label = g_capture_action == kAssignControllerCaptureAction ? "Clear assignment"
@@ -957,7 +1080,8 @@ void DrawControlsCaptureModal() {
         g_capture_finished = true;
     }
     ImGui::SameLine(0.0F, 12.0F);
-    if (SettingsButton("Cancel", cancel_width)) g_capture_finished = true;
+    if (SettingsButton("Cancel", cancel_width, false, SettingsButtonTone::Plain, false,
+                       "Close without changing the current binding or controller assignment.")) g_capture_finished = true;
     if (g_capture_finished) {
         ImGui::CloseCurrentPopup();
         g_capture_action = -1;
@@ -978,6 +1102,8 @@ void DrawControlsPage(float available_width, bool live) {
     if (entered) {
         state.context = ImGui::GetCurrentContext();
         state.undo.reset();
+        state.controller_readings.fill({});
+        state.motion_readings.fill({});
     }
     state.last_frame = frame;
     // A shortcut chord waits a moment for its second input.
@@ -1032,7 +1158,8 @@ void DrawControlsPage(float available_width, bool live) {
         for (std::size_t player = 0; player < dkr::runtime::input::kPlayerCount; ++player) {
             ImGui::SetCursorScreenPos({chips_x + (chip_width + 10.0F) * static_cast<float>(player), chips_y});
             const std::string label = "Player " + std::to_string(player + 1U);
-            if (DrawSoundChip(label.c_str(), player == g_selected_player, chip_width)) {
+            if (DrawSoundChip(label.c_str(), player == g_selected_player, chip_width,
+                              "Configure devices and bindings for this local player.")) {
                 g_selected_player = player;
             }
         }
@@ -1087,7 +1214,7 @@ void DrawControlsPage(float available_width, bool live) {
     } else if (g_controls_section == 2) {
         DrawControlsDriving(state, width, commit);
     } else if (g_controls_section == 3) {
-        DrawControlsMotion(width, live, commit);
+        DrawControlsMotion(state, width, live, commit);
     } else {
         DrawControlsShortcuts(width, commit);
     }

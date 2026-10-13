@@ -75,6 +75,7 @@ std::map<ImGuiID, PaddockTweenState> g_paddock_tweens;
 // time starts settled, so a page never animates in from nothing.
 inline float PaddockTween(ImGuiID id, bool on, float in_seconds,
                           float out_seconds) {
+    if (dkr::runtime::accessibility::display_preferences().reduce_motion) return on ? 1.0F : 0.0F;
     auto [found, added] = g_paddock_tweens.try_emplace(id);
     PaddockTweenState& state = found->second;
     const double now = PaddockClock();
@@ -99,7 +100,7 @@ inline ImGuiID PaddockKey(const char* purpose, ImGuiID seed) {
 // `transform: scale()` of a pressed control, without touching layout.
 inline void PaddockScaleVertices(ImDrawList* draw, int first_vertex,
                                  ImVec2 centre, float scale) {
-    if (scale >= 0.9999F) return;
+    if (scale >= 0.9999F || dkr::runtime::accessibility::display_preferences().reduce_motion) return;
     for (int index = first_vertex; index < draw->VtxBuffer.Size; ++index) {
         ImVec2& position = draw->VtxBuffer[index].pos;
         position.x = centre.x + (position.x - centre.x) * scale;
@@ -994,7 +995,7 @@ inline bool PaddockButton(const char* label,
                       press.min.y + std::round((height - text_height) * 0.5F)},
                      wrap, lines, style);
     PaddockEndPress(press, look.radius);
-    return press.pressed;
+    return AccessibleWidgetPressed(std::string_view(label, end - label), press.pressed);
 }
 
 // An underlined text link (.mods-text-link).
@@ -1012,7 +1013,7 @@ inline bool PaddockTextLink(const char* label) {
     draw->AddRectFilled({press.min.x, baseline + 3.0F},
                         {press.min.x + width, baseline + 4.0F}, colour);
     PaddockEndPress(press, 3.0F, 1.0F);
-    return press.pressed;
+    return AccessibleWidgetPressed(label, press.pressed);
 }
 
 inline float PaddockSectionTabWidth(const char* label) {
@@ -1062,7 +1063,13 @@ inline bool PaddockSectionTab(const char* label, bool open, float stretch = 0.0F
                    PaddockCol(0x031623), label, end);
     PaddockDrawRun(draw, type, {text_x, content_top}, text, label, end);
     PaddockEndPress(press, 12.0F);
-    return press.pressed;
+    dkr::runtime::accessibility::Node disclosure;
+    disclosure.role = dkr::runtime::accessibility::Role::Disclosure;
+    disclosure.label = std::string_view(label, end - label);
+    disclosure.selected = open;
+    disclosure.value = open ? "Expanded" : "Collapsed";
+    const auto action = AccessibleWidget(std::move(disclosure));
+    return press.pressed || (action && action->kind == dkr::runtime::accessibility::ActionKind::Press);
 }
 
 // ------------------------------------------------------------------ inputs
@@ -1103,7 +1110,7 @@ inline bool PaddockSwitch(const char* id, bool* value, const char* on_label,
         ImGui::SetTooltip("%s", description);
     }
     bool changed = false;
-    if (press.pressed) {
+    if (AccessibleTogglePressed(on_label, *value, press.pressed, true, description ? description : "")) {
         *value = !*value;
         changed = true;
     }
@@ -1135,7 +1142,7 @@ inline bool PaddockCheckbox(const char* id, const char* label, bool* value,
     const float height = std::max({42.0F, text_height, 24.0F});
     const PaddockPress press = PaddockBeginPress(id, {width, height});
     bool changed = false;
-    if (press.pressed) {
+    if (AccessibleTogglePressed(label, *value, press.pressed)) {
         *value = !*value;
         changed = true;
     }

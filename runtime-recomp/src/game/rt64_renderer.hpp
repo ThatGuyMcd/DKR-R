@@ -65,6 +65,7 @@ private:
     bool observed_overlay_visible_ = false;
     bool wait_replay_deferred_logged_ = false;
     bool owned_mode_ = false;
+    std::uint64_t accessibility_session_ = 0;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     std::unique_ptr<netplay::experimental::present_gate::Registration> owned_registration_;
     std::chrono::steady_clock::time_point last_owned_report_{};

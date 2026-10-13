@@ -424,6 +424,7 @@ struct QuickJoinTestAccess {
             std::mutex mutex;
             std::map<std::string,std::shared_ptr<rtc::WebSocket>> routes;
             std::vector<std::shared_ptr<rtc::WebSocket>> sockets;
+            std::vector<std::string> signaling;
         };
         const auto server_state=std::make_shared<ServerState>();
         rtc::WebSocketServer::Configuration server_config;
@@ -444,7 +445,9 @@ struct QuickJoinTestAccess {
                     if(!packet.contains("dst")) return;
                     std::shared_ptr<rtc::WebSocket> target;
                     { std::scoped_lock lock(server_state->mutex); const auto found=server_state->routes.find(packet["dst"].get<std::string>());
-                      if(found!=server_state->routes.end()) target=found->second; }
+                      if(found!=server_state->routes.end()) target=found->second;
+                      server_state->signaling.push_back(id+" -> "+packet["dst"].get<std::string>()+
+                          " target_open="+std::to_string(target && target->isOpen())+" "+packet.dump()); }
                     packet["src"]=id; if(target && target->isOpen()) target->send(packet.dump());
                 });
                 socket->send(Json{{"type","OPEN"}}.dump());
@@ -457,13 +460,53 @@ struct QuickJoinTestAccess {
         });
         quick_test_signaling_endpoint="ws://127.0.0.1:"+std::to_string(server.port());
         QuickJoinTransport host(true,"ABCDE"),client(false,"ABCDE");
+        std::atomic<unsigned> staged_routes{0};
+        const auto check_staged_route=[&](const std::shared_ptr<rtc::PeerConnection>& connection) {
+            // A construction scheduling gap must never release signaling:
+            // early answers would be dropped until the route is published.
+            // Auto-negotiation sets this description synchronously when the
+            // first outgoing channel is created, so this catches that race
+            // without relying on a particular scheduler or network speed.
+            assert(!connection->localDescription());
+            ++staged_routes;
+        };
+        host.before_route_publication_=check_staged_route;
+        client.before_route_publication_=check_staged_route;
         std::string error; assert(host.open(0,error));
+        const auto diagnose=[&] {
+            // All data belongs to this private synthetic rendezvous. Record
+            // enough negotiation state to distinguish signaling loss, ICE
+            // failure and an open channel that never delivered its bootstrap.
+            for(auto* transport:{&host,&client}) {
+                std::scoped_lock lock(transport->mutex_);
+                std::cerr<<"Quick Join diagnostics: "<<(transport==&host?"host":"client")
+                    <<" signaling_ready="<<transport->signaling_ready_.load()
+                    <<" connecting="<<transport->signaling_connecting_.load()
+                    <<" failed="<<transport->failed_.load()<<" error="<<transport->failure_
+                    <<" bootstrap_bytes="<<transport->bootstrap_.size()<<'\n';
+                for(const auto& [id,peer]:transport->peers_) {
+                    std::cerr<<" peer="<<id<<" current="<<peer->current.load()
+                        <<" route_ready="<<peer->route_ready.load()
+                        <<" state="<<peer->connection->state()
+                        <<" ice="<<peer->connection->iceState()
+                        <<" gathering="<<peer->connection->gatheringState()
+                        <<" control_open="<<(peer->control_channel && peer->control_channel->isOpen())<<'\n';
+                    if(const auto local=peer->connection->localDescription()) std::cerr<<" local SDP: "<<std::string(*local)<<'\n';
+                    if(const auto remote=peer->connection->remoteDescription()) std::cerr<<" remote SDP: "<<std::string(*remote)<<'\n';
+                }
+            }
+            std::scoped_lock lock(server_state->mutex);
+            for(const auto& signal:server_state->signaling) std::cerr<<" rendezvous: "<<signal<<'\n';
+        };
         const auto wait=[&](const char* stage,auto predicate) {
             const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);
             while(!predicate() && std::chrono::steady_clock::now()<deadline) {
                 host.service(); client.service(); std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
-            if(!predicate()) throw std::runtime_error(std::string("Quick Join fixture timed out at: ")+stage);
+            if(!predicate()) {
+                diagnose();
+                throw std::runtime_error(std::string("Quick Join fixture timed out at: ")+stage);
+            }
             std::cout<<"Quick Join loopback stage complete: "<<stage<<'\n';
         };
         wait("host registration",[&]{return host.signaling_ready_.load();});
@@ -471,6 +514,7 @@ struct QuickJoinTestAccess {
         std::string bootstrap; PeerAddress host_address{},client_address{};
         wait("client bootstrap",[&]{return !bootstrap.empty() || client.take_quick_join_bootstrap(bootstrap,host_address);});
         assert(bootstrap=="experimental-private-test");
+        assert(staged_routes==2);
         wait("host peer route",[&] {
             std::scoped_lock lock(host.mutex_);
             if(host.peers_.empty()) return false;

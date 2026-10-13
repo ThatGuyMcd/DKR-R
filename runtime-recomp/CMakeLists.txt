@@ -843,8 +843,16 @@ if(DKR_RUNTIME_BUILD_GENERATED)
             src/game/runtime_rice_texture_import.cpp
             src/game/runtime_texture_packs.cpp
             src/game/runtime_ui.cpp
+            src/game/accessibility_observation.cpp
+            src/game/accessibility_feedback.cpp
+            src/game/runtime_accessibility.cpp
             "${DKR_RT64_SOURCE}/src/contrib/imgui/backends/imgui_impl_sdlrenderer2.cpp"
         )
+        if(APPLE AND NOT IOS)
+            list(APPEND DKR_GAME_SOURCES src/game/runtime_accessibility_macos.mm)
+            set_source_files_properties(src/game/runtime_accessibility_macos.mm
+                PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+        endif()
     endif()
     if(WIN32)
         list(APPEND DKR_GAME_SOURCES
@@ -2326,6 +2334,67 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
     )
     add_test(NAME DKRRendererSnapshot COMMAND DKRRendererSnapshotTests)
+
+    add_executable(DKRAccessibilityObservationTests
+        tests/accessibility_observation_tests.cpp
+        src/game/accessibility_observation.cpp)
+    target_include_directories(DKRAccessibilityObservationTests PRIVATE src/game)
+    add_test(NAME DKRAccessibilityObservation COMMAND DKRAccessibilityObservationTests)
+
+    add_executable(DKRAccessibilityFeedbackTests
+        tests/accessibility_feedback_tests.cpp
+        src/game/accessibility_feedback.cpp
+        src/game/accessibility_observation.cpp)
+    target_include_directories(DKRAccessibilityFeedbackTests PRIVATE src/game)
+    add_test(NAME DKRAccessibilityFeedback COMMAND DKRAccessibilityFeedbackTests)
+
+    add_executable(DKRAccessibilityHostTests
+        tests/accessibility_host_tests.cpp
+        src/game/runtime_accessibility.cpp)
+    target_include_directories(DKRAccessibilityHostTests PRIVATE src/game)
+    target_compile_definitions(DKRAccessibilityHostTests PRIVATE DKR_ACCESSIBILITY_NO_NATIVE=1)
+    add_test(NAME DKRAccessibilityHost COMMAND DKRAccessibilityHostTests)
+
+    add_executable(DKRAccessibilityImGuiTests
+        tests/accessibility_imgui_tests.cpp
+        src/game/runtime_accessibility.cpp
+        "${DKR_RT64_SOURCE}/src/contrib/imgui/imgui.cpp"
+        "${DKR_RT64_SOURCE}/src/contrib/imgui/imgui_draw.cpp"
+        "${DKR_RT64_SOURCE}/src/contrib/imgui/imgui_tables.cpp"
+        "${DKR_RT64_SOURCE}/src/contrib/imgui/imgui_widgets.cpp")
+    target_include_directories(DKRAccessibilityImGuiTests PRIVATE src/game
+        "${DKR_RT64_SOURCE}/src/contrib/imgui")
+    target_compile_definitions(DKRAccessibilityImGuiTests PRIVATE DKR_ACCESSIBILITY_NO_NATIVE=1)
+    add_test(NAME DKRAccessibilityImGui COMMAND DKRAccessibilityImGuiTests)
+
+    foreach(accessibility_target DKRAccessibilityHostTests DKRAccessibilityImGuiTests)
+        target_sources(${accessibility_target} PRIVATE
+            src/game/accessibility_feedback.cpp src/game/accessibility_observation.cpp)
+    endforeach()
+
+    if(APPLE AND NOT IOS)
+        find_package(SDL2 REQUIRED)
+        add_executable(DKRAccessibilityMacOSTests
+            tests/accessibility_macos_tests.mm
+            src/game/runtime_accessibility.cpp
+            src/game/runtime_accessibility_macos.mm)
+        target_include_directories(DKRAccessibilityMacOSTests PRIVATE src/game ${SDL2_INCLUDE_DIRS})
+        target_compile_options(DKRAccessibilityMacOSTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+        target_link_libraries(DKRAccessibilityMacOSTests PRIVATE ${SDL2_LIBRARIES} "-framework Cocoa")
+        add_test(NAME DKRAccessibilityMacOS COMMAND DKRAccessibilityMacOSTests)
+        add_executable(DKRAccessibilityMacOSHierarchyTests
+            tests/accessibility_macos_hierarchy_tests.mm
+            src/game/runtime_accessibility.cpp
+            src/game/runtime_accessibility_macos.mm)
+        target_include_directories(DKRAccessibilityMacOSHierarchyTests PRIVATE src/game ${SDL2_INCLUDE_DIRS})
+        target_compile_options(DKRAccessibilityMacOSHierarchyTests PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+        target_link_libraries(DKRAccessibilityMacOSHierarchyTests PRIVATE ${SDL2_LIBRARIES} "-framework Cocoa")
+        add_test(NAME DKRAccessibilityMacOSHierarchy COMMAND DKRAccessibilityMacOSHierarchyTests)
+        foreach(accessibility_target DKRAccessibilityMacOSTests DKRAccessibilityMacOSHierarchyTests)
+            target_sources(${accessibility_target} PRIVATE
+                src/game/accessibility_feedback.cpp src/game/accessibility_observation.cpp)
+        endforeach()
+    endif()
 
     add_executable(DKRPresentationIdentityTests
         tests/presentation_identity_tests.cpp

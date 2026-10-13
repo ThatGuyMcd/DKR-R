@@ -1,4 +1,6 @@
 #include "runtime_ui.hpp"
+#include "runtime_accessibility.hpp"
+#include "accessibility_feedback.hpp"
 #include "runtime_portable.hpp"
 #include "render_power_policy.hpp"
 #include "performance_trace.hpp"
@@ -86,6 +88,7 @@
 #include "render/rt64_generated_mip_config.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
+#include "runtime_accessibility_imgui.hpp"
 #include "imgui/imgui_impl_sdl2_custom.h"
 #include "imgui/backends/imgui_impl_sdlrenderer2.h"
 #include "nfd.h"
@@ -406,6 +409,135 @@ bool DkrRaceButton(const char* label, const ImVec2& size = ImVec2(0.0F, 0.0F)) {
 #define Button DkrRaceButton
 
 namespace {
+
+// Explicit semantics for the initial host slice; unregistered pages remain
+// labelled as unavailable rather than being mistaken for an accessible UI.
+thread_local bool g_accessibility_launcher = false;
+thread_local std::string g_accessibility_scope;
+thread_local bool g_accessibility_modal = false;
+
+void AccessibilityScope(std::string scope, std::string label, bool modal) {
+    if (!g_accessibility_launcher) return;
+    g_accessibility_scope = scope;
+    g_accessibility_modal = modal;
+    dkr::runtime::accessibility::select_scope(std::move(scope), std::move(label), modal);
+}
+
+bool AccessibleLastItem(const std::string& id, const char* label,
+                        bool pressed, bool enabled = true, bool selected = false,
+                        bool clip_to_window = false) {
+    if (!g_accessibility_launcher) return pressed;
+    ImGuiWindow* root = ImGui::GetCurrentWindow()->RootWindow;
+    const bool modal = (root->Flags & ImGuiWindowFlags_Modal) != 0;
+    if (modal != g_accessibility_modal ||
+        (modal && g_accessibility_scope != std::string("modal/") + root->Name &&
+         g_accessibility_scope != std::string("overlay/modal/") + root->Name)) return pressed;
+    ImVec2 minimum = ImGui::GetItemRectMin(), maximum = ImGui::GetItemRectMax();
+    if (clip_to_window) {
+        const ImRect clip = ImGui::GetCurrentWindow()->ClipRect;
+        minimum = ImMax(minimum, clip.Min);
+        maximum = ImMin(maximum, clip.Max);
+        if (maximum.x <= minimum.x || maximum.y <= minimum.y) return pressed;
+    }
+    const ImVec2 origin = ImGui::GetMainViewport()->Pos;
+    const bool available = enabled &&
+        (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0;
+    const bool accessible_press = dkr::runtime::accessibility::add_button(id, label,
+        {minimum.x - origin.x, minimum.y - origin.y,
+         maximum.x - minimum.x, maximum.y - minimum.y}, available, selected,
+         ImGui::IsItemFocused() && ImGui::GetIO().NavVisible);
+    dkr::runtime::accessibility::apply_imgui_focus(
+        dkr::runtime::accessibility::host_tree(), id);
+    if (dkr::runtime::accessibility::host_tree().has_accessibility_focus(id))
+        ImGui::GetWindowDrawList()->AddRect(minimum, maximum,
+            IM_COL32(255, 231, 126, 255), 4.0F, 0, 3.0F);
+    return pressed || accessible_press;
+}
+
+bool AccessibleButton(const char* id, const char* label, ImVec2 size) {
+    return AccessibleLastItem(id, label, ImGui::Button(label, size));
+}
+
+std::optional<dkr::runtime::accessibility::Action> AccessibleWidget(
+    dkr::runtime::accessibility::Node node) {
+    if (!g_accessibility_launcher) return std::nullopt;
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const bool modal = (window->RootWindow->Flags & ImGuiWindowFlags_Modal) != 0;
+    if (modal != g_accessibility_modal ||
+        (modal && g_accessibility_scope != std::string("modal/") + window->RootWindow->Name &&
+         g_accessibility_scope != std::string("overlay/modal/") + window->RootWindow->Name)) return std::nullopt;
+    if (node.id.empty()) node.id = "widget-" + std::to_string(ImGui::GetItemID());
+    const std::string id = node.id;
+    const ImVec2 minimum = ImGui::GetItemRectMin(), maximum = ImGui::GetItemRectMax();
+    const ImVec2 origin = ImGui::GetMainViewport()->Pos;
+    node.bounds = {minimum.x - origin.x, minimum.y - origin.y,
+                   maximum.x - minimum.x, maximum.y - minimum.y};
+    node.enabled &= (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) == 0;
+    node.focused = ImGui::IsItemFocused() && ImGui::GetIO().NavVisible;
+    const bool text_editor = node.role == dkr::runtime::accessibility::Role::TextField;
+    const auto action = dkr::runtime::accessibility::add_control(std::move(node));
+    dkr::runtime::accessibility::apply_imgui_focus(dkr::runtime::accessibility::host_tree(), id, text_editor);
+    return action;
+}
+
+bool AccessibleWidgetPressed(std::string_view label, bool pressed, bool enabled = true,
+                             bool selected = false, std::string_view help = {}) {
+    dkr::runtime::accessibility::Node node;
+    node.role = dkr::runtime::accessibility::Role::PushButton;
+    node.label = label; node.enabled = enabled; node.selected = selected; node.help = help;
+    const auto action = AccessibleWidget(std::move(node));
+    return pressed || (action && action->kind == dkr::runtime::accessibility::ActionKind::Press);
+}
+
+bool AccessibleTogglePressed(std::string_view label, bool value, bool pressed,
+                             bool enabled = true, std::string_view help = {}) {
+    dkr::runtime::accessibility::Node node;
+    node.role = dkr::runtime::accessibility::Role::Checkbox;
+    node.label = label; node.number = value ? 1 : 0; node.value = value ? "On" : "Off";
+    node.enabled = enabled; node.help = help;
+    const auto action = AccessibleWidget(std::move(node));
+    return pressed || (action && action->kind == dkr::runtime::accessibility::ActionKind::Press);
+}
+
+bool AccessibleRange(std::string_view label, int* value, int minimum, int maximum,
+                     bool changed, bool enabled = true, std::string_view help = {},
+                     std::string shown = {}, int step = 1) {
+    dkr::runtime::accessibility::Node node;
+    node.role = dkr::runtime::accessibility::Role::Slider;
+    node.label = label; node.number = *value; node.minimum = minimum; node.maximum = maximum;
+    node.step = std::max(step, 1);
+    node.value = shown.empty() ? std::to_string(*value) : std::move(shown);
+    node.enabled = enabled; node.help = help;
+    const auto action = AccessibleWidget(std::move(node));
+    if (action) {
+        const int requested = dkr::runtime::accessibility::range_value_for_action(
+            *value, minimum, maximum, step, *action);
+        changed |= requested != *value;
+        *value = requested;
+    }
+    return changed;
+}
+
+void AccessibilityModal(const char* name) {
+    if (!g_accessibility_launcher) return;
+    AccessibilityScope(std::string(g_accessibility_scope.starts_with("overlay/") ? "overlay/modal/" : "modal/") + name, name, true);
+    if (std::string_view(name) != "Quit DKR-R?" &&
+        std::string_view(name) != "Select Diddy Kong Racing ROM" &&
+        std::string_view(name) != "Restart DKR-R?" &&
+        std::string_view(name) != "CHOOSE A NEW CONTROL" &&
+        std::string_view(name) != "SET UP CONTROLLER" &&
+        std::string_view(name) != "ENTER DKR-R TEXT")
+        dkr::runtime::accessibility::add_text("dialog-coverage",
+            "This dialog is not yet exposed by the accessibility prototype. Use the existing keyboard or controller controls.");
+}
+
+ImVec4 AccessibleSurface(ImVec4 colour) {
+    const auto prefs = dkr::runtime::accessibility::display_preferences();
+    if (prefs.reduce_transparency || prefs.increase_contrast) colour.w = 1.0F;
+    if (prefs.increase_contrast) colour = {0.02F, 0.04F, 0.05F, 1.0F};
+    return colour;
+}
+
 
 using ultramodern::renderer::Antialiasing;
 using ultramodern::renderer::AspectRatio;
@@ -1203,6 +1335,17 @@ void ApplyStyle() {
     // the blue half of the racing backdrop. Warm yellow is shared with the
     // start lights and remains distinct from every card and button colour.
     style.Colors[ImGuiCol_NavHighlight] = {1.0F, 0.82F, 0.12F, 1.0F};
+    const auto prefs = dkr::runtime::accessibility::display_preferences();
+    if (prefs.increase_contrast) {
+        style.Colors[ImGuiCol_Text] = {1, 1, 1, 1};
+        style.Colors[ImGuiCol_TextDisabled] = {0.85F, 0.85F, 0.85F, 1};
+        style.Colors[ImGuiCol_Border] = {1, 1, 1, 1};
+        style.FrameBorderSize = 2.0F;
+    }
+    if (prefs.increase_contrast || prefs.reduce_transparency)
+        for (auto color : {ImGuiCol_WindowBg, ImGuiCol_ChildBg, ImGuiCol_PopupBg,
+                           ImGuiCol_FrameBg, ImGuiCol_Button}) style.Colors[color].w = 1.0F;
+
 }
 
 void LoadLauncherFonts() {
@@ -1690,6 +1833,10 @@ void SaveSettings() {
             if (g_sound_muted[channel]) sound_muted |= 1U << channel;
         }
         output << "sound_muted=" << sound_muted << '\n';
+        const auto speech = dkr::runtime::accessibility::feedback_preferences();
+        output << "accessibility_automatic_speech=" << speech.automatic_speech << '\n';
+        output << "accessibility_announce_position=" << speech.announce_position << '\n';
+        output << "accessibility_position_interval_ms=" << speech.position_interval.count() << '\n';
         if (g_eq_custom) {
             output << "eq_custom=" << (*g_eq_custom)[0] << ',' << (*g_eq_custom)[1]
                    << ',' << (*g_eq_custom)[2] << '\n';
@@ -2008,6 +2155,7 @@ bool LoadLegacyBindingSetting(const std::string& key, int number) {
 void LoadSettings() {
     g_skip_intro = false;
     g_skip_intro_destination = 0;
+    dkr::runtime::accessibility::set_feedback_preferences({});
     GraphicsConfig config = ultramodern::renderer::get_graphics_config();
     int settings_version = 0;
     bool settings_complete = false;
@@ -2144,6 +2292,15 @@ void LoadSettings() {
         if (player_gyro_key) continue;
         try {
             const int number = std::stoi(value);
+            if (key == "accessibility_automatic_speech" || key == "accessibility_announce_position" ||
+                key == "accessibility_position_interval_ms") {
+                auto speech = dkr::runtime::accessibility::feedback_preferences();
+                if (key == "accessibility_automatic_speech") speech.automatic_speech = number != 0;
+                else if (key == "accessibility_announce_position") speech.announce_position = number != 0;
+                else speech.position_interval = std::chrono::milliseconds(std::clamp(number, 500, 10000));
+                dkr::runtime::accessibility::set_feedback_preferences(speech);
+                continue;
+            }
             if(dkr::runtime::water::enhanced::load_tuning(key,number))continue;
             if(key=="enhanced_water_timings") {dkr::runtime::water::enhanced::timing_enabled.store(number!=0);continue;}
             if (key == "enhanced_water_quality") {
@@ -3443,12 +3600,18 @@ bool BeginPaddedModal(const char* name, ImGuiWindowFlags flags = 0,
 #if defined(__ANDROID__) || defined(DKR_IOS)
     dkr::runtime::mobile::constrain_modal();
     flags &= ~(ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    if (g_paddock_modal_windows > 0) return BeginPaddockModalWindow(name, flags);
+    if (g_paddock_modal_windows > 0) {
+        const bool visible = BeginPaddockModalWindow(name, flags);
+        if (visible) AccessibilityModal(name);
+        return visible;
+    }
 #else
     if (g_paddock_modal_windows > 0) {
-        return BeginPaddockModalWindow(
+        const bool visible = BeginPaddockModalWindow(
             name, flags | ImGuiWindowFlags_NoScrollbar |
                       ImGuiWindowFlags_NoScrollWithMouse);
+        if (visible) AccessibilityModal(name);
+        return visible;
     }
 #endif
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
@@ -3461,6 +3624,7 @@ bool BeginPaddedModal(const char* name, ImGuiWindowFlags flags = 0,
 #endif
     const bool visible = ImGui::BeginPopupModal(name, nullptr, flags);
     ImGui::PopStyleVar(2);
+    if (visible) AccessibilityModal(name);
     return visible;
 }
 
@@ -3963,26 +4127,44 @@ void DrawRomBrowser(std::filesystem::path& selected, std::string& status,
         ? "This PC"
         : PathUtf8(g_rom_browser.directory);
     ImGui::TextWrapped("Current folder: %s", location.c_str());
-    if (ImGui::Button("UP ONE LEVEL", {170.0F, 42.0F})) {
+    dkr::runtime::accessibility::Node location_node;
+    location_node.id = "rom-browser-location";
+    location_node.label = "Current folder: " + location;
+    AccessibleWidget(std::move(location_node));
+    if (AccessibleButton("rom-browser-parent", "UP ONE LEVEL", {170.0F, 42.0F})) {
         RomBrowserBack();
     }
     ImGui::SameLine();
-    if (ImGui::Button("THIS PC", {130.0F, 42.0F})) {
+    if (AccessibleButton("rom-browser-roots", "THIS PC", {130.0F, 42.0F})) {
         g_rom_browser.directory.clear();
         RefreshRomBrowser();
     }
 
+    const bool accessible_scrolling = dkr::runtime::accessibility::native::screen_reader_active();
+    const std::string picker_help = "Select a folder to open it, or a ROM to load it. "
+        "System File Picker opens the native file dialog. " + status;
+    const float help_height = ImGui::CalcTextSize(picker_help.c_str(), nullptr, false,
+        ImGui::GetContentRegionAvail().x).y + ImGui::GetStyle().ItemSpacing.y;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, {0.02F, 0.12F, 0.23F, 0.98F});
-    BeginPaddedChild("game-pak-files", {0.0F, -118.0F}, true,
+    BeginPaddedChild("game-pak-files", {0.0F, -(accessible_scrolling ? 170.0F : 118.0F) - help_height}, true,
                      ImGuiWindowFlags_NavFlattened, {14.0F, 12.0F});
+    ImGuiWindow* file_list = ImGui::GetCurrentWindow();
     if (!g_rom_browser.message.empty()) {
         ImGui::PushStyleColor(ImGuiCol_Text, kWarm);
         ImGui::TextWrapped("%s", g_rom_browser.message.c_str());
+        dkr::runtime::accessibility::Node message_node;
+        message_node.id = "rom-browser-message";
+        message_node.label = g_rom_browser.message;
+        AccessibleWidget(std::move(message_node));
         ImGui::PopStyleColor();
         ImGui::Separator();
     }
     if (g_rom_browser.entries.empty() && g_rom_browser.message.empty()) {
         ImGui::TextDisabled("No supported ROM files or folders were found here.");
+        dkr::runtime::accessibility::Node empty_node;
+        empty_node.id = "rom-browser-empty";
+        empty_node.label = "No supported ROM files or folders were found here.";
+        AccessibleWidget(std::move(empty_node));
     }
     for (std::size_t index = 0; index < g_rom_browser.entries.size(); ++index) {
         const BrowserEntry& entry = g_rom_browser.entries[index];
@@ -3993,8 +4175,13 @@ void DrawRomBrowser(std::filesystem::path& selected, std::string& status,
         const std::string label = entry.directory
             ? "[FOLDER]  " + name
             : "[ROM]     " + name;
-        if (ImGui::Selectable(label.c_str(), false,
-                              ImGuiSelectableFlags_SpanAllColumns, {0.0F, 38.0F})) {
+        const bool selected_entry = ImGui::Selectable(label.c_str(), false,
+            ImGuiSelectableFlags_SpanAllColumns, {0.0F, 38.0F});
+        // Use the full path as action identity: refreshing a directory must
+        // never redirect a queued activation to a different row at that index.
+        const std::string entry_id = "rom-browser-entry/" + PathUtf8(entry.path);
+        const std::string accessible_label = (entry.directory ? "Folder: " : "ROM: ") + name;
+        if (AccessibleLastItem(entry_id, accessible_label.c_str(), selected_entry, true, false, true)) {
             if (entry.directory) {
                 g_rom_browser.directory = entry.path;
                 RefreshRomBrowser();
@@ -4014,13 +4201,34 @@ void DrawRomBrowser(std::filesystem::path& selected, std::string& status,
     ImGui::EndChild();
     ImGui::PopStyleColor();
 
+    // Only visible rows enter the AX tree. Explicit screen-reader scroll
+    // actions keep large folders navigable without losing the footer to the
+    // bounded semantic tree or placing hidden row frames over other controls.
+    if (accessible_scrolling) {
+        const float step = std::max(38.0F, file_list->InnerRect.GetHeight() - 38.0F);
+        ImGui::BeginDisabled(file_list->Scroll.y <= 0.0F);
+        if (AccessibleButton("rom-browser-previous", "PREVIOUS FILES", {170.0F, 42.0F}))
+            ImGui::SetScrollY(file_list, std::max(0.0F, file_list->Scroll.y - step));
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(file_list->Scroll.y >= file_list->ScrollMax.y);
+        if (AccessibleButton("rom-browser-next", "NEXT FILES", {170.0F, 42.0F}))
+            ImGui::SetScrollY(file_list, std::min(file_list->ScrollMax.y, file_list->Scroll.y + step));
+        ImGui::EndDisabled();
+    }
+
+    ImGui::TextWrapped("%s", picker_help.c_str());
+    dkr::runtime::accessibility::Node help_node;
+    help_node.id = "rom-picker-help";
+    help_node.label = picker_help;
+    AccessibleWidget(std::move(help_node));
     ImGui::TextDisabled("A / Cross  SELECT     B / Circle  BACK     D-pad / Stick  MOVE");
-    if (ImGui::Button("CANCEL", {130.0F, 42.0F})) {
+    if (AccessibleButton("rom-browser-cancel", "CANCEL", {130.0F, 42.0F})) {
         g_rom_browser.open = false;
         ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
-    if (ImGui::Button("SYSTEM FILE PICKER", {220.0F, 42.0F})) {
+    if (AccessibleButton("rom-system-picker", "SYSTEM FILE PICKER", {220.0F, 42.0F})) {
         if (SelectRomWithDialog(selected, catalog, status)) {
             rom_ready = true;
             g_rom_browser.open = false;
@@ -4135,6 +4343,8 @@ void DrawStartingLights(bool ready) {
 
 void BrandBlock(float available_width, float maximum_size = 230.0F,
                 bool animate_as_coin = true) {
+    animate_as_coin = animate_as_coin &&
+        !dkr::runtime::accessibility::display_preferences().reduce_motion;
     const float phase = animate_as_coin
         ? static_cast<float>(UiAnimationSeconds()) *
               (2.0F * 3.14159265358979323846F / 4.8F)
@@ -4328,7 +4538,8 @@ bool SidebarButton(const char* label, int page, int& sidebar_selection,
                    float width = -1.0F, float height = 46.0F) {
     const bool current = sidebar_selection == page;
     PushSidebarButtonColour(page, current);
-    const bool pressed = ImGui::Button(label, {width, height});
+    const bool pressed = AccessibleLastItem("sidebar-" + std::to_string(page), label,
+        ImGui::Button(label, {width, height}), true, current);
     ImGui::PopStyleColor();
     if (current) DrawSidebarCurrentStripe();
     if (pressed) {
@@ -4344,12 +4555,18 @@ bool LauncherSidebarButton(const char* label, int target_page, int& page,
                            float height = 46.0F) {
     const bool current = sidebar_selection == target_page;
     PushSidebarButtonColour(target_page, current);
-    const bool pressed = ImGui::Button(label, {width, height});
+    const bool pressed = AccessibleLastItem("sidebar-" + std::to_string(target_page), label,
+        ImGui::Button(label, {width, height}), true, current);
     ImGui::PopStyleColor();
     if (current) DrawSidebarCurrentStripe();
     if (pressed) {
         page = target_page;
+        AccessibilityScope("launcher/" + std::to_string(page), "DKR-R launcher", false);
         sidebar_selection = target_page;
+        // The page change invalidates old content and requests, while the
+        // activated shared navigation item remains the new focus anchor.
+        AccessibleLastItem("sidebar-" + std::to_string(target_page), label,
+            false, true, true);
     }
     return pressed;
 }
@@ -4799,6 +5016,11 @@ void DrawTextEntryKeyboard() {
     }
 
     const TextEntrySpec spec = GetTextEntrySpec(g_text_entry_target);
+    const std::size_t edit_capacity = std::min(sizeof(g_text_entry_edit), spec.capacity);
+    const std::string accessibility_prefix = "text-entry-" + std::to_string(static_cast<int>(g_text_entry_target)) + "-";
+    const auto text_button = [&](const char* id, const char* label, ImVec2 size, bool enabled = true) {
+        return AccessibleLastItem(accessibility_prefix + id, label, ImGui::Button(label, size), enabled);
+    };
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     const bool compact = display.y < 700.0F;
     ImGui::SetNextWindowSize(
@@ -4814,16 +5036,33 @@ void DrawTextEntryKeyboard() {
     PushHeadingFont();
     ImGui::TextUnformatted(spec.heading);
     PopHeadingFont();
+    dkr::runtime::accessibility::add_text(accessibility_prefix + "heading", spec.heading);
     ImGui::TextWrapped(
         "Use the D-pad and A button to enter text. Every letter and number "
         "is available; spaces and common name characters are included too.");
+    dkr::runtime::accessibility::add_text(accessibility_prefix + "instructions",
+        "Edit the text field with your keyboard or use the character buttons. Cancel discards changes; the save button applies them.");
     ImGui::Dummy({0.0F, 8.0F});
     ImGui::SetNextItemWidth(-1.0F);
+    ImGuiID editor_id = 0;
+    std::string editor_value;
     {
         const ControlFontScope scope;
         ImGui::InputTextWithHint("##general-text-entry", spec.hint,
                                  g_text_entry_edit,
-                                 sizeof(g_text_entry_edit));
+                                 edit_capacity);
+        editor_id = ImGui::GetItemID();
+        editor_value = g_text_entry_edit;
+        dkr::runtime::accessibility::Node editor;
+        editor.id = accessibility_prefix + "value";
+        editor.label = spec.hint;
+        editor.role = dkr::runtime::accessibility::Role::TextField;
+        editor.value = g_text_entry_edit;
+        editor.text_capacity = edit_capacity > 0 ? edit_capacity - 1 : 0;
+        editor.enabled = edit_capacity > 1;
+        editor.help = "Edit this value. Changes are applied only when you choose the save button.";
+        dkr::runtime::accessibility::apply_imgui_text_action(
+            AccessibleWidget(std::move(editor)), g_text_entry_edit, edit_capacity);
     }
     ImGui::Dummy({0.0F, 8.0F});
 
@@ -4837,9 +5076,9 @@ void DrawTextEntryKeyboard() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {spacing, spacing});
     for (std::size_t index = 0U; index < kAlphabet.size(); ++index) {
         char key_label[2]{kAlphabet[index], '\0'};
-        if (ImGui::Button(key_label, {key_width, key_height})) {
+        if (text_button(key_label, key_label, {key_width, key_height})) {
             const std::size_t length = std::strlen(g_text_entry_edit);
-            if (length < sizeof(g_text_entry_edit) - 1U) {
+            if (length + 1U < edit_capacity) {
                 g_text_entry_edit[length] = kAlphabet[index];
                 g_text_entry_edit[length + 1U] = '\0';
             }
@@ -4861,24 +5100,28 @@ void DrawTextEntryKeyboard() {
     const float finish_action_width = std::max(
         (action_region_width - action_gap) * 0.5F, 1.0F);
     const float action_height = compact ? 38.0F : 44.0F;
-    if (ImGui::Button("SPACE", {edit_action_width, action_height})) {
+    if (text_button("space", "SPACE", {edit_action_width, action_height})) {
         const std::size_t length = std::strlen(g_text_entry_edit);
-        if (length < sizeof(g_text_entry_edit) - 1U) {
+        if (length + 1U < edit_capacity) {
             g_text_entry_edit[length] = ' ';
             g_text_entry_edit[length + 1U] = '\0';
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("BACKSPACE", {edit_action_width, action_height})) {
+    if (text_button("backspace", "BACKSPACE", {edit_action_width, action_height})) {
         const std::size_t length = std::strlen(g_text_entry_edit);
-        if (length > 0U) g_text_entry_edit[length - 1U] = '\0';
+        if (length > 0U) {
+            std::size_t start = length - 1U;
+            while (start > 0U && (static_cast<unsigned char>(g_text_entry_edit[start]) & 0xC0) == 0x80) --start;
+            g_text_entry_edit[start] = '\0';
+        }
     }
     ImGui::SameLine();
-    if (ImGui::Button("CLEAR", {edit_action_width, action_height})) {
+    if (text_button("clear", "CLEAR", {edit_action_width, action_height})) {
         g_text_entry_edit[0] = '\0';
     }
     ImGui::Dummy({0.0F, 4.0F});
-    if (ImGui::Button("CANCEL", {finish_action_width, action_height})) {
+    if (text_button("cancel", "CANCEL", {finish_action_width, action_height})) {
         g_text_entry_target = TextEntryTarget::None;
         ImGui::CloseCurrentPopup();
     }
@@ -4886,13 +5129,15 @@ void DrawTextEntryKeyboard() {
     const bool can_accept = spec.allow_empty || g_text_entry_edit[0] != '\0';
     ImGui::BeginDisabled(!can_accept);
     ImGui::PushStyleColor(ImGuiCol_Button, kRaceRed);
-    if (ImGui::Button(spec.accept, {finish_action_width, action_height})) {
+    if (text_button("accept", spec.accept, {finish_action_width, action_height}, can_accept)) {
         CommitTextEntry();
         g_text_entry_target = TextEntryTarget::None;
         ImGui::CloseCurrentPopup();
     }
     ImGui::PopStyleColor();
     ImGui::EndDisabled();
+    if (editor_value != g_text_entry_edit)
+        dkr::runtime::accessibility::reload_imgui_text_editor(editor_id);
     ImGui::EndPopup();
 }
 
@@ -8000,11 +8245,33 @@ void DrawControllerMappingModal() {
         return;
     }
 
+    // Register immediately after each owning ImGui item so the native tree
+    // retains its actual bounds and the existing input/focus target.
+    const auto expose_text = [](const char* id, std::string_view label) {
+        dkr::runtime::accessibility::Node node;
+        node.id = id;
+        node.role = dkr::runtime::accessibility::Role::StaticText;
+        node.label = label;
+        AccessibleWidget(std::move(node));
+    };
+    const auto mapping_button = [](const char* id, const char* label, std::string_view help) {
+        const bool pressed = ImGui::Button(label, {-1.0F, 46.0F});
+        dkr::runtime::accessibility::Node node;
+        node.id = id;
+        node.role = dkr::runtime::accessibility::Role::PushButton;
+        node.label = label;
+        node.help = help;
+        const auto action = AccessibleWidget(std::move(node));
+        return pressed || (action && action->kind == dkr::runtime::accessibility::ActionKind::Press);
+    };
+
     PushHeadingFont();
     ImGui::TextUnformatted(progress.success ? "CONTROLLER READY" :
                            "N64 CONTROLLER SETUP");
+    expose_text("controller-mapping-heading", progress.success ? "CONTROLLER READY" : "N64 CONTROLLER SETUP");
     PopHeadingFont();
     ImGui::TextWrapped("%s", progress.controller_name.c_str());
+    expose_text("controller-mapping-device", progress.controller_name);
     if (progress.capturing) {
         const float fraction = progress.total > 0U
             ? static_cast<float>(progress.step) /
@@ -8014,21 +8281,27 @@ void DrawControllerMappingModal() {
             std::to_string(std::min(progress.step + 1U, progress.total)) +
             " of " + std::to_string(progress.total);
         ImGui::ProgressBar(fraction, {-1.0F, 28.0F}, overlay.c_str());
+        expose_text("controller-mapping-step", overlay);
         ImGui::Dummy({0.0F, 8.0F});
         ImGui::TextColored(kWarm, "%s", progress.prompt.c_str());
+        expose_text("controller-mapping-prompt", progress.prompt);
     }
     if (!progress.message.empty()) {
         ImGui::TextWrapped("%s", progress.message.c_str());
+        expose_text("controller-mapping-status", progress.message);
     }
     ImGui::Dummy({0.0F, 12.0F});
     if (progress.capturing) {
-        if (ImGui::Button("CANCEL SETUP", {-1.0F, 46.0F})) {
+        if (mapping_button("controller-mapping-cancel", "CANCEL SETUP",
+                           "Cancel this controller setup. Escape also cancels.")) {
             dkr::runtime::platform::cancel_controller_mapping();
             ImGui::CloseCurrentPopup();
         }
     } else {
         const char* button = progress.success ? "DONE" : "CLOSE";
-        if (ImGui::Button(button, {-1.0F, 46.0F})) {
+        if (mapping_button("controller-mapping-dismiss", button,
+                           progress.success ? "Close this dialog. The controller mapping has already been saved."
+                                            : "Close the controller setup status.")) {
             dkr::runtime::platform::dismiss_controller_mapping();
             ImGui::CloseCurrentPopup();
         }
@@ -8175,7 +8448,7 @@ void DrawOverlayContent(float content_width) {
         ImGui::Dummy({0.0F, 12.0F});
         ImGui::PushStyleColor(ImGuiCol_Button, kAccent);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kWarm);
-        if (ImGui::Button("RETURN TO THE RACE", {content_width, 64.0F})) {
+        if (AccessibleButton("overlay-return", "RETURN TO THE RACE", {content_width, 64.0F})) {
             g_overlay_visible.store(false, std::memory_order_release);
         }
         ImGui::PopStyleColor(2);
@@ -8315,6 +8588,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
 
     window = static_cast<SDL_Window*>(dkr::runtime::platform::prepare_window_for_launcher(software_failure_recovery));
     if (!window) return result;
+    dkr::runtime::accessibility::clear();
     SDL_SetWindowTitle(window, "DKR-R - Diddy Kong Racing Recompiled");
     const auto launcher_renderer_started_at =
         dkr::runtime::startup_performance::Clock::now();
@@ -8789,6 +9063,9 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             }
             dkr::runtime::platform::update_fullscreen_cursor(&event);
             ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
+                event.key.keysym.scancode == SDL_SCANCODE_F8)
+                dkr::runtime::accessibility::request_game_status_read();
             if (HandleInputCaptureEvent(&event)) {
                 return;
             }
@@ -8867,8 +9144,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         g_launcher_animation_seconds = std::chrono::duration<double>(
             animation_now - launcher_animation_epoch).count();
         constexpr double kBackgroundScrollPixelsPerSecond = 12.5;
-        launcher_background_scroll =
-            g_launcher_animation_seconds * kBackgroundScrollPixelsPerSecond;
+        launcher_background_scroll = dkr::runtime::accessibility::display_preferences().reduce_motion
+            ? 0.0 : g_launcher_animation_seconds * kBackgroundScrollPixelsPerSecond;
 
         if (launch_requested) {
             launch_requested=false;
@@ -8936,6 +9213,27 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         ImGui_ImplSDL2_NewFrame();
         dkr::runtime::platform::update_ui_gamepad_navigation();
         ImGui::NewFrame();
+        g_accessibility_launcher = true;
+        const ImGuiWindow* accessibility_modal = ImGui::GetTopMostPopupModal();
+        const char* pending_modal = request_quit_popup ? "Quit DKR-R?" :
+            request_restart_popup ? "Restart DKR-R?" :
+            g_rom_browser.open ? "Select Diddy Kong Racing ROM" : nullptr;
+        const char* modal_name = pending_modal ? pending_modal :
+            (accessibility_modal ? accessibility_modal->Name : nullptr);
+        g_accessibility_scope = modal_name ? std::string("modal/") + modal_name :
+            "launcher/" + std::to_string(page);
+        g_accessibility_modal = modal_name != nullptr;
+        dkr::runtime::accessibility::begin_frame(g_accessibility_scope,
+            modal_name ? modal_name : "DKR-R launcher", g_accessibility_modal);
+        dkr::runtime::accessibility::prepare_imgui_focus(
+            dkr::runtime::accessibility::host_tree());
+        const auto display_prefs = dkr::runtime::accessibility::display_preferences();
+        const unsigned display_key = display_prefs.increase_contrast |
+            (display_prefs.reduce_transparency << 1);
+        static unsigned previous_display_key = ~0U;
+        if (display_key != previous_display_key) {
+            ApplyStyle(); previous_display_key = display_key;
+        }
         int hud_viewport_width = 0;
         int hud_viewport_height = 0;
         SDL_GetWindowSize(window, &hud_viewport_width, &hud_viewport_height);
@@ -8966,7 +9264,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         const float panel_padding = menu.padding;
         const float right_inner_width = menu.inner_width;
         ImGui::SetCursorPos({outer_margin, outer_margin});
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuNavSurface);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, AccessibleSurface(kMenuNavSurface));
         ImGui::PushStyleColor(ImGuiCol_Border, kMenuNavBorder);
         const SidebarLayout sidebar_layout = CalculateSidebarLayout(
             content_height, sidebar_width);
@@ -8989,7 +9287,6 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             sidebar_selection = page;
             g_page_navigation_request = -1;
         }
-        ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
         ++g_race_button_sidebar;
         LauncherSidebarButton("PLAY", 0, page, sidebar_selection,
                               nav_inner_width, sidebar_layout.button_height);
@@ -9015,7 +9312,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             sidebar_selection == launcher_page_count
                 ? ImVec4{1.0F, 0.58F, 0.04F, 1.0F}
                 : ImVec4{0.92F, 0.43F, 0.06F, 1.0F});
-        if (ImGui::Button("RESTART DKR-R",
+        if (AccessibleButton("launcher-restart", "RESTART DKR-R",
                           {nav_inner_width, sidebar_layout.button_height})) {
             sidebar_selection = launcher_page_count;
             request_restart_popup = true;
@@ -9025,14 +9322,13 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         ImGui::PushStyleColor(
             ImGuiCol_Button,
             sidebar_selection == launcher_page_count + 1 ? kWarm : kRaceRed);
-        if (ImGui::Button("EXIT DKR-R",
+        if (AccessibleButton("launcher-exit", "EXIT DKR-R",
                           {nav_inner_width, sidebar_layout.button_height})) {
             sidebar_selection = launcher_page_count + 1;
             request_quit_popup = true;
         }
         ImGui::PopStyleColor();
         --g_race_button_sidebar;
-        ImGui::PopItemFlag();
         ImGui::EndGroup();
         ImGui::PopStyleVar();
         ImGui::PopTextWrapPos();
@@ -9045,7 +9341,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         DrawLinuxSoftwarePanelUnderlay(
             {right_width, content_height}, kMenuContentSurface);
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::end, &underlay_profile);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuContentSurface);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, AccessibleSurface(kMenuContentSurface));
         ImGui::PushStyleColor(ImGuiCol_Border, kMenuContentBorder);
         ImGui::BeginChild("launcher-content", {right_width, content_height}, true,
                           ImGuiWindowFlags_NavFlattened);
@@ -9109,12 +9405,15 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             request_quit_popup = false;
         }
         if (BeginPaddedModal("Restart DKR-R?", ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
             ImGui::TextUnformatted("Restart DKR-R and reload the launcher?");
+            dkr::runtime::accessibility::add_text("restart-message", "Restart DKR-R and reload the launcher? Your selected Game Pak and settings will be preserved.");
             ImGui::TextDisabled("Your selected Game Pak and settings will be preserved.");
-            if (ImGui::Button("CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
+            if (AccessibleButton("restart-cancel", "CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Button, {0.92F, 0.43F, 0.06F, 1.0F});
-            if (ImGui::Button("RESTART DKR-R", {170.0F, 40.0F})) {
+            if (AccessibleButton("restart-confirm", "RESTART DKR-R", {170.0F, 40.0F})) {
                 SaveSettings();
                 result.lifecycle_request = LifecycleRequest::Restart;
                 running = false;
@@ -9124,11 +9423,14 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             ImGui::EndPopup();
         }
         if (BeginPaddedModal("Quit DKR-R?", ImGuiWindowFlags_AlwaysAutoResize)) {
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
             ImGui::TextUnformatted("Exit DKR-R and return to the desktop?");
-            if (ImGui::Button("CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
+            dkr::runtime::accessibility::add_text("quit-message", "Exit DKR-R and return to the desktop?");
+            if (AccessibleButton("quit-cancel", "CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
+            ImGui::SetItemDefaultFocus();
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Button, {0.45F, 0.09F, 0.10F, 1.0F});
-            if (ImGui::Button("EXIT DKR-R", {140.0F, 40.0F})) {
+            if (AccessibleButton("quit-confirm", "EXIT DKR-R", {140.0F, 40.0F})) {
                 SaveSettings();
                 result.lifecycle_request = LifecycleRequest::Exit;
                 running = false;
@@ -9162,6 +9464,15 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             dkr::runtime::mobile::editor();
         }
 #endif
+        if (const ImGuiWindow* modal = ImGui::GetTopMostPopupModal())
+            AccessibilityModal(modal->Name);
+        if (!g_accessibility_modal) dkr::runtime::accessibility::add_text("coverage",
+            page == kPageSound ? "Accessibility prototype: speech and sound controls are available. Full race accessibility is still being validated." :
+            page == 0 ? "Accessibility prototype: launcher navigation, ROM file picker, Play and Exit. Some controls are not yet exposed." :
+                        "Accessibility prototype: shared settings controls are available. Some page-specific controls and dialogs are not yet exposed.");
+        dkr::runtime::accessibility::end_frame();
+        g_accessibility_launcher = false;
+        dkr::runtime::accessibility::pump_native(window);
         ImGui::Render();
         const auto launcher_ui_build_finished =
             std::chrono::steady_clock::now();
@@ -9252,6 +9563,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         static_cast<unsigned long long>(launcher_panel_cache.builds()),
         static_cast<unsigned long long>(launcher_panel_cache.hits()));
     launcher_panel_cache.clear();
+    dkr::runtime::accessibility::detach_native();
     ImGui_ImplSDLRenderer2_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
@@ -9349,6 +9661,8 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     PumpFriendPresence();
     const bool show_overlay =
         g_overlay_visible.load(std::memory_order_acquire);
+    if (!show_overlay && dkr::runtime::accessibility::host_tree().snapshot().scope.starts_with("overlay/"))
+        dkr::runtime::accessibility::clear();
     const bool show_fps = g_fps_overlay_enabled &&
         dkr::runtime::enhancements::modern_presentation_enabled();
     const bool show_crt = g_crt_enabled && g_crt_strength > 0.0F &&
@@ -9415,6 +9729,19 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         dkr::runtime::hud::set_viewport_extent(hud_viewport_width,
                                                hud_viewport_height);
     }
+    // The overlay shares launcher widgets and semantics; the main event pump
+    // publishes these C++ snapshots through the same native bridge.
+    const auto* overlay_modal = ImGui::GetTopMostPopupModal();
+    const bool accessibility_frame = show_overlay || overlay_modal;
+    g_accessibility_launcher = accessibility_frame;
+    if (accessibility_frame) {
+        g_accessibility_scope = overlay_modal ? std::string("overlay/modal/") + overlay_modal->Name :
+            "overlay/" + std::to_string(g_overlay_page.load(std::memory_order_relaxed));
+        g_accessibility_modal = overlay_modal != nullptr;
+        dkr::runtime::accessibility::begin_frame(g_accessibility_scope,
+            overlay_modal ? overlay_modal->Name : "DKR-R host overlay", g_accessibility_modal);
+        dkr::runtime::accessibility::prepare_imgui_focus(dkr::runtime::accessibility::host_tree());
+    }
     ApplyStyle();
     ImGui::GetIO().ConfigFlags |=
         ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
@@ -9465,7 +9792,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         const float content_x = menu.content_x;
         const float content_panel_width = menu.content_width;
         ImGui::SetCursorPos({overlay_margin, overlay_margin});
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuNavSurface);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, AccessibleSurface(kMenuNavSurface));
         ImGui::PushStyleColor(ImGuiCol_Border, kMenuNavBorder);
         const SidebarLayout sidebar_layout = CalculateSidebarLayout(
             overlay_height, sidebar_width);
@@ -9518,7 +9845,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
             sidebar_selection == kMenuPageCount
                 ? ImVec4{1.0F, 0.58F, 0.04F, 1.0F}
                 : ImVec4{0.92F, 0.43F, 0.06F, 1.0F});
-        if (ImGui::Button("RESTART DKR-R",
+        if (AccessibleButton("overlay-restart", "RESTART DKR-R",
                           {nav_inner_width, sidebar_layout.button_height})) {
             sidebar_selection = kMenuPageCount;
             g_overlay_sidebar_selection.store(sidebar_selection,
@@ -9531,7 +9858,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
             ImGuiCol_Button,
             sidebar_selection == kMenuPageCount + 1 ? kWarm : kRaceRed);
         const bool leave_island_pressed =
-            ImGui::Button("EXIT DKR-R",
+            AccessibleButton("overlay-exit", "EXIT DKR-R",
                           {nav_inner_width, sidebar_layout.button_height});
         if (leave_island_pressed) {
             sidebar_selection = kMenuPageCount + 1;
@@ -9548,7 +9875,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         ImGui::EndChild();
         ImGui::PopStyleColor(2);
         ImGui::SetCursorPos({content_x, overlay_margin});
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, kMenuContentSurface);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, AccessibleSurface(kMenuContentSurface));
         ImGui::PushStyleColor(ImGuiCol_Border, kMenuContentBorder);
         ImGui::BeginChild("overlay-content", {content_panel_width, overlay_height}, true,
                           ImGuiWindowFlags_NavFlattened);
@@ -9585,12 +9912,13 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
             ImGui::OpenPopup("Restart DKR-R?");
         }
         if (BeginPaddedModal("Restart DKR-R?", ImGuiWindowFlags_AlwaysAutoResize)) {
+            dkr::runtime::accessibility::add_text("restart-message", "Restart DKR-R and return to the launcher? Progress since the last in-game save point may be lost.");
             ImGui::TextUnformatted("Restart DKR-R and return to the launcher?");
             ImGui::TextDisabled("Progress since the last in-game save point may be lost.");
-            if (ImGui::Button("CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
+            if (AccessibleButton("overlay-cancel", "CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Button, {0.92F, 0.43F, 0.06F, 1.0F});
-            if (ImGui::Button("RESTART DKR-R", {170.0F, 40.0F})) {
+            if (AccessibleButton("overlay-restart-confirm", "RESTART DKR-R", {170.0F, 40.0F})) {
                 SaveSettings();
                 g_lifecycle_request.store(
                     dkr::runtime::ui::LifecycleRequest::Restart,
@@ -9603,12 +9931,13 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
             ImGui::EndPopup();
         }
         if (BeginPaddedModal("Quit DKR-R?", ImGuiWindowFlags_AlwaysAutoResize)) {
+            dkr::runtime::accessibility::add_text("quit-message", "Exit DKR-R and return to the desktop? Progress since the last in-game save point may be lost.");
             ImGui::TextUnformatted("Exit DKR-R and return to the desktop?");
             ImGui::TextDisabled("Progress since the last in-game save point may be lost.");
-            if (ImGui::Button("CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
+            if (AccessibleButton("overlay-cancel", "CANCEL", {120.0F, 40.0F})) ImGui::CloseCurrentPopup();
             ImGui::SameLine();
             ImGui::PushStyleColor(ImGuiCol_Button, {0.45F, 0.09F, 0.10F, 1.0F});
-            const bool confirm_leave_pressed = ImGui::Button("EXIT DKR-R", {140.0F, 40.0F});
+            const bool confirm_leave_pressed = AccessibleButton("overlay-exit-confirm", "EXIT DKR-R", {140.0F, 40.0F});
             if (confirm_leave_pressed) {
                 SaveSettings();
                 g_lifecycle_request.store(
@@ -9649,6 +9978,12 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     dkr::runtime::mobile::draw_controls(show_overlay);
     dkr::runtime::mobile::editor();
 #endif
+    if (accessibility_frame) {
+        if (!g_accessibility_modal) dkr::runtime::accessibility::add_text("coverage",
+            "Host overlay navigation and shared settings are available. Some page-specific controls and dialogs are not yet exposed. Close with Return to the race, F1 or Escape; press F8 during play for fresh game status.");
+        dkr::runtime::accessibility::end_frame();
+    }
+    g_accessibility_launcher = false;
     inspector->endFrame();
 }
 

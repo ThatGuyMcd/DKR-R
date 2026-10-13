@@ -159,6 +159,7 @@ public:
     PaddockFadeUp(const PaddockFadeUp&) = delete;
     PaddockFadeUp& operator=(const PaddockFadeUp&) = delete;
     ~PaddockFadeUp() {
+        if (dkr::runtime::accessibility::display_preferences().reduce_motion) return;
         const float elapsed = static_cast<float>(PaddockClock() - started_at_) - delay_;
         const float progress = PaddockEase(elapsed / duration_);
         if (progress >= 1.0F) return;
@@ -200,7 +201,7 @@ bool PlayTextButton(const char* label, bool destructive) {
     draw->AddRectFilled({press.min.x + 8.0F, std::round(baseline + 4.0F)},
                         {press.max.x - 8.0F, std::round(baseline + 5.0F)}, colour);
     PaddockEndPress(press, 6.0F);
-    return press.pressed;
+    return AccessibleWidgetPressed(label, press.pressed);
 }
 
 // The action of a launch notice (.play-notice .mods-button).
@@ -222,7 +223,7 @@ bool PlayNoticeButton(const char* label) {
     PaddockDrawRun(draw, type, {press.min.x + 16.0F, std::round(press.min.y + (42.0F - type.line) * 0.5F)},
                    PaddockCol(0xEAF3F5), label, end);
     PaddockEndPress(press, 6.0F);
-    return press.pressed;
+    return AccessibleWidgetPressed(label, press.pressed);
 }
 
 struct PlayNoticeLayout {
@@ -296,7 +297,8 @@ bool DrawPlayNotice(const PlayNotice& notice, float width, bool locked) {
 void DrawPlayLights(ImDrawList* draw, ImVec2 at, bool ready, double arrived_at) {
     // A ROM just loaded: the lights run red, amber, green once.
     const float t = static_cast<float>(PaddockClock() - arrived_at);
-    const bool arriving = ready && t >= 0.0F && t < 0.56F;
+    const auto accessibility_preferences = dkr::runtime::accessibility::display_preferences();
+    const bool arriving = !accessibility_preferences.reduce_motion && ready && t >= 0.0F && t < 0.56F;
     PaddockFill(draw, at, {at.x + 42.0F, at.y + 112.0F}, PaddockRound(21.0F),
                 PaddockCol(0x0C1922));
     const ImU32 off = PaddockRgb(0x4E5B5B);
@@ -316,6 +318,16 @@ void DrawPlayLights(ImDrawList* draw, ImVec2 at, bool ready, double arrived_at) 
     draw->AddCircleFilled({at.x + 21.0F, at.y + 56.0F}, 9.0F, PaddockApply(amber), 24);
     draw->AddCircleFilled({at.x + 21.0F, at.y + 88.0F}, 9.0F * green_scale,
                           PaddockApply(green), 24);
+    if (accessibility_preferences.differentiate_without_color) {
+        const ImU32 symbol = PaddockCol(0xFFFFFF);
+        if (ready) {
+            draw->AddLine({at.x + 16, at.y + 88}, {at.x + 20, at.y + 92}, symbol, 2);
+            draw->AddLine({at.x + 20, at.y + 92}, {at.x + 27, at.y + 84}, symbol, 2);
+        } else {
+            draw->AddLine({at.x + 17, at.y + 20}, {at.x + 25, at.y + 28}, symbol, 2);
+            draw->AddLine({at.x + 25, at.y + 20}, {at.x + 17, at.y + 28}, symbol, 2);
+        }
+    }
 }
 
 void RemoveSelectedRom(const PlayPageContext& play) {
@@ -502,7 +514,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         // The border turns green with the last light.
         const float since = static_cast<float>(PaddockClock() - state.arrived_at);
         ImU32 border = PaddockRgb(ready ? 0x1AC2A3U : 0xE82E21U);
-        if (ready && since >= 0.0F && since < 0.56F) {
+        if (!dkr::runtime::accessibility::display_preferences().reduce_motion &&
+            ready && since >= 0.0F && since < 0.56F) {
             border = PaddockMix(PaddockRgb(0xE82E21), PaddockRgb(0x1AC2A3),
                                 PaddockEase((since - 0.36F) / 0.2F));
         }
@@ -560,7 +573,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         look.fill = count > 0U ? 0x0A6EA1U : 0x1AC2A3U;
         look.hover_in = 0.12F;
         look.ellipsis_spread = 0.12F;
-        if (PaddockRaceButton(primary, {primary_width, 46.0F}, look)) {
+        if (AccessibleLastItem("play-add-rom", primary,
+            PaddockRaceButton(primary, {primary_width, 46.0F}, look))) {
             OpenRomBrowser(play.selected_rom);
         }
         if (secondary != nullptr) {
@@ -604,7 +618,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     // Only the Track Lab test (always the first notice) can be dismissed here.
     if (state.leaving) {
         const float t = static_cast<float>(PaddockClock() - state.leaving_at);
-        if (t >= 0.3F || std::any_of(notices.begin(), notices.end(),
+        if (dkr::runtime::accessibility::display_preferences().reduce_motion ||
+            t >= 0.3F || std::any_of(notices.begin(), notices.end(),
                 [&](const PlayNotice& notice) { return notice.key == state.leaving->key; })) {
             state.leaving.reset();
         } else {
@@ -733,7 +748,14 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         }
         ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
         ImGui::BeginDisabled(!can_start);
-        if (PaddockRaceButton(lobby ? "LEAVE LOBBY & PLAY OFFLINE" : "PLAY OFFLINE - Diddy Kong Racing", {width, 68.0F}, look)) {
+        const char* start_label = lobby ? "LEAVE LOBBY & PLAY OFFLINE" : "PLAY OFFLINE - Diddy Kong Racing";
+        if (g_accessibility_launcher && !g_accessibility_modal)
+            dkr::runtime::accessibility::add_text("play-rom-status", play.rom_ready
+                ? "ROM ready. " + PathUtf8(play.selected_rom) : "ROM not loaded. Choose BROWSE FOR ROM to continue.");
+        // Leaving an online lobby opens a separate unimplemented dialog, so
+        // this prototype exposes offline launch only.
+        if (AccessibleLastItem("play-start", start_label,
+            PaddockRaceButton(start_label, {width, 68.0F}, look), can_start && !lobby)) {
             if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");
             else play.launch_requested = true;
         }

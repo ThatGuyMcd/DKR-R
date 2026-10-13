@@ -57,4 +57,14 @@ struct ControllerSnapshot {
     GyroSnapshot gyro{};
 };
 
+// Diagnostic button readout; a disconnected device cannot retain stale presses.
+inline std::uint32_t pressed_button_mask(const ControllerSnapshot& snapshot) {
+    static_assert(kSnapshotButtonCount <= 32U);
+    if (!snapshot.connected) return 0U;
+    std::uint32_t mask = 0U;
+    for (std::size_t index = 0; index < snapshot.buttons.size(); ++index)
+        if (snapshot.buttons[index] != 0U) mask |= std::uint32_t{1} << index;
+    return mask;
+}
+
 } // namespace dkr::runtime::controllers
