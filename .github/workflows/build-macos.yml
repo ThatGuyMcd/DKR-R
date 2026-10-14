@@ -35,7 +35,7 @@ jobs:
       - name: Prepare compiler cache
         id: compiler
         run: |
-          brew install ccache
+          brew install ccache sdl2
           mkdir -p build
           {
             xcrun clang --version

@@ -1,0 +1,67 @@
+macOS native accessibility foundation
+=====================================
+
+Scope
+-----
+This PR exposes launcher/settings/overlay controls and read-only stock game
+menu/HUD information through AppKit. It includes optional VoiceOver speech,
+F8 status reading, and accessible speech settings. It does not implement
+synthesized item/road audio, pixel classifiers, renderer diagnostics, camera
+shake changes or a UIKit adapter. Windows/Linux/iOS retain no-op adapters;
+those platforms and broader in-race assistance require separate work.
+
+Native controls use stable identities, roles, values, selected/enabled state,
+bounds, standard actions and change notifications. Modal scopes omit covered
+background controls. Actions are queued and revalidated against the current
+host control before entering its ordinary mouse/controller action branch.
+Guest menu rows are read-only metadata; they cannot activate guest operations.
+
+Shared host text-entry dialogs expose named editable AppKit fields, current
+draft values, character keys and edit/accept/cancel actions. String replacements
+are bounded UTF-8 values checked against the current scope, generation, target
+and byte capacity. Native replacements synchronize the active ImGui editor;
+ordinary keyboard input and controller character buttons remain available.
+
+VoiceOver owns speech delivery, voice, rate and volume. Automatic speech is
+off by default. Sound settings can enable changed-menu/race-start/position
+announcements and set position cadence. F8 requests a fresh status while the
+game owns input. The read-only game summary requests focus only while VoiceOver
+and the game window are active, with native-editor protection and restoration
+when leaving that context. This does not establish useful audible speech.
+Speech and observation demand also respect native field editors and sheets.
+Race-start speech comes from qualified Get Ready/GO art, not the cached timer;
+missing/suppressed samples discard pending speech without replaying delivered
+announcements in the same known context.
+
+Host display preferences retain increased contrast, reduced transparency,
+Reduce Motion and Differentiate Without Color. Reduce Motion affects host UI
+animation; this PR does not change the gameplay camera or system settings.
+
+Observation boundary
+--------------------
+The renderer observes its existing immutable 8 MiB submission copy before
+RT64 mutates its decode workspace. Native callbacks never read live guest
+memory, call guest functions or retain guest pointers. Session tokens reject
+publication after reset/teardown; unavailable samples replace previous data.
+Freshness is a receipt timeout, not a guarantee of atomic guest state or final
+presented pixels. Online/owned presentation observations remain unavailable.
+
+Stock US v77/v80 decoding covers title/options/audio settings, steady Controller
+Pak 1 tables, Save Options, character confirmation, game/file selection, track
+selection and Adventure setup/trophy introductions, current dialogue pages,
+pause/quit confirmation and bounded postrace information. Coverage is
+conservative: transitions, unsupported layouts and malformed/clipped data are
+withheld. Boot Pak errors/delete/wait states are not covered. Race information
+includes qualified player position/lap/bananas, visible held-item category,
+level/quantity and source-qualified centered Get Ready/GO art. Audio synthesis
+is not required to describe held-item HUD state.
+
+Validation and limits
+---------------------
+Focused tests cover both revision layouts, copied-memory immutability,
+session/freshness rejection, speech scheduling, host/ImGui action validation
+and public AppKit hierarchy/focus/input behavior, including bounded text edits.
+The final AppKit test executables are compiled; their local foreground runs remain
+pending while the development computer is in use. Synthetic fixtures and
+native API tests do not prove spoken VoiceOver output or independent player
+navigation. See ACCESSIBILITY-ACCEPTANCE.txt for the remaining merge gates.

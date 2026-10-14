@@ -2,6 +2,7 @@
 #include "netplay/quick_join_transport.cpp"
 #include <cassert>
 #include <iostream>
+#include <future>
 #include <thread>
 #include <set>
 
@@ -29,13 +30,42 @@ struct QuickJoinTestAccess {
         auto original = factory.create_peer("same-racer", "original");
         assert(original);
         original->route_ready.store(true);
-        for (int stage = 0; stage <= 6; ++stage) {
+        factory.control_inbound_.push_back({original->address, {1, 2, 3}});
+        original->queued_bytes = 3;
+        for (int stage = 0; stage <= 7; ++stage) {
             factory.construction_failure_stage_ = stage;
             assert(!factory.create_peer("same-racer", "replacement", true));
             assert(original->current.load() && original->route_ready.load());
             assert(factory.peers_.at(original->identifier) == original);
             assert(factory.find_peer("same-racer", "original") == original);
+            assert(!factory.find_peer("same-racer", "replacement"));
+            assert(factory.control_inbound_.size() == 1 && original->queued_bytes == 3);
         }
+        factory.construction_failure_stage_ = 7;
+        assert(!factory.create_peer("new-racer", "new-route", true));
+        assert(!factory.find_peer("new-racer", "new-route") && factory.peers_.size() == 1);
+        std::promise<void> first_published, release_first;
+        auto first_ready = first_published.get_future();
+        auto release = release_first.get_future();
+        std::atomic<unsigned> negotiation_starts{0};
+        factory.construction_stage_hook_ = [&](int stage) {
+            if (stage == 7 && negotiation_starts.fetch_add(1) == 0) {
+                first_published.set_value();
+                release.wait();
+            }
+        };
+        auto first = std::async(std::launch::async, [&] { return factory.create_peer("same-racer", "first-failed", true); });
+        first_ready.wait();
+        const bool unprotected = factory.route_construction_mutex_.try_lock();
+        if (unprotected) factory.route_construction_mutex_.unlock();
+        assert(!unprotected);
+        auto second = std::async(std::launch::async, [&] { return factory.create_peer("same-racer", "second-failed", true); });
+        release_first.set_value();
+        assert(!first.get() && !second.get());
+        assert(original->current.load() && factory.find_peer("same-racer", "original") == original);
+        assert(!factory.find_peer("same-racer", "first-failed") && !factory.find_peer("same-racer", "second-failed"));
+        assert(factory.control_inbound_.size() == 1 && original->queued_bytes == 3);
+        factory.construction_stage_hook_ = {};
         factory.construction_failure_stage_ = -1;
         auto replacement = factory.create_peer("same-racer", "replacement", true);
         assert(replacement && replacement->address == original->address);
@@ -81,8 +111,10 @@ struct QuickJoinTestAccess {
         server.onClient([state](auto socket) {
             { std::lock_guard lock(state->mutex); state->sockets.push_back(socket); }
             std::weak_ptr<rtc::WebSocket> weak = socket;
-            socket->onOpen([state, weak] {
+            const auto registered = std::make_shared<std::atomic<bool>>(false);
+            const auto register_socket = [state, weak, registered] {
                 const auto socket = weak.lock(); if (!socket) return;
+                if (registered->exchange(true)) return;
                 const auto id = socket->path().value_or("/").substr(1);
                 if (state->reject.load()) { socket->send(Json{{"type", "ID-TAKEN"}}.dump()); return; }
                 { std::lock_guard lock(state->mutex); state->routes[id] = socket; }
@@ -98,33 +130,37 @@ struct QuickJoinTestAccess {
                     if (target && target->isOpen()) target->send(packet.dump());
                 });
                 socket->send(Json{{"type", "OPEN"}}.dump());
-            });
+            };
+            socket->onOpen(register_socket);
+            // The accepted socket may finish opening before onClient installs
+            // its callback. Register exactly once in either ordering.
+            if (socket->isOpen()) register_socket();
         });
         quick_test_signaling_endpoint = "ws://127.0.0.1:" + std::to_string(server.port());
         QuickJoinTransport host(true, "ABCDE"), client(false, "ABCDE");
         std::string error;
         assert(host.open(0, error));
-        const auto wait = [&](auto predicate) {
+        const auto wait = [&](const char* stage, auto predicate) {
             const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(20);
             while (!predicate() && std::chrono::steady_clock::now() < end) {
                 host.service(); client.service();
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
-            assert(predicate());
+            if (!predicate()) throw std::runtime_error(std::string("Quick Join lifecycle timed out at: ") + stage);
         };
-        wait([&] { return host.signaling_ready_.load(); });
+        wait("host registration", [&] { return host.signaling_ready_.load(); });
         state->reject.store(true);
         assert(host.rekey_quick_join("rejected", error));
         assert(host.quick_join_code() == "ABCDE");
-        wait([&] { return host.rekey_status() == QuickJoinRekeyStatus::Failed; });
+        wait("rejected rekey", [&] { return host.rekey_status() == QuickJoinRekeyStatus::Failed; });
         assert(host.quick_join_code() == "ABCDE" && host.signaling_ready_.load());
         state->reject.store(false);
         assert(client.open(0, error));
         host.set_quick_join_bootstrap("original");
         std::string bootstrap; PeerAddress address;
-        wait([&] { return !bootstrap.empty() || client.take_quick_join_bootstrap(bootstrap, address); });
+        wait("client bootstrap", [&] { return !bootstrap.empty() || client.take_quick_join_bootstrap(bootstrap, address); });
         assert(bootstrap == "original");
-        wait([&] { return client.traffic_ready(address, TransportTrafficClass::Authoritative); });
+        wait("authoritative channel", [&] { return client.traffic_ready(address, TransportTrafficClass::Authoritative); });
         // Actual SCTP delivery: this first run is not a saturation claim.
         std::set<unsigned> received;
         unsigned sent = 0, blocked = 0;
@@ -149,7 +185,7 @@ struct QuickJoinTestAccess {
             std::cerr << "Delivery incomplete: sent=" << sent << " received=" << received.size() << " blocked=" << blocked << '\n';
         assert(sent == 128 && received.size() == 128);
         std::cout << "Actual SCTP delivery: " << sent << " unique packets, " << blocked << " bounded backpressure attempts\n";
-        wait([&] { return client.traffic_ready(address, TransportTrafficClass::Checkpoint); });
+        wait("checkpoint channel", [&] { return client.traffic_ready(address, TransportTrafficClass::Checkpoint); });
         unsigned checkpoint_sent = 0U;
         bool checkpoint_blocked = false;
         std::promise<void> receiver_parked;
@@ -177,7 +213,7 @@ struct QuickJoinTestAccess {
         assert(client.send_status(address, control_payload, TransportTrafficClass::Control, error) == DatagramSendStatus::Sent);
         bool control_received = false;
         std::set<unsigned> checkpoint_received;
-        wait([&] {
+        wait("checkpoint delivery", [&] {
             PeerAddress source; std::vector<std::uint8_t> packet;
             while (host.receive(source, packet, error)) {
                 if (packet == control_payload) control_received = true;
@@ -241,7 +277,7 @@ struct QuickJoinTestAccess {
         // callbacks never dereference a destroyed DirectSession.
         host.set_receive_signal({});
         // Drain all accepted bulk before the route replacement checks below.
-        wait([&] {
+        wait("bulk drain", [&] {
             PeerAddress source; std::vector<std::uint8_t> packet;
             while (host.receive(source, packet, error)) assert(packet.size() == 14000);
             return client.buffered_bytes(TransportTrafficClass::Checkpoint) == 0 &&
@@ -261,20 +297,20 @@ struct QuickJoinTestAccess {
         client.service();
         { std::scoped_lock lock(client.mutex_); assert(client.peers_.contains(old_client->identifier)); }
         old_client->connection->close();
-        wait([&] {
+        wait("route replacement", [&] {
             std::scoped_lock lock(client.mutex_);
             const auto found = client.peers_.find(old_client->identifier);
             return found != client.peers_.end() && found->second != old_client &&
                 found->second->authority_channel && found->second->authority_channel->isOpen();
         });
-        wait([&] { return client.traffic_ready(address, TransportTrafficClass::Authoritative); });
+        wait("replacement authoritative channel", [&] { return client.traffic_ready(address, TransportTrafficClass::Authoritative); });
         const auto retry_before_stale = client.next_route_retry_ms_.load();
         client.request_route_retry(old_client);
         assert(client.next_route_retry_ms_.load() == retry_before_stale);
         const std::vector<std::uint8_t> resumed_payload(32U, 0x6DU);
         assert(client.send_status(address, resumed_payload, TransportTrafficClass::Authoritative, error) == DatagramSendStatus::Sent);
         bool recovered_delivery = false;
-        wait([&] {
+        wait("replacement delivery", [&] {
             PeerAddress source; std::vector<std::uint8_t> packet;
             if (host.receive(source, packet, error)) {
                 assert(source == admitted_host_source && packet == resumed_payload);
@@ -284,7 +320,7 @@ struct QuickJoinTestAccess {
         });
         std::cout << "Mature admitted route recovered with unchanged addresses and stale callbacks fenced\n";
         assert(host.rekey_quick_join("replacement", error));
-        wait([&] { return host.rekey_status() == QuickJoinRekeyStatus::Committed; });
+        wait("committed rekey", [&] { return host.rekey_status() == QuickJoinRekeyStatus::Committed; });
         assert(host.quick_join_code() != "ABCDE");
         assert(client.traffic_ready(address, TransportTrafficClass::Control));
         // Late malformed signaling cannot globally poison the established pair.

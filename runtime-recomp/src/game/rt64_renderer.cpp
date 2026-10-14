@@ -16,6 +16,7 @@
 #include "game_registration.hpp"
 #include "presentation_identity.hpp"
 #include "renderer_snapshot.hpp"
+#include "accessibility_observation.hpp"
 #include "local_scenery_rt64.hpp"
 #include "revision_addresses.hpp"
 #include "runtime_enhancements.hpp"
@@ -374,6 +375,7 @@ dkr::runtime::RT64Renderer::RT64Renderer(
     g_imem.fill(0);
     g_mi_interrupt = 0;
     g_dpc_registers.fill(0);
+    accessibility_session_ = accessibility::begin_session();
 
     RT64::Application::Core core{};
 #if defined(_WIN32)
@@ -715,6 +717,15 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task,
                                          rdram_snapshot);
     dkr::runtime::presentation::TaskIdentityScope identity_scope(
         rdram_snapshot, task->t.data_ptr);
+    // The runtime already owns this submission copy. Observe it before RT64
+    // mutates its decode workspace; never read live guest memory from AX.
+    // Online/owned snapshots are deliberately outside the prototype's scope.
+    accessibility::observe_submission(
+        owned_mode_ || netplay::session().active()
+            ? std::span<const std::uint8_t>{}
+            : std::span<const std::uint8_t>{rdram_snapshot, 0x800000U},
+        revision_addresses::selected_revision(),
+        presentation::task_scene_generation(), accessibility_session_);
     // DKR authors a new visual state at 30 Hz. Deriving that source cadence
     // from delayed VI history creates a positive feedback loop under load:
     // one late workload is misread as 20/15 Hz, RT64 schedules three or four
@@ -1014,6 +1025,10 @@ void dkr::runtime::RT64Renderer::shutdown() {
         if (g_active_renderer == this) g_active_renderer = nullptr;
     }
     std::scoped_lock presentation_lock(presentation_mutex_);
+    if (accessibility_session_ != 0) {
+        accessibility::end_session(accessibility_session_);
+        accessibility_session_ = 0;
+    }
     if (application_ != nullptr) {
         dkr::runtime::ui::detach(*application_);
         application_->end();

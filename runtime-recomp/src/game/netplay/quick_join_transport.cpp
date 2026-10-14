@@ -833,6 +833,11 @@ private:
                                       std::string connection_id,
                                       bool offer = false,
                                       const Json* remote_sdp = nullptr) {
+        // A failed replacement must roll back to a live predecessor. Serialize
+        // construction transactions so another replacement cannot capture the
+        // temporarily published route before its negotiation start commits.
+        // SDK callbacks remain free to acquire the separate transport mutex.
+        std::scoped_lock construction_lock(route_construction_mutex_);
         auto peer = std::make_shared<Peer>();
         peer->remote_id = std::move(remote);
         peer->connection_id = std::move(connection_id);
@@ -867,6 +872,9 @@ private:
         try {
         route_construction_check(0);
         rtc::Configuration configuration;
+        // Creating channels otherwise starts an offer immediately. A fast
+        // answer/candidate can arrive before find_peer can see this route.
+        configuration.disableAutoNegotiation = true;
 #ifndef DKR_QUICK_JOIN_TESTING
         configuration.iceServers.emplace_back(
             "stun:stun.l.google.com:19302");
@@ -934,16 +942,17 @@ private:
             peer->connection->setRemoteDescription(rtc::Description(
                 remote_sdp->value("sdp", ""), remote_sdp->value("type", "")));
         }
+#ifdef DKR_QUICK_JOIN_TESTING
+        if (before_route_publication_) before_route_publication_(peer->connection);
+#endif
         {
             std::scoped_lock lock(mutex_);
-            // Do not retire the usable route until replacement construction
-            // and initial negotiation have succeeded.
+            // Publish for incoming signaling, but keep the usable route alive
+            // until starting the replacement negotiation has succeeded.
             const auto current = peers_.find(peer->identifier);
             if (current != peers_.end() && current->second != replaced)
                 throw std::runtime_error("A newer route already replaced this construction");
             if (replaced) {
-                replaced->current.store(false, std::memory_order_release);
-                purge_peer_packets_locked(replaced);
                 remote_to_identifier_.erase(
                     replaced->remote_id + "\n" + replaced->connection_id);
             }
@@ -951,8 +960,17 @@ private:
                                   peer->connection_id] = peer->identifier;
             peers_[peer->identifier] = peer;
         }
+        // Publish the fully constructed route before releasing any signaling
+        // to the remote peer. SDK callbacks can now resolve its responses.
+        if (offer || remote_sdp) {
+            route_construction_check(7);
+            peer->connection->setLocalDescription(offer
+                ? rtc::Description::Type::Offer : rtc::Description::Type::Answer);
+        }
         if (replaced) {
             std::scoped_lock lock(mutex_);
+            replaced->current.store(false, std::memory_order_release);
+            purge_peer_packets_locked(replaced);
             retired_peers_.push_back(std::move(replaced));
         }
         return peer;
@@ -960,6 +978,16 @@ private:
             request_route_retry(peer);
             peer->current.store(false, std::memory_order_release);
             std::scoped_lock lock(mutex_);
+            const auto current = peers_.find(peer->identifier);
+            if (current != peers_.end() && current->second == peer) {
+                remote_to_identifier_.erase(peer->remote_id + "\n" + peer->connection_id);
+                if (replaced) {
+                    current->second = replaced;
+                    remote_to_identifier_[replaced->remote_id + "\n" + replaced->connection_id] = replaced->identifier;
+                } else {
+                    peers_.erase(current);
+                }
+            }
             retired_peers_.push_back(std::move(peer));
             return {};
         }
@@ -971,6 +999,7 @@ private:
 
     void route_construction_check(int stage) {
 #ifdef DKR_QUICK_JOIN_TESTING
+        if (construction_stage_hook_) construction_stage_hook_(stage);
         if (construction_failure_stage_ == stage)
             throw std::runtime_error("Injected route construction failure");
 #else
@@ -1233,6 +1262,9 @@ private:
                 const Json& sdp = payload["sdp"];
                 peer->connection->setRemoteDescription(rtc::Description(
                     sdp.value("sdp", ""), sdp.value("type", "")));
+                if (type == "OFFER") {
+                    peer->connection->setLocalDescription(rtc::Description::Type::Answer);
+                }
             } else if (type == "CANDIDATE" &&
                        payload.contains("candidate")) {
                 const Json& candidate = payload["candidate"];
@@ -1253,6 +1285,8 @@ private:
     bool host_ = false;
 #ifdef DKR_QUICK_JOIN_TESTING
     int construction_failure_stage_ = -1;
+    std::function<void(int)> construction_stage_hook_;
+    std::function<void(const std::shared_ptr<rtc::PeerConnection>&)> before_route_publication_;
 #endif
     std::string code_;
     std::string local_peer_id_;
@@ -1281,6 +1315,7 @@ private:
     std::string host_bootstrap_;
     std::string bootstrap_;
     PeerAddress bootstrap_peer_{};
+    std::mutex route_construction_mutex_;
     std::string failure_;
     std::atomic<std::uint64_t> next_peer_identifier_{1U};
     std::atomic<std::uint64_t> signaling_generation_{0U};

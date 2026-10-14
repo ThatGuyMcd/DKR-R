@@ -21,12 +21,15 @@
 
 #if DKR_RUNTIME_HAS_RT64
 #include "runtime_ui.hpp"
+#include "runtime_accessibility.hpp"
+#include "accessibility_observation.hpp"
 #include "imgui/imgui.h"
 #include <SDL.h>
 #if defined(_WIN32) || defined(__APPLE__)
 #include <SDL_syswm.h>
 #endif
 #if defined(__APPLE__)
+#include <TargetConditionals.h>
 #include <SDL_metal.h>
 extern "C" bool dkr_show_metal_layer(void* ns_window_ptr, void* layer_ptr);
 extern "C" bool dkr_handle_fullscreen_event(const SDL_Event* event);
@@ -1507,6 +1510,7 @@ void dkr::runtime::platform::shutdown() {
     }
 #endif
     if (g_window != nullptr) {
+        accessibility::detach_native();
         SDL_DestroyWindow(g_window);
         g_window = nullptr;
     }
@@ -1617,6 +1621,7 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
         // Allocate before retiring so failure cannot destroy the old window.
         // Transfer fullscreen only after releasing the previous SDL ownership.
         if (flags&SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window,0);
+        accessibility::detach_native();
         SDL_DestroyWindow(g_window);g_window=replacement;
         g_retire_launcher_window_for_game=false;
         SDL_SetWindowMinimumSize(g_window,800,600);
@@ -1649,6 +1654,7 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
                 (existing_flags & SDL_WINDOW_MAXIMIZED) != 0;
             const Uint32 fullscreen_mode = existing_flags &
                 (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
+            accessibility::detach_native();
             SDL_DestroyWindow(g_window);
             g_window = nullptr;
 
@@ -1711,6 +1717,7 @@ void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surfa
         // Release SDL's old fullscreen ownership before assigning it to the
         // replacement. No game renderer or overlay still references the HWND.
         if(flags&SDL_WINDOW_FULLSCREEN)SDL_SetWindowFullscreen(g_window,0);
+        accessibility::detach_native();
         SDL_DestroyWindow(g_window);g_window=replacement;
         g_retire_launcher_window_for_game=true;
         SDL_SetWindowMinimumSize(g_window,800,600);
@@ -1741,6 +1748,7 @@ void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surfa
         auto* replacement = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",
             x, y, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
         if (replacement) {
+            accessibility::detach_native();
             SDL_DestroyWindow(g_window);
             g_window = replacement;
             SDL_SetWindowMinimumSize(g_window, 800, 600);
@@ -1756,6 +1764,11 @@ void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surfa
 
 void dkr::runtime::platform::pump_window_events(void*) {
     pump_input_backend_events();
+    const auto observed = accessibility::read_observation();
+    accessibility::set_game_status(observed
+        ? accessibility::describe_observation(*observed)
+        : "Game status unavailable. No recent observation.");
+    accessibility::pump_native(g_window);
     if (dkr::runtime::ui::lifecycle_request() !=
         dkr::runtime::ui::LifecycleRequest::None) {
         ultramodern::quit();
@@ -1808,6 +1821,14 @@ void dkr::runtime::platform::pump_window_events(void*) {
         if(keyboard_toggle&&netplay::experimental::runtime_view().active) {
             std::fprintf(stderr,"[rollback][window] overlay key=%u capture=%d\n",unsigned(event.key.keysym.scancode),
                 int(dkr::runtime::ui::input_capture_active()));
+        }
+#endif
+#if defined(__APPLE__) && !TARGET_OS_IPHONE
+        if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
+            event.key.keysym.scancode == SDL_SCANCODE_F8 &&
+            !dkr::runtime::ui::input_capture_active()) {
+            accessibility::request_game_status_read();
+            continue;
         }
 #endif
         if (dkr::runtime::ui::input_capture_active()) {
@@ -2841,6 +2862,8 @@ dkr::runtime::platform::player_input_preview(std::size_t player) {
         const auto* device = Sdl3DeviceForInstance(
             g_sdl3_player_instances[player]);
         if (device != nullptr) {
+            preview.controller_connected = device->snapshot.connected;
+            preview.controller_buttons = dkr::runtime::controllers::pressed_button_mask(device->snapshot);
             using dkr::runtime::controllers::StandardAxis;
             preview.stick_x = NormalisePreviewAxis(device->snapshot.axes[
                 static_cast<std::size_t>(StandardAxis::LeftX)]);
@@ -2853,6 +2876,14 @@ dkr::runtime::platform::player_input_preview(std::size_t player) {
     SDL_GameController* controller = g_controllers[player];
     if (controller != nullptr &&
         SDL_GameControllerGetAttached(controller) == SDL_TRUE) {
+        dkr::runtime::controllers::ControllerSnapshot physical{};
+        physical.connected = true;
+        static_assert(SDL_CONTROLLER_BUTTON_MAX <= dkr::runtime::controllers::kSnapshotButtonCount);
+        for (int button = 0; button < SDL_CONTROLLER_BUTTON_MAX; ++button)
+            physical.buttons[static_cast<std::size_t>(button)] = SDL_GameControllerGetButton(
+                controller, static_cast<SDL_GameControllerButton>(button));
+        preview.controller_connected = true;
+        preview.controller_buttons = dkr::runtime::controllers::pressed_button_mask(physical);
         preview.stick_x = NormalisePreviewAxis(SDL_GameControllerGetAxis(
             controller, SDL_CONTROLLER_AXIS_LEFTX));
         preview.stick_y = -NormalisePreviewAxis(SDL_GameControllerGetAxis(

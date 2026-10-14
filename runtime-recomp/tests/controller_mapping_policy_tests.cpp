@@ -1,4 +1,5 @@
 #include "controller_mapping_policy.hpp"
+#include "controller_snapshot.hpp"
 
 #include <cassert>
 #include <cstdio>
@@ -6,6 +7,18 @@
 
 int main() {
     using namespace dkr::runtime::controllers;
+
+    // Diagnostic reads ignore retained disconnected presses and preserve
+    // simultaneous and extended standard button indices when connected.
+    ControllerSnapshot diagnostic{};
+    diagnostic.buttons[static_cast<std::size_t>(StandardButton::South)] = 1U;
+    diagnostic.buttons[static_cast<std::size_t>(StandardButton::DpadLeft)] = 1U;
+    diagnostic.buttons.back() = 1U;
+    assert(pressed_button_mask(diagnostic) == 0U);
+    diagnostic.connected = true;
+    assert(pressed_button_mask(diagnostic) == ((1U << 0U) | (1U << 13U) | (1U << 25U)));
+    diagnostic.buttons.fill(0U);
+    assert(pressed_button_mask(diagnostic) == 0U);
 
     ControllerMappingDefinition mapping{};
     mapping.inputs[mapping_index(MappingControl::StickLeft)] =

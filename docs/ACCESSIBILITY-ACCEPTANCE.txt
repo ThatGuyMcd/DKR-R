@@ -1,0 +1,43 @@
+Native macOS foundation acceptance
+==================================
+
+This local PR is one part of the broader accessibility work. Its user-facing
+purpose is to let a poorly sighted player identify host controls and stock
+menu choices, read current menu/HUD text, and receive understandable speech.
+It is not complete accessible gameplay or four-platform delivery.
+
+Merge gates
+-----------
+1. Build the isolated native foundation without held/world/road audio,
+   pixel-frame capture, camera comfort, renderer diagnostics or UIKit sources.
+2. Pass Observation, Feedback, Host, ImGui, MacOS and MacOSHierarchy tests.
+   Retain both-revision visible held-item text and read-only memory checks.
+3. Verify a rebuilt-app launcher/import/settings/overlay journey and a stock
+   menu-to-race path. Include selection changes, cancellation, confirmations,
+   modal exclusion, enabled state and return of ordinary SDL input. Exercise
+   a relevant host text dialog: read/edit its draft, accept and cancel, and
+   return to ordinary keyboard/controller input without stale edits.
+4. Establish actual useful VoiceOver speech with VoiceOver enabled. AX text,
+   selected/focused roles and screenshots alone are insufficient. Check that
+   changes are timely and intelligible, unchanged state is not repeatedly
+   announced, and speech remains tolerable alongside the game's normal audio.
+5. Check session reset, unsupported/transition screens, unavailable status,
+   background windows and native editors do not expose stale information or
+   steal input. Preserve normal behavior with VoiceOver off.
+6. Obtain intended-player feedback: would a poorly sighted user appreciate
+   the actual menu/status assistance? Automated tests cannot prove usefulness.
+
+Known coverage limits
+---------------------
+Boot Controller Pak errors/delete/wait states, multiplayer layouts, custom or
+unsupported text/layouts, moving postrace rows and Adventure preview stages
+without a setup GUI remain unavailable. Stock menu observations use a copied
+submission image; they are not final-pixel guarantees. The native adapter's
+public focus/hierarchy behavior does not prove useful speech or resolve ROM
+image display issues.
+
+Separate increments must deliver camera comfort, held-item audio/settings,
+iOS native support, visible world/road/item/booster assistance, aircraft visible
+altitude information and other-platform adapters. Renderer diagnostics, if
+introduced later, are engineering evidence and must stay out of player UI.
+No gameplay assistance success is claimed by this foundation's test results.

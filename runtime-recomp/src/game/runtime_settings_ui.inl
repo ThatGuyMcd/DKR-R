@@ -31,7 +31,13 @@ void SettingsLabel(std::string_view label, float width) {
 // Help under a control (.gfx-help).
 float SettingsHelp(std::string_view text, float width, unsigned colour = kSetMuted) {
     if (text.empty()) return 0.0F;
-    return PaddockText(SetHelpType(), PaddockRgb(colour), text, width);
+    const float height = PaddockText(SetHelpType(), PaddockRgb(colour), text, width);
+    dkr::runtime::accessibility::Node node;
+    node.role = dkr::runtime::accessibility::Role::StaticText;
+    node.id = "settings-help-" + std::to_string(ImGui::GetID(text.data(), text.data() + text.size()));
+    node.label = text;
+    AccessibleWidget(std::move(node));
+    return height;
 }
 
 // ------------------------------------------------------------ drop-down
@@ -119,6 +125,15 @@ int DrawSettingsPicker(const char* popup, ImVec2 anchor_min, ImVec2 anchor_max, 
             if (choice.disabled) ImGui::BeginDisabled();
             const PaddockPress press = PaddockBeginPress("##choice", {inner, row}, 0.12F, 0.12F);
             if (choice.disabled) ImGui::EndDisabled();
+            dkr::runtime::accessibility::Node accessibility_choice;
+            accessibility_choice.role = dkr::runtime::accessibility::Role::MenuItem;
+            accessibility_choice.label = choice.label;
+            accessibility_choice.help = choice.detail;
+            accessibility_choice.enabled = !choice.disabled;
+            accessibility_choice.selected = index == current;
+            const auto accessibility_pick = AccessibleWidget(std::move(accessibility_choice));
+            const bool picked_accessibly = accessibility_pick &&
+                accessibility_pick->kind == dkr::runtime::accessibility::ActionKind::Press;
             if (index == current && ImGui::IsWindowAppearing()) ImGui::SetItemDefaultFocus();
             const float alpha = choice.disabled ? 0.45F : 1.0F;
             const auto tone = [&](unsigned rgb, unsigned a8 = 255U) {
@@ -160,7 +175,7 @@ int DrawSettingsPicker(const char* popup, ImVec2 anchor_min, ImVec2 anchor_max, 
                 PaddockDrawRun(draw, detail_type, {text_x, top + label_type.line + 1.0F},
                                tone(0x9FB8C4), detail.data(), detail.data() + detail.size());
             }
-            if (press.pressed && !choice.disabled) {
+            if ((press.pressed || picked_accessibly) && !choice.disabled) {
                 picked = index;
                 ImGui::CloseCurrentPopup();
             }
@@ -186,7 +201,20 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value,
     if (disabled) ImGui::BeginDisabled();
     const PaddockPress press = PaddockBeginPress("##field", {width, 52.0F});
     if (disabled) ImGui::EndDisabled();
-    if (press.pressed && !disabled) ImGui::OpenPopup(popup);
+    dkr::runtime::accessibility::Node accessibility_choice;
+    accessibility_choice.role = dkr::runtime::accessibility::Role::Choice;
+    accessibility_choice.label = label; accessibility_choice.help = help;
+    accessibility_choice.number = *value;
+    accessibility_choice.maximum = std::max(static_cast<int>(choices.size()) - 1, 0);
+    accessibility_choice.enabled = !disabled && !choices.empty();
+    for (const auto& choice : choices) {
+        accessibility_choice.choices.push_back(choice.label);
+        accessibility_choice.choice_enabled.push_back(!choice.disabled && !choice.separator);
+    }
+    if (!choices.empty()) accessibility_choice.value = choices[static_cast<std::size_t>(*value)].label;
+    const auto accessibility_action = AccessibleWidget(std::move(accessibility_choice));
+    if ((press.pressed || (accessibility_action &&
+        accessibility_action->kind == dkr::runtime::accessibility::ActionKind::Press)) && !disabled) ImGui::OpenPopup(popup);
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const int first = draw->VtxBuffer.Size;
     const PaddockRadii radii = PaddockRound(8.0F);
@@ -208,7 +236,16 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value,
     }
     OlFade(draw, first, disabled ? 0.6F : 1.0F);
     PaddockEndPress(press, 8.0F, 0.98F);
-    const int picked = DrawSettingsPicker(popup, press.min, press.max, *value, choices);
+    int picked = DrawSettingsPicker(popup, press.min, press.max, *value, choices);
+    if (accessibility_action) {
+        using Kind = dkr::runtime::accessibility::ActionKind;
+        if (accessibility_action->kind == Kind::SetValue) picked = static_cast<int>(accessibility_action->value);
+        else if (accessibility_action->kind == Kind::Increment || accessibility_action->kind == Kind::Decrement) {
+            const int direction = accessibility_action->kind == Kind::Increment ? 1 : -1;
+            for (int next = *value + direction; next >= 0 && next < static_cast<int>(choices.size()); next += direction)
+                if (!choices[next].disabled && !choices[next].separator) { picked = next; break; }
+        }
+    }
     ImGui::PopID();
     bool changed = false;
     if (picked >= 0 && picked != *value) {
@@ -234,7 +271,8 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value,
 
 // A checkbox with its label, and its help 36 px in under it (.gfx-option).
 bool SettingsCheck(const char* id, std::string_view label, bool* value, float width,
-                   std::string_view help = {}, bool disabled = false) {
+                   std::string_view help = {}, bool disabled = false,
+                   std::string_view accessible_label = {}) {
     const PaddockType type = SetLabelType();
     const float text_width = std::max(width - 36.0F, 1.0F);
     const auto lines = PaddockWrap(type, label, text_width);
@@ -246,7 +284,8 @@ bool SettingsCheck(const char* id, std::string_view label, bool* value, float wi
     const PaddockPress press = PaddockBeginPress(id, {std::min(36.0F + std::ceil(label_width) + 4.0F, width), height});
     if (disabled) ImGui::EndDisabled();
     bool changed = false;
-    if (press.pressed && !disabled) {
+    if (AccessibleTogglePressed(accessible_label.empty() ? label : accessible_label,
+                                *value, press.pressed, !disabled, help) && !disabled) {
         *value = !*value;
         changed = true;
     }
@@ -318,6 +357,8 @@ bool SettingsRange(const char* id, std::string_view label, int* value, int minim
     if (disabled) ImGui::BeginDisabled();
     const PaddockRangeResult range = PaddockRange(id, value, minimum, maximum, width);
     if (disabled) ImGui::EndDisabled();
+    const bool accessible_changed = AccessibleRange(label, value, minimum, maximum, range.changed,
+        !disabled, help, shown.number + " " + shown.unit);
     if (disabled) OlFade(draw, first, 0.6F);
     if (!help.empty()) {
         PaddockGap(8.0F);
@@ -331,7 +372,7 @@ bool SettingsRange(const char* id, std::string_view label, int* value, int minim
                       PaddockCol(kSetFocus), 16.5F, 0, 3.0F);
     }
     splitter.Merge(draw);
-    return range.changed;
+    return accessible_changed;
 }
 
 // ------------------------------------------------------------ cards
@@ -459,7 +500,13 @@ bool SettingsDisclosure(const char* id, std::string_view label, bool& open, floa
     const float text_width = PaddockMeasure(type, label);
     const float height = std::max(44.0F, 14.0F + type.line + 4.0F);
     const PaddockPress press = PaddockBeginPress(id, {std::min(4.0F + 17.0F + text_width + 8.0F, width), height});
-    if (press.pressed) open = !open;
+    dkr::runtime::accessibility::Node disclosure;
+    disclosure.role = dkr::runtime::accessibility::Role::Disclosure;
+    disclosure.label = label; disclosure.selected = open;
+    disclosure.value = open ? "Expanded" : "Collapsed";
+    const auto accessibility_disclosure = AccessibleWidget(std::move(disclosure));
+    if (press.pressed || (accessibility_disclosure &&
+        accessibility_disclosure->kind == dkr::runtime::accessibility::ActionKind::Press)) open = !open;
     const ImU32 colour = PaddockApply(PaddockMix(PaddockRgb(kSetText), PaddockRgb(kSetWarm), press.hover));
     const float top = press.min.y + 14.0F;
     const ImVec2 marker{press.min.x + 4.0F + 4.0F, top + type.line * 0.5F};
@@ -561,7 +608,8 @@ inline float SettingsButtonWidth(std::string_view label) {
 // to the label; a long label wraps and grows the height.
 bool SettingsButton(const char* label, float width = 0.0F, bool disabled = false,
                     SettingsButtonTone tone = SettingsButtonTone::Plain, bool regular = false,
-                    const char* reason = nullptr, float padding_x = 14.0F) {
+                    const char* reason = nullptr, float padding_x = 14.0F,
+                    std::string_view accessible_label = {}, std::string_view accessible_value = {}) {
     const char* end = PaddockLabelEnd(label);
     const std::string_view text(label, static_cast<std::size_t>(end - label));
     const PaddockType type = PaddockReading(14.0F, !regular, 1.35F);
@@ -615,7 +663,15 @@ bool SettingsButton(const char* label, float width = 0.0F, bool disabled = false
         draw->AddRect({press.min.x - 4.5F, press.min.y - 4.5F}, {press.max.x + 4.5F, press.max.y + 4.5F},
                       PaddockCol(0xFFD078), 12.5F, 0, 3.0F);
     }
-    return press.pressed && !disabled;
+    dkr::runtime::accessibility::Node node;
+    node.role = dkr::runtime::accessibility::Role::PushButton;
+    node.label = accessible_label.empty() ? text : accessible_label;
+    node.value = accessible_value;
+    node.enabled = !disabled;
+    node.selected = tone == SettingsButtonTone::Selected;
+    node.help = reason ? reason : "";
+    const auto action = AccessibleWidget(std::move(node));
+    return (press.pressed || (action && action->kind == dkr::runtime::accessibility::ActionKind::Press)) && !disabled;
 }
 
 // ------------------------------------------------------------ secondary nav
@@ -651,7 +707,8 @@ int SettingsSecondaryNav(const char* id, const std::vector<const char*>& labels,
         ImGui::PushID(static_cast<int>(index));
         const PaddockPress press = PaddockBeginPress("##tab", {widths[index], 44.0F});
         ImGui::PopID();
-        if (press.pressed) picked = static_cast<int>(index);
+        if (AccessibleWidgetPressed(labels[index], press.pressed, true, selected,
+                                    "Show this settings section.")) picked = static_cast<int>(index);
         const float lit = std::max(press.hover, press.focused ? 1.0F : 0.0F);
         const ImU32 fill = selected ? PaddockMix(PaddockRgb(0x1B4053), PaddockRgb(0x234C60), lit)
                                     : PaddockMix(PaddockRgb(0x112E3E, 0U), PaddockRgb(0x112E3E), lit);

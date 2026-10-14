@@ -117,7 +117,7 @@ void DrawSoundSpeaker(ImDrawList* draw, ImVec2 at, ImU32 colour, int waves, bool
 
 // The mute button leading a volume row. Pointer only: the D-pad reaches mute
 // through A on the slider, so a row is one stop.
-bool DrawSoundMuteButton(const char* id, ImVec2 at, bool muted, float level) {
+bool DrawSoundMuteButton(const char* id, const char* channel, ImVec2 at, bool muted, float level) {
     ImGui::SetCursorScreenPos(at);
     ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
     const PaddockPress press = PaddockBeginPress(id, {44.0F, 44.0F});
@@ -135,7 +135,7 @@ bool DrawSoundMuteButton(const char* id, ImVec2 at, bool muted, float level) {
     DrawSoundSpeaker(draw, {press.min.x + 10.0F, press.min.y + 10.0F}, ink,
                      percent == 0 ? 0 : percent < 50 ? 1 : 2, muted);
     PaddockEndPress(press, 10.0F, 0.9F);
-    return press.pressed;
+    return AccessibleTogglePressed(std::string(channel) + " mute", muted, press.pressed, true, "Mute this channel while keeping its volume level.");
 }
 
 // A row's own surface: hover tint, and the focus ring of its slider.
@@ -221,7 +221,7 @@ bool DrawSoundVolumeRow(std::size_t channel, const char* label, ImVec2 at, float
     DrawSoundRowSurface(at, row_max, master, row_hovered, slider_focused);
 
     bool changed = false;
-    if (DrawSoundMuteButton("##mute", {at.x + (master ? 8.0F : 4.0F),
+    if (DrawSoundMuteButton("##mute", label, {at.x + (master ? 8.0F : 4.0F),
                                        narrow ? row.label_mid - 22.0F : at.y + (row.height - 44.0F) * 0.5F},
                             muted, level)) {
         SetSoundMuted(channel, !muted);
@@ -246,8 +246,12 @@ bool DrawSoundVolumeRow(std::size_t channel, const char* label, ImVec2 at, float
     const PaddockRangeResult slider =
         PaddockRange("##level", &steps, 0, 20, row.slider_width, look);
     if (dim < 1.0F) ImGui::PopStyleVar();
-    if (slider.changed) {
-        SetSoundLevel(channel, static_cast<float>(steps) / 20.0F);
+    // Native clients read and set the same percentage printed in the row;
+    // the painted range retains its existing twenty five-percent steps.
+    int percent = slider.changed ? steps * 5 : static_cast<int>(std::lround(level * 100.0F));
+    if (AccessibleRange(std::string(label) + " volume", &percent, 0, 100, slider.changed,
+                        true, "Adjust in five percent steps.", std::to_string(percent) + " percent", 5)) {
+        SetSoundLevel(channel, static_cast<float>(percent) / 100.0F);
         changed = true;
     } else if (slider.activated) {
         SetSoundMuted(channel, !muted);
@@ -294,6 +298,8 @@ void DrawSoundBandRow(std::size_t band, const char* label, ImVec2 at, float widt
     look.bipolar = true;
     ImGui::SetCursorScreenPos({row.slider_x, row.slider_y});
     const PaddockRangeResult slider = PaddockRange("##band", &db, -12, 12, row.slider_width, look);
+    AccessibleRange(std::string(label) + " equalizer", &db, -12, 12, slider.changed,
+                    true, "Adjust this equalizer band in decibels.", std::to_string(db) + " dB");
     if (slider.activated || slider.reset) db = 0;
     if (db != eq[band]) {
         eq[band] = db;
@@ -335,7 +341,7 @@ bool DrawSoundLinkButton(const char* label, bool disabled, const char* hint) {
     PaddockDrawRun(draw, type, {press.min.x + 15.0F, std::round(press.min.y + (44.0F - type.line) * 0.5F)},
                    ink, label, end);
     PaddockEndPress(press, 10.0F);
-    return press.pressed;
+    return AccessibleWidgetPressed(label, press.pressed, !disabled, false, hint ? hint : "");
 }
 
 // An EQ preset: the MODS / HACKS painted sign without its chevron; the preset
@@ -345,7 +351,8 @@ float SoundChipWidth(const char* label) {
     return std::ceil(PaddockMeasure(type, label, PaddockLabelEnd(label)) + 24.0F + 4.0F);
 }
 
-bool DrawSoundChip(const char* label, bool selected, float width) {
+bool DrawSoundChip(const char* label, bool selected, float width,
+                   std::string_view help = "Apply this equalizer preset.") {
     const PaddockType type = PaddockSign(18.0F, 1.4F);
     const char* end = PaddockLabelEnd(label);
     const float height = std::ceil(type.line + 20.0F + 4.0F);
@@ -372,7 +379,7 @@ bool DrawSoundChip(const char* label, bool selected, float width) {
     PaddockDrawRun(draw, type, {at.x, at.y + 2.0F}, PaddockCol(0x031623), label, end);
     PaddockDrawRun(draw, type, at, text, label, end);
     PaddockEndPress(press, 12.0F);
-    return press.pressed;
+    return AccessibleWidgetPressed(label, press.pressed, true, selected, help);
 }
 
 // A card's heading, its caption, and optionally its own action on the right
@@ -498,6 +505,37 @@ void DrawSoundPage(float available_width, bool live = false) {
         DrawSoundMultiplayerMusic(width);
         PaddockGap(16.0F);
     }
+
+    // Speech is available in both presentation profiles. VoiceOver owns its
+    // voice, rate and volume; opting out only prevents future announcements.
+    DrawSoundCard(width, [&](float inner) {
+        DrawSoundCardHead("Accessibility speech", "Read game status with VoiceOver.", inner,
+                          0.0F, [] {});
+        PaddockGap(12.0F);
+        auto speech = dkr::runtime::accessibility::feedback_preferences();
+        bool changed = SettingsCheck("##automatic-speech", "Automatic game announcements",
+            &speech.automatic_speech, inner,
+            "Announce observed menu selections, race-start prompts and position changes. VoiceOver must be enabled.");
+        PaddockGap(10.0F);
+        changed |= SettingsCheck("##position-speech", "Announce race position changes",
+            &speech.announce_position, inner, "Read changed positions without repeating unchanged status.");
+        PaddockGap(10.0F);
+        int interval = static_cast<int>(speech.position_interval.count());
+        changed |= SettingsRange("##position-interval", "Minimum time between position announcements",
+            &interval, 500, 10000, inner, [](int value) {
+                return SettingsRangeValue{std::to_string(value), "ms"};
+            }, "Keep the latest changed position while waiting. VoiceOver controls voice, speed and volume.");
+        speech.position_interval = std::chrono::milliseconds(interval);
+        if (changed) {
+            dkr::runtime::accessibility::set_feedback_preferences(speech);
+            SaveSettings();
+        }
+        PaddockGap(10.0F);
+        SettingsHelp("Close settings and press F8 during play to read fresh game status with VoiceOver.", inner);
+        PaddockGap(8.0F);
+        SettingsHelp("Turning automatic speech off stops future announcements. Speech already queued by VoiceOver may finish.", inner);
+    });
+    PaddockGap(16.0F);
 
     // ------------------------------------------------------------ volume
     DrawSoundCard(width, [&](float inner) {

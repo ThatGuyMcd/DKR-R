@@ -101,6 +101,10 @@ struct PlayerInputPreview {
     std::uint16_t buttons = 0;
     float stick_x = 0.0F;
     float stick_y = 0.0F;
+    // Physical standard controller buttons for diagnostics, independent of
+    // the virtual N64 gameplay sample (which is neutral while menus own input).
+    bool controller_connected = false;
+    std::uint32_t controller_buttons = 0U;
 };
 
 struct ControllerMappingProgress {
