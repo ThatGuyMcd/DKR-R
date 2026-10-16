@@ -1520,6 +1520,57 @@ def test_geometry_colour_edit():
           "which reads back from the encoded model")
 
 
+def test_geometry_vertex_paint():
+    """Paint the ``baked`` layer: the paint reaches the file.
+
+    ``baked`` is what the viewport draws and what Vertex Paint paints, and the
+    export read only the raw channels, so a repainted track looked lit in
+    Blender and went out with its old colours - white, for a converted mesh -
+    with nothing saying so. Every vertex left alone has to keep its bytes.
+    """
+    print("vertex painting the baked layer")
+    from track_lab import level_model
+    from track_lab.operators import geometry as geometry_ops
+    from track_lab.operators import geometry_export
+    from track_lab.preview import _srgb_to_linear
+
+    path, obj = _import_lake(include_hidden=True)
+    if path is None:
+        print("  skip: no extracted level models")
+        return
+
+    mesh = obj.data
+    base_model = level_model.load(path)
+    painted_at = 11
+    segment_index, vertex_index = _identity(mesh)[painted_at]
+    was = tuple(base_model.segments[segment_index].colours[vertex_index])
+    now = (12, 200, 90, was[3])
+    check(now != was, "the paint differs from what the vertex had")
+
+    layer = mesh.color_attributes[geometry_ops.COLOUR_ATTRIBUTE]
+    values = [0.0] * (len(layer.data) * 4)
+    layer.data.foreach_get("color", values)
+    values[painted_at * 4:painted_at * 4 + 4] = [
+        _srgb_to_linear(c / 255.0) for c in now[:3]] + [now[3] / 255.0]
+    layer.data.foreach_set("color", values)
+
+    edit = geometry_export.build_edited_model(bpy.context)
+    check(not edit.rebuilt, "painting adds nothing, so the file keeps its layout")
+    differing = [
+        (s, v)
+        for s, segment in enumerate(base_model.segments)
+        for v in range(len(segment.colours))
+        if tuple(segment.colours[v]) != tuple(edit.model.segments[s].colours[v])
+    ]
+    check(differing == [(segment_index, vertex_index)],
+          "exactly the painted vertex differs in the file (got %r)" % (differing,))
+    check(tuple(edit.model.segments[segment_index].colours[vertex_index]) == now,
+          "and it carries the paint (%r -> %r, got %r)"
+          % (was, now, tuple(edit.model.segments[segment_index].colours[vertex_index])))
+    check(any("painted" in note for note in edit.notes),
+          "and the export says it took the paint (notes %r)" % (edit.notes,))
+
+
 def test_unpainted_colour_layer():
     """An all-zero colour layer is not a black track, and it says so.
 
@@ -1599,6 +1650,24 @@ def test_unpainted_colour_layer():
     check(set(colours) == {white}, "a CORNER baked layer builds white")
     check(str(stats.get("colour_domain")) == "CORNER",
           "and its domain is reported (got %r)" % (stats.get("colour_domain"),))
+
+    # No 'baked' at all: the layer Blender renders with is the lighting - a
+    # mesh brought from another game carries it under its own name.
+    stats = {}
+    mesh = mesh_with([("Shading_Vertex", "POINT", (1.0, 0.5, 0.25, 1.0))])
+    colours = new_track._read_colours(mesh, stats)
+    check(set(colours) == {(255, 188, 137, 255)},
+          "the rendered layer is read when there is no baked one (got %r)"
+          % (set(colours),))
+    check(stats.get("colour_from") == "Shading_Vertex",
+          "and where it came from is recorded (got %r)" % (stats.get("colour_from"),))
+
+    # Alpha is linear, as the importer writes it, not sRGB.
+    stats = {}
+    mesh = mesh_with([(name, "POINT", (1.0, 1.0, 1.0, 0.5))])
+    colours = new_track._read_colours(mesh, stats)
+    check(set(colours) == {(255, 255, 255, 128)},
+          "a half alpha reads back as 128 (got %r)" % (set(colours),))
 
 
 def test_geometry_refuses_orphans():
@@ -4153,6 +4222,73 @@ def test_moved_blend_rebuilds_its_textures():
             shutil.rmtree(directory, ignore_errors=True)
 
 
+def test_moved_track_finds_its_base():
+    """A track of its own, unpacked somewhere else, still exports.
+
+    The case that shipped: a converted track zipped with its ``-geometry.bin``
+    and unpacked on another machine. The object recorded the base's absolute
+    path, which named a disk that was not there, and the export refused with
+    the file sitting right beside the ``.blend``.
+    """
+    print("a moved track finds its base model beside the .blend")
+    from track_lab.operators import geometry as geometry_ops
+    from track_lab.operators import geometry_export
+
+    fresh()
+    first = tempfile.mkdtemp(prefix="dkr-base-from-")
+    second = tempfile.mkdtemp(prefix="dkr-base-to-")
+    try:
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(first, "carried.blend"))
+        bpy.ops.mesh.primitive_grid_add(size=3000.0, x_subdivisions=2,
+                                        y_subdivisions=2)
+        result = bpy.ops.dkr.track_from_mesh_blank(keep_source=False)
+        check(result == {"FINISHED"}, "the mesh converts (%r)" % (result,))
+        obj = geometry_ops.geometry_objects(bpy.context)[0]
+        written = os.path.join(first, "carried-geometry.bin")
+        check(os.path.isfile(written), "its base is written beside the .blend")
+
+        # A copy: the original folder is still there, and the copy uses its own.
+        moved = os.path.join(second, "carried-geometry.bin")
+        shutil.copyfile(written, moved)
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(second, "carried.blend"))
+        found = geometry_export.base_model_path(bpy.context, obj)
+        check(os.path.samefile(found, moved),
+              "a copied folder uses the base beside it, not the original's (%s)"
+              % found)
+
+        # The move: the original folder is gone.
+        shutil.rmtree(first)
+        found = geometry_export.base_model_path(bpy.context, obj)
+        check(os.path.samefile(found, moved),
+              "with the original gone, the base beside the .blend is found")
+        check(geometry_export.build_edited_model(bpy.context) is not None,
+              "and the track exports")
+
+        # Recorded on Windows, opened anywhere.
+        recorded = r"Z:\nowhere at all\carried-geometry.bin"
+        obj[geometry_ops.PROP_MODEL_PATH] = recorded
+        bpy.context.scene.dkr.geometry_path = recorded
+        found = geometry_ops.model_path(bpy.context, obj)
+        check(found and os.path.samefile(found, moved),
+              "a Windows path names its file on any system (%r)" % found)
+
+        # Not carried along: the refusal says where it has to go.
+        os.remove(moved)
+        message = None
+        try:
+            geometry_export.base_model_path(bpy.context, obj)
+        except geometry_export.GeometryExportError as error:
+            message = str(error)
+        check(message is not None and "carried-geometry.bin" in message
+              and "next to the .blend" in message
+              and "addon preferences" not in message,
+              "a base left behind is named, with where to put it (%s)" % message)
+    finally:
+        fresh()
+        for directory in (first, second):
+            shutil.rmtree(directory, ignore_errors=True)
+
+
 def test_track_from_mesh_drops_what_it_no_longer_draws():
     """Converting again after repainting leaves the old pictures behind.
 
@@ -5512,6 +5648,7 @@ def main():
         test_track_from_mesh_with_its_own_textures()
         test_track_from_mesh_keeps_material_textures()
         test_moved_blend_rebuilds_its_textures()
+        test_moved_track_finds_its_base()
         test_track_from_mesh_drops_what_it_no_longer_draws()
         test_remove_unused_textures()
         test_track_from_mesh_survives_ctrl_j()
@@ -5537,6 +5674,7 @@ def main():
         test_slots()
         test_partial_export_is_safe()
         test_geometry_colour_edit()
+        test_geometry_vertex_paint()
         test_unpainted_colour_layer()
     finally:
         track_lab.unregister()
