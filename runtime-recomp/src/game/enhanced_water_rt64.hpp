@@ -192,9 +192,12 @@ inline void apply_material(RT64::State& state, const Registry& registry,
                 material.craftCurrent[i].w=-1;
             }
         }
-        const auto& air=crafts.air;
-        material.craftAir[0]={air[0],air[1],air[2],air[3]};
-        material.craftAir[1]={air[4],air[5],air[6],air[7]};
+        if(!lava) {
+            // Low-pass clearance shares the last two shoreline vectors
+            // (WATER_CRAFT_AIR): water draws publish no shoreline segments,
+            // and lava reuses only shoreSegments[0..15], so it gets none.
+            for(unsigned i=0;i<8;++i)WATER_CRAFT_AIR(material,i)=crafts.air[i];
+        }
         if(lava) {
             // Lava has no shoreline/wake field. Reuse its unused shoreline
             // vectors without changing the full 2048-byte shader ABI. Keep

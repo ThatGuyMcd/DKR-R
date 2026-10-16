@@ -16,25 +16,37 @@ diff --git a/src/shared/rt64_water_params.h b/src/shared/rt64_water_params.h
  
  #ifdef HLSL_CPU
  namespace interop {
-@@ -26,6 +34,9 @@
-     // matrix belongs to this draw's viewport, not a later live guest camera.
+@@ -20,6 +28,7 @@
+     float4 craftPrevious[WATER_CRAFT_COUNT]; // world XYZ, wet contact fraction (-1 means inactive)
+     float4 craftCurrent[WATER_CRAFT_COUNT];
+     float4 shoreCounts[2];     // bounded static shoreline segments in each craft's world tile
++    // Water draws carry low-pass clearance in the last two shoreline vectors (WATER_CRAFT_AIR).
+     float4 shoreSegments[WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE]; // immutable mean-water intersections, XZ endpoints
+     float4 performance;    // SSR steps, wake resolution, hardware distance, spray tier
+     float4 appearance;     // reflection, refraction, wake and waterfall strengths
+@@ -29,6 +38,17 @@
      float4x4 cameraViewProjection;
      float4 cameraPosition;  // XYZ, W=1 marks the reviewed DKR adapter
-+    // Clearance above the liquid, four crafts per vector: positive values
-+    // are aircraft, negative values hovercraft, zero means no low pass.
-+    float4 craftAir[WATER_CRAFT_COUNT/4];
  };
++
++// Low-pass clearance above the liquid, four crafts per vector: positive
++// values are aircraft, negative values hovercraft, zero means no low pass.
++// WaterDrawParams is exactly at the 2048-byte structured-buffer stride, so
++// the clearance shares the last two shoreline vectors instead of growing it.
++// Water draws publish no shoreline segments (every shoreCounts entry stays
++// zero, so the field shaders never read them) and lava draws reuse only
++// shoreSegments[0..15] for emitters and write no clearance. Low passes are
++// gated on active crafts (W>=0), which lava and vertical water never have.
++#define WATER_CRAFT_AIR_SEGMENT (WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE - WATER_CRAFT_COUNT / 4)
++#define WATER_CRAFT_AIR(m, i) ((m).shoreSegments[WATER_CRAFT_AIR_SEGMENT + (i) / 4][(i) % 4])
  
  struct WaterDrawParams {
-@@ -60,10 +71,19 @@
-     float4 simulation;      // step seconds, previous time, current time, tile extent
- };
- #ifdef HLSL_CPU
--static_assert(sizeof(WaterMaterial) == 1552, "DKR water task ABI");
--static_assert(sizeof(WaterDrawParams) == 2000, "DKR water shader ABI");
-+static_assert(sizeof(WaterMaterial) == 1584, "DKR water task ABI");
-+static_assert(sizeof(WaterDrawParams) == 2032, "DKR water shader ABI");
+     WaterMaterial material;
+@@ -66,7 +86,17 @@
+ static_assert(sizeof(WaterMaterial) == 1584, "DKR water task ABI");
+ static_assert(sizeof(WaterDrawParams) == 2048, "DKR water shader ABI");
  static_assert(sizeof(WaterDrawParams) <= 2048, "D3D structured-buffer stride limit");
++static_assert(WATER_CRAFT_AIR_SEGMENT >= 16, "Low-pass clearance must not overlap the lava emitters");
  static_assert(sizeof(WaterFieldPushConstants) == 32, "Portable water field shader ABI");
  static_assert(sizeof(WaterFieldPushConstants) <= 128, "Vulkan guaranteed push-constant budget");
  }
@@ -51,7 +63,7 @@ diff --git a/src/shared/rt64_water_params.h b/src/shared/rt64_water_params.h
 diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
 --- a/src/render/rt64_water_renderer.h
 +++ b/src/render/rt64_water_renderer.h
-@@ -122,6 +122,7 @@
+@@ -155,6 +155,7 @@
      BufferPair particleBuffer;
      std::array<float,WATER_CRAFT_COUNT> sprayDistance{};
      std::array<interop::float4,WATER_CRAFT_COUNT> sprayHeading{};
@@ -62,7 +74,7 @@ diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
 diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer.cpp
 --- a/src/render/rt64_water_renderer.cpp
 +++ b/src/render/rt64_water_renderer.cpp
-@@ -457,9 +457,20 @@
+@@ -498,9 +498,20 @@
      worker->commandList->setFramebuffer(scene.waterColorFramebuffer.get());
  }
  
@@ -84,7 +96,7 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
          spraySeed=0x57A064u^uint32_t(m.identity.w);
          return;
      }
-@@ -495,6 +506,45 @@
+@@ -536,6 +547,45 @@
              particles.push_back(p);
          }
      }
@@ -92,7 +104,7 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
 +    // hull: outward curtains (kind 2) and slowly settling mist (kind 1).
 +    for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) {
 +        const auto &old=m.craftPrevious[i], &current=m.craftCurrent[i];
-+        const float air=m.craftAir[i/4][i%4];
++        const float air=WATER_CRAFT_AIR(m,i);
 +        const float dx=current.x-old.x,dz=current.z-old.z;
 +        const float distance=std::sqrt(dx*dx+dz*dz), speed=distance/interval;
 +        const float wash=current.w<0 ? 0.0f : lowPassStrength(air)*std::clamp(speed/WATER_LOWPASS_FULL_SPEED,0.0f,1.0f);
@@ -130,17 +142,17 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
  }
  
  void WaterRenderer::drawSpray(RenderWorker *worker,uint32_t drawIndex) {
-@@ -535,7 +585,11 @@
+@@ -576,7 +626,11 @@
      const auto horizontal=std::find_if(draws.begin(),draws.end(),[](const auto& d){return d.material.effects.z<3;});
      const auto sourceDraw=horizontal==draws.end() ? draws.front() : *horizontal;
      const auto m=sourceDraw.material;
 -    const bool active=horizontal!=draws.end() && std::any_of(std::begin(m.craftCurrent),std::end(m.craftCurrent),[](const auto& c){return c.w>0;});
 +    // A low pass over the liquid keeps the field alive without hull contact.
 +    bool lowPass=false;
-+    for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) lowPass|=m.craftCurrent[i].w>=0 && m.craftAir[i/4][i%4]!=0;
++    for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) lowPass|=m.craftCurrent[i].w>=0 && WATER_CRAFT_AIR(m,i)!=0;
 +    const bool active=horizontal!=draws.end() && (lowPass ||
 +        std::any_of(std::begin(m.craftCurrent),std::end(m.craftCurrent),[](const auto& c){return c.w>0;}));
-     const uint32_t resolution=water_work::fieldResolution(active,bool(fieldTextures[0]),fieldResolution,uint32_t(m.identity.x));
+     const uint32_t resolution=active && m.performance.y>=128 ? uint32_t(m.performance.y) : water_work::fieldResolution(active,bool(fieldTextures[0]),fieldResolution,uint32_t(m.identity.x));
      constexpr float extent=4096, dt=1.0f/60;
      if (fieldResolution!=resolution) {
 diff --git a/src/shaders/WaterFieldCS.hlsl b/src/shaders/WaterFieldCS.hlsl
@@ -159,7 +171,7 @@ diff --git a/src/shaders/WaterFieldCS.hlsl b/src/shaders/WaterFieldCS.hlsl
          bool landed=!params.reset && old.w==0 && current.w>0 && params.simulation.y<m.animation.y && params.simulation.z>=m.animation.y;
          craftResponse[lane]=float4(saturate((old.y-current.y)/interval/180),landed ? 1 : 0,current.w,0);
 +        // Low pass: a footprint trailing beneath the craft, wider when higher.
-+        float air=m.craftAir[lane/4][lane%4];
++        float air=WATER_CRAFT_AIR(m,lane);
 +        float clearance=abs(air);
 +        float wash=current.w>=0 ? waterLowPassStrength(air)*saturate(distance/interval/WATER_LOWPASS_FULL_SPEED) : 0;
 +        craftWash[lane]=float4(to-heading*(10+clearance*0.15),20+clearance*0.3,wash*min(length(to-from)/cell,2));
@@ -304,7 +316,7 @@ diff --git a/src/shaders/WaterSprayPS.hlsl b/src/shaders/WaterSprayPS.hlsl
 diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
 --- a/src/shaders/WaterPS.hlsl
 +++ b/src/shaders/WaterPS.hlsl
-@@ -261,6 +261,38 @@
+@@ -299,6 +299,38 @@
      float determinant=dx.x*dy.y-dx.y*dy.x;
      float2 wakeGradient=float2(ddx(wake.x)*dy.y-ddy(wake.x)*dx.y,ddy(wake.x)*dx.x-ddx(wake.x)*dy.x)/max(abs(determinant),0.001)*sign(determinant);
      ripples += clamp(wakeGradient*8,-0.10,0.10);
@@ -316,7 +328,7 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
 +        float interval=max(m.animation.y-m.animation.x,0.00001);
 +        float f=saturate((p.camera.w-m.animation.x)/interval);
 +        [loop] for (uint i=0;i<WATER_CRAFT_COUNT;i++) {
-+            float air=m.craftAir[i/4][i%4];
++            float air=WATER_CRAFT_AIR(m,i);
 +            if (air==0 || m.craftCurrent[i].w<0) continue;
 +            float2 delta=m.craftCurrent[i].xz-m.craftPrevious[i].xz;
 +            float travel=length(delta);
@@ -343,7 +355,7 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
      float3 N = normalize(geometric + float3(-ripples.x, 0, -ripples.y));
      float3 V = normalize(p.camera.xyz - worldPosition);
      float3 L = normalize(m.sunDirection.xyz);
-@@ -270,7 +302,7 @@
+@@ -308,7 +340,7 @@
      float nh = saturate(dot(N,H));
      float vh = saturate(dot(V,H));
      float fresnel = 0.0204 + 0.9796 * pow(1-nv, 5);
@@ -352,7 +364,7 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
      float a2 = pow(roughness, 4);
      float d = a2 / max(PI * pow(nh*nh*(a2-1)+1, 2), 0.00001);
      float k = pow(roughness + 1, 2) * 0.125;
-@@ -349,7 +381,15 @@
+@@ -392,7 +424,15 @@
      float breakup=foamBreakup(worldPosition.xz,p.camera.w,m.surface.yz);
      float shore=wake.z*(1-smoothstep(30,100,abs(worldPosition.y-m.surface.x)));
      float foam=saturate((wake.y*1.8+shore*1.3+crest+contact)*m.animation.w*breakup);

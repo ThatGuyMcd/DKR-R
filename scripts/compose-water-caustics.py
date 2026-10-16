@@ -110,13 +110,13 @@ def renderer(t):
     causticPending=true;
     descriptorSet = std::make_unique<WaterDescriptorSet>(device,causticSampler.get());
     RenderPipelineLayoutBuilder builder;''')
-    t=replace(t,'''    for (auto &scene : scenes) { scene.captured=false; scene.surfaceCleared=false; }
-}''','''    for (auto &scene : scenes) { scene.captured=false; scene.surfaceCleared=false; }
+    t=replace(t,'''    for (auto &scene : scenes) { scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; scene.lavaPrepared=false; }
+}''','''    for (auto &scene : scenes) { scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; scene.lavaPrepared=false; }
     // The workload that recorded the caustic upload has completed.
     if (!causticPending) causticUpload.reset();
 }''')
-    t=replace(t,'        scene.materialSet = std::make_unique<WaterDescriptorSet>(worker->device);\n',
-        '        scene.materialSet = std::make_unique<WaterDescriptorSet>(worker->device,causticSampler.get());\n')
+    t=replace(t,'        scene.materialSet=std::make_unique<WaterDescriptorSet>(worker->device);\n',
+        '        scene.materialSet=std::make_unique<WaterDescriptorSet>(worker->device,causticSampler.get());\n')
     t=replace(t,'''    ms->setTexture(ms->sceneDepth,scene.depth.get(),RenderTextureLayout::SHADER_READ,scene.depthView.get());
 ''','''    ms->setTexture(ms->sceneDepth,scene.depth.get(),RenderTextureLayout::SHADER_READ,scene.depthView.get());
     ms->setTexture(ms->caustics,causticTexture.get(),RenderTextureLayout::SHADER_READ,causticView.get());

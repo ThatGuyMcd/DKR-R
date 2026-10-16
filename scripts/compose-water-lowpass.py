@@ -2,7 +2,7 @@
 
 Read the composed stage; emit one pipeline patch. Re-runs reverse this layer
 (and the later caustics layer, when present) in memory first, so the
-patch is always authored against the reflection-search baseline.
+patch is always authored against the lava-glow baseline.
 """
 from pathlib import Path
 import difflib
@@ -15,7 +15,7 @@ output=root/'patches/enhanced-water/dkr-lowpass.patch'
 caustics=root/'patches/enhanced-water/dkr-caustics.patch'
 layers=[]
 if caustics.exists() and 'causticTexture' in (stage/'src/shaders/WaterPS.hlsl').read_text():layers.append(caustics)
-if 'craftAir' in (stage/'src/shared/rt64_water_params.h').read_text():layers.append(output)
+if 'WATER_CRAFT_AIR' in (stage/'src/shared/rt64_water_params.h').read_text():layers.append(output)
 changes=[]
 
 def replace(t,a,b):
@@ -40,15 +40,28 @@ def params(t):
 #define WATER_LOWPASS_HOVER_SCALE 0.55f
 #define WATER_LOWPASS_FULL_SPEED 900.0f
 ''')
-    t=replace(t,'''    float4 cameraPosition;  // XYZ, W=1 marks the reviewed DKR adapter
-};''','''    float4 cameraPosition;  // XYZ, W=1 marks the reviewed DKR adapter
-    // Clearance above the liquid, four crafts per vector: positive values
-    // are aircraft, negative values hovercraft, zero means no low pass.
-    float4 craftAir[WATER_CRAFT_COUNT/4];
-};''')
-    t=replace(t,'''static_assert(sizeof(WaterMaterial) == 1552, "DKR water task ABI");
-static_assert(sizeof(WaterDrawParams) == 2000, "DKR water shader ABI");''','''static_assert(sizeof(WaterMaterial) == 1584, "DKR water task ABI");
-static_assert(sizeof(WaterDrawParams) == 2032, "DKR water shader ABI");''')
+    t=replace(t,'''    float4 shoreSegments[WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE]; // immutable mean-water intersections, XZ endpoints
+''','''    // Water draws carry low-pass clearance in the last two shoreline vectors (WATER_CRAFT_AIR).
+    float4 shoreSegments[WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE]; // immutable mean-water intersections, XZ endpoints
+''')
+    t=replace(t,'''struct WaterDrawParams {
+''','''// Low-pass clearance above the liquid, four crafts per vector: positive
+// values are aircraft, negative values hovercraft, zero means no low pass.
+// WaterDrawParams is exactly at the 2048-byte structured-buffer stride, so
+// the clearance shares the last two shoreline vectors instead of growing it.
+// Water draws publish no shoreline segments (every shoreCounts entry stays
+// zero, so the field shaders never read them) and lava draws reuse only
+// shoreSegments[0..15] for emitters and write no clearance. Low passes are
+// gated on active crafts (W>=0), which lava and vertical water never have.
+#define WATER_CRAFT_AIR_SEGMENT (WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE - WATER_CRAFT_COUNT / 4)
+#define WATER_CRAFT_AIR(m, i) ((m).shoreSegments[WATER_CRAFT_AIR_SEGMENT + (i) / 4][(i) % 4])
+
+struct WaterDrawParams {
+''')
+    t=replace(t,'''static_assert(sizeof(WaterDrawParams) <= 2048, "D3D structured-buffer stride limit");
+''','''static_assert(sizeof(WaterDrawParams) <= 2048, "D3D structured-buffer stride limit");
+static_assert(WATER_CRAFT_AIR_SEGMENT >= 16, "Low-pass clearance must not overlap the lava emitters");
+''')
     return t+'''
 #ifndef HLSL_CPU
 // Matches lowPassStrength in rt64_water_renderer.cpp.
@@ -91,7 +104,7 @@ void WaterRenderer::stepSpray(const interop::WaterMaterial &m,float fromTime,flo
     // hull: outward curtains (kind 2) and slowly settling mist (kind 1).
     for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) {
         const auto &old=m.craftPrevious[i], &current=m.craftCurrent[i];
-        const float air=m.craftAir[i/4][i%4];
+        const float air=WATER_CRAFT_AIR(m,i);
         const float dx=current.x-old.x,dz=current.z-old.z;
         const float distance=std::sqrt(dx*dx+dz*dz), speed=distance/interval;
         const float wash=current.w<0 ? 0.0f : lowPassStrength(air)*std::clamp(speed/WATER_LOWPASS_FULL_SPEED,0.0f,1.0f);
@@ -131,7 +144,7 @@ void WaterRenderer::stepSpray(const interop::WaterMaterial &m,float fromTime,flo
     t=replace(t,'''    const bool active=horizontal!=draws.end() && std::any_of(std::begin(m.craftCurrent),std::end(m.craftCurrent),[](const auto& c){return c.w>0;});''',
         '''    // A low pass over the liquid keeps the field alive without hull contact.
     bool lowPass=false;
-    for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) lowPass|=m.craftCurrent[i].w>=0 && m.craftAir[i/4][i%4]!=0;
+    for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) lowPass|=m.craftCurrent[i].w>=0 && WATER_CRAFT_AIR(m,i)!=0;
     const bool active=horizontal!=draws.end() && (lowPass ||
         std::any_of(std::begin(m.craftCurrent),std::end(m.craftCurrent),[](const auto& c){return c.w>0;}));''')
     return t
@@ -144,7 +157,7 @@ def field(t):
     t=replace(t,'''        craftResponse[lane]=float4(saturate((old.y-current.y)/interval/180),landed ? 1 : 0,current.w,0);
 ''','''        craftResponse[lane]=float4(saturate((old.y-current.y)/interval/180),landed ? 1 : 0,current.w,0);
         // Low pass: a footprint trailing beneath the craft, wider when higher.
-        float air=m.craftAir[lane/4][lane%4];
+        float air=WATER_CRAFT_AIR(m,lane);
         float clearance=abs(air);
         float wash=current.w>=0 ? waterLowPassStrength(air)*saturate(distance/interval/WATER_LOWPASS_FULL_SPEED) : 0;
         craftWash[lane]=float4(to-heading*(10+clearance*0.15),20+clearance*0.3,wash*min(length(to-from)/cell,2));
@@ -265,7 +278,7 @@ def surface(t):
         float interval=max(m.animation.y-m.animation.x,0.00001);
         float f=saturate((p.camera.w-m.animation.x)/interval);
         [loop] for (uint i=0;i<WATER_CRAFT_COUNT;i++) {
-            float air=m.craftAir[i/4][i%4];
+            float air=WATER_CRAFT_AIR(m,i);
             if (air==0 || m.craftCurrent[i].w<0) continue;
             float2 delta=m.craftCurrent[i].xz-m.craftPrevious[i].xz;
             float travel=length(delta);

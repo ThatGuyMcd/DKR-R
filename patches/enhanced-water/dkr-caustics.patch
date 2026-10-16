@@ -1,7 +1,7 @@
 diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
 --- a/src/render/rt64_water_renderer.h
 +++ b/src/render/rt64_water_renderer.h
-@@ -88,8 +88,8 @@
+@@ -95,8 +95,8 @@
      }
  };
  struct WaterDescriptorSet : RenderDescriptorSetBase {
@@ -12,7 +12,7 @@ diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
          builder.begin();
          draws = builder.addStructuredBuffer(1);
          sceneColor = builder.addTexture(2);
-@@ -97,6 +97,10 @@
+@@ -104,6 +104,10 @@
          currentField = builder.addTexture(4);
          previousField = builder.addTexture(5);
          originalColor = builder.addTexture(6);
@@ -23,7 +23,7 @@ diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
          builder.end();
          if (device) create(device);
      }
-@@ -106,6 +110,15 @@
+@@ -113,6 +117,15 @@
  struct WaterRenderer {
      std::vector<interop::WaterDrawParams> draws;
      BufferPair drawBuffer;
@@ -38,8 +38,8 @@ diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
 +    bool causticPending=false;
      std::unique_ptr<WaterDescriptorSet> descriptorSet;
      std::unique_ptr<RenderPipelineLayout> layout;
-     std::unique_ptr<RenderShader> vertexShader;
-@@ -217,6 +230,7 @@
+     struct WaterfallSet : RenderDescriptorSetBase {
+@@ -259,6 +272,7 @@
      uint64_t allocationBytes() const;
      void prepareField(RenderWorker *worker);
      void recordField(RenderWorker *worker);
@@ -50,19 +50,19 @@ diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
 diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer.cpp
 --- a/src/render/rt64_water_renderer.cpp
 +++ b/src/render/rt64_water_renderer.cpp
-@@ -6,6 +6,8 @@
+@@ -11,6 +11,8 @@
  #include <cstdio>
  #include <cstdlib>
  #include <stdexcept>
 +#include "stb/stb_image.h"
 +#include "textures/WaterCaustics.png.h"
  #include "shaders/WaterVS.hlsl.spirv.h"
- #include "shaders/WaterPS.hlsl.spirv.h"
- #include "shaders/WaterHardwarePS.hlsl.spirv.h"
-@@ -90,7 +92,53 @@
- WaterRenderer::WaterRenderer(RenderDevice *device, RenderShaderFormat format, bool hdr) : usesHDR(hdr) {
-     if (std::getenv("WR64_TEST_WATER_SHADER_FAILURE")) throw std::runtime_error("injected water shader failure");
-     if (std::getenv("DKRR_WATER_PROFILE") && device->getCapabilities().queryPools) profilePool = device->createQueryPool(128);
+ #include "shaders/WaterfallVS.hlsl.spirv.h"
+ #include "shaders/WaterfallPS.hlsl.spirv.h"
+@@ -124,7 +126,53 @@
+     waterfallVS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(WaterfallVSBlobDXIL,WaterfallVSBlobSPIRV,WaterfallVSBlobMSL,"VSMain",format)));
+     waterfallPS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(WaterfallPSBlobDXIL,WaterfallPSBlobSPIRV,WaterfallPSBlobMSL,"PSMain",format)));
+     waterfallMSPS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(WaterfallMSPSBlobDXIL,WaterfallMSPSBlobSPIRV,WaterfallMSPSBlobMSL,"PSMain",format)));
 -    descriptorSet = std::make_unique<WaterDescriptorSet>(device);
 +    // The caustic pattern is an authored grayscale PNG embedded at build time.
 +    // Box-filtered mips are staged here and uploaded once by recordCaustics.
@@ -114,33 +114,33 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
      RenderPipelineLayoutBuilder builder;
      builder.begin(false, true); // Water vertices use the input assembler on D3D12.
      builder.addPushConstant(0, 0, sizeof(interop::WaterPushConstants), RenderShaderStageFlag::VERTEX | RenderShaderStageFlag::PIXEL);
-@@ -195,6 +243,8 @@
+@@ -233,6 +281,8 @@
      wireIndices.clear(); wireStarts.clear();
      profileKinds.clear();
-     for (auto &scene : scenes) { scene.captured=false; scene.surfaceCleared=false; }
+     for (auto &scene : scenes) { scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; scene.lavaPrepared=false; }
 +    // The workload that recorded the caustic upload has completed.
 +    if (!causticPending) causticUpload.reset();
  }
  
- uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTarget *color, RenderTarget *depth, uint64_t key, bool classic, bool selfDepth) {
-@@ -265,7 +315,7 @@
-         scene.color->setName("Water immutable scene color");
-         scene.depth->setName("Water immutable scene depth");
-         scene.captureSet = std::make_unique<WaterCaptureSet>(worker->device);
--        scene.materialSet = std::make_unique<WaterDescriptorSet>(worker->device);
-+        scene.materialSet = std::make_unique<WaterDescriptorSet>(worker->device,causticSampler.get());
-     }
-     if (classic && (!scene.originalColor || scene.originalSamples!=color->multisampling.sampleCount)) {
-         scene.originalSet.reset(); scene.originalColorView.reset(); scene.originalColor.reset();
-@@ -330,6 +380,7 @@
-         classic ? scene.originalColorView.get() : scene.colorView.get());
+ uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTarget *color, RenderTarget *depth, uint64_t key, bool classic, bool selfDepth,water_work::Region originalRegion) {
+@@ -313,7 +363,7 @@
+             }
+         }
+         scene.captureSet=std::make_unique<WaterCaptureSet>(worker->device);
+-        scene.materialSet=std::make_unique<WaterDescriptorSet>(worker->device);
++        scene.materialSet=std::make_unique<WaterDescriptorSet>(worker->device,causticSampler.get());
+         if(!classic) {
+             scene.surfaceView=checkedWaterResource(scene.surface->createTextureView(RenderTextureViewDesc::Texture2D(RenderFormat::R32_FLOAT)));
+             scene.surfaceWidth=width;scene.surfaceHeight=height;scene.spraySet=std::make_unique<WaterSpraySet>(worker->device);
+@@ -348,6 +398,7 @@
+     ms->setTexture(ms->originalColor,scene.color.get(),RenderTextureLayout::SHADER_READ,scene.colorView.get());
      ms->setTexture(ms->sceneColor,scene.color.get(),RenderTextureLayout::SHADER_READ,scene.colorView.get());
      ms->setTexture(ms->sceneDepth,scene.depth.get(),RenderTextureLayout::SHADER_READ,scene.depthView.get());
 +    ms->setTexture(ms->caustics,causticTexture.get(),RenderTextureLayout::SHADER_READ,causticView.get());
-     sceneKeys.emplace(sceneKey,index);
+     if(!existing)sceneKeys.emplace(sceneKey,index);
      return index;
      } catch(...) {
-@@ -713,6 +764,18 @@
+@@ -756,6 +807,18 @@
      });
      endProfile(worker,token);
  
@@ -162,7 +162,7 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
 diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
 --- a/src/render/rt64_framebuffer_renderer.cpp
 +++ b/src/render/rt64_framebuffer_renderer.cpp
-@@ -1332,6 +1332,7 @@
+@@ -1360,6 +1360,7 @@
          if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->rays.record(worker);
          if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->recordNormals(worker, *outputBuffers);
          if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->recordField(worker);
@@ -173,7 +173,7 @@ diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuf
 diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
 --- a/src/shaders/WaterPS.hlsl
 +++ b/src/shaders/WaterPS.hlsl
-@@ -6,6 +6,8 @@
+@@ -7,6 +7,8 @@
  Texture2D<float4> currentField : register(t4);
  Texture2D<float4> previousField : register(t5);
  Texture2D<float4> originalColor : register(t6);
@@ -182,7 +182,7 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
  
  static const float PI = 3.14159265359;
  
-@@ -316,16 +318,18 @@
+@@ -354,16 +356,18 @@
      float refractedThickness = opticalDepth(refractedPixel,position.z,worldPosition,p);
      // Reject foreground silhouettes at the proposed sample before distorting.
      if (refractedThickness < 0) { refractedPixel = position.xy; refractedThickness = thickness; }
@@ -211,7 +211,7 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
      if (thickness >= 0 && refractedThickness >= 0) {
          float3 transmission = exp(-m.deepColor.a * float3(1.8,0.55,0.30) * refractedThickness);
          // Course geometry often ends a short distance below the shoreline.
-@@ -339,15 +343,12 @@
+@@ -377,15 +381,12 @@
          // Uncovered taps transition to the water body, not an unrelated
          // background color. Keep fractional coverage for a soft boundary.
          transmission*=receiverColor.a;
