@@ -2,9 +2,21 @@
 #include "probe_component.h"
 #include "probe_input.h"
 #include "probe_magic.h"
+#include "mods/magic_code_dispatch.h"
 #include <string.h>
 
 static dkr_probe_pad frame_inputs[4];
+static void code_event(unsigned event,uint8_t* ram,struct recomp_context* context) {
+#if DKR_PROBE_HAS_MOD_SERVICES
+    if(dkr_code_callbacks_enabled) {
+        const uint64_t args[]={event};uint64_t result=0;
+        if(dkr_probe_mod_dispatch("dkr_code_event",ram,context,args,1,0,0,&result)!=1)
+            dkr_probe_block("code-world-event-unavailable");
+    }
+#else
+    (void)event;(void)ram;(void)context;
+#endif
+}
 void dkr_probe_component_inputs(const dkr_probe_pad inputs[4]) {
     memcpy(frame_inputs, inputs, sizeof(frame_inputs));
 }
@@ -171,6 +183,7 @@ void dkr_probe_authored_component_tick(uint8_t* rdram, struct recomp_context* ct
        MEM_W(0,rate)!=2 || (unsigned)MEM_BU(0,timer)>2 || (unsigned)MEM_W(0,task)>1)
         dkr_probe_block("unsupported-authored-cpu-owner-state");
     if(!dkr_probe_scene_pending()) {
+        code_event(DKR_CODE_EVENT_FRAME,rdram,ctx);
         dkr_probe_menu_preview_begin(rdram,ctx);
         if(MEM_BU(0,timer))MEM_B(0,timer)=MEM_BU(0,timer)-1;
         dkr_probe_video_begin_frame(rdram);
@@ -180,6 +193,7 @@ void dkr_probe_authored_component_tick(uint8_t* rdram, struct recomp_context* ct
     dkr_probe_authored_main_cpu(rdram,ctx);
     authored_finish_frame(rdram,ctx);
     dkr_probe_menu_tick_end(rdram);
+    if(!dkr_probe_scene_pending())code_event(DKR_CODE_EVENT_FRAME_END,rdram,ctx);
     dkr_probe_leave();
 #else
     (void)rdram; (void)ctx;
@@ -193,6 +207,7 @@ void dkr_probe_authored_scene_resume(uint8_t* rdram, struct recomp_context* ctx)
         dkr_probe_block("unowned-authored-scene-resume");
     dkr_probe_scene_resume_main_cpu(rdram,ctx);
     authored_finish_frame(rdram,ctx);
+    code_event(DKR_CODE_EVENT_FRAME_END,rdram,ctx);
     dkr_probe_leave();
 #else
     (void)rdram;(void)ctx;dkr_probe_block("authored-cpu-pipeline-unavailable");

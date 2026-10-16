@@ -29,6 +29,7 @@ struct DirectSessionTestAccess {
         m.build_fingerprint=canonical_network_build_fingerprint(m.release_version);
         m.architecture="test";m.floating_point_mode="test";
         m.revision=revision;
+        m.owned_engine_hash=std::string(64,'e');m.owned_resources_hash=std::string(64,'c');
         check(host.enable_owned_backend(true));
         host.configure_manifest(m);const std::string digest(64,'a'),wrong(64,'b');
         check(!host.configure_mod_admission(digest,0));check(!host.configure_mod_admission("bad",32));
@@ -65,6 +66,20 @@ struct DirectSessionTestAccess {
         auto invalid_mod=m;invalid_mod.mod_manifest_hash="bad";
         check(!session_content_sync_incompatibility(host.manifest_,invalid_mod,true).empty());
         auto mismatch=m;mismatch.magic_codes_hash=99;check(!host.admission_incompatibility(mismatch).empty());
+        mismatch=m;mismatch.owned_engine_hash=wrong;
+        check(incompatibility_reason(m,mismatch,true).find("Replay engine")!=std::string::npos);
+        check(incompatibility_reason(m,mismatch,false).empty());
+        check(host.admission_incompatibility(mismatch).empty()==(mode!=SynchronizationMode::ExperimentalRollback));
+        mismatch=m;mismatch.mod_manifest_hash=digest;mismatch.owned_resources_hash=wrong;
+        check(!incompatibility_reason(host.manifest_,mismatch).empty());
+        // Provisional consent may prepare missing resources, but cannot claim
+        // the actual admission proof. No architecture/platform blacklist.
+        check(session_content_sync_incompatibility(host.manifest_,mismatch,true).empty());
+        protocol::HelloPayload hello; // Exercise bounded manifest wire fields.
+        hello.manifest=host.manifest_;hello.display_name="Client";
+        protocol::HelloPayload decoded_hello;
+        check(protocol::decode_hello(protocol::encode_hello(hello),decoded_hello,error));
+        check(decoded_hello.manifest==hello.manifest);
         mismatch=m;mismatch.revision=revision==Revision::UsV77?Revision::UsV80:Revision::UsV77;
         check(!host.admission_incompatibility(mismatch).empty());
         check(!host.configure_mod_admission(wrong,128)); // frozen while hosting
@@ -87,7 +102,10 @@ struct DirectSessionTestAccess {
         }
         check(host.bulk_outbound_.size()==24);
         host.bulk_outbound_.clear();host.normal_priority_outbound_.clear();
-        check(!host.complete_mod_admission(201,wrong,error));check(host.occupied_players()==1);
+        check(!host.complete_mod_admission(201,wrong,m.owned_resources_hash,error));check(host.occupied_players()==1);
+        check(!host.complete_mod_admission(201,digest,wrong,error));check(host.occupied_players()==1);
+        check(error.find("Prepared mod resources")!=std::string::npos);
+        check(!host.pending_by_request(201)->mods_verified);
         protocol::Datagram data;data.header.type=protocol::MessageType::ModControl;data.payload={1,2,3};
         check(host.handle_mod_packet_locked(999,data));check(host.mod_inbound_.empty());
         for(unsigned i=0;i<100;++i)check(host.handle_mod_packet_locked(201,data));
@@ -113,11 +131,11 @@ struct DirectSessionTestAccess {
             check(host.mod_inbound_bytes_==0);
         }
         data.header.type=protocol::MessageType::ModControl;data.payload={1,2,3};
-        check(host.complete_mod_admission(201,digest,error));check(host.occupied_players()==2);
+        check(host.complete_mod_admission(201,digest,m.owned_resources_hash,error));check(host.occupied_players()==2);
         check(counters->retained==3); // retain exactly once across preparation -> admission
-        check(host.complete_mod_admission(203,digest,error));check(host.occupied_players()==3);
+        check(host.complete_mod_admission(203,digest,m.owned_resources_hash,error));check(host.occupied_players()==3);
         check(host.reject_join(202,false,error));check(counters->released==1 && host.occupied_players()==3);
-        check(host.complete_mod_admission(202,digest,error)==false);
+        check(host.complete_mod_admission(202,digest,m.owned_resources_hash,error)==false);
         host.state_=ConnectionState::Running;check(host.handle_mod_packet_locked(203,data));
         std::vector<std::uint8_t> bytes{1};check(!host.send_mod_packet(203,bytes,true,error));
         DirectSession client;stop(client);client.state_=ConnectionState::Connecting;client.host_sender_id_=100;
@@ -131,13 +149,15 @@ struct DirectSessionTestAccess {
             check(rejected_view.failed && rejected_view.failure_reason==reason);
             check(rejected.view().compatibility_sync_offer==host.manifest_);
         }
-        check(!client.complete_local_mod_preparation(digest,error));
+        check(!client.complete_local_mod_preparation(digest,m.owned_resources_hash,error));
         protocol::Datagram offer;offer.header.type=protocol::MessageType::ModOffer;
         offer.payload=protocol::encode_mod_offer({digest,128});
         check(client.handle_mod_packet_locked(999,offer)&&!client.mod_offer_);
         check(client.handle_mod_packet_locked(100,offer)&&client.mod_offer_);
         check(client.state_==ConnectionState::AwaitingApproval && client.manifest_.mod_manifest_hash.empty());
-        check(client.complete_local_mod_preparation(digest,error));
+        check(!client.complete_local_mod_preparation(digest,{},error));
+        check(client.complete_local_mod_preparation(digest,m.owned_resources_hash,error));
+        check(client.manifest_.owned_resources_hash==m.owned_resources_hash);
         check(client.manifest_.mod_manifest_hash==digest);
         check(client.handle_mod_packet_locked(100,offer)&&client.state_==ConnectionState::AwaitingApproval);
         offer.payload=protocol::encode_mod_offer({wrong,128});client.handle_mod_packet_locked(100,offer);

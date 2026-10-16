@@ -8,6 +8,7 @@
 
 // .launcher-detail-page p: 16 / 1.5, 13 px under each paragraph.
 void DetailText(std::string_view text, float width, unsigned colour = kSetText, float after = 13.0F) {
+    if (text.empty()) return;
     PaddockText(PaddockReading(16.0F, false, 1.5F), PaddockRgb(colour), text, width);
     PaddockGap(after);
 }
@@ -72,8 +73,7 @@ void DrawTexturePackLibrary(float width) {
     using namespace dkr::runtime;
     using namespace dkr::runtime::texture_browser;
     texture_packs::request_background_refresh();
-    DetailText("Enable several packs to mix textures. Priority 1 wins clashes; missing textures come from the "
-               "next enabled pack. Use Higher / Lower to reorder. Changes apply live.",
+    DetailText("Enable multiple packs. Lower priority numbers win when textures overlap.",
                width, kSetMuted);
 
     // Search (.field): a field that opens the on-screen keyboard.
@@ -233,13 +233,13 @@ void DrawTexturePackLibrary(float width) {
                 const std::string type = texture_packs::format_name(pack.format);
                 PaddockText(detail_type, PaddockRgb(pack.compatible ? 0x1AC2A3U : kSetWarm),
                             type, column - 32.0F);
-                if (!pack.compatible && ImGui::IsItemHovered()) ImGui::SetTooltip("Incompatible with live activation");
+                if (!pack.compatible && ImGui::IsItemHovered()) ImGui::SetTooltip("This pack can't be enabled. Open Manage for details.");
                 const float priority_y = card.y + 16.0F + name_height + 8.0F + type_height + 10.0F;
                 ImGui::SetCursorScreenPos({card.x + 16.0F, priority_y});
                 PaddockText(detail_type, PaddockRgb(pack.priority == 1U ? kSetWarm : kSetText),
                             "Priority " + std::to_string(pack.priority), column - 32.0F);
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Lower number = higher priority. Sorting and filtering do not change priority.");
+                    ImGui::SetTooltip("Lower numbers win. Sorting and filtering don't change priority.");
                 }
                 const ImVec2 actions{card.x + 16.0F, priority_y + detail_type.line + 8.0F};
                 const float action_width = priority_stacked ? column - 32.0F
@@ -274,24 +274,24 @@ void DrawTexturePackLibrary(float width) {
     }
     if (!g_texture_pack_status.empty()) {
         PaddockGap(16.0F);
-        DetailText(g_texture_pack_status, width, kSetMuted);
+        DrawFriendlyStatus(g_texture_pack_status, width, dkr::runtime::copy::Area::Textures);
     }
     const std::string texture_status = texture_packs::status();
     if (!texture_status.empty()) {
         PaddockGap(g_texture_pack_status.empty() ? 16.0F : 0.0F);
-        DetailText(texture_status, width, kSetMuted);
+        if (texture_status != g_texture_pack_status)
+            DrawFriendlyStatus(texture_status, width, dkr::runtime::copy::Area::Textures);
     }
 }
 
 void DrawCrtOverlaySection(float width) {
     bool crt = g_crt_enabled;
-    if (SettingsCheck("##crt-enabled", "Enable CRT overlay", &crt, width)) {
+    if (SettingsCheck("##crt-enabled", "Enable CRT filter", &crt, width)) {
         g_crt_enabled = crt;
         SaveSettings();
     }
     PaddockGap(8.0F);
-    DetailText("Applied only to the game image. DKR-R\xE2\x80\x99s settings and performance overlays remain clear "
-               "above it.",
+    DetailText("Applies to the game image, not the menus.",
                width, kSetMuted);
     if (g_crt_enabled) {
         const float field = std::min(width, 680.0F);
@@ -307,7 +307,7 @@ void DrawCrtOverlaySection(float width) {
         }
         PaddockGap(13.0F);
         int density = static_cast<int>(std::round(std::clamp(g_crt_strength, 0.0F, 1.0F) * 100.0F));
-        if (SettingsRange("##crt-density", "Filter density", &density, 0, 100, field,
+        if (SettingsRange("##crt-density", "Filter strength", &density, 0, 100, field,
                           [](int value) { return SettingsRangeValue{std::to_string(value), "%"}; })) {
             g_crt_strength = static_cast<float>(density) / 100.0F;
             SaveSettings();
@@ -317,7 +317,7 @@ void DrawCrtOverlaySection(float width) {
     if (DetailRaceButton("IMPORT CUSTOM CRT FILTER", width)) ImportCrtFilterWithDialog();
     if (!g_crt_status.empty()) {
         PaddockGap(13.0F);
-        DetailText(g_crt_status, width, kSetMuted);
+        DrawFriendlyStatus(g_crt_status, width, dkr::runtime::copy::Area::Textures);
     }
 }
 
@@ -333,8 +333,7 @@ void DrawTexturesPage(float width) {
         if (modern) {
             DrawTexturePackLibrary(width);
         } else {
-            DetailText("Texture-pack management is available in the Modern presentation profile. Accurate mode "
-                       "remains unchanged.",
+            DetailText("Requires Modern graphics.",
                        width, kSetMuted);
         }
     }
@@ -342,8 +341,7 @@ void DrawTexturesPage(float width) {
         if (modern) {
             DrawCrtOverlaySection(width);
         } else {
-            DetailText("CRT overlays are available in the Modern presentation profile. Accurate mode remains "
-                       "unchanged.",
+            DetailText("Requires Modern graphics.",
                        width, kSetMuted);
         }
     }
@@ -393,7 +391,7 @@ void DrawAboutPatchNotes() {
     g_paddock_modal_frame = ImGui::GetFrameCount();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
     const float inner = width - 52.0F;
-    PaddockText(PaddockSign(19.0F, 1.2F, 0.0F), PaddockRgb(kSetText), "WHAT\xE2\x80\x99S NEW SINCE 1.0.0", inner);
+    PaddockText(PaddockSign(19.0F, 1.2F, 0.0F), PaddockRgb(kSetText), "RELEASE NOTES", inner);
     PaddockGap(13.0F);
     {
         const ImVec2 at = ImGui::GetCursorScreenPos();
@@ -401,45 +399,19 @@ void DrawAboutPatchNotes() {
         PaddockGap(1.0F + 22.0F);
     }
     constexpr std::array<std::pair<const char*, const char*>, 7> kNotes{{
-        {"GAME PAK COMPATIBILITY",
-         "Unified support for US v1.0, US Rev A / v1.1 and byte-swapped supported images through one launcher and "
-         "one runtime. Revision selection no longer opens a second application instance."},
-        {"DKR-R ONLINE",
-         "Added secure five-character Quick Join, host approval, Online Profiles, friends, friend invites, Open "
-         "Lobbies, presence and notifications. Added Lockstep and Rollback synchronization, host-authoritative race "
-         "state, recovery barriers, connection and controller overlays, synchronized saves and cross-platform build "
-         "compatibility checks. Water, hovercraft height, racer orientation, moving actors, RNG and CPU racers now "
-         "follow authoritative state. Network catch-up and bounded recovery keep unstable connections responsive "
-         "without accumulating permanent frame debt."},
-        {"MODERN PRESENTATION",
-         "Added high-refresh interpolation without changing game speed, widescreen and ultrawide presentation, "
-         "revised skyboxes and water, split-screen viewport handling, adjustable FOV, view distance, scenery "
-         "controls, maximum vehicle detail and HUD sizing. Stabilized wheels, propellers, steering wheels, shadows, "
-         "billboards, doors, trails, animated water and post-race cameras."},
-        {"GRAPHICS AND TEXTURES",
-         "Added RT64 and Rice texture-pack import, live pack selection, CRT overlays, anisotropic filtering, "
-         "downsampling, anti-aliasing, high-precision framebuffer controls and a configurable performance overlay. "
-         "Corrected texture-edge sampling and high-resolution UI tile seams."},
-        {"CONTROLS",
-         "Added independent Player 1-4 controller assignment, primary and secondary bindings, per-vehicle inversion, "
-         "per-player gyro, quick race restart, texture-pack and fullscreen shortcuts, background input, live "
-         "stick/gyro previews and broader modern/N64 controller database support."},
-        {"SAVES AND GAMEPLAY",
-         "Added automatic EEPROM validation and repair, virtual Controller Paks alongside rumble, save "
-         "backup/import/export, an Adventure Save Builder, course progress, unlockables and Magic Code management. "
-         "Added independent music, vehicle, effects, ambience and EQ controls, plus optional music for three- and "
-         "four-player races."},
-        {"LAUNCHER AND STABILITY",
-         "Redesigned the controller-first launcher and in-game overlay, added animated DKR-R branding, friends and "
-         "controller-friendly text entry, restart/exit/fullscreen handling, support diagnostics and clearer online "
-         "errors. Fixed transition crashes, intro-loop crashes, race-end vertex explosions, audio pops, black screens "
-         "and Linux/Steam Deck startup and layout problems."},
+        {"QUICK START", "Skip opening logos and choose the start menu or character select. Portable mode keeps data beside DKR-R."},
+        {"ONLINE", "Auto uses Experimental Rollback. Lobby mods can be downloaded from the host and kept for offline play. Online saves stay separate."},
+        {"CUSTOM MODS", "Browse custom characters with L / R, use custom tracks, compare duplicate mods and prepare saved imports again. Some custom features need additional support."},
+        {"GRAPHICS", "Enhanced water, reflections, waterfalls and lava, with separate lava lighting and quality controls. Widescreen track menus and custom-row backgrounds."},
+        {"TEXTURES AND CONTROLS", "Mix texture packs using priorities. Switch controller backends without closing the game. Adjust bindings, steering and gyro."},
+        {"SAVES AND SOUND", "Manage offline, online and modded saves separately. Back up, transfer and edit progress. Adjust sound levels and music for 3-4 player races."},
+        {"LAUNCHER AND UPDATES", "Shorter settings help and clearer dialogs, with technical details available when needed. Check for updates from Play or About; downloads and installation stay optional."},
     }};
     const float footer = 24.0F + 44.0F;
     ImGui::BeginChild("##patch-body", {inner, std::max(ImGui::GetContentRegionAvail().y - footer, 80.0F)}, false,
                       ImGuiWindowFlags_NavFlattened);
     const float text_width = inner - ImGui::GetStyle().ScrollbarSize - 8.0F;
-    DetailText("Current development and Online Beta changes", text_width, kSetMuted);
+    DetailText("DKR-R " + std::string(DKR_RELEASE_VERSION), text_width, kSetMuted);
     for (std::size_t index = 0; index < kNotes.size(); ++index) {
         if (index > 0U) PaddockGap(11.0F);
         DetailHeading(kNotes[index].first, text_width, kSetWarm);
@@ -457,7 +429,7 @@ void DrawAboutPatchNotes() {
 void DrawAboutSupport(float width) {
     PollSupportSystemSummary();
     AboutSectionTitle("Support summary", width);
-    DetailText("Privacy-safe settings and system details for troubleshooting.", width, kSetMuted);
+    DetailText("System information and tools for reporting problems.", width, kSetMuted);
     DetailCard(width, {20.0F, 18.0F}, [&](float inner) {
         // The facts (.launcher-detail-facts): a muted label, then its value.
         const GraphicsConfig config = ultramodern::renderer::get_graphics_config();
@@ -474,6 +446,8 @@ void DrawAboutSupport(float width) {
         };
 #if defined(__ANDROID__)
         facts.push_back({"Android build", dkr::runtime::android::build_identity()});
+#elif defined(DKR_IOS)
+        facts.push_back({"iOS build", dkr::runtime::ios::build_identity()});
 #endif
         if (g_support_summary) {
             facts.push_back({"OS", g_support_summary->operating_system});
@@ -502,10 +476,10 @@ void DrawAboutSupport(float width) {
         }
         PaddockGap(20.0F);
         bool logging = dkr::runtime::support::diagnostic_logging_enabled();
-        if (SettingsCheck("##diagnostic-logging", "Diagnostic logging", &logging, inner)) {
+        if (SettingsCheck("##diagnostic-logging", "Extra diagnostic logging", &logging, inner)) {
             dkr::runtime::support::set_diagnostic_logging_enabled(logging);
-            g_support_action_status = logging ? "Diagnostic logging will be enabled at the next launch."
-                                              : "Diagnostic logging will be disabled at the next launch.";
+            g_support_action_status = logging ? "Extra logging enabled from the next launch."
+                                              : "Extra logging disabled from the next launch.";
         }
         PaddockGap(8.0F);
         bool dumps = dkr::runtime::support::crash_dumps_enabled();
@@ -524,15 +498,14 @@ void DrawAboutSupport(float width) {
             dkr::runtime::android::export_diagnostics();
         }
         PaddockGap(8.0F);
-        DetailText("Save a diagnostic ZIP using Android's file picker. Review logs before sharing; "
-                   "they may contain paths and session details.", inner, kSetMuted, 0.0F);
+        DetailText("Review logs before sharing; they may contain paths and session details.", inner, kSetMuted, 0.0F);
         PaddockGap(12.0F);
 #endif
         if (DetailRaceButton("EXPORT SUPPORT SUMMARY", inner)) {
             std::filesystem::path output;
             std::string error;
             g_support_action_status = dkr::runtime::support::export_report(BuildSupportReport(), output, error)
-                ? "Support summary exported to the DKR-R support-reports folder." : error;
+                ? "Support report saved." : error;
         }
         PaddockGap(12.0F);
         DetailActionPair(inner, stacked, [&](float cell) {
@@ -552,18 +525,20 @@ void DrawAboutSupport(float width) {
         }
         if (!g_support_action_status.empty()) {
             PaddockGap(16.0F);
-            DetailText(g_support_action_status, inner, kSetMuted, 0.0F);
+            DrawFriendlyStatus(g_support_action_status, inner);
         }
         PaddockGap(16.0F);
     });
 }
+
+#include "runtime_updates_ui.inl"
 
 void DrawAboutPage(float width, bool support) {
     struct Credit {
         const char* name;
         const char* repository;
     };
-    constexpr std::array<Credit, 7> kTechnology{{
+    constexpr std::array<Credit, 9> kTechnology{{
         {"N64Recomp", "https://github.com/N64Recomp/N64Recomp"},
         {"N64ModernRuntime", "https://github.com/N64Recomp/N64ModernRuntime"},
         {"RT64", "https://github.com/rt64/rt64"},
@@ -571,6 +546,9 @@ void DrawAboutPage(float width, bool support) {
         {"Mbed TLS", "https://github.com/Mbed-TLS/mbedtls"},
         {"GekkoNet", "https://github.com/HeatXD/GekkoNet"},
         {"Diddy Kong Racing Decomp", "https://github.com/DavidSM64/Diddy-Kong-Racing"},
+        {"Golden Balloon - HUD layout reference", "https://github.com/akratch/goldenballoon"},
+        {"Wave Race 64 Recomp - enhanced-water rendering reference (MIT)",
+         "https://github.com/elliotttate/wave-race-64-recomp"},
     }};
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
     DrawPageHeading("ABOUT DKR-R");
@@ -578,33 +556,30 @@ void DrawAboutPage(float width, bool support) {
     DetailText("Diddy Kong Racing - Recompiled", width, kSetMuted, 0.0F);
     PaddockGap(24.0F);
     DetailCard(width, {22.0F, 22.0F}, [&](float inner) {
-        DetailText("Wizpig has invaded DKR-R. Race across land, water and sky, collect Golden Balloons and help Diddy "
-                   "and his friends send the intergalactic pig wizard packing.",
+        DetailText("A native recompile of Diddy Kong Racing with modern graphics, online play and mods.",
                    inner);
-        DetailText("DKR-R runs the original game logic through a native PC runtime. Accurate preserves the original "
-                   "presentation; Modern adds carefully isolated PC quality-of-life options.",
+        DetailText("",
                    inner);
         DetailHeading("CREATED BY THATGUYMCD", inner, kSetWarm);
-        DetailText("If you did not download DKR-R from ThatGuyMcd\xE2\x80\x99s GitHub repository, this build may have "
-                   "been modified or tampered with.",
+        DetailText("Official downloads are available on GitHub.",
                    inner);
-        DetailText("Official source: github.com/ThatGuyMcd/DKR-R", inner, kSetMuted, 3.0F);
+        DetailText("", inner, kSetMuted, 3.0F);
         PaddockGap(16.0F);
         DetailActionPair(inner, inner <= 520.0F, [&](float cell) {
             if (DetailRaceButton("VISIT GITHUB PAGE", cell)) SDL_OpenURL("https://github.com/ThatGuyMcd/DKR-R");
         }, [&](float cell) {
-            if (DetailRaceButton("VIEW PATCH NOTES", cell, 0xE82E21)) g_patch_notes_requested = true;
+            if (DetailRaceButton("VIEW RELEASE NOTES", cell, 0xE82E21)) g_patch_notes_requested = true;
         });
         PaddockGap(16.0F);
     });
 
     AboutSectionTitle("Release information", width);
     DetailText(std::string("DKR-R ") + DKR_RELEASE_VERSION, width);
-    DetailText("Windows, Linux and macOS builds", width);
-    DetailText("No copyrighted game data is distributed. A legally obtained supported Diddy Kong Racing Game Pak is "
-               "required.",
+    DetailText("", width);
+    DetailText("Requires your own legally obtained, supported Diddy Kong Racing ROM.",
                width, kSetMuted, 0.0F);
 
+    DrawUpdatesCard(width);
     AboutSectionTitle("Credits", width);
     DetailCard(width, {20.0F, 18.0F}, [&](float inner) {
         DetailHeading("POOTERMAN - DKR-R ICON", inner, kSetWarm);
@@ -623,26 +598,22 @@ void DrawAboutPage(float width, bool support) {
                 PaddockGap(8.0F);
                 if (DetailRaceButton("VISIT GITHUB", inner)) SDL_OpenURL(credit.repository);
             } else {
-                PaddockDrawRun(ImGui::GetWindowDrawList(), type, {at.x, std::round(at.y + (44.0F - type.line) * 0.5F)},
-                               PaddockCol(kSetText), credit.name, credit.name + std::strlen(credit.name));
-                ImGui::SetCursorScreenPos({at.x + inner - 190.0F, at.y});
+                // Keep long acknowledgements clear of the fixed-width action.
+                const float label_width = inner - 206.0F;
+                const float label_height = PaddockTextHeight(type, credit.name, label_width);
+                const float row_height = std::max(44.0F, label_height);
+                ImGui::SetCursorScreenPos({at.x, at.y + (row_height - label_height) * 0.5F});
+                PaddockText(type, PaddockRgb(kSetText), credit.name, label_width);
+                ImGui::SetCursorScreenPos({at.x + inner - 190.0F, at.y + (row_height - 44.0F) * 0.5F});
                 if (DetailRaceButton("VISIT GITHUB", 190.0F)) SDL_OpenURL(credit.repository);
+                ImGui::SetCursorScreenPos({at.x, at.y + row_height});
             }
             PaddockGap(12.0F);
             ImGui::PopID();
         }
         DetailText("Thanks to all developers and contributors.", inner, kSetMuted, 0.0F);
-        PaddockGap(26.0F);
-        DetailText("Golden Balloon - HUD layout reference", inner);
-        if (DetailRaceButton("VISIT GOLDEN BALLOON ON GITHUB", inner)) {
-            SDL_OpenURL("https://github.com/akratch/goldenballoon");
-        }
-        PaddockGap(26.0F);
-        DetailText("Wave Race 64 Recomp - enhanced-water rendering reference (MIT)", inner);
-        DetailText("Thank you to elliotttate and the Wave Race contributors. DKR-R adapts the renderer to its own water geometry, cameras and presentation pipeline.", inner, kSetMuted, 0.0F);
-        if (DetailRaceButton("VISIT WAVE RACE RECOMP ON GITHUB", inner)) {
-            SDL_OpenURL("https://github.com/elliotttate/wave-race-64-recomp");
-        }
+        PaddockGap(12.0F);
+        DetailText("Thanks to elliotttate and the Wave Race contributors for the enhanced-water rendering reference.", inner, kSetMuted, 0.0F);
         PaddockGap(26.0F);
         DetailHeading("DKR-R HDR TEXTURE PACK PROJECT", inner, kSetWarm);
         DetailText("A community project re-imagining Diddy Kong Racing in crisp HD while remaining faithful to the "

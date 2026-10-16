@@ -1,0 +1,68 @@
+[manifest]
+id = "dkr_ai_boss_difficulty"
+version = "1.0.0"
+display_name = "AI & Boss Difficulty"
+description = "Make computer racers and each boss slower or faster. 100% keeps the original pace. Lower is easier; higher is harder. Human racers and native boss attacks stay unchanged. Changes apply next game."
+authors = ["DKR-R contributors"]
+game_id = "dkr"
+minimum_recomp_version = "1.0.7"
+dependencies = []
+
+[[manifest.config_options]]
+id = "race_ai"
+name = "Race AI pace (%) - 100 is original"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+
+[[manifest.config_options]]
+id = "tricky"
+name = "Tricky pace (%)"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+
+[[manifest.config_options]]
+id = "bluey"
+name = "Bluey pace (%)"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+
+[[manifest.config_options]]
+id = "smokey"
+name = "Smokey pace (%)"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+
+[[manifest.config_options]]
+id = "bubbler"
+name = "Bubbler pace (%)"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+
+[[manifest.config_options]]
+id = "wizpig"
+name = "Wizpig first race pace (%)"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+
+[[manifest.config_options]]
+id = "rocket"
+name = "Wizpig final race pace (%)"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+
+[build]
+sources = ["main.c"]

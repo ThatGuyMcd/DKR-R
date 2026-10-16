@@ -1,8 +1,10 @@
 """Read composed patch layers back to their baseline, entirely in memory."""
 from pathlib import Path
 
-def read_before(stage,path,patches):
-    text=(Path(stage)/path).read_text()
+def read_before(stage,path,patches,text=None):
+    # An authored composer may supply an in-memory overlay while a build still
+    # owns an earlier staged revision. Never write into that active build tree.
+    if text is None:text=(Path(stage)/path).read_text()
     if path=='src/render/rt64_water_renderer.cpp' and 'WaterRenderer::prepareRays' in text:
         text=text.replace('        if(!rayShader) {','        if(!rayShader || !rayLayout) {\n            // Do not keep a shader if its companion layout creation failed.\n            rayShader.reset();rayLayout.reset();')
     for patch in patches:

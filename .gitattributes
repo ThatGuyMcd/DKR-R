@@ -8,3 +8,6 @@
 # Unified diffs prefix blank context lines with a space. Do not trim their
 # checksum-pinned bytes or treat nested patch syntax as source whitespace.
 *.patch -whitespace
+# Address-only SDK kits are checked against byte-exact receipt hashes.
+# Preserve their bytes rather than applying a platform's text conversion.
+modding/reference-us-v*/* -text

@@ -30,6 +30,9 @@
 #include <set>
 
 extern "C" void osPiStartDma_recomp(std::uint8_t*,recomp_context*);
+#if DKR_RUNTIME_HAS_RT64
+extern "C" void dkr_track_select_background_cover(std::uint8_t*,recomp_context*);
+#endif
 extern "C" void dkr_character_select_animation_fraction(std::uint8_t*,recomp_context*);
 extern "C" void dkr_custom_tracks_extend_table(std::uint8_t*,recomp_context*,std::uint32_t);
 extern "C" int dkr_custom_tracks_asset_override(std::uint8_t*,recomp_context*);
@@ -39,7 +42,7 @@ struct MenuState {
     std::mutex mutex;
     mods::TrackMenuAdapter adapter;
     bool allow_races, catalog_ready=false;
-    MenuState(std::vector<mods::Root> roots,bool races):adapter(std::move(roots),races),allow_races(races){}
+    MenuState(std::vector<mods::Root> roots,bool races,std::vector<mods::TrackMenuCup> cups={}):adapter(std::move(roots),races,std::move(cups)),allow_races(races){}
     explicit MenuState(mods::TrackMenuAdapter value):adapter(std::move(value)),allow_races(true),catalog_ready(true){}
 };
 struct CharacterState {
@@ -80,6 +83,7 @@ struct WorldState {
     RecompiledEntrypoint random=nullptr;
     RecompiledEntrypoint texture_animation=nullptr;
     std::shared_ptr<const custom_tracks::PreparedTracks> authored;
+    std::vector<mods::TrackMenuCup> cups;
     bool private_owner=false,frozen_online=false,custom_ai=false;
     std::uint32_t pending_course_heap=0;
 };
@@ -229,6 +233,7 @@ void begin_session(std::shared_ptr<mods::RuntimeSession> value) {
     launch.store(nullptr);characters.store(nullptr);menu.store(nullptr);session.store(std::move(value));
     ordinary_world.frozen_online=false;ordinary_world.authored.reset();ordinary_world.custom_ai=false;
     ordinary_world.pending_course_heap=0;
+    ordinary_world.cups.clear();
     ordinary_music_enabled=false;ordinary_world.music.store(nullptr);
 }
 void begin_online(std::shared_ptr<const mods::online::RuntimeResources> resources) {
@@ -247,11 +252,11 @@ void begin_online(std::shared_ptr<const mods::online::RuntimeResources> resource
 }
 void begin_prepared(std::shared_ptr<const mods::PreparedModLaunch> prepared) {
     begin_session(prepared?prepared->session:nullptr);
-    if(!prepared || !prepared->session)return;
+    if(!prepared || (!prepared->session&&!prepared->code))return;
     if(prepared->save_subfolder.empty() || prepared->save_path.empty() || prepared->pak_directory.empty())
         throw mods::Error("Modded runtime admission requires isolated save paths.");
-    if(!prepared->session->tracks().empty())begin_track_menu(true);
-    if(prepared->session->characters())begin_character_menu();
+    if(prepared->session&&!prepared->session->tracks().empty())begin_track_menu(true);
+    if(prepared->session&&prepared->session->characters())begin_character_menu();
     launch.store(std::move(prepared));
 }
 std::shared_ptr<const mods::PreparedModLaunch> prepared_launch(){return launch.load();}
@@ -331,6 +336,20 @@ void begin_character_menu() {
 void begin_track_menu(bool allow_races) {
     auto active=session.load();if(!active)throw mods::Error("No catalogue is admitted for the native menu.");
     menu.store(std::make_shared<MenuState>(active->tracks(),allow_races));
+}
+void set_trophy_menu(std::vector<mods::TrackMenuCup> cups) {
+    ordinary_world.cups=std::move(cups);
+    if(ordinary_world.cups.empty())return;
+    const auto assets=ordinary_world.session.load();
+    auto roots=assets?frozen_roots(*assets,ordinary_world.authored.get()):std::vector<mods::Root>{};
+    auto state=std::make_shared<MenuState>(std::move(roots),true,ordinary_world.cups);
+    // Frozen online IDs already exist at bootstrap. Offline Track Lab IDs
+    // are appended at retail initialization, so rebuild once at menu entry.
+    state->catalog_ready=ordinary_world.frozen_online;ordinary_world.menu.store(std::move(state));
+}
+std::string selected_trophy() {
+    const auto state=menu.load();if(!state)return {};
+    std::lock_guard lock(state->mutex);return state->adapter.selected_cup();
 }
 void request_scene(const std::string& id,unsigned carrier) {
     // Appended .dkrmap level IDs load through the custom-track asset hooks.
@@ -733,14 +752,16 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram,recomp_context* ctx,uns
         custom_tracks::arm_track_override({});
     auto state=legacy::menu.load();
     try {
-        // Online peers keep the reviewed retail vehicle gate untouched.
-        if(!netplay::session().active())legacy::lend_course_clear(rdram,*ctx,event,fields);
+        // Frozen/owned worlds keep the reviewed retail vehicle gate and must
+        // never consult the live process's transport session.
+        if(!legacy::frozen_courses() && !netplay::session().active())
+            legacy::lend_course_clear(rdram,*ctx,event,fields);
         // Level IDs are assigned at game initialization, after launcher setup.
         // Build the combined catalogue on the first Track Select entry, also
         // when there are no legacy mods enabled for this session.
         if(event==0 && (!state || !state->catalog_ready) && (legacy::frozen_courses() || !netplay::session().active())) {
             const auto authored=legacy::authored_courses();
-            if(!authored.empty()) {
+            if(!authored.empty() || !legacy::current_world().cups.empty()) {
                 const auto active=legacy::session.load();
                 auto roots=active?active->tracks():std::vector<dkr::mods::Root>{};
                 for(const auto& track:authored) {
@@ -754,7 +775,7 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram,recomp_context* ctx,uns
                     root.vehicles=track.vehicles;
                     roots.push_back(std::move(root));
                 }
-                state=std::make_shared<legacy::MenuState>(std::move(roots),state?state->allow_races:true);
+                state=std::make_shared<legacy::MenuState>(std::move(roots),state?state->allow_races:true,legacy::current_world().cups);
                 legacy::menu.store(state);
             }
             if(state)state->catalog_ready=true;
@@ -786,6 +807,30 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram,recomp_context* ctx,uns
         if(event==10 && legacy::owns_level(static_cast<std::int32_t>(ctx->r4)))
             effect.override_return=false;
         if(effect.scene)legacy::request_scene(effect.scene->id,effect.scene->carrier);
+        if(!effect.backgrounds.empty()) {
+            const auto payload=legacy::guest_payload();
+            if(!payload || !payload->menu_material_set)throw dkr::mods::Error("Native background material callback is unavailable.");
+            const auto dl_field=effect.background_display_list;
+            for(const auto& background:effect.backgrounds) {
+                auto call=*ctx;call.r4=static_cast<std::int32_t>(dl_field);
+                call.r5=static_cast<std::int32_t>(background.texture);call.r6=0;call.r7=0;
+                call.f_odd=call.mips3_float_mode?&call.f1.u32l:&call.f0.u32h;
+                // Guest callbacks may yield: no adapter lock is held.
+                payload->menu_material_set(rdram,&call);
+                if(payload->menu_background_cover) {
+                    auto cover=*ctx;cover.r8=static_cast<std::int32_t>(background.vertices);
+                    cover.f_odd=cover.mips3_float_mode?&cover.f1.u32l:&cover.f0.u32h;
+                    // The private payload records the existing background-cover
+                    // event. Local aspect settings NEVER mutate shared RAM.
+                    payload->menu_background_cover(rdram,&cover);
+                }
+                // Original F3DDKR vertex/polygon commands, original orthographic
+                // camera and double buffer. Continue the caller-owned CURRENT
+                // list; sMenuCurrDisplayList still belongs to the previous menu
+                // pulse here and must not be written or published early.
+                dkr::mods::append_track_background_quad({rdram,legacy::guest_memory_size()},dl_field,background);
+            }
+        }
         if(effect.navigation_sound) {
             const auto payload=legacy::guest_payload();
             if(!payload || !payload->menu_sound_play)throw dkr::mods::Error("Native menu sound callback is unavailable.");
@@ -823,9 +868,10 @@ extern "C" int dkr_legacy_asset_api(std::uint8_t* rdram,recomp_context* ctx,unsi
     try {
         auto lease=active->acquire();const auto mount=lease.route();if(!mount)return 0;
         const auto section=static_cast<std::uint32_t>(ctx->r4);
-        // Section 2 is already part of the shared boot-owned texture bank;
-        // its offsets may change with the active legacy course's artwork.
-        if(!legacy::frozen_courses() && operation==static_cast<unsigned>(dkr::mods::AssetOperation::PartialLoad) && section!=2 &&
+        // All texture/sprite artwork is boot-owned. A legacy course can change
+        // earlier record sizes, so only its bank may resolve these offsets.
+        const bool shared_artwork=section==2 || section==4 || section==12;
+        if(!legacy::frozen_courses() && operation==static_cast<unsigned>(dkr::mods::AssetOperation::PartialLoad) && !shared_artwork &&
            dkr_custom_tracks_asset_override(rdram,ctx))return 1;
         const auto payload=legacy::guest_payload();
         if(!payload)throw dkr::mods::Error("The custom asset loader has no selected revision.");
@@ -833,7 +879,7 @@ extern "C" int dkr_legacy_asset_api(std::uint8_t* rdram,recomp_context* ctx,unsi
             {rdram,legacy::guest_memory_size()},*ctx,{payload->asset_allocate,payload->asset_release,payload->asset_copy});
         if(handled && operation==static_cast<unsigned>(dkr::mods::AssetOperation::TableLoad)) {
             if(legacy::frozen_courses()) {if(section==22)legacy::course_budget(rdram,true);}
-            else if(section!=3)dkr_custom_tracks_extend_table(rdram,ctx,section);
+            else if(section!=3 && section!=5 && section!=13)dkr_custom_tracks_extend_table(rdram,ctx,section);
         }
         return handled;
     } catch(const ultramodern::thread_terminated&){throw;}
@@ -867,18 +913,19 @@ struct WorldRestore final:ModWorld::Restore {
 }
 ModWorld::ModWorld(std::shared_ptr<mods::RuntimeSession> assets,GamePayload calls,
     RecompiledEntrypoint animation,std::shared_ptr<const custom_tracks::PreparedTracks> authored,bool ai,
-    RecompiledEntrypoint random,std::shared_ptr<const mods::online::MusicLibrary> music,RecompiledEntrypoint texture)
+    RecompiledEntrypoint random,std::shared_ptr<const mods::online::MusicLibrary> music,RecompiledEntrypoint texture,std::vector<mods::TrackMenuCup> cups)
     :state_(std::make_unique<State>()) {
     if(!assets)throw mods::Error("An owned mod world needs admitted resources.");
     (void)mods::online::course_display_budgets(authored.get());
     state_->session.store(assets);state_->private_owner=true;state_->calls=calls;
     state_->animation=animation;state_->random=random;state_->authored=std::move(authored);state_->custom_ai=ai;
     state_->texture_animation=texture;
+    state_->cups=std::move(cups);
     state_->music.store(std::make_shared<MusicBinding>(std::move(music),assets->boot_bank()->revision()=="us.v80"));
     if(ai && !random)throw mods::Error("Owned custom AI needs the reviewed private RNG entry.");
     auto roots=frozen_roots(*assets,state_->authored.get());
-    if(!roots.empty()) {
-        auto menu=std::make_shared<MenuState>(std::move(roots),true);menu->catalog_ready=true;state_->menu.store(std::move(menu));
+    if(!roots.empty() || !state_->cups.empty()) {
+        auto menu=std::make_shared<MenuState>(std::move(roots),true,state_->cups);menu->catalog_ready=true;state_->menu.store(std::move(menu));
     }
     if(assets->characters()) {
         auto characters=std::make_shared<CharacterState>(assets->characters());
@@ -889,6 +936,15 @@ ModWorld::ModWorld(std::shared_ptr<mods::RuntimeSession> assets,GamePayload call
 ModWorld::~ModWorld()=default;
 const mods::AssetBus& ModWorld::bus()const{return state_->session.load()->bus();}
 const std::string& ModWorld::error()const{return state_->error;}
+void ModWorld::select_course(const std::string& id,unsigned carrier) {
+    // This explicit owner never falls through to the ordinary launcher world.
+    if(state_->authored&&std::ranges::any_of(state_->authored->courses,[&](const auto& c){return unsigned(c.level_id)==carrier;}))return;
+    state_->session.load()->request(id,carrier);
+}
+std::string ModWorld::selected_trophy()const {
+    const auto menu=state_->menu.load();if(!menu)return {};
+    std::lock_guard lock(menu->mutex);return menu->adapter.selected_cup();
+}
 namespace {
 mods::Bytes capture_world(const WorldState& state) {
     mods::CheckpointWriter out;out.u32(4);out.block(state.session.load()->checkpoint());

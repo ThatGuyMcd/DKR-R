@@ -1,3 +1,4 @@
+#include "temporary_directory.hpp"
 #include "custom_tracks.hpp"
 
 #include <algorithm>
@@ -294,8 +295,8 @@ int level_count(const std::vector<std::int32_t>& table) {
 } // namespace
 
 int main() {
-    const std::filesystem::path root =
-        std::filesystem::temp_directory_path() / "dkrr-custom-tracks-tests";
+    const TemporaryDirectory temporary("dkrr-custom-tracks-tests");
+    const std::filesystem::path root = temporary.path() / "fixtures";
     std::filesystem::remove_all(root);
     write_track(root / "beta.dkrmap", "beta", 192U);
     write_track(root / "alpha.dkrmap", "alpha", 128U);

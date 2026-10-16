@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 project(DKRGuestReplayProbe LANGUAGES C CXX)
+# LegacyMods shares the runtime project's C++20 requirement.
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/SourceRoots.cmake")
 set(DKR_PROBE_GENERATED "" CACHE PATH "Separate Patch Pipeline probe output")
 if(NOT EXISTS "${DKR_PROBE_GENERATED}/manifest.json")
     message(FATAL_ERROR "Generate an isolated probe payload first")
@@ -75,23 +79,22 @@ add_executable(DKRGuestReplayProbe probe_bridge.c probe_native.c probe_eeprom.cp
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/secure_channel.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/datagram_socket.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/session_transport.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../../extern/monocypher/src/monocypher.c"
+    "${DKR_DEPENDENCIES_DIR}/monocypher/src/monocypher.c"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/replay_qualification.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/rollback_state_store.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/rollback_ring.cpp")
 target_compile_features(DKRGuestReplayProbe PRIVATE c_std_11 cxx_std_20)
 string(JSON mod_services ERROR_VARIABLE mod_services_error GET "${manifest}" owned_mod_services)
 if(NOT mod_services_error AND mod_services)
-    get_filename_component(DKRPORT_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
     include("${DKRPORT_ROOT}/runtime-recomp/cmake/LegacyMods.cmake")
     target_sources(DKRGuestReplayProbe PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/../../src/game/runtime_legacy_mods.cpp"
         "${CMAKE_CURRENT_LIST_DIR}/../native_mod_world_test_boundaries.cpp")
     target_link_libraries(DKRGuestReplayProbe PRIVATE DKRLegacyGuestIO DKRLegacyModLaunch)
     target_include_directories(DKRGuestReplayProbe PRIVATE
-        "${DKRPORT_ROOT}/extern/n64-modern-runtime/librecomp/include"
-        "${DKRPORT_ROOT}/extern/n64-modern-runtime/ultramodern/include"
-        "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty/concurrentqueue")
+        "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/librecomp/include"
+        "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/ultramodern/include"
+        "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty/concurrentqueue")
     target_compile_definitions(DKRGuestReplayProbe PRIVATE DKR_PROBE_HAS_MOD_SERVICES=1)
     if(MSVC)
         target_compile_options(DKRGuestReplayProbe PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
@@ -112,8 +115,13 @@ endif()
 target_compile_definitions(DKRGuestReplayProbe PRIVATE DKR_PROBE_REVISION=${revision} DKR_PROBE_HAS_SCENE_CUTS=${scene_cuts} DKR_PROBE_HAS_AUDIO=${audio_services} DKR_PROBE_HAS_INPUT=${input_services} DKR_PROBE_HAS_AUTHORED_CPU=${authored_cpu} DKR_PROBE_HAS_FULL_SCENES=${full_scenes} DKR_PROBE_HAS_SYMBOL_ISOLATION=${symbol_isolation} DKR_PROBE_HAS_AUDIO_ISOLATION=${audio_symbol_isolation})
 target_include_directories(DKRGuestReplayProbe PRIVATE "${DKR_PROBE_GENERATED}"
     "${CMAKE_CURRENT_LIST_DIR}" "${CMAKE_CURRENT_LIST_DIR}/../../src/game"
-    "${CMAKE_CURRENT_LIST_DIR}/../../../extern/monocypher/src"
-    "${CMAKE_CURRENT_LIST_DIR}/../../../extern/n64-modern-runtime/thirdparty")
+    "${DKR_DEPENDENCIES_DIR}/monocypher/src"
+    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
+# Match the owned runtime's pinned ARM SIMD compatibility boundary.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+    target_include_directories(DKRGuestReplayProbe PRIVATE
+        "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty/sse2neon")
+endif()
 # Legacy native ABI headers must never take precedence over the generated
 # checked CPU/RSP headers. Link canaries intentionally fail on that mistake.
 target_include_directories(DKRGuestReplayProbe BEFORE PRIVATE "${DKR_PROBE_GENERATED}")
@@ -121,6 +129,7 @@ if(MSVC)
     target_compile_options(DKRGuestReplayProbe PRIVATE /UNDEBUG /fp:strict)
 else()
     target_compile_options(DKRGuestReplayProbe PRIVATE -UNDEBUG -fno-strict-aliasing
+        -ffp-contract=off -fno-fast-math
         $<$<COMPILE_LANGUAGE:C>:-Werror=implicit-function-declaration>)
     target_link_libraries(DKRGuestReplayProbe PRIVATE m)
 endif()
@@ -138,7 +147,7 @@ add_executable(DKRExperimentalPresentationOwnershipTests
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/experimental_checkpoint_hash.cpp")
 target_compile_features(DKRExperimentalPresentationOwnershipTests PRIVATE cxx_std_20)
 target_include_directories(DKRExperimentalPresentationOwnershipTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../../src/game"
-    "${CMAKE_CURRENT_LIST_DIR}/../../../extern/n64-modern-runtime/thirdparty")
+    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
 target_link_libraries(DKRExperimentalPresentationOwnershipTests PRIVATE Threads::Threads)
 if(MSVC)
     target_compile_options(DKRExperimentalPresentationOwnershipTests PRIVATE /UNDEBUG)
@@ -167,7 +176,7 @@ add_executable(DKRExperimentalPakOwnershipTests
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/rollback_ring.cpp")
 target_compile_features(DKRExperimentalPakOwnershipTests PRIVATE cxx_std_20)
 target_include_directories(DKRExperimentalPakOwnershipTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../../src/game"
-    "${CMAKE_CURRENT_LIST_DIR}/../../../extern/n64-modern-runtime/thirdparty")
+    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
 if(MSVC)
     target_compile_options(DKRExperimentalPakOwnershipTests PRIVATE /UNDEBUG)
 else()
@@ -179,6 +188,10 @@ set_tests_properties(RealGuestProbeClosure PROPERTIES TIMEOUT 20)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME ReplayProbePipelineControlFlow COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/test_generator.py")
 set_tests_properties(ReplayProbePipelineControlFlow PROPERTIES TIMEOUT 20)
+if(DKR_GENERATED_SOURCE_V77 AND DKR_GENERATED_SOURCE_V80)
+    set_tests_properties(ReplayProbePipelineControlFlow PROPERTIES ENVIRONMENT
+        "DKR_REVIEWED_GENERATED_V77=${DKR_GENERATED_SOURCE_V77};DKR_REVIEWED_GENERATED_V80=${DKR_GENERATED_SOURCE_V80}")
+endif()
 
 add_executable(DKRExperimentalProbeDriverTests
     "${CMAKE_CURRENT_LIST_DIR}/../experimental_rollback_tests.cpp"
@@ -192,7 +205,7 @@ add_executable(DKRExperimentalProbeDriverTests
 target_compile_features(DKRExperimentalProbeDriverTests PRIVATE cxx_std_20)
 target_include_directories(DKRExperimentalProbeDriverTests PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game"
-    "${CMAKE_CURRENT_LIST_DIR}/../../../extern/n64-modern-runtime/thirdparty")
+    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
 if(MSVC)
     target_compile_options(DKRExperimentalProbeDriverTests PRIVATE /UNDEBUG)
 else()

@@ -1,0 +1,162 @@
+name: Nightly host checks
+on:
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: Number of randomized session/network rounds
+        type: string
+        default: '10'
+      seed:
+        description: Optional unsigned 32-bit base seed for reproducing an order
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  sanitizers:
+    name: ASan + UBSan (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-nightly-tools # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+      - name: Install Linux compiler
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang-18 clang-tools-18 libclang-rt-18-dev ninja-build
+      - name: Prepare reviewed dependencies
+        uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+      - name: Configure instrumented native sources
+        working-directory: runtime-recomp
+        run: |
+          export PATH="$RUNNER_TEMP/nightly-tools/bin:$PATH"
+          compilers=()
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            compilers=(-DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18)
+          fi
+          cmake --preset host-sanitizers "${compilers[@]}"
+      - name: Build
+        working-directory: runtime-recomp
+        run: |
+          export PATH="$RUNNER_TEMP/nightly-tools/bin:$PATH"
+          cmake --build --preset host-sanitizers --parallel 4
+      - name: Run instrumented host suite
+        working-directory: runtime-recomp
+        run: |
+          export PATH="$RUNNER_TEMP/nightly-tools/bin:$PATH"
+          ctest --preset host-sanitizers --parallel 2 --output-junit junit.xml
+      - name: Summarize sanitizer results
+        if: ${{ always() }}
+        run: python3 scripts/ci_summary.py --label 'ASan + UBSan host tests' --junit build/host-sanitizers/junit.xml --output "$GITHUB_STEP_SUMMARY"
+      - name: Preserve sanitizer diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sanitizers-${{ matrix.runner }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            build/host-sanitizers/junit.xml
+            build/host-sanitizers/compile_commands.json
+            build/host-sanitizers/CMakeFiles/CMakeConfigureLog.yaml
+            build/host-sanitizers/Testing/Temporary/
+  flake-stress:
+    name: Seeded network stress (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHON_EXECUTABLE: ${{ matrix.runner == 'windows-2022' && 'python' || 'python3' }}
+      STRESS_ROUNDS: ${{ inputs.rounds || '10' }}
+      STRESS_SEED: ${{ inputs.seed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-nightly-tools # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Prepare reviewed dependencies
+        uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+      - name: Configure Unix host tests
+        if: runner.os != 'Windows'
+        working-directory: runtime-recomp
+        run: |
+          export PATH="$RUNNER_TEMP/nightly-tools/bin:$PATH"
+          cmake --preset host
+      - name: Build Unix host tests
+        if: runner.os != 'Windows'
+        working-directory: runtime-recomp
+        run: |
+          export PATH="$RUNNER_TEMP/nightly-tools/bin:$PATH"
+          cmake --build --preset host --parallel 4
+      - name: Configure Windows host tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: runtime-recomp
+        run: |
+          $env:PATH = "$env:RUNNER_TEMP\nightly-tools\Scripts;$env:PATH"
+          cmake --preset host-windows
+      - name: Build Windows host tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: runtime-recomp
+        run: |
+          $env:PATH = "$env:RUNNER_TEMP\nightly-tools\Scripts;$env:PATH"
+          cmake --build --preset host-windows --parallel $env:NUMBER_OF_PROCESSORS
+      - name: Run seeded rounds and retain first failure
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            nightly_bin="$(cygpath -u "$RUNNER_TEMP")/nightly-tools/Scripts"
+            export PATH="$nightly_bin:$PATH"
+          else
+            export PATH="$RUNNER_TEMP/nightly-tools/bin:$PATH"
+          fi
+          build_dir=build/host
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            build_dir=build/host-windows
+          fi
+          arguments=(--build-dir "$build_dir" --rounds "$STRESS_ROUNDS" --parallel 2 --output build/stress/nightly)
+          if [[ -n "$STRESS_SEED" ]]; then
+            arguments+=(--seed "$STRESS_SEED")
+          fi
+          "$PYTHON_EXECUTABLE" scripts/stress_tests.py "${arguments[@]}"
+      - name: Summarize seeded stress results
+        if: ${{ always() }}
+        run: |
+          if [[ -f build/stress/nightly/summary.md ]]; then
+            cat build/stress/nightly/summary.md >>"$GITHUB_STEP_SUMMARY"
+          else
+            "$PYTHON_EXECUTABLE" scripts/ci_summary.py --label 'Seeded network stress' --junit build/stress/nightly/junit.xml --output "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Preserve round seeds, logs and test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: stress-${{ matrix.runner }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            build/stress/nightly/
+            build/host/CMakeFiles/CMakeConfigureLog.yaml
+            build/host-windows/CMakeFiles/CMakeConfigureLog.yaml

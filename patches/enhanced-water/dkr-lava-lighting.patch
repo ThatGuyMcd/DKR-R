@@ -1,0 +1,267 @@
+diff --git a/src/render/rt64_framebuffer_renderer_call.h b/src/render/rt64_framebuffer_renderer_call.h
+--- a/src/render/rt64_framebuffer_renderer_call.h
++++ b/src/render/rt64_framebuffer_renderer_call.h
+@@ -25,2 +25,4 @@
+         uint32_t waterIndex = UINT32_MAX;
++        bool worldProjection = false;
++        uint32_t projectionIndex = UINT32_MAX;
+         const RenderPipeline *originalWaterPipeline = nullptr;
+diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
+--- a/src/render/rt64_water_renderer.h
++++ b/src/render/rt64_water_renderer.h
+@@ -87,2 +87,9 @@
+         if (device) create(device);
++    }
++};
++struct LavaLightingSet : RenderDescriptorSetBase {
++    uint32_t output,input;
++    explicit LavaLightingSet(RenderDevice *device=nullptr) {
++        builder.begin();output=builder.addReadWriteTexture(1);input=builder.addTexture(2);builder.end();
++        if(device)create(device);
+     }
+@@ -131,2 +138,11 @@
+     WaterRayScene rays;
++    std::unique_ptr<RenderShader> lavaLightingVS,lavaLightingPS,lavaLightingCS;
++    std::unique_ptr<RenderPipelineLayout> lavaLightingLayout;
++    std::unique_ptr<RenderPipeline> lavaLightingCompute;
++    std::map<uint32_t,std::unique_ptr<RenderPipeline>> lavaLightingPipelines;
++    bool lavaLightingUnavailable=false;
++    RenderPipeline *lavaLightingPipeline(RenderDevice *device,RenderShaderFormat format,const RenderMultisampling& samples);
++    bool prepareLavaLighting(RenderWorker *worker,uint32_t sceneIndex,const interop::WaterDrawParams& draw);
++    bool drawLavaLighting(RenderWorker *worker,uint32_t drawIndex,bool depthReadOnly,const RenderViewport& viewport);
++
+     bool rayUnavailable=false;
+@@ -161,3 +177,7 @@
+         std::shared_ptr<RenderTexture> color,depth;
+-        std::unique_ptr<RenderTexture> originalColor;
++        std::unique_ptr<RenderTexture> originalColor, lavaLight;
++        std::unique_ptr<RenderTextureView> lavaLightView;
++        std::unique_ptr<LavaLightingSet> lavaLightSet;
++        uint32_t lavaWidth=0,lavaHeight=0;
++        bool lavaPrepared=false;
+         uint32_t originalWidth=0,originalHeight=0,captureOwner=UINT32_MAX;
+diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer.cpp
+--- a/src/render/rt64_water_renderer.cpp
++++ b/src/render/rt64_water_renderer.cpp
+@@ -1,2 +1,3 @@
+ #include "rt64_water_renderer.h"
++#include "LavaLightingBounds.h"
+ #include "enhanced_water_settings.hpp"
+@@ -18,2 +19,5 @@
+ #include "shaders/WaterHardwarePS.hlsl.spirv.h"
++#include "shaders/LavaLightingVS.hlsl.spirv.h"
++#include "shaders/LavaLightingPS.hlsl.spirv.h"
++#include "shaders/LavaLightingCS.hlsl.spirv.h"
+ #include "shaders/WaterClassicPS.hlsl.spirv.h"
+@@ -39,2 +43,5 @@
+ #include "shaders/WaterHardwarePS.hlsl.dxil.h"
++#include "shaders/LavaLightingVS.hlsl.dxil.h"
++#include "shaders/LavaLightingPS.hlsl.dxil.h"
++#include "shaders/LavaLightingCS.hlsl.dxil.h"
+ #include "shaders/WaterClassicPS.hlsl.dxil.h"
+@@ -227,3 +234,3 @@
+     profileKinds.clear();
+-    for (auto &scene : scenes) { scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; }
++    for (auto &scene : scenes) { scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; scene.lavaPrepared=false; }
+ }
+@@ -244,3 +251,3 @@
+         return s.color ? water_policy::scratchBytes(s.width,s.height,s.surfaceSamples,s.classic,s.captureOwner!=i,
+-            bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight) : uint64_t(0);
++            bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight)+uint64_t(s.lavaWidth)*s.lavaHeight*16 : uint64_t(0);
+     };
+@@ -250,3 +257,3 @@
+     const auto requested=water_policy::scratchBytes(color->width,color->height,color->multisampling.sampleCount,
+-        classic,owner!=index,selfDepth,depth->width,depth->height,depth->multisampling.sampleCount,ow,oh);
++        classic,owner!=index,selfDepth,depth->width,depth->height,depth->multisampling.sampleCount,ow,oh)+(existing ? uint64_t(scenes[index].lavaWidth)*scenes[index].lavaHeight*16 : 0);
+     if(!water_policy::fits(active,requested,uint32_t(sceneKeys.size())-(existing ? 1 : 0))) {
+@@ -817,2 +824,123 @@
+ 
++
++RenderPipeline *WaterRenderer::lavaLightingPipeline(RenderDevice *device,RenderShaderFormat format,const RenderMultisampling& samples) {
++    if(lavaLightingUnavailable || !device->getCapabilities().rayQuery || !rayLayout)return nullptr;
++    const uint32_t key=uint32_t(samples.sampleCount);
++    if(auto it=lavaLightingPipelines.find(key);it!=lavaLightingPipelines.end())return it->second.get();
++    try {
++        if(!lavaLightingVS || !lavaLightingPS) {
++            lavaLightingVS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(LavaLightingVSBlobDXIL,LavaLightingVSBlobSPIRV,LavaLightingVSBlobMSL,"VSMain",format)));
++            lavaLightingPS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(LavaLightingPSBlobDXIL,LavaLightingPSBlobSPIRV,LavaLightingPSBlobMSL,"PSMain",format)));
++            lavaLightingCS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(LavaLightingCSBlobDXIL,LavaLightingCSBlobSPIRV,LavaLightingCSBlobMSL,"CSMain",format)));
++            LavaLightingSet lightSet;WaterRaySet raySet;
++            RenderPipelineLayoutBuilder builder;builder.begin(false,true);
++            builder.addPushConstant(0,0,sizeof(uint32_t)*4,RenderShaderStageFlag::COMPUTE|RenderShaderStageFlag::VERTEX|RenderShaderStageFlag::PIXEL);
++            builder.addDescriptorSet(*descriptorSet);builder.addDescriptorSet(raySet);builder.addDescriptorSet(lightSet);builder.end();
++            lavaLightingLayout=checkedWaterResource(builder.create(device));
++            lavaLightingCompute=checkedWaterResource(device->createComputePipeline(RenderComputePipelineDesc(lavaLightingLayout.get(),lavaLightingCS.get(),8,8,1)));
++        }
++        RenderGraphicsPipelineDesc desc;
++        desc.pipelineLayout=lavaLightingLayout.get();desc.vertexShader=lavaLightingVS.get();desc.pixelShader=lavaLightingPS.get();
++        desc.renderTargetCount=1;desc.renderTargetFormat[0]=RenderTarget::colorBufferFormat(usesHDR);
++        desc.renderTargetBlend[0]=RenderBlendDesc::Copy();desc.multisampling=samples;
++        desc.depthEnabled=false;desc.depthWriteEnabled=false;desc.depthTargetFormat=RenderFormat::D32_FLOAT;
++        desc.depthClipEnabled=false;desc.cullMode=RenderCullMode::NONE;desc.primitiveTopology=RenderPrimitiveTopology::TRIANGLE_LIST;
++        auto result=device->createGraphicsPipeline(desc);
++        if(!waterGraphicsPipelineValid(result.get()))throw std::runtime_error("lava lighting pipeline rejected");
++        auto* pointer=result.get();lavaLightingPipelines.emplace(key,std::move(result));return pointer;
++    } catch(const std::exception& error) {
++        lavaLightingUnavailable=true;
++        std::fprintf(stderr,"[water][lava-lighting] retaining emissive lava without scene lighting: %s\n",error.what());
++        return nullptr;
++    }
++}
++bool WaterRenderer::prepareLavaLighting(RenderWorker *worker,uint32_t index,const interop::WaterDrawParams& draw) {
++    if(index>=scenes.size() || !lavaLightingCompute)return false;
++    auto& scene=scenes[index];
++    const float q=draw.material.shoreCounts[0].x;
++    const uint32_t divisor=q>=12 ? 16 : q>=6 ? 8 : 4;
++    const uint32_t width=(scene.width+divisor-1)/divisor,height=(scene.height+divisor-1)/divisor;
++    if(scene.lavaLight && scene.lavaWidth==width && scene.lavaHeight==height) {scene.lavaPrepared=true;return true;}
++    if(scene.lavaPrepared)return false; // Earlier batches already own this descriptor.
++    // A shared scratch image per scene, never per batch/light or MSAA sample.
++    // Account this optional buffer inside the existing aggregate safety budget.
++    uint64_t used=0;
++    for(const auto& entry:sceneKeys) {
++        const auto& s=scenes[entry.second];
++        used+=water_policy::scratchBytes(s.width,s.height,s.surfaceSamples,s.classic,s.captureOwner!=entry.second,
++            bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight);
++        if(entry.second!=index)used+=uint64_t(s.lavaWidth)*s.lavaHeight*16;
++    }
++    if(used>water_policy::sceneBudget || uint64_t(width)*height*16>water_policy::sceneBudget-used)return false;
++    // Unused pooled scenes are from the already completed preceding workload.
++    // Do not let adding lighting make their retained scratch exceed the cap.
++    uint64_t retained=used+uint64_t(width)*height*16;
++    for(uint32_t i=uint32_t(sceneKeys.size());i<scenes.size();++i) {
++        const auto& s=scenes[i];
++        retained+=water_policy::scratchBytes(s.width,s.height,s.surfaceSamples,s.classic,s.captureOwner!=i,
++            bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight);
++        retained+=uint64_t(s.lavaWidth)*s.lavaHeight*16;
++    }
++    if(retained>water_policy::sceneBudget)scenes.resize(sceneKeys.size());
++    // This image is not yet referenced by a prepared batch. Retire it before
++    // allocating its replacement; never temporarily double the lighting budget.
++    scene.lavaLightSet.reset();scene.lavaLightView.reset();scene.lavaLight.reset();
++    scene.lavaWidth=scene.lavaHeight=0;
++    try {
++    // Alpha holds perspective depth, not colour: half precision can round
++    // valid distant receivers to sky or reconstruct a different world point.
++    auto texture=checkedWaterResource(worker->device->createTexture(RenderTextureDesc::Texture2D(width,height,1,RenderFormat::R32G32B32A32_FLOAT,RenderTextureFlag::STORAGE|RenderTextureFlag::UNORDERED_ACCESS)));
++    auto view=checkedWaterResource(texture->createTextureView(RenderTextureViewDesc::Texture2D(RenderFormat::R32G32B32A32_FLOAT)));
++    auto set=std::make_unique<LavaLightingSet>(worker->device);
++    set->setTexture(set->output,texture.get(),RenderTextureLayout::GENERAL,view.get());
++    set->setTexture(set->input,texture.get(),RenderTextureLayout::SHADER_READ,view.get());
++    scene.lavaLightSet=std::move(set);scene.lavaLightView=std::move(view);scene.lavaLight=std::move(texture);
++    scene.lavaWidth=width;scene.lavaHeight=height;scene.lavaPrepared=true;return true;
++    } catch(const std::exception& error) {
++        std::fprintf(stderr,"[water][lava-lighting] optional buffer unavailable; retaining enhanced surface: %s\n",error.what());
++        return false;
++    }
++}
++bool WaterRenderer::drawLavaLighting(RenderWorker *worker,uint32_t drawIndex,bool depthReadOnly,const RenderViewport& viewport) {
++    if(drawIndex>=draws.size() || drawIndex>=drawScenes.size() || !rays.set || lavaLightingUnavailable)return false;
++    auto& scene=scenes[drawScenes[drawIndex]];
++    const auto& d=draws[drawIndex];
++    if(d.material.effects.z!=5 || d.material.effects.w<0.5f || d.material.sunDirection.w<=0 || !scene.sourceColor)return false;
++    // Pipeline/resource creation belongs to workload preparation, never record.
++    auto it=lavaLightingPipelines.find(uint32_t(scene.sourceColor->multisampling.sampleCount));
++    if(it==lavaLightingPipelines.end() || !it->second || !scene.lavaLightSet)return false;
++    const auto bounds=lavaLightingBounds(d);
++    if(bounds[2]<=bounds[0] || bounds[3]<=bounds[1])return false;
++    // Fresh capture after world geometry, before orthographic HUD. It shares
++    // existing viewport scratch resources; no new full-resolution attachment.
++    scene.captured=false;scenes[scene.captureOwner].opticalCaptured=false;
++    captureScene(worker,drawIndex,depthReadOnly);
++    worker->commandList->setFramebuffer(nullptr);
++    worker->commandList->barriers(RenderBarrierStage::COMPUTE,RenderTextureBarrier(scene.lavaLight.get(),RenderTextureLayout::GENERAL));
++    worker->commandList->setComputePipelineLayout(lavaLightingLayout.get());
++    worker->commandList->setComputeDescriptorSet(materialSet(drawIndex),0);
++    worker->commandList->setComputeDescriptorSet(rays.set->get(),1);
++    worker->commandList->setComputeDescriptorSet(scene.lavaLightSet->get(),2);
++    worker->commandList->setPipeline(lavaLightingCompute.get());
++    const float quality=d.material.shoreCounts[0].x;
++    const uint32_t divisor=quality>=12 ? 16 : quality>=6 ? 8 : 4;
++    const uint32_t x=uint32_t(std::max(0.0f,std::max(float(d.viewBounds.x/divisor),std::floor(bounds[0]/divisor)-1)));
++    const uint32_t y=uint32_t(std::max(0.0f,std::max(float(d.viewBounds.y/divisor),std::floor(bounds[1]/divisor)-1)));
++    const uint32_t right=std::min(scene.lavaWidth,uint32_t(std::min(float(std::ceil(d.viewBounds.z/divisor)),std::ceil(bounds[2]/divisor)+1)));
++    const uint32_t bottom=std::min(scene.lavaHeight,uint32_t(std::min(float(std::ceil(d.viewBounds.w/divisor)),std::ceil(bounds[3]/divisor)+1)));
++    if(right<=x || bottom<=y)return false;
++    const std::array<uint32_t,4> pc{drawIndex,x,y,0};worker->commandList->setComputePushConstants(0,pc.data());
++    worker->commandList->dispatch((right-x+7)/8,(bottom-y+7)/8,1);
++    worker->commandList->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(scene.lavaLight.get(),RenderTextureLayout::SHADER_READ));
++    worker->commandList->setViewports(viewport);
++    worker->commandList->setScissors(RenderRect(int32_t(bounds[0]),int32_t(bounds[1]),int32_t(bounds[2]),int32_t(bounds[3])));
++    worker->commandList->setGraphicsPipelineLayout(lavaLightingLayout.get());
++    worker->commandList->setGraphicsDescriptorSet(materialSet(drawIndex),0);
++    worker->commandList->setGraphicsDescriptorSet(rays.set->get(),1);
++    worker->commandList->setGraphicsDescriptorSet(scene.lavaLightSet->get(),2);
++    worker->commandList->setPipeline(it->second.get());
++    worker->commandList->setGraphicsPushConstants(0,pc.data());
++    return true;
++}
++
+ bool WaterRenderer::prepareRays(RenderWorker *worker,RenderShaderFormat format,std::shared_ptr<const dkr::runtime::water::enhanced::RayGeometry> geometry) {
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -546,4 +546,23 @@
+         
++        uint32_t pendingLava=UINT32_MAX,pendingLavaProjection=UINT32_MAX;
++        auto finishLava = [&]() {
++            if(pendingLava==UINT32_MAX)return;
++            finishWater();
++            if(waterRenderer->drawLavaLighting(worker,pendingLava,depthState,framebuffer.viewport)) {
++                worker->commandList->setFramebuffer(depthState ? fbStorage->colorWriteDepthRead.get() : fbStorage->colorDepthWrite.get());
++                worker->commandList->drawInstanced(3,1,0,0);
++            }
++            pendingLava=UINT32_MAX;pendingLavaProjection=UINT32_MAX;
++            switchToGraphicsPipeline();
++        };
++
+         for (uint32_t i : rasterScene.instanceIndices) {
+             const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
++            if(pendingLava!=UINT32_MAX && (!drawCall.worldProjection || drawCall.projectionIndex!=pendingLavaProjection))finishLava();
++            if(pendingLava==UINT32_MAX && drawCall.waterIndex!=UINT32_MAX) {
++                const auto& m=waterRenderer->draws[drawCall.waterIndex].material;
++                if(m.effects.z==5 && m.effects.w>0.5f && m.sunDirection.w>0) {
++                    pendingLava=drawCall.waterIndex;pendingLavaProjection=drawCall.projectionIndex;
++                }
++            }
+             const uint32_t waterScene = drawCall.waterIndex == UINT32_MAX ? UINT32_MAX : waterRenderer->drawScenes[drawCall.waterIndex];
+@@ -770,2 +789,3 @@
+         // Mark targets for resolve.
++        finishLava();
+         finishWater();
+@@ -1647,2 +1667,4 @@
+                 instanceDrawCall.waterIndex = UINT32_MAX;
++                instanceDrawCall.worldProjection=false;
++                instanceDrawCall.projectionIndex=UINT32_MAX;
+                 instanceDrawCall.originalWaterPipeline = nullptr;
+@@ -1770,2 +1792,4 @@
+                         float horizontalMisalignment = 0.0f;
++                        instanceDrawCall.worldProjection=proj.type==Projection::Type::Perspective;
++                        instanceDrawCall.projectionIndex=proj.transformsIndex;
+                         switch (proj.type) {
+@@ -1895,5 +1919,8 @@
+                     const bool classic=wp.material.optics.w>0.5f;
+-                    bool hardware=!classic && wp.material.appearance.x>0 && wp.material.effects.w>0.5f &&
++                    bool hardware=!classic && (wp.material.appearance.x>0 || (wp.material.effects.z==5 && wp.material.sunDirection.w>0)) && wp.material.effects.w>0.5f &&
+                         waterRenderer->prepareRays(p.worker,p.rasterShaderCache->shaderFormat,p.curWorkload->waterRayGeometry);
+                     wp.material.effects.w=hardware ? 1.0f : 0.0f;
++                    if(hardware && wp.material.effects.z==5 && wp.material.sunDirection.w>0 &&
++                       !waterRenderer->lavaLightingPipeline(p.worker->device,p.rasterShaderCache->shaderFormat,p.fbStorage->colorTarget->multisampling))
++                        wp.material.sunDirection.w=0;
+                     // Originally opaque two-player water already owns scene
+@@ -1922,2 +1949,4 @@
+                         if(waterScene!=water_policy::invalidScene) {
++                        if(hardware && wp.material.effects.z==5 && wp.material.sunDirection.w>0 &&
++                           !waterRenderer->prepareLavaLighting(p.worker,waterScene,wp))wp.material.sunDirection.w=0;
+                         if(!classic)dkr::runtime::water::enhanced::active_reflection.store(hardware ? 2 : wp.material.identity.x>=2 ? 1 : 0);
+diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
+--- a/src/shaders/WaterPS.hlsl
++++ b/src/shaders/WaterPS.hlsl
+@@ -253,2 +253,3 @@
+         float4 reflection=0;
++        if(m.appearance.x>0) {
+ #ifdef HARDWARE_WATER
+@@ -264,2 +265,3 @@
+ #endif
++        }
+         float fresnel=0.04+0.96*pow(1-saturate(dot(N,V)),5);

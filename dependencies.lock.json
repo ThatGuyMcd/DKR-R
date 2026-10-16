@@ -66,6 +66,14 @@
       "purpose": "MPL-2.0 WebRTC data channels and WebSocket signaling for optional Quick Join transport"
     },
     {
+      "name": "libjuice",
+      "repository": "https://github.com/paullouisageneau/libjuice.git",
+      "commit": "22145ec3473c73d811417ac9a6aee0de530aaa3f",
+      "destination": "extern/libdatachannel/deps/libjuice",
+      "managedBy": "libdatachannel git submodule",
+      "purpose": "ICE/STUN transport used by libdatachannel; type-correct picohash callbacks preserve hashing without undefined function calls"
+    },
+    {
       "name": "usrsctp",
       "repository": "https://github.com/paullouisageneau/usrsctp.git",
       "commit": "fec583d54493f879d2ae44a743423bf8a04371ab",
@@ -88,6 +96,38 @@
       "destination": "extern/sdl3",
       "recursive": false,
       "purpose": "Private native controller and Steam Deck sensor helper; never the launcher window backend"
+    },
+    {
+      "name": "sdl2",
+      "repository": "https://github.com/libsdl-org/SDL.git",
+      "commit": "5d249570393f7a37e037abf22cd6012a4cc56a71",
+      "destination": "extern/sdl2",
+      "recursive": false,
+      "purpose": "Static SDL2 window, input, and audio backend for the iOS app"
+    },
+    {
+      "name": "sljit",
+      "repository": "https://github.com/zherczeg/sljit",
+      "commit": "f6326087b3404efb07c6d3deed97b3c3b8098c0c",
+      "destination": "extern/n64-modern-runtime/N64Recomp/lib/sljit",
+      "managedBy": "n64recomp git submodule",
+      "purpose": "Portable code generation dependency; iOS W^X build definitions"
+    },
+    {
+      "name": "plume",
+      "repository": "https://github.com/renderbag/plume.git",
+      "commit": "d890ac899e505fb30040e037a4037cdeca68f033",
+      "destination": "extern/rt64/src/contrib/plume",
+      "managedBy": "rt64 git submodule",
+      "purpose": "RT64 Metal rendering backend with iOS view support"
+    },
+    {
+      "name": "nativefiledialog-extended",
+      "repository": "https://github.com/btzy/nativefiledialog-extended",
+      "commit": "17b6e8ce219c0677f94b63636abb9296b28841ca",
+      "destination": "extern/rt64/src/contrib/nativefiledialog-extended",
+      "managedBy": "rt64 git submodule",
+      "purpose": "Native file dialog API with the project-owned iOS document picker"
     }
   ]
 }

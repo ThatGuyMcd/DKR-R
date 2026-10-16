@@ -3,6 +3,8 @@
 #include "enhanced_water_metadata.hpp"
 #include "WaterResourcePolicy.h"
 #include "WaterWorkPolicy.h"
+#include "enhanced_water_settings.hpp"
+#include "waterfall_scroll_policy.hpp"
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -76,15 +78,16 @@ int audit_stock_model(const char* path) {
             if(area)expected.push_back({triangles+f*16,std::uint32_t(fe-f),batch,kind});
         }
     }
-    Registry registry;registry.rebuild(m,base,cache,nt,reference);
+    Registry registry;registry.rebuild(m,base,cache,nt,reference,{},false,false,{},true);
     require(registry.surfaces().size()==expected.size(),"all stock liquid batches survive real cache encoding");
     for(const auto& draw:expected) {
         const auto surface=registry.find(draw.source,draw.count);
         require(surface && surface->kind==draw.kind,"stock material maps to its actual triangle range");
     }
-    require(registry.procedural().has_value()==(reference_kind==Kind::Waves),
-        "stock liquid wave reference resolves; lava/fog references remain excluded");
-    if(reference_kind==Kind::Waves) for(bool v80:{false,true}) {
+    const bool animated=reference_kind==Kind::Waves || reference_kind==Kind::Lava;
+    require(registry.procedural().has_value()==animated,
+        "stock water and molten wave references resolve; fog remains excluded");
+    if(animated) for(bool v80:{false,true}) {
         const auto symbols=wave_symbols(v80);
         word(symbols.batch,reference);word(symbols.controller,4);word(symbols.players,2);
         word(symbols.model,0x80470000);word(symbols.texture,headers);
@@ -93,18 +96,121 @@ int audit_stock_model(const char* path) {
             require(registry.find_dynamic(m,symbols,0x80600000+i*512+row*128,8).has_value(),
                 "stock wave material reaches dynamic draws in both revision layouts");
     }
+    unsigned flowing=0,mapped_flow=0;
+    if(reference_kind==Kind::Lava) {
+        require(bool(registry.glow_geometry()),"stock lava creates a complete native light cache input");
+        const auto begin=std::chrono::steady_clock::now();
+        LavaGlowCache glow;glow.prepare(registry.glow_geometry(),100);
+        const double prepare_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
+        unsigned steps=0,lit=0;double peak_step_ms=0;
+        while(!glow.ready() && steps<4096) {
+            const auto step=std::chrono::steady_clock::now();glow.step(1);++steps;
+            peak_step_ms=std::max(peak_step_ms,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-step).count());
+        }
+        require(glow.ready(),"stock lava cached lighting completes without GPU queries");
+        unsigned sources=0;
+        for(const auto& t:registry.glow_geometry()->triangles) {
+            if(t.source){++sources;continue;}
+            for(unsigned i=0;i<3;++i)if(glow.energy(t.addresses[i],t.p[i],2)>0.005F)++lit;
+        }
+        require(sources>16 && lit>0,"real volcano extends beyond old point-light cap and illuminates native scenery");
+        const auto stable=glow.ray_tests();for(unsigned i=0;i<120;++i)glow.step(2);
+        require(glow.ray_tests()==stable,"real volcano steady frames never recheck static occlusion");
+        std::cout<<"Lava cache: source-triangles="<<sources<<" receivers="<<glow.receivers()<<" lit-corners="<<lit
+            <<" prepare-ms="<<prepare_ms<<" bounded-steps="<<steps<<" peak-step-ms="<<peak_step_ms
+            <<" cached-occlusion-tests="<<stable<<" steady-frame-lighting-rays=0\n";
+    }
+    for(const auto& surface:registry.surfaces())if(surface.kind==Kind::Waterfall || surface.kind==Kind::Fountain) {
+        for(auto source=surface.begin;source<surface.end;source+=16) {
+            ++flowing;if(const auto* f=registry.flow_triangle(source);f && f->corners[0][3]>0)++mapped_flow;
+        }
+    }
     std::cout<<"PASS stock model "<<path<<": liquid-batches="<<expected.size()
-        <<" wave-reference="<<(reference_kind==Kind::Waves)<<'\n';
+        <<" flowing="<<flowing<<" mapped-flow="<<mapped_flow
+        <<" wave-reference="<<animated<<" lava="<<(reference_kind==Kind::Lava)<<'\n';
     return 0;
 }
 int main(int argc,char** argv) {
     using namespace RT64::water_policy;
+    {
+        std::vector<LavaEmitter> emitters;
+        for(unsigned i=0;i<4000;++i)add_lava_emitter(emitters,{float(i),0,0,20});
+        require(emitters.size()==16,"lava emitters remain bounded without dropping an entire river end");
+        double area=0;
+        for(const auto& e:emitters){area+=e[3]*e[3];for(float v:e)require(std::isfinite(v),"merged lava lights finite");}
+        require(std::abs(area-1600000)<10,"area-weighted emitter merge retains emission area within radius budget");
+        add_lava_emitter(emitters,{0,0,0,0});add_lava_emitter(emitters,{NAN,0,0,1});
+        require(emitters.size()==16,"invalid emitters cannot enter lighting buffer");
+        for(unsigned i=0;i<10000;++i){const auto p=lava_pulse(i*0.01f,0.35f,1);require(p>=0.65f && p<=1,"smooth lava pulse is bounded");}
+        require(lava_pulse(100,0,1)==1,"zero pulse strength preserves steady lighting");
+        reset_appearance();load_tuning("rtx_lava_lighting_intensity",999);
+        require(lava_lighting==300,"persisted light intensity is clamped");
+        load_tuning("rtx_lava_lighting_intensity",-1);require(lava_lighting==0,"zero light intensity disables pass");
+        reset_appearance();require(lava_lighting==100 && lava_pulse_strength==35 && lava_light_range==100,"lighting defaults restored with appearance");
+        const auto water_quality=requested_quality.load();const auto water_reflection=requested_reflection.load();
+        load_tuning("rtx_lava_lighting_enabled",0);
+        require(lava_lighting_enabled==0 && lava_lighting==100 && requested_quality==water_quality && requested_reflection==water_reflection,
+            "independent light switch preserves intensity, surface and reflection settings");
+        load_tuning("rtx_lava_lighting_quality",-10);require(lava_lighting_quality==0,"lighting quality lower clamp");
+        load_tuning("rtx_lava_lighting_quality",99);require(lava_lighting_quality==2,"lighting quality upper clamp");
+        load_tuning("rtx_lava_lighting_enabled",99);require(lava_lighting_enabled==1,"lighting enable upper clamp");
+        reset_appearance();require(lava_lighting_enabled==1 && lava_lighting_quality==1,"balanced independent lighting defaults restored");
+    }
+    {
+        const std::array<Vec3,3> river{{{0,20,0},{100,20,0},{0,0,100}}};
+        const std::array<std::array<float,2>,3> uv{{{0,0},{32,0},{0,32}}};
+        const std::array<float,2> period{32,32};
+        const auto flow=flow_mapping(river,uv,period);
+        require(flow.direction==1 && flow_matches(flow,river[2],uv[2],period),"river film follows authored downhill V, not fixed world Y");
+        const auto midpoint=flow.at({25,10,50});
+        require(std::abs(midpoint[0]-0.25F)<1e-5F && std::abs(midpoint[1]-0.5F)<1e-5F,"world-to-flow mapping retains authored phase");
+        auto mirrored=uv;for(auto& at:mirrored)at[1]=-at[1];
+        require(flow_mapping(river,mirrored,period).direction==-1,"mirrored river UVs still flow downhill");
+        const std::array<Vec3,3> turned{{{0,20,0},{0,20,100},{-100,0,0}}};
+        const auto rotated=flow_mapping(turned,uv,period);
+        require(rotated.direction==1 && rotated.at({-50,10,25})==midpoint,"rotated channel retains local flow frame");
+        auto shifted=uv[2];shifted[0]+=32;shifted[1]-=64;
+        require(flow_matches(flow,river[2],shifted,period),"adjacent UV repeats qualify without a film seam");
+        shifted[1]+=8;
+        require(!flow_matches(flow,river[2],shifted,period),"non-affine mapping cannot silently inherit an incorrect frame");
+        auto invalid=river;invalid[2]=river[1];
+        require(!flow_mapping(invalid,uv,period).direction && !flow_mapping(river,uv,{0,32}).direction &&
+            !flow_mapping(river,{},period).direction,"degenerate positions, periods and UV frames fail closed");
+    }
+    require(dkr::runtime::water::waterfall_uv_velocity(255.75F,0.25F,256)==0.5F &&
+        dkr::runtime::water::waterfall_uv_velocity(0.25F,255.75F,256)==-0.5F,"waterfall wrap never reverses or jumps");
+    require(dkr::runtime::water::waterfall_uv_velocity(1023.75F,-1023.75F,2048)==0.5F &&
+        dkr::runtime::water::waterfall_uv_velocity(31.75F,0.25F,32)==0.5F,"large and small authored waterfall periods work");
+    require(dkr::runtime::water::waterfall_uv_velocity(0,1,0)==0 &&
+        dkr::runtime::water::waterfall_uv_velocity(0,1,std::numeric_limits<float>::infinity())==0,"invalid waterfall period fails closed");
     const auto modern=sceneBytes(2560,1440,1,false,true,2560,1440,1);
     const auto classic=sceneBytes(2560,1440,1,true,false,2560,1440,1);
     require(fits(modern,classic,1),"1440p horizontal and vertical water fit together");
     require(!fits(2*modern+classic,modern,3),"active scratch targets remain bounded");
     require(!fits(0,sceneBytes(8193,1440,1,false,true,8193,1440,1),0),"oversized target rejected without allocation");
     require(!fits(0,UINT64_MAX,0) && !fits(sceneBudget+1,1,0),"budget arithmetic never wraps");
+    for(const unsigned samples:{1U,2U,4U}) {
+        const auto root=scratchBytes(2560,1440,samples,false,false,false,2560,1440,samples);
+        const auto isolated=scratchBytes(2560,1440,samples,false,true,true,2560,1440,samples);
+        const auto vertical=scratchBytes(2560,1440,samples,true,false,false,2560,1440,samples,2560,1472);
+        require(vertical==12,"waterfalls never allocate a fullscreen MSAA colour atlas");
+        require(fits(root,isolated,1) && fits(root+isolated,vertical,2),"reported 1440p mixed Z modes and fullscreen waterfall fit, including 4x MSAA");
+        const auto isolated_first=scratchBytes(2560,1440,samples,false,false,true,2560,1440,samples);
+        const auto opaque_second=scratchBytes(2560,1440,samples,false,true,false,2560,1440,samples);
+        require(root+isolated==isolated_first+opaque_second,"scratch budget is independent of horizontal draw order");
+        require(fits(vertical,isolated_first,1),"vertical-first ordering fits identical quality");
+    }
+    require(bucketExtent(1)==64 && bucketExtent(65)==128 && bucketExtent(8192)==8192 && !bucketExtent(8193),"atlas extents are bounded and bucketed");
+    require(scratchBytes(2560,1440,4,true,false,false,2560,1440,4,0,0)==12,"vertical rendering does not depend on projected capture bounds");
+    require(scratchBytes(8193,1440,4,true,false,false,8193,1440,4)==UINT64_MAX,"direct waterfalls retain target validation");
+    set_quality(2);reset_tuning();
+    require(preset()==3 && reflection_detail==-1 && wake_detail==-1,"old High settings retain automatic high detail");
+    requested_reflection=Reflection::Hardware;apply_preset(1);
+    require(preset()==1 && requested_reflection==Reflection::Hardware,"Performance preset never silently changes reflection method");
+    require(load_tuning("enhanced_water_reflection_distance",10000) && reflection_distance==200,"persisted tuning is clamped");
+    require(load_tuning("enhanced_water_wake_detail",-200) && wake_detail==-1,"old automatic detail value remains supported");
+    require(!load_tuning("unrelated_setting",100),"water parser does not consume unrelated settings");
+    require(preset()==4,"individual tuning marks Custom");reset_tuning();set_quality(0);
     require(retainedScenes(8,2)==2 && retainedScenes(2,0)==0,"unused menu targets are reclaimed");
     Recovery recovery;
     require(recovery.ready(),"water initially available");recovery.fail();
@@ -132,10 +238,15 @@ int main(int argc,char** argv) {
     e.surface_type=0;
     require(classify(e)==Kind::None,"unknown transparent material");
     e.flags=kWater | kWaves;
-    for (auto id : {16,58,158,221,265,300,320,503,871,898,927,1056}) {
+    for (auto id : {58,158,221,265,300,320,503,871,898,927,1056}) {
         e.texture_id=static_cast<std::uint16_t>(id);
         require(classify(e)==Kind::None,"false-positive water flag");
     }
+    e.texture_id=16;
+    require(classify(e)==Kind::Lava,"reviewed Hot Top molten wave texture is not water");
+    e.flags=0;
+    require(classify(e)==Kind::None,"lava artwork without liquid evidence is not replaced");
+    e.flags=kWater|kWaves;
     e.texture_id=15; e.surface_type=10;
     require(classify(e)==Kind::None,"ice collision type");
     e.surface_type=11; e.texture_id=317;
@@ -152,6 +263,12 @@ int main(int argc,char** argv) {
     require(!valid_triangle({0,0,0},{0,0,0},{0,0,10}),"degenerate plane");
     require(!valid_triangle({NAN,0,0},{10,0,0},{0,0,10}),"nonfinite plane");
     for (auto map : kStockWaterMaps) require(valid_profile(stock_profile(map)),"stock optics validated");
+    require(valid_profile(lava_profile()),"bounded molten profile");
+    Metadata lava_metadata;
+    require(parse_metadata(nlohmann::json::parse(R"({"version":1,"materials":[{"texture":7,"kind":"lava"}]})"),lava_metadata,error) &&
+        lava_metadata.materials[7]==Hint::Lava,"custom lava metadata uses the same validated ordinal system");
+    require(classify({0,60000,0,true,true,Hint::Lava})==Kind::Lava &&
+        classify({kHidden,60000,0,true,true,Hint::Lava})==Kind::None,"explicit custom lava cannot bypass hidden geometry");
     require(contains_stock_water(40) && contains_stock_water(53),"both Bubbler races");
     for (auto map : {1,2,6,7,9,11,13,15,17,18,24,27,32,33,34,35,38,41,46,52,54,55,62})
         require(!contains_stock_water(map),"non-liquid scene coverage");
@@ -177,6 +294,36 @@ int main(int argc,char** argv) {
     const auto word=[&](std::uint32_t p,std::uint32_t v){half(p,v>>16);half(p+2,v);};
     constexpr auto base=0x80001000U,tex=0x80002000U,seg=0x80003000U;
     constexpr auto verts=0x80004000U,tris=0x80005000U,batches=0x80006000U,cache=0x80007000U;
+    constexpr auto scroll_list=0x80009000U,scroll_object=0x80009100U,scroll_state=0x80009200U;
+    word(scroll_list,scroll_object);half(scroll_object+0x48,29);word(scroll_object+0x64,scroll_state);
+    half(scroll_state,29);half(scroll_state+4,0);half(scroll_state+6,47);
+    auto scrolls=texture_scrolls(Memory(ram),scroll_list,1);
+    require(scrolls[29].u==0 && scrolls[29].v==47,"hub river authored positive V scroll captured");
+    const std::array<Vec3,3> channel{{{0,0,0},{100,0,0},{0,0,100}}};
+    const std::array<Vec3,3> fall{{{0,0,0},{100,0,0},{0,100,0}}};
+    const std::array<std::array<float,2>,3> coords{{{0,0},{32,0},{0,32}}};
+    const auto channel_mapping=flow_mapping(channel,coords,{32,32});
+    const auto fall_mapping=flow_mapping(fall,coords,{32,32});
+    require(authored_flow_direction(channel_mapping,channel,scrolls[29],true)==-1 &&
+        authored_flow_direction(channel_mapping,channel,{0,-47},true)==1,"river follows retail UV motion, not reversed pattern motion");
+    require(authored_flow_direction(fall_mapping,fall,{0,47},true)==fall_mapping.direction,
+        "working vertical waterfalls retain downhill direction");
+    require(authored_flow_direction(channel_mapping,channel,{0,47},false)==channel_mapping.direction &&
+        authored_flow_direction(channel_mapping,channel,{12,47},true)==channel_mapping.direction,
+        "non-scrolling triangles and unsupported diagonal scroll do not receive a guessed override");
+    word(scroll_list+4,scroll_object);
+    require(texture_scrolls(Memory(ram),scroll_list,2)[29].v==94,"multiple scroll objects add like retail");
+    half(scroll_object+6,0x8000);
+    require(texture_scrolls(Memory(ram),scroll_list,1)==TextureScrolls{},"particle layout never interpreted as a scroll object");
+    half(scroll_object+6,0);half(scroll_state,256);
+    require(texture_scrolls(Memory(ram),scroll_list,1)==TextureScrolls{},"bad scroll ordinal excluded");
+    half(scroll_state,29);half(scroll_state+6,128);
+    require(texture_scrolls(Memory(ram),scroll_list,1)==TextureScrolls{},"invalid signed-byte retail scroll speed excluded");
+    half(scroll_state+6,47);word(scroll_object+0x64,0xFFFFFFF0);
+    require(texture_scrolls(Memory(ram),scroll_list,1)==TextureScrolls{} &&
+        texture_scrolls(Memory(ram),scroll_list,513)==TextureScrolls{} &&
+        texture_scrolls(Memory(ram),0xFFFFFFF0,1)==TextureScrolls{},"bounded immutable scroll reads reject corrupt pointers and counts");
+    word(scroll_object+0x64,scroll_state);
     word(base,tex);word(base+4,seg);half(base+0x18,1);half(base+0x1A,1);
     // Match Whale Bay/Pirate Lagoon: surface type 0, liquid identified by a
     // 3D texture cache key and batch flags, not the collision-type shortcut.
@@ -266,15 +413,24 @@ int main(int argc,char** argv) {
             !registry.find_dynamic(Memory(ram),symbols,wave_base,8),"live snapshot owns wave allocations");
         install();
     }
-    for(auto id:{16U,58U,158U,221U,265U,300U,320U,503U,871U,898U,927U,1056U}) {
+    for(auto id:{58U,158U,221U,265U,300U,320U,503U,871U,898U,927U,1056U}) {
         word(cache,0x8000U|id);byte(tex+7,14);
         registry.rebuild(Memory(ram),base,cache,1,batches);
         require(registry.surfaces().empty(),"encoded non-water IDs retain exclusion even with liquid collision types");
     }
     word(cache,0x8010);registry.rebuild(Memory(ram),base,cache,1,batches);
-    require(registry.surfaces().empty(),"procedural lava excluded from live registry");
-    require(!registry.find_dynamic(Memory(ram),wave_symbols(false),0x80010000,8),
-        "dynamic lava cannot acquire water reflections");
+    require(registry.find(tris,1) && registry.find(tris,1)->kind==Kind::Lava &&
+        registry.procedural() && registry.procedural()->kind==Kind::Lava,
+        "static and animated Hot Top lava share a distinct molten material");
+    require(!registry.liquid_height(10,10),"molten surfaces cannot emit water craft wakes");
+    for(bool v80:{false,true}) {
+        const auto symbols=wave_symbols(v80);
+        word(symbols.batch,batches);word(symbols.controller,4);word(symbols.players,1);
+        word(symbols.texture,0x80008000);word(symbols.model,base);
+        for(unsigned i=0;i<2;++i)word(symbols.triangles+i*4,0x8000A000+i*512);
+        const auto molten=registry.find_dynamic(Memory(ram),symbols,0x8000A000,8);
+        require(molten && molten->kind==Kind::Lava,"both retail revisions submit molten material for tessellated lava");
+    }
     word(cache,0x800F);byte(tris+3,9);registry.rebuild(Memory(ram),base,cache,1,batches);
     require(registry.surfaces().empty(),"malformed custom geometry excluded");
     registry.rebuild(Memory(ram),0xFFFFFFF0U,cache,1,batches);
@@ -322,6 +478,42 @@ int main(int argc,char** argv) {
             registry.vertical_image_kind(0x8060)==Kind::Waterfall,"encoded waterfall frames recognized");
     }
     word(cache,0x8000U|1241);
+    word(batches+8,0);byte(tex+7,0);
+    half(tris+4,0);half(tris+6,0);half(tris+8,128);half(tris+10,0);half(tris+12,0);half(tris+14,128);
+    registry.rebuild(Memory(ram),base,cache,1,batches,{},true);
+    require(registry.ray_geometry() && registry.ray_geometry()->masks.size()==2 &&
+        registry.ray_geometry()->opaque_vertices==0 && registry.ray_geometry()->vertices[0].liquid[2]==1,
+        "qualified vertical geometry receives an alpha-aware ray material, not an opaque rectangle");
+    const auto* authored_flow=registry.flow_triangle(tris);
+    require(authored_flow && authored_flow->corners[0][3]==1 && authored_flow->corners[1][0]==1 &&
+        registry.ray_geometry()->vertices[1].liquid[0]==4 && registry.ray_geometry()->vertices[1].liquid[3]!=0,
+        "visible triangle and its hardware reflection share normalized authored flow coordinates");
+    const auto original_corners=authored_flow->corners;
+    TextureScrolls river_scrolls{};river_scrolls[0]={0,47};
+    registry.rebuild(Memory(ram),base,cache,1,batches,{},true,true,river_scrolls);
+    require(registry.flow_triangle(tris)->corners[0][2]==-1 &&
+        registry.ray_geometry()->vertices[0].liquid[3]==-1,
+        "river surface and hardware reflection both use authored direction");
+    registry.rebuild(Memory(ram),base,cache,1,batches,{},true,false);
+    for(unsigned j=0;j<3;++j)half(tris+6+j*4,Memory(ram).s16(tris+6+j*4)+32);
+    registry.rebuild(Memory(ram),base,cache,1,batches,{},true,true);
+    require(registry.flow_triangle(tris)->corners==original_corners,"texture-cache churn cannot reset an existing film's phase");
+    registry.rebuild(Memory(ram),base,cache,1,batches,{},true,false);
+    require(registry.flow_triangle(tris)->corners!=original_corners,"a new scene never inherits the preceding scene's film origin");
+    const auto film=registry.ray_geometry();
+    byte(0x80008021,1);
+    registry.rebuild(Memory(ram),base,cache,1,batches,{},true);
+    require(registry.ray_geometry()!=film,"authored waterfall opacity invalidates immutable ray reuse");
+    require(registry.vertical_scroll_period(0x8020)==std::array<float,2>{4,4},"object waterfall captures texel periods after RSP 1/32 conversion");
+    for(unsigned format=0;format<=6;++format) {
+        byte(0x80008002,format);
+        half(0x80008016,128);
+        require(waterfall_opacity(Memory(ram),0x80008000,Kind::Waterfall).has_value(),"all direct retail opacity formats supported");
+    }
+    byte(0x80008002,7);
+    require(!waterfall_opacity(Memory(ram),0x80008000,Kind::Waterfall),"unknown paletted opacity cannot become an opaque ray wall");
+    byte(0x80008002,1);
+    half(0x80008016,64);
     half(0x80008016,33);registry.rebuild(Memory(ram),base,cache,1,batches);
     require(registry.vertical_image_kind(0x8020)==Kind::None,"truncated fountain image rejected");
     using namespace RT64::water_work;

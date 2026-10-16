@@ -1,0 +1,7 @@
+# CTest 4.1 adds reproducible --schedule-random-seed.
+# Official cmake wheels: Linux x64/ARM64, macOS universal2, Windows x64.
+cmake==4.1.3 \
+    --hash=sha256:3b6b25ce8fecc768881b36a1dfbca0013adac10a299c73e24cf4cbb99e4c37d6 \
+    --hash=sha256:3893eb9c20d8a8bac3d951bbef9a4ce9d5495cd35a08b4e08d76215f5ead5897 \
+    --hash=sha256:81f11b72bc59cbe547d9f283487ef0519bf68176edffcdfa1a4dc5a52f292369 \
+    --hash=sha256:fd5a2ea9a38c6109036d8c912a7db4df2de241cfbc00b7424ae246494387da80

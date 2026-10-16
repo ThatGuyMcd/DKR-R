@@ -1,0 +1,116 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt	2026-10-10 20:40:20
++++ b/CMakeLists.txt	2026-10-10 20:40:20
+@@ -5,7 +5,11 @@
+ 
+ if (APPLE)
+     enable_language(OBJC OBJCXX)
+-    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15")
++    # 10.15 is the macOS floor. It is not an iOS version, and passing it as
++    # -mios-version-min makes the Metal compiler reject [[id]].
++    if (NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
++        set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15")
++    endif()
+ endif()
+ 
+ option(RT64_STATIC "Build RT64 as a static library" OFF)
+@@ -45,7 +49,7 @@
+     configure_file("${PROJECT_SOURCE_DIR}/src/contrib/dxc/bin/x64/dxcompiler.dll" "dxcompiler.dll" COPYONLY)
+     configure_file("${PROJECT_SOURCE_DIR}/src/contrib/dxc/bin/x64/dxil.dll" "dxil.dll" COPYONLY)
+ elseif (APPLE)
+-    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
++    if (CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64")
+         # find zlib and include in dyld path
+         find_library(ZLIB_LIBRARY NAMES z)
+         get_filename_component(ZLIB_PATH ${ZLIB_LIBRARY} DIRECTORY)
+@@ -142,12 +146,31 @@
+     add_custom_command(OUTPUT ${OUTNAME}.metal
+             COMMAND spirv_cross_msl ${OUTNAME}.spv ${OUTNAME}.metal
+             DEPENDS ${OUTNAME}.spv spirv_cross_msl)
+-    add_custom_command(OUTPUT ${OUTNAME}.ir
+-            COMMAND xcrun -sdk macosx metal -o ${OUTNAME}.ir -c ${OUTNAME}.metal $<$<CONFIG:Debug>:-frecord-sources>
+-            DEPENDS ${OUTNAME}.metal)
+-    add_custom_command(OUTPUT ${OUTNAME}.metallib
+-            COMMAND xcrun -sdk macosx metallib ${OUTNAME}.ir -o ${OUTNAME}.metallib
+-            DEPENDS ${OUTNAME}.ir)
++    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
++        set(_dkr_ios_metal_sdk "iphoneos")
++        set(_dkr_ios_metal_min_flag "-mios-version-min")
++        if (CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
++            set(_dkr_ios_metal_sdk "iphonesimulator")
++            set(_dkr_ios_metal_min_flag "-miphonesimulator-version-min")
++        endif()
++        set(_dkr_ios_metal_min "")
++        if (CMAKE_OSX_DEPLOYMENT_TARGET)
++            set(_dkr_ios_metal_min "${_dkr_ios_metal_min_flag}=${CMAKE_OSX_DEPLOYMENT_TARGET}")
++        endif()
++        add_custom_command(OUTPUT ${OUTNAME}.ir
++                COMMAND xcrun -sdk ${_dkr_ios_metal_sdk} metal -o ${OUTNAME}.ir -c ${OUTNAME}.metal ${_dkr_ios_metal_min} $<$<CONFIG:Debug>:-frecord-sources>
++                DEPENDS ${OUTNAME}.metal)
++        add_custom_command(OUTPUT ${OUTNAME}.metallib
++                COMMAND xcrun -sdk ${_dkr_ios_metal_sdk} metallib ${OUTNAME}.ir -o ${OUTNAME}.metallib
++                DEPENDS ${OUTNAME}.ir)
++    else()
++        add_custom_command(OUTPUT ${OUTNAME}.ir
++                COMMAND xcrun -sdk macosx metal -o ${OUTNAME}.ir -c ${OUTNAME}.metal $<$<CONFIG:Debug>:-frecord-sources>
++                DEPENDS ${OUTNAME}.metal)
++        add_custom_command(OUTPUT ${OUTNAME}.metallib
++                COMMAND xcrun -sdk macosx metallib ${OUTNAME}.ir -o ${OUTNAME}.metallib
++                DEPENDS ${OUTNAME}.ir)
++    endif()
+     add_custom_command(OUTPUT ${OUTNAME}.metal.c
+             COMMAND file_to_c ${OUTNAME}.metallib ${TARGET_NAME}BlobMSL ${OUTNAME}.metal.c ${OUTNAME}.metal.h
+             DEPENDS ${OUTNAME}.metallib file_to_c
+diff --git a/src/apple/rt64_apple.mm b/src/apple/rt64_apple.mm
+--- a/src/apple/rt64_apple.mm	2026-10-10 20:40:20
++++ b/src/apple/rt64_apple.mm	2026-10-10 20:40:20
+@@ -1,7 +1,13 @@
+ #include "rt64_apple.h"
+ 
++#include <TargetConditionals.h>
++#if TARGET_OS_IPHONE
++#include <string.h>
++#import <Foundation/Foundation.h>
++#else
+ #import <AppKit/AppKit.h>
+ #import <Foundation/Foundation.h>
++#endif
+ 
+ const char* GetHomeDirectory() {
+     return strdup([NSHomeDirectory() UTF8String]);
+diff --git a/src/tools/file_to_c/CMakeLists.txt b/src/tools/file_to_c/CMakeLists.txt
+--- a/src/tools/file_to_c/CMakeLists.txt	2026-10-10 20:40:20
++++ b/src/tools/file_to_c/CMakeLists.txt	2026-10-10 20:40:20
+@@ -1,3 +1,14 @@
++if (IOS)
++    if (NOT DKR_HOST_FILE_TO_C OR NOT EXISTS "${DKR_HOST_FILE_TO_C}")
++        message(FATAL_ERROR "iOS builds require DKR_HOST_FILE_TO_C, an existing host file_to_c executable.")
++    endif()
++    add_executable(file_to_c IMPORTED GLOBAL)
++    set_target_properties(file_to_c PROPERTIES
++        IMPORTED_LOCATION "${DKR_HOST_FILE_TO_C}"
++    )
++    return()
++endif()
++
+ cmake_minimum_required(VERSION 3.20)
+ project(file_to_c)
+ set(CMAKE_CXX_STANDARD 17)
+diff --git a/src/tools/spirv_cross_msl/CMakeLists.txt b/src/tools/spirv_cross_msl/CMakeLists.txt
+--- a/src/tools/spirv_cross_msl/CMakeLists.txt	2026-10-10 20:40:20
++++ b/src/tools/spirv_cross_msl/CMakeLists.txt	2026-10-10 20:40:20
+@@ -1,3 +1,14 @@
++if (IOS)
++    if (NOT DKR_HOST_SPIRV_CROSS_MSL OR NOT EXISTS "${DKR_HOST_SPIRV_CROSS_MSL}")
++        message(FATAL_ERROR "iOS builds require DKR_HOST_SPIRV_CROSS_MSL, an existing host spirv_cross_msl executable.")
++    endif()
++    add_executable(spirv_cross_msl IMPORTED GLOBAL)
++    set_target_properties(spirv_cross_msl PROPERTIES
++        IMPORTED_LOCATION "${DKR_HOST_SPIRV_CROSS_MSL}"
++    )
++    return()
++endif()
++
+ cmake_minimum_required(VERSION 3.20)
+ project(spirv_cross_msl)
+ set(CMAKE_CXX_STANDARD 17)

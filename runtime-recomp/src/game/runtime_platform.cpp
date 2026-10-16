@@ -1,4 +1,5 @@
 #include "runtime_platform.hpp"
+#include "application_layout.hpp"
 #include "audio_equalizer.hpp"
 #include "controller_snapshot.hpp"
 #include "controller_mapping_policy.hpp"
@@ -30,6 +31,9 @@
 #include <SDL_metal.h>
 extern "C" bool dkr_show_metal_layer(void* ns_window_ptr, void* layer_ptr);
 extern "C" bool dkr_handle_fullscreen_event(const SDL_Event* event);
+#endif
+#if defined(DKR_IOS)
+#include "../ios/ios_platform.hpp"
 #endif
 #endif
 
@@ -290,8 +294,11 @@ std::string PathUtf8(const std::filesystem::path& path) {
 
 std::filesystem::path RuntimeAssetPath(const std::filesystem::path& relative) {
     if (char* base = SDL_GetBasePath(); base != nullptr) {
-        const std::filesystem::path candidate =
-            std::filesystem::path(base) / relative;
+        auto directory = std::filesystem::u8path(base);
+#if defined(_WIN32)
+        directory = dkr::runtime::layout::windows_application_directory(directory / "DKR-R-Runtime.exe");
+#endif
+        const auto candidate = directory / relative;
         SDL_free(base);
         std::error_code error;
         if (std::filesystem::is_regular_file(candidate, error)) {
@@ -1518,8 +1525,15 @@ void dkr::runtime::platform::shutdown() {
 #if DKR_RUNTIME_HAS_RT64
 ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
     if (g_window == nullptr) {
+#if defined(DKR_IOS)
+        // Desktop fullscreen, as on the Mac. Real fullscreen makes SDL restore
+        // its display mode on every refocus (Control Center, app switcher),
+        // and UIKit records that mode in portrait.
+        const Uint32 flags = SDL_WINDOW_METAL | SDL_WINDOW_ALLOW_HIGHDPI |
+            SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS;
+#else
         Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
-#if !defined(__ANDROID__)
+#if !defined(__ANDROID__) && !defined(DKR_IOS)
         // ui::configure restores the saved graphics config before this call.
         // Use borderless desktop fullscreen, matching RT64's normal window
         // mode, without changing the user's display mode or resolution.
@@ -1533,16 +1547,19 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
 #elif defined(__APPLE__)
         flags |= SDL_WINDOW_METAL;
 #endif
+#endif
         g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",
                                     SDL_WINDOWPOS_CENTERED,
                                     SDL_WINDOWPOS_CENTERED, 1440, 900, flags);
         if (g_window == nullptr) {
             std::fprintf(stderr, "[boot][window] SDL creation failed: %s\n", SDL_GetError());
+#if !defined(DKR_IOS)
         } else {
             // Both the launcher and the transparent in-game overlay are fully
             // responsive down to this size. Prevent a window-manager resize
             // from making controller targets or binding cards unusably small.
             SDL_SetWindowMinimumSize(g_window, 800, 600);
+#endif
         }
     }
 
@@ -1563,14 +1580,19 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
         std::fprintf(stderr, "[boot][window] Metal view failed: %s\n", SDL_GetError());
         return {};
     }
-    // plume's CocoaWindow messages .window as an NSWindow*, not an SDL_Window*.
     SDL_SysWMinfo info{};
     SDL_VERSION(&info.version);
     if (SDL_GetWindowWMInfo(g_window, &info) != SDL_TRUE) {
         std::fprintf(stderr, "[boot][window] native handle failed: %s\n", SDL_GetError());
         return {};
     }
+#if defined(DKR_IOS)
+    // iOS SDL exposes a UIWindow* as info.uikit.window, not NSWindow*.
+    return {.window = info.info.uikit.window, .view = SDL_Metal_GetLayer(g_metal_view)};
+#else
+    // plume's CocoaWindow messages .window as an NSWindow*, not an SDL_Window*.
     return {.window = info.info.cocoa.window, .view = SDL_Metal_GetLayer(g_metal_view)};
+#endif
 #else
     return g_window;
 #endif
@@ -1745,6 +1767,16 @@ void dkr::runtime::platform::pump_window_events(void*) {
     }
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
+#if defined(DKR_IOS)
+        if (event.type == SDL_APP_DIDENTERFOREGROUND)
+            dkr::runtime::ios::import_inbox();
+        else if (event.type == SDL_DROPFILE) {
+            dkr::runtime::ios::import_external_file(event.drop.file);
+            SDL_free(event.drop.file);
+            event.drop.file = nullptr;
+            continue;
+        }
+#endif
 #if defined(__APPLE__)
         if (dkr_handle_fullscreen_event(&event)) continue;
 #endif
@@ -2381,7 +2413,7 @@ void dkr::runtime::platform::set_audio_frequency(std::uint32_t frequency) {
 #endif
 }
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(DKR_IOS)
 #include "../android/mobile_ui.hpp"
 #endif
 
@@ -2444,10 +2476,16 @@ void dkr::runtime::platform::poll_input() {
                 !online_routing,
                 player == (online_routing ? online_profile : 0U));
         }
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(DKR_IOS)
         if (player == (online_routing ? online_profile : 0U)) {
+#if defined(DKR_IOS)
+            // iOS focus flags are flaky; a foreground phone should still receive touch.
+            dkr::runtime::mobile::merge_input(state,
+                blocked || dkr::runtime::mobile::editing());
+#else
             dkr::runtime::mobile::merge_input(state,
                 gameplay_blocked || !window_focused || dkr::runtime::mobile::editing());
+#endif
         }
 #endif
         dkr::runtime::modern_camera::publish_input(

@@ -2,20 +2,22 @@
 #include <algorithm>
 
 namespace dkr::mods {
-TrackMenuLayout::TrackMenuLayout(unsigned stock_rows,std::size_t custom_count)
-    :stock_rows_(stock_rows),custom_count_(custom_count) {
-    if((stock_rows!=4 && stock_rows!=5) || custom_count>512)throw Error("Invalid additive track menu dimensions.");
+TrackMenuLayout::TrackMenuLayout(unsigned stock_rows,std::size_t custom_count,std::size_t cups)
+    :stock_rows_(stock_rows),custom_count_(custom_count),cups_(cups) {
+    if((stock_rows!=4 && stock_rows!=5) || custom_count>512 || cups>32)throw Error("Invalid additive track menu dimensions.");
 }
 unsigned TrackMenuLayout::columns(int row)const {
     if(row<0 || static_cast<unsigned>(row)>=rows())return 0;
     if(static_cast<unsigned>(row)<stock_rows_)return row==4?5:6;
-    return static_cast<unsigned>(std::min<std::size_t>(4,custom_count_-(row-stock_rows_)*4));
+    if(static_cast<unsigned>(row)<cup_row())return static_cast<unsigned>(std::min<std::size_t>(6,custom_count_-(row-stock_rows_)*6));
+    return static_cast<unsigned>(std::min<std::size_t>(6,cups_-(row-cup_row())*6));
 }
 std::optional<TrackMenuCell> TrackMenuLayout::cell(TrackCursor cursor)const {
     if(cursor.column<0 || static_cast<unsigned>(cursor.column)>=columns(cursor.row))return {};
     TrackMenuCell result{cursor,{}};
     if(static_cast<unsigned>(cursor.row)>=stock_rows_)
-        result.custom_index=(cursor.row-stock_rows_)*4+cursor.column;
+        result.custom_index=static_cast<unsigned>(cursor.row)<cup_row()?
+            (cursor.row-stock_rows_)*6+cursor.column:custom_count_+(cursor.row-cup_row())*6+cursor.column;
     return result;
 }
 TrackCursor TrackMenuLayout::move(TrackCursor cursor,int horizontal,int vertical)const {
@@ -41,7 +43,8 @@ unsigned TrackMenuLayout::arrows(TrackCursor cursor)const {
     return flags;
 }
 TrackCursor TrackMenuLayout::custom_cursor(std::size_t index)const {
-    if(index>=custom_count_)throw Error("Custom track index is outside the catalogue.");
-    return {static_cast<int>(stock_rows_+index/4),static_cast<int>(index%4)};
+    if(index>=custom_count_+cups_)throw Error("Custom menu index is outside the catalogue.");
+    if(index<custom_count_)return {static_cast<int>(stock_rows_+index/6),static_cast<int>(index%6)};
+    index-=custom_count_;return {static_cast<int>(cup_row()+index/6),static_cast<int>(index%6)};
 }
 }

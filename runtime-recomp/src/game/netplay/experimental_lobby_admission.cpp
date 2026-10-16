@@ -2,27 +2,37 @@
 #include "authoritative_state_codec.hpp"
 #include "monocypher.h"
 #include <algorithm>
+#include <cstdio>
 
 namespace dkr::runtime::netplay::experimental {
 namespace {
-// v3 retains explicit encoding/decoded size and scopes chunk/ACK progress to
-// the incarnation. A raw checkpoint starting DKRZ is not a compressed stream.
-constexpr std::array<std::uint8_t,5> prefix{'D','K','X','A',3};
+// v4 adds a canonical component record; encoding/decoded size and chunk/ACK
+// progress remain scoped to the incarnation. DKRZ alone never implies encoding.
+constexpr std::array<std::uint8_t,5> prefix{'D','K','X','A',4};
 enum Kind : unsigned {Hello=1,Offer=2,Chunk=3,Ack=4,Ready=5,Progress=6};
 void put(std::vector<std::uint8_t>& b,std::uint32_t v) {for(unsigned i=0;i<4;++i)b.push_back(std::uint8_t(v>>(8*i)));}
 std::uint32_t word(std::span<const std::uint8_t> b,unsigned at=0) {std::uint32_t v=0;for(unsigned i=0;i<4;++i)v|=std::uint32_t(b[at+i])<<(8*i);return v;}
 secure::Key hash(std::span<const std::uint8_t> b) {secure::Key r{};crypto_blake2b(r.data(),r.size(),b.data(),b.size());return r;}
 bool nonzero(const secure::Key& k) {return std::any_of(k.begin(),k.end(),[](auto b){return b!=0;});}
 }
-LobbyAdmission::LobbyAdmission(SessionTransport& t,bool host,std::uint8_t players,std::uint8_t local,secure::Key contract)
+LobbyAdmission::LobbyAdmission(SessionTransport& t,bool host,std::uint8_t players,std::uint8_t local,AdmissionContract contract)
     :transport_(t),host_(host),players_(players),local_(local),contract_(contract) {}
 PeerAddress LobbyAdmission::address(std::uint8_t owner) {PeerAddress a{};a.size=4;a.storage[0]='D';a.storage[1]='K';a.storage[2]='X';a.storage[3]=owner;return a;}
 bool LobbyAdmission::fail(std::string e) {error_=std::move(e);return false;}
+bool LobbyAdmission::accept_contract(std::span<const std::uint8_t> bytes) {
+    AdmissionContract remote;
+    if(!AdmissionContract::decode(bytes,remote))return fail("Invalid rollback compatibility record.");
+    const auto difference=contract_.difference(remote);if(difference.empty())return true;
+    std::fprintf(stderr,"[rollback][compatibility] mismatch=%s local={%s} remote={%s}\n",
+        difference.c_str(),contract_.diagnostics().c_str(),remote.diagnostics().c_str());
+    return fail("Rollback compatibility mismatch: "+difference+". Use the same release and mods on every device.");
+}
 bool LobbyAdmission::begin(std::vector<std::uint8_t> baseline,Prepare prepare,std::string& error) {
     const auto maximum=transport_.maximum_plaintext_datagram_bytes();
-    if(begun_||players_<2||players_>4||local_>=players_||host_!=(local_==0)||!nonzero(contract_)||
-       !transport_.is_open()||maximum<160||(!host_&&!prepare)||
-       (host_&&(baseline.empty()||baseline.size()>kMaximumBaseline))) {
+    if(begun_||players_<2||players_>4||local_>=players_||host_!=(local_==0)||!nonzero(contract_.engine)||
+       !nonzero(contract_.rom)||!contract_.schema||!contract_.state_bytes||contract_.state_bytes>kMaximumBaseline||
+       !transport_.is_open()||maximum<AdmissionContract::wire_bytes+79||(!host_&&!prepare)||
+       (host_&&(baseline.empty()||baseline.size()!=contract_.state_bytes||baseline.size()>kMaximumBaseline))) {
         error="Invalid owned lobby admission.";return false;
     }
     chunk_bytes_=std::min<std::size_t>(4096,maximum-64);
@@ -74,7 +84,8 @@ std::string LobbyAdmission::status() const {
 std::uint64_t LobbyAdmission::baseline_identity() const {
     if(!local_ready_)return 0;
     std::array<std::uint8_t,96> bytes{};
-    std::copy(contract_.begin(),contract_.end(),bytes.begin());
+    const auto contract_hash=hash(contract_.encode());
+    std::copy(contract_hash.begin(),contract_hash.end(),bytes.begin());
     std::copy(incarnation_.begin(),incarnation_.end(),bytes.begin()+32);
     std::copy(digest_.begin(),digest_.end(),bytes.begin()+64);
     const auto d=hash(bytes);std::uint64_t v=0;for(unsigned i=0;i<8;++i)v|=std::uint64_t(d[i])<<(8*i);
@@ -100,7 +111,7 @@ bool LobbyAdmission::packet(std::uint8_t peer,std::span<const std::uint8_t> byte
     if(host_) {
         if(!peer||peer>=players_)return fail("Invalid owned admission sender.");
         if(kind==Hello) {
-            if(data.size()!=contract_.size()||!std::equal(data.begin(),data.end(),contract_.begin()))return fail("Experimental build / ROM / rules / owned-state contract does not match.");
+            if(!accept_contract(data))return false;
             if(!hello_[peer]) {hello_[peer]=true;progress_=now;peer_progress_[peer]=now;sent_[peer]={};}
             // Receipt does not mean the baseline is ready. No ghost readiness.
             return true;
@@ -121,13 +132,15 @@ bool LobbyAdmission::packet(std::uint8_t peer,std::span<const std::uint8_t> byte
         }
     } else if(peer==0) {
         if(kind==Offer) {
-            if(data.size()!=105||!std::equal(data.begin(),data.begin()+32,contract_.begin()))return fail("Experimental build / ROM / rules / owned-state contract does not match.");
-            const auto size=word(data,96);
-            const auto decoded=word(data,100);const auto encoding=data[104];
-            if(!size||size>kMaximumBaseline||!decoded||decoded>kMaximumBaseline||encoding>1||
+            constexpr auto at=AdmissionContract::wire_bytes;
+            if(data.size()!=at+73)return fail("Invalid rollback checkpoint offer.");
+            if(!accept_contract(data.first(at)))return false;
+            const auto size=word(data,at+64);
+            const auto decoded=word(data,at+68);const auto encoding=data[at+72];
+            if(!size||size>kMaximumBaseline||decoded!=contract_.state_bytes||decoded>kMaximumBaseline||encoding>1||
                (encoding==0&&size!=decoded)||(encoding==1&&(size<8||size>=decoded)))
                 return fail("Owned checkpoint exceeds the admitted size / encoding limits.");
-            secure::Key incarnation{},digest{};std::copy_n(data.begin()+32,32,incarnation.begin());std::copy_n(data.begin()+64,32,digest.begin());
+            secure::Key incarnation{},digest{};std::copy_n(data.begin()+at,32,incarnation.begin());std::copy_n(data.begin()+at+32,32,digest.begin());
             if(!nonzero(incarnation)||!nonzero(digest))return fail("Invalid owned checkpoint identity.");
             if(baseline_.empty()) {
                 incarnation_=incarnation;digest_=digest;decoded_bytes_=decoded;compressed_=encoding==1;
@@ -211,7 +224,7 @@ bool LobbyAdmission::service_admission(Clock::time_point now) {
             if(!hello_[peer])continue;
             if(!offer_accepted_[peer]) {
                 if(sent_[peer].time_since_epoch().count()&&now-sent_[peer]<retry)continue;
-                std::vector<std::uint8_t> offer(contract_.begin(),contract_.end());offer.insert(offer.end(),incarnation_.begin(),incarnation_.end());offer.insert(offer.end(),digest_.begin(),digest_.end());put(offer,total_bytes());put(offer,decoded_bytes_);offer.push_back(std::uint8_t(compressed_));
+                auto offer=contract_.encode();offer.insert(offer.end(),incarnation_.begin(),incarnation_.end());offer.insert(offer.end(),digest_.begin(),digest_.end());put(offer,total_bytes());put(offer,decoded_bytes_);offer.push_back(std::uint8_t(compressed_));
                 const auto offered=send(peer,Offer,offer,TransportTrafficClass::Control);
                 if(offered==DatagramSendStatus::Error)return false;
                 if(offered==DatagramSendStatus::Sent)sent_[peer]=now;
@@ -243,7 +256,7 @@ bool LobbyAdmission::service_admission(Clock::time_point now) {
         }
     } else if(!release_seen_&&(!sent_[0].time_since_epoch().count()||now-sent_[0]>=(baseline_.empty()||local_ready_?retry:std::chrono::milliseconds(20)))) {
         DatagramSendStatus result;
-        if(baseline_.empty())result=send(0,Hello,contract_,TransportTrafficClass::Control);
+        if(baseline_.empty())result=send(0,Hello,contract_.encode(),TransportTrafficClass::Control);
         else if(local_ready_) {std::vector<std::uint8_t> proof(incarnation_.begin(),incarnation_.end());proof.insert(proof.end(),digest_.begin(),digest_.end());result=send(0,Ready,proof,TransportTrafficClass::Control);}
         else {std::vector<std::uint8_t> ack(incarnation_.begin(),incarnation_.end());put(ack,received_);result=send(0,Ack,ack,TransportTrafficClass::Control);}
         if(result==DatagramSendStatus::Error)return false;if(result==DatagramSendStatus::Sent)sent_[0]=now;

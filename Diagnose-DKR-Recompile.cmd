@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo DKR-R - regenerate the prepared N64Recomp boundary
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Diagnose-DKR-Recompile.ps1"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Diagnose-DKR-Recompile.ps1" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.
@@ -13,5 +13,5 @@ if not "%EXIT_CODE%"=="0" (
 ) else (
     echo [OK] N64Recomp completed.
 )
-pause
+if not "%DKRPORT_NO_PAUSE%"=="1" pause
 exit /b %EXIT_CODE%

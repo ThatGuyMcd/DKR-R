@@ -16,6 +16,7 @@ struct RuntimeView {
     std::uint8_t missing_owners=0;
 };
 bool runtime_available(rom::Revision revision);
+std::string_view runtime_engine_identity(rom::Revision revision);
 RuntimeView runtime_view();
 void request_runtime_stop();
 // Called only AFTER recomp::start and all of its workers have joined. Borrows
@@ -25,5 +26,5 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,
     DirectSession& lobby,const LaunchDescriptor& accepted_launch,
     unsigned timeout_seconds,std::string& error,bool scripted_check=false,
     std::shared_ptr<const dkr::mods::online::RuntimeResources> mods={},
-    std::vector<std::uint8_t> mod_bootstrap={});
+    std::vector<std::uint8_t> mod_bootstrap={},std::vector<std::uint8_t> code_bootstrap={});
 }

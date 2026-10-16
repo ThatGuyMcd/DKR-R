@@ -18,6 +18,8 @@ enum class PresentationMarkerKind : std::uint8_t {
     PostraceFullViewport,
     HudWidget,
     HudRect,
+    TrackSelectUi,
+    TrackSelectPreview,
 };
 
 // An overflowed nested begin and its end are one rejected pair. Never let
@@ -50,6 +52,7 @@ constexpr bool is_aspect_marker(PresentationMarkerKind kind) {
     return kind == PresentationMarkerKind::FramedResults ||
            kind == PresentationMarkerKind::FixedUi ||
            kind == PresentationMarkerKind::BackgroundAspect ||
+           kind == PresentationMarkerKind::TrackSelectUi ||
            kind == PresentationMarkerKind::TrackSelectLensFlare;
 }
 
@@ -59,7 +62,8 @@ constexpr bool valid_presentation_marker(PresentationMarkerKind kind,
     if (variant > 31U) return false;
     if (kind == PresentationMarkerKind::Geometry) return mode <= 9U;
     if (kind == PresentationMarkerKind::SplitViewport ||
-        kind == PresentationMarkerKind::PostraceFullViewport) return mode == 0U;
+        kind == PresentationMarkerKind::PostraceFullViewport ||
+        kind == PresentationMarkerKind::TrackSelectPreview) return mode == 0U;
     return (is_aspect_marker(kind) || kind == PresentationMarkerKind::HudPass ||
             kind == PresentationMarkerKind::HudWidget || kind == PresentationMarkerKind::HudRect) &&
            mode <= 1U;

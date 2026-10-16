@@ -9,7 +9,9 @@
 
 #include "recomp.h"
 
+#if DKR_RUNTIME_HAS_RT64
 #include <SDL.h>
+#endif
 
 #include <array>
 #include <atomic>
@@ -611,6 +613,7 @@ extern "C" void dkr_extended_frustum_begin(std::uint8_t* rdram,
         g_frustum_scope.active = false;
     }
 
+#if DKR_RUNTIME_HAS_RT64
     auto* window = static_cast<SDL_Window*>(
         dkr::runtime::platform::sdl_window());
     if (window == nullptr) {
@@ -655,6 +658,7 @@ extern "C" void dkr_extended_frustum_begin(std::uint8_t* rdram,
                      "[boot][modern] CPU frustum scale=%.3f layout=%d window=%dx%d\n",
                      scale, layout, width, height);
     }
+#endif
 }
 
 extern "C" void dkr_extended_frustum_end(std::uint8_t* rdram,

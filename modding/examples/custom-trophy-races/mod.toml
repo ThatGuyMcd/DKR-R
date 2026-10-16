@@ -1,0 +1,12 @@
+[manifest]
+id = "dkr_custom_trophies"
+version = "1.0.2"
+display_name = "Custom Trophy Races"
+description = "Create cups in Details, then select them below Custom Tracks in Track Select. Supports repeated tracks, 1-99 laps and fixed or shuffled order. Original trophies stay available."
+authors = ["DKR-R contributors"]
+game_id = "dkr"
+minimum_recomp_version = "1.0.7"
+dependencies = []
+
+[build]
+sources = ["main.c"]

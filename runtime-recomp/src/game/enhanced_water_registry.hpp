@@ -1,6 +1,9 @@
 #pragma once
 #include "enhanced_water_policy.hpp"
 #include "enhanced_water_ray_geometry.hpp"
+#include "lava_lighting_policy.hpp"
+#include "lava_glow_policy.hpp"
+#include "flowing_water_mapping.hpp"
 #include <bit>
 #include <memory>
 #include <vector>
@@ -28,11 +31,91 @@ public:
     Vec3 vertex(std::uint32_t p) const { return {float(s16(p)),float(s16(p+2)),float(s16(p+4))}; }
 };
 
+struct TextureScroll {
+    std::int32_t u=0,v=0;
+    bool operator==(const TextureScroll&) const = default;
+};
+using TextureScrolls=std::array<TextureScroll,256>;
+
+// BHV_TEXTURE_SCROLL and Object/Object_TexScroll offsets are shared by both
+// retail revisions. Observe the immutable task snapshot, never guest memory
+// being updated by the simulation. Particle pointers have a different layout.
+inline TextureScrolls texture_scrolls(Memory m,std::uint32_t list,std::uint32_t count) {
+    TextureScrolls result{};
+    if(!list || count>512 || !m.valid(list,std::uint64_t(count)*4))return result;
+    for(std::uint32_t i=0;i<count;++i) {
+        const auto object=m.u32(list+i*4);
+        if(!object || !m.valid(object,0x68) || (m.u16(object+6)&0x8000U) ||
+           m.s16(object+0x48)!=29)continue;
+        const auto state=m.u32(object+0x64);
+        if(!state || !m.valid(state,12))continue;
+        const auto texture=m.s16(state),u=m.s16(state+4),v=m.s16(state+6);
+        if(texture<0 || texture>=256 || u<-128 || u>127 || v<-128 || v>127)continue;
+        // More than one scroll object can affect a material: retail adds them.
+        result[texture].u+=u;result[texture].v+=v;
+    }
+    return result;
+}
+
+inline float authored_flow_direction(const FlowMapping& mapping,
+    const std::array<Vec3,3>& p,TextureScroll scroll,bool scrollable) {
+    if(!mapping.direction || !scrollable || scroll.u!=0 || scroll.v==0)return mapping.direction;
+    const Vec3 a{p[1].x-p[0].x,p[1].y-p[0].y,p[1].z-p[0].z};
+    const Vec3 b{p[2].x-p[0].x,p[2].y-p[0].y,p[2].z-p[0].z};
+    const Vec3 n{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};
+    // Preserve working steep/vertical waterfalls. A river is a mostly
+    // horizontal sheet using waterfall artwork. Increasing retail UV offsets
+    // moves the visible pattern in -V, not +V. Honor that authored current.
+    if(n.y*n.y<(n.x*n.x+n.y*n.y+n.z*n.z)*0.3025F)return mapping.direction;
+    return scroll.v>0 ? -1.0F : 1.0F;
+}
+
 struct Surface {
     std::uint32_t begin = 0, end = 0, batch = 0;
     Kind kind = Kind::None;
     float height = 0;
+    std::array<float,2> scroll_period{};
 };
+
+struct FlowTriangle {
+    std::uint32_t source=0;
+    std::array<Vec3,3> positions{};
+    std::array<std::array<float,4>,3> corners{}; // repeating UV, signed V, qualified
+    std::array<float,2> period{};
+};
+
+// Reviewed retail TextureHeader formats. Unsupported/paletted masks are not
+// guessed opaque. Decode only immutable first-frame alpha; flow remains in the shader.
+inline std::optional<RayOpacityMask> waterfall_opacity(Memory m,std::uint32_t texture,Kind kind) {
+    if(!texture || !m.valid(texture,32))return {};
+    const auto w=m.u8(texture),h=m.u8(texture+1);
+    const auto f=m.u8(texture+2)&15U;
+    const auto pixels=std::uint32_t(w)*h;
+    const auto bytes=f==0 ? pixels*4 : (f==1 || f==4) ? pixels*2 :
+        (f==2 || f==5) ? pixels : (f==3 || f==6) ? (pixels+1)/2 : 0;
+    const auto stride=m.u16(texture+0x16);
+    if(!w || !h || !bytes || stride<32 || bytes>stride-32 || !m.valid(texture+32,bytes))return {};
+    RayOpacityMask mask{};mask.params={float(w),float(h),float(kind),0};
+    const auto alpha=[&](unsigned pixel) {
+        const auto p=texture+32;
+        switch(f) {
+            case 0:return m.u8(p+pixel*4+3)/255.0F;
+            case 1:return float(m.u16(p+pixel*2)&1U);
+            case 2:return m.u8(p+pixel)/255.0F;
+            case 3:return ((m.u8(p+pixel/2)>>(pixel%2 ? 0 : 4))&15U)/15.0F;
+            case 4:return m.u8(p+pixel*2+1)/255.0F;
+            case 5:return (m.u8(p+pixel)&15U)/15.0F;
+            case 6:return float((m.u8(p+pixel/2)>>(pixel%2 ? 0 : 4))&1U);
+            default:return 0.0F;
+        }
+    };
+    for(unsigned y=0;y<32;++y)for(unsigned x=0;x<32;++x) {
+        const auto opacity=alpha(std::min(unsigned(h)-1,(2*y+1)*h/64)*w+std::min(unsigned(w)-1,(2*x+1)*w/64));
+        const auto cell=y*32+x;
+        mask.alpha[cell/4] |= std::uint32_t(std::round(opacity*255))<<((cell%4)*8);
+    }
+    return mask;
+}
 
 struct WaveSymbols {
     std::uint32_t controller, players, batch, triangles, fallback, texture, model;
@@ -50,13 +133,29 @@ constexpr WaveSymbols wave_symbols(bool us_v80) {
 class Registry {
     struct WetTriangle { Vec3 a,b,c; };
     std::vector<Surface> surfaces_;
+    std::vector<FlowTriangle> flow_triangles_;
     std::vector<WetTriangle> wet_triangles_;
-    struct VerticalImage {std::uint32_t begin,end;Kind kind;};
+    struct VerticalImage {std::uint32_t begin,end;Kind kind;std::array<float,2> scroll_period;};
     std::vector<VerticalImage> vertical_images_;
     std::optional<Surface> procedural_;
     std::optional<Metadata> metadata_;
     std::shared_ptr<const RayGeometry> ray_geometry_;
+    std::vector<LavaEmitter> lava_emitters_;
+    std::shared_ptr<const GlowGeometry> glow_geometry_;
 public:
+    const std::shared_ptr<const GlowGeometry>& glow_geometry() const {return glow_geometry_;}
+    std::span<const LavaEmitter> lava_emitters() const { return lava_emitters_; }
+    const FlowTriangle* flow_triangle(std::uint32_t source) const {
+        source &= 0x1FFFFFFFU;
+        const auto it=std::lower_bound(flow_triangles_.begin(),flow_triangles_.end(),source,
+            [](const FlowTriangle& f,std::uint32_t p){return f.source<p;});
+        return it!=flow_triangles_.end() && it->source==source ? &*it : nullptr;
+    }
+    std::array<float,2> vertical_scroll_period(std::uint32_t image) const {
+        image &= 0x1FFFFFFFU;
+        for(const auto& entry:vertical_images_)if(image>=entry.begin && image<entry.end)return entry.scroll_period;
+        return {};
+    }
     const std::shared_ptr<const RayGeometry>& ray_geometry() const {return ray_geometry_;}
     const std::optional<Metadata>& metadata() const {return metadata_;}
     std::span<const Surface> surfaces() const { return surfaces_; }
@@ -136,10 +235,19 @@ public:
         return {};
     }
     void rebuild(Memory m,std::uint32_t model,std::uint32_t cache,std::uint32_t texture_count,
-                 std::uint32_t procedural_batch,std::optional<Metadata> metadata={},bool collect_rays=false) {
+                 std::uint32_t procedural_batch,std::optional<Metadata> metadata={},bool collect_rays=false,
+                 bool preserve_flow_phase=false,const TextureScrolls& scrolls={},bool collect_glow=false) {
+        const auto previous_flows=preserve_flow_phase ? std::move(flow_triangles_) : std::vector<FlowTriangle>{};
+        flow_triangles_.clear();
         surfaces_.clear(); wet_triangles_.clear(); vertical_images_.clear(); procedural_.reset();
+        lava_emitters_.clear();
         const auto previous_rays=std::move(ray_geometry_);
+        const auto previous_glow=std::move(glow_geometry_);
+        auto glow=collect_glow ? std::make_shared<GlowGeometry>() : nullptr;
         auto rays=collect_rays ? std::make_shared<RayGeometry>() : nullptr;
+        std::vector<RayVertex> falling_vertices;
+        bool ray_limit=false;
+        std::array<std::uint32_t,256> opacity_indices{};
         metadata_=std::move(metadata);
         if(!m.valid(model,0x4C) || !model) return;
         const auto textures=m.u32(model),segments=m.u32(model+4);
@@ -167,7 +275,8 @@ public:
                     (format==2 || format==5 || format==8) ? pixels :
                     (format==3 || format==6 || format==7) ? (pixels+1)/2 : 0;
                 if(!bytes || bytes>stride-32 || !m.valid(header+32,bytes))continue;
-                vertical_images_.push_back({(header+32)&0x1FFFFFFFU,(header+32+bytes)&0x1FFFFFFFU,kind});
+                vertical_images_.push_back({(header+32)&0x1FFFFFFFU,(header+32+bytes)&0x1FFFFFFFU,kind,
+                    {float(m.u8(header)),float(m.u8(header+1))}});
             }
         }
         std::vector<MaterialEvidence> materials(nt);
@@ -190,17 +299,44 @@ public:
                 !m.valid(verts,std::uint64_t(nv)*10) || !m.valid(tris,std::uint64_t(nf)*16) ||
                 !m.valid(batches,std::uint64_t(nb+1)*12)) continue;
             for(std::uint32_t b=0;b<nb;++b) {
-                if(++total_batches>8192) {surfaces_.clear();wet_triangles_.clear();procedural_.reset();return;}
+                if(++total_batches>8192) {surfaces_.clear();flow_triangles_.clear();wet_triangles_.clear();procedural_.reset();return;}
                 const auto batch=batches+b*12;
                 const auto texture=m.u8(batch);
                 const auto v=m.u16(batch+2),f=m.u16(batch+4);
                 const auto ve=m.u16(batch+14),fe=m.u16(batch+16);
                 if((texture>=nt && texture!=255) || ve<=v || ve>nv || fe<=f || fe>nf) continue;
                 total_triangles+=fe-f;
-                if(total_triangles>262144) {surfaces_.clear();wet_triangles_.clear();procedural_.reset();return;}
+                if(total_triangles>262144) {surfaces_.clear();flow_triangles_.clear();wet_triangles_.clear();procedural_.reset();return;}
                 auto e=texture==255 ? MaterialEvidence{} : materials[texture];
                 e.flags=m.u32(batch+8); e.geometry_valid=true;
                 auto kind=classify(e);
+                // Native, immutable level geometry only. Never collect racers,
+                // billboards, transparent overlays or a truncated blocker mesh.
+                const auto glow_texture_flags=texture==255 ? 0 : m.u16(m.u32(textures+texture*8)+6);
+                if(glow && glow->complete && (kind==Kind::Lava ||
+                   (kind==Kind::None && (texture==255 || e.texture_valid) &&
+                    opaque_ray_material(e.flags,glow_texture_flags)))) {
+                    for(std::uint32_t i=f;i<fe;++i) {
+                        const auto tri=tris+i*16;
+                        const std::array<std::uint32_t,3> indices{m.u8(tri+1),m.u8(tri+2),m.u8(tri+3)};
+                        if(std::any_of(indices.begin(),indices.end(),[&](auto n){return n>=ve-v;})) {
+                            glow->complete=false;glow->triangles.clear();break;
+                        }
+                        GlowTriangle triangle{};triangle.source=kind==Kind::Lava;
+                        bool opaque=true;
+                        for(unsigned j=0;j<3;++j) {
+                            const auto p=verts+(v+indices[j])*10;
+                            triangle.addresses[j]=p&0x1FFFFFFFU;triangle.p[j]=m.vertex(p);
+                            opaque &= m.u8(p+9)==255;
+                        }
+                        if(!valid_triangle(triangle.p[0],triangle.p[1],triangle.p[2]))continue;
+                        if(!triangle.source && !opaque)continue;
+                        if(glow->triangles.size()==kGlowTriangleLimit) {
+                            glow->complete=false;glow->triangles.clear();break;
+                        }
+                        glow->triangles.push_back(triangle);
+                    }
+                }
                 if(kind==Kind::None) {
                     const auto texture_flags=texture==255 ? 0 : m.u16(m.u32(textures+texture*8)+6);
                     if(!rays || (texture!=255 && !e.texture_valid) || !opaque_ray_material(e.flags,texture_flags))continue;
@@ -229,33 +365,125 @@ public:
                     }
                     continue;
                 }
+                std::uint32_t mask_index=0;
+                if(rays && (kind==Kind::Waterfall || kind==Kind::Fountain) && texture<nt && e.texture_valid) {
+                    mask_index=opacity_indices[texture];
+                    if(!mask_index)if(auto mask=waterfall_opacity(m,m.u32(textures+texture*8),kind)) {
+                        mask_index=std::uint32_t(rays->masks.size());rays->masks.push_back(*mask);
+                        opacity_indices[texture]=mask_index;
+                    }
+                }
                 double height=0; std::uint32_t points=0;
+                std::array<float,2> period{};
+                const bool flowing=kind==Kind::Waterfall || kind==Kind::Fountain;
+                if(flowing && texture<nt && e.texture_valid) {
+                    const auto header=m.u32(textures+texture*8);
+                    period={float(m.u8(header)),float(m.u8(header+1))};
+                }
                 const auto wet_begin=wet_triangles_.size();
+                const auto falling_begin=falling_vertices.size();
+                const auto flow_begin=flow_triangles_.size();
+                std::vector<LavaEmitter> batch_lava;
                 for(std::uint32_t i=f;i<fe && e.geometry_valid;++i) {
                     const auto tri=tris+i*16;
                     const auto a=m.u8(tri+1),bb=m.u8(tri+2),c=m.u8(tri+3);
                     if(a>=ve-v || bb>=ve-v || c>=ve-v) {e.geometry_valid=false;break;}
                     const auto pa=m.vertex(verts+(v+a)*10),pb=m.vertex(verts+(v+bb)*10),pc=m.vertex(verts+(v+c)*10);
                     if(!valid_triangle(pa,pb,pc)) continue; // Zero-area separators carry no surface.
+                    if(kind==Kind::Lava) {
+                        const float ux=pb.x-pa.x,uy=pb.y-pa.y,uz=pb.z-pa.z;
+                        const float vx=pc.x-pa.x,vy=pc.y-pa.y,vz=pc.z-pa.z;
+                        const float nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+                        // Only upward/molten beds emit area lighting. Existing
+                        // vertical lava artwork remains its original material.
+                        if(std::abs(ny)>std::sqrt(nx*nx+ny*ny+nz*nz)*0.5F)
+                            add_lava_emitter(batch_lava,{(pa.x+pb.x+pc.x)/3,(pa.y+pb.y+pc.y)/3+4,
+                                (pa.z+pb.z+pc.z)/3,std::min(600.0F,std::sqrt(std::abs(ny)*0.5F/3.14159265F))});
+                    }
+                    FlowTriangle flow_triangle{};
+                    if(flowing) {
+                        std::array<std::array<float,2>,3> uv{};
+                        const std::array<Vec3,3> p{pa,pb,pc};
+                        for(unsigned j=0;j<3;++j)uv[j]={m.s16(tri+4+j*4)/32.0F,m.s16(tri+6+j*4)/32.0F};
+                        auto flow=flow_mapping(p,uv,period);
+                        flow.direction=authored_flow_direction(flow,p,scrolls[texture],(m.u8(tri)&0x80U)==0);
+                        flow_triangle.source=tri&0x1FFFFFFFU;flow_triangle.positions=p;flow_triangle.period=period;
+                        if(flow.direction) {
+                            for(unsigned j=0;j<3;++j)flow_triangle.corners[j]={uv[j][0]/period[0],uv[j][1]/period[1],flow.direction,1};
+                            const auto old=std::lower_bound(previous_flows.begin(),previous_flows.end(),flow_triangle.source,
+                                [](const FlowTriangle& f,std::uint32_t at){return f.source<at;});
+                            if(old!=previous_flows.end() && old->source==flow_triangle.source && old->period==period &&
+                                old->corners[0][2]==flow.direction && std::memcmp(old->positions.data(),p.data(),sizeof(p))==0)
+                                flow_triangle.corners=old->corners;
+                        }
+                        flow_triangles_.push_back(flow_triangle);
+                    }
                     height+=pa.y+pb.y+pc.y; points+=3;
                     if((kind==Kind::Calm || kind==Kind::Waves) && wet_triangles_.size()<8192)
                         wet_triangles_.push_back({pa,pb,pc});
+                    if(rays && mask_index && falling_vertices.size()/3+rays->vertices.size()/3>=kMaximumRayTriangles)ray_limit=true;
+                    if(rays && mask_index && !ray_limit) {
+                        const std::array<std::uint32_t,3> indices{a,bb,c};
+                        for(unsigned j=0;j<3;++j) {
+                            const auto p=verts+(v+indices[j])*10;const auto at=m.vertex(p);
+                            RayVertex rv{};rv.position={at.x,at.y,at.z,1};
+                            rv.colour={m.u8(p+6)/255.0F,m.u8(p+7)/255.0F,m.u8(p+8)/255.0F,m.u8(p+9)/255.0F};
+                            rv.liquid={m.s16(tri+4+j*4)/32.0F,m.s16(tri+6+j*4)/32.0F,float(mask_index),0};
+                            if(flow_triangle.corners[j][3]>0) {
+                                rv.liquid[0]=flow_triangle.corners[j][0]*period[0];
+                                rv.liquid[1]=flow_triangle.corners[j][1]*period[1];
+                                rv.liquid[3]=flow_triangle.corners[j][2];
+                            }
+                            falling_vertices.push_back(rv);
+                        }
+                    }
                 }
-                if(!e.geometry_valid || !points) {wet_triangles_.resize(wet_begin);continue;}
+                if(!e.geometry_valid || !points) {
+                    wet_triangles_.resize(wet_begin);
+                    falling_vertices.resize(falling_begin);
+                    flow_triangles_.resize(flow_begin);
+                    continue;
+                }
                 Surface surface{(tris+f*16)&0x1FFFFFFFU,(tris+fe*16)&0x1FFFFFFFU,
                     batch&0x1FFFFFFFU,kind,static_cast<float>(height/points)};
+                for(const auto& emitter:batch_lava)add_lava_emitter(lava_emitters_,emitter);
+                if(texture<nt && e.texture_valid) {
+                    const auto header=m.u32(textures+texture*8);
+                    surface.scroll_period={float(m.u8(header)),float(m.u8(header+1))};
+                }
                 surfaces_.push_back(surface);
-                if((procedural_batch&0x1FFFFFFFU)==surface.batch && kind==Kind::Waves)
+                if((procedural_batch&0x1FFFFFFFU)==surface.batch &&
+                   (kind==Kind::Waves || (kind==Kind::Lava && (e.flags&kWaves))))
                     procedural_=surface;
             }
         }
         std::sort(surfaces_.begin(),surfaces_.end(),[](const Surface& a,const Surface& b){return a.begin<b.begin;});
+        if(glow && glow->complete && std::any_of(glow->triangles.begin(),glow->triangles.end(),
+            [](const GlowTriangle& t){return t.source;})) {
+            bool same=previous_glow && previous_glow->triangles.size()==glow->triangles.size();
+            for(std::size_t i=0;same && i<glow->triangles.size();++i) {
+                const auto& a=previous_glow->triangles[i];const auto& b=glow->triangles[i];
+                same=a.source==b.source && a.addresses==b.addresses;
+                for(unsigned j=0;same && j<3;++j) {
+                    const auto delta=glow_sub(a.p[j],b.p[j]);same=glow_dot(delta,delta)==0;
+                }
+            }
+            glow_geometry_=same ? previous_glow : std::move(glow);
+        }
+        std::sort(flow_triangles_.begin(),flow_triangles_.end(),[](const FlowTriangle& a,const FlowTriangle& b){return a.source<b.source;});
+        if(ray_limit || (rays && rays->vertices.size()+falling_vertices.size()>kMaximumRayTriangles*3))rays.reset();
+        if(rays) {
+            rays->opaque_vertices=std::uint32_t(rays->vertices.size());
+            rays->masks[0].params[3]=float(rays->opaque_vertices/3);
+            rays->vertices.insert(rays->vertices.end(),falling_vertices.begin(),falling_vertices.end());
+        }
         if(rays && !rays->vertices.empty()) {
             // Texture-cache churn is not a new static world. Exact comparison
             // keeps the submitted GPU scene alive without hash collisions or
             // accidentally reusing a different custom track at the same address.
-            if(previous_rays && previous_rays->vertices.size()==rays->vertices.size() &&
-                std::memcmp(previous_rays->vertices.data(),rays->vertices.data(),rays->vertices.size()*sizeof(RayVertex))==0)
+            if(previous_rays && previous_rays->vertices.size()==rays->vertices.size() && previous_rays->masks.size()==rays->masks.size() &&
+                std::memcmp(previous_rays->vertices.data(),rays->vertices.data(),rays->vertices.size()*sizeof(RayVertex))==0 &&
+                std::memcmp(previous_rays->masks.data(),rays->masks.data(),rays->masks.size()*sizeof(RayOpacityMask))==0)
                 ray_geometry_=previous_rays;
             else ray_geometry_=std::move(rays);
         }

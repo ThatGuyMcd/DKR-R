@@ -3,7 +3,7 @@ struct ProbeParams { uint width; uint height; uint phase; uint unused; };
 [[vk::push_constant]] ConstantBuffer<ProbeParams> params : register(b0);
 Texture2D<float4> referenceField : register(t1);
 Texture2D<float4> optimizedField : register(t2);
-RWTexture2D<float4> initialField : register(u3);
+[[vk::image_format("rgba16f")]] RWTexture2D<float4> initialField : register(u3);
 RWStructuredBuffer<float4> errors : register(u4);
 groupshared float4 groupErrors[64];
 [numthreads(8,8,1)]

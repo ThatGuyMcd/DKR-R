@@ -94,6 +94,11 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         fixtures = argv[1];
     }
+    const auto pcm_identity=[](const char* name,const DecodedMusic& music) {
+        std::vector<std::uint8_t> bytes;bytes.reserve(music.samples.size()*2);
+        for(const auto sample:music.samples)put16(bytes,std::uint16_t(sample));
+        std::printf("[test][custom-music-pcm] %s sha256=%s\n",name,sha256_hex(bytes.data(),bytes.size()).c_str());
+    };
     {
         DecodedMusic music;
         std::string error;
@@ -107,12 +112,14 @@ int main(int argc, char** argv) {
             peak = std::max(peak, std::abs(static_cast<int>(sample)));
         }
         assert(peak > 2600 && peak < 3200);
+        pcm_identity("stereo-44k",music);
 
         assert(decode_file(fixtures / "sine_mono_22k_id3.mp3", MusicCodec::Mp3,
                            "32c4d06effca0a8ded57208533211dd518cde5f6ae6163d47666ff1f09d165ac",
                            music, error));
         assert(music.frames == 33075U && music.sample_rate == 22050U);
         assert(music.samples[1000] == music.samples[1001]);   // mono, doubled
+        pcm_identity("mono-22k",music);
 
         assert(!decode_file(fixtures / "sine_mono_22k_id3.mp3", MusicCodec::Mp3,
                             std::string(64, '0'), music, error));

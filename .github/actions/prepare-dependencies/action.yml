@@ -1,0 +1,60 @@
+name: Prepare reviewed dependencies
+description: Cache pinned source checkouts and verify them before every build
+inputs:
+  profile:
+    description: Dependency set (host, ios, or android)
+    default: host
+runs:
+  using: composite
+  steps:
+    - name: Restore dependency sources
+      id: sources
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        key: sources-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.profile }}-${{ hashFiles('dependencies.lock.json', 'patches/**', 'scripts/bootstrap_dependencies.py', 'scripts/apply_dependency_patches.py', '.github/actions/prepare-dependencies/action.yml') }}
+        path: |
+          extern/n64-modern-runtime
+          extern/rt64
+          extern/gekkonet
+          extern/monocypher
+          extern/libdatachannel
+          extern/mbedtls
+          extern/sdl3
+          extern/sdl2
+    - name: Verify pinned sources and apply reviewed patches
+      shell: bash
+      env:
+        DEPENDENCY_PROFILE: ${{ inputs.profile }}
+        PYTHON_EXECUTABLE: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+      run: |
+        case "$DEPENDENCY_PROFILE" in
+        host) dependencies=(n64-modern-runtime rt64 gekkonet monocypher libdatachannel mbedtls sdl3) ;;
+        ios) dependencies=(rt64 sdl2) ;;
+        android) dependencies=(n64-modern-runtime rt64 sdl2) ;;
+        *)
+          echo "Unknown dependency profile: $DEPENDENCY_PROFILE" >&2
+          exit 1
+          ;;
+        esac
+        arguments=()
+        for dependency in "${dependencies[@]}"; do
+          arguments+=(--only "$dependency")
+        done
+        "$PYTHON_EXECUTABLE" scripts/bootstrap_dependencies.py --shallow "${arguments[@]}"
+        "$PYTHON_EXECUTABLE" scripts/apply_dependency_patches.py
+    # Save before configuration: the cache contains reviewed source checkouts,
+    # never build outputs, ROMs, generated retail code, or local game data.
+    - name: Save verified dependency sources
+      if: steps.sources.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        key: ${{ steps.sources.outputs.cache-primary-key }}
+        path: |
+          extern/n64-modern-runtime
+          extern/rt64
+          extern/gekkonet
+          extern/monocypher
+          extern/libdatachannel
+          extern/mbedtls
+          extern/sdl3
+          extern/sdl2

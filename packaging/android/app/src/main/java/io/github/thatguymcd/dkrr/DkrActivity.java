@@ -13,6 +13,12 @@ import java.util.concurrent.Executors;
 
 /** Android-owned files only: users grant access to individual imports via SAF. */
 public final class DkrActivity extends SDLActivity {
+    public String requestUpdateHttp(String url, String etag, long offset, long context) {
+        return DkrUpdates.fetch(url, etag, offset, context);
+    }
+    public String installVerifiedUpdate(String path, String version, String sha) {
+        return DkrUpdates.install(this, path, version, sha);
+    }
     // Preserve SDL's callbacks in full. Publish the valid holder before SDL
     // wakes its native thread, and unpublish before destruction. No Vulkan work
     // runs on Android's UI thread.
@@ -128,12 +134,12 @@ public final class DkrActivity extends SDLActivity {
             if (isFinishing() || isDestroyed()) return;
             if (taskStallDialog != null && taskStallDialog.isShowing()) return;
             taskStallDialog = new AlertDialog.Builder(this).setTitle("Game is taking longer than expected")
-                .setMessage(message + "\n\nYou can keep waiting or export logs for diagnosis. This does not reset your settings or saves.")
+                .setView(messageWithDetails("Keep waiting, or export logs to report the problem.", message))
                 .setPositiveButton("Keep waiting", (dialog, which) -> {})
                 .setNeutralButton("Export logs", (dialog, which) -> exportDiagnostics())
                 .setNegativeButton("Close app...", (dialog, which) ->
                     new AlertDialog.Builder(this).setTitle("Close the stalled game?")
-                        .setMessage("Unsaved progress may be lost. Export logs first if you need to report this problem.")
+                        .setMessage("Unsaved progress may be lost.")
                         .setNegativeButton("Cancel", (confirm, button) -> {})
                         .setPositiveButton("Close app", (confirm, button) -> {
                             // Explicit last-resort exit, never an automatic
@@ -148,11 +154,11 @@ public final class DkrActivity extends SDLActivity {
             if (isFinishing() || isDestroyed()) return;
             if (graphicsFailureDialog != null && graphicsFailureDialog.isShowing()) return;
             graphicsFailureDialog = new AlertDialog.Builder(this).setTitle("Graphics device stopped")
-                .setMessage(message + "\n\nUse Export logs below before trying again. Lower settings can reduce load, but cannot supply missing GPU features.")
+                .setView(messageWithDetails("Rendering stopped. Export logs before closing DKR-R.", message))
                 .setPositiveButton("Export logs", (dialog, which) -> exportDiagnostics())
                 .setNeutralButton("Close app...", (dialog, which) ->
                     new AlertDialog.Builder(this).setTitle("Close the stopped game?")
-                        .setMessage("Unsaved progress may be lost. Your saved games and settings will not be deleted.")
+                        .setMessage("Unsaved progress may be lost. Existing saves are kept.")
                         .setNegativeButton("Cancel", (confirm, button) -> showFailureDialog(message))
                         .setPositiveButton("Close app", (confirm, button) -> {
                             finishAndRemoveTask();
@@ -161,6 +167,34 @@ public final class DkrActivity extends SDLActivity {
                 .setNegativeButton("Dismiss", (dialog, which) ->
                     getSharedPreferences("startup-health", MODE_PRIVATE).edit()
                         .remove("graphics-failure").apply()).show();
+    }
+
+    private android.view.View messageWithDetails(String summary, String diagnostic) {
+        android.widget.LinearLayout content = new android.widget.LinearLayout(this);
+        content.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int padding = Math.round(20 * getResources().getDisplayMetrics().density);
+        content.setPadding(padding, padding / 2, padding, 0);
+        android.widget.TextView body = new android.widget.TextView(this);
+        body.setText(summary);
+        content.addView(body);
+        android.widget.Button more = new android.widget.Button(this);
+        more.setText("Details");
+        content.addView(more);
+        android.widget.ScrollView details = new android.widget.ScrollView(this);
+        android.widget.TextView text = new android.widget.TextView(this);
+        text.setText(diagnostic == null ? "No additional details." : diagnostic);
+        text.setTextIsSelectable(true);
+        details.addView(text);
+        details.setVisibility(android.view.View.GONE);
+        content.addView(details, new android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+            Math.round(140 * getResources().getDisplayMetrics().density)));
+        more.setOnClickListener(view -> {
+            boolean show = details.getVisibility() != android.view.View.VISIBLE;
+            details.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE);
+            more.setText(show ? "Hide details" : "Details");
+        });
+        return content;
     }
 
     @Override protected String[] getLibraries() { return new String[]{"c++_shared", "SDL2", "DKR-R"}; }
@@ -175,7 +209,7 @@ public final class DkrActivity extends SDLActivity {
             return new String[]{"--config", config.getAbsolutePath()};
         } catch (IOException error) {
             runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("DKR-R could not start")
-                .setMessage(error.getMessage()).setCancelable(false)
+                .setView(messageWithDetails("Couldn't prepare DKR-R's application files.", error.getMessage())).setCancelable(false)
                 .setPositiveButton("Close", (dialog, which) -> finish()).show());
             throw new IllegalStateException("Cannot stage application assets", error);
         }
@@ -300,7 +334,7 @@ public final class DkrActivity extends SDLActivity {
                 runOnUiThread(() -> Toast.makeText(this, "Export completed", Toast.LENGTH_LONG).show());
             } catch (Exception error) {
                 runOnUiThread(() -> new AlertDialog.Builder(this).setTitle("Export failed")
-                    .setMessage(error.getMessage()).setPositiveButton("OK", null).show());
+                    .setView(messageWithDetails("Couldn't export the file. Try another location.", error.getMessage())).setPositiveButton("OK", null).show());
             }
         });
     }

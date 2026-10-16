@@ -14,9 +14,10 @@ N64ModernRuntime must also satisfy GPL-3.0; see
 | RT64 | RDP rendering and presentation | MIT |
 | elliotttate/wave-race-64-recomp | Enhanced-water renderer reference, adapted through DKR-R's patch pipeline | MIT |
 | GekkoNet | Pinned netplay research dependency; DKR-R's integrated Experimental Rollback uses its project-owned checkpoint/replay runtime, not the retired GekkoNet coordinator | BSD-2-Clause |
-| Monocypher | Authenticated encryption for online multiplayer datagrams | BSD-2-Clause or CC0 (DKR-R uses BSD-2-Clause) |
+| Monocypher | Authenticated online multiplayer datagrams and standard Ed25519 update signatures | BSD-2-Clause or CC0 (DKR-R uses BSD-2-Clause) |
 | libdatachannel | Optional WebRTC data channels and WebSocket signaling for five-character Quick Join | MPL-2.0 |
 | Mbed TLS | Static TLS/DTLS provider used by Quick Join | Apache-2.0 or GPL-2.0-or-later (DKR-R uses Apache-2.0) |
+| libcurl | Linux updater HTTPS transport using the system certificate store | curl licence (MIT/X derivative); deployed system-library notices are included |
 | libjuice | ICE/STUN peer-route establishment used by libdatachannel | MPL-2.0 |
 | usrsctp | SCTP data-channel transport used by libdatachannel | BSD-3-Clause |
 | nlohmann/json | Signaling message encoding used by Quick Join | MIT |

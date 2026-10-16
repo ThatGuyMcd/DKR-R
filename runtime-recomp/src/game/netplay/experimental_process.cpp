@@ -57,7 +57,13 @@ struct Child {
 struct Child {
     pid_t pid=0;bool done=false,bounded=false;
     Child()=default;Child(const Child&)=delete;Child& operator=(const Child&)=delete;
-    ~Child(){if(pid&&bounded&&!done){kill(-pid,SIGKILL);int status;while(waitpid(pid,&status,0)<0&&errno==EINTR){}}}
+    void terminate() const {
+        // Spawn can return before the child's process group exists (observed
+        // under QEMU). An unreaped child PID cannot be reused: if the group is
+        // absent, cancel that owned child directly rather than waiting for it.
+        if(kill(-pid,SIGKILL)<0&&errno==ESRCH)kill(pid,SIGKILL);
+    }
+    ~Child(){if(pid&&bounded&&!done){terminate();int status;while(waitpid(pid,&status,0)<0&&errno==EINTR){}}}
     bool start(const std::filesystem::path& exe,std::span<const std::string> args,bool limit,std::string& error) {
         bounded=limit;std::vector<std::string> storage{exe.native()};storage.insert(storage.end(),args.begin(),args.end());
         std::vector<char*> argv;for(auto& arg:storage)argv.push_back(arg.data());argv.push_back(nullptr);
@@ -108,7 +114,7 @@ bool launch_child(const std::filesystem::path& exe,std::span<const std::string> 
 #else
     const auto pid=child.pid;
     try {std::thread([pid]{int status;while(waitpid(pid,&status,0)<0&&errno==EINTR){};application_running=false;}).detach();}
-    catch(...) {kill(-pid,SIGKILL);int status;while(waitpid(pid,&status,0)<0&&errno==EINTR){};application_running=false;error="Cannot reap experimental application child.";return false;}
+    catch(...) {child.terminate();int status;while(waitpid(pid,&status,0)<0&&errno==EINTR){};application_running=false;error="Cannot reap experimental application child.";return false;}
 #endif
     child.done=true;return true;
 }

@@ -1,0 +1,14 @@
+diff --git a/sljit_src/allocator_src/sljitExecAllocatorApple.c b/sljit_src/allocator_src/sljitExecAllocatorApple.c
+index 9bd2094..995666e 100644
+--- a/sljit_src/allocator_src/sljitExecAllocatorApple.c
++++ b/sljit_src/allocator_src/sljitExecAllocatorApple.c
+@@ -109,6 +109,9 @@ static SLJIT_INLINE void apple_update_wx_flags(sljit_s32 enable_exec)
+ #define SLJIT_MAP_JIT	(0)
+ #endif
+ 
++/* No JIT entitlement on iOS, so there is no W^X toggle to call. */
++#define SLJIT_UPDATE_WX_FLAGS(from, to, enable_exec)
++
+ #endif /* TARGET_OS_OSX */
+ 
+ static SLJIT_INLINE void* alloc_chunk(sljit_uw size)

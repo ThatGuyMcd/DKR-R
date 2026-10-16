@@ -1,0 +1,57 @@
+name: iOS device compilation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+        with:
+          profile: ios
+      - name: Record device toolchain
+        run: |
+          mkdir -p build/ios-compile
+          {
+            xcodebuild -version
+            xcrun --sdk iphoneos --show-sdk-version
+            xcrun --sdk iphoneos --show-sdk-path
+          } | tee build/ios-compile/toolchain.txt
+      - name: Configure actual iPhoneOS sources without ROM payloads
+        run: |
+          cmake -S runtime-recomp/tests/ios_compile -B build/ios-compile -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
+            -DCMAKE_BUILD_TYPE=Release
+      - name: Compile platform adapters and patched SDL2
+        run: cmake --build build/ios-compile --target DKRIosCompileCheck --parallel 3
+      - name: Verify device object architecture and SDK platform
+        run: |
+          python3 scripts/tests/test_verify_ios_compile.py
+          python3 scripts/verify_ios_compile.py build/ios-compile
+      - name: Preserve compilation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-device-compilation
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/ios-compile/toolchain.txt
+            build/ios-compile/compile_commands.json
+            build/ios-compile/device-objects.json
+            build/ios-compile/CMakeFiles/CMakeConfigureLog.yaml

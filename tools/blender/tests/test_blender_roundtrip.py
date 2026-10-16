@@ -109,7 +109,7 @@ def main():
         paths = find_object_maps()
         if not paths:
             print("SKIP: no extracted object maps found")
-            return 0
+            return 77  # Entire suite requires unavailable retail fixtures.
 
         selected = choose(paths, want_all)
         failures = []

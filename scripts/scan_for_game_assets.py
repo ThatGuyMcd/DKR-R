@@ -2,15 +2,13 @@
 """Fail when repository files look like ROMs or generated game-resource archives."""
 from __future__ import annotations
 
+import argparse
+import os
 import pathlib
 import sys
 import zipfile
 
-ROOT = (
-    pathlib.Path(sys.argv[1]).resolve()
-    if len(sys.argv) > 1
-    else pathlib.Path(__file__).resolve().parents[1]
-)
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKIP_PARTS = {
     ".git", ".deps", "build", "build-logs", "dist", "runtime", "extern",
     "run-data", "--portable", "squashfs-root", "__pycache__",
@@ -25,21 +23,30 @@ MAX_SOURCE_SIZE = 5 * 1024 * 1024
 ALLOW_LARGE: set[str] = set()
 
 
-def should_skip(path: pathlib.Path) -> bool:
-    return any(part in SKIP_PARTS for part in path.relative_to(ROOT).parts)
+def source_files(root: pathlib.Path):
+    def fail_walk(error):
+        raise error
+
+    for directory, children, files in os.walk(root, followlinks=False, onerror=fail_walk):
+        children[:] = sorted(name for name in children if name not in SKIP_PARTS)
+        for name in sorted(files):
+            path = pathlib.Path(directory) / name
+            if name not in SKIP_PARTS and path.is_file():
+                yield path
 
 
-def main() -> int:
-    if not ROOT.is_dir():
-        print(f"Asset scan FAILED: root is not a directory: {ROOT}", file=sys.stderr)
+def main(root: pathlib.Path | None = None) -> int:
+    root = (root or ROOT).resolve()
+    if not root.is_dir():
+        print(f"Asset scan FAILED: root is not a directory: {root}", file=sys.stderr)
         return 2
     failures: list[str] = []
     inspected = 0
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or should_skip(path):
-            continue
+    # os.walk prunes excluded build/dependency trees before examining files,
+    # including WSL-only links which the Windows host cannot stat.
+    for path in source_files(root):
         inspected += 1
-        relative = path.relative_to(ROOT).as_posix()
+        relative = path.relative_to(root).as_posix()
         if path.suffix.lower() in DENIED_SUFFIXES:
             failures.append(f"Denied game-data extension: {relative}")
             continue
@@ -65,4 +72,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", nargs="?", type=pathlib.Path, default=ROOT)
+    args = parser.parse_args()
+    try:
+        raise SystemExit(main(args.root))
+    except OSError as error:
+        print(f"Asset scan FAILED: {error}", file=sys.stderr)
+        raise SystemExit(2)

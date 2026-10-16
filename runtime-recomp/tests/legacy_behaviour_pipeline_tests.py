@@ -7,6 +7,8 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from legacy_behaviour_policy import compose_behaviour
 
+INPUTS = []
+
 class PolicyTests(unittest.TestCase):
     def test_unreviewed_source(self):
         with self.assertRaises(ValueError):

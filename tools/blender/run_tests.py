@@ -23,7 +23,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.abspath(os.path.join(HERE, ".."))
+REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+SKIP_EXIT_CODE = 77
 TESTS = os.path.join(HERE, "tests")
 
 PLAIN_SUITES = [
@@ -82,6 +83,9 @@ def main(argv=None):
     parser.add_argument("--skip-blender", action="store_true")
     args = parser.parse_args(argv)
 
+    if args.blender and (not os.path.isfile(args.blender) or not os.access(args.blender, os.X_OK)):
+        parser.error("--blender must name an existing executable: " + args.blender)
+
     results = {}
 
     for suite in PLAIN_SUITES:
@@ -104,7 +108,7 @@ def main(argv=None):
             for suite in BLENDER_SUITES:
                 command = [
                     blender, "--background", "--factory-startup",
-                    "--python", os.path.join(TESTS, suite),
+                    "--python-exit-code", "1", "--python", os.path.join(TESTS, suite),
                 ]
                 if args.all and suite == "test_blender_roundtrip.py":
                     command += ["--", "--all"]
@@ -116,7 +120,7 @@ def main(argv=None):
     failed = 0
     for suite in PLAIN_SUITES + BLENDER_SUITES:
         code = results.get(suite)
-        if code is None:
+        if code is None or code == SKIP_EXIT_CODE:
             print("  SKIP  %s" % suite)
         elif code == 0:
             print("  PASS  %s" % suite)

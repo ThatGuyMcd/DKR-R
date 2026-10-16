@@ -22,7 +22,7 @@ struct DkrLibraryTrack {
 struct ModsPageState {
     int section = -1;            // -1 closed, then kModsSection*
     int entry_section = -1;      // opened on the next entry (links from other pages)
-    int category = 0;            // 0 tracks, 1 characters
+    int category = 0;            // 0 tracks, 1 characters, 2 Custom Magic Codes
     bool filters_open = false;
     std::set<std::string> disclosures;
     std::string dkr_details_id;
@@ -114,6 +114,7 @@ struct LibraryEntry {
 };
 
 struct LibraryCardView {
+    bool code = false;
     bool native = false;
     bool native_toggle = false;
     std::string title;
@@ -195,7 +196,7 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
     } else if (mismatch) {
         view.note = "Prepare this legacy mod for the ROM version you have loaded.";
     } else if (characters && !item.enabled && active >= MaxActiveStageCharacters) {
-        view.note = "The native character identity range is full. Installed mods remain available.";
+        view.note = "Too many characters are enabled. Disable some and try again.";
     }
     view.prepare = !item.hidden && mismatch && !item.review.empty();
     return view;
@@ -208,7 +209,10 @@ float MeasureLibraryCard(const LibraryCardView& view, float width) {
     const PaddockType info = PaddockReading(12.0F, true, 1.5F);
     const PaddockType size = PaddockReading(11.0F, false, 1.5F);
     const PaddockType note = PaddockReading(13.0F, false, 1.55F);
-    float height = 2.0F + 16.0F + 26.0F + 13.0F;
+    const auto tag=PaddockFormatTagSize(view.code?PaddockFormat::Code:view.native?PaddockFormat::Dkr:PaddockFormat::Legacy);
+    const auto badge=PaddockBadgeSize(view.status);
+    const float top=tag.x+badge.x+12>inner?tag.y+8+badge.y:std::max(tag.y,badge.y);
+    float height = 2.0F + 16.0F + top + 13.0F;
     height += 1.0F + 17.0F + PaddockTextHeight(title, view.title, inner, true) +
               9.0F + 18.0F + 14.0F + 2.0F;
     const bool info_fits = view.size.empty() ||
@@ -222,7 +226,8 @@ float MeasureLibraryCard(const LibraryCardView& view, float width) {
 
 // Returns true when Details was pressed.
 bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
-                     float height, bool characters, bool locked) {
+                     float height, bool characters, bool locked,
+                     const std::function<void(bool)>& code_toggle={}) {
     using namespace dkr::mods;
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const float inner = std::max(width - 36.0F, 1.0F);
@@ -240,12 +245,15 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
 
     const float left = origin.x + 18.0F;
     float y = origin.y + 18.0F;
-    const PaddockFormat format = view.native ? PaddockFormat::Dkr : PaddockFormat::Legacy;
+    const PaddockFormat format = view.code ? PaddockFormat::Code : view.native ? PaddockFormat::Dkr : PaddockFormat::Legacy;
     PaddockFormatTag(draw, {left, y}, format);
     const ImVec2 badge = PaddockBadgeSize(view.status);
-    PaddockBadge(draw, {origin.x + width - 18.0F - badge.x, y + (26.0F - badge.y) * 0.5F},
+    const auto tag=PaddockFormatTagSize(format);
+    const bool stack_badge=tag.x+badge.x+12>inner;
+    PaddockBadge(draw, {stack_badge?left:origin.x + width - 18.0F - badge.x,
+                 y+(stack_badge?tag.y+8:(std::max(tag.y,badge.y)-badge.y)*0.5F)},
                  view.status, view.tone);
-    y += 26.0F + 13.0F;
+    y += (stack_badge?tag.y+8+badge.y:std::max(tag.y,badge.y))+13;
 
     // The painted title board, with its checker flag.
     const PaddockType title = PaddockSign(25.0F, 1.15F);
@@ -310,7 +318,9 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
         bool enabled = view.enabled;
         ImGui::BeginDisabled(!view.toggle_allowed);
         if (PaddockSwitch("##enabled", &enabled, "On", "Off")) {
-            if (view.native) {
+            if (view.code) {
+                if(code_toggle)code_toggle(enabled);
+            } else if (view.native) {
                 dkr::runtime::custom_tracks::set_kept_enabled(view.id, enabled, g_legacy_import_status);
             } else {
                 const auto kind = characters ? TrackCatalog::Kind::Character : TrackCatalog::Kind::Track;
@@ -635,7 +645,7 @@ void DrawModCardBrowser(float requested_width, bool characters,
             }
         } else {
             PaddockText(PaddockReading(13.0F, false, 1.5F), PaddockRgb(0xC7DCE6),
-                "Matching names or the same source and original slot may be different editions. Compare Details, then remove only the copy you do not want. Use Visibility: All to include hidden copies.", width);
+                "Matching names may be different versions. Compare Details before removing a copy.", width);
         }
         PaddockGap(12.0F);
     }
@@ -665,7 +675,7 @@ void DrawModCardBrowser(float requested_width, bool characters,
         PaddockInlineNote(slots,
                           active >= MaxActiveStageCharacters
                               ? "The native identity range is full. Installed mods remain available."
-                              : "Enable your collection; memory and asset limits are checked before launch. Four custom racers appear on the original stage. Highlight one and press L / R to browse extras. Mods without a custom portrait retain their original face.",
+                              : "Four custom racers appear on the stage. Select one and use L / R to browse more characters.",
                           width);
         PaddockGap(18.0F);
     }
@@ -691,7 +701,7 @@ void DrawModCardBrowser(float requested_width, bool characters,
         body_style.centre = true;
         y += PaddockTextAt(ImGui::GetWindowDrawList(), body, {at.x, at.y + y}, box.Inner(),
                            any ? "Try a different search or clear your filters to see more mods."
-                               : "Import a legacy patch or a DKR track to add it here.",
+                               : "Import a patch or track to add it here.",
                            body_style) + 13.0F;
         const char* action = any ? "Clear filters##empty" : "Import mods##empty";
         const auto kind = any ? PaddockButtonKind::Plain : PaddockButtonKind::Primary;
@@ -812,7 +822,7 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
     if (BeginPaddockModalWindow("Manage custom mod", ImGuiWindowFlags_AlwaysAutoResize)) {
         const auto* card = find_card(browser.manage_id);
         if (!card) {
-            PaddockModalText("This mod is no longer in the installed library.");
+            PaddockModalText("This mod is no longer installed.");
         } else {
             const auto& item = card->item;
             PaddockModalText(characters ? "MANAGE CUSTOM CHARACTER" : "MANAGE CUSTOM TRACK");
@@ -820,21 +830,21 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
             PaddockModalText(item.name);
             PaddockModalText(item.enabled ? kAccent : kWarm,
                              item.hidden ? "HIDDEN" : item.enabled ? "ACTIVE" : "INACTIVE");
-            for (const auto& source : card->sources) PaddockModalText("SOURCE PACK: " + source);
-            PaddockModalText(std::string("PREPARED FOR: ") +
+            for (const auto& source : card->sources) PaddockModalText("SOURCE: " + source);
+            PaddockModalText(std::string("ROM COMPATIBILITY: ") +
                              (card->revisions == 3 ? "ROM v 1.0 / v 1.1"
                               : card->revisions == 1 ? "ROM v 1.0" : "ROM v 1.1"));
-            PaddockModalText("MANAGED SIZE: " + FormatManagedTexturePackSize(item.managed_bytes) +
-                             " (prepared variants; retained import material excluded)");
+            PaddockModalText("INSTALLED SIZE: " + FormatManagedTexturePackSize(item.managed_bytes) +
+                             "");
             if (item.imported_at) {
                 const std::chrono::year_month_day date{std::chrono::floor<std::chrono::days>(
                     std::chrono::sys_seconds{std::chrono::seconds{item.imported_at}})};
                 ImGui::Text("IMPORTED: %04d-%02u-%02u", static_cast<int>(date.year()),
                             static_cast<unsigned>(date.month()), static_cast<unsigned>(date.day()));
             } else {
-                PaddockModalText("IMPORTED: Unknown (older import)");
+                PaddockModalText("IMPORTED: Unknown");
             }
-            if (!item.details.empty()) PaddockModalText(kWarm, item.details);
+            PaddockModalText(kWarm, dkr::runtime::copy::mod_support(item.details, item.behaviour_abi != 0));
             // Compare conservatively: never silently discard a name match or
             // a behaviour-enabled edition of an older asset-only import.
             const auto name = browser::name_key(item.name);
@@ -842,7 +852,7 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
             const auto match = browser.duplicate_matches.find(item.id);
             if (match != browser.duplicate_matches.end() && match->second.matches() &&
                 ImGui::CollapsingHeader("COMPARE POSSIBLE DUPLICATES")) {
-                PaddockModalText("These can be different editions. Removal applies only to the chosen content ID; other mods and saves are kept.");
+                PaddockModalText("These may be different versions. Removing one copy keeps other mods and saves.");
                 for (const auto& other : browser.all) {
                     if (other.item.id == item.id) continue;
                     const bool same_name = !name.empty() && browser::name_key(other.item.name) == name;
@@ -851,7 +861,7 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
                     PaddockModalText(other.item.name + " - " + (same_source ? "same source & slot" : "same name"));
                     PaddockModalText(other.item.hidden ? "Hidden" : other.item.enabled ? "Active" : "Inactive");
                     for (const auto& pack : other.sources) PaddockModalText("SOURCE: " + pack);
-                    PaddockModalText("CONTENT ID: " + other.item.id.substr(0, 12));
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Content ID: %s", other.item.id.c_str());
                     ImGui::PushID(other.item.id.c_str());
                     if (PaddockModalButton("VIEW THIS COPY")) {
                         browser.manage_id = other.item.id;
@@ -864,20 +874,20 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
                         PaddockModalText("Also named: " + native_name + " (DKR-R track, " + native_source + "). Inspect its card in My mods.");
                 }
             }
-            PaddockModalText(item.behaviour_abi ? "BEHAVIOUR CONTRACT: reviewed native adapter ABI " + std::to_string(item.behaviour_abi)
-                                               : "BEHAVIOUR CONTRACT: asset-only preparation (re-prepare the retained source import to inspect behaviour support)");
+            std::string technical = "Content ID: " + item.id + "\nBehaviour adapter: " + std::to_string(item.behaviour_abi);
+            if (!item.details.empty()) technical += "\n" + item.details;
+            DrawTechnicalDetails(technical, "Compatibility details");
             if (!characters) {
                 ImGui::TextWrapped("VEHICLES: %s%s%s", item.vehicles & 1 ? "Car " : "",
                                    item.vehicles & 2 ? "Hovercraft " : "", item.vehicles & 4 ? "Plane" : "");
             }
             ImGui::Dummy({0, 8});
             if (locked) {
-                PaddockModalText(kWarm, "Return to the launcher and leave the lobby to change mods. "
-                                        "Busy operations must finish first.");
+                PaddockModalText(kWarm, "Return to the launcher and leave the lobby to change mods.");
             }
             const unsigned active = browser::active_count(browser.all);
             if (characters && !item.enabled && active >= MaxActiveStageCharacters) {
-                PaddockModalText("The native character identity range is full. Installed mods remain available.");
+                PaddockModalText("Too many characters are enabled. Disable some and try again.");
             }
             const bool can_enable = browser::can_activate(*card, characters, active,
                                                           g_mod_browser_revision, locked);
@@ -910,17 +920,14 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
             }
             if (ImGui::CollapsingHeader("IMPORT DETAILS")) {
                 ImGui::TextWrapped("CONTENT ID: %s", item.id.c_str());
-                PaddockModalText("Source imports are retained for re-preparation. This mod uses isolated "
-                                 "saves; hiding or removing it never deletes saves.");
+                PaddockModalText("Saved imports can be prepared again. Hiding or removing a mod keeps its saves.");
                 ImGui::BeginDisabled(locked || item.review.empty());
                 if (PaddockModalButton("PREPARE SOURCE IMPORT AGAIN")) {
                     g_legacy_imports.prepare_review(item.review, ModReviewRoms());
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::EndDisabled();
-                PaddockModalText("This explicitly restores removed entries from this source import. "
-                                 "Existing hidden entries remain hidden. Behaviour-enabled editions have separate identities; "
-                                 "the older edition and its isolated saves are retained, not overwritten. Choose which edition to activate after preparation.");
+                PaddockModalText("Preparing again can restore removed mods. Existing selections and saves are kept; new versions start disabled.");
             }
         }
         if (PaddockModalButton("CLOSE")) ImGui::CloseCurrentPopup();
@@ -939,13 +946,11 @@ void DrawModManagement(ModBrowserState& browser, bool characters, bool locked) {
             PaddockModalText(card->item.name);
             ImGui::Separator();
             PaddockModalText(remove
-                ? "Remove this mod and all its prepared ROM variants? Other tracks and characters from "
-                  "the same pack, source files, retained import material and all saves are kept."
-                : "Deactivate and hide this mod? Its files and saves are kept. Use Visibility: Hidden "
-                  "to restore the card. Restoring does not activate it.");
+                ? "Remove this mod from DKR-R? Other mods, original source files and saves are kept."
+                : "Disable and hide this mod? Its files and saves are kept. Restore it using the Hidden filter; it stays disabled.");
             if (remove) {
-                PaddockModalText(kWarm, "Prepared content is deleted. Reimport its source patch to install it again.");
-                PaddockModalText("ONLY THIS CONTENT ID: " + card->item.id);
+                PaddockModalText(kWarm, "You'll need to prepare or import it again to reinstall.");
+                DrawTechnicalDetails("Content ID: " + card->item.id);
             }
             ImGui::BeginDisabled(locked);
             if (PaddockModalButton(remove ? "REMOVE THIS MOD" : "DEACTIVATE AND HIDE", 44)) {
@@ -973,6 +978,7 @@ struct ModImportActions {
     std::function<void()> choose_dkrmap_folder;
     std::function<void()> choose_track_zip;
     std::function<void()> choose_rom;
+    std::function<void()> choose_code;
 };
 
 void DrawModImportOption(const char* id, PaddockFormat format, const char* title,
@@ -1016,7 +1022,7 @@ void DrawModImportChooser(const ModImportActions& actions) {
     const float width = std::max(ImGui::GetContentRegionAvail().x, 1.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
     PaddockText(PaddockReading(14.0F, false, 1.55F), PaddockRgb(0xFFF6DA),
-                "Choose the format you downloaded. Both types appear in My mods.", width);
+                "Choose the type of mod to import.", width);
     PaddockGap(18.0F);
     DrawModImportOption("legacy", PaddockFormat::Legacy, "ROM patches",
                         ".xdelta files or ZIP packs containing legacy tracks and characters.", width, [&] {
@@ -1050,7 +1056,7 @@ void DrawModImportChooser(const ModImportActions& actions) {
     });
     PaddockGap(16.0F);
     DrawModImportOption("dkr", PaddockFormat::Dkr, "DKR-R tracks",
-                        "A .dkrmap folder or a ZIP of a native track. You can import it before loading a ROM.",
+                        "Import a .dkrmap folder or native-track ZIP. No ROM needed for import.",
                         width, [&] {
         ImGui::BeginDisabled(actions.locked);
         if (PaddockButton("Choose .dkrmap folder")) {
@@ -1061,6 +1067,15 @@ void DrawModImportChooser(const ModImportActions& actions) {
         if (PaddockButton("Choose track ZIP")) {
             ImGui::CloseCurrentPopup();
             if (actions.choose_track_zip) actions.choose_track_zip();
+        }
+        ImGui::EndDisabled();
+    });
+    PaddockGap(18.0F);
+    DrawModImportOption("code", PaddockFormat::Dkr, "Custom Magic Codes",
+                        "Import a .nrm code mod. Only enable code from authors you trust.",width,[&] {
+        ImGui::BeginDisabled(actions.locked);
+        if(PaddockButton("Choose code mod")) {
+            ImGui::CloseCurrentPopup();if(actions.choose_code)actions.choose_code();
         }
         ImGui::EndDisabled();
     });
@@ -1095,9 +1110,7 @@ void DrawDkrTrackDetails(const std::vector<DkrLibraryTrack>& tracks, bool rom_re
         PaddockModalText("This track is no longer in the library.");
     } else if (g_mods_page.dkr_remove_confirm) {
         PaddockModalText(found->name);
-        PaddockModalText("Uninstall this track from DKR-R? Its installed .dkrmap copy will be deleted. "
-                        "Original source files, saves and HD texture packs will be kept. "
-                        "You can import the track again later.");
+        PaddockModalText("Remove this installed track? Original source files, saves and HD texture packs are kept.");
         ImGui::BeginDisabled(locked || !found->installed);
         if (PaddockModalButton("UNINSTALL TRACK", 44)) {
             g_mods_page.uninstall_track_request = found->id;
@@ -1123,8 +1136,7 @@ void DrawDkrTrackDetails(const std::vector<DkrLibraryTrack>& tracks, bool rom_re
                                                      : "Kept from an online session. Inactive until you turn it on in My Mods.") : found->installed
             ? "Installed. This course appears automatically in the in-game track menu."
             : "Read from your working folder. Source files are managed in Track Lab.");
-        paragraph("Use Track Lab to test work in progress from your working folder. "
-                  "Native tracks use the Modern graphics profile.");
+        paragraph("Track Lab previews tracks from your working folder. Requires Modern graphics.");
         if (!rom_ready) paragraph("Load your original Diddy Kong Racing ROM in Play before racing.");
         if (!found->hd_pack_id.empty()) {
             PaddockGap(13.0F);
@@ -1139,8 +1151,7 @@ void DrawDkrTrackDetails(const std::vector<DkrLibraryTrack>& tracks, bool rom_re
             if (PaddockButton("Uninstall track")) g_mods_page.dkr_remove_confirm = true;
             ImGui::EndDisabled();
         } else {
-            paragraph("To remove this track, move its .dkrmap out of your working folder and rescan, "
-                      "or stop watching that folder in Track Lab.");
+            paragraph("Move this track out of your working folder and Rescan, or stop watching the folder.");
         }
         if (locked) paragraph("Return to the launcher and leave the lobby to change tracks. "
                               "Wait for any current import to finish.");
@@ -1160,7 +1171,7 @@ float PaddockImportButtonWidth(const char* label) {
 }
 
 // The painted "+ Import mods" sign (.mods-import-button).
-bool PaddockImportButton(const char* label, float forced_width = 0.0F) {
+bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool update_icon = false) {
     const PaddockType type = PaddockSign(22.0F, 1.1F);
     const char* end = PaddockLabelEnd(label);
     const float natural = PaddockImportButtonWidth(label);
@@ -1184,10 +1195,18 @@ bool PaddockImportButton(const char* label, float forced_width = 0.0F) {
     // Two centred strokes, which a font glyph's baseline would not give
     // (.import-button-symbol).
     const ImU32 ink = PaddockCol(0xFFF3C9);
-    PaddockFill(draw, {symbol.x + 8.0F, symbol.y + 14.0F}, {symbol.x + 22.0F, symbol.y + 16.0F},
-                PaddockRound(1.0F), ink);
-    PaddockFill(draw, {symbol.x + 14.0F, symbol.y + 8.0F}, {symbol.x + 16.0F, symbol.y + 22.0F},
-                PaddockRound(1.0F), ink);
+    if (update_icon) {
+        draw->PathArcTo({symbol.x + 15.0F, symbol.y + 15.0F}, 8.0F, -1.4F, 3.8F, 20);
+        draw->PathStroke(ink, 0, 2.0F);
+        draw->AddTriangleFilled({symbol.x + 13.0F, symbol.y + 4.0F},
+                                {symbol.x + 22.0F, symbol.y + 8.0F},
+                                {symbol.x + 14.0F, symbol.y + 12.0F}, ink);
+    } else {
+        PaddockFill(draw, {symbol.x + 8.0F, symbol.y + 14.0F}, {symbol.x + 22.0F, symbol.y + 16.0F},
+                    PaddockRound(1.0F), ink);
+        PaddockFill(draw, {symbol.x + 14.0F, symbol.y + 8.0F}, {symbol.x + 16.0F, symbol.y + 22.0F},
+                    PaddockRound(1.0F), ink);
+    }
     const float text_top = press.min.y + (56.0F - type.line) * 0.5F;
     PaddockDrawRun(draw, type, {symbol.x + 42.0F, text_top + 2.0F}, PaddockCol(0x632706),
                    label, end);
@@ -1197,20 +1216,26 @@ bool PaddockImportButton(const char* label, float forced_width = 0.0F) {
 }
 
 // Tracks / Characters (.mods-categories). Returns the selected index.
-int DrawLibraryCategories(int current, std::size_t tracks, std::size_t characters) {
+int DrawLibraryCategories(int current, std::size_t tracks, std::size_t characters,std::size_t codes,float available) {
     const PaddockType type = PaddockSign(19.0F, 1.4F);
     const PaddockType count_type = PaddockReading(12.0F, true, 1.5F);
-    const std::array<const char*, 2> labels{{"Tracks", "Characters"}};
-    const std::array<std::string, 2> counts{{std::to_string(tracks), std::to_string(characters)}};
-    std::array<float, 2> widths{};
-    for (std::size_t index = 0U; index < 2U; ++index) {
+    const std::array<const char*, 3> labels{{"Tracks", "Characters", "Custom Magic Codes"}};
+    const std::array<std::string, 3> counts{{std::to_string(tracks), std::to_string(characters),std::to_string(codes)}};
+    std::array<float, 3> widths{};
+    for (std::size_t index = 0U; index < labels.size(); ++index) {
         const float pill = std::max(23.0F, PaddockMeasure(count_type, counts[index]) + 12.0F);
         widths[index] = std::ceil(2.0F + 26.0F + PaddockMeasure(type, labels[index]) + 9.0F + pill);
     }
     const float button_height = std::ceil(type.line + 14.0F + 2.0F);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    const float total = 8.0F + widths[0] + widths[1] + 4.0F;
-    const ImVec2 end{origin.x + total, origin.y + button_height + 8.0F};
+    std::array<ImVec2,3> positions{};
+    float column=4.0F,row=4.0F,total=0;
+    for(unsigned i=0;i<3;++i) {
+        if(column>4.0F&&column+widths[i]+4.0F>available){column=4.0F;row+=button_height+4.0F;}
+        positions[i]={origin.x+column,origin.y+row};
+        column+=widths[i]+4.0F;total=std::max(total,column);
+    }
+    const ImVec2 end{origin.x + total, origin.y + row + button_height + 4.0F};
     ImDrawList* draw = ImGui::GetWindowDrawList();
     PaddockPanelStyle frame;
     frame.radii = PaddockRound(12.0F);
@@ -1219,9 +1244,8 @@ int DrawLibraryCategories(int current, std::size_t tracks, std::size_t character
     frame.ring_width = 1.0F;
     PaddockPanel(draw, origin, end, frame);
     int selected = current;
-    float x = origin.x + 4.0F;
-    for (int index = 0; index < 2; ++index) {
-        ImGui::SetCursorScreenPos({x, origin.y + 4.0F});
+    for (int index = 0; index < 3; ++index) {
+        ImGui::SetCursorScreenPos(positions[index]);
         const bool pressed_now = current == index;
         const PaddockPress press = PaddockBeginPress(labels[index], {widths[index], button_height});
         if (press.pressed) selected = index;
@@ -1261,7 +1285,6 @@ int DrawLibraryCategories(int current, std::size_t tracks, std::size_t character
         PaddockDrawRun(draw, count_type, {pill_x + (pill_width - digits) * 0.5F, pill_top}, text,
                        counts[index].data(), counts[index].data() + counts[index].size());
         PaddockEndPress(press, 8.0F);
-        x += widths[index] + 4.0F;
     }
     ImGui::SetCursorScreenPos(origin);
     ImGui::Dummy({total, end.y - origin.y});

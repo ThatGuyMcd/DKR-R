@@ -2,6 +2,8 @@
 #include "legacy_mod_process.hpp"
 #include "legacy_track_catalog.hpp"
 #include "online_mod_cache.hpp"
+#include "magic_code_game_world.hpp"
+#include "online_game_pak.hpp"
 #include "../custom_tracks.hpp"
 #include <json/json.hpp>
 #include <random>
@@ -37,7 +39,7 @@ struct Job {
 };
 }
 Bundle export_host(const std::filesystem::path& library,const std::vector<std::filesystem::path>& labs,
-    std::string revision,bool ai,std::stop_token stop) {
+    std::string revision,bool ai,std::stop_token stop,const std::filesystem::path& code_root,std::string_view version,const std::vector<std::filesystem::path>& roms) {
     if(labs.size()>MaxTracks)throw Error("Too many enabled Track Lab courses for an online session.");
     auto bundle=export_legacy(library,std::move(revision),stop);bundle.manifest.custom_ai=ai;
     std::uint64_t total=transfer_size(bundle.manifest);
@@ -54,6 +56,25 @@ Bundle export_host(const std::filesystem::path& library,const std::vector<std::f
         bundle.manifest.content.push_back({Kind::TrackLab,id,track.name,payload,artifact,payload,1});
         if(!bundle.payloads.emplace(payload,std::move(bytes)).second)throw Error("An enabled Track Lab course is duplicated.");
         total+=bundle.payloads.at(payload)->size();
+    }
+    if(!code_root.empty()&&std::filesystem::exists(code_root/"library.json")) {
+        code::Library codes(code_root,std::string(version));
+        auto frozen=codes.freeze(bundle.manifest.revision,true,code::GameWorld::policy().modules,stop);
+        if(std::any_of(frozen.ordered.begin(),frozen.ordered.end(),[](const auto& p){return p->modules.contains("trophies")||!p->tracks.empty();})) {
+            const auto courses=with_matching_game_pak(roms,bundle.manifest.revision,stop,
+                [](const auto& path){return dkr::runtime::rom::inspect(path);},
+                [&](const auto& path){return code::trophy::installed_catalogue(path,library,labs,stop);});
+            code::trophy::rebind(frozen,courses,bundle.manifest.revision);
+        }
+        for(const auto& package:frozen.ordered) {
+            const auto bytes=frozen.payloads.at(package->digest);
+            if(bytes->size()>MaxTransferBytes-total)throw Error("Online code packages exceed the session transfer budget.");
+            bundle.manifest.payloads.push_back({PayloadKind::Code,package->digest,{},bytes->size(),{}});
+            bundle.manifest.code.push_back({package->id,package->name,package->version,package->digest,
+                frozen.settings.at(package->id).dump(),frozen.data.at(package->id).dump()});
+            if(!bundle.payloads.emplace(package->digest,bytes).second)throw Error("An enabled code payload is duplicated.");
+            total+=bytes->size();
+        }
     }
     bundle.manifest=canonical(std::move(bundle.manifest));return bundle;
 }
@@ -92,6 +113,14 @@ ProfileSources profile_sources(const Profile& input_profile) {
             const auto raw= utf8_path(text);if(!raw.is_absolute())throw Error("Online courses must have absolute local paths.");
             auto path=private_storage_path(raw);
             sources.courses.push_back(std::move(path));
+        }
+        if(refs.contains("code")) {
+            if(!refs["code"].is_object()||refs["code"].size()>128)throw Error("Invalid online code source index.");
+            for(const auto& [hash,ref]:refs["code"].items()) {
+                const auto text=ref.get<std::string>();const auto path=utf8_path(text);
+                if(!valid_digest(hash)||text.size()>32768||!path.is_absolute())throw Error("Invalid online code source path.");
+                sources.code.emplace(hash,private_storage_path(path));
+            }
         }
     } else {
         // Earlier caches and isolated worker results remain readable. New
@@ -138,6 +167,13 @@ ProfileSources profile_sources(const Profile& input_profile) {
             throw Error("Online Track Lab course differs from its host manifest.");
     }
     if(found.size()!=expected.size())throw Error("Online profile is missing required host content.");
+    if(sources.code.size()!=manifest.code.size())throw Error("Online profile is missing required executable code.");
+    for(const auto& code:manifest.code) {
+        const auto at=sources.code.find(code.payload);if(at==sources.code.end())throw Error("Online code payload is missing.");
+        check_storage(at->second,false);const auto bytes=read_file(at->second,32*MiB);
+        const auto payload=std::find_if(manifest.payloads.begin(),manifest.payloads.end(),[&](const auto& p){return p.digest==code.payload;});
+        if(payload==manifest.payloads.end()||bytes.size()!=payload->size||sha256(bytes)!=code.payload)throw Error("Online code payload changed after preparation.");
+    }
     return sources;
 }
 void validate_profile(const Profile& profile){(void)profile_sources(profile);}
@@ -194,9 +230,16 @@ void copy_tree(const std::filesystem::path& source,const std::filesystem::path& 
 }
 }
 void retain_profile(const Profile& input_profile,const std::filesystem::path& library,
-    const std::filesystem::path& track_library,std::stop_token stop) {
+    const std::filesystem::path& track_library,std::stop_token stop,const std::filesystem::path& code_root,std::string_view version) {
     const Profile profile{input_profile.manifest,input_profile.digest,private_storage_path(input_profile.directory)};
     cancelled(stop);const auto sources=profile_sources(profile);
+    if(!profile.manifest.code.empty()) {
+        if(code_root.empty())throw Error("No offline Custom Magic Codes library is configured.");
+        code::Library codes(code_root,std::string(version));
+        for(const auto& package:profile.manifest.code) {
+            cancelled(stop);codes.import(read_file(sources.code.at(package.payload),code::MaxPackage),true);
+        }
+    }
     if(profile.manifest.content.empty())return;
     const auto root=private_storage_path(library),tracks=private_storage_path(track_library);
     ensure_directory(root);ensure_directory(tracks);
@@ -308,9 +351,20 @@ void verify_online_worker(const std::filesystem::path& worker,const std::filesys
     std::fprintf(stderr,"[online-mods][worker] online-prepare=1 path=%s\n",path_text(worker).c_str());
 }
 void cache_installed_payloads(const Manifest& input,const std::filesystem::path& input_payloads,
-    const std::filesystem::path& input_library,std::stop_token stop,const std::filesystem::path& track_library) {
+    const std::filesystem::path& input_library,std::stop_token stop,const std::filesystem::path& track_library,
+    const std::filesystem::path& code_root,std::string_view version) {
     const auto manifest=canonical(input);
     const auto payloads=private_storage_path(input_payloads);check_storage(payloads,true);
+    if(!code_root.empty()&&std::filesystem::exists(code_root/"packages")) {
+        code::Library library(code_root,std::string(version));
+        for(const auto& payload:manifest.payloads)if(payload.kind==PayloadKind::Code&&!cached_payload(payloads,payload)) {
+            cancelled(stop);
+            try {
+                const auto bytes=library.payload(payload.digest);if(bytes->size()!=payload.size)continue;
+                try{write_new_file(payloads/payload.digest,*bytes);}catch(...){if(!cached_payload(payloads,payload))throw;}
+            }catch(const std::exception&){cancelled(stop);} // optional reuse never waives SHA/package validation
+        }
+    }
     // Authored Track Lab packages also have a canonical wire representation.
     // Local enablement sidecars are excluded by the existing packer.
     if(!track_library.empty() && std::filesystem::exists(track_library)) {
@@ -362,6 +416,7 @@ void cache_installed_payloads(const Manifest& input,const std::filesystem::path&
 }
 namespace {
 void append_sources(ProfileSources& to,ProfileSources from) {
+    for(auto& [hash,path]:from.code)if(!to.code.emplace(hash,std::move(path)).second)throw Error("Duplicate online code source.");
     to.tracks.insert(to.tracks.end(),std::make_move_iterator(from.tracks.begin()),std::make_move_iterator(from.tracks.end()));
     to.characters.insert(to.characters.end(),std::make_move_iterator(from.characters.begin()),std::make_move_iterator(from.characters.end()));
     to.courses.insert(to.courses.end(),std::make_move_iterator(from.courses.begin()),std::make_move_iterator(from.courses.end()));
@@ -386,10 +441,11 @@ bool reuse_installed(const Manifest& manifest,const std::filesystem::path& libra
     append_sources(result,std::move(selected));return true;
 }
 void write_sources(const std::filesystem::path& directory,const Manifest& manifest,const ProfileSources& sources) {
-    json refs={{"schema",1},{"manifest",identity(manifest)},{"legacy",json::array()},{"courses",json::array()}};
+    json refs={{"schema",1},{"manifest",identity(manifest)},{"legacy",json::array()},{"courses",json::array()},{"code",json::object()}};
     for(unsigned kind=0;kind<2;++kind)for(const auto& source:kind?sources.characters:sources.tracks)
         refs["legacy"].push_back({{"kind",kind},{"id",source.item.id},{"group",source.item.group},{"library",path_text(source.library)}});
     for(const auto& course:sources.courses)refs["courses"].push_back(path_text(course));
+    for(const auto& [hash,path]:sources.code)refs["code"][hash]=path_text(path);
     write(directory/"sources.json",refs);
 }
 }
@@ -398,15 +454,16 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     const std::filesystem::path& worker,std::stop_token stop,const ProfileProgress& progress,const std::filesystem::path& installed_library,
     const std::filesystem::path& installed_track_library,const std::vector<std::filesystem::path>& selected_courses) {
     auto out=std::make_shared<Profile>();out->manifest=canonical(input);out->digest=identity(out->manifest);
-    if(roms.empty() || roms.size()>8 || !worker.is_absolute())throw Error("Online preparation needs imported Game Paks and the packaged importer.");
+    const bool needs_worker=std::any_of(out->manifest.payloads.begin(),out->manifest.payloads.end(),[](const auto& p){return p.kind!=PayloadKind::Code;});
+    if(needs_worker&&(roms.empty() || roms.size()>8 || !worker.is_absolute()))throw Error("Online preparation needs imported Game Paks and the packaged importer.");
     // check_storage normalizes its queries, not the caller's path. Normalize
     // before deriving directories so every create/rename/iterator uses the
     // same long-path representation as validation and file I/O on Windows.
     const auto root=private_storage_path(input_root);
     const auto payloads=private_storage_path(input_payloads);
-    check_storage(worker,false);check_storage(payloads,true);cancelled(stop);
+    if(needs_worker)check_storage(worker,false);check_storage(payloads,true);cancelled(stop);
     check_storage(root,true);child(root/"source-profiles");child(root/"prepared-payloads");child(root/"jobs");
-    verify_online_worker(worker,root,stop);
+    if(needs_worker)verify_online_worker(worker,root,stop);
     out->directory=root/"source-profiles"/out->digest;
     if(std::filesystem::exists(out->directory)) {
         if(!installed_library.empty() || !installed_track_library.empty() || !selected_courses.empty()) {
@@ -479,6 +536,12 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     std::set<std::string> batch_attempted;
     for(const auto& payload:out->manifest.payloads) {
         cancelled(stop);
+        if(payload.kind==PayloadKind::Code) {
+            if(!cached_payload(payloads,payload))throw Error("A required executable code package failed its SHA/size check.");
+            sources.code.emplace(payload.digest,payloads/payload.digest);++index;
+            if(progress)progress("Verifying portable Custom Magic Codes");
+            continue; // Never reconstruct a code package as a ROM patch.
+        }
         if(std::chrono::steady_clock::now()>=deadline)throw Error("Online mods exceeded the whole-session preparation limit.");
         const auto part=job.path/"parts"/payload.digest;child(part);
         // AI selection affects the final session, not reconstructed asset bytes.

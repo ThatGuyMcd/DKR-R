@@ -11,8 +11,10 @@
 #if defined(__linux__)
 #include <sys/prctl.h>
 #endif
-#if defined(__APPLE__)
+#if defined(__APPLE__) && !defined(DKR_IOS)
 #include <libproc.h>
+#endif
+#if defined(__APPLE__)
 #include <sandbox.h>
 #include <sys/event.h>
 #endif
@@ -118,6 +120,13 @@ void sandbox_import_worker(const std::filesystem::path& writable_directory) {
 }
 WorkerResult run_worker(const std::filesystem::path& executable,const std::filesystem::path& request,
     const std::function<bool()>& keep_running,std::chrono::milliseconds timeout) {
+#if defined(DKR_IOS)
+    (void)executable;
+    (void)request;
+    (void)keep_running;
+    (void)timeout;
+    throw Error("Legacy mod import is not available in the iOS app.");
+#else
     if(!executable.is_absolute() || !request.is_absolute() || timeout.count()<=0)
         throw Error("Importer requires absolute private executable/request paths and a bounded timeout.");
     if(keep_running && !keep_running()) return {WorkerOutcome::Cancelled,0};
@@ -199,6 +208,7 @@ WorkerResult run_worker(const std::filesystem::path& executable,const std::files
         if(std::chrono::steady_clock::now()>=deadline) return {WorkerOutcome::TimedOut,0};
         std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
+#endif
 #endif
 }
 } // namespace dkr::mods

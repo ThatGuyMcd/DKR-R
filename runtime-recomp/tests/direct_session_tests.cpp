@@ -51,18 +51,32 @@ public:
 };
 
 struct DirectSessionTestAccess {
-    DKR_TEST_NOINLINE static void owned_lane_isolation() {
-        DirectSession receiver;
-        // This fixture injects state without a real transport. Keep the normal
-        // worker from observing that deliberately incomplete session.
+    static bool launch_pending(const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
+        return session.launch_requested_;
+    }
+    static bool resume_arm_announced(const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
+        return session.gameplay_barrier_ && session.gameplay_barrier_->arm_announced;
+    }
+
+    // Fixtures that inject state without a real transport or peers must keep
+    // the live network worker from observing that deliberately incomplete
+    // session; otherwise it runs gameplay and timeout paths against it.
+    static void stop_worker(DirectSession& session) {
+        if (!session.network_worker_.joinable()) return;
         {
             // Match production shutdown: change the wait predicate under its
             // mutex so a notification cannot slip between predicate and wait.
-            std::scoped_lock lock(receiver.mutex_);
-            receiver.worker_stop_.store(true, std::memory_order_release);
+            std::scoped_lock lock(session.mutex_);
+            session.worker_stop_.store(true, std::memory_order_release);
         }
-        receiver.state_changed_.notify_all();
-        receiver.network_worker_.join();
+        session.state_changed_.notify_all();
+        session.network_worker_.join();
+    }
+    DKR_TEST_NOINLINE static void owned_lane_isolation() {
+        DirectSession receiver;
+        stop_worker(receiver);
         assert(receiver.enable_owned_backend(true));
         assert(receiver.owned_backend_available());
         {
@@ -132,12 +146,7 @@ struct DirectSessionTestAccess {
     }
     static void input_freshness_regression() {
         DirectSession client;
-        {
-            std::scoped_lock lock(client.mutex_);
-            client.worker_stop_.store(true, std::memory_order_release);
-        }
-        client.state_changed_.notify_all();
-        client.network_worker_.join();
+        stop_worker(client);
         prepare_fast_forward_guest(client, 100U, 1U);
         client.frame_commits_.clear();
         client.input_delay_ = 1U;
@@ -163,6 +172,7 @@ struct DirectSessionTestAccess {
     }
     static void online_save_status_regression() {
         DirectSession client;
+        stop_worker(client); // drives *_locked and the outbound queues directly
         client.is_host_ = false;
         client.state_ = ConnectionState::Lobby;
         client.local_slot_ = 1U;
@@ -701,6 +711,7 @@ struct DirectSessionTestAccess {
 
     static bool enqueue_checkpoint(DirectSession& session,
                                    std::uint8_t marker) {
+        std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
@@ -709,15 +720,18 @@ struct DirectSessionTestAccess {
             std::vector<std::uint8_t>{marker});
     }
     static std::size_t checkpoint_queue_size(const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         return session.authority_outbound_.size();
     }
     static std::uint8_t oldest_checkpoint_marker(
         const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         return session.authority_outbound_.front().bytes.front();
     }
     static bool enqueue_admission(DirectSession& session,
                                   protocol::MessageType type,
                                   std::uint8_t marker) {
+        std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
@@ -725,9 +739,11 @@ struct DirectSessionTestAccess {
             destination, type, std::vector<std::uint8_t>{marker});
     }
     static std::size_t admission_queue_size(const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         return session.critical_outbound_.size();
     }
     static std::size_t ordinary_queue_size(const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         return session.normal_priority_outbound_.size();
     }
     static std::uint64_t packets_sent(const DirectSession& session) {
@@ -759,6 +775,7 @@ struct DirectSessionTestAccess {
     static void prepare_fast_forward_guest(
         DirectSession& session, std::uint32_t first_frame,
         std::uint32_t frame_count, bool break_last_link = false) {
+        stop_worker(session);
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
         session.state_ = ConnectionState::Running;
@@ -933,6 +950,7 @@ struct DirectSessionTestAccess {
     static protocol::InputBatch repair_unproduced_input(
         DirectSession& session, std::uint32_t submitted_frame,
         std::uint32_t requested_frame, PackedInput held) {
+        stop_worker(session);
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
         session.state_ = ConnectionState::Running;
@@ -960,6 +978,7 @@ struct DirectSessionTestAccess {
     static bool repair_created_input_while_gameplay_is_parked(
         DirectSession& session, std::uint32_t submitted_frame,
         std::uint32_t requested_frame, PackedInput held) {
+        stop_worker(session);
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
         session.state_ = ConnectionState::Running;
@@ -992,6 +1011,7 @@ struct DirectSessionTestAccess {
     }
     static bool enqueue_input_repair(DirectSession& session,
                                      std::uint32_t frame = 0U) {
+        std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
@@ -1000,6 +1020,7 @@ struct DirectSessionTestAccess {
             std::vector<std::uint8_t>{0x52U}, frame);
     }
     static bool enqueue_realtime_input(DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
@@ -1014,28 +1035,27 @@ struct DirectSessionTestAccess {
         // counters (particularly under ARM emulation). Stop it for this one
         // deterministic unit case; pump-free admission below still tests the
         // real workers. Keep every exact-count assertion unchanged.
-        {
-            std::scoped_lock lock(session.mutex_);
-            session.worker_stop_.store(true, std::memory_order_release);
-        }
-        session.state_changed_.notify_all();
-        session.network_worker_.join();
+        stop_worker(session);
         auto transport = std::make_unique<BlockingRealtimeTransport>();
         BlockingRealtimeTransport* result = transport.get();
         session.transport_ = std::move(transport);
         return result;
     }
     static void flush_outbound(DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         session.flush_outbound_locked();
     }
     static std::size_t repair_queue_size(const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         return session.repair_outbound_.size();
     }
     static std::size_t realtime_queue_size(const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         return session.high_priority_outbound_.size();
     }
     static std::size_t simulation_queue_size(
         const DirectSession& session) {
+        std::scoped_lock lock(session.mutex_);
         return session.repair_outbound_.size() +
                session.high_priority_outbound_.size();
     }
@@ -1151,24 +1171,54 @@ void mark_online_game_loaded(
                              runtime.online_save_hash);
 }
 
+// Fixture settling uses a one-millisecond schedule, not one scheduler sleep
+// per poll. On Windows a 1 ms sleep can take an entire timer quantum; charging
+// that overshoot again for every poll turned this test into a two-minute wait.
+// Keep every requested pump and the intended settling duration. Late wakeups
+// catch up to the same steady-clock deadline instead of accumulating drift.
+template <typename Pump>
+void pump_scheduled(int attempts, Pump&& pump) {
+    auto next_poll = std::chrono::steady_clock::now();
+    for (int attempt = 0; attempt < attempts; ++attempt) {
+        pump();
+        next_poll += std::chrono::milliseconds(1);
+        std::this_thread::sleep_until(next_poll);
+    }
+}
+
 void pump_pair(dkr::runtime::netplay::DirectSession& host,
                dkr::runtime::netplay::DirectSession& client,
                int attempts = 200) {
-    for (int attempt = 0; attempt < attempts; ++attempt) {
+    pump_scheduled(attempts, [&] {
         host.pump();
         client.pump();
+    });
+}
+
+// Network completion is a predicate, not a guessed number of timer ticks.
+// The deadline bounds failed exchanges while healthy peers return immediately.
+template <typename Ready>
+void pump_pair_until(dkr::runtime::netplay::DirectSession& host,
+                     dkr::runtime::netplay::DirectSession& client,
+                     const char* stage, Ready&& ready) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    do {
+        host.pump();
+        client.pump();
+        if (ready()) return;
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    } while (std::chrono::steady_clock::now() < deadline);
+    std::cerr << "Timed out waiting for " << stage << '\n';
+    std::abort();
 }
 
 template <std::size_t Count>
 void pump_sessions(
     const std::array<dkr::runtime::netplay::DirectSession*, Count>& sessions,
     int attempts = 200) {
-    for (int attempt = 0; attempt < attempts; ++attempt) {
+    pump_scheduled(attempts, [&] {
         for (auto* session : sessions) session->pump();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    });
 }
 
 } // namespace
@@ -1848,8 +1898,12 @@ int main() {
             host_go = four_host.poll_gameplay_resume(73U, PlayerCount, four_error);
         }
         assert(host_go == SessionPollResult::Ready);
-        pump_sessions(sessions, 40);
         for (std::size_t index = 1U; index < sessions.size(); ++index) {
+            pump_pair_until(four_host, *sessions[index], "multi-racer Go", [&] {
+                const auto result = sessions[index]->poll_gameplay_resume(73U, PlayerCount, four_error);
+                assert(result != SessionPollResult::Failed);
+                return result == SessionPollResult::Ready;
+            });
             assert(sessions[index]->poll_gameplay_resume(
                        73U, PlayerCount, four_error) == SessionPollResult::Ready);
             std::uint32_t resume_frame = ~0U;
@@ -2014,12 +2068,17 @@ int main() {
         assert(lockstep_host.request_start(lockstep_error));
         assert(lockstep_host.view().launch_countdown_active);
         DirectSessionTestAccess::expire_launch_countdown(lockstep_host);
-        pump_pair(lockstep_host, lockstep_client, 60);
+        pump_pair_until(lockstep_host, lockstep_client, "lockstep launch release", [&] {
+            return DirectSessionTestAccess::launch_pending(lockstep_host) &&
+                   DirectSessionTestAccess::launch_pending(lockstep_client);
+        });
         assert(lockstep_host.consume_launch_request());
         assert(lockstep_client.consume_launch_request());
         mark_online_game_loaded(lockstep_host, 0x4C4F434B53544550ULL);
         mark_online_game_loaded(lockstep_client, 0x4C4F434B53544550ULL);
-        pump_pair(lockstep_host, lockstep_client, 80);
+        pump_pair_until(lockstep_host, lockstep_client, "loaded lockstep race", [&] {
+            return lockstep_host.running() && lockstep_client.running();
+        });
         assert(lockstep_host.running());
         assert(lockstep_client.running());
         assert(lockstep_client.begin_gameplay_handoff(
@@ -2060,18 +2119,22 @@ int main() {
         assert(lockstep_host.poll_gameplay_resume(
                    81U, 2U, lockstep_error) ==
                SessionPollResult::Pending);
-        pump_pair(lockstep_host, lockstep_client, 20);
+        pump_pair_until(lockstep_host, lockstep_client, "lockstep Arm announcement", [&] {
+            return DirectSessionTestAccess::resume_arm_announced(lockstep_client);
+        });
         assert(lockstep_client.poll_gameplay_resume(
                    81U, 2U, client_ready_error) ==
                SessionPollResult::Pending);
-        pump_pair(lockstep_host, lockstep_client, 20);
-        assert(lockstep_host.poll_gameplay_resume(
-                   81U, 2U, lockstep_error) ==
-               SessionPollResult::Ready);
-        pump_pair(lockstep_host, lockstep_client, 20);
-        assert(lockstep_client.poll_gameplay_resume(
-                   81U, 2U, client_ready_error) ==
-               SessionPollResult::Ready);
+        pump_pair_until(lockstep_host, lockstep_client, "lockstep_host resume Ready", [&] {
+            const auto result = lockstep_host.poll_gameplay_resume(81U, 2U, lockstep_error);
+            assert(result != SessionPollResult::Failed);
+            return result == SessionPollResult::Ready;
+        });
+        pump_pair_until(lockstep_host, lockstep_client, "lockstep_client resume Ready", [&] {
+            const auto result = lockstep_client.poll_gameplay_resume(81U, 2U, client_ready_error);
+            assert(result != SessionPollResult::Failed);
+            return result == SessionPollResult::Ready;
+        });
         std::uint32_t client_frame = ~0U;
         assert(lockstep_client.complete_gameplay_handoff(
             client_frame, lockstep_error));
@@ -2119,7 +2182,9 @@ int main() {
     assert(client.set_ready(true, error));
     pump_pair(host, client);
     assert(host.request_start(error));
-    pump_pair(host, client, 10);
+    pump_pair_until(host, client, "client launch countdown", [&] {
+        return client.view().launch_countdown_active;
+    });
     const auto countdown_host_view = host.view();
     const auto countdown_client_view = client.view();
     assert(countdown_host_view.launch_countdown_active);
@@ -2133,7 +2198,10 @@ int main() {
     // Prepare/Commit/Release transaction must still launch both racers.
     DirectSessionTestAccess::forget_remote_countdown_ack(host, 1U);
     DirectSessionTestAccess::expire_launch_countdown(host);
-    pump_pair(host, client, 50);
+    pump_pair_until(host, client, "launch release", [&] {
+        return DirectSessionTestAccess::launch_pending(host) &&
+               DirectSessionTestAccess::launch_pending(client);
+    });
     assert(host.consume_launch_request());
     assert(client.consume_launch_request());
     const auto host_launch = host.launch_descriptor();
@@ -2147,7 +2215,9 @@ int main() {
 
     mark_online_game_loaded(host, 0x1122334455667788ULL);
     mark_online_game_loaded(client, 0x1122334455667788ULL);
-    pump_pair(host, client, 100);
+    pump_pair_until(host, client, "loaded race", [&] {
+        return host.running() && client.running();
+    });
     assert(host.running());
     assert(client.running());
 
@@ -2282,20 +2352,26 @@ int main() {
     assert(host.poll_gameplay_resume(resolved_boss_intro_map, 8U,
                                      host_barrier_error) ==
            SessionPollResult::Pending);
-    pump_pair(host, client, 20);
+    pump_pair_until(host, client, "client Arm announcement", [&] {
+        return DirectSessionTestAccess::resume_arm_announced(client);
+    });
     assert(client.poll_gameplay_resume(resolved_boss_intro_map, 8U,
                                        client_barrier_error) ==
            SessionPollResult::Pending);
     // Receiving Arm is not enough: both authored threads remain parked until
     // Player 1 has received every Armed acknowledgement and broadcasts Go.
-    pump_pair(host, client, 20);
-    assert(host.poll_gameplay_resume(resolved_boss_intro_map, 8U,
-                                     host_barrier_error) ==
-           SessionPollResult::Ready);
-    pump_pair(host, client, 20);
-    assert(client.poll_gameplay_resume(resolved_boss_intro_map, 8U,
-                                       client_barrier_error) ==
-           SessionPollResult::Ready);
+    pump_pair_until(host, client, "host resume Ready", [&] {
+        const auto result = host.poll_gameplay_resume(
+            resolved_boss_intro_map, 8U, host_barrier_error);
+        assert(result != SessionPollResult::Failed);
+        return result == SessionPollResult::Ready;
+    });
+    pump_pair_until(host, client, "client resume Ready", [&] {
+        const auto result = client.poll_gameplay_resume(
+            resolved_boss_intro_map, 8U, client_barrier_error);
+        assert(result != SessionPollResult::Failed);
+        return result == SessionPollResult::Ready;
+    });
     std::uint32_t host_resume_frame = 0U;
     std::uint32_t client_resume_frame = 0U;
     assert(client.complete_gameplay_handoff(client_resume_frame, error));
@@ -2325,8 +2401,11 @@ int main() {
     const std::array<std::uint8_t, 7> host_rollback{
         0x44U, 0x4BU, 0x52U, 0x01U, 0x80U, 25U, 0xFBU};
     assert(host.send_rollback_packet(1U, host_rollback));
-    pump_pair(host, client, 40);
-    auto client_rollback = client.take_rollback_packets();
+    decltype(client.take_rollback_packets()) client_rollback;
+    pump_pair_until(host, client, "client rollback packet", [&] {
+        client_rollback = client.take_rollback_packets();
+        return !client_rollback.empty();
+    });
     assert(client_rollback.size() == 1U);
     assert(client_rollback[0].source_slot == 0U);
     assert(client_rollback[0].bytes == std::vector<std::uint8_t>(
@@ -2335,8 +2414,11 @@ int main() {
     const std::array<std::uint8_t, 7> client_rollback_payload{
         0x44U, 0x4BU, 0x52U, 0x02U, 0x40U, 0xE2U, 8U};
     assert(client.send_rollback_packet(0U, client_rollback_payload));
-    pump_pair(host, client, 40);
-    auto host_rollback_packets = host.take_rollback_packets();
+    decltype(host.take_rollback_packets()) host_rollback_packets;
+    pump_pair_until(host, client, "host rollback packet", [&] {
+        host_rollback_packets = host.take_rollback_packets();
+        return !host_rollback_packets.empty();
+    });
     assert(host_rollback_packets.size() == 1U);
     assert(host_rollback_packets[0].source_slot == 1U);
     assert(host_rollback_packets[0].bytes == std::vector<std::uint8_t>(
@@ -2373,7 +2455,11 @@ int main() {
     // rollback guest reaches the measured lead ceiling, Player 1 must park;
     // the old 96-frame exception allowed 3.2 seconds of permanent client debt.
     client.report_simulation_progress(host_resume_frame);
-    pump_pair(host, client, 20);
+    pump_pair_until(host, client, "race completed-frame watermark", [&] {
+        return host.host_should_backpressure(
+                   host_resume_frame + prediction_burst_frames, 3U) &&
+               host.view().recovering_peer_count == 1U;
+    });
     assert(host.host_should_backpressure(
         host_resume_frame + prediction_burst_frames, 3U));
     assert(host.view().recovering_peer_count == 1U);
@@ -2458,7 +2544,9 @@ int main() {
                repaired_commit_frame, {0x8000U, 25, -5}, repair_host_inputs,
                std::chrono::milliseconds(0)) ==
            InputSynchronizationResult::Committed);
-    pump_pair(host, client, 20);
+    pump_pair_until(host, client, "repair fixture commit delivery", [&] {
+        return DirectSessionTestAccess::has_frame_commit(client, repaired_commit_frame);
+    });
     assert(DirectSessionTestAccess::has_frame_commit(
         client, repaired_commit_frame));
     DirectSessionTestAccess::discard_frame_commit(
@@ -2470,7 +2558,10 @@ int main() {
                repaired_commit_frame, {0x4000U, -30, 8},
                repair_client_inputs, std::chrono::milliseconds(0)) ==
            InputSynchronizationResult::Pending);
-    pump_pair(host, client, 40);
+    pump_pair_until(host, client, "commit repair request", [&] {
+        return DirectSessionTestAccess::commit_repair_requests_sent(client) > repair_requests_before &&
+               DirectSessionTestAccess::commit_repair_requests_received(host) > 0U;
+    });
     assert(DirectSessionTestAccess::commit_repair_requests_sent(client) >
            repair_requests_before);
     assert(DirectSessionTestAccess::commit_repair_requests_received(host) >
@@ -2642,7 +2733,9 @@ int main() {
     client.begin_authoritative_phase();
     host.submit_state_hash(60U, 0xAABBCCDDEEFF0011ULL);
     client.submit_state_hash(60U, 0xAABBCCDDEEFF0011ULL);
-    pump_pair(host, client, 30);
+    pump_pair_until(host, client, "verified state hashes", [&] {
+        return host.view().last_verified_frame == 60U && client.view().last_verified_frame == 60U;
+    });
     assert(host.view().last_verified_frame == 60U);
     assert(client.view().last_verified_frame == 60U);
     assert(host.view().rollback_certified);
@@ -2650,7 +2743,9 @@ int main() {
 
     host.submit_state_hash(120U, 0x1111111111111111ULL);
     client.submit_state_hash(120U, 0x2222222222222222ULL);
-    pump_pair(host, client, 30);
+    pump_pair_until(host, client, "recovery announcement", [&] {
+        return host.recovery_frame().has_value() && client.recovery_frame().has_value();
+    });
     assert(host.view().state == ConnectionState::Running);
     assert(client.view().state == ConnectionState::Running);
     // A completed-frame digest mismatch schedules exactly one future repair
@@ -2734,9 +2829,11 @@ int main() {
                                      client_finish_error));
     assert(client_finish_error.empty());
     assert(host.begin_finish_seal(finish_frame, 1U, error));
-    pump_pair(host, client, 10);
-    assert(client.begin_finish_seal(client_finish_frame, 1U,
-                                    client_finish_error));
+    pump_pair_until(host, client, "client finish announcement", [&] {
+        const bool ready = client.begin_finish_seal(client_finish_frame, 1U, client_finish_error);
+        assert(client_finish_error.empty());
+        return ready;
+    });
     assert(client_finish_frame == finish_frame);
     // Finishes deliberately do not transfer another state snapshot. Both
     // peers consumed the same immutable authored commits; only the lifecycle
@@ -2827,6 +2924,10 @@ int main() {
             frame, TimelineProgressScope::Frontend);
         pump_pair(host, client, 8);
     }
+    pump_pair_until(host, client, "frontend completed-frame watermark", [&] {
+        return !host.host_should_backpressure(
+            frontend_host_frame, 8U, TimelineProgressScope::Frontend);
+    });
     assert(!host.host_should_backpressure(
         frontend_host_frame, 8U, TimelineProgressScope::Frontend));
 
@@ -2840,7 +2941,9 @@ int main() {
                std::chrono::milliseconds(0)) ==
            InputSynchronizationResult::Committed);
     ++frontend_host_frame;
-    pump_pair(host, client, 20);
+    pump_pair_until(host, client, "frontend commit delivery", [&] {
+        return DirectSessionTestAccess::has_frame_commit(client, repair_frame);
+    });
     assert(DirectSessionTestAccess::has_frame_commit(client, repair_frame));
     DirectSessionTestAccess::discard_frame_commit(client, repair_frame);
     const auto frontend_repair_requests_before =
@@ -2850,7 +2953,11 @@ int main() {
                repair_frame, {0x4000U, -19, 8}, pending_repair_inputs,
                std::chrono::milliseconds(0)) ==
            InputSynchronizationResult::Pending);
-    pump_pair(host, client, 40);
+    pump_pair_until(host, client, "frontend commit repair", [&] {
+        return DirectSessionTestAccess::commit_repair_requests_received(host) >
+                   frontend_repair_requests_before &&
+               DirectSessionTestAccess::has_frame_commit(client, repair_frame);
+    });
     assert(DirectSessionTestAccess::commit_repair_requests_received(host) >
            frontend_repair_requests_before);
     assert(DirectSessionTestAccess::has_frame_commit(client, repair_frame));
@@ -2917,9 +3024,11 @@ int main() {
         second_host_go = host.poll_gameplay_resume(91U, 8U, error);
     }
     assert(second_host_go == SessionPollResult::Ready);
-    pump_pair(host, client, 20);
-    assert(client.poll_gameplay_resume(91U, 8U, error) ==
-           SessionPollResult::Ready);
+    pump_pair_until(host, client, "second race Go", [&] {
+        const auto result = client.poll_gameplay_resume(91U, 8U, error);
+        assert(result != SessionPollResult::Failed);
+        return result == SessionPollResult::Ready;
+    });
     std::uint32_t second_host_resume = 0U;
     std::uint32_t second_client_resume = 0U;
     assert(host.complete_gameplay_handoff(second_host_resume, error));
@@ -2978,7 +3087,9 @@ int main() {
         client.end_authoritative_phase();
         const auto requested = resolved_map <= 14U ? 12U : resolved_map;
         assert(host.begin_gameplay_handoff(boundary, requested, error));
-        pump_pair(host, client, 25);
+        pump_pair_until(host, client, "chained handoff announcement", [&] {
+            return client.gameplay_handoff_suspended(boundary);
+        });
         assert(client.gameplay_handoff_suspended(boundary));
         assert(client.begin_gameplay_handoff(boundary, requested, error));
         host.begin_authoritative_phase();
@@ -3013,8 +3124,11 @@ int main() {
         // Cinematic host retires racer authority immediately. Client may still
         // need its Go retry; retained terminal replies survive that teardown.
         if (racers == 0U) host.end_authoritative_phase();
-        pump_pair(host, client, 25);
-        assert(client.poll_gameplay_resume(resolved_map, racers, error) == SessionPollResult::Ready);
+        pump_pair_until(host, client, "chained retained Go", [&] {
+            const auto result = client.poll_gameplay_resume(resolved_map, racers, error);
+            assert(result != SessionPollResult::Failed);
+            return result == SessionPollResult::Ready;
+        });
         assert(client.complete_gameplay_handoff(client_resume, error));
         if (racers == 0U) client.end_authoritative_phase();
         assert(host_resume == boundary && client_resume == boundary);

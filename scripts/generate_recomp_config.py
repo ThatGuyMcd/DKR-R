@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
 from pathlib import Path
 
 
 def toml_string(value: str) -> str:
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    # JSON and TOML basic strings share these escapes, except TOML also
+    # forbids an unescaped DEL character. Keep Unicode readable.
+    return json.dumps(value, ensure_ascii=False).replace(chr(127), "\\u007f")
 
 
 def string_list(entries: list[dict[str, object]]) -> str:
@@ -24,6 +27,8 @@ def main() -> int:
     parser.add_argument("--output-functions", required=True, type=Path)
     parser.add_argument("--entrypoint", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--composed-policy", type=Path,
+                        help="Write the complete checked policy for code-mod hook protection")
     parser.add_argument("--use-mdebug", action="store_true")
     parser.add_argument("--water-profile", action="store_true", help="Compose checked water timing hooks")
     parser.add_argument("--functions-per-output-file", type=int,
@@ -56,9 +61,21 @@ def main() -> int:
     policy = compose_behaviour(policy, arguments.elf, revision)
     from audio_queue_policy import compose_audio_queue
     policy = compose_audio_queue(policy, arguments.elf, revision)
+    from startup_flow_policy import compose_startup_flow
+    policy = compose_startup_flow(policy, arguments.elf, revision)
     if arguments.water_profile:
         from water_profile_policy import compose_water_profile
         policy = compose_water_profile(policy, arguments.elf)
+    if arguments.composed_policy:
+        # Baseline-only inventories miss project hooks added by composition.
+        # This receipt is emitted only after every selected policy has run.
+        receipt = dict(schema=1, revision=revision,
+                       elf_sha256=hashlib.sha256(arguments.elf.read_bytes()).hexdigest(),
+                       complete=True, policy=policy)
+        if arguments.composed_policy.resolve() in (arguments.policy.resolve(), arguments.elf.resolve(), arguments.output.resolve()):
+            raise ValueError('Composed policy must not overwrite an input or the generated TOML')
+        arguments.composed_policy.parent.mkdir(parents=True, exist_ok=True)
+        arguments.composed_policy.write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
 
     manual = ", ".join(
         "{ name = %s, section = %s, vram = %s, size = %s }"

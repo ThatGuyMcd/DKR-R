@@ -2,6 +2,9 @@
 #include "legacy_track_catalog.hpp"
 #include "../dkr_save_codec.hpp"
 #include "../custom_tracks.hpp"
+#include "../rom_revision.hpp"
+#include "magic_code_game_world.hpp"
+#include "online_game_pak.hpp"
 #include <algorithm>
 
 namespace dkr::mods {
@@ -16,28 +19,31 @@ void regular(const std::filesystem::path& path) {
         throw Error("The Adventure save must be a regular file, not a link.");
 }
 }
-std::vector<Bytes> publish_dkrmap_artwork(std::shared_ptr<const AssetBank> boot) {
+AssetBank::Overrides publish_dkrmap_artwork(std::shared_ptr<const AssetBank> boot) {
     if(!boot)throw Error("dkrmap artwork requires a verified boot bank.");
-    const auto count=boot->record_count(2);
-    const auto directory=AssetDirectory::build(std::move(boot));
-    const auto table_bytes=directory->read(3,0,directory->section_size(3));
-    std::vector<std::int32_t> table;
-    for(std::size_t at=0;at+4<=table_bytes.size();at+=4) {
-        table.push_back(static_cast<std::int32_t>(be32(table_bytes,at)));
-        if(table.back()==-1)break;
-    }
-    if(table.size()<2 || table.back()!=-1 || table.size()-2!=count)
-        throw Error("Boot artwork table does not describe its records.");
+    const auto directory=AssetDirectory::build(boot);
     namespace authored=dkr::runtime::custom_tracks;
-    // Section-3 loads of a mounted boot bank never reach the dkrmap table
-    // hook, so this is the one build of the texture table for the session.
-    const auto extended=authored::build_extended_table(authored::Section::Textures3D,table.data());
-    std::vector<Bytes> artwork;
-    for(std::size_t id=count;id+2<extended.size();++id) {
-        const auto size=extended[id+1]-extended[id];
-        const auto bytes=authored::payload_for(authored::Section::Textures3D,extended[id],size);
-        if(!bytes || size<=0)throw Error("Shared track artwork lost its published payload.");
-        artwork.emplace_back(bytes,bytes+size);
+    AssetBank::Overrides artwork;
+    for(const auto section:{authored::Section::Textures3D,authored::Section::Textures2D,authored::Section::Sprites}) {
+        const unsigned data=section==authored::Section::Textures3D?2:section==authored::Section::Textures2D?4:12;
+        const auto count=boot->record_count(data);
+        const auto table_bytes=directory->read(data+1,0,directory->section_size(data+1));
+        std::vector<std::int32_t> table;
+        for(std::size_t at=0;at+4<=table_bytes.size();at+=4) {
+            table.push_back(static_cast<std::int32_t>(be32(table_bytes,at)));
+            if(table.back()==-1)break;
+        }
+        if(table.size()<2 || table.back()!=-1 || table.size()-2!=count)
+            throw Error("Boot artwork table does not describe its records.");
+        // Exact lengths also cover large character/portrait namespaces; never
+        // truncate them at the old 4096-word retail scan limit.
+        const auto extended=authored::build_extended_table(section,table.data(),table.size());
+        for(std::size_t id=count;id+2<extended.size();++id) {
+            const auto size=extended[id+1]-extended[id];
+            const auto bytes=authored::payload_for(section,extended[id],size);
+            if(!bytes || size<=0)throw Error("Shared track artwork lost its published payload.");
+            artwork.emplace(AssetKey{data,static_cast<unsigned>(id)},Bytes(bytes,bytes+size));
+        }
     }
     return artwork;
 }
@@ -48,9 +54,54 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     // The offline catalog is never consulted for online launches. The lobby's
     // separately verified, frozen RuntimeResources supply online assets.
     if(online)return out;
-    const auto root=config/"mods"/"legacy";
-    if(!TrackCatalog::has_enabled(root))return out;
     auto report=[&](const char* message){if(stop.stop_requested())throw Error("Game launch cancelled.");if(progress)progress(message);};
+    const auto code_root=config/"mods"/"custom-magic-codes";
+    if(std::filesystem::exists(code_root/"library.json")) {
+        report("Preparing Custom Magic Codes");
+        const auto revision=dkr::runtime::rom::inspect(rom).revision;
+        code::Library library(code_root,DKR_RELEASE_VERSION);
+        auto frozen=std::make_shared<code::FrozenSet>(library.freeze(online::asset_revision(revision),false,
+            code::GameWorld::policy().modules,stop));
+        if(!frozen->ordered.empty())out->code=std::move(frozen);
+    }
+    auto finish=[&]() -> std::shared_ptr<const PreparedModLaunch> {
+        if(out->code) {
+            if(std::any_of(out->code->ordered.begin(),out->code->ordered.end(),[](const auto& p){return p->modules.contains("trophies")||!p->tracks.empty();})) {
+                std::vector<std::filesystem::path> labs;
+                for(const auto& track:dkr::runtime::custom_tracks::tracks())if(track.enabled)labs.push_back(track.source);
+                // Header IDs are not published until the retail boot later.
+                // Derive them now in the SAME enabled-track scan order that
+                // offline table assembly uses, not online's canonical order
+                // and not a stale/empty previous-session global ID map.
+                auto courses=code::trophy::installed_catalogue(rom,config/"mods"/"legacy",labs,stop,false);
+                auto rebound=std::make_shared<code::FrozenSet>(*out->code);
+                code::trophy::rebind(*rebound,courses,online::asset_revision(dkr::runtime::rom::inspect(rom).revision));out->code=std::move(rebound);
+            }
+            const auto identity="dkr-offline-code-session-1\n"+out->fingerprint+"\n"+out->code->identity;
+            out->fingerprint=sha256(View(reinterpret_cast<const std::uint8_t*>(identity.data()),identity.size()));
+        }
+        if(out->fingerprint.empty())return out;
+        out->save_subfolder=std::filesystem::path("mods")/out->fingerprint;
+        out->save_path=config/"saves"/out->save_subfolder/"dkr.us.v77.bin";
+        out->pak_directory=config/"saves"/out->save_subfolder/"paks";
+        report("Preparing separate modded-session saves");
+        ordinary(config);child(config/"saves");child(config/"saves"/"mods");child(out->save_path.parent_path());child(out->pak_directory);
+        using namespace dkr::runtime::saves;
+        if(!std::filesystem::exists(out->save_path)) {
+            const auto original=config/"saves"/"dkr.us.v77.bin";
+            auto seed=codec::blank_bytes();
+            if(std::filesystem::exists(original)) {
+                regular(original);seed=read_file(original,codec::kImageSize);
+                if(!codec::validate(seed))throw Error("The single-player Adventure save is invalid. It was not changed or copied into a modded session.");
+            }
+            write_new_file(out->save_path,seed);
+        }
+        regular(out->save_path);
+        if(!codec::validate(read_file(out->save_path,codec::kImageSize)))throw Error("The separate modded-session save is invalid. Restore it before starting this mod set.");
+        report("Custom mods ready");return out;
+    };
+    const auto root=config/"mods"/"legacy";
+    if(!TrackCatalog::has_enabled(root))return finish();
     report("Validating the original Game Pak");
     auto bytes=read_file(rom,MaxImage);canonicalize_rom(bytes);
     const auto stock=AssetBank::stock(std::move(bytes));
@@ -64,8 +115,9 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     report("Preparing the isolated game asset session");
     // Character IDs are allocated first. Publish dkrmap IDs against that
     // namespace, then retain the same immutable artwork in every scene bank.
-    auto shared_textures=publish_dkrmap_artwork(names?names->apply(stock):stock);
-    auto session=std::make_shared<RuntimeSession>(stock,names,std::move(shared_textures));
+    auto artwork=std::make_shared<const AssetBank::Overrides>(publish_dkrmap_artwork(names?names->apply(stock):stock));
+    auto session=std::make_shared<RuntimeSession>(stock,names,std::vector<Bytes>{},
+        [artwork](std::shared_ptr<const AssetBank> bank){return AssetBank::append_artwork(std::move(bank),*artwork);});
     std::vector<std::string> identities;
     for(auto& track:tracks) {
         report("Preparing custom Track Select previews");
@@ -81,25 +133,7 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     std::string identity="dkr-offline-mod-session-1\n"+stock->fingerprint()+"\n";
     for(const auto& part:identities)identity+=part+"\n";
     out->fingerprint=sha256(View(reinterpret_cast<const std::uint8_t*>(identity.data()),identity.size()));
-    out->save_subfolder=std::filesystem::path("mods")/out->fingerprint;
-    out->save_path=config/"saves"/out->save_subfolder/"dkr.us.v77.bin";
-    out->pak_directory=config/"saves"/out->save_subfolder/"paks";
-    report("Preparing separate modded-session saves");
-    ordinary(config);child(config/"saves");child(config/"saves"/"mods");child(out->save_path.parent_path());child(out->pak_directory);
-    using namespace dkr::runtime::saves;
-    if(!std::filesystem::exists(out->save_path)) {
-        const auto original=config/"saves"/"dkr.us.v77.bin";
-        auto seed=codec::blank_bytes();
-        if(std::filesystem::exists(original)) {
-            regular(original);seed=read_file(original,codec::kImageSize);
-            if(!codec::validate(seed))throw Error("The single-player Adventure save is invalid. It was not changed or copied into a modded session.");
-        }
-        // Exclusive creation, never replace an existing modded or stock save.
-        write_new_file(out->save_path,seed);
-    }
-    regular(out->save_path);
-    if(!codec::validate(read_file(out->save_path,codec::kImageSize)))throw Error("The separate modded-session save is invalid. Restore it before starting this mod set.");
-    report("Custom mods ready");out->session=std::move(session);return out;
+    out->session=std::move(session);return finish();
 }
 ModLaunch::~ModLaunch(){cancel();if(thread_.joinable())thread_.join();}
 ModLaunchView ModLaunch::snapshot()const{std::lock_guard lock(mutex_);return state_;}

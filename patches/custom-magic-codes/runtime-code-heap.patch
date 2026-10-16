@@ -1,0 +1,13 @@
+diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
+--- a/librecomp/src/recomp.cpp
++++ b/librecomp/src/recomp.cpp
+@@ -689,5 +689,8 @@
+                 }
+ 
+-                recomp::init_heap(rdram, recomp::mod_rdram_start + mod_ram_used);
++                // DKR's portable code world owns 0x81000000..0x81800000.
++                // Its checked allocator/checkpoint never shares O1Heap metadata.
++                // This reserved address range is identical on every platform.
++                recomp::init_heap(rdram, recomp::mod_rdram_start + mod_ram_used + 0x00800000U);
+ 
+                 save_type = game_entry.save_type;

@@ -101,16 +101,17 @@ public:
     PresentationMailbox();
     ~PresentationMailbox();
     static constexpr std::size_t kImageBytes=16U*1024U*1024U;
+    static constexpr std::size_t kCodeImageBytes=24U*1024U*1024U;
     // At most two queued leases + one latest pending + replacement candidate.
     // Bounds payload allocation, not allocator overhead or whole-process RSS.
-    static constexpr std::size_t kPeakPayloadBytes=4*kImageBytes;
+    static constexpr std::size_t kPeakPayloadBytes=4*kCodeImageBytes;
     // Draw observations belong to the same four immutable owners. Their
     // bounded pool is additional to RAM, never another queued-frame FIFO.
     static constexpr std::size_t kPeakDrawEventBytes=4*DKR_OWNED_MAX_DRAW_EVENTS*sizeof(dkr_owned_draw_event);
     // Includes the one active worker's mutable workspace, not GPU resources,
     // metadata or separately retained immutable local-scene assets (<=4 MiB
     // per cache generation). Never a total-process memory ceiling.
-    static constexpr std::size_t kPeakDecodePayloadBytes=kPeakPayloadBytes+kImageBytes;
+    static constexpr std::size_t kPeakDecodePayloadBytes=kPeakPayloadBytes+kCodeImageBytes;
     bool begin_epoch(std::uint64_t epoch);
     bool publish(std::uint64_t epoch,RenderDescriptor descriptor,std::span<const std::uint8_t> ram,
                  std::span<const dkr_owned_draw_event> events={},std::shared_ptr<const LocalSceneryScene> scenery={});

@@ -1,15 +1,26 @@
-"""CMake cross-compiling emulator for the pinned renderer's file_to_c target.
-
-Run the separately built host tool, never the Android target executable.
-"""
+"""Run the renderer's separately built host file_to_c tool when cross-compiling."""
+import argparse
 import pathlib
 import subprocess
 import sys
 
-if len(sys.argv) < 3:
-    raise SystemExit("Expected host tool, target tool and arguments")
-host = pathlib.Path(sys.argv[1]).resolve(strict=True)
-target = pathlib.Path(sys.argv[2]).stem
-if target != "file_to_c":
-    raise SystemExit("Only the renderer file_to_c build tool is supported")
-raise SystemExit(subprocess.call([str(host), *sys.argv[3:]]))
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("host", type=pathlib.Path)
+    parser.add_argument("target", type=pathlib.Path)
+    parser.add_argument("arguments", nargs=argparse.REMAINDER)
+    args = parser.parse_args(argv)
+    if args.target.stem != "file_to_c":
+        parser.error("Only the renderer file_to_c build tool is supported")
+    try:
+        host = args.host.resolve(strict=True)
+        return subprocess.call([str(host), *args.arguments])
+    except OSError as error:
+        print(f"Cannot run host shader tool {args.host}: {error}. "
+              "Build the host file_to_c target before cross-compiling.", file=sys.stderr)
+        return 127
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

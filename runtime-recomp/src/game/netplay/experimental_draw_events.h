@@ -17,7 +17,8 @@ enum dkr_owned_draw_kind {
     DKR_OWNED_MATRIX, DKR_OWNED_GEOMETRY, DKR_OWNED_SHADOW,
     DKR_OWNED_HUD_PASS, DKR_OWNED_HUD_WIDGET, DKR_OWNED_HUD_RECT,
     DKR_OWNED_TRANSITION, DKR_OWNED_SKY_MATRIX, DKR_OWNED_FRAME_METADATA,
-    DKR_OWNED_LOCAL_SCENERY
+    DKR_OWNED_LOCAL_SCENERY,
+    DKR_OWNED_TRACK_UI_BEGIN, DKR_OWNED_TRACK_UI_END, DKR_OWNED_TRACK_PREVIEW
 };
 typedef struct dkr_owned_draw_event {
     uint32_t kind,address,token;
@@ -27,7 +28,7 @@ typedef struct dkr_owned_draw_event {
 } dkr_owned_draw_event;
 
 static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
-    if(e->kind<DKR_OWNED_BACKGROUND_BEGIN || e->kind>DKR_OWNED_LOCAL_SCENERY ||
+    if(e->kind<DKR_OWNED_BACKGROUND_BEGIN || e->kind>DKR_OWNED_TRACK_PREVIEW ||
        e->address<0x80000000U || e->address>0x807FFFD8U)return 0;
     const int quad=e->kind==DKR_OWNED_BACKGROUND_QUAD ||
         e->kind==DKR_OWNED_SPLIT_SKY_QUAD || e->kind==DKR_OWNED_SPLIT_VOID_QUAD;
@@ -68,6 +69,14 @@ static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
             for(unsigned segment=e->parameters[8];segment<128;++segment)
                 if(e->parameters[9+segment/32]&(1U<<(segment&31U)))return 0;
             used=16;break;
+        case DKR_OWNED_TRACK_UI_BEGIN:case DKR_OWNED_TRACK_UI_END:
+            if(e->token)return 0;break;
+        case DKR_OWNED_TRACK_PREVIEW:
+            if(e->token)return 0;
+            for(unsigned i=0;i<4;++i)if((int32_t)e->parameters[i]<-4096 || (int32_t)e->parameters[i]>4096)return 0;
+            if((int32_t)e->parameters[0]>=(int32_t)e->parameters[2] ||
+               (int32_t)e->parameters[1]>=(int32_t)e->parameters[3])return 0;
+            used=4;break;
         default:return 0;
         }
         for(unsigned i=used;i<16;++i)if(e->parameters[i])return 0;

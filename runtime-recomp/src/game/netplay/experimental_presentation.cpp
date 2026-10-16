@@ -12,14 +12,16 @@ struct SubmissionDomain {
     std::size_t in_flight=0,consumers=0;
     bool alive=true;
     // Two queued immutable images + latest pending + publication candidate,
-    // one decoder, INCLUDING cached capacity: hard cap 80 MiB, not a FIFO.
+    // one decoder, INCLUDING cached capacity: 80 MiB vanilla / 120 MiB
+    // with portable code storage. Slot count never grows into a FIFO.
     std::mutex buffers_mutex;
     std::array<RenderSnapshot::Storage,4> images;
     std::vector<std::uint8_t> decoder;
     PresentationMailbox::BufferStatistics buffers;
-    RenderSnapshot::Storage acquire_image(std::span<const dkr_owned_draw_event> events) {
+    RenderSnapshot::Storage acquire_image(std::size_t bytes,std::span<const dkr_owned_draw_event> events) {
         std::scoped_lock lock(buffers_mutex);
         for(auto& image:images)if(!image.ram.empty()) {
+            image.ram.resize(bytes);
             const bool allocate=events.size()>image.events.capacity();
             // Reserve once to the admission limit, never grow a per-tick
             // vector. A failure leaves this free slot's RAM available; no
@@ -33,7 +35,7 @@ struct SubmissionDomain {
         }
         if(buffers.image_allocations==images.size())throw std::bad_alloc();
         RenderSnapshot::Storage image;
-        image.ram.resize(PresentationMailbox::kImageBytes);
+        image.ram.resize(bytes);
         if(!events.empty())image.events.reserve(DKR_OWNED_MAX_DRAW_EVENTS);
         if(!events.empty())image.events.assign(events.begin(),events.end());
         ++buffers.image_allocations;
@@ -45,11 +47,11 @@ struct SubmissionDomain {
         for(auto& destination:images)if(destination.ram.empty()){destination=std::move(image);return;}
         std::terminate(); // A duplicated release is an ownership error, never spill memory.
     }
-    std::vector<std::uint8_t> acquire_decoder() {
+    std::vector<std::uint8_t> acquire_decoder(std::size_t bytes) {
         std::scoped_lock lock(buffers_mutex);
-        if(!decoder.empty()){++buffers.decode_reuses;return std::move(decoder);}
+        if(!decoder.empty()){decoder.resize(bytes);++buffers.decode_reuses;return std::move(decoder);}
         if(buffers.decode_allocations==1)throw std::bad_alloc();
-        std::vector<std::uint8_t> image(PresentationMailbox::kImageBytes);
+        std::vector<std::uint8_t> image(bytes);
         ++buffers.decode_allocations;return image;
     }
     void release_decoder(std::vector<std::uint8_t> image) noexcept {
@@ -58,7 +60,7 @@ struct SubmissionDomain {
 };
 namespace {
 bool valid(RenderDescriptor d,std::span<const std::uint8_t> ram) {
-    if(ram.size()!=PresentationMailbox::kImageBytes || d.frame==UINT32_MAX || d.black>1 ||
+    if((ram.size()!=PresentationMailbox::kImageBytes&&ram.size()!=PresentationMailbox::kCodeImageBytes) || d.frame==UINT32_MAX || d.black>1 ||
        d.display_start<0x80000000U || (d.display_start&7) || (d.display_end&7) ||
        d.display_end<d.display_start || d.display_end-d.display_start<16 ||
        d.display_end>0x80800000U ||
@@ -73,7 +75,7 @@ RenderSnapshot::RenderSnapshot(std::uint64_t epoch,std::uint64_t generation,Rend
                              std::span<const std::uint8_t> ram,std::span<const dkr_owned_draw_event> events,
                              std::shared_ptr<SubmissionDomain> domain,std::shared_ptr<const LocalSceneryScene> scenery)
     :epoch_(epoch),generation_(generation),descriptor_(descriptor),local_scenery_(std::move(scenery)),
-     domain_(std::move(domain)),storage_(domain_->acquire_image(events)) {
+     domain_(std::move(domain)),storage_(domain_->acquire_image(ram.size(),events)) {
     std::memcpy(storage_.ram.data(),ram.data(),ram.size());
 }
 std::uint64_t RenderSnapshot::hash() const {
@@ -107,7 +109,7 @@ PresentationMailbox::~PresentationMailbox() {
     std::scoped_lock lock(domain_->mutex);domain_->alive=false;
 }
 DecodeWorkspace::DecodeWorkspace(std::shared_ptr<const RenderSnapshot> snapshot)
-    :snapshot_(std::move(snapshot)),ram_(snapshot_->domain_->acquire_decoder()) {
+    :snapshot_(std::move(snapshot)),ram_(snapshot_->domain_->acquire_decoder(snapshot_->bytes().size())) {
     const auto bytes=snapshot_->bytes();std::memcpy(ram_.data(),bytes.data(),bytes.size());
 }
 std::unique_ptr<DecodeWorkspace> DecodeWorkspace::create(std::shared_ptr<const RenderSnapshot> snapshot) {

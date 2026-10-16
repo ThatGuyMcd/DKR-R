@@ -1,0 +1,83 @@
+DKR-R 1.0.6
+
+There's been a lot going on since 1.0.5! This release brings the recent local
+fixes and contributor work together on the same source for every supplied build.
+
+Skip intro now keeps the Start menu's original opening sequence. In Play,
+tick Skip intro logos and choose Start menu or Character select. The setting
+is offline-only; online boot and Track Lab's direct track launch stay unchanged.
+
+Enhanced lava can now illuminate nearby geometry with a smooth pulsating glow.
+Select enhanced water and Hardware ray tracing, then open RTX lava lighting
+for its own on/off tickbox, Performance/Balanced/High quality, intensity,
+pulse strength, pulse speed and range. Turning scene lighting off keeps the
+rough, glowing lava surface and other enhanced-water effects enabled.
+Balanced uses half-resolution lighting; Performance uses quarter resolution,
+without reducing the game's selected image resolution. This is bounded, ray-tested diffuse lighting,
+not a full multi-bounce path tracer. Static level geometry blocks the light;
+dynamic racers are not added to the hardware acceleration structure.
+Devices without ray queries retain the emissive lava surface without this pass.
+
+Water presets now offer Original, Performance, Balanced, High and Custom.
+Advanced controls separately tune reflection/wake/spray detail, reflection
+strength and range, roughness, ripples, foam, wake visibility, clarity,
+refraction, waterfall flowing detail and RGB tint. Reset controls and bounded
+GPU timing logs are available. Presets do not change resolution, MSAA, target
+FPS or reflection method; lower visual intensity is not always lower GPU work.
+
+Enhanced water has additional viewport, allocation and MSAA safety checks,
+including the Whale Bay preview correction. Waterfalls/fountains retain alpha
+and fog with continuous flow and reflection opacity masks. Joined river sheets
+follow their authored mapping; the Snowflake Mountain current and waterfall
+scroll interpolation are corrected. Hardware fallback status is shown in Graphics.
+
+Custom Track Select rows cycle through six backgrounds and each has its own
+CUSTOM TRACKS heading. The correction keeps these background draws
+behind the previews and text, instead of briefly covering the whole screen.
+Returning to Future Fun Land keeps that world's original artwork.
+Preview images, names and arrows also remain inside their frames while
+scrolling on wide screens. The original 4:3 drawing cut-off is removed;
+frame proportions, the live cinematic and confirmation zoom are preserved.
+The follow-up also prevents brief text/image stretching as previews
+change, without restoring the old wide-screen clipping.
+Golden Balloon and Wave Race credits use the same compact link rows as the
+other core technology credits, with their acknowledgements kept intact.
+Very long track captions are abbreviated in-game to protect its fixed drawing
+buffers. Installed mod names and their launcher details keep the full text.
+
+Mixed `.dkrmap`/character libraries share checked texture and sprite namespaces.
+Table-length, ID, offset and allocation checks address invalid or truncated
+artwork references in Track Select. Budget errors still require reducing content.
+
+Offline custom tracks can choose vehicles allowed by their headers, without
+writing fake Adventure progress. Track Lab can generate preview flights and
+warn about forced-vehicle starts. Modern camera corner/drift/hit behaviour and
+defaults are revised; existing tuning migrates while retaining changed values.
+Online vehicle selection and the offline-only Modern camera keep their limits.
+
+All contributor changes merged into main through 2ced503 (PR #59) are included:
+RT64 HLE bounds checks, reproducible setup/test assertions, session fixture
+worker safety, Blender flythrough/vehicle/camera work and the iOS source port.
+There is also a repeatable regression/performance harness, safer staged builds,
+incremental/CI caching, verified dependency preparation, workflow linting and
+ROM-free mobile compilation checks and concurrent Friend-test isolation.
+Those compilation checks are not device tests.
+Existing custom mods, online backends, Track Lab, Blender additions, saves,
+texture priority and graphics preferences are retained.
+
+Windows x64, Linux x86_64, Linux ARM64, Steam Deck and Android ARM64 packages
+share the same authored Patch Pipeline. No ROMs, saves or private replay
+fixtures are bundled. The Steam Deck package uses the Linux x86_64 payload.
+Android build 1060002 keeps the previous application ID and signing identity for upgrades;
+do not uninstall the previous app just to update, as that can remove its data.
+
+Release numbering does not imply every device has been tested. Linux ARM64
+and Android need physical-device testing, and SteamOS integration needs a
+Steam Deck check. Hardware lighting remains optional and GPU/driver-dependent.
+Use the same 1.0.6 build on every online peer. Preserve a backup of your saves
+and mods before changing versions. No macOS or iOS binary is supplied here.
+
+This release supersedes the earlier 1.0.6 test candidates. Online peers must
+use the same exact compatible release, not merely a matching displayed version.
+Architecture and floating-point admission checks remain; Windows/Linux x64
+qualification does not establish x64-to-ARM rollback compatibility.

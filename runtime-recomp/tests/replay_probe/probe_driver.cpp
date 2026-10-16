@@ -25,6 +25,8 @@
 #include "runtime_legacy_mods.hpp"
 #include "mods/online_mod_runtime.hpp"
 #include "mods/legacy_checkpoint.hpp"
+#include "mods/magic_code_game_world.hpp"
+#include "mods/magic_code_effects.hpp"
 #endif
 #include <algorithm>
 #include <array>
@@ -55,7 +57,7 @@ static_assert(sizeof(ComponentAudio)==16+4096+8*sizeof(dkr_probe_audio_guard));
 void start_owned_video(std::uint8_t* ram,recomp_context*) {dkr_probe_video_start(ram);}
 class Component final : public SceneSimulation {
 public:
-    explicit Component(std::span<const std::uint8_t> fixture,bool water_phases=false,bool mode_phases=false,bool audio_phases=false,bool input_phases=false,std::uint64_t save_epoch=42,bool authored_cpu=false,std::uint32_t magic_codes=0,std::span<const std::uint8_t> initial_save={},OwnedBootOptions boot={}) : ram_(kRollbackMemoryBytes), water_phases_(water_phases), mode_phases_(mode_phases), audio_phases_(audio_phases), input_phases_(input_phases), authored_cpu_(authored_cpu), current_epoch_(save_epoch) {
+    explicit Component(std::span<const std::uint8_t> fixture,bool water_phases=false,bool mode_phases=false,bool audio_phases=false,bool input_phases=false,std::uint64_t save_epoch=42,bool authored_cpu=false,std::uint32_t magic_codes=0,std::span<const std::uint8_t> initial_save={},OwnedBootOptions boot={}) : ram_(kRollbackMemoryBytes+(boot.code?dkr_code_memory_reserve():0)), water_phases_(water_phases), mode_phases_(mode_phases), audio_phases_(audio_phases), input_phases_(input_phases), authored_cpu_(authored_cpu), current_epoch_(save_epoch) {
         assert(!authored_cpu_ || (input_phases_ && DKR_PROBE_HAS_AUTHORED_CPU));
         assert(state_.register_context(&context_));
         unsigned tag = 0;
@@ -159,7 +161,8 @@ public:
             mods_=std::make_unique<dkr::runtime::legacy::ModWorld>(boot.mods->new_session(),
                 dkr_owned_mod_calls::payload(),dkr_owned_mod_calls::call_dkr_character_select_animation_fraction,
                 boot.mods->authored(),boot.mods->profile()->manifest.custom_ai,dkr_owned_mod_calls::call_rand_range,boot.mods->music(),
-                dkr_owned_mod_calls::call_tex_animate_texture);
+                dkr_owned_mod_calls::call_tex_animate_texture,
+                boot.code?dkr::mods::code::trophy::menu_entries(*boot.code):std::vector<dkr::mods::TrackMenuCup>{});
             if(boot.mod_bootstrap.empty() || boot.mod_bootstrap.size()>256U*1024U ||
                !mods_->commit_checkpoint(mods_->stage_checkpoint(boot.mod_bootstrap)))
                 throw std::runtime_error("Custom native bootstrap ownership could not be admitted.");
@@ -167,6 +170,33 @@ public:
             throw std::runtime_error("The private mod service closure is not present in this build.");
 #endif
         } else if(!boot.mod_bootstrap.empty())throw std::runtime_error("A native mod bootstrap requires its exact pinned resources.");
+        if(boot.code) {
+#if DKR_PROBE_HAS_MOD_SERVICES
+            if(!boot.normal_boot||!authored_cpu_||!input_phases_||boot.code->ordered.empty()||boot.code_bootstrap.empty())
+                throw std::runtime_error("Online code mods require a frozen set and quiesced bootstrap state.");
+            std::size_t count=0;
+#if DKR_PROBE_REVISION==77
+            const auto* entries=dkr_experimental_v77_code_dispatch_table(&count);
+#else
+            const auto* entries=dkr_experimental_v80_code_dispatch_table(&count);
+#endif
+            code_=std::make_unique<dkr::mods::code::GameWorld>(*boot.code,
+                DKR_PROBE_REVISION==77?"us.v77":"us.v80",dkr::mods::code::DispatchTable{{entries,count}},boot.code_seed,true,
+                [](auto function,auto* ram,auto* context) {
+                    const auto call=dkr_probe_run_native(function,ram,context);
+                    if(!call.completed)throw dkr::mods::Error(call.blocked?call.blocked:"Owned code native callback failed.");
+                });
+            code_->course_selector([this](const auto& id,unsigned carrier){
+                if(!mods_)throw dkr::mods::Error("Owned cup selection has no admitted asset world.");
+                mods_->select_course(id,carrier);
+            });
+            code_->trophy_selector([this]{return mods_?mods_->selected_trophy():std::string{};});
+            code_->attach(ram_,true);code_->commit(code_->stage(boot.code_bootstrap));
+            if(code_bytes()>14U*1024U*1024U)throw std::runtime_error("Code checkpoint exceeds the online state budget.");
+#else
+            throw std::runtime_error("This owned CPU payload has no code-mod service boundary.");
+#endif
+        } else if(!boot.code_bootstrap.empty())throw std::runtime_error("Code bootstrap has no frozen package identity.");
     }
     ~Component() { dkr_probe_scenery_observe(nullptr,nullptr);dkr_probe_input_configure(0); dkr_probe_bind_eeprom(nullptr);dkr_probe_bind_paks(nullptr);dkr_probe_bind_magic(nullptr); }
     std::span<const std::uint8_t> confirmed_save() const {return save_.confirmed_image();}
@@ -193,7 +223,7 @@ public:
         // Complete only for THIS closed component: all reachable native imports
         // are audited private services or traps. No live participant exists.
         // Passing this contract must never advertise complete DKR replay.
-        return {0x434F4D504F4E454EULL+unsigned(mode_phases_)*4+unsigned(water_phases_)+unsigned(DKR_PROBE_HAS_SCENE_CUTS)*8+unsigned(audio_phases_)*4096+unsigned(input_phases_)*128+unsigned(authored_cpu_)*768+unsigned(DKR_PROBE_HAS_FULL_SCENES)*8192+16384+32768+65536+mod_contract(), state_.snapshot_size() + sizeof(native_) + (audio_phases_ ? sizeof(audio_):0) + (input_phases_ ? sizeof(input_)+Eeprom::kCheckpointBytes+Paks::kCheckpointBytes+MagicCodes::kCheckpointBytes:0)+mod_bytes(),
+        return {0x434F4D504F4E454EULL+unsigned(mode_phases_)*4+unsigned(water_phases_)+unsigned(DKR_PROBE_HAS_SCENE_CUTS)*8+unsigned(audio_phases_)*4096+unsigned(input_phases_)*128+unsigned(authored_cpu_)*768+unsigned(DKR_PROBE_HAS_FULL_SCENES)*8192+16384+32768+65536+mod_contract()+code_contract(), state_.snapshot_size() + sizeof(native_) + (audio_phases_ ? sizeof(audio_):0) + (input_phases_ ? sizeof(input_)+Eeprom::kCheckpointBytes+Paks::kCheckpointBytes+MagicCodes::kCheckpointBytes:0)+mod_bytes()+code_bytes(),
                 kRequiredStateDomains, true, true, true};
     }
     void attach_presentation_for_test(PresentationMailbox& box,bool independent_restore=false) {
@@ -269,6 +299,13 @@ public:
             for(unsigned i=0;i<4;++i)block[64+i]=std::uint8_t(native.size()>>(24-i*8));
             std::copy(native.begin(),native.end(),block.begin()+68);
         }catch(const std::exception& e){error=e.what();return false;}
+        if(code_)try {
+            const auto bytes=code_->checkpoint();auto block=output.subspan(code_offset(),code_bytes());
+            if(bytes.size()>block.size()-4)return false;
+            std::fill(block.begin(),block.end(),0);
+            for(unsigned i=0;i<4;++i)block[i]=std::uint8_t(bytes.size()>>(24-i*8));
+            std::copy(bytes.begin(),bytes.end(),block.begin()+4);
+        }catch(const std::exception& e){error=e.what();return false;}
 #endif
         return true;
     }
@@ -292,6 +329,7 @@ public:
         }
 #if DKR_PROBE_HAS_MOD_SERVICES
         std::unique_ptr<dkr::runtime::legacy::ModWorld::Restore> staged_mods;
+        std::shared_ptr<dkr::mods::code::World::Restore> staged_code;
         if(mods_)try {
             const auto block=input.subspan(mod_offset(),mod_bytes());
             if(!std::equal(mod_identity_.begin(),mod_identity_.end(),block.begin()))return false;
@@ -299,6 +337,11 @@ public:
             if(count>dkr::mods::CheckpointWriter::Budget ||
                !std::all_of(block.begin()+68+count,block.end(),[](auto byte){return byte==0;}))return false;
             staged_mods=mods_->stage_checkpoint(block.subspan(68,count));
+        }catch(const std::exception& e){error=e.what();return false;}
+        if(code_)try {
+            const auto block=input.subspan(code_offset(),code_bytes());const auto count=dkr::mods::be32(block,0);
+            if(count>block.size()-4||!std::all_of(block.begin()+4+count,block.end(),[](auto byte){return byte==0;}))return false;
+            staged_code=code_->stage(block.subspan(4,count));
         }catch(const std::exception& e){error=e.what();return false;}
 #endif
         unsigned frame = 0;
@@ -309,6 +352,7 @@ public:
         if(staged_mods && !mods_->commit_checkpoint(std::move(staged_mods))) {
             error="Owned native mod checkpoint commit lost its exclusive owner.";return false;
         }
+        if(staged_code)code_->commit(std::move(staged_code));
 #endif
         native_ = value; if(audio_phases_) audio_=audio;
         if(input_phases_) { input_=pads;save_=std::move(staged_save);paks_=std::move(staged_paks);magic_=std::move(staged_magic); }
@@ -395,6 +439,8 @@ public:
             // rather than hiding every asset/mod failure behind one label.
             if(mods_ && error=="owned-mod-service-failure" && !mods_->error().empty())
                 error += ": "+mods_->error();
+            if(code_ && error=="owned-mod-service-failure" && !code_->error().empty())
+                error += ": "+code_->error();
 #endif
             std::cerr << "component tick blocked: " << error << " address=0x" << std::hex << result.bad_address
                       << std::dec << " operations=" << result.operations << '\n';
@@ -520,6 +566,14 @@ public:
                     native_.video_black,native_.video_frames},
                 std::array{ram_proof,display_proof});
         }
+#if DKR_PROBE_HAS_MOD_SERVICES
+        if(code_)try {
+            const auto logs=dkr::mods::code::encode_effects(code_->linked(),code_->effects());
+            const auto inner=unsigned(output.effects.size());
+            prepend_effect_envelope(output.effects,{'D','K','G','C'},std::array{inner,unsigned(logs.size())});
+            output.effects.insert(output.effects.end(),logs.begin(),logs.end());
+        }catch(const std::exception& e){error=e.what();return false;}
+#endif
         return true;
     }
     bool commit(std::uint64_t epoch, std::uint32_t frame, std::span<const std::uint8_t> effects,
@@ -527,6 +581,17 @@ public:
         if(input_phases_ && epoch!=current_epoch_)return false;
         if (frame != confirmed_count_ || frame==UINT32_MAX || (boundary && (!native_.pending_scene_site || confirmed_scene_))) return false;
         const auto original=effects;
+#if DKR_PROBE_HAS_MOD_SERVICES
+        std::vector<dkr::mods::code::Effect> code_logs;
+        if(code_)try {
+            if(effects.size()<12||!std::equal(effects.begin(),effects.begin()+4,"DKGC"))return false;
+            const auto word=[&](unsigned offset){std::uint32_t v=0;for(unsigned b=0;b<4;++b)v|=std::uint32_t(effects[offset+b])<<(b*8);return v;};
+            const auto inner=word(4),logs=word(8);
+            if(inner>65536||logs>dkr::mods::code::MaxEffectJournal||effects.size()!=12+std::size_t(inner)+logs)return false;
+            code_logs=dkr::mods::code::decode_effects(code_->linked(),effects.subspan(12+inner,logs));
+            effects=effects.subspan(12,inner);
+        }catch(const std::exception& e){error=e.what();return false;}
+#endif
         if(authored_cpu_ && !boundary) {
             if(effects.size()<56 || !std::equal(effects.begin(),effects.begin()+4,"DKGV"))return false;
             const auto word=[&](unsigned offset){std::uint32_t v=0;for(unsigned b=0;b<4;++b)v|=std::uint32_t(effects[offset+b])<<(8*b);return v;};
@@ -584,6 +649,9 @@ public:
         if(retain_proofs_)commits_.emplace_back(original.begin(),original.end());
         if(input_phases_) {save_=std::move(staged_save);paks_=std::move(staged_paks);magic_=std::move(staged_magic);}
         ++confirmed_count_;
+#if DKR_PROBE_HAS_MOD_SERVICES
+        for(const auto& log:code_logs)std::fprintf(stderr,"[custom-magic-codes][%s] %s\n",log.package.c_str(),log.text.c_str());
+#endif
         // All nested journals were validated before this irreversible sink.
         // No device access in tick()/replay; confirmation invokes exactly once.
         if(rumble_sink_)for(unsigned port=0;port<4;++port)if(confirmed_motors[port]>=0) {
@@ -1038,27 +1106,56 @@ private:
         return 0;
 #endif
     }
+    static constexpr std::size_t dkr_code_memory_reserve(){return 8U*1024U*1024U;}
+    std::size_t code_offset()const{return mod_offset()+mod_bytes();}
+    std::size_t code_bytes()const {
+#if DKR_PROBE_HAS_MOD_SERVICES
+        return code_?4+code_->checkpoint_limit():0;
+#else
+        return 0;
+#endif
+    }
+    std::uint64_t code_contract()const {
+#if DKR_PROBE_HAS_MOD_SERVICES
+        if(code_) {const auto& id=code_->linked().identity;
+            return checkpoint_hash(std::span(reinterpret_cast<const std::uint8_t*>(id.data()),id.size()));}
+#endif
+        return 0;
+    }
     dkr_probe_result run_private(dkr_probe_entry entry,std::uint8_t* ram,std::size_t bytes,
         recomp_context* ctx,std::uint64_t budget) {
 #if DKR_PROBE_HAS_MOD_SERVICES
         struct Binding {
             static int dispatch(void* owner,const char* name,std::uint8_t* ram,recomp_context* ctx,
                 const std::uint64_t* args,unsigned count,const std::uint32_t* fields,unsigned event,std::uint64_t* result) noexcept {
-                return static_cast<dkr::runtime::legacy::ModWorld*>(owner)->dispatch(name,ram,ctx,args,count,fields,event,*result);
+                auto& world=*static_cast<Component*>(owner);
+                if(std::strcmp(name,"dkr_code_enter")==0||std::strcmp(name,"dkr_code_leave")==0||std::strcmp(name,"dkr_code_event")==0||std::strcmp(name,"dkr_code_indirect")==0||std::strcmp(name,"dkr_code_lap_address")==0) {
+                    if(!world.code_||count!=1||!args||args[0]>UINT32_MAX)return -1;
+                    if(std::strcmp(name,"dkr_code_event")==0){*result=0;return world.code_->dispatch_event(unsigned(args[0]),ram,ctx);}
+                    if(std::strcmp(name,"dkr_code_indirect")==0)return world.code_->indirect(std::uint32_t(args[0]),ram,ctx,*result);
+                    if(std::strcmp(name,"dkr_code_lap_address")==0)return world.code_->lap_address(std::uint32_t(args[0]),*result);
+                    return world.code_->dispatch(std::strcmp(name,"dkr_code_leave")==0,std::uint32_t(args[0]),ram,ctx,*result);
+                }
+                return world.mods_?world.mods_->dispatch(name,ram,ctx,args,count,fields,event,*result):0;
             }
-            ~Binding(){if(!dkr_probe_bind_mod_service(nullptr,nullptr))std::abort();}
+            int previous=dkr_code_callbacks_enabled;
+            const std::uint8_t* previous_mask=dkr_code_hook_mask;
+            ~Binding(){dkr_code_callbacks_enabled=previous;dkr_code_hook_mask=previous_mask;if(!dkr_probe_bind_mod_service(nullptr,nullptr))std::abort();}
         };
-        if(mods_) {
-            if(!dkr_probe_bind_mod_service(Binding::dispatch,mods_.get())) {
+        if(mods_||code_) {
+            if(!dkr_probe_bind_mod_service(Binding::dispatch,this)) {
                 dkr_probe_result failure{};failure.blocked="owned-mod-binding-not-quiescent";return failure;
             }
-            Binding binding;return dkr_probe_run(entry,ram,bytes,ctx,budget);
+            Binding binding;dkr_code_callbacks_enabled=code_?1:0;
+            dkr_code_hook_mask=code_?code_->hook_mask():nullptr;
+            return dkr_probe_run(entry,ram,bytes,ctx,budget);
         }
 #endif
         return dkr_probe_run(entry,ram,bytes,ctx,budget);
     }
 #if DKR_PROBE_HAS_MOD_SERVICES
     std::unique_ptr<dkr::runtime::legacy::ModWorld> mods_;
+    std::unique_ptr<dkr::mods::code::GameWorld> code_;
     std::string mod_identity_;
 #endif
     RuntimeState state_;
@@ -1440,6 +1537,7 @@ public:
     std::shared_ptr<const RenderSnapshot> delayed_consumer;
     std::vector<Effect> effects;
     std::array<std::array<bool,320>,3> sampled{};
+    std::array<unsigned,3> next_sample{};
     unsigned scene=0,pending_preparations=0;
     explicit SceneSessionWorld(std::span<const std::uint8_t> fixture,unsigned first_site)
         :world(fixture,false,true,true,true,91,true),first_site_(first_site) {
@@ -1503,6 +1601,7 @@ FrameInputs scene_inputs(unsigned scene,unsigned frame,unsigned players) {
 }
 bool dkr_probe_scene_session_check(std::span<const std::uint8_t> fixture,unsigned players,unsigned final_frames) {
     if(!DKR_PROBE_HAS_AUTHORED_CPU || players<2 || players>4 || final_frames<12 || final_frames>300)return false;
+    constexpr unsigned boundary_frames=6,prediction_window=6;
     for(unsigned first_site:{1,2}) {
         std::array<std::unique_ptr<SceneSessionWorld>,4> worlds;
         std::array<std::unique_ptr<Session>,4> sessions;
@@ -1518,7 +1617,7 @@ bool dkr_probe_scene_session_check(std::span<const std::uint8_t> fixture,unsigne
             if(p)keys[p]=secure::generate_key();
             worlds[p]=std::make_unique<SceneSessionWorld>(fixture,first_site);
             sessions[p]=std::make_unique<Session>(*worlds[p]);
-            if(!sessions[p]->start({{91,std::uint8_t(players),6},std::uint8_t(p),0},error))return false;
+            if(!sessions[p]->start({{91,std::uint8_t(players),prediction_window},std::uint8_t(p),0},error))return false;
             previous_epoch[p]=91;
             transports[p]=std::make_unique<ImpairedUdp>();
             if(!transports[p]->open(0,error) || !DatagramSocket::resolve("127.0.0.1",transports[p]->local_port(),addresses[p],error))return false;
@@ -1540,10 +1639,19 @@ bool dkr_probe_scene_session_check(std::span<const std::uint8_t> fixture,unsigne
                 if(final_limit) {
                     if(!networks[p]->service() || session.step(false)==SessionStep::Failed)return false;
                 } else if(!pumps[p]->pulse(Network::Clock::now(),[&]{
-                    const auto scene=unsigned(session.epoch()-91),frame=session.frontier();
-                    if(scene>=world.sampled.size() || frame>=world.sampled[scene].size() || world.sampled[scene][frame])
+                    const auto scene=unsigned(session.epoch()-91);
+                    if(scene>=world.sampled.size())
+                        throw std::runtime_error("Out-of-range physical scene input epoch");
+                    // Pump's independent physical clock may publish one frame
+                    // ahead while simulation waits or corrects. With this test's
+                    // zero delay, Timeline assigns successive samples 0,1,...;
+                    // the simulation frontier is not that immutable input ID.
+                    const auto frame=world.next_sample[scene];
+                    if(frame<session.frontier() || std::uint64_t(frame)>std::uint64_t(session.frontier())+1 ||
+                       frame>=world.sampled[scene].size() || world.sampled[scene][frame])
                         throw std::runtime_error("Duplicate/out-of-range physical scene input assignment");
                     world.sampled[scene][frame]=true;
+                    ++world.next_sample[scene];
                     return scene_inputs(scene,frame,players)[p];
                 })) {
                     std::cerr<<"Actual scene session peer="<<p<<" epoch="<<session.epoch()<<" "<<pumps[p]->error()<<'\n';return false;
@@ -1581,13 +1689,25 @@ bool dkr_probe_scene_session_check(std::span<const std::uint8_t> fixture,unsigne
         std::vector<std::uint8_t> expected(reference.contract().state_bytes),actual(expected.size());
         if(!reference.capture(expected,error))return false;
         for(unsigned p=0;p<players;++p) {
+            const auto& samples=worlds[p]->next_sample;
+            // Before a remote boundary is known, prediction can extend the
+            // old scene by its window and the physical clock by one further
+            // sample. That immutable lookahead is discarded at the epoch cut,
+            // never reassigned to the next scene. Check each epoch separately.
+            const bool sample_bounds=samples[0]>=boundary_frames && samples[1]>=boundary_frames &&
+                samples[0]<=boundary_frames+prediction_window+1 && samples[1]<=boundary_frames+prediction_window+1 &&
+                samples[2]>=final_frames && samples[2]<=final_frames+1 &&
+                pumps[p]->view().physical_samples==samples[0]+samples[1]+samples[2];
             if(!worlds[p]->capture(actual,error) || actual!=expected || worlds[p]->effects!=reference.effects ||
                worlds[p]->world.preparations_for_test()!=reference.world.preparations_for_test() ||
                worlds[p]->pending_preparations!=16 || !worlds[p]->mailbox.quiescent() ||
-               worlds[p]->scene!=2 || pumps[p]->view().physical_samples<final_frames+12 ||
-               pumps[p]->view().physical_samples>final_frames+24 || !networks[p]->statistics().rejected) {
+               worlds[p]->scene!=2 || !sample_bounds || !networks[p]->statistics().rejected) {
                 std::cerr<<"Actual chained session mismatch peer="<<p<<" preparations="<<worlds[p]->pending_preparations
-                         <<" samples="<<pumps[p]->view().physical_samples<<'\n';return false;
+                         <<" samples="<<pumps[p]->view().physical_samples
+                         <<" scene-samples="<<worlds[p]->next_sample[0]<<','<<worlds[p]->next_sample[1]<<','<<worlds[p]->next_sample[2]
+                         <<" state="<<(actual==expected)<<" effects="<<(worlds[p]->effects==reference.effects)
+                         <<" construction="<<(worlds[p]->world.preparations_for_test()==reference.world.preparations_for_test())
+                         <<" mailbox="<<worlds[p]->mailbox.quiescent()<<" scene="<<worlds[p]->scene<<'\n';return false;
             }
             rollbacks+=sessions[p]->statistics().rollbacks;
         }

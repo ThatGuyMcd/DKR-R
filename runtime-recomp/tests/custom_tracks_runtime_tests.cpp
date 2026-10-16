@@ -604,6 +604,41 @@ int main() {
         payload.mempool_alloc_safe = nullptr;
     }
 
+    // Large boot-owned portrait tables must not be silently truncated at
+    // 4096 words. Exercise the real guest hook on both supported revisions,
+    // including the highest supported record count after one appended image.
+    {
+        std::string texture(544,'\0');texture[0]=16;texture[1]=16;texture[2]=0x11;
+        texture[5]=1;texture[0x12]=1;texture[0x16]=2;texture[0x17]=0x20;
+        std::ofstream(folder/"texture.bin",std::ios::binary)<<texture;
+        std::ofstream(folder/"manifest.json")<<
+            R"({"schemaVersion":1,"id":"test","name":"Test","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
+            R"({"section":"LEVEL_MODELS","file":"model.bin"},{"section":"TEXTURES_2D","file":"texture.bin"}]})";
+        tracks::scan(root/"tracks");
+        payload.mempool_alloc_safe=[](std::uint8_t*,recomp_context* ctx){ctx->r2=addr(0x80600000);};
+        for(const auto revision:{dkr::runtime::rom::Revision::UsV77,dkr::runtime::rom::Revision::UsV80}) {
+            assert(addresses::select(revision));
+            for(const unsigned count:{5000U,32766U}) {
+                const auto source=0x80200000U;
+                for(unsigned i=0;i<=count;++i)MEM_W(i*4,addr(source))=i*16;
+                MEM_W((count+1)*4,addr(source))=-1;
+                recomp_context begin{};begin.r4=5;dkr_custom_tracks_table_load_begin(rdram,&begin);
+                recomp_context end{};end.r2=addr(source);dkr_custom_tracks_table_load_end(rdram,&end);
+                assert(static_cast<std::uint32_t>(end.r2)==0x80600000);
+                assert(MEM_W(count*4,end.r2)==count*16);
+                assert(MEM_W((count+1)*4,end.r2)==count*16+texture.size());
+                assert(MEM_W((count+2)*4,end.r2)==-1);
+            }
+            // No sentinel before the end of RDRAM: refuse without reading
+            // beyond the guest or changing the returned table pointer.
+            const auto source=0x807FFFB0U;
+            for(unsigned at=source;at<0x80800000U;at+=4)MEM_W(0,addr(at))=0;
+            recomp_context begin{};begin.r4=5;dkr_custom_tracks_table_load_begin(rdram,&begin);
+            recomp_context end{};end.r2=addr(source);dkr_custom_tracks_table_load_end(rdram,&end);
+            assert(static_cast<std::uint32_t>(end.r2)==source);
+        }
+        payload.mempool_alloc_safe=nullptr;
+    }
     tracks::set_auto_boot(false);
     tracks::arm_track_override("");
     std::filesystem::remove_all(root);

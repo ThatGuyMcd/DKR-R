@@ -32,7 +32,8 @@ struct Route final:SessionTransport {
     }
 };
 void check(unsigned players) {
-    Bus bus;secure::Key contract{};contract[0]=45;
+    Bus bus;AdmissionContract contract;contract.engine[0]=45;contract.rom[0]=7;
+    contract.schema=1;contract.state_bytes=213713;
     std::vector<std::uint8_t> baseline(213713);for(std::size_t i=0;i<baseline.size();++i)baseline[i]=std::uint8_t(i*31);
     std::array<std::unique_ptr<Route>,4> routes;
     std::array<std::unique_ptr<LobbyAdmission>,4> admissions;
@@ -72,11 +73,37 @@ void check(unsigned players) {
     for(unsigned p=1;p<players;++p)assert(preparations[p]==1);
 }
 void mismatch() {
-    Bus bus;bus.impaired=false;Route host(bus,0),client(bus,1);secure::Key h{},c{};h[0]=1;c[0]=2;
+    Bus bus;bus.impaired=false;Route host(bus,0),client(bus,1);AdmissionContract h;
+    h.engine[0]=1;h.rom[0]=7;h.schema=1;h.state_bytes=3;auto c=h;c.engine[0]=2;
     LobbyAdmission a(host,true,2,0,h),b(client,false,2,1,c);std::string error;
     assert(a.begin({1,2,3},{},error));assert(b.begin({},[](auto,std::string&){return true;},error));
     const auto now=LobbyAdmission::Clock::now();assert(a.service_admission(now));assert(b.service_admission(now));
     assert(!a.service_admission(now+std::chrono::milliseconds(1)));assert(!b.prepared());assert(!a.error().empty());
+    assert(a.error().find("replay engine")!=std::string::npos);
+}
+void contracts() {
+    AdmissionContract a;a.engine[0]=2;a.rom[31]=2;a.resources[5]=3;
+    a.schema=0x0102030405060708ULL;a.state_bytes=3;a.launch=43;a.save=44;a.epoch=45;
+    const auto wire=a.encode();assert(wire.size()==136&&wire[96]==8&&wire[103]==1);
+    AdmissionContract b;assert(AdmissionContract::decode(wire,b)&&a.difference(b).empty());
+    assert(!AdmissionContract::decode(std::span(wire).first(135),b));
+    for(unsigned field=0;field<8;++field) {
+        auto changed=wire;changed[field<3?field*32:96+(field-3)*8]^=1;
+        assert(AdmissionContract::decode(changed,b));assert(!a.difference(b).empty());
+        Bus bus;bus.impaired=false;Route host(bus,0),client(bus,1);
+        LobbyAdmission x(host,true,2,0,a),y(client,false,2,1,b);std::string error;
+        assert(x.begin({1,2,3},{},error));assert(y.begin({},[](auto,std::string&){assert(false);return false;},error));
+        const auto now=LobbyAdmission::Clock::now();assert(y.service_admission(now));
+        assert(!x.service_admission(now));assert(x.error().find(a.difference(b))!=std::string::npos);
+        assert(!x.prepared()&&!y.prepared());
+        // The client must diagnose a differing Offer just as precisely, and
+        // reject it before allocating/calling the checkpoint preparation hook.
+        std::vector<std::uint8_t> offer{'D','K','X','A',4,2};
+        const auto record=a.encode();offer.insert(offer.end(),record.begin(),record.end());offer.resize(6+136+73);
+        bus.received[1].push_back({LobbyAdmission::address(0),std::move(offer)});
+        assert(!y.service_admission(now+std::chrono::milliseconds(1)));
+        assert(y.error().find(a.difference(b))!=std::string::npos&&y.total_bytes()==0);
+    }
 }
 }
-int main(){for(unsigned p=2;p<=4;++p)check(p);mismatch();std::cout<<"Owned normal-lobby admission: 2/3/4 owners, impairment, integrity, idempotence and early-input preservation passed.\n";}
+int main(){contracts();for(unsigned p=2;p<=4;++p)check(p);mismatch();std::cout<<"Owned normal-lobby admission: named component mismatches, canonical wire, 2/3/4 owners, impairment, integrity, idempotence and early-input preservation passed.\n";}

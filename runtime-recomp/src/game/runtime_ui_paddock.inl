@@ -1178,11 +1178,32 @@ inline bool PaddockCheckbox(const char* id, const char* label, bool* value,
 
 enum class PaddockFieldResult { None, Edited, GamepadActivated };
 
+// A fixed-size keyboard affordance leaves room for the editable text instead
+// of squeezing a word button into narrow fields.
+inline bool PaddockKeyboardButton() {
+    const auto press=PaddockBeginPress("##keyboard",{44,44});
+    auto* draw=ImGui::GetWindowDrawList();
+    PaddockFill(draw,press.min,press.max,PaddockRound(8),PaddockCol(press.hovered?0x234E65:0x173A4E));
+    PaddockStroke(draw,press.min,press.max,PaddockRound(8),PaddockCol(0x476373),1);
+    const ImVec2 a{press.min.x+9,press.min.y+13},b{press.max.x-9,press.max.y-12};
+    draw->AddRect(a,b,PaddockCol(0xFFF0C2),3);
+    for(int y=0;y<2;++y)for(int x=0;x<5;++x){
+        const ImVec2 p{a.x+4+x*4.5F,a.y+4+y*4.0F};draw->AddRectFilled(p,{p.x+2,p.y+2},PaddockCol(0xFFF0C2));
+    }
+    draw->AddLine({a.x+7,b.y-3},{b.x-7,b.y-3},PaddockCol(0xFFF0C2),1.5F);
+    PaddockEndPress(press,8,1);
+    if(press.hovered||press.focused){const auto item=GImGui->LastItemData;ImGui::SetTooltip("On-screen keyboard");GImGui->LastItemData=item;}
+    return press.pressed;
+}
+
 // A text field (.mods-search). A controller cannot type into it, so a gamepad
 // activation is handed back for the caller's on-screen keyboard.
 inline PaddockFieldResult PaddockSearch(const char* id, char* buffer,
                                         std::size_t capacity, const char* hint,
                                         float width) {
+    width=std::max(1.0F,std::min(width,ImGui::GetContentRegionAvail().x));
+    ImGui::PushID(id);ImGui::BeginGroup();
+    const float keyboard_width=44.0F;
     const PaddockType type = PaddockReading(PaddockLauncherTypographyActive() ? 16.0F : 13.0F,
                                            false, 1.4F);
     ImGui::PushFont(type.font);
@@ -1197,8 +1218,10 @@ inline PaddockFieldResult PaddockSearch(const char* id, char* buffer,
     ImGui::PushStyleColor(ImGuiCol_Text, PaddockRgb(0xEAF3F5));
     ImGui::PushStyleColor(ImGuiCol_TextDisabled, PaddockRgb(0x9BB0BD));
     ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0, 0U));
-    ImGui::SetNextItemWidth(width);
-    const bool edited = ImGui::InputTextWithHint(id, hint, buffer, capacity);
+    ImGui::SetNextItemWidth(std::max(1.0F,width-keyboard_width-8.0F));
+    // The caller's ID is already scoped above. A visible ImGui label adds
+    // width AFTER the input frame and pushes the keyboard outside the row.
+    const bool edited = ImGui::InputTextWithHint("##value", hint, buffer, capacity);
     const bool activated = ImGui::IsItemActivated();
     const bool active = ImGui::IsItemActive();
     const bool focused = ImGui::IsItemFocused() && ImGui::GetIO().NavVisible;
@@ -1207,16 +1230,18 @@ inline PaddockFieldResult PaddockSearch(const char* id, char* buffer,
     ImGui::PopStyleColor(7);
     ImGui::PopStyleVar(3);
     ImGui::PopFont();
-    if (activated && GImGui->ActiveIdSource == ImGuiInputSource_Gamepad) {
-        ImGui::ClearActiveID();
-        return PaddockFieldResult::GamepadActivated;
-    }
+    const bool gamepad=activated&&GImGui->ActiveIdSource==ImGuiInputSource_Gamepad;
+    if(gamepad)ImGui::ClearActiveID();
     if (active || focused) {
         ImGui::GetWindowDrawList()->AddRect(
             {min.x - 4.5F, min.y - 4.5F}, {max.x + 4.5F, max.y + 4.5F},
             PaddockCol(0xFFD11F), 13.5F, 0, 3.0F);
     }
-    return edited ? PaddockFieldResult::Edited : PaddockFieldResult::None;
+    ImGui::SameLine(0,8);
+    const bool keyboard=PaddockKeyboardButton();
+    ImGui::EndGroup();ImGui::PopID();
+    return keyboard||gamepad ? PaddockFieldResult::GamepadActivated :
+        edited ? PaddockFieldResult::Edited : PaddockFieldResult::None;
 }
 
 inline PaddockType PaddockFieldLabelType() {
@@ -1227,6 +1252,7 @@ inline PaddockType PaddockFieldLabelType() {
 // A labelled drop-down (.mods-field select). Returns true when changed.
 inline bool PaddockSelect(const char* id, const char* label, int* value,
                           const std::vector<std::string>& items, float width) {
+    width = std::max(1.0F, std::min(width, ImGui::GetContentRegionAvail().x));
     const PaddockType label_type = PaddockFieldLabelType();
     const PaddockType type = PaddockReading(PaddockLauncherTypographyActive() ? 16.0F : 13.0F,
                                            false, 1.4F);
@@ -1282,7 +1308,7 @@ inline bool PaddockSelect(const char* id, const char* label, int* value,
             const bool selected = index == *value;
             const std::string row_label = "  " + items[index];
             if (ImGui::Selectable(row_label.c_str(), selected, 0,
-                                  {width - 10.0F, row})) {
+                                  {std::max(1.0F, ImGui::GetContentRegionAvail().x), row})) {
                 changed = *value != index;
                 *value = index;
             }
@@ -1483,11 +1509,11 @@ inline void PaddockBadge(ImDrawList* draw, ImVec2 position, std::string_view tex
                    PaddockCol(ink), text.data(), text.data() + text.size());
 }
 
-enum class PaddockFormat { Legacy, Dkr };
+enum class PaddockFormat { Legacy, Dkr, Code };
 
 inline ImVec2 PaddockFormatTagSize(PaddockFormat format) {
     const PaddockType type = PaddockSign(15.0F, 1.2F, 0.02F);
-    const std::string_view text = format == PaddockFormat::Legacy ? "Legacy" : "DKR";
+    const std::string_view text = format == PaddockFormat::Code ? "Code" : format == PaddockFormat::Legacy ? "Legacy" : "DKR";
     return {std::ceil(PaddockMeasure(type, text) + 18.0F),
             std::ceil(type.line + 8.0F)};
 }
@@ -1495,7 +1521,7 @@ inline ImVec2 PaddockFormatTagSize(PaddockFormat format) {
 inline void PaddockFormatTag(ImDrawList* draw, ImVec2 position, PaddockFormat format) {
     const PaddockType type = PaddockSign(15.0F, 1.2F, 0.02F);
     const bool legacy = format == PaddockFormat::Legacy;
-    const std::string_view text = legacy ? "Legacy" : "DKR";
+    const std::string_view text = format == PaddockFormat::Code ? "Code" : legacy ? "Legacy" : "DKR";
     const ImVec2 size = PaddockFormatTagSize(format);
     const ImVec2 end{position.x + size.x, position.y + size.y};
     PaddockFill(draw, position, end, PaddockRound(4.0F),
@@ -1634,10 +1660,10 @@ int g_paddock_modal_windows = 0;
 
 // A modal window with the paddock's painted title bar. Only the window is
 // styled here; wrap the call in a PaddockFlatScope for the body.
-inline bool BeginPaddockModalWindow(const char* name, ImGuiWindowFlags flags) {
+inline bool BeginPaddockModalWindow(const char* name, ImGuiWindowFlags flags,bool fixed_viewport=false) {
 #if defined(__ANDROID__)
     dkr::runtime::mobile::constrain_modal();
-    flags &= ~(ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if(!fixed_viewport)flags &= ~(ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 #endif
     // The title bar is sized from the current font and painted below. Never
     // push a font across Begin: PopFont would drop the popup's atlas texture.
@@ -1646,7 +1672,7 @@ inline bool BeginPaddockModalWindow(const char* name, ImGuiWindowFlags flags) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
                         {24.0F, std::max((52.0F - ImGui::GetFontSize()) * 0.5F, 0.0F)});
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, PaddockRgb(0x112632));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, PaddockRgb(fixed_viewport?0x0B202C:0x112632));
     ImGui::PushStyleColor(ImGuiCol_Border, PaddockRgb(0xFFFFFF, 32U));
     ImGui::PushStyleColor(ImGuiCol_TitleBg, PaddockRgb(0x08567C));
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, PaddockRgb(0x08567C));

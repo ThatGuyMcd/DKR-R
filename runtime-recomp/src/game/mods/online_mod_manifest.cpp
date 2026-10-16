@@ -15,7 +15,7 @@ const char* kind(Kind value) {
     throw Error("Invalid online mod kind.");
 }
 const char* payload_kind(PayloadKind value) {
-    switch(value) {case PayloadKind::Xdelta:return "xdelta";case PayloadKind::TrackLab:return "tracklab";}
+    switch(value) {case PayloadKind::Xdelta:return "xdelta";case PayloadKind::TrackLab:return "tracklab";case PayloadKind::Code:return "code";}
     throw Error("Invalid online mod payload kind.");
 }
 void keys(const json& object,std::initializer_list<const char*> names) {
@@ -29,25 +29,40 @@ unsigned number(const json& value) {
 bool label(std::string_view value) {
     return !value.empty() && value.size()<=256 && std::none_of(value.begin(),value.end(),[](unsigned char c){return c<32 || c==127;});
 }
+bool code_id(std::string_view value) {
+    return !value.empty()&&value.size()<=96&&std::all_of(value.begin(),value.end(),[](char c){
+        return (c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='_'||c=='-';});
+}
+void canonical_object(const std::string& text,std::size_t limit) {
+    if(text.size()>limit)throw Error("Online code configuration exceeds its bound.");
+    std::vector<std::set<std::string>> keys;
+    const auto value=json::parse(text,[&](int depth,json::parse_event_t event,json& token) {
+        if(depth>20)throw Error("Online code configuration is nested too deeply.");
+        if(event==json::parse_event_t::object_start)keys.emplace_back();
+        if(event==json::parse_event_t::key&&(keys.empty()||!keys.back().insert(token.get<std::string>()).second))throw Error("Duplicate online code configuration field.");
+        if(event==json::parse_event_t::object_end)keys.pop_back();return true;
+    });
+    if(!value.is_object()||value.dump()!=text)throw Error("Online code configuration is not canonical.");
+}
 }
 bool valid_digest(std::string_view value) noexcept {
     return value.size()==64 && std::all_of(value.begin(),value.end(),[](char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f');});
 }
 Manifest canonical(Manifest value) {
     if(value.schema!=ManifestSchema || (value.revision!="us.v77" && value.revision!="us.v80") ||
-       value.payloads.size()>MaxPackages || value.content.size()>MaxTracks+MaxCharacters)
+       value.payloads.size()>MaxPackages || value.content.size()>MaxTracks+MaxCharacters||value.code.size()>128)
         throw Error("Unsupported online mod manifest or content budget.");
     std::sort(value.payloads.begin(),value.payloads.end(),[](const auto& a,const auto& b){return a.digest<b.digest;});
     std::sort(value.content.begin(),value.content.end(),[](const auto& a,const auto& b){return std::tie(a.kind,a.id)<std::tie(b.kind,b.id);});
     std::map<std::string,PayloadKind> payloads;std::uint64_t bytes=0;
     for(const auto& p:value.payloads) {
-        const auto limit=p.kind==PayloadKind::Xdelta?MaxPatch:MaxStaged;
+        const auto limit=p.kind==PayloadKind::Xdelta?MaxPatch:p.kind==PayloadKind::Code?32*MiB:MaxStaged;
         payload_kind(p.kind);
         if(!valid_digest(p.digest) || !p.size || p.size>limit || p.size>MaxTransferBytes-bytes ||
            (!p.source_label.empty() && (!label(p.source_label) || p.source_label.size()>120)) ||
            !payloads.emplace(p.digest,p.kind).second ||
            (p.kind==PayloadKind::Xdelta && p.source_revision!="us.v77" && p.source_revision!="us.v80") ||
-           (p.kind==PayloadKind::TrackLab && !p.source_revision.empty()))
+           (p.kind!=PayloadKind::Xdelta && !p.source_revision.empty()))
             throw Error("Invalid, duplicate or oversized online mod payload.");
         bytes+=p.size;
     }
@@ -65,6 +80,13 @@ Manifest canonical(Manifest value) {
         used.insert(c.payload);
         if(c.kind==Kind::Character)++characters;else ++tracks;
     }
+    std::set<std::string> code_ids;
+    for(const auto& code:value.code) {
+        if(!code_id(code.id)||!label(code.name)||!label(code.version)||code.version.size()>64||
+            !code_ids.insert(code.id).second||!payloads.contains(code.payload)||payloads.at(code.payload)!=PayloadKind::Code)
+            throw Error("Invalid or duplicate online code selection.");
+        canonical_object(code.settings,512*1024);canonical_object(code.data,65536);used.insert(code.payload);
+    }
     if(tracks>MaxTracks || characters>MaxCharacters || used.size()!=payloads.size())
         throw Error("Online mod selection exceeds the supported budget or includes unused payloads.");
     return value;
@@ -72,9 +94,10 @@ Manifest canonical(Manifest value) {
 Bytes encode(const Manifest& input) {
     const auto value=canonical(input);
     json doc={{"schema",value.schema},{"revision",value.revision},{"custom_ai",value.custom_ai},
-              {"payloads",json::array()},{"content",json::array()}};
+              {"payloads",json::array()},{"content",json::array()},{"code",json::array()}};
     for(const auto& p:value.payloads)doc["payloads"].push_back({{"kind",payload_kind(p.kind)},{"sha256",p.digest},{"source_revision",p.source_revision},{"size",p.size},{"source_label",p.source_label}});
     for(const auto& c:value.content)doc["content"].push_back({{"kind",kind(c.kind)},{"id",c.id},{"name",c.name},{"payload",c.payload},{"artifact",c.artifact},{"bank",c.bank},{"adapter",c.adapter},{"behaviour",c.behaviour},{"behaviour_abi",c.behaviour_abi}});
+    for(const auto& c:value.code)doc["code"].push_back({{"id",c.id},{"name",c.name},{"version",c.version},{"payload",c.payload},{"settings",c.settings},{"data",c.data}});
     const auto text=doc.dump();if(text.size()>MaxManifestBytes)throw Error("Online mod manifest exceeds its byte limit.");
     return Bytes(text.begin(),text.end());
 }
@@ -89,17 +112,17 @@ Manifest decode(View bytes) {
             throw Error("Duplicate online mod manifest field.");
         if(event==json::parse_event_t::object_end)object_keys.pop_back();return true;
     });
-    keys(doc,{"schema","revision","custom_ai","payloads","content"});
+    keys(doc,{"schema","revision","custom_ai","payloads","content","code"});
     Manifest out;out.schema=number(doc.at("schema"));out.revision=doc.at("revision").get<std::string>();out.custom_ai=doc.at("custom_ai").get<bool>();
     const auto& payloads=doc.at("payloads");const auto& contents=doc.at("content");
-    if(!payloads.is_array() || !contents.is_array() || payloads.size()>MaxPackages || contents.size()>MaxTracks+MaxCharacters)
+    if(!payloads.is_array() || !contents.is_array() || payloads.size()>MaxPackages || contents.size()>MaxTracks+MaxCharacters||!doc.at("code").is_array()||doc.at("code").size()>128)
         throw Error("Online mod manifest exceeds its entry limit.");
     for(const auto& p:payloads) {
         keys(p,{"kind","sha256","source_revision","size","source_label"});
         const auto tag=p.at("kind").get<std::string>();
-        if(tag!="xdelta" && tag!="tracklab")throw Error("Unknown online mod payload.");
+        if(tag!="xdelta" && tag!="tracklab"&&tag!="code")throw Error("Unknown online mod payload.");
         if(!p.at("size").is_number_unsigned())throw Error("Invalid online mod payload size.");
-        out.payloads.push_back({tag=="xdelta"?PayloadKind::Xdelta:PayloadKind::TrackLab,p.at("sha256").get<std::string>(),p.at("source_revision").get<std::string>(),p.at("size").get<std::uint64_t>(),p.at("source_label").get<std::string>()});
+        out.payloads.push_back({tag=="xdelta"?PayloadKind::Xdelta:tag=="code"?PayloadKind::Code:PayloadKind::TrackLab,p.at("sha256").get<std::string>(),p.at("source_revision").get<std::string>(),p.at("size").get<std::uint64_t>(),p.at("source_label").get<std::string>()});
     }
     for(const auto& c:contents) {
         keys(c,{"kind","id","name","payload","artifact","bank","adapter","behaviour","behaviour_abi"});
@@ -109,6 +132,11 @@ Manifest decode(View bytes) {
             c.at("id").get<std::string>(),c.at("name").get<std::string>(),c.at("payload").get<std::string>(),
             c.at("artifact").get<std::string>(),c.at("bank").get<std::string>(),number(c.at("adapter")),
             c.at("behaviour").get<std::string>(),number(c.at("behaviour_abi"))});
+    }
+    for(const auto& c:doc.at("code")) {
+        keys(c,{"id","name","version","payload","settings","data"});
+        out.code.push_back({c.at("id").get<std::string>(),c.at("name").get<std::string>(),c.at("version").get<std::string>(),
+            c.at("payload").get<std::string>(),c.at("settings").get<std::string>(),c.at("data").get<std::string>()});
     }
     return canonical(std::move(out));
 }

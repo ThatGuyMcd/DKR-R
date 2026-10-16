@@ -1,0 +1,241 @@
+CUSTOM MAGIC CODES - AUTHORING SDK, API 1
+
+PURPOSE AND BOUNDARIES
+
+Author portable C code compiled for MIPS II, O32, big endian, FR=0. Package it
+with the pinned RecompModTool as .nrm. The same package is interpreted by the
+Windows, Linux x86_64/ARM64 and Android application; do not ship host DLLs,
+executables, scripts, generated game code, a ROM or extracted Nintendo assets.
+
+This is a powerful gameplay boundary, not unrestricted replacement of the
+host runtime. Mods can access guest game memory, hook game functions, change
+rules/objects/racers, replace eligible functions, export services/events and
+use packaged resources. Scheduler, persistent storage, audio ownership and
+port safety fixes are protected. A checked executor does not sandbox raw
+native-game calls. Explicit user trust is required even for SDK-only code.
+
+Unknown executable/global-data differences in legacy xdelta/ROM packages are
+NOT automatically executed. Port that behaviour to an actual code mod or a
+reviewed adapter. This does not undo the legacy importer protection policy.
+
+BUILD
+
+Requires Python 3.11+, Clang/LLD with MIPS support and the project's pinned
+RecompModTool from extern/n64-modern-runtime/N64Recomp. Use the compiler/tool
+from the build environment, not an arbitrary downloaded mod-tool binary.
+
+  python3 modding/build.py modding/examples/custom-trophy-races \
+    --output /absolute/new-directory \
+    --mod-tool /absolute/path/to/RecompModTool
+
+The output directory must not exist. The script invokes only compilers and
+packaging tools; it never starts the game or executes the produced code mod.
+It compiles runtime.c for freestanding memory operations. Build flags include
+-march=mips2 -mabi=32 -mfp32 -mno-odd-spreg -mno-abicalls -fno-pic -G0,
+no builtins and no multiply/add contraction. Use mod.ld, not a host linker.
+
+mod.toml declares the ID/version/display name/authors/game_id=dkr, minimum
+recomp version, dependencies and build sources. dkr.json adds schema/api=1,
+activation=restart, online=deterministic or offline-only, explicit revisions,
+required versioned modules, resources, conflicts and exclusive systems.
+requires_tracks lists stable stock:<id>, legacy:<content SHA256> or
+dkrmap:<track ID> dependencies; they must be enabled before preparation.
+See the examples for exact syntax. IDs are portable [a-z0-9_-], max 96 bytes.
+Packages use canonical paths and cannot contain symbolic links or host code.
+
+The ai-boss-difficulty example uses named before/after callbacks and seven
+bounded Number options. It scales the native top-speed return for visible
+AI and the movement-only float argument of the separate distant-AI helper.
+It does not replace vehicle physics or compound velocity every frame. FPR
+pairs in DkrGameCall use the even slot's low 32 bits for its single value;
+preserve the upper half when changing a float return. Its state and options
+are owned guest/frozen data, using the same ordinary/private SDK dispatcher.
+
+Trophy .dkrcup sharing is data-only, not another code package format. Schema
+1 has format=dkr-trophy-cups, version=1, cups (Definition schema 1), and tracks
+(the exact Course documents used by those cups). At most 32 cups, 128 rounds
+each, 1..99 laps, 1024 distinct tracks and 256 KiB per exchange file. Imports
+validate definitions/dependencies and merge without overwriting local cups;
+saving still enforces the smaller 60 KiB runtime cup publication budget.
+Local shuffle seed/history and championship progress are not exported.
+
+MODULES / CAPABILITIES
+
+core, memory, events, settings, resources, random:
+  dkr_sdk_version; deterministic per-package dkr_random_u32; dkr_alloc/free;
+  dkr_setting_number/string; frozen dkr_data_size/read; immutable package
+  dkr_resource_size/read; confirmed dkr_log. Reads are at most 4096 bytes.
+  dkr_setting_number returns an O32 double. Strings include their NUL length.
+
+game, game-hooks, game-events:
+  Named before_function / after_function callbacks, symbol addresses/sizes,
+  explicit native O32 calls and callback context read/write. Named functions
+  resolve against the selected revision's actual dispatcher, not a global
+  process function table. See include/dkr/magic_codes.h.
+
+racers, objects, input, cameras:
+  Typed snapshots and selected writes in include/dkr/game.h. Racer lists are
+  at most 8; object lists at most 512; cameras 0..7; players 0..3. Reacquire
+  addresses after scene changes. Inputs come from recorded logical player
+  input, not an independent SDL poll. Non-finite transform writes reject.
+
+collision:
+  Bounded nearest static floor query in one native level segment. At most
+  8192 triangles, charged against callback instruction fuel. It is not a full
+  moving-object collision solver or an alternative physics engine.
+
+hud:
+  dkr_hud_text draws printable ASCII through an already-loaded native font
+  in a named drawing callback. It uses the current menu/HUD list, bounds text
+  to 160 bytes/call and 512 glyphs/package/frame, and restores font state.
+  Draw during an outer HUD/menu render hook, not recursively inside draw_text.
+
+audio:
+  Curated sound/music/stop/fade commands only when the actual CPU closure has
+  all four reviewed non-blocking handlers. Initialization/readiness and IDs
+  are checked. It uses the owned guest audio engine; confirmed audio output
+  is still governed by the existing rollback PCM journal. No host device or
+  SDL audio API is exposed.
+
+racing, trophies:
+  Frozen cup/course services and extended-lap timing registration. The
+  custom-trophy-races example is the reference adapter. Increasing only
+  LevelHeader.laps is UNSAFE: native records/results/HUD arrays have fixed
+  capacities. The adapter virtualises round indices, owns 8x100 timing words,
+  registers racers, bounds result cells and handles two-digit HUD numbers.
+  Native Time Trial must remain off for extended laps. Exclusive systems
+  race-laps and trophy-flow prevent two incompatible adapters owning these
+  rules simultaneously.
+
+  Register racers after track_setup_racers, never after obj_init_racer:
+  spawn initialization precedes final racer IDs. Retail also runs settling
+  ticks before setup returns. The SDK validates and binds the completed live
+  roster on the first extended-lap access. Its registry lives in checkpointed
+  per-owner service memory in both the ordinary and private game worlds.
+
+SAVES AND RESOURCES
+
+There is no host filesystem API. Resources are declared logical IDs, loaded
+before activation and read-only. Scalar options and structured JSON data are
+frozen for the game. Offline game saves/Paks are routed to the mod-set scope;
+online saves use the host-owned lease and never fall back to ordinary offline
+saves. Native EEPROM/storage APIs cannot be called/replaced by code mods.
+In-game progression/state belongs in rewindable mod/game memory. Persistent
+game save changes use the existing scoped game save lifecycle, not log/event
+side effects. No generic per-mod file-write service is claimed by API 1.
+
+CALLBACKS AND ABI
+
+DKR_CALLBACK(on_boot) runs once before retail initialization. Do not assume
+fonts, objects, a level header or audio are ready there. Resolve symbols then
+acquire scene-dependent state after a load. on_frame/on_frame_end are owned
+simulation boundaries. on_scene_unload/on_scene_loaded/on_racer_spawned/
+on_results/on_menu are emitted only when the corresponding compiled game
+dispatcher has that lifecycle operation.
+
+The trophies module exposes the cup explicitly chosen in the additive Track
+Select menu. dkr_trophy_info returns zero for a stock trophy or no selection;
+it does not activate the editor's last-open cup. All saved cups are admitted
+together, with exact course identities and seeded order. The native adapter
+owns six-column custom-track rows followed by separate custom-trophy rows.
+Never write or extend gTrackSelectIDs: its native entries are 16-bit and its
+fixed-size stock layout is not the additive catalogue. Preview scroll globals
+are floats, not integer screen coordinates. Custom menu state rewinds with
+its explicit ordinary/private owner; it never uses another world's selection.
+
+DKR_CALLBACK(before_function) and after_function receive original a0..a3.
+For an after callback, v0/v1 hold return values. Read/write the full context
+using dkr_game_context_read/write inside named callbacks. Entry edits affect
+the original native call. System hooks are not exposed. The private owned
+scheduler does not expose raw main_game_loop; use on_frame/on_frame_end.
+
+dkr_game_skip_original is only valid before a replaceable function. It cannot
+remove project fixes. A reviewed race-laps owner may replace the fixed native
+race_finish_time_trial result-copy operation to avoid record array overflow.
+dkr_game_repeat_original is restricted to after_hud_element_render and at
+most four original draws, outside the VM lease; it is not a general loop.
+
+For native calls, DkrGameCall contains integer/FPR pairs, hi/lo/FCSR. Supply
+an aligned guest stack with 16 outgoing O32 words; argument 5 starts at
+stack[4]. dkr_call4 is the convenience helper. Never use a host pointer. The
+adapter copies outgoing arguments to a separate bounded native guest stack.
+Blocking/thread/DMA/scheduler calls and their transitive callers are rejected.
+Calling a function is not permission to replace its port ownership hooks.
+
+RAW REVISION-SPECIFIC MODS
+
+Portable named SDK mods can declare us.v77 and us.v80. Raw address hooks,
+replacement symbols and game relocations require EXACTLY one explicit
+revision and its address-only authoring kit:
+
+  --reference-kit modding/reference-us-v77
+
+Each kit includes functions.toml, data.toml, symbols.ld, game_symbols.inc and
+a receipt with the pinned ELF/file hashes. It contains addresses/sizes only,
+not the original game implementation. Do not mix kits or delete receipt
+verification. Use DKR_HOOK / DKR_HOOK_RETURN / DKR_REPLACE as declared in the
+SDK header. Availability is further limited by the application's actual
+emitted dispatcher and protected-function policy, especially online.
+
+DETERMINISM AND ONLINE
+
+The host freezes exact package bytes, canonical dependency order, scalar and
+structured data, asset revision, selected course IDs/content and resolved cup
+order/seed. Clients approve that exact offer, then validate/link before proof.
+Downloaded data may be retained offline but cannot silently activate there.
+
+Every ordinary or private game instance owns its own code World and TLS CPU
+binding. Mod globals, BSS, heaps, callback/native stacks, service tables, RNG,
+FCSR, pending effects and game state participate in checkpoints. Immutable
+code/resources are not duplicated in every slot. Restore stages all data
+before committing; pending logs are emitted online only after confirmation.
+Do not use wall clocks, host randomness or external IO to decide gameplay.
+Transient native adapter locks are not simulated gameplay state.
+
+Same package format does not mean mixed application builds can connect.
+Owned runtime/content/ABI contracts must match across all platforms. Code
+mods require Experimental Rollback online; older backends are gated rather
+than silently omitting mod state. Auto selects the owned backend.
+
+LIMITS / FAILURE
+
+32 MiB package, 64 MiB expanded, 4 MiB guest code image, 512 archive members,
+16384 functions, 128 dependencies, 128 enabled packages and 8 MiB total guest
+code-world storage. Each package gets a 64 KiB allocator heap, 32 KiB callback
+stack bank, 64 KiB native-call stack bank and 4 KiB checkpointed services.
+Resources/owned package data have a combined 256 MiB session budget. Scalar
+strings max 4096 bytes; structured configuration max 64 KiB per package.
+
+Each top-level callback chain has 200000 guest instructions, 128 gateway
+calls, 8 package callback frames and bounded native recursion. Exhaustion,
+bad memory, unsupported instructions/imports, incompatible replacements and
+changed immutable code stop the session; no partial unsafe fallback runs.
+These limits prevent unbounded interpreter work, not all mistakes inside a
+trusted native game call. Cross-package order/conflicts are checked before
+activation; runtime faults include a concrete log/launcher explanation.
+
+STATIC INSPECTION
+
+DKR-MagicCode-Inspect package.nrm reads metadata without executing code.
+--core-link also resolves core-only package relocations/imports.
+--game-link dispatch.json resolves against an actual staged normal dispatch
+receipt or private owned manifest. It does not start a game, allocate guest
+RAM, initialize a code world or execute callbacks. This is not gameplay or
+multiplayer acceptance testing.
+
+PATCH PIPELINE
+
+All CPU wrappers, indirect adapters and lap-field redirects are generated into
+NEW staged outputs by scripts/stage_magic_code_payload.py and the private
+scripts/generate_replay_probe.py composition. The dependency heap reservation
+is an authored staged patch. Never edit extern submodules, RecompiledFuncs
+or RecompiledPatches. Reference decomp source is read-only.
+
+Normal staging requires the complete TOML configuration that produced each
+CPU input (DKR_CODE_POLICY_V77 / DKR_CODE_POLICY_V80 in CMake; defaults to the
+sibling v77.toml / v80.toml). Private generation accepts --code-policy-config.
+Instruction patches, ownership hooks, ignored/renamed/stubbed symbols and
+transitive blocking calls all inform replacement protection. An incomplete
+configuration is a build error, not permission to omit port-fix protection.
+audit_dispatch.py checks staged lap-field coverage and these dispatch grants
+without executing the game or a code package.

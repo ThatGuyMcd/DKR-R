@@ -28,6 +28,8 @@ MENU_FIELDS = [
     ("gTrackNameVoiceDelay", 4), ("gTrackmenuType", 4),
     ("gIsInTracksMenu", 4), ("gTrackIdToLoad", 4),
     ("gThread30NeedToLoadLevel", 4), ("gTitleScreenLoaded", 4),
+    ("sMenuCurrDisplayList", 4),
+    ("gTrackSelectVertsFlip", 4),
 ]
 MENU_EVENTS = ["menu_track_select_init", "menu_track_select_init", "trackmenu_input", "trackmenu_input",
                "trackmenu_render_names", "trackmenu_track_view", "bgload_start", "bgload_start",
@@ -231,7 +233,7 @@ def compose_scene_runtime(policy: dict, fragment: dict, sections: list, function
 
 def compose_track_menu(policy: dict, fragment: dict, sections: list, symbols: dict) -> dict:
     """Keep native drawing/zoom functions; add bounded catalogue data hooks."""
-    if fragment.get("schema") != 1 or fragment.get("abi") != 3 or fragment.get("revision") not in ("us.v77", "us.v80"):
+    if fragment.get("schema") != 1 or fragment.get("abi") != 4 or fragment.get("revision") not in ("us.v77", "us.v80"):
         raise ValueError("Unsupported track-menu adapter")
     words = {start+i: struct.unpack_from(">I", data, i)[0]
              for start, data in sections for i in range(0, len(data), 4)}
@@ -282,8 +284,13 @@ def compose_track_menu(policy: dict, fragment: dict, sections: list, symbols: di
         if any(int(p["vram"],0) == pc for p in patches):
             raise ValueError(f"Track-menu hook collides with an instruction patch: {name}")
         owners = [h for h in hooks if int(h["beforeVram"],0) == pc]
+        event_fields=field_data
+        if event==4:
+            event_fields=", ".join("(uint32_t)ctx->r29 + 0x90U" if f['name']=='gTrackSelectRenderDetails'
+                else f"{int(f['address'],0):#010x}U" for f in fields)
+            observed=5 # Five draw-only columns, three rows; separate stack storage.
         text = ("extern int dkr_legacy_track_menu(uint8_t*, recomp_context*, unsigned, const uint32_t*, unsigned); "
-                "{ static const uint32_t dkr_legacy_fields[] = {"+field_data+"}; "
+                "{ "+("" if event==4 else "static ")+"const uint32_t dkr_legacy_fields[] = {"+event_fields+"}; "
                 + ("if (" if site["returns"] else "")
                 + f"dkr_legacy_track_menu(rdram, ctx, {event}U, dkr_legacy_fields, {observed}U)"
                 + (") return; }" if site["returns"] else "; }"))
@@ -439,6 +446,8 @@ def main() -> None:
         if menu.get("revision") != fragment.get("revision"):
             raise ValueError("Track-menu and asset revisions differ")
         result = compose_track_menu(result, menu, elf_sections(args.elf), elf_functions(args.elf, (1, 2)))
+        from track_select_draw_policy import compose_track_draw
+        result = compose_track_draw(result,args.elf,fragment['revision'],elf_sections(args.elf),elf_functions(args.elf,(1,2)))
     if args.characters:
         if not args.scene_runtime:raise ValueError('Character adapter requires boot/scene asset ownership')
         character=json.loads(args.characters.read_text())

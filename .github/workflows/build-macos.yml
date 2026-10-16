@@ -1,19 +1,110 @@
-name: macOS policy tests
-on: [push, pull_request]
+name: macOS host tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   macos:
     strategy:
+      fail-fast: false
       matrix:
         runner: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/build/ccache
+      CCACHE_MAXSIZE: 500M
+      CCACHE_COMPILERCHECK: content
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Prepare pinned runtime dependencies
+        uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+      - name: Prepare compiler cache
+        id: compiler
         run: |
-          python3 scripts/bootstrap_dependencies.py --only n64-modern-runtime --only rt64 --only gekkonet --only monocypher --only libdatachannel --only mbedtls
-          bash scripts/apply-dependency-patches.sh
-      - name: Configure, build and test
-        run: |
-          cmake -S runtime-recomp -B build/policy-macos -G Ninja -DCMAKE_BUILD_TYPE=Release -DDKRPORT_ROOT="$PWD" -DDKR_RUNTIME_BUILD_GENERATED=OFF -DDKR_RUNTIME_BUILD_RT64=OFF
-          cmake --build build/policy-macos --parallel
-          ctest --test-dir build/policy-macos --output-on-failure -R '^DKR'
+          brew install ccache
+          mkdir -p build
+          {
+            xcrun clang --version
+            xcodebuild -version
+            xcrun --sdk macosx --show-sdk-version
+            ccache --version
+          } >build/compiler-toolchain.txt
+          echo "fingerprint=$(shasum -a 256 build/compiler-toolchain.txt | cut -d ' ' -f 1)" >>"$GITHUB_OUTPUT"
+      - name: Restore compiler cache
+        id: objects
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: build/ccache
+          key: ccache-v1-${{ matrix.runner }}-${{ steps.compiler.outputs.fingerprint }}-${{ github.sha }}
+          restore-keys: ccache-v1-${{ matrix.runner }}-${{ steps.compiler.outputs.fingerprint }}-
+      - name: Reset compiler cache statistics
+        run: ccache --zero-stats
+      - name: Configure
+        working-directory: runtime-recomp
+        run: cmake --preset host -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Build
+        working-directory: runtime-recomp
+        run: cmake --build --preset host --parallel
+      - name: Report compiler cache statistics
+        if: ${{ always() && steps.compiler.outcome == 'success' }}
+        run: ccache --show-stats | tee build/compiler-cache-stats.txt
+      - name: Save compiler cache
+        if: ${{ success() && steps.objects.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: build/ccache
+          key: ${{ steps.objects.outputs.cache-primary-key }}
+      - name: Test
+        working-directory: runtime-recomp
+        run: ctest --preset host --parallel 2 --output-junit junit.xml
+      - name: Capture regression and benchmark report
+        run: python3 scripts/regression.py --build-dir build/host --repeat 1 --warmup 0 --output build/regression/ci
+      - name: Summarize host checks
+        if: ${{ always() }}
+        run: python3 scripts/ci_summary.py --label "macOS host tests" --junit build/host/junit.xml --regression build/regression/ci/report.json --cache-stats build/compiler-cache-stats.txt --output "$GITHUB_STEP_SUMMARY"
+      - name: Preserve regression report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: regression-${{ matrix.runner }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: build/regression/ci/
+      - name: Preserve test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-results-${{ matrix.runner }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/host/junit.xml
+            build/compiler-toolchain.txt
+            build/compiler-cache-stats.txt
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: host-${{ matrix.runner }}
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/host/CMakeFiles/CMakeConfigureLog.yaml
+            build/host/CMakeFiles/CMakeError.log
+            build/host/CMakeFiles/CMakeOutput.log
+            build/host/Testing/Temporary/LastTest.log
+            build/host/Testing/Temporary/LastTestsFailed.log

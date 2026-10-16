@@ -8,8 +8,11 @@ generated game or dependencies.
 ## Runtime and patch ownership
 
 The ordinary execution path combines the user's validated ROM, matching ELF,
-N64Recomp CPU output, Rare audio/F3DDKR RSP output, N64ModernRuntime services
-and the project RT64 bridge. One SDL2 frontend owns launcher/game interaction.
+N64Recomp CPU output, statically recompiled Rare audio RSP output,
+N64ModernRuntime services and the project
+[F3DDKR graphics HLE decoder](F3DDKR.md), which submits RT64 workloads.
+Graphics microcode is handled by that decoder, not by an RSP translation unit.
+One SDL2 frontend owns launcher/game interaction.
 Supported desktop builds use a separate headless SDL3 input worker; Android
 uses in-process SDL2. SDL3 never replaces the frontend's window ABI.
 

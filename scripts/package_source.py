@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import os
+import tempfile
 import subprocess
 import sys
 import zipfile
@@ -50,18 +52,23 @@ def source_files() -> list[pathlib.Path]:
         pathlib.PurePosixPath("assets/controllers"),
         pathlib.PurePosixPath("assets/ui/Icons"),
         pathlib.PurePosixPath("assets/ui/Backgrounds"),
+        pathlib.PurePosixPath("assets/ui/CustomTrackBackgrounds"),
         pathlib.PurePosixPath("docs"),
+        pathlib.PurePosixPath("regression"),
         pathlib.PurePosixPath("packaging"),
         pathlib.PurePosixPath("runtime-recomp/cmake"),
-        pathlib.PurePosixPath("runtime-recomp/src/game"),
-        pathlib.PurePosixPath("runtime-recomp/src/input"),
+        pathlib.PurePosixPath("runtime-recomp/src"),
+        pathlib.PurePosixPath("runtime-recomp/include"),
+        pathlib.PurePosixPath("tools/blender"),
         pathlib.PurePosixPath("runtime-recomp/tests"),
         pathlib.PurePosixPath("patches"),
+        pathlib.PurePosixPath("modding"),
         pathlib.PurePosixPath("scripts"),
     )
     allowed_untracked_suffixes = {
         ".c", ".cc", ".cpp", ".h", ".hpp", ".json", ".md", ".png",
-        ".ps1", ".py", ".sh", ".txt", ".patch", ".yaml", ".yml", ".cmake",
+        ".toml", ".hlsl", ".hlsli", ".in", ".inc", ".inl", ".ld", ".ps1", ".py", ".sh", ".txt", ".patch", ".yaml", ".yml", ".cmake",
+        ".java", ".kt", ".xml", ".gradle",
     }
     selected = set(tracked)
     allowed_exact_untracked = {
@@ -89,6 +96,8 @@ def source_files() -> list[pathlib.Path]:
             )
         ):
             selected.add(path)
+        elif path.suffix.lower() in allowed_untracked_suffixes:
+            print(f"Excluded untracked possible source file (outside supported roots): {path}", file=sys.stderr)
     return sorted(path for path in selected if (ROOT / path).is_file())
 
 
@@ -103,6 +112,7 @@ def create_archive(output: pathlib.Path) -> None:
                 SOURCE_PREFIX + relative.as_posix(),
                 date_time=(1980, 1, 1, 0, 0, 0),
             )
+            info.create_system = 3
             info.compress_type = zipfile.ZIP_DEFLATED
             executable = relative.suffix.lower() == ".sh"
             info.external_attr = ((0o100755 if executable else 0o100644) << 16)
@@ -129,18 +139,32 @@ def validate_archive(path: pathlib.Path) -> None:
     print(f"Source archive scan passed: {inspected} files inspected")
 
 
-def main() -> int:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", nargs="?", default=str(DEFAULT_OUTPUT))
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     output = pathlib.Path(args.output).resolve()
     if output.exists():
         print(f"Refusing to overwrite existing source archive: {output}", file=sys.stderr)
         return 2
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    create_archive(output)
-    validate_archive(output)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=output.parent, prefix=".source-", suffix=".zip", delete=False) as file:
+            temporary = pathlib.Path(file.name)
+        create_archive(temporary)
+        validate_archive(temporary)
+        # A hard link publishes the complete archive atomically and fails if
+        # another invocation has claimed the destination since our preflight.
+        temporary.chmod(0o644)
+        os.link(temporary, output)
+    except (OSError, RuntimeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
+        print(f"Source packaging failed: {error}", file=sys.stderr)
+        return 2
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     print(output)
     return 0
 

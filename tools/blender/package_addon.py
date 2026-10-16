@@ -14,10 +14,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import tempfile
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.abspath(os.path.join(HERE, ".."))
+REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 PACKAGE_DIR = os.path.join(HERE, "track_lab")
 PACKAGE_NAME = "track_lab"
 
@@ -51,10 +52,33 @@ def main(argv=None):
     target = os.path.join(args.output, PACKAGE_NAME + ".zip")
 
     count = 0
-    with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path, arcname in iter_files():
-            archive.write(path, arcname)
-            count += 1
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=args.output, prefix=".track_lab-", suffix=".zip", delete=False) as file:
+            temporary = file.name
+        with zipfile.ZipFile(temporary, "w", zipfile.ZIP_DEFLATED) as archive:
+            for path, arcname in iter_files():
+                info = zipfile.ZipInfo(arcname, date_time=(1980, 1, 1, 0, 0, 0))
+                info.create_system = 3
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                with open(path, "rb") as source:
+                    archive.writestr(info, source.read())
+                count += 1
+        if not count:
+            raise ValueError("No addon files were selected")
+        with zipfile.ZipFile(temporary) as archive:
+            bad_member = archive.testzip()
+            if bad_member:
+                raise ValueError("Corrupt addon archive member: " + bad_member)
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, target)
+    except (OSError, ValueError, zipfile.BadZipFile) as error:
+        print("FAIL: could not package addon: %s" % error, file=sys.stderr)
+        return 1
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
 
     size = os.path.getsize(target)
     print("files  : %d" % count)

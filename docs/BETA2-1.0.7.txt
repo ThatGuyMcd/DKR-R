@@ -1,0 +1,34 @@
+DKR-R v1.0.7 beta 2
+
+Custom Magic Codes are executable gameplay mods. Import the supplied Trophy
+Races or AI & Boss Difficulty .nrm through Mods / Hacks -> Import Mods. Open
+Custom Magic Codes -> Details, review and approve the exact code, choose
+settings and enable it for a new game. Neither mod is automatically enabled.
+
+Trophy Races uses Cups, Lineup and Share screens, with controller navigation,
+on-screen text entry and automatic track refresh. Custom cups appear after
+the six-column Custom Tracks rows. Share exports/imports data-only .dkrcup
+files; send the required tracks alongside them. The original trophies remain.
+
+This beta fixes shared text fields drawing their internal IDs beside the
+input, which pushed the keyboard outside Cup Options and Choose a Track.
+Dropdowns and choice rows use their actual available width. Launcher and
+overlay use the same implementation.
+
+Custom-Magic-Codes/MODDERS-GUIDE.html is the complete authoring book, with
+33 chapters, all 37 public API functions/helpers, full headers and examples.
+MODDERS-GUIDE.txt, SDK.txt and USER-GUIDE.txt are included alongside it.
+
+Use matching beta 2 application builds for online sessions. Auto selects
+Experimental Rollback, required for code mods. Clients approve executable
+downloads; keeping them offline does not change offline selection or saves.
+
+The technical version is 1.0.7+beta.2, keeping compatibility with the supplied
+mods' minimum 1.0.7 requirement. Android versionCode is 1070007 and keeps the
+existing application/signing identity. No new signing key was generated.
+
+Windows x64, Linux x86_64 / Steam Deck, Linux ARM64 and Android ARM64 are
+packaged. Both Linux architectures have AppImages. No macOS binary is included.
+
+Compilation and static package/link inspection are not gameplay acceptance.
+Gameplay, controller/device and online session checks remain with the maintainer.

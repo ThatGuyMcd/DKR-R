@@ -1,0 +1,154 @@
+diff --git a/plume_apple.mm b/plume_apple.mm
+index 1384fe9..22fc694 100644
+--- a/plume_apple.mm
++++ b/plume_apple.mm
+@@ -7,6 +7,144 @@
+ 
+ #include "plume_apple.h"
+ 
++#include <TargetConditionals.h>
++
++#if TARGET_OS_IPHONE
++#import <UIKit/UIKit.h>
++
++namespace plume {
++    RenderDeviceVendor getRenderDeviceVendor(uint64_t) {
++        return RenderDeviceVendor(0x106B); // Apple
++    }
++
++    CGFloat getScaleFactor(UIWindow *uiWindow) {
++#ifdef PLUME_APPLE_RETINA_ENABLED
++        // contentScaleFactor is a view property and drops to 1 while UIKit
++        // snapshots the app (Control Center, app switcher), which shrinks the
++        // swapchain to points. Use the screen's native scale, which is also
++        // what SDL_GetWindowSizeInPixels reports for the overlay.
++        UIScreen *screen = uiWindow.windowScene.screen ?: uiWindow.screen;
++        return screen != nil ? screen.nativeScale : [uiWindow contentScaleFactor];
++#else
++        return 1.0f;
++#endif
++    }
++
++    // MARK: - CocoaWindow
++
++    CocoaWindow::CocoaWindow(void* window)
++        : windowHandle(window), cachedRefreshRate(0) {
++        cachedAttributes = {0, 0, 0, 0};
++
++        if ([NSThread isMainThread]) {
++            UIWindow *uiWindow = (__bridge UIWindow *)windowHandle;
++            CGRect bounds = [uiWindow bounds];
++            CGFloat scaleFactor = getScaleFactor(uiWindow);
++
++            cachedAttributes.x = 0;
++            cachedAttributes.y = 0;
++            cachedAttributes.width = (int)round(bounds.size.width * scaleFactor);
++            cachedAttributes.height = (int)round(bounds.size.height * scaleFactor);
++
++            UIScreen *screen = [uiWindow screen];
++            if (@available(iOS 10.3, *)) {
++                cachedRefreshRate.store((int)[screen maximumFramesPerSecond]);
++            }
++        } else {
++            updateWindowAttributesInternal(true);
++            updateRefreshRateInternal(true);
++        }
++    }
++
++    CocoaWindow::~CocoaWindow() {}
++
++    void CocoaWindow::updateWindowAttributesInternal(bool forceSync) {
++        auto updateBlock = ^{
++            UIWindow *uiWindow = (__bridge UIWindow *)windowHandle;
++            CGRect bounds = [uiWindow bounds];
++            CGFloat scaleFactor = getScaleFactor(uiWindow);
++
++            std::lock_guard<std::mutex> lock(attributesMutex);
++            cachedAttributes.x = 0;
++            cachedAttributes.y = 0;
++            cachedAttributes.width = (int)round(bounds.size.width * scaleFactor);
++            cachedAttributes.height = (int)round(bounds.size.height * scaleFactor);
++        };
++
++        if (forceSync) {
++            dispatch_sync(dispatch_get_main_queue(), updateBlock);
++        } else {
++            dispatch_async(dispatch_get_main_queue(), updateBlock);
++        }
++    }
++
++    void CocoaWindow::updateRefreshRateInternal(bool forceSync) {
++        auto updateBlock = ^{
++            UIWindow *uiWindow = (__bridge UIWindow *)windowHandle;
++            UIScreen *screen = [uiWindow screen];
++            if (@available(iOS 10.3, *)) {
++                cachedRefreshRate.store((int)[screen maximumFramesPerSecond]);
++            }
++        };
++
++        if (forceSync) {
++            dispatch_sync(dispatch_get_main_queue(), updateBlock);
++        } else {
++            dispatch_async(dispatch_get_main_queue(), updateBlock);
++        }
++    }
++
++    void CocoaWindow::getWindowAttributes(CocoaWindowAttributes* attributes) const {
++        if ([NSThread isMainThread]) {
++            UIWindow *uiWindow = (__bridge UIWindow *)windowHandle;
++            CGRect bounds = [uiWindow bounds];
++            CGFloat scaleFactor = getScaleFactor(uiWindow);
++
++            {
++                std::lock_guard<std::mutex> lock(attributesMutex);
++                const_cast<CocoaWindow*>(this)->cachedAttributes.x = 0;
++                const_cast<CocoaWindow*>(this)->cachedAttributes.y = 0;
++                const_cast<CocoaWindow*>(this)->cachedAttributes.width = (int)round(bounds.size.width * scaleFactor);
++                const_cast<CocoaWindow*>(this)->cachedAttributes.height = (int)round(bounds.size.height * scaleFactor);
++
++                *attributes = cachedAttributes;
++            }
++        } else {
++            {
++                std::lock_guard<std::mutex> lock(attributesMutex);
++                *attributes = cachedAttributes;
++            }
++
++            const_cast<CocoaWindow*>(this)->updateWindowAttributesInternal(false);
++        }
++    }
++
++    int CocoaWindow::getRefreshRate() const {
++        if ([NSThread isMainThread]) {
++            UIWindow *uiWindow = (__bridge UIWindow *)windowHandle;
++            UIScreen *screen = [uiWindow screen];
++
++            if (@available(iOS 10.3, *)) {
++                int freshRate = (int)[screen maximumFramesPerSecond];
++                const_cast<CocoaWindow*>(this)->cachedRefreshRate.store(freshRate);
++                return freshRate;
++            }
++
++            return cachedRefreshRate.load();
++        } else {
++            int rate = cachedRefreshRate.load();
++
++            const_cast<CocoaWindow*>(this)->updateRefreshRateInternal(false);
++
++            return rate;
++        }
++    }
++
++    void CocoaWindow::toggleFullscreen() {
++        // The UIKit app is already fullscreen.
++    }
++}
++#else
+ #import <AppKit/AppKit.h>
+ #import <Foundation/Foundation.h>
+ #import <IOKit/IOKitLib.h>
+@@ -176,3 +314,4 @@ namespace plume {
+         }
+     }
+ }
++#endif

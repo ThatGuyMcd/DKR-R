@@ -1,5 +1,6 @@
 #include "online_mod_sync.hpp"
 #include "online_mod_cache.hpp"
+#include "online_mod_runtime.hpp"
 #include <algorithm>
 #include <map>
 
@@ -30,7 +31,13 @@ bool ModSync::start(SyncPhase phase) {
         if(phase==SyncPhase::ReadingOffer)state_.stage="Waiting for host approval and any required mod offer";
         decision_.reset();keep_offline_=true;}running_.store(true);return true;
 }
-void ModSync::consent(bool accept,bool keep_offline){std::lock_guard lock(mutex_);if(state_.phase==SyncPhase::Review){decision_=accept;keep_offline_=keep_offline;changed_.notify_all();}}
+void ModSync::consent(bool accept,bool keep_offline,std::string code_offer) {
+    std::lock_guard lock(mutex_);if(state_.phase!=SyncPhase::Review)return;
+    if(accept&&state_.manifest&&!state_.manifest->code.empty()&&(state_.offer.empty()||code_offer!=state_.offer)) {
+        state_.error="Approve the exact host code offer before joining.";return;
+    }
+    decision_=accept;keep_offline_=keep_offline;state_.error.clear();changed_.notify_all();
+}
 void ModSync::cancel(){if(thread_.joinable())thread_.request_stop();changed_.notify_all();if(!running_.load())publish({});}
 void ModSync::pause(std::stop_token stop,std::chrono::milliseconds wait) {
     std::unique_lock lock(mutex_);changed_.wait_for(lock,stop,wait,[]{return false;});
@@ -47,11 +54,12 @@ bool ModSync::prepare_host(SyncSettings settings,std::filesystem::path legacy,st
             const auto began=Clock::now();
             settings.online_root=private_storage_path(settings.online_root);
             folders(settings);progress("Freezing the host's selected mods");
-            auto bundle=std::make_shared<const Bundle>(export_host(legacy,labs,revision,ai,stop));
+            auto bundle=std::make_shared<const Bundle>(export_host(legacy,labs,revision,ai,stop,settings.offline_code_root,settings.host_version,settings.imported_roms));
             const auto exported=Clock::now();
             SyncView ready;ready.phase=SyncPhase::HostReady;ready.manifest=std::make_shared<const Manifest>(bundle->manifest);
+            ready.offer=identity(bundle->manifest);
             ready.total=transfer_size(bundle->manifest);
-            if(!bundle->manifest.content.empty()) {
+            if(has_mods(bundle->manifest)) {
                 cache_bundle(*bundle,settings.online_root/"payloads",stop);
                 ready.profile=prepare_profile(bundle->manifest,settings.online_root/"payloads",settings.imported_roms,
                     settings.online_root,settings.worker,stop,[&](auto stage){progress(stage);},legacy,settings.offline_tracks_root,labs);
@@ -128,7 +136,7 @@ void ModSync::host_loop(std::shared_ptr<const Bundle> bundle,std::stop_token sto
                 if(message.operation==Operation::Preparing)at->second.acknowledgement=Message{Operation::PreparingAck,message.manifest};
                 if(message.operation==Operation::Cancel){link_.reject(packet.request,"Mod synchronization declined.");peers.erase(at);}
                 else if(message.operation==Operation::Verified) {
-                    std::string error;if(!link_.admit(packet.request,message.manifest,error))throw Error(error);
+                    std::string error;if(!link_.admit(packet.request,message.manifest,message.payload,error))throw Error(error);
                     peers.erase(at);
                 }
             }catch(const std::exception& error){link_.reject(packet.request,error.what());peers.erase(packet.sender);}
@@ -157,7 +165,7 @@ void ModSync::host_loop(std::shared_ptr<const Bundle> bundle,std::stop_token sto
 }
 void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation& prepare,std::stop_token stop) {
     Download download;ChunkInbox inbox;std::unique_ptr<PayloadFile> file;std::shared_ptr<const Profile> profile;
-    std::shared_ptr<const void> runtime;Clock::time_point retry{},consent_retry{},preparing_retry{};
+    std::shared_ptr<const RuntimeResources> runtime;Clock::time_point retry{},consent_retry{},preparing_retry{};
     std::string requested_payload;std::uint32_t requested_offset=0;
     bool data_requested=false;
     const auto download_began=Clock::now();
@@ -202,7 +210,7 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
             // frontend owns cancellation after the guest world has stopped.
             SyncView ready;ready.phase=SyncPhase::Verified;ready.profile=profile;ready.runtime=runtime;
             ready.kept_offline=kept_offline;ready.keep_error=keep_error;
-            if(saw_offer){ready.manifest=std::make_shared<const Manifest>(download.manifest());ready.received=ready.total=transfer_size(download.manifest());}
+            if(saw_offer){ready.manifest=std::make_shared<const Manifest>(download.manifest());ready.offer=download.digest();ready.received=ready.total=transfer_size(download.manifest());}
             ready.stage="Host mods verified for this session";publish(std::move(ready));return;
         }
         if(saw_offer && !network.joining)throw Error("The host connection ended during mod admission.");
@@ -229,6 +237,7 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
                 if(advanced)retry=Clock::now()+std::chrono::seconds(1);
                 if(advanced && download.phase()==TransferPhase::Consent) {
                     SyncView review;review.phase=SyncPhase::Review;review.manifest=std::make_shared<const Manifest>(download.manifest());
+                    review.offer=download.digest();
                     review.total=transfer_size(download.manifest());review.stage="Review the host's required mods";publish(std::move(review));
                 }
               } else if(download.accept_payload_chunk(*chunk)) {
@@ -252,9 +261,11 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
                 // route's idle timeout on slow storage. Consent is still local;
                 // these authenticated status packets grant no asset access.
                 auto heartbeat=stage_heartbeat(ProgressPhase::Review);
-                progress("Checking the packaged mod importer before downloading");verify_online_worker(settings.worker,settings.online_root,stop);
+                if(std::any_of(download.manifest().payloads.begin(),download.manifest().payloads.end(),[](const auto& p){return p.kind!=PayloadKind::Code;})) {
+                    progress("Checking the packaged mod importer before downloading");verify_online_worker(settings.worker,settings.online_root,stop);
+                }
                 progress("Checking installed patches to avoid unnecessary downloads");
-                cache_installed_payloads(download.manifest(),settings.online_root/"payloads",settings.offline_legacy_root,stop,settings.offline_tracks_root);
+                cache_installed_payloads(download.manifest(),settings.online_root/"payloads",settings.offline_legacy_root,stop,settings.offline_tracks_root,settings.offline_code_root,settings.host_version);
                 heartbeat.request_stop();heartbeat.join();
                 download.consent();progress("Downloading required host mods into the separate online cache");
                 std::lock_guard lock(mutex_);keep_requested=keep_offline_;state_.phase=SyncPhase::Downloading;
@@ -312,7 +323,7 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
             const auto runtime_ready=Clock::now();
             if(keep_requested && !settings.offline_legacy_root.empty() && !settings.offline_tracks_root.empty()) {
                 preparation_progress("Keeping verified copies in Mods/Hacks for offline play");
-                try {retain_profile(*profile,settings.offline_legacy_root,settings.offline_tracks_root,stop);kept_offline=true;}
+                try {retain_profile(*profile,settings.offline_legacy_root,settings.offline_tracks_root,stop,settings.offline_code_root,settings.host_version);kept_offline=true;}
                 catch(const std::exception& error){require_running(stop);keep_error=std::string(error.what()).substr(0,1024);}
                 catch(...){require_running(stop);keep_error="Offline copies could not be saved. Your verified session mods are still available.";}
             }
@@ -322,11 +333,12 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
                 static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(runtime_ready-profile_ready).count()),
                 static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-runtime_ready).count()),
                 static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-preparation_began).count()));
-            require_running(stop);if(!link_.verify_local(download.digest(),error))throw Error(error);
+            require_running(stop);if(!link_.verify_local(download.digest(),runtime->fingerprint(),error))throw Error(error);
             heartbeat.request_stop();heartbeat.join();
             download.prepared(profile->digest);prepared=true;retry={};
         } else if(download.phase()==TransferPhase::Verified && Clock::now()>=retry) {
-            if(send(0,control(Operation::Verified,download),error))retry=Clock::now()+std::chrono::milliseconds(250);
+            Message proof{Operation::Verified,download.digest(),runtime->fingerprint()};
+            if(send(0,proof,error))retry=Clock::now()+std::chrono::milliseconds(250);
             else if(!error.empty())throw Error(error);
         }
         if(download.phase()==TransferPhase::Payloads) {

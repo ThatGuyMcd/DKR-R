@@ -6,6 +6,8 @@
 #include "runtime_platform.hpp"
 #include "modern_camera.hpp"
 #include "runtime_portable.hpp"
+#include "updates/update_service.hpp"
+#include "updates/update_process.hpp"
 #include "runtime_netplay.hpp"
 #include "runtime_support.hpp"
 #include "runtime_log_archive.hpp"
@@ -14,6 +16,8 @@
 #include "startup_performance.hpp"
 #include "virtual_pak.hpp"
 #include "runtime_legacy_mods.hpp"
+#include "runtime_code_mods.hpp"
+#include "mods/online_mod_runtime.hpp"
 #include "host_task_lifetime.hpp"
 #include "launcher_recovery_policy.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
@@ -25,6 +29,10 @@
 #if defined(__ANDROID__)
 #include "graphics_health.hpp"
 #include "../android/android_platform.hpp"
+#endif
+#if defined(DKR_IOS)
+#include "../ios/ios_platform.hpp"
+#include <cstdlib>
 #endif
 #if DKR_LEGACY_QUALIFICATION
 #include "legacy_runtime_qualification.hpp"
@@ -71,6 +79,7 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
+#include <shellapi.h>
 #include <DbgHelp.h>
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "netplay/experimental_arguments.hpp"
@@ -112,7 +121,7 @@ bool ConfigurePersistentRuntimeLog(
     }
 #endif
     std::setvbuf(stderr, nullptr, _IONBF, 0);
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) || defined(DKR_IOS)
     // RT64 writes GPU/driver identification to stdout. Keep it in the same
     // private log as startup errors so phone users can export both together.
     dup2(STDERR_FILENO, STDOUT_FILENO);
@@ -128,6 +137,10 @@ std::filesystem::path DefaultConfigDirectory(const char* executable_argument) {
     if (dkr::runtime::portable::enabled_at_startup()) {
         return executable_directory / "dkr-runtime-data";
     }
+#if defined(DKR_IOS)
+    // Files-visible sandbox, not the signed bundle.
+    return dkr::runtime::ios::documents_directory() / "DKR-R";
+#endif
 #if defined(_WIN32)
     if (const char* app_data = std::getenv("APPDATA"); app_data != nullptr && *app_data != '\0') {
         return std::filesystem::path(app_data) / "DKRPort";
@@ -490,23 +503,23 @@ bool PrepareCanonicalRomPath(std::filesystem::path& rom_path,
 } // namespace
 
 bool RelaunchApplication(int argc, char** argv) {
-#ifdef _WIN32
+#if defined(DKR_IOS)
     (void)argc;
     (void)argv;
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION process{};
-    std::wstring command_line = GetCommandLineW();
-    if (command_line.empty() ||
-        !CreateProcessW(nullptr, command_line.data(), nullptr, nullptr, FALSE,
-                        0, nullptr, nullptr, &startup, &process)) {
-        std::fprintf(stderr, "[boot][restart] CreateProcessW failed: %lu\n",
-                     static_cast<unsigned long>(GetLastError()));
+    // The sandbox rejects execv. main() exits and the icon starts a new process.
+    std::fprintf(stderr, "[boot][restart] quitting so the icon can start a new process\n");
+    return true;
+#elif defined(_WIN32)
+    try {
+        auto executable=dkr::updates::application_executable();auto root=dkr::updates::application_directory();auto launcher=root/"DKR-R.exe";
+        if(!std::filesystem::is_regular_file(launcher))launcher=executable;
+        std::vector<std::string> arguments;for(int i=1;i<argc;++i)arguments.emplace_back(argv[i]);
+        dkr::updates::Child next(launcher,arguments,root);
+        return true;
+    } catch(const std::exception& error) {
+        std::fprintf(stderr,"[boot][restart] %s\n",error.what());
         return false;
     }
-    CloseHandle(process.hThread);
-    CloseHandle(process.hProcess);
-    return true;
 #else
     if (argc <= 0 || argv == nullptr || argv[0] == nullptr) {
         return false;
@@ -524,8 +537,31 @@ bool RelaunchApplication(int argc, char** argv) {
 }
 
 int DkrMain(int argc, char** argv) {
+    dkr::updates::remember_arguments(argc,argv);
+#if !defined(__ANDROID__) && !defined(DKR_IOS)
+    // Hold a shared lock for normal play, including multiple local instances.
+    // The external updater must obtain exclusive access before any replacement.
+    std::unique_ptr<dkr::updates::InstallLock> application_update_lock;
+    try {
+        auto executable=dkr::updates::application_executable();
+#if defined(__APPLE__)
+        auto install_root=executable.parent_path().parent_path().parent_path();
+        if(install_root.extension()==".app")application_update_lock=std::make_unique<dkr::updates::InstallLock>(install_root.parent_path(),5000,true);
+#else
+        auto install_root=dkr::updates::application_directory();
+        if(std::filesystem::is_regular_file(install_root/"assets/updates/install.json") || std::getenv("APPIMAGE"))
+            application_update_lock=std::make_unique<dkr::updates::InstallLock>(install_root,5000,true);
+#endif
+    } catch(const std::exception& error) {
+        std::fprintf(stderr,"[updates][startup-lock] %s\n",error.what());return 6;
+    }
+#endif
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
+#if defined(DKR_IOS)
+    dkr::runtime::ios::configure_session();
+    dkr::runtime::ios::prepare_storage();
+#endif
     dkr::runtime::portable::configure(argv[0]);
 #if defined(__ANDROID__)
     std::set_terminate([] {
@@ -546,6 +582,25 @@ int DkrMain(int argc, char** argv) {
     dkr::runtime::startup_performance::mark("process-entry");
 #if defined(_WIN32)
     SetUnhandledExceptionFilter(RuntimeCrashFilter);
+    if (argc == 4 && std::string_view(argv[1]) == "--self-test-install-layout") {
+        const auto expected = std::filesystem::u8path(argv[2]);
+        const auto& root = dkr::runtime::portable::application_directory();
+        std::error_code error;
+        bool passed = std::filesystem::equivalent(root, expected, error) && !error;
+        const bool portable_expected = std::string_view(argv[3]) == "on";
+        passed = passed && (std::string_view(argv[3]) == "on" || std::string_view(argv[3]) == "off") &&
+            dkr::runtime::portable::enabled_at_startup() == portable_expected &&
+            dkr::runtime::portable::marker_path() == root / "portable.txt";
+        if (portable_expected) passed = passed && DefaultConfigDirectory(argv[0]) == root / "dkr-runtime-data";
+        for (const auto* file : {"DKR-R.exe", "libexec/dkr-r/DKR-R-Runtime.exe",
+             "libexec/dkr-r/DKR-R-ModWorker.exe", "libexec/dkr-r/DKR-R-Updater.exe",
+             "libexec/dkr-r/DKR-R-InputHost.exe", "assets/ui/Icons/DKR-R-Spinning-Icon.png",
+             "assets/ui/Backgrounds/DKR-R-Launcher-Background.png",
+             "assets/ui/CustomTrackBackgrounds/rt64.json", "assets/controllers/gamecontrollerdb.txt"})
+            passed = passed && std::filesystem::is_regular_file(root / file);
+        std::fprintf(stderr,"[test][install-layout] %s: public root, private runtime, assets, helpers and portable route\n", passed ? "PASS" : "FAILED");
+        return passed ? 0 : 1;
+    }
 #endif
 
     if (argc >= 2 && std::string_view(argv[1]) == "--self-test-pak") {
@@ -965,8 +1020,8 @@ int DkrMain(int argc, char** argv) {
     }
     const dkr::runtime::rom::Revision registered_revision = rom_identity.revision;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-    if (rollback_bootstrap && registered_revision!=dkr::runtime::rom::Revision::UsV77) {
-        std::fprintf(stderr,"[rollback-test] This first race test requires US v1.0.\n");
+    if (rollback_bootstrap && !dkr::runtime::netplay::experimental::runtime_available(registered_revision)) {
+        std::fprintf(stderr,"[rollback-test] No linked replay engine for this validated revision.\n");
         dkr::runtime::platform::shutdown(); return 3;
     }
 #endif
@@ -1086,6 +1141,7 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::netplay::reset_runtime_state();
         dkr::runtime::rev_a_asset_mutex::reset_statistics();
         dkr::runtime::legacy::begin_session(nullptr);
+        dkr::runtime::code_mods::reset();
         bool selecting_save_owner = false;
         std::shared_ptr<const dkr::mods::online::RuntimeResources> online_mods;
         try {
@@ -1104,6 +1160,12 @@ int DkrMain(int argc, char** argv) {
                 else dkr::runtime::legacy::begin_prepared(prepared_mods);
             } else dkr::runtime::legacy::begin_prepared(prepared_mods);
             const auto online_save = dkr::runtime::netplay::session().runtime_view();
+            const auto code_set=online_mods?online_mods->code():prepared_mods->code;
+            if(code_set&&online_save.active&&(!online_save.launch_descriptor||online_save.launch_descriptor->synchronization!=
+                    dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback))
+                throw dkr::mods::Error("Custom Magic Codes require the owned Experimental Rollback engine online.");
+            dkr::runtime::code_mods::begin(code_set,registered_revision,
+                online_save.launch_descriptor?online_save.launch_descriptor->match_id:0x444B52434F444531ULL,online_save.active);
             selecting_save_owner = true;
             if (!dkr::runtime::saves::prepare_runtime_save_context(config_directory,
                     prepared_mods->save_subfolder, prepared_mods->pak_directory,
@@ -1124,6 +1186,7 @@ int DkrMain(int argc, char** argv) {
                 dkr::runtime::pak::begin_session_directory({});
                 dkr::runtime::saves::retire_runtime_save_context();
                 dkr::runtime::legacy::begin_session(nullptr);
+                dkr::runtime::code_mods::reset();
                 prepared_mods.reset();
                 if (dkr::runtime::netplay::session().active())
                     dkr::runtime::netplay::session().fail_runtime_start(std::string("Save protection: ") + error.what());
@@ -1349,8 +1412,9 @@ int DkrMain(int argc, char** argv) {
                             : "Retail startup stopped before its safe handoff: "+mod_error);
                     }
                     auto mod_bootstrap=online_mods?dkr::runtime::legacy::online_bootstrap_checkpoint():dkr::mods::Bytes{};
+                    auto code_bootstrap=dkr::runtime::code_mods::bootstrap_checkpoint();
                     owned_ok=dkr::runtime::netplay::experimental::run_runtime(window_handle,rom_path,std::move(bootstrap),*admitted_lobby,*owned_descriptor,timeout_seconds,owned_error,owned_check,
-                        online_mods,std::move(mod_bootstrap));
+                        online_mods,std::move(mod_bootstrap),std::move(code_bootstrap));
                 } catch(const std::exception& exception) {owned_error=exception.what();}
                 catch(...) {owned_error="The owned runtime could not start safely.";}
                 if(!owned_ok) {
@@ -1374,7 +1438,10 @@ int DkrMain(int argc, char** argv) {
         if (!save_failure.empty()) dkr::runtime::ui::report_mod_error("Save protection: " + save_failure);
 #endif
         prepared_mods.reset();
-        const auto mod_failure=dkr::runtime::legacy::failure();
+        auto mod_failure=dkr::runtime::legacy::failure();
+        const auto code_failure=dkr::runtime::code_mods::failure();
+        if(!code_failure.empty()){if(!mod_failure.empty())mod_failure+="; ";mod_failure+=code_failure;}
+        dkr::runtime::code_mods::reset();
         dkr::runtime::legacy::begin_session(nullptr);
         if (registered_revision == dkr::runtime::rom::Revision::UsV80) {
             const auto mutex_stats =
@@ -1485,19 +1552,19 @@ int DkrMain(int argc, char** argv) {
 
 #if defined(_WIN32)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
-#if defined(DKR_EXPERIMENTAL_RACE_TEST)
-    // Keep the existing normal-launch path intact. Only the explicit local
-    // bootstrap child needs UTF-8 argv, including non-ASCII profile paths.
-    if(std::wcsstr(GetCommandLineW(),L"--rollback-bootstrap-output")) {
-        dkr::runtime::netplay::experimental::WindowsUtf8Arguments unicode;
-        if(!unicode.valid)return 2;
-        return DkrMain(int(unicode.values.size()),unicode.values.data());
-    }
-#endif
-    return DkrMain(__argc, __argv);
+    // Update relaunches retain Unicode ROM/profile arguments on all backends.
+    int count=0;auto** wide=CommandLineToArgvW(GetCommandLineW(),&count);if(!wide)return 2;
+    std::vector<std::string> text;for(int i=0;i<count;++i){int n=WideCharToMultiByte(CP_UTF8,0,wide[i],-1,nullptr,0,nullptr,nullptr);std::string value(n,'\0');WideCharToMultiByte(CP_UTF8,0,wide[i],-1,value.data(),n,nullptr,nullptr);value.pop_back();text.push_back(std::move(value));}
+    LocalFree(wide);std::vector<char*> arguments;for(auto& value:text)arguments.push_back(value.data());
+    return DkrMain(count,arguments.data());
 }
 #else
 int main(int argc, char** argv) {
-    return DkrMain(argc, argv);
+    const int status = DkrMain(argc, argv);
+#if defined(DKR_IOS)
+    // UIKit's postFinishLaunch ignores this status and does not exit.
+    std::exit(status);
+#endif
+    return status;
 }
 #endif

@@ -9,6 +9,14 @@ Use the same complete DKR-R package on every machine, including its private
 workers. The same original ROM revision, compatible build, gameplay rules and
 session mod identity must be admitted before the game starts.
 
+Version 1.0.7 uses protocol 50. Use 1.0.7 on every device, not a mixture with
+1.0.5/1.0.6. Windows and Linux/SteamOS are not separate online versions.
+Replay-engine IDs normalise text line endings, so separately generated Windows
+and Linux builds of the same source agree. Actual code changes are still checked.
+The lobby checks the replay engine, then compares the actual prepared mod
+resources before admitting a modded client. A cached download is still checked;
+there is no need to delete your offline library or download everything again.
+
 ## Starting a lobby
 
 1. Select your original ROM and local input profile. The profile supplies your
@@ -147,6 +155,10 @@ Treat lobby codes as private invitations. They expire when the lobby closes
 and no later than six hours after creation. Rekey/revoke controls invalidate
 admission capabilities without giving strangers a player slot.
 
+Use **Hide code** beside the lobby code when streaming. **Show code** reveals it
+again; Copy still copies the real invite. Hiding it is not an access-control
+change, so keep normal host approval enabled for people you don't know.
+
 ## Connection and compatibility
 
 Quick Join uses the public PeerJS rendezvous for signalling, then authenticated
@@ -163,6 +175,12 @@ Admission checks build/protocol, ROM, Patch Pipeline identity, gameplay/Magic
 Codes, mod contracts, save proof, architecture and floating-point policy.
 An ARM64 port does not automatically permit x64/ARM64 mixed sessions.
 Use compatible peers; don't bypass a failed compatibility check.
+
+Startup failures name the mismatched part: replay engine, Game Pak, prepared
+mods, checkpoint schema/size, launch rules, online save or startup epoch.
+The runtime log records local and remote fingerprints, not save contents.
+For a report, send both logs from the same attempt plus the package names,
+ROM revision and enabled mod set. Keep personal paths/invite details private.
 
 There is no voice/text chat, spectator mode or general public matchmaking
 directory. “Open Lobbies” is not a promise of an unrestricted public browser.

@@ -1,0 +1,1887 @@
+# Modders Guide to Custom Magic Code Creation
+
+DKR-R v1.0.7 beta 2 | Custom Magic Codes API 1
+By ThatGuyMcd and the DKR-R contributors
+
+## 1. Right, what can we actually make?
+
+Custom Magic Codes are proper code mods. They are not just another list of
+cheats, and they are not limited to swapping a character model or a track.
+You can change race rules, alter AI, build your own trophy flow, read player
+input, move objects, change camera behaviour and add text to the game's HUD.
+You can hook the original game's functions and work directly with its memory.
+There is a lot you can do here!
+
+The important bit is doing it properly. DKR-R still owns the window, graphics
+device, controller backend, saving, audio device and online session. A code
+mod works inside the game's guest world. It does not replace the PC/Android
+application or get permission to bypass those systems.
+
+This guide covers the SDK supplied with this build. It starts with a complete
+small project, then goes through settings, callbacks, game services, native
+hooks, trophies, online behaviour and sharing your finished mod. The reference
+sections cover every public function in the two SDK headers.
+
+Do not copy an API from Rocket-R or Glover-R and expect it to work here. The
+idea is similar, but the names, lifetime rules, available services and online
+requirements are different. DKR-R currently uses restart-based activation.
+There is no general live-switching or live-settings API in this SDK.
+
+### Pick the right route
+
+- Use a character pack for models, portraits and supported character assets.
+- Use Track Lab or a supported track pack for a new course and its assets.
+- Use a texture pack for replacement textures and their priorities.
+- Use Custom Magic Codes for new rules and executable game behaviour.
+- Combine these when your project needs both assets and code.
+
+A track's old ROM patch may contain executable changes. Importing that patch
+does NOT automatically execute those changes. Port the behaviour into a real
+Custom Magic Code package, or use a specific supported legacy adapter.
+
+### What is available, and what needs more work?
+
+Straightforward SDK work: scalar settings, deterministic random numbers,
+package resources, racer/object snapshots and selected writes, recorded
+logical input, camera transforms, static-floor queries, native text, original
+sound/music commands and the frozen custom-cup services.
+
+Advanced work: custom item rules, AI decisions, physics changes, game menus,
+camera logic, object behaviours and native function replacements. These need
+the decomp, the correct function boundary, compatible game structures and
+careful handling of what the original game expects. A named symbol is not a
+typed API, and having its address does not make every operation safe.
+
+Not supplied as general SDK services: arbitrary host files or networking,
+DLLs, Python/Lua/JavaScript, new GPU shaders, RTX settings, custom PCM music,
+a managed mesh/scene importer, a complete collision/physics engine, custom
+launcher widgets, launcher command buttons, per-mod file saves or hot reload.
+Some game-side equivalents can be built with native hooks and owned guest
+data. That is different from a ready-made portable service for them.
+
+## 2. The files you need to know
+
+Keep the SDK folder intact. These files belong together:
+
+```text
+modding/
+  build.py                       Build a portable code package
+  runtime.c                      Small freestanding memory runtime
+  mod.ld                         Guest linker layout
+  reference-sdk-only.toml         SDK-only link reference
+  include/dkr/magic_codes.h       Core, hooks, calls and trophy API
+  include/dkr/game.h              Typed game services
+  reference-us-v77/               Address-only US v1.0 reference kit
+  reference-us-v80/               Address-only US Rev A/v1.1 reference kit
+  examples/core-boot/             Small boot/export example
+  examples/guide-starting-bananas/ Complete settings/racer example
+  examples/ai-boss-difficulty/    Working named-hook example
+  examples/custom-trophy-races/  Full championship adapter
+  SDK.txt                        Compact technical contract
+  USER-GUIDE.txt                 Installing and using the supplied mods
+  MODDERS-GUIDE.txt               This guide
+```
+
+The two ROM labels inside metadata are `us.v77` and `us.v80`. They are internal
+revision identities, not game version numbers 77 and 80. Declare only the
+revisions you genuinely support. Named SDK code can support both in one
+package; a mod with raw game relocations/hooks/replacements must declare
+exactly one revision and use the matching reference kit.
+
+The SDK does not include a game ROM or the original game implementation.
+Players supply their own supported ROM. An SDK-only mod can be compiled
+without loading a ROM into the authoring tool.
+
+## 3. Set up the compiler
+
+You need Python 3.11 or newer, Clang with its MIPS target, LLD and the pinned
+RecompModTool from DKR-R's N64Recomp dependency. Use the tool revision that
+belongs to this SDK. A similarly named tool from another recomp may produce
+different metadata.
+
+On Windows, WSL is a practical way to compile guest C. Use a Linux Clang/LLD
+with the MIPS backend. A Windows compiler installation is not automatically
+a suitable MIPS toolchain. `clang --print-targets` should list MIPS.
+
+In a configured DKR-R developer checkout the tool can be built with CMake:
+
+```sh
+cmake --build /absolute/path/to/configured-build --target RecompModTool
+```
+
+That is the packaging tool, not a game launch. For a Visual Studio build add
+`--config Release`. Find the resulting RecompModTool executable in that build
+tree and pass its full path below. The standalone source SDK does not fetch
+or build the tool for you. Do not edit the dependency to get a mod compiling.
+
+All examples in this guide use shell paths. PowerShell users can put a whole
+command on one line. In WSL, a Windows folder such as C:\MyMods is normally
+`/mnt/c/MyMods`. Do not mix a Windows executable path with a Linux executable
+path without deliberately invoking the correct environment.
+
+### The target is not your PC
+
+Your mod compiles as big-endian MIPS II, O32, 32-bit guest pointers, FR=0
+floating-point registers. DKR-R interprets that portable code on Windows,
+Linux x86_64, Steam Deck, Linux ARM64 and Android ARM64. You do not produce
+five different DLLs. The same compatible .nrm is used on those hosts.
+
+build.py supplies the flags. They include `-march=mips2 -mabi=32 -mfp32
+-mno-odd-spreg -mno-abicalls -fno-pic -G0`, freestanding C, no builtins and
+`-ffp-contract=off`. Do not remove those flags to silence a problem. Do not
+link against the PC's libc. The supplied runtime implements memset, memcpy,
+memmove and memcmp, not the entire C standard library.
+
+There is no printf, fopen, malloc or operating-system thread API promised by
+the SDK. Use dkr_log, dkr_alloc and the actual declared imports where suitable.
+Large division or other operations can make a compiler emit helper functions;
+if one is unresolved, provide a compatible bounded guest implementation or
+change the operation. Do not import a host library as a shortcut.
+
+## 4. Your first proper mod
+
+Let's make Starting Bananas. The player chooses a starting banana count and
+whether it affects everyone, humans or AI. There is also a text setting so
+you can see how text entry works. It logs the chosen label once at boot.
+
+The complete source is in examples/guide-starting-bananas. Copy that folder
+to your own development directory if you want to change it. Keep source out
+of the game's generated folders and dependency trees.
+
+### mod.toml
+
+```toml
+[manifest]
+id = "guide_starting_bananas"
+version = "1.0.0"
+display_name = "Starting Bananas"
+description = "Choose starting bananas for humans, AI or everyone. Applies next game."
+authors = ["Your name"]
+game_id = "dkr"
+minimum_recomp_version = "1.0.7"
+dependencies = []
+
+[[manifest.config_options]]
+id = "bananas"
+name = "Starting bananas"
+type = "Number"
+default = 5.0
+min = 0.0
+max = 10.0
+
+[[manifest.config_options]]
+id = "affect"
+name = "Apply to"
+type = "Enum"
+options = ["Everyone", "Humans only", "AI only"]
+default = "Everyone"
+
+[[manifest.config_options]]
+id = "label"
+name = "Session label"
+type = "String"
+default = "Starting Bananas ready"
+
+[build]
+sources = ["main.c"]
+```
+
+### dkr.json
+
+```json
+{
+  "schema": 1,
+  "api": 1,
+  "activation": "restart",
+  "online": "deterministic",
+  "revisions": ["us.v77", "us.v80"],
+  "requires": {"core": 1, "settings": 1, "game": 1, "racers": 1},
+  "systems": ["starting-bananas"]
+}
+```
+
+### main.c
+
+```c
+#include <dkr/game.h>
+
+static DkrU32 starting_bananas;
+static DkrU32 affected;
+
+DKR_CALLBACK(on_boot) void boot(void) {
+    double value = dkr_setting_number("bananas");
+    starting_bananas = (DkrU32)(value + 0.5);
+    affected = (DkrU32)dkr_setting_number("affect");
+    char label[96];
+    DkrU32 bytes = dkr_setting_string("label", 0, 0);
+    if (bytes > 0 && bytes <= sizeof(label)) {
+        dkr_setting_string("label", label, sizeof(label));
+        dkr_log(label);
+    }
+}
+
+DKR_CALLBACK(after_track_setup_racers) void apply_start(void) {
+    DkrU32 count = dkr_racer_count();
+    for (DkrU32 i = 0; i < count; ++i) {
+        DkrRacerState racer;
+        if (!dkr_racer_get(i, &racer)) continue;
+        if (racer.finished) continue;
+        if (affected == 1 && racer.player < 0) continue;
+        if (affected == 2 && racer.player >= 0) continue;
+        dkr_racer_set(i, DKR_RACER_BANANAS, starting_bananas);
+    }
+}
+```
+
+This is a small teaching mod, not a replacement for every native banana rule.
+It runs whenever track_setup_racers completes, which can include native demo
+or menu-owned track setups. If your release should affect only a particular
+race mode, add a decomp-backed mode/race-type guard before the loop. Do not
+claim it is Adventure-only or human-only without selecting/checking that.
+The setting label is optional diagnostic text, not the game's track name.
+
+Notice what we did NOT do: multiply a racer value every frame, keep a stale
+racer pointer forever or change the global game speed. We change one field
+once after the native roster is available.
+
+### Build it
+
+```sh
+python3 /path/to/modding/build.py /path/to/my-starting-bananas \
+  --output /path/to/builds/starting-bananas-1 \
+  --mod-tool /path/to/RecompModTool
+```
+
+The output directory must not exist. Choose a fresh directory on each build.
+Optional `--clang /path/to/clang` and `--lld /path/to/ld.lld` select explicit
+tools. The resulting package is guide_starting_bananas.nrm. Import that file,
+not mod.elf, the object files or the tool's intermediate archive.
+
+### Install it
+
+Open MODS / HACKS, Import Mods, then choose the .nrm. Open Custom Magic Codes,
+open Details, review and approve the code, save the settings and enable it.
+Start a fresh game. Changing a setting while another game is running does
+not rewrite that running game's frozen configuration.
+
+Approval applies to exact package bytes. Rebuilding normally gives you a new
+digest. Select and approve the new edition rather than assuming an old trust
+decision applies. Keep version numbers meaningful so users can identify it.
+
+## 5. Understand the two manifests
+
+mod.toml is input to the packaging tool. It produces mod.json in the archive.
+dkr.json is DKR-R's extra contract. Both matter. A successful C compile does
+not prove the package will pass the application loader or link its callbacks.
+
+### mod.toml fields
+
+- id: permanent package identity, not the filename or display name. Use
+  lower-case ASCII letters, numbers, underscores or hyphens; 1..96 bytes.
+- version: semantic major.minor.patch, with valid optional version suffixes.
+  Bump it for changed releases. Do not publish different bytes under one
+  filename/version and expect clients to treat them as identical.
+- display_name: player-facing name, up to 160 bytes.
+- description: explain the behaviour and important limits. The loader permits
+  up to 32768 bytes; that is not a reason to write an essay in the UI.
+- authors: the packaging tool's list of names. Credit your collaborators.
+- game_id: exactly "dkr".
+- minimum_recomp_version: the minimum DKR-R host version, not the mod version.
+  Version comparisons understand prereleases. A minimum of 1.0.7 is newer
+  than 1.0.7-beta.2; 1.0.7+beta.2 retains the 1.0.7 compatibility baseline.
+- dependencies: required code package IDs, optionally with a minimum version,
+  for example ["my_rules_library:1.2.0"]. This is not a load-order slider.
+- config_options: the generated settings form, explained in the next chapter.
+- build.sources: C file paths/globs inside the project, for example
+  ["main.c", "rules/*.c"]. No parent traversal, external files or symlinks.
+
+The wrapper currently supports bounded .c sources, at most 256 files and
+1 MiB per source. It always adds runtime.c. It is not a C++ project generator.
+The upstream tool knows extra fields that DKR-R may not implement. In
+particular, optional_dependencies are not a substitute for a declared
+required dependency in DKR-R's resolver. Do not use native_libraries or an
+unmanaged custom_gamemode; the supported wrapper rejects those.
+
+### dkr.json fields
+
+- schema and api: both 1 for this SDK.
+- activation: "restart". Omission currently defaults to restart; declaring
+  it explicitly makes your intent clear. Other activation values reject.
+- online: "deterministic" if suitable for online; "offline-only" otherwise.
+  Omission defaults to offline-only. This flag is a promise, not an automatic
+  correction for nondeterministic code.
+- revisions: one or both of "us.v77", "us.v80". At least one is required.
+- requires: module names mapped to version 1. Unsupported requirements reject
+  before activation. Declare the services you use.
+- systems: exclusive ownership names. Two enabled mods claiming the same
+  system are rejected. Choose a meaningful shared name for incompatible
+  implementations, not a unique random name just to avoid a conflict.
+- conflicts: explicit incompatible code package IDs, for example
+  ["another_race_rules_mod"]. The user must disable the conflict.
+- resources: logical resource ID to an archive-relative file path.
+- requires_tracks: stable course identities required before preparation.
+  Use the application's actual stock:, legacy: or dkrmap: IDs.
+
+There can be at most 32 required module entries, 128 dependency/conflict/system
+entries in each relevant list, 512 requires_tracks entries and 256 resource
+entries. A list must not contain duplicate identities. IDs are case-sensitive;
+archive paths also reject case-colliding entries for cross-platform safety.
+
+Resources example:
+
+```json
+"resources": {
+  "rules": "data/rules.bin",
+  "messages": "data/messages.txt"
+}
+```
+
+Place these files inside your project. The builder adds them to the final
+archive. Resource IDs are not host filenames. Do not put absolute paths,
+backslashes, `..`, symlinks, reserved Windows filenames or alternate-stream
+syntax into package paths. Do not alias two resource IDs to one path.
+
+## 6. Settings menus that people can actually use
+
+Ordinary settings come from [[manifest.config_options]]. The launcher and
+overlay share the generated form. API 1 supports exactly Number, Enum and
+String. There is no Boolean type: use a two-choice Enum for On/Off.
+
+### Number
+
+```toml
+[[manifest.config_options]]
+id = "pace"
+name = "AI pace (%) - 100 is original"
+type = "Number"
+default = 100.0
+min = 50.0
+max = 150.0
+```
+
+The UI uses a bounded numeric slider. In guest C:
+
+```c
+double configured = dkr_setting_number("pace");
+float multiplier = (float)(configured * 0.01);
+```
+
+Do not pretend a Number is automatically an integer. If your setting means
+whole laps/items, deliberately round or clamp once. There is no SDK setting
+for a custom slider step, display suffix, precision or dependent visibility.
+Those would need a host UI change. `name` should tell the player the unit and
+neutral value instead of relying on an invented metadata property.
+
+### Enum
+
+```toml
+[[manifest.config_options]]
+id = "enabled_rule"
+name = "Extra rule"
+type = "Enum"
+options = ["Off", "On"]
+default = "Off"
+```
+
+Read it with dkr_setting_number. It returns the selected zero-based index:
+Off is 0 and On is 1. The packaging tool can emit an enum's default by its
+label; DKR-R normalises the frozen setting to an index. Do not request an Enum
+through dkr_setting_string. Keep option order stable between compatible
+editions or provide a deliberate migration plan. Up to 256 choices are
+accepted; a short sensible list is much easier to use on a controller.
+
+### String and the on-screen keyboard
+
+```toml
+[[manifest.config_options]]
+id = "message"
+name = "Message"
+type = "String"
+default = "Good luck!"
+```
+
+The field supports physical typing and the shared on-screen keyboard. The
+keyboard icon opens it, and controller activation also opens it. Your guest
+code does not need to create that keyboard.
+
+Query the size, including the terminating NUL, then supply a buffer that
+fits the entire value. A short local buffer is fine if you handle a long
+setting by ignoring it or showing a fallback. Never silently request a
+partial read; the setting-string service does not truncate for you.
+
+```c
+char message[128];
+DkrU32 needed = dkr_setting_string("message", 0, 0);
+if (needed && needed <= sizeof(message)) {
+    dkr_setting_string("message", message, sizeof(message));
+}
+```
+
+The form can hold a String of up to 4096 bytes, but the reader's destination
+capacity is limited to 4096 INCLUDING NUL. Keep values intended for that
+reader at 4095 bytes or less. For larger structured information use frozen
+data/resources and bounded reads, not an oversized scalar String.
+
+### Saving, reset and when values change
+
+Players choose Save settings. Reset settings restores defaults in the editor;
+the changes still need saving. A game uses a frozen snapshot. The host freezes
+that same configuration for all online peers. There is no settings_changed
+callback and no per-frame host form read. Read stable options once at boot
+unless there is a clear reason to read them again.
+
+Use concise labels. Make 100 mean original where that is a meaningful scale.
+Keep dangerous options off by default. Explain irreversible or mutually
+exclusive behaviour before asking for approval, not after a game has started.
+Do not fill every description with interpreter internals or promises that a
+package was verified to be harmless.
+
+### Can I make a dedicated settings screen like the cup editor?
+
+Not simply by adding fields to mod.toml. The cup editor is an authored host
+integration specifically for dkr_custom_trophies. Its Cups/Lineup/Share pages,
+file dialogs, controller shortcuts and structured-data publication are not
+widgets that arbitrary guest packages can instantiate.
+
+For a generic mod use the Number/Enum/String form. If a complex editor is
+essential, propose a launcher/overlay integration using the shared authored
+UI and worker pipeline. A native game menu is another option, but you then
+own its rendering/input/state rules and cannot assume it writes launcher
+settings. API 1 has no generic command button, key-binding capture, live
+toggle, collapsible group, colour picker, dependency visibility or file-picker
+declaration for third-party mod forms.
+
+## 7. Callbacks and the game's lifetime
+
+A callback is an entry point the runtime invokes at a known boundary. Use
+DKR_CALLBACK(event) before an ordinary guest C function. The C function name
+is yours; the event token determines where it runs. Keep names unique.
+
+```c
+DKR_CALLBACK(on_boot) void my_boot(void) { /* frozen setup */ }
+DKR_CALLBACK(on_frame_end) void my_tick_end(void) { /* bounded work */ }
+```
+
+on_boot runs once before retail initialisation. Resolve symbols, read options
+and prepare mod-owned state there. Do not assume there are racers, fonts,
+an audio player, loaded objects or a level header yet.
+
+on_frame and on_frame_end are simulation boundaries, not display refresh
+callbacks. A 120 Hz screen does not mean gameplay should advance twice as
+fast. Online replay may evaluate a boundary again after restoring a previous
+checkpoint. Write state so replay repeats the same result.
+
+The lifecycle events are:
+
+- on_boot: fresh code-world initialisation.
+- on_frame: start of an owned simulation boundary.
+- on_frame_end: end of that boundary.
+- on_scene_unload: before the compiled unload operation.
+- on_scene_loaded: after the compiled level_load operation.
+- on_racer_spawned: after obj_init_racer, NOT after final roster IDs exist.
+- on_results: before the compiled postrace_start operation.
+- on_menu: after the compiled menu_init operation.
+
+The adapter adds lifecycle events only when the selected compiled game
+dispatcher can actually emit them. Import/link may reject an unavailable
+event. A broad on_menu event is not a guarantee every menu has completed its
+first rendered frame. For exact arguments or timing, use a named callback
+whose native function signature you have checked.
+
+### Before and after a particular function
+
+```c
+DKR_CALLBACK(before_menu_init) void before_menu(DkrU32 menu) {
+    /* menu is original a0; inspect only what you understand here. */
+    (void)menu;
+}
+```
+
+Named callbacks resolve against the actual selected dispatcher. They can be
+portable across both ROM revisions without embedding raw addresses. There
+is no promise that every function in the decomp was emitted or is available
+in both ordinary offline and private online closures.
+
+Before/after callbacks receive the original a0..a3 argument values. An after
+callback does NOT magically receive a C return value as its first argument.
+Use the full callback context to inspect v0/v1 or floating return registers.
+If you want to change the original call's arguments/return, write that
+context. Changing your own C parameter variable changes only that local copy.
+
+### Scene-dependent pointers
+
+Keep symbol addresses for permanent global slots when appropriate. Reacquire
+the object, racer, current header and list pointer stored in those slots
+after a load. A pointer that worked in Whale Bay may refer to freed/reused
+memory in the next track. Never use a scene-unload notification to carry on
+editing objects after their native owner has destroyed them.
+
+Do not register extended-lap racers from on_racer_spawned. Native setup
+assigns final racer IDs later and performs settling ticks before returning.
+The trophy example and the lap services chapter explain the correct boundary.
+
+## 8. Read the decomp before changing behaviour
+
+The reference project is https://github.com/davidsm64/diddy-kong-racing . Use
+the matching local revision/reference information for exact layouts. A decomp
+function tells you much more than a name: parameter types, callers, order of
+updates, array capacities, mode checks and cleanup requirements.
+
+Start with a narrow question: which function calculates this value, and what
+else uses it? Find the callers and the structure definition. Check whether
+the function executes once per racer, once per simulation update, multiple
+times in settling ticks, or during menu previews as well as real races.
+
+Example: AI & Boss Difficulty changes the freshly calculated AI pace, not
+the accumulated velocity each frame. Nearby AI uses the native top-speed
+path; distant AI follows a separate spline movement helper. Changing only
+one gives inconsistent difficulty. Scaling updateRate globally would also
+change clocks, attacks and other behaviour the user never asked to alter.
+
+Example: raising a lap byte is not enough for 99-lap races. Native timing,
+results, HUD sprites and Time Trial records have separate small capacities.
+Find every consumer before increasing a limit. An unsafe write may crash
+later at the finish line rather than where you changed the value.
+
+### Work in the right source layer
+
+Your mod project contains your C, metadata and owned resources. If DKR-R itself
+needs a new adapter, author it through the Patch Pipeline into NEW staged
+outputs. Never hand-edit extern submodules, RecompiledFuncs or RecompiledPatches.
+The decomp is a reference, not a place to patch a generated release by hand.
+Do not ship generated game C or original/extracted Nintendo assets as your
+mod's source. Credit and licence any original third-party work you use.
+
+## 9. Core services and owned state
+
+Include dkr/magic_codes.h for the core API; dkr/game.h includes it as well.
+The weak function bodies in the header are link metadata, NOT fallbacks.
+Every import must resolve before activation. A missing service does not
+silently return the zero in the header and let your mod continue.
+
+### dkr_sdk_version
+
+`DkrU32 dkr_sdk_version(void)` returns API version 1. It is not the release
+string and not a feature-discovery API. Declare required module versions in
+dkr.json. There is no dkr_module_query function in this header.
+
+### dkr_random_u32
+
+`DkrU32 dkr_random_u32(void)` uses deterministic per-package RNG state. That
+state is seeded by the session and rewinds with the package. Do not seed a
+separate rules generator from time, a host pointer, a CPU counter or SDL.
+
+Calling RNG conditionally changes the future sequence. Every peer must take
+the same branch and make the same calls. A deterministic generator cannot
+save code that branches on nondeterministic local presentation state. `% n`
+is adequate for many casual choices but has modulo bias; use bounded rejection
+sampling when you need an unbiased choice, with a strict attempt limit.
+
+### dkr_alloc and dkr_free
+
+`void *dkr_alloc(DkrU32 bytes)` allocates from this package's 64 KiB heap,
+rounds to 16-byte blocks and zeroes the allocated block. It returns NULL for
+zero/oversized requests or insufficient space. Check the result.
+
+`void dkr_free(void *address)` accepts NULL. Otherwise supply the exact start
+of a currently allocated block from your package. Double-free, an interior
+pointer or a foreign pointer is an error. Do not pass native game allocations
+to it, and do not pass dkr_alloc memory to a native mempool free routine.
+
+Global/static mutable data, BSS, allocator state, stacks and SDK service
+state participate in checkpoints. Keep big tables in static owned storage
+or the heap, not on a small callback stack. Immutable resources/code are not
+copied into every rollback slot. Do not self-modify executable instructions.
+
+### dkr_log
+
+`void dkr_log(const char *message)` queues a message for this package.
+The limit is 512 UTF-8 bytes per message and 128 pending effects. Keep text
+NUL-terminated and short. Online delivery waits for frame confirmation so a
+rewind does not publish speculative duplicate effects as real history.
+
+Log a useful state transition or error context. Do not log every racer every
+frame. Formatting a thousand log messages is not free, and exhausting the
+effect queue stops the session. This is not a persistence mechanism.
+
+## 10. Structured data and package resources
+
+These are different from scalar settings. Both are frozen/read-only during
+the game, but they come from different places.
+
+`dkr_data_size(name)` and `dkr_data_read(name, offset, destination, bytes)`
+access a host-published structured configuration document. It is canonical
+UTF-8 JSON without an automatically appended NUL. Missing documents have
+size zero and read as zero bytes. Each read is at most 4096 bytes and must
+fit inside the document.
+
+Structured configuration is an object of up to 32 named object documents,
+bounded to 64 KiB for the package. It is NOT a list of arbitrary user files
+that dkr.json automatically loads. API 1 exposes read access, not a guest
+write service or a generic editor for those documents. The trophy editor is
+an example of host-side publication of this data.
+
+`dkr_resource_size(name)` and `dkr_resource_read(name, offset, destination,
+bytes)` access a declared immutable package resource by its logical ID.
+An unknown resource ID is an error, not a filesystem lookup. Reads are at
+most 4096 bytes, return the copied byte count and must be fully in range.
+Allocate a terminator yourself if treating resource bytes as a C string.
+
+```c
+static unsigned char block[512];
+static DkrU32 offset;
+
+static int read_rule_block(void) {
+    DkrU32 size = dkr_resource_size("rules");
+    if (offset >= size) return 0;
+    DkrU32 count = size - offset;
+    if (count > sizeof(block)) count = sizeof(block);
+    DkrU32 copied = dkr_resource_read("rules", offset, block, count);
+    offset += copied;
+    return copied != 0;
+}
+```
+
+This is a chunking pattern, not permission to parse 32 MiB in one boot callback.
+Plan bounded work over appropriate simulation boundaries. If data determines
+the rules, complete and validate it before those rules are used. Reset parse
+state deliberately; replay must restore that state rather than reread a host
+file. Use an explicit byte order for binary resources, not host struct dumps.
+
+Resources can carry your own rules, text and other original data. Packaging
+bytes does not provide an automatic texture/model/audio decoder or make the
+renderer use them. There is no API 1 resource_write or arbitrary file path API.
+
+## 11. Racers and vehicles
+
+All typed game functions in this and the following chapters are declared in
+dkr/game.h. They copy values into guest structs. They do not give you borrowed
+host pointers or a permanently valid object handle.
+
+`dkr_racer_count()` returns the current roster count, bounded to 8. It is not
+the number of human players or the number of enabled character mods.
+
+`dkr_racer_get(index, &out)` fills DkrRacerState and returns 1 for an available
+entry or 0 when there is no object for that index. The index enumerates the
+CURRENT native racer list. Do not assume it is a permanent player identity.
+
+The 64-byte DkrRacerState contains:
+
+- object: guest address of the racer object.
+- racer: guest address of its native racer data.
+- player: signed native player identifier; negative identifies AI in the
+  reference example. Keep game-mode/demo/ghost distinctions in mind.
+- index: native racer ID; not necessarily your enumeration index.
+- character: native character/carrier identity, not a custom package digest.
+- vehicle: native vehicle identity. Ordinary Car/Hovercraft/Plane are 0/1/2;
+  boss variants use other identities. Do not clamp every racer to 0..2.
+- lap and count_lap: distinct native counters. Check the decomp before using
+  either as a one-based display number or changing race progression.
+- position: native race position field.
+- finished: native finished state.
+- bananas: banana count.
+- x, y, z: object world position, copied as floats.
+- speed: the racer's native forward-velocity scalar, not a full velocity
+  vector or a guaranteed metres-per-second value.
+- reserved: zeroed ABI space, not a field for your own persistent state.
+
+`dkr_racer_set(index, field, bits)` supports the following writes and returns
+1 on success or 0 when no racer object exists:
+
+```text
+DKR_FIELD_X          0    x position, float bits
+DKR_FIELD_Y          1    y position, float bits
+DKR_FIELD_Z          2    z position, float bits
+DKR_RACER_SPEED      3    native speed scalar, float bits
+DKR_RACER_BANANAS    4    integer 0..99
+```
+
+Use the provided `dkr_float_bits(float value)` helper for float setters:
+
+```c
+dkr_racer_set(i, DKR_RACER_SPEED, dkr_float_bits(new_speed));
+```
+
+Do not cast 2.5f to DkrU32 and expect that to mean float bits. That numeric
+cast produces 2. Non-finite transform/speed writes reject. A finite but silly
+coordinate or speed can still break native gameplay, so validate your own
+range too. Setting a position does not perform a collision sweep, reset every
+physics accumulator or safely move a racer between levels.
+
+There is no generic typed setter for lap, position/ranking, finished, vehicle,
+character, item inventory, boost timers or full 3D velocity. These may be
+changed with reviewed native hooks/memory logic, but you then own all native
+invariants. The snapshot's existence is not permission to write the entire
+snapshot struct back over a native Racer structure.
+
+### Keep custom characters separate from the native carrier
+
+A custom character may reuse a native carrier's physics and IDs. Do not decide
+that a particular native character number uniquely identifies Yooka, Dixie
+or somebody's new character package. Exact custom content identity belongs
+to the admitted asset catalogue. API 1 has no general custom-character-name
+lookup, outfit selector or character-package enumeration service.
+
+If your code mod requires a particular character/asset setup, document it and
+use a reviewed content integration. Do not identify packages by whichever
+slot or filename happened to be visible in one local menu.
+
+## 12. Objects and new behaviours
+
+`dkr_object_count()` returns the current native list count, bounded to 512.
+`dkr_object_get(index, &out)` returns 1 and fills the 36-byte DkrObjectState,
+or 0 for an unavailable entry.
+
+The snapshot contains object (guest address), behaviour (native behaviour
+identifier), id (native object ID), x/y/z, scale, opacity and collision (the
+native collision/interact word). Treat collision as opaque native data until
+you have checked its type. It is not a portable host collider handle.
+
+`dkr_object_set(index, field, bits)` supports x/y/z through DKR_FIELD_X/Y/Z
+and scale through DKR_OBJECT_SCALE (3), all using float bits. There is no
+typed opacity, rotation, behaviour, ID or collision setter in API 1.
+
+Object-list positions can change as objects spawn, despawn or are sorted.
+Reacquire the list on each relevant update. If you cache an object address,
+also establish that it still belongs to the same live object and clear it
+on scene transitions. Do not use an address as a stable online content ID.
+
+### Can a mod create a new object?
+
+There is no dkr_spawn_object, managed actor API or model importer in these
+headers. An advanced mod can call an eligible native spawn routine with the
+correct native spawn record, loaded assets, alignment and lifecycle rules,
+or change an existing behaviour at a reviewed function boundary. That requires
+decomp work. Check that the actual normal AND private dispatchers permit the
+call; some spawning paths can lead into protected/blocking work.
+
+Replacing an object's behaviour is not just setting an enum. Consider init,
+per-frame update, rendering, interactions, cleanup, scene unload, allocation
+ownership and rewind. A track pack can supply object maps/assets alongside
+your code; the code resource reader does not automatically register a new
+native object type or decompress a model for you.
+
+## 13. Logical input
+
+`dkr_input_get(player, &out)` reads player 0..3 and fills the 20-byte DkrInput.
+The fields are held, pressed, released, stick_x and stick_y. The three button
+fields are native N64 logical button masks, not SDL scancodes. The signed
+stick values use the game's mapped/deadzoned logical input, bounded to
+-70..70 by this adapter.
+
+Use held for a continuous action, pressed for a one-shot action and released
+for a release edge. Do not toggle a rule every frame the player holds a
+button. Do not poll the operating system or a second controller backend.
+
+For example, the usual native A mask is 0x8000, B is 0x4000, Z is 0x2000 and
+Start is 0x1000. Match any further masks to the decomp's controller definitions
+for the behaviour you are implementing. These are logical inputs after the
+player's configured bindings, including supported controller/touch paths.
+
+```c
+static DkrU32 toggled;
+DKR_CALLBACK(on_frame) void read_buttons(void) {
+    DkrInput input;
+    if (!dkr_input_get(0, &input)) return;
+    if (input.pressed & 0x2000U) toggled ^= 1U;
+}
+```
+
+This shows edge handling only. In a real mod, gate it to the intended gameplay
+state so Z does not toggle rules in every menu, demo or post-race sequence.
+Choose a chord that does not break the game's own controls and explain it.
+The SDK does not automatically consume the button from native gameplay.
+
+There is no general input setter, extra remappable mod action, raw right-stick
+API, keyboard-event callback or launcher input-binding UI for arbitrary mods
+in API 1. A camera mod needing extra device axes requires a host integration;
+do not use an unrecorded local device state to drive shared online simulation.
+
+## 14. Cameras
+
+`dkr_camera_get(index, &out)` supports indices 0..7 and copies the 40-byte
+DkrCameraState: camera guest address, x/y/z, signed yaw/pitch/roll, boom,
+shake and mode. Native angular fields are game units, not automatically
+degrees or radians. Check the decomp's conversion/convention before using them.
+
+`dkr_camera_set(index, field, bits)` writes x/y/z, DKR_CAMERA_BOOM (3) and
+DKR_CAMERA_SHAKE (4), using finite float bits. It returns 1 on success;
+out-of-range indices or invalid fields/values are errors. There are no typed
+yaw/pitch/roll/mode setters in API 1.
+
+A camera can be rewritten by native camera logic later in the same update.
+Choose a hook after the relevant calculation if you want a final adjustment,
+or modify a well-understood input to that calculation. Do not repeatedly
+force a position in every arbitrary render callback and expect stable
+interpolation. Keep previous/current camera state and cutscene transitions
+consistent with the game's own presentation pipeline.
+
+For split-screen, identify the correct native camera/viewport rather than
+applying one player's offset to all eight slots. Camera changes that affect
+gameplay must be deterministic; local presentation experiments must not
+change collision, racers or shared rules from a local-only branch.
+
+## 15. Static-floor collision queries
+
+`dkr_collision_floor(&query, &hit)` checks one native level segment for the
+closest static floor at or below ceiling_y at x/z. It does NOT search the
+whole level automatically.
+
+```c
+DkrFloorQuery query = {segment_index, x, ceiling_y, z};
+DkrFloorHit hit;
+DkrU32 result = dkr_collision_floor(&query, &hit);
+if (result == 1) {
+    /* hit.y and normal_x/y/z describe the selected static triangle. */
+} else if (result == 0xffffffffU) {
+    /* Too expensive for the bounded query; do not treat as a hit. */
+}
+```
+
+The 16-byte query contains signed segment, x, ceiling_y, z. The 24-byte result
+contains y, segment, triangle and normal_x/y/z. Return values are 1 for a hit,
+0 for no hit/unavailable segment and 0xffffffff for the query-work limit.
+Coordinates must be finite; x/z magnitudes are bounded to 1e7.
+
+The implementation permits at most 8192 triangles and charges 32 instruction
+budget units per triangle before the scan. The shared callback's remaining
+budget can impose a much smaller useful limit. Do not run this per racer,
+per object and per frame without budgeting it.
+
+This is not a wall raycast, swept sphere, moving-platform query, water-height
+query or full collision solver. A floor probe cannot by itself prevent a
+wide camera near plane from crossing a wall. Use a reviewed native collision
+path or request a new SDK service for that type of work.
+
+## 16. Drawing HUD and menu text
+
+`dkr_hud_text(&text)` draws through the native font system using a current
+menu or HUD display-list owner. It returns 1 if drawn, 0 when the required
+font/list is not ready. Invalid context or malformed fields are errors.
+
+The 28-byte DkrHudText has target, font, x, y, rgba, alignment and a guest
+pointer to NUL-terminated text. Target is DKR_TEXT_MENU (0) or DKR_TEXT_HUD
+(1). Font must be 0..2 and already loaded. x/y must lie in -2048..2048.
+rgba is packed RRGGBBAA. Use native alignment flags; 0 is a simple starting
+point. The adapter permits only valid combinations in the native 0..15 range.
+
+```c
+static const char caption[] = "CUSTOM RULES";
+/* Call this from your chosen eligible before_/after_ drawing callback. */
+static void draw_caption(void) {
+    DkrHudText text = {
+        DKR_TEXT_HUD, 0, 16, 24, 0xffe080ffU, 0, caption
+    };
+    dkr_hud_text(&text);
+}
+```
+
+Do not attach this helper to on_boot or an ordinary on_frame event. The
+service requires a named before_/after_ callback whose function is a drawing
+owner (`render`, `hud_` or `draw_` naming is checked). Pick an OUTER native
+HUD/menu drawing function present in the actual dispatcher, then verify it
+owns the target display list. Hooking draw_text and calling dkr_hud_text
+inside it recursively invokes the same function. That is not a safe overlay.
+
+Text must use printable ASCII (bytes 32..126), at most 160 bytes per call and
+512 glyphs per package/simulation frame. It is not Unicode or markup. Use
+separate bounded calls for multiple lines. The service restores the native
+font colour/position/background state after its draw.
+
+Coordinates follow the native rendering context, not desktop pixel sizes.
+Check the intended split-screen viewport, aspect handling and drawing phase.
+The service does not automatically anchor text to a widescreen edge or give
+you a launcher-style Paddock card. There is no general rectangle/image/font
+loading API in these headers. Native drawing calls are advanced alternatives,
+not permission to pass fabricated display-list pointers.
+
+Do not use an interpolated render call count to advance rules or random state.
+Keep the HUD a view of state calculated at simulation boundaries. Drawing a
+caption must not make an online race use different physics at 60 and 120 Hz.
+
+## 17. Sound and music
+
+`dkr_audio_command(command, value)` exposes four curated native commands:
+
+```text
+DKR_AUDIO_SOUND       0   Play an available native sound ID
+DKR_AUDIO_MUSIC       1   Play an available native sequence ID
+DKR_AUDIO_STOP_MUSIC  2   Stop native music (value ignored)
+DKR_AUDIO_FADE_MUSIC  3   Native signed fade value, -4096..4096
+```
+
+It returns 1 when the command is dispatched, or 0 before the relevant audio
+player/table is ready or when a sound/sequence ID is unavailable. Music IDs
+must also fit 0..255. Do not guess that every small integer is a valid song.
+Check the matching decomp assets/sequence definitions.
+
+The audio module is admitted only when all four reviewed nonblocking native
+handlers exist in the selected CPU closure. If an operation is unavailable,
+do not call raw sound/music internals to bypass that restriction.
+
+These commands use the owned guest audio engine. Online PCM is still governed
+by the confirmed-frame audio journal. Do not open an SDL audio device or
+attempt to play speculative host audio yourself. Trigger a sound on a state
+change/input edge, not continuously from a held button or every HUD draw.
+
+The fade value is a native engine value, not a documented number of seconds
+or a generic 0..100 volume slider. Follow native call sites for the effect
+you want. API 1 does not supply a new WAV/MP3 player, sound handle lifecycle,
+spatial audio emitter, custom stream decoder or per-mod master-volume bus.
+
+## 18. Native symbols and raw game memory
+
+`dkr_game_symbol(name)` returns a guest address from the selected revision's
+address-only reference symbols, or NULL for an unknown name.
+`dkr_game_symbol_size(name)` returns its recorded size or 0 if unknown.
+They do not allocate or load the native object for you.
+
+Resolve by name where possible. The same global can have a different address
+in us.v77 and us.v80. A successful name lookup does not prove the native
+function can be called, hooked or replaced: dispatcher grants are separate.
+
+For a pointer global, the returned address is the address OF THE POINTER
+SLOT. The value inside it is the current scene object/header/list address:
+
+```c
+static unsigned char **current_header;
+DKR_CALLBACK(on_boot) void resolve_header(void) {
+    current_header = dkr_game_symbol("gCurrentLevelHeader");
+}
+```
+
+Check both current_header and *current_header at the appropriate later
+boundary. Check the real type, native structure size and alignment before
+dereferencing. The SDK's typed accessors are preferable when they cover your
+change. Copying a decomp structure is not safe if your compiler changes its
+packing, enum width or pointer model.
+
+Guest RAM accesses use MIPS big-endian semantics; the host runtime handles
+its internal word-swapped storage. Do not manually byte-swap a C field just
+because the Windows host is little-endian. Resource file formats, on the
+other hand, need whatever explicit byte order you defined for those files.
+
+The exposed native data region is the game's first 8 MiB guest RAM; mod code
+and owned data are separately linked from 0x81000000. Do not infer writable
+permission merely because a numeric address seems to fall in a larger
+physical backing allocation. A native object pointer and a mod-owned pointer
+have different lifetimes and allocation owners.
+
+Raw memory is powerful and dangerous. The checked executor catches invalid
+mapped access and illegal instructions; it cannot know that a write to a
+perfectly mapped native byte corrupted a future result index. Native calls
+are not a security sandbox. Treat packages as trusted executable code.
+
+## 19. The native call ABI, without the guesswork
+
+`dkr_game_call(name, &call)` calls an eligible emitted native game function.
+It returns 1 on dispatch and writes the resulting register context back.
+Unknown/protected calls are errors; they are not optional NULL no-ops.
+
+DkrGameCall contains r[32], f[32], hi, lo (64-bit slots), fcsr and padding
+(32-bit). Register names follow MIPS: r[2]/r[3] are v0/v1, r[4]..r[7] are
+a0..a3 and r[29] is sp. Integer arguments often need sign extension from
+32-bit native values. Guest addresses are 32-bit even on a 64-bit PC.
+
+Supply a mod-owned, 16-byte-aligned outgoing stack with 16 words. Arguments
+5 and later start at stack[4], NOT stack[0]. The bridge copies the outgoing
+words to a bounded separate native guest stack before calling the game.
+Never pass a pointer to a host stack, an uninitialised sp or an arbitrary
+native temporary stack you do not own.
+
+`dkr_call4(name, a, b, c, d)` is the provided convenience helper for integer/
+pointer arguments in a0..a3 and an integer v0 return. It sets up the aligned
+outgoing stack for you. It is not a universal float/double/struct-return
+adapter. Follow the actual O32 signature for anything more complicated.
+
+For five integer arguments:
+
+```c
+static DkrU64 call5(const char *name, DkrU32 a, DkrU32 b,
+                  DkrU32 c, DkrU32 d, DkrU32 fifth) {
+    DkrGameCall call = {0};
+    DkrU32 stack[16] __attribute__((aligned(16))) = {0};
+    call.r[4] = (DkrU64)(long long)(DkrS32)a;
+    call.r[5] = (DkrU64)(long long)(DkrS32)b;
+    call.r[6] = (DkrU64)(long long)(DkrS32)c;
+    call.r[7] = (DkrU64)(long long)(DkrS32)d;
+    call.r[29] = (DkrU64)(long long)(DkrS32)(DkrU32)stack;
+    stack[4] = fifth;
+    dkr_game_call(name, &call);
+    return call.r[2];
+}
+```
+
+Float registers use FR=0 pairs. Each even f[] slot holds the paired words;
+odd slots are reserved. In this bridge a single float in f0 uses the low
+32 bits of f[0]. Preserve the upper half when changing only that float.
+A double uses its full even pair. A function's float argument may travel
+in integer or floating registers depending on the O32 signature; do not
+assume every float goes in f12. Inspect the decomp and generated call site.
+
+`dkr_setting_number` itself returns an O32 double. The C declaration already
+handles that; declaring your own incompatible float import corrupts the ABI.
+Function pointers and native indirect callbacks must target an admitted
+function in the calling world. Do not turn a host function address into a
+guest integer and call it.
+
+### Call permission is not replacement permission
+
+A native function may be callable but not replaceable. Port instruction
+patches, lifecycle ownership and system safeguards still apply. Scheduler,
+thread/message, DMA and blocking paths, including reviewed transitive callers,
+are fenced off. A function name existing in symbols.ld does not override
+those grants. Curated audio goes through its specific service instead.
+
+## 20. Editing a callback's arguments and return values
+
+`dkr_game_context_read(&call)` copies the active named native callback's
+context. `dkr_game_context_write(&call)` writes it back. Use these ONLY within
+a before_/after_ named callback, not on_boot/on_frame or an unrelated helper
+executed after the callback has ended. Never retain a context pointer.
+
+Read the existing context, change the small field you own and write it back.
+Do not zero-initialise a replacement context and erase every other register.
+Integer/FPR slots, hi/lo, FCSR and the native stack have ABI responsibilities.
+
+The AI Difficulty example is the useful reference. Its after_top-speed hook
+reads the float return, scales it once and preserves the other half of f[0]:
+
+```c
+union FloatWord { float value; DkrU32 bits; };
+/* Inside a checked after_ callback returning a single float in f0: */
+DkrGameCall call;
+dkr_game_context_read(&call);
+union FloatWord result = { .bits = (DkrU32)call.f[0] };
+result.value *= scale;
+call.f[0] = (call.f[0] & 0xffffffff00000000ULL) | result.bits;
+dkr_game_context_write(&call);
+```
+
+Validate the original value and your scale first. Do not paste this into a
+function returning a pointer, integer or double. A nearby function with a
+similar name may have a completely different return convention.
+
+### Skipping the original
+
+`dkr_game_skip_original()` is valid only from a before-function callback and
+only for an eligible replaceable function. You now own the original's work,
+return registers and any state/cleanup its callers expect. An after callback
+is too late to prevent the original from writing out of bounds.
+
+Project-owned safety fixes cannot normally be skipped. The reviewed
+race-laps owner has a specific exception for race_finish_time_trial so custom
+extended laps can avoid the native fixed result arrays. Do not generalise
+that exception to the rest of the game's protected code.
+
+### Repeating the original
+
+`dkr_game_repeat_original()` is restricted to after_hud_element_render. The
+wrapper allows at most four original draws and performs each outside the
+VM/native lease. This supports the trophy mod's two-digit lap rendering.
+It is not a general retry, loop, physics tick or way to call a blocked native
+function. Any other use rejects.
+
+## 21. Raw hooks and replacements
+
+Use named SDK callbacks first. Raw hooks are for cases where you genuinely
+need a revision-specific connection. They are not an upgrade that makes
+every protected function writable.
+
+Build with `--reference-kit /path/to/modding/reference-us-v77` for a us.v77
+mod, or the v80 kit for us.v80. dkr.json must contain exactly that one revision.
+The builder checks the kit receipt and hashes. Do not remove that check or
+combine the addresses from one kit with the symbols from another.
+
+Each kit includes functions.toml, data.toml, symbols.ld, game_symbols.inc and
+receipt.json. It contains addresses and sizes, not the original game bodies.
+The function/data lists are a reference inventory, not a grant that the
+current emitted dispatcher can call or replace everything in them.
+
+### DKR_HOOK
+
+```c
+DKR_HOOK(native_function_name) void my_entry_hook(DkrU32 a0) {
+    (void)a0;
+}
+```
+
+This attaches an entry hook through the raw metadata. Match the true ABI.
+There is no hidden automatic C argument conversion. Unlike named callbacks,
+do not rely on the named-context services being available for an arbitrary
+raw-only hook. Use named before_/after_ callbacks when you need their context
+editing/skip facilities.
+
+### DKR_HOOK_RETURN
+
+```c
+DKR_HOOK_RETURN(native_function_name) void my_exit_hook(DkrU32 a0) {
+    (void)a0;
+}
+```
+
+This attaches at return. Its argument slots reflect the native wrapper's
+context, not a generated high-level return object. Read the actual ABI and
+prefer a named after_ callback if you need to edit a return register.
+
+### DKR_REPLACE
+
+```c
+DKR_REPLACE DkrS32 native_function_name(DkrS32 value) {
+    return value;
+}
+```
+
+That is a SYNTAX example, not a real function you can paste into a mod.
+Use the exact target symbol name, signature and semantics from your matching
+reference/decomp. You are supplying the replacement implementation, not
+renaming a function arbitrarily. Only one package may replace a given native
+function. Both the target and the call paths it uses must pass the dispatch
+policy for the actual game world.
+
+Replacements are a last resort when a smaller hook cannot do the job.
+Preserve required state transitions, cleanup, return values and interfaces.
+Do not copy a huge native function just to change one multiplier. A new
+function implementation also needs its own licence/provenance review before
+you distribute it.
+
+Raw-address game relocations also make a package revision-specific. Merely
+listing both revisions does not translate addresses, structure layouts or
+different function bodies. Named portable lookups still require you to
+verify the semantics match across revisions.
+
+## 22. Mods talking to other mods
+
+DKR_EXPORT exposes a guest function to another declared code dependency.
+Keep its ABI small, explicit and versioned:
+
+```c
+DKR_EXPORT DkrU32 rules_limit(void) {
+    return 10;
+}
+```
+
+The consumer declares the provider in mod.toml dependencies, for example
+`dependencies = ["my_rules_library:1.0.0"]`. To import from that owner rather
+than the SDK's wildcard owner, the pinned tool's section convention is:
+
+```c
+#define MOD_IMPORT_FROM(owner) \
+    __attribute__((noinline, weak, used, section(".recomp_import." owner)))
+
+MOD_IMPORT_FROM("my_rules_library") DkrU32 rules_limit(void) { return 0; }
+```
+
+That body is import metadata, not a fallback implementation. The provider's
+export must exist, be enabled and satisfy the minimum version. A missing
+export fails linking. Use the same prototype on both sides. Pass guest
+values, not host pointers, and agree on who owns any pointed-to data.
+
+### Package events
+
+The tool/linker also supports package-owned events. This is the lower-level
+section convention, not an extra DKR SDK helper macro:
+
+```c
+/* In the provider package: */
+__attribute__((noinline, weak, used, section(".recomp_event")))
+void rules_changed(DkrU32 value) { (void)value; }
+
+/* In a consumer that declares the provider dependency: */
+__attribute__((used, retain,
+    section(".recomp_callback.my_rules_library:rules_changed")))
+void react_to_rules(DkrU32 value) { (void)value; }
+```
+
+The provider calls its event function to dispatch subscribers. Match the
+argument convention yourself; there is no runtime C type checker. Dispatch
+uses the calling code world, canonical package order and the same bounded
+callback chain. It is not a network message or an asynchronous host event.
+
+Keep exported/event calls short. Cross-package callbacks have stack and
+recursion limits too. Do not build A -> B -> A unbounded recursion. Do not
+use mod load order as a substitute for an agreed ownership contract.
+Dependencies are resolved topologically in a canonical order, with stable
+ID traversal; missing dependencies, cycles, multiple selected editions,
+conflicts and duplicate exclusive systems reject before activation.
+
+## 23. Custom Trophy Races in depth
+
+The supplied dkr_custom_trophies 1.0.2 is the reference for a substantial
+game-flow mod. Its host editor and guest adapter do different jobs.
+
+The editor builds named cup definitions, validates the enabled course
+catalogue, resolves supported vehicles and publishes the frozen data. The
+guest code then adapts native trophy flow, extended timing, HUD and results.
+The application adds custom cup tiles separately from the original stock
+Track Select grid. The last cup you opened in the editor is not automatically
+the cup you have selected to play.
+
+### The editor and controller flow
+
+Cups shows the collection. Lineup uses the full width for rounds. Share
+contains import/export. Each round keeps track/laps/vehicle/actions on one
+line; compact windows move extra controls into Actions. Save and Back stay
+outside the scrolling list.
+
+Use D-pad navigation, A to select, X to add a track, Y for actions, LB/RB to
+switch cups, Start to save and B to go back. In Move mode, Up/Down moves the
+round, A places it and B cancels the move. Text fields have an on-screen
+keyboard. Opening Details refreshes the enabled track catalogue in the
+background. Select the intended ROM and enable the tracks first.
+
+Cup Options handles name, duplication, deletion, order, reshuffling, refresh
+and code options. Choose a Track searches/filters the available race tracks.
+Saving waits for the library worker to commit the publication; it is not
+just changing a label in the UI.
+
+### Definition schema
+
+```json
+{
+  "schema": 1,
+  "id": "my_cup",
+  "name": "My Trophy Race",
+  "shuffle": false,
+  "rounds": [
+    {"course": "stock:5", "laps": 3, "vehicle": 255}
+  ]
+}
+```
+
+The course is an example of ID SYNTAX; use the real enabled catalogue to
+choose the track you mean. A carrier number or display name is not a stable
+custom-course identity. Round vehicle 255 means track default in a definition;
+0/1/2 request Car/Hovercraft/Plane and must be supported by that course.
+
+IDs must be valid package-style IDs. Names are up to 160 UTF-8 bytes, not
+160 arbitrary Unicode characters. The definition has exactly those five
+fields; each round has exactly course/laps/vehicle. Adding a convenient
+extra field does not make it supported. The current definition permits
+1..128 rounds and 1..99 laps per round, with repeated tracks allowed.
+
+A saved collection permits 32 cups, subject to a 60 KiB runtime publication
+budget. Do not calculate 32 x 128 and promise every possible long-name
+combination fits. Validation also checks course identity, exact custom
+content edition, allowed vehicles and race type. Hubs, boss arenas and
+challenges are not automatically ordinary trophy courses.
+
+### Stable courses and frozen order
+
+stock:<native ID> identifies a stock course. legacy:<content SHA256>
+identifies a prepared legacy custom course. dkrmap:<track ID> identifies a
+Track Lab course; its separate content digest still pins the edition.
+Filenames, local row indices and names are not identities.
+
+The host freezes the definition, catalogue content, seed and resolved order.
+A shuffled collection is resolved with a deterministic bounded shuffle;
+clients do not reshuffle independently on receipt. Round source indices and
+resolved vehicles are part of the frozen proof. Changing a local track file
+or its edition requires preparation again, not reuse of a stale menu tile.
+
+### Guest trophy services
+
+`dkr_trophy_info(name, capacity)` returns the admitted round count for the
+explicitly selected custom-cup tile, or 0 for a stock trophy/no custom cup.
+Pass NULL to omit the name. If you request it, use at least a 164-byte buffer.
+The native display name is ASCII-safe; the editor retains the original name.
+
+`dkr_trophy_round(index, &round)` fills a 344-byte DkrTrophyRound and returns
+1. Query info first. An out-of-range round or no selected custom cup is an
+error, not an automatic wrap. The struct has carrier, laps, resolved vehicle,
+name[164], course[164] and reserved. carrier is the native loader slot; course
+is the stable identity. Do not replace the latter with a display name.
+
+`dkr_course_select(course, carrier)` selects a course only if that exact
+identity/carrier belongs to the admitted selected cup. It returns 1 on
+success. It is not a general arbitrary load-level or asset-download service.
+
+Declare trophies/racing/game/core version 1 as appropriate and exclusive
+systems race-laps and trophy-flow for the full adapter. Do not claim trophies
+without publishing the required host-side trophies document; a generic
+third-party package does not automatically get the first-party editor.
+
+### Extended laps are a whole adapter, not one byte
+
+`dkr_race_laps(table)` registers a package-owned, 4-byte-aligned
+DkrU32[8][100] table, including the finish sentinel, zeroes it and resets the
+racer registry. Pass NULL when leaving the custom race. It returns 1 on
+success. The package must claim the exclusive race-laps system. Native
+Time Trial must be OFF.
+
+`dkr_race_register(racer)` registers native RACER DATA, not its object, under
+its final native racer ID. It returns that index (0 is a valid success).
+Register the completed roster AFTER track_setup_racers. obj_init_racer and
+on_racer_spawned are too early: IDs are not final yet.
+
+Native setup performs settling ticks before track_setup_racers returns. The
+SDK validates and binds the completed live roster on the first redirected
+settling access. That service state rewinds with the owning world. This is
+not a fallback to writing the original five-lap array.
+
+The reference adapter also:
+
+- keeps its real round counter separate from the native four-round indices;
+- bounds every borrowed native trophy/ceremony/result index;
+- selects the admitted custom course at the actual preview/load boundaries;
+- sets supported lap and vehicle fields at the right setup boundary;
+- replaces the reviewed fixed native result-copy operation for custom races;
+- keeps native Time Trial records and their colour tables out of extended laps;
+- draws two real digits for 10..99 laps instead of indexing a nonexistent sprite;
+- restores borrowed native state when quitting or returning to ordinary menus;
+- leaves original Adventure trophies and stock trophy tiles available.
+
+Do not remove those pieces because the first race appears to load. The
+original failures were often exposed only in setup, Track Select or results.
+Read examples/custom-trophy-races/main.c alongside the decomp before forking
+the adapter. Keep its safety changes when adding new rules.
+
+### Track Select integration
+
+Custom tracks have up to six tiles per row. Saved custom cups get separate
+CUSTOM TROPHIES rows after them. The native gTrackSelectIDs stock table is
+fixed-size with 16-bit entries; extending or writing it as a different type
+is not how this integration works. Preview scroll globals are floats.
+
+Ordinary and private online owners keep their own checkpointed selection.
+A client must not use another world's local row index as the course ID.
+The host's editor-selected cup is not a reason to replace the native stock
+trophy tile or force every player into that cup without menu selection.
+
+### Sharing a cup or a track pack with a cup
+
+Use Share -> Export this cup or Export all cups. The .dkrcup format is DATA
+ONLY. It contains format="dkr-trophy-cups", version=1, cup definitions and
+the exact seven-field course documents they require: id, name, content,
+carrier, vehicles, default_vehicle and race.
+
+Do not hand-invent content hashes or copy a catalogue from a different track
+edition. Export from the actual enabled setup. A file is bounded to 256 KiB,
+32 cups, 128 rounds per cup and 1024 distinct course requirements. The smaller
+runtime publication limit still applies when the user saves the merged cups.
+
+Share the .dkrcup alongside the required track packages. The receiver installs
+and enables those tracks, selects their ROM, opens the trophy mod and uses
+Share -> Import cups. Import previews missing/different requirements, keeps
+existing cups, skips matching definitions and remaps colliding IDs instead
+of overwriting unrelated cups. The user then saves the changes.
+
+A .dkrcup does not contain the code mod, track assets, save files, offline
+approval, local shuffle history or championship progress. Importing it does
+not approve/enable executable code. Online, the host resolves and freezes
+the actual shuffled order for everyone.
+
+Cup progress is rewindable during the current game, not a resume-after-closing
+tournament. Custom results must not award stock Adventure unlocks or write
+vanilla Time Trial records by accident.
+
+## 24. AI and Boss Difficulty as a worked native-hook example
+
+This separate mod is not baked into Trophy Races. It can be enabled beside it
+because it owns ai-pace rather than race-laps/trophy-flow. The source is in
+examples/ai-boss-difficulty and the explanation in its GUIDE.txt.
+
+It has seven Number settings, all 50..150 with 100 as original: ordinary AI,
+Tricky, Bluey, Smokey, Bubbler, Wizpig's first race and his final rocket race.
+Its named hooks support both revision identities without hard-coded function
+addresses. It resolves the relevant global slots once at boot.
+
+For physical AI, after_handle_racer_top_speed reads the freshly calculated
+float return from f0, validates its range and applies a pace multiplier once.
+It preserves native boosts/bananas/start calculations rather than replacing
+the entire physics routine.
+
+Distant spline AI does not use that same path. before_func_8005B818 scales
+only the movement helper's O32 float updateRateF in a3. It leaves integer
+timers, race time, weapon logic and the global update cadence alone.
+
+It deliberately excludes human racers, native Time Trial, hubs/menu previews,
+unsupported race types and already-finished racers. Vehicle identities, not
+character model names, select the boss category. Smokey's related variant
+shares its intended setting. Native boss attacks remain native.
+
+This is a useful pattern: find both the visible and simplified update paths,
+change the smallest appropriate calculated value, and give the player a
+clear neutral setting. It is not a claim that multiplying speed makes every
+possible boss behaviour safely adjustable.
+
+## 25. Online mods and deterministic behaviour
+
+The host is the Mod Master. It freezes exact code package bytes/digests,
+canonical dependency order, scalar settings, structured configuration,
+asset revision, track content and resolved trophy order/seed. Clients accept
+that exact offer before it becomes an active game.
+
+Existing matching offline package data can be reused. Missing packages can
+be transferred. Clients must explicitly approve executable code. Downloaded
+code may be kept in the offline library, but that does not silently approve,
+select, enable or reconfigure the client's offline setup.
+
+Custom Magic Codes require Experimental Rollback online; Auto selects that
+owned backend. Host Prediction and Strict Input Sync do not supply the full
+arbitrary-code checkpoint contract. Do not publish a code mod claiming all
+backends work simply because the mod appears in the shared launcher.
+
+### What rewinds
+
+Each ordinary/private game instance has its own code world and CPU binding.
+Mod globals, BSS, heap contents/allocator state, callback/native stacks,
+service tables, RNG, FCSR and pending effects are checkpointed with that
+world. Immutable code/resources are shared as immutable data rather than
+duplicated into every history slot.
+
+Restoring a checkpoint stages and validates state before committing. It
+does not rerun on_boot or reinstall zero-initialised globals on every rewind.
+Do not implement your own reset-on-replay path that erases legitimate state.
+
+### Rules for an online-safe mod
+
+- Branch on recorded logical input and admitted game state, not local SDL
+  input, frame presentation rate, language, filename order or host timing.
+- Use deterministic owned RNG. Consume it in the same simulation order.
+- Keep mutable rules state in guest-owned/checkpointed memory, not a host
+  static variable or an external process.
+- Keep rules independent of render callback frequency and resolution.
+- Do not read changing files, clocks, network services or environment values
+  to decide gameplay. There are no SDK APIs for these anyway.
+- Keep work bounded on every peer. A portable package does not guarantee an
+  expensive loop performs acceptably on a phone or Steam Deck.
+- Use confirmed effects. Do not turn a speculative callback into a permanent
+  host write or user-visible notification of an unconfirmed outcome.
+- Keep exact content/configuration checks. Do not bypass admission to get
+  peers with different executable bytes into the same race.
+
+The application build/runtime/content/ABI contracts must also match across
+platforms. The same public version label alone is not enough if one person
+has an older private adapter or a different generated payload. Release all
+platforms from matching source and authored pipeline receipts.
+
+### Cross-platform release checks for the mod author
+
+The maintainer/player should check the intended mod on both ROM revisions,
+ordinary offline and owned online paths, host/client roles and intended
+devices. Include a full race finish, results, another track, quit/rejoin and
+mixed character/track setups. Include a low-end performance check, not just
+a powerful Windows GPU. These are author acceptance steps, not operations
+the package inspector performs.
+
+## 26. Saves, progress and trust
+
+Offline code-mod games use a mod-set save/Pak scope rather than writing back
+to the ordinary single-player scope. An existing Adventure save may seed
+that scope. A different code/configuration set can resolve to a different
+save scope; progress appearing different is not a reason to delete saves.
+
+Online uses the host-owned save lease. Clients do not get permission to
+write received online state into their ordinary offline save. Code mods
+cannot call/replace protected EEPROM/Pak/storage functions to bypass this.
+
+There is no generic per-mod persistent file-write API in API 1. Keep session
+state in rewindable memory. Do not use logs as a database, or assume a static
+variable survives closing the application. Native save-field changes still
+need a reviewed format/lifecycle plan inside the appropriate scoped game save.
+
+Executable trust is separate from format validation. Checksums, import checks
+and a valid manifest do not prove that a mod has sensible rules, safe native
+memory writes or honest behaviour. Be clear about what your package changes.
+Do not tell users to disable safeguards or approve an unknown download.
+
+Changing edition resets executable trust/enabled state. Generic third-party
+settings/data are not automatically migrated between editions. The supplied
+trophy package has a specific host migration retaining its compatible cup
+documents; that is not a universal migration mechanism for every package ID.
+Do not reuse its ID to obtain its editor, migration or permissions.
+
+## 27. Module reference
+
+All module versions below are 1. Put the ones your package relies on in
+dkr.json requires. The module names describe compatibility requirements;
+they are not an operating-system permission sandbox.
+
+```text
+core          API version and basic SDK boundary
+memory        dkr_alloc / dkr_free and owned guest storage
+events        Core/package callback and event infrastructure
+settings      Frozen Number / Enum / String values and structured data reads
+resources     Immutable declared package-resource reads
+random        Deterministic per-package random state
+game          Symbols, eligible native calls and named callback context
+game-hooks    Eligible raw/named native hook boundary
+game-events   Emitted named/lifecycle game event boundary
+racers        Current racer snapshots and supported field writes
+objects       Current object snapshots and transform/scale writes
+input         Recorded logical player input
+cameras       Native camera snapshots and supported field writes
+collision     Bounded nearest static floor in one level segment
+hud           Printable native text in a valid named drawing callback
+audio         Four reviewed native audio commands, when available
+racing        Extended timing table and finalized-racer registration
+trophies      Admitted selected-cup/round/course services
+```
+
+The standalone core-link inspector supplies only the core policy. A mod
+using game callbacks needs the ACTUAL game-link policy/dispatcher. The library
+can preview capabilities before a concrete CPU closure is attached; final
+admission still has to validate the real selected closure. In particular,
+audio and lifecycle/name availability cannot be inferred from a preview alone.
+
+## 28. Hard limits and a sensible performance budget
+
+These are loader/runtime ceilings, not targets to hit. Stay well below them.
+The first relevant bound applies; satisfying one does not waive the others.
+
+```text
+Package archive                     32 MiB
+Expanded archive                    64 MiB total; individual entry <=32 MiB
+Archive members                     512
+Guest image/sections incl. BSS       4 MiB per package
+Guest functions                     16384 per package
+Source files in build.py            256, .c only, <=1 MiB each
+Required code dependencies          128
+Enabled code packages               128 theoretical; memory usually binds first
+Total resident code-world storage   8 MiB
+Per-package allocator heap          64 KiB
+Per-package callback stack bank     32 KiB, sliced for up to 8 nested callbacks
+Per-package native stack bank       64 KiB, sliced for up to 8 nested calls
+Per-package checkpointed services   4 KiB, owned by the SDK
+Owned package/resources budget      256 MiB per session, including overhead
+Scalar settings                     Up to 128
+Scalar String form                  4096 bytes; reader capacity incl. NUL <=4096
+Structured configuration            64 KiB per package, <=32 named objects
+Resource/document read              <=4096 bytes per service call
+Instructions per top-level chain    200000, shared by nested work
+Gateway calls per chain             128
+Package callback depth              8
+Native callback/event adapter depth 32; native calls separately bounded to 8
+Pending log effects                 128; <=512 UTF-8 bytes per message
+HUD text                            160 ASCII bytes/call, 512 glyphs/frame/package
+Native racers / objects             8 / 512
+Logical players / camera indices    4 / 8
+Floor query                         <=8192 triangles and remaining shared fuel
+Saved custom cups                   32
+Rounds / laps                       128 per cup / 1..99 per round
+Runtime trophy publication          60 KiB
+Data-only .dkrcup exchange          256 KiB, <=1024 distinct course documents
+```
+
+Each package pays for its heap/stack/service banks even if its own code is
+tiny. 128 enabled packages is not a promise that 128 real packages fit in the
+8 MiB resident budget. Static data, alignment and those banks all count.
+Likewise, a small ZIP can expand into a large image/BSS allocation.
+
+The callback stack bank is divided into nested frames of roughly 4 KiB, not
+a 32 KiB local-array allowance for every invocation. Native calls use bounded
+roughly 8 KiB stack slices. Keep large arrays static or allocate them once.
+Do not assume deep recursion becomes safe because total host RAM is large.
+
+### Make it lightweight
+
+Cache permanent symbol lookups at boot. Cache frozen scalar settings. Acquire
+live scene pointers at their proper boundary. Use a targeted hook rather than
+scanning every native object on every frame when one object init/update hook
+would do. Prefer event-driven state changes over constant rewriting.
+
+Avoid nested all-racers x all-objects x all-triangles loops. Do not parse large
+JSON in every callback, draw hundreds of glyphs per racer, repeatedly allocate
+memory or spam logs. A replay correction may execute your logic again, making
+expensive work more noticeable online.
+
+The instruction meter covers interpreted work and charges some bounded
+services such as collision. It is not a promise that a permitted native call
+is cheap or that no native function can crash. Native work and bad legal
+game-state writes can still be harmful. Measure the actual intended mod on
+the target devices when you do acceptance testing.
+
+## 29. Inspecting a package without running it
+
+DKR-MagicCode-Inspect is a metadata/link inspection tool. It does not start
+the game, allocate guest RAM, initialise a code world or execute callbacks.
+Its output reports executed=false. Treat it as a useful first gate, not
+gameplay or multiplayer qualification.
+
+```sh
+DKR-MagicCode-Inspect /path/to/my_mod.nrm
+DKR-MagicCode-Inspect /path/to/core_mod.nrm --core-link
+DKR-MagicCode-Inspect /path/to/game_mod.nrm \
+  --game-link /path/to/actual/magic-code-dispatch.json
+```
+
+Use DKR-MagicCode-Inspect.exe on Windows. It is a developer tool produced by
+the DKRMagicCodeInspect CMake target, not a second game launcher. If it is
+not in a player package, build that target from the matching developer
+checkout. Do not tell players to open the private runtime executable.
+
+The game-link input can also be the matching private owned manifest.json.
+Use the real normal AND private receipts for each supported ROM revision.
+A raw reference kit's function list is not a dispatch receipt. A successful
+normal link does not prove the private online closure contains every call.
+
+Check package ID/version/hash, deterministic flag, selected revision,
+function/import counts, namespace verification and resident bytes. A missing
+dependency export may need inspection as part of the complete admitted set;
+one isolated package cannot prove another package will be enabled at runtime.
+
+For DKR-R adapter maintainers, audit_dispatch.py checks generated lap-access
+coverage and dispatch protection using read-only staged sources/receipts:
+
+```sh
+python3 modding/audit_dispatch.py \
+  --source /path/to/original-cpu-input \
+  --normal /path/to/new-normal-dispatch \
+  --owned /path/to/new-private-dispatch --revision 77
+```
+
+Use 80 and its matching paths for the other revision. This is a Patch Pipeline
+audit for the application adapter, not a required operation for every small
+code-mod author. Do not hand-edit generated output to make the audit pass.
+
+## 30. When something goes wrong
+
+Start with the exact package/version/hash, DKR-R build, Game Pak revision and
+whether the failure is offline, host or client. Keep the relevant runtime
+logs and a crash dump if there is one. Logs can rotate: copy the affected
+session out before overwriting it with repeated unrelated launches.
+
+Disable the suspect code mod and start a fresh game to isolate it. If it
+needs dependencies, keep a deliberate minimal set. Do not delete someone's
+ordinary single-player save or remove compatibility checks as a debugging
+step. Use a backup/development save scope for deliberate invasive experiments.
+
+### Package requires a newer DKR-R version
+
+Compare minimum_recomp_version with the actual application version. Semantic
+prereleases sort below the final version; build metadata does not. Do not
+lower a real requirement just to get past the loader. Use a host that actually
+provides the intended API/adapter, or deliberately support an older baseline.
+
+### Unavailable SDK import or module
+
+Check spelling, API version, required modules and the actual closure. Copying
+a Rocket-R import name does not create a DKR-R implementation. Missing audio
+handlers or named lifecycle events are concrete compatibility failures, not
+a reason to use a protected raw call.
+
+### Unavailable SDK event / protected or unavailable game call
+
+Check the actual dispatch receipt and its protection flags. A decomp symbol
+can exist without an emitted callable entry. Check both revisions and both
+ordinary/private dispatchers. If a safe new adapter is needed, author it
+upstream through the Patch Pipeline; do not bypass ownership protection.
+
+### Unknown setting, wrong type or invalid configuration
+
+IDs are exact and case-sensitive. Enum reads are numeric indices. Numeric
+defaults/min/max must be finite and ordered. Strings must fit their read
+buffer. Save settings before launch; editing metadata inside an installed
+content-addressed package breaks its digest and trust decision.
+
+### Code exceeds the memory budget
+
+Inspect resident bytes, including BSS and mandatory per-package banks. Reduce
+large static tables, package count or duplicated data. Keep large immutable
+resources outside the resident code image where appropriate. Raising only
+the ZIP size limit does not enlarge the checkpointed resident budget.
+
+### Callback fuel, recursion or effect budget exceeded
+
+Bound loops, reduce work, remove recursive native callbacks and rate-limit
+logs/HUD drawing. All nested work shares the top-level chain's instruction
+and gateway allowance. A while loop waiting for game state cannot progress
+the native game while it is inside your callback.
+
+### HUD text requires a named drawing callback
+
+Move the draw to an eligible outer HUD/menu render hook. Make sure the font
+and target list are ready. Do not call the text service from boot/frame code,
+or from draw_text itself. Use ASCII and respect the glyph limits.
+
+### An extended lap access has no registered racer
+
+Use the current trophy adapter. Do not register during obj_init_racer. The
+completed roster must have final unique IDs and belong to the live level.
+Check that your fork retained dkr_race_laps, completed-roster registration,
+Time Trial exclusion and the native result/HUD bounds. Do not suppress the
+error and write the old fixed array anyway.
+
+### Track Select crashes or shows the wrong custom track
+
+Do not overwrite gTrackSelectIDs, infer identity from a filename/row or treat
+native float scroll fields as integers. Use admitted stable course IDs and
+the separate custom cup integration. Check removed/mismatched track editions
+and reload the catalogue before saving definitions.
+
+### Offline works, online does not
+
+Check deterministic metadata, required backend, exact peers/build contracts,
+Game Pak identity, package hashes/settings, dependencies, course content and
+private-dispatch availability. Then check real deterministic behaviour: no
+host clock, local input polling, render-rate rules or uncheckpointed state.
+Do not advertise online support solely because the offline race started.
+
+### It stops safely instead of crashing
+
+A rejected operation deliberately stops the code session rather than carry
+on with partially applied rules or mismatched peers. Read the concrete error.
+This is useful evidence. It does not prove a different unchecked native
+operation cannot crash later, and it is not a reason to weaken the guard.
+
+## 31. Building and sharing a finished mod
+
+Give the package a unique ID, a sensible version, a short clear description,
+accurate authors and explicit requirements. Keep a source release and the
+exact .nrm hash for each published edition. Keep separate development output
+directories so you can reproduce which bytes someone installed.
+
+The final .nrm is a ZIP with mod.json, dkr.json, mod_syms.bin, mod_binary.bin
+and any declared resource files. Do not hand-replace its binary after
+approval. The .dkrcode extension is accepted for the same portable package
+boundary; it is not a text-cheat format or host executable.
+
+Your download can contain the .nrm, a short installation README, licence,
+source link and optional .dkrcup/asset packs as separate clearly named files.
+Do not put a ROM, original extracted game assets, executable DLLs or your
+personal saves/configuration into it. Include licences for the work you
+actually redistribute. A source link is not a replacement for respecting
+the licence of copied code/assets.
+
+### A useful release README
+
+```text
+MY MOD 1.0.0
+
+What it changes: [plain description]
+Needs: DKR-R [version], [ROM revisions], [dependencies / tracks]
+Online: Experimental Rollback / Auto [or Offline only]
+
+Import the .nrm in Mods / Hacks -> Import Mods.
+Open Custom Magic Codes -> Details, review and approve it.
+Set the options, Save settings, enable it and start a new game.
+
+Settings: [neutral values, units, limits]
+Controls: [any gameplay button/chord and when it applies]
+Incompatible with: [known conflicting mods / systems]
+Save behaviour: [any meaningful mod-specific caveats]
+Known limits: [specific, honest limitations]
+Source / licence / credits / support: [actual locations]
+Package SHA256: [exact published package hash]
+```
+
+If you include a custom cup with a track pack, export its .dkrcup from the
+real enabled catalogue. Explain that the receiver still installs the tracks
+and the Trophy Races code mod, then imports the cup through Share. Never
+call a cup file executable or tell users it includes assets that it does not.
+
+### The author acceptance checklist
+
+Compilation/link checks first: source compiles with the SDK flags; manifests
+parse; options/types/defaults are valid; required imports/events link against
+each intended normal/private revision; no protected bypass or undeclared
+resource; resident/resource budgets fit; exact release hash is recorded.
+
+Gameplay acceptance next, performed by the author/maintainer: defaults and
+edge values; all intended vehicles/modes; menus/demo/scene transitions; race
+start/finish/results/quit; repeated races; disabling on a new session; both
+ROM revisions; custom assets; controller text entry; offline save isolation;
+online host/client/rejoin; intended Windows/Linux/ARM/Android devices and
+their performance. Do not report these as passed because a compiler returned 0.
+
+Do not promise "changes absolutely anything" without naming what your mod
+actually changes. Powerful does not mean unbounded, and a clear small mod
+that behaves properly is much more useful than one that randomly corrupts
+someone's race. Build on the supported boundary, keep the original game's
+invariants in mind, and give players something they can actually enjoy.
+
+## 32. Where to look when you want to go further
+
+The public SDK headers are the exact function/struct contract. SDK.txt is the
+compact reference. USER-GUIDE.txt describes the installed player workflow.
+The complete examples are better references than isolated guessed snippets.
+The HTML edition adds a searchable declaration appendix from the same headers.
+
+For application-side SDK maintenance, these authored source areas implement
+the boundary. They are references for extending the port, not new imports
+you can call directly from guest C:
+
+```text
+runtime-recomp/src/game/mods/
+  magic_code_package.*            Archive, metadata, options, dependency rules
+  magic_code_link.*               Relocations, imports, hook/replace grants
+  magic_code_vm.*                 Checked guest executor and memory budgets
+  magic_code_world.*              Per-package state, core services, checkpoint
+  magic_code_game_services.*      Typed native state and static-floor query
+  magic_code_game_world.*         Actual dispatch, native ABI, HUD/audio/laps
+  magic_code_library.*            Storage, edition, approval and frozen set
+  magic_code_library_jobs.*       Worker-backed UI operations
+  magic_code_trophy_definition.*  Cup validation, order and frozen proof
+  magic_code_trophy_catalog.*     Course catalogue, publication and sharing
+runtime-recomp/src/game/
+  runtime_code_mods_ui.inl        Shared code library and generic settings UI
+  runtime_trophy_editor_ui.inl    First-party dedicated cup editor
+scripts/
+  stage_magic_code_payload.py    New normal CPU wrappers and complete policy
+  generate_replay_probe.py       New private owned CPU composition
+  magic_code_authoring_kit.py    Address-only revision kit generation
+  magic_code_hook_inventory.py   Complete-policy raw hook inventory
+  stage_magic_code_sdk.py        Source SDK distribution staging
+```
+
+If extending the SDK, define the public ABI, validation, determinism and
+checkpoint ownership together. Add both normal/private adapters and all
+supported revision grants. Update the versioned module policy, docs, source
+examples and static inspection path. A launcher switch alone is not an
+implemented gameplay capability.
+
+Keep application changes in authored host source or authored Patch Pipeline
+inputs. Never patch protected submodules or generated RecompiledFuncs /
+RecompiledPatches in place. Keep generated outputs separate and reproducible.
+
+### Reference projects
+
+DKR decomp reference:
+https://github.com/davidsm64/diddy-kong-racing
+
+DKR-R source and release notes:
+https://github.com/ThatGuyMcd/DKR-R
+
+Rocket-R modding/SDK reference, for the broader approach rather than API
+compatibility with DKR-R:
+https://github.com/ThatGuyMcd/Rocket-R/blob/main/docs/modding.md
+https://github.com/ThatGuyMcd/Rocket-R/blob/main/docs/SDK2.md
+
+The DKR-R source/headers shipped with this guide define this API 1 edition.
+Future releases can add services. Check their actual headers and migration
+notes rather than assuming a feature from a different recomp is present.
+
+## 33. Quick function index
+
+Core/version/RNG/memory/logging: dkr_sdk_version, dkr_random_u32, dkr_alloc,
+dkr_free, dkr_log. See chapter 9.
+
+Settings: dkr_setting_number, dkr_setting_string. See chapter 6.
+
+Frozen documents/resources: dkr_data_size, dkr_data_read, dkr_resource_size,
+dkr_resource_read. See chapter 10.
+
+Racers: dkr_racer_count, dkr_racer_get, dkr_racer_set, dkr_float_bits. See 11.
+Objects: dkr_object_count, dkr_object_get, dkr_object_set. See 12.
+Input: dkr_input_get. See 13.
+Cameras: dkr_camera_get, dkr_camera_set. See 14.
+Collision: dkr_collision_floor. See 15.
+Drawing: dkr_hud_text. See 16.
+Audio: dkr_audio_command. See 17.
+
+Symbols/native calls: dkr_game_symbol, dkr_game_symbol_size, dkr_game_call,
+dkr_call4. See 18 and 19.
+Callback editing: dkr_game_context_read, dkr_game_context_write,
+dkr_game_skip_original, dkr_game_repeat_original. See 20.
+
+Trophy services: dkr_trophy_info, dkr_trophy_round, dkr_course_select.
+Extended laps: dkr_race_laps, dkr_race_register. See 23.
+
+Metadata attributes: DKR_IMPORT, DKR_CALLBACK, DKR_EXPORT, DKR_HOOK,
+DKR_HOOK_RETURN, DKR_REPLACE. See 7, 9, 21 and 22.
+
+ABI structs: DkrGameCall (19), DkrTrophyRound (23), DkrRacerState (11),
+DkrObjectState (12), DkrInput (13), DkrCameraState (14), DkrFloorQuery /
+DkrFloorHit (15), DkrHudText (16). Fixed sizes and declarations are in the
+supplied headers; do not replace them with host-layout copies.

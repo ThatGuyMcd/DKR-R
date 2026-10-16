@@ -7,7 +7,13 @@ if not exist "%APP%" (
     echo %APP%
     echo.
     echo Run Build-Windows.cmd first.
-    pause
+    if not "%DKRPORT_NO_PAUSE%"=="1" pause
     exit /b 1
 )
-start "DKR-R" "%APP%"
+if "%DKRPORT_NO_PAUSE%"=="1" goto synchronous
+start "DKR-R" "%APP%" %*
+exit /b %ERRORLEVEL%
+
+:synchronous
+"%APP%" %*
+exit /b %ERRORLEVEL%

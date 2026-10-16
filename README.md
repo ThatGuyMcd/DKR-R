@@ -8,15 +8,95 @@
   </a>
 </p>
 
-DKR-R 1.0.5 is here! There's been a lot going on since the last update.
-We've now got custom tracks and characters, Track Lab integration, texture-pack
-priorities and online mod sharing built into the launcher.
+DKR-R 1.0.7 brings clearer online compatibility checks, built-in update checks
+and a much lighter lava glow. The launcher and overlay have had a tidy-up too.
+
+The current development package is **v1.0.7 beta 2**. It adds Custom Magic Codes,
+Custom Trophy Races and AI & Boss Difficulty, with a controller-first cup editor
+and cup sharing. Start with the [player guide](modding/USER-GUIDE.txt), or the
+[Modders Guide to Custom Magic Code Creation](modding/MODDERS-GUIDE.txt) to make
+your own. The SDK includes a navigable offline HTML edition too.
 
 DKR-R is a native static recompilation of Diddy Kong Racing. Bring your own
 legally obtained US v1.0 or US Rev A/v1.1 ROM; no game ROM or extracted
 Nintendo/Rare assets are included.
 
-## What's new in 1.0.5
+## What's new in 1.0.7
+
+- Fix a cross-platform compatibility trap where Windows and Linux line endings
+  could give identical replay code different online identities.
+- Online checks the replay engine before joining and compares the actual
+  prepared mod resources before admitting a client. Startup errors name the
+  mismatched part instead of reporting one catch-all error. Everyone in a
+  lobby needs 1.0.7; don't mix these packages with 1.0.6.
+- The launcher checks GitHub for updates in the background. There is also a
+  **Check for updates** button in Play and update controls in About DKR-R.
+  Downloads are verified and installation needs your approval. Updates need
+  signed release metadata; an ordinary GitHub ZIP alone is not an update offer.
+- On Windows, **DKR-R.exe** is the only application to launch. The runtime and
+  helpers stay in `libexec/dkr-r`; keep the complete package together.
+- Nearby lava glow uses cached scenery colours, not a full-screen ray-traced
+  lighting pass. The pulse stays hot, blending yellow-white with orange-red
+  instead of black. Glow has its own on/off and intensity controls; hardware
+  reflections are separate and can still be demanding.
+- Launcher and overlay wording is shorter and more consistent. Unnecessary
+  connection/reflection detail sections have been removed. Streamers can
+  hide the lobby code without changing the code shared by Copy.
+- PR #60 adds repeatable nightly/stress checks, compact dependency caches,
+  a reviewed libjuice callback fix and safer Quick Join channel opening.
+
+See the [changelog](CHANGELOG.md), [online guide](docs/ONLINE_MULTIPLAYER.md)
+and [release validation](RELEASE-VALIDATION.md) for the details and test coverage.
+
+## Carried forward from 1.0.6
+
+- Skip intro logos in Play, then choose Start menu or Character select. The
+  Start menu keeps its opening sequence and music. Online startup stays unchanged.
+- Enhanced water has had another stability pass, including effect popping,
+  reflection handling and the Whale Bay Track Select crash. Waterfalls now have
+  continuous flowing detail with corrected scrolling/interpolation, transparency
+  and reflection masks. The river near Snowflake Mountain follows its authored flow.
+- There is much more control over the water! Original, Performance, Balanced,
+  High and Custom presets are joined by separate reflection, wake and spray
+  quality controls. Fine-tune reflection strength/range, roughness, ripples,
+  foam, clarity, refraction, waterfall detail and water tint. Presets leave
+  your game resolution, MSAA, FPS target and reflection method alone.
+- Hot Top Volcano has enhanced lava with moving molten cracks and rough
+  hot-rock detail. Version 1.0.7 replaces its costly surrounding lighting with
+  the lighter glow described above; surface detail and reflections stay separate.
+- Every custom Track Select row now has a CUSTOM TRACKS header and cycles
+  through six backgrounds. Future Fun Land restores its own artwork when you
+  scroll back. Images, names and arrows stay with their wooden frames on wide
+  screens, including the fix for brief horizontal stretching during transitions.
+- Custom `.dkrmap` artwork shares the correct texture/sprite namespace with
+  character mods. Asset-table length, offset and allocation checks address
+  Track Select failures when combining tracks and large character libraries.
+  Very long in-game captions are shortened without renaming your installed mods.
+- Offline custom tracks can use the vehicles allowed by their headers.
+  Track Lab can generate looping Track Select preview flights along the race
+  line, while preserving flights placed by the author. Export validation warns
+  about race starts that force a different vehicle. Online vehicle selection
+  keeps its existing restrictions.
+- The Modern camera has revised corner, drift and wall-hit behaviour, less
+  spring lag and no corner roll by default. Existing tuning files migrate
+  while preserving changed values. The camera remains an offline feature.
+- Malformed graphics commands now have stronger bounds and execution-budget
+  checks. Water rendering also has additional allocation, viewport and MSAA
+  safety checks. Golden Balloon and Wave Race credits use the same tidy link
+  rows as the other technology credits.
+- Contributor work adds safer dependency setup, build locking and packaging,
+  improved macOS support, and an iOS sideload source port. Apple binaries are
+  not part of this delivery. Windows, both Linux architectures, Steam Deck and
+  Android use the same release source.
+- Developers now have a regression/performance harness with retained reports,
+  private retail replay checks, repeatable build presets, faster incremental
+  builds and CI caching, workflow linting and mobile compilation checks.
+
+See the [1.0.6 changelog](CHANGELOG.md#106--12-october-2026) for the full breakdown,
+[Graphics](docs/GRAPHICS.md) for the water/lighting controls, and
+[Track Lab](tools/blender/README.md) for authoring changes.
+
+The features carried forward from 1.0.5 include:
 
 - Custom tracks sit below the original worlds in Track Select, with the wooden
   frames and previews intact. Your original tracks stay where they belong.
@@ -59,7 +139,13 @@ qualified. The [platform guide](docs/PLATFORMS.md) explains the current coverage
    dropdown lets you switch between installed revisions.
 4. Choose **Accurate** for the original 4:3/30 FPS presentation, or **Modern**
    for widescreen, higher presentation rates and the additional settings.
-5. Select **START DIDDY KONG RACING - RECOMPILED**.
+5. Optionally tick **Skip intro logos** and choose **Start menu** or
+   **Character select**, then select **PLAY OFFLINE**.
+
+Skip intro is remembered between launches and is off by default. It does not
+change online startup. Start menu retains the normal title sequence and music;
+Character select follows the normal title exit into Player Select. Track Lab's
+direct-track launch still takes priority when it is enabled.
 
 `.z64`, `.v64` and `.n64` byte orders are detected from the file itself.
 Both supported revisions run inside the same application; there's no separate
@@ -118,19 +204,33 @@ review them before sharing. See [troubleshooting](docs/TROUBLESHOOTING.md).
 
 The current Public Build packages are:
 
-- `DKR-R-1.0.5-Windows-x64.zip`
-- `DKR-R-1.0.5-Linux-x86_64.AppImage`
+- `DKR-R-1.0.7-Windows-x64.zip`
+- `DKR-R-1.0.7-Linux-x86_64.AppImage`
+- `DKR-R-1.0.7-Linux-aarch64.AppImage`
+- `DKR-R-1.0.7-SteamDeck-x86_64.AppImage` (same Linux payload)
+- `DKR-R-1.0.7-Android-arm64.apk` (Android 9+, ARM64)
 - `track_lab.zip` for Blender.
 
-Android ARM64 and Linux ARM64 have separate preview ports. macOS has source
-and build-kit support; a newly qualified macOS binary is not part of this
-Windows/Linux delivery. See [platform support](docs/PLATFORMS.md).
+ARM, Android and Steam Deck still need physical-device checks. Release numbering
+is not a promise that every device is qualified. No macOS/iOS binary is included
+in this build pass; their source support is preserved.
+See [platform support](docs/PLATFORMS.md) for the platform-specific requirements.
+
+Contributing without a ROM? Start with the [developer guide](docs/DEVELOPMENT.md).
+`python3 scripts/check.py` runs the fast source/tooling checks without a C++
+build or dependency downloads; host presets cover the C++ tests.
 
 For a source build, follow [Building DKR-R](docs/BUILDING.md). Both ROM
 revisions and the appropriate Patch Pipeline outputs are required for a
 complete release. Never hand-edit submodules or generated recompilation files.
 
 ## Documentation
+
+Background GitHub release checks are available under **About DKR-R → Updates**,
+with a manual check in Play, verified downloads and user-approved installation.
+Your saves, mods and portable data stay in place. Published v1.0.6 needs one
+manual upgrade to get this feature. See [Updates](docs/UPDATES.md) for supported
+install routes, recovery and release-signing requirements.
 
 The [documentation index](docs/README.md) separates player guides, modding,
 development, proposals and historical investigations.
@@ -140,8 +240,10 @@ delivery.
 ## Credits and licensing
 
 DKR-R was created by ThatGuyMcd with help from the project's contributors.
-Thanks to the contributors behind the macOS support, Modern camera and
-Track Lab improvements included in 1.0.5.
+Thanks to the contributors behind the platform support, Modern camera,
+Track Lab, graphics safety and development tools. The 1.0.6 integration includes
+the merged work from PRs #51–#59. Version 1.0.7 also includes PR #60 alongside
+the local updater, launcher and lava changes.
 
 The application icon was created by
 [POOTERMAN](https://www.deviantart.com/pooterman). `sr.gu` leads the DKR-R HDR

@@ -98,7 +98,7 @@ def main():
     paths = find_models()
     if not paths:
         print("SKIP: no extracted level models under %s" % VANILLA)
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
 
     decoded = 0
     vertices = triangles = batches = 0

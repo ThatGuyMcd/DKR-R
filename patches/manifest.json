@@ -136,6 +136,17 @@
       ]
     },
     {
+      "name": "sljit",
+      "repositoryPath": "extern/n64-modern-runtime/N64Recomp/lib/sljit",
+      "expectedCommit": "f6326087b3404efb07c6d3deed97b3c3b8098c0c",
+      "patches": [
+        {
+          "path": "patches/sljit/0001-define-ios-wx-flags.patch",
+          "sha256": "c069ad3ebe5d58a94d3632406b25862467d8942a38b63bb71a462d6b375b0991"
+        }
+      ]
+    },
+    {
       "name": "RT64",
       "repositoryPath": "extern/rt64",
       "expectedCommit": "6f1c2d99a4ea571c139f449c326fd176ba8f3496",
@@ -203,6 +214,18 @@
         {
           "path": "patches/rt64/0017-enable-retina-swapchain.patch",
           "sha256": "899c2f115332b02fb75b8dfed919d31796c3cd6b9f6ec7d96f91f005d61a29eb"
+        },
+        {
+          "path": "patches/rt64/0018-validate-hle-commands-before-fetch.patch",
+          "sha256": "96ebbc5cbd9b671064ca986bd647980626c35acee9f9ce63f7ebf4f8c8458b42"
+        },
+        {
+          "path": "patches/rt64/0019-ios-metal-shader-sdk.patch",
+          "sha256": "95e7055dce9572e7f9a4acf939148b23e97ce9cc2fa2be4d05a5b45aa8752360"
+        },
+        {
+          "path": "patches/rt64/0020-ios-imgui-pixel-size.patch",
+          "sha256": "d346ecb854a422b3c9b0349a72b8217a08e4b0b5dc86e22f5b1ab995d25a7ca5"
         }
       ]
     },
@@ -241,6 +264,17 @@
       ]
     },
     {
+      "name": "LibJuice",
+      "repositoryPath": "extern/libdatachannel/deps/libjuice",
+      "expectedCommit": "22145ec3473c73d811417ac9a6aee0de530aaa3f",
+      "patches": [
+        {
+          "path": "patches/libjuice/0001-use-type-correct-picohash-callbacks.patch",
+          "sha256": "4b241581ec9d25534541f3f8f75bd934472c90e31f0aab8eca208287d7043f87"
+        }
+      ]
+    },
+    {
       "name": "usrsctp",
       "repositoryPath": "extern/libdatachannel/deps/usrsctp",
       "expectedCommit": "fec583d54493f879d2ae44a743423bf8a04371ab",
@@ -262,6 +296,43 @@
       "repositoryPath": "extern/sdl3",
       "expectedCommit": "147a8ee32dbf9ac02f3794964490687b6bbda1bc",
       "patches": []
+    },
+    {
+      "name": "plume",
+      "repositoryPath": "extern/rt64/src/contrib/plume",
+      "expectedCommit": "d890ac899e505fb30040e037a4037cdeca68f033",
+      "patches": [
+        {
+          "path": "patches/plume/0001-ios-uiwindow.patch",
+          "sha256": "fab91df8c323612f13c4b4f155a99191880fde59dedeb779a727aa2cf43a3ee9"
+        },
+        {
+          "path": "patches/plume/0002-ios-metal-device-os27-upstream.patch",
+          "sha256": "a1c559877eaa59a5cf8878c4e0879f15aa5ffbd0455b8e5a5d593289348709ce"
+        }
+      ]
+    },
+    {
+      "name": "nativefiledialog-extended",
+      "repositoryPath": "extern/rt64/src/contrib/nativefiledialog-extended",
+      "expectedCommit": "17b6e8ce219c0677f94b63636abb9296b28841ca",
+      "patches": [
+        {
+          "path": "patches/nfd/0001-ios-document-picker.patch",
+          "sha256": "e1a27493c4c063a8862d0e23373837d9dabd588d0b2b46560b73831f5068c78f"
+        }
+      ]
+    },
+    {
+      "name": "SDL2",
+      "repositoryPath": "extern/sdl2",
+      "expectedCommit": "5d249570393f7a37e037abf22cd6012a4cc56a71",
+      "patches": [
+        {
+          "path": "patches/sdl2/0001-ios-uiscene-lifecycle.patch",
+          "sha256": "f65f1466f90204b187d66f2883fd63098c7a1553493dee4aacdb948a6d3dbc77"
+        }
+      ]
     }
   ]
 }

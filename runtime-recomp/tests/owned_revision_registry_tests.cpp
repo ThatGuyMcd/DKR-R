@@ -1,3 +1,5 @@
+#include "netplay/experimental_performance.hpp"
+#include <exception>
 #include "owned_game.hpp"
 #include <iostream>
 #include <stdexcept>
@@ -6,6 +8,7 @@
 #include "netplay/netplay_types.hpp"
 #include "recomp.h"
 #include "mods/legacy_memory_safety.h"
+#include "runtime_legacy_mods.hpp"
 #include "probe_audio.h"
 extern "C" {
 #define DECLARE_MEMORY_PROBE(revision) \
@@ -48,6 +51,19 @@ bool dkr_experimental_v80_dkr_probe_menu_flow_check(std::span<const std::uint8_t
 extern "C" void dkr_experimental_v80_dkr_probe_rom(const std::uint8_t*,std::size_t);
 #endif
 int main(int argc,char** argv) try {
+    // Report only opt-in diagnostic counters on ordinary exits. This scope
+    // does not change guest state or emit a misleading final report on unwind.
+    struct FinalPerformanceReport {
+        FinalPerformanceReport() {
+            if (dkr::runtime::netplay::experimental::performance::enabled())
+                dkr::runtime::netplay::experimental::performance::begin_report_window();
+        }
+        ~FinalPerformanceReport() {
+            if (std::uncaught_exceptions() == 0)
+                dkr::runtime::netplay::experimental::performance::report();
+        }
+    } final_performance_report;
+
     using namespace dkr::runtime::netplay::experimental;
     using dkr::runtime::rom::Revision;
     unsigned checks=0;
@@ -193,6 +209,17 @@ int main(int argc,char** argv) try {
             return bytes;
         };
         const auto fixture77=read(argv[1]),rom77=read(argv[2]),fixture80=read(argv[3]),rom80=read(argv[4]);
+        // Private menu dispatch must not reach the process-global network
+        // session. The linked native boundary throws on any such access.
+        for(const auto* rom:{&rom77,&rom80}) {
+            auto assets=std::make_shared<dkr::mods::RuntimeSession>(dkr::mods::AssetBank::stock(*rom));
+            dkr::runtime::legacy::ModWorld native(assets,{},nullptr,nullptr,false);
+            std::vector<std::uint8_t> ram(8U*1024U*1024U);
+            const auto before=ram;recomp_context context{};context.r4=1;
+            const std::uint64_t observed=0;std::uint64_t result=99;
+            check(native.dispatch("dkr_legacy_track_menu",ram.data(),&context,&observed,1,nullptr,12,result)==1);
+            check(result==0 && ram==before);
+        }
         if(argc==6 && std::string(argv[5])=="--menu-flow") {
             dkr_experimental_v77_dkr_probe_rom(rom77.data(),rom77.size());
 #if DKR_OWNED_EXPECT_V80

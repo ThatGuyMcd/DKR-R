@@ -9,6 +9,11 @@ void validate(const Message& value) {
        (!value.payload.empty() && !valid_digest(value.payload)) || value.bytes.size()>MaxChunkBytes)
         throw Error("Invalid online mod transfer message.");
     const auto operation=value.operation;
+    if(operation==Operation::Verified) {
+        if(!valid_digest(value.payload) || value.offset || value.total || !value.bytes.empty())
+            throw Error("Invalid prepared mod resource proof.");
+        return;
+    }
     if(operation==Operation::Progress) {
         if(!value.payload.empty() || !value.total || value.total>MaxTransferBytes || value.offset>value.total ||
             value.bytes.empty() || value.bytes.size()>241 || value.bytes[0]<1 || value.bytes[0]>4 ||

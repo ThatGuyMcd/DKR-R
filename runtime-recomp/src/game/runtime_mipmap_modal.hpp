@@ -5,7 +5,7 @@
 
 namespace dkr::runtime::ui {
 inline void draw_mipmap_loading_modal() {
-    constexpr const char* title = "GENERATING TEXTURE MIPMAPS";
+    constexpr const char* title = "PREPARING TEXTURES";
     const bool visible = RT64::mipLoadingVisible();
     if (visible && !ImGui::IsPopupOpen(title)) ImGui::OpenPopup(title);
     const auto* viewport = ImGui::GetMainViewport();
@@ -21,12 +21,12 @@ inline void draw_mipmap_loading_modal() {
             draw->PathArcTo(ImVec2{pos.x + 13.0F, pos.y + 14.0F}, 10.0F, angle, angle + 4.8F, 28);
             draw->PathStroke(IM_COL32(255, 190, 30, 255), 0, 3.0F);
             ImGui::Dummy(ImVec2{32.0F, 30.0F}); ImGui::SameLine();
-            ImGui::TextWrapped("Preparing texture detail. Please wait...");
+            ImGui::TextWrapped("Preparing textures...");
             ImGui::Spacing();
             ImGui::TextWrapped("%llu textures processed; %llu currently being prepared.",
                 static_cast<unsigned long long>(RT64::MipConfiguration::completed.load()),
                 static_cast<unsigned long long>(RT64::MipConfiguration::pending.load()));
-            ImGui::TextWrapped("The game will continue automatically. This does not modify your texture packs or saves.");
+            ImGui::TextWrapped("The game continues when preparation finishes.");
         }
         ImGui::EndPopup();
     }

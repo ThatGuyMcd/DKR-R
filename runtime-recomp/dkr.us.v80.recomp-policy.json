@@ -441,6 +441,24 @@
       "reason": "While waves_render is active, consume the validated caller-captured grid selector and bind each tile allocation to its stable scene, viewport and exact topology. This prevents unrelated vertex/UV grids from being paired without reading caller locals through the callee stack."
     },
     {
+      "function": "menu_logo_screen_loop",
+      "beforeVram": "0x80082fd4",
+      "text": "extern void dkr_skip_intro_logos(uint8_t*, recomp_context*); dkr_skip_intro_logos(rdram, ctx);",
+      "reason": "One-shot offline Play preference; preserve retail saves, title input, music and online startup."
+    },
+    {
+      "function": "menu_title_screen_init",
+      "beforeVram": "0x80083b3c",
+      "text": "extern void dkr_skip_intro_title(uint8_t*, recomp_context*); dkr_skip_intro_title(rdram, ctx);",
+      "reason": "One-shot offline Play preference; preserve retail saves, title input, music and online startup."
+    },
+    {
+      "function": "menu_title_screen_loop",
+      "beforeVram": "0x80083e1c",
+      "text": "extern void dkr_skip_intro_character_select(uint8_t*, recomp_context*); dkr_skip_intro_character_select(rdram, ctx);",
+      "reason": "One-shot offline Play preference; preserve retail saves, title input, music and online startup."
+    },
+    {
       "function": "menu_title_screen_loop",
       "beforeVram": "0x80083FC4",
       "text": "extern void dkr_title_intro_audio_tail(uint8_t*, recomp_context*); dkr_title_intro_audio_tail(rdram, ctx);",

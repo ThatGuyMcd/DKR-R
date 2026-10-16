@@ -1,0 +1,114 @@
+CUSTOM MAGIC CODES - IMPLEMENTATION RECORD
+2026-10-16
+
+Candidate: v1.0.7 beta 2 (technical version 1.0.7+beta.2)
+Track Select and racer-registration repairs are implemented; see BUILD-RECEIPT.txt for
+the exact compiled packages and archive fingerprints.
+Gameplay acceptance remains with the maintainer.
+
+IMPLEMENTED
+
+* Strict portable NRM import, API/revision/dependency/resource/configuration
+  validation, exact executable trust approval and restart-only activation.
+* Bounded MIPS O32/FR=0 code execution, immutable instructions, per-owner
+  globals/heaps/stacks/RNG/FCSR/services and deterministic restoration.
+* Ordinary and private owned CPU dispatch composed in NEW Patch Pipeline
+  outputs. System ownership, complete instruction-only port fixes and
+  transitive blocking callers cannot be replaced or bypassed as raw calls.
+* Named game events, eligible raw hooks/replacements and checked native ABI
+  calls; typed racers/objects/input/camera/static-floor/HUD/audio services.
+* Shared worker-backed launcher/overlay library, settings/edition/permission
+  controls, frozen structured documents and the custom-cup editor.
+* Host-owned ordered package/configuration admission, explicit exact-offer
+  code consent, local/offline reuse and inactive offline download retention.
+* Owned rollback/presentation/effect integration, bootstrap state handoff,
+  transactional code restores, confirmed-only code log/audio delivery.
+* Separate mod-set save/Pak scope; online save ownership remains isolated.
+* A REAL separately importable Custom Trophy Races NRM and source: named
+  cups, repeated vanilla/legacy/Track Lab courses, fixed or seeded shuffled
+  order, per-round vehicle and 1..99 laps, up to 128 rounds. Tracks-mode cup
+  flow retains native points/portraits/ceremony. Adventure trophies and native
+  Time Trial records are not used as custom progress storage.
+* Six-column custom-track rows, followed by separate CUSTOM TROPHIES rows
+  for ALL saved cups. Stock trophy tiles are no longer replaced. No sample
+  callback writes the stock s16 track grid or treats scroll floats as ints.
+* Cup selection is part of the explicit native owner's checkpoint, separate
+  from course asset identity. Native options borrow race/trophy semantics
+  without leaking columns five/six into stock trophy/challenge decisions.
+* The exact faulty 1.0.0 executable is rejected before code execution. The
+  library preserves saved trophy documents when selecting its 1.0.2 update,
+  but never transfers trust or enabled state to a different executable hash.
+* Extended lap fields redirected in racer/HUD/result routines, bounded native
+  result cells, deferred two-digit HUD drawing, safe display glyphs and
+  first-launch offline Track Lab ID resolution.
+* Final-ID racer registration after track_setup_racers, with SDK validation
+  and binding at the first constructor settling access. The reported missing
+  registry safe-stop is not bypassed by writing unsafe native lap arrays.
+* Responsive wide Details in launcher and overlay, dedicated Cups/Lineup/Share
+  screens, searchable track picker, single-line rounds, copy/up/down ordering,
+  controller move/place/cancel, fixed Save/Back and on-screen text entry,
+  worker-acknowledged saving and unsaved-change confirmation. Enabled tracks
+  are refreshed automatically whenever the trophy editor is opened.
+* Data-only .dkrcup import/export for one or all cups. Import previews track
+  requirements, checks exact custom-track content, skips duplicates and
+  remaps colliding cup IDs without replacing existing definitions. No code,
+  track assets, save data or local shuffle history is exchanged by this file.
+* Separately importable AI & Boss Difficulty 1.0.0: independent 50..150 pace
+  controls for race AI and six boss categories, including both Wizpig races.
+  Handles both physical and distant spline AI. Neutral 100 changes no game
+  state; humans, time trials, menus, hubs and finished racers are excluded.
+* SDK headers, address-only v77/v80 reference kits, authoring/build tools,
+  source examples, USER-GUIDE.txt, SDK.txt and the 33-chapter Modders Guide
+  with all 37 public functions/helpers and exact headers in its HTML edition.
+* Shared text inputs hide their internal labels; nested cup/search fields no
+  longer allocate extra label width beyond their keyboard button. Dropdown
+  field/choice widths are bounded to their current available content area.
+
+STATIC EVIDENCE
+
+Dispatch audits found 27 reviewed lap accesses in each normal/private payload
+for BOTH revisions (8 functions each). Full policy protection covers 196 v77
+and 197 v80 function names. Actual dispatcher tables contain 1808/1810 normal
+and 1500/1502 private entries. Four reviewed audio handlers are present.
+
+The trophy NRM compiled with the pinned compiler/tool chain, then passed
+read-only metadata/relocation/import resolution against BOTH actual private
+namespaces on Windows and Linux. No guest instructions were executed by the
+inspector. Package SHA256:
+6f900a1005c892e4b86a48a3e4bacb7a1e01a7364680ebdd61af954cd94cf154
+
+The updated 1.0.2 package contains 21 functions, 11 imports and 179248 resident
+bytes. Read-only linking resolved both actual ROM namespaces on Windows and
+Linux without executing guest instructions. The difficulty mod contains 7
+functions, 4 imports and 171056 resident bytes. Its SHA256 is:
+2a3bf19b7ca26b6f477f27ee5eeeb65d3a60e3620a17a150205043c6f81795af
+Six-column/cup regression source previously compiled in syntax-only mode;
+its executable was not run.
+
+BUILD STATUS
+
+The previous four-platform fix4 delivery used the owned contract below;
+beta 2 retains the same guest gameplay sources. The per-delivery receipt
+records final compile/package status and the configured contract:
+176b4392d45f8e3bbd70c09330d5cb8eb03521fb9b58a9ee32e3345ccdda0869
+
+The earlier candidates are preserved, not updated in place. The beta 2
+delivery uses a separate release-107-beta2 directory. This source record
+does not replace the per-delivery archive receipt or gameplay acceptance.
+
+ACCEPTANCE AND LIMITS
+
+No gameplay, mod callback, CTest, runtime self-test, replay, match or device
+session was run. The user explicitly reserves those checks. Compile/link,
+shader compilation, archive/source inspection and hashing are not gameplay
+acceptance. No claim of a bug-free runtime or security sandbox is made.
+
+There is no host DLL/script/file-write API and no automatic execution of
+unknown legacy ROM changes. Native scheduler/save/render ownership remains
+protected. Code mods require Experimental Rollback online. Custom cups are
+session championships, not persisted resume-after-closing tournaments.
+See SDK.txt for precise limits and capabilities.
+
+No commit, push, remote merge, tag or release publication was performed.
+Protected extern, RecompiledFuncs and RecompiledPatches directories remain
+unchanged; generated adapters/dependency changes use new staged outputs.

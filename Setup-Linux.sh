@@ -8,6 +8,14 @@ for tool in cmake ninja c++ git pkg-config python3; do
     missing=1
   fi
 done
+if command -v pkg-config >/dev/null 2>&1; then
+  for package in sdl2 gtk+-3.0 vulkan; do
+    if ! pkg-config --exists "${package}"; then
+      echo "Missing development package exposed by pkg-config: ${package}" >&2
+      missing=1
+    fi
+  done
+fi
 if [[ "${missing}" -ne 0 ]]; then
   cat >&2 <<'MSG'
 Ubuntu 24.04 build prerequisites:
@@ -15,22 +23,12 @@ Ubuntu 24.04 build prerequisites:
     libsdl2-dev libgtk-3-dev libvulkan-dev vulkan-tools \
     libasound2-dev libpulse-dev libsamplerate0-dev \
     libx11-dev libxext-dev libxrandr-dev libwayland-dev libxkbcommon-dev
+Install the missing prerequisites, then rerun ./Setup-Linux.sh.
 MSG
   exit 1
 fi
 
-for package in sdl2 gtk+-3.0 vulkan; do
-  if ! pkg-config --exists "${package}"; then
-    echo "Missing development package exposed by pkg-config: ${package}" >&2
-    missing=1
-  fi
-done
-if [[ "${missing}" -ne 0 ]]; then
-  echo 'Install the Ubuntu development packages listed above, then rerun setup.' >&2
-  exit 1
-fi
-
-cmake --version | head -n 1
-c++ --version | head -n 1
+cmake --version | sed -n '1p'
+c++ --version | sed -n '1p'
 pkg-config --modversion sdl2 gtk+-3.0 vulkan
 echo 'Linux runtime prerequisites passed. Prepare generated code, then run ./Build-Linux.sh.'

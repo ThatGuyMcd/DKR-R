@@ -29,9 +29,21 @@ int main() {
     std::vector<std::uint8_t> loaded(state_bytes);
     assert(store.load(9U, loaded));
     assert(loaded == branch);
-    // Three mostly-identical states must consume substantially less than
-    // three full copies; this protects handheld memory use.
-    assert(store.memory_bytes() < state_bytes * 3U);
+    // The rewind fixture retains four frames (6..9), including two full
+    // checkpoints. Exercise the three-state compression contract separately:
+    // one checkpoint, two sparse deltas, and the store's comparison buffer.
+    RollbackStateStore compact_store(state_bytes, 3U, 3U);
+    std::vector<std::uint8_t> compact_state(state_bytes, 0U);
+    for (std::uint32_t frame = 0U; frame < 3U; ++frame) {
+        compact_state[frame * RollbackStateStore::kPageBytes] =
+            static_cast<std::uint8_t>(frame + 1U);
+        assert(compact_store.save(frame, compact_state, frame));
+        assert(compact_store.load(frame, loaded));
+        assert(loaded == compact_state);
+    }
+    // Includes the comparison buffer; retaining three full snapshots cannot
+    // satisfy this bound. This protects the sparse store's handheld footprint.
+    assert(compact_store.memory_bytes() < state_bytes * 3U);
 
     // Exercise DKR's actual rollback footprint. Checkpoint-group eviction must
     // keep a usable rollback window without allocating/promoting a full state

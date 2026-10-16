@@ -11,6 +11,8 @@ namespace dkr::mods {
 // happens before admission and does not write RDRAM.
 class RuntimeSession {
 public:
+    // One launch-owned namespace builder, reapplied identically to boot and
+    // every admitted scene (frozen online courses or offline Track Lab artwork).
     using CourseAugmentation=std::function<std::shared_ptr<const AssetBank>(std::shared_ptr<const AssetBank>)>;
     explicit RuntimeSession(std::shared_ptr<const AssetBank> stock,
         std::shared_ptr<const CharacterNamespace> characters=nullptr,

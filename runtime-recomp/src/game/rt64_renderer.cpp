@@ -20,6 +20,7 @@
 #include "revision_addresses.hpp"
 #include "runtime_enhancements.hpp"
 #include "widescreen_policy.hpp"
+#include "track_select_draw_policy.hpp"
 #include "interpolation_state_policy.hpp"
 #include "runtime_hud_layout.hpp"
 #include "hud_reference_layout.hpp"
@@ -442,6 +443,26 @@ dkr::runtime::RT64Renderer::RT64Renderer(
     }
     std::fprintf(stderr, "[boot][android] private renderer storage ready\n");
     android_pipeline_cache::directory = application_config.dataPath / "pipeline-cache";
+#endif
+#if defined(DKR_IOS)
+    // Path detection picks $HOME/.dkr-port, and a device sandbox (unlike the
+    // simulator) refuses writes at the container root.
+    application_config.detectDataPath = false;
+    {
+        const char* home = std::getenv("HOME");
+        std::error_code storage_error;
+        if (home != nullptr && *home != '\0') {
+            application_config.dataPath = std::filesystem::path(home) /
+                "Library" / "Application Support" / "RT64";
+            std::filesystem::create_directories(application_config.dataPath, storage_error);
+        }
+        if (home == nullptr || *home == '\0' || storage_error) {
+            std::fprintf(stderr, "[boot][ios] renderer storage unavailable: %s\n",
+                         storage_error.message().c_str());
+            setup_result = ultramodern::renderer::SetupResult::GraphicsAPINotFound;
+            return;
+        }
+    }
 #endif
     auto config = ultramodern::renderer::get_graphics_config();
 #if defined(__ANDROID__)
@@ -1159,6 +1180,17 @@ void dkr::runtime::RT64Renderer::present_owned(
         }
         presentation::PresentationMarker marker{};marker.token=std::uint16_t(event.token);
         switch(event.kind) {
+        case DKR_OWNED_TRACK_UI_BEGIN:case DKR_OWNED_TRACK_UI_END:
+            marker.kind=presentation::PresentationMarkerKind::TrackSelectUi;
+            marker.mode=event.kind==DKR_OWNED_TRACK_UI_BEGIN?1:0;
+            marker.token=std::uint16_t(presentation::track_select_cover_token(cover));break;
+        case DKR_OWNED_TRACK_PREVIEW:
+            marker.kind=presentation::PresentationMarkerKind::TrackSelectPreview;
+            marker.token=std::uint16_t(presentation::track_select_cover_token(cover));
+            marker.hud_transform.x=float(std::int32_t(event.parameters[0])*4);
+            marker.hud_transform.clip_top=float(std::int32_t(event.parameters[1])*4);
+            marker.hud_transform.y=float(std::int32_t(event.parameters[2])*4);
+            marker.hud_transform.clip_bottom=float(std::int32_t(event.parameters[3])*4);break;
         case DKR_OWNED_GEOMETRY:
             if(!modern)continue;
             marker.mode=std::uint8_t(event.parameters[0]);marker.variant=std::uint8_t(event.parameters[1]);break;

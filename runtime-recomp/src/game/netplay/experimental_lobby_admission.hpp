@@ -1,5 +1,6 @@
 #pragma once
 #include "experimental_network.hpp"
+#include "experimental_admission_contract.hpp"
 #include <functional>
 #include <deque>
 
@@ -13,7 +14,7 @@ public:
     using Prepare = std::function<bool(std::span<const std::uint8_t>,std::string&)>;
     static constexpr std::size_t kMaximumBaseline = 32U*1024U*1024U;
     LobbyAdmission(SessionTransport& transport,bool host,std::uint8_t players,
-                   std::uint8_t local,secure::Key contract);
+                   std::uint8_t local,AdmissionContract contract);
     bool begin(std::vector<std::uint8_t> baseline,Prepare prepare,std::string& error);
     bool service_admission(Clock::time_point now=Clock::now());
     bool prepared() const;
@@ -39,12 +40,14 @@ public:
     static PeerAddress address(std::uint8_t owner);
 private:
     bool fail(std::string);
+    bool accept_contract(std::span<const std::uint8_t>);
     DatagramSendStatus send(std::uint8_t,unsigned,std::span<const std::uint8_t>,TransportTrafficClass);
     bool packet(std::uint8_t,std::span<const std::uint8_t>,Clock::time_point);
     SessionTransport& transport_;
     bool host_,begun_=false,local_ready_=false,release_seen_=false;
     std::uint8_t players_,local_;
-    secure::Key contract_{},incarnation_{},digest_{};
+    AdmissionContract contract_{};
+    secure::Key incarnation_{},digest_{};
     // Keep the wire image for idempotent late chunks. The prepared game and
     // its identity always use the original, losslessly decoded checkpoint.
     std::vector<std::uint8_t> baseline_,chunks_;

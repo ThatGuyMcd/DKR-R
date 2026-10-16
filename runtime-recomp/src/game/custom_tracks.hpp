@@ -529,8 +529,10 @@ void set_auto_boot(bool enabled);
 // Builds the replacement table for `section` from the retail table (terminated
 // by -1). Returns an empty vector when nothing is added, meaning the caller
 // must publish the retail table unchanged.
+// Pass the readable word count for additive namespaces; the default is only
+// the legacy stock-table scan bound, not a limit on published mod libraries.
 [[nodiscard]] std::vector<std::int32_t> build_extended_table(
-    Section section, const std::int32_t* retail_table);
+    Section section, const std::int32_t* retail_table, std::size_t table_words = 4096U);
 
 // Resolves an offset produced by build_extended_table. Returns nullptr when
 // the offset belongs to the ROM or does not cover `size` bytes, in which case

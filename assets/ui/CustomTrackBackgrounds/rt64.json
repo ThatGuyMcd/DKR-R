@@ -1,0 +1,11 @@
+{
+  "configuration": {"configurationVersion":3,"hashVersion":5,"autoPath":"rt64","defaultOperation":"preload","defaultShift":"none"},
+  "textures": [
+    {"path":"custom-row-1.png","hashes":{"rt64":"206d5f44069cbcad"},"operation":"preload","shift":"none"},
+    {"path":"custom-row-2.png","hashes":{"rt64":"8cc110a2995e91cb"},"operation":"preload","shift":"none"},
+    {"path":"custom-row-3.png","hashes":{"rt64":"5081f4671da18c3b"},"operation":"preload","shift":"none"},
+    {"path":"custom-row-4.png","hashes":{"rt64":"75445d2a4046a145"},"operation":"preload","shift":"none"},
+    {"path":"custom-row-5.png","hashes":{"rt64":"ddb85956cfa1601d"},"operation":"preload","shift":"none"},
+    {"path":"custom-row-6.png","hashes":{"rt64":"8aaec51a5a73156a"},"operation":"preload","shift":"none"}
+  ]
+}

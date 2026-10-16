@@ -168,18 +168,18 @@ def main():
     offsets = sections()
     if offsets is None:
         print("SKIP: no assets.lut.bin; assets.bin is not in this checkout")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
     binary_path = os.path.join(ASSETS, "assets.bin")
     if not os.path.isfile(binary_path):
         print("SKIP: no assets.bin in this checkout")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
     with open(binary_path, "rb") as handle:
         blob = handle.read()
 
     tree, matching = find_tree(offsets, blob)
     if tree is None or matching == 0:
         print("SKIP: no extracted revision matches assets.bin")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
     print("assets.bin matches : %s (%d maps)" % (os.path.basename(tree), matching))
 
     catalog = catalog_module.load()

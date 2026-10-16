@@ -1,3 +1,4 @@
+#include "temporary_directory.hpp"
 // custom_music end to end against simulated guest memory: a scanned track with
 // a real MP3, a level load, the carrier's volume calls, its play state and
 // tempo, and the mixed output.
@@ -75,8 +76,8 @@ int main() {
 
     // A schema 2 track whose header starts sequence 12 and whose music is the
     // addon's 2 s stereo test tone.
-    const std::filesystem::path root =
-        std::filesystem::temp_directory_path() / "dkrr-custom-music-runtime";
+    const TemporaryDirectory temporary("dkrr-custom-music-runtime");
+    const std::filesystem::path root = temporary.path() / "fixtures";
     std::filesystem::remove_all(root);
     const std::filesystem::path track = root / "tone.dkrmap";
     std::filesystem::create_directories(track / "music");

@@ -1,0 +1,2938 @@
+{
+  "scope": "Launcher, shared overlay settings, dialogs and notifications. Presentation only.",
+  "entries": [
+    {
+      "id": "COPY-001",
+      "file": "runtime_play_ui.inl",
+      "previous": "Choose your legally obtained Diddy Kong Racing Game Pak.",
+      "approved": "Choose your Diddy Kong Racing ROM.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-002",
+      "file": "runtime_play_ui.inl",
+      "previous": "Load your ROM, then jump into the race.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-003",
+      "file": "runtime_play_ui.inl",
+      "previous": "Add your other Game Pak revision to switch between them here.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-004",
+      "file": "runtime_play_ui.inl",
+      "previous": " ROMs in your list. Switch any time before you start.",
+      "approved": " ROMs available.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-005",
+      "file": "runtime_play_ui.inl",
+      "previous": "Load an original Diddy Kong Racing ROM to continue.",
+      "approved": "Choose a Diddy Kong Racing ROM to start.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-006",
+      "file": "runtime_play_ui.inl",
+      "previous": "Skip intro logos",
+      "approved": "Skip intro",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-007",
+      "file": "runtime_play_ui.inl",
+      "previous": "Skip the publisher logos when launching offline. Start menu keeps the original opening sequence; Character select goes straight to choosing a racer. Online startup is unchanged. Track Lab's direct-track launch takes priority.",
+      "approved": "Offline launches only.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-008",
+      "file": "runtime_play_ui.inl",
+      "previous": "Portable mode preference saved. Existing saves and settings were not moved or replaced.",
+      "approved": "Restart DKR-R to apply. Existing saves aren't moved automatically.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-009",
+      "file": "runtime_play_ui.inl",
+      "previous": "Uses portable.txt beside the application. On next launch, portable mode stores data in dkr-runtime-data beside it; otherwise your normal user profile is used. A command-line config override takes priority. Switching does not transfer saves.",
+      "approved": "Store saves and settings beside DKR-R.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-010",
+      "file": "runtime_play_ui.inl",
+      "previous": "Restart DKR-R to apply the portable mode change. This session keeps using its current data folder.",
+      "approved": "Restart DKR-R to apply.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-011",
+      "file": "runtime_play_ui.inl",
+      "previous": "YOUR OFFLINE ADVENTURE",
+      "approved": "OFFLINE ADVENTURE",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-012",
+      "file": "runtime_play_ui.inl",
+      "previous": "No readable offline Adventure yet. Existing invalid files will not be overwritten on launch.",
+      "approved": "No offline Adventure save yet.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-013",
+      "file": "runtime_play_ui.inl",
+      "previous": "Online sessions use separate saves. Enabled custom mods use a separate mod-set save, listed in Save Manager.",
+      "approved": "Online and modded games use separate saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-014",
+      "file": "runtime_play_ui.inl",
+      "previous": "This leaves the online lobby before starting offline play. If you are the host, your lobby closes for everyone. Online progress is not copied into your offline save.",
+      "approved": "Leave this lobby and start offline? If you're the host, the lobby closes for everyone. Online progress stays separate.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-015",
+      "file": "runtime_play_ui.inl",
+      "previous": "Track Lab test: ",
+      "approved": "Track preview: ",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-016",
+      "file": "runtime_play_ui.inl",
+      "previous": "Starts directly in this track as Diddy, in single player. Uses the Modern graphics profile.",
+      "approved": "Starts directly in this track as Diddy.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-017",
+      "file": "runtime_play_ui.inl",
+      "previous": "Native DKR track. Uses the Modern graphics profile.",
+      "approved": "Uses Modern graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-018",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Adjust the game display and visual detail.",
+      "approved": "Display, effects and scenery.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-019",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Most changes apply to the running game; settings that need a new launch say so.",
+      "approved": "Changes apply while playing unless marked otherwise.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-020",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Changes made before launch are applied when the adventure begins.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-021",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Performance presets (optional)",
+      "approved": "Performance presets",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-022",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Nothing changes until you press Apply.",
+      "approved": "Choose a preset, then select Apply.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-023",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Battery: 480p / 30 FPS. Balanced: 480p / 60 FPS. Both use standard precision and 4x filtering. Quality: window resolution / 60 FPS, high precision and 16x filtering. All disable MSAA and supersampling; HUD and aspect stay unchanged. Targets are not guarantees.",
+      "approved": "Battery: 480p / 30 FPS. Balanced: 480p / 60 FPS. Quality: display resolution / 60 FPS.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-024",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Low load presets use native 240p game rendering with standard precision. The launcher and touch controls stay sharp. These are optional quality reductions, not simulation-speed changes.",
+      "approved": "Low load uses 240p for slower devices.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-025",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "APPLY PERFORMANCE PRESET",
+      "approved": "APPLY PRESET",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-026",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Filtering applies on the next game launch. Existing settings are preserved unless you apply a preset.",
+      "approved": "Applying a preset replaces these graphics settings. Filtering applies next game.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-027",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Presentation, window, resolution and frame rate.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-028",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Presentation and window.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-029",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Accurate keeps the original look at 30 FPS. Modern unlocks the options on this page.",
+      "approved": "Accurate uses the original 30 FPS presentation. Modern enables graphics enhancements.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-030",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Play in a window or use the full screen.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-031",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Higher resolutions draw more pixels and can increase graphics load.",
+      "approved": "Higher resolutions look sharper but use more GPU power.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-032",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Fit to window fills wide screens; Original keeps the 4:3 picture.",
+      "approved": "Fit to window fills the available screen.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-033",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Presentation rate",
+      "approved": "Frame rate",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-034",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Match display follows your monitor's refresh rate.",
+      "approved": "Matches your screen's refresh rate.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-035",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Targets above the monitor refresh can reduce input-to-present latency, but cannot add visible refreshes and use more CPU/GPU power.",
+      "approved": "Higher targets use more CPU and GPU power.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-036",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Fit to window, graphics tuning, the HUD layout and scenery options appear in Modern. Accurate always uses the release-proven graphics API.",
+      "approved": "Switch to Modern to customise graphics, HUD and scenery.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-037",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Renderer & performance",
+      "approved": "Advanced graphics",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-038",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Smooths jagged edges. Higher settings cost more GPU time.",
+      "approved": "Smooths jagged edges. Higher levels use more GPU power.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-039",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Improves angled track textures. Samplers are rebuilt on the next game launch.",
+      "approved": "Keeps textures sharper at an angle. Applies next game.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-040",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "High precision framebuffer",
+      "approved": "Colour precision",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-041",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "More colour precision for effects and fades.",
+      "approved": "Reduces colour banding in effects and fades.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-042",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Downsampling quality",
+      "approved": "Supersampling",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-043",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Renders extra pixels before the final image is reduced. Higher values are expensive; Off is recommended for high refresh rates.",
+      "approved": "Renders extra pixels for a cleaner image. Higher values use much more GPU power.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-044",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Texture LOD bias",
+      "approved": "Texture sharpness (LOD bias)",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-045",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Applies live. 0.00 is the unbiased default; negative values favour sharper mip levels and positive values softer ones. Only textures with mipmaps change.",
+      "approved": "Negative values sharpen mipmapped textures; positive values soften them.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-046",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Applied at the next game launch. Automatic remains the recovery choice.",
+      "approved": "Leave on Automatic unless troubleshooting. Applies next game.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-047",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Generate texture mipmaps",
+      "approved": "Reduce texture shimmering",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-048",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Default off. Generates mipmaps for eligible original and PNG pack textures on the next game launch; LOD bias then adjusts them live. HUD, shadows, alpha cutouts and unsafe subtiles keep their original sampling. Authored DDS mipmaps are preserved.",
+      "approved": "Smooths distant textures. Applies next game.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-049",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Display game performance statistics while playing.",
+      "approved": "Show FPS and performance details.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-050",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Readability and the look of the game image.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-051",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "For one and two players. HUD size stays at 100%; three and four-player HUDs are unchanged.",
+      "approved": "Choose the HUD area for 1-2 players.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-052",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Adjusts each gameplay level from its authored camera. Menus, character select and cutscenes keep their original framing.",
+      "approved": "See more of the track. Racing only.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-053",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "A chase camera that swings into corners, opens up with speed, shows the side of your kart in a drift and reacts to boosts and landings. The right stick (or the mouse with its right button held) turns it around your racer and RT accelerates. During a race the right stick then stops sending C-buttons (camera distance, course arrows, minimap). Local play only.",
+      "approved": "A smoother chase camera. The right stick turns the camera instead of sending C-buttons. Offline only.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-054",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Hold Look back (right stick click by default, rebind under Controls) to see behind your racer. Local play only.",
+      "approved": "Hold Look back to see behind you. Change its binding in Controls. Offline only.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-055",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Tune the Modern camera (F7)",
+      "approved": "Adjust camera (F7)",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-056",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "A panel over the race that adjusts the camera while you drive, with presets such as Comfort. Use the mouse; the controller keeps driving.",
+      "approved": "Adjust the camera while driving. Use the mouse.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-057",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Enable CRT overlay",
+      "approved": "Enable CRT filter",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-058",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Apply a CRT filter to the game image. Launcher text and performance overlays stay clear. Pick the filter under Textures.",
+      "approved": "Adds a retro screen effect. Choose a filter in Textures.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-059",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "More visible detail can increase CPU and GPU load.",
+      "approved": "Higher detail can reduce performance.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-060",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Experimental performance diagnostics",
+      "approved": "Record performance details",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-061",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Records bounded timing summaries in runtime.log without changing speed or quality. No GPU diagnostic drain. Enable before the match for a complete capture.",
+      "approved": "Records performance details in the log. Enable before starting a match.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-062",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Experimental Rollback: keep-scenery, view-distance and retention apply locally to restored retail scenery billboards, including removed tree tops; they do not yet extend all actors or level geometry. Vehicle LOD, FOV, animated/effect ranges, water detail and CPU culling remain canonical. Your preferences are kept for single-player and legacy online modes.",
+      "approved": "Some camera and detail settings aren't available in this online mode. Scenery settings affect restored sprites, not every object or part of the track.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-063",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Keep racers on their most detailed models.",
+      "approved": "Use the most detailed racer models.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-064",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Keep forward-visible scenery in the adventure hub.",
+      "approved": "Keep visible hub scenery from disappearing.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-065",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Keep forward-visible scenery during races and boss challenges.",
+      "approved": "Keep visible race and boss scenery from disappearing.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-066",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Keep forward-visible scenery in minigames and battle arenas.",
+      "approved": "Keep visible minigame scenery from disappearing.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-067",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Ultrawide scenery guard",
+      "approved": "Reduce wide-screen scenery pop-in",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-068",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Expand visibility checks to reduce scenery disappearing near wide-screen edges.",
+      "approved": "Keeps scenery visible near wide-screen edges.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-069",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Culling safety margin",
+      "approved": "Visibility margin",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-070",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Objects directly behind the camera still cull normally.",
+      "approved": "Extra scenery around the edges of the view.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-071",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Scenery and object view distance",
+      "approved": "Scenery and object distance",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-072",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Scenery retention",
+      "approved": "Scenery coverage",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-073",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Authored",
+      "approved": "Original",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-074",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Current region",
+      "approved": "Current area",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-075",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Visible + adjacent",
+      "approved": "Visible + neighbouring areas",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-076",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Billboard and effect distance",
+      "approved": "Sprites and effects distance",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-077",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Only forward-visible regions are retained; objects behind the camera still cull. Higher settings can increase CPU and GPU load on handheld systems.",
+      "approved": "Higher distances and coverage can reduce performance. Scenery behind the camera is not kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-078",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Optional water presentation. Original preserves the game's water.",
+      "approved": "Customise water, reflections and lava.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-079",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Hardware ray tracing (experimental)",
+      "approved": "Hardware ray tracing",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-080",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Switches surrounding lava light on or off independently. Enhanced water, reflections and the glowing lava surface are unchanged.",
+      "approved": "Adds lava glow to nearby walls and ground. Turning it off keeps enhanced water and the lava surface.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-081",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Performance (quarter resolution)",
+      "approved": "Performance",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-082",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Balanced (half resolution)",
+      "approved": "Balanced",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-083",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "High (full resolution)",
+      "approved": "High",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-084",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Zero disables the lighting pass. Higher values brighten nearby walls and ground without changing the lava surface brightness.",
+      "approved": "Brightness of the surrounding glow. Zero turns it off.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-085",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Zero gives a steady glow. Higher values deepen the smooth brightness pulse.",
+      "approved": "Blends yellow-white heat into orange-red heat. Zero keeps a steady colour.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-086",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Controls how quickly the underglow pulses. Animation stays local in online play.",
+      "approved": "How quickly the glow pulses.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-087",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Changes the reach of the glow. Occlusion is ray-tested against static level geometry; this is not a full multi-bounce renderer.",
+      "approved": "How far the glow reaches.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-088",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Requires enhanced water and Hardware ray tracing. Balanced traces at one quarter of the full-resolution pixel count; Performance at one sixteenth. Depth-aware upsampling keeps the game image at its selected resolution. Unsupported devices keep the emissive lava surface.",
+      "approved": "Nearby glow is lightweight. It doesn't use ray-traced lighting.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-089",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "100% preserves the existing trace distance. Farther rays can cost more GPU time.",
+      "approved": "How far reflected objects can appear. Longer distances use more GPU power.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-090",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Changes the look. Zero skips reflection tracing; other values do not reduce game resolution.",
+      "approved": "Brightness of reflections. Zero turns reflections off.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-091",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "100% uses each track's authored water profile. Higher values soften highlights.",
+      "approved": "Higher values soften reflections and highlights.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-092",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Visual ripples only. Waves, collisions and buoyancy are unchanged.",
+      "approved": "Strength of small surface ripples.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-093",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Adjusts surface and shoreline foam without changing the race simulation.",
+      "approved": "Amount of surface and shoreline foam.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-094",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Adjusts the visible racer trails independently of wake simulation quality.",
+      "approved": "Visibility of trails behind racers.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-095",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "100% preserves each track's underwater visibility. Higher values show deeper receivers.",
+      "approved": "How clearly you can see below the surface.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-096",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Adjusts underwater image distortion. This does not affect physics.",
+      "approved": "Strength of underwater distortion.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-097",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Zero keeps the original artwork. 100% uses continuous flowing water; higher values brighten the film. Authored transparency is retained.",
+      "approved": "Brightness of flowing waterfall detail. Zero uses the original artwork.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-098",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Restore existing water quality defaults",
+      "approved": "Reset water quality",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-099",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Log water GPU timings",
+      "approved": "Record water performance",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-100",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Takes effect on the next game launch. Records bounded timing summaries without an extra GPU drain.",
+      "approved": "Records water performance in the log. Applies next game.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-101",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Water presets never change the game's resolution, MSAA, FPS target or reflection method. Quality changes are applied at a safe renderer workload boundary; appearance stays local in online play.",
+      "approved": "Water presets don't change resolution, frame-rate targets or the reflection method.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-102",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Last rendered water used sky reflections.",
+      "approved": "Current water reflections: sky.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-103",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Last rendered water used screen-space reflections (hardware fallback).",
+      "approved": "Current water reflections: screen-space.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-104",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Last rendered water used hardware reflections.",
+      "approved": "Current water reflections: hardware ray tracing.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-105",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "This renderer encountered a bounded water allocation fallback. See runtime.log for dimensions and the reason.",
+      "approved": "Water rendering needed a fallback earlier in this game. Details are in the log.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-106",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "GPU capability is checked when you start the game.",
+      "approved": "Hardware support is checked when the game starts.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-107",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "This renderer cannot use hardware ray queries. Screen-space reflections will be used.",
+      "approved": "Hardware ray tracing isn't supported. Using screen-space reflections.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-108",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "GPU ray queries are available. Hardware-scene failures retain screen-space reflections; allocation fallbacks are recorded in runtime.log.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-109",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Screen-space reflections use visible scene depth, not hardware ray tracing. Hardware ray tracing needs a compatible GPU and driver; otherwise screen-space reflections are used. The experimental hardware path traces opaque level geometry; moving racers use screen-space reflections. Off-screen surfaces currently use their vertex colours, not their texture-pack detail. Waterfalls and fountains use a continuous flowing-water material while retaining authored transparency and fog. Hot Top Volcano's lava uses an emissive molten material with the same quality and reflection settings, without water wakes or refraction. These settings do not change collisions, buoyancy or online simulation.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-110",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Restore graphics defaults",
+      "approved": "Restore original graphics",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-111",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "RESTORE GRAPHICS DEFAULTS",
+      "approved": "RESTORE ORIGINAL GRAPHICS",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-112",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Switch back to Accurate, the original presentation. Your Modern settings are kept, and you can undo until your next graphics change or until you leave this page.",
+      "approved": "Switch to Accurate graphics. Your Modern settings are kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-113",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Graphics settings already match the defaults.",
+      "approved": "Already using Accurate graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-114",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Accurate restored. Your Modern settings are kept.",
+      "approved": "Original graphics restored. Modern settings kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-115",
+      "file": "runtime_graphics_ui.inl",
+      "previous": "Your previous graphics settings have been restored.",
+      "approved": "Previous graphics settings restored.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-116",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Set how loud the game is and shape its sound. Changes apply right away.",
+      "approved": "Adjust volume and sound.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-117",
+      "file": "runtime_sound_ui.inl",
+      "previous": "The original game turns race music off with 3 or 4 players. Leave this on to keep it playing.",
+      "approved": "Play music in 3-4 player races.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-118",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Category mixing is deferred in Experimental Rollback.",
+      "approved": "Individual volumes aren't available in this online mode.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-119",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Put the mix back how it was.",
+      "approved": "Restore the previous mix.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-120",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Music, effects, vehicles and ambience back to 100%. Master stays.",
+      "approved": "Reset individual volumes to 100%. Master stays unchanged.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-121",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Master sets how loud everything is. The mix balances the parts.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-122",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Master sets how loud everything is.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-123",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Accurate keeps the original island mix: music, effects, vehicles and the EQ stay at their authored values.",
+      "approved": "Switch to Modern to adjust the mix and equaliser.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-124",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Experimental Rollback uses the authored category mix. Your category preferences are kept for single-player and legacy online modes. Master volume and output EQ stay local and live; independent category mixing is deferred.",
+      "approved": "Individual volumes aren't available in this online mode. Master volume and equaliser still work.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-125",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Equalizer",
+      "approved": "Equaliser",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-126",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Pick a sound, or fine-tune the three bands.",
+      "approved": "Choose a preset or adjust the bands.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-127",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Master is muted, so nothing plays.",
+      "approved": "Master is muted.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-128",
+      "file": "runtime_sound_ui.inl",
+      "previous": "Master is at 0%, so nothing plays.",
+      "approved": "Master volume is 0%.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-129",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Configure your devices and button mappings.",
+      "approved": "Set up controllers and button bindings.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-130",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Reconnect the assigned controller, or choose another device.",
+      "approved": "Reconnect this controller or choose another.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-131",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Connect a controller, then press one of its buttons. Keyboard mapping is also available.",
+      "approved": "Connect a controller and press a button.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-132",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Move the left stick or press a button to check this controller.",
+      "approved": "Move the stick or press a button.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-133",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Waiting for an assigned controller. Live values will appear here.",
+      "approved": "Connect a controller to test input.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-134",
+      "file": "runtime_controls_ui.inl",
+      "previous": "For this player only. Keyboard input requires the game to be focused.",
+      "approved": "For this player. Keyboard input still needs a focused game window.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-135",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Memory Pak stores game data. Rumble Pak enables vibration on supported controllers. Both can stay enabled: the virtual Memory Pak takes priority whenever the game asks for storage.",
+      "approved": "Memory Pak stores game data. Rumble Pak enables vibration. Both can stay enabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-136",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Preferred input backend",
+      "approved": "Controller backend",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-137",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Automatic (SDL3 on Steam Deck)",
+      "approved": "Auto",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-138",
+      "file": "runtime_controls_ui.inl",
+      "previous": "SDL2 compatibility",
+      "approved": "SDL2",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-139",
+      "file": "runtime_controls_ui.inl",
+      "previous": "SDL3 native",
+      "approved": "SDL3",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-140",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Switching controller backend safely...",
+      "approved": "Switching controller backend...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-141",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Backend changes apply live; the launcher, game window, audio and renderer remain running.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-142",
+      "file": "runtime_controls_ui.inl",
+      "previous": "SDL3 uses its native controller database. Switch to SDL2 compatibility and restart to create or import raw mappings.",
+      "approved": "Switch to SDL2 to create or import controller mappings.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-143",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Controller map tools create and share raw SDL2 mappings.",
+      "approved": "Import or export custom controller mappings.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-144",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Available with SDL2 compatibility.",
+      "approved": "Requires SDL2.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-145",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Select a binding, then press a key or controller button. Escape cancels.",
+      "approved": "Select a binding, then press a key or button. Escape cancels.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-146",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Controller names use the standard gamepad layout.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-147",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Adds a minimum output once the stick leaves its deadzone.",
+      "approved": "Adds steering as soon as the stick leaves its deadzone.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-148",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Changes how steering builds as the stick moves. 1.00 gives a linear response.",
+      "approved": "Changes steering response. 1.00 is linear.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-149",
+      "file": "runtime_controls_ui.inl",
+      "previous": "How far a trigger must be pressed before it counts as a button press.",
+      "approved": "How far a trigger must be pressed.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-150",
+      "file": "runtime_controls_ui.inl",
+      "previous": "These adjustments shape the final N64 stick sample once per game update. Accurate keeps the original response.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-151",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Requires a controller with a motion sensor.",
+      "approved": "Requires a motion-enabled controller.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-152",
+      "file": "runtime_controls_ui.inl",
+      "previous": "These adjustments require Modern presentation. Accurate preserves the original control response.",
+      "approved": "Requires Modern graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-153",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Press a gamepad button or move an axis firmly. Escape cancels.",
+      "approved": "Press a button or move the stick. Escape cancels.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-154",
+      "file": "runtime_controls_ui.inl",
+      "previous": ", or hold the first and press a second. The chord is saved automatically. Escape cancels.",
+      "approved": ", or hold it and press a second. Escape cancels.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-155",
+      "file": "runtime_controls_ui.inl",
+      "previous": "Press any button on the controller you want this player to use. Escape cancels.",
+      "approved": "Press a button on this player's controller. Escape cancels.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-156",
+      "file": "runtime_controls_ui.inl",
+      "previous": "No SDL gyro sensor was reported by Controller ",
+      "approved": "No motion sensor reported by Controller ",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-157",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Keep your progress safe, edit adventures and move saves between devices.",
+      "approved": "Back up, transfer and edit your saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-158",
+      "file": "runtime_saves_ui.inl",
+      "previous": "These actions include all three adventure slots, shared unlocks and personal records.",
+      "approved": "Includes all three slots, unlocks and records.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-159",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Restore earlier progress. A safety backup is also created before applying edits or resetting a save.",
+      "approved": "A backup is created before replacing your save.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-160",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Transfer ordinary offline Adventure progress and offline Controller Paks. Online and mod-set saves are separate and are not included.",
+      "approved": "Includes offline Adventure progress and Controller Paks. Online and modded saves are not included.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-161",
+      "file": "runtime_saves_ui.inl",
+      "previous": "EXPORT OFFLINE GARAGE",
+      "approved": "EXPORT OFFLINE SAVE BUNDLE",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-162",
+      "file": "runtime_saves_ui.inl",
+      "previous": "IMPORT OFFLINE GARAGE",
+      "approved": "IMPORT OFFLINE SAVE BUNDLE",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-163",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Four virtual memory cards. Each card is included in a complete garage export when available.",
+      "approved": "Four virtual memory cards. Included in offline save bundles when available.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-164",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Back up the save, then rebuild its checksums without changing save data?",
+      "approved": "Repair this save? Your progress won't be edited.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-165",
+      "file": "runtime_saves_ui.inl",
+      "previous": "The exact original is kept in Backups.",
+      "approved": "The original will be backed up.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-166",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Reset all three slots, unlocks and records? Your current save will be backed up first.",
+      "approved": "Reset all three slots, unlocks and records? A backup will be created first.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-167",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Your unapplied editor changes will be discarded.",
+      "approved": "Unsaved editor changes will be discarded.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-168",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Set all balloons, amulets, keys and course progress in this slot to complete?",
+      "approved": "Complete this Adventure slot?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-169",
+      "file": "runtime_saves_ui.inl",
+      "previous": "This changes the draft. Use Apply changes to save it.",
+      "approved": "Use Apply changes to save this edit.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-170",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Enable Adventure Two, Drumstick and all T.T. victories in this draft?",
+      "approved": "Unlock Adventure Two, Drumstick and all T.T. victories?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-171",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Discard unapplied changes?",
+      "approved": "Discard unsaved changes?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-172",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Reload the current save and discard edits to all three slots and shared unlocks?",
+      "approved": "Discard edits to all three slots and shared unlocks?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-173",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Replace the current save with this draft? A backup of the current save will be created first.",
+      "approved": "Apply these edits to your offline save? A backup will be created first.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-174",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Checksums are rebuilt and verified before the save is swapped in.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-175",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Target: YOUR OFFLINE ADVENTURE. Online and modded progress are not changed.",
+      "approved": "Offline Adventure save. Online and modded saves aren't affected.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-176",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Checksums repaired without changing save data. The original is available in Backups.",
+      "approved": "Save repaired. Original kept in Backups.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-177",
+      "file": "runtime_saves_ui.inl",
+      "previous": "The Adventure save checksums are already valid.",
+      "approved": "This save doesn't need repair.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-178",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Changes applied. Checksums verified; previous progress is available in Backups.",
+      "approved": "Changes saved. Previous progress kept in Backups.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-179",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Reading stored saves... no files are being changed.",
+      "approved": "Reading saves...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-180",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Host-owned online progress and isolated client copies. These are never automatically imported into offline play.",
+      "approved": "Online progress is separate from offline saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-181",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Each enabled mod set has separate progress. Changing your mod selection does not delete earlier saves.",
+      "approved": "Each mod selection keeps separate progress.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-182",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Recovery candidates are shown as stored. Nothing is restored automatically. A missing original cannot be reconstructed without a surviving copy.",
+      "approved": "Restore a surviving copy to recover progress. Recovery needs an existing save or backup.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-183",
+      "file": "runtime_saves_ui.inl",
+      "previous": "No stored saves found in this category. Your files have not been moved or deleted.",
+      "approved": "No saves found in this category.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-184",
+      "file": "runtime_saves_ui.inl",
+      "previous": "PIT LANE SAFETY LOCK",
+      "approved": "SAVE EDITING UNAVAILABLE",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-185",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Save import, restore and reset are available before the game starts. Close the game and use Save Manager so DKR cannot write to the same save or Controller Pak during a transfer.",
+      "approved": "Return to the launcher before importing, restoring or resetting saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-186",
+      "file": "runtime_saves_ui.inl",
+      "previous": "Offline progress is protected while you are in an online lobby. Leave the lobby before editing, importing, repairing or restoring personal saves.",
+      "approved": "Leave the lobby before changing offline saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-187",
+      "file": "runtime_saves_ui.inl",
+      "previous": "The game creates a save after your first adventure. You can also import a save or create a fresh one below.",
+      "approved": "Start an Adventure, import a save or create one below.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-188",
+      "file": "runtime_saves_ui.inl",
+      "previous": "The save failed its integrity check. Back up and repair it, or restore a working backup.",
+      "approved": "Repair this save or restore a working backup.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-189",
+      "file": "runtime_online_ui.inl",
+      "previous": "These settings are fixed when you create a lobby.",
+      "approved": "Applies to the next lobby you create.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-190",
+      "file": "runtime_online_ui.inl",
+      "previous": "Menu ownership",
+      "approved": "Who controls the menus?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-191",
+      "file": "runtime_online_ui.inl",
+      "previous": "Host guides menus until character select",
+      "approved": "Host until character select",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-192",
+      "file": "runtime_online_ui.inl",
+      "previous": "Host controls shared menus",
+      "approved": "Host for shared menus",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-193",
+      "file": "runtime_online_ui.inl",
+      "previous": "Every assigned port",
+      "approved": "All players",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-194",
+      "file": "runtime_online_ui.inl",
+      "previous": "Maximum racers",
+      "approved": "Maximum players",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-195",
+      "file": "runtime_online_ui.inl",
+      "previous": "Synchronization",
+      "approved": "Online mode",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-196",
+      "file": "runtime_online_ui.inl",
+      "previous": "Host prediction (legacy Rollback)",
+      "approved": "Host Prediction",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-197",
+      "file": "runtime_online_ui.inl",
+      "previous": "Strict input sync (Lockstep)",
+      "approved": "Strict Input Sync",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-198",
+      "file": "runtime_online_ui.inl",
+      "previous": "Experimental rollback (in development)",
+      "approved": "Experimental Rollback",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-199",
+      "file": "runtime_online_ui.inl",
+      "previous": "Experimental rollback",
+      "approved": "Experimental Rollback",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-200",
+      "file": "runtime_online_ui.inl",
+      "previous": "Auto selects Experimental rollback. The host can also choose a backend explicitly.",
+      "approved": "Uses Experimental Rollback.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-201",
+      "file": "runtime_online_ui.inl",
+      "previous": "Rollback prediction window (frames)",
+      "approved": "Prediction window (frames)",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-202",
+      "file": "runtime_online_ui.inl",
+      "previous": "Uses this lobby, Quick Join, friend invites, countdown, controls and online-only save. Late actual inputs are corrected by replaying owned game state. The previous backends remain available. Supports the admitted US v 1.0/v 1.1 revisions and synchronized session mods. For distant players, start with automatic delay and a 10-frame prediction window. A two-frame window may be too short for the route. Real-device playtest qualification is ongoing.",
+      "approved": "Higher values allow more time for late inputs, but can increase replay work. Automatic input delay is a good starting point.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-203",
+      "file": "runtime_online_ui.inl",
+      "previous": "Use previous online mode",
+      "approved": "Use Host Prediction",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-204",
+      "file": "runtime_online_ui.inl",
+      "previous": "Prediction allowance (frames)",
+      "approved": "Prediction window (frames)",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-205",
+      "file": "runtime_online_ui.inl",
+      "previous": "The host may predict missing input briefly. Clients follow confirmed host frames; this mode does not rewind gameplay. Distance still affects response time.",
+      "approved": "The host handles missing inputs. Response time depends on the connection.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-206",
+      "file": "runtime_online_ui.inl",
+      "previous": "Lockstep suits very stable, low-latency connections. Network variation can cause stalls.",
+      "approved": "Waits for every player's input. Best for stable, low-latency connections.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-207",
+      "file": "runtime_online_ui.inl",
+      "previous": "Measures the slowest racer before launch. Delay stays fixed during the race.",
+      "approved": "Adjusts input delay for the lobby's connection.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-208",
+      "file": "runtime_online_ui.inl",
+      "previous": "Record deterministic replay",
+      "approved": "Record game replay",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-209",
+      "file": "runtime_online_ui.inl",
+      "previous": "Keep a replay of the shared race.",
+      "approved": "Records game inputs for replay tools, not a video.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-210",
+      "file": "runtime_online_ui.inl",
+      "previous": "Two to four racers. One private lobby.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-211",
+      "file": "runtime_online_ui.inl",
+      "previous": "Gameplay settings are fixed until you leave this session.",
+      "approved": "Game settings stay fixed in this lobby.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-212",
+      "file": "runtime_online_ui.inl",
+      "previous": "Host settings apply to the next lobby you create.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-213",
+      "file": "runtime_online_ui.inl",
+      "previous": "Find rooms hosted by friends. Invitations appear first.",
+      "approved": "Find lobbies hosted by friends.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-214",
+      "file": "runtime_online_ui.inl",
+      "previous": "Your controls stay yours, whatever player number you get.",
+      "approved": "Choose your local control profile.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-215",
+      "file": "runtime_online_ui.inl",
+      "previous": "You race with",
+      "approved": "Your controls",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-216",
+      "file": "runtime_online_ui.inl",
+      "previous": "Everyone in a lobby must match on these. DKR-R checks it for you when someone joins.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-217",
+      "file": "runtime_online_ui.inl",
+      "previous": "The host supplies a separate online save. Your single-player progress is kept.",
+      "approved": "Uses the host's online save. Offline progress stays separate.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-218",
+      "file": "runtime_online_ui.inl",
+      "previous": "None on. Friends need none on too.",
+      "approved": "None enabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-219",
+      "file": "runtime_online_ui.inl",
+      "previous": " on. Friends need the same ones.",
+      "approved": " enabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-220",
+      "file": "runtime_online_ui.inl",
+      "previous": "Friends can invite you to their lobby with one click.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-221",
+      "file": "runtime_online_ui.inl",
+      "previous": "Show a notice when a friend comes online.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-222",
+      "file": "runtime_online_ui.inl",
+      "previous": "Friend Codes add trusted racers. Quick Join codes open a lobby.",
+      "approved": "Friend Codes add friends. Lobby codes join games.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-223",
+      "file": "runtime_online_ui.inl",
+      "previous": "Invites grant one admission and expire after five minutes. Locking the lobby prevents new invitations.",
+      "approved": "Invites expire after 5 minutes.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-224",
+      "file": "runtime_online_ui.inl",
+      "previous": "Create a lobby to invite friends with one click.",
+      "approved": "Create a lobby to invite friends.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-225",
+      "file": "runtime_online_ui.inl",
+      "previous": "Presentation settings stay available during a session.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-226",
+      "file": "runtime_online_ui.inl",
+      "previous": "Show networking overlay",
+      "approved": "Show connection overlay",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-227",
+      "file": "runtime_online_ui.inl",
+      "previous": "Compare your local input with the input committed by Player 1.",
+      "approved": "Show local and received controller input.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-228",
+      "file": "runtime_online_ui.inl",
+      "previous": "Quick Join Â· Host is Player 1.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-229",
+      "file": "runtime_online_ui.inl",
+      "previous": "Determinism verified",
+      "approved": "Game in sync",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-230",
+      "file": "runtime_online_ui.inl",
+      "previous": "Waiting for Player 1 authority validationâ¦",
+      "approved": "Checking game sync...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-231",
+      "file": "runtime_online_ui.inl",
+      "previous": "Connection variation detected. DKR-R is preparing a synchronized recovery point; keep racing.",
+      "approved": "Restoring game sync...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-232",
+      "file": "runtime_online_ui.inl",
+      "previous": "Deterministic replay recording enabled.",
+      "approved": "Game input recording enabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-233",
+      "file": "runtime_online_ui.inl",
+      "previous": "Online save verified",
+      "approved": "Save ready",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-234",
+      "file": "runtime_online_ui.inl",
+      "previous": "Verifying online saveâ¦",
+      "approved": "Syncing save...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-235",
+      "file": "runtime_online_ui.inl",
+      "previous": "Ending the previous match and verifying its online save. Please wait...",
+      "approved": "Saving the previous match...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-236",
+      "file": "runtime_online_ui.inl",
+      "previous": "You need at least one friend to start.",
+      "approved": "You need at least one other player to start.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-237",
+      "file": "runtime_online_ui.inl",
+      "previous": "SESSION MODS - Host managed and verified: ",
+      "approved": "LOBBY MODS: ",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-238",
+      "file": "runtime_online_ui.inl",
+      "previous": "Adventure progress and Controller Paks are isolated from your offline files. This session does not update personal offline progress.",
+      "approved": "Offline progress stays separate.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-239",
+      "file": "runtime_online_ui.inl",
+      "previous": "This temporary mod set applies to every racer. Leave the lobby to restore your offline selection. Modded host progress uses a separate save for this exact mod set.",
+      "approved": "Your offline mod selection returns when you leave. Modded online progress uses a separate save.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-240",
+      "file": "runtime_online_ui.inl",
+      "previous": "Testing session trafficâ¦ ",
+      "approved": "Testing connection... ",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-241",
+      "file": "runtime_online_ui.inl",
+      "previous": "Nobody new can ask to join. Racers already here stay.",
+      "approved": "Prevents new players joining.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-242",
+      "file": "runtime_online_ui.inl",
+      "previous": "Session pre-flight results",
+      "approved": "Connection test results",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-243",
+      "file": "runtime_online_ui.inl",
+      "previous": "The remaining racers are back in this lobby. Once the online save is verified, everyone can Ready and the host can start again. Single-player saves are unchanged.",
+      "approved": "You can start another match once the online save is ready. Offline progress stays separate.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-244",
+      "file": "runtime_online_ui.inl",
+      "previous": "The host's lobby has closed. You can create or join another lobby without restarting DKR-R. Single-player saves are unchanged.",
+      "approved": "The host left or closed the lobby. Create or join another lobby to play again.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-245",
+      "file": "runtime_online_ui.inl",
+      "previous": "Their presence, invites and hosted lobbies will be hidden.",
+      "approved": "Their online status, invites and lobbies will be hidden.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-246",
+      "file": "runtime_online_ui.inl",
+      "previous": "The launcher tests session traffic for seven seconds; this is not a CPU or GPU benchmark.",
+      "approved": "A 7-second connection check. Results don't measure game performance.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-247",
+      "file": "runtime_online_ui.inl",
+      "previous": "Excellent â best online experience",
+      "approved": "Good - fewer network interruptions expected",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-248",
+      "file": "runtime_online_ui.inl",
+      "previous": "Host a private room, share its five-character code, approve requests and ready up. Player 1 starts the race for everyone.",
+      "approved": "Create a lobby and share its 5-character code, or enter a friend's code to join.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-249",
+      "file": "runtime_online_ui.inl",
+      "previous": "Open lobbies lists rooms hosted by friends. Friend Codes add racers to your list; lobby invitations grant one admission and expire after five minutes.",
+      "approved": "The host approves joining players. You can also join friends through Open Lobbies.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-250",
+      "file": "runtime_online_ui.inl",
+      "previous": "Host Settings controls racer limits, shared menus, synchronization and input delay. Rollback and automatic delay are the defaults.",
+      "approved": "Everyone selects Ready, then the host starts the game. Auto uses Experimental Rollback.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-251",
+      "file": "runtime_online_ui.inl",
+      "previous": "Every racer needs the same ROM revision and gameplay settings. The host supplies a separate online Adventure save; single-player progress is kept.",
+      "approved": "Use the same ROM version. The host supplies online mods and a separate online save.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-252",
+      "file": "runtime_online_ui.inl",
+      "previous": "Online is in beta. Crashes or other issues may occur; please report them to ThatGuyMcd on GitHub or Discord with the details needed to reproduce them.",
+      "approved": "Offline saves stay separate. Troubleshooting tools are available in About DKR-R.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-253",
+      "file": "runtime_online_ui.inl",
+      "previous": "Race friends over the internet. No account, no port forwarding: just share a code.",
+      "approved": "Create a lobby or join with a code.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-254",
+      "file": "runtime_online_ui.inl",
+      "previous": "Everyone in a lobby needs the same revision.",
+      "approved": "Use the same ROM version as the host.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-255",
+      "file": "runtime_online_ui.inl",
+      "previous": "Races and minigames support 2â4 racers. Adventure supports 2.",
+      "approved": "Adventure supports 2 players. Races and minigames support up to 4.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-256",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Finish the current operation and select a supported Game Pak before hosting.",
+      "approved": "Finish the current operation and select a supported ROM before hosting.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-257",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Preparing the host's session mod set in the background. Offline saves and mods are unchanged.",
+      "approved": "Preparing lobby mods...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-258",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Verified mods kept in Mods/Hacks. New copies are inactive for offline play.",
+      "approved": "Mods saved in Mods / Hacks. New offline copies start disabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-259",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Joined with verified session mods, but offline copies could not be kept: ",
+      "approved": "Joined the lobby, but couldn't keep offline mod copies: ",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-260",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Host preparation cancelled because the selected lobby, Game Pak or Magic Codes changed.",
+      "approved": "Preparation cancelled because the lobby, ROM or Magic Codes changed.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-261",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "The host's playable mod resources were not prepared.",
+      "approved": "Couldn't prepare the host's mods.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-262",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "ONLINE SESSION PREPARATION FAILED",
+      "approved": "COULDN'T PREPARE LOBBY MODS",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-263",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "THIS LOBBY USES CUSTOM MODS",
+      "approved": "THIS LOBBY NEEDS MODS",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-264",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "PREPARING SESSION MODS",
+      "approved": "PREPARING LOBBY MODS",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-265",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "No unverified content was activated. Your offline saves and mod selection were not changed. Dismiss this message, correct the requirement above, then retry hosting or joining.",
+      "approved": "Offline saves and mod selections weren't changed.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-266",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "The host controls this session's active mods. Download and verify these files before joining?",
+      "approved": "Download these mods from the host to join?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-267",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Required files: %.1f MiB (verified cached files are reused)",
+      "approved": "Required files: %.1f MiB (installed files are reused)",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-268",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Verified session mods use a separate online cache. Optionally keep copies in your own Mods/Hacks library; new copies are inactive until you enable them. Existing mod selections, textures and saves stay unchanged. ROMs and native executable code are never downloaded.",
+      "approved": "New offline copies start disabled. Your existing mod selections and saves are kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-269",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "Keep in Mods/Hacks for offline play",
+      "approved": "Keep downloaded mods for offline play",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-270",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "DECLINE",
+      "approved": "CANCEL",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-271",
+      "file": "runtime_online_mods_ui.inl",
+      "previous": "The launcher remains responsive. Each mod is checked against your own imported Game Pak before you are admitted to the lobby.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-272",
+      "file": "runtime_details_ui.inl",
+      "previous": "Enable several packs to mix textures. Priority 1 wins clashes; missing textures come from the next enabled pack. Use Higher / Lower to reorder. Changes apply live.",
+      "approved": "Enable multiple packs. Lower priority numbers win when textures overlap.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-273",
+      "file": "runtime_details_ui.inl",
+      "previous": "Incompatible with live activation",
+      "approved": "This pack can't be enabled. Open Manage for details.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-274",
+      "file": "runtime_details_ui.inl",
+      "previous": "Lower number = higher priority. Sorting and filtering do not change priority.",
+      "approved": "Lower numbers win. Sorting and filtering don't change priority.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-275",
+      "file": "runtime_details_ui.inl",
+      "previous": "Applied only to the game image. DKR-Râs settings and performance overlays remain clear above it.",
+      "approved": "Applies to the game image, not the menus.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-276",
+      "file": "runtime_details_ui.inl",
+      "previous": "Enable CRT overlay",
+      "approved": "Enable CRT filter",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-277",
+      "file": "runtime_details_ui.inl",
+      "previous": "Filter density",
+      "approved": "Filter strength",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-278",
+      "file": "runtime_details_ui.inl",
+      "previous": "Texture-pack management is available in the Modern presentation profile. Accurate mode remains unchanged.",
+      "approved": "Requires Modern graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-279",
+      "file": "runtime_details_ui.inl",
+      "previous": "CRT overlays are available in the Modern presentation profile. Accurate mode remains unchanged.",
+      "approved": "Requires Modern graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-280",
+      "file": "runtime_details_ui.inl",
+      "previous": "Privacy-safe settings and system details for troubleshooting.",
+      "approved": "System information and tools for reporting problems.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-281",
+      "file": "runtime_details_ui.inl",
+      "previous": "Diagnostic logging",
+      "approved": "Extra diagnostic logging",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-282",
+      "file": "runtime_details_ui.inl",
+      "previous": "Diagnostic logging will be enabled at the next launch.",
+      "approved": "Extra logging enabled from the next launch.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-283",
+      "file": "runtime_details_ui.inl",
+      "previous": "Diagnostic logging will be disabled at the next launch.",
+      "approved": "Extra logging disabled from the next launch.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-284",
+      "file": "runtime_details_ui.inl",
+      "previous": "Save a diagnostic ZIP using Android's file picker. Review logs before sharing; they may contain paths and session details.",
+      "approved": "Review logs before sharing; they may contain paths and session details.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-285",
+      "file": "runtime_details_ui.inl",
+      "previous": "Support summary exported to the DKR-R support-reports folder.",
+      "approved": "Support report saved.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-286",
+      "file": "runtime_details_ui.inl",
+      "previous": "Wizpig has invaded DKR-R. Race across land, water and sky, collect Golden Balloons and help Diddy and his friends send the intergalactic pig wizard packing.",
+      "approved": "A native recompile of Diddy Kong Racing with modern graphics, online play and mods.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-287",
+      "file": "runtime_details_ui.inl",
+      "previous": "DKR-R runs the original game logic through a native PC runtime. Accurate preserves the original presentation; Modern adds carefully isolated PC quality-of-life options.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-288",
+      "file": "runtime_details_ui.inl",
+      "previous": "If you did not download DKR-R from ThatGuyMcdâs GitHub repository, this build may have been modified or tampered with.",
+      "approved": "Official downloads are available on GitHub.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-289",
+      "file": "runtime_details_ui.inl",
+      "previous": "Official source: github.com/ThatGuyMcd/DKR-R",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-290",
+      "file": "runtime_details_ui.inl",
+      "previous": "Windows, Linux and macOS builds",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-291",
+      "file": "runtime_details_ui.inl",
+      "previous": "No copyrighted game data is distributed. A legally obtained supported Diddy Kong Racing Game Pak is required.",
+      "approved": "Requires your own legally obtained, supported Diddy Kong Racing ROM.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-292",
+      "file": "runtime_details_ui.inl",
+      "previous": "Current development and Online Beta changes",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-293",
+      "file": "runtime_details_ui.inl",
+      "previous": "Thank you to elliotttate and the Wave Race contributors. DKR-R adapts the renderer to its own water geometry, cameras and presentation pipeline.",
+      "approved": "Thanks to elliotttate and the Wave Race contributors for the enhanced-water rendering reference.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-294",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Matching names or the same source and original slot may be different editions. Compare Details, then remove only the copy you do not want. Use Visibility: All to include hidden copies.",
+      "approved": "Matching names may be different versions. Compare Details before removing a copy.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-295",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Import a legacy patch or a DKR track to add it here.",
+      "approved": "Import a patch or track to add it here.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-296",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "This mod is no longer in the installed library.",
+      "approved": "This mod is no longer installed.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-297",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "SOURCE PACK: ",
+      "approved": "SOURCE: ",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-298",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "MANAGED SIZE: ",
+      "approved": "INSTALLED SIZE: ",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-299",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": " (prepared variants; retained import material excluded)",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-300",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "IMPORTED: Unknown (older import)",
+      "approved": "IMPORTED: Unknown",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-301",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "These can be different editions. Removal applies only to the chosen content ID; other mods and saves are kept.",
+      "approved": "These may be different versions. Removing one copy keeps other mods and saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-302",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Return to the launcher and leave the lobby to change mods. Busy operations must finish first.",
+      "approved": "Return to the launcher and leave the lobby to change mods.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-303",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "The native character identity range is full. Installed mods remain available.",
+      "approved": "Too many characters are enabled. Disable some and try again.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-304",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Source imports are retained for re-preparation. This mod uses isolated saves; hiding or removing it never deletes saves.",
+      "approved": "Saved imports can be prepared again. Hiding or removing a mod keeps its saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-305",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "This explicitly restores removed entries from this source import. Existing hidden entries remain hidden. Behaviour-enabled editions have separate identities; the older edition and its isolated saves are retained, not overwritten. Choose which edition to activate after preparation.",
+      "approved": "Preparing again can restore removed mods. Existing selections and saves are kept; new versions start disabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-306",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Remove this mod and all its prepared ROM variants? Other tracks and characters from the same pack, source files, retained import material and all saves are kept.",
+      "approved": "Remove this mod from DKR-R? Other mods, original source files and saves are kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-307",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Deactivate and hide this mod? Its files and saves are kept. Use Visibility: Hidden to restore the card. Restoring does not activate it.",
+      "approved": "Disable and hide this mod? Its files and saves are kept. Restore it using the Hidden filter; it stays disabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-308",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Prepared content is deleted. Reimport its source patch to install it again.",
+      "approved": "You'll need to prepare or import it again to reinstall.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-309",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Choose the format you downloaded. Both types appear in My mods.",
+      "approved": "Choose a patch or native track.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-310",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "A .dkrmap folder or a ZIP of a native track. You can import it before loading a ROM.",
+      "approved": "Import a .dkrmap folder or native-track ZIP. No ROM needed for import.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-311",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Uninstall this track from DKR-R? Its installed .dkrmap copy will be deleted. Original source files, saves and HD texture packs will be kept. You can import the track again later.",
+      "approved": "Remove this installed track? Original source files, saves and HD texture packs are kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-312",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "Use Track Lab to test work in progress from your working folder. Native tracks use the Modern graphics profile.",
+      "approved": "Track Lab previews tracks from your working folder. Requires Modern graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-313",
+      "file": "runtime_mod_library_ui.inl",
+      "previous": "To remove this track, move its .dkrmap out of your working folder and rescan, or stop watching that folder in Track Lab.",
+      "approved": "Move this track out of your working folder and Rescan, or stop watching the folder.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-314",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "How much the camera follows the nose or the motion, and how quickly that alignment changes when a drift starts or ends.",
+      "approved": "How closely the camera follows the racer through turns and drifts.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-315",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "How the camera takes a change of direction. It keeps up through a steady corner; the kart turns on screen only while the turn is starting or ending. Damping below 1 overshoots.",
+      "approved": "How smoothly the camera turns. Damping below 1 adds overshoot.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-316",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "The right stick, or the mouse while racing (Esc frees the pointer; hold the right button to keep the view where you put it). Left alone, the camera drifts back behind the racer.",
+      "approved": "Turn the camera with the right stick or mouse. Hold the right mouse button to keep the view; Escape frees the pointer.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-317",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "Boosts, landings, and the game's own hits and explosions. All at 0 is no shake; the swing when you hit a wall is under Hits.",
+      "approved": "Shake from boosts, landings and impacts. Zero turns shake off.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-318",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "Walls and karts stop the racer dead, bounce it off or knock its nose round. Below 100% the camera keeps following the motion it had, so its aim, zoom and FOV ignore the stop and the bounce until the racer has its speed back, and the racer turns on screen instead of the world. The lower, the longer it waits for a racer that stays slow. 100% is the camera's raw reaction. The Hit light under State shows when one is being smoothed.",
+      "approved": "Lower values smooth the camera after collisions. 100% follows the impact immediately.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-319",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "modern-camera.ini was updated to the current camera: values you had not changed follow the new defaults.",
+      "approved": "Camera settings updated. Your custom values are kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-320",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "Needs the Modern presentation profile (Graphics).",
+      "approved": "Requires Modern graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-321",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "Waiting for a race: it drives the gameplay follow camera, offline only. Split screen scales the framing.",
+      "approved": "Start an offline race to adjust the camera.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-322",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "Custom. Gold labels differ from the DKR-R tuning.",
+      "approved": "Custom. Gold labels mark changed settings.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-323",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "Every camera step, hits included, goes to logs/runtime.log until you untick this or quit. For reporting a jolt.",
+      "approved": "Records camera movement in the log until turned off or DKR-R closes.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-324",
+      "file": "runtime_camera_tuning_ui.inl",
+      "previous": "Live on controller port %u. Changes apply as you drive.",
+      "approved": "Player %u camera. Changes apply while driving.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-325",
+      "file": "runtime_mipmap_modal.hpp",
+      "previous": "GENERATING TEXTURE MIPMAPS",
+      "approved": "PREPARING TEXTURES",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-326",
+      "file": "runtime_mipmap_modal.hpp",
+      "previous": "Preparing texture detail. Please wait...",
+      "approved": "Preparing textures...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-327",
+      "file": "runtime_mipmap_modal.hpp",
+      "previous": "The game will continue automatically. This does not modify your texture packs or saves.",
+      "approved": "The game continues when preparation finishes.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-328",
+      "file": "runtime_ui.cpp",
+      "previous": "Finishing the atomic install. DKR-R will not interrupt this step.",
+      "approved": "Finishing installation...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-329",
+      "file": "runtime_ui.cpp",
+      "previous": "READY TO RACE",
+      "approved": "DONE",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-330",
+      "file": "runtime_ui.cpp",
+      "previous": "Library work runs in the background. Original Game Paks and saves are not modified. Cancellation stops before commit; committed changes finish safely.",
+      "approved": "Cancel stops before the next installation. Completed imports are kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-331",
+      "file": "runtime_ui.cpp",
+      "previous": "Checking prepared assets and separate modded saves. The launcher remains responsive.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-332",
+      "file": "runtime_ui.cpp",
+      "previous": "The game is stopped. Check Mods / Hacks or disable the affected mods and try again.",
+      "approved": "Check Mods / Hacks or disable the affected mods, then try again.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-333",
+      "file": "runtime_ui.cpp",
+      "previous": "Use the D-pad and A button to enter text. Every letter and number is available; spaces and common name characters are included too.",
+      "approved": "D-pad to select. A to enter.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-334",
+      "file": "runtime_ui.cpp",
+      "previous": "Use the D-pad to choose each character and press A to enter it. Quick Join avoids I, O, 1 and 0 so codes are easy to read.",
+      "approved": "D-pad to select. A to enter.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-335",
+      "file": "runtime_ui.cpp",
+      "previous": "Paste the secure Friend Code, or enter its eight characters with the controller. DKR-R supplies the DKR- prefix automatically. The request is delivered when both racers are online.",
+      "approved": "Enter the 8 characters of the Friend Code. The DKR- prefix is added automatically.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-336",
+      "file": "runtime_ui.cpp",
+      "previous": "Install the same DKR-R build on every machine, then restart DKR-R before reconnecting.",
+      "approved": "Everyone needs the same DKR-R version. Update and reconnect.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-337",
+      "file": "runtime_ui.cpp",
+      "previous": "Select the same supported Game Pak revision as player 1, then reconnect to the lobby.",
+      "approved": "Choose the same ROM version as the host, then reconnect.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-338",
+      "file": "runtime_ui.cpp",
+      "previous": "Match the host's gameplay-affecting settings, then leave and rejoin the lobby.",
+      "approved": "Match the host's required game settings, then rejoin.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-339",
+      "file": "runtime_ui.cpp",
+      "previous": "Match the host's enabled Magic Codes in MODS / HACKS, then reconnect. The exact differences are listed below.",
+      "approved": "Match the Magic Codes listed below, then reconnect.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-340",
+      "file": "runtime_ui.cpp",
+      "previous": "Leave and rejoin the lobby to receive the host's isolated online save again. If it repeats, the host can check their Online save in Save Manager. Do not replace clients' offline saves to fix a lobby mismatch.",
+      "approved": "Rejoin to sync the online save. If it fails again, the host should check their Online save in Save Manager. Don't replace offline saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-341",
+      "file": "runtime_ui.cpp",
+      "previous": "Use the same presentation preset and simulation rate on every machine, then reconnect.",
+      "approved": "Game update rates don't match. Check Details and make sure everyone uses the same DKR-R version.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-342",
+      "file": "runtime_ui.cpp",
+      "previous": "This platform combination did not pass deterministic compatibility. Confirm both builds are from the same release package.",
+      "approved": "These builds can't play together. Use matching releases and check Details.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-343",
+      "file": "runtime_ui.cpp",
+      "previous": "Ask the host for a fresh Quick Join code and enter it again.",
+      "approved": "Ask the host for a new lobby code.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-344",
+      "file": "runtime_ui.cpp",
+      "previous": "Confirm the host is still running, both racers are online, and DKR-R is allowed through each firewall. Then retry Quick Join.",
+      "approved": "Check that the host is online and the code is current. Allow DKR-R through your firewall if needed, then retry.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-345",
+      "file": "runtime_ui.cpp",
+      "previous": "The host declined this request. Ask the host to approve a new join request before retrying.",
+      "approved": "The host declined your request. Ask them before trying again.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-346",
+      "file": "runtime_ui.cpp",
+      "previous": "This racer is blocked by the host. The host must unblock them before another request can be accepted.",
+      "approved": "The host must unblock this player before they can join.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-347",
+      "file": "runtime_ui.cpp",
+      "previous": "This two-racer lobby is full. Wait for Player 2's slot to open, then reconnect.",
+      "approved": "This lobby is full. Try again when a player leaves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-348",
+      "file": "runtime_ui.cpp",
+      "previous": "The lobby is already launching or racing. Wait until the host returns to the lobby, then reconnect.",
+      "approved": "This lobby isn't accepting players. Ask the host to unlock it or wait for the game to finish.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-349",
+      "file": "runtime_ui.cpp",
+      "previous": "Return every racer to the lobby and let player 1 start the event again. If it repeats, save the diagnostic log before restarting DKR-R.",
+      "approved": "Return to the lobby and let the host start again. If it repeats, keep the logs for support.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-350",
+      "file": "runtime_ui.cpp",
+      "previous": "The session stopped before divergent gameplay could continue. Return to the lobby, confirm matching settings and Game Paks, then retry.",
+      "approved": "The game lost sync. Return to the lobby and try again.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-351",
+      "file": "runtime_ui.cpp",
+      "previous": "The connection could not recover safely. Return to the lobby and retry after the connection has stabilized.",
+      "approved": "Game sync couldn't be restored. Return to the lobby and try again.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-352",
+      "file": "runtime_ui.cpp",
+      "previous": "The network connection was interrupted. Check the connection, then reconnect through Quick Join.",
+      "approved": "Connection lost. Check your connection and rejoin.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-353",
+      "file": "runtime_ui.cpp",
+      "previous": "Return to the DKR-R Online tab for the persistent error. Retry after confirming matching builds, Game Paks, settings and a stable connection.",
+      "approved": "The session couldn't continue. Check Details, then return to Online.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-354",
+      "file": "runtime_ui.cpp",
+      "previous": "ONLINE SESSION HALTED",
+      "approved": "SESSION ENDED",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-355",
+      "file": "runtime_ui.cpp",
+      "previous": "HOW TO RECOVER",
+      "approved": "WHAT TO DO",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-356",
+      "file": "runtime_ui.cpp",
+      "previous": "ONE-CLICK HOST SYNC AVAILABLE",
+      "approved": "MATCH HOST SETTINGS",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-357",
+      "file": "runtime_ui.cpp",
+      "previous": "DKR-R can select the host's Game Pak only if that exact supported ROM is already in your library, mirror the host's Magic Codes, verify the resulting manifest, and retry this invitation. No ROM data is transferred.",
+      "approved": "Match the host's ROM and Magic Codes, then reconnect. The required ROM must already be in your library; ROM files aren't downloaded.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-358",
+      "file": "runtime_ui.cpp",
+      "previous": "HOST ON / THIS RACER OFF: %s - %s",
+      "approved": "ENABLE: %s - %s",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-359",
+      "file": "runtime_ui.cpp",
+      "previous": "HOST OFF / THIS RACER ON: %s - %s",
+      "approved": "DISABLE: %s - %s",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-360",
+      "file": "runtime_ui.cpp",
+      "previous": "WAITING FOR PLAYER 1'S SYNCHRONIZED START SIGNAL",
+      "approved": "Waiting for host...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-361",
+      "file": "runtime_ui.cpp",
+      "previous": "VALIDATING EVERY RACER'S STARTING GRID",
+      "approved": "Checking players...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-362",
+      "file": "runtime_ui.cpp",
+      "previous": "ARMING THE SAME LAUNCH FOR EVERY RACER",
+      "approved": "Preparing game...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-363",
+      "file": "runtime_ui.cpp",
+      "previous": "RELEASING THE SYNCHRONIZED START",
+      "approved": "Starting game...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-364",
+      "file": "runtime_ui.cpp",
+      "previous": "NETWORK INPUT BUFFER EXHAUSTED - WAITING FOR RACER INPUT",
+      "approved": "Waiting for player input...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-365",
+      "file": "runtime_ui.cpp",
+      "previous": "CONFIRMING INPUT BEFORE A SCENE RESOURCE CHANGE",
+      "approved": "Syncing next screen...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-366",
+      "file": "runtime_ui.cpp",
+      "previous": "WAITING FOR RACERS AT THE SAME SCENE",
+      "approved": "Waiting for players to load...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-367",
+      "file": "runtime_ui.cpp",
+      "previous": "PREPARING THE SYNCHRONIZED SCENE",
+      "approved": "Loading next screen...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-368",
+      "file": "runtime_ui.cpp",
+      "previous": "RETIRING THE CORRECTED FRAME",
+      "approved": "Updating display...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-369",
+      "file": "runtime_ui.cpp",
+      "previous": "LOADING THE SAME GAME STATE",
+      "approved": "Syncing game...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-370",
+      "file": "runtime_ui.cpp",
+      "previous": "SYNCHRONIZING RACE START",
+      "approved": "Syncing race start...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-371",
+      "file": "runtime_ui.cpp",
+      "previous": "SYNCHRONIZING THE NEXT SCREEN",
+      "approved": "Syncing next screen...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-372",
+      "file": "runtime_ui.cpp",
+      "previous": "SYNCHRONIZING RACE RESULTS",
+      "approved": "Syncing results...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-373",
+      "file": "runtime_ui.cpp",
+      "previous": "RECOVERING THE SHARED TIMELINE",
+      "approved": "Restoring game sync...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-374",
+      "file": "runtime_ui.cpp",
+      "previous": "A RACER IS CATCHING UP",
+      "approved": "Waiting for a player to catch up...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-375",
+      "file": "runtime_ui.cpp",
+      "previous": "SYNCHRONIZING CUTSCENE",
+      "approved": "Syncing cutscene...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-376",
+      "file": "runtime_ui.cpp",
+      "previous": "HIDE FROM LIST keeps DKR-R's managed copy on disk. Choose Hidden from the Visibility filter to restore it later.",
+      "approved": "Hide keeps the pack installed. Restore it using the Hidden filter.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-377",
+      "file": "runtime_ui.cpp",
+      "previous": "WARNING - PERMANENT DELETION CANNOT BE UNDONE",
+      "approved": "DELETION CAN'T BE UNDONE",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-378",
+      "file": "runtime_ui.cpp",
+      "previous": "DELETE COMPLETELY removes DKR-R's managed archive or converted texture cache. The original source archive outside DKR-R is never touched.",
+      "approved": "Delete removes DKR-R's installed copy. Your original archive is kept.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-379",
+      "file": "runtime_ui.cpp",
+      "previous": "MANAGED SIZE",
+      "approved": "INSTALLED SIZE",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-380",
+      "file": "runtime_ui.cpp",
+      "previous": "MANAGED LOCATION",
+      "approved": "FOLDER",
+      "verification": "state-aware-or-details"
+    },
+    {
+      "id": "COPY-381",
+      "file": "runtime_ui.cpp",
+      "previous": "OPEN MANAGED LOCATION",
+      "approved": "OPEN FOLDER",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-382",
+      "file": "runtime_ui.cpp",
+      "previous": "Opened the managed texture-pack location.",
+      "approved": "Texture-pack folder opened.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-383",
+      "file": "runtime_ui.cpp",
+      "previous": "Preparing an import again adds support for your current ROM and reinstalls removed entries. Hidden mods stay hidden.",
+      "approved": "Prepare again for your current ROM or to restore removed mods. Hidden mods stay hidden.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-384",
+      "file": "runtime_ui.cpp",
+      "previous": "Changes apply on the next launch. Each code lists its supported modes. Tracks-only codes do not affect Adventure.",
+      "approved": "Changes apply next game. Each code lists its supported modes.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-385",
+      "file": "runtime_ui.cpp",
+      "previous": "One-time actions stay queued until used. After granting a Golden Balloon, let the game save before quitting.",
+      "approved": "One-time codes stay queued until used. Let the game save after receiving a Golden Balloon.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-386",
+      "file": "runtime_ui.cpp",
+      "previous": "Leave the online lobby before changing Magic Codes. This session uses the codes agreed with the host. Credits remain queued for offline play.",
+      "approved": "Leave the lobby to change Magic Codes. Pending offline actions stay queued.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-387",
+      "file": "runtime_ui.cpp",
+      "previous": "All launch Magic Codes cleared.",
+      "approved": "Magic Codes cleared.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-388",
+      "file": "runtime_ui.cpp",
+      "previous": "When and where do codes apply?",
+      "approved": "When codes apply",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-389",
+      "file": "runtime_ui.cpp",
+      "previous": "Testing a track uses the Modern graphics profile. Selecting a test track switches to it automatically.",
+      "approved": "Track previews use Modern graphics.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-390",
+      "file": "runtime_ui.cpp",
+      "previous": "Keep your .dkrmap tracks in one working folder. Re-export in place, then rescan to find updates and new tracks. Remove a track from this folder to remove it from the list.",
+      "approved": "Choose a working folder for your tracks. Re-export in place, then Rescan to load changes.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-391",
+      "file": "runtime_ui.cpp",
+      "previous": "Track files stay in this folder. HD texture packs are installed separately in AppData.",
+      "approved": "Track files stay in this folder. HD texture packs are installed separately.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-392",
+      "file": "runtime_ui.cpp",
+      "previous": "Select a track, then launch the game. Races load that track until you stop testing or choose a course in Track Select.",
+      "approved": "Select a track to preview. Stop testing or choose a course in Track Select to return to normal play.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-393",
+      "file": "runtime_ui.cpp",
+      "previous": "Start directly in the selected test track as Diddy, in single player. Stays on until you turn it off. Quit a race to reach the menus; L+Z reloads the track.",
+      "approved": "Start directly in this track as Diddy. Quit the race to reach the menus; L+Z reloads the track.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-394",
+      "file": "runtime_ui.cpp",
+      "previous": "Use Import mods to choose a legacy patch or a DKR track.",
+      "approved": "Import a patch or native track.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-395",
+      "file": "runtime_ui.cpp",
+      "previous": "Load your original ROM in Play. Legacy patches need it for preparation; DKR tracks can be imported before this step.",
+      "approved": "Choose the required ROM in Play to prepare legacy patches.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-396",
+      "file": "runtime_ui.cpp",
+      "previous": "Enable legacy tracks for Track Select. Installed DKR tracks appear automatically in the in-game track menu.",
+      "approved": "Enable legacy mods to use them. Installed native tracks appear in Track Select.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-397",
+      "file": "runtime_ui.cpp",
+      "previous": "Each enabled legacy mod set uses separate Adventure saves and Controller Paks.",
+      "approved": "Legacy mod selections keep separate saves.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-398",
+      "file": "runtime_ui.cpp",
+      "previous": "Hiding a legacy mod turns it off and keeps its files. Removing it keeps your saves and original files.",
+      "approved": "Hiding disables a mod. Removing it keeps saves and original source files.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-399",
+      "file": "runtime_ui.cpp",
+      "previous": "Legacy patches need their exact source ROM. Tracks are prepared for your imported US v1.0 or v1.1 ROMs; characters are validated for either version. Native DKR tracks do not need patch preparation.",
+      "approved": "Legacy patches need the ROM version they were made for. Native tracks don't need patch preparation.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-400",
+      "file": "runtime_ui.cpp",
+      "previous": "Prepare all source imports again",
+      "approved": "Prepare all imports again",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-401",
+      "file": "runtime_ui.cpp",
+      "previous": "No retained source imports are available to prepare. Import an original ROM and refresh the library first.",
+      "approved": "No saved imports available. Choose the required ROM and import the original patch again.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-402",
+      "file": "runtime_ui.cpp",
+      "previous": "Prepare all re-checks retained legacy sources for your imported ROMs, one import at a time. Existing editions, enabled/hidden selections and saves stay unchanged; new editions start inactive. You can cancel between transactions.",
+      "approved": "Rebuild mods from their saved imports. Existing selections and saves are kept. New versions start disabled.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-403",
+      "file": "runtime_ui.cpp",
+      "previous": "Installed DKR tracks appear automatically in the in-game track menu. Enable legacy mods to include them. Track Lab is for development and testing.",
+      "approved": "Installed native tracks appear in Track Select. Enable legacy mods to use them.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-404",
+      "file": "runtime_ui.cpp",
+      "previous": " legacy mods enabled. Changes apply on the next launch.",
+      "approved": " legacy mods enabled. Applies next game.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-405",
+      "file": "runtime_ui.cpp",
+      "previous": "No ROM loaded. Choose your original Diddy Kong Racing ROM to play or prepare legacy mods.",
+      "approved": "Choose a ROM to prepare legacy mods.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-406",
+      "file": "runtime_ui.cpp",
+      "previous": "Some legacy mods were prepared for a different ROM version. Use Prepare mod on their cards.",
+      "approved": "Prepare the affected mods for the selected ROM.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-407",
+      "file": "runtime_ui.cpp",
+      "previous": "Browsing is available. Return to the launcher and leave the lobby to change mods.",
+      "approved": "Return to the launcher and leave the lobby to change mods.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-408",
+      "file": "runtime_ui.cpp",
+      "previous": "You are in an online lobby. Leave the lobby to change mods or Magic Codes.",
+      "approved": "Leave the lobby to change mods or Magic Codes.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-409",
+      "file": "runtime_ui.cpp",
+      "previous": "Restart DKR-R and reload the launcher?",
+      "approved": "Restart DKR-R?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-410",
+      "file": "runtime_ui.cpp",
+      "previous": "Your selected Game Pak and settings will be preserved.",
+      "approved": "",
+      "verification": "removed"
+    },
+    {
+      "id": "COPY-411",
+      "file": "runtime_ui.cpp",
+      "previous": "Restart DKR-R and return to the launcher?",
+      "approved": "Restart DKR-R?",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-412",
+      "file": "runtime_ui.cpp",
+      "previous": "Progress since the last in-game save point may be lost.",
+      "approved": "Unsaved progress may be lost.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-413",
+      "file": "runtime_ui.cpp",
+      "previous": "Adventure and Controller Pak saves returned safely to T.T.'s garage.",
+      "approved": "Offline save bundle imported. Previous saves were backed up.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-414",
+      "file": "runtime_ui.cpp",
+      "previous": "Complete save garage exported successfully.",
+      "approved": "Offline save bundle exported.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-415",
+      "file": "runtime_ui.cpp",
+      "previous": "Stored save exported successfully. The original was not changed.",
+      "approved": "Save exported.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-416",
+      "file": "runtime_ui.cpp",
+      "previous": "Checking imported Game Paks in the background. No settings have changed yet.",
+      "approved": "Checking your ROM library...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-417",
+      "file": "runtime_ui.cpp",
+      "previous": "One-click sync stopped safely: the host's exact supported Game Pak is not already imported on this device. DKR-R never transfers ROM data.",
+      "approved": "The host's ROM version isn't in your library. ROM files aren't downloaded.",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-418",
+      "file": "runtime_ui.cpp",
+      "previous": "Host Game Pak and Magic Codes matched. Reconnecting with the authenticated invitation...",
+      "approved": "Host settings matched. Reconnecting...",
+      "verification": "literal"
+    },
+    {
+      "id": "COPY-419",
+      "file": "runtime_ui.cpp",
+      "previous": "Friend request saved locally. Its status will confirm when the racer receives it.",
+      "approved": "Friend request saved. Waiting for delivery.",
+      "verification": "literal"
+    }
+  ]
+}

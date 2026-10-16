@@ -18,31 +18,22 @@ struct CameraTuningGroup {
 constexpr std::array<CameraTuningGroup, 12> kCameraTuningGroups{{
     {camtune::TuningGroup::Framing, "Framing", "Distance, height and zoom with speed.", true},
     {camtune::TuningGroup::Direction, "Direction",
-     "How much the camera follows the nose or the motion, and how quickly that alignment changes when a "
-     "drift starts or ends.", true},
+     "How closely the camera follows the racer through turns and drifts.", true},
     {camtune::TuningGroup::YawSpring, "Yaw spring",
-     "How the camera takes a change of direction. It keeps up through a steady corner; the kart turns on "
-     "screen only while the turn is starting or ending. Damping below 1 overshoots.", true},
+     "How smoothly the camera turns. Damping below 1 adds overshoot.", true},
     {camtune::TuningGroup::Follow, "Follow", "How elastic the position is.", false},
     {camtune::TuningGroup::Terrain, "Terrain", "Pitching with the track's slope.", false},
     {camtune::TuningGroup::LookAhead, "Look ahead", "Aiming where the racer is going.", false},
     {camtune::TuningGroup::Fov, "Field of view", "Sense of speed, added to the level's own FOV.", false},
     {camtune::TuningGroup::Roll, "Roll", "A slight tilt as the racer turns.", false},
     {camtune::TuningGroup::Orbit, "Manual orbit",
-     "The right stick, or the mouse while racing (Esc frees the pointer; hold the right button to keep "
-     "the view where you put it). Left alone, the camera drifts back behind the racer.", false},
+     "Turn the camera with the right stick or mouse. Hold the right mouse button to keep the view; Escape frees the pointer.", false},
     {camtune::TuningGroup::Collision, "Walls",
-     "When a wall comes between the camera and the racer the camera comes in, but never into the racer: "
-     "first it rises over the racer, as little as clears the wall.", false},
+     "When a wall comes between the camera and the racer. The camera rises over the racer rather than into it.", false},
     {camtune::TuningGroup::Shake, "Shake",
-     "Boosts and landings. All at 0 is no shake. Hits and explosions never shake this camera; "
-     "the swing when you hit a wall is under Hits.", true},
+     "Shake from boosts and landings. Zero turns shake off. Hits and explosions never shake this camera.", true},
     {camtune::TuningGroup::Hits, "Hits",
-     "Walls and karts stop the racer dead, bounce it off or knock its nose round. Below 100% the camera "
-     "keeps following the motion it had, so its aim, zoom and FOV ignore the stop and the bounce until "
-     "the racer has its speed back, and the racer turns on screen instead of the world. The lower, "
-     "the longer it waits for a racer that stays slow. 100% is the camera's raw reaction. The Hit "
-     "light under State shows when one is being smoothed.",
+     "Lower values smooth the camera after collisions. 100% follows the impact immediately.",
      true},
 }};
 
@@ -80,8 +71,7 @@ void LoadCameraTuning() {
     // An older file is brought up to date once, so the panel and the file
     // agree on what is saved.
     if (migrated && SaveCameraTuning(tuning)) {
-        g_camera_tuning.status = "modern-camera.ini was updated to the current camera: values you had not "
-                                 "changed follow the new defaults.";
+        g_camera_tuning.status = "Camera settings updated. Your custom values are kept.";
     }
 }
 
@@ -285,15 +275,14 @@ bool CameraTuningRows(camtune::TuningGroup group, camtune::Tuning& tuning, const
 void CameraTuningStatus(const camtune::Readout& live) {
     namespace enh = dkr::runtime::enhancements;
     if (!enh::modern_presentation_enabled()) {
-        ImGui::TextColored(kWarm, "Needs the Modern presentation profile (Graphics).");
+        ImGui::TextColored(kWarm, "Requires Modern graphics.");
     } else if (!camtune::requested()) {
         ImGui::TextColored(kWarm, "The Modern camera is off.");
     } else if (live.live) {
-        ImGui::TextColored(kAccent, "Live on controller port %u. Changes apply as you drive.",
+        ImGui::TextColored(kAccent, "Player %u camera. Changes apply while driving.",
                            static_cast<unsigned>(live.port + 1U));
     } else {
-        ImGui::TextWrapped("Waiting for a race: it drives the gameplay follow camera, offline only. "
-                           "Split screen scales the framing.");
+        ImGui::TextWrapped("Start an offline race to adjust the camera.");
     }
 }
 
@@ -410,7 +399,7 @@ void DrawCameraTuningPanel() {
         }
         ImGui::TextWrapped("%s", matched >= 0
             ? camtune::kTuningPresets[static_cast<std::size_t>(matched)].help
-            : "Custom. Gold labels differ from the DKR-R tuning.");
+            : "Custom. Gold labels mark changed settings.");
         ImGui::PushTextWrapPos(0.0F);
         ImGui::TextDisabled("Motion sick? Start from Comfort: roll, shake, FOV changes and sway "
                             "are the usual causes.");
@@ -443,8 +432,7 @@ void DrawCameraTuningPanel() {
         bool step_log = camtune::step_log();
         if (ImGui::Checkbox("Record the camera to runtime.log", &step_log)) camtune::set_step_log(step_log);
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Every camera step, hits included, goes to logs/runtime.log until you untick "
-                              "this or quit. For reporting a jolt.");
+            ImGui::SetTooltip("Records camera movement in the log until turned off or DKR-R closes.");
         }
         ImGui::Spacing();
 

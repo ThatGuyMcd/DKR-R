@@ -4,11 +4,17 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 #include <SDL.h>
-#if !defined(DKR_MOBILE_UI_TEST)
+#if defined(__ANDROID__) && !defined(DKR_MOBILE_UI_TEST)
 #include <SDL_system.h>
 #include <jni.h>
 #endif
+#if defined(DKR_IOS)
+#include "../ios/ios_platform.hpp"
+extern "C" void dkr_ios_ui_metrics(float* scale, float* text_scale, float insets[4]);
+#endif
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <deque>
 #include <fstream>
@@ -17,6 +23,9 @@
 #include <vector>
 
 namespace dkr::runtime::mobile {
+#if defined(DKR_MOBILE_UI_TEST)
+void test_metrics(float& scale, float insets[4]);
+#endif
 namespace {
 std::mutex mutex;
 Contacts contacts;
@@ -61,7 +70,18 @@ Point group_extent(int group, Rect safe) {
 }
 void read_metrics() {
 #if defined(DKR_MOBILE_UI_TEST)
-    scale = 2;
+    test_metrics(scale, insets);
+#elif defined(DKR_IOS)
+    float reported_scale = 1.0F;
+    float reported_text_scale = 1.0F;
+    float reported_insets[4]{};
+    dkr_ios_ui_metrics(&reported_scale, &reported_text_scale, reported_insets);
+    if (std::isfinite(reported_scale) && reported_scale > 0)
+        scale = std::clamp(reported_scale, 1.0F, 5.0F);
+    if (std::isfinite(reported_text_scale) && reported_text_scale > 0)
+        text_scale = std::clamp(reported_text_scale, 1.0F, 1.5F);
+    for (int i = 0; i < 4; ++i)
+        insets[i] = std::isfinite(reported_insets[i]) ? std::max(0.0F, reported_insets[i]) : 0;
 #else
     static Uint64 last = 0;
     const auto now = SDL_GetTicks64();
@@ -347,6 +367,15 @@ void clear() {
     cancel_pending = true;
 }
 bool event(const SDL_Event& e, bool gameplay) {
+#if defined(DKR_IOS)
+    if (e.type == SDL_APP_DIDENTERFOREGROUND)
+        dkr::runtime::ios::import_inbox();
+    if (e.type == SDL_DROPFILE) {
+        dkr::runtime::ios::import_external_file(e.drop.file);
+        SDL_free(const_cast<char*>(e.drop.file));
+        return true;
+    }
+#endif
     if (e.type == SDL_APP_WILLENTERBACKGROUND || e.type == SDL_APP_TERMINATING ||
         (e.type == SDL_WINDOWEVENT &&
          (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST || e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED))) {
@@ -372,6 +401,10 @@ bool event(const SDL_Event& e, bool gameplay) {
     bool open = false;
     {
         std::lock_guard lock(mutex);
+        // A physical touch switches automatic visibility back from controller
+        // input. Hidden controls reappear on the next rendered frame.
+        if (e.type == SDL_FINGERDOWN)
+            controller_active = false;
         if ((gameplay && !edit_active) || test_active) {
             auto& destination = test_active ? preview_contacts : contacts;
             Point pos{e.tfinger.x, e.tfinger.y};

@@ -259,8 +259,8 @@ public:
     std::size_t mod_chunk_budget() const;
     bool send_mod_packet(std::uint64_t target,std::span<const std::uint8_t> bytes,
                          bool data,std::string& error);
-    bool complete_mod_admission(std::uint64_t request,std::string_view digest,std::string& error);
-    bool complete_local_mod_preparation(std::string_view digest,std::string& error);
+    bool complete_mod_admission(std::uint64_t request,std::string_view digest,std::string_view resources,std::string& error);
+    bool complete_local_mod_preparation(std::string_view digest,std::string_view resources,std::string& error);
     void configure_session_save(std::vector<std::uint8_t> canonical_save,
                                 SaveInstaller installer, SaveReader reader = {});
     void configure_artifact_directory(std::filesystem::path directory);

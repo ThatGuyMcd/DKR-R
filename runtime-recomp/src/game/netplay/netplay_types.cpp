@@ -120,6 +120,8 @@ std::uint64_t manifest_hash(const CompatibilityManifest& manifest) {
     HashText(hash, manifest.architecture);
     HashText(hash, manifest.floating_point_mode);
     HashText(hash, manifest.mod_manifest_hash);
+    HashText(hash, manifest.owned_engine_hash);
+    HashText(hash, manifest.owned_resources_hash);
     return hash;
 }
 bool valid_mod_manifest_hash(std::string_view hash) {
@@ -127,7 +129,7 @@ bool valid_mod_manifest_hash(std::string_view hash) {
 }
 
 std::string incompatibility_reason(const CompatibilityManifest& expected,
-                                   const CompatibilityManifest& candidate) {
+                                   const CompatibilityManifest& candidate,bool owned) {
     if (candidate.protocol_version != expected.protocol_version) {
         return "Netplay protocol versions do not match.";
     }
@@ -142,6 +144,11 @@ std::string incompatibility_reason(const CompatibilityManifest& expected,
     if (candidate.patch_policy_hash != expected.patch_policy_hash) {
         return "Recomp patch policies do not match.";
     }
+    if (owned && (!valid_mod_manifest_hash(expected.owned_engine_hash) ||
+        !valid_mod_manifest_hash(candidate.owned_engine_hash) ||
+        candidate.owned_engine_hash!=expected.owned_engine_hash)) {
+        return "Replay engine builds do not match. Install the same release on every device.";
+    }
     if (candidate.magic_codes_hash != expected.magic_codes_hash) {
         return "Magic Codes do not match.|magic:" +
                std::to_string(expected.magic_codes_hash) + ":" +
@@ -153,6 +160,11 @@ std::string incompatibility_reason(const CompatibilityManifest& expected,
     if (!valid_mod_manifest_hash(expected.mod_manifest_hash) || !valid_mod_manifest_hash(candidate.mod_manifest_hash) ||
         candidate.mod_manifest_hash != expected.mod_manifest_hash) {
         return "Gameplay mod manifests do not match.";
+    }
+    if (!valid_mod_manifest_hash(expected.owned_resources_hash) ||
+        !valid_mod_manifest_hash(candidate.owned_resources_hash) ||
+        candidate.owned_resources_hash!=expected.owned_resources_hash) {
+        return "Prepared mod resources do not match. Re-prepare the host's mods before joining.";
     }
     if (candidate.session_save_hash != expected.session_save_hash) {
         return "Adventure save contents differ.";
@@ -173,13 +185,15 @@ std::string online_failure_display_message(std::string_view message) {
 }
 
 std::string session_content_sync_incompatibility(const CompatibilityManifest& expected,
-    const CompatibilityManifest& candidate,bool host_offers_mods) {
+    const CompatibilityManifest& candidate,bool host_offers_mods,bool owned) {
     auto comparable=candidate;
     comparable.session_save_hash=expected.session_save_hash;
     if(host_offers_mods && !expected.mod_manifest_hash.empty() &&
-       valid_mod_manifest_hash(comparable.mod_manifest_hash))
+       valid_mod_manifest_hash(comparable.mod_manifest_hash) && valid_mod_manifest_hash(comparable.owned_resources_hash)) {
         comparable.mod_manifest_hash=expected.mod_manifest_hash;
-    return incompatibility_reason(expected,comparable);
+        comparable.owned_resources_hash=expected.owned_resources_hash;
+    }
+    return incompatibility_reason(expected,comparable,owned);
 }
 
 OnlineFailure classify_online_failure(std::string_view message) {

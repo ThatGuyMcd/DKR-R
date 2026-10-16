@@ -134,7 +134,8 @@ constexpr std::uint8_t kCharacterDiddy = 9U;
 
 constexpr std::uint32_t kRdramLow = 0x80000000U;
 constexpr std::uint32_t kRdramHigh = 0x807FFFB6U;
-constexpr std::uint32_t kMaxTableEntries = 4096U;
+constexpr std::uint32_t kRdramEnd = 0x80800000U;
+constexpr std::uint32_t kMaxTableEntries = 32769U; // records + end offset + sentinel
 
 // DKR serialises asset DMA on one thread, and Rev A additionally guards it
 // with a one-token queue, so neither loader is reentrant. Recording the
@@ -295,13 +296,14 @@ static void publish_extended_table(std::uint8_t* rdram, recomp_context* context,
     }
 
     const auto retail_address = static_cast<std::uint32_t>(context->r2);
-    if (!addressable(retail_address)) {
+    if (!addressable(retail_address) || (retail_address & 3U)) {
         return; // Retail returned NULL; leave the failure exactly as authored.
     }
 
     std::vector<std::int32_t> retail;
     retail.reserve(64);
-    for (std::uint32_t index = 0; index < kMaxTableEntries; ++index) {
+    const auto available = std::min(kMaxTableEntries, (kRdramEnd - retail_address) / 4U);
+    for (std::uint32_t index = 0; index < available; ++index) {
         const std::int32_t entry =
             read_word(rdram, retail_address + (index * 4U));
         retail.push_back(entry);
@@ -310,12 +312,14 @@ static void publish_extended_table(std::uint8_t* rdram, recomp_context* context,
         }
     }
     if (retail.empty() || retail.back() != -1) {
+        std::fprintf(stderr, "[custom-tracks] refusing unterminated table section=%u address=%08X words=%u\n",
+                     requested, retail_address, available);
         return; // Unterminated: refuse rather than guess.
     }
 
     const std::vector<std::int32_t> extended =
         dkr::runtime::custom_tracks::build_extended_table(section,
-                                                          retail.data());
+                                                          retail.data(), retail.size());
     if (extended.empty()) {
         return; // Nothing added; the retail table stands unchanged.
     }
@@ -331,7 +335,8 @@ static void publish_extended_table(std::uint8_t* rdram, recomp_context* context,
     call.r5 = static_cast<gpr>(kColourTagGrey);
     payload->mempool_alloc_safe(rdram, &call);
     const auto allocated = static_cast<std::uint32_t>(call.r2);
-    if (!addressable(allocated)) {
+    if (!addressable(allocated) || (allocated & 3U) ||
+        extended.size() > (kRdramEnd - allocated) / 4U) {
         return; // Out of pool: keep the retail table rather than fail the load.
     }
 

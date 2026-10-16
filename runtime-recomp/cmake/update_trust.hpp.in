@@ -1,0 +1,5 @@
+#pragma once
+#include <string_view>
+namespace dkr::updates {
+inline constexpr std::string_view kUpdatePublicKey="@DKR_UPDATE_PUBLIC_KEY@";
+}

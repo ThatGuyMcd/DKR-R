@@ -22,7 +22,7 @@ int main() {
     std::cout << "N64ModernRuntime targets: linked\n";
     std::cout << "RT64 target: " << (DKR_RUNTIME_HAS_RT64 ? "linked" : "not requested") << "\n";
     std::cout << "\nThis probe validates generated-code and runtime compilation only.\n";
-    std::cout << "A playable boot still requires DKR-specific game registration, PI/save callbacks,\n";
-    std::cout << "F3DDKR and audio RSP recompilation, and an RT64 render context.\n";
+    std::cout << "It does not exercise the game runtime: DKR registration, PI/save callbacks,\n";
+    std::cout << "F3DDKR graphics HLE, recompiled audio RSP, or the RT64 render context.\n";
     return DKR_RUNTIME_GENERATED_FILE_COUNT > 0 ? 0 : 2;
 }

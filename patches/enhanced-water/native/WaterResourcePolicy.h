@@ -25,6 +25,20 @@ inline uint64_t sceneBytes(uint32_t width,uint32_t height,uint32_t samples,
 inline bool fits(uint64_t active,uint64_t requested,uint32_t count) {
     return count<maxScenes && active<=sceneBudget && requested<=sceneBudget-active;
 }
+// Shared optical capture + mask are counted once per framebuffer, not once
+// per legacy Z-write mode. Vertical water samples the authored texture directly
+// in the retail-compatible shader: no framebuffer/sample atlas is allocated.
+inline uint64_t scratchBytes(uint32_t width,uint32_t height,uint32_t samples,
+    bool classic,bool shared,bool selfDepth,uint32_t depthWidth,uint32_t depthHeight,
+    uint32_t depthSamples,uint32_t originalWidth=0,uint32_t originalHeight=0) {
+    const auto checked=sceneBytes(width,height,samples,false,selfDepth,depthWidth,depthHeight,depthSamples);
+    if(checked==UINT64_MAX)return checked;
+    if(classic)return 12;
+    return shared ? (selfDepth ? uint64_t(depthWidth)*depthHeight*4*depthSamples : 0) : checked;
+}
+inline uint32_t bucketExtent(uint32_t extent) {
+    return extent && extent<=8192 ? std::min(8192u,((extent+63)/64)*64) : 0;
+}
 inline uint32_t retainedScenes(uint32_t pooled,uint32_t used) {return std::min(pooled,used);}
 // Allocation/field failures revert only the current workload, then retry after
 // a bounded cooldown. Budget rejection itself is cheap and needs no cooldown.

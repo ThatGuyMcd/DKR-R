@@ -5,6 +5,7 @@
 #include <json/json.hpp>
 #include <map>
 #include <set>
+#include <algorithm>
 
 namespace dkr::mods::online {
 namespace {
@@ -34,6 +35,8 @@ void prepare_library(const Manifest& input,const std::filesystem::path& input_pa
     const std::vector<std::filesystem::path>& owned_roms,const std::filesystem::path& input_destination,
     const ProgressCallback& progress,ImportPreparation* shared_sources) {
     const auto manifest=canonical(input);const auto digest=identity(manifest);
+    if(!manifest.code.empty()||std::any_of(manifest.payloads.begin(),manifest.payloads.end(),[](const auto& p){return p.kind==PayloadKind::Code;}))
+        throw Error("Portable code packages must use the code admission path, never the legacy ROM importer.");
     const auto payload_directory=private_storage_path(input_payload_directory);
     const auto destination=private_storage_path(input_destination);
     if(owned_roms.empty() || owned_roms.size()>8 || std::filesystem::exists(destination))throw Error("Online preparation needs imported original Game Paks and fresh staging.");

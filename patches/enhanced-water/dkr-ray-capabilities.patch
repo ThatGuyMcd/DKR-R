@@ -1,6 +1,15 @@
 diff --git a/src/contrib/plume/plume_render_interface_types.h b/src/contrib/plume/plume_render_interface_types.h
 --- a/src/contrib/plume/plume_render_interface_types.h
 +++ b/src/contrib/plume/plume_render_interface_types.h
+@@ -1667,6 +1667,9 @@
+         // Private backend data. Can go unused.
+         std::vector<uint8_t> buildData;
++        // Vulkan requires one range per geometry, not the aggregate primitive
++        // count for every mesh. D3D12's geometry descriptors retain their counts.
++        std::vector<uint32_t> geometryPrimitiveCounts;
+     };
+ 
+     struct RenderTopLevelASInstance {
 @@ -1768,6 +1768,7 @@
          // Raytracing.
          bool raytracing = false;
@@ -91,6 +100,30 @@ diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan
              interfaceTexture->textureLayout = textureBarrier.layout;
              interfaceTexture->barrierStages = stages;
          }
+@@ -3393,14 +3393,24 @@
+-        VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo = {};
+-        buildRangeInfo.primitiveCount = buildInfo.primitiveCount;
+-        buildRangeInfo.primitiveOffset = 0;
+-        buildRangeInfo.firstVertex = 0;
+-        buildRangeInfo.transformOffset = 0;
+-
+-        VkAccelerationStructureBuildRangeInfoKHR *buildRangeInfoPtr = &buildRangeInfo;
++        assert(buildInfo.geometryPrimitiveCounts.size() == buildInfo.meshCount);
++        std::vector<VkAccelerationStructureBuildRangeInfoKHR> buildRanges(buildInfo.meshCount);
++        for (uint32_t i = 0; i < buildInfo.meshCount; i++) {
++            buildRanges[i].primitiveCount = buildInfo.geometryPrimitiveCounts[i];
++            buildRanges[i].primitiveOffset = 0;
++            buildRanges[i].firstVertex = 0;
++            buildRanges[i].transformOffset = 0;
++        }
++        // One build is issued, with a contiguous range array containing one
++        // entry per geometry. A scalar range reads past its end for mesh two
++        // and also makes mesh one consume triangles from the following mesh.
++        VkAccelerationStructureBuildRangeInfoKHR *buildRangeInfoPtr = buildRanges.data();
+         vkCmdBuildAccelerationStructuresKHR(vk, 1, &buildGeometryInfo, &buildRangeInfoPtr);
+     }
+ 
+     void VulkanCommandList::buildTopLevelAS(const RenderAccelerationStructure *dstAccelerationStructure, RenderBufferReference scratchBuffer, RenderBufferReference instancesBuffer, const RenderTopLevelASBuildInfo &buildInfo) {
 @@ -3883,6 +3885,10 @@
              featuresChain = &portabilityFeatures;
          }
@@ -153,6 +186,13 @@ diff --git a/src/contrib/plume/plume_vulkan.cpp b/src/contrib/plume/plume_vulkan
          capabilities.raytracingStateUpdate = false;
          capabilities.sampleLocations = (sampleLocationProperties.sampleLocationSampleCounts != 0);
          capabilities.resolveRegion = true;
+@@ -4294,6 +4294,7 @@
+         buildInfo.meshCount = meshCount;
+         buildInfo.primitiveCount = primitiveCount;
++        buildInfo.geometryPrimitiveCounts = geometryPrimitiveCounts;
+         buildInfo.preferFastBuild = preferFastBuild;
+         buildInfo.preferFastTrace = preferFastTrace;
+         buildInfo.scratchSize = roundUp(buildSizesInfo.buildScratchSize, AccelerationStructureBufferAlignment);
 diff --git a/src/contrib/plume/plume_d3d12.cpp b/src/contrib/plume/plume_d3d12.cpp
 --- a/src/contrib/plume/plume_d3d12.cpp
 +++ b/src/contrib/plume/plume_d3d12.cpp

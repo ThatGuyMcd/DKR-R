@@ -1,0 +1,15 @@
+diff --git a/src/imgui/imgui_impl_sdl2_custom.cpp b/src/imgui/imgui_impl_sdl2_custom.cpp
+index 3edf457..3e97fea 100644
+--- a/src/imgui/imgui_impl_sdl2_custom.cpp
++++ b/src/imgui/imgui_impl_sdl2_custom.cpp
+@@ -595,6 +595,10 @@ void ImGui_ImplSDL2_NewFrame()
+         w = h = 0;
+     if (bd->Renderer != nullptr)
+         SDL_GetRendererOutputSize(bd->Renderer, &display_w, &display_h);
++    else if (!(SDL_GetWindowFlags(bd->Window) & SDL_WINDOW_OPENGL))
++        // The GL drawable size of a Metal or Vulkan window falls back to its
++        // size in points on UIKit, which would draw a Retina overlay at 1x.
++        SDL_GetWindowSizeInPixels(bd->Window, &display_w, &display_h);
+     else
+         SDL_GL_GetDrawableSize(bd->Window, &display_w, &display_h);
+     io.DisplaySize = ImVec2((float)w, (float)h);

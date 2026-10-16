@@ -2,7 +2,7 @@ DKR-R 1.0.5-beta.15-playtest.16-fix.1 - music event-queue correction
 
 HISTORICAL BUILD RECORD
 The original findings and limits below belong to the named earlier build.
-For current 1.0.5 instructions, use docs/README.md and CHANGELOG.md in the
+For current instructions, use docs/README.md and CHANGELOG.md in the
 source repository. These old results do not qualify later packages.
 
 

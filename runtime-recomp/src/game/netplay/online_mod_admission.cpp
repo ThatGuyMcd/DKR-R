@@ -1,6 +1,7 @@
 #include "direct_session.hpp"
 #include "mods/online_mod_manifest.hpp"
 #include <algorithm>
+#include <cstdio>
 
 namespace dkr::runtime::netplay {
 namespace {
@@ -15,6 +16,7 @@ bool DirectSession::configure_mod_admission(std::string digest,std::uint32_t siz
     if(state_!=ConnectionState::Offline || !valid_mod_manifest_hash(digest) ||
        (digest.empty()?size!=0:(!size || size>dkr::mods::online::MaxManifestBytes)))return false;
     manifest_.mod_manifest_hash=std::move(digest);mod_manifest_bytes_=size;mod_offer_.reset();
+    if(manifest_.mod_manifest_hash.empty())manifest_.owned_resources_hash.clear();
     mod_inbound_.clear();mod_inbound_bytes_=0;return true;
 }
 void DirectSession::send_mod_offer_locked(PendingRecord& pending) {
@@ -62,18 +64,27 @@ void DirectSession::clear_pending_mod_route_locked(PendingRecord& pending) {
     }
     pending.mod_route_retained=false;
 }
-bool DirectSession::complete_local_mod_preparation(std::string_view digest,std::string& error) {
+bool DirectSession::complete_local_mod_preparation(std::string_view digest,std::string_view resources,std::string& error) {
     std::scoped_lock lock(mutex_);
-    if(is_host_ || !joining(state_) || !mod_offer_ || mod_offer_->manifest_hash!=digest) {
+    if(is_host_ || !joining(state_) || !mod_offer_ || mod_offer_->manifest_hash!=digest ||
+       resources.empty() || !valid_mod_manifest_hash(resources)) {
         error="The prepared mods do not belong to the current host offer.";return false;
     }
-    manifest_.mod_manifest_hash=std::string(digest);room_view_.manifest.mod_manifest_hash=std::string(digest);error.clear();return true;
+    manifest_.mod_manifest_hash=std::string(digest);room_view_.manifest.mod_manifest_hash=std::string(digest);
+    manifest_.owned_resources_hash=std::string(resources);room_view_.manifest.owned_resources_hash=std::string(resources);
+    error.clear();return true;
 }
-bool DirectSession::complete_mod_admission(std::uint64_t request,std::string_view digest,std::string& error) {
+bool DirectSession::complete_mod_admission(std::uint64_t request,std::string_view digest,std::string_view resources,std::string& error) {
     std::scoped_lock lock(mutex_);auto* pending=pending_by_request(request);
     if(!is_host_ || !waiting(state_) || !pending || !pending->mods_approved || manifest_.mod_manifest_hash.empty() ||
        digest!=manifest_.mod_manifest_hash) {error="The mod preparation proof does not belong to this approved request.";return false;}
+    if(resources.empty() || !valid_mod_manifest_hash(resources) || resources!=manifest_.owned_resources_hash) {
+        std::fprintf(stderr,"[online][compatibility] prepared-resources expected=%s received=%.*s\n",
+            manifest_.owned_resources_hash.c_str(),int(std::min<std::size_t>(resources.size(),64)),resources.data());
+        error="Prepared mod resources do not match. Re-prepare the host's mods before joining.";return false;
+    }
     pending->mods_verified=true;pending->manifest.mod_manifest_hash=std::string(digest);
+    pending->manifest.owned_resources_hash=std::string(resources);
     return approve_join_locked(request,error);
 }
 bool DirectSession::handle_mod_packet_locked(std::uint64_t sender,const protocol::Datagram& packet) {

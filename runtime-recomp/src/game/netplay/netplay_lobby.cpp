@@ -42,7 +42,8 @@ std::optional<std::uint8_t> Lobby::join(
         error = "This racer identity is invalid or already connected.";
         return std::nullopt;
     }
-    const std::string mismatch = incompatibility_reason(room_.manifest, manifest);
+    const std::string mismatch = incompatibility_reason(room_.manifest, manifest,
+        room_.rules.synchronization==SynchronizationMode::ExperimentalRollback);
     if (!mismatch.empty()) {
         error = mismatch;
         return std::nullopt;

@@ -1,4 +1,5 @@
 #include "f3ddkr_rt64.hpp"
+#include "f3ddkr_execution_policy.hpp"
 #include "postrace_viewport_rt64.hpp"
 
 #include "interpolation_state_policy.hpp"
@@ -16,6 +17,7 @@
 #include "water_uv_rt64.hpp"
 #include "water_performance.hpp"
 #include "water_scroll_policy.hpp"
+#include "track_select_draw_policy.hpp"
 #if defined(DKR_ENHANCED_WATER)
 #include "enhanced_water_rt64.hpp"
 #endif
@@ -342,6 +344,10 @@ struct dkr::runtime::F3DDKRRT64Bridge::StateData {
         std::uint8_t previous_matrix_aspect_override = G_EX_ASPECT_AUTO;
         std::uint8_t previous_rect_aspect = G_EX_ASPECT_AUTO;
         std::uint8_t previous_background_fill_stretch = 0U;
+        bool track_scissor = false;
+        unsigned previous_track_ui_cover = 0U;
+        RT64::ExtendedAlignment previous_scissor_alignment{};
+        std::array<std::int16_t,4> previous_clip_ratios{};
     };
 
     struct PendingShadowBatch {
@@ -371,6 +377,8 @@ struct dkr::runtime::F3DDKRRT64Bridge::StateData {
     bool water_camera_valid = false;
     float water_time = 0.0F;
     const water::enhanced::Registry* water_registry = nullptr;
+    const water::enhanced::LavaGlowCache* lava_glow_cache = nullptr;
+    float lava_glow_step = 0;
     std::uint32_t water_camera_address = 0;
 #endif
     LocalSceneryRT64Pass* local_scenery=nullptr;
@@ -390,6 +398,7 @@ struct dkr::runtime::F3DDKRRT64Bridge::StateData {
     std::uint8_t matrix_aspect_override = G_EX_ASPECT_AUTO;
     std::uint8_t rect_aspect_mode = G_EX_ASPECT_AUTO;
     bool task_rejected = false;
+    f3ddkr::CommandBudget command_budget{};
     bool split_viewport_fill_pending = false;
     bool postrace_full_viewport_pending = false;
     bool split_viewport_scissor_adjusted = false;
@@ -413,6 +422,11 @@ struct dkr::runtime::F3DDKRRT64Bridge::StateData {
     presentation::RejectedMarkerScopes rejected_hud_widgets{};
     dkr::runtime::presentation::RejectedMarkerScopes rejected_hud_scopes{};
     std::array<AspectScope, 16> aspect_scopes{};
+    unsigned track_ui_cover = 0U;
+    presentation::TrackSelectFramebufferImages track_color_images{};
+    bool track_preview_pending = false;
+    unsigned track_preview_cover = 0U;
+    std::array<int,4> track_preview_bounds{};
     std::size_t aspect_scope_depth = 0U;
     dkr::runtime::presentation::RejectedMarkerScopes rejected_aspect_scopes{};
     PendingShadowBatch pending_shadow_batch{};
@@ -450,6 +464,7 @@ dkr::runtime::F3DDKRRT64Bridge::F3DDKRRT64Bridge()
     gbi_->map[kFillRectOpcode] = &FillRect;
     gbi_->map[G_TEXRECT] = &HudTextureRect;
     gbi_->map[G_TEXRECTFLIP] = &HudTextureRect;
+    gbi_->map[0xD5U] = &TrackTextureRect;
     // Interpolation scopes are recorded out-of-band at the address of the
     // next authored command. Route every opcode through one bounded dispatcher
     // so the renderer can apply that metadata without appending bytes to DKR's
@@ -1804,6 +1819,27 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application,
         water::enhanced::requested_quality.load(std::memory_order_relaxed)!=water::enhanced::Quality::Original) {
         data_->water_registry=&water::enhanced::task_registry(*state,presentation::task_scene_generation());
         data_->water_time=float(presentation::task_presentation_time());
+        struct GlowTaskCache {
+            water::enhanced::LavaGlowCache cache;
+            std::uint32_t scene=~0U;
+            float current=-1,previous=-1;
+            float stepped=-1;
+            const water::enhanced::GlowGeometry* stepped_geometry=nullptr;
+        };
+        static thread_local GlowTaskCache glow;
+        const auto scene=presentation::task_scene_generation();
+        if(glow.scene!=scene || data_->water_time<glow.current) {
+            glow.scene=scene;glow.current=glow.previous=data_->water_time;
+        } else if(glow.current!=data_->water_time) {
+            glow.previous=glow.current;glow.current=data_->water_time;
+        }
+        data_->lava_glow_step=std::clamp(glow.current-glow.previous,0.0F,0.1F);
+        glow.cache.prepare(data_->water_registry->glow_geometry(),water::enhanced::lava_light_range.load());
+        if(glow.stepped!=data_->water_time || glow.stepped_geometry!=data_->water_registry->glow_geometry().get()) {
+            glow.cache.step(data_->water_time);glow.stepped=data_->water_time;
+            glow.stepped_geometry=data_->water_registry->glow_geometry().get();
+        }
+        data_->lava_glow_cache=&glow.cache;
     }
 #endif
     RT64::RSP& rsp = *state->rsp;
@@ -1831,7 +1867,25 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application,
     rsp.modelViewProjChanged = true;
 
     const std::uint32_t start = PhysicalAddress(rsp, task.t.data_ptr);
-    application.processDisplayLists(application.core.RDRAM, start, 0, true);
+    // Keep RT64's normal profiling and interrupt completion path. Its optional
+    // guard runs before even the opcode fetch, including after a branch.
+    struct ValidationScope {
+        RT64::Interpreter& interpreter;
+        decltype(RT64::Interpreter::hleCommandValidator) previous;
+        ~ValidationScope() { interpreter.hleCommandValidator = previous; }
+    } validation_scope{*application.interpreter,
+                       application.interpreter->hleCommandValidator};
+    application.interpreter->hleCommandValidator = &ValidateCommand;
+    // Avoid forming an out-of-allocation pointer in processDisplayLists even
+    // when a malformed task start resolves outside the owned 8 MiB snapshot.
+    if (start >= kRDRAMSize) {
+        data_->task_rejected = true;
+        if (g_logged_counted_errors++ < 64U)
+            std::fprintf(stderr, "[boot][f3ddkr] rejected task start=0x%06X\n", start);
+        application.state->spInterrupt();
+    } else {
+        application.processDisplayLists(application.core.RDRAM, start, 0, true);
+    }
     // Malformed/aborted tasks must not leave presentation state in RT64.
     while (data_->hud_widget_depth > 0) {
         state->flush();
@@ -1878,6 +1932,12 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application,
     }
     while (data_->aspect_scope_depth > 0U) {
         const auto scope = data_->aspect_scopes[--data_->aspect_scope_depth];
+        if(scope.track_scissor) {
+            state->rdp->popScissor();
+            state->rdp->setScissorAlign(scope.previous_scissor_alignment);
+            for(unsigned edge=0;edge<4;++edge)state->rsp->setClipRatioEdge(edge,scope.previous_clip_ratios[edge]);
+            data_->track_ui_cover=scope.previous_track_ui_cover;
+        }
         state->flush();
         state->rdp->setRectAspect(scope.previous_rect_aspect);
         data_->rect_aspect_mode = scope.previous_rect_aspect;
@@ -1918,6 +1978,39 @@ void dkr::runtime::F3DDKRRT64Bridge::MoveMem(
     RT64::GBI_F3D::moveMem(state, display_list);
 }
 
+bool dkr::runtime::F3DDKRRT64Bridge::ValidateCommand(
+    RT64::State* state, RT64::DisplayList* command) {
+    if (active_ == nullptr || state == nullptr || command == nullptr) return false;
+    auto& data = *active_->data_;
+    if (data.task_rejected) return false;
+    const auto check = data.command_budget.validate(
+        reinterpret_cast<std::uintptr_t>(state->RDRAM),
+        reinterpret_cast<std::uintptr_t>(command), kRDRAMSize,
+        [command] { return static_cast<std::uint8_t>(command->w0 >> 24U); },
+        [command](std::uint8_t opcode) -> std::size_t {
+            if (opcode == G_TEXRECT || opcode == G_TEXRECTFLIP || opcode==0xD5U) return 3U;
+            if (opcode == kMoveMemOpcode &&
+                command->p0(16, 8) == F3D_G_MV_MATRIX_1) return 4U;
+            return 1U;
+        });
+    // Retail F3DDKR uses no RT64 extension stream; presentation metadata is
+    // out-of-band. Unknown extension layouts must not bypass span validation.
+    const bool extension = check == f3ddkr::CommandCheck::Okay &&
+        state->ext.interpreter->extendedOpCode != 0 &&
+        (command->w0 >> 24U) == state->ext.interpreter->extendedOpCode;
+    if (check == f3ddkr::CommandCheck::Okay && !extension) return true;
+    if (g_logged_counted_errors++ < 64U) {
+        std::fprintf(stderr,
+            "[boot][f3ddkr] rejected command stream task=%llu reason=%u "
+            "extension=%u remaining-words=%zu\n",
+            static_cast<unsigned long long>(data.task_count),
+            static_cast<unsigned>(check), extension ? 1U : 0U,
+            data.command_budget.remaining_words());
+    }
+    data.task_rejected = true;
+    return false;
+}
+
 void dkr::runtime::F3DDKRRT64Bridge::Dispatch(
     RT64::State* state, RT64::DisplayList** display_list) {
     if (active_ == nullptr || state == nullptr || display_list == nullptr ||
@@ -1945,7 +2038,8 @@ void dkr::runtime::F3DDKRRT64Bridge::Dispatch(
         return;
     }
     if (opcode == kFullSyncOpcode && (active_->data_->split_color_image_count != 0U ||
-                                     active_->data_->hud_color_image_count != 0U)) {
+                                     active_->data_->hud_color_image_count != 0U ||
+                                     active_->data_->track_color_images.count != 0U)) {
         // Finish pending calls before normalising the producer-owned aggregate;
         // never access or mutate a workload after fullSync hands it to RT64.
         state->flush();
@@ -1963,9 +2057,13 @@ void dkr::runtime::F3DDKRRT64Bridge::Dispatch(
             if (std::find(data.split_color_images.begin(), end,
                           pair.colorImage.address) != end ||
                 std::find(data.hud_color_images.begin(), hud_end,
-                          pair.colorImage.address) != hud_end) {
+                          pair.colorImage.address) != hud_end ||
+                data.track_color_images.contains(pair.colorImage.address)) {
                 const auto authored_union = pair.scissorRect;
-                dkr::runtime::presentation::normalise_split_framebuffer_extent(pair);
+                if(data.track_color_images.contains(pair.colorImage.address))
+                    presentation::normalise_track_select_framebuffer_extent(pair);
+                else
+                    presentation::normalise_split_framebuffer_extent(pair);
                 if (trace) {
                     unsigned adjusted = 0U;
                     unsigned rectangles = 0U;
@@ -2012,6 +2110,16 @@ void dkr::runtime::F3DDKRRT64Bridge::Dispatch(
         profile::event(profile::Event::DecodedDrawCalls,calls);
     }
     handler(state, display_list);
+    auto& data=*active_->data_;
+    if(opcode==kSetScissorOpcode && data.track_preview_pending) {
+        const auto clip=presentation::track_select_preview_clip(data.track_preview_bounds,data.track_preview_cover);
+        auto& rect=state->rdp->scissorRectStack[state->rdp->scissorStackSize-1];
+        rect.ulx=clip.left;rect.uly=clip.top;rect.lrx=clip.right;rect.lry=clip.bottom;
+        state->rdp->extended.scissorLeftOriginStack[state->rdp->scissorStackSize-1]=G_EX_ORIGIN_NONE;
+        state->rdp->extended.scissorRightOriginStack[state->rdp->scissorStackSize-1]=G_EX_ORIGIN_NONE;
+        state->updateDrawStatusAttribute(RT64::DrawAttribute::Scissor);
+        data.track_preview_pending=false;
+    }
     AdjustSplitViewportCommand(state, command, opcode);
 }
 
@@ -2105,6 +2213,24 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationMarkers(
             static_cast<std::uint32_t>(command - rdram_begin));
     for (std::size_t index = 0U; index < markers.count; ++index) {
         const auto& marker = markers.markers[index];
+        if(marker.kind==PresentationMarkerKind::TrackSelectPreview) {
+            auto& data=*active_->data_;
+            const auto& b=marker.hud_transform;
+            if((display_list->w0>>24U)!=kSetScissorOpcode ||
+               !std::isfinite(b.x) || !std::isfinite(b.y) || !std::isfinite(b.clip_top) || !std::isfinite(b.clip_bottom) ||
+               std::abs(b.x)>16384.F || std::abs(b.y)>16384.F ||
+               std::abs(b.clip_top)>16384.F || std::abs(b.clip_bottom)>16384.F || b.x>=b.y || b.clip_top>=b.clip_bottom) {
+                active_->ReportPresentationError(2U,"invalid Track Select preview observation",marker.kind,marker.mode,marker.variant);
+                continue;
+            }
+            data.track_preview_bounds={int(b.x),int(b.clip_top),int(b.y),int(b.clip_bottom)};
+            data.track_color_images.remember(state->rdp->colorImage.address,state->rdp->colorImage.width);
+            // Clip against the CURRENT renderer viewport, including resizes
+            // while this immutable task was waiting in the presentation queue.
+            data.track_preview_cover=presentation::track_select_cover_token(data.world_window_aspect/(4.F/3.F));
+            data.track_preview_pending=true;
+            continue;
+        }
         if (marker.kind == PresentationMarkerKind::HudRect) {
             state->flush();
             active_->data_->hud_rect_bias=marker.mode!=0 ? (marker.variant&3U) : 0U;
@@ -2229,8 +2355,16 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationGroup(
     }
 
     if (dkr::runtime::presentation::is_aspect_marker(kind)) {
+        if(kind==PresentationMarkerKind::TrackSelectUi)
+            presentation_token=std::uint16_t(presentation::track_select_cover_token(data.world_window_aspect/(4.F/3.F)));
         state->flush();
         if (mode == kHudPassMarkerBeginMode) {
+            if(kind==PresentationMarkerKind::TrackSelectUi &&
+               state->rdp->scissorStackSize>=RDP_EXTENDED_STACK_SIZE) {
+                ++data.rejected_aspect_scopes.depth;
+                active_->ReportPresentationError(1U,"Track Select scissor scope overflow",kind,mode,presentation_variant);
+                return;
+            }
             if (data.rejected_aspect_scopes.reject_begin(
                     data.aspect_scope_depth, data.aspect_scopes.size())) {
                 active_->ReportPresentationError(1U, "aspect scope overflow",
@@ -2246,6 +2380,32 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationGroup(
             scope.previous_rect_aspect = data.rect_aspect_mode;
             scope.previous_background_fill_stretch =
                 data.background_fill_stretch_active;
+            scope.track_scissor=kind==PresentationMarkerKind::TrackSelectUi;
+            if(scope.track_scissor) {
+                // Keep overscan on each draw, but tag this native screen so its
+                // aggregate is normalised before submission. Otherwise RT64's
+                // rectangle heuristic can stretch text/images but not the RSP
+                // wooden frame whenever preview framebuffer pairs change.
+                if(!data.track_color_images.remember(state->rdp->colorImage.address,state->rdp->colorImage.width) &&
+                   state->rdp->colorImage.width==320U)
+                    active_->ReportPresentationError(1U,"Track Select framebuffer identity overflow",kind,mode,presentation_variant);
+                scope.previous_track_ui_cover=data.track_ui_cover;
+                scope.previous_scissor_alignment=state->rdp->extended.global.scissor;
+                scope.previous_clip_ratios=state->rsp->clipRatios;
+                state->rdp->pushScissor();
+                const auto clip=presentation::track_select_window_clip(presentation_token);
+                auto& rect=state->rdp->scissorRectStack[state->rdp->scissorStackSize-1];
+                rect.ulx=clip.left;rect.uly=clip.top;rect.lrx=clip.right;rect.lry=clip.bottom;
+                state->rdp->extended.scissorLeftOriginStack[state->rdp->scissorStackSize-1]=G_EX_ORIGIN_NONE;
+                state->rdp->extended.scissorRightOriginStack[state->rdp->scissorStackSize-1]=G_EX_ORIGIN_NONE;
+                auto alignment=scope.previous_scissor_alignment;
+                alignment.leftOrigin=alignment.rightOrigin=G_EX_ORIGIN_NONE;
+                state->rdp->setScissorAlign(alignment);
+                const auto ratio=std::int16_t(std::clamp((presentation_token+1023U)/1024U,1U,8U));
+                state->rsp->setClipRatioEdge(0,ratio);state->rsp->setClipRatioEdge(2,-ratio);
+                state->updateDrawStatusAttribute(RT64::DrawAttribute::Scissor);
+                data.track_ui_cover=presentation_token;
+            }
 
             if (kind == PresentationMarkerKind::BackgroundAspect) {
                 // Background-only rectangles may cover the host width. They do
@@ -2266,6 +2426,12 @@ void dkr::runtime::F3DDKRRT64Bridge::ApplyPresentationGroup(
         } else if (data.aspect_scope_depth > 0U &&
                    data.aspect_scopes[data.aspect_scope_depth - 1U].kind == kind) {
             const auto scope = data.aspect_scopes[--data.aspect_scope_depth];
+            if(scope.track_scissor) {
+                state->rdp->popScissor();
+                state->rdp->setScissorAlign(scope.previous_scissor_alignment);
+                for(unsigned edge=0;edge<4;++edge)state->rsp->setClipRatioEdge(edge,scope.previous_clip_ratios[edge]);
+                data.track_ui_cover=scope.previous_track_ui_cover;
+            }
             data.matrix_aspect_override_active =
                 scope.previous_matrix_aspect_override_active;
             data.matrix_aspect_override =
@@ -2672,6 +2838,24 @@ void dkr::runtime::F3DDKRRT64Bridge::HudTextureRect(
     *display_list=command;
 }
 
+void dkr::runtime::F3DDKRRT64Bridge::TrackTextureRect(
+    RT64::State* state, RT64::DisplayList** display_list) {
+    auto* command=*display_list;
+    if(!active_->data_->track_ui_cover || command->w0!=0xD5000001U || command->w1!=0x54524354U) {
+        RejectTask(display_list);return;
+    }
+    ++command;
+    const auto ulx=std::int16_t(command->p0(16,16)),uly=std::int16_t(command->p0(0,16));
+    const auto lrx=std::int16_t(command->p1(16,16)),lry=std::int16_t(command->p1(0,16));
+    ++command;
+    RT64::ExtendedAlignment alignment{};
+    alignment.leftOrigin=alignment.rightOrigin=G_EX_ORIGIN_NONE;
+    state->rdp->drawTexRect(ulx,uly,lrx,lry,0,std::int16_t(command->p0(16,16)),
+        std::int16_t(command->p0(0,16)),std::int16_t(command->p1(16,16)),
+        std::int16_t(command->p1(0,16)),false,alignment);
+    *display_list=command;
+}
+
 void dkr::runtime::F3DDKRRT64Bridge::TextureOffset(
     RT64::State*, RT64::DisplayList** display_list) {
     assert(active_ != nullptr);
@@ -2804,6 +2988,25 @@ void dkr::runtime::F3DDKRRT64Bridge::Vertex(
         rsp.modelViewProjChanged = true;
     }
     rsp.setVertex(kScratchVertexAddress, count, destination);
+#if defined(DKR_ENHANCED_WATER)
+    if(data.lava_glow_cache && data.lava_glow_cache->ready() && data.water_camera_valid &&
+       !data.billboard && data.hud_widget_depth==0 && !data.shadow_scope_active) {
+        auto& draw=state->ext.workloadQueue->workloads[state->ext.workloadQueue->writeCursor].drawData;
+        for(std::uint32_t i=0;i<count;++i) {
+            const auto address=source+i*10U;
+            const water::enhanced::Vec3 point{float(ReadS16(state->RDRAM,address)),
+                float(ReadS16(state->RDRAM,address+2)),float(ReadS16(state->RDRAM,address+4))};
+            const float energy=data.lava_glow_cache->energy(address,point,data.water_time);
+            if(energy<=0)continue;
+            if(draw.lavaGlow.size()<draw.vertexCount())draw.lavaGlow.resize(draw.vertexCount(),0);
+            draw.lavaGlow[rsp.indices[destination+i]]=energy;
+            draw.lavaGlowActive=true;draw.lavaGlowTime=data.water_time;draw.lavaGlowStep=data.lava_glow_step;
+            draw.lavaGlowStrength=water::enhanced::lava_pulse_strength.load()*0.01F;
+            draw.lavaGlowSpeed=water::enhanced::lava_pulse_speed.load()*0.01F;
+            draw.lavaGlowIntensity=water::enhanced::lava_lighting.load()*0.01F;
+        }
+    }
+#endif
     if (data.hud_widget_depth != 0) {
         rsp.modelMatrixStack[data.selected_matrix] = authored_hud_matrix;
         rsp.modelViewProjChanged = true;
@@ -3037,6 +3240,15 @@ void dkr::runtime::F3DDKRRT64Bridge::Triangle(RT64::State* state,
         for (std::size_t corner = 0; corner < vertices.size(); ++corner) {
             skipped += water::set_texcoord(rsp, draw, vertices[corner], s[corner], t[corner], skip_equal_uv);
         }
+#if defined(DKR_ENHANCED_WATER)
+        if(data.water_registry && state->waterMaterial.identity.x>0 && state->waterMaterial.optics.w>0.5F) {
+            const auto* flow=data.water_registry->flow_triangle(address);
+            for(unsigned corner=0;corner<3;++corner) {
+                const auto at=flow ? flow->corners[corner] : std::array<float,4>{};
+                draw.waterfallFlow[rsp.indices[vertices[corner]]]={at[0],at[1],at[2],at[3]};
+            }
+        }
+#endif
         rsp.drawIndexedTri(vertices[0], vertices[1], vertices[2]);
     }
 #if defined(DKR_ENHANCED_WATER)
@@ -3263,6 +3475,7 @@ void dkr::runtime::F3DDKRRT64Bridge::RunCommands(
     std::array<RT64::DisplayList*, kMaxNestedDisplayLists> return_stack{};
     std::uint32_t return_depth = 0;
     while (command != nullptr && consumed < command_count) {
+        if (!ValidateCommand(state, command)) break;
         RT64::DisplayList* before = command;
         ApplyPresentationMarkers(state, command);
         const std::uint8_t opcode = static_cast<std::uint8_t>(command->w0 >> 24U);

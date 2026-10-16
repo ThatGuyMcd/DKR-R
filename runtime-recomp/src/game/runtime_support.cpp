@@ -266,6 +266,10 @@ bool open_directory(const std::filesystem::path& directory,
         error = "Windows could not open that DKR-R support folder.";
         return false;
     }
+#elif defined(DKR_IOS)
+    // iOS cannot fork. The directory was created above for the Files app.
+    error = "On iPhone, that folder is in the Files app under DKR-R.";
+    return false;
 #else
     const pid_t child = fork();
     if (child == 0) {

@@ -1,5 +1,20 @@
 # Magic Codes
 
+## Custom Magic Codes
+
+Executable gameplay mods live in **Mods / Hacks → Custom Magic Codes**, separate
+from the original game's codes below. Import an author's `.nrm`/`.dkrcode`,
+review and approve the exact edition in Details, save its settings and enable
+it for a new game. The host owns the online set; Auto/Experimental Rollback is
+required for code mods. Downloads do not change a client's offline selection.
+
+See the [player guide](../modding/USER-GUIDE.txt) for Custom Trophy Races,
+cup sharing and AI & Boss Difficulty. To make your own, start with the
+[Modders Guide to Custom Magic Code Creation](../modding/MODDERS-GUIDE.txt).
+It covers the complete API 1 boundary and its limits, not unrestricted host code.
+
+## Original game codes
+
 Magic Codes stay in **Mods / Hacks → Magic Codes**. Choose the modifiers you
 want before launching; conflicting codes are turned off according to the
 original game's rules. Codes are launch settings, not a patch to your ROM.

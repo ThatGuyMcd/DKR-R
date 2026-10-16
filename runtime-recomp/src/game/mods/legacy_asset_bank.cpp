@@ -125,6 +125,33 @@ std::size_t AssetBank::record_count(unsigned section) const {
     if(section>=50) throw Error("Invalid bank asset section.");
     return augmented_?counts_[section]:stock_?stock_->record_count(section):records_[section].size();
 }
+std::shared_ptr<const AssetBank> AssetBank::append_artwork(
+    std::shared_ptr<const AssetBank> input,Overrides additions) {
+    if(!input)throw Error("Shared artwork requires a verified asset bank.");
+    if(additions.empty())return input;
+    auto bank=std::shared_ptr<AssetBank>(new AssetBank);
+    bank->stock_=input->stock_?input->stock_:input;
+    bank->revision_=input->revision_;bank->digest_=input->digest_;
+    bank->overrides_=input->overrides_;bank->augmented_=true;bank->courses_=input->courses_;
+    for(unsigned s=0;s<50;++s)bank->counts_[s]=input->record_count(s);
+    std::size_t total=bank->owned_override_bytes();
+    std::string identity="dkr-shared-artwork-v2:"+input->fingerprint_;
+    for(auto& [key,bytes]:additions) {
+        const auto [section,id]=key;
+        if(section!=2 && section!=4 && section!=12)
+            throw Error("Shared artwork attempted to append an unowned asset section.");
+        if(id!=bank->counts_[section] || id>=32767 || bytes.empty() || bytes.size()>MaxImage || bytes.size()>MaxStaged-total)
+            throw Error("Shared artwork IDs must follow the boot records and stay inside the namespace budget.");
+        total+=bytes.size();++bank->counts_[section];
+        identity+=":"+std::to_string(section)+","+std::to_string(id)+","+sha256(bytes);
+        bank->overrides_.emplace(key,std::move(bytes));
+    }
+    if(!input->augmented_) {
+        const auto ids=input->stock_section(30);bank->overrides_[{30,0}]=Bytes(ids.begin(),ids.end());
+    }
+    bank->fingerprint_=sha256(View(reinterpret_cast<const std::uint8_t*>(identity.data()),identity.size()));
+    return bank;
+}
 std::shared_ptr<const AssetBank> AssetBank::append_courses(
     std::shared_ptr<const AssetBank> input,Overrides additions) {
     if(!input || input->courses_)throw Error("Track Lab namespace must be admitted exactly once before boot.");

@@ -73,7 +73,7 @@ def main():
     if not paths:
         print("SKIP: no extracted object maps under %s" % VANILLA)
         print("      run the decomp's extract.sh first")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
 
     failures = []
     objects = 0

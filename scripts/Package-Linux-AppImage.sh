@@ -41,23 +41,32 @@ fi
 INPUT_HOST_DIRECTORY="${BUILD_DIRECTORY}/bin/Release/libexec/dkr-r"
 INPUT_HOST="${INPUT_HOST_DIRECTORY}/DKR-R-InputHost"
 MOD_WORKER="${INPUT_HOST_DIRECTORY}/DKR-R-ModWorker"
+UPDATE_HELPER="${INPUT_HOST_DIRECTORY}/DKR-R-Updater"
 SDL3_LIBRARY="${INPUT_HOST_DIRECTORY}/libSDL3.so.0"
 VERSION_FILE_VALUE="$(tr -d '\r\n' < "${PROJECT_ROOT}/VERSION")"
 VERSION="${DKR_RELEASE_VERSION:-${VERSION_FILE_VALUE}}"
 EXPERIMENTAL_RACE_TEST=0
 if grep -Eq '^DKR_EXPERIMENTAL_RACE_TEST:BOOL=(ON|1|TRUE|YES)[[:space:]]*$' "${BUILD_DIRECTORY}/CMakeCache.txt"; then
   EXPERIMENTAL_RACE_TEST=1
-  if [[ "${VERSION}" != 1.0.5 ]]; then
+  if [[ "${VERSION}" != 1.0.5 && "${VERSION}" != 1.0.6 && "${VERSION}" != 1.0.7 && "${VERSION}" != 1.0.7+beta.2 ]]; then
   [[ "${VERSION}" == *experimental* || "${VERSION}" == *rollback-test* || "${VERSION}" == 1.0.5-beta.15 || "${VERSION}" == 1.0.5-beta.15-playtest.[23456789] || "${VERSION}" == 1.0.5-beta.15-playtest.10 || "${VERSION}" == 1.0.5-beta.15-playtest.11 || "${VERSION}" == 1.0.5-beta.15-playtest.12 || "${VERSION}" == 1.0.5-beta.15-playtest.14 || "${VERSION}" == 1.0.5-beta.15-playtest.15 || "${VERSION}" == 1.0.5-beta.15-playtest.15-fix.[12] || "${VERSION}" == 1.0.5-beta.15-playtest.16 || "${VERSION}" == 1.0.5-beta.15-playtest.16-fix.[12] ]] || { echo 'Experimental builds require a distinct experimental version or an approved Beta 15 playtest candidate.' >&2; exit 1; }
 fi
 fi
-# Explicit beta qualification deferral; normal release packaging still runs all checks.
+# Runtime checks are on by default. Release maintainers can explicitly reserve
+# execution/acceptance for their own machines without running the game here.
 SKIP_RUNTIME_TESTS="${DKR_SKIP_RUNTIME_TESTS:-0}"
+DEFER_RUNTIME_TESTS_TO_USER="${DKR_DEFER_RUNTIME_TESTS_TO_USER:-0}"
 [[ "${SKIP_RUNTIME_TESTS}" == 0 || "${SKIP_RUNTIME_TESTS}" == 1 ]] || {
   echo 'DKR_SKIP_RUNTIME_TESTS must be 0 or 1' >&2; exit 1;
 }
-if [[ "${VERSION}" == 1.0.5 && "${SKIP_RUNTIME_TESTS}" != 0 ]]; then
-  echo 'Public release packaging requires all runtime checks.' >&2; exit 1
+[[ "${DEFER_RUNTIME_TESTS_TO_USER}" == 0 || "${DEFER_RUNTIME_TESTS_TO_USER}" == 1 ]] || {
+  echo 'DKR_DEFER_RUNTIME_TESTS_TO_USER must be 0 or 1' >&2; exit 1;
+}
+if [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "${SKIP_RUNTIME_TESTS}" != 0 && "${DEFER_RUNTIME_TESTS_TO_USER}" != 1 ]]; then
+  echo 'Public release runtime checks need explicit maintainer deferral: DKR_DEFER_RUNTIME_TESTS_TO_USER=1.' >&2; exit 1
+fi
+if [[ "${SKIP_RUNTIME_TESTS}" == 1 ]]; then
+  echo 'Packaging only: runtime execution is deferred to the maintainer; this is not an acceptance pass.'
 fi
 ARCH="${DKR_LINUX_ARCH:-x86_64}"
 case "${ARCH}" in
@@ -149,7 +158,7 @@ if grep -aEq 'DKR_WATER_TEST_MAP|\[perf\]\[private-water-preview\]' "${BINARY}";
 fi
 READELF="${READELF:-readelf}"
 command -v "${READELF}" >/dev/null || { echo "Missing ELF inspector: ${READELF}" >&2; exit 1; }
-for architecture_file in "${BINARY}" "${MOD_WORKER}" "${INPUT_HOST}" "${SDL3_LIBRARY}"; do
+for architecture_file in "${BINARY}" "${MOD_WORKER}" "${INPUT_HOST}" "${SDL3_LIBRARY}" "${UPDATE_HELPER}"; do
   "${READELF}" -h "${architecture_file}" | grep -F "${ELF_MACHINE}" >/dev/null || {
     echo "Wrong architecture (expected ${ARCH}): ${architecture_file}" >&2; exit 1;
   }
@@ -166,17 +175,34 @@ command -v patchelf >/dev/null || { echo "Missing required command: patchelf" >&
 
 mkdir -p "${APPDIR}/usr/share/doc/dkr-port/licenses" "$(dirname "${OUTPUT}")"
 mkdir -p "${APPDIR}/usr/share/metainfo"
+CODE_SDK_ARGUMENTS=(--output "${APPDIR}/usr/share/doc/dkr-port/Custom-Magic-Codes")
+if [[ -n "${DKR_CODE_EXAMPLE:-}" ]]; then
+  CODE_SDK_ARGUMENTS+=(--example "${DKR_CODE_EXAMPLE}")
+fi
+if [[ -n "${DKR_CODE_DIFFICULTY_EXAMPLE:-}" ]]; then
+  CODE_SDK_ARGUMENTS+=(--difficulty-example "${DKR_CODE_DIFFICULTY_EXAMPLE}")
+fi
+python3 "${PROJECT_ROOT}/scripts/stage_magic_code_sdk.py" "${CODE_SDK_ARGUMENTS[@]}"
 install -m 0644 "${ICON_FILE}" "${ICON_STAGE}/dkr-r.png"
 install -m 0755 "${BINARY}" "${BINARY_STAGE}/DKR-R"
 EXPERIMENTAL_DEPLOY_ARGS=()
 if [[ "${VERSION}" == 1.0.5 ]]; then
   install -m 0644 "${PROJECT_ROOT}/docs/PUBLIC-1.0.5-NOTES.txt" "${APPDIR}/usr/share/doc/dkr-port/RELEASE-NOTES.txt"
 fi
+if [[ "${VERSION}" == 1.0.6 ]]; then
+  install -m 0644 "${PROJECT_ROOT}/docs/PUBLIC-1.0.6-NOTES.txt" "${APPDIR}/usr/share/doc/dkr-port/RELEASE-NOTES.txt"
+fi
+if [[ "${VERSION}" == 1.0.7 ]]; then
+  install -m 0644 "${PROJECT_ROOT}/docs/PUBLIC-1.0.7-NOTES.txt" "${APPDIR}/usr/share/doc/dkr-port/RELEASE-NOTES.txt"
+fi
 if [[ "${VERSION}" == 1.0.5-beta.15 ]]; then
   install -m 0644 "${PROJECT_ROOT}/docs/BETA15-RELEASE.txt" "${APPDIR}/usr/share/doc/dkr-port/BETA15-NOTES.txt"
   install -m 0644 "${PROJECT_ROOT}/docs/BETA15-ONLINE-STABILITY-20261007.txt" "${APPDIR}/usr/share/doc/dkr-port/ONLINE-STABILITY-CORRECTION.txt"
 fi
-if [[ "${EXPERIMENTAL_RACE_TEST}" == 1 && "${VERSION}" != 1.0.5 ]]; then
+if [[ "${VERSION}" == 1.0.7+beta.2 ]]; then
+  install -m 0644 "${PROJECT_ROOT}/docs/BETA2-1.0.7.txt" "${APPDIR}/usr/share/doc/dkr-port/RELEASE-NOTES.txt"
+fi
+if [[ "${EXPERIMENTAL_RACE_TEST}" == 1 && "${VERSION}" != 1.0.5 && "${VERSION}" != 1.0.6 && "${VERSION}" != 1.0.7 && "${VERSION}" != 1.0.7+beta.2 ]]; then
   # The earlier generic file describes Playtest 2; current playtests ship their own
   # current connection/scope guide instead of contradictory version guidance.
   if [[ "${VERSION}" != 1.0.5-beta.15 && "${VERSION}" != 1.0.5-beta.15-playtest.8 && "${VERSION}" != 1.0.5-beta.15-playtest.9 && "${VERSION}" != 1.0.5-beta.15-playtest.10 && "${VERSION}" != 1.0.5-beta.15-playtest.11 && "${VERSION}" != 1.0.5-beta.15-playtest.12 && "${VERSION}" != 1.0.5-beta.15-playtest.14 && "${VERSION}" != 1.0.5-beta.15-playtest.15 && "${VERSION}" != 1.0.5-beta.15-playtest.15-fix.[12] && "${VERSION}" != 1.0.5-beta.15-playtest.16 && "${VERSION}" != 1.0.5-beta.15-playtest.16-fix.[12] ]]; then
@@ -252,6 +278,7 @@ if [[ "${VERSION}" == 1.0.5-beta.15-playtest.16-fix.2 ]]; then
 fi
 install -m 0644 "${PROJECT_ROOT}/patches/enhanced-water/LICENSE-WAVE-RACE.txt" "${APPDIR}/usr/share/doc/dkr-port/WAVE-RACE-WATER-LICENSE.txt"
 install -m 0644 "${PROJECT_ROOT}/docs/ONLINE_MULTIPLAYER.md" "${APPDIR}/usr/share/doc/dkr-port/ONLINE_MULTIPLAYER.md"
+install -m 0644 "${PROJECT_ROOT}/docs/UPDATES.md" "${APPDIR}/usr/share/doc/dkr-port/UPDATES.md"
 install -m 0644 "${PROJECT_ROOT}/docs/ONLINE-STABILITY.md" "${APPDIR}/usr/share/doc/dkr-port/ONLINE-STABILITY.md"
 install -m 0644 "${PROJECT_ROOT}/docs/HUD-WORKSHOP.md" "${APPDIR}/usr/share/doc/dkr-port/HUD-WORKSHOP.md"
 install -m 0644 "${PROJECT_ROOT}/runtime-recomp/COPYING-NOTICE.md" "${APPDIR}/usr/share/doc/dkr-port/COPYING-NOTICE.md"
@@ -316,6 +343,7 @@ mkdir -p "${APPDIR}/usr/bin/assets/ui/Backgrounds"
 install -m 0644 \
   "${PROJECT_ROOT}/assets/ui/Backgrounds/DKR-R-Launcher-Background.png" \
   "${APPDIR}/usr/bin/assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
+cp -R "${PROJECT_ROOT}/assets/ui/CustomTrackBackgrounds" "${APPDIR}/usr/bin/assets/ui/CustomTrackBackgrounds"
 mkdir -p "${APPDIR}/usr/bin/assets/filters"
 install -m 0644 "${PROJECT_ROOT}"/assets/filters/*.png \
   "${APPDIR}/usr/bin/assets/filters/"
@@ -328,6 +356,8 @@ install -m 0644 "${PROJECT_ROOT}/assets/controllers/gamecontrollerdb.txt" \
 # therefore resolves only the private copy installed beside it.
 mkdir -p "${APPDIR}/usr/libexec/dkr-r"
 install -m 0755 "${MOD_WORKER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker"
+install -m 0755 "${UPDATE_HELPER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-Updater"
+patchelf --set-rpath '$ORIGIN/../../lib' "${APPDIR}/usr/libexec/dkr-r/DKR-R-Updater"
 patchelf --set-rpath '$ORIGIN/../../lib' "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker"
 install -m 0755 "${INPUT_HOST}" \
   "${APPDIR}/usr/libexec/dkr-r/DKR-R-InputHost"
@@ -336,6 +366,7 @@ install -m 0755 "${SDL3_LIBRARY}" \
 patchelf --set-rpath '$ORIGIN' \
   "${APPDIR}/usr/libexec/dkr-r/DKR-R-InputHost"
 if [[ "${SKIP_RUNTIME_TESTS}" == 0 ]]; then
+[[ "$(timeout 15 "${APPDIR}/usr/libexec/dkr-r/DKR-R-Updater" --self-test)" == 'DKR-R updater protocol 1' ]] || { echo 'Packaged updater helper is not compatible.' >&2; exit 1; }
 timeout 15 "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker" --self-test
 [[ "$(timeout 15 "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker" --online-capability)" == 'DKR-R online-prepare protocol 1' ]] || { echo 'Packaged ModWorker lacks online preparation support.' >&2; exit 1; }
 LD_LIBRARY_PATH="${APPDIR}/usr/libexec/dkr-r${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \

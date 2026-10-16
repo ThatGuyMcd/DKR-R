@@ -1,20 +1,124 @@
-name: Windows policy tests
-on: [push, pull_request]
+name: Windows host tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      SCCACHE_DIR: ${{ github.workspace }}/build/sccache
+      SCCACHE_CACHE_SIZE: 500M
+    defaults:
+      run:
+        shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Prepare pinned runtime dependencies
-        shell: pwsh
+        uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+      - name: Install pinned compiler cache
+        id: compiler-cache
+        uses: mozilla-actions/sccache-action@fd02668681acd5f960e1372061bee5e3e987195c # v0.0.11
+        with:
+          version: v0.18.0
+          disable_annotations: true
+      - name: Identify MSVC and SDK
+        id: compiler
         run: |
-          python scripts/bootstrap_dependencies.py --only n64-modern-runtime --only rt64 --only gekkonet --only monocypher --only libdatachannel --only mbedtls --only sdl3
-          python scripts/apply_dependency_patches.py
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$installation) { throw 'Visual Studio C++ tools are missing' }
+          "VS_INSTALLATION=$installation" >> $env:GITHUB_ENV
+          & "$installation\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          if (!$?) { throw 'Could not initialize the x64 MSVC environment' }
+          New-Item -ItemType Directory -Force build | Out-Null
+          $compiler = (Get-Command cl.exe).Source
+          @(
+            "MSVC: $((Get-Item $compiler).VersionInfo.FileVersion)"
+            "Compiler SHA256: $((Get-FileHash $compiler -Algorithm SHA256).Hash)"
+            "Windows SDK: $env:WindowsSDKVersion"
+            "sccache: 0.18.0"
+          ) | Set-Content build/compiler-toolchain.txt
+          $fingerprint = (Get-FileHash build/compiler-toolchain.txt -Algorithm SHA256).Hash.ToLowerInvariant()
+          "fingerprint=$fingerprint" >> $env:GITHUB_OUTPUT
+      - name: Restore compiler cache
+        id: objects
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: build/sccache
+          key: sccache-v1-windows-2022-${{ steps.compiler.outputs.fingerprint }}-${{ github.sha }}
+          restore-keys: sccache-v1-windows-2022-${{ steps.compiler.outputs.fingerprint }}-
       - name: Configure
-        shell: pwsh
-        run: cmake -S runtime-recomp -B build/policy-windows -G "Visual Studio 17 2022" -A x64 -DDKRPORT_ROOT="$pwd" -DDKR_RUNTIME_BUILD_GENERATED=OFF -DDKR_RUNTIME_BUILD_RT64=OFF
-      - name: Build and test
-        shell: pwsh
+        working-directory: runtime-recomp
         run: |
-          cmake --build build/policy-windows --config Release --parallel
-          ctest --test-dir build/policy-windows -C Release --output-on-failure -R '^DKR'
+          & "$env:VS_INSTALLATION\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          if (!$?) { throw 'Could not initialize the x64 MSVC environment' }
+          sccache --zero-stats
+          cmake --preset host -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+      - name: Build
+        working-directory: runtime-recomp
+        run: |
+          & "$env:VS_INSTALLATION\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          if (!$?) { throw 'Could not initialize the x64 MSVC environment' }
+          cmake --build --preset host --parallel $env:NUMBER_OF_PROCESSORS
+      - name: Report compiler cache statistics
+        if: ${{ always() && steps.compiler.outcome == 'success' }}
+        run: sccache --stop-server | Tee-Object -FilePath build/compiler-cache-stats.txt
+      - name: Save compiler cache
+        if: ${{ success() && steps.objects.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: build/sccache
+          key: ${{ steps.objects.outputs.cache-primary-key }}
+      - name: Test
+        working-directory: runtime-recomp
+        run: |
+          & "$env:VS_INSTALLATION\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          if (!$?) { throw 'Could not initialize the x64 MSVC environment' }
+          ctest --preset host --parallel 2 --output-junit junit.xml
+      - name: Capture regression and benchmark report
+        run: python scripts/regression.py --build-dir build/host --repeat 1 --warmup 0 --output build/regression/ci
+      - name: Summarize host checks
+        if: ${{ always() }}
+        run: python scripts/ci_summary.py --label "Windows host tests" --junit build/host/junit.xml --regression build/regression/ci/report.json --cache-stats build/compiler-cache-stats.txt --output "$env:GITHUB_STEP_SUMMARY"
+      - name: Preserve regression report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: regression-windows
+          retention-days: 7
+          if-no-files-found: ignore
+          path: build/regression/ci/
+      - name: Preserve test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-results-windows
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/host/junit.xml
+            build/compiler-toolchain.txt
+            build/compiler-cache-stats.txt
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: host-windows
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/host/CMakeFiles/CMakeConfigureLog.yaml
+            build/host/CMakeFiles/CMakeError.log
+            build/host/CMakeFiles/CMakeOutput.log
+            build/host/Testing/Temporary/LastTest.log
+            build/host/Testing/Temporary/LastTestsFailed.log

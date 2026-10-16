@@ -136,6 +136,10 @@ int main(int argc,char** argv) {
                 start=std::chrono::steady_clock::now();auto again=RuntimeResources::prepare(profile,roms[std::string_view(revision)=="us.v80"?1:0]);
                 check(again->fingerprint()==resources->fingerprint());
                 const auto warm_ms=elapsed(start);
+                // Machine-independent release evidence. Paths/timings are not
+                // identities; compare these exact values across platform builds.
+                std::cout<<revision<<" manifest="<<profile->digest<<" resources="<<resources->fingerprint()
+                    <<" boot-bank="<<b->boot_bank()->fingerprint()<<"\n";
                 std::cout<<revision<<" roots="<<bundle.manifest.content.size()<<" payloads="<<bundle.manifest.payloads.size()
                     <<" export-ms="<<export_ms<<" profile-ms="<<profile_ms<<" runtime-ms="<<runtime_ms
                     <<" two-worlds-ms="<<worlds_ms<<" warm-runtime-ms="<<warm_ms<<" aggregate-files=2 worker=0\n";

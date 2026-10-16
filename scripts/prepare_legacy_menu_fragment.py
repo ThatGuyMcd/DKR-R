@@ -94,7 +94,7 @@ def prepare(elf: Path, revision: str):
         begin, size = one(name)
         body = b"".join(struct.pack(">I", words[pc]) for pc in range(begin, begin + size, 4))
         bodies[name] = {"vram": hex(begin), "size": size, "sha256": hashlib.sha256(body).hexdigest()}
-    return {"schema": 1, "revision": revision, "abi": 3, "fields": fields, "functions": bodies, "hooks": hooks}
+    return {"schema": 1, "revision": revision, "abi": 4, "fields": fields, "functions": bodies, "hooks": hooks}
 
 
 if __name__ == "__main__":

@@ -1,0 +1,141 @@
+CUSTOM MAGIC CODES
+
+Custom Magic Codes are executable gameplay mods. They are separate from the
+original game's Magic Codes and from texture, character and track packs.
+
+IMPORTING A CODE MOD
+
+Open MODS / HACKS, choose Import Mods, then import the author's .nrm or
+.dkrcode file. Select Custom Magic Codes to find it. Open Details, review the
+author/package, approve code only if you trust its source, then enable it.
+Changes apply when you next start a game. Leave any running game or lobby
+before changing code mods or their settings.
+
+A code mod can change gameplay and game memory. Verification checks the
+package's contents and compatibility; it does not prove the author is safe.
+Raw game calls are not a security sandbox. Never approve unexpected code.
+
+CUSTOM TROPHY RACES
+
+The supplied dkr_custom_trophies.nrm is a real, separately importable code
+mod. It is not enabled automatically. Import it and approve it in Details.
+
+1. Select your Game ROM in Play. Enable the character/track mods you want.
+2. Open the code mod's Details. Your enabled tracks load in the background.
+3. Open Cups and choose New cup. Name it in Cup options. The Lineup screen
+   uses the full width: each round has its track, laps, vehicle and actions
+   on one line. Add track opens a searchable picker. Select a track name to
+   replace it without changing its lap count. Copy repeats a round.
+4. Choose Lineup order or Shuffled order. Cup options has Shuffle again.
+   Up / Down moves a round. On a controller, Y opens Round actions: choose
+   Move round, use Up / Down, then A to place or B to cancel the move.
+5. Save changes, enable the code mod in Cup options, and start the game. Closing with
+   unsaved edits asks whether to keep editing or discard them.
+6. Enter Tracks and scroll below the Custom Tracks rows. Each saved cup has
+   its own tile under CUSTOM TROPHIES. Select the cup you want to race.
+
+Cups, Lineup and Share have separate screens. Only the list scrolls; the
+cup selector and Save / Back controls stay visible. At narrower widths,
+the round's Actions button holds Move, Copy and Remove so rows never wrap.
+Laps and vehicle are also available in Actions when the window is narrow.
+Use D-pad to navigate, A to select, X to add a track, Y for actions, LB / RB
+to switch cups, Start to save and B to go back. Select the keyboard icon beside a text
+field for the on-screen keyboard; controller activation opens it directly.
+The keyboard supports upper/lower case, numbers and punctuation. A physical
+keyboard can still type into the fields. Launcher and overlay share this UI.
+
+The editor supports 32 saved cups, up to 128 rounds per cup and 1..99 laps
+per round, subject to the configuration size limit. It accepts vanilla race
+tracks, enabled legacy custom tracks and enabled Track Lab race tracks.
+Challenges, boss arenas and hub worlds are not ordinary cup courses. A
+vehicle must be supported by its track. Refresh and save again if a course
+is replaced or disabled.
+
+Upgrade the trophy example to 1.0.2 with this application build. Importing
+the new edition keeps your saved cups, but you must approve the new code and
+enable it again. Racer timing is registered only after final racer IDs exist;
+the SDK also binds the completed roster during the native setup settling
+ticks. This fixes the reported unregistered-racer safe-stop.
+
+SHARING CUPS
+
+Open Share. Export cup saves the cup currently open in Details. Export all cups saves
+your whole collection. These .dkrcup files contain lineup, names, lap counts,
+vehicle choices, shuffle rules and track requirements, not executable code,
+track assets, game saves or championship progress. Share the file beside
+your track pack, or include it as a separate file in the same download ZIP.
+The receiver installs/enables the tracks first, then opens Custom Trophy
+Races Details, opens Share and chooses Import cups. Extract a .dkrcup from a
+ZIP first. The in-app file picker supports controller navigation, a Downloads
+shortcut and on-screen path/filename entry. System picker opens the desktop
+file dialog if preferred. Export asks before replacing a file.
+
+The import preview lists the cups and required tracks. Missing tracks or a
+different custom-track edition must be resolved before adding the cups.
+Existing cups are kept, identical cups are skipped, and colliding IDs are
+renamed. Click Add cups, then Save changes. Import never approves/enables
+code or starts a game. Shuffled cups use the receiving collection's shuffle
+seed; the host freezes the actual order for all online players as usual.
+Cup files support both Game Pak revisions; stock tracks are matched by ID,
+while custom tracks require their exact content edition. Export uses a
+temporary file and atomic replacement so a failed commit keeps the old file.
+
+AI & BOSS DIFFICULTY
+
+The separate dkr_ai_boss_difficulty.nrm adds seven pace sliders: race AI,
+Tricky, Bluey, Smokey, Bubbler and the first/final Wizpig races. Import and
+approve it in Custom Magic Codes, adjust its Details sliders, Save settings
+and enable it for the next game. 100 is original, lower is easier, higher is
+harder. Try 85 or 110 first. Human racers and native attacks remain unchanged.
+It can be enabled together with Custom Trophy Races. See its source example's
+GUIDE.txt for the exact mechanics and limits. Neither mod is auto-enabled.
+
+Custom tracks and custom cups use up to six tiles per row. Cups begin on a
+separate row after the final custom track; they never replace the original
+Trophy Race tiles. Adventure trophies are also unchanged.
+Continue advances the cup; Quit Trophy Race
+returns to Track Select. Native standings, points, portraits and trophy
+ceremonies remain in use. Names outside the game's ASCII font are displayed
+with replacement characters; the editor keeps the original names.
+
+SAVE PROTECTION
+
+Offline code-mod sessions use a separate mod-set Adventure save and Pak
+directory. An existing single-player Adventure save may seed that directory,
+but the code-mod session does not write back to the ordinary save. Different
+code/configuration sets have different save scopes. Custom cups do not write
+vanilla Time Trial records or unlock ordinary Adventure trophies.
+
+Cup progress during a game, lap timing, points and mod state are part of the
+game's rewindable state. The cup is not a resume-after-closing championship;
+start it again from its first round after restarting the game. There is no
+arbitrary host-file API for code mods.
+
+ONLINE
+
+The host chooses the enabled code, its edition and settings, the cup and its
+resolved course order. Auto uses Experimental Rollback. Custom Magic Codes
+require that backend; Host Prediction and Strict Input Sync do not have the
+complete arbitrary-code state contract.
+
+Clients review the exact offer and explicitly approve executable code before
+it can run. Installed matching package data is reused. Downloaded code is
+kept in the client's library for later offline use, but is not automatically
+approved, selected, enabled or configured for offline games. Receiving code
+does not change the client's offline mod setup or single-player save.
+
+Every player needs a compatible application build, the same Game Pak asset
+revision and the same admitted package/configuration order. Windows, Linux,
+Steam Deck and Android use the same portable guest code format. Native host
+DLLs and scripts are not accepted as portable code mods.
+
+RECOVERY
+
+If preparation refuses a package, read its message, leave the lobby and fix
+the missing dependency, revision, course or settings. Do not delete your
+single-player saves. To isolate a bad code mod, disable it and start a fresh
+game. Runtime faults stop the code session and report the failing operation;
+they are not permission to continue with mismatched code online.
+
+This candidate was compiled and statically inspected, not gameplay tested.
+The maintainer performs gameplay and cross-device acceptance testing.

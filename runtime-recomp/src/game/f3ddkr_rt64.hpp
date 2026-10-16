@@ -45,6 +45,7 @@ private:
 
     static F3DDKRRT64Bridge* active_;
 
+    static bool ValidateCommand(RT64::State* state, RT64::DisplayList* command);
     static void Dispatch(RT64::State* state,
                          RT64::DisplayList** display_list);
     static void ApplyPresentationMarkers(RT64::State* state,
@@ -65,6 +66,7 @@ private:
     static void Matrix(RT64::State* state, RT64::DisplayList** display_list);
     static void FillRect(RT64::State* state, RT64::DisplayList** display_list);
     static void HudTextureRect(RT64::State* state, RT64::DisplayList** display_list);
+    static void TrackTextureRect(RT64::State* state, RT64::DisplayList** display_list);
     static void TextureOffset(RT64::State* state, RT64::DisplayList** display_list);
     static void Vertex(RT64::State* state, RT64::DisplayList** display_list);
     static void Triangle(RT64::State* state, RT64::DisplayList** display_list);

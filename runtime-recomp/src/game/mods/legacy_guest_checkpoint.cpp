@@ -143,22 +143,29 @@ CharacterPresentation CharacterPresentation::stage_checkpoint(View bytes,std::si
     return next;
 }
 Bytes TrackMenuAdapter::checkpoint()const {
-    if(masked_ || background_y_ || candidate_)throw Error("Cannot checkpoint an outstanding custom track input/draw/load invocation.");
-    CheckpointWriter out;out.u32(1);out.u32(static_cast<std::uint32_t>(tracks_.size()));
+    if(masked_ || background_y_ || background_display_list_ || candidate_ || !options_.empty())throw Error("Cannot checkpoint an outstanding custom track input/draw/load invocation.");
+    CheckpointWriter out;out.u32(2);out.u32(static_cast<std::uint32_t>(tracks_.size()));
     for(const auto& t:tracks_)out.text(t.content_id,64);
+    out.u32(static_cast<std::uint32_t>(cups_.size()));for(const auto& cup:cups_)out.text(cup.id,64);
+    out.text(selected_cup_,64);
     out.u32(name_address_);out.flag(allow_races_);out.flag(in_tracks_);
     const auto cursor=[&](const auto& value){out.flag(value.has_value());if(value){out.u32(static_cast<std::uint32_t>(value->row));out.u32(static_cast<std::uint32_t>(value->column));}};
     const auto scene=[&](const auto& value){out.flag(value.has_value());if(value){out.text(value->id,64);out.u32(value->carrier);}};
     cursor(move_);cursor(restore_);scene(pending_);scene(race_);out.text(preview_id_,64);return std::move(out).finish();
 }
 TrackMenuAdapter TrackMenuAdapter::stage_checkpoint(View bytes)const {
-    CheckpointReader in(bytes);schema(in);
+    CheckpointReader in(bytes);schema(in,2);
     if(in.bounded(512)!=tracks_.size())throw Error("Track sidecar belongs to a different custom catalogue.");
     for(const auto& t:tracks_)if(in.text(64)!=t.content_id)throw Error("Track sidecar order/identity differs.");
-    auto next=*this;next.name_address_=guest_pointer(in,true,8);next.allow_races_=in.flag();next.in_tracks_=in.flag();
+    if(in.bounded(32)!=cups_.size())throw Error("Trophy sidecar belongs to a different cup catalogue.");
+    for(const auto& cup:cups_)if(in.text(64)!=cup.id)throw Error("Trophy sidecar order/identity differs.");
+    auto next=*this;next.selected_cup_=in.text(64);
+    if(!next.selected_cup_.empty()&&std::ranges::none_of(cups_,[&](const auto& c){return c.id==next.selected_cup_;}))throw Error("Trophy sidecar selection is not admitted.");
+    next.name_address_=guest_pointer(in,true,8);next.allow_races_=in.flag();next.in_tracks_=in.flag();
     if(next.allow_races_!=allow_races_)throw Error("Track sidecar changes the admitted race policy.");
     if(next.name_address_ && names_.size()>0x80800000U-next.name_address_)throw Error("Track name allocation is outside guest RAM.");
-    const auto cursor=[&]()->std::optional<TrackCursor>{if(!in.flag())return {};const auto row=in.bounded(5U+static_cast<unsigned>((tracks_.size()+3)/4)-1);const auto column=in.bounded(3);return TrackCursor{static_cast<int>(row),static_cast<int>(column)};};
+    const TrackMenuLayout layout(5,tracks_.size(),cups_.size());
+    const auto cursor=[&]()->std::optional<TrackCursor>{if(!in.flag())return {};const auto row=in.bounded(layout.rows()-1);const auto column=in.bounded(5);return TrackCursor{static_cast<int>(row),static_cast<int>(column)};};
     const auto scene=[&](bool stock_preview)->std::optional<TrackSceneChoice>{
         if(!in.flag())return {};
         TrackSceneChoice value{in.text(64),in.u32()};
@@ -167,13 +174,15 @@ TrackMenuAdapter TrackMenuAdapter::stage_checkpoint(View bytes)const {
         // Only pending previews may use that form, and only for retail IDs;
         // authored levels and custom race/retry identities stay catalog-bound.
         const bool retail=stock_preview && value.id.empty() && value.carrier<65;
-        if(!retail && std::ranges::none_of(tracks_,[&](const auto& t){return t.content_id==value.id && t.carrier==value.carrier;}))
+        const bool cup=stock_preview&&std::ranges::any_of(cups_,[&](const auto& t){return t.id==value.id&&t.preview.carrier==value.carrier;});
+        if(!retail && !cup && std::ranges::none_of(tracks_,[&](const auto& t){return t.content_id==value.id && t.carrier==value.carrier;}))
             throw Error("Track sidecar refers to an unadmitted course.");
         return value;
     };
     next.move_=cursor();next.restore_=cursor();next.pending_=scene(true);next.race_=scene(false);next.preview_id_=in.text(64);in.end();
-    if(!next.preview_id_.empty() && std::ranges::none_of(tracks_,[&](const auto& t){return t.content_id==next.preview_id_;}))
+    if(!next.preview_id_.empty() && std::ranges::none_of(tracks_,[&](const auto& t){return t.content_id==next.preview_id_;}) &&
+       std::ranges::none_of(cups_,[&](const auto& t){return t.id==next.preview_id_;}))
         throw Error("Track sidecar preview is not admitted.");
-    next.masked_=false;next.saved_x_=next.saved_y_=0;next.saved_buttons_=0;next.candidate_.reset();next.background_y_.reset();return next;
+    next.masked_=false;next.saved_x_=next.saved_y_=0;next.saved_buttons_=0;next.options_.clear();next.candidate_.reset();next.background_y_.reset();next.background_display_list_.reset();return next;
 }
 }

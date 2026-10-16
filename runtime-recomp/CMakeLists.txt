@@ -57,17 +57,24 @@ int main() { std::jthread t([](std::stop_token) {}); }" DKR_HAS_JTHREAD)
 endif()
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(IOS)
+    set(BUILD_TESTING OFF CACHE BOOL "No test harness in the sideload app" FORCE)
+endif()
 include(CTest)
+include(cmake/ProjectTests.cmake)
 
 if(BUILD_TESTING AND NOT ANDROID)
-    add_executable(DKREnhancedWaterPolicyTests tests/enhanced_water_policy_tests.cpp)
-    target_include_directories(DKREnhancedWaterPolicyTests PRIVATE src/game "${CMAKE_CURRENT_LIST_DIR}/../extern/rt64/src/contrib" "${CMAKE_CURRENT_LIST_DIR}/../patches/enhanced-water/native")
-    add_test(NAME DKREnhancedWaterPolicy COMMAND DKREnhancedWaterPolicyTests)
+    add_executable(DKRLauncherCopyTests tests/launcher_copy_tests.cpp)
+    target_include_directories(DKRLauncherCopyTests PRIVATE src/game)
+    add_test(NAME DKRLauncherCopy COMMAND DKRLauncherCopyTests)
 endif()
 
-set(DKRPORT_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." CACHE PATH "Root of the DKR Port repository")
+
+include(cmake/SourceRoots.cmake)
 option(DKR_RUNTIME_BUILD_GENERATED "Compile N64Recomp-generated DKR CPU functions" ON)
 option(DKR_RUNTIME_BUILD_RT64 "Also configure and compile the pinned RT64 renderer" OFF)
+include(cmake/HostSanitizers.cmake)
+include(cmake/RegressionHarness.cmake)
 option(DKR_LEGACY_QUALIFICATION "Build private real-runtime legacy scene qualification hooks (not for packaging)" OFF)
 option(DKR_REPLAY_QUALIFICATION "Private real-game replay fixtures; never package" OFF)
 option(DKR_EXPERIMENTAL_RENDER_QUALIFICATION "PRIVATE generation-retirement GPU probe; never package" OFF)
@@ -92,17 +99,29 @@ set(DKR_PATCH_POLICY_SHA256
 set(DKR_TEST_ROM_V77 "" CACHE FILEPATH "Optional local US v1.0 ROM for revision tests")
 set(DKR_TEST_ROM_V80_Z64 "" CACHE FILEPATH "Optional local US Rev A z64 ROM for revision tests")
 set(DKR_TEST_ROM_V80_SWAPPED "" CACHE FILEPATH "Optional local US Rev A byte-swapped ROM for revision tests")
-get_filename_component(DKRPORT_ROOT "${DKRPORT_ROOT}" ABSOLUTE)
-set(DKR_MODERN_RUNTIME_SOURCE "${DKRPORT_ROOT}/extern/n64-modern-runtime")
+set(DKR_MODERN_RUNTIME_SOURCE "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime")
 set(DKR_RECOMP_SOURCE "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp")
-set(DKR_RT64_SOURCE "${DKRPORT_ROOT}/extern/rt64")
-set(DKR_GEKKONET_SOURCE "${DKRPORT_ROOT}/extern/gekkonet")
-set(DKR_MONOCYPHER_SOURCE "${DKRPORT_ROOT}/extern/monocypher")
-set(DKR_LIBDATACHANNEL_SOURCE "${DKRPORT_ROOT}/extern/libdatachannel")
-set(DKR_MBEDTLS_SOURCE "${DKRPORT_ROOT}/extern/mbedtls")
-set(DKR_SDL3_SOURCE "${DKRPORT_ROOT}/extern/sdl3")
+set(DKR_RT64_SOURCE "${DKR_DEPENDENCIES_DIR}/rt64")
+
+if(BUILD_TESTING AND NOT ANDROID)
+    add_executable(DKRLavaGlowTests tests/lava_glow_tests.cpp)
+    target_include_directories(DKRLavaGlowTests PRIVATE src/game)
+    add_test(NAME DKRLavaGlow COMMAND DKRLavaGlowTests)
+    add_executable(DKREnhancedWaterPolicyTests tests/enhanced_water_policy_tests.cpp)
+    target_include_directories(DKREnhancedWaterPolicyTests PRIVATE src/game "${DKR_RT64_SOURCE}/src/contrib" "${CMAKE_CURRENT_LIST_DIR}/../patches/enhanced-water/native")
+    add_test(NAME DKREnhancedWaterPolicy COMMAND DKREnhancedWaterPolicyTests)
+endif()
+
+set(DKR_GEKKONET_SOURCE "${DKR_DEPENDENCIES_DIR}/gekkonet")
+set(DKR_MONOCYPHER_SOURCE "${DKR_DEPENDENCIES_DIR}/monocypher")
+set(DKR_LIBDATACHANNEL_SOURCE "${DKR_DEPENDENCIES_DIR}/libdatachannel")
+set(DKR_MBEDTLS_SOURCE "${DKR_DEPENDENCIES_DIR}/mbedtls")
+set(DKR_SDL3_SOURCE "${DKR_DEPENDENCIES_DIR}/sdl3")
 if(ANDROID)
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/AndroidPlatform.cmake")
+endif()
+if(IOS)
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/iOSPlatform.cmake")
 endif()
 option(DKR_RUNTIME_BUILD_SDL3_INPUT_HOST
     "Build the isolated SDL3 native controller and sensor host" ON)
@@ -113,6 +132,9 @@ set(DKR_GENERATED_SOURCE_V80 "" CACHE PATH
 set(DKR_GENERATED_RSP_SOURCE "${CMAKE_CURRENT_LIST_DIR}/RecompiledRSP" CACHE PATH
     "RSPRecomp-generated source for the selected DKR revision")
 set(DKR_GENERATED_FILE_COUNT 0)
+
+option(DKR_NETPLAY_WEBRTC "Build the optional five-character Quick Join transport" ON)
+include(cmake/DependencyPreflight.cmake)
 
 if(DKR_RUNTIME_BUILD_GENERATED)
     if(DKR_GENERATED_SOURCE_V80 STREQUAL "")
@@ -158,6 +180,14 @@ if(MSVC)
             target_compile_options(${DKR_PDB_SAFE_TARGET} PRIVATE /FS)
         endif()
     endforeach()
+    if(TARGET miniz)
+        # Upstream adds /Zi even in Release. Embed its debug information in
+        # each object: Ninja's parallel sources must not share miniz.pdb.
+        target_compile_options(miniz PRIVATE /Z7)
+        # sccache still interprets upstream's literal /Zi as a PDB output even
+        # after /Z7 overrides it. Compile these few sources directly.
+        set_property(TARGET miniz PROPERTY C_COMPILER_LAUNCHER "")
+    endif()
 endif()
 
 if(NOT EXISTS "${DKR_GEKKONET_SOURCE}/GekkoLib/CMakeLists.txt")
@@ -187,7 +217,6 @@ add_library(DKRNetplayCrypto STATIC
     "${DKR_MONOCYPHER_SOURCE}/src/monocypher.c"
 )
 
-option(DKR_NETPLAY_WEBRTC "Build the optional five-character Quick Join transport" ON)
 if(DKR_NETPLAY_WEBRTC)
     if(NOT EXISTS "${DKR_LIBDATACHANNEL_SOURCE}/CMakeLists.txt")
         message(FATAL_ERROR
@@ -240,6 +269,8 @@ endif()
 target_include_directories(DKRNetplayCrypto PUBLIC
     "${DKR_MONOCYPHER_SOURCE}/src"
 )
+
+include(cmake/Updates.cmake)
 
 add_library(DKRNetplayCore STATIC
     src/game/netplay/authoritative_state.cpp
@@ -600,6 +631,7 @@ if(DKR_RUNTIME_BUILD_RT64)
             TARGET_DIRECTORY rt64 APPEND PROPERTY COMPILE_OPTIONS -include render_resource_policy.hpp)
     endif()
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/EnhancedWater.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/HleCommandGuard.cmake")
     if(MSVC AND TARGET rt64)
         # RT64 enables /MP internally. Ensure all compiler workers serialize
         # writes to the target PDB so clean RelWithDebInfo builds are reliable.
@@ -610,6 +642,7 @@ endif()
 if(DKR_RUNTIME_BUILD_GENERATED)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/LegacyMods.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomMagicCodes.cmake")
     foreach(config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
         string(TOUPPER "${config}" config_upper)
         set_target_properties(DKRLegacyModWorker PROPERTIES
@@ -618,19 +651,8 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     endforeach()
     set(DKR_V80_SYMBOL_MAP
         "${CMAKE_BINARY_DIR}/generated/dkr_v80_symbol_map.hpp")
-    execute_process(
-        COMMAND "${Python3_EXECUTABLE}"
-                "${CMAKE_CURRENT_LIST_DIR}/cmake/generate_revision_symbol_map.py"
-                "${DKR_GENERATED_SOURCE_V80}"
-                "dkr_v80_"
-                "${DKR_V80_SYMBOL_MAP}"
-        RESULT_VARIABLE DKR_SYMBOL_MAP_RESULT
-        ERROR_VARIABLE DKR_SYMBOL_MAP_ERROR
-    )
-    if(NOT DKR_SYMBOL_MAP_RESULT EQUAL 0)
-        message(FATAL_ERROR
-            "Could not namespace the Rev A CPU payload: ${DKR_SYMBOL_MAP_ERROR}")
-    endif()
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/RevisionSymbolMap.cmake")
+    dkr_generate_revision_symbol_map("${DKR_GENERATED_SOURCE_V80}" "dkr_v80_" "${DKR_V80_SYMBOL_MAP}")
 
     # Each ROM revision contributes only its generated CPU payload. The
     # frontend, renderer, audio, input, netplay and settings runtime are linked
@@ -638,6 +660,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     # at compile time so protected generated output remains untouched.
     function(dkr_add_recompiled_payload TARGET_NAME REVISION SOURCE_DIR WRAPPER)
         set(FORCE_INCLUDE "${ARGV4}")
+        dkr_stage_magic_code_payload(SOURCE_DIR "${SOURCE_DIR}" "${REVISION}")
         file(GLOB_RECURSE GENERATED_C CONFIGURE_DEPENDS "${SOURCE_DIR}/*.c")
         file(GLOB_RECURSE GENERATED_CXX CONFIGURE_DEPENDS "${SOURCE_DIR}/*.cpp")
         set(GENERATED_FILES ${GENERATED_C} ${GENERATED_CXX})
@@ -689,6 +712,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         endforeach()
 
         add_library(${TARGET_NAME} STATIC ${GENERATED_FILES} "${WRAPPER}")
+        target_compile_features(${TARGET_NAME} PRIVATE c_std_11)
         target_include_directories(${TARGET_NAME} PRIVATE
             "${DKRPORT_ROOT}/include"
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
@@ -747,6 +771,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
             "Run Generate-DKR-RSP.cmd first.")
     endif()
     set(DKR_GAME_SOURCES
+        src/game/runtime_code_mods.cpp
         src/game/audio_equalizer.cpp
         # The policy's asset hooks call into these with or without RT64; the
         # table logic itself is DKRCustomTracksCore, via DKRLegacyModLaunch.
@@ -781,6 +806,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         src/game/runtime_save_routing.cpp
         src/game/runtime_portable.cpp
         src/game/runtime_stubs.cpp
+        src/game/startup_flow.cpp
         src/game/runtime_support.cpp
         src/game/runtime_telemetry.cpp
         src/game/startup_performance.cpp
@@ -796,8 +822,11 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         set_property(SOURCE src/game/camera_obstruction.cpp tests/replay_probe/probe_native.c
             APPEND PROPERTY COMPILE_OPTIONS -ffp-contract=off)
     endif()
-    if(APPLE)
+    if(APPLE AND NOT IOS AND DKR_RUNTIME_BUILD_RT64)
         list(APPEND DKR_GAME_SOURCES src/game/runtime_metal_layer.mm)
+    endif()
+    if(IOS)
+        list(APPEND DKR_GAME_SOURCES src/android/mobile_ui.cpp)
     endif()
     if(DKR_LEGACY_QUALIFICATION)
         list(APPEND DKR_GAME_SOURCES src/game/legacy_runtime_qualification.cpp)
@@ -807,6 +836,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     endif()
     if(DKR_REPLAY_QUALIFICATION)
         set_property(SOURCE src/game/runtime_netplay.cpp src/game/custom_tracks_hooks.cpp
+            src/game/replay_probe_capture.cpp
             APPEND PROPERTY COMPILE_DEFINITIONS DKR_REPLAY_QUALIFICATION=1)
     endif()
     if(DKR_EXPERIMENTAL_RACE_TEST)
@@ -872,6 +902,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         DKR_PATCH_POLICY_SHA256="${DKR_PATCH_POLICY_SHA256}"
         NOMINMAX
     )
+    target_link_libraries(DKRPortGame PRIVATE DKRUpdateClient)
     if(DKR_EXPERIMENTAL_RACE_TEST)
         target_compile_definitions(DKRPortGame PRIVATE DKR_EXPERIMENTAL_RACE_TEST=1)
     endif()
@@ -893,6 +924,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         librecomp)
     target_link_libraries(DKRPortGame PRIVATE DKRNetplayCore)
     target_link_libraries(DKRPortGame PRIVATE DKRLegacyModLaunch DKRLegacyGuestIO)
+    target_link_libraries(DKRPortGame PRIVATE DKRCustomMagicCodes)
     add_dependencies(DKRPortGame DKRLegacyModWorker)
     if(MSVC)
         target_compile_options(DKRPortGame PRIVATE /FS)
@@ -933,6 +965,8 @@ if(DKR_RUNTIME_BUILD_GENERATED)
                     "$<TARGET_FILE_DIR:DKRPortGame>/SDL2.dll"
                 VERBATIM
             )
+        elseif(IOS)
+            dkr_ios_finish(DKRPortGame)
         else()
             find_package(SDL2 REQUIRED)
             target_include_directories(DKRPortGame PRIVATE ${SDL2_INCLUDE_DIRS})
@@ -949,36 +983,43 @@ if(DKR_RUNTIME_BUILD_GENERATED)
                 VERBATIM
             )
         endif()
+        set(DKR_GAME_ASSET_DIRECTORY "$<TARGET_FILE_DIR:DKRPortGame>")
+        if(WIN32)
+            set(DKR_GAME_ASSET_DIRECTORY "$<TARGET_FILE_DIR:DKRUpdateLauncher>")
+        endif()
         add_custom_command(TARGET DKRPortGame POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_BINARY_DIR}/dkr-release.json"
-                "$<TARGET_FILE_DIR:DKRPortGame>/dkr-release.json"
+                "${DKR_GAME_ASSET_DIRECTORY}/dkr-release.json"
             COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/ui/Icons"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Logo.bmp"
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/ui/Icons/DKR-R-Logo.bmp"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Logo.bmp"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Spinning-Icon.png"
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/ui/Icons/DKR-R-Spinning-Icon.png"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Spinning-Icon.png"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Short-Logo.png"
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/ui/Icons/DKR-R-Short-Logo.png"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Short-Logo.png"
             COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/ui/Backgrounds"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Backgrounds"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
             COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/filters"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/filters"
             COMMAND "${CMAKE_COMMAND}" -E copy_directory
                 "${CMAKE_CURRENT_LIST_DIR}/../assets/filters"
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/filters"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/filters"
             COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/controllers"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/controllers"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${CMAKE_CURRENT_LIST_DIR}/../assets/controllers/gamecontrollerdb.txt"
-                "$<TARGET_FILE_DIR:DKRPortGame>/assets/controllers/gamecontrollerdb.txt"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/controllers/gamecontrollerdb.txt"
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/CustomTrackBackgrounds"
+                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/CustomTrackBackgrounds"
             COMMENT "Staging the DKR-R launcher, graphics and controller assets"
             VERBATIM
         )
@@ -992,11 +1033,18 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     )
     if(WIN32)
         set_target_properties(DKRPortGame PROPERTIES WIN32_EXECUTABLE TRUE)
+        set_target_properties(DKRPortGame PROPERTIES OUTPUT_NAME "DKR-R-Runtime")
+        set_target_properties(DKRPortGame PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/libexec/dkr-r")
+        add_dependencies(DKRPortGame DKRUpdateLauncher DKRUpdateHelper)
     endif()
     foreach(config Debug Release RelWithDebInfo MinSizeRel)
         string(TOUPPER "${config}" config_upper)
+        set(_dkr_game_output "${CMAKE_BINARY_DIR}/bin/${config}")
+        if(WIN32)
+            string(APPEND _dkr_game_output "/libexec/dkr-r")
+        endif()
         set_target_properties(DKRPortGame PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY_${config_upper} "${CMAKE_BINARY_DIR}/bin/${config}"
+            RUNTIME_OUTPUT_DIRECTORY_${config_upper} "${_dkr_game_output}"
         )
     endforeach()
 endif()
@@ -1058,8 +1106,9 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
             "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.c" "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.cpp"
             "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.h" "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.hpp")
         dkr_owned_content_identity(owned_content_parts "${CMAKE_CURRENT_LIST_DIR}" "${owned_directory}"
-            "${owned_directory}/manifest.json" ${owned_identity_files})
-        set(owned_identity_parts "owned-revision:${owned_revision}|numeric-policy:separate-fp-rounding-v1|${owned_content_parts}")
+            "${owned_directory}/manifest.json" "${CMAKE_CURRENT_LIST_DIR}/src/game/track_select_draw_guest.h"
+            "${DKRPORT_ROOT}/modding/reference-us-v77/game_symbols.inc" "${DKRPORT_ROOT}/modding/reference-us-v80/game_symbols.inc" ${owned_identity_files})
+        set(owned_identity_parts "owned-revision:${owned_revision}|identity-policy:text-lf-v1|numeric-policy:separate-fp-rounding-v1|${owned_content_parts}")
         string(SHA256 DKR_OWNED_BUILD_ID_V${owned_revision} "${owned_identity_parts}")
         message(STATUS "Owned v${owned_revision} rollback contract: ${DKR_OWNED_BUILD_ID_V${owned_revision}}")
     endforeach()
@@ -1069,10 +1118,19 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
         tests/memory_probe_test_entries.c tests/native_mod_world_test_boundaries.cpp src/game/runtime_legacy_mods.cpp)
     target_link_libraries(DKROwnedRevisionRegistryTests PRIVATE DKRExperimentalOwnedGame)
     target_include_directories(DKROwnedRevisionRegistryTests PRIVATE src/game
+        # Shared native adapters use the production ABI and their explicit
+        # bounds checks, not either revision's guarded guest-memory macros.
+        # Guarded generated headers remain private to each owned CPU library.
+        "${DKR_RECOMP_SOURCE}/include"
         "${DKR_EXPERIMENTAL_OWNED_GENERATED}"
         "${DKR_MODERN_RUNTIME_SOURCE}/librecomp/include"
         "${DKR_MODERN_RUNTIME_SOURCE}/ultramodern/include"
         "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty/concurrentqueue")
+    # Native ModWorld adapters use the ordinary runtime header, just as the
+    # executable does. The private generated MEM_* fault trampolines belong
+    # only to the revision-isolated owned libraries, never the C++ adapter.
+    target_include_directories(DKROwnedRevisionRegistryTests BEFORE PRIVATE
+        "${DKR_RECOMP_SOURCE}/include")
     if(MSVC)
         target_compile_options(DKROwnedRevisionRegistryTests PRIVATE /EHs /EHc-)
     endif()
@@ -1085,6 +1143,8 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
             "${DKR_MODERN_RUNTIME_SOURCE}/librecomp/include"
             "${DKR_MODERN_RUNTIME_SOURCE}/ultramodern/include"
             "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty/concurrentqueue")
+        target_include_directories(DKRExperimentalOwnedQuickJoinTests BEFORE PRIVATE
+            "${DKR_RECOMP_SOURCE}/include")
         file(READ "${DKR_EXPERIMENTAL_OWNED_GENERATED}/manifest.json" DKR_OWNED_MANIFEST)
         string(JSON DKR_OWNED_REVISION GET "${DKR_OWNED_MANIFEST}" revision)
         string(JSON DKR_OWNED_FULL_SCENES ERROR_VARIABLE DKR_OWNED_FULL_SCENES_ERROR GET "${DKR_OWNED_MANIFEST}" full_scenes)
@@ -1101,11 +1161,6 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
             message(FATAL_ERROR "Integrated rollback requires the full-scene Patch Pipeline; race-only payloads cannot be shipped here")
         endif()
         target_compile_definitions(DKRExperimentalOwnedQuickJoinTests PRIVATE DKR_OWNED_TEST_REVISION=${DKR_OWNED_REVISION} DKR_OWNED_FULL_SCENES=${DKR_OWNED_FULL_SCENES})
-        if(MSVC)
-            target_compile_options(DKRExperimentalOwnedQuickJoinTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRExperimentalOwnedQuickJoinTests PRIVATE -UNDEBUG)
-        endif()
     endif()
     if(WIN32)
         foreach(owned_check DKROwnedRevisionRegistryTests DKRExperimentalOwnedQuickJoinTests)
@@ -1204,6 +1259,7 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
             "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.cpp"
             "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.h")
         set(DKR_OWNED_CONTRACT_FILES
+                "${DKRPORT_ROOT}/modding/reference-us-v77/game_symbols.inc" "${DKRPORT_ROOT}/modding/reference-us-v80/game_symbols.inc"
                 "${DKR_EXPERIMENTAL_OWNED_GENERATED}/manifest.json"
                 ${DKR_INTERACTIVE_SOURCE} tests/replay_probe/probe_driver.cpp
                 tests/replay_probe/probe_bridge.h tests/replay_probe/probe_native.c
@@ -1211,6 +1267,7 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
                 tests/replay_probe/probe_policies.cpp
                 src/game/camera_clearance_metadata.h src/game/camera_clearance_policy.hpp
                 src/game/camera_obstruction_guest.h src/game/camera_obstruction_math.h
+                src/game/track_select_draw_guest.h
                 tests/replay_probe/probe_audio_rsp.cpp src/game/netplay/runtime_state.hpp
                 src/game/netplay/experimental_rollback.cpp src/game/netplay/experimental_launch.cpp
                 src/game/netplay/experimental_timeline.cpp src/game/netplay/experimental_network.cpp
@@ -1308,6 +1365,10 @@ foreach(config Debug Release RelWithDebInfo MinSizeRel)
 endforeach()
 
 if(BUILD_TESTING)
+    add_executable(DKRF3DDKRHleExecutionTests tests/f3ddkr_hle_execution_tests.cpp)
+    target_compile_features(DKRF3DDKRHleExecutionTests PRIVATE cxx_std_20)
+    target_include_directories(DKRF3DDKRHleExecutionTests PRIVATE src/game)
+    add_test(NAME DKRF3DDKRHleExecution COMMAND DKRF3DDKRHleExecutionTests)
     add_executable(DKRAndroidPresentationPolicyTests tests/android_presentation_policy_tests.cpp)
     target_compile_features(DKRAndroidPresentationPolicyTests PRIVATE cxx_std_20)
     target_include_directories(DKRAndroidPresentationPolicyTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
@@ -1326,11 +1387,46 @@ if(BUILD_TESTING)
     # Build tooling: dependency patch pipeline, reviewed-ELF digest and the
     # shell entry-point contracts. Needs only git and Python, so it runs in
     # every configuration including the policy-only CI builds.
-    find_package(Python3 COMPONENTS Interpreter)
-    find_package(Git)
-    if(Python3_Interpreter_FOUND AND GIT_FOUND)
-        add_test(NAME DKRBuildTooling
-            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/build_tooling_tests.py")
+    if(DKR_NETPLAY_WEBRTC)
+        add_executable(DKRPicoHashCallbackTests tests/picohash_callback_tests.c)
+        target_include_directories(DKRPicoHashCallbackTests PRIVATE
+            "${DKR_LIBDATACHANNEL_SOURCE}/deps/libjuice/src")
+        add_test(NAME DKRPicoHashCallbacks COMMAND DKRPicoHashCallbackTests)
+    endif()
+
+    foreach(tooling_test IN ITEMS
+            "DKRBuildTooling|build_tooling_tests.py"
+            "DKRHostTaskPolicy|host_task_policy_tests.py"
+            "DKRLegacyModPipeline|legacy_mod_pipeline_tests.py"
+            "DKRToolingUtilities|tooling_utilities_tests.py"
+            "DKRSourcePackaging|source_packaging_tests.py"
+            "DKRBuildIteration|build_iteration_tests.py"
+            "DKRDeveloperEntrypoints|developer_entrypoint_tests.py"
+            "DKRAssetScan|asset_scan_tests.py"
+            "DKRRegressionHarness|regression_harness_tests.py"
+            "DKRHarnessReports|harness_report_tests.py"
+            "DKRReplayCapture|replay_capture_tests.py"
+            "DKRCiSummary|ci_summary_tests.py"
+            "DKRStressRunner|stress_runner_tests.py"
+            "DKROwnedContentIdentity|owned_content_identity_tests.py"
+            "DKRLauncherCopySource|launcher_copy_source_tests.py")
+        string(REPLACE "|" ";" tooling_test "${tooling_test}")
+        list(GET tooling_test 0 test_name)
+        list(GET tooling_test 1 test_script)
+        add_test(NAME ${test_name}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/${test_script}")
+        set_tests_properties(${test_name} PROPERTIES LABELS "host;tooling" TIMEOUT 180)
+    endforeach()
+    if(UNIX)
+        add_test(NAME DKRIosPackaging
+            COMMAND "${Python3_EXECUTABLE}" "${DKRPORT_ROOT}/scripts/tests/test_package_ios.py")
+        set_tests_properties(DKRIosPackaging PROPERTIES LABELS "host;tooling" TIMEOUT 180)
+    endif()
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME DKRStartupFlowPipeline
+            COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_LIST_DIR}/tests/test_startup_flow_pipeline.py")
+        add_test(NAME DKRTrackSelectDrawPipeline
+            COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_LIST_DIR}/tests/test_track_select_draw_pipeline.py")
     endif()
     if(APPLE)
         # Compiled directly so the policy-only CI configuration, which has no
@@ -1339,10 +1435,13 @@ if(BUILD_TESTING)
             src/game/mods/legacy_mod_process.cpp)
         target_include_directories(DKRLegacyModSandboxTests PRIVATE src/game/mods)
         target_compile_features(DKRLegacyModSandboxTests PRIVATE cxx_std_20)
-        target_compile_options(DKRLegacyModSandboxTests PRIVATE -UNDEBUG)
         add_test(NAME DKRLegacyModSandbox COMMAND DKRLegacyModSandboxTests)
     endif()
     add_executable(DKRRenderIdlePolicyTests tests/render_idle_policy_tests.cpp)
+    add_executable(DKRTrackSelectDrawTests tests/track_select_draw_tests.cpp)
+    target_compile_features(DKRTrackSelectDrawTests PRIVATE cxx_std_20)
+    target_include_directories(DKRTrackSelectDrawTests PRIVATE src/game "${CMAKE_CURRENT_LIST_DIR}/../extern/n64-modern-runtime/N64Recomp/include")
+    add_test(NAME DKRTrackSelectDraw COMMAND DKRTrackSelectDrawTests)
     add_executable(DKRRenderPassPolicyTests tests/render_pass_policy_tests.cpp)
     target_compile_features(DKRRenderPassPolicyTests PRIVATE cxx_std_20)
     add_test(NAME DKRRenderPassPolicy COMMAND DKRRenderPassPolicyTests)
@@ -1396,6 +1495,16 @@ if(BUILD_TESTING)
             target_link_libraries(DKRMobileUiTests PRIVATE ${SDL2_LIBRARIES})
         endif()
         add_test(NAME DKRMobileUi COMMAND DKRMobileUiTests)
+        add_executable(DKRIosEventQueueTests tests/ios_event_queue_tests.cpp)
+        target_compile_features(DKRIosEventQueueTests PRIVATE cxx_std_20)
+        target_compile_definitions(DKRIosEventQueueTests PRIVATE SDL_MAIN_HANDLED=1)
+        if(WIN32)
+            target_include_directories(DKRIosEventQueueTests PRIVATE
+                "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/include")
+        else()
+            target_include_directories(DKRIosEventQueueTests PRIVATE ${SDL2_INCLUDE_DIRS})
+        endif()
+        add_test(NAME DKRIosEventQueue COMMAND DKRIosEventQueueTests)
     endif()
     add_executable(DKRMobileGraphicsPresetTests tests/mobile_graphics_preset_tests.cpp)
     target_include_directories(DKRMobileGraphicsPresetTests PRIVATE
@@ -1418,8 +1527,11 @@ if(BUILD_TESTING)
         # helper on desktop Vulkan, not a separate simplified implementation.
         add_executable(DKRAndroidTransferGpuTests EXCLUDE_FROM_ALL tests/android_transfer_gpu_tests.cpp)
         target_compile_features(DKRAndroidTransferGpuTests PRIVATE cxx_std_20)
-        target_include_directories(DKRAndroidTransferGpuTests PRIVATE "${DKR_RT64_SOURCE}/src" "${CMAKE_CURRENT_LIST_DIR}/src/game"
-            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+        # This buffer-only renderer probe also configures without generated ROM
+        # payloads. Consume renderer headers directly; no game target is needed.
+        target_include_directories(DKRAndroidTransferGpuTests PRIVATE
+            "${DKR_RT64_SOURCE}/src" "${CMAKE_CURRENT_LIST_DIR}/src/game"
+            "$<TARGET_PROPERTY:rt64,INCLUDE_DIRECTORIES>")
         target_compile_definitions(DKRAndroidTransferGpuTests PRIVATE DKR_GRAPHICS_FAULT_TEST=1 NOMINMAX)
         target_link_libraries(DKRAndroidTransferGpuTests PRIVATE rt64)
         if(WIN32)
@@ -1539,11 +1651,6 @@ if(BUILD_TESTING)
     add_executable(DKRExperimentalConfirmedOutputTests tests/experimental_confirmed_output_tests.cpp)
     find_package(Threads REQUIRED)
     target_link_libraries(DKRExperimentalConfirmedOutputTests PRIVATE DKRNetplayCore Threads::Threads)
-    if(MSVC)
-        target_compile_options(DKRExperimentalConfirmedOutputTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRExperimentalConfirmedOutputTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRExperimentalConfirmedOutput COMMAND DKRExperimentalConfirmedOutputTests)
     set_tests_properties(DKRExperimentalConfirmedOutput PROPERTIES TIMEOUT 30)
 
@@ -1611,11 +1718,6 @@ if(BUILD_TESTING)
     add_test(NAME DKRExperimentalRollback COMMAND DKRExperimentalRollbackTests)
     add_executable(DKRLocalSceneryTests tests/local_scenery_tests.cpp)
     target_link_libraries(DKRLocalSceneryTests PRIVATE DKRNetplayCore)
-    if(MSVC)
-        target_compile_options(DKRLocalSceneryTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRLocalSceneryTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRLocalScenery COMMAND DKRLocalSceneryTests)
     if(DKR_EXPERIMENTAL_OWNED_GENERATED)
         add_executable(DKRCheckedMemoryTests
@@ -1624,20 +1726,15 @@ if(BUILD_TESTING)
             "${DKR_EXPERIMENTAL_OWNED_GENERATED}" tests/replay_probe src/game)
         target_compile_features(DKRCheckedMemoryTests PRIVATE c_std_11 cxx_std_20)
         if(MSVC)
-            target_compile_options(DKRCheckedMemoryTests PRIVATE /UNDEBUG /fp:strict)
+            target_compile_options(DKRCheckedMemoryTests PRIVATE /fp:strict)
         else()
-            target_compile_options(DKRCheckedMemoryTests PRIVATE -UNDEBUG -fno-strict-aliasing)
+            target_compile_options(DKRCheckedMemoryTests PRIVATE -fno-strict-aliasing)
             target_link_libraries(DKRCheckedMemoryTests PRIVATE m)
         endif()
         add_test(NAME DKRCheckedMemory COMMAND DKRCheckedMemoryTests)
     endif()
     add_executable(DKRPresentationOwnershipTests tests/experimental_presentation_tests.cpp src/game/renderer_snapshot.cpp)
     target_link_libraries(DKRPresentationOwnershipTests PRIVATE DKRNetplayCore)
-    if(MSVC)
-        target_compile_options(DKRPresentationOwnershipTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRPresentationOwnershipTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRPresentationOwnership COMMAND DKRPresentationOwnershipTests)
     add_executable(DKRExperimentalOwnerInputTests tests/experimental_owner_input_tests.cpp)
     target_link_libraries(DKRExperimentalOwnerInputTests PRIVATE DKRNetplayCore)
@@ -1656,10 +1753,7 @@ if(BUILD_TESTING)
     add_test(NAME DKRExperimentalNetwork COMMAND DKRExperimentalNetworkTests)
     add_executable(DKRProbeMemoryInlineTests tests/probe_memory_inline_tests.c tests/replay_probe/probe_bridge.c)
     target_include_directories(DKRProbeMemoryInlineTests PRIVATE src/game)
-    if(MSVC)
-        target_compile_options(DKRProbeMemoryInlineTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRProbeMemoryInlineTests PRIVATE -UNDEBUG)
+    if(NOT MSVC)
         target_link_libraries(DKRProbeMemoryInlineTests PRIVATE m)
     endif()
     add_test(NAME DKRProbeMemoryInline COMMAND DKRProbeMemoryInlineTests)
@@ -1667,20 +1761,10 @@ if(BUILD_TESTING)
     target_link_libraries(DKRExperimentalLaunchTests PRIVATE DKRNetplayCore)
     add_executable(DKRExperimentalLobbyAdmissionTests tests/experimental_lobby_admission_tests.cpp)
     target_link_libraries(DKRExperimentalLobbyAdmissionTests PRIVATE DKRNetplayCore)
-    if(MSVC)
-        target_compile_options(DKRExperimentalLobbyAdmissionTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRExperimentalLobbyAdmissionTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRExperimentalLobbyAdmission COMMAND DKRExperimentalLobbyAdmissionTests)
     add_test(NAME DKRExperimentalLaunch COMMAND DKRExperimentalLaunchTests)
     add_executable(DKRExperimentalPcmTests tests/experimental_pcm_tests.cpp)
     target_link_libraries(DKRExperimentalPcmTests PRIVATE DKRNetplayCore)
-    if(MSVC)
-        target_compile_options(DKRExperimentalPcmTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRExperimentalPcmTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRExperimentalPcm COMMAND DKRExperimentalPcmTests)
     if(WIN32 OR (UNIX AND NOT ANDROID AND NOT APPLE))
         add_executable(DKRExperimentalProcessTests tests/experimental_process_tests.cpp src/game/netplay/experimental_process.cpp)
@@ -1713,11 +1797,6 @@ if(BUILD_TESTING)
         add_executable(DKRFriendDeliveryTests tests/friend_delivery_tests.cpp)
         target_link_libraries(DKRFriendDeliveryTests PRIVATE DKRNetplayCore)
         target_include_directories(DKRFriendDeliveryTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
-        if(MSVC)
-            target_compile_options(DKRFriendDeliveryTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRFriendDeliveryTests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRFriendDelivery COMMAND DKRFriendDeliveryTests)
         set_tests_properties(DKRFriendDelivery PROPERTIES TIMEOUT 20)
         add_test(NAME DKRFriendLocalIntegration COMMAND DKRFriendDeliveryTests --integration)
@@ -1725,22 +1804,12 @@ if(BUILD_TESTING)
         add_executable(DKRQuickJoinLifecycleTests tests/quick_join_lifecycle_tests.cpp)
         target_link_libraries(DKRQuickJoinLifecycleTests PRIVATE DKRNetplayCore)
         target_include_directories(DKRQuickJoinLifecycleTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
-        if(MSVC)
-            target_compile_options(DKRQuickJoinLifecycleTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRQuickJoinLifecycleTests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRQuickJoinLifecycle COMMAND DKRQuickJoinLifecycleTests)
         set_tests_properties(DKRQuickJoinLifecycle PROPERTIES TIMEOUT 90)
         add_executable(DKRExperimentalQuickJoinTests tests/experimental_network_tests.cpp)
         target_link_libraries(DKRExperimentalQuickJoinTests PRIVATE DKRNetplayCore)
         target_include_directories(DKRExperimentalQuickJoinTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
         target_compile_definitions(DKRExperimentalQuickJoinTests PRIVATE DKR_EXPERIMENTAL_QUICKJOIN_TEST=1)
-        if(MSVC)
-            target_compile_options(DKRExperimentalQuickJoinTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRExperimentalQuickJoinTests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRExperimentalQuickJoin COMMAND DKRExperimentalQuickJoinTests)
         set_tests_properties(DKRExperimentalQuickJoin PROPERTIES TIMEOUT 90)
     endif()
@@ -1785,22 +1854,41 @@ if(BUILD_TESTING)
             target_compile_definitions(DKRLegacyMemoryGuest${revision}Tests PRIVATE DKR_MEMORY_TEST_REVISION=${revision})
             target_include_directories(DKRLegacyMemoryGuest${revision}Tests PRIVATE
                 "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}"
-                "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include")
+                "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include")
             if(NOT MSVC)
                 target_compile_options(DKRLegacyMemoryGuest${revision}Tests PRIVATE -Wno-implicit-function-declaration)
                 target_link_libraries(DKRLegacyMemoryGuest${revision}Tests PRIVATE m)
             endif()
             add_test(NAME DKRLegacyMemoryGuest${revision} COMMAND DKRLegacyMemoryGuest${revision}Tests)
+            add_executable(DKRTrackSelectNative${revision}Tests
+                tests/track_select_native_draw_tests.cpp
+                src/game/mods/legacy_track_menu.cpp src/game/mods/legacy_track_menu_adapter.cpp
+                "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/trackmenu_render_names.c"
+                "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/texrect_draw_scaled.c"
+                "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/texrect_draw.c")
+            target_compile_definitions(DKRTrackSelectNative${revision}Tests PRIVATE DKR_TEST_REVISION=${revision})
+            target_compile_features(DKRTrackSelectNative${revision}Tests PRIVATE cxx_std_20)
+            target_include_directories(DKRTrackSelectNative${revision}Tests PRIVATE src/game
+                "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}" "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include")
+            if(NOT MSVC)
+                target_link_libraries(DKRTrackSelectNative${revision}Tests PRIVATE m)
+            endif()
+            add_test(NAME DKRTrackSelectNative${revision} COMMAND DKRTrackSelectNative${revision}Tests)
         endforeach()
     endif()
     if(TARGET DKRLegacyGuestIO)
         add_executable(DKRLegacyCacheCapacityTests tests/legacy_cache_capacity_tests.cpp)
         target_link_libraries(DKRLegacyCacheCapacityTests PRIVATE DKRLegacyModCore)
+        add_executable(DKRLegacyDkrmapArtworkTests tests/legacy_dkrmap_artwork_tests.cpp src/game/dkr_save_codec.cpp)
+        target_link_libraries(DKRLegacyDkrmapArtworkTests PRIVATE DKRLegacyModLaunch)
+        add_test(NAME DKRLegacyDkrmapArtwork COMMAND DKRLegacyDkrmapArtworkTests)
         add_executable(DKRLegacyTrackMenuAdapterTests tests/legacy_track_menu_adapter_tests.cpp)
         target_link_libraries(DKRLegacyTrackMenuAdapterTests PRIVATE DKRLegacyGuestIO DKRNetplayCore)
         target_compile_definitions(DKRLegacyTrackMenuAdapterTests PRIVATE DKR_TRACK_MENU_ROLLBACK_TEST=1)
         if(WIN32 AND TARGET rt64)
             target_link_directories(DKRLegacyCacheCapacityTests PRIVATE
+                "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+            target_link_directories(DKRLegacyDkrmapArtworkTests PRIVATE
                 "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
             target_link_directories(DKRLegacyTrackMenuAdapterTests PRIVATE
                 "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
@@ -1911,11 +1999,6 @@ if(BUILD_TESTING)
 
     add_executable(DKRFinishPresentationTests tests/finish_presentation_tests.cpp)
     target_include_directories(DKRFinishPresentationTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
-    if(MSVC)
-        target_compile_options(DKRFinishPresentationTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRFinishPresentationTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRFinishPresentation COMMAND DKRFinishPresentationTests)
 
     add_executable(DKRPresentationCounterPolicyTests
@@ -1992,11 +2075,6 @@ if(BUILD_TESTING)
         else()
             target_link_libraries(DKRSplitScreenRT64Tests PRIVATE ${SDL2_LIBRARIES})
         endif()
-        if(MSVC)
-            target_compile_options(DKRSplitScreenRT64Tests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRSplitScreenRT64Tests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRSplitScreenRT64 COMMAND DKRSplitScreenRT64Tests)
 
         add_executable(DKRWaterUVTests tests/water_uv_rt64_tests.cpp)
@@ -2015,11 +2093,6 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE_DIR:DKRWaterUVTests>/SDL2.dll")
         else()
             target_link_libraries(DKRWaterUVTests PRIVATE ${SDL2_LIBRARIES})
-        endif()
-        if(MSVC)
-            target_compile_options(DKRWaterUVTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRWaterUVTests PRIVATE -UNDEBUG)
         endif()
         add_test(NAME DKRWaterUV COMMAND DKRWaterUVTests)
 
@@ -2040,11 +2113,6 @@ if(BUILD_TESTING)
                     "$<TARGET_FILE_DIR:DKRHudGroupsTests>/SDL2.dll")
         else()
             target_link_libraries(DKRHudGroupsTests PRIVATE ${SDL2_LIBRARIES})
-        endif()
-        if(MSVC)
-            target_compile_options(DKRHudGroupsTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRHudGroupsTests PRIVATE -UNDEBUG)
         endif()
         add_test(NAME DKRHudGroups COMMAND DKRHudGroupsTests)
 
@@ -2069,10 +2137,7 @@ if(BUILD_TESTING)
             target_link_libraries(DKRHudEditorTests PRIVATE ${SDL2_LIBRARIES})
         endif()
         if(MSVC)
-            target_compile_options(DKRHudEditorTests PRIVATE /UNDEBUG)
             target_link_options(DKRHudEditorTests PRIVATE /STACK:262144)
-        else()
-            target_compile_options(DKRHudEditorTests PRIVATE -UNDEBUG)
         endif()
         add_test(NAME DKRHudBasicSettings COMMAND DKRHudEditorTests)
 
@@ -2162,7 +2227,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(DKRMagicCodeRuntimeTests PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
-        "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include"
+        "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
     )
     find_package(Threads REQUIRED)
     target_link_libraries(DKRMagicCodeRuntimeTests PRIVATE Threads::Threads)
@@ -2276,11 +2341,6 @@ if(BUILD_TESTING)
     )
     add_executable(DKRAudioEventQueueTests tests/audio_event_queue_tests.cpp)
     target_include_directories(DKRAudioEventQueueTests PRIVATE src/game "${DKR_RECOMP_SOURCE}/include")
-    if(MSVC)
-        target_compile_options(DKRAudioEventQueueTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRAudioEventQueueTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRAudioEventQueue COMMAND DKRAudioEventQueueTests)
     target_include_directories(DKRCustomMusicSequenceTests PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
@@ -2288,11 +2348,6 @@ if(BUILD_TESTING)
     # The cases are the addon's, so both validators read the same songs.
     target_compile_definitions(DKRCustomMusicSequenceTests PRIVATE
         DKR_MUSIC_FIXTURES="${DKRPORT_ROOT}/tools/blender/tests/fixtures")
-    if(MSVC)
-        target_compile_options(DKRCustomMusicSequenceTests PRIVATE /UNDEBUG)
-    else()
-        target_compile_options(DKRCustomMusicSequenceTests PRIVATE -UNDEBUG)
-    endif()
     add_test(NAME DKRCustomMusicSequence COMMAND DKRCustomMusicSequenceTests)
 
     add_executable(DKRCountdownTonePolicyTests
@@ -2341,11 +2396,6 @@ if(BUILD_TESTING)
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
             "${DKR_RT64_SOURCE}/src/contrib"
         )
-        if(MSVC)
-            target_compile_options(DKRCustomTracksTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRCustomTracksTests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRCustomTracks COMMAND DKRCustomTracksTests)
         add_executable(DKRCustomTracksRuntimeTests
             tests/custom_tracks_runtime_tests.cpp
@@ -2358,13 +2408,8 @@ if(BUILD_TESTING)
         target_include_directories(DKRCustomTracksRuntimeTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
             "${DKR_RT64_SOURCE}/src/contrib"
-            "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include"
+            "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
         )
-        if(MSVC)
-            target_compile_options(DKRCustomTracksRuntimeTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRCustomTracksRuntimeTests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRCustomTracksRuntime COMMAND DKRCustomTracksRuntimeTests)
         add_executable(DKRCustomTracksGuestTests
             tests/custom_tracks_guest_tests.cpp
@@ -2375,11 +2420,6 @@ if(BUILD_TESTING)
         target_include_directories(DKRCustomTracksGuestTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_RT64_SOURCE}/src/contrib"
             "${DKR_RECOMP_SOURCE}/include")
-        if(MSVC)
-            target_compile_options(DKRCustomTracksGuestTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRCustomTracksGuestTests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRCustomTracksGuest COMMAND DKRCustomTracksGuestTests)
         add_executable(DKRCustomMusicRuntimeTests
             tests/custom_music_runtime_tests.cpp
@@ -2396,11 +2436,6 @@ if(BUILD_TESTING)
             DKR_MUSIC_FIXTURES="${DKRPORT_ROOT}/tools/blender/tests/fixtures")
         find_package(Threads REQUIRED)
         target_link_libraries(DKRCustomMusicRuntimeTests PRIVATE Threads::Threads)
-        if(MSVC)
-            target_compile_options(DKRCustomMusicRuntimeTests PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(DKRCustomMusicRuntimeTests PRIVATE -UNDEBUG)
-        endif()
         add_test(NAME DKRCustomMusicRuntime COMMAND DKRCustomMusicRuntimeTests)
     endif()
     add_executable(DKRPresentationMarkerPolicyTests
@@ -2489,6 +2524,23 @@ if(BUILD_TESTING)
       )
     add_test(NAME DKRIntroTailPolicy COMMAND DKRIntroTailPolicyTests)
 
+    add_executable(DKRStartupFlowTests tests/startup_flow_tests.cpp)
+    target_include_directories(DKRStartupFlowTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    add_test(NAME DKRStartupFlow COMMAND DKRStartupFlowTests)
+    add_executable(DKRStartupFlowGuestTests tests/startup_flow_guest_tests.cpp src/game/startup_flow.cpp)
+    target_include_directories(DKRStartupFlowGuestTests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include")
+    add_test(NAME DKRStartupFlowGuest COMMAND DKRStartupFlowGuestTests)
+    # Explicit for the current tree, also compatible with main's centralized
+    # assertion policy (which covers these new targets automatically).
+    foreach(startup_test IN ITEMS DKRStartupFlowTests DKRStartupFlowGuestTests)
+        if(MSVC)
+            target_compile_options(${startup_test} PRIVATE /UNDEBUG)
+        else()
+            target_compile_options(${startup_test} PRIVATE -UNDEBUG)
+        endif()
+    endforeach()
+
     add_executable(DKRSchedulerEventPolicyTests
         tests/scheduler_event_policy_tests.cpp
     )
@@ -2544,81 +2596,13 @@ if(BUILD_TESTING)
     )
     add_test(NAME DKRInputProfile COMMAND DKRInputProfileTests)
 
-    # These executables intentionally use assert() as their zero-dependency
-    # test primitive. RelWithDebInfo normally defines NDEBUG, which used to turn
-    # every assertion into a no-op in the exact configuration shipped to users.
-    set(DKR_ASSERT_TEST_TARGETS
-        DKRExperimentalCheckpointHashTests
-        DKRNetplayCoreTests
-        DKRQuickJoinTransportTests
-        DKRRollbackDriverTests
-        DKRExperimentalRollbackTests
-        DKRExperimentalOwnerInputTests
-        DKRExperimentalTimelineTests
-        DKRExperimentalEpochTests
-        DKRExperimentalSessionTests
-        DKRExperimentalNetworkTests
-        DKRExperimentalLaunchTests
-        DKRExperimentalEepromTests
-        DKRRuntimeStateTests
-        DKRSecureChannelTests
-        DKRDatagramSocketTests
-        DKRDirectSessionTests
-        DKRNetplayInputLatencyTests
-        DKROnlineRosterPolicyTests
-        DKRReplayRecorderTests
-        DKRNetplayAdverseNetworkTests
-        DKRPresentationPolicyTests
-        DKRPresentationRandomPolicyTests
-        DKRModernCameraPolicyTests
-        DKRWidescreenPolicyTests
-        DKRHudLayoutPolicyTests
-        DKRViPresentationPolicyTests
-        DKRMagicCodePolicyTests
-        DKRMagicCodeRuntimeTests
-        DKRQuickRestartPolicyTests
-        DKRCharacterSelectAnimationPolicyTests
-        DKRCharacterSelectMusicPolicyTests
-        DKRMotionSteeringPolicyTests
-        DKRSaveManagerTests
-        DKRSaveStorageTests
-        DKRSaveCodecTests
-        DKRAudioEqualizerTests
-        DKRAudioMixPolicyTests
-        DKRCustomMusicPolicyTests
-        DKRCustomMusicDecodeTests
-        DKRCustomMusicSequenceTests
-        DKRCountdownTonePolicyTests
-        DKRRendererSnapshotTests
-        DKRPresentationIdentityTests
-        DKRInterpolationStatePolicyTests
-        DKRPresentationMarkerPolicyTests
-        DKRRiceTexturePackPolicyTests
-        DKRUiNotificationPolicyTests
-        DKRIntroTailPolicyTests
-        DKRControllerAssignmentPolicyTests
-        DKRInputBackendPolicyTests
-        DKRControllerMappingPolicyTests
-        DKRControllerDatabaseTests
-        DKRInputProfileTests
-        DKROnlineInputPolicyTests
-        DKRRomRevisionTests
-        DKRRevisionAddressesTests
-        DKRVehicleContextPolicyTests
-        DKRSteeringWheelPolicyTests
-        DKRPresentationCounterPolicyTests
-        DKRDeterminismStateHash77Tests
-        DKRDeterminismStateHash80Tests
-    )
-    if(DKR_RUNTIME_BUILD_RT64)
-        list(APPEND DKR_ASSERT_TEST_TARGETS DKRCustomTracksTests DKRCustomTracksRuntimeTests DKRCustomTracksGuestTests
-            DKRCustomMusicRuntimeTests)
-    endif()
-    foreach(DKR_ASSERT_TEST_TARGET IN LISTS DKR_ASSERT_TEST_TARGETS)
-        if(MSVC)
-            target_compile_options(${DKR_ASSERT_TEST_TARGET} PRIVATE /UNDEBUG)
-        else()
-            target_compile_options(${DKR_ASSERT_TEST_TARGET} PRIVATE -UNDEBUG)
-        endif()
-    endforeach()
+    add_test(NAME DKRTestAssertionContract
+        COMMAND "${CMAKE_COMMAND}"
+            "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/test-assertion-contract"
+            "-DTEST_GENERATOR=${CMAKE_GENERATOR}"
+            "-DTEST_C_COMPILER=${CMAKE_C_COMPILER}"
+            "-DTEST_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+            "-DTEST_CTEST_COMMAND=${CMAKE_CTEST_COMMAND}"
+            -P "${CMAKE_CURRENT_LIST_DIR}/tests/cmake/test_assertions.cmake")
+    set_tests_properties(DKRTestAssertionContract PROPERTIES TIMEOUT 120)
 endif()

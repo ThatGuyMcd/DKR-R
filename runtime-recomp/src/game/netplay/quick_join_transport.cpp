@@ -1052,7 +1052,9 @@ private:
         }
         }
         const std::weak_ptr<Peer> weak_peer(peer);
-        bound->onOpen(callbacks_.wrap([this, weak_peer, label] {
+        const auto opened = std::make_shared<std::atomic<bool>>(false);
+        const auto on_open = callbacks_.wrap([this, weak_peer, label, opened] {
+            if (opened->exchange(true)) return;
             const auto locked = weak_peer.lock();
             if (!locked || !locked->current.load(
                     std::memory_order_acquire)) return;
@@ -1068,7 +1070,8 @@ private:
                 label != "dkr-r-replica") {
                 send_bootstrap(locked->control_channel);
             }
-        }));
+        });
+        bound->onOpen(on_open);
         const std::weak_ptr<rtc::DataChannel> weak_channel(bound);
         bound->onClosed(callbacks_.wrap([this, weak_peer, weak_channel, label] {
             if (const auto locked = weak_peer.lock()) {
@@ -1159,6 +1162,9 @@ private:
                 }
                 if (receive_signal_) receive_signal_->notify();
             }));
+        // SDK open events are not replayed when callbacks are installed late.
+        // Handle an already-open accepted channel once, after wiring messages.
+        if (bound->isOpen()) on_open();
     }
 
     void send_bootstrap(const std::shared_ptr<rtc::DataChannel>& channel) {

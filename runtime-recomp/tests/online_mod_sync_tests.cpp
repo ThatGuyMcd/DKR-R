@@ -51,12 +51,12 @@ public:
         }
         hub_.packets[to].push_back({slot_,slot_?slot_:0,Bytes(data.begin(),data.end())});return true;
     }
-    bool verify_local(std::string_view digest,std::string&)override {
-        std::lock_guard lock(hub_.mutex);if(!slot_ || !hub_.offer || digest!=hub_.offer->digest)return false;
+    bool verify_local(std::string_view digest,std::string_view resources,std::string&)override {
+        std::lock_guard lock(hub_.mutex);if(!valid_digest(resources) || !slot_ || !hub_.offer || digest!=hub_.offer->digest)return false;
         hub_.verified[slot_]=true;return true;
     }
-    bool admit(std::uint64_t slot,std::string_view digest,std::string&)override {
-        std::lock_guard lock(hub_.mutex);if(slot>=4 || !hub_.verified[slot] || !hub_.offer || digest!=hub_.offer->digest)return false;
+    bool admit(std::uint64_t slot,std::string_view digest,std::string_view resources,std::string&)override {
+        std::lock_guard lock(hub_.mutex);if(!valid_digest(resources) || slot>=4 || !hub_.verified[slot] || !hub_.offer || digest!=hub_.offer->digest)return false;
         hub_.admitted[slot]=true;return true;
     }
     void reject(std::uint64_t slot,std::string_view)override{std::lock_guard lock(hub_.mutex);if(slot<4)hub_.left[slot]=true;}
@@ -95,7 +95,7 @@ int main(int argc,char** argv) {
             Hub rejected;rejected.left[1]=true;
             rejected.failure_reason[1]="Magic Codes do not match.|magic:2:0";
             Link rejected_link(rejected,1);ModSync client(rejected_link);
-            RuntimePreparation never=[](auto,std::stop_token)->std::shared_ptr<const void>{throw Error("Rejected admission must not reconstruct content.");};
+            RuntimePreparation never=[](auto,std::stop_token)->std::shared_ptr<const RuntimeResources>{throw Error("Rejected admission must not reconstruct content.");};
             check(client.watch_client({root/"rejected-cache",utf8_path(argv[2]),{utf8_path(argv[1])}},never));
             const auto failure=wait(client,SyncPhase::Failed);
             check(failure.error==rejected.failure_reason[1]);
@@ -112,7 +112,7 @@ int main(int argc,char** argv) {
             const auto imported=utf8_path(argv[1]);
             const auto revision=std::string(asset_revision(dkr::runtime::rom::inspect(imported).revision));
             check(!revision.empty());
-            RuntimePreparation proof=[&](auto profile,std::stop_token stop)->std::shared_ptr<const void>{
+            RuntimePreparation proof=[&](auto profile,std::stop_token stop)->std::shared_ptr<const RuntimeResources>{
                 return with_matching_game_pak({imported},profile->manifest.revision,stop,
                     [](const auto& path){return dkr::runtime::rom::inspect(path);},
                     [&](const auto& path){return RuntimeResources::prepare(profile,path,stop);});
@@ -165,7 +165,7 @@ int main(int argc,char** argv) {
             Hub stale;Link host_link(stale,0),client_link(stale,1);ModSync host(host_link),client(client_link);
             const auto imported=utf8_path(argv[1]);
             const auto revision=std::string(asset_revision(dkr::runtime::rom::inspect(imported).revision));
-            RuntimePreparation proof=[&](auto profile,std::stop_token stop)->std::shared_ptr<const void>{return RuntimeResources::prepare(profile,imported,stop);};
+            RuntimePreparation proof=[&](auto profile,std::stop_token stop)->std::shared_ptr<const RuntimeResources>{return RuntimeResources::prepare(profile,imported,stop);};
             check(host.prepare_host({root/"stale-host",utf8_path(argv[2]),{imported}},root/"missing-legacy",{lab},revision,true,proof));
             const auto ready=wait(host,SyncPhase::HostReady);
             {std::lock_guard lock(stale.mutex);stale.offer=SyncOffer{identity(*ready.manifest),static_cast<std::uint32_t>(encode(*ready.manifest).size())};stale.hosting=true;}

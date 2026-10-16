@@ -1,0 +1,48 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 86873e8..1635b6e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -13,6 +13,8 @@ option(NFD_INSTALL "Generate install target for nfd" ${nfd_ROOT_PROJECT})
+ set(nfd_PLATFORM Undefined)
+ if(WIN32)
+   set(nfd_PLATFORM PLATFORM_WIN32)
++elseif(IOS)
++  set(nfd_PLATFORM PLATFORM_IOS)
+ elseif(APPLE)
+   set(nfd_PLATFORM PLATFORM_MACOS)
+ elseif(UNIX AND NOT APPLE)
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index f83c583..31a2349 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -56,6 +56,13 @@ if(nfd_PLATFORM STREQUAL PLATFORM_MACOS)
+   list(APPEND SOURCE_FILES nfd_cocoa.m)
+ endif()
+ 
++if(nfd_PLATFORM STREQUAL PLATFORM_IOS)
++  if(NOT DKR_IOS_NFD_SOURCE OR NOT EXISTS "${DKR_IOS_NFD_SOURCE}")
++    message(FATAL_ERROR "iOS builds require DKR_IOS_NFD_SOURCE, an existing document picker source (runtime-recomp/src/ios/ios_file_dialog.mm).")
++  endif()
++  list(APPEND SOURCE_FILES "${DKR_IOS_NFD_SOURCE}")
++endif()
++
+ # Define the library
+ add_library(${TARGET_NAME} ${SOURCE_FILES})
+ 
+@@ -101,6 +108,16 @@ if(nfd_PLATFORM STREQUAL PLATFORM_MACOS)
+   endif()
+ endif()
+ 
++if(nfd_PLATFORM STREQUAL PLATFORM_IOS)
++  target_compile_options(${TARGET_NAME} PRIVATE -fobjc-arc)
++  find_library(UIKIT_LIBRARY UIKit)
++  find_library(NFD_IOS_UNIFORMTYPEIDENTIFIERS_LIBRARY UniformTypeIdentifiers)
++  if(NOT UIKIT_LIBRARY OR NOT NFD_IOS_UNIFORMTYPEIDENTIFIERS_LIBRARY)
++    message(FATAL_ERROR "iOS file dialog requires the UIKit and UniformTypeIdentifiers frameworks.")
++  endif()
++  target_link_libraries(${TARGET_NAME} PRIVATE ${UIKIT_LIBRARY} ${NFD_IOS_UNIFORMTYPEIDENTIFIERS_LIBRARY})
++endif()
++
+ if(nfd_COMPILER STREQUAL COMPILER_MSVC)
+   string(REPLACE "/EHsc" "/EHs-c-" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+   string(REPLACE "/GR" "/GR-" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")

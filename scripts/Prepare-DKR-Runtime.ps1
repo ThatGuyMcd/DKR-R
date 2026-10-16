@@ -343,7 +343,7 @@ try {
 
     if (-not $SkipApt) {
         Write-Host 'Ubuntu may ask for your Linux sudo password while installing the documented decomp dependencies.' -ForegroundColor Yellow
-        & wsl.exe --exec bash -lc "sudo apt-get update && sudo apt-get install -y build-essential pkg-config git python3 python3-pip binutils-mips-linux-gnu python3-venv libpcre2-dev libpcre2-8-0 cmake ninja-build clang lld"
+        & wsl.exe --exec bash -lc "sudo apt-get update && sudo apt-get install -y build-essential pkg-config git python3 python3-pip binutils-mips-linux-gnu python3-venv libpcre2-dev libpcre2-8-0 cmake ninja-build clang lld libcurl4-openssl-dev"
         if ($LASTEXITCODE -ne 0) { Fail 'WSL dependency installation failed. Rerun with -SkipApt only after installing the listed packages manually.' }
     }
 

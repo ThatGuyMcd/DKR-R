@@ -52,8 +52,13 @@ def prepare(elf,revision):
                       'expected':[hex(words[at+i*4]) for i in range(3)]})
     return {'schema':1,'revision':revision,'abi':3,'fields':fields,'functions':bodies,'hooks':hooks}
 
-if __name__=='__main__':
+def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--elf',type=Path,required=True);p.add_argument('--revision',choices=ELFS,required=True)
-    p.add_argument('--output',type=Path,required=True);a=p.parse_args()
-    with a.output.open('x',encoding='utf-8') as f:f.write(json.dumps(prepare(a.elf,a.revision),indent=2)+'\n')
+    p.add_argument('--output',type=Path,required=True);a=p.parse_args(argv)
+    payload = json.dumps(prepare(a.elf,a.revision),indent=2)+'\n'
+    with a.output.open('x',encoding='utf-8') as f:f.write(payload)
+    return 0
+
+if __name__=='__main__':
+    raise SystemExit(main())

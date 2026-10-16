@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.24)
+project(dkr-ios-host-tools LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_MSL ON CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_GLSL ON CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_CPP OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_SKIP_INSTALL ON CACHE BOOL "" FORCE)
+
+set(RT64 "${CMAKE_CURRENT_LIST_DIR}/../../../extern/rt64")
+set(SPIRV_DIR "${RT64}/src/contrib/spirv-cross")
+add_subdirectory("${SPIRV_DIR}" spirv-cross EXCLUDE_FROM_ALL)
+
+add_executable(file_to_c "${RT64}/src/tools/file_to_c/file_to_c.cpp")
+add_executable(spirv_cross_msl "${RT64}/src/tools/spirv_cross_msl/spirv_cross_msl.cpp")
+target_include_directories(spirv_cross_msl PRIVATE "${SPIRV_DIR}")
+target_link_libraries(spirv_cross_msl PRIVATE spirv-cross-msl spirv-cross-glsl spirv-cross-core)

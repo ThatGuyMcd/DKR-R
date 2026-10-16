@@ -1,4 +1,5 @@
 #include "runtime_portable.hpp"
+#include "application_layout.hpp"
 
 #include <cstdint>
 #include <cstdlib>
@@ -88,14 +89,20 @@ bool SafeExistingMarker(std::string& error) {
 } // namespace
 
 void configure(const char* executable_argument) {
+#if defined(_WIN32)
+    g_application_directory = dkr::runtime::layout::windows_application_directory(ExecutablePath(executable_argument));
+#else
     g_application_directory = ExecutablePath(executable_argument).parent_path();
+#endif
     g_marker = g_application_directory.empty() ? std::filesystem::path{} : g_application_directory / "portable.txt";
     g_enabled_at_startup = enabled();
 }
 const std::filesystem::path& application_directory() { return g_application_directory; }
 const std::filesystem::path& marker_path() { return g_marker; }
 bool supported() {
-#if defined(__ANDROID__)
+#if defined(DKR_IOS)
+    return false; // signed bundle cannot hold portable.txt
+#elif defined(__ANDROID__)
     return false;
 #else
     return !g_marker.empty();

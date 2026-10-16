@@ -89,7 +89,7 @@ unsigned run(Fixture& f, unsigned s, unsigned frame, bool fast, bool seams, bool
     if(record) f.state->flush();
     return skipped;
 }
-void interpolate(Fixture& current, Fixture& previous, std::uint8_t tag=0U) {
+void interpolate(Fixture& current, Fixture& previous, std::uint8_t tag=G_EX_COMPONENT_INTERPOLATE) {
     for(auto* fixture : {&current,&previous}) {
         auto& d=fixture->draw();
         d.worldTransforms={hlslpp::float4x4::identity()};
@@ -98,7 +98,7 @@ void interpolate(Fixture& current, Fixture& previous, std::uint8_t tag=0U) {
         auto& group=d.transformGroups[0];
         group.decompose=false;
         group.vertexInterpolation=G_EX_COMPONENT_INTERPOLATE;
-        group.texcoordInterpolation=tag ? tag : G_EX_COMPONENT_INTERPOLATE;
+        group.texcoordInterpolation=tag;
         fixture->queue->workloads[fixture->queue->writeCursor].extended.texcoordWrapPoint={8092.F,8092.F};
     }
     RT64::GameFrame frame;
@@ -229,6 +229,25 @@ int main() {
             rsp.matrixId(123,false,false,false,1,1,0,0,1,1,tag,1,0,1,0,0,false,false);
             assert(rsp.extended.modelMatrixIdStack[rsp.extended.modelMatrixIdStackSize-1].texcoordInterpolation==tag);
         }
+
+    // Exercise the actual presentation matcher, not just the wrap helper.
+    // A qualified waterfall may interpolate inside a group whose other UVs
+    // explicitly remain skipped; texture changes must not reuse that period.
+    for(float period:{4.F,32.F,64.F,128.F}) {
+        run(previous_candidate,2,0,true,false,false);
+        run(candidate,2,1,true,false,false);
+        auto& before=previous_candidate.draw();auto& after=candidate.draw();
+        before.waterfallPeriods[0]={period,period};after.waterfallPeriods[0]={period,period};
+        before.tcFloats[0]=period-0.25F;after.tcFloats[0]=0.25F;
+        before.tcFloats[1]=0.25F;after.tcFloats[1]=period-0.25F;
+        const auto authored=after.tcFloats;
+        interpolate(candidate,previous_candidate,G_EX_COMPONENT_SKIP);
+        assert(after.tcFloats==authored && after.tcVelFloats[0]==0.5F && after.tcVelFloats[1]==-0.5F);
+        assert(after.tcVelFloats[2]==4.F && after.tcVelFloats[3]==5.F);
+        before.waterfallPeriods[0]={period*2,period};after.tcVelFloats[0]=4.F;after.tcVelFloats[1]=5.F;
+        interpolate(candidate,previous_candidate,G_EX_COMPONENT_SKIP);
+        assert(after.tcVelFloats[0]==4.F && after.tcVelFloats[1]==5.F);
+    }
 
     for(unsigned s:{2U,3U,4U,6U}) {
         run(baseline,s,0,false,false,false);run(candidate,s,0,true,false,false);

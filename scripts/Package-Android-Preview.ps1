@@ -4,10 +4,19 @@ param(
     [Parameter(Mandatory)][string]$NdkDirectory,
     [Parameter(Mandatory)][string]$StageDirectory,
     [Parameter(Mandatory)][string]$Gradle,
-    [Parameter(Mandatory)][string]$OutputDirectory
+    [Parameter(Mandatory)][string]$OutputDirectory,
+    [string]$Version = '',
+    [int]$VersionCode = 0,
+    [string]$CustomMagicCodeExample = '',
+    [string]$CustomMagicCodeDifficultyExample = '',
+    [switch]$ReleaseBuild
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
+if ([string]::IsNullOrWhiteSpace($Version)) { $Version = (Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() }
+if ($Version -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?$') { throw 'Invalid APK version.' }
+if ($VersionCode -lt 0) { throw 'Invalid APK version code.' }
+if (-not (Select-String -LiteralPath (Join-Path $BuildDirectory 'CMakeCache.txt') -SimpleMatch "DKR_RELEASE_VERSION:STRING=$Version" -Quiet)) { throw 'Native build version does not match the requested APK version.' }
 if (Select-String -LiteralPath (Join-Path $BuildDirectory 'CMakeCache.txt') -Pattern '^DKR_ANDROID_RENDER_QUALIFICATION:BOOL=(ON|1|TRUE|YES)$' -Quiet) {
     throw 'Refusing to package private desktop renderer qualification.'
 }
@@ -31,6 +40,11 @@ $assets = Join-Path $StageDirectory 'assets'
 $strip = Join-Path $NdkDirectory 'toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-strip.exe'
 $readelf = Join-Path $NdkDirectory 'toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-readelf.exe'
 New-Item -ItemType Directory -Force $native, $assets, $OutputDirectory | Out-Null
+$codeSdkArguments = @('--output', (Join-Path $assets 'Custom-Magic-Codes'))
+if ($CustomMagicCodeExample) { $codeSdkArguments += @('--example', $CustomMagicCodeExample) }
+if ($CustomMagicCodeDifficultyExample) { $codeSdkArguments += @('--difficulty-example', $CustomMagicCodeDifficultyExample) }
+& python (Join-Path $PSScriptRoot 'stage_magic_code_sdk.py') @codeSdkArguments
+if ($LASTEXITCODE -ne 0) { throw 'Custom Magic Codes SDK staging failed.' }
 $libraries = @(
     (Join-Path $BuildDirectory 'libDKR-R.so'),
     (Join-Path $BuildDirectory 'sdl2/libSDL2.so'),
@@ -57,7 +71,19 @@ if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() -e
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/PUBLIC-1.0.5-NOTES.txt') -Destination $notices
     Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/RELEASE-README.md') -Destination (Join-Path $notices 'README.md')
 }
-if (Test-Path -LiteralPath (Join-Path $projectRoot 'docs/ENHANCED-WATER-BETA15.txt')) {
+if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() -eq '1.0.6') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/PUBLIC-1.0.6-NOTES.txt') -Destination $notices
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/RELEASE-README.md') -Destination (Join-Path $notices 'README.md')
+}
+if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() -eq '1.0.7') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/PUBLIC-1.0.7-NOTES.txt') -Destination $notices
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/RELEASE-README.md') -Destination (Join-Path $notices 'README.md')
+}
+if ($Version -eq '1.0.7+beta.2') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BETA2-1.0.7.txt') -Destination (Join-Path $notices 'RELEASE-NOTES.txt')
+}
+if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim().StartsWith('1.0.5-beta.15') -and
+    (Test-Path -LiteralPath (Join-Path $projectRoot 'docs/ENHANCED-WATER-BETA15.txt'))) {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/ENHANCED-WATER-BETA15.txt') -Destination $notices
 }
 if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() -eq '1.0.5-beta.15') {
@@ -69,6 +95,7 @@ if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() -e
     }
 }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/licenses') -Destination (Join-Path $notices 'licenses') -Recurse
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/UPDATES.md') -Destination $notices
 Copy-Item -LiteralPath (Join-Path $SdlSource 'LICENSE.txt') -Destination (Join-Path $notices 'SDL2-LICENSE.txt')
 foreach ($entry in @(
     @('patches/enhanced-water/LICENSE-WAVE-RACE.txt','WAVE-RACE-WATER-LICENSE.txt'),
@@ -95,10 +122,14 @@ foreach ($file in Get-ChildItem -LiteralPath $StageDirectory -Recurse -File) {
 # Incremental APK assembly can retain the previous compressed native-library
 # entry as unused ZIP space. Clean only Gradle's app outputs before distribution;
 # staged inputs, native build products, signing identity and user data are kept.
-& $Gradle -p (Join-Path $projectRoot 'packaging/android') "-PdkrSdlSource=$SdlSource" "-PdkrNativeStage=$StageDirectory" :app:clean :app:assembleDebug --no-daemon
+$variant = if ($ReleaseBuild) { 'release' } else { 'debug' }
+$assembleTask = if ($ReleaseBuild) { ':app:assembleRelease' } else { ':app:assembleDebug' }
+$versionArguments = @("-PdkrVersionName=$Version")
+if ($VersionCode -gt 0) { $versionArguments += "-PdkrVersionCode=$VersionCode" }
+& $Gradle -p (Join-Path $projectRoot 'packaging/android') "-PdkrSdlSource=$SdlSource" "-PdkrNativeStage=$StageDirectory" @versionArguments :app:clean $assembleTask --no-daemon
 if ($LASTEXITCODE -ne 0) { throw 'Android APK assembly failed.' }
-$version = (Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim()
-$output = Join-Path $OutputDirectory "DKR-R-$version-Android-arm64-preview.apk"
+$suffix = if ($ReleaseBuild) { '' } else { '-preview' }
+$output = Join-Path $OutputDirectory "DKR-R-$version-Android-arm64$suffix.apk"
 if (Test-Path -LiteralPath $output) { throw 'Refusing to replace an existing APK.' }
-Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/android/app/build/outputs/apk/debug/app-debug.apk') -Destination $output
+Copy-Item -LiteralPath (Join-Path $projectRoot "packaging/android/app/build/outputs/apk/$variant/app-$variant.apk") -Destination $output
 Get-FileHash -LiteralPath $output -Algorithm SHA256

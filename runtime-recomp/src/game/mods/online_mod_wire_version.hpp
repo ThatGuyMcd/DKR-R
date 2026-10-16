@@ -2,7 +2,8 @@
 #include <cstdint>
 
 namespace dkr::mods::online {
-// Rolling credits require a matching sender and receiver. Also included in
-// lobby admission identity so old Beta 15 peers are rejected before transfer.
-inline constexpr std::uint8_t WireVersion=2;
+// v3 binds the prepared runtime-resource identity into the Verified proof.
+// Included in lobby identity so older peers are rejected before transfer.
+// v4 adds explicitly consented executable packages and frozen code config.
+inline constexpr std::uint8_t WireVersion=4;
 }

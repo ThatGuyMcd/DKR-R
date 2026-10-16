@@ -5,8 +5,11 @@ param(
     [string]$Configuration = 'Release',
     [string]$BuildDirectory = 'build\dkr-runtime-rt64',
     [string]$OutputDirectory = '',
-    # For explicitly deferred beta qualification only; release checks remain on by default.
-    [switch]$SkipRuntimeTests
+    [string]$CustomMagicCodeExample = '',
+    [string]$CustomMagicCodeDifficultyExample = '',
+    # Runtime checks stay on by default. Deferral requires an explicit second switch.
+    [switch]$SkipRuntimeTests,
+    [switch]$DeferRuntimeTestsToUser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,17 +68,20 @@ if (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) {
     }
 }
 $zip = "$stage.zip"
-if ($Version -eq '1.0.5' -and $SkipRuntimeTests) {
-    throw 'Public release packaging requires all runtime checks; SkipRuntimeTests is beta-only.'
+if ($Version -match '^\d+\.\d+\.\d+$' -and $SkipRuntimeTests -and -not $DeferRuntimeTestsToUser) {
+    throw 'Public release packaging requires runtime checks unless DeferRuntimeTestsToUser is explicitly set.'
+}
+if ($SkipRuntimeTests -and $DeferRuntimeTestsToUser) {
+    Write-Host 'Packaging only: runtime and gameplay testing are deferred to the maintainer.'
 }
 $deniedExtensions = @('.z64', '.v64', '.n64', '.eep', '.mpk', '.sra', '.fla', '.o2r', '.otr', '.dkr-probe', '.dkr-bootstrap', '.dkr-component')
-$runtimeFiles = @('DKR-R.exe', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll')
+$runtimeFiles = @('DKR-R.exe')
 $experimentalRaceTest = (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt')) -and
     (Select-String -LiteralPath (Join-Path $resolvedBuild 'CMakeCache.txt') -Pattern '^DKR_EXPERIMENTAL_RACE_TEST:BOOL=(ON|1|TRUE|YES)$' -Quiet)
-if ($experimentalRaceTest -and $Version -ne '1.0.5') {
+if ($experimentalRaceTest -and $Version -notin @('1.0.5','1.0.6','1.0.7','1.0.7+beta.2')) {
     if ($Version -notmatch 'experimental|rollback-test|^1\.0\.5-beta\.15(?:-playtest\.(?:[23456789]|10|11|12|14|15(?:-fix\.[12])?|16(?:-fix\.[12])?))?$') { throw 'Experimental backend builds must use a distinctly labelled experimental version or an approved Beta 15 playtest candidate.' }
 }
-$inputHostFiles = @('DKR-R-InputHost.exe', 'SDL3.dll', 'DKR-R-ModWorker.exe')
+$inputHostFiles = @('DKR-R-Runtime.exe', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll', 'DKR-R-InputHost.exe', 'SDL3.dll', 'DKR-R-ModWorker.exe', 'DKR-R-Updater.exe')
 
 if (Test-Path -LiteralPath $stage) {
     throw "Refusing to overwrite existing release directory: $stage"
@@ -85,16 +91,19 @@ if (Test-Path -LiteralPath $zip) {
 }
 
 $bin = Join-Path $resolvedBuild "bin\$Configuration"
-if (Test-Path -LiteralPath (Join-Path $bin 'DKR-R.exe')) {
-    $releaseVersionInfo = (Get-Item -LiteralPath (Join-Path $bin 'DKR-R.exe')).VersionInfo
+foreach ($releaseImageName in @('DKR-R.exe','libexec/dkr-r/DKR-R-Runtime.exe')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $bin $releaseImageName))) { throw "Missing release image: $releaseImageName" }
+    $releaseVersionInfo = (Get-Item -LiteralPath (Join-Path $bin $releaseImageName)).VersionInfo
     if ($releaseVersionInfo.FileVersion -ne $Version -or $releaseVersionInfo.ProductVersion -ne $Version) {
         throw "The release executable's public version metadata does not match '$Version'. Reconfigure and rebuild before packaging."
     }
-    $imageText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $bin 'DKR-R.exe')))
-    if (-not $imageText.Contains($Version)) {
+    $imageText = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes((Join-Path $bin $releaseImageName)))
+    # The thin bootstrap stores its version in the already-checked UTF-16 PE
+    # resource. The runtime also carries its ASCII log/UI version literal.
+    if ($releaseImageName -like '*DKR-R-Runtime.exe' -and -not $imageText.Contains($Version)) {
         throw "The release executable does not contain the requested version '$Version'. Reconfigure and rebuild before packaging."
     }
-    if ($imageText.Contains('DKR_REPLAY_CAPTURE_FILE')) {
+    if ($imageText.Contains('DKR_REPLAY_CAPTURE_FILE') -or $imageText.Contains('DKR_UPDATE_TEST_VERIFIER')) {
         throw 'Release executable still contains private replay fixture capture.'
     }
     if ($imageText.Contains('DKR_WATER_TEST_MAP') -or $imageText.Contains('[perf][private-water-preview]')) {
@@ -118,6 +127,11 @@ foreach ($name in $inputHostFiles) {
 
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $stage | Out-Null
+$codeSdkArguments = @('--output', (Join-Path $stage 'Custom-Magic-Codes'))
+if ($CustomMagicCodeExample) { $codeSdkArguments += @('--example', $CustomMagicCodeExample) }
+if ($CustomMagicCodeDifficultyExample) { $codeSdkArguments += @('--difficulty-example', $CustomMagicCodeDifficultyExample) }
+& python (Join-Path $PSScriptRoot 'stage_magic_code_sdk.py') @codeSdkArguments
+if ($LASTEXITCODE -ne 0) { throw 'Custom Magic Codes SDK staging failed.' }
 foreach ($name in $runtimeFiles) {
     Copy-Item -LiteralPath (Join-Path $bin $name) -Destination (Join-Path $stage $name)
 }
@@ -132,11 +146,20 @@ $stagedInputHost = Join-Path $stagedInputHostDirectory 'DKR-R-InputHost.exe'
 if ($Version -eq '1.0.5') {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PUBLIC-1.0.5-NOTES.txt') -Destination (Join-Path $stage 'RELEASE-NOTES.txt')
 }
+if ($Version -eq '1.0.6') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PUBLIC-1.0.6-NOTES.txt') -Destination (Join-Path $stage 'RELEASE-NOTES.txt')
+}
+if ($Version -eq '1.0.7') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\PUBLIC-1.0.7-NOTES.txt') -Destination (Join-Path $stage 'RELEASE-NOTES.txt')
+}
+if ($Version -eq '1.0.7+beta.2') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA2-1.0.7.txt') -Destination (Join-Path $stage 'RELEASE-NOTES.txt')
+}
 if ($Version -eq '1.0.5-beta.15') {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-RELEASE.txt') -Destination (Join-Path $stage 'BETA15-NOTES.txt')
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\BETA15-ONLINE-STABILITY-20261007.txt') -Destination (Join-Path $stage 'ONLINE-STABILITY-CORRECTION.txt')
 }
-if ($experimentalRaceTest -and $Version -ne '1.0.5') {
+if ($experimentalRaceTest -and $Version -notin @('1.0.5','1.0.6','1.0.7','1.0.7+beta.2')) {
     # Current playtests have their own connection/scope guides. The older file
     # describes Playtest 2 and must not label this candidate as that release.
     if ($Version -notin @('1.0.5-beta.15', '1.0.5-beta.15-playtest.8', '1.0.5-beta.15-playtest.9', '1.0.5-beta.15-playtest.10', '1.0.5-beta.15-playtest.11', '1.0.5-beta.15-playtest.12', '1.0.5-beta.15-playtest.14', '1.0.5-beta.15-playtest.15', '1.0.5-beta.15-playtest.15-fix.1', '1.0.5-beta.15-playtest.15-fix.2', '1.0.5-beta.15-playtest.16', '1.0.5-beta.15-playtest.16-fix.1', '1.0.5-beta.15-playtest.16-fix.2')) {
@@ -204,6 +227,8 @@ $backgroundDirectory = Join-Path $stage 'assets\ui\Backgrounds'
 New-Item -ItemType Directory -Path $backgroundDirectory -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\ui\Backgrounds\DKR-R-Launcher-Background.png') `
     -Destination (Join-Path $backgroundDirectory 'DKR-R-Launcher-Background.png')
+$customBackgroundDirectory = Join-Path $stage 'assets\ui\CustomTrackBackgrounds'
+Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\ui\CustomTrackBackgrounds') -Destination $customBackgroundDirectory -Recurse
 $filterDirectory = Join-Path $stage 'assets\filters'
 New-Item -ItemType Directory -Path $filterDirectory -Force | Out-Null
 Copy-Item -Path (Join-Path $projectRoot 'assets\filters\*.png') `
@@ -214,6 +239,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'assets\controllers\gamecontrolle
     -Destination (Join-Path $controllerDirectory 'gamecontrollerdb.txt')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging\RELEASE-README.md') -Destination (Join-Path $stage 'README.md')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\ONLINE_MULTIPLAYER.md') -Destination (Join-Path $stage 'ONLINE_MULTIPLAYER.md')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\UPDATES.md') -Destination (Join-Path $stage 'UPDATES.md')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\ONLINE-STABILITY.md') -Destination (Join-Path $stage 'ONLINE-STABILITY.md')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\HUD-WORKSHOP.md') -Destination (Join-Path $stage 'HUD-WORKSHOP.md')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\LEGACY-MODS-BETA.md') -Destination (Join-Path $stage 'LEGACY-MODS-BETA.md')
@@ -369,18 +395,31 @@ try {
     Write-Warning 'Runtime tests explicitly deferred. This package still requires runtime qualification.'
 }
 
+# The bootstrap's shared installation lock is runtime state, never package data.
+$packagingUpdateLock = Join-Path $stage '.dkr-update-lock'
+if (Test-Path -LiteralPath $packagingUpdateLock -PathType Leaf) {
+    Remove-Item -LiteralPath $packagingUpdateLock
+}
+& python (Join-Path $projectRoot 'scripts/update_release.py') prepare-tree --directory $stage --version $Version --platform windows-x64
+if ($LASTEXITCODE -ne 0) { throw 'Updater ownership receipt could not be prepared.' }
 $packagedFiles = Get-ChildItem -LiteralPath $stage -Recurse -File
 $executables = @($packagedFiles | Where-Object { $_.Extension -ieq '.exe' })
 $expectedExecutables = @(
     [IO.Path]::GetFullPath($stagedRuntime),
+    [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-Runtime.exe')),
     [IO.Path]::GetFullPath($stagedInputHost),
-    [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-ModWorker.exe'))
+    [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-ModWorker.exe')),
+    [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-Updater.exe'))
 )
 $unexpectedExecutables = @($executables | Where-Object {
     $expectedExecutables -notcontains [IO.Path]::GetFullPath($_.FullName)
 })
 if ($executables.Count -ne $expectedExecutables.Count -or $unexpectedExecutables.Count -ne 0) {
-    throw "The Windows release must contain one public DKR-R.exe and the two private libexec helpers (input and mod importer). Found: $($executables.FullName -join ', ')"
+    throw "The Windows release must contain the public launcher, runtime, and three approved private helpers (input, mod importer, updater). Found: $($executables.FullName -join ', ')"
+}
+$publicExecutables = @(Get-ChildItem -LiteralPath $stage -File -Filter '*.exe')
+if ($publicExecutables.Count -ne 1 -or $publicExecutables[0].Name -ne 'DKR-R.exe') {
+    throw 'Only DKR-R.exe may be presented as an executable at the release root.'
 }
 $denied = @($packagedFiles | Where-Object { $deniedExtensions -contains $_.Extension.ToLowerInvariant() })
 if ($denied.Count -ne 0) {

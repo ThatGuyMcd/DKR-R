@@ -42,7 +42,9 @@ namespace dkr::runtime::netplay {
 // consent-based, provisional mod admission. Older clients cannot skip it.
 // v49 expands private character sound tokens and versions sparse mod sidecars.
 // An older peer must never interpret these tokens/checkpoints as its roster.
-inline constexpr std::uint32_t kProtocolVersion = 49U;
+// v50 checks the replay engine and prepared resources before lobby admission,
+// and carries named startup contract components instead of an opaque digest.
+inline constexpr std::uint32_t kProtocolVersion = 50U;
 inline constexpr std::uint8_t kMaximumInputDelayFrames = 9U;
 inline constexpr std::size_t kMaximumPlayers = 4U;
 // Regular races/minigames support 2-4 peers. Adventure remains two-player.
@@ -125,6 +127,8 @@ struct CompatibilityManifest {
     // Empty for vanilla sessions; otherwise lowercase SHA-256 of the exact
     // canonical online mod manifest. Cosmetics are intentionally excluded.
     std::string mod_manifest_hash;
+    std::string owned_engine_hash;
+    std::string owned_resources_hash;
 
     bool operator==(const CompatibilityManifest&) const = default;
 };
@@ -234,11 +238,11 @@ struct OnlineFailure {
 };
 
 std::string incompatibility_reason(const CompatibilityManifest& expected,
-                                   const CompatibilityManifest& candidate);
+                                   const CompatibilityManifest& candidate,bool owned=false);
 // Eligibility only: neither manifest is modified. Actual save installation
 // and consent-based mod reconstruction remain mandatory before admission.
 std::string session_content_sync_incompatibility(const CompatibilityManifest& expected,
-    const CompatibilityManifest& candidate,bool host_offers_mods);
+    const CompatibilityManifest& candidate,bool host_offers_mods,bool owned=false);
 OnlineFailure classify_online_failure(std::string_view message);
 std::string online_failure_display_message(std::string_view message);
 

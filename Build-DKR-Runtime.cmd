@@ -13,5 +13,5 @@ if not "%exitCode%"=="0" (
     echo.
     echo [OK] The DKR ELF, generated CPU code and runtime probe were prepared.
 )
-pause
+if not "%DKRPORT_NO_PAUSE%"=="1" pause
 exit /b %exitCode%

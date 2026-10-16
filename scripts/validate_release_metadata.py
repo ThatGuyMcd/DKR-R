@@ -18,7 +18,7 @@ def fail(message: str) -> None:
 def main() -> int:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     if not re.fullmatch(
-        r"\d+\.\d+\.\d+(?:-beta\.[1-9]\d*(?:-playtest\.[1-9]\d*(?:-fix\.[1-9]\d*)?)?)?",
+        r"\d+\.\d+\.\d+(?:-beta\.[1-9]\d*(?:-playtest\.[1-9]\d*(?:-fix\.[1-9]\d*)?)?|\+beta\.[1-9]\d*)?",
         version,
     ):
         fail(f"VERSION is not a supported release/beta semantic version: {version!r}")
@@ -33,21 +33,13 @@ def main() -> int:
     manifest = json.loads((ROOT / "patches/manifest.json").read_text(encoding="utf-8"))
     locked = {item["name"].lower(): item["commit"].lower()
               for item in lock["dependencies"]}
-    aliases = {
-        "n64modernruntime": "n64-modern-runtime",
-        "n64recomp": "n64recomp",
-        "rt64": "rt64",
-        "hlslpp": "hlslpp",
-        "usrsctp": "usrsctp",
-        "gekkonet": "gekkonet",
-        "monocypher": "monocypher",
-        "libdatachannel": "libdatachannel",
-        "mbedtls": "mbedtls",
-        "sdl3": "sdl3",
-    }
+    aliases = {"n64modernruntime": "n64-modern-runtime"}
     checked = 0
     for dependency in manifest["dependencies"]:
-        key = aliases[dependency["name"].lower()]
+        name = dependency["name"].lower()
+        key = aliases.get(name, name)
+        if key not in locked:
+            fail(f"Patched dependency is missing from lockfile: {dependency['name']}")
         if locked[key] != dependency["expectedCommit"].lower():
             fail(f"Pinned commit mismatch for {dependency['name']}")
         for entry in dependency["patches"]:
@@ -63,8 +55,12 @@ def main() -> int:
         r"\bmilestone\b|\brelease candidate\b|\brc\d+\b",
         re.IGNORECASE,
     )
-    for path in [ROOT / "README.md", ROOT / "THIRD_PARTY.md", *sorted((ROOT / "docs").glob("*.md")),
-                 *sorted((ROOT / "packaging").glob("*.md"))]:
+    # Historical engineering notes may describe earlier release stages. Only
+    # current release-facing documents must avoid stale release wording.
+    for relative in ("README.md", "THIRD_PARTY.md", "docs/README.md",
+                     "docs/BUILDING.md", "docs/PLATFORMS.md",
+                     "packaging/RELEASE-README.md", "packaging/MACOS-BUILD-README.md"):
+        path = ROOT / relative
         match = forbidden.search(path.read_text(encoding="utf-8"))
         if match:
             fail(f"Historical release wording in {path.relative_to(ROOT)}: {match.group(0)}")

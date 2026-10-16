@@ -9,6 +9,7 @@
 #include "legacy_mod_launch.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 
@@ -58,6 +59,7 @@ Bytes model(const std::vector<std::int32_t>& ids) {
     Bytes body(prefix, 0);
     put32(body, 0, table);
     body[0x19] = static_cast<std::uint8_t>(ids.size());
+    put32(body,0x20,tracks::kCustomSpriteIdBase); // Track-local minimap sprite 0.
     for(std::size_t i = 0; i < ids.size(); ++i) {
         put32(body, table + i * 8U, static_cast<std::uint32_t>(ids[i]));
         body[table + i * 8U + 4] = 16; body[table + i * 8U + 5] = 16; body[table + i * 8U + 6] = 0x11;
@@ -85,8 +87,6 @@ void write_track(const std::filesystem::path& root, const AuthoredTrack& track) 
         write(folder / file, track.textures[j]);
         ids.push_back(tracks::kCustomTextureIdBase + static_cast<std::int32_t>(j));
     }
-    write(folder / "manifest.json", "{\"schemaVersion\":1,\"id\":\"" + track.id + "\",\"name\":\"" +
-                                        track.id + "\",\"adds\":[" + adds + "]}");
     // A header keeps pointing at retail object maps (73 and 5) when the track
     // ships none; 0 would be another level's objects.
     Bytes header(200, 0);
@@ -94,6 +94,13 @@ void write_track(const std::filesystem::path& root, const AuthoredTrack& track) 
     header[0xBB] = 5;
     write(folder / "h.bin", header);
     write(folder / "m.bin", model(ids));
+    Bytes sprite(16,0);sprite[0]=0x70;sprite[3]=1;sprite[13]=1;
+    write(folder / "minimap.bin", texture(16,16,'m'));
+    write(folder / "sprite.bin", sprite);
+    adds+=",{\"section\":\"TEXTURES_2D\",\"file\":\"minimap.bin\"},"
+          "{\"section\":\"SPRITES\",\"file\":\"sprite.bin\"}";
+    write(folder / "manifest.json", "{\"schemaVersion\":1,\"id\":\"" + track.id + "\",\"name\":\"" +
+                                        track.id + "\",\"adds\":[" + adds + "]}");
 }
 
 std::vector<std::int32_t> table_of(const AssetDirectory& directory, unsigned section) {
@@ -111,7 +118,7 @@ std::vector<std::int32_t> table_of(const AssetDirectory& directory, unsigned sec
 void require_models_resolve(const std::shared_ptr<const AssetBank>& boot,
                             const std::vector<AuthoredTrack>& authored, std::size_t base) {
     const auto retail = table_of(*AssetDirectory::build(boot), 26);
-    const auto extended = tracks::build_extended_table(tracks::Section::LevelModels, retail.data());
+    const auto extended = tracks::build_extended_table(tracks::Section::LevelModels, retail.data(),retail.size());
     const auto models = retail.size() - 2;
     require(extended.size() == retail.size() + authored.size(), "Each authored track did not add one model.");
     std::size_t matched = 0;
@@ -120,6 +127,12 @@ void require_models_resolve(const std::shared_ptr<const AssetBank>& boot,
         const auto served = tracks::payload_for(tracks::Section::LevelModels, extended[index], size);
         require(served != nullptr, "An authored model is not served.");
         const View body(served + 10, static_cast<std::size_t>(size) - 10);
+        const auto sprite=be32(body,0x20);
+        require(sprite>=boot->record_count(12)-authored.size() && sprite<boot->record_count(12),
+                "An authored model lost its minimap sprite.");
+        const auto texture=be16(boot->record(12,sprite),0);
+        require(texture>=boot->record_count(4)-authored.size() && texture<boot->record_count(4),
+                "A minimap sprite lost its boot-owned 2D texture.");
         const auto count = be16(body, 0x18);
         const auto* owner = [&]() -> const AuthoredTrack* {
             for(const auto& track : authored) if(track.textures.size() == count) return &track;
@@ -140,16 +153,45 @@ void require_models_resolve(const std::shared_ptr<const AssetBank>& boot,
 void unit() {
     rejects([] {publish_dkrmap_artwork(nullptr);}, "Artwork was published without a boot bank.");
     rejects([] {AssetBank::append_textures(nullptr, {});}, "Artwork was appended to no bank.");
+    rejects([] {AssetBank::append_artwork(nullptr, {});}, "Minimaps were appended to no bank.");
 }
+
+void guest_word(Bytes& memory,std::uint32_t address,std::uint32_t value) {
+    const auto at=address&0x1fffffffU;
+    for(unsigned i=0;i<4;++i)memory.at((at+i)^3)=static_cast<std::uint8_t>(value>>(24-i*8));
+}
+struct ResidentFixture {
+    Bytes memory=Bytes(8*MiB);
+    ResidentAssetLayout layout;
+    explicit ResidentFixture(const AssetBank& bank,const ResidentBank& resident):layout(resident_asset_layout(bank.revision())) {
+        for(unsigned i=0;i<resident.tables().size();++i) {
+            const auto address=0x80200000U+i*0x10000U;
+            const auto& bytes=resident.tables()[i];require(bytes.size()<0x10000,"Fixture tables overlap.");
+            guest_word(memory,layout.table_pointers[i],address);
+            for(unsigned j=0;j<bytes.size();++j)memory.at(((address&0x1fffffffU)+j)^3)=bytes[j];
+        }
+        for(unsigned i=0;i<3;++i) {
+            guest_word(memory,layout.caches[i].count_address,0);
+            guest_word(memory,layout.caches[i].pointer_address,0x80400000U+i*0x10000U);
+        }
+    }
+    void live(unsigned kind,unsigned id) {
+        const auto cache=0x80400000U+kind*0x10000U;
+        guest_word(memory,layout.caches[kind].count_address,1);
+        guest_word(memory,cache,id);guest_word(memory,cache+4,0x80500000U+kind*0x10000U);
+        guest_word(memory,0x80500000U+kind*0x10000U,0x12345678);
+    }
+};
 
 void corpus(const std::filesystem::path& rom) {
     const auto stock = AssetBank::stock(read_file(rom, MaxImage));
-    const auto n2 = stock->record_count(2), n29 = stock->record_count(29), n32 = stock->record_count(32);
+    const auto n2 = stock->record_count(2), n4=stock->record_count(4), n12=stock->record_count(12),
+        n29 = stock->record_count(29), n32 = stock->record_count(32);
     // custom_tracks keeps its state files beside the scanned folder, so the
     // folder is nested to keep them inside this test's own directory.
-    const auto sandbox = std::filesystem::temp_directory_path() / "dkr-dkrmap-artwork-tests";
+    const auto sandbox = std::filesystem::temp_directory_path() /
+        ("dkr-dkrmap-artwork-tests-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto root = sandbox / "custom-tracks";
-    std::filesystem::remove_all(sandbox);
     std::filesystem::create_directories(root);
 
     // Nothing authored: the stock boot path stays the untouched cartridge.
@@ -169,8 +211,11 @@ void corpus(const std::filesystem::path& rom) {
     // A character namespace owning one texture and one model, built the way
     // allocate_characters' additions are.
     const auto character_texture = texture(16, 16, 'k');
-    const AssetBank::Overrides additions{{{2, static_cast<unsigned>(n2)}, character_texture},
+    AssetBank::Overrides additions{{{2, static_cast<unsigned>(n2)}, character_texture},
                                          {{29, static_cast<unsigned>(n29)}, Bytes(64, 0x5A)}};
+    // A large portrait/frame namespace, matching the failure class from the
+    // 42-character report. Its sentinel is beyond the old 4096-word bound.
+    for(unsigned i=0;i<4200;++i)additions.emplace(AssetKey{4,static_cast<unsigned>(n4)+i},character_texture);
     const auto original_ids = stock->stock_section(30);
     Bytes ids(original_ids.begin(), original_ids.begin() + (n29 + 1) * 2);
     ids.push_back(static_cast<std::uint8_t>(n32 >> 8));
@@ -180,15 +225,16 @@ void corpus(const std::filesystem::path& rom) {
 
     // Characters first, dkrmap artwork after them, in custom_tracks' order.
     const auto artwork = publish_dkrmap_artwork(characters);
-    require(artwork.size() == 3, "Not every authored texture was published.");
-    const auto boot = AssetBank::append_textures(characters, artwork);
-    require(boot->augmented() && boot->record_count(2) == n2 + 1 + artwork.size(), "Boot artwork count is wrong.");
+    require(artwork.size() == 7, "Not every authored texture/minimap was published.");
+    const auto boot = AssetBank::append_artwork(characters, artwork);
+    require(boot->augmented() && boot->record_count(2) == n2 + 4, "Boot artwork count is wrong.");
+    require(boot->record_count(4)==n4+4202 && boot->record_count(12)==n12+2,"Minimap namespace was not boot-owned.");
     require(std::ranges::equal(boot->record(2, static_cast<unsigned>(n2)), character_texture),
             "dkrmap artwork displaced a character texture.");
     require(boot->record_count(29) == n29 + 1 && boot->record(29, static_cast<unsigned>(n29)).size() == 64,
             "dkrmap artwork dropped a character model.");
-    for(std::size_t j = 0; j < artwork.size(); ++j)
-        require(std::ranges::equal(boot->record(2, static_cast<unsigned>(n2 + 1 + j)), artwork[j]),
+    for(const auto& [key,bytes]:artwork)
+        require(std::ranges::equal(boot->record(key.first,key.second), bytes),
                 "Boot bank artwork is out of order.");
     // The models resolve against the final bank too, not just the table.
     require_models_resolve(boot, authored, n2 + 1);
@@ -203,8 +249,11 @@ void corpus(const std::filesystem::path& rom) {
     // Every scene carries the same artwork at the same IDs.
     AssetBus bus;
     require(bool(ResidentBank::prepare(boot, boot, bus)->route()), "The artwork boot bank does not route.");
-    const auto course = AssetBank::derive(stock, std::string(64, 'a'), {{{27, 5}, Bytes{1, 2, 3}}});
-    const auto scene = AssetBank::append_textures(AssetBank::augment(course, additions, ids), artwork);
+    auto changed2D=Bytes(stock->record(4,0).begin(),stock->record(4,0).end());changed2D.resize(changed2D.size()+16);
+    auto changedSprite=Bytes(stock->record(12,0).begin(),stock->record(12,0).end());changedSprite.resize(changedSprite.size()+4);
+    const auto course = AssetBank::derive(stock, std::string(64, 'a'),
+        {{{27, 5}, Bytes{1, 2, 3}},{{4,0},changed2D},{{12,0},changedSprite}});
+    const auto scene = AssetBank::append_artwork(AssetBank::augment(course, additions, ids), artwork);
     require(bool(ResidentBank::prepare(boot, scene, bus)->route()), "A legacy course lost the shared artwork.");
     require(scene->digest() == course->digest() && scene->record(27, 5)[0] == 1, "Artwork discarded a legacy course.");
     rejects([&] {ResidentBank::prepare(boot, AssetBank::augment(course, additions, ids), bus);},
@@ -212,21 +261,66 @@ void corpus(const std::filesystem::path& rom) {
     rejects([&] {ResidentBank::prepare(characters, scene, bus);},
             "A scene grew the boot texture table.");
     auto reordered = artwork;
-    std::reverse(reordered.begin(), reordered.end());
+    std::swap(reordered.at({2,static_cast<unsigned>(n2+1)}),reordered.at({2,static_cast<unsigned>(n2+2)}));
     rejects([&] {
-        ResidentBank::prepare(boot, AssetBank::append_textures(AssetBank::augment(course, additions, ids), reordered), bus);
+        ResidentBank::prepare(boot, AssetBank::append_artwork(AssetBank::augment(course, additions, ids), reordered), bus);
     }, "A scene moved a live artwork ID.");
 
     // Artwork alone, without characters, starts right after the cartridge's.
     const auto alone = publish_dkrmap_artwork(stock);
-    require(alone == artwork, "Artwork bytes depend on the character namespace.");
-    const auto stock_boot = AssetBank::append_textures(stock, alone);
-    require(stock_boot->augmented() && std::ranges::equal(stock_boot->record(2, static_cast<unsigned>(n2)), alone[0]),
+    const auto stock_boot = AssetBank::append_artwork(stock, alone);
+    require(stock_boot->augmented() && std::ranges::equal(stock_boot->record(2, static_cast<unsigned>(n2)), alone.at({2,static_cast<unsigned>(n2)})),
             "Artwork alone does not follow the cartridge textures.");
     require_models_resolve(stock_boot, authored, n2);
-    RuntimeSession session(stock, nullptr, alone);
+    RuntimeSession session(stock, nullptr, {},[alone](auto bank){return AssetBank::append_artwork(bank,alone);});
     require(bool(session.acquire().route()), "An artwork session read the cartridge's smaller table.");
     rejects([&] {ResidentBank::prepare(stock_boot, course, bus);}, "A course without the artwork was accepted.");
+
+    // Reproduce the previous bug: a post-boot sprite hook replaces the old
+    // sentinel with a new end offset, without updating its declared owner.
+    const auto prior=AssetBank::augment(stock,additions,ids);
+    const auto prior_resident=ResidentBank::prepare(prior,prior,bus);
+    ResidentFixture broken(*prior,*prior_resident);ResidentAssetState old_state(prior_resident);
+    guest_word(broken.memory,0x80220000U+static_cast<unsigned>((n12+1)*4),1234);
+    rejects([&]{old_state.prepare(broken.memory,prior_resident);},"The original ownership guard stopped detecting mutated tables.");
+
+    const auto initial=ResidentBank::prepare(boot,boot,bus),next=ResidentBank::prepare(boot,scene,bus);
+    ResidentFixture fixture(*boot,*initial);ResidentAssetState state(initial);
+    fixture.live(0,static_cast<unsigned>(n4+4200));fixture.live(1,static_cast<unsigned>(n12));
+    const auto unchanged=fixture.memory;
+    for(unsigned repeat=0;repeat<3;++repeat) {
+        auto plan=state.prepare(fixture.memory,next);
+        require(state.commit(fixture.memory,std::move(plan))==ResidentAssetState::Commit::Published,"Track Select bank switch failed.");
+        plan=state.prepare(fixture.memory,initial);
+        require(state.commit(fixture.memory,std::move(plan))==ResidentAssetState::Commit::Published,"Return to the boot bank failed.");
+        require(fixture.memory==unchanged,"Bank switches changed shared minimap cache IDs, pointers or refcounts.");
+    }
+    RuntimeSession augmented_session(stock,nullptr,{},[additions,ids,artwork](auto bank) {
+        return AssetBank::append_artwork(AssetBank::augment(bank,additions,ids),artwork);
+    });
+    PreparedTrack prepared{};prepared.bank=course;prepared.root.content_id=course->digest();prepared.root.carrier=5;
+    prepared.artifact_digest=std::string(64,'b');augmented_session.admit(std::move(prepared));
+    const auto copy=augmented_session.instantiate();
+    require(copy->boot_bank()->fingerprint()==boot->fingerprint(),"Prepared session did not retain artwork ownership.");
+    AssetBus session_bus;
+    const auto session_boot=ResidentBank::prepare(boot,boot,session_bus);
+    ResidentFixture session_guest(*boot,*session_boot);
+    session_guest.live(0,static_cast<unsigned>(n4+4200));session_guest.live(1,static_cast<unsigned>(n12));
+    const auto boot_memory=session_guest.memory;
+    const auto pristine=copy->checkpoint();
+    for(unsigned repeat=0;repeat<3;++repeat) {
+        copy->request(course->digest(),5);copy->begin_scene(session_guest.memory,5);
+        require(copy->current_content()==course->digest(),"The scene adapter did not select the legacy bank.");
+        copy->begin_scene(session_guest.memory,static_cast<unsigned>(stock->record_count(23)),true);
+        require(copy->current_content().empty() && session_guest.memory==boot_memory,
+                "The scene adapter did not restore shared artwork for the native preview.");
+    }
+    auto restore=copy->stage_checkpoint(pristine);
+    require(copy->commit_checkpoint(std::move(restore)),"Shared artwork checkpoint did not restore.");
+    require(copy->current_content().empty(),"Restoring the shared namespace changed scene identity.");
+    rejects([&]{AssetBank::append_artwork(characters,{{{27,0},Bytes{1}}});},"Artwork admitted an unrelated section.");
+    rejects([&]{AssetBank::append_artwork(characters,{{{4,static_cast<unsigned>(n4+4201)},character_texture}});},
+            "Artwork admitted a noncontiguous minimap ID.");
 
     std::filesystem::remove_all(sandbox);
 }
@@ -235,10 +329,33 @@ void corpus(const std::filesystem::path& rom) {
 int main(int argc, char** argv) {
     try {
         unit();
-        if(argc == 2) corpus(utf8_path(argv[1]));
-        else if(argc != 1) throw Error("Usage: tests [owned-v77-or-v80-rom]");
+        if(argc >= 2)corpus(utf8_path(argv[1]));
+        if(argc==3) {
+            const auto sandbox=std::filesystem::temp_directory_path()/
+                ("dkr-minimap-pack-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            tracks::scan(sandbox/"tracks");std::string error;tracks::InstallOutcome installed;
+            const bool imported=tracks::install(utf8_path(argv[2]),error,&installed);
+            require(imported,error.c_str());
+            const auto stock=AssetBank::stock(read_file(utf8_path(argv[1]),MaxImage));
+            const auto artwork=publish_dkrmap_artwork(stock);const auto boot=AssetBank::append_artwork(stock,artwork);
+            require(artwork.size()==30,"Supplied Shrine pack did not publish 28 textures plus its minimap texture/sprite.");
+            require(boot->record_count(12)==stock->record_count(12)+1,"Supplied minimap sprite was not boot-owned.");
+            require(be16(boot->record(12,static_cast<unsigned>(stock->record_count(12))),0)==stock->record_count(4),
+                    "Supplied minimap texture reference was not resolved.");
+            const auto model_table=table_of(*AssetDirectory::build(stock),26);
+            const auto extended=tracks::build_extended_table(tracks::Section::LevelModels,model_table.data(),model_table.size());
+            const auto model_id=stock->record_count(27);const auto size=extended.at(model_id+1)-extended.at(model_id);
+            const auto bytes=tracks::payload_for(tracks::Section::LevelModels,extended.at(model_id),size);
+            require(bytes!=nullptr,"Supplied model payload was not served.");
+            require(tracks::model_minimap_sprite(Bytes(bytes,bytes+size))==stock->record_count(12),"Supplied model's minimap stayed unresolved.");
+            const auto header_table=table_of(*AssetDirectory::build(stock),22);
+            const auto headers=tracks::build_extended_table(tracks::Section::LevelHeaders,header_table.data(),header_table.size());
+            require(!tracks::minimap_hidden(headers.at(stock->record_count(23))),"Supplied minimap was hidden despite being published.");
+            if(!installed.temp_root.empty())tracks::discard_install_temp(installed.temp_root);
+            std::filesystem::remove_all(sandbox);
+        } else if(argc>3)throw Error("Usage: tests [owned-v77-or-v80-rom [dkrmap-pack.zip]]");
         std::cout << checks << " dkrmap artwork checks passed"
-                  << (argc == 2 ? "." : "; pass an owned ROM for the bank checks.") << '\n';
+                  << (argc >= 2 ? "." : "; pass an owned ROM for the bank checks.") << '\n';
         return 0;
     } catch(const std::exception& error) {
         std::cerr << error.what() << '\n';

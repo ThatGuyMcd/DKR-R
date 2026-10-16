@@ -5,11 +5,13 @@
 #include "runtime_netplay.hpp"
 #include "runtime_save_routing.hpp"
 #include "runtime_legacy_mods.hpp"
+#include "runtime_code_mods.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
 #endif
 
 #include "librecomp/game.hpp"
+#include "librecomp/addresses.hpp"
 #include "ultramodern/ultramodern.hpp"
 
 #include <cstdint>
@@ -28,10 +30,12 @@ void InitialiseEntrypointContext(std::uint8_t*, recomp_context* context) {
 }
 
 void RegisterThreadContext(std::uint8_t* rdram, recomp_context* context) {
+    dkr::runtime::code_mods::bind_thread();
     dkr::runtime::netplay::register_runtime_context(rdram, context);
 }
 
 void UnregisterThreadContext(std::uint8_t* rdram, recomp_context* context) {
+    dkr::runtime::code_mods::unbind_thread();
     dkr::runtime::netplay::unregister_runtime_context(rdram, context);
 }
 
@@ -75,7 +79,7 @@ void RunDkrEntrypoint(std::uint8_t* rdram, recomp_context* context) {
         }
         std::fprintf(stderr,
                      "[netplay][save] isolated online EEPROM activated\n");
-    } else if(const auto mods=dkr::runtime::legacy::prepared_launch();mods && mods->session) {
+    } else if(const auto mods=dkr::runtime::legacy::prepared_launch();mods && (mods->session||mods->code)) {
         ultramodern::change_save_file(mods->save_subfolder.generic_u8string(),u8"dkr.us.v77");
         if(ultramodern::get_save_file_path().lexically_normal()!=mods->save_path.lexically_normal()) {
             std::fprintf(stderr,"[legacy][save] Refusing guest entry: isolated save route did not activate.\n");
@@ -88,6 +92,7 @@ void RunDkrEntrypoint(std::uint8_t* rdram, recomp_context* context) {
         // launch so single-player always reopens its ordinary EEPROM.
         ultramodern::change_save_file(u8"", u8"dkr.us.v77");
     }
+    dkr::runtime::code_mods::boot(rdram,recomp::mem_size);
     payload->entrypoint(rdram, context);
 }
 
@@ -114,7 +119,9 @@ bool dkr::runtime::RegisterGame(const std::filesystem::path& config_directory,
         .rom_hash = payload->rom_hash,
         .internal_name = "DIDDY KONG RACING",
         .game_id = kGameId,
-        .mod_game_id = "dkr",
+        // Only the approved, session-owned loader may activate code. Loose
+        // stock-loader NRMs cannot bypass code consent or online admission.
+        .mod_game_id = "",
         .save_type = recomp::SaveType::Eep4k,
         .is_enabled = true,
         .decompression_routine = nullptr,

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "api": 1,
+  "activation": "restart",
+  "online": "deterministic",
+  "revisions": ["us.v77", "us.v80"],
+  "requires": {"core": 1, "random": 1, "events": 1}
+}

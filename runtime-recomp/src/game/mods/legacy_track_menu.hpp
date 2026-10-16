@@ -17,8 +17,10 @@ struct TrackMenuCell {
 // Only cell().custom_index selects a custom catalogue entry.
 class TrackMenuLayout {
 public:
-    TrackMenuLayout(unsigned stock_rows,std::size_t custom_count);
-    unsigned rows()const{return stock_rows_+static_cast<unsigned>((custom_count_+3)/4);}
+    static constexpr unsigned CustomColumns=6;
+    TrackMenuLayout(unsigned stock_rows,std::size_t custom_count,std::size_t cups=0);
+    unsigned cup_row()const{return stock_rows_+static_cast<unsigned>((custom_count_+5)/6);}
+    unsigned rows()const{return cup_row()+static_cast<unsigned>((cups_+5)/6);}
     unsigned stock_rows()const{return stock_rows_;}
     unsigned columns(int row)const;
     std::optional<TrackMenuCell> cell(TrackCursor cursor)const;
@@ -28,5 +30,6 @@ public:
 private:
     unsigned stock_rows_;
     std::size_t custom_count_;
+    std::size_t cups_;
 };
 }

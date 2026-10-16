@@ -129,21 +129,21 @@ def main():
     binary_path = os.path.join(ASSETS, "assets.bin")
     if offsets is None or not os.path.isfile(binary_path):
         print("SKIP: assets.bin is not in this checkout")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
     with open(binary_path, "rb") as handle:
         blob = handle.read()
 
     tree_root, matching = find_tree(offsets, blob)
     if tree_root is None or matching == 0:
         print("SKIP: no extracted revision matches assets.bin")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
 
     tree = assets.AssetTree(tree_root)
     catalog = catalog_module.load()
     translation = tree.translation_table()
     if not translation:
         print("SKIP: no level-object translation table")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
 
     encoder = object_map_encoder.ObjectMapEncoder(
         catalog, translation, tree.asset_index

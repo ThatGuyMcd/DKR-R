@@ -48,6 +48,7 @@ int main() {
                       PresentationMarkerKind::FixedUi,
                       PresentationMarkerKind::BackgroundAspect,
                       PresentationMarkerKind::HudPass,
+                      PresentationMarkerKind::TrackSelectUi,
                       PresentationMarkerKind::TrackSelectLensFlare}) {
         assert(valid_presentation_marker(kind, 0U, 0U));
         assert(valid_presentation_marker(kind, 1U, 0U));
@@ -59,6 +60,9 @@ int main() {
     assert(valid_presentation_marker(PresentationMarkerKind::PostraceFullViewport, 0U, 0U));
     assert(!valid_presentation_marker(PresentationMarkerKind::PostraceFullViewport, 1U, 0U));
     assert(!is_aspect_marker(PresentationMarkerKind::PostraceFullViewport));
+    assert(valid_presentation_marker(PresentationMarkerKind::TrackSelectPreview,0U,0U));
+    assert(!valid_presentation_marker(PresentationMarkerKind::TrackSelectPreview,1U,0U));
+    assert(!is_aspect_marker(PresentationMarkerKind::TrackSelectPreview));
     assert(!valid_presentation_marker(PresentationMarkerKind::Geometry, 10U, 0U));
     assert(!valid_presentation_marker(PresentationMarkerKind::Geometry, 7U, 32U));
     assert(!valid_presentation_marker(static_cast<PresentationMarkerKind>(255), 0U, 0U));

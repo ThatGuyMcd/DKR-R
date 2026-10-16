@@ -1,6 +1,6 @@
 # DKR-R documentation
 
-Start here for the current 1.0.5 instructions. The older plans and playtest logs
+Start here for the current v1.0.7 beta 2 instructions. The older plans and playtest logs
 are still useful, but they aren't the current feature list.
 
 ## Playing and settings
@@ -15,6 +15,7 @@ are still useful, but they aren't the current feature list.
 | [Sound](SOUND.md) | Volume, EQ, multiplayer music and rollback mixing restrictions. |
 | [Controls](CONTROLLERS.md) | Profiles, N64 setup, SDL2/SDL3, gyro and Android touch groups. |
 | [Saves and portable mode](SAVES.md) | Offline/online/modded storage, recovery and profile switching. |
+| [Application updates](UPDATES.md) | GitHub checks, signed packages, installation, backups and publishing. |
 | [Texture packs](TEXTURE_PACKS.md) | Imports, priorities, CRT filters and track-owned HD packs. |
 | [Custom tracks and characters](LEGACY-MODS-BETA.md) | Legacy imports, roster browsing, AI, adapters and mod management. |
 | [Magic Codes](MAGIC_CODES.md) | Launch selection, online rules and one-shot actions. |
@@ -24,6 +25,11 @@ are still useful, but they aren't the current feature list.
 
 ## Track Lab and development
 
+- [Modders Guide to Custom Magic Code Creation](../modding/MODDERS-GUIDE.txt):
+  complete API 1 authoring book, settings, native hooks, trophies and online rules.
+  The packaged SDK also includes a navigable HTML edition with the full headers.
+- [Custom Magic Codes SDK](../modding/SDK.txt) and
+  [player guide](../modding/USER-GUIDE.txt).
 - [Track Lab addon](../tools/blender/README.md) and
   [addon changelog](../tools/blender/CHANGELOG.md).
 - [Custom track format](CUSTOM_TRACKS.md), [level model format](LEVEL_MODEL_FORMAT.md)
@@ -33,6 +39,8 @@ are still useful, but they aren't the current feature list.
 - [Architecture](ARCHITECTURE.md), [native runtime](../runtime-recomp/README.md),
   [F3DDKR bridge](F3DDKR.md) and [renderer ownership](RENDER_SNAPSHOT_ARCHITECTURE.md).
 - [Legacy test suite](../runtime-recomp/tests/legacy_mods/README.md).
+- [Regression and performance harness](REGRESSION.md): repeatable runtime checks,
+  private CPU replay routes, checkpoint benchmarks and baseline reports.
 - [Reviewed legacy behaviour evidence](LEGACY-BEHAVIOUR-20261010.txt).
   Exact corpus coverage is not blanket permission to execute unknown mod code.
 - [Asset policy](ASSET_POLICY.md), [controller database provenance](../assets/controllers/README.md)
@@ -40,14 +48,16 @@ are still useful, but they aren't the current feature list.
 
 ## Releases and credits
 
-- [Changelog](../CHANGELOG.md) and [current public release notes](PUBLIC-1.0.5-NOTES.txt).
+- [Changelog](../CHANGELOG.md), [beta 2 notes](BETA2-1.0.7.txt) and
+  [1.0.7 public release notes](PUBLIC-1.0.7-NOTES.txt).
 - [Release validation](../RELEASE-VALIDATION.md) separates recorded automated
   checks from user-led gameplay/hardware acceptance.
 - [Packaged readme template](../packaging/RELEASE-README.md).
 - [Third-party credits](../THIRD_PARTY.md), [project licence](../LICENSE.md)
   and [runtime licensing notice](../runtime-recomp/COPYING-NOTICE.md).
 
-Windows x64 and Linux x64 AppImage are the current Public Build delivery.
+The 1.0.7 release targets Windows x64, Linux x86_64/ARM64 AppImages, Steam Deck
+and Android ARM64. See the platform guide and validation record for actual checks.
 Experimental Rollback and hardware ray tracing remain experimental.
 Android/ARM/macOS support must not be inferred from a desktop test count.
 

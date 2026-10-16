@@ -1,0 +1,7 @@
+# SDK imports need no retail game symbols, assets or ROM bytes.
+[[section]]
+name = ".main"
+rom = 0x1000
+vram = 0x80000400
+size = 0x7FFC00
+functions = []

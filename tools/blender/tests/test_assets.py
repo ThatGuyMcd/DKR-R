@@ -386,7 +386,7 @@ def main():
     tree = find_tree()
     if tree is None:
         print("SKIP: no extracted asset tree found under %s" % VANILLA)
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
     print("asset tree: %s" % tree.root)
     print()
 

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "revision": "us.v80",
-  "abi": 3,
+  "abi": 4,
   "fields": [
     {
       "name": "gTrackSelectCursorX",
@@ -137,78 +137,88 @@
       "name": "gTitleScreenLoaded",
       "address": "0x800dfa08",
       "size": 4
+    },
+    {
+      "name": "sMenuCurrDisplayList",
+      "address": "0x8012693c",
+      "size": 4
+    },
+    {
+      "name": "gTrackSelectVertsFlip",
+      "address": "0x80126ee4",
+      "size": 4
     }
   ],
   "functions": {
-    "leveltable_vehicle_default": {
-      "vram": "0x8006b2ec",
-      "size": 76,
-      "sha256": "d18926581a915a2e6ec0e5af62f66664e64c95c2891d3d6da68b0ce57471a016"
-    },
-    "menu_init": {
-      "vram": "0x80081820",
-      "size": 468,
-      "sha256": "e7308df5526b2d9ec1fbf1f9aa6226ac647acb3abcc6813bcc2d3644b5326069"
-    },
-    "trackmenu_track_view": {
-      "vram": "0x800909a0",
-      "size": 1072,
-      "sha256": "9626b6f7ea995fa6d5865871f36beb93b0a759e1abfc990857a348f3105d3eab"
-    },
-    "leveltable_vehicle_usable": {
-      "vram": "0x8006b338",
-      "size": 84,
-      "sha256": "53d05845deb3376e199ac3eae97aeee3629b50d252c90466e28295dc5213eca7"
-    },
     "load_level_for_menu": {
       "vram": "0x8006e528",
       "size": 212,
       "sha256": "cad1cb56072b5d9a260d56a783fb680bd54203aab268bf8b982b2b5027f01f2e"
-    },
-    "func_8008F618": {
-      "vram": "0x8008fad0",
-      "size": 1084,
-      "sha256": "6d52c018007a2e41bd149ae63ca5be5705ce98aa15026bb537ea08e6d767bca5"
-    },
-    "level_name": {
-      "vram": "0x8006c01c",
-      "size": 288,
-      "sha256": "db19e49772b170a28e61fb105128383897e450f38e348913af8e388e00766d90"
-    },
-    "load_level_game": {
-      "vram": "0x8006cd98",
-      "size": 188,
-      "sha256": "3c0f081fd67da703864425642d6fb612f2c5e5d8d5d42979c613340d036bfdba"
     },
     "func_80092188": {
       "vram": "0x800926a4",
       "size": 2692,
       "sha256": "081b044b414987577839716376687d0b6781045c249790371d7bb792a47b5083"
     },
-    "trackmenu_render_names": {
-      "vram": "0x800903d4",
-      "size": 1484,
-      "sha256": "9504136c75417fccbf404d6ae1274e65c26d3128e8f10a6727b7594b878d13ef"
+    "func_8008F618": {
+      "vram": "0x8008fad0",
+      "size": 1084,
+      "sha256": "6d52c018007a2e41bd149ae63ca5be5705ce98aa15026bb537ea08e6d767bca5"
     },
-    "trackmenu_input": {
-      "vram": "0x80090dd0",
-      "size": 1472,
-      "sha256": "3c86c369947d9ccab8a7cdaefcc726eb0e286b7ae80f7a20b678af36ea406f85"
+    "leveltable_vehicle_usable": {
+      "vram": "0x8006b338",
+      "size": 84,
+      "sha256": "53d05845deb3376e199ac3eae97aeee3629b50d252c90466e28295dc5213eca7"
+    },
+    "trackmenu_track_view": {
+      "vram": "0x800909a0",
+      "size": 1072,
+      "sha256": "9626b6f7ea995fa6d5865871f36beb93b0a759e1abfc990857a348f3105d3eab"
     },
     "bgload_start": {
       "vram": "0x800c79b8",
       "size": 72,
       "sha256": "f1de4a47b03229a36b10b2ca694473bc0613f54e73552167daee5cd310a30116"
     },
-    "menu_track_select_init": {
-      "vram": "0x8008ec58",
-      "size": 2156,
-      "sha256": "f7e1f4828f7c177904a3ecd608c680a6c117ff68018ad8b2119e7f2eec2c5938"
+    "trackmenu_render_names": {
+      "vram": "0x800903d4",
+      "size": 1484,
+      "sha256": "9504136c75417fccbf404d6ae1274e65c26d3128e8f10a6727b7594b878d13ef"
+    },
+    "leveltable_vehicle_default": {
+      "vram": "0x8006b2ec",
+      "size": 76,
+      "sha256": "d18926581a915a2e6ec0e5af62f66664e64c95c2891d3d6da68b0ce57471a016"
     },
     "trackmenu_assets": {
       "vram": "0x8008f4c4",
       "size": 552,
       "sha256": "b0e8c29e05e0381f73ebe6cac482864ee36b94040989510cc7908ed4c0e4d4cb"
+    },
+    "trackmenu_input": {
+      "vram": "0x80090dd0",
+      "size": 1472,
+      "sha256": "3c86c369947d9ccab8a7cdaefcc726eb0e286b7ae80f7a20b678af36ea406f85"
+    },
+    "load_level_game": {
+      "vram": "0x8006cd98",
+      "size": 188,
+      "sha256": "3c0f081fd67da703864425642d6fb612f2c5e5d8d5d42979c613340d036bfdba"
+    },
+    "menu_track_select_init": {
+      "vram": "0x8008ec58",
+      "size": 2156,
+      "sha256": "f7e1f4828f7c177904a3ecd608c680a6c117ff68018ad8b2119e7f2eec2c5938"
+    },
+    "menu_init": {
+      "vram": "0x80081820",
+      "size": 468,
+      "sha256": "e7308df5526b2d9ec1fbf1f9aa6226ac647acb3abcc6813bcc2d3644b5326069"
+    },
+    "level_name": {
+      "vram": "0x8006c01c",
+      "size": 288,
+      "sha256": "db19e49772b170a28e61fb105128383897e450f38e348913af8e388e00766d90"
     }
   },
   "hooks": [

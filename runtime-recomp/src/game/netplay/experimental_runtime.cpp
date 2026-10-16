@@ -8,6 +8,7 @@
 #include "rt64_renderer.hpp"
 #include "runtime_enhancements.hpp"
 #include "save_manager.hpp"
+#include "mods/online_mod_runtime.hpp"
 #include "ultramodern/config.hpp"
 #include "monocypher.h"
 #if defined(__ANDROID__)
@@ -32,7 +33,6 @@ RuntimeView view;
 std::atomic<bool> requested_stop{false};
 void report(RuntimeView v) {std::scoped_lock lock(view_mutex);view=std::move(v);}
 secure::Key digest(std::span<const std::uint8_t> bytes) {secure::Key r{};crypto_blake2b(r.data(),r.size(),bytes.data(),bytes.size());return r;}
-void put(std::vector<std::uint8_t>& bytes,std::uint64_t v,unsigned n) {for(unsigned i=0;i<n;++i)bytes.push_back(std::uint8_t(v>>(8*i)));}
 std::vector<std::uint8_t> read_rom(const std::filesystem::path& path) {
     std::ifstream file(path,std::ios::binary|std::ios::ate);
     if(!file||file.tellg()!=rom::kRetailRomSize)throw std::runtime_error("Cannot open the canonical ROM for owned play.");
@@ -234,12 +234,13 @@ std::uint32_t pack(PackedInput p) {return p.buttons|(std::uint32_t(std::uint8_t(
 PackedInput unpack(std::uint32_t p) {return {std::uint16_t(p),std::int8_t(p>>16),std::int8_t(p>>24)};}
 }
 bool runtime_available(rom::Revision revision) {return owned_adapter_available(revision);}
+std::string_view runtime_engine_identity(rom::Revision revision) {return owned_adapter_identity(revision);}
 RuntimeView runtime_view() {std::scoped_lock lock(view_mutex);return view;}
 void request_runtime_stop() {requested_stop=true;}
 bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesystem::path& canonical_rom,
     std::vector<std::uint8_t> bootstrap,DirectSession& lobby,const LaunchDescriptor& accepted_launch,
     unsigned timeout_seconds,std::string& error,bool scripted_check,
-    std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,std::vector<std::uint8_t> mod_bootstrap) {
+    std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,std::vector<std::uint8_t> mod_bootstrap,std::vector<std::uint8_t> code_bootstrap) {
     const std::optional<LaunchDescriptor> launch{accepted_launch};const auto initial=lobby.runtime_view();
     // A departure may retire the accepted descriptor during cold boot, or
     // between this caller and the worker startup. Validate against the caller's
@@ -320,7 +321,8 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                     [&](ConfirmedAudio audio,std::string& e) {return shared.audio.push(audio.rate,audio.pcm,e);},
                     message,false,std::uint32_t(lobby.view().room.manifest.magic_codes_hash),seed,
                     OwnedBootOptions{true,launch->player_count,launch->host_control,
-                        enhancements::multiplayer_race_music_enabled(),mods,std::move(mod_bootstrap)});
+                        enhancements::multiplayer_race_music_enabled(),mods,std::move(mod_bootstrap),
+                        mods?mods->code():nullptr,std::move(code_bootstrap),launch->match_id});
             }
             if(!world)throw std::runtime_error(message);
             world=std::make_unique<ObservedOwnedGame>(std::move(world),shared.simulation_activity);
@@ -333,13 +335,18 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                 if(port==local)shared.confirmed_motor.store(enabled?1:0,std::memory_order_release);
             });
             if(world->scene_view().owners!=launch->player_count)throw std::runtime_error("Owned construction roster differs from the accepted lobby.");
-            const auto contract=world->contract();std::vector<std::uint8_t> identity;
+            const auto contract=world->contract();AdmissionContract identity;
             const std::string_view build=owned_adapter_identity(revision);
             if(build.empty())throw std::runtime_error("The selected replay engine has no compatibility identity.");
-            identity.insert(identity.end(),build.begin(),build.end());
-            const auto rom_hash=digest(rom_bytes);identity.insert(identity.end(),rom_hash.begin(),rom_hash.end());
-            put(identity,contract.schema,8);put(identity,contract.state_bytes,8);put(identity,launch_descriptor_hash(*launch),8);
-            put(identity,initial.online_save_hash,8);put(identity,epoch,8);
+            identity.engine=digest(std::span(reinterpret_cast<const std::uint8_t*>(build.data()),build.size()));
+            identity.rom=digest(rom_bytes);
+            if(mods) {
+                const auto& fingerprint=mods->fingerprint();
+                identity.resources=digest(std::span(reinterpret_cast<const std::uint8_t*>(fingerprint.data()),fingerprint.size()));
+            }
+            identity.schema=contract.schema;identity.state_bytes=contract.state_bytes;
+            identity.launch=launch_descriptor_hash(*launch);identity.save=initial.online_save_hash;identity.epoch=epoch;
+            std::fprintf(stderr,"[rollback][compatibility] owner=%u %s\n",unsigned(local),identity.diagnostics().c_str());
             std::vector<std::uint8_t> baseline;
             std::fprintf(stderr,"[rollback][admission] owner=%u host=%d build=%s checkpoint=%zu capture-begin\n",
                 unsigned(local),initial.host,build.data(),contract.state_bytes);
@@ -348,7 +355,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                 if(!world->capture(baseline,message))throw std::runtime_error(
                     message.empty()?"The initial owned checkpoint could not be captured.":message);
             }
-            LobbyAdmission admission(route,initial.host,launch->player_count,local,digest(identity));
+            LobbyAdmission admission(route,initial.host,launch->player_count,local,identity);
             if(!admission.begin(std::move(baseline),[&](auto b,std::string& e){return world->admit_initial(b,e);},message))throw std::runtime_error(message);
             std::fprintf(stderr,"[rollback][admission] owner=%u checkpoint-captured decoded=%u wire=%u\n",
                 unsigned(local),admission.decoded_bytes(),admission.total_bytes());

@@ -550,7 +550,7 @@ bool DirectSession::join_friend_invite(std::string_view invite,
     peers_ = {};
     pending_joins_ = {};
     mod_offer_.reset();mod_inbound_.clear();mod_inbound_bytes_=0;
-    mod_manifest_bytes_=0;manifest_.mod_manifest_hash.clear();
+    mod_manifest_bytes_=0;manifest_.mod_manifest_hash.clear();manifest_.owned_resources_hash.clear();
     // Completion/encoding caches belong to this authenticated session only.
     // A new room can reuse the same numeric scene and boundary identifiers.
     completed_releases_.clear();
@@ -708,7 +708,7 @@ void DirectSession::disconnect(std::string_view reason) {
     maximum_network_pump_us_ = 0U;
     pending_joins_ = {};
     mod_offer_.reset();mod_inbound_.clear();mod_inbound_bytes_=0;
-    mod_manifest_bytes_=0;manifest_.mod_manifest_hash.clear();
+    mod_manifest_bytes_=0;manifest_.mod_manifest_hash.clear();manifest_.owned_resources_hash.clear();
     received_sequences_.clear();
     blocked_senders_.clear();
     blocked_sources_.clear();
@@ -9293,7 +9293,8 @@ std::string DirectSession::admission_incompatibility(
     // This comparison only establishes eligibility to review/download. The
     // actual slot allocation still requires complete_mod_admission's proof.
     const std::string other = session_content_sync_incompatibility(manifest_,candidate,
-        mod_manifest_bytes_ && !manifest_.mod_manifest_hash.empty());
+        mod_manifest_bytes_ && !manifest_.mod_manifest_hash.empty(),
+        room_view_.rules.synchronization==SynchronizationMode::ExperimentalRollback);
     if (!other.empty()) return other;
     if (candidate.session_save_hash != manifest_.session_save_hash &&
         !save_sync_available()) {

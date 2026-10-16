@@ -2,7 +2,7 @@
 [[vk::push_constant]] ConstantBuffer<WaterFieldPushConstants> params : register(b0);
 StructuredBuffer<WaterDrawParams> waterDraws : register(t1);
 Texture2D<float4> previousField : register(t2);
-RWTexture2D<float4> nextField : register(u3);
+[[vk::image_format("rgba16f")]] RWTexture2D<float4> nextField : register(u3);
 
 float4 source(int2 pixel,uint tile) {
     if (params.reset || any(pixel<0) || any(pixel>=int(params.resolution))) return 0;

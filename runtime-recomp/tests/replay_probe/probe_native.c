@@ -7,6 +7,7 @@
 #include "probe_magic.h"
 #include "../../src/game/camera_obstruction_guest.h"
 #include "../../src/game/mods/legacy_memory_safety.h"
+#include "../../src/game/track_select_draw_guest.h"
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
@@ -26,11 +27,13 @@ static int draw_invalid;
 static int framed_scope, lens_scope, split_world_scope, panel_scope;
 static int clear_scope, mosaic_scope, chequer_scope;
 static unsigned scenery_viewmask;
+static dkr_track_draw_state track_draw;
 
 void dkr_probe_draw_begin(void) {
     draw_count=0;draw_invalid=0;framed_scope=0;lens_scope=0;split_world_scope=0;panel_scope=0;
     clear_scope=mosaic_scope=chequer_scope=0;
     scenery_viewmask=0;
+    memset(&track_draw,0,sizeof(track_draw));
     dkr_probe_parity_begin();
 }
 static void parity_emit(const dkr_owned_draw_event* event) {
@@ -181,7 +184,7 @@ void dkr_probe_boss_diagnostic_failure(const dkr_probe_result* result,recomp_con
     fflush(stderr);
 }
 unsigned dkr_probe_draw_capture(dkr_owned_draw_event* events,unsigned capacity) {
-    if(draw_invalid)return 0; // Never publish a truncated scope transaction.
+    if(draw_invalid || track_draw.active || track_draw.pending)return 0; // Never publish a truncated scope transaction.
     dkr_owned_draw_event metadata={DKR_OWNED_FRAME_METADATA,0x80000000U,0,{0}};
     metadata.parameters[0]=state.presentation.scene;
     if(draw_count<DKR_OWNED_MAX_DRAW_EVENTS&&(!draw_count||draw_events[draw_count-1].kind!=DKR_OWNED_FRAME_METADATA))draw_events[draw_count++]=metadata;
@@ -991,7 +994,7 @@ static void void_primitive(uint8_t* rdram,recomp_context* ctx) {
     }
 }
 dkr_probe_native_state dkr_probe_native_capture(void) { return state; }
-void dkr_probe_native_restore(dkr_probe_native_state value) { state = value; scene_authorization=0; confirmed_menu_tick=0; active_menu_tick=0; inline_menu_preview=0; }
+void dkr_probe_native_restore(dkr_probe_native_state value) { state = value; scene_authorization=0; confirmed_menu_tick=0; active_menu_tick=0; inline_menu_preview=0; memset(&track_draw,0,sizeof(track_draw)); }
 int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* context) {
     (void)ram; (void)context;
     dkr_probe_checkpoint();
@@ -1326,6 +1329,29 @@ uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_con
     (void)ram; (void)context;
     dkr_probe_checkpoint();
     uint64_t mod_result=0;
+    if(offline && canonical_presentation && DKR_PROBE_HAS_FULL_SCENES && count==2 &&
+       strcmp(name,"dkr_track_select_draw")==0 && args[0]<=10 && args[1]<=UINT32_MAX) {
+        uint8_t* rdram=ram;
+        const unsigned event=(unsigned)args[0];
+        // Low-level font/rectangle helpers are shared with racing and other
+        // menus. Their inactive scope is an exact no-op, not a new permission.
+        if(!dkr_probe_menu_callback_enabled()) {
+            if(event>=2 && event<=9 && !track_draw.active)return 0;
+            dkr_probe_block("unowned-track-select-draw");
+        }
+        const unsigned result=dkr_track_draw_guest(&track_draw,rdram,context,event);
+        if(event==0 || event==1)draw_marker(rdram,guest_address((uint32_t)args[1]),
+            event==0?DKR_OWNED_TRACK_UI_BEGIN:DKR_OWNED_TRACK_UI_END,0);
+        else if(event==9) {
+            int32_t bounds[4];
+            if(dkr_track_preview_bounds(rdram,context,(uint32_t)args[1],bounds)) {
+                dkr_owned_draw_event e={DKR_OWNED_TRACK_PREVIEW,(uint32_t)context->r2,0,{0}};
+                for(unsigned i=0;i<4;++i)e.parameters[i]=(uint32_t)bounds[i];
+                parity_emit(&e);
+            }
+        }
+        return result;
+    }
     if(dkr_probe_mod_dispatch(name,ram,context,args,count,0,0,&mod_result))return mod_result;
     if(offline && count==4 && strcmp(name,"dkr_legacy_memory_service")==0 &&
        args[1]==DKR_PROBE_REVISION && args[2]<=UINT32_MAX && args[3]<=UINT32_MAX) {
@@ -1382,6 +1408,13 @@ uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_con
     /* These private captures use fresh profiles with no custom characters.
        Match runtime_legacy_mods.cpp's explicit no-character-state paths. */
     if (offline) {
+        /* runtime_legacy_mods.cpp validates the selector, then returns the
+           supplied retail bits before touching RAM when no character/session
+           state exists. ModWorld dispatch above owns all installed mods. */
+        if(count==3 && args[0]<3 && args[1]<=UINT32_MAX && args[2]<=UINT32_MAX &&
+           strcmp(name,"dkr_legacy_racer_stat")==0) return args[2];
+        if(count==2 && args[0]<3 && args[1]<=UINT32_MAX &&
+           strcmp(name,"dkr_legacy_course_component")==0) return args[1];
         if(count==1 && args[0]<4 && strcmp(name,"dkr_legacy_asset_cache_capacity")==0) {
             const uint32_t capacities[4]={700,100,70,100};return capacities[args[0]];
         }

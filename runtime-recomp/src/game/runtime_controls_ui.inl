@@ -280,8 +280,8 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
         PaddockGap(12.0F);
     }
     if (!status.connected) {
-        ControlsNote(status.assigned ? "Reconnect the assigned controller, or choose another device."
-                                     : "Connect a controller, then press one of its buttons. Keyboard mapping is also available.",
+        ControlsNote(status.assigned ? "Reconnect this controller or choose another."
+                                     : "Connect a controller and press a button.",
                      width);
     } else if (!status.mapping_source.empty()) {
         ControlsNote("Input map: " + status.mapping_source, width);
@@ -306,8 +306,8 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
         const float inner = box.Inner();
         PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), "Input test", inner);
         PaddockGap(6.0F);
-        ControlsNote(status.connected ? "Move the left stick or press a button to check this controller."
-                                      : "Waiting for an assigned controller. Live values will appear here.",
+        ControlsNote(status.connected ? "Move the stick or press a button."
+                                      : "Connect a controller to test input.",
                      inner);
         const auto preview = platform::player_input_preview(g_selected_player);
         ControlsAxis("Horizontal", preview.stick_x, status.connected, inner);
@@ -328,7 +328,7 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
         commit();
     }
     PaddockGap(8.0F);
-    ControlsNote("For this player only. Keyboard input requires the game to be focused.", width);
+    ControlsNote("For this player. Keyboard input still needs a focused game window.", width);
 
     if (ControlsDisclosure("##shared", "Shared settings", state.shared_open, width)) {
         ControlsScope(true, width);
@@ -371,17 +371,15 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
             }
             PaddockGap(16.0F);
         }
-        ControlsNote("Memory Pak stores game data. Rumble Pak enables vibration on supported controllers. "
-                     "Both can stay enabled: the virtual Memory Pak takes priority whenever the game asks "
-                     "for storage.",
+        ControlsNote("Memory Pak stores game data. Rumble Pak enables vibration. Both can stay enabled.",
                      width);
     }
 
     if (ControlsDisclosure("##advanced", "Advanced compatibility", state.advanced_open, width)) {
         ControlsScope(true, width);
         int backend = static_cast<int>(platform::requested_input_backend());
-        if (SettingsDropdown("backend", "Preferred input backend", &backend,
-                             {"Automatic (SDL3 on Steam Deck)", "SDL2 compatibility", "SDL3 native"}, width)) {
+        if (SettingsDropdown("backend", "Controller backend", &backend,
+                             {"Auto", "SDL2", "SDL3"}, width)) {
             platform::set_requested_input_backend(
                 backend == static_cast<int>(platform::InputBackend::SDL2Compatibility)
                     ? platform::InputBackend::SDL2Compatibility
@@ -391,28 +389,28 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
             commit();
         }
         PaddockGap(8.0F);
-        ControlsNote(std::string("Active: ") + platform::input_backend_name(platform::active_input_backend()) +
-                         ". " + platform::input_backend_detail(),
-                     width, kSetText);
+        ControlsNote(std::string("Active: ") + platform::input_backend_name(platform::active_input_backend()), width, kSetText);
+        if (dkr::runtime::copy::looks_like_error(platform::input_backend_detail()))
+            DrawIssue(platform::input_backend_detail(), dkr::runtime::copy::Area::Controller);
+        else DrawTechnicalDetails(platform::input_backend_detail(), "Controller details");
         ControlsNote(platform::input_backend_switch_pending()
-                         ? "Switching controller backend safely..."
-                         : "Backend changes apply live; the launcher, game window, audio and renderer remain running.",
+                         ? "Switching controller backend..."
+                         : "",
                      width, platform::input_backend_switch_pending() ? kSetWarm : kSetMuted);
-        ControlsNote(sdl3_native ? "SDL3 uses its native controller database. Switch to SDL2 compatibility and "
-                                   "restart to create or import raw mappings."
-                                 : "Controller map tools create and share raw SDL2 mappings.",
+        ControlsNote(sdl3_native ? "Switch to SDL2 to create or import controller mappings."
+                                 : "Import or export custom controller mappings.",
                      width);
         ControlsRow(width, [&](float cell) {
             if (SettingsButton("Remap this controller", cell, sdl3_native || !status.connected,
                                SettingsButtonTone::Plain, false,
-                               sdl3_native ? "Available with SDL2 compatibility." : "Connect and assign a controller first.") &&
+                               sdl3_native ? "Requires SDL2." : "Connect and assign a controller first.") &&
                 platform::begin_controller_mapping(current_instance, g_selected_player)) {
                 g_controller_mapping_popup_pending = true;
                 g_controller_mapping_completion_saved = false;
             }
         }, [&](float cell) {
             if (SettingsButton("Import controller maps", cell, sdl3_native, SettingsButtonTone::Plain, false,
-                               "Available with SDL2 compatibility.")) {
+                               "Requires SDL2.")) {
                 ImportControllerMappingsWithDialog();
             }
         });
@@ -420,7 +418,7 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
         if (SettingsButton("Export custom maps")) ExportControllerMappingsWithDialog();
         if (!g_controller_mapping_status.empty()) {
             PaddockGap(12.0F);
-            ControlsNote(g_controller_mapping_status, width, kSetText);
+            DrawFriendlyStatus(g_controller_mapping_status, width, dkr::runtime::copy::Area::Controller);
         }
     }
 }
@@ -432,8 +430,8 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
     const bool keyboard = input::keyboard_player() == static_cast<int>(g_selected_player);
     ControlsScope(false, width);
     ControlsHeading("Button mapping", width);
-    ControlsNote("Select a binding, then press a key or controller button. Escape cancels.", width);
-    ControlsNote(keyboard ? std::string("Controller names use the standard gamepad layout.")
+    ControlsNote("Select a binding, then press a key or button. Escape cancels.", width);
+    ControlsNote(keyboard ? std::string("")
                           : "Keyboard input belongs to Player " + std::to_string(input::keyboard_player() + 1) +
                                 ". Change it in Device \xE2\x86\x92 Shared settings.",
                  width);
@@ -660,7 +658,7 @@ void DrawControlsDriving(ControlsPageState& state, float width, const std::funct
             commit();
         }
         PaddockGap(8.0F);
-        ControlsNote("Adds a minimum output once the stick leaves its deadzone.", width);
+        ControlsNote("Adds steering as soon as the stick leaves its deadzone.", width);
         PaddockGap(4.0F);
         int curve = static_cast<int>(std::lround(input::stick_curve() * 100.0F));
         if (SettingsRange("##curve", "Response curve", &curve, 50, 250, width, [](int value) {
@@ -672,7 +670,7 @@ void DrawControlsDriving(ControlsPageState& state, float width, const std::funct
             commit();
         }
         PaddockGap(8.0F);
-        ControlsNote("Changes how steering builds as the stick moves. 1.00 gives a linear response.", width);
+        ControlsNote("Changes steering response. 1.00 is linear.", width);
         PaddockGap(4.0F);
         int threshold = static_cast<int>(std::lround(input::trigger_threshold() * 100.0F));
         if (SettingsRange("##threshold", "Trigger threshold", &threshold, 5, 95, width,
@@ -681,11 +679,10 @@ void DrawControlsDriving(ControlsPageState& state, float width, const std::funct
             commit();
         }
         PaddockGap(8.0F);
-        ControlsNote("How far a trigger must be pressed before it counts as a button press.", width);
+        ControlsNote("How far a trigger must be pressed.", width);
     }
     PaddockGap(12.0F);
-    ControlsNote("These adjustments shape the final N64 stick sample once per game update. Accurate keeps the "
-                 "original response.",
+    ControlsNote("",
                  width);
     if (SettingsButton("Restore stick response and inversions")) {
         ControlsSnapshot before = TakeControlsSnapshot();
@@ -719,7 +716,7 @@ void DrawControlsMotion(float width, bool live, const std::function<void()>& com
         commit();
     }
     PaddockGap(8.0F);
-    ControlsNote("Requires a controller with a motion sensor.", width);
+    ControlsNote("Requires a motion-enabled controller.", width);
     if (!gyro) return;
     int axis = static_cast<int>(input::gyro_axis(player));
     if (SettingsDropdown("motion-style", "Motion style", &axis,
@@ -798,7 +795,7 @@ void DrawControlsMotion(float width, bool live, const std::function<void()>& com
     } else if (!live) {
         ControlsNote("Recenter and calibrate your controller from the in-game overlay.", width);
     } else if (!available) {
-        ControlsNote("No SDL gyro sensor was reported by Controller " + std::to_string(player + 1U) + ".", width);
+        ControlsNote("No motion sensor reported by Controller " + std::to_string(player + 1U) + ".", width);
     }
 }
 
@@ -808,9 +805,7 @@ void DrawControlsShortcuts(float width, const std::function<void()>& commit) {
     namespace input = dkr::runtime::input;
     ControlsScope(true, width);
     ControlsHeading("Game shortcuts", width);
-    ControlsNote("Available for editing from any player. Select a binding to record a key, button or two-button "
-                 "combination. Controller shortcuts listen to Player 1\xE2\x80\x99s controller.",
-                 width);
+    ControlsNote("Shortcuts use Player 1's controller. Select a binding to change it.", width);
     bool quick_restart = input::quick_restart_enabled();
     if (SettingsCheck("##quick-restart", "Enable quick race restart", &quick_restart, width)) {
         input::set_quick_restart_enabled(quick_restart);
@@ -907,14 +902,14 @@ void DrawControlsCaptureModal() {
                   dkr::runtime::input::action_label(static_cast<Action>(g_capture_action));
         help = g_capture_device == CaptureDevice::Keyboard
             ? "Press a keyboard key. Escape cancels."
-            : "Press a gamepad button or move an axis firmly. Escape cancels.";
+            : "Press a button or move the stick. Escape cancels.";
     } else if (g_capture_action == kShortcutCaptureAction) {
         heading = ShortcutActionLabel(g_capture_shortcut_action);
         help = std::string("Press one ") + (g_capture_device == CaptureDevice::Keyboard ? "key" : "controller button") +
-               ", or hold the first and press a second. The chord is saved automatically. Escape cancels.";
+               ", or hold it and press a second. Escape cancels.";
     } else if (g_capture_action == kAssignControllerCaptureAction) {
         heading = "Assign Player " + std::to_string(g_selected_player + 1U);
-        help = "Press any button on the controller you want this player to use. Escape cancels.";
+        help = "Press a button on this player's controller. Escape cancels.";
     }
     PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), heading, inner);
     PaddockGap(13.0F);
@@ -999,7 +994,7 @@ void DrawControlsPage(float available_width, bool live) {
     // taller than the study's 58 px line.
     PaddockGap(4.0F);
     PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted),
-                "Configure your devices and button mappings.", width);
+                "Set up controllers and button bindings.", width);
     PaddockGap(24.0F);
 
     // The local player (.controls-player-bar): four painted chips.
@@ -1076,8 +1071,7 @@ void DrawControlsPage(float available_width, bool live) {
     if ((g_controls_section == 2 || g_controls_section == 3) && !modern) {
         ControlsScope(g_controls_section == 2, width);
         ControlsHeading(g_controls_section == 2 ? "Stick response" : "Motion steering", width);
-        ControlsNote("These adjustments require Modern presentation. Accurate preserves the original control "
-                     "response.",
+        ControlsNote("Requires Modern graphics.",
                      width);
         if (SettingsButton("Open graphics settings")) g_page_navigation_request = kPageGraphics;
     } else if (g_controls_section == 0) {

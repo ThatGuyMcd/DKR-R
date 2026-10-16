@@ -3,6 +3,7 @@
 #include "legacy_asset_directory.hpp"
 #include "online_course_policy.hpp"
 #include "online_mod_cache_policy.hpp"
+#include "magic_code_game_world.hpp"
 #include <algorithm>
 #include <set>
 #include <chrono>
@@ -57,7 +58,7 @@ std::uint64_t retention_budget() {
 }
 }
 std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_ptr<const Profile> profile,
-    const std::filesystem::path& rom,std::stop_token stop) {
+    const std::filesystem::path& rom,std::stop_token stop,std::string_view version) {
     const auto began=std::chrono::steady_clock::now();
     if(!profile)throw Error("Online resources require a verified host profile.");
     cancelled(stop);const auto sources=profile_sources(*profile);check_storage(rom,false);
@@ -79,6 +80,30 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
     if(out->stock_->revision()!=out->profile_->manifest.revision)
         throw Error("The locally imported Game Pak revision does not match this lobby.");
     cancelled(stop);
+    if(!out->profile_->manifest.code.empty()) {
+        auto code_set=std::make_shared<code::FrozenSet>();std::vector<std::shared_ptr<const code::Package>> packages;
+        std::set<std::string> enabled;std::size_t resident=0;
+        for(const auto& wanted:out->profile_->manifest.code) {
+            cancelled(stop);const auto bytes=std::make_shared<const Bytes>(read_file(sources.code.at(wanted.payload),code::MaxPackage));
+            const auto package=code::inspect(*bytes,version);
+            if(package->digest!=wanted.payload||package->id!=wanted.id||package->name!=wanted.name||package->version!=wanted.version)
+                throw Error("Executable package metadata differs from the exact host offer.");
+            const auto settings=code::parse_document(View(reinterpret_cast<const std::uint8_t*>(wanted.settings.data()),wanted.settings.size()),512*1024);
+            const auto data=code::parse_document(View(reinterpret_cast<const std::uint8_t*>(wanted.data.data()),wanted.data.size()),65536);
+            const auto options=code::configuration(*package,settings),documents=code::structured_data(data);
+            if(options.dump()!=wanted.settings||documents.dump()!=wanted.data)throw Error("Executable code configuration differs from the host offer.");
+            std::size_t bytes_owned=bytes->size()+package->binary.size()*2;
+            for(const auto& [id,value]:package->resources)bytes_owned+=value.size();
+            if(bytes_owned>256*MiB-resident)throw Error("Executable package resources exceed the online memory budget.");
+            resident+=bytes_owned;enabled.insert(package->id);packages.push_back(package);
+            code_set->settings.emplace(package->id,options);code_set->data.emplace(package->id,documents);
+            code_set->payloads.emplace(package->digest,bytes);
+        }
+        code_set->ordered=code::resolve(packages,enabled,out->profile_->manifest.revision,true,code::GameWorld::policy().modules);
+        if(code_set->ordered!=packages)throw Error("The host code packages are not in canonical dependency order.");
+        code_set->identity=code::session_identity(code_set->ordered,code_set->settings,out->profile_->manifest.revision,code_set->data);
+        out->code_=std::move(code_set);
+    }
     auto characters=TrackCatalog::load_selected_characters(sources.characters,out->stock_);
     if(!characters.empty())out->characters_=std::make_shared<const CharacterNamespace>(allocate_characters(out->stock_,std::move(characters)));
     cancelled(stop);out->tracks_=TrackCatalog::load_selected(sources.tracks,out->stock_);
@@ -150,12 +175,26 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
     // Fully prepare every route NOW, before proof/readiness. Scene switches
     // subsequently select immutable banks and never decode/hash/read a file.
     auto prepared=out->new_session();
+    if(out->code_) {
+        std::map<std::string,unsigned> defaults;
+        for(const auto& track:out->tracks_) {
+            const auto header=track.bank->record(23,track.root.carrier);
+            if(header.size()<0x50)throw Error("A custom course is missing its default vehicle header.");
+            defaults.emplace(track.root.content_id,header[0x4d]);
+        }
+        code::trophy::verify_configuration(*out->code_,code::trophy::catalogue(*out->stock_,prepared->tracks(),*out->authored_,defaults));
+    }
     out->prepared_world_=prepared;
     std::string identity="dkr-online-runtime-2\n"+out->profile_->digest+"\n"+prepared->boot_bank()->fingerprint()+music_identity;
+    if(out->code_)identity+="\ncode:"+out->code_->identity;
     for(const auto& track:out->tracks_)identity+="\n"+track.root.content_id+":"+track.bank->fingerprint();
     out->fingerprint_=sha256(View(reinterpret_cast<const std::uint8_t*>(identity.data()),identity.size()));
     cancelled(stop);
     std::size_t cache_bytes=prepared->prepared_bytes()+128*MiB-music_budget;
+    if(out->code_)for(const auto& package:out->code_->ordered) {
+        cache_bytes+=out->code_->payloads.at(package->digest)->size()+package->binary.size()*2;
+        for(const auto& [id,value]:package->resources)cache_bytes+=value.size();
+    }
     for(const auto& [key,data]:out->additions_)cache_bytes+=data.size();
     for(const auto& section:out->authored_->additions)for(const auto& data:section)cache_bytes+=data.size();
     for(const auto& track:out->authored_->tracks)for(const auto& entry:track.entries)cache_bytes+=entry.bytes.size();

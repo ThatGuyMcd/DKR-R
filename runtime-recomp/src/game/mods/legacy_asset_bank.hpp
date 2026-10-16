@@ -26,6 +26,10 @@ public:
     // at those same IDs in every legacy scene, including its cache identities.
     static std::shared_ptr<const AssetBank> append_textures(
         std::shared_ptr<const AssetBank> bank,const std::vector<Bytes>& textures);
+    // Boot-owned Track Lab artwork: 3D textures, 2D minimap textures and
+    // sprites. The same additions must be applied to every scene bank.
+    static std::shared_ptr<const AssetBank> append_artwork(
+        std::shared_ptr<const AssetBank> bank,Overrides additions);
     // Launch-only Track Lab namespace. Records must be contiguous after each
     // current table; no existing record, executable or global data is replaced.
     static std::shared_ptr<const AssetBank> append_courses(

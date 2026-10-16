@@ -411,7 +411,7 @@ def main():
     if tree is None:
         print("no extracted asset tree found under %s" % VANILLA)
         print("skipping: this suite checks the addon against the real textures")
-        return 0
+        return 77  # Entire suite requires unavailable retail fixtures.
 
     catalogue = textures.catalogue(tree)
     models = find_level_models(tree)

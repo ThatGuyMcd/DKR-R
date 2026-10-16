@@ -50,7 +50,9 @@ def main() -> int:
     ]
     lines.extend(f"#define {name} {prefix}{name}" for name in sorted(names))
     lines.append("")
-    output_path.write_text("\n".join(lines), encoding="utf-8")
+    content = "\n".join(lines)
+    if not output_path.exists() or output_path.read_text(encoding="utf-8") != content:
+        output_path.write_text(content, encoding="utf-8")
     return 0
 
 

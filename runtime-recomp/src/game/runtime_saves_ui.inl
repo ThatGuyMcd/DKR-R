@@ -75,6 +75,7 @@ void SavesSeparator(std::string_view text, float width, bool reading = true) {
 }
 
 void SavesNote(std::string_view text, float width, float px = 16.0F, unsigned colour = kSetMuted) {
+    if (text.empty()) return;
     PaddockText(PaddockReading(px, false, 1.45F), PaddockRgb(colour), text, width);
     PaddockGap(13.0F);
 }
@@ -524,7 +525,7 @@ void DrawSavesOverview(SavesPageState& state, float width, float panel, const Sa
     const char* reason = !info.exists ? "Create or import a save first." : "Restore or repair the save first.";
     PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), "Save file", width);
     PaddockGap(13.0F);
-    SavesNote("These actions include all three adventure slots, shared unlocks and personal records.", width);
+    SavesNote("Includes all three slots, unlocks and records.", width);
     {
         const float backup = PaddockRaceButtonWidth("BACK UP SAVE");
         const float export_width = PaddockRaceButtonWidth("EXPORT SAVE");
@@ -604,7 +605,7 @@ void DrawSavesOverview(SavesPageState& state, float width, float panel, const Sa
     }
 
     SavesSeparator("Backups", width);
-    SavesNote("Restore earlier progress. A safety backup is also created before applying edits or resetting a save.",
+    SavesNote("A backup is created before replacing your save.",
               width);
     const auto& backups = view.adventure_backups;
     if (backups.empty()) {
@@ -681,16 +682,16 @@ void DrawSavesOverview(SavesPageState& state, float width, float panel, const Sa
 
 void DrawSavesTransfer(float width, float panel, const SaveManagerViewCache& view) {
     SavesSeparator("Move your offline saves", width, false);
-    SavesNote("Transfer ordinary offline Adventure progress and offline Controller Paks. Online and mod-set saves are separate and are not included.",
+    SavesNote("Includes offline Adventure progress and Controller Paks. Online and modded saves are not included.",
               width);
     const bool stacked = panel <= 540.0F;
     const float half = stacked ? width : std::floor((width - 10.0F) * 0.5F);
-    if (SavesRaceButton("EXPORT OFFLINE GARAGE", half)) ExportSaveBundleWithDialog();
+    if (SavesRaceButton("EXPORT OFFLINE SAVE BUNDLE", half)) ExportSaveBundleWithDialog();
     if (!stacked) ImGui::SameLine(0.0F, 10.0F); else PaddockGap(10.0F);
-    if (SavesRaceButton("IMPORT OFFLINE GARAGE", half)) ImportSaveBundleWithDialog();
+    if (SavesRaceButton("IMPORT OFFLINE SAVE BUNDLE", half)) ImportSaveBundleWithDialog();
     PaddockGap(18.0F);
     SavesSeparator("Virtual Controller Paks", width, false);
-    SavesNote("Four virtual memory cards. Each card is included in a complete garage export when available.", width);
+    SavesNote("Four virtual memory cards. Included in offline save bundles when available.", width);
     const float column = stacked ? width : std::floor((width - 12.0F) * 0.5F);
     const ImVec2 at = ImGui::GetCursorScreenPos();
     float row_top = at.y;
@@ -742,15 +743,15 @@ void DrawSavesConfirmations(SavesPageState& state) {
     switch (state.ask) {
         case Ask::Repair:
             heading = "Repair this save?";
-            paragraphs = {"Back up the save, then rebuild its checksums without changing save data?",
-                          "The exact original is kept in Backups."};
+            paragraphs = {"Repair this save? Your progress won't be edited.",
+                          "The original will be backed up."};
             confirm = "BACK UP & REPAIR";
             break;
         case Ask::Reset:
             heading = exists ? "Start a fresh adventure?" : "Create an Adventure save?";
-            paragraphs = {exists ? "Reset all three slots, unlocks and records? Your current save will be backed up first."
+            paragraphs = {exists ? "Reset all three slots, unlocks and records? A backup will be created first."
                                  : "Create an empty save with three adventure slots?",
-                          dirty ? "Your unapplied editor changes will be discarded."
+                          dirty ? "Unsaved editor changes will be discarded."
                                 : "You can edit the new save from Edit progress."};
             confirm = exists ? "BACK UP & RESET" : "CREATE SAVE";
             destructive = exists;
@@ -759,33 +760,33 @@ void DrawSavesConfirmations(SavesPageState& state) {
             heading = "Restore this backup?";
             paragraphs = {PathUtf8(state.restore),
                           "Your current save will be backed up before it is replaced.",
-                          dirty ? "Your unapplied editor changes will be discarded."
+                          dirty ? "Unsaved editor changes will be discarded."
                                 : "You can restore the replaced save from this list."};
             confirm = "RESTORE BACKUP";
             destructive = true;
             break;
         case Ask::MaxOut:
             heading = "Max out this adventure?";
-            paragraphs = {"Set all balloons, amulets, keys and course progress in this slot to complete?",
-                          "This changes the draft. Use Apply changes to save it."};
+            paragraphs = {"Complete this Adventure slot?",
+                          "Use Apply changes to save this edit."};
             confirm = "MAX OUT";
             break;
         case Ask::UnlockAll:
             heading = "Unlock all racers and modes?";
-            paragraphs = {"Enable Adventure Two, Drumstick and all T.T. victories in this draft?",
+            paragraphs = {"Unlock Adventure Two, Drumstick and all T.T. victories?",
                           "Use Apply changes to save these unlocks."};
             confirm = "UNLOCK ALL";
             break;
         case Ask::Discard:
-            heading = "Discard unapplied changes?";
-            paragraphs = {"Reload the current save and discard edits to all three slots and shared unlocks?"};
+            heading = "Discard unsaved changes?";
+            paragraphs = {"Discard edits to all three slots and shared unlocks?"};
             confirm = "DISCARD";
             destructive = true;
             break;
         case Ask::Apply:
             heading = "Apply changes?";
-            paragraphs = {"Replace the current save with this draft? A backup of the current save will be created first.",
-                          "Checksums are rebuilt and verified before the save is swapped in."};
+            paragraphs = {"Apply these edits to your offline save? A backup will be created first.",
+                          ""};
             confirm = "BACK UP & APPLY";
             break;
         case Ask::None:
@@ -799,7 +800,7 @@ void DrawSavesConfirmations(SavesPageState& state) {
         }
         return;
     }
-    paragraphs.insert(paragraphs.begin(), "Target: YOUR OFFLINE ADVENTURE. Online and modded progress are not changed.");
+    paragraphs.insert(paragraphs.begin(), "Offline Adventure save. Online and modded saves aren't affected.");
     const float inner = SettingsDialogInner();
     for (std::size_t index = 0; index < paragraphs.size(); ++index) {
         if (index > 0U) PaddockGap(13.0F);
@@ -821,8 +822,8 @@ void DrawSavesConfirmations(SavesPageState& state) {
                     InvalidateSaveManagerViewCache();
                     SavesForgetDraft();
                     g_save_manager_status = changed
-                        ? "Checksums repaired without changing save data. The original is available in Backups."
-                        : "The Adventure save checksums are already valid.";
+                        ? "Save repaired. Original kept in Backups."
+                        : "This save doesn't need repair.";
                 } else {
                     g_save_manager_status = error;
                 }
@@ -877,7 +878,7 @@ void DrawSavesConfirmations(SavesPageState& state) {
                     InvalidateSaveManagerViewCache();
                     state.original = g_save_builder_image;
                     state.summary.reset();
-                    g_save_manager_status = "Changes applied. Checksums verified; previous progress is available in Backups.";
+                    g_save_manager_status = "Changes saved. Previous progress kept in Backups.";
                 } else if (!error.empty()) {
                     g_save_manager_status = error;
                 }
@@ -900,7 +901,7 @@ void DrawSavesConfirmations(SavesPageState& state) {
 
 void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
     using namespace dkr::runtime::saves;
-    if (!g_save_manager_status.empty()) SavesNote(g_save_manager_status, width, 16.0F, kSetWarm);
+    if (!g_save_manager_status.empty()) DrawFriendlyStatus(g_save_manager_status, width, dkr::runtime::copy::Area::Saves);
     static std::future<std::vector<StoredAdventure>> pending;
     static std::vector<StoredAdventure> records;
     static bool loaded = false;
@@ -911,11 +912,11 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
     if (pending.valid()) {
         if (pending.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             try { records = pending.get(); } catch (...) { g_save_manager_status = "Stored-save scan failed; no files were changed."; }
-        } else SavesNote("Reading stored saves... no files are being changed.", width);
+        } else SavesNote("Reading saves...", width);
     }
-    SavesNote(state.scope == 1 ? "Host-owned online progress and isolated client copies. These are never automatically imported into offline play."
-        : state.scope == 2 ? "Each enabled mod set has separate progress. Changing your mod selection does not delete earlier saves."
-        : "Recovery candidates are shown as stored. Nothing is restored automatically. A missing original cannot be reconstructed without a surviving copy.", width);
+    SavesNote(state.scope == 1 ? "Online progress is separate from offline saves."
+        : state.scope == 2 ? "Each mod selection keeps separate progress."
+        : "Restore a surviving copy to recover progress. Recovery needs an existing save or backup.", width);
     bool found = false;
     for (const auto& record : records) {
         if (record.scope != state.scope) continue;
@@ -939,7 +940,7 @@ void DrawStoredSaves(SavesPageState& state, float width, bool locked) {
         });
         PaddockGap(14.0F); ImGui::PopID();
     }
-    if (!found && !pending.valid()) SavesNote("No stored saves found in this category. Your files have not been moved or deleted.", width);
+    if (!found && !pending.valid()) SavesNote("No saves found in this category.", width);
 }
 
 void DrawSaveManagerPage(float available_width, bool live) {
@@ -956,7 +957,7 @@ void DrawSaveManagerPage(float available_width, bool live) {
     DrawPageHeading("SAVE MANAGER");
     PaddockGap(13.0F);
     PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetMuted),
-                "Keep your progress safe, edit adventures and move saves between devices.", width);
+                "Back up, transfer and edit your saves.", width);
     PaddockGap(22.0F);
     const bool lobby = dkr::runtime::netplay::session().active();
     const int scope = SettingsSectionSigns({"OFFLINE", "ONLINE", "MODDED", "RECOVERY"}, state.scope, width);
@@ -975,11 +976,10 @@ void DrawSaveManagerPage(float available_width, bool live) {
         SavesNote(owner.online ? "ACTIVE: ONLINE SESSION SAVE" : route.parent_path().filename() == "saves"
             ? "ACTIVE: YOUR OFFLINE ADVENTURE" : "ACTIVE: MOD-SET SAVE (OFFLINE)", inner, 16.0F, kSetText);
         SavesNote(PathUtf8(route), inner, 14.0F);
-        PaddockText(PaddockSign(19.0F, 1.45F, 0.0F), PaddockRgb(kSetText), "PIT LANE SAFETY LOCK", inner);
+        PaddockText(PaddockSign(19.0F, 1.45F, 0.0F), PaddockRgb(kSetText), "SAVE EDITING UNAVAILABLE", inner);
         PaddockGap(12.0F);
         PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetMuted),
-                    "Save import, restore and reset are available before the game starts. Close the game and use "
-                    "Save Manager so DKR cannot write to the same save or Controller Pak during a transfer.",
+                    "Return to the launcher before importing, restoring or resetting saves.",
                     inner);
         box.End([](ImDrawList* draw, ImVec2 a, ImVec2 b) {
             PaddockPanel(draw, a, b, {PaddockRound(16.0F), PaddockRgb(0x0B2E40, 245U), PaddockRgb(kSetBorder), 1.0F});
@@ -989,7 +989,7 @@ void DrawSaveManagerPage(float available_width, bool live) {
     }
 
     if (!g_save_manager_status.empty()) {
-        PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetWarm), g_save_manager_status, width);
+        DrawFriendlyStatus(g_save_manager_status, width, dkr::runtime::copy::Area::Saves);
         PaddockGap(13.0F);
     }
     const SaveManagerViewCache& view = CachedSaveManagerView();
@@ -1004,17 +1004,15 @@ void DrawSaveManagerPage(float available_width, bool live) {
         unsigned status_colour = kSavesAccent;
         if (!info.exists) {
             status = "No Adventure save yet";
-            description = "The game creates a save after your first adventure. You can also import a save or "
-                          "create a fresh one below.";
+            description = "Start an Adventure, import a save or create one below.";
             status_colour = kSetText;
         } else if (info.size != dkr::runtime::saves::codec::kImageSize) {
-            status = "Save size not recognized";
-            description = "This save is " + std::to_string(info.size) +
-                          " bytes; 512 bytes are required. Import a working save or restore a backup below.";
+            status = "Unsupported save format";
+            description = "Try a supported save or restore a working backup.";
             status_colour = kSavesError;
         } else if (!info.valid) {
             status = "Save needs repair";
-            description = "The save failed its integrity check. Back up and repair it, or restore a working backup.";
+            description = "Repair this save or restore a working backup.";
             status_colour = kSavesError;
         }
         PaddockBox box(width, {19.0F, 19.0F});
@@ -1028,8 +1026,13 @@ void DrawSaveManagerPage(float available_width, bool live) {
                        PaddockCol(status_colour), status.data(), status.data() + status.size());
         PaddockGap(12.0F);
         PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetMuted), description, inner);
+        if (info.exists && info.size != dkr::runtime::saves::codec::kImageSize)
+            DrawTechnicalDetails("Save size: " + std::to_string(info.size) + " bytes. Expected 512 bytes.", "Format details");
         PaddockGap(13.0F);
-        PaddockText(PaddockReading(14.0F, false, 1.4F), PaddockRgb(kSetMuted), PathUtf8(info.path), inner);
+        if (ImGui::CollapsingHeader("Save location")) {
+            SavesNote(PathUtf8(info.path), inner, 14.0F);
+            if (SavesRaceButton("COPY LOCATION")) SDL_SetClipboardText(PathUtf8(info.path).c_str());
+        }
         if (info.exists && info.size == dkr::runtime::saves::codec::kImageSize && !info.valid) {
             PaddockGap(13.0F);
             if (SavesRaceButton("BACK UP & REPAIR SAVE", 0.0F, SavesTone::Primary, lobby)) {
@@ -1042,7 +1045,7 @@ void DrawSaveManagerPage(float available_width, bool live) {
     }
     PaddockGap(24.0F);
     if (lobby) {
-        SavesNote("Offline progress is protected while you are in an online lobby. Leave the lobby before editing, importing, repairing or restoring personal saves.", width, 16.0F, kSetWarm);
+        SavesNote("Leave the lobby before changing offline saves.", width, 16.0F, kSetWarm);
         SavesNote(view.preview, width);
         if (SavesRaceButton("EXPORT OFFLINE COPY", 0, SavesTone::Plain, !editable)) ExportAdventureWithDialog();
         state.ask = SavesPageState::Ask::None;

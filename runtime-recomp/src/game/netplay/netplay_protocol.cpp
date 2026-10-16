@@ -76,7 +76,9 @@ bool TakeString(std::span<const std::uint8_t> bytes, std::size_t& cursor,
 
 bool PutManifest(std::vector<std::uint8_t>& out,
                  const CompatibilityManifest& manifest) {
-    if(!valid_mod_manifest_hash(manifest.mod_manifest_hash))return false;
+    if(!valid_mod_manifest_hash(manifest.mod_manifest_hash) ||
+       !valid_mod_manifest_hash(manifest.owned_engine_hash) ||
+       !valid_mod_manifest_hash(manifest.owned_resources_hash))return false;
     Put32(out, manifest.protocol_version);
     if (!PutString(out, manifest.release_version,
                    kMaximumReleaseVersionBytes) ||
@@ -93,7 +95,9 @@ bool PutManifest(std::vector<std::uint8_t>& out,
     Put32(out, manifest.simulation_rate);
     return PutString(out, manifest.architecture, 32U) &&
            PutString(out, manifest.floating_point_mode, 48U) &&
-           PutString(out, manifest.mod_manifest_hash, 64U);
+           PutString(out, manifest.mod_manifest_hash, 64U) &&
+           PutString(out, manifest.owned_engine_hash, 64U) &&
+           PutString(out, manifest.owned_resources_hash, 64U);
 }
 
 bool TakeManifest(std::span<const std::uint8_t> bytes, std::size_t& cursor,
@@ -118,7 +122,11 @@ bool TakeManifest(std::span<const std::uint8_t> bytes, std::size_t& cursor,
         !TakeString(bytes, cursor, manifest.architecture, 32U) ||
         !TakeString(bytes, cursor, manifest.floating_point_mode, 48U) ||
         !TakeString(bytes, cursor, manifest.mod_manifest_hash, 64U) ||
-        !valid_mod_manifest_hash(manifest.mod_manifest_hash)) {
+        !TakeString(bytes, cursor, manifest.owned_engine_hash, 64U) ||
+        !TakeString(bytes, cursor, manifest.owned_resources_hash, 64U) ||
+        !valid_mod_manifest_hash(manifest.mod_manifest_hash) ||
+        !valid_mod_manifest_hash(manifest.owned_engine_hash) ||
+        !valid_mod_manifest_hash(manifest.owned_resources_hash)) {
         return false;
     }
     manifest.revision = static_cast<Revision>(revision);

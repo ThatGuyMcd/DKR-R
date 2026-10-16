@@ -10,5 +10,5 @@ if not "%EXITCODE%"=="0" (
 ) else (
     echo [OK] DKR runtime preparation completed.
 )
-pause
+if not "%DKRPORT_NO_PAUSE%"=="1" pause
 exit /b %EXITCODE%

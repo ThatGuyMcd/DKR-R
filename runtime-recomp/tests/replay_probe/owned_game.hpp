@@ -6,6 +6,7 @@
 #include <memory>
 
 namespace dkr::mods::online { class RuntimeResources; }
+namespace dkr::mods::code {struct FrozenSet;}
 
 namespace dkr::runtime::netplay::experimental {
 struct OwnedBootOptions {
@@ -21,6 +22,9 @@ struct OwnedBootOptions {
     // Native cache/menu sidecar captured AFTER the cold bootstrap's workers
     // have joined. Never borrow the normal world's mutable RuntimeSession.
     std::vector<std::uint8_t> mod_bootstrap;
+    std::shared_ptr<const dkr::mods::code::FrozenSet> code;
+    std::vector<std::uint8_t> code_bootstrap;
+    std::uint64_t code_seed=0x444B52434F444531ULL;
 };
 struct ConfirmedAudio {
     std::uint64_t epoch = 0;

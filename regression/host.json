@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "name": "ROM-free runtime regression and checkpoint performance",
+  "scenarios": [
+    {
+      "id": "rollback",
+      "description": "Checkpoint restore, correction and exact replay",
+      "ctest": "DKRExperimentalRollback",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "scene-epochs",
+      "description": "Confirmed scene epoch transitions",
+      "ctest": "DKRExperimentalEpoch",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "network",
+      "description": "Network scheduling and recovery policies",
+      "ctest": "DKRExperimentalNetwork",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "session",
+      "description": "Experimental session state transitions",
+      "ctest": "DKRExperimentalSession",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "presentation",
+      "description": "Renderer snapshot and presentation lifetime",
+      "ctest": "DKRPresentationOwnership",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "audio",
+      "description": "Confirmed PCM output ownership",
+      "ctest": "DKRExperimentalPcm",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "saves",
+      "description": "Save persistence and recovery",
+      "ctest": "DKRSaveStorage",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "online-saves",
+      "description": "Confirmed online EEPROM isolation",
+      "ctest": "DKRExperimentalEeprom",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "input",
+      "description": "Player input ownership",
+      "ctest": "DKRExperimentalOwnerInput",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "performance-policy",
+      "description": "Performance instrumentation and bounded runtime policies",
+      "ctest": "DKRPerformancePolicy",
+      "timeout_seconds": 180
+    },
+    {
+      "id": "checkpoint-benchmark",
+      "description": "Synthetic 8 MiB production checkpoint hash/store/restore benchmark",
+      "ctest": "DKRRegressionBenchmark",
+      "timeout_seconds": 180,
+      "expect_stdout": [
+        "Checkpoint benchmark passed"
+      ],
+      "fingerprints": [
+        "Checkpoint fingerprint: [0-9a-f]+"
+      ],
+      "required_metrics": [
+        "checkpoint.hash_median_ms",
+        "checkpoint.hash_p95_ms",
+        "checkpoint.store_median_ms",
+        "checkpoint.restore_median_ms"
+      ]
+    }
+  ]
+}

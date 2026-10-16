@@ -1,46 +1,5 @@
 # All dependency modifications use checked isolated copies, never the checkout.
-find_package(Git REQUIRED)
-function(dkr_stage_patch target source stage_name patch)
-    set(stage "${CMAKE_BINARY_DIR}/generated/${stage_name}")
-    set(files ${ARGN})
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${patch}")
-    foreach(file IN LISTS files)
-        get_filename_component(parent "${file}" DIRECTORY)
-        file(MAKE_DIRECTORY "${stage}/${parent}")
-        configure_file("${source}/${file}" "${stage}/${file}" COPYONLY)
-    endforeach()
-    execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${stage}"
-        COMMAND_ERROR_IS_FATAL ANY)
-    foreach(mode IN ITEMS check apply)
-        # Checkout EOLs differ between Windows and Linux. Ignore context-only
-        # whitespace; added lines still pass the strict whitespace check.
-        set(flags --recount --whitespace=error --ignore-space-change)
-        if(mode STREQUAL "check")
-            list(APPEND flags --check)
-        endif()
-        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${stage}" apply ${flags} "${patch}"
-            RESULT_VARIABLE result ERROR_VARIABLE error)
-        if(NOT result EQUAL 0)
-            message(FATAL_ERROR "${stage_name} ${mode} failed: ${error}")
-        endif()
-    endforeach()
-    get_target_property(sources ${target} SOURCES)
-    foreach(file IN LISTS files)
-        get_filename_component(name "${file}" NAME)
-        set(matches ${sources})
-        list(FILTER matches INCLUDE REGEX "(^|/)${name}$")
-        list(LENGTH matches count)
-        if(NOT count EQUAL 1)
-            message(FATAL_ERROR "${stage_name}: expected one ${name}, found ${count}")
-        endif()
-        list(REMOVE_ITEM sources ${matches})
-        list(APPEND sources "${stage}/${file}")
-        get_filename_component(parent "${file}" DIRECTORY)
-        set_source_files_properties("${stage}/${file}" TARGET_DIRECTORY ${target}
-            PROPERTIES INCLUDE_DIRECTORIES "${source}/${parent};${DKRPORT_ROOT}/runtime-recomp/src/game")
-    endforeach()
-    set_property(TARGET ${target} PROPERTY SOURCES "${sources}")
-endfunction()
+include("${CMAKE_CURRENT_LIST_DIR}/StagedPatch.cmake")
 
 dkr_stage_patch(ultramodern "${DKR_MODERN_RUNTIME_SOURCE}" performance-runtime
     "${DKRPORT_ROOT}/patches/performance/runtime-snapshot-pool.patch" ultramodern/src/events.cpp)
@@ -59,6 +18,12 @@ if(DKR_REPLAY_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
     dkr_stage_patch(librecomp "${CMAKE_BINARY_DIR}/generated/guest-cancellation" experimental-quiesced-bootstrap
         "${DKRPORT_ROOT}/patches/netplay/experimental-quiesced-bootstrap.patch" librecomp/src/recomp.cpp)
 endif()
+set(DKR_CODE_RUNTIME_INPUT "${CMAKE_BINARY_DIR}/generated/guest-cancellation")
+if(DKR_REPLAY_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
+    set(DKR_CODE_RUNTIME_INPUT "${CMAKE_BINARY_DIR}/generated/experimental-quiesced-bootstrap")
+endif()
+dkr_stage_patch(librecomp "${DKR_CODE_RUNTIME_INPUT}" custom-magic-code-heap
+    "${DKRPORT_ROOT}/patches/custom-magic-codes/runtime-code-heap.patch" librecomp/src/recomp.cpp)
 if(BUILD_TESTING AND NOT ANDROID)
     add_executable(DKRNativeGuestLifetimeTests "${DKRPORT_ROOT}/runtime-recomp/tests/native_guest_lifetime_tests.cpp")
     target_compile_definitions(DKRNativeGuestLifetimeTests PRIVATE

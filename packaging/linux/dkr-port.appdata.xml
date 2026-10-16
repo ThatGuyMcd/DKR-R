@@ -16,6 +16,9 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.0.7+beta.2" date="2026-10-16" type="development"/>
+    <release version="1.0.7" date="2026-10-15"/>
+    <release version="1.0.6" date="2026-10-12"/>
     <release version="1.0.5" date="2026-10-10"/>
     <release version="1.0.5-beta.15-playtest.15-fix.2" date="2026-10-07" type="development"/>
     <release version="1.0.5-beta.12" date="2026-09-25" type="development"/>

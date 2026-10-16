@@ -12,8 +12,8 @@ namespace dkr::runtime::water::enhanced {
 
 enum class Quality : std::uint8_t { Original, Enhanced, High };
 enum class Reflection : std::uint8_t { Sky, ScreenSpace, Hardware };
-enum class Kind : std::uint8_t { None, Calm, Waves, Waterfall, Fountain };
-enum class Hint : std::uint8_t { Automatic, Exclude, Calm, Waves, Waterfall, Fountain };
+enum class Kind : std::uint8_t { None, Calm, Waves, Waterfall, Fountain, Lava };
+enum class Hint : std::uint8_t { Automatic, Exclude, Calm, Waves, Waterfall, Fountain, Lava };
 
 inline constexpr std::uint32_t kWater = 1U << 13U;
 inline constexpr std::uint32_t kWaves = 1U << 22U;
@@ -56,8 +56,13 @@ constexpr Kind classify(MaterialEvidence e) {
     case Hint::Waves: return Kind::Waves;
     case Hint::Waterfall: return Kind::Waterfall;
     case Hint::Fountain: return Kind::Fountain;
+    case Hint::Lava: return Kind::Lava;
     default: break;
     }
+    // Reviewed Hot Top Volcano molten surface (including waves_render's
+    // reference batch). Do not turn its rock, haze or collision-type 10 ice
+    // into lava, and never treat molten geometry as water for craft wakes.
+    if (e.texture_id == 16U && (e.flags & kWater)) return Kind::Lava;
     if (excluded_stock_texture(e.texture_id) || e.surface_type == 10U)
         return Kind::None;
     switch (e.texture_id) {
@@ -102,6 +107,15 @@ struct Profile {
     float ripple = 0.65F;
     float foam = 0.6F;
 };
+
+constexpr Profile lava_profile() {
+    Profile p;
+    p.deep={0.028F,0.006F,0.002F};
+    p.shallow={1.0F,0.18F,0.015F};
+    p.sky={0.15F,0.055F,0.025F};
+    p.roughness=0.26F; p.ripple=0.35F; p.foam=0;
+    return p;
+}
 
 inline bool valid_profile(const Profile& p) {
     const auto colour = [](Vec3 v) { return finite(v) && v.x >= 0 && v.y >= 0 &&

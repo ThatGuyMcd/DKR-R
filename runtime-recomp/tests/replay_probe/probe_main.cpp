@@ -1,3 +1,5 @@
+#include "netplay/experimental_performance.hpp"
+#include <exception>
 #include "funcs.h"
 #include "probe_bridge.h"
 #include "probe_driver.hpp"
@@ -37,6 +39,49 @@ extern "C" int dkr_probe_audio_link_canaries_unchanged();
 
 namespace {
 const char* checked_service=nullptr;
+std::array<std::uint64_t,3> checked_native_args{};
+unsigned checked_native_count=0;
+std::uint64_t checked_native_result=0;
+void no_mod_parameter_entry(std::uint8_t* ram,recomp_context* context) {
+    checked_native_result=dkr_probe_native_args(checked_service,ram,context,
+        checked_native_args.data(),checked_native_count);
+}
+void no_mod_parameter_test() {
+    std::vector<std::uint8_t> ram(64,0xA5);
+    const auto original=ram;
+    recomp_context context{};
+    dkr::runtime::netplay::repair_float_register_pointer(context);
+    const auto saved=context;
+    for(const bool racer:{false,true}) {
+        checked_service=racer?"dkr_legacy_racer_stat":"dkr_legacy_course_component";
+        checked_native_count=racer?3:2;
+        for(unsigned selector=0;selector<3;++selector) {
+            for(const std::uint32_t bits:{0U,0x3F800000U,0x80000000U,UINT32_MAX}) {
+                checked_native_args={selector,racer?UINT32_MAX:bits,bits};
+                dkr_probe_offline_services(1);
+                auto result=dkr_probe_run(no_mod_parameter_entry,ram.data(),ram.size(),&context,100);
+                assert(result.completed && checked_native_result==bits && result.memory_accesses==0);
+                assert(ram==original && std::memcmp(&context,&saved,sizeof(context))==0);
+            }
+        }
+        // Unknown selectors, altered ABI widths/arity and a non-offline
+        // owner must still trap before returning a synthetic parameter.
+        for(unsigned fault=0;fault<5;++fault) {
+            checked_native_count=racer?3:2;
+            checked_native_args={0,0,0};dkr_probe_offline_services(1);
+            if(fault==0)checked_native_args[0]=3;
+            if(fault==1)checked_native_args[1]=UINT64_C(0x100000000);
+            if(fault==2)--checked_native_count;
+            if(fault==3)dkr_probe_offline_services(0);
+            if(fault==4)checked_native_args[racer?2:1]=UINT64_C(0x100000000);
+            const auto result=dkr_probe_run(no_mod_parameter_entry,ram.data(),ram.size(),&context,100);
+            assert(!result.completed && result.blocked && std::strcmp(result.blocked,checked_service)==0);
+            assert(ram==original && std::memcmp(&context,&saved,sizeof(context))==0);
+        }
+    }
+    dkr_probe_offline_services(1);
+    std::cout<<"Stock racer/course parameter identities preserve exact bits and reject invalid boundaries.\n";
+}
 std::array<std::uint8_t,4096> checked_dma_dmem;
 std::uint32_t checked_dma_dmem_address=0,checked_dma_dram_address=0,checked_dma_length=0;
 int checked_dma_write=0;
@@ -707,6 +752,7 @@ bool component_replay(dkr_probe_entry root, std::vector<std::uint8_t>& ram,
     return changed > sizeof(unsigned);
 }
 void self_test() {
+    no_mod_parameter_test();
     owned_video_test();
     audio_dma_services_test();
 #if DKR_PROBE_HAS_AUDIO_ISOLATION
@@ -772,6 +818,19 @@ void self_test() {
 }
 }
 int main(int argc, char** argv) {
+    // Report only opt-in diagnostic counters on ordinary exits. This scope
+    // does not change guest state or emit a misleading final report on unwind.
+    struct FinalPerformanceReport {
+        FinalPerformanceReport() {
+            if (dkr::runtime::netplay::experimental::performance::enabled())
+                dkr::runtime::netplay::experimental::performance::begin_report_window();
+        }
+        ~FinalPerformanceReport() {
+            if (std::uncaught_exceptions() == 0)
+                dkr::runtime::netplay::experimental::performance::report();
+        }
+    } final_performance_report;
+
     using namespace dkr::runtime::netplay;
     if (const char* watched = std::getenv("DKR_PROBE_WATCH_WORD")) {
         char* end = nullptr;

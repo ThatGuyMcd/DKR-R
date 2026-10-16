@@ -23,8 +23,10 @@ android {
         applicationId 'io.github.thatguymcd.dkrr.preview'
         minSdk 28
         targetSdk 35
-        versionCode 1050032
-        versionName root.toPath().resolve('VERSION').toFile().text.trim()
+        // Bootstrap updater APK: keep the existing application/signing identity
+        // and increment this for every published APK, including same-version fixes.
+        versionCode providers.gradleProperty('dkrVersionCode').map { it.toInteger() }.getOrElse(1070007)
+        versionName providers.gradleProperty('dkrVersionName').getOrElse(root.toPath().resolve('VERSION').toFile().text.trim())
         ndk { abiFilters 'arm64-v8a' }
     }
     sourceSets.main {
@@ -34,8 +36,26 @@ android {
         assets.srcDirs = ["${nativeStage}/assets"]
     }
     packaging { jniLibs { useLegacyPackaging = true } }
+    signingConfigs {
+        updaterRelease {
+            // CI must reuse the distributed certificate (or an authorised
+            // Android signing lineage), not generate a fresh debug identity.
+            if (System.getenv('DKR_ANDROID_KEYSTORE')) {
+                storeFile file(System.getenv('DKR_ANDROID_KEYSTORE'))
+                storePassword System.getenv('DKR_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('DKR_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('DKR_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         debug { debuggable true }
-        release { minifyEnabled false }
+        release {
+            minifyEnabled false
+            debuggable false
+            // Keep upgrade compatibility with the existing distributed APKs.
+            // A future production key migration needs an explicit user-data plan.
+            signingConfig System.getenv('DKR_ANDROID_KEYSTORE') ? signingConfigs.updaterRelease : signingConfigs.debug
+        }
     }
 }

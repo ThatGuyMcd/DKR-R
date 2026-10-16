@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "revision": "us.v80",
+  "elf_sha256": "a3fd54e626af1e99a51751dafd0c6fa2498ea035722e1e4aed73df9cd94c7bbb",
+  "files": {
+    "game_symbols.inc": "526dc2ba1e8ac8f9bec051df50171a645895eda6623f4de7f8bad7dbf11e5fdc",
+    "functions.toml": "4f039f59fa4b932bc108c60098dd3318d3427a6a2f7e40bd7cad406e22889342",
+    "data.toml": "1349a9772ad155aa5e395f9f7050d4ae1247f85aab16c61ad8446e03f04b8e8c",
+    "symbols.ld": "a63a604a7abe2e6b23fd12bc695868a1d5b682bd59c21b774cae54e8b8af654b"
+  }
+}

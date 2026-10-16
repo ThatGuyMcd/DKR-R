@@ -5,18 +5,23 @@ project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 version="${DKR_RELEASE_VERSION:-$(tr -d '\r\n' <"${project_root}/VERSION")}"
 kit_name="DKR-R-${version}-macOS-Build-Kit"
 stage_root="${DKR_MAC_KIT_STAGE_ROOT:-${project_root}/build/${version}-macos-kit-staging}"
-stage="${stage_root}/${kit_name}"
 output="${project_root}/dist/${kit_name}.tar.gz"
 
-[[ ! -e "${stage}" ]] || {
-  echo "macOS build-kit staging already exists: ${stage}" >&2
-  exit 1
-}
 [[ ! -e "${output}" ]] || {
   echo "macOS build-kit archive already exists: ${output}" >&2
   exit 1
 }
 
+mkdir -p "${stage_root}" "${project_root}/dist"
+scratch="$(mktemp -d "${stage_root}/.kit.XXXXXX")"
+archive=""
+cleanup() {
+  rm -rf -- "${scratch}"
+  if [[ -n "${archive}" ]]; then rm -f -- "${archive}"; fi
+}
+trap cleanup EXIT
+archive="$(mktemp "${project_root}/dist/.kit.XXXXXX")"
+stage="${scratch}/${kit_name}"
 mkdir -p "${stage}/extern"
 install -m 0644 "${project_root}/VERSION" "${stage}/VERSION"
 install -m 0644 "${project_root}/dependencies.lock.json" "${stage}/dependencies.lock.json"
@@ -60,6 +65,9 @@ print(f"macOS build-kit scan passed: {inspected} files inspected")
 PY
 
 mkdir -p "${project_root}/dist"
-tar -C "${stage_root}" -czf "${output}" "${kit_name}"
+tar -C "${scratch}" -czf "${archive}" "${kit_name}"
+# Publish a complete archive without clobbering an output created meanwhile.
+chmod 0644 "${archive}"
+ln "${archive}" "${output}"
 printf 'Created %s\n' "${output}"
-sha256sum "${output}"
+shasum -a 256 "${output}"

@@ -15,6 +15,12 @@
 /DKR-R-*.AppImage
 /DKR-R-*.apk
 /DKR-R-*.aab
+/DKR-R-*.ipa
+/DKR-R-*.tar.gz
+/Custom-Magic-Codes-SDK*.zip
+# Keep compiled code mods outside the source SDK; commit their source instead.
+*.nrm
+*.dkrcode
 CMakeUserPresets.json
 
 # Build-system and compiler intermediates

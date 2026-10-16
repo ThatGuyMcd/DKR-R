@@ -471,6 +471,19 @@ struct QuickJoinTestAccess {
         std::string bootstrap; PeerAddress host_address{},client_address{};
         wait("client bootstrap",[&]{return !bootstrap.empty() || client.take_quick_join_bootstrap(bootstrap,host_address);});
         assert(bootstrap=="experimental-private-test");
+        // Rebind a real, already-open accepted channel. The SDK does not replay
+        // its open event; bootstrap must still be delivered by late binding.
+        std::shared_ptr<QuickJoinTransport::Peer> existing_peer;
+        {
+            std::scoped_lock lock(host.mutex_);
+            assert(!host.peers_.empty());
+            existing_peer = host.peers_.begin()->second;
+        }
+        assert(existing_peer->control_channel->isOpen());
+        host.bind_channel(existing_peer, existing_peer->control_channel);
+        bootstrap.clear();
+        wait("late channel bootstrap",[&]{return !bootstrap.empty() || client.take_quick_join_bootstrap(bootstrap,host_address);});
+        assert(bootstrap=="experimental-private-test");
         wait("host peer route",[&] {
             std::scoped_lock lock(host.mutex_);
             if(host.peers_.empty()) return false;

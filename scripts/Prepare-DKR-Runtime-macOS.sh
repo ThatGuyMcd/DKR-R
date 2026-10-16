@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "${PROJECT_ROOT}/scripts/lib/apple-build.sh"
 # Inherit the same lock when Build invokes preparation; release on process exit.
 if [[ "${DKR_MACOS_LOCK_ENTRY:-}" != "${BASH_SOURCE[0]}" ]]; then
   exec python3 "${PROJECT_ROOT}/scripts/macos_build_lock.py" "${PROJECT_ROOT}" "${BASH_SOURCE[0]}" "$@"
@@ -84,11 +85,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-[[ "$(uname -s)" == "Darwin" ]] || {
-  echo "This script prepares the macOS build." >&2
-  exit 1
-}
-JOBS="${JOBS:-$(sysctl -n hw.logicalcpu)}"
+dkr_require_macos
+JOBS="$(dkr_apple_build_jobs "$JOBS")"
 mkdir -p "$LOG_DIR"
 exec > >(tee -a "$LOG_PATH") 2>&1
 
@@ -101,7 +99,6 @@ step() {
   echo
   echo "==> $*"
 }
-[[ "$JOBS" =~ ^[1-9][0-9]*$ ]] || fail "--jobs must be a positive integer."
 # Keep paths valid when N64Recomp changes its working directory.
 [[ "$OUTPUT" == /* ]] || OUTPUT="$PWD/$OUTPUT"
 [[ -n "$ROM_V77" && -f "$ROM_V77" ]] || {

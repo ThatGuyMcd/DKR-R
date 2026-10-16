@@ -1,0 +1,223 @@
+diff --git a/src/hle/rt64_workload.h b/src/hle/rt64_workload.h
+--- a/src/hle/rt64_workload.h
++++ b/src/hle/rt64_workload.h
+@@ -27,4 +27,8 @@
+ namespace RT64 {
+     struct DrawData {
++        // Immutable local irradiance; the existing RSP pass interpolates its pulse.
++        std::vector<float> lavaGlow;
++        bool lavaGlowActive=false;
++        float lavaGlowTime=0,lavaGlowStep=0,lavaGlowStrength=0,lavaGlowSpeed=1,lavaGlowIntensity=0;
+         std::vector<float> posFloats;
+         std::vector<float> velFloats;
+@@ -146,4 +150,5 @@
+         BufferPair texcoordVelocityBuffer;
+         BufferPair normalColorBuffer;
++        BufferPair lavaGlowBuffer;
+         BufferPair viewProjIndicesBuffer;
+         BufferPair worldIndicesBuffer;
+diff --git a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
+--- a/src/hle/rt64_workload.cpp
++++ b/src/hle/rt64_workload.cpp
+@@ -48,4 +48,7 @@
+ 
+     void Workload::resetDrawData() {
++        drawData.lavaGlow.clear();drawData.lavaGlowActive=false;
++        drawData.lavaGlowTime=drawData.lavaGlowStep=drawData.lavaGlowStrength=drawData.lavaGlowIntensity=0;
++        drawData.lavaGlowSpeed=1;
+         drawData.posFloats.clear();
+         drawData.velFloats.clear();
+@@ -202,6 +205,10 @@
+     
+     void Workload::uploadDrawData(RenderWorker *worker, BufferUploader *bufferUploader) {
++        // Only lava scenes upload a per-vertex stream; otherwise bind a 4-byte dummy.
++        drawData.lavaGlow.resize(drawData.lavaGlowActive ? drawData.vertexCount() : 1,0);
+         const RenderBufferFlags rtInputFlag = worker->device->getCapabilities().raytracing ? RenderBufferFlag::ACCELERATION_STRUCTURE_INPUT : RenderBufferFlag::NONE;
+         bufferUploader->submit(worker, {
++            {drawData.lavaGlow.data(),{0,drawData.lavaGlow.size()},sizeof(float),RenderBufferFlag::FORMATTED,
++             {RenderFormat::R32_FLOAT},&drawBuffers.lavaGlowBuffer},
+             { drawData.posFloats.data(), drawRanges.posFloats, sizeof(float), RenderBufferFlag::FORMATTED, { RenderFormat::R32_FLOAT }, &drawBuffers.positionBuffer },
+             { drawData.velFloats.data(), drawRanges.velFloats, sizeof(float), RenderBufferFlag::FORMATTED, { RenderFormat::R32_FLOAT }, &drawBuffers.velocityBuffer },
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -761,4 +761,9 @@
+             auto &posTransformed = workload.drawData.posTransformed;
+             const uint32_t newIndex = workload.drawData.vertexCount();
++            if(workload.drawData.lavaGlowActive) {
++                auto& glow=workload.drawData.lavaGlow;
++                const float value=globalIndex<glow.size() ? glow[globalIndex] : 0;
++                glow.resize(newIndex+1,0);glow[newIndex]=value;
++            }
+             posFloats.emplace_back(posFloats[globalIndex * 3 + 0]);
+             posFloats.emplace_back(posFloats[globalIndex * 3 + 1]);
+diff --git a/src/render/rt64_descriptor_sets.h b/src/render/rt64_descriptor_sets.h
+--- a/src/render/rt64_descriptor_sets.h
++++ b/src/render/rt64_descriptor_sets.h
+@@ -529,4 +529,5 @@
+         uint32_t dstCol;
+         uint32_t dstWorld;
++        uint32_t srcLavaGlow;
+ 
+         RSPProcessDescriptorSet(RenderDevice *device = nullptr) {
+@@ -554,4 +555,5 @@
+             dstCol = builder.addReadWriteStructuredBuffer(21);
+             dstWorld = builder.addReadWriteStructuredBuffer(22);
++            srcLavaGlow = builder.addFormattedBuffer(23);
+             builder.end();
+ 
+diff --git a/src/render/rt64_rsp_processor.h b/src/render/rt64_rsp_processor.h
+--- a/src/render/rt64_rsp_processor.h
++++ b/src/render/rt64_rsp_processor.h
+@@ -17,5 +17,8 @@
+             float curFrameWeight;
+             uint32_t waterWorldActive;
++            float lavaGlowScale,lavaGlowCooling;
++            uint32_t padding{};
+         };
++        static_assert(sizeof(ProcessCB)==32,"RSP HLSL constant rows");
+ 
+         struct ModifyCB {
+diff --git a/src/render/rt64_shader_library.cpp b/src/render/rt64_shader_library.cpp
+--- a/src/render/rt64_shader_library.cpp
++++ b/src/render/rt64_shader_library.cpp
+@@ -543,5 +543,6 @@
+             RSPProcessDescriptorSet descriptorSet;
+             layoutBuilder.begin();
+-            layoutBuilder.addPushConstant(0, 0, sizeof(uint32_t) * 4, RenderShaderStageFlag::COMPUTE);
++            // Match both 16-byte HLSL constant rows, including padding.
++            layoutBuilder.addPushConstant(0, 0, sizeof(uint32_t) * 8, RenderShaderStageFlag::COMPUTE);
+             layoutBuilder.addDescriptorSet(descriptorSet);
+             layoutBuilder.end();
+diff --git a/src/render/rt64_rsp_processor.cpp b/src/render/rt64_rsp_processor.cpp
+--- a/src/render/rt64_rsp_processor.cpp
++++ b/src/render/rt64_rsp_processor.cpp
+@@ -6,4 +6,5 @@
+ 
+ #include "rt64_buffer_uploader.h"
++#include "lava_lighting_policy.hpp"
+ 
+ namespace RT64 {
+@@ -25,4 +26,8 @@
+         processCB.curFrameWeight = p.curFrameWeight;
+         processCB.waterWorldActive = p.outputBuffers->waterWorldActive ? 1U : 0U;
++        const float glowTime=drawData.lavaGlowTime-drawData.lavaGlowStep*(1-std::clamp(p.curFrameWeight,0.0f,1.0f));
++        processCB.lavaGlowCooling=dkr::runtime::water::enhanced::lava_cooling(glowTime,drawData.lavaGlowStrength,drawData.lavaGlowSpeed);
++        processCB.lavaGlowScale=drawData.lavaGlowActive ? std::clamp(drawData.lavaGlowIntensity,0.0f,3.0f) *
++            dkr::runtime::water::enhanced::lava_pulse(glowTime,drawData.lavaGlowStrength,drawData.lavaGlowSpeed) : 0;
+         p.outputBuffers->screenPosBuffer.computedSize += processCB.vertexCount * sizeof(float) * 4;
+         p.outputBuffers->genTexCoordBuffer.computedSize += processCB.vertexCount * sizeof(float) * 2;
+@@ -51,4 +56,5 @@
+         processSet->setBuffer(processSet->dstWorld, p.outputBuffers->rasterWorldPosBuffer.buffer.get(), RenderBufferStructuredView(sizeof(float) * 4));
+ 
++        processSet->setBuffer(processSet->srcLavaGlow,p.drawBuffers->lavaGlowBuffer.get(),p.drawBuffers->lavaGlowBuffer.getView(0));
+         const uint32_t modifyCount = drawData.modifyCount();
+         modifyCB.modifyCount = modifyCount;
+diff --git a/src/shaders/RSPProcessCS.hlsl b/src/shaders/RSPProcessCS.hlsl
+--- a/src/shaders/RSPProcessCS.hlsl
++++ b/src/shaders/RSPProcessCS.hlsl
+@@ -18,4 +18,7 @@
+     float curFrameWeight;
+     uint waterWorldActive;
++    float lavaGlowScale;
++    float lavaGlowCooling;
++    uint reserved;
+ };
+ 
+@@ -43,4 +46,5 @@
+ RWStructuredBuffer<float4> dstCol : register(u21);
+ RWStructuredBuffer<float4> dstWorld : register(u22);
++Buffer<float> srcLavaGlow : register(t23);
+ 
+ [numthreads(GROUP_SIZE, 1, 1)]
+@@ -133,4 +137,9 @@
+     dstPos[vertexOffsetIndex] = screenPos;
+     dstTc[vertexOffsetIndex] = tc;
++    if(gConstants.lavaGlowScale>0) {
++        const float energy=min(0.18,min(0.14,max(0,srcLavaGlow[vertexOffsetIndex]))*gConstants.lavaGlowScale);
++        const float3 warmth=lerp(float3(1,0.19,0.012),float3(1,0.07,0.006),saturate(gConstants.lavaGlowCooling));
++        vertexColor.rgb=min(vertexColor.rgb+max(vertexColor.rgb,0.12)*warmth*energy,1);
++    }
+     dstCol[vertexOffsetIndex] = vertexColor;
+     if (gConstants.waterWorldActive) dstWorld[vertexOffsetIndex] = mul(worldMat, float4(pos - vel * (1.0f - gConstants.curFrameWeight), 1.0f));
+diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
+--- a/src/shaders/WaterPS.hlsl
++++ b/src/shaders/WaterPS.hlsl
+@@ -250,4 +250,8 @@
+         float footprint=max(length(ddx(worldPosition.xz)),length(ddy(worldPosition.xz)))*LAVA_WORLD_SCALE;
+         float4 molten=lavaSurface(worldPosition.xz,p.camera.w,footprint);
++        // Surface heat and nearby glow share the interpolated clock. Pulse
++        // between hot and cooling palettes, never between lit and black.
++        const float cooling=saturate(m.sunColor.w)*0.5*(1-sin(p.camera.w*m.optics.y*1.7));
++        molten.rgb=lavaHeatPalette(molten.rgb,cooling)*m.shoreCounts[0].z;
+         float roughness=clamp(m.shallowColor.a+molten.a*0.18,0.065,0.65);
+         float4 reflection=0;
+@@ -255,5 +259,5 @@
+ #ifdef HARDWARE_WATER
+         bool fallingHit=false,capturedHit=false;
+-        float4 traced=hardwareWaterReflection(worldPosition,N,V,p,fallingHit,capturedHit);
++        float4 traced=m.shoreCounts[0].y>0.5 ? hardwareWaterReflection(worldPosition,N,V,p,fallingHit,capturedHit) : float4(0,0,0,0);
+         if(fallingHit || capturedHit)reflection=traced;
+         else {
+diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
+--- a/src/render/rt64_water_renderer.h
++++ b/src/render/rt64_water_renderer.h
+@@ -239,5 +239,5 @@
+     std::vector<uint32_t> profileKinds;
+     uint32_t profileFrames=0;
+-    std::array<double,5> profileTotals{};
++    std::array<double,6> profileTotals{};
+     bool usesHDR;
+ 
+diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer.cpp
+--- a/src/render/rt64_water_renderer.cpp
++++ b/src/render/rt64_water_renderer.cpp
+@@ -744,14 +744,14 @@
+     profilePool->queryResults();
+     const auto *times = profilePool->getResults();
+-    double milliseconds[4] = {};
++    double milliseconds[5] = {};
+     for (uint32_t i=0;i<profileKinds.size();i++) {
+         if (times[i*2+1] >= times[i*2]) milliseconds[profileKinds[i]] += double(times[i*2+1]-times[i*2])/1000000.0;
+     }
+-    for(unsigned i=0;i<4;i++)profileTotals[i]+=milliseconds[i];
+-    profileTotals[4]+=frameMilliseconds;
++    for(unsigned i=0;i<5;i++)profileTotals[i]+=milliseconds[i];
++    profileTotals[5]+=frameMilliseconds;
+     if(++profileFrames==120) {
+-        std::fprintf(stderr,"[water][timing] frames=%u normal-ms=%.3f capture-ms=%.3f surface-ms=%.3f field-ms=%.3f frame-gpu-ms=%.3f bytes=%llu\n",
++        std::fprintf(stderr,"[water][timing] frames=%u normal-ms=%.3f capture-ms=%.3f surface-ms=%.3f field-ms=%.3f lava-ms=%.3f frame-gpu-ms=%.3f bytes=%llu\n",
+             profileFrames,profileTotals[0]/profileFrames,profileTotals[1]/profileFrames,profileTotals[2]/profileFrames,
+-            profileTotals[3]/profileFrames,profileTotals[4]/profileFrames,static_cast<unsigned long long>(allocationBytes()));
++            profileTotals[3]/profileFrames,profileTotals[4]/profileFrames,profileTotals[5]/profileFrames,static_cast<unsigned long long>(allocationBytes()));
+         profileFrames=0;profileTotals.fill(0);
+     }
+@@ -759,11 +759,11 @@
+         const char *name = std::getenv("DKRR_WATER_PROFILE");
+         FILE *file = name ? std::fopen(name,"w") : nullptr;
+-        if (file) std::fprintf(file,"course,quality,debug,views,width,height,water_draws,normal_vertices,normal_ms,capture_ms,surface_ms,field_ms,frame_gpu_ms\n");
++        if (file) std::fprintf(file,"course,quality,debug,views,width,height,water_draws,normal_vertices,normal_ms,capture_ms,surface_ms,field_ms,lava_ms,frame_gpu_ms\n");
+         return file;
+     }();
+     if (csv) {
+         const auto &d = draws.front();
+-        std::fprintf(csv,"%.0f,%.0f,%.0f,%zu,%.0f,%.0f,%zu,%zu,%.5f,%.5f,%.5f,%.5f,%.5f\n",d.material.identity.z,d.material.identity.x,d.material.identity.y,sceneKeys.size(),d.screen.z,d.screen.w,
+-            drawScenes.size(),normalVertices.size(),milliseconds[0],milliseconds[1],milliseconds[2],milliseconds[3],frameMilliseconds);
++        std::fprintf(csv,"%.0f,%.0f,%.0f,%zu,%.0f,%.0f,%zu,%zu,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",d.material.identity.z,d.material.identity.x,d.material.identity.y,sceneKeys.size(),d.screen.z,d.screen.w,
++            drawScenes.size(),normalVertices.size(),milliseconds[0],milliseconds[1],milliseconds[2],milliseconds[3],milliseconds[4],frameMilliseconds);
+         std::fflush(csv);
+     }
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -549,8 +549,10 @@
+             if(pendingLava==UINT32_MAX)return;
+             finishWater();
++            const auto lavaProfileToken=waterRenderer->beginProfile(worker,4);
+             if(waterRenderer->drawLavaLighting(worker,pendingLava,depthState,framebuffer.viewport)) {
+                 worker->commandList->setFramebuffer(depthState ? fbStorage->colorWriteDepthRead.get() : fbStorage->colorDepthWrite.get());
+                 worker->commandList->drawInstanced(3,1,0,0);
+             }
++            waterRenderer->endProfile(worker,lavaProfileToken);
+             pendingLava=UINT32_MAX;pendingLavaProjection=UINT32_MAX;
+             switchToGraphicsPipeline();

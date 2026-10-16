@@ -1,0 +1,262 @@
+diff --git a/src/video/uikit/SDL_uikitappdelegate.h b/src/video/uikit/SDL_uikitappdelegate.h
+index df3ff0fb9..41d5bfcd3 100644
+--- a/src/video/uikit/SDL_uikitappdelegate.h
++++ b/src/video/uikit/SDL_uikitappdelegate.h
+@@ -35,6 +35,8 @@
+ + (NSString *)getAppDelegateClassName;
+ 
+ - (void)hideLaunchScreen;
++- (void)sendDropFileForURL:(NSURL *)url;
++- (void)attachWindowsToScene:(UIWindowScene *)scene API_AVAILABLE(ios(13.0), tvos(13.0));
+ 
+ /* This property is marked as optional, and is only intended to be used when
+  * the app's UI is storyboard-based. SDL is not storyboard-based, however
+@@ -44,4 +46,15 @@
+ 
+ @end
+ 
++/* The window scene SDL windows attach to, or nil before UIKit connects one.
++ * Apps built against newer SDKs must adopt the UIScene life cycle, so windows
++ * created with only a frame would never be shown. */
++UIWindowScene *UIKit_GetWindowScene(void) API_AVAILABLE(ios(13.0), tvos(13.0));
++
++#if !TARGET_OS_TV
++/* The scene's interface orientation. statusBarOrientation is unreliable once
++ * the app adopts scenes, and SDL keeps its display modes in sync with this. */
++UIInterfaceOrientation UIKit_GetInterfaceOrientation(void);
++#endif
++
+ /* vi: set ts=4 sw=4 expandtab: */
+diff --git a/src/video/uikit/SDL_uikitappdelegate.m b/src/video/uikit/SDL_uikitappdelegate.m
+index 31b114a93..83add350b 100644
+--- a/src/video/uikit/SDL_uikitappdelegate.m
++++ b/src/video/uikit/SDL_uikitappdelegate.m
+@@ -349,10 +349,118 @@ static UIImage *SDL_LoadLaunchImageNamed(NSString *name, int screenh)
+ 
+ @end
+ 
++static UIWindowScene *sdl_window_scene API_AVAILABLE(ios(13.0), tvos(13.0)) = nil;
++
++UIWindowScene *UIKit_GetWindowScene(void)
++{
++    return sdl_window_scene;
++}
++
++#if !TARGET_OS_TV
++extern void SDL_OnApplicationDidChangeStatusBarOrientation(void);
++
++UIInterfaceOrientation UIKit_GetInterfaceOrientation(void)
++{
++    if (@available(iOS 13.0, *)) {
++        if (sdl_window_scene != nil && sdl_window_scene.interfaceOrientation != UIInterfaceOrientationUnknown) {
++            return sdl_window_scene.interfaceOrientation;
++        }
++    }
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wdeprecated-declarations"
++    return [UIApplication sharedApplication].statusBarOrientation;
++#pragma clang diagnostic pop
++}
++#endif
++
++static void UIKit_AttachWindowToScene(UIWindow *window, UIWindowScene *scene) API_AVAILABLE(ios(13.0), tvos(13.0))
++{
++    if (window != nil && scene != nil && window.windowScene == nil) {
++        window.windowScene = scene;
++    }
++}
++
++API_AVAILABLE(ios(13.0), tvos(13.0))
++@interface SDLUIKitSceneDelegate : UIResponder <UIWindowSceneDelegate>
++@end
++
++@implementation SDLUIKitSceneDelegate
++
++- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions
++{
++    if (![scene isKindOfClass:[UIWindowScene class]]) {
++        return;
++    }
++    sdl_window_scene = (UIWindowScene *)scene;
++
++    SDLUIKitDelegate *delegate = [SDLUIKitDelegate sharedAppDelegate];
++    [delegate attachWindowsToScene:sdl_window_scene];
++
++#if !TARGET_OS_TV
++    SDL_OnApplicationDidChangeStatusBarOrientation();
++#endif
++
++    /* A file opened from another app can be what launched us. */
++    for (UIOpenURLContext *context in connectionOptions.URLContexts) {
++        [delegate sendDropFileForURL:context.URL];
++    }
++}
++
++#if !TARGET_OS_TV
++- (void)windowScene:(UIWindowScene *)windowScene didUpdateCoordinateSpace:(id<UICoordinateSpace>)previousCoordinateSpace interfaceOrientation:(UIInterfaceOrientation)previousInterfaceOrientation traitCollection:(UITraitCollection *)previousTraitCollection
++{
++    /* Scene apps don't reliably get the status bar orientation notification,
++     * and SDL restores fullscreen windows to the desktop mode it maintains. */
++    if (windowScene == sdl_window_scene) {
++        SDL_OnApplicationDidChangeStatusBarOrientation();
++    }
++}
++#endif
++
++- (void)sceneDidDisconnect:(UIScene *)scene
++{
++    if (scene == sdl_window_scene) {
++        sdl_window_scene = nil;
++    }
++}
++
++- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts
++{
++    SDLUIKitDelegate *delegate = [SDLUIKitDelegate sharedAppDelegate];
++    for (UIOpenURLContext *context in URLContexts) {
++        [delegate sendDropFileForURL:context.URL];
++    }
++}
++
++@end
++
+ @implementation SDLUIKitDelegate {
+     UIWindow *launchWindow;
+ }
+ 
++- (UISceneConfiguration *)application:(UIApplication *)application configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession options:(UISceneConnectionOptions *)options API_AVAILABLE(ios(13.0), tvos(13.0))
++{
++    UISceneConfiguration *config = [[UISceneConfiguration alloc] initWithName:nil sessionRole:connectingSceneSession.role];
++    config.delegateClass = [SDLUIKitSceneDelegate class];
++    return config;
++}
++
++- (void)attachWindowsToScene:(UIWindowScene *)scene API_AVAILABLE(ios(13.0), tvos(13.0))
++{
++    UIKit_AttachWindowToScene(launchWindow, scene);
++
++    SDL_VideoDevice *_this = SDL_GetVideoDevice();
++    if (_this) {
++        SDL_Window *window;
++        for (window = _this->windows; window != NULL; window = window->next) {
++            SDL_WindowData *data = (__bridge SDL_WindowData *) window->driverdata;
++            if (data != nil) {
++                UIKit_AttachWindowToScene(data.uiwindow, scene);
++            }
++        }
++    }
++}
++
+ /* convenience method */
+ + (id)sharedAppDelegate
+ {
+@@ -390,6 +498,16 @@ static UIImage *SDL_LoadLaunchImageNamed(NSString *name, int screenh)
+ 
+ - (void)postFinishLaunch
+ {
++    if (@available(iOS 13.0, tvOS 13.0, *)) {
++        /* With a scene manifest, UIKit connects the scene after launch
++         * finishes. Wait for it so the first SDL window has somewhere to go. */
++        NSDictionary *manifest = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"UIApplicationSceneManifest"];
++        NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5.0];
++        while (manifest != nil && sdl_window_scene == nil && [deadline timeIntervalSinceNow] > 0) {
++            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
++        }
++    }
++
+     /* Hide the launch screen the next time the run loop is run. SDL apps will
+      * have a chance to load resources while the launch screen is still up. */
+     [self performSelector:@selector(hideLaunchScreen) withObject:nil afterDelay:0.0];
+diff --git a/src/video/uikit/SDL_uikitmodes.m b/src/video/uikit/SDL_uikitmodes.m
+index 97c59c250..2440e6c4e 100644
+--- a/src/video/uikit/SDL_uikitmodes.m
++++ b/src/video/uikit/SDL_uikitmodes.m
+@@ -24,6 +24,7 @@
+ 
+ #include "SDL_system.h"
+ #include "SDL_uikitmodes.h"
++#include "SDL_uikitappdelegate.h"
+ 
+ #include "../../events/SDL_events_c.h"
+ 
+@@ -355,7 +356,7 @@ SDL_bool UIKit_IsDisplayLandscape(UIScreen *uiscreen)
+ {
+ #if !TARGET_OS_TV
+     if (uiscreen == [UIScreen mainScreen]) {
+-        return UIInterfaceOrientationIsLandscape([UIApplication sharedApplication].statusBarOrientation);
++        return UIInterfaceOrientationIsLandscape(UIKit_GetInterfaceOrientation());
+     } else
+ #endif /* !TARGET_OS_TV */
+     {
+@@ -525,7 +526,7 @@ void UIKit_QuitModes(_THIS)
+ #if !TARGET_OS_TV
+ void SDL_OnApplicationDidChangeStatusBarOrientation(void)
+ {
+-    BOOL isLandscape = UIInterfaceOrientationIsLandscape([UIApplication sharedApplication].statusBarOrientation);
++    BOOL isLandscape = UIInterfaceOrientationIsLandscape(UIKit_GetInterfaceOrientation());
+     SDL_VideoDisplay *display = SDL_GetDisplay(0);
+ 
+     if (display) {
+@@ -550,7 +551,7 @@ void SDL_OnApplicationDidChangeStatusBarOrientation(void)
+             currentmode->h = height;
+         }
+ 
+-        switch ([UIApplication sharedApplication].statusBarOrientation) {
++        switch (UIKit_GetInterfaceOrientation()) {
+         case UIInterfaceOrientationPortrait:
+             orientation = SDL_ORIENTATION_PORTRAIT;
+             break;
+diff --git a/src/video/uikit/SDL_uikitvideo.m b/src/video/uikit/SDL_uikitvideo.m
+index f7aa3fd12..380289952 100644
+--- a/src/video/uikit/SDL_uikitvideo.m
++++ b/src/video/uikit/SDL_uikitvideo.m
+@@ -40,6 +40,7 @@
+ #include "SDL_uikitvulkan.h"
+ #include "SDL_uikitmetalview.h"
+ #include "SDL_uikitmessagebox.h"
++#include "SDL_uikitappdelegate.h"
+ 
+ #define UIKITVID_DRIVER_NAME "uikit"
+ 
+@@ -220,7 +221,7 @@ CGRect UIKit_ComputeViewFrame(SDL_Window *window, UIScreen *screen)
+      * https://bugzilla.libsdl.org/show_bug.cgi?id=3505
+      * https://bugzilla.libsdl.org/show_bug.cgi?id=3465
+      * https://forums.developer.apple.com/thread/65337 */
+-    orient = [UIApplication sharedApplication].statusBarOrientation;
++    orient = UIKit_GetInterfaceOrientation();
+     landscape = UIInterfaceOrientationIsLandscape(orient) ||
+                     !(UIKit_GetSupportedOrientations(window) & (UIInterfaceOrientationMaskPortrait | UIInterfaceOrientationMaskPortraitUpsideDown));
+     fullscreen = CGRectEqualToRect(screen.bounds, frame);
+diff --git a/src/video/uikit/SDL_uikitwindow.m b/src/video/uikit/SDL_uikitwindow.m
+index 0e0ea0577..6e7ddd2e1 100644
+--- a/src/video/uikit/SDL_uikitwindow.m
++++ b/src/video/uikit/SDL_uikitwindow.m
+@@ -155,7 +155,7 @@ int UIKit_CreateWindow(_THIS, SDL_Window *window)
+         SDL_VideoDisplay *display = SDL_GetDisplayForWindow(window);
+         SDL_DisplayData *data = (__bridge SDL_DisplayData *) display->driverdata;
+         SDL_Window *other;
+-        UIWindow *uiwindow;
++        UIWindow *uiwindow = nil;
+ #if !TARGET_OS_TV
+         const CGSize origsize = data.uiscreen.currentMode.size;
+ #endif
+@@ -207,7 +207,18 @@ int UIKit_CreateWindow(_THIS, SDL_Window *window)
+ 
+         /* ignore the size user requested, and make a fullscreen window */
+         /* !!! FIXME: can we have a smaller view? */
+-        uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
++        if (@available(iOS 13.0, tvOS 13.0, *)) {
++            /* A scene window takes the scene's size and orientation. The
++             * screen bounds still follow how the device was held at launch,
++             * which is portrait for a landscape-only app picked up upright. */
++            UIWindowScene *scene = UIKit_GetWindowScene();
++            if (scene != nil && data.uiscreen == [UIScreen mainScreen]) {
++                uiwindow = [[SDL_uikitwindow alloc] initWithWindowScene:scene];
++            }
++        }
++        if (uiwindow == nil) {
++            uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
++        }
+ 
+         /* put the window on an external display if appropriate. */
+         if (data.uiscreen != [UIScreen mainScreen]) {

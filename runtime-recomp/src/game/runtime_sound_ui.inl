@@ -444,8 +444,7 @@ void DrawSoundMultiplayerMusic(float width) {
     if (!press.hovered && !press.focused) return;
     // The tooltip opens under the setting (.snd-multiplayer-tip).
     constexpr std::string_view kTip =
-        "The original game turns race music off with 3 or 4 players. "
-        "Leave this on to keep it playing.";
+        "Play music in 3-4 player races.";
     const PaddockType tip = PaddockReading(14.0F, false, 1.45F);
     const float tip_width = std::min(300.0F, ImGui::GetIO().DisplaySize.x - 64.0F);
     const float tip_height = PaddockTextHeight(tip, kTip, tip_width - 28.0F) + 24.0F;
@@ -492,7 +491,7 @@ void DrawSoundPage(float available_width, bool live = false) {
     DrawPageHeading("SOUND");
     PaddockGap(4.0F);
     PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(kSndMuted),
-                "Set how loud the game is and shape its sound. Changes apply right away.", width);
+                "Adjust volume and sound.", width);
     PaddockGap(16.0F);
     if (modern) {
         DrawSoundMultiplayerMusic(width);
@@ -504,16 +503,16 @@ void DrawSoundPage(float available_width, bool live = false) {
         bool mix_changed = false;
         const char* reset_label = state.undo_levels ? "Undo reset" : "Reset mix";
         const bool reset_disabled = owned_category_mix_deferred || (!state.undo_levels && SoundMixIsOriginal());
-        const char* reset_hint = owned_category_mix_deferred ? "Category mixing is deferred in Experimental Rollback."
+        const char* reset_hint = owned_category_mix_deferred ? "Individual volumes aren't available in this online mode."
             : reset_disabled ? "The mix is already at 100%."
-            : state.undo_levels ? "Put the mix back how it was."
-            : "Music, effects, vehicles and ambience back to 100%. Master stays.";
+            : state.undo_levels ? "Restore the previous mix."
+            : "Reset individual volumes to 100%. Master stays unchanged.";
         const float reset_width = modern
             ? std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.0F), reset_label) + 30.0F)
             : 0.0F;
         DrawSoundCardHead("Volume",
-                          modern ? "Master sets how loud everything is. The mix balances the parts."
-                                 : "Master sets how loud everything is.",
+                          modern ? ""
+                                 : "",
                           inner, reset_width, [&] {
             if (!DrawSoundLinkButton(reset_label, reset_disabled, reset_hint) || owned_category_mix_deferred) return;
             if (state.undo_levels) {
@@ -547,8 +546,7 @@ void DrawSoundPage(float available_width, bool live = false) {
         if (!modern) {
             PaddockGap(10.0F);
             PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSndMuted),
-                        "Accurate keeps the original island mix: music, effects, vehicles and "
-                        "the EQ stay at their authored values.",
+                        "Switch to Modern to adjust the mix and equaliser.",
                         inner);
             return;
         }
@@ -569,8 +567,8 @@ void DrawSoundPage(float available_width, bool live = false) {
             if (master_silent) {
                 const PaddockType note = PaddockReading(13.0F, true, 1.3F);
                 const std::string_view text = g_sound_muted[0]
-                    ? "Master is muted, so nothing plays."
-                    : "Master is at 0%, so nothing plays.";
+                    ? "Master is muted."
+                    : "Master volume is 0%.";
                 const float note_width = PaddockMeasure(note, text);
                 PaddockDrawRun(draw, note, {std::round(line_end - note_width),
                                             std::round(mid - note.line * 0.5F)},
@@ -583,9 +581,7 @@ void DrawSoundPage(float available_width, bool live = false) {
         }
         PaddockGap(10.0F - 2.0F);
         if (owned_category_mix_deferred) {
-            SettingsHelp("Experimental Rollback uses the authored category mix. Your category preferences are "
-                         "kept for single-player and legacy online modes. Master volume and output EQ stay local "
-                         "and live; independent category mixing is deferred.", inner);
+            SettingsHelp("Individual volumes aren't available in this online mode. Master volume and equaliser still work.", inner);
             PaddockGap(10.0F);
         }
         ImGui::BeginDisabled(owned_category_mix_deferred);
@@ -612,7 +608,7 @@ void DrawSoundPage(float available_width, bool live = false) {
     // ------------------------------------------------------------ equalizer
     PaddockGap(16.0F);
     DrawSoundCard(width, [&](float inner) {
-        DrawSoundCardHead("Equalizer", "Pick a sound, or fine-tune the three bands.", inner,
+        DrawSoundCardHead("Equaliser", "Choose a preset or adjust the bands.", inner,
                           0.0F, [] {});
         PaddockGap(4.0F + 10.0F);
 

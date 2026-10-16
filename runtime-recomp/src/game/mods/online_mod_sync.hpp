@@ -6,6 +6,7 @@
 #include <atomic>
 
 namespace dkr::mods::online {
+class RuntimeResources;
 struct SyncOffer {std::string digest;std::uint32_t bytes=0;};
 struct SyncPacket {std::uint64_t sender=0,request=0;Bytes bytes;};
 struct SyncNetworkView {
@@ -28,8 +29,8 @@ public:
     virtual bool receive(SyncPacket&)=0;
     virtual std::size_t chunk_budget()const=0;
     virtual bool send(std::uint64_t recipient,View bytes,bool data,std::string& error)=0;
-    virtual bool verify_local(std::string_view digest,std::string& error)=0;
-    virtual bool admit(std::uint64_t request,std::string_view digest,std::string& error)=0;
+    virtual bool verify_local(std::string_view digest,std::string_view resources,std::string& error)=0;
+    virtual bool admit(std::uint64_t request,std::string_view digest,std::string_view resources,std::string& error)=0;
     virtual void reject(std::uint64_t request,std::string_view reason)=0;
     virtual void leave(std::string_view reason)=0;
 };
@@ -37,6 +38,8 @@ struct SyncSettings {
     std::filesystem::path online_root,worker;
     std::vector<std::filesystem::path> imported_roms;
     std::filesystem::path offline_legacy_root,offline_tracks_root;
+    std::filesystem::path offline_code_root;
+    std::string host_version="1.0.7";
 };
 enum class SyncPhase {Idle,HostPreparing,HostReady,ReadingOffer,Review,Downloading,Preparing,Verified,Failed};
 struct PeerProgress {
@@ -56,8 +59,9 @@ struct SyncView {
     bool kept_offline=false;
     std::string keep_error;
     std::vector<PeerProgress> peers;
+    std::string offer;
 };
-using RuntimePreparation=std::function<std::shared_ptr<const void>(std::shared_ptr<const Profile>,std::stop_token)>;
+using RuntimePreparation=std::function<std::shared_ptr<const RuntimeResources>(std::shared_ptr<const Profile>,std::stop_token)>;
 class ModSync {
 public:
     explicit ModSync(SyncLink& link):link_(link){}
@@ -67,7 +71,7 @@ public:
     bool prepare_host(SyncSettings settings,std::filesystem::path legacy,
         std::vector<std::filesystem::path> labs,std::string revision,bool custom_ai,RuntimePreparation prepare);
     bool watch_client(SyncSettings settings,RuntimePreparation prepare);
-    void consent(bool accept,bool keep_offline=true);
+    void consent(bool accept,bool keep_offline=true,std::string approved_code_offer={});
     void cancel();
     SyncView snapshot()const;
 private:

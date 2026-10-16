@@ -6,6 +6,8 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'scripts'))
 from legacy_memory_safety_policy import compose_memory_safety
 
+ELF_INPUTS = []
+
 class PolicyTests(unittest.TestCase):
     def test_requires_reviewed_elf(self):
         with self.assertRaises(ValueError):

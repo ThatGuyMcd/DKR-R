@@ -19,8 +19,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import apply_dependency_patches as patches  # noqa: E402
+import bootstrap_dependencies as bootstrap  # noqa: E402
 import legacy_character_presentation_policy as presentation  # noqa: E402
 import validate_release_metadata as release_metadata  # noqa: E402
+import package_source  # noqa: E402
 
 
 # Hermetic: the developer's global config (signing, hooks, autocrlf) must not
@@ -40,9 +42,56 @@ def write(path, text):
     path.write_text(text, newline="\n")
 
 
+class SourcePackageTests(unittest.TestCase):
+    def test_new_custom_backgrounds_and_authored_shaders_are_included(self):
+        selected = [Path("assets/ui/CustomTrackBackgrounds/custom-row-1.png"),
+                    Path("assets/ui/CustomTrackBackgrounds/rt64.json"),
+                    Path("patches/enhanced-water/native/LavaLightingCS.hlsl"),
+                    Path("patches/enhanced-water/native/LavaFlow.hlsli")]
+        excluded = [Path("downloads/example.png"), Path("assets/ui/CustomTrackBackgrounds/game.z64"),
+                    Path("patches/private.dkr-probe")]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path in selected + excluded:
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_bytes(b"fixture")
+            with patch.object(package_source, "ROOT", root), \
+                 patch.object(package_source, "git_paths", side_effect=[[], selected + excluded]):
+                self.assertEqual(package_source.source_files(), sorted(selected))
+
+
 class ReleaseMetadataTests(unittest.TestCase):
     def test_current_release_metadata(self):
         self.assertEqual(release_metadata.main(), 0)
+
+    def test_patched_dependencies_require_matching_lock_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "packaging/linux").mkdir(parents=True)
+            (root / "patches").mkdir()
+            (root / "VERSION").write_text("1.0.5")
+            (root / "packaging/linux/dkr-port.appdata.xml").write_text(
+                '<release version="1.0.5"/>')
+            for name in ("README.md", "THIRD_PARTY.md", "docs/README.md", "docs/BUILDING.md",
+                         "docs/PLATFORMS.md", "packaging/RELEASE-README.md", "packaging/MACOS-BUILD-README.md"):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("")
+            manifest = {"dependencies": [{"name": "NewDependency",
+                "expectedCommit": "abc123", "patches": []}]}
+            (root / "patches/manifest.json").write_text(json.dumps(manifest))
+            lock_path = root / "dependencies.lock.json"
+            with patch.object(release_metadata, "ROOT", root):
+                lock_path.write_text(json.dumps({"dependencies": []}))
+                with self.assertRaisesRegex(RuntimeError, "missing from lockfile"):
+                    release_metadata.main()
+                lock = {"dependencies": [{"name": "newdependency", "commit": "ABC123"}]}
+                lock_path.write_text(json.dumps(lock))
+                self.assertEqual(release_metadata.main(), 0)
+                lock["dependencies"][0]["commit"] = "def456"
+                lock_path.write_text(json.dumps(lock))
+                with self.assertRaisesRegex(RuntimeError, "Pinned commit mismatch"):
+                    release_metadata.main()
 
     def test_invalid_version_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -55,8 +104,31 @@ class ReleaseMetadataTests(unittest.TestCase):
                         with self.assertRaisesRegex(RuntimeError, "semantic version"):
                             release_metadata.main()
 
+    def test_unknown_dependency_names_and_historical_notes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("README.md", "THIRD_PARTY.md", "docs/README.md", "docs/BUILDING.md",
+                         "docs/PLATFORMS.md", "packaging/RELEASE-README.md", "packaging/MACOS-BUILD-README.md"):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("Current documentation\n")
+            (root / "VERSION").write_text("1.0.5")
+            (root / "packaging/linux").mkdir()
+            (root / "packaging/linux/dkr-port.appdata.xml").write_text('<release version="1.0.5"/>')
+            (root / "patches").mkdir()
+            (root / "patches/manifest.json").write_text(json.dumps({"dependencies": [
+                {"name": "new-library", "expectedCommit": "abc", "patches": []}]}))
+            (root / "dependencies.lock.json").write_text(json.dumps({"dependencies": [
+                {"name": "new-library", "commit": "abc"}]}))
+            (root / "docs/historical-notes.md").write_text("Earlier milestone and release candidate\n")
+            with patch.object(release_metadata, "ROOT", root):
+                self.assertEqual(release_metadata.main(), 0)
+                (root / "dependencies.lock.json").write_text('{"dependencies": []}')
+                with self.assertRaisesRegex(RuntimeError, "missing from lockfile: new-library"):
+                    release_metadata.main()
 
-class PatchPipelineTests(unittest.TestCase):
+
+class PatchFixture:
     """Stacked patches where the second edits the first's file and adds a new
     one, which is exactly what broke the old all-or-reset logic."""
 
@@ -117,6 +189,8 @@ class PatchPipelineTests(unittest.TestCase):
         self.assertEqual((self.repo / "empty.txt").read_bytes(), b"")
         self.assertFalse((self.repo / "blob.bin").exists())
 
+
+class PatchPipelineTests(PatchFixture, unittest.TestCase):
     def test_submodule_style_checkout_is_patched(self):
         self.assertTrue((self.repo / ".git").is_file())
         self.apply()
@@ -134,21 +208,93 @@ class PatchPipelineTests(unittest.TestCase):
             self.assertEqual((self.repo / name).stat().st_mtime_ns, stamp, name)
         self.assert_patched()
 
-    def test_half_applied_checkout_is_repaired(self):
+    def test_interrupted_checkout_requires_explicit_repair(self):
         # First patch applied, plus the second patch's new file left behind
         # by an interrupted run (`git checkout -- .` doesn't remove it).
         git(self.repo, "apply", str(self.patches[0]))
         (self.repo / "new.txt").write_text("stale\n")
-        self.apply()
+        with self.assertRaisesRegex(SystemExit, "unrecognized local edits"):
+            self.apply()
+        patches.apply_manifest(self.root, self.manifest, repair=True)
         self.assert_patched()
 
-    def test_local_edit_is_reverted_and_unrelated_untracked_kept(self):
+    def test_local_edit_is_preserved_and_explicit_repair_keeps_unrelated_untracked(self):
         self.apply()
         (self.repo / "a.txt").write_text("local edit\n")
         (self.repo / "helper-symlink-target").write_text("keep me\n")
-        self.apply()
+        with self.assertRaisesRegex(SystemExit, "unrecognized local edits"):
+            self.apply()
+        self.assertEqual((self.repo / "a.txt").read_text(), "local edit\n")
+        patches.apply_manifest(self.root, self.manifest, repair=True)
         self.assert_patched()
         self.assertEqual((self.repo / "helper-symlink-target").read_text(), "keep me\n")
+
+    def test_exact_intermediate_patch_state_resumes(self):
+        git(self.repo, "apply", str(self.patches[0]))
+        self.apply()
+        self.assert_patched()
+
+    def test_check_validates_stacked_patches_without_checkout_mutation(self):
+        before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns)
+                  for p in self.repo.iterdir() if p.is_file()}
+        index_path = Path(git(self.repo, "rev-parse", "--git-path", "index"))
+        index = index_path.read_bytes()
+        self.assertEqual(patches.apply_manifest(self.root, self.manifest, check=True), 0)
+        self.assertEqual(index_path.read_bytes(), index)
+        self.assertEqual(before, {p.name: (p.read_bytes(), p.stat().st_mtime_ns)
+                                 for p in self.repo.iterdir() if p.is_file()})
+
+    def test_required_missing_checkout_and_empty_check_are_rejected(self):
+        data = json.loads(self.manifest.read_text())
+        data["dependencies"].append({**data["dependencies"][0], "name": "missing", "repositoryPath": "absent"})
+        self.manifest.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "dependency checkout is missing"):
+            patches.apply_manifest(self.root, self.manifest, require_all=True)
+        self.assertEqual((self.repo / "a.txt").read_text(), "one\ntwo\nthree\n")
+        data["dependencies"] = data["dependencies"][1:]
+        self.manifest.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "No dependency checkouts found"):
+            patches.apply_manifest(self.root, self.manifest, check=True)
+
+    def test_cli_check_and_failure_exit_codes(self):
+        command = [sys.executable, str(ROOT / "scripts/apply_dependency_patches.py"),
+                   "--root", str(self.root), "--manifest", str(self.manifest), "--check"]
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("validated", result.stdout)
+        self.assertEqual((self.repo / "a.txt").read_text(), "one\ntwo\nthree\n")
+        write(self.repo / "a.txt", "developer work\n")
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unrecognized local edits", result.stderr)
+        self.assertEqual((self.repo / "a.txt").read_text(), "developer work\n")
+
+    def test_all_dependencies_preflight_before_first_write(self):
+        data = json.loads(self.manifest.read_text())
+        other = self.root / "other"
+        git(self.root / "upstream", "worktree", "add", "-q", "--detach", str(other), self.commit)
+        second = {**data["dependencies"][0], "name": "other", "repositoryPath": "other"}
+        data["dependencies"].append(second)
+        self.manifest.write_text(json.dumps(data))
+        write(other / "a.txt", "developer work\n")
+        with self.assertRaisesRegex(SystemExit, "unrecognized local edits"):
+            self.apply()
+        self.assertEqual((self.repo / "a.txt").read_text(), "one\ntwo\nthree\n")
+        write(other / "a.txt", "one\ntwo\nthree\n")
+        second["patches"] = [{**second["patches"][0], "sha256": "bad"}]
+        self.manifest.write_text(json.dumps(data))
+        with self.assertRaisesRegex(SystemExit, "checksum mismatch"):
+            self.apply()
+        self.assertEqual((self.repo / "a.txt").read_text(), "one\ntwo\nthree\n")
+
+    def test_staged_managed_local_edit_is_preserved(self):
+        write(self.repo / "a.txt", "staged developer work\n")
+        git(self.repo, "add", "a.txt")
+        write(self.repo / "a.txt", "one\ntwo\nthree\n")
+        index = git(self.repo, "write-tree")
+        with self.assertRaisesRegex(SystemExit, "unrecognized local edits"):
+            self.apply()
+        self.assertEqual(git(self.repo, "write-tree"), index)
 
     def test_checksum_is_enforced(self):
         write(self.patches[0], self.patches[0].read_text() + "\n")
@@ -168,6 +314,200 @@ class PatchPipelineTests(unittest.TestCase):
             self.apply()
         self.assertEqual((self.repo / "unrelated.txt").read_text(), "developer edit\n")
         self.assertEqual((self.repo / "a.txt").read_text(), "one\ntwo\nthree\n")
+
+
+class BootstrapPatchTests(PatchFixture, unittest.TestCase):
+    """Exercise bootstrap against local-only origins and the real patch stack."""
+
+    def setUp(self):
+        super().setUp()
+        self.env = patch.dict(os.environ, GIT_ENV)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.manifest.rename(self.root / "patches" / "manifest.json")
+        self.manifest = self.root / "patches" / "manifest.json"
+        self.entry = {"name": "dep", "destination": "dep", "commit": self.commit,
+                      "repository": str(self.root / "upstream")}
+        git(self.repo, "remote", "add", "origin", self.entry["repository"])
+
+    def bootstrap(self):
+        with patch.object(bootstrap, "ROOT", self.root):
+            return bootstrap.prepare_dependency(self.entry, False)
+
+    def test_bootstrap_patch_bootstrap_preserves_files_and_index(self):
+        self.bootstrap()
+        self.apply()
+        before = {p.name: p.stat().st_mtime_ns for p in self.repo.iterdir()}
+        index = git(self.repo, "write-tree")
+        with patch.object(bootstrap, "run", wraps=bootstrap.run) as commands:
+            self.assertEqual(self.bootstrap()["commit"], self.commit)
+        self.assertFalse(any(call.args[0][1] in ("fetch", "checkout", "reset", "clean")
+                             for call in commands.call_args_list))
+        self.assert_patched()
+        self.assertEqual(git(self.repo, "write-tree"), index)
+        self.assertEqual(before, {p.name: p.stat().st_mtime_ns for p in self.repo.iterdir()})
+
+    def test_bootstrap_rejects_unexpected_work_without_mutation(self):
+        for kind in ("tracked", "managed", "untracked", "staged"):
+            with self.subTest(kind=kind):
+                self.apply()
+                target = self.repo / {"tracked": "unrelated.txt", "managed": "a.txt",
+                                      "untracked": "leftover.txt", "staged": "unrelated.txt"}[kind]
+                original = target.read_bytes() if target.exists() else None
+                target.write_bytes(b"developer work\n")
+                if kind == "staged":
+                    git(self.repo, "add", "--", target.name)
+                    target.write_bytes(original)
+                index = git(self.repo, "write-tree")
+                work = target.read_bytes()
+                with self.assertRaisesRegex(RuntimeError, "contains local changes"):
+                    self.bootstrap()
+                self.assertEqual(target.read_bytes(), work)
+                self.assertEqual(git(self.repo, "write-tree"), index)
+                if kind == "staged":
+                    git(self.repo, "reset", "--", target.name)
+                if original is None:
+                    target.unlink()
+                else:
+                    target.write_bytes(original)
+
+    def test_bootstrap_clones_and_checks_out_pinned_commit(self):
+        self.entry["destination"] = "fresh"
+        self.bootstrap()
+        self.assertEqual((self.root / "fresh" / "a.txt").read_text(), "one\ntwo\nthree\n")
+        self.assertEqual(git(self.root / "fresh", "rev-parse", "HEAD"), self.commit)
+
+    def test_shallow_bootstrap_pins_old_revision_and_preserves_reviewed_edits(self):
+        self.entry["destination"] = "fresh"
+        with patch.object(bootstrap, "ROOT", self.root):
+            bootstrap.prepare_dependency(self.entry, False, shallow=True)
+        checkout = self.root / "fresh"
+        self.assertEqual(git(checkout, "rev-parse", "HEAD"), self.commit)
+        self.assertEqual(git(checkout, "rev-parse", "--is-shallow-repository"), "true")
+        self.assertEqual(git(checkout, "rev-list", "--count", "HEAD"), "1")
+        manifest = json.loads(self.manifest.read_text())
+        manifest["dependencies"][0]["repositoryPath"] = "fresh"
+        self.manifest.write_text(json.dumps(manifest))
+        self.apply()
+        with patch.object(bootstrap, "ROOT", self.root), patch.object(bootstrap, "run", wraps=bootstrap.run) as commands:
+            bootstrap.prepare_dependency(self.entry, False, shallow=True)
+        self.assertFalse(any(call.args[0][1] in ("fetch", "checkout", "reset", "clean")
+                             for call in commands.call_args_list))
+        self.assertEqual((checkout / "a.txt").read_text(), self.final_a)
+        write(checkout / "a.txt", "developer work\n")
+        with patch.object(bootstrap, "ROOT", self.root), self.assertRaisesRegex(RuntimeError, "contains local changes"):
+            bootstrap.prepare_dependency(self.entry, False, shallow=True)
+        self.assertEqual((checkout / "a.txt").read_text(), "developer work\n")
+
+    def test_bootstrap_rejects_incomplete_patch_stack(self):
+        git(self.repo, "apply", str(self.patches[0]))
+        with self.assertRaisesRegex(RuntimeError, "contains local changes"):
+            self.bootstrap()
+        self.assertEqual((self.repo / "a.txt").read_text(), "one\nTWO\nthree\n")
+
+    def test_bootstrap_rejects_patch_manifest_pin_mismatch(self):
+        self.apply()
+        manifest = json.loads(self.manifest.read_text())
+        manifest["dependencies"][0]["expectedCommit"] = "0" * 40
+        self.manifest.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(RuntimeError, "contains local changes"):
+            self.bootstrap()
+        self.assert_patched()
+
+    def test_bootstrap_rejects_corrupt_reviewed_patch(self):
+        self.apply()
+        write(self.patches[0], self.patches[0].read_text() + "\n")
+        with self.assertRaisesRegex(SystemExit, "checksum mismatch"):
+            self.bootstrap()
+        self.assert_patched()
+
+    def test_bootstrap_preserves_reviewed_submodule_and_rejects_local_edits(self):
+        child_origin = self.root / "child-origin"
+        child_origin.mkdir()
+        git(child_origin, "init", "-q")
+        write(child_origin / "child.txt", "original\n")
+        git(child_origin, "add", ".")
+        git(child_origin, "commit", "-qm", "child base")
+        child_commit = git(child_origin, "rev-parse", "HEAD")
+        git(self.repo, "-c", "protocol.file.allow=always", "submodule", "add",
+            str(child_origin), "nested child")
+        git(self.repo, "commit", "-qm", "add child")
+        self.commit = git(self.repo, "rev-parse", "HEAD")
+        self.entry.update(commit=self.commit, recursive=True)
+        child = self.repo / "nested child"
+        write(child / "child.txt", "reviewed\n")
+        patch_path = self.root / "patches/child.patch"
+        write(patch_path, git(child, "diff") + "\n")
+        manifest = json.loads(self.manifest.read_text())
+        manifest["dependencies"][0]["expectedCommit"] = self.commit
+        manifest["dependencies"].append({
+            "name": "child", "repositoryPath": "dep/nested child",
+            "expectedCommit": child_commit, "patches": [{
+                "path": "patches/child.patch",
+                "sha256": hashlib.sha256(patch_path.read_bytes()).hexdigest()}]})
+        self.manifest.write_text(json.dumps(manifest))
+        self.apply()
+        before = (child / "child.txt").stat().st_mtime_ns
+        self.bootstrap()
+        self.assert_patched()
+        self.assertEqual((child / "child.txt").read_text(), "reviewed\n")
+        self.assertEqual((child / "child.txt").stat().st_mtime_ns, before)
+        for name in ("child.txt", "untracked.txt"):
+            with self.subTest(name=name):
+                target = child / name
+                target.write_text("developer work\n")
+                with self.assertRaisesRegex(RuntimeError, "contains local changes"):
+                    self.bootstrap()
+                self.assertEqual(target.read_text(), "developer work\n")
+                if name == "child.txt":
+                    target.write_text("reviewed\n")
+                else:
+                    target.unlink()
+
+        # Even explicit repair must preflight a later nested manifest entry
+        # before it discards any managed edits in the parent checkout.
+        write(self.repo / "a.txt", "parent developer work\n")
+        write(patch_path, patch_path.read_text() + "\n")
+        with self.assertRaisesRegex(SystemExit, "checksum mismatch"):
+            patches.apply_manifest(self.root, self.manifest, repair=True)
+        self.assertEqual((self.repo / "a.txt").read_text(), "parent developer work\n")
+        self.assertEqual((child / "child.txt").read_text(), "reviewed\n")
+
+    def test_nested_selection_initializes_parent_and_preserves_resolution_records(self):
+        child_origin = self.root / "child-origin"
+        child_origin.mkdir()
+        git(child_origin, "init", "-q")
+        write(child_origin / "child.txt", "original\n")
+        git(child_origin, "add", ".")
+        git(child_origin, "commit", "-qm", "child base")
+        upstream = self.root / "upstream"
+        git(upstream, "-c", "protocol.file.allow=always", "submodule", "add",
+            str(child_origin), "nested child")
+        git(upstream, "commit", "-qm", "add child")
+        parent = {**self.entry, "destination": "fresh", "commit": git(upstream, "rev-parse", "HEAD")}
+        child = {"name": "child", "destination": "fresh/nested child",
+                 "repository": str(child_origin), "commit": git(child_origin, "rev-parse", "HEAD"),
+                 "managedBy": "dep git submodule"}
+        self.assertEqual([e["name"] for e in bootstrap.select_entries([child, parent], {"child"})],
+                         ["dep", "child"])
+        lock = self.root / "lock.json"
+        lock.write_text(json.dumps({"dependencies": [child, parent]}))
+        resolved = self.root / "resolved.json"
+        resolved.write_text(json.dumps({"dependencies": [{"name": "unrelated", "commit": "keep"}]}))
+        with patch.object(bootstrap, "ROOT", self.root), patch.object(bootstrap, "LOCK_FILE", lock), \
+             patch.object(bootstrap, "RESOLVED_FILE", resolved), \
+             patch.object(sys, "argv", ["bootstrap", "--only", "child"]), \
+             patch.dict(os.environ, {"GIT_ALLOW_PROTOCOL": "file"}):
+            self.assertEqual(bootstrap.main(), 0)
+        checkout = self.root / child["destination"]
+        self.assertTrue((checkout / ".git").is_file(), "nested dependency must be a submodule, never a clone")
+        self.assertEqual((checkout / "child.txt").read_text(), "original\n")
+        self.assertIn("unrelated", [e["name"] for e in json.loads(resolved.read_text())["dependencies"]])
+        write(checkout / "child.txt", "developer work\n")
+        with patch.object(bootstrap, "ROOT", self.root):
+            with self.assertRaisesRegex(RuntimeError, "dirty submodule"):
+                bootstrap.prepare_dependency(parent, True)
+        self.assertEqual((checkout / "child.txt").read_text(), "developer work\n")
 
 
 def elf32be(sections):
@@ -249,6 +589,8 @@ class RepositoryContractTests(unittest.TestCase):
             (root / "scripts").mkdir()
             (root / "bin").mkdir()
             (root / "scripts/macos_build_lock.py").write_text((ROOT / "scripts/macos_build_lock.py").read_text())
+            (root / "scripts/lib").mkdir()
+            (root / "scripts/lib/apple-build.sh").write_text((ROOT / "scripts/lib/apple-build.sh").read_text())
             build = root / "Build-macOS.sh"
             build.write_text((ROOT / "Build-macOS.sh").read_text())
             prepare = root / "scripts" / "Prepare-DKR-Runtime-macOS.sh"
@@ -273,6 +615,8 @@ class RepositoryContractTests(unittest.TestCase):
             root = Path(temporary)
             (root / "scripts").mkdir()
             (root / "scripts/macos_build_lock.py").write_text((ROOT / "scripts/macos_build_lock.py").read_text())
+            (root / "scripts/lib").mkdir()
+            (root / "scripts/lib/apple-build.sh").write_text((ROOT / "scripts/lib/apple-build.sh").read_text())
             for script in ("Build-macOS.sh", "scripts/Prepare-DKR-Runtime-macOS.sh"):
                 (root / script).write_text((ROOT / script).read_text())
                 for option in ("--rom-v77", "--rom-v80", "--jobs"):
@@ -390,6 +734,46 @@ class MacOSDevexTests(unittest.TestCase):
             parent.write_text('exit 0\n')
             self.assertEqual(subprocess.run(cmd).returncode, 0)
 
+    def test_apple_helpers_validate_jobs_without_source_side_effects(self):
+        helper = ROOT / 'scripts/lib/apple-build.sh'
+        script = r"""
+set -euo pipefail
+before_pwd="$PWD"
+before_options="$-"
+# Sourcing must not probe or install anything.
+uname() { return 91; }
+xcodebuild() { return 92; }
+sysctl() { return 93; }
+source "$1"
+[[ "$PWD" == "$before_pwd" && "$-" == "$before_options" ]]
+export CMAKE_BUILD_PARALLEL_LEVEL=7
+[[ "$(dkr_apple_build_jobs)" == 7 ]]
+[[ "$(dkr_apple_build_jobs 3)" == 3 ]]
+for invalid in 0 -1 abc '2 3' 1.5; do
+  if dkr_apple_build_jobs "$invalid" >/dev/null 2>&1; then exit 1; fi
+done
+export CMAKE_BUILD_PARALLEL_LEVEL=invalid
+if dkr_apple_build_jobs >/dev/null 2>&1; then exit 1; fi
+unset CMAKE_BUILD_PARALLEL_LEVEL
+sysctl() { printf '12\n'; }
+[[ "$(dkr_apple_build_jobs)" == 12 ]]
+sysctl() { return 1; }
+[[ "$(dkr_apple_build_jobs)" == 1 ]]
+uname() { printf 'Linux\n'; }
+if dkr_require_macos >/dev/null 2>&1; then exit 1; fi
+uname() { printf 'Darwin\n'; }
+dkr_require_macos
+dkr_require_tools bash
+if dkr_require_tools dkr_nonexistent_tool >/dev/null 2>&1; then exit 1; fi
+xcodebuild() { [[ "$1" == -version ]]; }
+if dkr_require_xcode >/dev/null 2>&1; then exit 1; fi
+xcodebuild() { return 0; }
+dkr_require_xcode
+"""
+        result = subprocess.run(['/bin/bash', '-c', script, 'apple-helper-test', str(helper)],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_host_check_rejects_missing_sha1sum_and_old_gmake(self):
         helper = ROOT / 'scripts/macos-host-tools.sh'
         with tempfile.TemporaryDirectory() as tmp:
@@ -406,7 +790,7 @@ class MacOSDevexTests(unittest.TestCase):
             env = dict(os.environ, PATH=str(root))
             missing = subprocess.run(cmd, env=env, capture_output=True, text=True)
             self.assertNotEqual(missing.returncode, 0)
-            self.assertIn('Missing sha1sum', missing.stderr)
+            self.assertIn('missing from PATH: sha1sum', missing.stderr)
             executable('sha1sum')
             old_make = subprocess.run(cmd, env=env, capture_output=True, text=True)
             self.assertNotEqual(old_make.returncode, 0)

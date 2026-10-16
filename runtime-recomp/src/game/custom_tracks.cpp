@@ -1037,9 +1037,9 @@ std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* re
     // the terminator, then drop one, exactly as level_global_init does. The
     // dropped slot is the end offset that sizes the final retail entry.
     std::uint32_t counted = 0;
-    // Raw retail callers retain their original scan bound. Frozen online
-    // tables have an exact vector length and can include additive characters.
-    const auto sanity_limit = std::min<std::size_t>(table_words, 32768U);
+    // 32767 records need an end offset AND a sentinel. Native callers provide
+    // their exact available length, including large character namespaces.
+    const auto sanity_limit = std::min<std::size_t>(table_words, 32769U);
     while (counted < sanity_limit && retail_table[counted] != -1) {
         ++counted;
     }
@@ -1051,6 +1051,16 @@ std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* re
     const std::uint32_t retail_count = counted - 1U;
 
     const std::vector<const Entry*> entries = enabled_entries(section,tracks);
+    if(entries.size()>32767U-retail_count)
+        throw std::runtime_error("Track Lab artwork exceeds the game's signed asset-ID range.");
+    for(std::uint32_t i=0;i<counted;++i) {
+        if(retail_table[i]<0 || (i && retail_table[i]<retail_table[i-1]))
+            throw std::runtime_error("Track Lab received an invalid asset-offset table.");
+    }
+    std::uint64_t end=static_cast<std::uint32_t>(retail_table[retail_count]);
+    for(const auto* entry:entries)end+=entry->bytes.size();
+    if(end>0x7FFFFFFFU)
+        throw std::runtime_error("Track Lab asset offsets exceed the game's signed offset range.");
     SectionState& state = sections[section_slot(section)];
     state.retail_count = retail_count;
     state.end_offset = static_cast<std::uint32_t>(retail_table[retail_count]);
@@ -1131,13 +1141,13 @@ std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* re
 } // namespace
 
 std::vector<std::int32_t> build_extended_table(
-    Section section, const std::int32_t* retail_table) {
+    Section section, const std::int32_t* retail_table, std::size_t table_words) {
     std::scoped_lock lock(g_mutex);
     if (g_rescan_pending) {
         std::fprintf(stderr, "[custom-tracks] applying deferred rescan\n");
         scan_locked(g_directory);
     }
-    return assemble_table(section,retail_table,g_tracks,g_sections,g_resolved_level_ids);
+    return assemble_table(section,retail_table,g_tracks,g_sections,g_resolved_level_ids,table_words);
 }
 
 PreparedTracks prepare_tracks(std::vector<Track> tracks,

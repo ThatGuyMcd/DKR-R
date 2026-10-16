@@ -1,0 +1,38 @@
+DKR-R v1.0.7
+
+Keep the whole package together. On Windows, start DKR-R.exe; the runtime and
+helpers belong in libexec/dkr-r. Linux releases include AppImages. Steam Deck
+uses the Linux x86_64 payload. Android's APK version code is 1070001.
+
+WHAT'S NEW SINCE 1.0.6
+
+- Fix a Windows/Linux line-ending difference that could make identical replay
+  engines fail the online compatibility check after separate platform builds.
+- Earlier online checks compare the replay engine and actual prepared mods.
+  Startup errors name the mismatched component and log both fingerprints.
+  Every device in a lobby needs 1.0.7 (network protocol 50, mod transfer 3).
+- Background GitHub update checks, a Check for updates button in Play, and
+  update/download/install controls in About DKR-R. Installation needs consent
+  and signed release metadata. Saves, ROMs, mods and settings are not replaced.
+  Older 1.0.6 installations need one manual upgrade to obtain the updater.
+- Shorter launcher/overlay help, warnings and dialogs. Connection Details and
+  Reflection Details collapsibles have been removed.
+- Hide/Show lobby code for streamers. Copy still copies the actual invite.
+- Lava stays hot through its pulse, from yellow-white to orange-red. Nearby
+  glow is subtler and uses cached scenery colours, without an extra lighting
+  pass or per-frame lighting rays. Glow can be disabled independently.
+  Hardware reflections are separate and can still have a sizeable GPU cost.
+- PR #60's Quick Join opening fixes, reviewed libjuice callback patch, nightly
+  sanitizer/stress checks and compact dependency caches are included.
+
+Experimental Rollback and hardware ray tracing remain experimental. A release
+number does not certify every WAN connection, GPU or mixed-architecture pair.
+See RELEASE-VALIDATION.md in the source for the actual checks and limitations.
+No new Apple binary is built in this Windows/Linux/Android packaging pass.
+
+Back up your saves before upgrading. Do not uninstall Android to update unless
+you have exported the saves first. Keep private lobby codes, paths and profile
+keys out of public reports; paired host/client logs are useful for online bugs.
+
+No game ROM or extracted Nintendo/Rare assets are included. Bring your own
+legally obtained clean US v1.0 or US Rev A/v1.1 Diddy Kong Racing ROM.

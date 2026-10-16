@@ -54,6 +54,7 @@ inline bool parse_metadata(const nlohmann::json& json,Metadata& out,std::string&
                 else if(kind=="waves")hint=Hint::Waves;
                 else if(kind=="waterfall")hint=Hint::Waterfall;
                 else if(kind=="fountain")hint=Hint::Fountain;
+                else if(kind=="lava")hint=Hint::Lava;
                 else throw std::runtime_error("unknown water material kind");
                 assigned[std::size_t(ordinal)]=true;staged.materials[std::size_t(ordinal)]=hint;
             }

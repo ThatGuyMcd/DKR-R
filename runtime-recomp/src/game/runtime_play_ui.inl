@@ -102,7 +102,7 @@ float PaddockRaceButtonWidth(const char* label, float font_px = 19.0F,
 // ------------------------------------------------------------ play page
 
 constexpr const char* kRomChoosePrompt =
-    "Choose your legally obtained Diddy Kong Racing Game Pak.";
+    "Choose your Diddy Kong Racing ROM.";
 
 struct PlayPageContext {
     std::filesystem::path& selected_rom;
@@ -373,11 +373,10 @@ std::vector<PlayNotice> BuildPlayNotices(bool rom_ready) {
                 break;
             }
         }
-        notices.push_back({"test", "Track Lab test: " + name,
+        notices.push_back({"test", "Track preview: " + name,
                            tracks_ns::auto_boot_enabled()
-                               ? "Starts directly in this track as Diddy, in single player. "
-                                 "Uses the Modern graphics profile."
-                               : "Native DKR track. Uses the Modern graphics profile.",
+                               ? "Starts directly in this track as Diddy."
+                               : "Uses Modern graphics.",
                            false, "Stop testing"});
     }
     if (rom_ready && g_mod_browser_revision != 0U) {
@@ -432,7 +431,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
 
 
     RefreshModBrowserCards(g_legacy_imports.snapshot());
-    const bool imports_busy = g_legacy_imports.snapshot().busy;
+    const bool imports_busy = g_legacy_imports.snapshot().busy || g_code_library.view()->busy;
     const bool launch_modal = g_mod_launch.snapshot().modal;
     const bool lobby = dkr::runtime::netplay::session().active();
     const bool nav = ImGui::GetIO().NavVisible;
@@ -440,11 +439,20 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     const float width = std::max(available_width, 1.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
 
-    DrawPageHeading("PLAY");
-    PaddockGap(4.0F);
-    PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-                "Load your ROM, then jump into the race.", width);
-    PaddockGap(16.0F);
+    {
+        const ImVec2 header = ImGui::GetCursorScreenPos();
+        const float action = std::min(width, PaddockImportButtonWidth("Check for updates"));
+        ImGui::BeginGroup();
+        DrawPageHeading("PLAY");
+        ImGui::EndGroup();
+        const float heading_height = ImGui::GetItemRectSize().y;
+        const auto layout = dkr::runtime::copy::play_header(width, action, heading_height);
+        ImGui::SetCursorScreenPos({header.x + layout.action_x, header.y + layout.action_y});
+        DrawPlayUpdateButton(action);
+        ImGui::SetCursorScreenPos(header);
+        ImGui::Dummy({width, layout.height});
+    }
+    PaddockGap(20.0F);
 
     // The ROM pass: status, the ROM list, and the actions for it.
     {
@@ -475,9 +483,9 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
             meta = play.rom_status;
             meta_colour = 0xFFAA97;
         } else if (count == 1U) {
-            meta = "Add your other Game Pak revision to switch between them here.";
+            meta = "";
         } else if (count > 1U) {
-            meta = std::to_string(count) + " ROMs in your list. Switch any time before you start.";
+            meta = std::to_string(count) + " ROMs available.";
         } else {
             meta = "Accepted files: .z64, .n64, .v64";
         }
@@ -491,7 +499,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         const float actions_height = actions_row ? 46.0F : 46.0F + 8.0F + 44.0F;
         const float pick_width = std::min(body_width, rom_picker_width);
         const float pick_height = 4.0F + pick_label.line + 6.0F + 60.0F + 8.0F;
-        const std::string_view no_rom = "Load an original Diddy Kong Racing ROM to continue.";
+        const std::string_view no_rom = "Choose a Diddy Kong Racing ROM to start.";
         const float detail_height = count > 0U ? pick_height : PaddockTextHeight(file_type, no_rom, body_width);
         const float meta_height = PaddockTextHeight(meta_type, meta, body_width);
         const float body_height = 6.0F + heading.line + 8.0F + detail_height + 2.0F +
@@ -660,6 +668,19 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     }
     // START.
     PaddockGap(16.0F);
+    if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, width)) {
+        SaveSettings();
+    }
+    if (g_skip_intro) {
+        PaddockGap(12.0F);
+        if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
+            {"Start menu", "Character select"}, width, false, {})) SaveSettings();
+    }
+    PaddockGap(8.0F);
+    if (g_skip_intro)
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+                    "Offline launches only.", width);
+    PaddockGap(16.0F);
     if (dkr::runtime::portable::supported()) {
         // Inspect only on page entry or an explicit click, never per-frame I/O.
         static bool portable_enabled = false;
@@ -671,31 +692,37 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
                 portable_enabled = dkr::runtime::portable::enabled();
                 portable_status = std::move(error);
             } else {
-                portable_status = "Portable mode preference saved. Existing saves and settings were not moved or replaced.";
+                portable_status = "Restart DKR-R to apply. Existing saves aren't moved automatically.";
             }
         }
         PaddockGap(8.0F);
         PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            "Uses portable.txt beside the application. On next launch, portable mode stores data in dkr-runtime-data beside it; otherwise your normal user profile is used. A command-line config override takes priority. Switching does not transfer saves.", width);
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            "Current data folder: " + PathUtf8(g_config_directory), width);
+            "Store saves and settings beside DKR-R.", width);
         if (portable_enabled != dkr::runtime::portable::enabled_at_startup()) {
             PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14),
-                "Restart DKR-R to apply the portable mode change. This session keeps using its current data folder.", width);
+                "Restart DKR-R to apply.", width);
         }
         if (!portable_status.empty()) {
-            PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xFFAB14), portable_status, width);
+            if (dkr::runtime::copy::looks_like_error(portable_status))
+                DrawIssue(portable_status, dkr::runtime::copy::Area::Portable);
+            else
+                PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+                            "Existing saves aren't moved automatically.", width);
         }
         PaddockGap(16.0F);
     }
     {
         const auto& save = CachedSaveManagerView();
-        PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(0xFFF6DA), "YOUR OFFLINE ADVENTURE", width);
+        PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(0xFFF6DA), "OFFLINE ADVENTURE", width);
         PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            save.preview.empty() ? "No readable offline Adventure yet. Existing invalid files will not be overwritten on launch." : save.preview, width);
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), PathUtf8(save.adventure.path), width);
+            save.preview.empty() ? (save.adventure.exists ? "Offline save couldn't be read."
+                                                         : "No offline Adventure save yet.")
+                                 : save.preview, width);
+        if (save.adventure.exists && !save.adventure.valid)
+            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14),
+                        "Your offline save needs attention. Check Save Manager before playing.", width);
         PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            "Online sessions use separate saves. Enabled custom mods use a separate mod-set save, listed in Save Manager.", width);
+            "Online and modded games use separate saves.", width);
         PaddockGap(12.0F);
     }
     {
@@ -730,7 +757,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     }
     if (BeginSettingsDialog("Leave lobby and play offline?", "LEAVE LOBBY & PLAY OFFLINE?", 620.0F, 0x06336E)) {
         PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(0xB0C9CC),
-            "This leaves the online lobby before starting offline play. If you are the host, your lobby closes for everyone. Online progress is not copied into your offline save.", SettingsDialogInner());
+            "Leave this lobby and start offline? If you're the host, the lobby closes for everyone. Online progress stays separate.", SettingsDialogInner());
         PaddockGap(20.0F);
         if (PlayNoticeButton("CANCEL")) ImGui::CloseCurrentPopup();
         ImGui::SameLine();

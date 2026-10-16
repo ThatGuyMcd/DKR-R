@@ -1,0 +1,33 @@
+[manifest]
+id = "guide_starting_bananas"
+version = "1.0.0"
+display_name = "Starting Bananas"
+description = "Choose starting bananas for humans, AI or everyone. Applies next game."
+authors = ["Your name"]
+game_id = "dkr"
+minimum_recomp_version = "1.0.7"
+dependencies = []
+
+[[manifest.config_options]]
+id = "bananas"
+name = "Starting bananas"
+type = "Number"
+default = 5.0
+min = 0.0
+max = 10.0
+
+[[manifest.config_options]]
+id = "affect"
+name = "Apply to"
+type = "Enum"
+options = ["Everyone", "Humans only", "AI only"]
+default = "Everyone"
+
+[[manifest.config_options]]
+id = "label"
+name = "Session label"
+type = "String"
+default = "Starting Bananas ready"
+
+[build]
+sources = ["main.c"]

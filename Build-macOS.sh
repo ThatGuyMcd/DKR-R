@@ -8,6 +8,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${project_root}/scripts/lib/apple-build.sh"
 # Inherit the same lock when Build invokes preparation; release on process exit.
 if [[ "${DKR_MACOS_LOCK_ENTRY:-}" != "${BASH_SOURCE[0]}" ]]; then
   exec python3 "${project_root}/scripts/macos_build_lock.py" "${project_root}" "${BASH_SOURCE[0]}" "$@"
@@ -60,16 +61,9 @@ EOF
   esac
   shift
 done
-jobs="${jobs:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 1)}"
-[[ "$jobs" =~ ^[1-9][0-9]*$ ]] || {
-  echo '--jobs must be a positive integer.' >&2
-  exit 1
-}
+jobs="$(dkr_apple_build_jobs "$jobs")"
 export CMAKE_BUILD_PARALLEL_LEVEL="$jobs"
-[[ "$(uname -s)" == "Darwin" ]] || {
-  echo 'Build-macOS.sh must run on macOS with Xcode installed.' >&2
-  exit 1
-}
+dkr_require_macos
 
 if [[ -z "${DKR_MAC_GENERATED_SOURCE:-}" || -z "${DKR_MAC_V80_GENERATED_SOURCE:-}" ]]; then
   # Apple's Bash 3.2 treats an empty array as unset under nounset.
@@ -83,12 +77,7 @@ if [[ -z "${DKR_MAC_GENERATED_SOURCE:-}" || -z "${DKR_MAC_V80_GENERATED_SOURCE:-
   DKR_MAC_V80_GENERATED_SOURCE="${generated_root}/v80/RecompiledFuncs"
 fi
 
-for tool in cmake ninja; do
-  command -v "${tool}" >/dev/null 2>&1 || {
-    echo "Missing required macOS build tool: ${tool}" >&2
-    exit 1
-  }
-done
+dkr_require_tools cmake ninja
 for dependency in n64-modern-runtime rt64; do
   [[ -d "${project_root}/extern/${dependency}" ]] || {
     echo "extern/${dependency} is missing; run scripts/Prepare-DKR-Runtime-macOS.sh first." >&2

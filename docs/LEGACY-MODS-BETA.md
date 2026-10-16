@@ -5,7 +5,7 @@ add tracks and characters without replacing your originals, and the host can
 share the required set for online play.
 
 The filename remains `LEGACY-MODS-BETA.md` so existing links keep working.
-These are the current 1.0.5 instructions.
+These are the current 1.0.6 instructions. The filename is retained for existing links.
 
 ## Import and play
 
@@ -30,6 +30,23 @@ Custom tracks appear below the original worlds with the original wooden
 frames, previews and navigation flow. Fresh Track Select entry starts at
 Dino Domain. `.dkrmap` courses from Track Lab share the Tracks library, marked
 **DKR** rather than **Legacy**.
+
+Each custom row has a CUSTOM TRACKS heading and alternates through the six
+built-in backgrounds. Returning to Future Fun Land restores its original art.
+Wider screens keep preview images, captions and arrows attached to their frames
+during scrolling; confirmation zoom remains the original transition.
+Very long captions are shortened in-game, not in the installed mod metadata.
+
+For offline authored tracks, the vehicle screen can select the vehicles allowed
+by the track header. A start object may still force a vehicle; Track Lab warns
+about that on export. Online retains its current vehicle-selection gate.
+Track Lab exports a looping preview flight if a race/boss track has none and
+does not overwrite an author's existing flight. See the addon guide.
+
+Custom track artwork and character artwork share checked boot-owned texture
+and sprite tables. Large libraries are no longer truncated at the former table
+scan limit; malformed offsets or exhausted budgets still fail safely. This is
+not a promise that arbitrary tracks or unlimited assets fit in guest memory.
 
 Four custom character actors sit on the original animated Player Select stage:
 two below and two above. With more enabled, highlight a custom actor and use

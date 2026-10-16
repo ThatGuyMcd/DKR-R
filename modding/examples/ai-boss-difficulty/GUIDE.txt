@@ -1,0 +1,34 @@
+AI & BOSS DIFFICULTY
+
+Import dkr_ai_boss_difficulty.nrm in MODS / HACKS. Open its Custom Magic Codes
+Details, approve it only if you trust its source, enable it, adjust the pace
+sliders and Save settings. Settings apply to the next game, not a running one.
+
+100 keeps the original pace. Try 85 for an easier race or 110 for a harder
+one. Each setting supports 50..150. Race AI affects ordinary car, hovercraft
+and plane computer racers, including custom characters. Tricky, Bluey,
+Smokey, Bubbler and both Wizpig races have independent settings. Rematches
+use the same setting as their corresponding boss. Reset settings restores
+all seven sliders to 100; save afterwards.
+
+This is a PACE-based difficulty mod, not replacement AI. Native paths,
+weapons, boss attacks, start advantages, rubber-banding, boosts and collision
+remain. Percentages adjust the speed control, not an exact guaranteed lap
+time. Native steering, terrain and maximum path-step limits still apply.
+Human racers, time trials, title demos, previews, hubs and finished racers
+are excluded. Extreme pace settings may be unsuitable for some custom tracks.
+
+The mod handles both visible vehicle physics and the separate distant-AI
+spline movement path, so the setting does not disappear when a racer leaves
+the camera. It never multiplies stored velocity every frame or changes the
+global simulation rate. At 100 its hooks make no game-state changes.
+
+Works with Custom Trophy Races: the two mods own different systems. Online
+uses the existing Custom Magic Codes admission on Experimental Rollback:
+the host's exact package and settings are shared, clients explicitly approve
+code, and settings/state use the ordinary checkpoint/save protections.
+No arbitrary scripts, host DLLs or extra files are executed.
+
+Compiled and statically inspected only. Gameplay and cross-device acceptance
+are reserved to the maintainer. Boss behaviour at extreme settings needs
+their in-game acceptance; this is not a claim of completed gameplay testing.

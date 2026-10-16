@@ -97,24 +97,24 @@ add_library(DKRLegacyModCore STATIC
     "${_dkr_mod_src}/legacy_mod_stage.cpp")
 target_compile_features(DKRLegacyModCore PUBLIC cxx_std_20)
 target_include_directories(DKRLegacyModCore PUBLIC "${_dkr_mod_src}"
-    "${DKRPORT_ROOT}/extern/rt64/src/contrib"
-    "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty")
+    "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib"
+    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
 target_compile_definitions(DKRLegacyModCore PRIVATE NOMINMAX)
 target_link_libraries(DKRLegacyModCore PRIVATE DKRLegacyDelta PUBLIC DKRMusicSequenceValidator)
 
 # Reuse the exact pinned compression and hashing code already shipped with
 # DKR-R. A standalone importer test does not need the renderer or networking.
 add_library(DKRLegacyModMiniz STATIC
-    "${DKRPORT_ROOT}/extern/rt64/src/contrib/miniz/miniz.c")
+    "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/miniz/miniz.c")
 if(TARGET mbedcrypto)
     # Use the application's existing hashing provider and its ABI/configuration.
     set(_dkr_mod_hash mbedcrypto)
 else()
     add_library(DKRLegacyModHash STATIC
-        "${DKRPORT_ROOT}/extern/mbedtls/library/sha256.c"
-        "${DKRPORT_ROOT}/extern/mbedtls/library/platform_util.c")
+        "${DKR_DEPENDENCIES_DIR}/mbedtls/library/sha256.c"
+        "${DKR_DEPENDENCIES_DIR}/mbedtls/library/platform_util.c")
     target_include_directories(DKRLegacyModHash PRIVATE
-        "${_dkr_mod_src}" "${DKRPORT_ROOT}/extern/mbedtls/include")
+        "${_dkr_mod_src}" "${DKR_DEPENDENCIES_DIR}/mbedtls/include")
     target_compile_definitions(DKRLegacyModHash PRIVATE
         MBEDTLS_CONFIG_FILE="legacy_mod_hash_config.h")
     target_compile_definitions(DKRLegacyModCore PRIVATE
@@ -122,7 +122,7 @@ else()
     set(_dkr_mod_hash DKRLegacyModHash)
 endif()
 target_include_directories(DKRLegacyModCore PRIVATE
-    "${DKRPORT_ROOT}/extern/mbedtls/include")
+    "${DKR_DEPENDENCIES_DIR}/mbedtls/include")
 target_link_libraries(DKRLegacyModCore PRIVATE ${_dkr_mod_hash})
 if(TARGET rt64)
     # The game gets miniz from RT64's existing archive, exactly once. The child
@@ -140,7 +140,7 @@ add_library(DKRLegacyGuestIO STATIC "${_dkr_mod_src}/legacy_runtime_io.cpp"
     "${_dkr_mod_src}/legacy_guest_checkpoint.cpp"
     "${_dkr_mod_src}/legacy_runtime_assets.cpp")
 target_include_directories(DKRLegacyGuestIO PUBLIC
-    "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include")
+    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include")
 target_link_libraries(DKRLegacyGuestIO PUBLIC DKRLegacyModCore)
 if(BUILD_TESTING)
     add_executable(DKRLegacyBehaviourTests "${DKRPORT_ROOT}/runtime-recomp/tests/legacy_behaviour_tests.cpp")
@@ -148,7 +148,7 @@ if(BUILD_TESTING)
     if(WIN32 AND TARGET rt64)
         # Full-runtime builds inherit RT64's SDL dependency. The independent
         # headless build uses its small compression provider instead.
-        set(_dkr_behaviour_sdl "${DKRPORT_ROOT}/extern/rt64/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+        set(_dkr_behaviour_sdl "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
         target_link_directories(DKRLegacyBehaviourTests PRIVATE "${_dkr_behaviour_sdl}")
         add_custom_command(TARGET DKRLegacyBehaviourTests POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_dkr_behaviour_sdl}/SDL2.dll" "$<TARGET_FILE_DIR:DKRLegacyBehaviourTests>/SDL2.dll")
@@ -188,6 +188,8 @@ add_library(DKRLegacyImportLibrary STATIC "${_dkr_mod_src}/legacy_import_library
     "${_dkr_mod_src}/legacy_mod_library.cpp"
     "${_dkr_mod_src}/legacy_track_catalog.cpp")
 target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRLegacyModCore DKRLegacyModProcess)
+target_include_directories(DKRLegacyImportLibrary PRIVATE
+    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include")
 
 add_library(DKRLegacyModLaunch STATIC "${_dkr_mod_src}/legacy_mod_launch.cpp"
     "${_dkr_mod_src}/online_mod_runtime.cpp"
@@ -201,7 +203,7 @@ target_include_directories(DKRLegacyModLaunch PRIVATE "${DKRPORT_ROOT}/runtime-r
 add_library(DKRCustomTracksCore STATIC "${_dkr_mod_src}/../custom_tracks.cpp")
 target_link_libraries(DKRCustomTracksCore PUBLIC DKRMusicSequenceValidator)
 target_include_directories(DKRCustomTracksCore PUBLIC "${_dkr_mod_src}/.."
-    "${DKRPORT_ROOT}/extern/rt64/src/contrib")
+    "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
 target_compile_features(DKRCustomTracksCore PUBLIC cxx_std_20)
 target_compile_definitions(DKRCustomTracksCore PRIVATE NOMINMAX)
 if(TARGET rt64)

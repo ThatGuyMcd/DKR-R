@@ -1,0 +1,62 @@
+From 53605876aec40498e50944f9a6f96380928bcb37 Mon Sep 17 00:00:00 2001
+From: squidbus <175574877+squidbus@users.noreply.github.com>
+Date: Sun Sep 20 10:40:31 2026 -0700
+Subject: [PATCH] Fixes for non-macOS and OS 27 (#116)
+
+Upstream renderbag/plume commit, carried until RT64 bumps its plume
+submodule past it.
+
+
+diff --git a/plume_metal.cpp b/plume_metal.cpp
+index 373c87e..b670ed3 100644
+--- a/plume_metal.cpp
++++ b/plume_metal.cpp
+@@ -3794,12 +3794,30 @@ namespace plume {
+         mtl->retain();
+         devices->release();
+ 
++        NS::OperatingSystemVersion osVersion = NS::ProcessInfo::processInfo()->operatingSystemVersion();
++
+         const std::string deviceName(mtl->name()->utf8String());
+         description.name = deviceName;
++#if PLUME_MACOS && (!defined(MAC_OS_VERSION_27_0) || MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_VERSION_27_0)
+         description.type = mapDeviceType(mtl->location());
++#else
++        // location is only available on macOS and deprecated from 27 onward.
++        // For other OS types and 27+ it's always integrated.
++        description.type = RenderDeviceType::INTEGRATED;
++#endif
+         description.driverVersion = 1; // Unavailable
+         description.vendor = mtl->supportsFamily(MTL::GPUFamilyApple1) ? RenderDeviceVendor::APPLE : getRenderDeviceVendor(mtl->registryID());
++#if PLUME_MACOS
+         description.dedicatedVideoMemory = mtl->recommendedMaxWorkingSetSize();
++#else
++        // On other OS types, recommendedMaxWorkingSetSize is available starting in 16.0
++        if (osVersion.majorVersion >= 16) {
++            description.dedicatedVideoMemory = mtl->recommendedMaxWorkingSetSize();
++        } else {
++            // Otherwise, memory is always unified.
++            description.dedicatedVideoMemory = NS::ProcessInfo::processInfo()->physicalMemory();
++        }
++#endif
+ 
+         timestampCounterSet = findTimestampCounterSet();
+         if (timestampCounterSet != nullptr) {
+@@ -3811,8 +3829,6 @@ namespace plume {
+         createResolvePipelineState();
+         sharedBlitDescriptor = MTL::BlitPassDescriptor::alloc()->init();
+ 
+-        NS::OperatingSystemVersion osVersion = NS::ProcessInfo::processInfo()->operatingSystemVersion();
+-
+         // Fill capabilities.
+         // https://developer.apple.com/documentation/metal/device-inspection
+         // TODO: Support Raytracing.
+@@ -3823,7 +3839,7 @@ namespace plume {
+         capabilities.resolveModes = false;
+         capabilities.scalarBlockLayout = true;
+         capabilities.presentWait = true;
+-        capabilities.preferHDR = mtl->recommendedMaxWorkingSetSize() > (512 * 1024 * 1024);
++        capabilities.preferHDR = description.dedicatedVideoMemory > (512 * 1024 * 1024);
+         capabilities.dynamicDepthBias = true;
+         capabilities.uma = mtl->hasUnifiedMemory();
+         capabilities.gpuUploadHeap = capabilities.uma;

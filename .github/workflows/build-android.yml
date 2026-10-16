@@ -1,0 +1,57 @@
+name: Android device compilation
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+        with:
+          profile: android
+      - name: Install exact device toolchain
+        run: |
+          if [[ ! -f "$ANDROID_HOME/ndk/29.0.14206865/source.properties" ]]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;29.0.14206865'
+          fi
+          mkdir -p build/android-compile
+          tee build/android-compile/toolchain.txt < "$ANDROID_HOME/ndk/29.0.14206865/source.properties"
+      - name: Configure actual Android sources without ROM payloads
+        run: |
+          cmake -S runtime-recomp/tests/android_compile -B build/android-compile -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/29.0.14206865/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 \
+            -DANDROID_STL=c++_shared -DCMAKE_BUILD_TYPE=Release
+      - name: Compile adapters and link the production platform subset
+        run: cmake --build build/android-compile --target DKRAndroidCompileCheck --parallel 3
+      - name: Verify arm64 ELF and 16 KB load alignment
+        run: |
+          python3 scripts/tests/test_verify_android_compile.py
+          python3 scripts/verify_android_compile.py build/android-compile \
+            --readelf "$ANDROID_HOME/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+      - name: Preserve compilation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-device-compilation
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/android-compile/toolchain.txt
+            build/android-compile/compile_commands.json
+            build/android-compile/device-objects.json
+            build/android-compile/CMakeFiles/CMakeConfigureLog.yaml

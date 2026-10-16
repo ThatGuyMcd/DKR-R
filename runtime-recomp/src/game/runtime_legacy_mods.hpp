@@ -3,6 +3,7 @@
 #include "mods/legacy_mod_launch.hpp"
 #include "custom_tracks.hpp"
 #include "mods/online_mod_music.hpp"
+#include "mods/legacy_track_menu_adapter.hpp"
 #include "game_payload.hpp"
 namespace dkr::mods::online {class RuntimeResources;}
 
@@ -28,6 +29,8 @@ bool frozen_music_volume(std::uint8_t*,recomp_context*);
 bool frozen_music_render(float*,std::size_t,unsigned);
 std::shared_ptr<const mods::PreparedModLaunch> prepared_launch();
 void begin_track_menu(bool allow_races=false);
+void set_trophy_menu(std::vector<mods::TrackMenuCup>);
+std::string selected_trophy();
 // Explicit roster seeding is reserved for development qualification.
 void begin_character_roster(const std::array<std::string,4>& selected);
 void begin_character_menu();
@@ -45,7 +48,8 @@ public:
         std::shared_ptr<const custom_tracks::PreparedTracks>,bool custom_ai,
         RecompiledEntrypoint private_random=nullptr,
         std::shared_ptr<const mods::online::MusicLibrary> music=nullptr,
-        RecompiledEntrypoint private_texture_animation=nullptr);
+        RecompiledEntrypoint private_texture_animation=nullptr,
+        std::vector<mods::TrackMenuCup> cups={});
     ~ModWorld();
     ModWorld(const ModWorld&)=delete;
     ModWorld& operator=(const ModWorld&)=delete;
@@ -59,6 +63,8 @@ public:
         const std::uint32_t*,unsigned,std::uint64_t&)noexcept;
     const mods::AssetBus& bus()const;
     const std::string& error()const;
+    void select_course(const std::string&,unsigned);
+    std::string selected_trophy()const;
 private:
     struct State;
     std::unique_ptr<State> state_;

@@ -67,7 +67,9 @@ int main() {
         auto packet=encode_message({Operation::Cancel,digest});packet.push_back(0);rejects([&]{decode_message(packet);});
         rejects([&]{encode_message({Operation::PayloadChunk,digest,hash,25000,25001,Bytes(2)});});
         rejects([&]{encode_message({Operation::PayloadChunk,digest,hash,0,25001,Bytes(MaxChunkBytes+1)});});
-        rejects([&]{encode_message({Operation::Verified,digest,hash});});
+        check(decode_message(encode_message({Operation::Verified,digest,hash})).payload==hash);
+        rejects([&]{encode_message({Operation::Verified,digest});});
+        rejects([&]{encode_message({Operation::Verified,digest,hash,1});});
         // Three recipients share immutable source bytes but have independent
         // consent/progress. Cancelling one cannot advance or cancel another.
         std::array<Download,3> peers;
@@ -86,7 +88,7 @@ int main() {
             while(auto chunk=upload.next()) {check(windowed.manifest_chunk(*chunk));upload.sent();}
         }
         windowed.consent();upload.request({Operation::Consent,digest},768);
-        rejects([&]{upload.request({Operation::Verified,digest},768);});
+        rejects([&]{upload.request({Operation::Verified,digest,hash},768);});
         Bytes result;bool dropped=false;
         while(windowed.phase()==TransferPhase::Payloads) {
             upload.request(windowed.request(768),768);
@@ -99,7 +101,7 @@ int main() {
             }
         }
         check(result==payload && dropped);upload.request({Operation::Preparing,digest},768);
-        upload.request({Operation::Verified,digest},768);check(upload.preparing()&&!upload.next());
+        upload.request({Operation::Verified,digest,hash},768);check(upload.preparing()&&!upload.next());
         upload.request({Operation::Cancel,digest},768);check(upload.cancelled());
         rejects([&]{upload.request({Operation::ManifestRequest,digest,{},0,static_cast<std::uint32_t>(metadata.size())},768);});
         // Reliable/unordered bulk packets, including a lost first-window chunk,

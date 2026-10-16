@@ -1,0 +1,375 @@
+{
+  "schema_version": 1,
+  "name": "Private retail CPU replay and scene regression",
+  "scenarios": [
+    {
+      "id": "v77-owned-race",
+      "description": "Owned game correction and canonical state/PCM equality",
+      "command": [
+        "${probe77}",
+        "${race77}",
+        "mode_game",
+        "--offline-services",
+        "--owned-adapter-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom77}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race77}",
+        "${rom77}"
+      ],
+      "expect_stdout": [
+        "state_pcm_exact=1 confirmed_sink_once=1 immutable_publication=1"
+      ],
+      "timeout_seconds": 180,
+      "required_metrics": [
+        "rollback.guest-tick.count",
+        "rollback.guest-tick.mean_ms"
+      ]
+    },
+    {
+      "id": "v77-authored-driver",
+      "description": "Authored CPU with late input and immutable presentation ownership",
+      "command": [
+        "${probe77}",
+        "${race77}",
+        "mode_game",
+        "--offline-services",
+        "--authored-owned-driver"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom77}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race77}",
+        "${rom77}"
+      ],
+      "expect_stdout": [
+        "PRIVATE AUTHORED MAIN CPU: exact retail CPU span",
+        "players=2 frames=120",
+        "players=3 frames=120",
+        "players=4 frames=120",
+        "exact=1; full game adapter remains unqualified"
+      ],
+      "timeout_seconds": 300,
+      "required_metrics": [
+        "rollback.guest-tick.count",
+        "rollback.guest-tick.mean_ms"
+      ]
+    },
+    {
+      "id": "v77-menu-flow",
+      "description": "Two-player Tracks race through quit, Title, characters and track selection",
+      "command": [
+        "${probe77}",
+        "${menu77}",
+        "mode_game",
+        "--offline-services",
+        "--retail-menu-flow-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom77}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${menu77}",
+        "${rom77}"
+      ],
+      "expect_stdout": [
+        "Real menu fixture owners=2 adventure=0",
+        "Real controller menu flow boundaries=",
+        "menu=0 character=1 track=1"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "v77-adventure-flow",
+      "description": "Two-player Tracks race through actual Adventure selection and introduction",
+      "command": [
+        "${probe77}",
+        "${menu77}",
+        "mode_game",
+        "--offline-services",
+        "--retail-adventure-flow-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom77}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${menu77}",
+        "${rom77}"
+      ],
+      "expect_stdout": [
+        "Real menu fixture owners=2 adventure=1",
+        "menu=0 character=1",
+        "save=1 cinematic=1",
+        "viewports=1 network_owners=2 two_player_adventure=1"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "v77-scene-resume",
+      "description": "Confirmed scene teardown, construction, resume and corrected replay",
+      "command": [
+        "${probe77}",
+        "${race77}",
+        "mode_game",
+        "--offline-services",
+        "--retail-scene-resume-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom77}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race77}",
+        "${rom77}"
+      ],
+      "expect_stdout": [
+        "REAL scene resume site=1",
+        "REAL scene resume site=2",
+        "state_effects_byte_exact=1; real GPU/lobby integration remains unowned"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "v77-scene-session",
+      "description": "Chained scene epochs under impaired encrypted loopback for 2/3/4 peers",
+      "command": [
+        "${probe77}",
+        "${race77}",
+        "mode_game",
+        "--offline-services",
+        "--retail-scene-session-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom77}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race77}",
+        "${rom77}"
+      ],
+      "expect_stdout": [
+        "ACTUAL SCENE SESSION: peers=2",
+        "ACTUAL SCENE SESSION: peers=3",
+        "ACTUAL SCENE SESSION: peers=4",
+        "chained_epochs=91,92,93",
+        "corrected_state_construction_effects_byte_exact=1"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "v80-owned-race",
+      "description": "Owned game correction and canonical state/PCM equality",
+      "command": [
+        "${probe80}",
+        "${race80}",
+        "mode_game",
+        "--offline-services",
+        "--owned-adapter-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom80}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race80}",
+        "${rom80}"
+      ],
+      "expect_stdout": [
+        "state_pcm_exact=1 confirmed_sink_once=1 immutable_publication=1"
+      ],
+      "timeout_seconds": 180,
+      "required_metrics": [
+        "rollback.guest-tick.count",
+        "rollback.guest-tick.mean_ms"
+      ]
+    },
+    {
+      "id": "v80-authored-driver",
+      "description": "Authored CPU with late input and immutable presentation ownership",
+      "command": [
+        "${probe80}",
+        "${race80}",
+        "mode_game",
+        "--offline-services",
+        "--authored-owned-driver"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom80}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race80}",
+        "${rom80}"
+      ],
+      "expect_stdout": [
+        "PRIVATE AUTHORED MAIN CPU: exact retail CPU span",
+        "players=2 frames=120",
+        "players=3 frames=120",
+        "players=4 frames=120",
+        "exact=1; full game adapter remains unqualified"
+      ],
+      "timeout_seconds": 300,
+      "required_metrics": [
+        "rollback.guest-tick.count",
+        "rollback.guest-tick.mean_ms"
+      ]
+    },
+    {
+      "id": "v80-menu-flow",
+      "description": "Two-player Tracks race through quit, Title, characters and track selection",
+      "command": [
+        "${probe80}",
+        "${menu80}",
+        "mode_game",
+        "--offline-services",
+        "--retail-menu-flow-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom80}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${menu80}",
+        "${rom80}"
+      ],
+      "expect_stdout": [
+        "Real menu fixture owners=2 adventure=0",
+        "Real controller menu flow boundaries=",
+        "menu=0 character=1 track=1"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "v80-adventure-flow",
+      "description": "Two-player Tracks race through actual Adventure selection and introduction",
+      "command": [
+        "${probe80}",
+        "${menu80}",
+        "mode_game",
+        "--offline-services",
+        "--retail-adventure-flow-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom80}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${menu80}",
+        "${rom80}"
+      ],
+      "expect_stdout": [
+        "Real menu fixture owners=2 adventure=1",
+        "menu=0 character=1",
+        "save=1 cinematic=1",
+        "viewports=1 network_owners=2 two_player_adventure=1"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "v80-scene-resume",
+      "description": "Confirmed scene teardown, construction, resume and corrected replay",
+      "command": [
+        "${probe80}",
+        "${race80}",
+        "mode_game",
+        "--offline-services",
+        "--retail-scene-resume-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom80}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race80}",
+        "${rom80}"
+      ],
+      "expect_stdout": [
+        "REAL scene resume site=1",
+        "REAL scene resume site=2",
+        "state_effects_byte_exact=1; real GPU/lobby integration remains unowned"
+      ],
+      "timeout_seconds": 300
+    },
+    {
+      "id": "v80-scene-session",
+      "description": "Chained scene epochs under impaired encrypted loopback for 2/3/4 peers",
+      "command": [
+        "${probe80}",
+        "${race80}",
+        "mode_game",
+        "--offline-services",
+        "--retail-scene-session-check"
+      ],
+      "env": {
+        "DKR_PROBE_ROM": "${rom80}",
+        "DKR_PROBE_TEST_FRAMES": "120",
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race80}",
+        "${rom80}"
+      ],
+      "expect_stdout": [
+        "ACTUAL SCENE SESSION: peers=2",
+        "ACTUAL SCENE SESSION: peers=3",
+        "ACTUAL SCENE SESSION: peers=4",
+        "chained_epochs=91,92,93",
+        "corrected_state_construction_effects_byte_exact=1"
+      ],
+      "timeout_seconds": 900
+    },
+    {
+      "id": "both-revisions-state-pcm",
+      "description": "Interleaved production revision engines restore/replay with stable state and PCM fingerprints",
+      "command": [
+        "${registry}",
+        "${race77}",
+        "${rom77}",
+        "${race80}",
+        "${rom80}"
+      ],
+      "env": {
+        "DKR_ROLLBACK_PROFILE": "1"
+      },
+      "inputs": [
+        "${race77}",
+        "${rom77}",
+        "${race80}",
+        "${rom80}"
+      ],
+      "expect_stdout": [
+        "Cross-platform replay v77 state=",
+        "Cross-platform replay v80 state=",
+        "effects-with-pcm=",
+        "Both production revision engines: real gameplay corrections, exact state/PCM and interleaved replay isolation passed."
+      ],
+      "timeout_seconds": 300,
+      "fingerprints": [
+        "^Cross-platform replay v77 state=[0-9a-f]+ effects-with-pcm=[0-9a-f]+$",
+        "^Cross-platform replay v80 state=[0-9a-f]+ effects-with-pcm=[0-9a-f]+$"
+      ],
+      "required_metrics": [
+        "rollback.guest-tick.count",
+        "rollback.guest-tick.mean_ms"
+      ]
+    }
+  ]
+}

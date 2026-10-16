@@ -1,6 +1,7 @@
 // Headless layout checks of the actual MODS / HACKS library drawing code.
 // No SDL window, renderer, user configuration, ROM or filesystem mutation.
 #include "mods/legacy_mod_library.hpp"
+#include "launcher_copy_policy.hpp"
 #include "mods/legacy_mod_browser.hpp"
 #include "custom_tracks.hpp"
 #include "generated/racing_banana_font.h"
@@ -54,6 +55,7 @@ void RequestTextEntryKeyboard(TextEntryTarget){}
 struct RomEntry{std::filesystem::path path;};
 std::vector<RomEntry> LoadRomCatalog(){return {};}
 #include "../src/game/runtime_ui_paddock.inl"
+#include "../src/game/runtime_messages_ui.inl"
 #include "../src/game/runtime_mod_library_ui.inl"
 
 void fonts(float size) {
@@ -208,6 +210,38 @@ int main() {
             ImGui::DestroyContext();
         }
         check(rendered>0,"No libraries were checked.");
+
+        // The actual header action and details renderer use the same fonts
+        // and geometry in Play and Mods. No update/network call is made here.
+        for(const float size:{19.0F,24.0F,28.0F})for(const float width:{280.0F,360.0F,540.0F,850.0F,1280.0F,2048.0F}) {
+            ImGui::CreateContext();fonts(size);
+            auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.LogFilename=nullptr;
+            io.DisplaySize={width+80,800};io.DeltaTime=1.0F/60;
+            ImGui::GetStyle().WindowPadding={0,0};
+            frame(width,[&]{
+                const float panel=ImGui::GetContentRegionAvail().x;
+                const ImVec2 origin=ImGui::GetCursorScreenPos();
+                const float heading=PaddockText(PaddockSign(42),PaddockRgb(0xFFAB14),"PLAY",panel);
+                const float natural=PaddockImportButtonWidth("Check for updates");
+                const float action=std::min(panel,natural);
+                const auto layout=dkr::runtime::copy::play_header(panel,action,heading);
+                ImGui::SetCursorScreenPos({origin.x+layout.action_x,origin.y+layout.action_y});
+                check(!PaddockImportButton(action<natural?"Updates###play-update-check":"Check for updates###play-update-check",action,true),"Unfocused header action fired.");
+                check(ImGui::GetItemRectMax().x<=origin.x+panel+0.5F,"Update header action clips.");
+                check(ImGui::GetItemRectMax().y<=origin.y+layout.height+0.5F,"Update header action exceeds row.");
+                ImGui::SetCursorScreenPos({origin.x,origin.y+layout.height+20});
+                ImGui::SetNextItemOpen(true,ImGuiCond_Always);
+                DrawTechnicalDetails(std::string(3500,'W'),"Large diagnostic");
+            });
+            auto* diagnostic=ImGui::FindWindowByName("Browser/##technical-text");
+            for(auto* window:ImGui::GetCurrentContext()->Windows) {
+                if(!window->Active||!(window->Flags&ImGuiWindowFlags_ChildWindow))continue;
+                check(window->Size.y<=180,"Diagnostic body isn't bounded.");
+                check(window->ContentSize.x<=window->Size.x+0.5F,"Long diagnostic doesn't wrap.");
+            }
+            (void)diagnostic;
+            ImGui::DestroyContext();
+        }
 
         // Native details and uninstall confirmation remain scrollable and fit
         // small launchers, including long track names and locked operations.

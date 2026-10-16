@@ -158,7 +158,7 @@ public:
 private:
     static constexpr std::size_t kHistory = 128U;
     static constexpr std::uint32_t kFutureInputs = 48U;
-    static constexpr std::size_t kMaximumEffectBytes = 64U * 1024U;
+    static constexpr std::size_t kMaximumEffectBytes = 192U * 1024U;
     struct Frame {
         std::uint32_t number = 0U;
         bool valid = false;

@@ -1,0 +1,26 @@
+diff --git a/src/hle/rt64_interpreter.h b/src/hle/rt64_interpreter.h
+--- a/src/hle/rt64_interpreter.h
++++ b/src/hle/rt64_interpreter.h
+@@ -16,6 +16,9 @@
+         GBI *hleGBI;
+         uint8_t extendedOpCode = 0;
+         GBIFunction extendedFunction = nullptr;
++        // Optional client guard, called before any HLE opcode dereference.
++        // Returning false stops decoding through the normal completion path.
++        bool (*hleCommandValidator)(State *, DisplayList *) = nullptr;
+ 
+         struct {
+             uint32_t textAddress = 0;
+diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
+--- a/src/hle/rt64_interpreter.cpp
++++ b/src/hle/rt64_interpreter.cpp
+@@ -170,6 +170,9 @@
+         uint8_t opCode;
+         GBIFunction func;
+         while (dl != nullptr) {
++            if (hleCommandValidator != nullptr && !hleCommandValidator(state, dl)) {
++                break;
++            }
+             opCode = (dl->w0 >> 24);
+ 
+             if ((extendedOpCode != 0) && (opCode == extendedOpCode)) {
