@@ -41,14 +41,15 @@ converted back - the UVs from ``dkr_uv``, the baked colours from the separate
 - because the values an author sees are normalised, V-flipped and sRGB, and
 none of those survive the trip back exactly. A segment nobody touched has to
 come out unchanged, which rules out a lossy conversion anywhere near it.
+The one exception is a vertex whose ``baked`` colour no longer shows its raw
+channels: the author painted it, and the paint is what goes out.
 """
 
 from __future__ import annotations
 
+import ntpath
 import os
 from typing import Dict, List, Optional, Tuple
-
-import bpy
 
 from .. import (level_model, level_model_edit, level_model_layout, prefs,
                 scene, transparency as looks, water)
@@ -149,17 +150,14 @@ def base_model_path(context, obj) -> str:
     """The ``.bin`` the mesh was decoded from.
 
     Recorded on the object at import, because that is the file this particular
-    mesh's vertex identities are indices into. The scene setting is the
-    fallback for a mesh imported before the object carried it, and the asset
-    tree is the last resort for a ``.blend`` moved to another machine.
+    mesh's vertex identities are indices into; :func:`.geometry.model_path`
+    finds it there or beside the ``.blend``. The asset tree is the last resort
+    for a retail track's ``.blend`` moved to another machine - it never holds a
+    base the author's own track was built on.
     """
-    candidates = [
-        obj.get(geometry.PROP_MODEL_PATH),
-        context.scene.dkr.geometry_path,
-    ]
-    for candidate in candidates:
-        if candidate and os.path.isfile(bpy.path.abspath(candidate)):
-            return bpy.path.abspath(candidate)
+    found = geometry.model_path(context, obj)
+    if found:
+        return found
 
     tree = prefs.resolve(context)
     source = context.scene.dkr.source_path or context.scene.dkr.geometry_path
@@ -167,12 +165,22 @@ def base_model_path(context, obj) -> str:
     if level is not None and level.model_path and os.path.isfile(level.model_path):
         return level.model_path
 
-    named = next((c for c in candidates if c), None)
+    named = obj.get(geometry.PROP_MODEL_PATH) or context.scene.dkr.geometry_path
+    shown = ntpath.basename(str(named)) if named else "an unrecorded file"
+    if obj.get(geometry.PROP_AUTHORED_BASE, False):
+        raise GeometryExportError(
+            "the track geometry is built on %s, a file this addon wrote beside "
+            "the .blend, and it is neither beside this .blend nor where it was "
+            "written. It is the only copy of the base the edits are applied to "
+            "- the game's assets do not have it - so put it back next to the "
+            ".blend, and keep the two together when the track is moved or "
+            "shared" % shown
+        )
     raise GeometryExportError(
-        "the track geometry was imported from %s, which is not there any more, "
-        "so there is no base model to apply the edits to. Re-import the "
-        "geometry, or point the addon preferences at the extracted assets"
-        % (os.path.basename(named) if named else "an unrecorded file")
+        "the track geometry was imported from %s, which is neither where it was "
+        "nor beside the .blend, so there is no base model to apply the edits "
+        "to. Re-import the geometry, or point the addon preferences at the "
+        "extracted assets" % shown
     )
 
 
@@ -488,7 +496,13 @@ def read_mesh(obj, model, translucency=None, fades=None,
                 for name in geometry.ATTR_COLOUR_CHANNELS]
     colours = (list(zip(*channels)) if all(c is not None for c in channels)
                else [geometry.unpack_colour(value) for value in raw_colours])
+    colours, painted = _take_paint(mesh, colours, model, segments_biased,
+                                   vertices_biased)
     read = MeshRead()
+    if painted:
+        read.notes.append(
+            "%d vertex colour(s) taken from the '%s' layer, where they had been "
+            "painted" % (painted, geometry.COLOUR_ATTRIBUTE))
     matrix = obj.matrix_world
 
     # Pool order is the file's order wherever the file still decides it: a
@@ -584,6 +598,50 @@ def read_mesh(obj, model, translucency=None, fades=None,
             "them, with %d corner vertex copies, since a segment's vertices are "
             "its own" % (crossing, copied))
     return read
+
+
+def _take_paint(mesh, colours, model, segments_biased, vertices_biased):
+    """Where the author painted the ``baked`` layer, the paint wins.
+
+    ``baked`` is what the viewport draws and what Vertex Paint paints, but the
+    raw channels are what reaches the file, so a repaint used to be shown and
+    then dropped. The raw channels stay the source wherever the layer still
+    shows them: every byte survives sRGB to linear and back exactly (see
+    :func:`..preview._linear_to_srgb`), so an untouched vertex compares equal
+    and keeps its bytes. A vertex whose raw channels were themselves changed
+    from the base model keeps them too - that edit was made on the attribute
+    the export reads, on purpose.
+
+    Returns the colours and how many came from the paint.
+    """
+    layer = mesh.color_attributes.get(geometry.COLOUR_ATTRIBUTE)
+    if layer is None or layer.domain != "POINT" or len(layer.data) != len(colours):
+        return colours, 0
+    values = [0.0] * (len(layer.data) * 4)
+    layer.data.foreach_get("color", values)
+
+    from ..preview import _linear_to_srgb  # noqa: PLC0415 - optional helper
+
+    def byte(value):
+        return max(0, min(255, int(round(value * 255.0))))
+
+    taken = list(colours)
+    painted = 0
+    for at, raw in enumerate(colours):
+        shown = values[at * 4:at * 4 + 4]
+        paint = tuple(byte(_linear_to_srgb(c)) for c in shown[:3]) + (byte(shown[3]),)
+        raw = tuple(raw)
+        if paint == raw:
+            continue
+        segment = segments_biased[at] - 1
+        vertex = vertices_biased[at] - 1
+        if (0 <= segment < len(model.segments)
+                and 0 <= vertex < len(model.segments[segment].colours)
+                and raw != tuple(model.segments[segment].colours[vertex])):
+            continue
+        taken[at] = paint
+        painted += 1
+    return taken, painted
 
 
 def _map_position(matrix, vertex, at):

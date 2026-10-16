@@ -323,6 +323,14 @@ def _read_colours(mesh, stats=None) -> list:
     white = (255, 255, 255, 255)
     stats = {} if stats is None else stats
     layer = mesh.color_attributes.get(geometry.COLOUR_ATTRIBUTE)
+    if layer is None:
+        # No 'baked' at all. The layer Blender draws and renders with is the
+        # paint the author is looking at, and a mesh brought from another game
+        # carries its lighting there under its own name - an MK64 import's
+        # 'Shading_Vertex'. Building that white said nothing at all.
+        layer = _default_layer(mesh)
+        if layer is not None:
+            stats["colour_from"] = layer.name
     if layer is not None and layer.domain != "POINT":
         stats["colour_domain"] = layer.domain
         layer = None
@@ -347,17 +355,28 @@ def _read_colours(mesh, stats=None) -> list:
 
     from ..preview import _linear_to_srgb  # noqa: PLC0415 - optional helper
 
+    def byte(value):
+        return max(0, min(255, int(round(value * 255.0))))
+
     colours = []
     for index in range(len(mesh.vertices)):
         at = index * 4
         if at + 4 > len(values):
             colours.append(white)
             continue
+        # Alpha is stored linear, as the importer writes it - only the colour
+        # channels went through sRGB.
         colours.append(tuple(
-            max(0, min(255, int(round(_linear_to_srgb(values[at + c]) * 255.0))))
-            for c in range(4)
-        ))
+            byte(_linear_to_srgb(values[at + c])) for c in range(3)
+        ) + (byte(values[at + 3]),))
     return colours
+
+
+def _default_layer(mesh):
+    """The colour layer Blender renders with, or ``None``."""
+    attributes = mesh.color_attributes
+    name = getattr(attributes, "default_color_name", "") or attributes.active_color_name
+    return attributes.get(name) if name else None
 
 
 # ---------------------------------------------------------------------------
@@ -835,6 +854,12 @@ def build_track(operator, context, obj, textures, keep_source, donor=None,
         operator.report({"WARNING"}, warning)
     for warning in _texture_warnings(adopted, stats, uv_layers):
         operator.report({"WARNING"}, warning)
+    if stats.get("colour_from") and not stats.get("colour_domain"):
+        operator.report(
+            {"INFO"},
+            "the baked lighting was taken from the '%s' colour layer, the one "
+            "Blender renders with" % stats["colour_from"],
+        )
 
     parts = []
     if donor:
@@ -906,15 +931,19 @@ def _texture_warnings(adopted, stats, uv_layers) -> list:
     # Saying so is the point. The track still builds, and a white track looks
     # plausible enough that an author can ship it without ever learning that
     # the lighting they painted is not in it.
-    if stats.get("colour_pristine") or stats.get("colour_domain"):
+    if (stats.get("colour_pristine") or stats.get("colour_domain")
+            or stats.get("colour_elsewhere")):
         if stats.get("colour_pristine"):
             reason = ("the '%s' colour layer has never been painted"
                       % stats["colour_pristine"])
-        else:
+        elif stats.get("colour_domain"):
             reason = ("the '%s' colour layer is on the %s domain, and the "
                       "baked lighting is read from Vertex"
-                      % (geometry.COLOUR_ATTRIBUTE,
+                      % (stats.get("colour_from", geometry.COLOUR_ATTRIBUTE),
                          str(stats["colour_domain"]).title()))
+        else:
+            reason = ("the mesh has no '%s' colour layer"
+                      % geometry.COLOUR_ATTRIBUTE)
         message = (
             "%s, so the track was built with white lighting. Vertex colour is "
             "multiplied into the texture, so this is what keeps a track from "
