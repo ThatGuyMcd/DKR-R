@@ -612,6 +612,9 @@ void RegisterCameraMatrix(std::uint8_t* rdram,
             dkr::runtime::presentation::kIgnoredIdentity;
         return;
     }
+    if (matrix_role == 1U) {
+        dkr::runtime::modern_camera::trace_drawn_pose(rdram, camera_id);
+    }
     const std::uint32_t camera =
         kCamerasAddress + camera_id * kCameraSize;
     if (!ValidRange(camera, kCameraSize)) {

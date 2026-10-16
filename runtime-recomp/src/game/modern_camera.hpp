@@ -96,4 +96,8 @@ void restore(std::uint8_t* rdram, const std::uint32_t fields[8]);
 // One-shot interpolation cut for a player camera slot (look-back toggles).
 bool consume_cut(std::uint32_t camera_slot);
 
+// With the step log on, called as a frame's camera matrix is built: logs the
+// pose being drawn when it is not the one the Modern camera left there.
+void trace_drawn_pose(std::uint8_t* rdram, std::uint32_t camera_slot);
+
 } // namespace dkr::runtime::modern_camera

@@ -31,10 +31,12 @@ constexpr std::array<CameraTuningGroup, 12> kCameraTuningGroups{{
     {camtune::TuningGroup::Orbit, "Manual orbit",
      "The right stick, or the mouse while racing (Esc frees the pointer; hold the right button to keep "
      "the view where you put it). Left alone, the camera drifts back behind the racer.", false},
-    {camtune::TuningGroup::Collision, "Walls", "When a wall comes between the camera and the racer.", false},
+    {camtune::TuningGroup::Collision, "Walls",
+     "When a wall comes between the camera and the racer the camera comes in, but never into the racer: "
+     "first it rises over the racer, as little as clears the wall.", false},
     {camtune::TuningGroup::Shake, "Shake",
-     "Boosts, landings, and the game's own hits and explosions. All at 0 is no shake; the swing "
-     "when you hit a wall is under Hits.", true},
+     "Boosts and landings. All at 0 is no shake. Hits and explosions never shake this camera; "
+     "the swing when you hit a wall is under Hits.", true},
     {camtune::TuningGroup::Hits, "Hits",
      "Walls and karts stop the racer dead, bounce it off or knock its nose round. Below 100% the camera "
      "keeps following the motion it had, so its aim, zoom and FOV ignore the stop and the bounce until "
@@ -63,11 +65,15 @@ bool SaveCameraTuning(const camtune::Tuning& tuning);
 void LoadCameraTuning() {
     camtune::Tuning tuning = camtune::default_tuning();
     bool migrated = false;
-    std::ifstream input(CameraTuningPath(), std::ios::binary);
-    if (input) {
-        std::ostringstream text;
-        text << input.rdbuf();
-        tuning = camtune::parse_tuning(text.str(), &migrated);
+    {
+        // Closed before the save below: Windows will not replace a file
+        // that is still open.
+        std::ifstream input(CameraTuningPath(), std::ios::binary);
+        if (input) {
+            std::ostringstream text;
+            text << input.rdbuf();
+            tuning = camtune::parse_tuning(text.str(), &migrated);
+        }
     }
     camtune::set_tuning(tuning);
     g_camera_tuning.saved = tuning;

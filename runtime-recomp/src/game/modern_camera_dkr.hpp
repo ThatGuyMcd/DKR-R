@@ -85,9 +85,6 @@ inline float layout_framing(std::uint32_t layout) {
 // params is in metres with one-player framing; layout_params scales it.
 struct Tuning {
     MCParams params{};
-    // Retail hits and explosions shake the camera; this scales how much of
-    // that reaches modern_cam as trauma.
-    float retailShake = 1.0F;
     // Orbiting with the mouse, in degrees per 100 pixels of mouse travel.
     // 0 turns it off.
     float mouseOrbit = 30.0F;
@@ -126,6 +123,9 @@ inline Tuning default_tuning() {
     // pace of a camera operator, so a drift ending does not swing the view.
     p.driftAlign = 0.45F;
     p.alignSharpness = 3.0F;
+    // A wall cutting the boom slides the eye in over a few frames instead of
+    // metres in one.
+    p.collisionPullSharpness = 12.0F;
     p.yawFreq = 2.3F;
     p.yawDamping = 1.0F;
     p.lookAhead = 0.12F;
@@ -229,7 +229,7 @@ struct TuningField {
 // The Bancada's ranges. fovBase is left out: DKR keeps each level's FOV and
 // only adds modern_cam's change, so the base is not a setting. So is
 // collisionRadius: the clearance probe uses the level's authored radius.
-inline constexpr std::array<TuningField, 60> kTuningFields{{
+inline constexpr std::array<TuningField, 64> kTuningFields{{
     {"distMin", &MCParams::distMin, TuningGroup::Framing, "Distance at rest", 1.0F, 10.0F, "m", 2},
     {"distMax", &MCParams::distMax, TuningGroup::Framing, "Distance at top speed", 1.0F, 12.0F, "m", 2},
     {"heightMin", &MCParams::heightMin, TuningGroup::Framing, "Height at rest", 0.2F, 4.0F, "m", 2},
@@ -251,8 +251,10 @@ inline constexpr std::array<TuningField, 60> kTuningFields{{
     {"heightSharpness", &MCParams::heightSharpness, TuningGroup::Follow, "Vertical on the ground", 0.5F, 30.0F, "/s", 1},
     {"airHeightSharpness", &MCParams::airHeightSharpness, TuningGroup::Follow, "Vertical in the air", 0.2F, 20.0F, "/s", 1},
     {"maxVerticalLag", &MCParams::maxVerticalLag, TuningGroup::Follow, "Maximum vertical lag", 0.2F, 6.0F, "m", 1},
+    {"riseLag", &MCParams::riseLag, TuningGroup::Follow, "Below a racer going up, at most", 0.0F, 2.0F, "m", 2},
     {"slopeFollow", &MCParams::slopeFollow, TuningGroup::Terrain, "Follows the slope", 0.0F, 1.0F, "", 2},
     {"slopeSharpness", &MCParams::slopeSharpness, TuningGroup::Terrain, "Speed", 0.5F, 15.0F, "/s", 1},
+    {"slopeMax", &MCParams::slopeMax, TuningGroup::Terrain, "Tilts at most", 0.0F, 45.0F, "\xC2\xB0", 0, true},
     {"lookAhead", &MCParams::lookAhead, TuningGroup::LookAhead, "Anticipates the motion", 0.0F, 0.6F, "s", 2},
     {"lookAheadMax", &MCParams::lookAheadMax, TuningGroup::LookAhead, "Limit", 0.0F, 8.0F, "m", 1},
     {"lookAheadSharpness", &MCParams::lookAheadSharpness, TuningGroup::LookAhead, "Smoothness", 0.5F, 20.0F, "/s", 1},
@@ -273,12 +275,13 @@ inline constexpr std::array<TuningField, 60> kTuningFields{{
     {"mouseOrbit", nullptr, TuningGroup::Orbit, "Mouse, 0 = off", 0.0F, 90.0F,
      "\xC2\xB0/100 px", 0, false, &Tuning::mouseOrbit},
     {"collisionReleaseSharpness", &MCParams::collisionReleaseSharpness, TuningGroup::Collision, "Return after a wall", 0.5F, 20.0F, "/s", 1},
+    {"collisionPullSharpness", &MCParams::collisionPullSharpness, TuningGroup::Collision, "Comes in for a wall (0 = at once)", 0.0F, 100.0F, "/s", 0},
+    {"collisionMinDist", &MCParams::collisionMinDist, TuningGroup::Collision, "Never closer to the racer than", 0.0F, 4.0F, "m", 2},
+    {"collisionLiftMax", &MCParams::collisionLiftMax, TuningGroup::Collision, "Rises over the racer up to", 0.0F, 70.0F, "\xC2\xB0", 0, true},
     {"traumaDecay", &MCParams::traumaDecay, TuningGroup::Shake, "Decay", 0.2F, 5.0F, "/s", 1},
     {"boostTrauma", &MCParams::boostTrauma, TuningGroup::Shake, "On a boost", 0.0F, 1.0F, "", 2},
     {"landingTrauma", &MCParams::landingTrauma, TuningGroup::Shake, "On landing", 0.0F, 1.0F, "", 2},
     {"landingSpeedForMax", &MCParams::landingSpeedForMax, TuningGroup::Shake, "Fall speed for full shake", 2.0F, 25.0F, "m/s", 1},
-    {"retailShake", nullptr, TuningGroup::Shake, "Game hits and explosions", 0.0F, 2.0F, "x", 2, false,
-     &Tuning::retailShake},
     {"shakeFreq", &MCParams::shakeFreq, TuningGroup::Shake, "Frequency", 2.0F, 40.0F, "Hz", 1},
     {"shakeMaxAngle", &MCParams::shakeMaxAngle, TuningGroup::Shake, "Maximum angle", 0.0F, 8.0F, "\xC2\xB0", 2, true},
     {"shakeMaxOffset", &MCParams::shakeMaxOffset, TuningGroup::Shake, "Maximum offset", 0.0F, 0.5F, "m", 2},
@@ -506,7 +509,6 @@ inline Tuning comfort_tuning() {
     p.rollMax = 0.0F;
     p.boostTrauma = 0.0F;
     p.landingTrauma = 0.0F;
-    tuning.retailShake = 0.0F;
     p.enableSteerLead = 0;
     p.enablePosSpring = 0;
     p.enableLandingDip = 0;

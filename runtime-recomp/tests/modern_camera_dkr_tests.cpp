@@ -141,7 +141,6 @@ bool TuningFileRoundTrip() {
     tuning.params.yawFreq = 1.234567F;
     tuning.params.steerLead = 0.3F;
     tuning.params.enableLandingDip = 1;
-    tuning.retailShake = 0.5F;
     tuning.hitReaction = 40.0F;
     tuning.recenterEase = 1.5F;
     if (!same_tuning(parse_tuning(serialize_tuning(tuning)), tuning)) return false;
@@ -149,6 +148,12 @@ bool TuningFileRoundTrip() {
     const Tuning odd = parse_tuning("# note\r\nyawFreq=99\r\nnope=1\r\ndistMin=abc\r\n"
                                     "rollMax=-5\r\nenableBoostKick=0\r\n");
     const Tuning defaults = default_tuning();
+    // Hits and explosions no longer shake the camera: a file saved while
+    // they did still loads, and the setting is not written back.
+    if (!same_tuning(parse_tuning("version=2\nretailShake=2\n"), defaults) ||
+        serialize_tuning(defaults).find("retailShake") != std::string::npos) {
+        return false;
+    }
     return odd.params.yawFreq == 6.0F && odd.params.distMin == defaults.params.distMin &&
         odd.params.rollMax == 0.0F && odd.params.enableBoostKick == 0 &&
         same_tuning(parse_tuning(""), defaults) &&
@@ -163,7 +168,7 @@ bool ComfortIsCalm() {
     const Tuning comfort = comfort_tuning();
     const MCParams& p = comfort.params;
     return p.rollMax == 0.0F && p.rollFromYawRate == 0.0F && p.boostTrauma == 0.0F &&
-        p.landingTrauma == 0.0F && comfort.retailShake == 0.0F && p.fovBoost == 0.0F &&
+        p.landingTrauma == 0.0F && p.fovBoost == 0.0F &&
         p.enableLandingDip == 0 && p.enableBoostKick == 0 && p.enableSteerLead == 0 &&
         p.yawDamping >= 1.0F && p.distMax == p.distMin && p.heightMax == p.heightMin;
 }
@@ -370,10 +375,11 @@ struct WallResult {
     double aim_swing = 0.0;     // units the aim point moved along the nose, relative to the racer
     double turn = 0.0;          // the view's fastest turn, degrees/s
     double eye_accel = 0.0;     // the eye's fastest speed change, units/s^2
+    double retreat = 0.0;       // units the eye moved back along the nose after the hit
     bool landed = false;        // modern_cam saw a landing during the hit
 };
 
-WallResult wall_hit(const Tuning& tuning, bool hop = false) {
+WallResult wall_hit(const Tuning& tuning, bool hop = false, bool hold = true) {
     const MCParams params = layout_params(tuning, 0U);
     const float dt = 1.0F / 30.0F;
     MCState s{};
@@ -382,6 +388,7 @@ WallResult wall_hit(const Tuning& tuning, bool hop = false) {
     WallResult result;
     const HitTiming timing = hit_timing(tuning.hitReaction);
     double aim_before = 0.0, fov_before = 0.0, previous_yaw = 0.0, previous_speed = 600.0;
+    double farthest_along = -1e9;
     float previous_x = 0.0F, previous_z = 0.0F;
     const float nx = static_cast<float>(std::sin(kNose)), nz = static_cast<float>(std::cos(kNose));
     for (int i = 0; i < 150; ++i) {
@@ -399,6 +406,7 @@ WallResult wall_hit(const Tuning& tuning, bool hop = false) {
         const HitInput given = hit_steady_input(velocity, static_cast<float>(kNose), dt, guard, timing);
         in.yaw = given.heading;
         in.vel = given.velocity;
+        in.hold = hold ? guard.blend : 0.0F;
         // The wall lifts the wheels for a tick, as a kerb does.
         in.grounded = hop && (i == 60 || i == 61) ? 0 : 1;
         const MCParams p = hit_step_params(params, guard);
@@ -422,6 +430,11 @@ WallResult wall_hit(const Tuning& tuning, bool hop = false) {
             aim_before = aim;
             fov_before = out.fovDeg;
         }
+        const double eye_along = out.eye.x * nx + out.eye.z * nz;
+        if (i >= 59) {
+            farthest_along = std::max(farthest_along, eye_along);
+            result.retreat = std::max(result.retreat, farthest_along - eye_along);
+        }
         if (i >= 60) {
             result.nearest = std::min(result.nearest, distance);
             result.farthest = std::max(result.farthest, distance);
@@ -436,22 +449,28 @@ WallResult wall_hit(const Tuning& tuning, bool hop = false) {
     return result;
 }
 
-// A wall hit is not a spring any more: the camera moves back with the
-// bounce (as retail's does), its aim, zoom and FOV ignore the stop, and
-// once the racer is back up to speed the framing is what it was. Raw
+// A wall hit is not a spring any more: while DKR throws the racer back and
+// it drives off again, the camera stays tied to it as the retail camera
+// does, so the distance between them hardly changes (the position spring
+// used to overshoot, back off and come in again: the camera approached the
+// racer and moved away). Its aim, zoom and FOV ignore the stop. Raw
 // modern_cam (hits at 100%) still whips round and pumps the FOV.
 bool WallHitIsNotASpring() {
     Tuning raw = default_tuning();
     raw.hitReaction = 100.0F;
     const WallResult bare = wall_hit(raw);
     const WallResult held = wall_hit(default_tuning());
-    std::printf("[test][modern-camera] wall at 600 u/s: eye %.0f -> %.0f..%.0f -> %.0f units, aim moved %.0f, "
-                "fov %.1f deg, view turned %.0f deg/s (raw: eye %.0f..%.0f, aim %.0f, fov %.1f, %.0f deg/s)\n",
-                held.before, held.nearest, held.farthest, held.settled, held.aim_swing, held.fov_swing, held.turn,
-                bare.nearest, bare.farthest, bare.aim_swing, bare.fov_swing, bare.turn);
-    return bare.turn > 100.0 && held.turn < 5.0 && held.nearest > held.before * 0.85 &&
-        held.farthest < held.before * 1.1 && std::fabs(held.settled - held.before) < 8.0 &&
-        held.aim_swing < 40.0 && held.fov_swing < 1.0;
+    const WallResult sprung = wall_hit(default_tuning(), false, false);
+    std::printf("[test][modern-camera] wall at 600 u/s: eye %.0f -> %.0f..%.0f -> %.0f units from the racer "
+                "(spring: %.0f..%.0f), aim moved %.0f, fov %.1f deg, view turned %.0f deg/s (raw: eye %.0f..%.0f, "
+                "aim %.0f, fov %.1f, %.0f deg/s)\n",
+                held.before, held.nearest, held.farthest, held.settled, sprung.nearest, sprung.farthest,
+                held.aim_swing, held.fov_swing, held.turn, bare.nearest, bare.farthest, bare.aim_swing,
+                bare.fov_swing, bare.turn);
+    return bare.turn > 100.0 && held.turn < 5.0 && held.nearest > held.before * 0.95 &&
+        held.farthest < held.before * 1.05 &&
+        sprung.farthest - sprung.nearest > held.farthest - held.nearest &&
+        std::fabs(held.settled - held.before) < 8.0 && held.aim_swing < 40.0 && held.fov_swing < 1.0;
 }
 
 // A hop off the wall is not a landing: no dip and no shake during a hit.
@@ -644,6 +663,173 @@ bool RecentringEasesIn() {
         eased_recenter_sharpness(3.0F, 1.21F, 1.2F, 0.0F) == 3.0F;
 }
 
+// A wall across the boom behind the racer: the vertical plane z = wall_z
+// (the camera side is lower z), solid up to height top, and optionally a
+// ceiling at the same height over everything.
+struct Wall {
+    float wall_z = -40.0F;
+    float top = 1.0e6F;
+    bool ceiling = false;
+    bool present = true; // set by stand_by_wall
+};
+
+int wall_raycast(void* user, MCVec3 from, MCVec3 to, float radius, float* hit) {
+    const Wall& wall = *static_cast<const Wall*>(user);
+    if (!wall.present) return 0;
+    float best = 2.0F;
+    const float plane = wall.wall_z + radius; // where the probe sphere touches it
+    if (to.z < plane && from.z > plane) {
+        const float t = (from.z - plane) / (from.z - to.z);
+        if (from.y + (to.y - from.y) * t < wall.top + radius) best = t;
+    }
+    const float roof = wall.top - radius;
+    if (wall.ceiling && to.y > roof && from.y < roof) best = std::min(best, (roof - from.y) / (to.y - from.y));
+    if (best > 1.0F) return 0;
+    *hit = best;
+    return 1;
+}
+
+struct WallRun {
+    double closest = 1.0e9; // nearest the eye came to the pivot, units
+    MCOutput out{};
+    MCState state{};
+};
+
+// A racer at rest facing +z (the camera behind it at lower z) for `seconds`,
+// with the wall present from the first step and gone after `gone_after`.
+WallRun stand_by_wall(Wall wall, float seconds, float gone_after = 1.0e9F) {
+    const MCParams p = dkr_params(0U);
+    WallRun run;
+    const float dt = 1.0F / 30.0F;
+    const int steps = static_cast<int>(seconds / dt);
+    for (int i = 0; i < steps; ++i) {
+        wall.present = i * dt < gone_after;
+        MCInput in{};
+        in.grounded = 1;
+        ModernCam_Update(&run.state, &p, &in, dt, wall_raycast, &wall, &run.out);
+        const MCVec3 a = run.state.anchor;
+        const double dx = run.out.eye.x - a.x, dy = run.out.eye.y - (a.y + p.targetHeight * p.unitScale),
+                     dz = run.out.eye.z - a.z;
+        run.closest = std::min(run.closest, std::sqrt(dx * dx + dy * dy + dz * dz));
+    }
+    return run;
+}
+
+// A wall right behind the racer once folded the boom to 5% of its length,
+// inside the racer: the screen filled with Diddy's cap. The eye now stays at
+// least collisionMinDist from the pivot and rises over a wall it can clear.
+bool WallNeverPutsTheEyeInTheRacer() {
+    const MCParams p = dkr_params(0U);
+    const double floor = p.collisionMinDist * p.unitScale;
+    Wall low;
+    low.top = 60.0F;
+    const WallRun over = stand_by_wall(low, 2.0F);
+    Wall tall;
+    const WallRun backed = stand_by_wall(tall, 2.0F);
+    Wall box;
+    box.top = 40.0F;
+    box.ceiling = true;
+    const WallRun boxed = stand_by_wall(box, 2.0F);
+    std::printf("[test][modern-camera] wall: low %.0f units from the pivot (eye y %.0f, lift %.2f), "
+                "tall %.0f (lift %.2f), boxed in %.0f; floor %.0f\n",
+                over.closest, over.out.eye.y, over.state.lift, backed.closest, backed.state.lift, boxed.closest,
+                floor);
+    // Never inside the racer, whatever the wall.
+    if (over.closest < floor * 0.99 || backed.closest < floor * 0.99 || boxed.closest < floor * 0.99) return false;
+    // Over a low wall the camera rises above it and stands clear.
+    if (!(over.state.lift > 0.0F) || !(over.out.eye.y > low.top) || over.state.collisionDist < 0.9F) return false;
+    // Backed against a tall one it rises as far as it may and looks down.
+    if (!(backed.state.lift > 0.0F) || !(backed.out.pitch < -0.5F)) return false;
+    return true;
+}
+
+// A wall that suddenly cuts the boom (the racer turns along it) once pulled
+// the eye in by metres in one frame and let it slide back out: the "back and
+// forth" of a hit by a wall. It now slides in too, quickly.
+bool WallCutSlides() {
+    const MCParams p = dkr_params(0U);
+    MCState s{};
+    MCOutput out{};
+    Wall wall;
+    wall.wall_z = -80.0F;
+    const float dt = 1.0F / 30.0F;
+    double previous = 0.0, biggest = 0.0, before = 0.0, after = 0.0;
+    for (int i = 0; i < 60; ++i) {
+        wall.present = i >= 30;
+        MCInput in{};
+        in.grounded = 1;
+        ModernCam_Update(&s, &p, &in, dt, wall_raycast, &wall, &out);
+        if (i == 29) before = out.eye.z;
+        if (i >= 30) biggest = std::max(biggest, std::fabs(out.eye.z - previous));
+        previous = out.eye.z;
+    }
+    after = out.eye.z;
+    const double total = std::fabs(after - before);
+    std::printf("[test][modern-camera] wall cuts the boom: eye comes %.0f units in, at most %.0f in one frame\n", total,
+                biggest);
+    return total > 80.0 && biggest < total * 0.4 && after > wall.wall_z;
+}
+
+// A racer that bounces off a wall often takes the wall out from between
+// itself and the camera. The boom used to stretch back out at once, so the
+// camera came in for the wall and backed off during the hit. Held, it stays
+// in until the hit eases out, then returns.
+bool HitKeepsTheBoomIn() {
+    const MCParams p = dkr_params(0U);
+    MCState s{};
+    MCOutput out{};
+    Wall wall;
+    wall.wall_z = -80.0F;
+    const float dt = 1.0F / 30.0F;
+    float during = 0.0F, at_hit = 0.0F;
+    for (int i = 0; i < 120; ++i) {
+        wall.present = i >= 30 && i < 60; // the wall leaves as the hit starts
+        MCInput in{};
+        in.grounded = 1;
+        in.hold = i >= 60 && i < 75 ? 1.0F : 0.0F;
+        ModernCam_Update(&s, &p, &in, dt, wall_raycast, &wall, &out);
+        if (i == 59) at_hit = s.collisionDist;
+        if (i == 74) during = s.collisionDist;
+    }
+    std::printf("[test][modern-camera] wall gone during a hit: boom %.2f at the hit, %.2f at its end, %.2f after\n",
+                at_hit, during, s.collisionDist);
+    return at_hit < 0.6F && std::fabs(during - at_hit) < 0.01F && s.collisionDist > 0.95F;
+}
+
+// Once the wall is gone the camera settles back to its usual height.
+bool WallLiftReturns() {
+    const WallRun run = stand_by_wall(Wall{}, 4.0F, 1.0F);
+    const WallRun open = stand_by_wall(Wall{}, 4.0F, 0.0F);
+    std::printf("[test][modern-camera] wall gone: lift %.3f, eye y %.1f vs %.1f with no wall\n", run.state.lift,
+                run.out.eye.y, open.out.eye.y);
+    return run.state.lift == 0.0F && open.state.lift == 0.0F && std::fabs(run.out.eye.y - open.out.eye.y) < 1.0F;
+}
+
+// A hovercraft that hits a bank rides 280 units up it in a second, on the
+// ground, nose up. The camera once trailed up to 88 units below it, tilted
+// with the bank, looking up at its underside. On the ground it now keeps
+// within riseLag of a climbing racer and tilts at most slopeMax.
+bool ClimbingKeepsTheCameraAbove() {
+    const MCParams p = dkr_params(0U);
+    MCState s{};
+    MCOutput out{};
+    const float dt = 1.0F / 30.0F;
+    double lowest = 1.0e9;
+    for (int i = 0; i < 60; ++i) {
+        const bool climbing = i >= 15 && i < 45;
+        MCInput in{};
+        in.pos = MCVec3{0.0F, climbing ? (i - 15) * 280.0F / 30.0F : (i < 15 ? 0.0F : 280.0F), 300.0F * dt * i};
+        in.vel = MCVec3{0.0F, climbing ? 280.0F : 0.0F, 300.0F};
+        in.slopePitch = climbing ? 0.9F : 0.0F;
+        in.grounded = 1;
+        ModernCam_Update(&s, &p, &in, dt, nullptr, nullptr, &out);
+        lowest = std::min(lowest, static_cast<double>(out.eye.y - in.pos.y));
+    }
+    std::printf("[test][modern-camera] climbing a bank: eye at most %.0f units below the racer, tilt %.2f\n",
+                -lowest, s.slope);
+    return lowest > -p.riseLag * p.unitScale && std::fabs(s.slope) <= p.slopeMax + 1e-6F;
+}
+
 bool TuningScalesWithLayout() {
     Tuning tuning = default_tuning();
     tuning.params.distMin = 4.0F;
@@ -684,6 +870,11 @@ int main() {
         {"hit reaction scale", HitReactionScale},
         {"knocked nose", KnockedNoseTurnsOnScreen},
         {"second hit", SecondHitDoesNotGoStale},
+        {"wall never puts the eye in the racer", WallNeverPutsTheEyeInTheRacer},
+        {"wall lift returns", WallLiftReturns},
+        {"wall cut slides", WallCutSlides},
+        {"hit keeps the boom in", HitKeepsTheBoomIn},
+        {"climbing keeps the camera above", ClimbingKeepsTheCameraAbove},
     };
     for (const auto& test : tests) {
         if (!test.run()) {
