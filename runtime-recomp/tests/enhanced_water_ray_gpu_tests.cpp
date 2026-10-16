@@ -175,9 +175,10 @@ void fieldProbe(RT64::RenderWorker& worker,plume::RenderShaderFormat format) {
     for(unsigned i=0;i<2;i++)if(timedCases[i])std::printf("Synthetic wake-only mean: resolution=%u baseline=%.3fms optimized=%.3fms (not gameplay FPS).\n",i ? 512 : 256,referenceMs[i]/timedCases[i],optimizedMs[i]/timedCases[i]);
 }
 struct ProjectionSet : plume::RenderDescriptorSetBase {
-    uint32_t input,output;
+    uint32_t draws,output,input;
     explicit ProjectionSet(plume::RenderDevice* device) {
-        builder.begin();input=builder.addStructuredBuffer(1);output=builder.addReadWriteStructuredBuffer(2);builder.end();create(device);
+        builder.begin();draws=builder.addStructuredBuffer(1);output=builder.addReadWriteStructuredBuffer(2);
+        input=builder.addStructuredBuffer(3);builder.end();create(device);
         if(!get())throw std::runtime_error("Projection descriptor allocation failed");
     }
 };
@@ -185,7 +186,12 @@ struct ProjectionCase {
     interop::WaterDrawParams draw;
     interop::float4 world,expectedPixel,rawWorld;
 };
-static_assert(sizeof(ProjectionCase)==2048,"GPU projection probe ABI and D3D stride");
+// Draw parameters alone nearly fill D3D's 2048-byte structured stride, so the
+// probe inputs are uploaded to a parallel buffer with the same index.
+struct ProjectionInput {
+    interop::float4 world,expectedPixel,rawWorld;
+};
+static_assert(sizeof(interop::WaterDrawParams)<=2048 && sizeof(ProjectionInput)==48,"GPU projection probe ABI and D3D stride");
 void projectionProbe(RT64::RenderWorker& worker,plume::RenderShaderFormat format) {
     using namespace RT64;
     std::vector<ProjectionCase> cases;
@@ -234,19 +240,28 @@ void projectionProbe(RT64::RenderWorker& worker,plume::RenderShaderFormat format
 #endif
     shader=required(worker.device->createShader(WaterProjectionProbeCSBlobSPIRV,sizeof(WaterProjectionProbeCSBlobSPIRV),"CSMain",format));
     auto pipeline=required(worker.device->createComputePipeline(RenderComputePipelineDesc(layout.get(),shader.get(),1,1,1)));
-    const uint64_t inputBytes=cases.size()*sizeof(ProjectionCase),outputBytes=cases.size()*16;
+    std::vector<interop::WaterDrawParams> draws;std::vector<ProjectionInput> inputs;
+    for(const auto& c:cases) {draws.push_back(c.draw);inputs.push_back({c.world,c.expectedPixel,c.rawWorld});}
+    const uint64_t drawBytes=draws.size()*sizeof(interop::WaterDrawParams),inputBytes=inputs.size()*sizeof(ProjectionInput);
+    const uint64_t outputBytes=cases.size()*16;
+    auto drawBuffer=required(worker.device->createBuffer(RenderBufferDesc::DefaultBuffer(drawBytes,RenderBufferFlag::STORAGE)));
     auto input=required(worker.device->createBuffer(RenderBufferDesc::DefaultBuffer(inputBytes,RenderBufferFlag::STORAGE)));
-    auto upload=required(worker.device->createBuffer(RenderBufferDesc::UploadBuffer(inputBytes)));
+    auto upload=required(worker.device->createBuffer(RenderBufferDesc::UploadBuffer(drawBytes+inputBytes)));
     auto output=required(worker.device->createBuffer(RenderBufferDesc::DefaultBuffer(outputBytes,RenderBufferFlag::STORAGE|RenderBufferFlag::UNORDERED_ACCESS)));
     auto readback=required(worker.device->createBuffer(RenderBufferDesc::ReadbackBuffer(outputBytes)));
-    const RenderRange none(0,0),written(0,inputBytes);
+    const RenderRange none(0,0),written(0,drawBytes+inputBytes);
     auto mapped=upload->map(0,&none);if(!mapped)throw std::runtime_error("No projection upload");
-    std::memcpy(mapped,cases.data(),inputBytes);upload->unmap(0,&written);
-    set.setBuffer(set.input,input.get(),RenderBufferStructuredView(sizeof(ProjectionCase)));
+    std::memcpy(mapped,draws.data(),drawBytes);
+    std::memcpy(static_cast<std::uint8_t*>(mapped)+drawBytes,inputs.data(),inputBytes);upload->unmap(0,&written);
+    set.setBuffer(set.draws,drawBuffer.get(),RenderBufferStructuredView(sizeof(interop::WaterDrawParams)));
+    set.setBuffer(set.input,input.get(),RenderBufferStructuredView(sizeof(ProjectionInput)));
     set.setBuffer(set.output,output.get(),RenderBufferStructuredView(16));
     worker.commandList->begin();
+    worker.commandList->barriers(RenderBarrierStage::COPY,RenderBufferBarrier(drawBuffer.get(),RenderBufferAccess::WRITE));
     worker.commandList->barriers(RenderBarrierStage::COPY,RenderBufferBarrier(input.get(),RenderBufferAccess::WRITE));
-    worker.commandList->copyBufferRegion(input->at(0),upload->at(0),inputBytes);
+    worker.commandList->copyBufferRegion(drawBuffer->at(0),upload->at(0),drawBytes);
+    worker.commandList->copyBufferRegion(input->at(0),upload->at(drawBytes),inputBytes);
+    worker.commandList->barriers(RenderBarrierStage::COMPUTE,RenderBufferBarrier(drawBuffer.get(),RenderBufferAccess::READ));
     worker.commandList->barriers(RenderBarrierStage::COMPUTE,RenderBufferBarrier(input.get(),RenderBufferAccess::READ));
     worker.commandList->barriers(RenderBarrierStage::COMPUTE,RenderBufferBarrier(output.get(),RenderBufferAccess::WRITE));
     worker.commandList->setComputePipelineLayout(layout.get());worker.commandList->setPipeline(pipeline.get());

@@ -1,17 +1,27 @@
 #include "WaterProjection.hlsli"
+// Draw parameters alone nearly fill D3D's 2048-byte structured stride, so the
+// probe inputs live in a parallel buffer with the same index.
+struct ProjectionInput {
+    float4 world;
+    float4 expectedPixel;
+    float4 rawWorld;
+};
 struct ProjectionCase {
     WaterDrawParams draw;
     float4 world;
     float4 expectedPixel;
     float4 rawWorld;
 };
-StructuredBuffer<ProjectionCase> cases : register(t1);
+StructuredBuffer<WaterDrawParams> draws : register(t1);
 RWStructuredBuffer<float4> results : register(u2);
+StructuredBuffer<ProjectionInput> inputs : register(t3);
 [numthreads(1,1,1)]
 void CSMain(uint index : SV_DispatchThreadID) {
-    uint count,stride; cases.GetDimensions(count,stride);
+    uint count,stride; inputs.GetDimensions(count,stride);
     if(index>=count)return;
-    ProjectionCase c=cases[index];
+    ProjectionInput input=inputs[index];
+    ProjectionCase c;
+    c.draw=draws[index];c.world=input.world;c.expectedPixel=input.expectedPixel;c.rawWorld=input.rawWorld;
     float4 pixel=waterPixelFromWorld(c.world.xyz,c.draw);
     float3 recovered=waterWorldFromPixel(c.expectedPixel.xy,c.expectedPixel.z,c.draw);
     float3 decoded=waterDecodeWorld(c.rawWorld,c.draw);

@@ -28,7 +28,9 @@ set(water_projection "${DKRPORT_ROOT}/patches/enhanced-water/dkr-projection.patc
 set(water_recovery "${DKRPORT_ROOT}/patches/enhanced-water/dkr-recovery.patch")
 set(water_performance "${DKRPORT_ROOT}/patches/enhanced-water/dkr-performance.patch")
 set(water_reflection_search "${DKRPORT_ROOT}/patches/enhanced-water/dkr-reflection-search.patch")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${water_performance}" "${water_reflection_search}")
+set(water_lowpass "${DKRPORT_ROOT}/patches/enhanced-water/dkr-lowpass.patch")
+set(water_caustics "${DKRPORT_ROOT}/patches/enhanced-water/dkr-caustics.patch")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${water_performance}" "${water_reflection_search}" "${water_lowpass}" "${water_caustics}")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${water_patch}" "${water_adapter}" "${water_budget}" "${water_safety}" "${water_views}" "${water_field_portability}" "${water_rays}" "${water_ray_caps}" "${water_projection}" "${water_recovery}")
 
 # Compose the capability adapter on the ACTIVE backend sources, including
@@ -137,7 +139,7 @@ foreach(file IN ITEMS WaterProjection.hlsli WaterProjectionProbeCS.hlsl)
     configure_file("${DKRPORT_ROOT}/patches/enhanced-water/native/${file}" "${water_stage}/src/shaders/${file}" COPYONLY)
 endforeach()
 execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${water_stage}" COMMAND_ERROR_IS_FATAL ANY)
-foreach(patch IN ITEMS "${water_patch}" "${water_adapter}" "${water_budget}" "${water_safety}" "${water_views}" "${water_field_portability}" "${water_rays}" "${water_ray_caps}" "${water_projection}" "${water_recovery}" "${water_performance}" "${water_reflection_search}")
+foreach(patch IN ITEMS "${water_patch}" "${water_adapter}" "${water_budget}" "${water_safety}" "${water_views}" "${water_field_portability}" "${water_rays}" "${water_ray_caps}" "${water_projection}" "${water_recovery}" "${water_performance}" "${water_reflection_search}" "${water_lowpass}" "${water_caustics}")
 foreach(mode IN ITEMS check apply)
     set(flags --recount --ignore-space-change --whitespace=error)
     if(mode STREQUAL "check")
@@ -244,5 +246,14 @@ dkr_water_shader(WaterSurfacePS WaterSurfacePS ps PSMain)
 dkr_water_shader(WaterSprayVS WaterSprayVS vs VSMain)
 dkr_water_shader(WaterSprayPS WaterSprayPS ps PSMain)
 dkr_water_shader(WaterSprayMSPS WaterSprayPS ps PSMain -D SPRAY_MSAA)
+# The authored caustic pattern is embedded like the shader blobs, so no
+# runtime file is packaged or looked up.
+set(water_caustics_png "${DKRPORT_ROOT}/patches/enhanced-water/native/WaterCaustics.png")
+set(water_caustics_out "${water_shader_out}/textures/WaterCaustics.png")
+add_custom_command(OUTPUT "${water_caustics_out}.c" "${water_caustics_out}.h"
+    COMMAND file_to_c "${water_caustics_png}" WaterCausticsPNG "${water_caustics_out}.c" "${water_caustics_out}.h"
+    DEPENDS "${water_caustics_png}" file_to_c VERBATIM)
+target_sources(rt64 PRIVATE "${water_caustics_out}.c")
+list(APPEND water_shader_outputs "${water_caustics_out}.c" "${water_caustics_out}.h")
 add_custom_target(DKREnhancedWaterShaders DEPENDS ${water_shader_outputs})
 add_dependencies(rt64 DKREnhancedWaterShaders)
