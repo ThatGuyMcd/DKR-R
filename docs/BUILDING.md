@@ -207,6 +207,16 @@ The script prepares pinned checkouts and both normal payloads. Add `--package`
 for an ad-hoc-signed app ZIP, not a notarised public release. Bundled Homebrew
 libraries inherit the host's macOS deployment requirements.
 
+For a public release, use `--notarize` instead. It signs with a Developer ID,
+notarizes, staples, and writes `dist/DKR-R-<version>-macOS-<arch>-notarized.zip`:
+
+```bash
+xcrun notarytool store-credentials dkr-notary   # once
+DKR_MAC_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+DKR_MAC_NOTARY_PROFILE=dkr-notary \
+  ./Build-macOS.sh --rom-v77 "/path/to/US 1.0.z64" --rom-v80 "/path/to/US Rev A.z64" --notarize
+```
+
 Setup recovery checks staged Python/native tools, and preparation uses isolated
 revision trees. Do not edit live dependencies or delete protected directories
 to recover a stage. See [macOS kit notes](../packaging/MACOS-BUILD-README.md).

@@ -17,6 +17,7 @@ unset DKR_MACOS_LOCK_ENTRY
 prepare_args=()
 jobs="${CMAKE_BUILD_PARALLEL_LEVEL:-}"
 package=0
+notarize=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --rom-v77 | --rom-v80 | --jobs)
@@ -30,6 +31,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   --skip-deps | --force) prepare_args+=("$1") ;;
   --package) package=1 ;;
+  --notarize) package=1 notarize=1 ;;
   -h | --help)
     cat <<'EOF'
 Usage: ./Build-macOS.sh --rom-v77 PATH --rom-v80 PATH [options]
@@ -42,6 +44,9 @@ Prepare, build and test DKR-R on macOS.
   --force         Regenerate payloads even when inputs are unchanged
   --package       Also create a self-contained, ad-hoc-signed app ZIP in dist/
                   (runs on this Mac's macOS version or newer: Homebrew SDL sets the floor)
+  --notarize      Package with a Developer ID signature, notarize and staple.
+                  Needs DKR_MAC_SIGN_IDENTITY (a "Developer ID Application" identity)
+                  and DKR_MAC_NOTARY_PROFILE (an xcrun notarytool keychain profile)
   -h, --help      Show this help
 
 Prerequisites: Xcode and Homebrew. Quote ROM paths with spaces.
@@ -113,6 +118,13 @@ if [[ "$package" -eq 1 ]]; then
     exit 1
   }
 fi
+if [[ "$notarize" -eq 1 ]]; then
+  # Fail before the build rather than after it.
+  [[ -n "${DKR_MAC_SIGN_IDENTITY:-}" && -n "${DKR_MAC_NOTARY_PROFILE:-}" ]] || {
+    echo '--notarize needs DKR_MAC_SIGN_IDENTITY and DKR_MAC_NOTARY_PROFILE.' >&2
+    exit 1
+  }
+fi
 build_dir="${DKR_MAC_BUILD_DIR:-${project_root}/build/dkr-runtime-macos}"
 revision_80_generated="${DKR_MAC_V80_GENERATED_SOURCE}"
 [[ "$revision_80_generated" == /* ]] || revision_80_generated="$PWD/$revision_80_generated"
@@ -149,5 +161,7 @@ trap cleanup EXIT
 "${executable}" --self-test-pak "${pak_test}"
 printf '\nBuild and tests passed. Launch with ./Run-macOS.sh.\n'
 if [[ "$package" -eq 1 ]]; then
-  python3 "${project_root}/scripts/package_macos.py" "${build_dir}" "${version}"
+  package_args=("${build_dir}" "${version}")
+  [[ "$notarize" -eq 0 ]] || package_args+=(--notarize)
+  python3 "${project_root}/scripts/package_macos.py" "${package_args[@]}"
 fi

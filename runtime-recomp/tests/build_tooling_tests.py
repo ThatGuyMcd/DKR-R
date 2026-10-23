@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -710,6 +711,29 @@ class MacOSDevexTests(unittest.TestCase):
             (root / 'bin/Release/dkr-release.json').write_text('{"version":"1.0.5-old","build_number":1}')
             with self.assertRaisesRegex(RuntimeError, 'differs from configured'):
                 package.package(root, '1.0.5-new')
+
+    def test_notarize_requires_identity_and_profile(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("DKR_MAC_")}
+        for extra in ({}, {"DKR_MAC_SIGN_IDENTITY": "-", "DKR_MAC_NOTARY_PROFILE": "p"},
+                      {"DKR_MAC_SIGN_IDENTITY": "Developer ID Application: X (T)"}):
+            result = subprocess.run([sys.executable, str(ROOT / "scripts/package_macos.py"),
+                                     "build", "1.0.8", "--notarize"],
+                                    capture_output=True, text=True, env={**env, **extra})
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("DKR_MAC_SIGN_IDENTITY and DKR_MAC_NOTARY_PROFILE", result.stderr)
+
+    @unittest.skipUnless(shutil.which("ditto"), "ditto is macOS-only")
+    def test_archive_rejects_appledouble_entries(self):
+        import package_macos as package
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp) / "stage"
+            (stage / "DKR-R.app").mkdir(parents=True)
+            (stage / "DKR-R.app/._Info.plist").write_text("x")
+            with self.assertRaisesRegex(RuntimeError, "metadata files"):
+                package.archive(stage, Path(tmp) / "out.zip")
+            (stage / "DKR-R.app/._Info.plist").unlink()
+            (stage / "DKR-R.app/Info.plist").write_text("x")
+            package.archive(stage, Path(tmp) / "out.zip")
 
     def test_lock_rejects_concurrent_builds_and_allows_nested_prepare(self):
         import fcntl
