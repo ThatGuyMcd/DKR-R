@@ -36,7 +36,7 @@ jobs:
       - uses: ./.github/actions/prepare-nightly-tools # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
       - name: Install Linux compiler
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang-18 clang-tools-18 libclang-rt-18-dev ninja-build
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang-18 clang-tools-18 libclang-rt-18-dev libcurl4-openssl-dev
       - name: Prepare reviewed dependencies
         uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
       - name: Configure instrumented native sources
@@ -95,7 +95,7 @@ jobs:
       - uses: ./.github/actions/prepare-nightly-tools # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
       - name: Install Linux build tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev
       - name: Prepare reviewed dependencies
         uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
       - name: Configure Unix host tests
