@@ -2337,6 +2337,18 @@ void discard_install_temp(const std::filesystem::path& temp_root) {
     std::filesystem::remove_all(temp_root, code);
 }
 
+// A zip without a *.dkrmap folder installs under its manifest id, so the id
+// must be one plain folder name: no separators, drive colon, dot names or
+// characters Windows refuses. Ids already installed are not re-checked.
+static bool valid_folder_id(const std::string& id) {
+    if (id.empty() || id == "." || id == ".." || id.back() == '.' || id.back() == ' ') {
+        return false;
+    }
+    return std::none_of(id.begin(), id.end(), [](unsigned char c) {
+        return c < 0x20 || std::strchr("/\\:<>\"|?*", c) != nullptr;
+    });
+}
+
 bool install(const std::filesystem::path& source, std::string& error,
              InstallOutcome* outcome) {
     std::filesystem::path destination_root;
@@ -2403,22 +2415,47 @@ bool install(const std::filesystem::path& source, std::string& error,
     }
 
     // A zip's inner folder can be named anything; fall back to the manifest id.
+    if (track_dir.extension() != ".dkrmap" && !valid_folder_id(probe.id)) {
+        discard_install_temp(temp_root);
+        error = "That track's manifest id can't be used as a folder name.";
+        return false;
+    }
     const std::string folder_name =
         track_dir.extension() == ".dkrmap"
             ? track_dir.filename().string()
             : probe.id + ".dkrmap";
     const std::filesystem::path destination = destination_root / folder_name;
     std::filesystem::create_directories(destination_root, code);
-    if (std::filesystem::exists(destination, code)) {
-        std::filesystem::remove_all(destination, code);
-    }
-    std::filesystem::copy(track_dir, destination,
+    // Copy beside the installed track and swap it in, so a failed copy keeps
+    // the old one. Neither side name ends in .dkrmap, so scans skip leftovers.
+    const std::filesystem::path staged = destination_root / (folder_name + ".partial");
+    const std::filesystem::path previous = destination_root / (folder_name + ".previous");
+    std::error_code ignored;
+    std::filesystem::remove_all(staged, ignored);
+    std::filesystem::copy(track_dir, staged,
                           std::filesystem::copy_options::recursive, code);
     if (code) {
+        std::filesystem::remove_all(staged, ignored);
         discard_install_temp(temp_root);
         error = "Could not copy the track: " + code.message();
         return false;
     }
+    const bool replacing = std::filesystem::exists(destination, ignored);
+    if (replacing) {
+        std::filesystem::remove_all(previous, ignored);
+        std::filesystem::rename(destination, previous, code);
+    }
+    if (!code) std::filesystem::rename(staged, destination, code);
+    if (code) {
+        if (replacing && !std::filesystem::exists(destination, ignored)) {
+            std::filesystem::rename(previous, destination, ignored);
+        }
+        std::filesystem::remove_all(staged, ignored);
+        discard_install_temp(temp_root);
+        error = "Could not replace the installed track: " + code.message();
+        return false;
+    }
+    if (replacing) std::filesystem::remove_all(previous, ignored);
 
     if (outcome != nullptr) {
         *outcome = InstallOutcome{};

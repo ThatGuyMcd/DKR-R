@@ -13,6 +13,9 @@
 #include <vector>
 
 #include <miniz/miniz.h>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 using namespace dkr::runtime::custom_tracks;
 
@@ -866,6 +869,50 @@ int main() {
         }
         assert(bare_installed);
     }
+
+    // A zip without a *.dkrmap folder installs under its manifest id, which
+    // must not name a path outside the install directory.
+    for (const std::string id : {"../escape", "a/b", "/abs", "C:\\\\x", "..", "trail.",
+                                 "nul\\u0000end", "pipe|name"}) {
+        write_zip(root / "escape.zip",
+                  {{"manifest.json", track_manifest(id, "")},
+                   {"h.bin", std::string(72U, 'h')}});
+        std::string install_error;
+        assert(!install(root / "escape.zip", install_error));
+        assert(install_error.find("folder name") != std::string::npos);
+        assert(!std::filesystem::exists(root / "escape.dkrmap"));
+        assert(!std::filesystem::exists(root / "install" / "a"));
+    }
+
+    // Reinstalling swaps the new copy in and leaves no side folders.
+    {
+        write_zip(root / "bare.zip",
+                  {{"manifest.json", track_manifest("bare", "\"author\":\"second\",")},
+                   {"h.bin", std::string(72U, 'h')}});
+        std::string install_error;
+        assert(install(root / "bare.zip", install_error));
+        assert(read_file_text(root / "install" / "bare.dkrmap" / "manifest.json").find("second") !=
+               std::string::npos);
+        assert(!std::filesystem::exists(root / "install" / "bare.dkrmap.partial"));
+        assert(!std::filesystem::exists(root / "install" / "bare.dkrmap.previous"));
+    }
+#if !defined(_WIN32)
+    // A copy that fails partway keeps the installed track.
+    if (::geteuid() != 0) {
+        const auto source = root / "broken" / "bare.dkrmap";
+        std::filesystem::create_directories(source);
+        write_file(source / "manifest.json", track_manifest("bare", "\"author\":\"third\","));
+        write_file(source / "h.bin", std::string(72U, 'h'));
+        write_file(source / "unreadable.bin", "x");
+        std::filesystem::permissions(source / "unreadable.bin", std::filesystem::perms::none);
+        std::string install_error;
+        assert(!install(source, install_error));
+        std::filesystem::permissions(source / "unreadable.bin", std::filesystem::perms::owner_all);
+        assert(read_file_text(root / "install" / "bare.dkrmap" / "manifest.json").find("second") !=
+               std::string::npos);
+        assert(!std::filesystem::exists(root / "install" / "bare.dkrmap.partial"));
+    }
+#endif
 
     // A .zip that wraps the .dkrmap AND its <track>-hd.zip. install() reports
     // the pack for the caller to import, then hands back the temp to clean.
