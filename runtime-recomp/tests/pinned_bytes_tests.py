@@ -137,6 +137,33 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("missing", err)
 
+    def write_capsule_base(self, data):
+        base = b"first-party base\n"
+        manifest = {"roles": {"ROLE": {"x.cpp": {"base": "runtime-recomp/src/x.cpp", "base_sha256": sha(base)}}}}
+        write(self.root / "patches/release-prep/v1/source-capsule-r1/manifest.json", json.dumps(manifest).encode())
+        write(self.root / "runtime-recomp/src/x.cpp", data)
+
+    def test_changed_capsule_base_fails(self):
+        self.write_capsule_base(b"folded bytes\n")
+        status, err = run_checker(self.root)
+        self.assertEqual(status, 1)
+        self.assertIn("runtime-recomp/src/x.cpp: sha256", err)
+
+    def test_released_capsule_base_may_change(self):
+        self.write_capsule_base(b"folded bytes\n")
+        write(self.root / check_pinned_bytes.RELEASED_BASES, b"runtime-recomp/src/x.cpp\n")
+        self.assertEqual(run_checker(self.root), (0, ""))
+
+    def test_released_list_names_only_changed_capsule_bases(self):
+        self.write_capsule_base(b"first-party base\n")
+        write(self.root / check_pinned_bytes.RELEASED_BASES, b"runtime-recomp/src/x.cpp\nscripts/other.py\n")
+        status, err = run_checker(self.root)
+        self.assertEqual(status, 1)
+        self.assertIn("runtime-recomp/src/x.cpp: listed in", err)
+        self.assertIn("matches its pin again", err)
+        self.assertIn("scripts/other.py: listed in", err)
+        self.assertIn("not a capsule base", err)
+
     def test_paths_limit_the_check_and_manifests_expand_to_their_files(self):
         write(self.root / "patches/dep/0001.patch", b"changed\n")
         self.assertEqual(run_checker(self.root, "modding/reference-us-v77/symbols.ld")[0], 0)

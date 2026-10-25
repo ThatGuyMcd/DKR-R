@@ -12,7 +12,8 @@ would "fix":
   whose file names are their own sha256;
 * the capsules' "base" files, first-party sources whose CRLF-normalised bytes
   the capsule manifest pins (``base_sha256``) because capsule.py rebuilds its
-  roles from them.
+  roles from them. Bases the fold has rewritten are listed in
+  scripts/fold/released-bases.txt and are not pinned (see RELEASED_BASES).
 
 With no arguments every pin is checked. With paths (what pre-commit passes),
 only the pins those paths belong to are checked; a manifest or receipt in the
@@ -48,7 +49,56 @@ DRIFTED_BASES = frozenset(
         "runtime-recomp/src/game/runtime_graphics_ui.inl",
     }
 )
+# Fold transition, steps B1 to B8: the fold writes the shipped bytes over the
+# capsule bases. Like DRIFTED_BASES, every one of them still has its pinned
+# bytes at the capsule's base commit (34ed57ae), which is where
+# restore_capsule.py reads a drifted base from; nothing builds from the capsule
+# once the sources are folded. The list is checked both ways: every entry must
+# be a capsule base whose bytes no longer match its pin, so it cannot excuse
+# any other file. B8 deletes the capsule, the list and this block.
+RELEASED_BASES = "scripts/fold/released-bases.txt"
 CAPSULE = re.compile(r"^patches/release-prep/[^/]+/source-capsule-[^/]+/(?P<sha>[0-9a-f]{64})\.[A-Za-z0-9]+$")
+
+
+def released(root: Path) -> set[str]:
+    path = root / RELEASED_BASES
+    if not path.exists():
+        return set()
+    return {line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()}
+
+
+def base_pins(root: Path) -> dict[str, tuple[str, str]]:
+    """Every capsule base with (expected sha256, manifest), released or not."""
+    bases: dict[str, tuple[str, str]] = {}
+    for manifest_path in sorted(root.glob(CAPSULE_MANIFESTS)):
+        source = manifest_path.relative_to(root).as_posix()
+        capsule = json.loads(manifest_path.read_text(encoding="utf-8"))
+        for entries in capsule["roles"].values():
+            for entry in entries.values():
+                base = entry.get("base")
+                if base and base not in DRIFTED_BASES:
+                    bases[base] = (entry["base_sha256"], source)
+    return bases
+
+
+def canonical_sha(path: Path) -> str | None:
+    """sha256 of a capsule base as capsule.py canonical() reads it."""
+    try:
+        return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+    except FileNotFoundError:
+        return None
+
+
+def released_problems(root: Path) -> list[str]:
+    """Entries of RELEASED_BASES that are not a capsule base, or whose bytes match their pin again."""
+    bases = base_pins(root)
+    problems: list[str] = []
+    for path in sorted(released(root)):
+        if path not in bases:
+            problems.append(f"{path}: listed in {RELEASED_BASES} but not a capsule base")
+        elif canonical_sha(root / path) == bases[path][0]:
+            problems.append(f"{path}: listed in {RELEASED_BASES} but matches its pin again; remove the entry")
+    return problems
 
 
 def pins(root: Path) -> dict[str, tuple[str, str]]:
@@ -68,14 +118,8 @@ def pins(root: Path) -> dict[str, tuple[str, str]]:
         match = CAPSULE.match(relative)
         if match:
             pinned[relative] = (match["sha"], "its file name")
-    for manifest_path in sorted(root.glob(CAPSULE_MANIFESTS)):
-        source = manifest_path.relative_to(root).as_posix()
-        capsule = json.loads(manifest_path.read_text(encoding="utf-8"))
-        for entries in capsule["roles"].values():
-            for entry in entries.values():
-                base = entry.get("base")
-                if base and base not in DRIFTED_BASES:
-                    pinned[base] = (entry["base_sha256"], source)
+    free = released(root)
+    pinned.update({base: pin for base, pin in base_pins(root).items() if base not in free})
     return pinned
 
 
@@ -92,8 +136,9 @@ def selected(pinned: dict[str, tuple[str, str]], paths: Iterable[str]) -> list[s
 def check(root: Path, paths: Iterable[str] | None = None) -> list[str]:
     """One message per pinned file that is missing or whose sha256 changed."""
     pinned = pins(root)
-    problems: list[str] = []
-    for path in sorted(pinned) if paths is None else selected(pinned, paths):
+    listed = None if paths is None else [Path(p).as_posix().removeprefix("./") for p in paths]
+    problems = released_problems(root) if listed is None or RELEASED_BASES in listed else []
+    for path in sorted(pinned) if listed is None else selected(pinned, listed):
         expected, source = pinned[path]
         try:
             raw = (root / path).read_bytes()

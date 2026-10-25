@@ -182,6 +182,9 @@ PIPELINE_ALLOWED = {
     "scripts/gen_guest_symbols.py": "writes new symbol headers",
     "scripts/guest_hooks.py": "applies declared hooks to generated guest code",
     "scripts/generate_replay_probe.py": "reads first-party headers only to collect probe symbol names",
+    # Fold-only (step B1): writes the shipped closure into runtime-recomp/ once,
+    # respelling staged #include paths. Deleted with scripts/fold/ after C11.
+    "scripts/fold/apply_closure.py": "writes the shipped v1.0.11 closure back into the tree once",
 }
 GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake"}
 IDENTITY_ALLOWED_SUFFIX = "netplay/legacy_identity.hpp"

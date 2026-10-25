@@ -100,6 +100,7 @@ include = [
     "scripts/gen_guest_symbols.py",
     "scripts/check_includes.py",
     "scripts/check_registries.py",
+    "scripts/fold",
     "scripts/release",
 ]
 strict = [
@@ -111,6 +112,7 @@ strict = [
     "scripts/gen_guest_symbols.py",
     "scripts/check_includes.py",
     "scripts/check_registries.py",
+    "scripts/fold",
     "scripts/release",
 ]
 exclude = ["build", "extern", "patches", "tools/blender"]

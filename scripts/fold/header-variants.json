@@ -1,0 +1,442 @@
+{
+ "schema": 1,
+ "about": "Headers the v1.0.11 binaries held in more than one version, the one the fold keeps, and the TUs that compiled against another one. Written by scripts/fold/apply_closure.py --write-variants; only chosen_sha256 and reason are edited by hand. See docs/fold-in/header-decisions.md.",
+ "headers": {
+  "runtime-recomp/src/game/mobile_graphics_preset.hpp": {
+   "chosen_sha256": "0df57598bb10b72429159a77a44c30d42f11855f4c903e1af14828f542a0ab2d",
+   "reason": "PR 68 version (upstream-sync): the launcher graphics page needs matching_preset/preset_anisotropy. rt64_renderer.cpp compiled the pre-PR 68 copy; the delta only adds <optional> and two inline functions it does not call.",
+   "kind": "split",
+   "chosen_from": [
+    "cfg-ref/generated/upstream-sync/mobile_graphics_preset.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2",
+     "from": [
+      "capsule/roles/SDK2_BASE/native/src/game/mobile_graphics_preset.hpp"
+     ],
+     "forwards_to_chosen": false,
+     "tus": [
+      "runtime-recomp/src/game/rt64_renderer.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/legacy_character_materialize.hpp": {
+   "chosen_sha256": "7fa418bb9fd4da9b79eab21dd98876f2b05b4496330b809e17c9359bf4eef4fb",
+   "reason": "SDK2 version, used by 44 TUs including the defining TU legacy_character_materialize.cpp. vehicle_binding.cpp and vehicle_resources.cpp compiled main's copy (DKRCustomVehicles had runtime-recomp/src/game/mods on its include path) without source_portrait; neither names PreparedCharacter or prepare_character.",
+   "kind": "split",
+   "chosen_from": [
+    "capsule/roles/SDK2/native/src/game/mods/legacy_character_materialize.hpp",
+    "capsule/roles/SDK2_BASE/native/src/game/mods/legacy_character_materialize.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "bd4b2f1104257de526bbe05cbfa1aac0ec0f3b528f908de55d7ac16e5e992397",
+     "from": [
+      "repo/runtime-recomp/src/game/mods/legacy_character_materialize.hpp"
+     ],
+     "forwards_to_chosen": false,
+     "tus": [
+      "runtime-recomp/src/game/vehicle_binding.cpp",
+      "runtime-recomp/src/game/vehicle_resources.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_dispatch.h": {
+   "chosen_sha256": "d819d4ffb0dac82ea2dbbb9b1555088b3a759e40a0ba2dfa26557a506ec593da",
+   "reason": "PR 66 version (upstream-sync): adds the __APPLE__ __thread DKR_CODE_TLS block that runtime_code_mods.cpp defines against. The other 155 TUs compiled the pre-PR 66 copy; off Apple the two preprocess to the same tokens.",
+   "kind": "split",
+   "chosen_from": [
+    "cfg-ref/generated/upstream-sync/magic_code_dispatch.h"
+   ],
+   "others": [
+    {
+     "sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7",
+     "from": [
+      "capsule/roles/SDK2/native/src/game/mods/magic_code_dispatch.h",
+      "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_dispatch.h"
+     ],
+     "forwards_to_chosen": false,
+     "tus": [
+      "payload:owned-v77/guest_0.c",
+      "payload:owned-v77/guest_1.c",
+      "payload:owned-v77/guest_10.c",
+      "payload:owned-v77/guest_12.c",
+      "payload:owned-v77/guest_13.c",
+      "payload:owned-v77/guest_14.c",
+      "payload:owned-v77/guest_16.c",
+      "payload:owned-v77/guest_17.c",
+      "payload:owned-v77/guest_18.c",
+      "payload:owned-v77/guest_19.c",
+      "payload:owned-v77/guest_2.c",
+      "payload:owned-v77/guest_20.c",
+      "payload:owned-v77/guest_21.c",
+      "payload:owned-v77/guest_22.c",
+      "payload:owned-v77/guest_24.c",
+      "payload:owned-v77/guest_25.c",
+      "payload:owned-v77/guest_29.c",
+      "payload:owned-v77/guest_3.c",
+      "payload:owned-v77/guest_30.c",
+      "payload:owned-v77/guest_4.c",
+      "payload:owned-v77/guest_5.c",
+      "payload:owned-v77/guest_6.c",
+      "payload:owned-v77/guest_9.c",
+      "payload:owned-v77/magic_code_dispatch.c",
+      "payload:owned-v80/guest_0.c",
+      "payload:owned-v80/guest_1.c",
+      "payload:owned-v80/guest_10.c",
+      "payload:owned-v80/guest_12.c",
+      "payload:owned-v80/guest_13.c",
+      "payload:owned-v80/guest_14.c",
+      "payload:owned-v80/guest_16.c",
+      "payload:owned-v80/guest_17.c",
+      "payload:owned-v80/guest_18.c",
+      "payload:owned-v80/guest_19.c",
+      "payload:owned-v80/guest_2.c",
+      "payload:owned-v80/guest_20.c",
+      "payload:owned-v80/guest_21.c",
+      "payload:owned-v80/guest_22.c",
+      "payload:owned-v80/guest_24.c",
+      "payload:owned-v80/guest_25.c",
+      "payload:owned-v80/guest_29.c",
+      "payload:owned-v80/guest_3.c",
+      "payload:owned-v80/guest_30.c",
+      "payload:owned-v80/guest_4.c",
+      "payload:owned-v80/guest_5.c",
+      "payload:owned-v80/guest_6.c",
+      "payload:owned-v80/guest_9.c",
+      "payload:owned-v80/magic_code_dispatch.c",
+      "runtime-recomp/src/game/game_main.cpp",
+      "runtime-recomp/src/game/game_registration.cpp",
+      "runtime-recomp/src/game/mods/legacy_mod_launch.cpp",
+      "runtime-recomp/src/game/mods/magic_code_game_world.cpp",
+      "runtime-recomp/src/game/mods/online_mod_profile.cpp",
+      "runtime-recomp/src/game/mods/online_mod_runtime.cpp",
+      "runtime-recomp/src/game/offline_keep.cpp",
+      "runtime-recomp/src/game/replay_probe_capture.cpp",
+      "runtime-recomp/src/game/runtime_code_mods.cpp",
+      "runtime-recomp/src/game/runtime_ui.cpp",
+      "runtime-recomp/tests/replay_probe/probe_component.c",
+      "runtime-recomp/tests/replay_probe/probe_driver.cpp",
+      "staged:achievements/guest77/funcs_14.c",
+      "staged:achievements/guest80/funcs_14.c",
+      "staged:all-player-detail/DKRExperimentalOwnedGameV77/guest_26.c",
+      "staged:all-player-detail/DKRExperimentalOwnedGameV80/guest_26.c",
+      "staged:all-player-detail/DKRRecompiledFuncsV77/funcs_12.c",
+      "staged:all-player-detail/DKRRecompiledFuncsV77/funcs_31.c",
+      "staged:all-player-detail/DKRRecompiledFuncsV80/funcs_12.c",
+      "staged:all-player-detail/DKRRecompiledFuncsV80/funcs_31.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_0.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_1.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_11.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_13.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_16.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_17.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_18.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_19.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_20.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_21.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_23.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_24.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_25.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_26.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_27.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_28.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_3.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_30.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_32.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_33.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_35.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_36.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_4.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_5.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/funcs_7.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/magic_code_dispatch.c",
+      "staged:code-dispatch-v77-506a05229edd65b3574e608d73fd615afa346faaec3335d92fbd67318a3e699d/save_layout_functions.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_0.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_1.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_11.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_13.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_16.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_17.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_18.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_19.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_20.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_21.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_23.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_24.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_25.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_26.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_27.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_28.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_3.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_30.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_32.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_33.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_35.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_36.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_4.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_5.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/funcs_7.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/magic_code_dispatch.c",
+      "staged:code-dispatch-v80-86e0603f5a817ac918e91d4e075f308b86ca1445e980fbad8e90c24374404c71/save_layout_functions.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV77/guest_15.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV77/guest_23.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV77/guest_7.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV77/guest_8.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV80/guest_15.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV80/guest_23.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV80/guest_7.c",
+      "staged:custom-vehicles/DKRExperimentalOwnedGameV80/guest_8.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV77/funcs_15.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV77/funcs_2.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV77/funcs_22.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV77/funcs_29.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV77/funcs_34.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV77/funcs_8.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV77/funcs_9.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV80/funcs_15.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV80/funcs_2.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV80/funcs_22.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV80/funcs_29.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV80/funcs_34.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV80/funcs_8.c",
+      "staged:custom-vehicles/DKRRecompiledFuncsV80/funcs_9.c",
+      "staged:mod-runtime-repair/DKRExperimentalOwnedGameV77/guest_11.c",
+      "staged:mod-runtime-repair/DKRExperimentalOwnedGameV80/guest_11.c",
+      "staged:mod-runtime-repair/DKRRecompiledFuncsV77/funcs_6.c",
+      "staged:mod-runtime-repair/DKRRecompiledFuncsV80/funcs_6.c",
+      "staged:online-vehicle-menu/DKRExperimentalOwnedGameV77/guest_28.c",
+      "staged:online-vehicle-menu/DKRExperimentalOwnedGameV80/guest_28.c",
+      "staged:vehicle-seating/DKRExperimentalOwnedGameV77/guest_27.c",
+      "staged:vehicle-seating/DKRExperimentalOwnedGameV80/guest_27.c",
+      "staged:vehicle-seating/DKRRecompiledFuncsV77/funcs_10.c",
+      "staged:vehicle-seating/DKRRecompiledFuncsV80/funcs_10.c"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_game_services.hpp": {
+   "chosen_sha256": "7678891f8722a9783c102170b31ac8b8787f9acf89bee3a1569cb019c6bfa35d",
+   "reason": "The real header. The mod-runtime-repair copy only forwards to it by absolute path.",
+   "kind": "forwarder",
+   "chosen_from": [
+    "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_game_services.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "4f907fadd92121a19c7e0241a8a2f8c9f9e964abe681c5050c7e2d714c3d8f7c",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/magic_code_game_services.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_game_world.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_game_world.hpp": {
+   "chosen_sha256": "df13ed6b3fe4fdbd13a6110a2e26d6414c6f55a6a45be0b6cfca0533becd220a",
+   "reason": "The real header. The mod-runtime-repair copy only forwards to it by absolute path.",
+   "kind": "forwarder",
+   "chosen_from": [
+    "capsule/roles/SDK2/native/src/game/mods/magic_code_game_world.hpp",
+    "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_game_world.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "876d0836ab82e9fcb61e84f261a4a9e31ef3d5660f036c78f7fe5237d21cddb6",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/magic_code_game_world.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_game_world.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_link.hpp": {
+   "chosen_sha256": "560ee62b56deea565f291bda677c683d0a0fd684f808364b80ea445ccfd48e7a",
+   "reason": "The real header. The mod-runtime-repair copy only forwards to it by absolute path.",
+   "kind": "forwarder",
+   "chosen_from": [
+    "capsule/roles/SDK2/native/src/game/mods/magic_code_link.hpp",
+    "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_link.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "9a275f242123fdbd6bc1ffd58501c02533b81a75cb554bebb8a7e8c1d95dfd08",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/magic_code_link.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_link.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_native_arguments.hpp": {
+   "chosen_sha256": "35ff5aaaa7812fce8fbb2536f1df7391b1370720fc5861c5f27e9d5e599b04a1",
+   "reason": "The real header. The mod-runtime-repair copy only forwards to it by absolute path.",
+   "kind": "forwarder",
+   "chosen_from": [
+    "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_native_arguments.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "61d5961edaf2044eec240dc519223e187ac445a593322488628c058133bd4682",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/magic_code_native_arguments.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_game_world.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_package.hpp": {
+   "chosen_sha256": "0ba945c65f765bb176a88de01d26fda2a1a8b153a944ac3480042571caa56354",
+   "reason": "SDK2 version, used by 38 TUs including magic_code_package.cpp (through the mod-runtime-repair forwarder). vehicle_library.cpp and vehicle_package.cpp compiled main's copy without the sdk2_* Package fields.",
+   "kind": "split",
+   "chosen_from": [
+    "capsule/roles/SDK2/native/src/game/mods/magic_code_package.hpp",
+    "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_package.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "18f09343a177ada9bd446f0ab486aa29fa824ecc848fab3b4576501a180fc47b",
+     "from": [
+      "repo/runtime-recomp/src/game/mods/magic_code_package.hpp"
+     ],
+     "forwards_to_chosen": false,
+     "tus": [
+      "runtime-recomp/src/game/vehicle_library.cpp",
+      "runtime-recomp/src/game/vehicle_package.cpp"
+     ]
+    },
+    {
+     "sha256": "7f8b7a0b90f52a719fae8eec9afbcbf2749430c1135f6cc1cf944433691f09f9",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/magic_code_package.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_package.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_vm.hpp": {
+   "chosen_sha256": "4e17ef696382008cd230492179c0bf9637b57966e89345c2712121229e0a6f4f",
+   "reason": "The real header. The mod-runtime-repair copy only forwards to it by absolute path.",
+   "kind": "forwarder",
+   "chosen_from": [
+    "capsule/roles/SDK2/native/src/game/mods/magic_code_vm.hpp",
+    "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_vm.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "70fb205773a4495ea4ae9636c222c4108abe8d90081f4d8a14b663a55afe4226",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/magic_code_vm.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_game_world.cpp",
+      "runtime-recomp/src/game/mods/magic_code_link.cpp",
+      "runtime-recomp/src/game/mods/magic_code_package.cpp",
+      "runtime-recomp/src/game/mods/magic_code_vm.cpp",
+      "runtime-recomp/src/game/mods/magic_code_world.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/magic_code_world.hpp": {
+   "chosen_sha256": "efea94b65498d924ef0d1907dc85106198514c5d65e7541bacfc2b0545edb280",
+   "reason": "The real header. The mod-runtime-repair copy only forwards to it by absolute path.",
+   "kind": "forwarder",
+   "chosen_from": [
+    "capsule/roles/SDK2/native/src/game/mods/magic_code_world.hpp",
+    "capsule/roles/SDK2_BASE/native/src/game/mods/magic_code_world.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "98e001da4bcc36c19b29fc576cb742d3aad83c1c40a6bdade39be72c4ac2e190",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/magic_code_world.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_world.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/mods/sdk2_schema.hpp": {
+   "chosen_sha256": "af5027b58d21d1c3640adc21ad3f6f9df9d8c91ae6565e5ef8aa505af23198ee",
+   "reason": "The real header. The mod-runtime-repair copy only forwards to it by absolute path.",
+   "kind": "forwarder",
+   "chosen_from": [
+    "capsule/roles/SDK2_BASE/native/src/game/mods/sdk2_schema.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "0ecfd82ab1fc40ff43a74a512c5121689a5ab713bd31be7475a7fda7e6c1f1ac",
+     "from": [
+      "cfg-ref/generated/mod-runtime-repair/native/mods/sdk2_schema.hpp"
+     ],
+     "forwards_to_chosen": true,
+     "tus": [
+      "runtime-recomp/src/game/mods/magic_code_package.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/resident_music.hpp": {
+   "chosen_sha256": "946ae39bb0dedad218bf2d8e1bc9b5f97e1f36b408dce8546d7ed308ad827276",
+   "reason": "music-preview-repair version, used by the defining TU resident_music.cpp. online_mod_runtime.cpp compiled the custom-vehicles copy without the PreviewScope class, which it does not use.",
+   "kind": "split",
+   "chosen_from": [
+    "cfg-ref/generated/music-preview-repair/resident_music.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "ca345e512ff03cc4c085418dd720dcdd943e1afe433c4272155a77b35f41f985",
+     "from": [
+      "cfg-ref/generated/custom-vehicles/native/resident_music.hpp"
+     ],
+     "forwards_to_chosen": false,
+     "tus": [
+      "runtime-recomp/src/game/mods/online_mod_runtime.cpp"
+     ]
+    }
+   ]
+  },
+  "runtime-recomp/src/game/save_manager.hpp": {
+   "chosen_sha256": "330c525c25a5597690088dcfa7bc045ec613e06020bd72aa0db40ca2dbec6bde",
+   "reason": "SHARED_SAVES version, used by the defining TU save_manager.cpp and four others. runtime_save_routing.cpp compiled the SDK2 copy (no CustomRecords kind, content_hash/copies or stored_adventures(limit, truncated)); it names none of them.",
+   "kind": "split",
+   "chosen_from": [
+    "capsule/roles/SHARED_SAVES/native/src/game/save_manager.hpp"
+   ],
+   "others": [
+    {
+     "sha256": "232f52ff0d9e63ae073ee016c7e9bc4d27f3c5e37013d576114bd0c8033cafab",
+     "from": [
+      "capsule/roles/SDK2/native/src/game/save_manager.hpp"
+     ],
+     "forwards_to_chosen": false,
+     "tus": [
+      "runtime-recomp/src/game/runtime_save_routing.cpp"
+     ]
+    }
+   ]
+  }
+ }
+}
