@@ -1,0 +1,22 @@
+{
+ "schema": 1,
+ "about": "Differences between the folded build and the v1.0.11 reference that scripts/fold/equivalence.py reports and that are explained. Each entry quotes the exact difference line; anything not listed fails.",
+ "deltas": [
+  {
+   "difference": "DKRPortGame: runtime-recomp/src/game/game_main.cpp: include dirs lost ['runtime-recomp/src'] extra []",
+   "reason": "A layer re-added the parent of game_main.cpp's staged directory (prior/..). No include in the TU or its headers resolves through runtime-recomp/src: dropping it from the reference include path leaves all 233 resolved includes unchanged."
+  },
+  {
+   "difference": "DKRPortGame: runtime-recomp/src/game/runtime_legacy_mods.cpp: include dirs lost ['<build>/generated'] extra []",
+   "reason": "The parent of a layer's generated stage directory (prior/..). No include in the TU or its headers resolves through it: dropping it leaves all 166 resolved includes unchanged."
+  },
+  {
+   "difference": "DKRPortGame: runtime-recomp/src/game/runtime_ui.cpp: include dirs lost ['<build>/generated'] extra []",
+   "reason": "The parent of a layer's generated stage directory (prior/..). No include in the TU or its headers resolves through it: dropping it leaves all 842 resolved includes unchanged."
+  },
+  {
+   "difference": "DKRPortGame: runtime-recomp/src/game/rt64_renderer.cpp: object sections differ: data .eh_frame, data .group",
+   "reason": "Header variant mobile_graphics_preset.hpp (PR 68): its new inline helpers instantiate GraphicsConfig's destructor earlier, so that COMDAT is emitted first. All 79 sections exist on both sides and every text section and relocation is identical; only the unwind-table entry order (.eh_frame) and the COMDAT group section indices (.group) follow the new emission order."
+  }
+ ]
+}
