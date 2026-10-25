@@ -5,12 +5,6 @@ if(APPLE)
     enable_language(OBJC OBJCXX)
 endif()
 
-file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/../VERSION" DKR_NETWORK_RELEASE_VERSION
-     LIMIT_COUNT 1)
-if(DKR_NETWORK_RELEASE_VERSION STREQUAL "")
-    set(DKR_NETWORK_RELEASE_VERSION "development")
-endif()
-
 set(DKR_RELEASE_VERSION "" CACHE STRING "Public DKR-R release version")
 if(DKR_RELEASE_VERSION STREQUAL "")
     file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/../VERSION" DKR_RELEASE_VERSION
@@ -171,6 +165,18 @@ endif()
 # runtime preparation notice before distributing a linked executable.
 add_subdirectory("${DKR_MODERN_RUNTIME_SOURCE}" "${CMAKE_BINARY_DIR}/n64-modern-runtime")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/PerformancePatches.cmake")
+# Lobby stability's owned adapter for osSpTaskStartGo: task_submission.cpp
+# includes librecomp's unchanged sp.cpp (named in sdk_task_source.hpp), so
+# librecomp compiles the wrapper in its place.
+set_source_files_properties("${DKR_MODERN_RUNTIME_SOURCE}/librecomp/src/sp.cpp"
+    TARGET_DIRECTORY librecomp PROPERTIES HEADER_FILE_ONLY ON)
+target_sources(librecomp PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game/task_submission.cpp")
+if(MSVC)
+    # The C entrypoint forwards C++ failures through a scoped permission; /EHc
+    # would let MSVC skip that unwind.
+    set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/game/task_submission.cpp"
+        TARGET_DIRECTORY librecomp PROPERTIES COMPILE_OPTIONS "/EHs;/EHc-")
+endif()
 if(MSVC)
     # The pinned dependencies enable multi-processor compilation internally.
     # Serialize writes to each target PDB from the project boundary so clean
@@ -314,6 +320,20 @@ add_library(DKRNetplayCore STATIC
     src/game/netplay/secure_channel.cpp
     src/game/netplay/session_transport.cpp
     src/game/netplay/windows_firewall.cpp
+    # Spectator parties, lobby restoration, rollback connection checks and the
+    # online directory.
+    src/game/party.cpp
+    src/game/confirmed_feed.cpp
+    src/game/party_codec.cpp
+    src/game/checkpoint_transfer.cpp
+    src/game/observer_playback.cpp
+    src/game/confirmed_observer.cpp
+    src/game/owner_export.cpp
+    src/game/party_link.cpp
+    src/game/owned_observer.cpp
+    src/game/lobby_adapter.cpp
+    src/game/rollback_check.cpp
+    src/game/online_directory.cpp
 )
 target_include_directories(DKRNetplayCore PUBLIC
     "${CMAKE_CURRENT_LIST_DIR}/src/game"
@@ -332,6 +352,7 @@ else()
 endif()
 if(WIN32)
     target_link_libraries(DKRNetplayCore PUBLIC ws2_32 bcrypt iphlpapi ole32 oleaut32 shell32)
+    target_link_libraries(DKRNetplayCore PRIVATE Crypt32)
 endif()
 
 if(DKR_RUNTIME_BUILD_RT64 AND DKR_RUNTIME_BUILD_SDL3_INPUT_HOST)
@@ -811,6 +832,18 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         src/game/runtime_telemetry.cpp
         src/game/startup_performance.cpp
         src/game/virtual_pak.cpp
+        src/game/mod_store.cpp
+        src/game/mod_store_names.cpp
+        src/game/mod_store_install.cpp
+        src/game/vehicle_world.cpp
+        src/game/render_heap_support.cpp
+        src/game/texture_dump.cpp
+        src/game/achievements.cpp
+        src/game/achievement_catalogue.cpp
+        src/game/party_runtime.cpp
+        src/game/invite_handoff.cpp
+        src/game/store_vehicle_adapter.cpp
+        src/game/producer_snapshot.cpp
         ${DKR_GENERATED_RSP}
     )
     # Identical contact arithmetic in native and owned adapters. In particular,
@@ -861,6 +894,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
             src/game/runtime_rice_texture_import.cpp
             src/game/runtime_texture_packs.cpp
             src/game/runtime_ui.cpp
+            src/game/vehicle_rt64.cpp
             "${DKR_RT64_SOURCE}/src/contrib/imgui/backends/imgui_impl_sdlrenderer2.cpp"
         )
     endif()
@@ -887,6 +921,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     endif()
     target_include_directories(DKRPortGame PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
+        "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe"
         "${CMAKE_CURRENT_LIST_DIR}/third_party/dr_libs"
         "${DKR_RECOMP_SOURCE}/include"
         "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
@@ -900,10 +935,13 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         DKR_LEGACY_QUALIFICATION=$<BOOL:${DKR_LEGACY_QUALIFICATION}>
         DKR_RUNTIME_HAS_SDL3_INPUT_HOST=$<BOOL:${DKR_RUNTIME_BUILD_SDL3_INPUT_HOST}>
         DKR_RELEASE_VERSION="${DKR_RELEASE_VERSION}"
-        DKR_NETWORK_RELEASE_VERSION="${DKR_NETWORK_RELEASE_VERSION}"
+        # Peers see the configured release version, not the VERSION file's.
+        DKR_NETWORK_RELEASE_VERSION="${DKR_RELEASE_VERSION}"
         DKR_PATCH_POLICY_SHA256="${DKR_PATCH_POLICY_SHA256}"
         NOMINMAX
     )
+    # Shared saves and the store read their JSON with nlohmann/json.
+    target_include_directories(DKRPortGame PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
     target_link_libraries(DKRPortGame PRIVATE DKRUpdateClient)
     if(DKR_EXPERIMENTAL_RACE_TEST)
         target_compile_definitions(DKRPortGame PRIVATE DKR_EXPERIMENTAL_RACE_TEST=1)
@@ -930,6 +968,9 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     add_dependencies(DKRPortGame DKRLegacyModWorker)
     if(MSVC)
         target_compile_options(DKRPortGame PRIVATE /FS)
+        # The SDK 2 schema and workspace pages add template sections to the
+        # single launcher TU; extended COFF keeps it under the section limit.
+        target_compile_options(DKRPortGame PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
     endif()
     if(WIN32)
         target_link_libraries(DKRPortGame PRIVATE ws2_32)
@@ -1167,10 +1208,10 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
         else()
             set(DKR_OWNED_FULL_SCENES 1)
         endif()
-        if(DKR_EXPERIMENTAL_RACE_TEST AND DKR_OWNED_FULL_SCENES)
-            set_property(SOURCE src/game/runtime_ui.cpp APPEND PROPERTY
-                COMPILE_DEFINITIONS DKR_EXPERIMENTAL_FULL_SCENES=1)
-        endif()
+        # v1.0.11 compiled runtime_ui.cpp without DKR_EXPERIMENTAL_FULL_SCENES
+        # (the release chain dropped this per-source define when it relocated
+        # the launcher), so its full-scene branches stay off until that is
+        # changed on purpose.
         if(DKR_EXPERIMENTAL_RACE_TEST AND NOT DKR_OWNED_FULL_SCENES)
             message(FATAL_ERROR "Integrated rollback requires the full-scene Patch Pipeline; race-only payloads cannot be shipped here")
         endif()
@@ -2296,8 +2337,11 @@ if(BUILD_TESTING)
         src/game/save_manager.cpp
         src/game/netplay/experimental_pak.cpp
     )
+    # save_manager.cpp is the shared-saves version, which reads its records
+    # index with nlohmann/json.
     target_include_directories(DKRSaveManagerTests PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
+        "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include"
     )
     add_test(NAME DKRSaveManager COMMAND DKRSaveManagerTests)
 
