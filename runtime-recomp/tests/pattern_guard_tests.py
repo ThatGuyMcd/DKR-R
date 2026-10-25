@@ -69,6 +69,20 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(run_guard(ROOT, "--explain", "PG999")[0], 2)
 
 
+class CheckContentTests(unittest.TestCase):
+    def test_a_patch_registered_before_it_is_written_is_still_checked(self):
+        # Registering first must not hide PG008: PG007 hashes the planned
+        # content instead of reading a file that doesn't exist yet.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            shutil.copytree(FIXTURES / "PG008/positive", root)
+            patch = root / "patches/rt64/0001-sidebar.patch"
+            text = patch.read_text(encoding="utf-8")
+            patch.unlink()
+            findings = pattern_guard.check_content(root, "patches/rt64/0001-sidebar.patch", text)
+        self.assertIn("PG008", {finding.rule for finding in findings})
+
+
 class CMakeTokenizerTests(unittest.TestCase):
     def test_comments_quotes_brackets_and_lines(self):
         commands = pattern_guard.parse_cmake(
