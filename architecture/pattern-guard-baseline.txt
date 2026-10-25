@@ -16,7 +16,7 @@ patches/achievements/ReleaseOverlay.cmake PG002
 patches/achievements/ReleaseOverlay.cmake PG003
 patches/achievements/audit.py PG013
 patches/achievements/configure.py PG013
-patches/achievements/inspect_rom.py PG013
+patches/achievements/inspect_rom.py PG004
 patches/achievements/native/achievement_catalogue.cpp PG006
 patches/achievements/native/achievement_ui.inl PG006
 patches/achievements/native/achievements.cpp PG006
@@ -97,7 +97,7 @@ patches/camera-plus/native/camera_snapshot.hpp PG006
 patches/camera-plus/native/camera_xr.cpp PG006
 patches/camera-plus/native/camera_xr.hpp PG006
 patches/camera-plus/package_playtest.py PG013
-patches/camera-plus/scene_kernel_pipeline.py PG013
+patches/camera-plus/scene_kernel_pipeline.py PG004
 patches/camera-plus/sdk/dkr/presentation.h PG006
 patches/camera-plus/vr_device_patch.py PG013
 patches/camera-shadow/NativeOverlay.cmake PG001
@@ -290,7 +290,7 @@ patches/liquid-streaming/NativeOverlay.cmake PG003
 patches/liquid-streaming/OWNER-NOTES.txt PG013
 patches/liquid-streaming/liquid_replacement_gate.hpp PG006
 patches/liquid-streaming/package.py PG013
-patches/liquid-streaming/pipeline.py PG013
+patches/liquid-streaming/pipeline.py PG004
 patches/liquid-streaming/water_residency_rt64.hpp PG006
 patches/lobby-link-repair/IMPLEMENTATION.txt PG013
 patches/lobby-link-repair/PLAYTEST.txt PG013
@@ -554,7 +554,7 @@ patches/race-release-repair/audit.py PG004
 patches/race-release-repair/configure.py PG013
 patches/race-release-repair/handoff.py PG013
 patches/race-release-repair/package.py PG013
-patches/race-release-repair/pipeline.py PG013
+patches/race-release-repair/pipeline.py PG004
 patches/race-release-repair/run_checks.py PG013
 patches/race-release-repair/tests/runtime_tests.cpp PG006
 patches/race-release-repair/transforms.py PG013
@@ -613,7 +613,7 @@ patches/release-prep/v1.0.7/RELEASE-PLAN.txt PG013
 patches/release-prep/v1.0.7/ReleaseOverlay.cmake PG001
 patches/release-prep/v1.0.7/ReleaseOverlay.cmake PG002
 patches/release-prep/v1.0.7/ReleaseOverlay.cmake PG003
-patches/release-prep/v1.0.7/android_store.py PG013
+patches/release-prep/v1.0.7/android_store.py PG004
 patches/release-prep/v1.0.7/android_store_compat.hpp PG006
 patches/release-prep/v1.0.7/audit.py PG013
 patches/release-prep/v1.0.7/capsule.py PG004
@@ -891,10 +891,10 @@ patches/release-prep/v1.0.9/ReleaseOverlay.cmake PG002
 patches/release-prep/v1.0.9/ReleaseOverlay.cmake PG003
 patches/release-prep/v1.0.9/UPDATER.txt PG013
 patches/release-prep/v1.0.9/android_account_input.py PG013
-patches/release-prep/v1.0.9/android_http.py PG013
-patches/release-prep/v1.0.9/android_shared.py PG013
-patches/release-prep/v1.0.9/android_snapshot.py PG013
-patches/release-prep/v1.0.9/android_texture.py PG013
+patches/release-prep/v1.0.9/android_http.py PG004
+patches/release-prep/v1.0.9/android_shared.py PG004
+patches/release-prep/v1.0.9/android_snapshot.py PG004
+patches/release-prep/v1.0.9/android_texture.py PG004
 patches/release-prep/v1.0.9/audit.py PG004
 patches/release-prep/v1.0.9/documentation/check.py PG004
 patches/release-prep/v1.0.9/documentation/content.py PG013
@@ -1225,7 +1225,7 @@ patches/vehicle-original-textures/finalize.py PG013
 patches/vehicle-original-textures/native/driver_anchor_units.hpp PG006
 patches/vehicle-original-textures/native/package_compatibility.hpp PG006
 patches/vehicle-original-textures/package.py PG013
-patches/vehicle-original-textures/pipeline.py PG013
+patches/vehicle-original-textures/pipeline.py PG004
 patches/vehicle-original-textures/run_checks.py PG013
 patches/vehicle-original-textures/tests/package_checks.cpp PG006
 patches/vehicle-seating/FORMAT.txt PG013
@@ -1252,6 +1252,10 @@ patches/viewport-flow/pipeline.py PG004
 runtime-recomp/CMakeLists.txt PG007
 runtime-recomp/cmake/PerformancePatches.cmake PG007
 runtime-recomp/cmake/android/PreRotation.cmake PG007
+runtime-recomp/src/game/achievement_symbols.hpp PG011
+runtime-recomp/src/game/netplay/experimental_runtime.cpp PG010
+runtime-recomp/src/game/polish_symbols.hpp PG011
+runtime-recomp/src/game/vehicle_symbols.hpp PG011
 scripts/adapt-water-reference.py PG004
 scripts/camera_plus_pipeline.py PG004
 scripts/character_portrait_pipeline.py PG004

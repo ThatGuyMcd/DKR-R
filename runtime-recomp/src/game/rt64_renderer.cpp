@@ -1,4 +1,9 @@
+#include "render_provenance.hpp"
+#include "vehicle_binding.hpp"
 #include "rt64_renderer.hpp"
+#include "camera_rt64.hpp"
+#include "revision_addresses.hpp"
+#include "netplay/online_input_broker.hpp"
 #include "render_power_policy.hpp"
 #include "performance_trace.hpp"
 #include "water_performance.hpp"
@@ -15,6 +20,7 @@
 
 #include "game_registration.hpp"
 #include "presentation_identity.hpp"
+#include "detail_contract.hpp"
 #include "renderer_snapshot.hpp"
 #include "local_scenery_rt64.hpp"
 #if defined(DKR_LOCAL_MODEL_DETAIL)
@@ -35,6 +41,7 @@
 #include "runtime_texture_packs.hpp"
 #include "startup_performance.hpp"
 #include "vi_presentation_policy.hpp"
+#include "performance_switches.hpp"
 #include "runtime_platform.hpp"
 #include "runtime_ui.hpp"
 #if defined(_WIN32)
@@ -583,6 +590,16 @@ dkr::runtime::RT64Renderer::RT64Renderer(
     // packs on its first presentation, even if the retired renderer had already
     // consumed this library generation. Do not change users' enabled settings.
     dkr::runtime::texture_packs::renderer_started();
+    std::fprintf(stderr,"[perf][surgical-features] reusable-flow=%u texture-index=%u mip-scratch=%u monotonic-pacer=%u; quality, guest clocks and GPU fences preserved\n",
+        unsigned(surgical::flow_reuse()),unsigned(surgical::texture_index()),unsigned(surgical::mip_scratch()),unsigned(surgical::monotonic_pacer()));
+    if(application_->textureCache && application_->device) {
+        constexpr std::uint64_t MiB=1024ULL*1024;
+        const auto dedicated=application_->device->getDescription().dedicatedVideoMemory;
+        const auto budget=std::clamp<std::uint64_t>(dedicated/2,512*MiB,3072*MiB);
+        application_->textureCache->setReplacementPoolMaxSize(budget);
+        std::fprintf(stderr,"[texture-packs][budget] effective=%llu MiB; scene and mip-upload headroom reserved\n",
+            static_cast<unsigned long long>(budget/MiB));
+    }
 #if defined(DKR_ENHANCED_WATER)
     const bool water_ray_queries=application_->device && application_->device->getCapabilities().rayQuery;
     water::enhanced::hardware_ray_capability.store(water_ray_queries ? 1 : 0);
@@ -718,11 +735,49 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task,
     // them. DKR relies on that during scene transitions and can free texture
     // allocations while the host graphics queue is still pending. Parse this
     // task from the submission-time snapshot, then restore live RDRAM for VI.
-    RendererSnapshotScope snapshot_scope(application_->core.RDRAM,
-                                         application_->state->RDRAM,
-                                         rdram_snapshot);
     dkr::runtime::presentation::TaskIdentityScope identity_scope(
         rdram_snapshot, task->t.data_ptr);
+    const bool detail_requested=enhancements::maximum_detail_enabled()&&!detail::ordinary_events().empty();
+    std::uint8_t* decode_bytes=rdram_snapshot;
+    const bool camera_requested=bool(camera::activation());
+    const auto car_resources=mods::vehicles::render_resources();
+    const bool cars_requested=car_resources&&!car_resources->library.packages.empty();
+    { // render repair: pristine submission, reusable private decode arena
+        if(camera_decoder_.size()!=DKR_CAMERA_KERNEL_BYTES)camera_decoder_.resize(DKR_CAMERA_KERNEL_BYTES);
+        std::memcpy(camera_decoder_.data(),rdram_snapshot,0x800000);
+        decode_bytes=camera_decoder_.data();
+    }
+    RendererSnapshotScope snapshot_scope(application_->core.RDRAM,
+                                         application_->state->RDRAM,
+                                         decode_bytes);
+    render_provenance::Scope provenance({rdram_snapshot,0x800000},
+        {decode_bytes,decode_bytes==rdram_snapshot?0x800000U:camera_decoder_.size()},task->t.data_ptr);
+    static std::atomic_flag provenance_notice=ATOMIC_FLAG_INIT;
+    if(!provenance_notice.test_and_set(std::memory_order_relaxed))
+        std::fprintf(stderr,"[render][decode-isolation] pristine submission; reusable private workspace; 8 MiB copy per source task\n");
+
+    if(!camera_pass_)camera_pass_=std::make_unique<camera::RenderPass>();
+    camera::FrameStamp camera_frame{};
+    camera_frame.scene=presentation::task_scene_generation();
+    camera_frame.time=float(presentation::task_presentation_time());
+    camera_frame.frame=std::uint32_t(std::max(0.F,camera_frame.time)*30.F);
+    camera_frame.dt=1.F/30.F;
+    int camera_width=0,camera_height=0;
+    if(auto* w=static_cast<SDL_Window*>(platform::sdl_window()))SDL_GetWindowSize(w,&camera_width,&camera_height);
+    if(application_->userConfig.aspectRatio==RT64::UserConfiguration::AspectRatio::Expand&&camera_width>0&&camera_height>0)
+        camera_frame.aspect=float(camera_width)/camera_height;
+    else if(application_->userConfig.aspectRatio==RT64::UserConfiguration::AspectRatio::Manual)
+        camera_frame.aspect=float(application_->userConfig.aspectTarget);
+    const auto camera_online=netplay::online_input_broker().view();
+    camera_frame.online=camera_online.enabled;
+    if(camera_requested)camera_pass_->prepare({rdram_snapshot,0x800000},camera_decoder_,camera_frame,{},
+        camera_online.local_slot,unsigned(platform::online_input_profile()));
+    // A submission snapshot is only 8 MiB. The existing private camera/car
+    // workspace supplies the disjoint 16-MiB decode arena; never write beyond
+    // the snapshot, live RDRAM, or the canonical guest's 8-MiB ownership.
+    static thread_local LocalModelRT64Pass ordinary_models;
+    ordinary_models.prepare(detail_requested?detail::ordinary_events():std::span<const dkr_owned_draw_event>{},
+        detail_requested?std::span<std::uint8_t>{camera_decoder_}:std::span<std::uint8_t>{},presentation::task_scene_generation());
     // DKR authors a new visual state at 30 Hz. Deriving that source cadence
     // from delayed VI history creates a positive feedback loop under load:
     // one late workload is misread as 20/15 Hz, RT64 schedules three or four
@@ -743,16 +798,16 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task,
 #if defined(__ANDROID__)
         {
             android_frame_budget::Scope decodeTiming(android_frame_budget::Region::Decoder);
-            f3ddkr_.process(*application_, *task);
+            f3ddkr_.process(*application_, *task,nullptr,nullptr,detail_requested?&ordinary_models:nullptr,camera_requested?camera_pass_.get():nullptr);
         }
         android_frame_budget::report();
 #else
-        f3ddkr_.process(*application_, *task);
+        f3ddkr_.process(*application_, *task,nullptr,nullptr,detail_requested?&ordinary_models:nullptr,camera_requested?camera_pass_.get():nullptr);
 #endif
         record_track_performance(rdram_snapshot, start);
     } else {
         track_capture_.count = 0; // A later opt-in capture must not span the idle gap.
-        f3ddkr_.process(*application_, *task);
+        f3ddkr_.process(*application_, *task,nullptr,nullptr,detail_requested?&ordinary_models:nullptr,camera_requested?camera_pass_.get():nullptr);
     }
 #if defined(__ANDROID__)
     } catch (const dkr::runtime::graphics_health::TaskAborted&) {
@@ -1272,6 +1327,13 @@ void dkr::runtime::RT64Renderer::present_owned(
     const auto present_cursor=application_->presentQueue->writeCursor;
     {std::scoped_lock lock(presentation_mutex_);
         presentation::TaskIdentityScope identity{owned_markers,owned_matrices,owned_shadows,scene,modern,double(lease->descriptor().frame)/30.0};
+        if(!camera_pass_)camera_pass_=std::make_unique<camera::RenderPass>();
+        camera::FrameStamp camera_frame{};camera_frame.scene=scene;
+        camera_frame.epoch=std::uint32_t(lease->epoch());camera_frame.frame=d.frame;
+        camera_frame.time=float(d.frame)/30.F;camera_frame.dt=1.F/30.F;
+        camera_frame.aspect=cover*4.F/3.F;camera_frame.online=true;
+        camera_pass_->prepare(lease->bytes(),workspace->bytes(),camera_frame,lease->draw_events(),
+            online_view_session_.owner,unsigned(platform::online_input_profile()),owned_decode_scratch_->online.focused());
         application_->state->setRefreshRate(30);
         {netplay::experimental::performance::Scope timing(netplay::experimental::performance::Stage::Process);
 #if defined(__ANDROID__)
@@ -1281,8 +1343,10 @@ void dkr::runtime::RT64Renderer::present_owned(
              f3ddkr_.process(*application_,task,&owned_decode_scratch_->local_scenery,&owned_decode_scratch_->online
 #if defined(DKR_LOCAL_MODEL_DETAIL)
                  ,&owned_decode_scratch_->local_models
+#else
+                 ,nullptr
 #endif
-             );
+                 ,camera_pass_.get());
 #if defined(__ANDROID__)
          } catch (const graphics_health::TaskAborted&) {
              // DrainOnExit retains the immutable image, decode workspace and

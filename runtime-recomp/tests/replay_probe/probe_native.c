@@ -1,3 +1,4 @@
+#include "../../src/game/primary_heap.h"
 #include "recomp.h"
 #include "funcs.h"
 #include "probe_bridge.h"
@@ -24,7 +25,7 @@ static int active_menu_tick;
 static int inline_menu_preview;
 static dkr_owned_draw_event draw_events[DKR_OWNED_MAX_DRAW_EVENTS];
 static unsigned draw_count;
-static dkr_owned_draw_event local_models[128],local_objects[512];
+static dkr_owned_draw_event local_models[256],local_objects[512];
 static unsigned local_model_count,local_object_count;
 static int local_model_overflow,local_object_overflow,local_flushed;
 static int draw_invalid;
@@ -55,7 +56,7 @@ static void local_emit(const dkr_owned_draw_event* event) {
     if(!dkr_owned_draw_event_valid(event))return;
     if(event->kind==DKR_OWNED_LOCAL_MODEL) {
         if(local_model_overflow)return;
-        if(local_model_count==128){local_model_overflow=1;local_model_count=0;return;}
+        if(local_model_count==256){local_model_overflow=1;local_model_count=0;return;}
         local_models[local_model_count++]=*event;
     } else if(event->kind==DKR_OWNED_LOCAL_OBJECT) {
         if(local_object_overflow)return;
@@ -755,7 +756,10 @@ void dkr_probe_scene_load_reset(uint8_t* rdram,recomp_context* ctx) {
         dkr_probe_block("unowned-confirmed-scene-reset");
     uint64_t ignored=0;
     dkr_probe_mod_dispatch("dkr_legacy_scene_begin",rdram,ctx,0,0,0,0,&ignored);
-    dkr_probe_mod_dispatch("dkr_owned_course_prepare",rdram,ctx,0,0,0,0,&ignored);
+    // Inline Track Select previews are confirmed but silent, just like
+    // deferred menu backgrounds. This does not authorise an audio decoder.
+    const uint64_t silent_music_preview=inline_track_preview(rdram) && confirmed_menu_tick;
+    dkr_probe_mod_dispatch("dkr_owned_course_prepare",rdram,ctx,&silent_music_preview,1,0,0,&ignored);
     // Accurate/4:3 private world has no live interpolation registry and every
     // reversible drawing scope is balanced. No mod session exists here. The
     // Scene reset clears diagnostic/work counters, not event-pool ownership.
@@ -977,6 +981,9 @@ static int owned_presentation_hook(const char* name,uint8_t* rdram,recomp_contex
         return 1;
     }
     if(strcmp(name,"dkr_split_screen_world_aspect_end")==0) {
+        uint32_t camera_addresses[8];dkr_probe_presentation_addresses(camera_addresses);
+        draw_marker(rdram,ctx->r17,DKR_OWNED_CAMERA_WORLD_END,
+            (uint32_t)MEM_W(0,guest_address(camera_addresses[7]))&3U);
         dkr_probe_online_racers(rdram,(uint32_t)ctx->r17,parity_emit);
         if(framed_scope)draw_marker(rdram,ctx->r17,DKR_OWNED_FRAMED_END,0);
         if(split_world_scope)draw_marker(rdram,ctx->r17,DKR_OWNED_SPLIT_WORLD_END,0);
@@ -985,8 +992,11 @@ static int owned_presentation_hook(const char* name,uint8_t* rdram,recomp_contex
     if(strcmp(name,"dkr_track_select_lens_flare_tint_begin")==0) {
         uint32_t a[8];dkr_probe_presentation_addresses(a);int32_t b[8];
         for(unsigned i=0;i<4;++i) {b[i]=MEM_W(i*4,guest_address(a[0]));b[i+4]=MEM_W(0x20+i*4,guest_address(a[0]));}
-        lens_scope=dkr_probe_lens_scope(b,MEM_W(0,guest_address(a[6])));
-        if(lens_scope)draw_marker(rdram,ctx->r17,DKR_OWNED_LENS_BEGIN,0);
+        const int postrace=dkr_probe_postrace_scope(MEM_W(0,guest_address(a[1])),
+            (int8_t)MEM_B(0,guest_address(a[2])),MEM_W(0,guest_address(a[3])),
+            MEM_W(0,guest_address(a[4])),MEM_W(0,guest_address(a[5])));
+        lens_scope=postrace||dkr_probe_lens_scope(b,MEM_W(0,guest_address(a[6])));
+        if(lens_scope)draw_marker(rdram,ctx->r17,DKR_OWNED_LENS_BEGIN,postrace&&!state.postrace_contracted?1U:0U);
         return 1;
     }
     if(strcmp(name,"dkr_track_select_lens_flare_tint_end")==0) {
@@ -1103,6 +1113,12 @@ int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* cont
     dkr_probe_checkpoint();
     uint64_t mod_result=0;
     if(dkr_probe_mod_dispatch(name,ram,context,0,0,0,0,&mod_result))return (int)mod_result;
+    // No asset world (vanilla/code-only): same known-pool policy.
+    // A handled custom admission above always keeps precedence.
+    if(strcmp(name,"dkr_legacy_heap_capacity")==0) {
+        context->r15=(int32_t)dkr_primary_heap_end((uint32_t)context->r15,0x800000U);
+        return 0;
+    }
     /* modern_camera.cpp: the local Modern camera never moves an owned or
        replayed frame, so there is no pose to hand back here. */
     if(strcmp(name,"dkr_modern_camera_restore")==0)return 0;

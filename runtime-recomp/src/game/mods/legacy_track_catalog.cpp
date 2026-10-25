@@ -608,7 +608,7 @@ std::vector<PreparedCharacter> TrackCatalog::load_selected_characters(std::span<
     std::vector<PreparedCharacter> result;std::set<std::string> loaded;
     std::map<std::filesystem::path,json> reviews;
     std::map<std::filesystem::path,Bytes> audio_blobs;
-    std::size_t cached_audio_bytes=0;
+    std::size_t cached_audio_bytes=0,source_portrait_bytes=0;
     std::array<View,3> originals{};bool audio_checked=false;
     for(const auto& selected_source:sources) {
         const auto root=private_storage_path(selected_source.library);const auto& item=selected_source.item;
@@ -643,6 +643,40 @@ std::vector<PreparedCharacter> TrackCatalog::load_selected_characters(std::span<
                 if(package)throw Error("Ambiguous character source audio.");package=&p;
             }
             if(!package)throw Error("The retained character audio does not match this import.");
+            // A v2 artifact can contain the neighbouring donor's portrait.
+            // Authenticate its retained source image independently; do not
+            // rewrite the canonical model identity or its isolated save path.
+            constexpr unsigned portrait_ids[]{122,123,124,126,125,127,128,129,130,131};
+            const auto portrait_id=portrait_ids[item.base_character];
+            if(character.root.portrait!=portrait_id) {
+                const auto& source_records=package->at("records");
+                if(!source_records.is_array() || source_records.size()>65536)
+                    throw Error("Character source portrait record list is invalid.");
+                const json* portrait_record=nullptr;
+                for(const auto& record:source_records)
+                    if(record.at("section")==4 && record.at("record")==portrait_id) {
+                        if(portrait_record)throw Error("Ambiguous retained character portrait.");
+                        portrait_record=&record;
+                    }
+                // Unchanged source records inherit the verified original.
+                const auto original_portrait=stock->record(4,portrait_id);
+                character.source_portrait.assign(original_portrait.begin(),original_portrait.end());
+                if(portrait_record) {
+                    const auto hash=field(*portrait_record,"sha256");
+                    if(!digest(hash))throw Error("Invalid retained portrait digest.");
+                    const auto file=source/"blobs"/hash;
+                    if(std::filesystem::is_symlink(file) || !std::filesystem::is_regular_file(file))
+                        throw Error("Retained portrait is missing. Prepare this character's source import again.");
+                    auto bytes=read_file(file,4*MiB);
+                    if(sha256(bytes)!=hash || bytes.size()!=portrait_record->at("size").get<std::size_t>())
+                        throw Error("Retained portrait failed its source integrity check.");
+                    character.source_portrait=std::move(bytes);
+                }
+                // Decode/validate every frame now, on the preparation worker.
+                character_portrait_changed(character.source_portrait,original_portrait);
+                character.source_portrait_id=portrait_id;
+            }
+
             std::array<Bytes,3> audio;
             constexpr unsigned ids[]{2,3,7};
             // US 1.0 and 1.1 share the original control/sample banks. The two
@@ -687,6 +721,16 @@ std::vector<PreparedCharacter> TrackCatalog::load_selected_characters(std::span<
                 throw Error("Retained race audio belongs to a different character import.");
             character.race_audio=prepare_character_race_audio(audio[0],audio[1],audio[2],item.base_character);
         }
+        constexpr unsigned correct_portraits[]{122,123,124,126,125,127,128,129,130,131};
+        const auto correct_portrait=correct_portraits[character.root.base_character];
+        if(character.root.portrait!=correct_portrait && character.source_portrait.empty()) {
+            const auto bytes=stock->record(4,correct_portrait);
+            character.source_portrait.assign(bytes.begin(),bytes.end());
+            character.source_portrait_id=correct_portrait;
+        }
+        if(character.source_portrait.size()>32*MiB-source_portrait_bytes)
+            throw Error("Recovered character portraits exceed the presentation memory budget.");
+        source_portrait_bytes+=character.source_portrait.size();
         result.push_back(std::move(character));
         if(result.size()>MaxActiveStageCharacters)throw Error("The character library exceeds the native presentation identity range.");
     }

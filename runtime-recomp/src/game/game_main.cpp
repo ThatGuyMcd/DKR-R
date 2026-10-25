@@ -1,3 +1,10 @@
+#include "build_contract.hpp"
+#include "diagnostics.hpp"
+#include "rollback_policy.hpp"
+#include "invite_handoff.hpp"
+#include "party_link.hpp"
+#include "custom_records.hpp"
+#include "shared_saves.hpp"
 #include "game_registration.hpp"
 #include "revision_addresses.hpp"
 #include "null_renderer.hpp"
@@ -42,6 +49,8 @@
 #include "rt64_renderer.hpp"
 #include "runtime_texture_packs.hpp"
 #include "runtime_ui.hpp"
+#include "achievements.hpp"
+#include "camera_runtime.hpp"
 #include "runtime_hud_layout.hpp"
 #include <SDL.h>
 #endif
@@ -164,6 +173,7 @@ std::vector<std::filesystem::path> RecoverySaveLocations(const char* executable_
     std::error_code ec;
     const auto executable = std::filesystem::absolute(std::filesystem::u8path(executable_argument), ec);
     if (!ec) roots.push_back(executable.parent_path() / "dkr-runtime-data");
+    roots.push_back(dkr::runtime::portable::application_directory() / "dkr-runtime-data");
 #if defined(_WIN32)
     if (const char* app_data = std::getenv("APPDATA"); app_data && *app_data)
         roots.emplace_back(std::filesystem::path(app_data) / "DKRPort");
@@ -580,6 +590,7 @@ int DkrMain(int argc, char** argv) {
     });
 #endif
     dkr::runtime::startup_performance::mark("process-entry");
+    std::fprintf(stderr,"[lobby-stability][build] version=%s contract=%s\n",DKR_RELEASE_VERSION,DKR_LOBBY_STABILITY_CONTRACT);
 #if defined(_WIN32)
     SetUnhandledExceptionFilter(RuntimeCrashFilter);
     if (argc == 4 && std::string_view(argv[1]) == "--self-test-install-layout") {
@@ -1081,7 +1092,7 @@ int DkrMain(int argc, char** argv) {
         },
         .presentation_allowed_callback = []() {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-            if(dkr_experimental_bootstrap_active())return false;
+            if(dkr_experimental_bootstrap_active())return dkr::lobby_stability::bootstrap_audio_worker_allowed();
 #endif
             return dkr::runtime::netplay::external_side_effects_allowed();
         }};
@@ -1142,6 +1153,7 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::rev_a_asset_mutex::reset_statistics();
         dkr::runtime::legacy::begin_session(nullptr);
         dkr::runtime::code_mods::reset();
+        dkr::runtime::camera::reset();
         bool selecting_save_owner = false;
         std::shared_ptr<const dkr::mods::online::RuntimeResources> online_mods;
         try {
@@ -1161,22 +1173,57 @@ int DkrMain(int argc, char** argv) {
             } else dkr::runtime::legacy::begin_prepared(prepared_mods);
             const auto online_save = dkr::runtime::netplay::session().runtime_view();
             const auto code_set=online_mods?online_mods->code():prepared_mods->code;
-            if(code_set&&online_save.active&&(!online_save.launch_descriptor||online_save.launch_descriptor->synchronization!=
+            dkr::runtime::achievements::begin(online_save.active,0,code_set&&!code_set->ordered.empty(),dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())||(code_set&&std::any_of(code_set->ordered.begin(),code_set->ordered.end(),[](const auto& p){return p->development;})));
+            if(code_set&&!code_set->ordered.empty()&&online_save.active&&(!online_save.launch_descriptor||online_save.launch_descriptor->synchronization!=
                     dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback))
-                throw dkr::mods::Error("Custom Magic Codes require the owned Experimental Rollback engine online.");
+                throw dkr::mods::Error("Custom Magic Codes require the owned Rollback engine online.");
+            dkr::runtime::camera::begin(config_directory,DKR_RELEASE_VERSION,registered_revision,online_save.active,code_set&&std::any_of(code_set->ordered.begin(),code_set->ordered.end(),[](const auto& p){return p->api==2&&p->modules.contains("presentation2");}));
             dkr::runtime::code_mods::begin(code_set,registered_revision,
                 online_save.launch_descriptor?online_save.launch_descriptor->match_id:0x444B52434F444531ULL,online_save.active);
-            selecting_save_owner = true;
+            const bool development_code=code_set&&std::any_of(code_set->ordered.begin(),code_set->ordered.end(),[](const auto& p){return p->development;});
+              const bool development_session=online_save.active?(online_save.launch_descriptor&&online_save.launch_descriptor->development):development_code;
+              if(development_code&&online_save.active&&!development_session)throw dkr::mods::Error("Enable Development lobby before using development code mods online.");
+              const auto developer_folder=development_session?std::filesystem::path("development")/(code_set?code_set->identity.substr(0,24):"online-"+std::to_string(online_save.launch_descriptor->match_id)):prepared_mods->save_subfolder;
+              const auto developer_paks=development_session?config_directory/"saves"/developer_folder/"paks":prepared_mods->pak_directory;
+              if(development_session&&!online_save.active&&
+                 !dkr::runtime::saves::shared::prepare_development(config_directory,developer_folder,rom_error))throw dkr::mods::Error(rom_error);
+              selecting_save_owner = true;
+            if(dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())) {
+                auto party=dkr::runtime::spectators::party_link(&dkr::runtime::netplay::session());
+                std::vector<std::uint8_t> seed;{std::scoped_lock lock(party->mutex);seed=party->seed;}
+                if(seed.size()!=512)throw dkr::mods::Error("Party bootstrap is missing its verified save seed.");
+                dkr::runtime::spectators::party_bootstrap_seed(seed);
+                ultramodern::set_save_storage_callbacks({dkr::runtime::spectators::party_bootstrap_path,
+                    dkr::runtime::spectators::party_bootstrap_load,dkr::runtime::spectators::party_bootstrap_write});
+                dkr::runtime::pak::begin_session_directory({});
+                std::filesystem::path records;
+                if(online_save.host) {std::vector<std::uint8_t> active;std::filesystem::path owner;
+                    if(!dkr::runtime::saves::read_online_adventure(true,online_save.launch_descriptor->match_id,active,owner,rom_error)||active!=seed)throw dkr::mods::Error("The host online seed changed during party boot: "+rom_error);
+                    records=owner.parent_path()/"custom-records-v1.bin";}
+                if(!dkr::runtime::saves::records::begin(records,false,rom_error))throw dkr::mods::Error(rom_error);
+            } else {
+                dkr::runtime::spectators::party_bootstrap_seed({});
             if (!dkr::runtime::saves::prepare_runtime_save_context(config_directory,
-                    prepared_mods->save_subfolder, prepared_mods->pak_directory,
+                    developer_folder, developer_paks,
                     online_save.active, online_save.host,
                     online_save.launch_descriptor ? online_save.launch_descriptor->match_id : 0,
-                    online_save.online_save_hash, rom_error)) throw dkr::mods::Error(rom_error);
+                    online_save.online_save_hash, rom_error,development_session)) throw dkr::mods::Error(rom_error);
+            {
+                const auto path=dkr::runtime::saves::runtime_save_path();
+                const auto utf8=path.generic_u8string();
+                std::fprintf(stderr,"[save][selected] owner=%s path=%s progress=%s\n",
+                    online_save.active?"online":development_session?"development":"personal",
+                    std::string(utf8.begin(),utf8.end()).c_str(),dkr::runtime::saves::shared::describe(path).c_str());
+            }
             ultramodern::set_save_storage_callbacks({
                 dkr::runtime::saves::runtime_save_path,
                 dkr::runtime::saves::load_runtime_save,
                 dkr::runtime::saves::commit_runtime_save});
             dkr::runtime::pak::begin_session_directory(dkr::runtime::saves::runtime_pak_directory());
+            if(!dkr::runtime::saves::records::begin(development_session?std::filesystem::path{}:
+                dkr::runtime::saves::runtime_save_path().parent_path()/"custom-records-v1.bin",
+                !development_session&&(!online_save.active||online_save.host),rom_error))throw dkr::mods::Error(rom_error);
+            }
         } catch(const std::exception& error) {
             std::fprintf(stderr,"[legacy][launch] %s\n",error.what());
 #if DKR_RUNTIME_HAS_RT64
@@ -1184,9 +1231,16 @@ int DkrMain(int argc, char** argv) {
                 // No guest producer exists yet. A locked/invalid route is a
                 // recoverable refusal, never permission to open an offline fallback.
                 dkr::runtime::pak::begin_session_directory({});
-                dkr::runtime::saves::retire_runtime_save_context();
+                {std::string records_error;if(!dkr::runtime::saves::records::finish(records_error)) {
+            std::fprintf(stderr,"[save][custom-records] %s\n",records_error.c_str());
+#if DKR_RUNTIME_HAS_RT64
+            dkr::runtime::ui::report_mod_error(records_error);
+#endif
+        }}
+        dkr::runtime::saves::retire_runtime_save_context();
                 dkr::runtime::legacy::begin_session(nullptr);
                 dkr::runtime::code_mods::reset();
+        dkr::runtime::camera::reset();
                 prepared_mods.reset();
                 if (dkr::runtime::netplay::session().active())
                     dkr::runtime::netplay::session().fail_runtime_start(std::string("Save protection: ") + error.what());
@@ -1246,6 +1300,7 @@ int DkrMain(int argc, char** argv) {
 #endif
         std::fprintf(stderr,
                      "[boot] runtime initialized; waiting for first safe VI state\n");
+        dkr::runtime::invites::game_running(true);
         std::atomic<bool> runtime_finished{false};
 #if defined(__ANDROID__)
         dkr::runtime::graphics_health::reset();
@@ -1279,6 +1334,9 @@ int DkrMain(int argc, char** argv) {
                 admitted_lobby->fail_runtime_start(rom_error.empty()?"This ROM does not have an owned rollback payload.":rom_error);
                 dkr::runtime::platform::shutdown();return 5;
             }
+            std::fprintf(stderr,"[lobby-start][bootstrap] match=%llu local=%u players=%u resources=%s event=begin-retail-bootstrap\n",
+                static_cast<unsigned long long>(owned_descriptor->match_id),unsigned(initial_online.local_slot),unsigned(owned_descriptor->player_count),online_mods?online_mods->fingerprint().c_str():"stock");
+            dkr::lobby_stability::begin_bootstrap(owned_descriptor->match_id);
             local_bootstrap_session=std::make_unique<dkr::runtime::netplay::DirectSession>();
             dkr::runtime::netplay::bind_external_session(local_bootstrap_session.get());
             // Local construction has neutral virtual controls. It may neither
@@ -1341,11 +1399,17 @@ int DkrMain(int argc, char** argv) {
                 if (dkr::runtime::host_tasks::registry.take_stall(stalled, task_check_now)) {
                     char message[256];
                     std::snprintf(message, sizeof(message),
-                        "Task %llu (%08X) has made no progress for 15 seconds at %s (pending=%u). "
+                        "Task %llu (%08X, type=%u) has made no progress for 15 seconds at %s (pending=%u). "
                         "It may still finish. No completion has been forced.",
-                        static_cast<unsigned long long>(stalled.token.generation), stalled.token.address,
+                        static_cast<unsigned long long>(stalled.token.generation), stalled.token.address,stalled.type,
                         dkr::runtime::host_tasks::stage_name(stalled.stage), stalled.pending);
                     std::fprintf(stderr, "[host-task][stall] %s\n", message);
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+                    if(owned_launch)std::fprintf(stderr,"[lobby-start][bootstrap] match=%llu bootstrap-active=%u elapsed-ms=%lld task-type=%u task-generation=%llu stage=%s\n",
+                        static_cast<unsigned long long>(owned_descriptor->match_id),unsigned(dkr_experimental_bootstrap_active()),
+                        static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(task_check_now-runtime_started_at).count()),stalled.type,
+                        static_cast<unsigned long long>(stalled.token.generation),dkr::runtime::host_tasks::stage_name(stalled.stage));
+#endif
 #if defined(__ANDROID__)
                     if (task_stalls_reported == 0) dkr::runtime::android::report_task_stall(message);
 #endif
@@ -1400,8 +1464,12 @@ int DkrMain(int argc, char** argv) {
         if(owned_launch) {
             dkr::runtime::netplay::bind_external_session(admitted_lobby);
             local_bootstrap_session.reset();
+            dkr::lobby_stability::end_bootstrap();
             auto bootstrap=dkr_experimental_bootstrap_take_state();
-            if(runtime_failure==nullptr) {
+            std::fprintf(stderr,"[lobby-start][bootstrap] match=%llu event=retail-bootstrap-ended elapsed-ms=%lld memory-bytes=%zu error=%s\n",
+                static_cast<unsigned long long>(owned_descriptor->match_id),static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-runtime_started_at).count()),
+                bootstrap.memory.size(),bootstrap.error.c_str());
+            if(runtime_failure==nullptr&&dkr::runtime::ui::lifecycle_request()!=dkr::runtime::ui::LifecycleRequest::StopGame) {
                 std::string owned_error;
                 bool owned_ok=false;
                 try {
@@ -1421,7 +1489,7 @@ int DkrMain(int argc, char** argv) {
                     owned_failed=true;
                     std::fprintf(stderr,"[rollback][owned] %s\n",owned_error.c_str());
                     admitted_lobby->fail_runtime_start(owned_error);
-                    dkr::runtime::ui::report_mod_error("Experimental online play stopped safely: "+owned_error);
+                    dkr::runtime::ui::report_mod_error("Online play stopped safely: "+owned_error);
                 }
             }
             return_from_owned=true;
@@ -1433,7 +1501,16 @@ int DkrMain(int argc, char** argv) {
 #endif
         dkr::runtime::pak::begin_session_directory({});
         const auto save_failure = dkr::runtime::saves::runtime_save_failure();
+        std::string invite_records_failure;
+        {std::string records_error;if(!dkr::runtime::saves::records::finish(records_error)) {
+            invite_records_failure=records_error;
+            std::fprintf(stderr,"[save][custom-records] %s\n",records_error.c_str());
+#if DKR_RUNTIME_HAS_RT64
+            dkr::runtime::ui::report_mod_error(records_error);
+#endif
+        }}
         dkr::runtime::saves::retire_runtime_save_context();
+        dkr::runtime::invites::game_running(false);
 #if DKR_RUNTIME_HAS_RT64
         if (!save_failure.empty()) dkr::runtime::ui::report_mod_error("Save protection: " + save_failure);
 #endif
@@ -1442,6 +1519,7 @@ int DkrMain(int argc, char** argv) {
         const auto code_failure=dkr::runtime::code_mods::failure();
         if(!code_failure.empty()){if(!mod_failure.empty())mod_failure+="; ";mod_failure+=code_failure;}
         dkr::runtime::code_mods::reset();
+        dkr::runtime::camera::reset();
         dkr::runtime::legacy::begin_session(nullptr);
         if (registered_revision == dkr::runtime::rom::Revision::UsV80) {
             const auto mutex_stats =
@@ -1480,6 +1558,8 @@ int DkrMain(int argc, char** argv) {
             if(!mod_failure.empty())dkr::runtime::ui::report_mod_error("Custom content stopped safely: "+mod_failure);
             std::fprintf(stderr,
                          "[boot][stop] game stopped; returning to launcher\n");
+            dkr::runtime::invites::finish_return(!save_failure.empty()?save_failure:!invite_records_failure.empty()?invite_records_failure:!mod_failure.empty()?mod_failure:
+                owned_failed?std::string("The previous online game did not finish safely. Review its error before joining."):std::string{});
             dkr::runtime::ui::reset_lifecycle_request();
             const bool software_launcher_return = dkr::runtime::launcher_surface_recovery(
                 owned_failed, return_from_owned, !mod_failure.empty() || !save_failure.empty());

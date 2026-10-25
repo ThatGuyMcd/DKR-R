@@ -1,5 +1,5 @@
 #include "probe_bridge.h"
-#include "netplay/experimental_eeprom.hpp"
+#include "../../src/game/netplay/experimental_eeprom.hpp"
 namespace { dkr::runtime::netplay::experimental::Eeprom* owned=nullptr; }
 extern "C" void dkr_probe_bind_eeprom(void* save) { owned=static_cast<dkr::runtime::netplay::experimental::Eeprom*>(save); }
 extern "C" int dkr_probe_eeprom_enabled(void) {

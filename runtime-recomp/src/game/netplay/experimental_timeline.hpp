@@ -24,7 +24,7 @@ public:
     // the presentation frontier does not rewind. The paced live clock may
     // publish a bounded lead, never overwrite a final sample on the wire.
     bool needs_local_input(bool live_lead=false) const;
-    OwnerInputResult sample_local(PackedInput input,bool live_lead=false);
+    OwnerInputResult sample_local(PackedInput input,bool live_lead=false,dkr::sdk2::Command command={});
     OwnerInputResult receive_authenticated(std::uint8_t peer, std::span<const std::uint8_t> bytes);
     // Admit received immutable inputs into the driver's ledger BEFORE querying
     // whether to sample. Does not capture, restore, tick or commit the world.
@@ -42,8 +42,8 @@ public:
     std::uint8_t missing_input_mask() const {return driver_.missing_input_mask();}
     bool scene_boundary_pending() const { return driver_.scene_boundary_pending(); }
 private:
-    struct Pending { std::uint32_t frame = 0; PackedInput input{}; bool valid = false; };
-    bool stage(std::uint8_t owner, std::uint32_t frame, PackedInput input);
+    struct Pending { std::uint32_t frame = 0; PackedInput input{}; bool valid = false; dkr::sdk2::Command command{}; };
+    bool stage(std::uint8_t owner, std::uint32_t frame, PackedInput input,dkr::sdk2::Command command={});
     bool feed();
     Driver driver_;
     OwnerInputHistory inputs_;

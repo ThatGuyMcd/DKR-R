@@ -225,7 +225,7 @@ public:
         std::scoped_lock lock(mutex_);
         for (const auto& [id, peer] : peers_) {
             if (peer->address == address &&
-                (pinned_routes_.contains(peer->remote_id) || pinned_routes_.size() < 4U)) {
+                (pinned_routes_.contains(peer->remote_id) || pinned_routes_.size() < 16U)) {
                 pinned_routes_[peer->remote_id] = {id, address};
                 return;
             }
@@ -792,7 +792,7 @@ private:
         if(control&&peer->control_channel!=control)return;
         peer->departure_reported=true;
         std::erase_if(departed_peers_,[](const auto& p){const auto live=p.lock();return !live||!live->current.load();});
-        if(departed_peers_.size()<4U)departed_peers_.push_back(peer);
+        if(departed_peers_.size()<16U)departed_peers_.push_back(peer);
         if(receive_signal_)receive_signal_->notify();
     }
 
@@ -841,7 +841,7 @@ private:
             std::scoped_lock lock(mutex_);
             if (peer->remote_id.size() > 128U || peer->connection_id.size() > 128U ||
                 retired_peers_.size() + pending_retirements_.load() >= 16U ||
-                (peers_.size() >= 8U && std::none_of(peers_.begin(), peers_.end(), [&](const auto& entry) { return entry.second->remote_id == peer->remote_id; }))) return {};
+                (peers_.size() >= 16U && std::none_of(peers_.begin(), peers_.end(), [&](const auto& entry) { return entry.second->remote_id == peer->remote_id; }))) return {};
             auto existing = std::find_if(
                 peers_.begin(), peers_.end(), [&](const auto& entry) {
                     return entry.second &&

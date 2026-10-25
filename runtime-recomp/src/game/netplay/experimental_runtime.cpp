@@ -1,4 +1,10 @@
+#include "../rollback_policy.hpp"
+#include "party_runtime.hpp"
+#include "party_camera.hpp"
+#include "vehicle_binding.hpp"
+#include "../achievements.hpp"
 #include "experimental_runtime.hpp"
+#include "../mods/sdk2_bridge.hpp"
 #include "experimental_lobby_admission.hpp"
 #include "experimental_checkpoint_hash.hpp"
 #include "experimental_confirmed_output.hpp"
@@ -115,6 +121,9 @@ class ObservedOwnedGame final:public OwnedGame {
     std::unique_ptr<OwnedGame> game_;OwnerActivity& activity_;
 public:
     ObservedOwnedGame(std::unique_ptr<OwnedGame> game,OwnerActivity& activity):game_(std::move(game)),activity_(activity) {}
+    bool development_command(std::uint64_t epoch,std::uint32_t frame,const dkr::sdk2::Command& command,std::string& error)override {
+        return game_->development_command(epoch,frame,command,error);
+    }
     SimulationContract contract() const override {return game_->contract();}
     bool requires_confirmed_tick() const override {return game_->requires_confirmed_tick();}
     std::uint8_t input_dependencies() const override {return game_->input_dependencies();}
@@ -154,6 +163,7 @@ public:
     }
     std::uint32_t confirmed_count() const override {return game_->confirmed_count();}
     std::span<const std::uint8_t> confirmed_save() const override {return game_->confirmed_save();}
+    std::span<const std::uint8_t> confirmed_records() const override {return game_->confirmed_records();}
     std::span<const std::uint8_t> confirmed_paks() const override {return game_->confirmed_paks();}
     bool install_initial_paks(std::uint64_t epoch,std::span<const std::uint8_t> images,std::string& error) override {
         return game_->install_initial_paks(epoch,images,error);
@@ -234,13 +244,171 @@ std::uint32_t pack(PackedInput p) {return p.buttons|(std::uint32_t(std::uint8_t(
 PackedInput unpack(std::uint32_t p) {return {std::uint16_t(p),std::int8_t(p>>16),std::int8_t(p>>24)};}
 }
 bool runtime_available(rom::Revision revision) {return owned_adapter_available(revision);}
-std::string_view runtime_engine_identity(rom::Revision revision) {return owned_adapter_identity(revision);}
+std::string_view runtime_engine_identity(rom::Revision revision) {
+    auto identify=[](rom::Revision r){auto base=std::string(owned_adapter_identity(r));if(base.empty())return base;
+        base+="dcb1e8df777d341f2e96d4ee78cdc4337d32a6ddc86b4b60dbcc46fabfd31efc";base+="893bbedb02a3c87771e75befab107a2ce54641073742be69e97b995a9d0a3bbf";base+="2a82142dc00619b29b80f5f0b6485c3ffe8c0a33e89a7a6c48d0a6ac8eeb4a66";base+="c4d77b07ed3b7f9aabcf7ce1430780fc65a1ce086e62b66a0af672aac40eb5ac";const auto h=digest(std::span(reinterpret_cast<const std::uint8_t*>(base.data()),base.size()));
+        std::string hex;constexpr char digits[]="0123456789abcdef";for(auto c:h){hex+=digits[c>>4];hex+=digits[c&15];}return hex;};
+    static const auto v77=identify(rom::Revision::UsV77),v80=identify(rom::Revision::UsV80);
+    return revision==rom::Revision::UsV77?v77:revision==rom::Revision::UsV80?v80:std::string_view{};
+}
 RuntimeView runtime_view() {std::scoped_lock lock(view_mutex);return view;}
 void request_runtime_stop() {requested_stop=true;}
+bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::filesystem::path& canonical_rom,
+    std::vector<std::uint8_t> bootstrap,DirectSession& lobby,const LaunchDescriptor& launch,
+    unsigned timeout_seconds,std::string& error,std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,
+    std::vector<std::uint8_t> mod_bootstrap,std::vector<std::uint8_t> code_bootstrap) {
+    namespace party=dkr::runtime::spectators;
+    auto hub=party::party_link(&lobby);const auto initial=party::party_link_view(&lobby);
+    std::vector<std::uint8_t> seed;
+    {std::scoped_lock lock(hub->mutex);seed=hub->seed;}
+    if(!initial.enabled||!initial.admitted||seed.size()!=512||bootstrap.empty()) {error="The party launch is missing its verified local bootstrap/save.";return false;}
+    if(initial.stopping){party::party_returned(&lobby,{});ui::report_online_game_end(initial.status,lobby.active());error.clear();return true;}
+    std::fprintf(stderr,"[party][boot] role=%s racers=%u seed=verified\n",initial.host?"host":initial.party.controls[0].member==initial.local?"racer-p1":"member",unsigned(launch.player_count));
+    Shared shared;requested_stop=false;shared.confirmed_save=seed;
+    std::atomic<unsigned> local_port{4};std::atomic<bool> watching{true};
+    ConfirmedSaveWriter save_writer([&,host=initial.host](const ConfirmedSaveSnapshot& s,std::string& e) {
+        // Only the authority stores the communal online bank. Observers never
+        // install host state into a personal save, records bank or controller Pak.
+        if(host&&!launch.development) {
+            if(!saves::commit_online_adventure(true,launch.match_id,s.eeprom,e)||
+               !saves::commit_experimental_online_paks(true,launch.match_id,s.paks,e))return false;
+            if(!s.records.empty()) {
+                std::vector<std::uint8_t> ignored;std::filesystem::path owner;
+                if(!saves::read_online_adventure(true,launch.match_id,ignored,owner,e)||
+                   !saves::records::persist(owner.parent_path()/"custom-records-v1.bin",s.records,e))return false;
+            }
+        }
+        std::scoped_lock lock(shared.mutex);shared.confirmed_save=s.eeprom;e.clear();return true;
+    });
+    RuntimeWorkers workers{shared,save_writer};
+    const auto saved_layout=online_view::requested_layout.load();
+    platform::set_online_input_routing(true,launch.occupied_mask,255);
+    workers.render=std::thread([&] {
+        WorkerCompletion completed{shared.renderer_done};
+        try {
+            std::vector<std::uint8_t> parked(PresentationMailbox::kImageBytes);
+            RT64Renderer renderer(parked.data(),window,false,true);
+            if(!renderer.valid())throw std::runtime_error("The party renderer could not start.");
+            auto config=ultramodern::renderer::get_graphics_config();shared.renderer_ready=true;
+            std::uint64_t generation=0;unsigned previous_target=99;bool previous_watching=true;party::WatchCamera previous_camera=party::WatchCamera::AllSplits;
+            while(!shared.stop) {
+                renderer.reap_owned();auto next_config=ultramodern::renderer::get_graphics_config();
+                if(config!=next_config){renderer.update_config(config,next_config);config=next_config;}
+                const auto v=party::party_link_view(&lobby);const auto p=local_port.load();
+                const auto auto_target=unsigned(std::chrono::duration_cast<std::chrono::seconds>(party::PartyRuntime::Clock::now().time_since_epoch()).count()/8)%launch.player_count;
+                const auto target=watching.load()?(v.camera==party::WatchCamera::Director?auto_target:v.target):p;
+                if(watching.load())online_view::requested_layout=v.camera==party::WatchCamera::AllSplits?online_view::Layout::SplitScreen:online_view::Layout::MyRacer;
+                else if(previous_watching)online_view::requested_layout=saved_layout;
+                previous_watching=watching.load();
+                const auto custom_cars=dkr::mods::vehicles::render_resources();
+                // The legacy private camera closure predates GPU-only custom
+                // car draws. Keep those cars/seat alignment intact by using
+                // the automatic full-screen racing camera for their director.
+                party::spectator_director=watching.load()&&v.camera==party::WatchCamera::Director&&
+                    (!custom_cars||custom_cars->library.packages.empty());
+                if(generation!=v.party.generation||target!=previous_target||previous_camera!=v.camera) {
+                    online_view::Session session;session.players=launch.player_count;session.owner=std::min(target,unsigned(launch.player_count-1));
+                    for(const auto& m:v.party.members)if(m.port)session.names[*m.port]=m.name;
+                    renderer.set_online_view_session(std::move(session));generation=v.party.generation;previous_target=target;previous_camera=v.camera;
+                }
+                bool presented=false;
+                if(renderer.owned_capacity_available())if(auto lease=shared.mailbox.take()){renderer.present_owned(lease,shared.mailbox);presented=true;}
+                if(!presented){renderer.repeat_owned();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+            }
+        }catch(const std::exception& e){shared.fail(e.what());}catch(...){shared.fail("Party presentation worker failed.");}
+    });
+    workers.simulation=std::thread([&] {
+        WorkerCompletion completed{shared.simulation_done};std::unique_ptr<OwnedGame> world;
+        try {
+            auto bytes=read_rom(canonical_rom);std::string message;constexpr std::uint64_t epoch=91;
+            if(!shared.mailbox.begin_epoch(epoch))throw std::runtime_error("Party presentation epoch refused.");
+            const auto revision=lobby.view().room.manifest.revision==Revision::UsV80?rom::Revision::UsV80:rom::Revision::UsV77;
+            world=make_owned_game_for_revision(revision,bootstrap,bytes,epoch,shared.mailbox,
+                [&](ConfirmedAudio a,std::string& e){return shared.audio.push(a.rate,a.pcm,e);},message,false,
+                std::uint32_t(lobby.view().room.manifest.magic_codes_hash),seed,
+                OwnedBootOptions{true,launch.player_count,launch.host_control,enhancements::multiplayer_race_music_enabled(),mods,
+                    std::move(mod_bootstrap),mods?mods->code():nullptr,std::move(code_bootstrap),launch.match_id,launch.development});
+            if(!world)throw std::runtime_error(message);
+            std::fprintf(stderr,"[party][boot] owned world ready; bytes=%zu\n",world->contract().state_bytes);
+            if(initial.host) {std::vector<std::uint8_t> paks;if(!saves::read_experimental_online_paks(true,launch.match_id,paks,message)||!world->install_initial_paks(epoch,paks,message))throw std::runtime_error(message);}
+            dkr::sdk2::authority(initial.host,launch.development);
+            world->set_confirmed_rumble_sink([&](unsigned p,bool enabled){if(!watching.load()&&p==local_port.load())shared.confirmed_motor.store(enabled?1:0);});
+            party::PartyRuntime runtime(&lobby,*world,shared.mailbox,launch,[](auto b){return digest(b);});
+            if(!runtime.begin(message))throw std::runtime_error(message);
+            std::fprintf(stderr,"[party][boot] checkpoint admission started\n");
+            bool prior_watching=true;unsigned prior_port=4;auto next_save=Network::Clock::now()+std::chrono::seconds(5);
+            while(!shared.stop) {
+                OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::Pump);
+                const auto now=Network::Clock::now();
+                if(!runtime.pulse(now,unpack(shared.input.load()),message)) {
+                    if(!message.empty())throw std::runtime_error(message);shared.stop=true;break;
+                }
+                watching=runtime.watching();local_port=runtime.local_port();
+                if(prior_watching!=watching.load()||prior_port!=local_port.load()) {
+                    // A role transition starts fresh local achievement context;
+                    // no observation from spectating can retroactively unlock.
+                    dkr::runtime::achievements::begin(true,local_port.load(),bool(mods),launch.development||watching.load());
+                    prior_watching=watching.load();prior_port=local_port.load();
+                }
+                const auto cursor=runtime.next();
+                const auto stats=runtime.statistics();
+                report({true,PumpWait::None,cursor.epoch,cursor.frame,runtime.confirmed(),stats.rollbacks,stats.replayed_frames,runtime.status(),cursor.epoch==0});
+                if(now>=next_save) {
+                    if(initial.host&&!save_writer.submit(world->confirmed_save(),world->confirmed_paks(),message,world->confirmed_records()))throw std::runtime_error(message);
+                    next_save=now+std::chrono::seconds(5);
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }catch(const std::exception& e){std::fprintf(stderr,"[party][failure] %s\n",e.what());shared.fail(e.what());if(!initial.host&&party::party_watching(&lobby))lobby.disconnect("Stopped watching: "+std::string(e.what()));else party::party_stop(&lobby,e.what());}
+         catch(...){shared.fail("Party simulation worker failed.");if(!initial.host&&party::party_watching(&lobby))lobby.disconnect("Stopped watching.");else party::party_stop(&lobby,"Party simulation stopped.");}
+        if(world&&initial.host) {std::string message;if(!save_writer.submit(world->confirmed_save(),world->confirmed_paks(),message,world->confirmed_records()))shared.fail(message);}
+    });
+    const auto start=Network::Clock::now();ConfirmedAudioMailbox::Block block;
+    std::array<std::int16_t,ConfirmedAudioMailbox::kMaximumBytes/2> pcm{};unsigned routed=99;
+    std::uint16_t prior_buttons=0;
+    while(!shared.stop&&!shared.simulation_done) {
+        const auto port=local_port.load();
+        if(port!=routed){for(int p=0;p<4;++p)platform::set_rumble(p,false);platform::set_online_input_routing(true,launch.occupied_mask,port<4?std::uint8_t(port):255);routed=port;}
+        const auto motor=shared.confirmed_motor.exchange(-1);if(motor>=0&&port<4&&!watching.load())platform::set_rumble(int(port),motor!=0);
+        platform::pump_window_events(nullptr);platform::poll_input();
+        std::uint16_t buttons=0;float x=0,y=0;bool blocked=false;platform::get_local_online_input(&buttons,&x,&y,&blocked);
+        const auto pressed=std::uint16_t(buttons&~prior_buttons);prior_buttons=buttons;
+        if(watching.load()&&!blocked) {
+            const auto camera=party::party_link_view(&lobby);
+            if(pressed&0x0008)party::party_camera(&lobby,party::WatchCamera((unsigned(camera.camera)+1)%3),camera.target);
+            if(pressed&0x0300)party::party_camera(&lobby,party::WatchCamera::Follow,
+                (camera.target+((pressed&0x0100)?1:unsigned(launch.player_count-1)))%launch.player_count);
+        }
+        shared.input=pack(blocked||watching.load()?PackedInput{}:PackedInput{buttons,std::int8_t(std::clamp(x,-1.0F,1.0F)*80),std::int8_t(std::clamp(y,-1.0F,1.0F)*80)});
+        for(unsigned i=0;i<ConfirmedAudioMailbox::kCapacity&&shared.audio.take(block);++i) {
+            for(std::size_t j=0;j<block.bytes/2;++j)pcm[j^1]=std::int16_t(std::uint16_t(block.pcm[2*j])|(std::uint16_t(block.pcm[2*j+1])<<8));
+            platform::set_audio_frequency(block.rate);platform::queue_audio(pcm.data(),block.bytes/2);
+        }
+        if(const auto failure=save_writer.error();!failure.empty())shared.fail(failure);
+        const auto state=party::party_link_view(&lobby);if(state.stopping||!state.enabled)shared.stop=true;
+        const auto lifecycle=ui::lifecycle_request();
+        if(requested_stop||lifecycle!=ui::LifecycleRequest::None||(timeout_seconds&&Network::Clock::now()-start>=std::chrono::seconds(timeout_seconds))) {
+            std::fprintf(stderr,"[party][exit] role=%s requested=%u lifecycle=%d\n",initial.host?"host":"client",unsigned(requested_stop.load()),int(lifecycle));
+            if(lifecycle==ui::LifecycleRequest::Exit||lifecycle==ui::LifecycleRequest::Restart||requested_stop)lobby.disconnect(initial.host?"The host closed the lobby.":"Left the lobby.");
+            else if(watching.load()&&!initial.host)lobby.disconnect("Stopped watching.");
+            else party::party_stop(&lobby,"Returned to the lobby.");
+            shared.stop=true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    workers.retire();
+    party::spectator_director=false;online_view::requested_layout=saved_layout;
+    {std::scoped_lock lock(shared.mutex);error=shared.failure;party::party_returned(&lobby,shared.confirmed_save);}
+    if(ui::lifecycle_request()!=ui::LifecycleRequest::Exit&&ui::lifecycle_request()!=ui::LifecycleRequest::Restart)
+        ui::report_online_game_end(error.empty()?party::party_link_view(&lobby).status:error,lobby.active());
+    return error.empty();
+}
+
 bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesystem::path& canonical_rom,
     std::vector<std::uint8_t> bootstrap,DirectSession& lobby,const LaunchDescriptor& accepted_launch,
     unsigned timeout_seconds,std::string& error,bool scripted_check,
     std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,std::vector<std::uint8_t> mod_bootstrap,std::vector<std::uint8_t> code_bootstrap) {
+    if(dkr::runtime::spectators::party_enabled(&lobby))return run_party_runtime(window,canonical_rom,std::move(bootstrap),lobby,accepted_launch,timeout_seconds,error,std::move(mods),std::move(mod_bootstrap),std::move(code_bootstrap));
     const std::optional<LaunchDescriptor> launch{accepted_launch};const auto initial=lobby.runtime_view();
     // A departure may retire the accepted descriptor during cold boot, or
     // between this caller and the worker startup. Validate against the caller's
@@ -261,6 +429,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
     // All peers use the same compact N64 owner roster even if a departed lobby
     // slot leaves a hole. The authenticated network routes retain their slots.
     LobbyRoute route(lobby,*launch);const auto local=route.owner(initial.local_slot);
+    dkr::runtime::achievements::begin(true,local,bool(mods),launch->development);
     if(local>=launch->player_count){error="The local racer is absent from the accepted roster.";return false;}
     std::vector<std::uint8_t> seed;std::filesystem::path save_path;
     if(!saves::read_online_adventure(initial.host,launch->match_id,seed,save_path,error)||
@@ -272,6 +441,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
     ConfirmedSaveWriter save_writer([&,host=initial.host,match=launch->match_id,
         last_save=seed,last_paks=std::vector<std::uint8_t>{}](const ConfirmedSaveSnapshot& snapshot,std::string& message) mutable {
         OwnerActivity::Scope stage(shared.save_activity,OwnerStage::SaveWrite);
+        if(launch->development){message.clear();return true;}
         if(snapshot.eeprom!=last_save) {
             if(!saves::commit_online_adventure(host,match,snapshot.eeprom,message))return false;
             last_save=snapshot.eeprom;
@@ -279,6 +449,11 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
         if(snapshot.paks!=last_paks) {
             if(!saves::commit_experimental_online_paks(host,match,snapshot.paks,message))return false;
             last_paks=snapshot.paks;
+        }
+        if(!snapshot.records.empty()) {
+            std::vector<std::uint8_t> ignored;std::filesystem::path owner;
+            if(!saves::read_online_adventure(host,match,ignored,owner,message)||
+               !saves::records::persist(owner.parent_path()/"custom-records-v1.bin",snapshot.records,message))return false;
         }
         std::scoped_lock lock(shared.mutex);shared.confirmed_save=snapshot.eeprom;return true;
     });
@@ -330,9 +505,10 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                     message,false,std::uint32_t(lobby.view().room.manifest.magic_codes_hash),seed,
                     OwnedBootOptions{true,launch->player_count,launch->host_control,
                         enhancements::multiplayer_race_music_enabled(),mods,std::move(mod_bootstrap),
-                        mods?mods->code():nullptr,std::move(code_bootstrap),launch->match_id});
+                        mods?mods->code():nullptr,std::move(code_bootstrap),launch->match_id,launch->development});
             }
             if(!world)throw std::runtime_error(message);
+            dkr::sdk2::authority(initial.host,launch->development);
             world=std::make_unique<ObservedOwnedGame>(std::move(world),shared.simulation_activity);
             if(initial.host) {
                 std::vector<std::uint8_t> pak_seed;
@@ -414,6 +590,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                 simulation_started=true;
                 NetworkConfiguration config;if(!route.configuration(admission.incarnation(),config,message))throw std::runtime_error(message);
                 Network network(session,admission);if(!network.start(config,message))throw std::runtime_error(message);Pump pump(session,network);
+                pump.command_source([local,development=launch->development]{return local==0&&development?dkr::sdk2::take(true):dkr::sdk2::Command{};});
                 std::uint64_t published_epoch=0;std::uint32_t published_frame=UINT32_MAX,published_replays=UINT32_MAX;
                 auto last_save_at=seed;
                 const auto initial_paks=world->confirmed_paks();
@@ -499,7 +676,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                     const auto next_view=std::tuple{pump.view().wait,session.epoch(),
                         stats.next_frame,stats.confirmed_frames,stats.rollbacks,stats.replayed_frames};
                     if(!reported_view||*reported_view!=next_view) {
-                        report({true,pump.view().wait,session.epoch(),stats.next_frame,stats.confirmed_frames,stats.rollbacks,stats.replayed_frames,"Experimental rollback",false,session.missing_input_mask()});
+                        report({true,pump.view().wait,session.epoch(),stats.next_frame,stats.confirmed_frames,stats.rollbacks,stats.replayed_frames,"Rollback",false,session.missing_input_mask()});
                         reported_view=next_view;
                     }
                     if(now>=next_save) {
@@ -507,8 +684,8 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                         const auto confirmed=world->confirmed_save();
                         const auto paks=world->confirmed_paks();
                         if(!std::equal(confirmed.begin(),confirmed.end(),last_save_at.begin(),last_save_at.end())||
-                           !std::equal(paks.begin(),paks.end(),last_paks_at.begin(),last_paks_at.end())) {
-                            if(!save_writer.submit(confirmed,paks,message))throw std::runtime_error(message);
+                           !std::equal(paks.begin(),paks.end(),last_paks_at.begin(),last_paks_at.end())||!world->confirmed_records().empty()) {
+                            if(!save_writer.submit(confirmed,paks,message,world->confirmed_records()))throw std::runtime_error(message);
                             // These are enqueued, not yet durable. The writer
                             // owns the persistence proof and final return fence.
                             last_save_at.assign(confirmed.begin(),confirmed.end());
@@ -539,7 +716,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
         if(world) try {
             OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::SaveSnapshot);
             std::string message;
-            if(!save_writer.submit(world->confirmed_save(),world->confirmed_paks(),message))shared.fail(message);
+            if(!save_writer.submit(world->confirmed_save(),world->confirmed_paks(),message,world->confirmed_records()))shared.fail(message);
         } catch(const std::exception& e){shared.fail(e.what());}
           catch(...){shared.fail("The confirmed online save could not be retained.");}
     });

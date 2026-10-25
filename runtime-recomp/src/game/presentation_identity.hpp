@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <limits>
 #include <span>
+#include <vector>
 
 namespace dkr::runtime::presentation {
 
@@ -2387,6 +2388,7 @@ struct PresentationMarkerList {
     std::size_t count = 0U;
 };
 struct LocatedPresentationMarker {std::uint32_t address;PresentationMarker marker;};
+std::vector<LocatedPresentationMarker> camera_world_boundaries();
 struct OwnedMatrixBinding {std::uint32_t address;MatrixInterpolation interpolation;bool weak=false;};
 struct OwnedShadowBinding {std::uint16_t token;RigidShadowOwnerPolicy policy;ShadowOwnerMotionSample motion;};
 

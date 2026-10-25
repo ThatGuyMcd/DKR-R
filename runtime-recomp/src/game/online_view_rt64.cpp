@@ -57,7 +57,7 @@ void Pass::prepare(const Session& session,std::span<const dkr_owned_draw_event> 
     if(!p.plan.eligible)return;
     for(unsigned i=0;i<events.size();++i) {
         const auto& e=events[i];
-        if(e.kind<DKR_OWNED_ONLINE_VIEW || e.kind==DKR_OWNED_LOCAL_MODEL || e.kind==DKR_OWNED_LOCAL_OBJECT)continue;
+        if(e.kind<DKR_OWNED_ONLINE_VIEW || e.kind==DKR_OWNED_LOCAL_MODEL || e.kind==DKR_OWNED_LOCAL_OBJECT || e.kind==DKR_OWNED_CAMERA_WORLD_END)continue;
         if(p.count==p.events.size()||!dkr_owned_draw_event_valid(&e)) {p.plan={};p.count=0;return;}
         p.events[p.count++]={e,i};
     }

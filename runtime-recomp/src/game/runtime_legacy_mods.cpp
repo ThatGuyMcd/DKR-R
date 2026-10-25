@@ -1,4 +1,15 @@
+#include "primary_heap.h"
+#include "owned_vehicle_menu.hpp"
+#include <array>
+#include <cstring>
+#include "resident_music.hpp"
+#include "custom_records.hpp"
 #include "runtime_legacy_mods.hpp"
+#include "achievements.hpp"
+#include "vehicle_binding.hpp"
+#include "vehicle_world.hpp"
+#include <bit>
+#include "mods/magic_code_package.hpp"
 #include "atomic_snapshot.hpp"
 #include "custom_tracks.hpp"
 #include "runtime_netplay.hpp"
@@ -68,11 +79,12 @@ struct CharacterState {
 };
 struct MusicBinding {
     std::mutex mutex;
-    mods::online::MusicState state;
+    mods::online::resident_music::State state;
     MusicBinding(std::shared_ptr<const mods::online::MusicLibrary> songs,bool rev80):state(std::move(songs),rev80){}
-    explicit MusicBinding(mods::online::MusicState value):state(std::move(value)){}
+    explicit MusicBinding(mods::online::resident_music::State value):state(std::move(value)){}
 };
 struct WorldState {
+    std::shared_ptr<vehicles::World> vehicles;
     AtomicSnapshot<mods::RuntimeSession> session;
     AtomicSnapshot<const mods::PreparedModLaunch> launch;
     AtomicSnapshot<MenuState> menu;
@@ -85,11 +97,15 @@ struct WorldState {
     std::shared_ptr<const custom_tracks::PreparedTracks> authored;
     std::vector<mods::TrackMenuCup> cups;
     bool private_owner=false,frozen_online=false,custom_ai=false;
+    bool records_restored=false;
+    mods::Bytes records_last;
     std::uint32_t pending_course_heap=0;
 };
 WorldState ordinary_world;
 std::atomic<bool> ordinary_music_enabled{false};
 thread_local WorldState* private_world=nullptr;
+struct OwnedVehicleDrawCallbacks {RecompiledEntrypoint frame=nullptr,text_width=nullptr;};
+thread_local OwnedVehicleDrawCallbacks owned_vehicle_draw_callbacks;
 WorldState& current_world(){return private_world?*private_world:ordinary_world;}
 template<class T,AtomicSnapshot<T> WorldState::*Member>struct WorldSlot {
     std::shared_ptr<T> load()const{return (current_world().*Member).load();}
@@ -112,6 +128,7 @@ std::vector<custom_tracks::TrackSelectEntry> authored_courses() {
     return world.private_owner || world.frozen_online?
         (world.authored?world.authored->courses:std::vector<custom_tracks::TrackSelectEntry>{}):custom_tracks::track_select_entries();
 }
+#include "records_guest.inl"
 bool frozen_courses(){return current_world().private_owner || current_world().frozen_online;}
 // Retail Tracks mode only lets a player change vehicle on a course already
 // cleared in Adventure: func_80092188 tests courseFlags & RACE_CLEARED before
@@ -224,9 +241,12 @@ void begin_session(std::shared_ptr<mods::RuntimeSession> value) {
     {std::lock_guard lock(error_mutex);last_error.clear();}
     launch.store(nullptr);characters.store(nullptr);menu.store(nullptr);session.store(std::move(value));
     ordinary_world.frozen_online=false;ordinary_world.authored.reset();ordinary_world.custom_ai=false;
-    ordinary_world.pending_course_heap=0;
+    ordinary_world.pending_course_heap=0;ordinary_world.records_restored=false;ordinary_world.records_last.clear();
     ordinary_world.cups.clear();
     ordinary_music_enabled=false;ordinary_world.music.store(nullptr);
+    const auto assets=session.load();const auto cars=mods::vehicles::resources_for(assets.get());
+    ordinary_world.vehicles=cars&&!cars->library.packages.empty()?std::make_shared<vehicles::World>(cars,assets->boot_bank()->revision()=="us.v80"):nullptr;
+    mods::vehicles::publish_render_resources(cars);
 }
 void begin_online(std::shared_ptr<const mods::online::RuntimeResources> resources) {
     if(!resources)throw mods::Error("Online mod admission has no pinned game resources.");
@@ -245,8 +265,8 @@ void begin_online(std::shared_ptr<const mods::online::RuntimeResources> resource
 void begin_prepared(std::shared_ptr<const mods::PreparedModLaunch> prepared) {
     begin_session(prepared?prepared->session:nullptr);
     if(!prepared || (!prepared->session&&!prepared->code))return;
-    if(prepared->save_subfolder.empty() || prepared->save_path.empty() || prepared->pak_directory.empty())
-        throw mods::Error("Modded runtime admission requires isolated save paths.");
+    if(prepared->save_path.empty() || prepared->pak_directory.empty())
+        throw mods::Error("Runtime admission requires a frozen personal save owner.");
     if(prepared->session&&!prepared->session->tracks().empty())begin_track_menu(true);
     if(prepared->session&&prepared->session->characters())begin_character_menu();
     launch.store(std::move(prepared));
@@ -266,6 +286,7 @@ bool frozen_course_hook(const char* hook,std::uint8_t* ram,recomp_context* ctx) 
     try {
     auto& world=current_world();const std::string_view name(hook);
     if(name=="prepare_memory") {
+        mods::online::resident_music::PreparationScope ordinary_load(!world.private_owner);
         world.pending_course_heap=mods::online::course_heap(world.authored.get(),static_cast<unsigned>(ctx->r4));
         if(const auto music=world.music.load()) {std::lock_guard lock(music->mutex);
             mods::CharacterMenuFields fields;fields.fill(0x80000000U);mods::CharacterMenuMemory guest({ram,guest_memory_size()},fields);
@@ -339,6 +360,9 @@ void set_trophy_menu(std::vector<mods::TrackMenuCup> cups) {
     // are appended at retail initialization, so rebuild once at menu entry.
     state->catalog_ready=ordinary_world.frozen_online;ordinary_world.menu.store(std::move(state));
 }
+#include "mods/sdk2_asset_inventory.inl"
+std::string asset_inventory(){return sdk2_asset_inventory(session.load());}
+std::string current_course(){const auto active=session.load();return active?active->current_content():std::string{};}
 std::string selected_trophy() {
     const auto state=menu.load();if(!state)return {};
     std::lock_guard lock(state->mutex);return state->adapter.selected_cup();
@@ -374,6 +398,18 @@ extern "C" int dkr_legacy_texture_animation(std::uint8_t* ram,recomp_context* ct
 }
 extern "C" void dkr_legacy_character_event(std::uint8_t* rdram,recomp_context* ctx,unsigned event,std::uint32_t roster_address) {
     using namespace dkr::runtime;
+    if(event>=200) {
+        try {
+            const auto cars=legacy::current_world().vehicles;
+            if(event==200)ctx->r2=cars?cars->render_begin({rdram,legacy::guest_memory_size()},roster_address):0;
+            else if(event==201){if(cars)cars->render_end({rdram,legacy::guest_memory_size()},roster_address,unsigned(ctx->r8));}
+            else if(event==202||event==203){if(cars)cars->wheel_scope({rdram,legacy::guest_memory_size()},roster_address,event==202);}
+            else if(event==204){if(cars)cars->advance_wheels({rdram,legacy::guest_memory_size()},roster_address,std::bit_cast<float>(std::uint32_t(ctx->r6)));}
+            else throw dkr::mods::Error("Unknown custom vehicle render event.");
+            return;
+        }catch(const ultramodern::thread_terminated&){throw;}
+         catch(const std::exception& error){legacy::fail(error.what());}
+    }
     auto state=legacy::characters.load();if(!state)return;
     try {
         std::lock_guard lock(state->mutex);
@@ -393,6 +429,14 @@ extern "C" void dkr_legacy_character_event(std::uint8_t* rdram,recomp_context* c
 }
 extern "C" void dkr_legacy_character_ai_event(std::uint8_t* rdram,recomp_context* ctx,unsigned event,dkr::mods::OriginalPiHandler random) {
     using namespace dkr::runtime;
+    // Cars have their own primary-racer lifecycle. Do not gate this on a
+    // character selector, the custom-AI preference, or an offline-only path.
+    try {
+        if(const auto cars=legacy::current_world().vehicles)
+            cars->race({rdram,legacy::guest_memory_size()},*ctx,event);
+    }catch(const ultramodern::thread_terminated&){throw;}
+     catch(const std::exception& error){legacy::fail(error.what());}
+
     const auto state=legacy::characters.load();
     if(!state || !state->selector || (legacy::frozen_courses()?!legacy::current_world().custom_ai:netplay::session().active()))return;
     try {
@@ -532,10 +576,11 @@ extern "C" int dkr_legacy_character_menu(std::uint8_t* rdram,recomp_context* ctx
      catch(const std::exception& error){legacy::fail(error.what());}
 }
 extern "C" void dkr_legacy_heap_capacity(std::uint8_t*,recomp_context* ctx) {
-    const auto end=dkr::mods::legacy_heap_end(std::uint32_t(ctx->r15),dkr::runtime::legacy::guest_memory_size(),
+    const auto admitted=dkr::mods::legacy_heap_end(std::uint32_t(ctx->r15),dkr::runtime::legacy::guest_memory_size(),
         bool(dkr::runtime::legacy::session.load()));
+    const auto end=dkr_primary_heap_end(admitted,dkr::runtime::legacy::guest_memory_size());
     if(end!=std::uint32_t(ctx->r15))
-        std::fprintf(stderr,"[legacy][memory] offline custom-session pool uses existing 8 MiB RDRAM; stock/online pool unchanged\n");
+        std::fprintf(stderr,"[memory][primary-pool] end=0x%08X mapped=%zu; deterministic residency headroom; deferred frees unchanged\n",end,dkr::runtime::legacy::guest_memory_size());
     ctx->r15=static_cast<gpr>(static_cast<std::int32_t>(end));
 }
 extern "C" std::uint32_t dkr_legacy_course_component(std::uint8_t*,recomp_context*,unsigned site,std::uint32_t native_value) {
@@ -735,7 +780,38 @@ extern "C" std::uint32_t dkr_legacy_character_cinematic_portrait(std::uint8_t*,r
     try {return state->presentation.cinematic_portrait(id);}
     catch(const std::exception& e){legacy::fail(e.what());}
 }
+extern "C" void dkr_vehicle_menu_draw(std::uint8_t* rdram,recomp_context* ctx,
+        dkr::runtime::RecompiledEntrypoint frame,dkr::runtime::RecompiledEntrypoint text_width) {
+    using namespace dkr::runtime;
+    try {
+        const auto cars=legacy::current_world().vehicles;const auto calls=legacy::guest_payload();
+        if(cars&&calls)cars->draw({rdram,legacy::guest_memory_size()},*ctx,*calls,frame,text_width);
+    }catch(const ultramodern::thread_terminated&){throw;}
+     catch(const std::exception& error){legacy::fail(error.what());}
+}
+
 extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram,recomp_context* ctx,unsigned event,const std::uint32_t* fields,unsigned observed) {
+    if(event>=100) {
+        using namespace dkr::runtime;
+        try {
+            const auto cars=legacy::current_world().vehicles;if(!cars)return 0;
+            const auto calls=legacy::guest_payload();if(!calls)throw dkr::mods::Error("Custom vehicles have no admitted native menu callbacks.");
+            const auto result=cars->menu({rdram,legacy::guest_memory_size()},*ctx,event,*calls,[&](unsigned player) {
+                if(const auto state=legacy::characters.load()) {
+                    std::lock_guard lock(state->mutex);
+                    if(const auto entry=state->roster.entry(player))return entry->headers[0];
+                }
+                dkr::mods::CharacterMenuFields addresses;addresses.fill(0x80000000U);
+                dkr::mods::CharacterMenuMemory g({rdram,legacy::guest_memory_size()},addresses);
+                const auto table=legacy::session.load()->boot_bank()->revision()=="us.v80"?0x80126990U:0x801263f0U;
+                constexpr unsigned headers[]{2,3,4,5,6,7,8,9,1,0};const auto base=g.read(table+player,1);
+                if(base>=10)throw dkr::mods::Error("Invalid selected native driver.");return headers[base];
+            });
+            return result?1:0;
+        }catch(const ultramodern::thread_terminated&){throw;}
+         catch(const std::exception& error){legacy::fail(error.what());}
+    }
+
     using namespace dkr::runtime;
     // trackmenu_assets(TRACKMENU_TYPE_LOAD_LEVEL): Track Select confirmed a
     // course. That choice supersedes Track Lab's sticky load override before
@@ -744,6 +820,16 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram,recomp_context* ctx,uns
         custom_tracks::arm_track_override({});
     auto state=legacy::menu.load();
     try {
+        if(!legacy::private_world&&(event==0||event==1||event==15)) {
+            auto& owner=legacy::ordinary_world;
+            auto bytes=legacy::course_records(rdram,*ctx,!owner.records_restored);
+            if(!bytes.empty()) {
+                owner.records_restored=true;
+                if(!netplay::session().active()&&bytes!=owner.records_last) {
+                    saves::records::submit(bytes);owner.records_last=std::move(bytes);
+                }
+            }
+        }
         // Frozen/owned worlds keep the reviewed retail vehicle gate and must
         // never consult the live process's transport session.
         if(!legacy::frozen_courses() && !netplay::session().active())
@@ -901,6 +987,7 @@ struct WorldRestore final:ModWorld::Restore {
     std::shared_ptr<MenuState> menu;
     std::shared_ptr<CharacterState> characters;
     std::shared_ptr<MusicBinding> music;
+    std::shared_ptr<vehicles::World> vehicles;
 };
 }
 ModWorld::ModWorld(std::shared_ptr<mods::RuntimeSession> assets,GamePayload calls,
@@ -910,6 +997,10 @@ ModWorld::ModWorld(std::shared_ptr<mods::RuntimeSession> assets,GamePayload call
     if(!assets)throw mods::Error("An owned mod world needs admitted resources.");
     (void)mods::online::course_display_budgets(authored.get());
     state_->session.store(assets);state_->private_owner=true;state_->calls=calls;
+    if(const auto cars=mods::vehicles::resources_for(assets.get());cars&&!cars->library.packages.empty()) {
+        state_->vehicles=std::make_shared<vehicles::World>(cars,assets->boot_bank()->revision()=="us.v80");
+        mods::vehicles::publish_render_resources(cars);
+    }
     state_->animation=animation;state_->random=random;state_->authored=std::move(authored);state_->custom_ai=ai;
     state_->texture_animation=texture;
     state_->cups=std::move(cups);
@@ -933,13 +1024,16 @@ void ModWorld::select_course(const std::string& id,unsigned carrier) {
     if(state_->authored&&std::ranges::any_of(state_->authored->courses,[&](const auto& c){return unsigned(c.level_id)==carrier;}))return;
     state_->session.load()->request(id,carrier);
 }
+std::string ModWorld::asset_inventory()const {return sdk2_asset_inventory(state_->session.load());}
+std::string ModWorld::current_course()const {return state_->session.load()->current_content();}
 std::string ModWorld::selected_trophy()const {
     const auto menu=state_->menu.load();if(!menu)return {};
     std::lock_guard lock(menu->mutex);return menu->adapter.selected_cup();
 }
 namespace {
 mods::Bytes capture_world(const WorldState& state) {
-    mods::CheckpointWriter out;out.u32(4);out.block(state.session.load()->checkpoint());
+    mods::CheckpointWriter out;out.u32(5);out.block(state.session.load()->checkpoint());
+    out.flag(bool(state.vehicles));if(state.vehicles)out.block(state.vehicles->checkpoint());
     out.u32(state.pending_course_heap);
     const auto menu=state.menu.load();out.flag(bool(menu));
     if(menu) {std::lock_guard lock(menu->mutex);out.block(menu->adapter.checkpoint());}
@@ -963,9 +1057,11 @@ mods::Bytes online_bootstrap_checkpoint() {
     auto result=capture_world(ordinary_world);ordinary_music_enabled=false;return result;
 }
 std::unique_ptr<ModWorld::Restore> ModWorld::stage_checkpoint(mods::View bytes)const {
-    mods::CheckpointReader in(bytes);if(in.u32()!=4)throw mods::Error("Unsupported owned mod world schema.");
+    mods::CheckpointReader in(bytes);if(in.u32()!=5)throw mods::Error("Unsupported owned mod world schema.");
     auto out=std::make_unique<WorldRestore>();out->authority=state_.get();out->mutation=state_->mutation;
     const auto assets=state_->session.load();out->session=assets->stage_checkpoint(in.block());
+    if(in.flag()!=bool(state_->vehicles))throw mods::Error("Owned vehicle catalogue differs.");
+    if(state_->vehicles)out->vehicles=state_->vehicles->stage_checkpoint(in.block());
     out->pending_course_heap=in.u32();
     if(!mods::online::admitted_course_heap(state_->authored.get(),out->pending_course_heap))
         throw mods::Error("Owned course checkpoint has an invalid collision heap.");
@@ -997,6 +1093,7 @@ bool ModWorld::commit_checkpoint(std::unique_ptr<Restore> value) {
        state_->mutation==UINT64_MAX || !state_->session.load()->commit_checkpoint(std::move(staged->session)))return false;
     state_->menu.store(std::move(staged->menu));state_->characters.store(std::move(staged->characters));
     state_->pending_course_heap=staged->pending_course_heap;
+    state_->vehicles=std::move(staged->vehicles);
     state_->music.store(std::move(staged->music));
     ++state_->mutation;return true;
 }
@@ -1007,7 +1104,32 @@ int ModWorld::dispatch(const char* operation,std::uint8_t* ram,recomp_context* c
             throw mods::Error("Invalid owned mod callback boundary.");
         WorldScope scope(*state_);const std::string_view name(operation);result=0;
         const auto arity=[&](unsigned expected){if(count!=expected)throw mods::Error("Owned mod callback ABI differs.");};
-        if(name=="dkr_legacy_asset_api"){arity(1);result=dkr_legacy_asset_api(ram,ctx,static_cast<unsigned>(args[0]));}
+        if(name=="dkr_owned_vehicle_menu_draw") {
+            arity(0);
+            const auto callbacks=owned_vehicle_draw_callbacks;
+            if(!state_->private_owner||!state_->vehicles||!callbacks.frame||!callbacks.text_width)
+                throw mods::Error("Owned vehicle menu has no private drawing binding.");
+            state_->vehicles->draw({ram,guest_memory_size()},*ctx,state_->calls,callbacks.frame,callbacks.text_width);
+            result=1;
+            static std::atomic<unsigned> reports{0};
+            if(reports.fetch_add(1,std::memory_order_relaxed)<4)
+                std::fprintf(stderr,"[custom-vehicles][owned-menu] owned-vehicle-menu-v1: private picker, portraits, frame and text submitted\n");
+        }
+        else if(name=="dkr_achievements_context") {
+            arity(1);const auto assets=session.load();
+            result=owns_level(static_cast<std::int32_t>(args[0])) ||
+                (assets&&!assets->current_content().empty()) || !selected_trophy().empty();
+        }
+        else if(name=="dkr_shared_records_capture") {
+            arity(0);state_->records_last=course_records(ram,*ctx,false);
+            if(state_->records_last.empty())state_->records_last=saves::records::encode({});
+            result=reinterpret_cast<std::uintptr_t>(&state_->records_last);
+        }
+        else if(name=="dkr_shared_records_install") {
+            arity(0);state_->records_last=course_records(ram,*ctx,true);
+            result=!state_->records_last.empty()||authored_courses().empty();
+        }
+        else if(name=="dkr_legacy_asset_api"){arity(1);result=dkr_legacy_asset_api(ram,ctx,static_cast<unsigned>(args[0]));}
         else if(name=="dkr_legacy_scene_begin"){arity(0);dkr_legacy_scene_begin(ram,ctx);}
         else if(name=="dkr_owned_scene_admission") {
             arity(1);if(args[0]>127)throw mods::Error("Custom scene ID is outside its signed-byte range.");
@@ -1015,7 +1137,10 @@ int ModWorld::dispatch(const char* operation,std::uint8_t* ram,recomp_context* c
             if(result)course_budget(ram,false);
         }
         else if(name=="dkr_owned_course_prepare") {
-            arity(0);frozen_course_hook("prepare_memory",ram,ctx);
+            arity(1);
+            if(args[0]>1)throw mods::Error("Invalid inline music preview policy.");
+            mods::online::resident_music::PreviewScope preview(args[0]!=0);
+            frozen_course_hook("prepare_memory",ram,ctx);
         }
         else if(name=="dkr_custom_music_sequence_loaded"){arity(0);frozen_music_hook("loaded",ram,ctx);}
         else if(name=="dkr_custom_music_sequence_started"){arity(0);frozen_music_hook("started",ram,ctx);}
@@ -1079,6 +1204,20 @@ int ModWorld::dispatch(const char* operation,std::uint8_t* ram,recomp_context* c
     }catch(const std::exception& e){try{state_->error=e.what();}catch(...){}return -1;}
      catch(...){try{state_->error="Owned custom content stopped safely after an unexpected native fault.";}catch(...){}return -1;}
 }
+int draw_owned_vehicle_menu(ModWorld& world,std::uint8_t* ram,recomp_context* ctx,
+    RecompiledEntrypoint frame,RecompiledEntrypoint text_width) noexcept {
+    if(!ram||!ctx||!frame||!text_width)return -1;
+    // Nested native callbacks retain the same world and restore their caller's
+    // entrypoints even when the checked guest trampoline rejects a callback.
+    struct Binding {
+        OwnedVehicleDrawCallbacks before=owned_vehicle_draw_callbacks;
+        Binding(RecompiledEntrypoint f,RecompiledEntrypoint w){owned_vehicle_draw_callbacks={f,w};}
+        ~Binding(){owned_vehicle_draw_callbacks=before;}
+    } binding(frame,text_width);
+    std::uint64_t result=0;
+    const auto status=world.dispatch("dkr_owned_vehicle_menu_draw",ram,ctx,nullptr,0,nullptr,0,result);
+    return status==1&&result==1?1:-1;
+}
 void ModWorld::mix_music(std::uint8_t* ram,std::span<std::uint8_t> pcm,unsigned rate) {
     const auto music=state_->music.load();if(!music)return;
     std::lock_guard lock(music->mutex);mods::CharacterMenuFields fields;fields.fill(0x80000000U);
@@ -1086,3 +1225,32 @@ void ModWorld::mix_music(std::uint8_t* ram,std::span<std::uint8_t> pcm,unsigned 
     if(state_->mutation==UINT64_MAX)throw mods::Error("Custom music transaction exhausted.");++state_->mutation;
 }
 }
+
+namespace dkr::runtime::saves::records {
+Bytes snapshot(legacy::ModWorld& world,std::uint8_t* ram) {
+    recomp_context call{};std::uint64_t result=0;
+    if(world.dispatch("dkr_shared_records_capture",ram,&call,nullptr,0,nullptr,0,result)!=1||!result)
+        throw std::runtime_error("Could not capture custom-course records from the owned guest: "+(world.error().empty()?std::string("missing records service result"):world.error()));
+    return *reinterpret_cast<const Bytes*>(std::uintptr_t(result));
+}
+void install(legacy::ModWorld& world,std::uint8_t* ram) {
+    if(seed().size()==20)return;
+    recomp_context call{};std::uint64_t result=0;
+    if(world.dispatch("dkr_shared_records_install",ram,&call,nullptr,0,nullptr,0,result)!=1||!result)
+        throw std::runtime_error("Custom records could not be installed at the initial owned boundary; originals were retained: "+(world.error().empty()?std::string("record tables are not ready"):world.error()));
+}
+}
+
+extern "C" void dkr_achievements_observe(std::uint8_t* ram,unsigned revision) noexcept {
+    using namespace dkr::runtime;
+    if(achievements::online_session())return;
+    try {
+        auto sample=achievements::capture(ram,legacy::guest_memory_size(),revision);
+        const auto assets=legacy::session.load();
+        sample.custom=sample.level>=65||legacy::owns_level(sample.level)||
+            (assets&&!assets->current_content().empty())||!legacy::selected_trophy().empty();
+        achievements::submit(sample);
+    }catch(...){std::fprintf(stderr,"[achievements] Read-only observer unavailable at this boundary\n");}
+}
+
+// checked-record-observer-v2: revision-owned RAM access, no guest callback.

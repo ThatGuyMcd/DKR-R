@@ -22,7 +22,7 @@ enum dkr_owned_draw_kind {
     DKR_OWNED_ONLINE_VIEW, DKR_OWNED_ONLINE_HUD, DKR_OWNED_ONLINE_SHARED,
     DKR_OWNED_ONLINE_DIVIDER_BEGIN, DKR_OWNED_ONLINE_DIVIDER_END,
     DKR_OWNED_ONLINE_RACER,DKR_OWNED_ONLINE_HUD_WIDGET_BEGIN,DKR_OWNED_ONLINE_HUD_WIDGET_END,
-    DKR_OWNED_LOCAL_MODEL,DKR_OWNED_LOCAL_OBJECT
+    DKR_OWNED_LOCAL_MODEL,DKR_OWNED_LOCAL_OBJECT,DKR_OWNED_CAMERA_WORLD_END
 };
 typedef struct dkr_owned_draw_event {
     uint32_t kind,address,token;
@@ -32,7 +32,7 @@ typedef struct dkr_owned_draw_event {
 } dkr_owned_draw_event;
 
 static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
-    if(e->kind<DKR_OWNED_BACKGROUND_BEGIN || e->kind>DKR_OWNED_LOCAL_OBJECT ||
+    if(e->kind<DKR_OWNED_BACKGROUND_BEGIN || e->kind>DKR_OWNED_CAMERA_WORLD_END ||
        e->address<0x80000000U || e->address>0x807FFFD8U)return 0;
     const int quad=e->kind==DKR_OWNED_BACKGROUND_QUAD ||
         e->kind==DKR_OWNED_SPLIT_SKY_QUAD || e->kind==DKR_OWNED_SPLIT_VOID_QUAD;
@@ -85,6 +85,8 @@ static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
             if(e->token>3||e->parameters[0]>3||e->parameters[1]>32||
                e->parameters[2]>255||e->parameters[3]>1||e->parameters[4]>4)return 0;
             used=5;break;
+        case DKR_OWNED_CAMERA_WORLD_END:
+            if(e->token>3)return 0;break;
         case DKR_OWNED_ONLINE_HUD:
             if(e->token>3)return 0;break;
         case DKR_OWNED_ONLINE_SHARED:case DKR_OWNED_ONLINE_DIVIDER_BEGIN:case DKR_OWNED_ONLINE_DIVIDER_END:

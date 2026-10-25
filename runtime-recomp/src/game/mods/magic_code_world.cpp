@@ -4,6 +4,9 @@
 #include <bit>
 #include <cstring>
 #include <cstdio>
+#include <chrono>
+
+#include "magic_code_execution_policy.hpp"
 
 namespace dkr::mods::code {
 namespace {
@@ -46,7 +49,7 @@ World::World(std::shared_ptr<const LinkedSet> linked,std::uint64_t seed,Native n
     for(std::size_t i=0;i<linked_->owners.size();++i) {
         auto v=seed+=0x9e3779b97f4a7c15ULL;v=(v^(v>>30))*0xbf58476d1ce4e5b9ULL;
         v=(v^(v>>27))*0x94d049bb133111ebULL;v^=v>>31;
-        state_.push_back({v?v:1,0,{{0,linked_->owners[i].heap_size,false}}});calls_.push_back(0);
+        state_.push_back({v?v:1,0,{{0,linked_->owners[i].heap_size,false}}});calls_.push_back(0);metrics_.emplace_back();
     }
 }
 LinkPolicy World::core_policy() {
@@ -71,11 +74,37 @@ void World::attach(std::span<std::uint8_t> ram,bool initial) {
     if(initial)install(*linked_,ram);
     ram_=ram;bus_=std::move(bus);
 }
+std::unique_ptr<World::Rebind> World::prepare_rebind(std::shared_ptr<const LinkedSet> image,int migration)const {
+    if(!idle()||ram_.empty()||!image||image->resident_bytes!=linked_->resident_bytes)bad("reload needs a retired equal-size world");
+    auto regions=image->regions;
+    if(migration>=0)for(auto& r:regions)if(r.writable) {
+        const auto& owner=image->owners.at(unsigned(migration));r.writable=r.address>=owner.begin&&r.address+std::uint64_t(r.size)<=owner.end;
+    }
+    regions.push_back({0x80000000U,8*unsigned(MiB),migration<0,false});
+    auto result=std::make_unique<Rebind>();result->linked=std::move(image);result->migration=migration;
+    result->bus=std::make_unique<Memory>(ram_,std::move(regions));return result;
+}
+void World::exchange(Rebind& value)noexcept {
+    linked_.swap(value.linked);bus_.swap(value.bus);std::swap(migration_owner_,value.migration);
+    for(const auto& r:linked_->regions)if(r.executable) {
+        const auto image=std::find_if(linked_->sections.begin(),linked_->sections.end(),[&](const auto& s){return r.address>=s.address&&r.address-s.address<s.bytes.size();});
+        // All extents/alignment were admitted by link(), before the swap.
+        std::memcpy(ram_.data()+r.address-0x80000000U,image->word_swapped.data()+r.address-image->address,r.size);
+    }
+}
+void World::owner_event(unsigned owner,std::string_view name,Budget& budget,const Registers& args) {
+    execution::PhaseScope phase_scope(execution::event_phase(name));
+    execution::Transaction transaction(this,budget,name);
+    const auto found=linked_->events.find("*:"+std::string(name));if(found==linked_->events.end())return;
+    for(auto address:found->second)if(linked_->function_owners.at(address)==owner){auto c=args;call(address,c,budget);}
+}
 void World::detach() {
     if(active_)bad("cannot retire RDRAM during a code callback");
     bus_.reset();ram_={};
 }
 void World::initialize(Budget& budget) {
+    execution::PhaseScope phase_scope(execution::Phase::Loading);
+    execution::Transaction transaction(this,budget,"on_boot");
     if(initialized_||active_||ram_.empty())bad("code world initialization requires a fresh retired session");
     initialized_=true;
     event("*","on_boot",Registers{},budget);
@@ -84,6 +113,22 @@ void World::call(std::uint32_t function,Registers& c,Budget& budget,const Argume
     const auto found=linked_->function_owners.find(function);
     if(found==linked_->function_owners.end()||ram_.empty())bad("unlinked code callback");
     const auto owner=found->second;auto& depth=calls_.at(owner);
+    const auto& package=*linked_->owners[owner].package;
+    execution::Transaction transaction(this,budget,"callback");
+    auto& work_budget=transaction.budget();
+    execution::OwnerScope execution_owner(owner,package.id,
+        package.api==2?package.sdk2_instructions:200000,
+        package.api==2?package.sdk2_native_calls:128);
+    const auto before=execution_owner.work().counts;
+    const auto started=std::chrono::steady_clock::now();
+    struct Costs {
+        Metric& metric;const execution::OwnerWork& work;execution::Counts before;
+        bool outer;std::chrono::steady_clock::time_point started;
+        ~Costs(){++metric.callbacks;if(!outer)return;
+            metric.instructions+=work.counts.instructions-before.instructions;
+            metric.native_calls+=work.counts.native-before.native;
+            metric.nanoseconds+=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-started).count();}
+    } costs{metrics_[owner],execution_owner.work(),before,depth==0,started};
     if(depth>=8)bad("package callback stack exhausted");
     try {
         const auto saved_sp=c.integer[29];const auto saved_fcsr=c.fcsr;
@@ -100,34 +145,53 @@ void World::call(std::uint32_t function,Registers& c,Budget& budget,const Argume
             World& w;unsigned& depth;Registers& c;std::uint64_t sp;std::uint32_t fcsr;std::size_t owner;
             ~Guard(){w.state_[owner].fcsr=c.fcsr;c.integer[29]=sp;c.fcsr=fcsr;--depth;--w.active_;}
         }guard{*this,depth,c,saved_sp,saved_fcsr,owner};
-        execute(bus,c,function,budget,[&](auto target,auto& registers,auto& fuel){gateway(target,registers,fuel);});
+        execute(bus,c,function,work_budget,[&](auto target,auto& registers,auto& fuel){gateway(target,registers,fuel);});
     }catch(const Error& e) {
         char context[160];std::snprintf(context,sizeof(context)," [package=%s callback=0x%08X]",
             linked_->owners[owner].package->id.c_str(),function);
-        throw Error(std::string(e.what())+context);
+        std::string location;
+        const auto& package=*linked_->owners[owner].package;
+        if(package.api==2&&!package.debug_lines.empty()) {
+            const auto& functions=linked_->owners[owner].functions;const auto found=std::find(functions.begin(),functions.end(),function);
+            if(found!=functions.end()) {
+                const auto& name=package.symbols->functions[std::size_t(found-functions.begin())].name;
+                if(const auto line=package.debug_lines.find(name);line!=package.debug_lines.end())location=" [callback-source="+line->second+"]";
+            }
+        }
+        throw Error(std::string(e.what())+context+location+execution::diagnostic());
     }
 }
 void World::event(std::string_view owner,std::string_view name,const Registers& arguments,Budget& budget,const ArgumentStack* native_arguments) {
+    execution::PhaseScope phase_scope(execution::event_phase(name));
+    execution::Transaction transaction(this,budget,name);
     const auto found=linked_->events.find(std::string(owner)+":"+std::string(name));
     if(found!=linked_->events.end())for(auto function:found->second){auto c=arguments;call(function,c,budget,native_arguments);}
 }
 bool World::has_hook(std::uint32_t function)const{return linked_->hooks.contains(function);}
 bool World::enter(std::uint32_t function,Registers& c,Budget& budget,const ArgumentStack* native_arguments) {
+    execution::Transaction transaction(this,budget,"entry-hooks");
     const auto found=linked_->hooks.find(function);if(found==linked_->hooks.end())return false;
     for(auto hook:found->second.entry){auto context=c;call(hook,context,budget,native_arguments);}
     if(found->second.replacement){call(*found->second.replacement,c,budget,native_arguments);return true;}return false;
 }
 void World::leave(std::uint32_t function,const Registers& c,Budget& budget,const ArgumentStack* native_arguments) {
+    execution::Transaction transaction(this,budget,"exit-hooks");
     const auto found=linked_->hooks.find(function);if(found==linked_->hooks.end())return;
     for(auto hook:found->second.exit){auto context=c;call(hook,context,budget,native_arguments);}
 }
 void World::gateway(std::uint32_t address,Registers& c,Budget& budget) {
+    if(migration_owner_>=0) {
+        const auto found=linked_->imports.find(address);
+        if(found==linked_->imports.end()||found->second.owner!=unsigned(migration_owner_)||found->second.event||found->second.dependency!="*"||
+           !core_policy().services.contains(found->second.name))bad("reload migration permits only this owner's core services");
+    }
     const auto found=linked_->imports.find(address);
     if(found==linked_->imports.end()) {
         if(!linked_->native_functions.contains(address)||!native_)bad("unlinked or protected base-game call");
         native_(address,c,budget);return;
     }
     const auto& import=found->second;const auto& owner=linked_->owners[import.owner];
+    execution::gateway(import.dependency=="*"&&!import.event);
     if(import.event){event(import.dependency,import.name,c,budget);return;}
     if(import.dependency=="*") {
         auto& bus=memory();static const auto policy=core_policy();
@@ -147,7 +211,7 @@ void World::gateway(std::uint32_t address,Registers& c,Budget& budget) {
 void World::core(std::string_view name,std::size_t index,Memory& bus,Registers& c,Budget&) {
     const auto& owner=linked_->owners[index];auto& state=state_[index];
     const auto a=std::uint32_t(c.integer[4]),b=std::uint32_t(c.integer[5]),d=std::uint32_t(c.integer[6]);
-    if(name=="dkr_sdk_version"){c.integer[2]=ApiVersion;return;}
+    if(name=="dkr_sdk_version"){c.integer[2]=owner.package->api;return;}
     if(name=="dkr_random_u32") {
         auto x=state.random;x^=x>>12;x^=x<<25;x^=x>>27;state.random=x;
         c.integer[2]=std::uint32_t((x*0x2545f4914f6cdd1dULL)>>32);return;
@@ -179,6 +243,15 @@ void World::core(std::string_view name,std::size_t index,Memory& bus,Registers& 
         const auto& value=owner.settings[key];
         if(name=="dkr_setting_number") {
             if(!value.is_number())bad("setting is not numeric");
+            if(owner.package->api==2) {
+                const auto& options=owner.package->options;
+                const auto found=std::find_if(options.begin(),options.end(),[&](const auto& option){return option.at("id")==key;});
+                if(found!=options.end()) {
+                    const auto at=owner.services+28672+unsigned(found-options.begin())*8;
+                    const auto tag=bus.load(at,4);const auto raw=std::uint32_t(bus.load(at+4,4));
+                    if(tag==1||tag==2){const double live=tag==1?double(std::bit_cast<float>(raw)):double(raw);c.floating[0]=std::bit_cast<std::uint64_t>(live);return;}
+                }
+            }
             c.floating[0]=std::bit_cast<std::uint64_t>(value.get<double>());return;
         }
         if(!value.is_string())bad("setting is not text");
@@ -217,7 +290,13 @@ std::vector<Effect> World::take_effects(){
 Bytes World::checkpoint()const {
     verify_immutable();
     if(active_||ram_.empty())bad("checkpoint requires a retired code boundary");
-    Writer w;w.word(ExecutionVersion);w.bytes.insert(w.bytes.end(),linked_->identity.begin(),linked_->identity.end());
+    // Exact canonical size; preserve every field and zero-padding decision.
+    // One allocation instead of repeatedly growing the serialized image.
+    std::size_t serialized=80;
+    for(const auto& s:state_)serialized+=16+s.blocks.size()*12;
+    for(const auto& effect:effects_)serialized+=8+effect.text.size();
+    for(const auto& region:linked_->regions)if(region.writable)serialized+=8+region.size;
+    Writer w;w.bytes.reserve(serialized);w.word(ExecutionVersion);w.bytes.insert(w.bytes.end(),linked_->identity.begin(),linked_->identity.end());
     w.word(initialized_?1U:0U);w.word(std::uint32_t(state_.size()));
     for(const auto& s:state_) {
         w.wide(s.random);w.word(s.fcsr);w.word(std::uint32_t(s.blocks.size()));

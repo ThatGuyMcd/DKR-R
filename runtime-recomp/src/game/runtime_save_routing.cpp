@@ -17,7 +17,7 @@ dkr::runtime::saves::RuntimeOnlineSaveStatus g_runtime_save_status;
 struct SaveContext {
     std::filesystem::path path, paks;
     std::shared_ptr<dkr::runtime::saves::storage::Lease> lease;
-    bool online = false, host = false, loaded = false, incomplete = false;
+    bool online = false, host = false, loaded = false, incomplete = false, development = false;
     std::uint64_t match = 0, hash = 0;
     std::string failure;
 };
@@ -108,7 +108,7 @@ dkr::runtime::saves::runtime_online_save_status() {
 
 bool dkr::runtime::saves::prepare_runtime_save_context(const std::filesystem::path& root,
     const std::filesystem::path& subfolder, const std::filesystem::path& paks,
-    bool online, bool host, std::uint64_t match, std::uint64_t hash, std::string& error) {
+    bool online, bool host, std::uint64_t match, std::uint64_t hash, std::string& error,bool development) {
     std::scoped_lock lock(g_runtime_save_mutex);
     if (g_context.lease) { error = "The previous save owner has not retired."; return false; }
     g_context = {};
@@ -127,6 +127,8 @@ bool dkr::runtime::saves::prepare_runtime_save_context(const std::filesystem::pa
     auto lease = storage::acquire(path, error); if (!lease) return false;
     g_context.path = path; g_context.paks = online ? path.parent_path() / "paks" :
         (paks.empty() ? storage::absolute(root) : storage::absolute(paks));
+    g_context.development=development;
+    if(development)g_context.paks=storage::absolute(paks);
     g_context.online = online; g_context.host = host; g_context.match = match; g_context.hash = hash;
     g_context.lease = std::move(lease);
     std::fprintf(stderr, "[save][scope] online=%d host=%d lease=held immutable-route=1\n", int(online), int(host));
@@ -139,7 +141,16 @@ void dkr::runtime::saves::retire_runtime_save_context() {
 }
 bool dkr::runtime::saves::runtime_save_context_ready() {
     std::scoped_lock lock(g_runtime_save_mutex);
-    return g_context.lease && g_context.loaded && g_context.failure.empty();
+    if(!g_context.lease||!g_context.loaded||!g_context.failure.empty())return false;
+    // Verify what init_saving actually loaded, not a second proposed route.
+    // On mismatch retain the scoped failure for the launcher's recovery UI.
+    // Never fall back to a user's ordinary save or release the existing lease.
+    if(storage::absolute(ultramodern::get_save_file_path())!=g_context.path) {
+        g_context.failure="The loaded EEPROM does not match its frozen launch save owner.";
+        std::fprintf(stderr,"[save][boot] loaded EEPROM differs from its frozen save owner\n");
+        return false;
+    }
+    return true;
 }
 bool dkr::runtime::saves::runtime_save_writes_allowed() {
     std::scoped_lock lock(g_runtime_save_mutex); return g_context.lease && g_context.loaded;
@@ -189,6 +200,10 @@ bool dkr::runtime::saves::commit_runtime_save(const std::filesystem::path& path,
         if (!g_context.incomplete) std::fprintf(stderr, "[save][commit] deferred incomplete EEPROM transaction\n");
         g_context.incomplete = true; return false;
     }
+    // Online development starts from the authenticated seed, but never writes
+    // experimental progress into its normal durable profile. The owned writer
+    // follows the same policy and returns the original seed to the lobby.
+    if(g_context.development&&g_context.online){g_context.incomplete=false;return true;}
     std::string error;
     if (!storage::write_atomic(path, bytes, ValidRuntimeImage, error)) {
         g_context.failure = error; std::fprintf(stderr, "[save][commit] %s\n", error.c_str()); return false;

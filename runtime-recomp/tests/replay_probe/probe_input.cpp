@@ -1,6 +1,6 @@
 #include "probe_input.h"
 #include "recomp.h"
-#include "netplay/experimental_eeprom.hpp"
+#include "../../src/game/netplay/experimental_eeprom.hpp"
 #include "netplay/experimental_rollback.hpp"
 #include "netplay/replay_qualification.hpp"
 #include "netplay/runtime_state.hpp"

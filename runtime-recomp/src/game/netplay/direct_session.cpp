@@ -1,3 +1,13 @@
+#include "../policy.hpp"
+#include "../owner_state.hpp"
+#include "../departure.hpp"
+#include "../start_gate.hpp"
+#include "../rollback_check.hpp"
+#include "../lobby_adapter.hpp"
+#include "../rollback_policy.hpp"
+#include "party_link.hpp"
+#include "party_codec.hpp"
+#include "monocypher.h"
 #include "direct_session.hpp"
 #include "experimental_runtime_admission.hpp"
 #include "experimental_latency.hpp"
@@ -195,11 +205,14 @@ DirectSession::~DirectSession() {
     save_executor_.stop();
     replay_writer_.stop();
     transport_closer_.stop();
+    dkr::runtime::party_start::forget(this);
+    dkr::runtime::spectators::forget_party_link(this);
+    dkr::online::native::forget(this);
 }
 
 void DirectSession::configure_manifest(const CompatibilityManifest& manifest) {
     std::scoped_lock lock(mutex_);
-    if (state_ == ConnectionState::Offline) manifest_ = manifest;
+    if (state_ == ConnectionState::Offline) {manifest_ = manifest;dkr::online::compatibility(manifest.release_version);}
 }
 
 void DirectSession::configure_session_save(
@@ -358,7 +371,7 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
                          std::string room_name, ConnectionMethod method,
                          std::string player_name, const Rules& rules,
                          std::string& error) {
-    if (const char* reason = experimental::runtime_admission_error(rules.synchronization, owned_backend_available())) {
+    if (const char* reason = dkr::runtime::netplay::rollback_policy::admission_error(rules.synchronization, owned_backend_available())) {
         error = reason;
         return false;
     }
@@ -488,6 +501,13 @@ bool DirectSession::host(std::uint16_t port, std::string advertised_host,
     input_delay_ = rules.automatic_input_delay ? 2U : rules.manual_input_delay;
     room_view_ = lobby_.room();
     state_ = ConnectionState::Hosting;
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+     if(party->requested&&method_==ConnectionMethod::QuickJoin&&rules.synchronization==SynchronizationMode::ExperimentalRollback) {
+        party->enabled=party->host=party->admitted=true;party->local=party->authority=sender_id_;party->room_id=match_id_;
+        if(!party->party.create(sender_id_,local_name_,error))return false;
+        party->seed=session_save_;party->save_hash=manifest_.session_save_hash;party->save_generation=session_save_generation_;
+        party->ready[sender_id_]=false;party->maximum_racers=rules.maximum_players;
+     }}
     worker_wake_ = true;
     state_changed_.notify_all();
     if (method_ == ConnectionMethod::QuickJoin) {
@@ -511,6 +531,14 @@ bool DirectSession::join_friend_invite(std::string_view invite,
                                        std::string player_name,
                                        const secure::Key& admission,
                                        std::string& error) {
+    if(valid_quick_join_code(invite)){
+        bool watch=false;{auto p=dkr::runtime::spectators::party_link(this);std::scoped_lock lock(p->mutex);watch=p->join_watch;}
+        if(dkr::online::begin_code_join(this,std::string(invite),player_name,admission,watch)){
+            if(!dkr::online::view()->joining){error=dkr::online::view()->error;return false;}
+            error.clear();return true;
+        }
+    }
+
     std::scoped_lock lock(mutex_);
     local_online_save_ready_ = false;
     local_online_save_acknowledged_ = false;
@@ -631,7 +659,7 @@ bool DirectSession::join_friend_invite(std::string_view invite,
     host_public_ = quick_join ? secure::Key{} : host_public;
     invitation_capability_ = quick_join ? secure::Key{} : invitation_capability;
     client_friend_admission_ = admission;
-    client_key_pair_ = secure::generate_key_pair();
+    client_key_pair_ = dkr::online::client_key(this);
     sender_id_ = random_u64();
     local_name_ = std::move(player_name);
     local_slot_ = 0U;
@@ -660,6 +688,36 @@ bool DirectSession::join_friend_invite(std::string_view invite,
 
 void DirectSession::disconnect(std::string_view reason) {
     std::scoped_lock lock(mutex_);
+// disconnect already owns DirectSession::mutex_. No PartyLink lock is retained
+// while pumping the authenticated receipt. The final wait is strictly bounded.
+{
+    namespace leaving=dkr::runtime::party_departure;
+    bool notify=false;
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+     notify=party->enabled&&party->admitted&&!is_host_&&bool(host_address_)&&transport_->is_open();}
+    if(notify){
+        leaving::begin(this,sender_id_);
+        const auto bytes=dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave,leaving::notice(1,sender_id_));
+        send_with_key(host_address_,key_,static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),bytes);
+        const auto deadline=std::chrono::steady_clock::now()+leaving::CloseGrace;
+        do{
+            flush_outbound_locked();pump_locked();
+            if(leaving::acknowledged(this))break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }while(transport_->is_open()&&std::chrono::steady_clock::now()<deadline);
+        std::fprintf(stderr,"[lobby][leave] application close notice %s\n",leaving::acknowledged(this)?"acknowledged":"grace expired; host silence detection remains active");
+        leaving::forget(this);
+    }
+}
+
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+     if(party->enabled&&transport_->is_open()) {
+        const auto bytes=dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave);
+        if(is_host_)for(const auto& p:party->peers)send_with_key(p.address,p.key,static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),bytes);
+        else if(host_address_)send_with_key(host_address_,key_,static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),bytes);
+        flush_outbound_locked();
+     }
+     party->reset_connection();dkr::runtime::party_start::forget(this);}
     if (transport_->is_open() && state_ != ConnectionState::Offline) {
         // An empty disconnect used to erase the only useful evidence when a
         // guest cleared a locally failed session.  The host then reported an
@@ -908,7 +966,7 @@ void DirectSession::network_loop() {
                 if (transport_->is_open()) pump_locked();
                 else if ((launch_descriptor_ && launch_descriptor_->synchronization == SynchronizationMode::ExperimentalRollback) ||
                          (owned_match_end_ && !owned_match_end_->resumed))
-                    fail_locked("The experimental connection closed. The game ended; return to Online to reconnect.");
+                    fail_locked("The online connection closed. The game ended; return to Online to reconnect.");
             } catch (const std::exception& exception) {
                 worker_fault = true;
                 fail_locked(std::string("The online transport failed safely: ") + exception.what());
@@ -957,7 +1015,7 @@ void DirectSession::network_loop() {
         // the worker immediately; the bounded receive poll remains frequent
         // enough to service several times within one authored frame.
         const auto receive_poll =
-            state_ == ConnectionState::Running ||
+            dkr::runtime::rollback_check::active(this) || state_ == ConnectionState::Running ||
                     state_ == ConnectionState::Loading ||
                     state_ == ConnectionState::Connecting ||
                     state_ == ConnectionState::AwaitingApproval
@@ -994,6 +1052,7 @@ void DirectSession::network_loop() {
 
 bool DirectSession::set_ready(bool ready, std::string& error) {
     std::scoped_lock lock(mutex_);
+    if(dkr::runtime::spectators::party_enabled(this)){dkr::runtime::spectators::party_ready(this,ready);error.clear();return true;}
     if (owned_match_end_ && !owned_match_end_->resumed) {
         error = "Wait for every remaining racer to return to the lobby and verify the online save.";
         return false;
@@ -1047,8 +1106,8 @@ bool DirectSession::approve_join_locked(std::uint64_t request_id,
         error = "Wait for the connection pre-flight check to finish.";
         return false;
     }
-    if (!is_host_ || (state_ != ConnectionState::Hosting &&
-                      state_ != ConnectionState::Lobby)) {
+    if (!is_host_ || ((state_ != ConnectionState::Hosting &&
+                      state_ != ConnectionState::Lobby)&&!dkr::runtime::spectators::party_enabled(this))) {
         error = "Only the host can approve racers while waiting in the lobby.";
         return false;
     }
@@ -1057,6 +1116,18 @@ bool DirectSession::approve_join_locked(std::uint64_t request_id,
         error = "That join request has expired.";
         return false;
     }
+    if(auto owner=dkr::online::native::owner(this);owner->guarded){
+        const auto* binding=dkr::online::native::binding(*owner,pending->sender_id);
+        auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock lock(party->mutex);
+        auto gate=dkr::runtime::party_start::gate(this);
+        const bool running_watch=binding&&dkr::online::contract::running_spectator(binding->watching,binding->allow_running&&dkr::online::view()->running_spectators,party->enabled,party->running,party->stopping,launch_countdown_active_||launch_stage_!=LaunchStage::Idle);
+        if(!binding||binding->client!=pending->client_public||binding->privacy!=owner->privacy||
+           owner->blocked.contains(binding->account)||lobby_locked_||launch_countdown_active_||launch_stage_!=LaunchStage::Idle||
+           gate->phase==dkr::runtime::party_start::Phase::Countdown||gate->phase==dkr::runtime::party_start::Phase::Committing||
+           (party->launch&&!running_watch)||party->stopping||dkr::runtime::rollback_check::active(this)){
+            error="This authenticated request is no longer valid for the waiting lobby.";return false;
+        }
+    }
     if (!manifest_.mod_manifest_hash.empty() && !pending->mods_verified) {
         if (!mod_manifest_bytes_) {
             error = "The host's immutable mod offer has not been prepared."; return false;
@@ -1064,7 +1135,7 @@ bool DirectSession::approve_join_locked(std::uint64_t request_id,
         if (!pending->mods_approved) {
             const auto reserved=std::count_if(pending_joins_.begin(),pending_joins_.end(),
                 [](const auto& p){return p.active && p.mods_approved;});
-            if (occupied_players()+reserved>=room_view_.rules.maximum_players) {
+            if (!dkr::runtime::spectators::party_enabled(this)&&occupied_players()+reserved>=room_view_.rules.maximum_players) {
                 error = "This lobby has no unreserved racer slot."; return false;
             }
             pending->mods_approved=true;
@@ -1075,6 +1146,29 @@ bool DirectSession::approve_join_locked(std::uint64_t request_id,
         status_=pending->display_name+" is reviewing/preparing the host's mods.";
         error.clear(); return true;
     }
+// Inside approve_join_locked, after provisional mod/content proof succeeds.
+if(auto party=dkr::runtime::spectators::party_link(this);party->enabled) {
+    namespace watch=dkr::runtime::spectators;
+    std::scoped_lock party_lock(party->mutex);
+    const auto kind=party->pending_watch.find(pending->sender_id);
+    if(kind==party->pending_watch.end()){error="Use this build's Racer or Watch Race join option.";return false;}
+    if(party->launch&&!kind->second){error="The race is running. Join as a spectator, then request a racing slot.";return false;}
+    if(!save_sync_available()||session_save_.size()!=512){error="The host's online save is not ready.";return false;}
+    std::optional<std::uint8_t> port;
+    if(!kind->second){for(unsigned i=0;i<std::min<unsigned>(4,room_view_.rules.maximum_players);++i)if(!party->party.snapshot().controls[i].member){port=std::uint8_t(i);break;}
+        if(!port){error="All four racing places are occupied. Join as a spectator instead.";return false;}}
+    if(!party->party.add(pending->sender_id,pending->display_name,port,error))return false;
+    party->peers.push_back({pending->sender_id,pending->address,pending->key,pending->next_sequence,std::chrono::steady_clock::now()});
+    party->ready[pending->sender_id]=false;
+    if(!pending->mod_route_retained)transport_->retain_peer_route(pending->address);
+    const auto accepted=protocol::encode_hello_ack({true,0,"Joined the lobby",session_save_,{},session_save_generation_,manifest_.session_save_hash});
+    const auto response=watch::link_encode(watch::LinkKind::Accepted,accepted);
+    send_with_key(pending->address,pending->key,static_cast<protocol::MessageType>(watch::PartyMessageType),response);
+    party->pending_watch.erase(pending->sender_id);party->advertised={};
+    status_=pending->display_name+(port?" joined as a racer.":" joined to watch.");
+    *pending={};error.clear();return true;
+}
+
     const std::string peer_id = std::to_string(pending->sender_id);
     CompatibilityManifest synchronized_manifest = pending->manifest;
     const bool requires_save_sync = true;
@@ -1191,9 +1285,11 @@ bool DirectSession::reject_join(std::uint64_t request_id,
                   protocol::MessageType::HelloAck,
                   protocol::encode_hello_ack({false, 0U,
                       block_for_session ? "The host blocked this request for the session."
-                                        : "The host declined this join request."}));
+                                        : dkr::lobby_stability::decline_reason(this,request_id)}));
     if (block_for_session) {
         blocked_senders_.insert(pending->sender_id);
+        auto directory_owner=dkr::online::native::owner(this);
+        if(auto* binding=dkr::online::native::binding(*directory_owner,pending->sender_id))directory_owner->blocked.insert(binding->account);
         const std::string source_host = DatagramSocket::describe_host(pending->address);
         if (!source_host.empty()) blocked_sources_.insert(source_host);
     }
@@ -1211,7 +1307,7 @@ bool DirectSession::set_lobby_locked(bool locked, std::string& error) {
         return false;
     }
     if (!is_host_ || (state_ != ConnectionState::Hosting &&
-                      state_ != ConnectionState::Lobby)) {
+                      state_ != ConnectionState::Lobby && !dkr::runtime::spectators::party_enabled(this))) {
         error = "Only the host can lock the lobby before the race starts.";
         return false;
     }
@@ -1307,11 +1403,12 @@ bool DirectSession::revoke_invitation(std::string& error) {
 
 bool DirectSession::request_start(std::string& error) {
     std::scoped_lock lock(mutex_);
+    if(dkr::runtime::spectators::party_enabled(this)){if(!is_host_){error="Only the host can start.";return false;}dkr::runtime::spectators::party_start(this);error.clear();return true;}
     if (owned_match_end_ && !owned_match_end_->resumed) {
         error = "Wait for every remaining racer to return to the lobby and verify the online save.";
         return false;
     }
-    if (const char* reason = experimental::runtime_admission_error(lobby_.room().rules.synchronization, owned_backend_available_)) {
+    if (const char* reason = dkr::runtime::netplay::rollback_policy::admission_error(lobby_.room().rules.synchronization, owned_backend_available_)) {
         error = reason;
         return false;
     }
@@ -1391,62 +1488,14 @@ void DirectSession::begin_countdown_locked() {
 
 bool DirectSession::request_connection_test(std::string& error) {
     std::scoped_lock lock(mutex_);
-    if (pending_invitation_) {
-        error = "Wait for the code replacement to finish before testing.";
-        return false;
-    }
-    if (!is_host_ || (state_ != ConnectionState::Hosting &&
-                      state_ != ConnectionState::Lobby)) {
-        error = "Only Player 1 can run a connection pre-flight check from the lobby.";
-        return false;
-    }
-    if (connection_test_active_ || launch_stage_ != LaunchStage::Idle) {
-        error = "A synchronized lobby operation is already running.";
-        return false;
-    }
-    if (occupied_players() < 2U || occupied_players() > kSupportedOnlinePlayers) {
-        error = "At least two racers must be in the lobby before testing the session.";
-        return false;
-    }
-    constexpr std::array<TransportTrafficClass, 5U> required_traffic{{
-        TransportTrafficClass::Checkpoint,
-        TransportTrafficClass::Control,
-        TransportTrafficClass::Authoritative,
-        TransportTrafficClass::Realtime,
-        TransportTrafficClass::Replica}};
-    for (const PeerRecord& peer : peers_) {
-        if (!peer.active) continue;
-        for (const TransportTrafficClass traffic : required_traffic) {
-            if (transport_->traffic_ready(peer.address, traffic)) continue;
-            error = "A racer's network lanes are still warming up. Try the test again in a moment.";
-            return false;
-        }
-    }
-
-    reset_connection_test_locked();
-    connection_test_results_ = {};
-    connection_test_active_ = true;
-    connection_test_id_ = next_connection_test_id_++;
-    if (connection_test_id_ == 0U) connection_test_id_ = next_connection_test_id_++;
-    if (next_connection_test_id_ == 0U) next_connection_test_id_ = 1U;
-    const auto now = std::chrono::steady_clock::now();
-    connection_test_started_ = now;
-    connection_test_measurement_end_ = now + std::chrono::seconds(6);
-    connection_test_drain_end_ = connection_test_measurement_end_ +
-                                 std::chrono::seconds(1);
-    connection_test_queue_failures_at_start_ = transport_queue_failures_;
-    for (std::uint32_t& sequence : connection_test_next_sequence_) sequence = 1U;
-    broadcast(protocol::MessageType::PreflightBegin,
-              protocol::encode_preflight_begin(
-                  {connection_test_id_, 7000U}));
-    status_ = "Connection pre-flight is applying representative online traffic.";
-    worker_wake_ = true;
-    state_changed_.notify_all();
-    error.clear();
-    return true;
+#include "../owner_context.inl"
+    const bool ok=dkr::runtime::rollback_check::request(this,rollback_context(),error);
+    if(ok){worker_wake_=true;state_changed_.notify_all();}
+    return ok;
 }
 
 void DirectSession::reset_connection_test_locked() {
+    dkr::runtime::rollback_check::forget(this);
     if (connection_test_id_) terminal_connection_test_id_ = connection_test_id_;
     connection_test_active_ = false;
     connection_test_draining_ = false;
@@ -1468,183 +1517,9 @@ void DirectSession::reset_connection_test_locked() {
     connection_test_result_last_send_ = {};
 }
 
-void DirectSession::service_connection_test_locked(
-    std::chrono::steady_clock::time_point now) {
-    if (!connection_test_active_ || !is_host_) {
-        if (connection_test_active_ && !is_host_ && now >= connection_test_drain_end_) {
-            terminal_connection_test_id_ = connection_test_id_;
-            connection_test_active_ = false;
-            ++connection_test_result_generation_;
-            status_ = "Connection pre-flight was inconclusive: final results did not arrive in time. You can retry the test or change Ready.";
-        }
-        if (is_host_ && !connection_test_active_ && now < connection_test_result_retry_until_ &&
-            now - connection_test_result_last_send_ >= std::chrono::milliseconds(500)) {
-            for (const auto& peer : peers_) {
-                if (!peer.active) continue;
-                for (const auto& result : connection_test_results_) {
-                    if (!result.valid || (connection_test_result_acks_[peer.slot] & (1U << result.player_slot))) continue;
-                    send_to(peer.address, protocol::MessageType::PreflightResult,
-                        protocol::encode_preflight_result({connection_test_id_, result.player_slot, result.score,
-                            result.p95_rtt_ms, result.jitter_ms,
-                            static_cast<std::uint16_t>(result.loss_percent * 10.0F),
-                            static_cast<std::uint16_t>(result.late_percent * 10.0F), result.queues_drained}));
-                }
-            }
-            connection_test_result_last_send_ = now;
-        }
-        return;
-    }
-
-    constexpr std::array<protocol::MessageType, 5U> message_types{{
-        protocol::MessageType::PreflightControlProbe,
-        protocol::MessageType::PreflightAuthorityProbe,
-        protocol::MessageType::PreflightRealtimeProbe,
-        protocol::MessageType::PreflightReplicaProbe,
-        protocol::MessageType::PreflightCheckpointProbe}};
-    constexpr std::array<std::chrono::milliseconds, 5U> intervals{{
-        std::chrono::milliseconds(100), std::chrono::milliseconds(33),
-        std::chrono::milliseconds(33), std::chrono::milliseconds(200),
-        std::chrono::milliseconds(100)}};
-    constexpr std::array<std::size_t, 5U> padding_sizes{{
-        16U, 192U, 24U, 880U, 880U}};
-
-    if (now < connection_test_measurement_end_) {
-        for (std::size_t lane = 0U; lane < message_types.size(); ++lane) {
-            if (connection_test_last_send_[lane].time_since_epoch().count() != 0 &&
-                now - connection_test_last_send_[lane] < intervals[lane]) {
-                continue;
-            }
-            std::uint32_t sequence = connection_test_next_sequence_[lane]++;
-            if (sequence == 0U) sequence = connection_test_next_sequence_[lane]++;
-            if (connection_test_next_sequence_[lane] == 0U) {
-                connection_test_next_sequence_[lane] = 1U;
-            }
-            protocol::PreflightProbePayload probe{
-                connection_test_id_, sequence, steady_microseconds(), false,
-                std::vector<std::uint8_t>(padding_sizes[lane],
-                                          static_cast<std::uint8_t>(lane + 1U))};
-            const auto payload = protocol::encode_preflight_probe(probe);
-            for (const PeerRecord& peer : peers_) {
-                if (!peer.active) continue;
-                if (send_to(peer.address, message_types[lane], payload)) {
-                    ++connection_test_sent_[peer.slot][lane];
-                }
-            }
-            connection_test_last_send_[lane] = now;
-        }
-        return;
-    }
-
-    if (!connection_test_draining_) {
-        connection_test_draining_ = true;
-        status_ = "Connection pre-flight is draining and measuring its queues.";
-    }
-    if (now < connection_test_drain_end_) return;
-
-    connection_test_results_ = {};
-    connection_test_results_[local_slot_] = {
-        true, local_slot_, 10U, 0U, 0U, 0.0F, 0.0F, true};
-    int overall_score = 10;
-    for (const PeerRecord& peer : peers_) {
-    if (!peer.active) continue;
-    std::vector<double> all_rtt;
-    std::uint64_t total_sent = 0U;
-    std::uint64_t total_received = 0U;
-    std::uint64_t late_samples = 0U;
-    double jitter_sum = 0.0;
-    std::uint64_t jitter_samples = 0U;
-    for (std::size_t lane = 0U; lane < connection_test_rtt_samples_[peer.slot].size();
-         ++lane) {
-        total_sent += connection_test_sent_[peer.slot][lane];
-        total_received += connection_test_received_[peer.slot][lane];
-        const auto& samples = connection_test_rtt_samples_[peer.slot][lane];
-        all_rtt.insert(all_rtt.end(), samples.begin(), samples.end());
-        for (std::size_t sample = 0U; sample < samples.size(); ++sample) {
-            if (samples[sample] > 100.0) ++late_samples;
-            if (sample != 0U) {
-                jitter_sum += std::abs(samples[sample] - samples[sample - 1U]);
-                ++jitter_samples;
-            }
-        }
-    }
-    std::sort(all_rtt.begin(), all_rtt.end());
-    const double p95 = all_rtt.empty()
-        ? 65535.0
-        : all_rtt[static_cast<std::size_t>(std::ceil(
-              static_cast<double>(all_rtt.size()) * 0.95)) - 1U];
-    const double jitter = jitter_samples == 0U
-        ? 0.0 : jitter_sum / static_cast<double>(jitter_samples);
-    const double loss = total_sent == 0U
-        ? 100.0
-        : static_cast<double>(total_sent - (std::min)(total_sent, total_received)) *
-              100.0 / static_cast<double>(total_sent);
-    const double late = all_rtt.empty()
-        ? 100.0
-        : static_cast<double>(late_samples) * 100.0 /
-              static_cast<double>(all_rtt.size());
-    const bool queues_drained =
-        critical_outbound_.empty() && repair_outbound_.empty() &&
-        high_priority_outbound_.empty() && commit_outbound_.empty() &&
-        authority_outbound_.empty() && normal_priority_outbound_.empty() &&
-        bulk_outbound_.empty() &&
-        transport_->buffered_bytes(TransportTrafficClass::Control) < 4096U &&
-        transport_->buffered_bytes(TransportTrafficClass::Authoritative) < 4096U &&
-        transport_->buffered_bytes(TransportTrafficClass::Checkpoint) < 4096U &&
-        transport_->buffered_bytes(TransportTrafficClass::Realtime) < 4096U &&
-        transport_->buffered_bytes(TransportTrafficClass::Replica) < 4096U &&
-        transport_queue_failures_ == connection_test_queue_failures_at_start_;
-
-    int score = 10;
-    if (p95 > 60.0) --score;
-    if (p95 > 100.0) score -= 2;
-    if (p95 > 180.0) score -= 2;
-    if (jitter > 8.0) --score;
-    if (jitter > 12.0) --score;
-    if (jitter > 30.0) --score;
-    if (loss > 0.2) --score;
-    if (loss > 0.5) --score;
-    if (loss > 2.0) --score;
-    if (late > 2.0) --score;
-    if (late > 8.0) --score;
-    if (!queues_drained) score -= 3;
-    score = std::clamp(score, 1, 10);
-
-        overall_score = (std::min)(overall_score, score);
-        ConnectionTestResultView result{
-            true, peer.slot, static_cast<std::uint8_t>(score),
-            static_cast<std::uint16_t>(std::clamp(p95, 0.0, 65535.0)),
-            static_cast<std::uint16_t>(std::clamp(jitter, 0.0, 65535.0)),
-            static_cast<float>(loss), static_cast<float>(late), queues_drained};
-        connection_test_results_[peer.slot] = result;
-    }
-    ++connection_test_result_generation_;
-    if (connection_test_result_generation_ == 0U) {
-        ++connection_test_result_generation_;
-    }
-    for (const ConnectionTestResultView& result : connection_test_results_) {
-        if (!result.valid) continue;
-        const auto payload = protocol::encode_preflight_result({
-            connection_test_id_, result.player_slot, result.score,
-            result.p95_rtt_ms, result.jitter_ms,
-            static_cast<std::uint16_t>(std::clamp(
-                std::lround(result.loss_percent * 10.0F), 0L, 1000L)),
-            static_cast<std::uint16_t>(std::clamp(
-                std::lround(result.late_percent * 10.0F), 0L, 1000L)),
-            result.queues_drained});
-        for (int copy = 0; copy < 3; ++copy) {
-            broadcast(protocol::MessageType::PreflightResult, payload);
-        }
-    }
-    connection_test_active_ = false;
-    connection_test_draining_ = false;
-    terminal_connection_test_id_ = connection_test_id_;
-    connection_test_result_retry_until_ = now + std::chrono::seconds(15);
-    status_ = overall_score >= 8
-        ? "Connection pre-flight passed in the green band."
-        : overall_score >= 5
-            ? "Connection pre-flight completed in the orange band."
-            : "Connection pre-flight found a red-band route.";
-    state_changed_.notify_all();
+void DirectSession::service_connection_test_locked(std::chrono::steady_clock::time_point) {
+    // Superseded by the isolated Rollback diagnostic serviced before the
+    // spectator-capable lobby's early return. Legacy scores are never run.
 }
 
 bool DirectSession::all_active_players_acknowledged_locked(
@@ -2043,6 +1918,7 @@ void DirectSession::send_loaded_locked() {
 
 void DirectSession::fail_runtime_start(std::string reason) {
     std::scoped_lock lock(mutex_);
+    if(dkr::runtime::spectators::party_enabled(this)){dkr::runtime::spectators::party_stop(this,std::move(reason));return;}
     fail_locked(std::move(reason));
 }
 
@@ -3373,7 +3249,7 @@ bool DirectSession::receive_owned_packet_locked(std::uint8_t source,
     if(launch_hash!=launch_descriptor_hash(*launch_descriptor_))return true;
     const auto payload_size=packet.payload.size()-8U;
     if (owned_inbound_.size() >= 256 || owned_inbound_bytes_ + payload_size > 2U*1024U*1024U) {
-        fail_locked("The experimental packet consumer stopped servicing its bounded receive queue.");
+        fail_locked("The Rollback packet consumer stopped servicing its bounded receive queue.");
         return true;
     }
     const auto traffic = type == protocol::MessageType::ExperimentalInput ? TransportTrafficClass::Realtime
@@ -4883,6 +4759,7 @@ SessionView DirectSession::view_locked() const {
                        last_verified_frame_, last_authoritative_frame_,
                        authoritative_corrections_, input_delay_, method_,
                        match_id_, lobby_locked_};
+    if(auto owner=dkr::online::native::owner(this);is_host_&&owner->guarded)result.room.visibility=owner->public_room?Visibility::Public:Visibility::Private;
     result.owned_match_ending = owned_match_end_ && !owned_match_end_->resumed;
     result.input_stalls = input_stalls_;
     result.longest_input_stall_ms = longest_input_stall_ms_;
@@ -5069,6 +4946,17 @@ SessionView DirectSession::view_locked() const {
         result.network_jitter_ms = local.jitter_ms;
         result.network_loss_percent = local.packet_loss_percent;
     }
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+     if(party->enabled){result.room=room_view_;result.room.players={};result.room.generation=party->party.snapshot().generation;
+        result.room.phase=party->launch&&!party->stopping?RoomPhase::Running:RoomPhase::Waiting;
+        for(const auto& m:party->party.snapshot().members)if(m.port){auto& p=result.room.players[*m.port];
+            p.occupied=p.compatible=true;p.host=m.host;p.slot=*m.port;p.peer_id=std::to_string(m.id);p.display_name=m.name;
+            p.ready=party->ready.contains(m.id)&&party->ready.at(m.id);p.loaded=party->running;result.online_save_ready[*m.port]=true;}
+        if(!party->status.empty())result.status=party->status;
+        result.network_rtt_ms=party->rtt_ms;
+        if(is_host_)for(const auto& peer:party->peers)if(const auto* m=party->party.find(peer.id);m&&m->role==dkr::runtime::spectators::Role::Racer&&peer.rtt_count)
+            for(unsigned i=0;i<peer.rtt_count;++i)result.network_rtt_ms=std::max(result.network_rtt_ms,peer.rtts[i]);
+     }}
     result.mod_offer=mod_offer_;
     if (is_host_) {
         for (const PendingRecord& pending : pending_joins_) {
@@ -5754,6 +5642,9 @@ std::uint64_t& DirectSession::outbound_sequence(
             return peer.next_sequence;
         }
     }
+    // Promotion retains one monotonically increasing authenticated nonce.
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+     if(auto* p=party->peer(address);p&&p->key==key)return p->sequence;}
     for (PendingRecord& pending : pending_joins_) {
         if (pending.active && pending.address == address && pending.key == key) {
             return pending.next_sequence;
@@ -5768,7 +5659,11 @@ std::uint64_t& DirectSession::outbound_sequence(
 bool DirectSession::send_join_request() {
     const protocol::HelloPayload hello{local_name_, manifest_,
                                        client_friend_admission_};
-    const auto payload = protocol::encode_hello(hello);
+    auto payload = protocol::encode_hello(hello);
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+     if(party->requested){const std::array<std::uint8_t,8> marker{'D','K','R','P','T','Y',1,std::uint8_t(party->join_watch)};
+        payload.insert(payload.begin(),marker.begin(),marker.end());}}
+
     secure::Key peer_key{};
     const auto encrypted = secure::seal_join_request(
         payload, client_key_pair_.secret, client_key_pair_.public_key,
@@ -5788,8 +5683,55 @@ void DirectSession::broadcast(protocol::MessageType type,
 }
 
 void DirectSession::pump_locked() {
+#include "../owner_pump.inl"
+#include "../owner_context.inl"
+#include "../owner_send.inl"
+
+// This owner-only path is shared by authenticated leave/disconnect notices,
+// current transport closure and the heartbeat watchdog. Spectators never own
+// a racing port. A lost racer must stop the old control roster, not simulate on.
+auto retire_party_member=[&](std::uint64_t id,const char* cause){
+    namespace watch=dkr::runtime::spectators;
+    auto party=watch::party_link(this);std::scoped_lock party_lock(party->mutex);
+    if(!is_host_||!party->enabled||id==party->local)return false;
+    const auto* member=party->party.find(id);auto* peer=party->peer(id);
+    if(!member||!peer)return false;
+    const auto name=member->name;const auto address=peer->address;
+    const bool racer=member->role==watch::Role::Racer,live=racer&&bool(party->launch);
+    std::string reason;
+    if(!party->party.remove(id,reason)){
+        party->stopping=party->stop_requested=true;party->running=false;
+        party->status="The disconnected member could not be retired safely: "+reason;return true;
+    }
+    party->ready.erase(id);party->pending_watch.erase(id);
+    std::erase_if(party->swap_requests,[&](const auto& item){return item.second==id;});
+    if(party->requested_swap&&party->requested_swap->second==id)party->requested_swap.reset();
+    if(party->approved_swap&&party->approved_swap->second==id)party->approved_swap.reset();
+    for(auto& pending:party->outgoing)std::erase_if(pending,[&](const auto& item){
+        if(item.target!=id)return false;party->outgoing_bytes-=item.bytes.size();return true;
+    });
+    std::erase_if(party->incoming,[&](const auto& item){
+        if(item.source!=id)return false;party->incoming_bytes-=item.bytes.size();return true;
+    });
+    for(auto& item:party->peers)if(item.id==id)crypto_wipe(item.key.data(),item.key.size());
+    std::erase_if(party->peers,[&](const auto& item){return item.id==id;});
+    transport_->release_peer_route(address);party->advertised={};
+    if(live){party->stopping=party->stop_requested=true;party->running=false;
+        party->status=name+" disconnected. Returning safely to the lobby.";}
+    else party->status=name+(racer?" left the lobby.":" stopped spectating.");
+    status_=party->status;
+    std::fprintf(stderr,"[lobby][departure] role=%s live=%u cause=%s; roster retired\n",racer?"racer":"spectator",unsigned(live),cause);
+    return true;
+};
+
     PeerAddress departed{};
     while(transport_->take_peer_departure(departed)) {
+        {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+         if(party->enabled){
+            if(is_host_){if(const auto* member=party->peer(departed))if(retire_party_member(member->id,"transport closed"))continue;}
+            else if(departed==host_address_){fail_locked("The host disconnected. The lobby has closed.");return;}
+         }}
+
         if(is_host_)for(auto& pending:pending_joins_)if(pending.active && pending.mod_route_retained && pending.address==departed) {
             clear_pending_mod_route_locked(pending);pending={};
         }
@@ -5878,9 +5820,11 @@ void DirectSession::pump_locked() {
             PeerRecord* peer = peer_by_sender(packet_sender);
             if (peer && peer->address==source) receive_key = &peer->key;
             else {
-                auto* pending=pending_by_sender(packet_sender);
-                if(!pending || !pending->mods_approved || !(pending->address==source))continue;
-                receive_key=&pending->key;provisional_mod_peer=true;
+                auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+                if(auto* member=party->peer(packet_sender);member&&member->address==source)receive_key=&member->key;
+                else {auto* pending=pending_by_sender(packet_sender);
+                    if(!pending || !pending->mods_approved || !(pending->address==source))continue;
+                    receive_key=&pending->key;provisional_mod_peer=true;}
             }
         } else if (packet_sender != host_sender_id_) {
             continue;
@@ -5904,10 +5848,257 @@ void DirectSession::pump_locked() {
         // per traffic lane while retaining one globally unique encryption
         // sequence/nonce on the sender.
         auto& receive_windows = received_sequences_[packet_sender];
-        if (!receive_windows[receive_sequence_lane(packet.header.type)]
+        if(unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType&&packet.header.frame>=5)continue;
+        const auto sequence_lane=unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType?packet.header.frame:receive_sequence_lane(packet.header.type);
+        if (!receive_windows[sequence_lane]
                  .accept(packet_sequence)) {
             continue;
         }
+        // Only the authenticated host's matching receipt is consumed during
+        // local teardown. Delayed launch/Room packets cannot re-arm the game.
+        if(dkr::runtime::party_departure::waiting(this)){
+            dkr::runtime::spectators::LinkMessage reply;
+            if(packet_sender==host_sender_id_&&source==host_address_&&
+               unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType&&
+               dkr::runtime::spectators::link_decode(packet.payload,reply)&&
+               reply.kind==dkr::runtime::spectators::LinkKind::Leave&&
+               dkr::runtime::party_departure::notice(reply.body,2,sender_id_))
+                dkr::runtime::party_departure::acknowledge(this,sender_id_);
+            continue;
+        }
+        // The generic Disconnect handler only knows the old four-port peer
+        // table. An admitted party member has its own authenticated identity.
+        if(packet.header.type==protocol::MessageType::Disconnect){
+            auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+            if(party->enabled){
+                if(is_host_)retire_party_member(packet_sender,"disconnect notice");
+                else if(packet_sender==host_sender_id_&&source==host_address_){fail_locked("The host disconnected. The lobby has closed.");return;}
+                continue;
+            }
+        }
+        if(dkr::runtime::rollback_check::diagnostic_type(packet.header.type)) {
+            // Already decrypted, admitted and replay-window validated above.
+            bool approved=!is_host_&&packet_sender==host_sender_id_&&source==host_address_;
+            if(is_host_){
+                const auto p=dkr::runtime::spectators::party_link(this);std::scoped_lock lock(p->mutex);
+                if(p->enabled){const auto* peer=p->peer(packet_sender);approved=peer&&peer->address==source;}
+                else{const auto* peer=peer_by_sender(packet_sender);approved=peer&&peer->active&&peer->address==source;}
+            }
+            if(approved)dkr::runtime::rollback_check::receive(this,rollback_context(),packet_sender,packet.header.type,packet.payload,rollback_send,std::chrono::steady_clock::now());
+            continue; // Never enter legacy preflight or real game-input handlers.
+        }
+// Inside DirectSession::pump_locked, after AEAD and replay-window validation.
+if (unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType) {
+    if(state_==ConnectionState::Failed||state_==ConnectionState::Offline)continue;
+    namespace watch=dkr::runtime::spectators;
+    auto party=watch::party_link(this);std::scoped_lock party_lock(party->mutex);
+    watch::LinkMessage message;
+    if(!watch::link_decode(packet.payload,message))continue;
+    if(is_host_) {
+        auto* member=party->peer(packet_sender);
+        if(!party->enabled||!member||member->address!=source)continue;
+        const auto now=std::chrono::steady_clock::now();
+        const auto* identity=party->party.find(packet_sender);
+        const bool observer=identity&&identity->role==watch::Role::Spectator;
+        const std::size_t token_cap=observer?16*1024:128*1024,token_rate=observer?16:128;
+        member->received_tokens=std::min(member->received_tokens,token_cap);
+        if(member->rate_at.time_since_epoch().count()) {
+            const auto credit=std::chrono::duration_cast<std::chrono::milliseconds>(now-member->rate_at).count();
+            if(credit>0){member->received_tokens=std::min(token_cap,member->received_tokens+std::size_t(credit)*token_rate);member->rate_at=now;}
+        } else member->rate_at=now;
+        if(packet.payload.size()>member->received_tokens)continue;
+        member->received_tokens-=packet.payload.size();member->heard=now;
+        switch(message.kind) {
+        case watch::LinkKind::Runtime:
+            if(observer) {
+                // Watchers can acknowledge playback or request a seat, never
+                // supply racing input, membership, scene votes or host state.
+                if(message.body.size()<21||message.body.size()>128)break;
+                const auto kind=message.body[4];
+                if(kind!=1&&kind!=4&&kind!=13&&kind!=15&&kind!=16&&kind!=17)break;
+            }
+            party->admit_incoming(packet_sender,message.body);break;
+        case watch::LinkKind::Heartbeat: {
+            std::uint64_t token=0;bool reply=false;
+            if(!watch::link_heartbeat(message.body,token,reply))break;
+            if(!reply)party->enqueue({packet_sender,watch::LinkKind::Heartbeat,TransportTrafficClass::Control,watch::link_heartbeat(token,true)});
+            else if(token==member->ping_token&&member->ping_sent.time_since_epoch().count()) {
+                const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(now-member->ping_sent).count();
+                if(ms>=0&&ms<5000){member->rtts[member->rtt_index++%member->rtts.size()]=std::uint16_t(std::max<std::int64_t>(1,ms));member->rtt_count=std::min<unsigned>(member->rtt_count+1,unsigned(member->rtts.size()));}
+                member->ping_token=0;
+            }break;
+        }
+        case watch::LinkKind::Start: {
+            auto gate=dkr::runtime::party_start::gate(this);
+            const auto receipt=dkr::runtime::party_start::receipt(message.body,*gate);
+            if(!party->participant(packet_sender)||!gate->launch||gate->roster!=party->party.snapshot().generation)break;
+            if(receipt==1&&gate->phase==dkr::runtime::party_start::Phase::Countdown)gate->prepared.insert(packet_sender);
+            if(receipt==2&&gate->phase==dkr::runtime::party_start::Phase::Committing)gate->committed.insert(packet_sender);
+            break;
+        }
+        case watch::LinkKind::Ready:
+            if(!party->launch&&!party->stopping&&message.body.size()==1&&message.body[0]<=1&&party->participant(packet_sender))
+                party->ready[packet_sender]=message.body[0]!=0;
+            break;
+        case watch::LinkKind::Stop:
+            if(party->participant(packet_sender)){party->stop_requested=true;party->status="A racer returned to the lobby.";}
+            break;
+        case watch::LinkKind::Returned:
+            if(party->launch&&party->participant(packet_sender)){
+                party->stopping=party->stop_requested=true;party->running=false;
+                party->status=(identity?identity->name:std::string("A racer"))+" returned to the lobby. The match has ended.";
+                std::fprintf(stderr,"[lobby][departure] racer returned; match retirement requested\n");
+            }
+            break;
+        case watch::LinkKind::Leave: {
+            const bool receipt=dkr::runtime::party_departure::notice(message.body,1,packet_sender);
+            if(!message.body.empty()&&!receipt)break;
+            if(receipt){
+                const auto bytes=watch::link_encode(watch::LinkKind::Leave,dkr::runtime::party_departure::notice(2,packet_sender));
+                send_with_key(member->address,member->key,static_cast<protocol::MessageType>(watch::PartyMessageType),bytes);
+                flush_outbound_locked();
+            }
+            retire_party_member(packet_sender,"leave notice");break;
+        }
+        default:break; // No client can publish membership, a launch or a checkpoint as host.
+        }
+    } else {
+        if(packet_sender!=host_sender_id_||source!=host_address_)continue;
+        last_admission_response_=std::chrono::steady_clock::now();
+        if(message.kind==watch::LinkKind::Accepted) {
+            protocol::HelloAckPayload accepted;std::string reason;
+            if(!party->requested||!protocol::decode_hello_ack(message.body,accepted,reason)||!accepted.accepted||
+               accepted.synchronized_save.size()!=512||
+               stable_hash(std::string_view(reinterpret_cast<const char*>(accepted.synchronized_save.data()),512))!=accepted.online_save_hash||
+               !accepted.online_save_generation||!accepted.online_save_hash)continue;
+            if(party->enabled&&party->admitted){
+                if(accepted.online_save_generation<session_save_generation_)continue;
+                if(accepted.online_save_generation==session_save_generation_){
+                    if(accepted.online_save_hash!=manifest_.session_save_hash)fail_locked("The host supplied conflicting lobby save identities. Leave and rejoin.");
+                    continue; // An acceptance retry cannot reset a live client's port or phase.
+                }
+                if(party->launch&&!party->stopping){fail_locked("The host changed the lobby save during a running match.");continue;}
+            }
+            party->enabled=party->admitted=true;party->host=false;party->local=sender_id_;party->authority=host_sender_id_;
+            party->room_id=match_id_;party->seed=accepted.synchronized_save;party->save_generation=accepted.online_save_generation;party->save_hash=accepted.online_save_hash;
+            party->status="Joined the lobby";state_=ConnectionState::Lobby;local_slot_=255;
+            std::fprintf(stderr,"[lobby][admission] party accepted; awaiting authenticated roster and settings\n");
+            local_online_save_ready_=local_online_save_acknowledged_=true;
+            session_save_generation_=accepted.online_save_generation;manifest_.session_save_hash=accepted.online_save_hash;
+            room_view_.manifest.session_save_hash=accepted.online_save_hash;
+            transport_->retain_peer_route(host_address_);
+        } else if(party->enabled&&party->admitted) {
+            if(message.kind==watch::LinkKind::Roster) {
+                watch::PartySnapshot roster;std::string reason;
+                if(watch::wire::roster(message.body,roster,reason)&&roster.host==host_sender_id_&&
+                   std::any_of(roster.members.begin(),roster.members.end(),[&](const auto& m){return m.id==sender_id_;})&&
+                   party->party.replace_verified(std::move(roster),reason)) {
+                    const auto* local=party->party.find(sender_id_);local_slot_=local&&local->port?*local->port:255;
+                }
+            } else if(message.kind==watch::LinkKind::Room) {
+                protocol::LobbyStatePayload room;std::string reason;
+                if(protocol::decode_lobby_state(message.body,room,reason)&&room.generation==party->party.snapshot().generation&&room.generation>=room_view_.generation) {
+                    const bool changed=room_view_.generation!=room.generation||room_view_.rules!=room.rules;
+                    apply_lobby_payload(room);
+                    // Party generation names membership, not Ready or automatic
+                    // input-delay updates. Apply validated current metadata too.
+                    room_view_.rules=room.rules;room_view_.phase=room.phase;input_delay_=room.input_delay_frames;
+                    if(changed)std::fprintf(stderr,"[lobby][room] synchronized generation=%llu mode=Rollback delay=%u window=%u\n",
+                        static_cast<unsigned long long>(room.generation),unsigned(input_delay_),unsigned(room.rules.rollback_window));
+                    for(const auto& m:party->party.snapshot().members)if(m.port)party->ready[m.id]=room.players[*m.port].ready;
+                } else if(reason==dkr::runtime::netplay::rollback_policy::unsupported_lobby) fail_locked(reason);
+            } else if(message.kind==watch::LinkKind::Launch) {
+protocol::StartPayload start;std::string reason;
+auto gate=dkr::runtime::party_start::gate(this);
+using StartPhase=dkr::runtime::party_start::Phase;
+if(!protocol::decode_start(message.body,start,reason)){
+    party->status="The host sent an invalid starting grid. Please recreate the lobby.";
+    std::fprintf(stderr,"[lobby][start-reject] invalid descriptor: %s\n",reason.c_str());
+}else{
+    const auto& launch=start.descriptor;
+    const auto& roster=party->party.snapshot();
+    unsigned count=0;std::uint8_t mask=0;
+    for(const auto& m:roster.members)if(m.role==watch::Role::Racer&&m.port){++count;mask|=std::uint8_t(1U<<*m.port);}
+    const bool valid=launch.match_id==match_id_&&launch.synchronization==SynchronizationMode::ExperimentalRollback&&
+        launch.compatibility_hash==manifest_hash(room_view_.manifest)&&room_view_.generation==roster.generation&&
+        launch.player_count==count&&launch.occupied_mask==mask&&party->seed.size()==512&&
+        party->save_generation==session_save_generation_&&party->save_hash==manifest_.session_save_hash&&
+        start.descriptor_hash!=gate->retired;
+    if(!valid){
+        // A roster or Room can be in flight. Do not arm a different grid or
+        // silently start; the host retries and its bounded gate names failure.
+        if(gate->hash!=start.descriptor_hash){
+            gate->hash=start.descriptor_hash;
+            std::fprintf(stderr,"[lobby][start-wait] roster=%llu room=%llu racers=%u/%u manifest=%u seed=%u\n",
+                static_cast<unsigned long long>(roster.generation),static_cast<unsigned long long>(room_view_.generation),count,unsigned(launch.player_count),
+                unsigned(launch.compatibility_hash==manifest_hash(room_view_.manifest)),unsigned(party->seed.size()==512));
+        }
+        party->status="Validating the host's current roster, settings and save before starting...";
+    }else if(start.stage==0){
+        if(!party->launch){
+            if(!gate->launch||gate->hash!=start.descriptor_hash){
+                gate->launch=launch;gate->hash=start.descriptor_hash;gate->roster=roster.generation;
+                gate->save_generation=session_save_generation_;gate->save_hash=manifest_.session_save_hash;
+                gate->phase=StartPhase::Countdown;gate->deadline=std::chrono::steady_clock::now()+std::chrono::seconds(35);
+                std::fprintf(stderr,"[lobby][start-prepare] starting grid verified; awaiting countdown and commit\n");
+            }
+            party->enqueue({host_sender_id_,watch::LinkKind::Start,TransportTrafficClass::Control,dkr::runtime::party_start::receipt(1,*gate)});
+        }
+    }else if(start.stage==1){
+        const bool prepared=gate->launch&&*gate->launch==launch&&gate->hash==start.descriptor_hash&&gate->roster==roster.generation;
+        // A late spectator may join an already running match. It never blocks
+        // racers, never owns a port, and still validates the complete descriptor.
+        if(prepared||party->local_watching()){
+            gate->launch=launch;gate->hash=start.descriptor_hash;gate->roster=roster.generation;
+            gate->save_generation=session_save_generation_;gate->save_hash=manifest_.session_save_hash;gate->phase=StartPhase::Released;
+            party->enqueue({host_sender_id_,watch::LinkKind::Start,TransportTrafficClass::Control,dkr::runtime::party_start::receipt(2,*gate)});
+            if(!party->launch||*party->launch!=launch){
+                party->launch=launch;party->running=party->stopping=party->returned=false;
+                launch_countdown_active_=false;launch_stage_=LaunchStage::Idle;
+                launch_descriptor_=launch;launch_requested_=true;state_=ConnectionState::Loading;
+                party->status=status_="Preparing the online game";
+                std::fprintf(stderr,"[lobby][launch] accepted committed stage=1 racers=%u\n",unsigned(launch.player_count));
+            }
+        }
+    }
+}
+
+            } else if(message.kind==watch::LinkKind::Runtime)party->admit_incoming(host_sender_id_,message.body);
+            else if(message.kind==watch::LinkKind::Heartbeat) {
+                std::uint64_t token=0;bool reply=false;
+                if(watch::link_heartbeat(message.body,token,reply)) {
+                    if(!reply)party->enqueue({host_sender_id_,watch::LinkKind::Heartbeat,TransportTrafficClass::Control,watch::link_heartbeat(token,true)});
+                    else if(token==party->ping_token&&party->ping_sent.time_since_epoch().count()) {
+                        const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-party->ping_sent).count();
+                        if(ms>=0&&ms<5000)party->rtt_ms=std::uint16_t(std::max<std::int64_t>(1,ms));party->ping_token=0;
+                    }
+                }
+            }
+            else if(message.kind==watch::LinkKind::Start) {
+                auto gate=dkr::runtime::party_start::gate(this);
+                if(dkr::runtime::party_start::receipt(message.body,*gate)==3){
+                    gate->retired=gate->hash;gate->launch.reset();gate->phase=dkr::runtime::party_start::Phase::Cancelled;
+                    reset_launch_transaction_locked();launch_descriptor_.reset();launch_requested_=false;
+                    // A committed client may already be cold-booting. Its
+                    // runtime sees stopping and retires; waiting clients stay.
+                    party->stopping=bool(party->launch);party->launch.reset();party->running=false;party->ready.clear();
+                    party->status=status_="The host cancelled the synchronized start. Racers must ready again.";
+                    state_=ConnectionState::Lobby;std::fprintf(stderr,"[lobby][start-cancel] host cancelled\n");
+                }
+            }
+            else if(message.kind==watch::LinkKind::Stop) {
+                {auto gate=dkr::runtime::party_start::gate(this);gate->retired=gate->hash;gate->launch.reset();gate->phase=dkr::runtime::party_start::Phase::Cancelled;}
+                reset_launch_transaction_locked();
+                party->stopping=true;party->running=false;party->status.assign(message.body.begin(),message.body.end());
+                launch_descriptor_.reset();launch_requested_=false;state_=ConnectionState::Lobby;status_=party->status;
+            } else if(message.kind==watch::LinkKind::Leave) {
+                party->stopping=true;party->running=false;party->status="The host closed the lobby.";fail_locked(party->status);
+            }
+        }
+    }
+    continue;
+}
+
         handle_packet(source, packet_sender, packet);
     }
     flush_outbound_locked();
@@ -5915,6 +6106,243 @@ void DirectSession::pump_locked() {
     const auto now = std::chrono::steady_clock::now();
     if(is_host_)for(auto& pending:pending_joins_)if(pending.active && pending.mods_approved &&
         !pending.mods_verified && now-pending.last_acknowledgement>=std::chrono::seconds(1))send_mod_offer_locked(pending);
+    if(dkr::runtime::party_departure::waiting(this)){flush_outbound_locked();return;}
+    if(dkr::runtime::rollback_check::engaged(this))
+        dkr::runtime::rollback_check::service(this,rollback_context(),rollback_send,std::chrono::steady_clock::now());
+// Inside pump_locked after ordinary receive/flush, before four-port policies.
+{
+    namespace watch=dkr::runtime::spectators;
+    auto party=watch::party_link(this);std::scoped_lock party_lock(party->mutex);
+    if(party->enabled) {
+        if(state_==ConnectionState::Failed||state_==ConnectionState::Offline)return;
+#include "../remove_member.inl"
+        const auto now=std::chrono::steady_clock::now();
+        auto queue=[&](watch::MemberId target,watch::LinkKind kind,std::vector<std::uint8_t> body){
+            return party->enqueue({target,kind,TransportTrafficClass::Control,std::move(body)});
+        };
+        auto stop=[&](std::string reason){
+            party->running=false;party->stopping=true;party->ready.clear();party->status=std::move(reason);
+            launch_descriptor_.reset();launch_requested_=false;state_=is_host_?ConnectionState::Hosting:ConnectionState::Lobby;
+            reset_launch_transaction_locked();dkr::runtime::party_start::forget(this);
+            status_=party->status;
+        };
+        if(is_host_) {
+            for(auto& peer:party->peers)if(!peer.ping_sent.time_since_epoch().count()||now-peer.ping_sent>=std::chrono::seconds(1)) {
+                peer.ping_token=std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());peer.ping_sent=now;
+                queue(peer.id,watch::LinkKind::Heartbeat,watch::link_heartbeat(peer.ping_token,false));
+            }
+            if(!party->launch&&!launch_countdown_active_&&launch_stage_==LaunchStage::Idle&&room_view_.rules.automatic_input_delay) {
+                std::uint16_t slowest=0;
+                for(const auto& peer:party->peers)if(const auto* m=party->party.find(peer.id);m&&m->role==watch::Role::Racer&&peer.rtt_count) {
+                    auto sorted=peer.rtts;std::sort(sorted.begin(),sorted.begin()+peer.rtt_count);slowest=std::max(slowest,sorted[peer.rtt_count-1]);
+                }
+                input_delay_=experimental::automatic_delay(std::max(100.,double(slowest)),room_view_.rules.rollback_window);
+            }
+            std::vector<std::uint64_t> silent_members;
+            for(const auto& peer:party->peers)
+                if(now-peer.heard>=dkr::runtime::party_departure::SilenceLimit)silent_members.push_back(peer.id);
+            for(auto id:silent_members)retire_party_member(id,"authenticated traffic silent for 10 seconds");
+            if(party->returned) {
+                if(party->seed.size()==512) {
+                    session_save_=party->seed;manifest_.session_save_hash=stable_hash(std::string_view(reinterpret_cast<const char*>(session_save_.data()),512));
+                    ++session_save_generation_;if(!session_save_generation_)++session_save_generation_;
+                    party->save_generation=session_save_generation_;party->save_hash=manifest_.session_save_hash;room_view_.manifest=manifest_;
+                    const auto refreshed=protocol::encode_hello_ack({true,0,"Back in the lobby",session_save_,{},session_save_generation_,manifest_.session_save_hash});
+                    queue(0,watch::LinkKind::Accepted,refreshed);
+                }
+                party->returned=false;party->launch.reset();party->stopping=false;party->ready.clear();party->advertised={};
+            }
+            if(party->ready_requested&&!party->launch&&party->participant(sender_id_))party->ready[sender_id_]=party->ready_value;
+            party->ready_requested=false;
+// Within the DirectSession and PartyLink owner locks.
+auto gate=dkr::runtime::party_start::gate(this);
+using StartPhase=dkr::runtime::party_start::Phase;
+auto required_start=[&](const auto& acknowledgements){
+    for(const auto& m:party->party.snapshot().members)
+        if((m.role==watch::Role::Racer||m.host)&&m.id!=sender_id_&&!acknowledgements.contains(m.id))return false;
+    return true;
+};
+auto cancel_start=[&](std::string reason){
+    if(gate->hash){queue(0,watch::LinkKind::Start,dkr::runtime::party_start::receipt(3,*gate));gate->retired=gate->hash;}
+    gate->phase=StartPhase::Cancelled;gate->launch.reset();gate->prepared.clear();gate->committed.clear();
+    reset_launch_transaction_locked();party->launch.reset();launch_descriptor_.reset();launch_requested_=false;
+    party->running=party->stopping=false;state_=ConnectionState::Hosting;
+    party->ready.clear();party->advertised={};party->status=status_=std::move(reason);
+    std::fprintf(stderr,"[lobby][start-cancel] %s\n",status_.c_str());
+};
+if(party->start_requested){
+    party->start_requested=false;
+    if(!party->launch&&!party->stopping&&gate->phase!=StartPhase::Countdown&&gate->phase!=StartPhase::Committing){
+        std::string reason;bool all=true;
+        for(const auto& m:party->party.snapshot().members)if(m.role==watch::Role::Racer){
+            if(!party->ready[m.id]){all=false;reason="Every racer must be ready before starting.";break;}
+            if(m.id!=sender_id_){
+                const auto* peer=party->peer(m.id);
+                if(!peer||!peer->rtt_count||now-peer->heard>=std::chrono::seconds(5)){
+                    all=false;reason="Waiting for a completed two-way racer connection. Please try Start again in a moment.";break;
+                }
+                // An open lobby/control channel alone cannot deliver the
+                // initial rollback checkpoint. Prove every required route.
+                for(auto lane:{TransportTrafficClass::Control,TransportTrafficClass::Authoritative,
+                               TransportTrafficClass::Realtime,TransportTrafficClass::Checkpoint})
+                    if(!transport_->traffic_ready(peer->address,lane)){all=false;reason="A racer's Rollback channels are still connecting. Please try Start again in a moment.";break;}
+            }
+        }
+        if(all&&session_save_.size()==512&&watch::prepare_racing_ports(party->party,reason)){
+            unsigned count=0;for(const auto& m:party->party.snapshot().members)if(m.role==watch::Role::Racer)++count;
+            LaunchDescriptor launch;launch.match_id=match_id_;launch.lobby_generation=++party->launch_serial;
+            launch.compatibility_hash=manifest_hash(manifest_);launch.occupied_mask=std::uint8_t((1U<<count)-1);launch.player_count=std::uint8_t(count);
+            launch.input_delay_frames=input_delay_;launch.rollback_window=room_view_.rules.rollback_window;
+            launch.synchronization=SynchronizationMode::ExperimentalRollback;launch.host_control=room_view_.rules.host_control;launch.development=room_view_.rules.development;
+            if(valid_launch_descriptor(launch)&&!protocol::encode_start({0,launch,launch_descriptor_hash(launch)}).empty()){
+                const auto retired=gate->retired;*gate={};gate->retired=retired;gate->launch=launch;gate->hash=launch_descriptor_hash(launch);
+                gate->roster=party->party.snapshot().generation;gate->save_generation=session_save_generation_;gate->save_hash=manifest_.session_save_hash;
+                gate->rules=room_view_.rules;gate->phase=StartPhase::Countdown;gate->deadline=now+std::chrono::seconds(30);
+                gate->prepared.insert(sender_id_);gate->committed.insert(sender_id_);
+                reset_launch_transaction_locked();launch_countdown_active_=true;launch_stage_=LaunchStage::Countdown;
+                launch_countdown_deadline_=now+std::chrono::seconds(5);++launch_countdown_generation_;
+                if(!launch_countdown_generation_)++launch_countdown_generation_;
+                party->advertised={};party->status=status_="DKR-R Online starts in five seconds.";
+                std::fprintf(stderr,"[lobby][countdown] five seconds; racers=%u\n",count);
+            }else reason="The lobby settings cannot start this race.";
+        }else if(reason.empty())reason="The verified online save is not ready.";
+        if(!reason.empty())party->status=status_=reason;
+    }
+}
+if(gate->phase==StartPhase::Countdown||gate->phase==StartPhase::Committing){
+    bool intact=gate->launch&&gate->roster==party->party.snapshot().generation&&gate->rules==room_view_.rules&&
+        gate->save_generation==session_save_generation_&&gate->save_hash==manifest_.session_save_hash&&
+        gate->launch->compatibility_hash==manifest_hash(manifest_);
+    for(const auto& m:party->party.snapshot().members)if(m.role==watch::Role::Racer&&!party->ready[m.id])intact=false;
+    if(!intact)cancel_start("The lobby changed. The five-second start was cancelled safely; racers must ready again.");
+    else if(party->stop_requested){party->stop_requested=false;cancel_start("The synchronized start was cancelled. Racers must ready again.");}
+    else if(now>=gate->deadline)cancel_start("A racer did not acknowledge the synchronized start in time. The lobby is still open; check the connection and try again.");
+    else{
+        if(gate->phase==StartPhase::Countdown&&now>=launch_countdown_deadline_&&required_start(gate->prepared)){
+            gate->phase=StartPhase::Committing;gate->deadline=now+std::chrono::seconds(15);gate->retry={};
+            launch_countdown_active_=false;launch_stage_=LaunchStage::Committing;
+            party->status=status_="Countdown complete. Waiting for every racer to accept the same launch.";
+        }
+        if(gate->phase==StartPhase::Committing&&required_start(gate->committed)){
+            gate->phase=StartPhase::Released;launch_stage_=LaunchStage::Idle;launch_countdown_active_=false;
+            party->launch=*gate->launch;party->seed=session_save_;party->running=party->stopping=party->returned=party->launch_sent=false;
+            launch_descriptor_=*gate->launch;launch_requested_=true;state_=ConnectionState::Loading;party->advertised={};
+            const auto* me=party->party.find(sender_id_);local_slot_=me&&me->port?*me->port:255;
+            party->status=status_="Every racer accepted the launch. Preparing the synchronized game.";
+            std::fprintf(stderr,"[lobby][start-release] all required racers acknowledged; racers=%u\n",unsigned(gate->launch->player_count));
+        }else if(now>=gate->retry){
+            // Control is reliable; retries also make validation insensitive to
+            // roster/Room delivery order and duplicate messages idempotent.
+            queue(0,watch::LinkKind::Roster,watch::wire::roster(party->party.snapshot()));
+            const auto stage=std::uint8_t(gate->phase==StartPhase::Countdown?0:1);
+            queue(0,watch::LinkKind::Launch,protocol::encode_start({stage,*gate->launch,gate->hash}));
+            gate->retry=now+std::chrono::milliseconds(250);
+            if(now>=launch_countdown_deadline_&&gate->phase==StartPhase::Countdown)
+                party->status=status_="Countdown complete. Waiting for every racer to validate the starting grid.";
+        }
+    }
+}
+
+            if(party->stop_requested) {
+                party->stop_requested=false;auto reason=party->status.empty()?std::string("Returned to the lobby."):party->status;
+                if(reason.size()>240)reason.resize(240);
+                if(gate->phase==StartPhase::Countdown||gate->phase==StartPhase::Committing||
+                   (gate->phase==StartPhase::Released&&launch_requested_&&!party->running))cancel_start(std::move(reason));
+                else {queue(0,watch::LinkKind::Stop,{reason.begin(),reason.end()});stop(std::move(reason));}
+            }
+            if(now-party->advertised>=std::chrono::milliseconds(500)) {
+                party->advertised=now;
+                auto room=lobby_payload();room.generation=party->party.snapshot().generation;room.players={};room.rules=room_view_.rules;
+                // The codec validates every slot, including vacant ports.
+                for(unsigned p=0;p<room.players.size();++p)room.players[p].slot=std::uint8_t(p);
+                room.phase=party->launch&&!party->stopping?RoomPhase::Running:RoomPhase::Waiting;
+                room.rules.synchronization=SynchronizationMode::ExperimentalRollback;
+                for(const auto& m:party->party.snapshot().members)if(m.port) {
+                    auto& row=room.players[*m.port];row.occupied=true;row.slot=*m.port;row.display_name=m.name;row.ready=party->ready[m.id];row.loaded=party->running;row.route=Route::Direct;
+                }
+                queue(0,watch::LinkKind::Roster,watch::wire::roster(party->party.snapshot()));
+                const auto room_bytes=protocol::encode_lobby_state(room);
+                if(room_bytes.empty()) {
+                    std::fprintf(stderr,"[lobby][wire-error] room serialization failed; no empty settings packet sent\n");
+                    stop("The lobby settings could not be published. Please recreate the lobby.");
+                    party->launch.reset();
+                } else queue(0,watch::LinkKind::Room,room_bytes);
+                if(party->launch&&!party->stopping){
+                    // StartPayload's committed stage is 1, never 2.
+                    const auto bytes=protocol::encode_start({1,*party->launch,launch_descriptor_hash(*party->launch)});
+                    if(bytes.empty()) {
+                        std::fprintf(stderr,"[lobby][wire-error] committed launch serialization failed\n");
+                        stop("The lobby start message could not be published. Please recreate the lobby.");party->launch.reset();
+                    } else {
+                        queue(0,watch::LinkKind::Launch,bytes);
+                        if(!party->launch_sent){party->launch_sent=true;std::fprintf(stderr,"[lobby][launch] committed stage=1 racers=%u\n",unsigned(party->launch->player_count));}
+                    }
+                }
+            }
+        } else {
+            {auto gate=dkr::runtime::party_start::gate(this);
+             if(gate->phase==dkr::runtime::party_start::Phase::Countdown&&now>=gate->deadline){
+                gate->retired=gate->hash;gate->launch.reset();gate->phase=dkr::runtime::party_start::Phase::Cancelled;
+                reset_launch_transaction_locked();party->status=status_="The host did not complete the synchronized start. Leave and rejoin the lobby.";
+             }}
+            if(party->admitted&&now-last_admission_response_>dkr::runtime::party_departure::SilenceLimit) {
+                party->stopping=true;party->running=false;fail_locked("The host stopped responding. The lobby has closed.");return;
+            }
+            if(party->ready_requested){
+                if(party->party.find(party->local)&&room_view_.generation==party->party.snapshot().generation&&
+                   room_view_.rules.synchronization==SynchronizationMode::ExperimentalRollback) {
+                    queue(party->authority,watch::LinkKind::Ready,{std::uint8_t(party->ready_value)});party->ready_requested=false;
+                } else party->status="Waiting for the host's current lobby settings...";
+            }
+            if(party->stop_requested){
+                party->stop_requested=false;
+                const bool racer=party->participant(party->local);
+                queue(party->authority,racer?watch::LinkKind::Stop:watch::LinkKind::Leave,{});
+                if(!racer)stop("Stopped watching.");
+            }
+            if(party->returned){queue(party->authority,watch::LinkKind::Returned,{});party->returned=false;party->launch.reset();party->stopping=false;}
+            if(now-party->heartbeat>=std::chrono::seconds(1)){
+                party->ping_token=std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());party->ping_sent=party->heartbeat=now;
+                queue(party->authority,watch::LinkKind::Heartbeat,watch::link_heartbeat(party->ping_token,false));
+            }
+        }
+        if(party->running&&launch_descriptor_)state_=ConnectionState::Running;
+        // Independent per-peer SCTP lanes and bounded round-robin bursts.
+        // Bulk never fills a racing input/control queue in DirectSession.
+        const auto elapsed=party->budget_at.time_since_epoch().count()?std::chrono::duration_cast<std::chrono::milliseconds>(now-party->budget_at).count():0;
+        if(elapsed>0)party->bulk_tokens=std::min<std::size_t>(256*1024,party->bulk_tokens+std::size_t(elapsed)*4096);
+        party->budget_at=now;
+        for(unsigned lane: {0U,2U,1U,3U,4U}) {
+            auto& pending=party->outgoing[lane];unsigned allowance=lane==4?8:16;
+            for(unsigned n=0;n<allowance&&!pending.empty();++n) {
+                auto item=std::move(pending.front());pending.pop_front();party->outgoing_bytes-=item.bytes.size();
+                auto payload=watch::link_encode(item.kind,item.bytes);bool blocked=false;
+                auto send=[&](const PeerAddress& destination,const secure::Key& key){
+                    if((lane==3||lane==4)&&payload.size()>party->bulk_tokens){blocked=true;return;}
+                    if(!transport_->traffic_ready(destination,item.traffic)){blocked=true;return;}
+                    auto& serial=outbound_sequence(destination,key);if(serial==UINT64_MAX){blocked=true;return;}
+                    protocol::Datagram record{{static_cast<protocol::MessageType>(watch::PartyMessageType),match_id_,serial++,unsigned(item.traffic)},payload};
+                    auto plain=protocol::encode(record,transport_->maximum_plaintext_datagram_bytes());
+                    if(plain.empty()){blocked=true;return;}
+                    auto encrypted=secure::seal(plain,key,sender_id_,record.header.sequence,match_id_);std::string ignored;
+                    const auto sent=transport_->send_status(destination,encrypted,item.traffic,ignored);
+                    if(sent!=DatagramSendStatus::Sent)blocked=true;
+                    else if(lane==3||lane==4)party->bulk_tokens-=std::min(party->bulk_tokens,payload.size());
+                };
+                if(is_host_) {
+                    if(!item.target) {
+                        // Expand broadcasts once: a blocked recipient must not
+                        // cause repeats or starvation on already sent routes.
+                        for(const auto& peer:party->peers)party->enqueue({peer.id,item.kind,item.traffic,item.bytes});
+                    } else if(auto* peer=party->peer(item.target))send(peer->address,peer->key);
+                } else if(!item.target||item.target==host_sender_id_)send(host_address_,key_);
+                if(blocked)party->enqueue(std::move(item));
+            }
+        }
+        expire_pending_joins();state_changed_.notify_all();return;
+    }
+}
+
     constexpr auto control_retry = std::chrono::milliseconds(250);
     service_owned_match_end_locked(now);
     // The outer runtime can apply lead backpressure before requesting input,
@@ -6356,6 +6784,19 @@ void DirectSession::handle_join_request(
     }
     if (blocked_senders_.contains(packet_sender) ||
         blocked_sources_.contains(DatagramSocket::describe_host(source))) return;
+    auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+    bool party_join=false,watch_join=false;
+    const std::array<std::uint8_t,7> marker{'D','K','R','P','T','Y',1};
+    if(plain.size()>=8&&std::equal(marker.begin(),marker.end(),plain.begin())&&plain[7]<=1) {
+        party_join=true;watch_join=plain[7]!=0;plain.erase(plain.begin(),plain.begin()+8);
+    }
+    // The host owns this policy. A racer advertises support for parties, not
+    // permission to enable them. A non-spectator lobby uses normal admission.
+    if(party_join&&!party->enabled&&!watch_join)party_join=false;
+    if(party_join!=party->enabled || (party_join&&party->launch&&!watch_join)) {
+        send_with_key(source,peer_key,protocol::MessageType::HelloAck,
+            protocol::encode_hello_ack({false,0,party->enabled?"Join using Racer or Watch Race. A running race accepts spectators only.":"This host has disabled spectators. Join as a racer."}));return;
+    }
     protocol::HelloPayload hello{};
     std::string error;
     if (!protocol::decode_hello(plain, hello, error)) {
@@ -6364,6 +6805,14 @@ void DirectSession::handle_join_request(
         return;
     }
     ++join_packets_accepted_;
+    if(party_join) {
+        if(auto* existing=party->peer(packet_sender)) {
+            if(existing->address!=source||existing->key!=peer_key)return;
+            const auto body=protocol::encode_hello_ack({true,0,"Joined the lobby",session_save_,{},session_save_generation_,manifest_.session_save_hash});
+            send_with_key(existing->address,existing->key,static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),
+                dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Accepted,body));party->advertised={};return;
+        }
+    }
     if (PeerRecord* existing = peer_by_sender(packet_sender)) {
         if (!(existing->address == source)) return;
         send_with_key(existing->address, existing->key,
@@ -6376,7 +6825,25 @@ void DirectSession::handle_join_request(
         broadcast_lobby();
         return;
     }
-    if (lobby_locked_ || (state_ != ConnectionState::Lobby && state_ != ConnectionState::Hosting)) {
+    auto directory_owner=dkr::online::native::owner(this);
+    if(directory_owner->guarded){
+        auto existing=dkr::online::native::binding(*directory_owner,packet_sender);
+        const bool repeated=existing&&existing->client==client_public&&existing->watching==watch_join&&existing->privacy==directory_owner->privacy&&!directory_owner->blocked.contains(existing->account);
+        if(!dkr::online::native::authorize(*directory_owner,hello.friend_admission,client_public,packet_sender,watch_join)){
+            send_with_key(source,peer_key,protocol::MessageType::HelloAck,protocol::encode_hello_ack({false,0,"Sign in with Discord and join through DKR-R Online."}));return;
+        }
+        if(!repeated){auto* binding=dkr::online::native::binding(*directory_owner,packet_sender);
+            if(binding)dkr::online::respond(this,{{"type","consume"},{"id",binding->id}});}
+        auto gate=dkr::runtime::party_start::gate(this);
+        const auto* watch_binding=dkr::online::native::binding(*directory_owner,packet_sender);
+        const bool running_watch=watch_binding&&dkr::online::contract::running_spectator(watch_binding->watching,watch_binding->allow_running&&dkr::online::view()->running_spectators,party->enabled,party->running,party->stopping,launch_countdown_active_||launch_stage_!=LaunchStage::Idle);
+        if(lobby_locked_||launch_countdown_active_||launch_stage_!=LaunchStage::Idle||
+           gate->phase==dkr::runtime::party_start::Phase::Countdown||gate->phase==dkr::runtime::party_start::Phase::Committing||
+           (party->launch&&!running_watch)||party->stopping||dkr::runtime::rollback_check::active(this)){
+            send_with_key(source,peer_key,protocol::MessageType::HelloAck,protocol::encode_hello_ack({false,0,"The lobby is changing state. Please join again when it is waiting."}));return;
+        }
+    }
+    if (lobby_locked_ || ((state_ != ConnectionState::Lobby && state_ != ConnectionState::Hosting)&&!party_join)) {
         send_with_key(source, peer_key, protocol::MessageType::HelloAck,
             protocol::encode_hello_ack({false, 0U, "The host is not accepting new racers right now."}));
         return;
@@ -6412,10 +6879,17 @@ void DirectSession::handle_join_request(
     pending->display_name = std::move(hello.display_name);
     pending->manifest = std::move(hello.manifest);
     pending->last_seen = std::chrono::steady_clock::now();
+    if(party_join){
+        const auto role=party->pending_watch.find(packet_sender);
+        if(role!=party->pending_watch.end()&&role->second!=watch_join)return;
+        party->pending_watch[packet_sender]=watch_join;
+    }
     if(pending->mods_approved) {
         send_mod_offer_locked(*pending);return;
     }
-    if (consume_friend_admission_locked(hello.friend_admission)) {
+    const auto directory_binding=dkr::online::native::binding(*directory_owner,packet_sender);
+    if ((directory_owner->guarded&&directory_binding&&directory_binding->automatic)||
+        (!directory_owner->guarded&&consume_friend_admission_locked(hello.friend_admission))) {
         const PeerAddress pending_address = pending->address;
         const secure::Key pending_key = pending->key;
         std::string admission_error;
@@ -7179,6 +7653,7 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
     } else if (packet.header.type == protocol::MessageType::LobbyState) {
         protocol::LobbyStatePayload payload{};
         if (protocol::decode_lobby_state(packet.payload, payload, error)) apply_lobby_payload(payload);
+        else if (error == dkr::runtime::netplay::rollback_policy::unsupported_lobby) fail_locked(error);
     } else if (packet.header.type == protocol::MessageType::PreflightBegin) {
         protocol::PreflightBeginPayload begin{};
         if (!protocol::decode_preflight_begin(packet.payload, begin, error) ||
@@ -8019,6 +8494,7 @@ protocol::LobbyStatePayload DirectSession::lobby_payload() const {
     payload.phase = room.phase;
     payload.room_name = room.name;
     payload.visibility = room.visibility;
+    if(auto owner=dkr::online::native::owner(this);is_host_&&owner->guarded)payload.visibility=owner->public_room?Visibility::Public:Visibility::Private;
     payload.rules = room.rules;
     payload.input_delay_frames = input_delay_;
     payload.countdown_active = launch_countdown_active_;
@@ -8042,6 +8518,9 @@ protocol::LobbyStatePayload DirectSession::lobby_payload() const {
 void DirectSession::apply_lobby_payload(const protocol::LobbyStatePayload& payload) {
     if (retired_owned_generation_ && payload.generation <= retired_owned_generation_) return;
     if (payload.generation < room_view_.generation) return;
+    // Visibility already exists in the authenticated Room codec. It is
+    // metadata and must also update without changing party/launch generations.
+    room_view_.visibility=payload.visibility;
     const bool semantic_update = payload.generation > room_view_.generation;
     if (semantic_update) {
         room_view_.generation = payload.generation;
@@ -8139,6 +8618,8 @@ void DirectSession::expire_pending_joins() {
     for (PendingRecord& pending : pending_joins_) {
         if (pending.active && (now - pending.last_seen > lifetime ||
             (pending.mods_approved && now-pending.first_seen>std::chrono::minutes(20)))) {
+            if(pending.mods_approved)send_with_key(pending.address,pending.key,protocol::MessageType::HelloAck,
+                protocol::encode_hello_ack({false,0U,now-pending.last_seen>lifetime?"Mod preparation lost contact with this player. Retry to resume verified files.":"The mod admission time budget expired. Retry to reuse verified files."}));
             clear_pending_mod_route_locked(pending);pending = {};
         }
     }
@@ -9141,6 +9622,12 @@ void DirectSession::fail_locked(std::string message) {
     // a second failure transition.
     state_ = ConnectionState::Failed;
     status_ = message;
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);
+     if(party->enabled){party->stopping=true;party->running=false;party->status=message;
+        const auto body=dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave);
+        if(is_host_)for(const auto& peer:party->peers)send_with_key(peer.address,peer.key,static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),body);
+        else if(host_address_)send_with_key(host_address_,key_,static_cast<protocol::MessageType>(dkr::runtime::spectators::PartyMessageType),body);
+     }}
     if (is_host_) broadcast(protocol::MessageType::Disconnect, failure_payload_);
     else if (host_address_) {
         send_to(host_address_, protocol::MessageType::Disconnect,
@@ -9186,6 +9673,7 @@ LaunchDescriptor DirectSession::make_launch_descriptor() const {
             ? room.rules.rollback_window
             : 0U;
     descriptor.host_control = room.rules.host_control;
+    descriptor.development=room.rules.development;
     for (std::size_t slot = 0; slot < room.players.size(); ++slot) {
         if (!room.players[slot].occupied) continue;
         descriptor.occupied_mask |= static_cast<std::uint8_t>(1U << slot);
@@ -9197,7 +9685,7 @@ LaunchDescriptor DirectSession::make_launch_descriptor() const {
 bool DirectSession::validate_start_descriptor(
     const protocol::StartPayload& payload, std::string& error) const {
     const LaunchDescriptor& descriptor = payload.descriptor;
-    if (const char* reason = experimental::runtime_admission_error(descriptor.synchronization, owned_backend_available_)) {
+    if (const char* reason = dkr::runtime::netplay::rollback_policy::admission_error(descriptor.synchronization, owned_backend_available_)) {
         error = reason;
         return false;
     }

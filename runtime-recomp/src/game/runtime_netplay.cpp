@@ -1,3 +1,4 @@
+#include "rollback_policy.hpp"
 #include "runtime_netplay.hpp"
 #if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
@@ -2339,7 +2340,7 @@ int drive_authored_tick(std::uint8_t* rdram, recomp_context* context) {
 #endif
     const RuntimeSessionView view = g_session.runtime_view();
     if (view.active && view.launch_descriptor) {
-        if (const char* reason = experimental::runtime_admission_error(view.launch_descriptor->synchronization)) {
+        if (const char* reason = dkr::runtime::netplay::rollback_policy::admission_error(view.launch_descriptor->synchronization)) {
             g_session.fail_runtime_start(reason);
             halt_failed_simulation();
             return 1;

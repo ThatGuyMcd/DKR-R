@@ -1,3 +1,4 @@
+#include "custom_records.hpp"
 #pragma once
 #include "experimental_pak.hpp"
 #include <algorithm>
@@ -59,7 +60,7 @@ private:
 };
 
 struct ConfirmedSaveSnapshot {
-    std::vector<std::uint8_t> eeprom,paks;
+    std::vector<std::uint8_t> eeprom,paks,records;
 };
 
 // One write in flight plus one latest pending snapshot. Intermediate confirmed
@@ -72,11 +73,12 @@ public:
     ConfirmedSaveWriter(const ConfirmedSaveWriter&)=delete;
     ConfirmedSaveWriter& operator=(const ConfirmedSaveWriter&)=delete;
     ~ConfirmedSaveWriter() {finish();join();}
-    bool submit(std::span<const std::uint8_t> eeprom,std::span<const std::uint8_t> paks,std::string& error) {
+    bool submit(std::span<const std::uint8_t> eeprom,std::span<const std::uint8_t> paks,std::string& error,std::span<const std::uint8_t> records={}) {
         if(eeprom.size()!=512||paks.size()!=Paks::kImagesBytes) {
             error="Invalid confirmed online save snapshot size.";return false;
         }
-        ConfirmedSaveSnapshot copy{{eeprom.begin(),eeprom.end()},{paks.begin(),paks.end()}};
+        if(!records.empty()&&!saves::records::valid(records)){error="Invalid confirmed custom records.";return false;}
+        ConfirmedSaveSnapshot copy{{eeprom.begin(),eeprom.end()},{paks.begin(),paks.end()},{records.begin(),records.end()}};
         {
             std::scoped_lock lock(mutex_);
             if(!error_.empty()) {error=error_;return false;}

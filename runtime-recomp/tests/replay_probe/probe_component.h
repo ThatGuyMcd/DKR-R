@@ -16,6 +16,12 @@ void dkr_probe_water_component_tick(uint8_t* ram, struct recomp_context* context
 void dkr_probe_mode_component_tick(uint8_t* ram, struct recomp_context* context);
 // Retains the audited main-loop CPU span including RSP/RDP setup, background,
 // missing-controller HUD and complete DL terminators. No task/VI completion.
+#if DKR_PROBE_REVISION == 77
+#define dkr_probe_sdk2_pulse dkr_experimental_v77_sdk2_pulse
+#else
+#define dkr_probe_sdk2_pulse dkr_experimental_v80_sdk2_pulse
+#endif
+void dkr_probe_sdk2_pulse(uint8_t*,struct recomp_context*);
 void dkr_probe_authored_component_tick(uint8_t* ram, struct recomp_context* context);
 // Confirmed private game-to-game transaction resumes the saved guest stack.
 // Does not sample input again or rerun the suspended scene's CPU prefix.

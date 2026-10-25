@@ -6,8 +6,11 @@
 #include "flowing_water_mapping.hpp"
 #include <bit>
 #include <memory>
+#include <map>
 #include <vector>
 #include <cstring>
+#include "texture_binding_index.hpp"
+#include "performance_observation.hpp"
 
 namespace dkr::runtime::water::enhanced {
 
@@ -131,8 +134,18 @@ constexpr WaveSymbols wave_symbols(bool us_v80) {
 }
 
 class Registry {
+    std::vector<std::uint32_t> liquid_headers_;
+    void add_liquid_header(std::uint32_t header) {
+        if(liquid_headers_.size()<256 && std::find(liquid_headers_.begin(),liquid_headers_.end(),header)==liquid_headers_.end())
+            liquid_headers_.push_back(header);
+    }
+public:
+    const auto& liquid_headers() const {return liquid_headers_;}
+private:
     struct WetTriangle { Vec3 a,b,c; };
     std::vector<Surface> surfaces_;
+    struct FlowVertices {std::uint32_t end; std::array<float,2> period;};
+    std::map<std::uint32_t,FlowVertices> flow_vertices_;
     std::vector<FlowTriangle> flow_triangles_;
     std::vector<WetTriangle> wet_triangles_;
     struct VerticalImage {std::uint32_t begin,end;Kind kind;std::array<float,2> scroll_period;};
@@ -143,6 +156,15 @@ class Registry {
     std::vector<LavaEmitter> lava_emitters_;
     std::shared_ptr<const GlowGeometry> glow_geometry_;
 public:
+    std::array<float,2> flow_vertex_period(std::uint32_t source,std::uint32_t count) const {
+        source &= 0x1FFFFFFFU;
+        if(!count)return {};
+        auto it=flow_vertices_.upper_bound(source);
+        if(it==flow_vertices_.begin())return {};
+        --it;
+        if((source-it->first)%10 || std::uint64_t(source)+std::uint64_t(count)*10>it->second.end)return {};
+        return it->second.period;
+    }
     const std::shared_ptr<const GlowGeometry>& glow_geometry() const {return glow_geometry_;}
     std::span<const LavaEmitter> lava_emitters() const { return lava_emitters_; }
     const FlowTriangle* flow_triangle(std::uint32_t source) const {
@@ -236,15 +258,18 @@ public:
     }
     void rebuild(Memory m,std::uint32_t model,std::uint32_t cache,std::uint32_t texture_count,
                  std::uint32_t procedural_batch,std::optional<Metadata> metadata={},bool collect_rays=false,
-                 bool preserve_flow_phase=false,const TextureScrolls& scrolls={},bool collect_glow=false) {
+                 bool preserve_flow_phase=false,const TextureScrolls& scrolls={},bool collect_glow=false,bool animation_only=false) {
+        surgical::Scope registry_timing(surgical::Region::Registry);
         const auto previous_flows=preserve_flow_phase ? std::move(flow_triangles_) : std::vector<FlowTriangle>{};
         flow_triangles_.clear();
+        flow_vertices_.clear();
         surfaces_.clear(); wet_triangles_.clear(); vertical_images_.clear(); procedural_.reset();
         lava_emitters_.clear();
         const auto previous_rays=std::move(ray_geometry_);
         const auto previous_glow=std::move(glow_geometry_);
-        auto glow=collect_glow ? std::make_shared<GlowGeometry>() : nullptr;
-        auto rays=collect_rays ? std::make_shared<RayGeometry>() : nullptr;
+        liquid_headers_.clear();
+        auto glow=collect_glow && !animation_only ? std::make_shared<GlowGeometry>() : nullptr;
+        auto rays=collect_rays && !animation_only ? std::make_shared<RayGeometry>() : nullptr;
         std::vector<RayVertex> falling_vertices;
         bool ray_limit=false;
         std::array<std::uint32_t,256> opacity_indices{};
@@ -265,6 +290,7 @@ public:
             const Kind kind=id==1241 ? Kind::Fountain :
                 (id==317 || id==1177 || id==1391) ? Kind::Waterfall : Kind::None;
             if(kind==Kind::None || !ptr || !m.valid(ptr,32))continue;
+            add_liquid_header(ptr);
             const auto frames=(std::max)(1U,std::uint32_t(m.u16(ptr+0x12)>>8));
             const auto stride=m.u16(ptr+0x16);
             if(frames>256 || stride<32 || !m.valid(ptr,std::uint64_t(frames)*stride))continue;
@@ -279,6 +305,11 @@ public:
                     {float(m.u8(header)),float(m.u8(header+1))}});
             }
         }
+        std::optional<surgical::TextureBindingIndex> binding_index;
+        if(surgical::texture_index() && nt>=8 && texture_count>=32) {
+            try {binding_index.emplace(m,cache,texture_count,texture_3d_id);}
+            catch(const std::bad_alloc&) {binding_index.reset();} // Exact original lookup is the fallback.
+        }
         std::vector<MaterialEvidence> materials(nt);
         std::uint32_t total_batches=0,total_triangles=0;
         for(std::uint32_t t=0;t<nt;++t) {
@@ -286,7 +317,8 @@ public:
             e.texture_valid=ptr && m.valid(ptr,0x20); e.texture_id=65535;
             e.surface_type=m.u8(info+7);
             if(metadata_)e.hint=metadata_->materials[t];
-            for(std::uint32_t c=0;c<texture_count;++c) if(m.u32(cache+c*8+4)==ptr) {
+            if(binding_index)e.texture_id=binding_index->find(ptr);
+            else for(std::uint32_t c=0;c<texture_count;++c) if(m.u32(cache+c*8+4)==ptr) {
                 if(const auto id=texture_3d_id(m.u32(cache+c*8))) e.texture_id=*id;
                 break;
             }
@@ -299,17 +331,45 @@ public:
                 !m.valid(verts,std::uint64_t(nv)*10) || !m.valid(tris,std::uint64_t(nf)*16) ||
                 !m.valid(batches,std::uint64_t(nb+1)*12)) continue;
             for(std::uint32_t b=0;b<nb;++b) {
-                if(++total_batches>8192) {surfaces_.clear();flow_triangles_.clear();wet_triangles_.clear();procedural_.reset();return;}
+                if(++total_batches>8192) {surfaces_.clear();flow_triangles_.clear();flow_vertices_.clear();wet_triangles_.clear();procedural_.reset();return;}
                 const auto batch=batches+b*12;
                 const auto texture=m.u8(batch);
                 const auto v=m.u16(batch+2),f=m.u16(batch+4);
                 const auto ve=m.u16(batch+14),fe=m.u16(batch+16);
                 if((texture>=nt && texture!=255) || ve<=v || ve>nv || fe<=f || fe>nf) continue;
                 total_triangles+=fe-f;
-                if(total_triangles>262144) {surfaces_.clear();flow_triangles_.clear();wet_triangles_.clear();procedural_.reset();return;}
+                if(total_triangles>262144) {surfaces_.clear();flow_triangles_.clear();flow_vertices_.clear();wet_triangles_.clear();procedural_.reset();return;}
                 auto e=texture==255 ? MaterialEvidence{} : materials[texture];
                 e.flags=m.u32(batch+8); e.geometry_valid=true;
                 auto kind=classify(e);
+                if(kind!=Kind::None && texture<nt && e.texture_valid)
+                    add_liquid_header(m.u32(textures+texture*8));
+                if((kind==Kind::Waterfall || kind==Kind::Fountain) && texture<nt && e.texture_valid) {
+                    const auto header=m.u32(textures+texture*8);
+                    const std::array<float,2> period{float(m.u8(header))*8.F,float(m.u8(header+1))*8.F};
+                    if(period[0]>=8 && period[1]>=8) {
+                        const auto begin=(verts+v*10)&0x1FFFFFFFU,end=(verts+ve*10)&0x1FFFFFFFU;
+                        auto [at,inserted]=flow_vertices_.emplace(begin,FlowVertices{end,period});
+                        if(!inserted && (at->second.end!=end || at->second.period!=period))at->second.period={};
+                    }
+                }
+                // Vanilla animation needs only validated batch ranges and
+                // texture periods. Do not build flow meshes, shoreline data,
+                // opacity masks, emitters, ray geometry or lighting caches.
+                if(animation_only) {
+                    Surface animation{(tris+f*16)&0x1FFFFFFFU,(tris+fe*16)&0x1FFFFFFFU,
+                        batch&0x1FFFFFFFU,kind,0,{}};
+                    if((kind==Kind::Waterfall || kind==Kind::Fountain) && texture<nt && e.texture_valid) {
+                        const auto header=m.u32(textures+texture*8);
+                        const std::array<float,2> period{float(m.u8(header)),float(m.u8(header+1))};
+                        if(period[0]>=1 && period[1]>=1)
+                            animation.scroll_period=period;
+                    }
+                    // Retain non-flowing ranges too: an excluded/reused level
+                    // texture must not inherit the object-image fallback.
+                    surfaces_.push_back(animation);
+                    continue;
+                }
                 // Native, immutable level geometry only. Never collect racers,
                 // billboards, transparent overlays or a truncated blocker mesh.
                 const auto glow_texture_flags=texture==255 ? 0 : m.u16(m.u32(textures+texture*8)+6);

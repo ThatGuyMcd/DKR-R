@@ -18,7 +18,7 @@ inline std::uint32_t wave_batch_symbol() {
     return wave_symbols(revision_addresses::selected_revision()==rom::Revision::UsV80).batch;
 }
 
-inline const Registry& task_registry(RT64::State& state,std::uint32_t scene) {
+inline const Registry& task_registry(RT64::State& state,std::uint32_t scene,bool animation_only=false) {
     struct Cache {
         Registry registry;
         std::array<std::uint32_t,6> key{};
@@ -29,21 +29,21 @@ inline const Registry& task_registry(RT64::State& state,std::uint32_t scene) {
     static thread_local Cache cache;
     Memory m(std::span<const std::uint8_t>(state.RDRAM,0x800000));
     const auto model=m.u32(level_model_symbol());
-    const bool lighting=lava_lighting_enabled.load()!=0 && lava_lighting.load()>0;
+    const bool lighting=!animation_only && lava_lighting_enabled.load()!=0 && lava_lighting.load()>0;
     const bool glow=lighting;
-    const bool rays=hardware_ray_capability.load(std::memory_order_relaxed)==1 &&
+    const bool rays=!animation_only && hardware_ray_capability.load(std::memory_order_relaxed)==1 &&
         requested_reflection.load(std::memory_order_relaxed)==Reflection::Hardware &&
         reflection_strength.load(std::memory_order_relaxed)>0;
     const std::array<std::uint32_t,6> key{scene,model,m.u32(revision_addresses::TextureCache),
-        m.u32(revision_addresses::NumberOfLoadedTextures),m.u32(wave_batch_symbol()),(rays ? 1U : 0U)|(glow ? 2U : 0U)};
+        m.u32(revision_addresses::NumberOfLoadedTextures),m.u32(wave_batch_symbol()),(rays ? 1U : 0U)|(glow ? 2U : 0U)|(animation_only ? 4U : 0U)};
     const auto revision=revision_addresses::selected_revision();
-    const auto scrolls=texture_scrolls(m,m.u32(revision_addresses::ObjectList),m.u32(revision_addresses::ObjectCount));
+    const auto scrolls=animation_only ? TextureScrolls{} : texture_scrolls(m,m.u32(revision_addresses::ObjectList),m.u32(revision_addresses::ObjectCount));
     if(cache.key!=key || cache.revision!=revision || cache.scrolls!=scrolls) {
         const bool preserve_flow_phase=cache.key[0]==scene && cache.key[1]==model && cache.revision==revision;
         cache.key=key;cache.revision=revision;cache.scrolls=scrolls;
         cache.registry.rebuild(m,key[1],key[2],key[3],key[4],
-            legacy::renderer_water_for_level(static_cast<std::int32_t>(m.u32(revision_addresses::CurrentMapId))),rays,preserve_flow_phase,scrolls,glow);
-        if(key[4] && cache.trace_lines<64) {
+            legacy::renderer_water_for_level(static_cast<std::int32_t>(m.u32(revision_addresses::CurrentMapId))),rays,preserve_flow_phase,scrolls,glow,animation_only);
+        if(!animation_only && key[4] && cache.trace_lines<64) {
             ++cache.trace_lines;
             const auto symbols=wave_symbols(revision==rom::Revision::UsV80);
             std::fprintf(stderr,"[water][wave-reference] scene=%u map=%u batch=%08X liquid=%u subdivisions=%u players=%u buffer=%08X\n",

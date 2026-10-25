@@ -8,6 +8,8 @@
 #include <optional>
 #include <cstdio>
 
+#include "magic_code_execution_policy.hpp"
+
 namespace dkr::mods::code {
 namespace {
 [[noreturn]] void fault(const char* message){throw Error(std::string("Custom Magic Code: ")+message);}
@@ -200,7 +202,7 @@ void execute(Memory& memory,Registers& c,std::uint32_t entry,Budget& budget,cons
     c.integer[0]=0;std::uint32_t pc=entry;std::optional<std::uint32_t> pending;
     try {while(pc!=Done) {
         if(!budget.instructions)fault("instruction budget exceeded");
-        --budget.instructions;
+        --budget.instructions;execution::instruction();
         const auto instruction=std::uint32_t(memory.load(pc,4,true));
         const unsigned op=instruction>>26,rs=(instruction>>21)&31,rt=(instruction>>16)&31,
             rd=(instruction>>11)&31,sa=(instruction>>6)&31,fn=instruction&63;
@@ -329,8 +331,6 @@ void execute(Memory& memory,Registers& c,std::uint32_t entry,Budget& budget,cons
         if(prior) {
             pc=*prior;
             if(pc!=Done&&!memory.executable(pc)) {
-                if(!budget.native_calls)fault("native call budget exceeded");
-                --budget.native_calls;
                 if(!gateway)fault("unlinked function call");
                 gateway(pc,c,budget);pc=std::uint32_t(c.integer[31]);c.integer[0]=0;
                 if(pc==Done)break;

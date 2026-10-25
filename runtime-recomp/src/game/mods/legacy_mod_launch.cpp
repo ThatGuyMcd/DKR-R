@@ -1,4 +1,6 @@
+#include "../shared_saves.hpp"
 #include "legacy_mod_launch.hpp"
+#include "vehicle_binding.hpp"
 #include "legacy_track_catalog.hpp"
 #include "../dkr_save_codec.hpp"
 #include "../custom_tracks.hpp"
@@ -54,6 +56,8 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     // The offline catalog is never consulted for online launches. The lobby's
     // separately verified, frozen RuntimeResources supply online assets.
     if(online)return out;
+    std::string personal_error;
+    if(!dkr::runtime::saves::shared::prepare(config,personal_error))throw Error(personal_error);
     auto report=[&](const char* message){if(stop.stop_requested())throw Error("Game launch cancelled.");if(progress)progress(message);};
     const auto code_root=config/"mods"/"custom-magic-codes";
     if(std::filesystem::exists(code_root/"library.json")) {
@@ -66,42 +70,32 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     }
     auto finish=[&]() -> std::shared_ptr<const PreparedModLaunch> {
         if(out->code) {
-            if(std::any_of(out->code->ordered.begin(),out->code->ordered.end(),[](const auto& p){return p->modules.contains("trophies")||!p->tracks.empty();})) {
+            if(std::any_of(out->code->ordered.begin(),out->code->ordered.end(),[](const auto& p){return (p->api==2&&p->modules.contains("catalogues2"))||p->modules.contains("trophies")||!p->tracks.empty();})) {
                 std::vector<std::filesystem::path> labs;
                 for(const auto& track:dkr::runtime::custom_tracks::tracks())if(track.enabled)labs.push_back(track.source);
                 // Header IDs are not published until the retail boot later.
                 // Derive them now in the SAME enabled-track scan order that
                 // offline table assembly uses, not online's canonical order
                 // and not a stale/empty previous-session global ID map.
-                auto courses=code::trophy::installed_catalogue(rom,config/"mods"/"legacy",labs,stop,false);
+                code::Json sdk2_inventory;
+                auto courses=code::trophy::installed_catalogue(rom,config/"mods"/"legacy",labs,stop,false,&sdk2_inventory);
                 auto rebound=std::make_shared<code::FrozenSet>(*out->code);
-                code::trophy::rebind(*rebound,courses,online::asset_revision(dkr::runtime::rom::inspect(rom).revision));out->code=std::move(rebound);
+                code::trophy::rebind(*rebound,courses,online::asset_revision(dkr::runtime::rom::inspect(rom).revision),sdk2_inventory);out->code=std::move(rebound);
             }
             const auto identity="dkr-offline-code-session-1\n"+out->fingerprint+"\n"+out->code->identity;
             out->fingerprint=sha256(View(reinterpret_cast<const std::uint8_t*>(identity.data()),identity.size()));
         }
-        if(out->fingerprint.empty())return out;
-        out->save_subfolder=std::filesystem::path("mods")/out->fingerprint;
-        out->save_path=config/"saves"/out->save_subfolder/"dkr.us.v77.bin";
-        out->pak_directory=config/"saves"/out->save_subfolder/"paks";
-        report("Preparing separate modded-session saves");
-        ordinary(config);child(config/"saves");child(config/"saves"/"mods");child(out->save_path.parent_path());child(out->pak_directory);
-        using namespace dkr::runtime::saves;
-        if(!std::filesystem::exists(out->save_path)) {
-            const auto original=config/"saves"/"dkr.us.v77.bin";
-            auto seed=codec::blank_bytes();
-            if(std::filesystem::exists(original)) {
-                regular(original);seed=read_file(original,codec::kImageSize);
-                if(!codec::validate(seed))throw Error("The single-player Adventure save is invalid. It was not changed or copied into a modded session.");
-            }
-            write_new_file(out->save_path,seed);
-        }
-        regular(out->save_path);
-        if(!codec::validate(read_file(out->save_path,codec::kImageSize)))throw Error("The separate modded-session save is invalid. Restore it before starting this mod set.");
+        out->save_subfolder.clear();
+        out->save_path=config/"saves"/"dkr.us.v77.bin";
+        out->pak_directory=config;
+        std::string save_error;
+        if(!dkr::runtime::saves::shared::prepare(config,save_error))throw Error(save_error);
         report("Custom mods ready");return out;
     };
     const auto root=config/"mods"/"legacy";
-    if(!TrackCatalog::has_enabled(root))return finish();
+    report("Preparing custom cars");
+    auto cars=vehicles::Library(config/"mods"/"vehicles").freeze(stop);
+    if(!TrackCatalog::has_enabled(root)&&cars.packages.empty())return finish();
     report("Validating the original Game Pak");
     auto bytes=read_file(rom,MaxImage);canonicalize_rom(bytes);
     const auto stock=AssetBank::stock(std::move(bytes));
@@ -116,9 +110,15 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     // Character IDs are allocated first. Publish dkrmap IDs against that
     // namespace, then retain the same immutable artwork in every scene bank.
     auto artwork=std::make_shared<const AssetBank::Overrides>(publish_dkrmap_artwork(names?names->apply(stock):stock));
+    auto vehicle_resources=vehicles::prepare_resources(stock,
+        AssetBank::append_artwork(names?names->apply(stock):stock,*artwork),names,std::move(cars));
     auto session=std::make_shared<RuntimeSession>(stock,names,std::vector<Bytes>{},
-        [artwork](std::shared_ptr<const AssetBank> bank){return AssetBank::append_artwork(std::move(bank),*artwork);});
+        [artwork,vehicle_resources](std::shared_ptr<const AssetBank> bank){
+            return vehicle_resources->apply(AssetBank::append_artwork(std::move(bank),*artwork));
+        });
+    vehicles::bind_resources(session,vehicle_resources);
     std::vector<std::string> identities;
+    if(!vehicle_resources->library.packages.empty())identities.push_back("vehicles:"+vehicle_resources->identity);
     for(auto& track:tracks) {
         report("Preparing custom Track Select previews");
         identities.push_back("track:"+track.root.content_id+":"+track.bank->fingerprint());

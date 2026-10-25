@@ -492,30 +492,13 @@ void DrawGraphicsPage(float available_width, bool live) {
                 SaveSettings();
             }
             PaddockGap(16.0F);
-            namespace cam = dkr::runtime::modern_camera;
-            bool modern_camera = cam::requested();
-            if (SettingsCheck("##modern-camera", "Modern camera", &modern_camera, inner,
-                              "A smoother chase camera. The right stick turns the camera instead of sending C-buttons. Offline only.")) {
-                cam::set_enabled(modern_camera);
-                SaveSettings();
-            }
-            PaddockGap(16.0F);
-            bool look_back = cam::look_back_requested();
-            if (SettingsCheck("##look-back", "Look back", &look_back, inner,
-                              "Hold Look back to see behind you. Change its binding in Controls. Offline only.")) {
-                cam::set_look_back_enabled(look_back);
-                SaveSettings();
-            }
-            if (live) {
-                PaddockGap(12.0F);
-                if (SettingsButton("Adjust camera (F7)")) {
-                    OpenCameraTuning();
-                    g_overlay_visible.store(false, std::memory_order_release);
-                }
-                PaddockGap(6.0F);
-                SettingsHelp("Adjust the camera while driving. Use the mouse.", inner);
-            }
             ImGui::EndDisabled();
+            const auto camera_provider=dkr::runtime::camera::activation();
+            SettingsHelp("ModernCamera++ is available as an optional mod in Mods/Hacks.",inner);
+            if(live&&camera_provider&&SettingsButton("Camera++ settings (F7)",inner)) {
+                OpenCameraTuning();g_overlay_visible.store(false,std::memory_order_release);
+            }
+
             PaddockGap(16.0F);
             bool crt = g_crt_enabled;
             if (SettingsCheck("##crt", "Enable CRT filter", &crt, inner,
@@ -548,7 +531,7 @@ void DrawGraphicsPage(float available_width, bool live) {
                 ImGui::EndDisabled();
             };
             check("##max-detail", "Maximum vehicle detail", enh::maximum_detail_requested(),
-                  enh::set_maximum_detail_enabled, "Use the most detailed racer models.", true
+                  enh::set_maximum_detail_enabled, "Use the highest-detail characters and vehicles in every view, online and offline. Split-screen uses more graphics power.", true
 #if !defined(DKR_LOCAL_MODEL_DETAIL)
                   , owned_camera_settings_deferred
 #endif

@@ -102,9 +102,28 @@ std::vector<Course> catalogue(const AssetBank& stock,const std::vector<Root>& le
     }
     std::sort(out.begin(),out.end(),[](const auto& a,const auto& b){return a.id<b.id;});return out;
 }
+Json sdk2_inventory(const AssetBank& stock,Json characters) {
+    std::sort(characters.begin(),characters.end(),[](const auto& a,const auto& b){return a.at("id").template get<std::string>()<b.at("id").template get<std::string>();});
+    Json banks=Json::object();for(const auto [name,section]:std::array<std::pair<const char*,unsigned>,6>{{{"models",29},{"textures-3d",2},{"textures-2d",4},{"sprites",12},{"object-templates",34},{"level-models",27}}})
+        banks[name]={{"section",section},{"count",stock.record_count(section)},{"bank",stock.base_fingerprint()},{"scope","native-base"}};
+    return {{"schema",2},{"banks",banks},{"characters",characters}};
+}
+void verify_sdk2_inventory(const FrozenSet& code,const AssetBank& stock,const CharacterNamespace* names) {
+    Json characters=Json::array();if(names)for(const auto& item:names->characters)characters.push_back({{"id",item.id},{"name",item.name},{"donor",item.base_character}});
+    const auto actual=sdk2_inventory(stock,std::move(characters));
+    for(const auto& package:code.ordered)if(package->api==2&&package->modules.contains("catalogues2")) {
+        const auto& expected=code.data.at(package->id).at("_sdk2_catalogue").at("inventory");
+        if(expected.at("schema")!=2||expected.at("banks")!=actual.at("banks")||expected.at("characters").size()!=actual.at("characters").size())throw Error("SDK resource inventory differs from admitted native assets.");
+        for(unsigned i=0;i<actual.at("characters").size();++i)if(expected.at("characters")[i].at("id")!=actual.at("characters")[i].at("id")||expected.at("characters")[i].at("donor")!=actual.at("characters")[i].at("donor"))throw Error("SDK character catalogue differs from the admitted character namespace.");
+    }
+}
 std::vector<Course> installed_catalogue(const std::filesystem::path& rom,const std::filesystem::path& legacy,
-    const std::vector<std::filesystem::path>& paths,std::stop_token stop,bool canonical_order) {
+    const std::vector<std::filesystem::path>& paths,std::stop_token stop,bool canonical_order,Json* inventory) {
     auto bytes=read_file(rom,MaxImage);canonicalize_rom(bytes);const auto stock=AssetBank::stock(std::move(bytes));
+    if(inventory) {
+        Json characters=Json::array();for(const auto& item:TrackCatalog::selected_items(legacy,stock->revision(),TrackCatalog::Kind::Character))characters.push_back({{"id",item.id},{"name",item.name},{"donor",item.base_character}});
+        *inventory=sdk2_inventory(*stock,std::move(characters));
+    }
     if(stop.stop_requested())throw Error("Cup catalogue cancelled.");
     std::vector<Root> roots;std::map<std::string,unsigned> defaults;
     if(TrackCatalog::has_enabled(legacy))for(const auto& t:TrackCatalog::load_enabled(legacy,stock)) {
@@ -176,6 +195,12 @@ std::vector<TrackMenuCup> menu_entries(const FrozenSet& code) {
     if(entries.size()>32)throw Error("Custom trophy menu exceeds 32 cups.");return entries;
 }
 void verify_configuration(const FrozenSet& code,const std::vector<Course>& courses) {
+    Json catalogue=Json::array();for(const auto& course:courses)catalogue.push_back(course_document(course));
+    for(const auto& p:code.ordered)if(p->api==2&&p->modules.contains("catalogues2")) {
+        const auto& data=code.data.at(p->id);
+        if(!data.contains("_sdk2_catalogue")||data.at("_sdk2_catalogue").at("schema")!=2||data.at("_sdk2_catalogue").at("courses")!=catalogue)
+            throw Error(p->name+": frozen SDK 2 resource catalogue differs from the admitted game assets.");
+    }
     for(const auto& package:code.ordered)for(const auto& required:package->tracks)
         if(std::none_of(courses.begin(),courses.end(),[&](const auto& course){return course.id==required;}))
             throw Error(package->name+" requires an enabled course: "+required);
@@ -184,7 +209,13 @@ void verify_configuration(const FrozenSet& code,const std::vector<Course>& cours
         for(const auto& cup:all(data))(void)verify(encode(cup),courses);
     }
 }
-void rebind(FrozenSet& code,const std::vector<Course>& courses,std::string_view revision) {
+void rebind(FrozenSet& code,const std::vector<Course>& courses,std::string_view revision,const Json& inventory) {
+    Json catalogue=Json::array();for(const auto& course:courses)catalogue.push_back(course_document(course));
+    for(const auto& p:code.ordered)if(p->api==2&&p->modules.contains("catalogues2")) {
+        auto& data=code.data[p->id];if(data.is_null())data=Json::object();
+        data["_sdk2_catalogue"]={{"schema",2},{"courses",catalogue},{"inventory",inventory}};
+        (void)structured_data(data);
+    }
     for(const auto& package:code.ordered)for(const auto& required:package->tracks)
         if(std::none_of(courses.begin(),courses.end(),[&](const auto& course){return course.id==required;}))
             throw Error(package->name+" requires an enabled course: "+required);

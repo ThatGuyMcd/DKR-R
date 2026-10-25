@@ -1,4 +1,6 @@
 #include "magic_code_package.hpp"
+#include <cmath>
+#include "sdk2_schema.hpp"
 #include <recompiler/context.h>
 #include <miniz/miniz.h>
 #include <algorithm>
@@ -8,6 +10,8 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+
+#include "magic_code_execution_policy.hpp"
 
 namespace dkr::mods::code {
 namespace {
@@ -241,7 +245,10 @@ std::shared_ptr<const Package> inspect(View bytes,std::string_view host_version)
     p->minimum_host=Version::parse(text(manifest,"minimum_recomp_version",64));
     if(p->minimum_host>Version::parse(host_version))bad("package requires a newer DKR-R version");
     if(manifest.contains("native_libraries")&&(!manifest["native_libraries"].is_array()||!manifest["native_libraries"].empty()))bad("native libraries are not supported");
-    if(meta.value("schema",0)!=1||meta.value("api",0)!=ApiVersion)bad("unsupported DKR SDK version");
+    if(!meta.contains("schema")||!meta["schema"].is_number_unsigned()||meta["schema"]!=1||!meta.contains("api")||!meta["api"].is_number_unsigned()||(meta["api"]!=1&&meta["api"]!=2))bad("unsupported DKR SDK version");
+    p->api=meta.at("api").get<unsigned>();
+    if(meta.contains("development")&&!meta["development"].is_boolean())bad("invalid development-session declaration");
+    p->development=p->api==2&&meta.value("development",false);
     if(meta.value("activation",std::string("restart"))!="restart")bad("code changes require a new game session");
     const auto mode=meta.value("online",std::string("offline-only"));
     if(mode!="offline-only"&&mode!="deterministic")bad("unsupported online execution mode");
@@ -256,8 +263,8 @@ std::shared_ptr<const Package> inspect(View bytes,std::string_view host_version)
     if(meta.contains("requires")) {
         const auto& modules=meta["requires"];if(!modules.is_object()||modules.size()>32)bad("invalid SDK module requirements");
         for(const auto& [name,version]:modules.items()) {
-            if(!valid_id(name)||!version.is_number_unsigned()||version.get<std::uint64_t>()!=1)bad("unsupported SDK module version");
-            p->modules.emplace(name,1);
+            if(!valid_id(name)||!version.is_number_unsigned()||version.get<std::uint64_t>()<1||version.get<std::uint64_t>()>p->api)bad("unsupported SDK module version");
+            p->modules.emplace(name,version.get<unsigned>());
         }
     }
     if(manifest.contains("dependencies")) {
@@ -294,6 +301,40 @@ std::shared_ptr<const Package> inspect(View bytes,std::string_view host_version)
         const auto& schema=manifest["config_schema"];
         if(!schema.is_object()||!schema.contains("options")||!schema["options"].is_array()||schema["options"].size()>128)bad("invalid settings schema");
         p->options=schema["options"];
+    }
+    if(p->api==2&&meta.contains("profile")) {
+        if(!meta["profile"].is_string())bad("SDK profile must be compact, standard or large");
+        p->sdk2_profile=meta["profile"].get<std::string>();
+        if(p->sdk2_profile=="compact"){p->sdk2_heap=32768;p->sdk2_instructions=100000;p->sdk2_native_calls=32;}
+        else if(p->sdk2_profile=="large"){p->sdk2_heap=262144;p->sdk2_instructions=500000;p->sdk2_native_calls=256;}
+        else if(p->sdk2_profile!="standard")bad("unknown portable SDK profile");
+    }
+    if(meta.contains("live_reload")) {
+        if(p->api!=2||!p->development||meta.at("live_reload")!="instruction-only"||!meta.contains("state_schema")||
+           !meta.at("state_schema").is_number_unsigned()||meta.at("state_schema").get<std::uint64_t>()<1||meta.at("state_schema").get<std::uint64_t>()>UINT32_MAX)
+            bad("Live reload requires API 2 development, instruction-only and a nonzero state_schema");
+        p->sdk2_reload=true;p->sdk2_state_schema=meta.at("state_schema").get<unsigned>();
+    }
+    if(meta.contains("live_options")) {
+        if(p->api!=2||!p->modules.contains("live-settings2")||!meta.at("live_options").is_array()||meta.at("live_options").size()>128)bad("Live options require API 2/live-settings2 and a bounded list");
+        for(const auto& id:meta.at("live_options")) {
+            if(!id.is_string()||!valid_id(id.get<std::string>())||!p->sdk2_live_options.insert(id.get<std::string>()).second)bad("Invalid or duplicate live option ID");
+            const auto option=std::find_if(p->options.begin(),p->options.end(),[&](const auto& item){return item.at("id")==id;});
+            if(option==p->options.end()||(option->at("type")!="Number"&&option->at("type")!="Enum"))bad("Only explicitly reviewed numeric/enum options can be live");
+        }
+    }
+    sdk2_schema(*p);
+    if(p->api==2&&p->resources.contains("source-map")) {
+        const auto map=parse_document(p->resources.at("source-map"),1024*1024);
+        if(map.value("schema",0)!=2||!map.contains("functions")||!map["functions"].is_array()||map["functions"].size()>16384)bad("invalid SDK 2 source map");
+        for(const auto& row:map["functions"]) {
+            if(!row.is_object()||!row.contains("name")||!row["name"].is_string()||row["name"].get_ref<const std::string&>().size()>512||
+               !row.contains("file")||!row["file"].is_string()||row["file"].get_ref<const std::string&>().size()>512||
+               !row.contains("line")||!row["line"].is_number_unsigned()||row["line"].get<std::uint64_t>()>10000000)bad("invalid SDK source-map row");
+            const auto file=row["file"].get<std::string>();
+            if(file.find("..")!=file.npos||file.find(':')!=file.npos||file.find('\\')!=file.npos||std::any_of(file.begin(),file.end(),[](unsigned char c){return c<32||c==127;}))bad("unsafe source-map filename");
+            if(!file.empty()&&row["line"].get<unsigned>())p->debug_lines.emplace(row["name"].get<std::string>(),file+":"+std::to_string(row["line"].get<unsigned>()));
+        }
     }
     p->binary=archive.require("mod_binary.bin");const auto& symbols=archive.require("mod_syms.bin");
     if(p->binary.empty()||p->binary.size()>MaxCode||symbols.size()>4*MiB)bad("code image exceeds its budget");
@@ -385,7 +426,8 @@ Json structured_data(const Json& data) {
 }
 std::string session_identity(const std::vector<std::shared_ptr<const Package>>& packages,
     const std::map<std::string,Json>& settings,std::string_view revision,const std::map<std::string,Json>& data) {
-    Json value={{"api",ApiVersion},{"execution",ExecutionVersion},{"revision",revision},{"packages",Json::array()}};
+    const bool sdk2=std::any_of(packages.begin(),packages.end(),[](const auto& p){return p->api==2;});
+    Json value={{"work-policy",std::string(execution::Policy)},{"api",sdk2?2:ApiVersion},{"execution",sdk2?2:ExecutionVersion},{"revision",revision},{"packages",Json::array()}};
     for(const auto& p:packages) {
         const auto found=settings.find(p->id);const auto options=configuration(*p,found==settings.end()?Json::object():found->second);
         const auto document=data.find(p->id);

@@ -1,3 +1,4 @@
+#include "party_link.hpp"
 #include "game_registration.hpp"
 
 #include "game_payload.hpp"
@@ -47,7 +48,14 @@ void RunDkrEntrypoint(std::uint8_t* rdram, recomp_context* context) {
     }
 
     dkr::runtime::saves::reset_runtime_online_save_status();
-    if (!dkr::runtime::saves::runtime_save_context_ready()) {
+    const bool private_party_boot=
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
+        dkr_experimental_bootstrap_active()&&dkr::runtime::spectators::party_bootstrap_active();
+#else
+        false;
+#endif
+    // The party owns a verified memory-only seed, not a personal save route.
+    if (!dkr::runtime::saves::runtime_save_context_ready()&&!private_party_boot) {
         std::fprintf(stderr, "[save][boot] %s\n", dkr::runtime::saves::runtime_save_failure().c_str());
         ultramodern::quit(); return;
     }
@@ -79,18 +87,11 @@ void RunDkrEntrypoint(std::uint8_t* rdram, recomp_context* context) {
         }
         std::fprintf(stderr,
                      "[netplay][save] isolated online EEPROM activated\n");
-    } else if(const auto mods=dkr::runtime::legacy::prepared_launch();mods && (mods->session||mods->code)) {
-        ultramodern::change_save_file(mods->save_subfolder.generic_u8string(),u8"dkr.us.v77");
-        if(ultramodern::get_save_file_path().lexically_normal()!=mods->save_path.lexically_normal()) {
-            std::fprintf(stderr,"[legacy][save] Refusing guest entry: isolated save route did not activate.\n");
-            ultramodern::quit();return;
-        }
-        std::fprintf(stderr,"[legacy][save] isolated offline mod-set EEPROM activated\n");
     } else {
-        // A game can return to this launcher and start again in the same
-        // process. Explicitly leave any prior online route before a local
-        // launch so single-player always reopens its ordinary EEPROM.
-        ultramodern::change_save_file(u8"", u8"dkr.us.v77");
+        // runtime_save_context_ready() verified the actual loaded EEPROM
+        // against its immutable launch owner above. Keep that exact route:
+        // ordinary, isolated mod-set, or isolated development save.
+        std::fprintf(stderr,"[save][boot] frozen offline EEPROM verified; no mutable route switch\n");
     }
     dkr::runtime::code_mods::boot(rdram,recomp::mem_size);
     payload->entrypoint(rdram, context);

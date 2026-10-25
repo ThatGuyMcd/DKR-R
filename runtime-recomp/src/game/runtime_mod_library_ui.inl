@@ -114,6 +114,8 @@ struct LibraryEntry {
 };
 
 struct LibraryCardView {
+    float preview_height=0;
+    std::function<void(float,float)> preview;
     bool code = false;
     bool native = false;
     std::string title;
@@ -216,6 +218,7 @@ float MeasureLibraryCard(const LibraryCardView& view, float width) {
     height += 18.0F + (info_fits ? info.line : info.line + 8.0F + size.line) + 9.0F;
     if (!view.note.empty()) height += PaddockTextHeight(note, view.note, inner) + 18.0F;
     if (view.prepare) height += 42.0F;
+    if(view.preview)height+=view.preview_height+12.F;
     height += 2.0F + 12.0F + 42.0F + 16.0F + 2.0F;
     return std::ceil(height);
 }
@@ -295,6 +298,9 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
         y += PaddockTextAt(draw, note, {left, y}, inner, view.note, note_style) + 18.0F;
     }
 
+    if(view.preview) {
+        ImGui::SetCursorScreenPos({left,y});view.preview(inner,view.preview_height);y+=view.preview_height+12.F;
+    }
     bool details = false;
     if (view.prepare) {
         ImGui::SetCursorScreenPos({left, y});
@@ -314,8 +320,8 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
         bool enabled = view.enabled;
         ImGui::BeginDisabled(!view.toggle_allowed);
         if (PaddockSwitch("##enabled", &enabled, "On", "Off")) {
-            if (view.code) {
-                if(code_toggle)code_toggle(enabled);
+            if (code_toggle) {
+                code_toggle(enabled);
             } else if (view.native) {
                 if (dkr::runtime::custom_tracks::set_enabled(view.id, enabled, g_legacy_import_status))
                     g_legacy_import_status = enabled ? "Track on for the next game." : "Track off for the next game.";
@@ -976,6 +982,7 @@ struct ModImportActions {
     std::function<void()> choose_track_zip;
     std::function<void()> choose_rom;
     std::function<void()> choose_code;
+    std::function<void()> choose_vehicle;
 };
 
 void DrawModImportOption(const char* id, PaddockFormat format, const char* title,
@@ -1073,6 +1080,15 @@ void DrawModImportChooser(const ModImportActions& actions) {
         ImGui::BeginDisabled(actions.locked);
         if(PaddockButton("Choose code mod")) {
             ImGui::CloseCurrentPopup();if(actions.choose_code)actions.choose_code();
+        }
+        ImGui::EndDisabled();
+    });
+    PaddockGap(18.0F);
+    DrawModImportOption("vehicle",PaddockFormat::Dkr,"Custom vehicles",
+        "Import a .dkrkart car or a vehicle ZIP. Choose your car from Track Select.",width,[&] {
+        ImGui::BeginDisabled(actions.locked);
+        if(PaddockButton("Choose car package")) {
+            ImGui::CloseCurrentPopup();if(actions.choose_vehicle)actions.choose_vehicle();
         }
         ImGui::EndDisabled();
     });
@@ -1221,21 +1237,21 @@ bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool upda
 }
 
 // Tracks / Characters (.mods-categories). Returns the selected index.
-int DrawLibraryCategories(int current, std::size_t tracks, std::size_t characters,std::size_t codes,float available) {
+int DrawLibraryCategories(int current, std::size_t tracks, std::size_t characters,std::size_t codes,std::size_t vehicles,float available) {
     const PaddockType type = PaddockSign(19.0F, 1.4F);
     const PaddockType count_type = PaddockReading(12.0F, true, 1.5F);
-    const std::array<const char*, 3> labels{{"Tracks", "Characters", "Custom Magic Codes"}};
-    const std::array<std::string, 3> counts{{std::to_string(tracks), std::to_string(characters),std::to_string(codes)}};
-    std::array<float, 3> widths{};
+    const std::array<const char*, 4> labels{{"Tracks", "Characters", "Custom Magic Codes", "Vehicles"}};
+    const std::array<std::string, 4> counts{{std::to_string(tracks), std::to_string(characters),std::to_string(codes),std::to_string(vehicles)}};
+    std::array<float, 4> widths{};
     for (std::size_t index = 0U; index < labels.size(); ++index) {
         const float pill = std::max(23.0F, PaddockMeasure(count_type, counts[index]) + 12.0F);
         widths[index] = std::ceil(2.0F + 26.0F + PaddockMeasure(type, labels[index]) + 9.0F + pill);
     }
     const float button_height = std::ceil(type.line + 14.0F + 2.0F);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    std::array<ImVec2,3> positions{};
+    std::array<ImVec2,4> positions{};
     float column=4.0F,row=4.0F,total=0;
-    for(unsigned i=0;i<3;++i) {
+    for(unsigned i=0;i<4;++i) {
         if(column>4.0F&&column+widths[i]+4.0F>available){column=4.0F;row+=button_height+4.0F;}
         positions[i]={origin.x+column,origin.y+row};
         column+=widths[i]+4.0F;total=std::max(total,column);
@@ -1249,7 +1265,7 @@ int DrawLibraryCategories(int current, std::size_t tracks, std::size_t character
     frame.ring_width = 1.0F;
     PaddockPanel(draw, origin, end, frame);
     int selected = current;
-    for (int index = 0; index < 3; ++index) {
+    for (int index = 0; index < 4; ++index) {
         ImGui::SetCursorScreenPos(positions[index]);
         const bool pressed_now = current == index;
         const PaddockPress press = PaddockBeginPress(labels[index], {widths[index], button_height});

@@ -112,16 +112,25 @@ void prepare_library(const Manifest& input,const std::filesystem::path& input_pa
             for(const bool enabled:{false,true}) {
             if(!(enabled?behaviour_enabled:asset_only))continue;
             report(kind==Kind::Track?"Preparing exact custom course selection":"Preparing exact custom character selection");
-            const auto prepared=job/(std::string(kind==Kind::Track?"tracks":"characters")+(enabled?"-behaviour":"-assets"));
+            // Old host selections retain v2 IDs/save associations. Rebuild
+            // that exact edition only when requested, never accept a mismatch.
+            for(const bool previous_portraits:{false,true}) {
+            if(previous_portraits && kind!=Kind::Character)continue;
+            bool pending=false;
+            for(const auto& content:manifest.content)
+                if(content.payload==payload.digest && content.kind==kind && (content.behaviour_abi!=0)==enabled &&
+                   !found.contains({kind,content.id}))pending=true;
+            if(!pending)continue;
+            const auto prepared=job/(std::string(previous_portraits?"previous-portraits-":"")+std::string(kind==Kind::Track?"tracks":"characters")+(enabled?"-behaviour":"-assets"));
             if(kind==Kind::Track)prepare_imported_tracks(review,owned_roms,prepared,progress,&preparation,enabled);
-            else prepare_imported_characters(review,owned_roms,prepared,progress,&preparation,enabled);
+            else prepare_imported_characters(review,owned_roms,prepared,progress,&preparation,enabled,previous_portraits);
             auto receipt=read(prepared/"prepared.json");
             const char* entries=kind==Kind::Track?"tracks":"characters";
             auto selected=json::array();
             for(const auto& item:receipt.at(entries)) {
                 if(kind==Kind::Track && item.at("revision")!=manifest.revision)continue;
                 const auto key=std::make_pair(kind,item.at("id").get<std::string>());const auto entry=expected.find(key);
-                if(entry==expected.end() || entry->second.payload!=payload.digest)continue;
+                if(entry==expected.end() || entry->second.payload!=payload.digest || found.contains(key))continue;
                 const auto& wanted=entry->second;
                 if((wanted.behaviour_abi!=0)!=enabled)continue;
                 if(item.at("patch")!=wanted.payload || item.at("artifact")!=wanted.artifact || item.at("name")!=wanted.name ||
@@ -132,6 +141,9 @@ void prepare_library(const Manifest& input,const std::filesystem::path& input_pa
             }
             // Do not expose extra roots or duplicate asset-only editions from
             // the other policy as members of the frozen session collection.
+            // A corrected pass may have no roots matching an old host ID.
+            // Leave that scratch unpublished; empty groups are not catalogues.
+            if(selected.empty())continue;
             receipt[entries]=std::move(selected);
             const auto original_receipt=prepared/"prepared.json";
             const auto retained_receipt=prepared/"prepared-all.json";
@@ -139,6 +151,7 @@ void prepare_library(const Manifest& input,const std::filesystem::path& input_pa
             write(original_receipt,receipt);
             const auto hash=sha256(read_file(prepared/"prepared.json",MiB));
             std::filesystem::rename(prepared,root/(kind==Kind::Track?"prepared":"prepared-characters")/hash);
+            }
             }
         }
         storage_budget(destination);

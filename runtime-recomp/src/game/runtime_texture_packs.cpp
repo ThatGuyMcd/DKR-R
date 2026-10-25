@@ -1,4 +1,6 @@
+#include "mod_store_install.hpp"
 #include "runtime_texture_packs.hpp"
+#include "mod_store.hpp"
 #include "application_layout.hpp"
 #include "startup_performance.hpp"
 
@@ -1010,11 +1012,20 @@ void refresh() {
 
 std::vector<PackInfo> snapshot(bool include_hidden) {
     std::scoped_lock lock(g_mutex);
-    if (include_hidden) return g_packs;
+    const auto named = [](PackInfo pack) {
+        pack.name = dkr::store::texture_display_name(pack.path, pack.name);
+        return pack;
+    };
+    if (include_hidden) {
+        auto result = g_packs;
+        for (auto& pack : result) pack = named(std::move(pack));
+        return result;
+    }
     std::vector<PackInfo> visible;
     visible.reserve(g_packs.size());
     std::copy_if(g_packs.begin(), g_packs.end(), std::back_inserter(visible),
                  [](const PackInfo& pack) { return !pack.hidden; });
+    for (auto& pack : visible) pack = named(std::move(pack));
     return visible;
 }
 
@@ -1628,3 +1639,5 @@ std::string status() {
 }
 
 } // namespace dkr::runtime::texture_packs
+
+#include "store_texture_adapter.inl"

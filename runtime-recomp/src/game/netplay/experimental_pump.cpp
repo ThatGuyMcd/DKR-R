@@ -22,7 +22,7 @@ bool Pump::pulse(Network::Clock::time_point now,const std::function<PackedInput(
     constexpr auto period=std::chrono::nanoseconds(1'000'000'000/30);
     const auto deadline=Network::Clock::now()+std::chrono::milliseconds(2);
     if(allow_new_tick && now>=next_sample_ && session_.needs_local_input(true)) {
-        if(session_.sample_local(sample(),true)!=OwnerInputResult::Accepted) return fail("Experimental owner input could not be published.");
+        if(session_.sample_local(sample(),true,commands_?commands_():dkr::sdk2::Command{})!=OwnerInputResult::Accepted) return fail("Experimental owner input could not be published.");
         ++view_.physical_samples;
         next_sample_=(std::max)(next_sample_+period,now-period);
     }

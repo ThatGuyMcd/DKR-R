@@ -31,15 +31,16 @@ void configure(const std::filesystem::path& config_directory);
 void configure_recovery_locations(std::vector<std::filesystem::path> roots);
 SaveInfo adventure_info();
 void set_online_save_protection(bool enabled);
-enum class StoredSaveKind { Adventure, ControllerPak, ExperimentalPaks };
+enum class StoredSaveKind { Adventure, ControllerPak, ExperimentalPaks, CustomRecords };
 struct StoredAdventure {
     int scope = 0; // 0 offline, 1 online, 2 modded, 3 recovery candidates
     StoredSaveKind kind = StoredSaveKind::Adventure;
     SaveInfo info;
-    std::string label, preview;
+    std::string label, preview, content_hash;
+    unsigned copies=1;
 };
 // Bounded read-only inventory; callers scan on a worker, never at frame rate.
-std::vector<StoredAdventure> stored_adventures();
+std::vector<StoredAdventure> stored_adventures(std::size_t limit=256, bool* truncated=nullptr);
 bool export_stored_adventure(const std::filesystem::path& source,
     const std::filesystem::path& destination, std::string& error);
 bool export_stored_save(const std::filesystem::path& source,

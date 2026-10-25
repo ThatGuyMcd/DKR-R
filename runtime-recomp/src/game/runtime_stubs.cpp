@@ -1,3 +1,4 @@
+#include "diagnostics.hpp"
 #include "recomp.h"
 
 #include "runtime_enhancements.hpp"
@@ -410,6 +411,9 @@ extern "C" void dkr_split_screen_viewport_fill(
     if (rdram == nullptr || context == nullptr) {
         return;
     }
+    AppendPresentationGroupCommand(rdram,context->r17,PresentationGroupMode::World,
+        std::uint16_t(MEM_W(0,RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId))&3U),
+        0U,PresentationMarkerKind::CameraWorldBegin);
     const float cover = ExpandedCoverScale();
     const bool postrace = PostraceFullViewScope(rdram, cover);
     g_postrace_world_framed = postrace &&
@@ -488,6 +492,9 @@ extern "C" void dkr_split_screen_world_aspect_end(
     if (rdram == nullptr || context == nullptr) {
         return;
     }
+    AppendPresentationGroupCommand(rdram,context->r17,PresentationGroupMode::World,
+        std::uint16_t(MEM_W(0,RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId))&3U),
+        0U,PresentationMarkerKind::CameraWorldEnd);
     // Close in reverse order. Dedicated markers restore the exact renderer
     // state they captured, so they cannot consume an unrelated group scope.
     if (g_postrace_framed_scope_active) {
@@ -598,7 +605,8 @@ extern "C" void dkr_track_select_lens_flare_tint_begin(
     const bool tracks_menu_active = MEM_W(
         0, RdramAddress(
             dkr::runtime::revision_addresses::IsInTracksMenu)) != 0;
-    if (!dkr::runtime::enhancements::preserve_track_select_lens_flare_tint(
+    const bool postrace_lens=PostraceFullViewScope(rdram,ExpandedCoverScale());
+    if (!postrace_lens && !dkr::runtime::enhancements::preserve_track_select_lens_flare_tint(
             dkr::runtime::enhancements::modern_presentation_enabled(),
             ExpandedCoverScale() > 1.0001F, tracks_menu_active,
             fullscreen_preview)) {
@@ -607,7 +615,8 @@ extern "C" void dkr_track_select_lens_flare_tint_begin(
 
     g_track_select_lens_flare_scope_active =
         AppendPresentationGroupCommand(
-            rdram, context->r17, PresentationGroupMode::StaticAuto, 0U,
+            rdram, context->r17, PresentationGroupMode::StaticAuto,
+            postrace_lens&&!g_postrace_frame_gate.contracted_frame_submitted?1U:0U,
             0U, PresentationMarkerKind::TrackSelectLensFlare);
 #else
     (void)rdram;
@@ -666,7 +675,9 @@ extern "C" int dkr_scheduler_sp_event_valid(std::uint8_t* rdram,
             // valid retail task and must not reach that unchecked load.
             if (dkr::runtime::scheduler::is_valid_sp_task_pointer(task)) {
                 using namespace dkr::runtime::host_tasks;
-                registry.consume(registry.lookup(task + 0x10U, Engine::Sp), Engine::Sp);
+                const auto token=registry.lookup(task+0x10U,Engine::Sp);
+                dkr::lobby_stability::bootstrap_event("SP-handler-consumed",scheduler,task,token.generation);
+                registry.consume(token,Engine::Sp);
                 return 1;
             }
         }
@@ -710,7 +721,9 @@ extern "C" int dkr_scheduler_dp_event_valid(std::uint8_t* rdram,
                     static_cast<std::int32_t>(scheduler))));
             if (dkr::runtime::scheduler::is_valid_dp_task_pointer(task)) {
                 using namespace dkr::runtime::host_tasks;
-                registry.consume(registry.lookup(task + 0x10U, Engine::Dp), Engine::Dp);
+                const auto token=registry.lookup(task+0x10U,Engine::Dp);
+                dkr::lobby_stability::bootstrap_event("DP-handler-consumed",scheduler,task,token.generation);
+                registry.consume(token,Engine::Dp);
                 return 1;
             }
         }
@@ -743,6 +756,7 @@ extern "C" int dkr_scheduler_dp_event_valid(std::uint8_t* rdram,
 }
 
 extern "C" void dkr_scheduler_sp_handled(std::uint8_t*, recomp_context*) {
+    dkr::lobby_stability::bootstrap_event("SP-handler-acknowledging",0,0);
     // The host graphics/audio worker cannot safely publish a dependent DP edge
     // until DKR's scheduler has finished clearing and rescheduling the active
     // SP task. This hook is placed at the common exit of __scHandleRSP by the

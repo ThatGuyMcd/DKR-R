@@ -1,4 +1,7 @@
 #include "local_model_rt64.hpp"
+#include "detail_contract.hpp"
+#include "detail_metrics.hpp"
+#include "vehicle_rt64.hpp"
 #include "visual_model_kernel.h"
 #include "native_draw_scope_rt64.hpp"
 #include "runtime_enhancements.hpp"
@@ -38,6 +41,7 @@ struct Step {
     enum Kind {Command,Triangle} kind=Command;
     std::uint32_t w0=0,w1=0;
     std::array<Corner,3> corners{};
+    unsigned source_triangle=0;
 };
 struct Packet {std::vector<Step> steps;dkr_visual_model_result model{};unsigned triangles=0;};
 bool rdp_opcode(unsigned op) {
@@ -90,6 +94,17 @@ struct LocalModelRT64Pass::Impl {
     struct Image {std::uint32_t source=0,count=0,address=0;std::shared_ptr<const Texture> texture;};
     std::vector<Observation> observations;
     std::vector<Image> images;
+    // Sorted, merged successful replacement spans. Query cost is logarithmic
+    // instead of scanning every racer/scenery observation per triangle.
+    std::vector<std::pair<std::uint32_t,std::uint32_t>> suppressed;
+    detail::FrameMetrics profile;
+    unsigned kernel_builds=0,vertex_uploads=0,batches=0,texture_hits=0,texture_captures=0;
+    void suppress(std::uint32_t first,std::uint32_t last) {
+        auto at=std::lower_bound(suppressed.begin(),suppressed.end(),first,[](const auto& row,auto value){return row.second<value;});
+        while(at!=suppressed.end()&&at->first<=last){first=std::min(first,at->first);last=std::max(last,at->second);at=suppressed.erase(at);}
+        suppressed.insert(at,{first,last});
+    }
+    #include "detail_texture_cache.inl"
     std::span<std::uint8_t> ram;
     std::uint32_t scene=0,cursor=kTextureBegin;
     unsigned draws=0,logged=0;
@@ -102,12 +117,16 @@ struct LocalModelRT64Pass::Impl {
     // Reuse allocations across frames and poses across split-screen views.
     // No pointer to reusable guest scratch is retained in a compiled packet.
     std::array<CachedPacket,96> cache;
+    std::array<CachedPacket,128> racer_cache;
+    std::size_t racer_cached=0,racer_steps=0;
+    unsigned racer_operations=0;
+    std::array<unsigned,4> racer_triangles{};
     std::uint32_t texture(const Reader& r,std::uint32_t source,unsigned count,const dkr_visual_model_result& model) {
         for(unsigned i=0;i<images.size();++i)if(images[i].source==source && images[i].count==count)return i;
         for(unsigned i=0;i<model.texture_count;++i) {
             const auto p=model.textures[i];
             if((r.word(p+0xC)&0xFFFFFFU)!=source || r.half(p+0xA)!=count)continue;
-            auto tex=std::make_shared<const Texture>(netplay::experimental::capture_local_texture(ram,p));
+            auto tex=retain_texture(r,p);
             const auto bytes=(tex->bytes.size()+7U)&~std::size_t(7U);
             if(bytes>kTextureEnd-cursor)throw std::runtime_error("local model texture arena full");
             const auto address=cursor;cursor+=std::uint32_t(bytes);
@@ -116,25 +135,32 @@ struct LocalModelRT64Pass::Impl {
         }
         throw std::runtime_error("local model texture ownership");
     }
-    const Packet* build(const dkr_owned_draw_event& e) {
+    const Packet* build(const dkr_owned_draw_event& e,bool extra) {
+        auto packets=extra?std::span<CachedPacket>{cache}:std::span<CachedPacket>{racer_cache};
+        auto& packet_count=extra?cached:racer_cached;
+        auto& operations=extra?kernel_operations:racer_operations;
+        auto& prepared_steps=extra?packet_steps:racer_steps;
+        const auto operation_limit=extra?12000000U:detail::KernelOperations;
+        const auto step_limit=extra?65536U:detail::PreparedSteps;
         const auto& p=e.parameters;
         dkr_visual_model_request request{p[1],p[2],p[3],p[4],p[5],p[6],p[7],p[9]};
-        for(std::size_t i=0;i<cached;++i)if(std::memcmp(&cache[i].request,&request,sizeof(request))==0)
-            return cache[i].valid?&cache[i].packet:nullptr;
-        if(cached==cache.size() || kernel_operations>=12000000U || packet_steps>=65536)return nullptr;
-        auto& entry=cache[cached++];entry.request=request;entry.valid=false;
+        for(std::size_t i=0;i<packet_count;++i)if(std::memcmp(&packets[i].request,&request,sizeof(request))==0)
+            return packets[i].valid?&packets[i].packet:nullptr;
+        if(packet_count==packets.size()||operations>=operation_limit||prepared_steps>=step_limit)throw std::runtime_error(extra?"scenery preparation capacity":"racer preparation capacity");
+        auto& entry=packets[packet_count++];entry.request=request;entry.valid=false;
         auto& packet=entry.packet;
         auto kernel=revision_addresses::selected_revision()==rom::Revision::UsV80?dkr_visual_v80_model:dkr_visual_v77_model;
         packet.steps.clear();packet.triangles=0;
         // Failed packets count too: malformed late commands must not bypass
         // the frame's allocation budget by leaving many large partial vectors.
-        struct Charge {std::size_t& total;const Packet& packet;~Charge(){total+=packet.steps.size();}} charge{packet_steps,packet};
+        struct Charge {std::size_t& total;const Packet& packet;~Charge(){total+=packet.steps.size();}} charge{prepared_steps,packet};
+        ++kernel_builds;
         if(!kernel(ram.data(),ram.size(),&request,&packet.model)) {
             if(logged++<8)std::fprintf(stderr,"[graphics][local-detail] retained original mesh: %s\n",packet.model.failure?packet.model.failure:"invalid model");
-            kernel_operations+=packet.model.operations;
+            operations+=packet.model.operations;
             return nullptr;
         }
-        kernel_operations+=packet.model.operations;
+        operations+=packet.model.operations;
         Reader r{ram};std::array<Corner,32> vertices{};std::array<bool,32> valid{};
         unsigned matrix=1,vertex_cursor=0,triangles=0;
         for(unsigned i=0;i<packet.model.count;++i) {
@@ -176,7 +202,7 @@ struct LocalModelRT64Pass::Impl {
                     throw std::runtime_error("local model triangle ownership");
                 if(triangles+count>8192)throw std::runtime_error("local model triangle budget");triangles+=count;
                 for(unsigned tri=0;tri<count;++tri) {
-                    Step step;step.kind=Step::Triangle;step.w0=r.byte(source+tri*16);step.w1=(w0>>16)&15U;
+                    Step step;step.source_triangle=(source-packet.model.triangles)/16+tri;step.kind=Step::Triangle;step.w0=r.byte(source+tri*16);step.w1=(w0>>16)&15U;
                     for(unsigned c=0;c<3;++c) {
                         const auto n=r.byte(source+tri*16+1+c);if(n>=32||!valid[n])throw std::runtime_error("local model triangle reference");
                         step.corners[c]=vertices[n];step.corners[c].s=std::int16_t(r.half(source+tri*16+4+c*4));step.corners[c].t=std::int16_t(r.half(source+tri*16+6+c*4));
@@ -185,7 +211,7 @@ struct LocalModelRT64Pass::Impl {
                 }
             } else if(op==0xB6||op==0xB7||op==0xE7)packet.steps.push_back({Step::Command,w0,w1});
             else throw std::runtime_error("local model geometry opcode");
-            if(packet.steps.size()>32768 || packet_steps+packet.steps.size()>65536)
+            if(packet.steps.size()>32768 || prepared_steps+packet.steps.size()>step_limit)
                 throw std::runtime_error("local model packet budget");
         }
         packet.triangles=triangles;entry.valid=triangles!=0;
@@ -195,11 +221,18 @@ struct LocalModelRT64Pass::Impl {
 LocalModelRT64Pass::LocalModelRT64Pass():impl_(std::make_unique<Impl>()) {}
 LocalModelRT64Pass::~LocalModelRT64Pass()=default;
 void LocalModelRT64Pass::prepare(std::span<const dkr_owned_draw_event> events,std::span<std::uint8_t> ram,std::uint32_t scene) noexcept {
-    auto& p=*impl_;p.observations.clear();p.images.clear();p.ram=ram;p.scene=scene;p.cursor=kTextureBegin;p.draws=0;
+    auto& p=*impl_;
+    p.profile.begin(scene,unsigned(events.size()),p.kernel_builds,p.vertex_uploads,p.batches,p.texture_hits,p.texture_captures);
+    detail::MicroScope prepare_cost{p.profile.prepare_us};
+    if(p.texture_scene!=scene||p.texture_frame==UINT64_MAX){p.retained_textures.clear();p.retained_texture_bytes=0;p.texture_scene=scene;p.texture_frame=0;}
+    ++p.texture_frame;p.suppressed.clear();
+    p.observations.clear();p.images.clear();p.ram=ram;p.scene=scene;p.cursor=kTextureBegin;p.draws=0;
     p.cached=p.packet_steps=p.kernel_operations=0;
-    p.submitted_triangles=0;
+    p.submitted_triangles=0;p.racer_cached=p.racer_steps=p.racer_operations=0;p.racer_triangles.fill(0);
     std::size_t retained=0;for(const auto& entry:p.cache)retained+=entry.packet.steps.capacity();
     if(retained>131072)for(auto& entry:p.cache)std::vector<Step>().swap(entry.packet.steps);
+    retained=0;for(const auto& entry:p.racer_cache)retained+=entry.packet.steps.capacity();
+    if(retained>detail::PreparedSteps*2U)for(auto& entry:p.racer_cache)std::vector<Step>().swap(entry.packet.steps);
     const bool maximum=enhancements::maximum_detail_enabled();
     p.settings={enhancements::presentation_profile(),enhancements::scenery_retention_mode(),enhancements::view_distance_multiplier(),
         enhancements::keep_hub_scenery_requested(),enhancements::keep_track_scenery_requested(),enhancements::keep_minigame_scenery_requested(),
@@ -208,9 +241,15 @@ void LocalModelRT64Pass::prepare(std::span<const dkr_owned_draw_event> events,st
     if(!p.enabled)return;
     try {
         for(const auto& e:events)if(maximum && e.kind==DKR_OWNED_LOCAL_MODEL) {
-            if(!dkr_owned_draw_event_valid(&e)||p.observations.size()==128){p.enabled=false;return;}
+            if(!dkr_owned_draw_event_valid(&e)||p.observations.size()==detail::Observations){p.enabled=false;return;}
             p.observations.push_back({e});
         }
+        std::stable_sort(p.observations.begin(),p.observations.end(),[](const auto& a,const auto& b){return a.e.address<b.e.address;});
+        // Preflight racers first. Optional scenery cannot consume their pose,
+        // packet or texture preparation capacity. Poses matching across views
+        // use one checked packet; only transforms/head angles remain per view.
+        for(const auto& o:p.observations)try{(void)p.build(o.e,false);}
+        catch(const std::exception& error){detail::note({scene,o.e.parameters[1],o.e.token,0,0,1,maximum,error.what()});}
         Reader r{ram};
         std::array<std::vector<std::uint32_t>,4> drawn;
         for(const auto& e:events)if(e.kind==DKR_OWNED_LOCAL_OBJECT&&dkr_owned_draw_event_valid(&e))drawn[e.token].push_back(e.parameters[0]);
@@ -257,20 +296,28 @@ void LocalModelRT64Pass::prepare(std::span<const dkr_owned_draw_event> events,st
             if(a.e.address!=b.e.address)return a.e.address<b.e.address;
             return a.squared_distance>b.squared_distance;
         });
-    }catch(...){p.enabled=false;}
+    }catch(const std::exception& error){
+        std::erase_if(p.observations,[](const auto& o){return o.extra;});
+        detail::note({scene,0,0,0,0,1,maximum,error.what()});
+    }catch(...){std::erase_if(p.observations,[](const auto& o){return o.extra;});}
 }
 bool LocalModelRT64Pass::replaces_triangle(std::uint32_t command)const noexcept {
     const auto& p=*impl_;if(!p.enabled)return false;
-    for(const auto& o:p.observations)if(o.replaced && !o.extra && command>=o.e.address-0x80000000U && command<o.e.parameters[0]-0x80000000U)return true;
-    return false;
+    const auto at=std::upper_bound(p.suppressed.begin(),p.suppressed.end(),command,[](auto value,const auto& row){return value<row.first;});
+    return at!=p.suppressed.begin()&&command<std::prev(at)->second;
 }
 void LocalModelRT64Pass::draw_at(RT64::State& state,std::uint32_t command_address,IdentitySelector select) {
     auto& p=*impl_;if(!p.enabled||!select)return;
-    for(auto& o:p.observations) {
-        if(o.consumed||o.e.address-0x80000000U!=command_address)continue;o.consumed=true;
+    const auto address=command_address+0x80000000U;
+    auto found=std::lower_bound(p.observations.begin(),p.observations.end(),address,[](const auto& o,auto value){return o.e.address<value;});
+    if(found==p.observations.end()||found->e.address!=address)return;
+    detail::MicroScope submit_cost{p.profile.submit_us};
+    for(;found!=p.observations.end()&&found->e.address==address;++found) {
+        auto& o=*found;if(o.consumed)continue;o.consumed=true;
         auto& rsp=*state.rsp;
         if(state.rdp->colorCombinerStackSize>=RDP_EXTENDED_STACK_SIZE || state.rdp->primColorStackSize>=RDP_EXTENDED_STACK_SIZE || state.rdp->envColorStackSize>=RDP_EXTENDED_STACK_SIZE)continue;
         const Packet* packet=nullptr;
+        const mods::vehicles::ModelProfile* driver_mask=nullptr;
         auto transform=hlslpp::float4x4::identity();
         std::uint32_t environment=0xFFFFFF00U,primitive=0xFFFFFF00U|o.alpha;
         try {
@@ -288,8 +335,17 @@ void LocalModelRT64Pass::draw_at(RT64::State& state,std::uint32_t command_addres
                         (std::uint32_t(r.byte(shading+6))<<8)|r.byte(shading+7);
                 }
             }
-            packet=p.build(o.e);if(!packet || packet->triangles>32768U-p.submitted_triangles)continue;
-        }catch(const std::exception& error){if(p.logged++<8)std::fprintf(stderr,"[graphics][local-detail] retained original mesh: %s\n",error.what());continue;}
+            packet=p.build(o.e,o.extra);
+            if(!packet){detail::note({p.scene,o.e.parameters[1],o.e.token,0,0,1,true,"invalid prepared model; original retained"});continue;}
+            auto& triangles=o.extra?p.submitted_triangles:p.racer_triangles[o.e.token];
+            const auto limit=o.extra?32768U:detail::ViewTriangles;
+            if(packet->triangles>limit-triangles){detail::note({p.scene,o.e.parameters[1],o.e.token,0,0,1,true,"view triangle capacity; original retained"});continue;}
+            if(const auto* cars=vehicles::active_render_pass();!o.extra&&cars)
+                driver_mask=cars->detail_profile(o.e.parameters[1],o.e.parameters[2]);
+            if(driver_mask)for(const auto& step:packet->steps)
+                if(step.kind==Step::Triangle&&step.source_triangle>=driver_mask->hide.size())
+                    throw std::runtime_error("high-detail driver mask exceeds its own model");
+        }catch(const std::exception& error){detail::note({p.scene,o.e.parameters[1],o.e.token,0,0,1,true,error.what()});continue;}
         // All spans, uploads and references have been checked before the first
         // GPU draw. No callback, allocator or guest interpreter runs below.
         NativeDrawScope restore(state);
@@ -299,22 +355,14 @@ void LocalModelRT64Pass::draw_at(RT64::State& state,std::uint32_t command_addres
             state.rdp->setEnvColor(environment);
         }
         if(o.e.parameters[7])rsp.modelMatrixStack[2]=hlslpp::mul(head_matrix(packet->model,std::int16_t(o.e.parameters[8])),rsp.modelMatrixStack[1]);
-        select(rsp,presentation::normalise_identity(p.scene^o.e.parameters[1]^0x4D4F444CU^(o.e.token*0x9E3779B9U)));
-        for(const auto& step:packet->steps) {
-            if(step.kind==Step::Command){command(state,step.w0,step.w1);continue;}
-            rsp.textureState.on=std::uint8_t(step.w1);
-            rsp.clearGeometryMode(rsp.cullBothMask);
-            if(!(step.w0&0x40U))rsp.setGeometryMode(rsp.viewportStack[rsp.viewportStackSize-1].scale.x>0 ?
-                (rsp.cullBothMask&~rsp.cullFrontMask):rsp.cullFrontMask);
-            for(unsigned c=0;c<3;++c) {
-                const auto& v=step.corners[c];std::memcpy(state.RDRAM+kVertices+c*sizeof(v.vertex),&v.vertex,sizeof(v.vertex));
-                rsp.modelMatrixStackSize=int(v.matrix+1);rsp.modelViewProjChanged=true;rsp.modelViewProjInserted=false;
-                rsp.setVertex(kVertices+c*sizeof(v.vertex),1,c);
-                rsp.modifyVertex(std::uint16_t(c),G_MWO_POINT_ST,(std::uint32_t(std::uint16_t(v.s))<<16)|std::uint16_t(v.t));
-            }
-            rsp.drawIndexedTri(0,1,2);
-        }
-        state.flush();o.replaced=true;++p.draws;p.submitted_triangles+=packet->triangles;
+        select(rsp,presentation::normalise_identity(p.scene^o.e.parameters[1]^presentation::mix_identity(o.e.parameters[2])^(o.e.parameters[7]<<28)^0x4D4F444CU^(o.e.token*0x9E3779B9U)));
+        #include "detail_batch.inl"
+        state.flush();o.replaced=true;++p.draws;
+        if(!o.extra)p.suppress(o.e.address-0x80000000U,o.e.parameters[0]-0x80000000U);
+        if(o.extra)p.submitted_triangles+=packet->triangles;else p.racer_triangles[o.e.token]+=packet->triangles;
+        if(!o.extra)detail::note({p.scene,o.e.parameters[1],o.e.token,Reader{p.ram}.byte(o.e.parameters[1]+0x3a),0,1,true,"highest resident presentation mesh"});
+        if(!o.extra&&p.logged++<16)std::fprintf(stderr,"[graphics][local-detail] highest-loaded driver instance=%08X object=%08X car-mask=%u triangles=%u; independent-driver-detail-v1\n",
+            o.e.parameters[2],o.e.parameters[1],unsigned(driver_mask!=nullptr),packet->triangles);
     }
 }
 }

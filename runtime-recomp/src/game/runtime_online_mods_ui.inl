@@ -1,5 +1,7 @@
 // Included after FinishOnlineLobby. Session selection is temporary: the
 // offline libraries and their enable/hide/order files are never written here.
+std::string g_stability_retry_invite;
+bool g_stability_retry_requested=false,g_stability_retry_watch=false;
 bool g_online_keep_downloads = true;
 bool g_online_approve_code=false;
 std::string g_online_code_offer;
@@ -10,7 +12,7 @@ bool OnlineModSelectionLocked() {
 
 void ReportOnlinePreparationFailure(std::string_view error) {
     if(g_online_mod_notice.fail(error,dkr::runtime::rom::revision_name(g_online_mod_identity.revision),
-        dkr::runtime::netplay::synchronization_name(CurrentOnlineSynchronization())))
+        dkr::runtime::netplay::rollback_policy::name(CurrentOnlineSynchronization())))
         std::fprintf(stderr,"[online-mods][failure] revision=%s backend=%s stage=%s error=%s\n",
             g_online_mod_notice.revision.c_str(),g_online_mod_notice.backend.c_str(),
             g_online_mod_notice.stage.c_str(),g_online_mod_notice.error.c_str());
@@ -24,11 +26,11 @@ dkr::mods::online::RuntimePreparation OnlineModRuntimePreparation(
         // Only the host has authoritative rules at this stage. Clients still
         // link/validate the owned dispatcher here, verify identical resources,
         // and enforce the admitted launch descriptor in game_main.
-        if(!profile->manifest.code.empty()&&host_mode &&
+        if((!profile->manifest.code.empty()||dkr::mods::online::car_count(profile->manifest))&&host_mode &&
            *host_mode!=dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback)
-            throw dkr::mods::Error("Custom Magic Codes need Auto or Experimental Rollback. Other online modes still support tracks and characters.");
+            throw dkr::mods::Error("Custom cars and Magic Codes require Rollback.");
         if(!profile->manifest.code.empty())std::fprintf(stderr,"[online-mods][code-admission] role=%s backend=%s packages=%zu\n",
-            host_mode?"host":"joining-client",host_mode?dkr::runtime::netplay::synchronization_name(*host_mode):"awaiting-admitted-rules",
+            host_mode?"host":"joining-client",host_mode?dkr::runtime::netplay::rollback_policy::name(*host_mode):"awaiting-admitted-rules",
             profile->manifest.code.size());
         return dkr::mods::online::with_matching_game_pak(roms,profile->manifest.revision,stop,
             [](const auto& rom){return dkr::runtime::rom::inspect(rom);},
@@ -61,7 +63,7 @@ bool CreateOnlineLobby() {
        OnlineModSelectionLocked() || g_legacy_imports.snapshot().busy || g_code_library.view()->busy || g_mod_launch.snapshot().modal) {
         g_online_action_status="Finish the current operation and select a supported ROM before hosting.";return false;
     }
-    if(const char* reason=experimental::runtime_admission_error(CurrentOnlineSynchronization(),session().owned_backend_available())) {
+    if(const char* reason=dkr::runtime::netplay::rollback_policy::admission_error(CurrentOnlineSynchronization(),session().owned_backend_available())) {
         g_online_action_status=reason;ReportOnlinePreparationFailure(reason);return false;
     }
     OnlineHostRequest request;
@@ -73,6 +75,7 @@ bool CreateOnlineLobby() {
     request.rules.automatic_input_delay=g_online_automatic_delay;
     request.rules.manual_input_delay=static_cast<std::uint8_t>(g_online_manual_delay);
     request.rules.record_replay=g_online_record_replay;
+    request.rules.development=g_online_development&&request.rules.synchronization==SynchronizationMode::ExperimentalRollback;
     request.manifest=BuildNetplayManifest(g_online_mod_identity);
     request.save_mode=static_cast<dkr::runtime::saves::OnlineSaveSeedMode>(g_online_save_seed_mode);
     request.room=g_online_room_name;request.name=g_online_player_name;
@@ -89,7 +92,7 @@ bool CreateOnlineLobby() {
     std::fprintf(stderr,"[online-mods][host] revision=%s asset-revision=%s backend=%s preparation-start\n",
         dkr::runtime::rom::revision_id(g_online_mod_identity.revision).data(),
         dkr::mods::online::asset_revision(g_online_mod_identity.revision).data(),
-        synchronization_name(CurrentOnlineSynchronization()));
+        dkr::runtime::netplay::rollback_policy::name(CurrentOnlineSynchronization()));
     g_online_action_status="Preparing lobby mods...";
     return true;
 }
@@ -101,7 +104,15 @@ void PumpOnlineMods() {
     auto view=g_online_mod_sync->snapshot();
     g_online_mod_notice.progress(view.stage);
     const auto network=session().view();
-    if(view.phase==SyncPhase::Verified && view.profile && g_online_kept_profile!=view.profile->digest) {
+    if(g_stability_retry_requested&&!dkr::lobby_stability::snapshot(g_online_mod_sync.get()).running) {
+        g_stability_retry_requested=false;std::string error;
+        {auto p=dkr::runtime::spectators::party_link(&session());std::scoped_lock lock(p->mutex);p->join_watch=g_stability_retry_watch;}
+        if(session().join(g_stability_retry_invite,g_online_player_name,error)){g_online_mod_notice.clear();g_online_mod_watching=false;}
+        else g_online_action_status=error;
+        return;
+    }
+    if(view.phase==SyncPhase::Verified && view.profile && (view.kept_offline||!view.keep_error.empty()) &&
+       network.state!=ConnectionState::Loading && network.state!=ConnectionState::Running && g_online_kept_profile!=view.profile->digest) {
         g_online_kept_profile=view.profile->digest;
         if(view.kept_offline) {
             g_legacy_imports.refresh();g_code_library.refresh();dkr::runtime::custom_tracks::reload();
@@ -138,6 +149,10 @@ void PumpOnlineMods() {
         return;
     }
     const bool joining=network.state==ConnectionState::Connecting || network.state==ConnectionState::AwaitingApproval;
+    if(joining&&!network.invite.empty()) {
+        g_stability_retry_invite=network.invite;
+        auto p=dkr::runtime::spectators::party_link(&session());std::scoped_lock lock(p->mutex);g_stability_retry_watch=p->join_watch;
+    }
     if(joining && !g_online_mod_watching) {
         auto settings=OnlineModSettings();
         g_online_mod_notice.clear();
@@ -174,6 +189,17 @@ void DrawOnlineModModal() {
         DrawTechnicalDetails("ROM: " + g_online_mod_notice.revision + "\nOnline mode: " +
             g_online_mod_notice.backend + "\nStage: " + g_online_mod_notice.stage + "\n" + g_online_mod_notice.error);
         ImGui::TextWrapped("Offline saves and mod selections weren't changed.");
+        if(ImGui::Button("COPY JOIN DIAGNOSTICS",{ImGui::GetContentRegionAvail().x,36})) {
+            const auto details=std::string("DKR-R ")+DKR_RELEASE_VERSION+"\n"+dkr::lobby_stability::report(g_online_mod_sync.get())+
+                "\nROM: "+g_online_mod_notice.revision+"\nBackend: "+g_online_mod_notice.backend+"\n"+g_online_mod_notice.error;
+            ImGui::SetClipboardText(details.c_str());
+        }
+        if(!g_stability_retry_invite.empty()&&view.phase==SyncPhase::Failed&&!g_online_mod_host_request&&dkr::lobby_stability::snapshot(g_online_mod_sync.get()).role=="client") {
+            ImGui::TextWrapped("Retry reuses verified files and repairs damaged private cache entries. Review the host's current mods again.");
+            if(ImGui::Button("RETRY JOIN",{ImGui::GetContentRegionAvail().x,42})) {
+                g_online_mod_sync->cancel();g_stability_retry_requested=true;ImGui::CloseCurrentPopup();
+            }
+        }
         if(ImGui::Button("DISMISS",{ImGui::GetContentRegionAvail().x,42})) {
             g_online_mod_notice.clear();g_online_mod_sync->cancel();
             g_online_mod_host_request.reset();g_online_mod_watching=false;
@@ -182,18 +208,27 @@ void DrawOnlineModModal() {
         ImGui::EndPopup();return;
     }
     ImGui::TextWrapped("%s",dkr::runtime::copy::progress(view.stage).c_str());
+    if(busy) {
+        const auto d=dkr::lobby_stability::snapshot(g_online_mod_sync.get());const auto now=std::chrono::steady_clock::now();
+        if(view.stage!=dkr::runtime::copy::progress(view.stage))ImGui::TextWrapped("%s",view.stage.c_str());
+        ImGui::Text("Elapsed %.0fs | Stage %.0fs",std::chrono::duration<double>(now-d.began).count(),std::chrono::duration<double>(now-d.phase_began).count());
+        if(view.phase==SyncPhase::Downloading&&view.total) {
+            ImGui::Text("%.1f / %.1f MiB | Downloaded %.1f MiB | Reused %.1f MiB",double(view.received)/dkr::mods::MiB,double(view.total)/dkr::mods::MiB,double(d.wire)/dkr::mods::MiB,double(d.cached)/dkr::mods::MiB);
+            ImGui::Text("Transfer rate %.2f MiB/s | Gap repairs %llu",d.bytes_per_second/dkr::mods::MiB,static_cast<unsigned long long>(d.retries));
+        }
+    }
     if(review && view.manifest) {
         if(g_online_code_offer!=view.offer){g_online_code_offer=view.offer;g_online_approve_code=false;}
         ImGui::TextWrapped("Download these mods from the host to join?");
         BeginPaddedChild("Required mods",{ImGui::GetContentRegionAvail().x,std::min(230.0F,40.0F+(view.manifest->content.size()+view.manifest->code.size())*28.0F)},true);
         for(const auto& mod:view.manifest->content) {
-            const char* kind=mod.kind==Kind::Character?"Character":mod.kind==Kind::TrackLab?"Track Lab":"Track";
+            const char* kind=mod.kind==dkr::mods::online::CarContent?"Car":mod.kind==Kind::Character?"Character":mod.kind==Kind::TrackLab?"Track Lab":"Track";
             ImGui::TextWrapped("%s: %s",kind,mod.name.c_str());
         }
         for(const auto& code:view.manifest->code)ImGui::TextWrapped("Custom Magic Code: %s (%s)",code.name.c_str(),code.version.c_str());
         ImGui::EndChild();
         ImGui::Text("Required files: %.1f MiB (installed files are reused)",double(view.total)/dkr::mods::MiB);
-        ImGui::TextWrapped("New offline copies start disabled. Your existing mod selections and saves are kept.");
+        ImGui::TextWrapped("Offline copies are saved after joining and start disabled. Your current selections and saves are kept.");
         ImGui::Checkbox("Keep downloaded mods for offline play",&g_online_keep_downloads);
         if(!view.manifest->code.empty()) {
             ImGui::TextWrapped("This lobby runs executable mod code. It can change gameplay and game memory. Only join if you trust the host and mod authors.");

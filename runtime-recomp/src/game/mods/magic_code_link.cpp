@@ -2,6 +2,8 @@
 #include <recompiler/context.h>
 #include <algorithm>
 
+#include "magic_code_execution_policy.hpp"
+
 namespace dkr::mods::code {
 namespace {
 [[noreturn]] void bad(const std::string& reason){throw Error("Custom Magic Code: "+reason);}
@@ -20,6 +22,11 @@ std::shared_ptr<const LinkedSet> link(const std::vector<std::shared_ptr<const Pa
     const std::map<std::string,Json>& settings,std::string_view revision,const LinkPolicy& policy,
     const std::map<std::string,Json>& data) {
     if(ordered.size()>128)bad("too many code packages enabled in one session");
+    unsigned simulation_owners=0,tuning_owners=0;
+    for(const auto& p:ordered)if(p&&p->api==2) {
+        if(p->modules.contains("simulation2")&&++simulation_owners>1)bad("only one simulation control provider can own a session");
+        if(p->modules.contains("racer-tuning2")&&++tuning_owners>1)bad("only one racer tuning provider can own a session");
+    }
     std::set<std::string> enabled;
     for(const auto& p:ordered)if(!p||!enabled.insert(p->id).second)bad("duplicate or missing code package");
     const auto resolved=resolve(ordered,enabled,revision,policy.online,policy.modules);
@@ -85,14 +92,15 @@ std::shared_ptr<const LinkedSet> link(const std::vector<std::shared_ptr<const Pa
             const auto end=base+section.size+section.bss_size;
             if(at<end)out->regions.push_back({at,end-at,true,false});
         }
-        owner.heap_size=64*1024;owner.heap=allocate(owner.heap_size);
+        owner.heap_size=p.api==2?p.sdk2_heap:64*1024;owner.heap=allocate(owner.heap_size);
         out->regions.push_back({owner.heap,owner.heap_size,true,false});
         constexpr unsigned StackBytes=32*1024;const auto stack=allocate(StackBytes);
         owner.stack=stack+StackBytes-80;out->regions.push_back({stack,StackBytes,true,false});
         constexpr unsigned NativeStackBytes=64*1024;const auto native_stack=allocate(NativeStackBytes);
         owner.native_stack=native_stack+NativeStackBytes-80;
         out->regions.push_back({native_stack,NativeStackBytes,true,false});
-        owner.services=allocate(4096);out->regions.push_back({owner.services,4096,true,false});owner.end=cursor;
+        const unsigned service_bytes=p.api==2?65536U:4096U;
+        owner.services=allocate(service_bytes);out->regions.push_back({owner.services,service_bytes,true,false});owner.end=cursor;
         for(const auto& symbol:symbols.import_symbols) {
             const auto dep=dependency(symbols,symbol.dependency_index);
             if(dep=="*"&&!policy.services.contains(symbol.base.name))bad("unavailable SDK import: "+symbol.base.name);
@@ -154,6 +162,7 @@ std::shared_ptr<const LinkedSet> link(const std::vector<std::shared_ptr<const Pa
         for(const auto& callback:symbols.callbacks) {
             const auto& event=symbols.dependency_events.at(callback.dependency_event_index);
             auto dep=dependency(symbols,event.dependency_index);if(dep==".")dep=p.id;
+            if(dep=="*"&&(event.event_name=="on_tool"||event.event_name=="on_cleanup"||event.event_name=="on_reload"||event.event_name=="on_live_setting")&&p.api!=2)bad("on_tool requires executable API 2");
             if(dep=="*"&&!policy.events.contains(event.event_name))bad("unavailable SDK event: "+event.event_name);
             if(dep!="*"&&!exports.contains(dep))bad("event dependency is not enabled");
             if(dep!="*"&&dep!=p.id&&std::none_of(p.dependencies.begin(),p.dependencies.end(),[&](const auto& d){return d.id==dep;}))bad("event dependency is absent from the manifest");

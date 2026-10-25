@@ -5,6 +5,7 @@
 #include "magic_code_trophy_catalog.hpp"
 #include "recomp.h"
 #include <mutex>
+#include "sdk2_bridge.hpp"
 
 namespace dkr::mods::code {
 using GuestFunction=void(*)(std::uint8_t*,recomp_context*);
@@ -29,6 +30,16 @@ public:
     // Called by the C-only private dispatcher, or the ordinary guest wrapper.
     // Errors return AFTER all C++ locks/leases have unwound.
     int dispatch(bool leaving,std::uint32_t address,std::uint8_t*,recomp_context*,std::uint64_t& result)noexcept;
+    unsigned sdk2_pulse();
+    void sdk2_reload();
+    int sdk2_dispatch_pulse()noexcept;
+    bool sdk2_frame_starts_at(std::uint32_t)const;
+    void sdk2_command(const dkr::sdk2::Command&);
+    void sdk2_development(bool value){sdk2_development_=value;}
+    void sdk2_frame_agreed(bool value){sdk2_frame_agreed_=value;}
+    void sdk2_current_course(std::function<std::string()> query){sdk2_current_course_=std::move(query);}
+    void sdk2_assets(const std::string& value){if(!value.empty())sdk2_assets_=parse_document(View(reinterpret_cast<const std::uint8_t*>(value.data()),value.size()),2*MiB);}
+    bool sdk2_wants_assets()const{for(const auto& o:linked().owners)if(o.package->api==2&&o.package->modules.contains("catalogues2"))return true;return false;}
     const std::string& error()const{return error_;}
     Bytes checkpoint()const;
     // Quiesced native-to-owned handoff only, while the supplied RAM is alive.
@@ -43,6 +54,40 @@ public:
     std::size_t required_ram()const{return 16*MiB+linked().resident_bytes;}
     std::size_t checkpoint_limit()const;
 private:
+    bool sdk2_enabled()const;
+    void sdk2_boundary(unsigned);
+    void sdk2_inspector();
+    void sdk2_lifetime(std::string_view,bool,const Registers&);
+    void sdk2_emit(Memory&,std::uint32_t,unsigned,unsigned,unsigned,unsigned,unsigned,unsigned,unsigned);
+    bool sdk2_service(std::string_view,std::size_t,Memory&,Registers&,Budget&);
+    bool sdk2_operation_available(unsigned)const;
+    int sdk2_operation(unsigned,std::size_t,Memory&,const std::array<std::uint32_t,16>&,std::array<std::uint32_t,16>&,Budget&);
+    int sdk2_cast(Memory&,std::uint32_t,std::uint32_t,Budget&);
+    int sdk2_track_catalogue(Memory&,std::string_view,unsigned,Json&,Budget&);
+    int sdk2_control(Memory&,std::size_t,unsigned,unsigned);
+    int sdk2_tune(Memory&,std::size_t,unsigned);
+    int sdk2_setting_apply(Memory&,std::size_t,unsigned,unsigned,std::uint32_t,Budget&);
+    void sdk2_vehicle(std::string_view,bool,const Registers&);
+    void sdk2_apply_overrides(std::size_t,unsigned,bool);
+    void sdk2_shading(std::string_view,bool,const Registers&);
+    bool sdk2_freeze(std::string_view)const;
+    void sdk2_native_return(std::string_view,Registers&);
+    int sdk2_document(std::size_t,Memory&,std::string_view,Registers&,Budget&);
+    bool sdk2_document_command(const dkr::sdk2::Command&,std::size_t,Memory&);
+    std::string sdk2_course_identity()const;
+    unsigned sdk2_phase_=1;
+    bool sdk2_command_=false;
+    bool sdk2_development_=false;
+    bool sdk2_active_=false;
+    bool sdk2_pulsing_=false;
+    bool sdk2_frame_agreed_=false;
+    unsigned sdk2_inspector_serial_=0;
+    Budget sdk2_budget_{};
+    std::map<std::string,unsigned> sdk2_modules_;
+    std::vector<trophy::Course> sdk2_courses_;
+    Json sdk2_inventory_=Json::object(),sdk2_cups_=Json::array();
+    Json sdk2_assets_=Json::object();
+    std::function<std::string()> sdk2_current_course_;
     static Registers read(const recomp_context&);
     static void write(recomp_context&,const Registers&);
     DispatchTable table_;

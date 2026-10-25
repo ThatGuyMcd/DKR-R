@@ -1,3 +1,4 @@
+#include "../rollback_policy.hpp"
 #include "experimental_lobby_admission.hpp"
 #include "authoritative_state_codec.hpp"
 #include "monocypher.h"
@@ -202,7 +203,7 @@ bool LobbyAdmission::service_admission(Clock::time_point now) {
         if(!transport_.receive(source,bytes,error)) {if(!error.empty())return fail(error);break;}
         if(source.size!=4||source.storage[0]!='D'||source.storage[1]!='K'||source.storage[2]!='X'||source.storage[3]>=players_||source.storage[3]==local_)return fail("Invalid admitted owned route.");
         if(bytes.size()>=4&&std::equal(prefix.begin(),prefix.begin()+4,bytes.begin())) {
-            if(bytes.size()<5||bytes[4]!=prefix[4])return fail("The racers are using different Experimental Rollback rebuilds. Install the same package on every machine.");
+            if(bytes.size()<5||bytes[4]!=prefix[4])return fail("The racers are using different Rollback rebuilds. Install the same package on every machine.");
             if(!packet(source.storage[3],bytes,now))return false;
         }
         else {

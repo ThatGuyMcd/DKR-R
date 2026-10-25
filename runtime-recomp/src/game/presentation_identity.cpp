@@ -1,4 +1,7 @@
+#include "producer_snapshot.hpp"
 #include "presentation_identity.hpp"
+#include "detail_contract.hpp"
+#include <cstring>
 #include "retained_metadata_table.hpp"
 #include "netplay/experimental_performance.hpp"
 #include "custom_music.hpp"
@@ -127,6 +130,7 @@ struct MatrixBinding {
 };
 
 struct SubmittedFrame {
+    std::vector<dkr_owned_draw_event> details;
     std::uint32_t display_list_address = 0;
     std::uint32_t task_number = 0;
     std::uint32_t scene_generation = 0;
@@ -168,6 +172,8 @@ dkr::runtime::presentation::PresentationDiagnosticBudget g_marker_rejections{};
 std::array<std::unordered_map<std::uint64_t,
     dkr::runtime::presentation::ShadowOwnerMotionSample>, 2>
     g_shadow_owner_motion_maps;
+std::array<std::vector<dkr_owned_draw_event>,2> g_detail_maps;
+thread_local std::vector<dkr_owned_draw_event> g_active_detail;
 std::deque<SubmittedFrame> g_submitted_frames;
 bool g_submission_overflowed = false;
 std::atomic<std::uint32_t> g_scene_generation{1U};
@@ -961,7 +967,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
     std::uint8_t* rdram_snapshot, std::uint32_t display_list_address) {
     g_active_task_presentation_time = 0.0;
     g_active_matrix_map.clear();
-    g_active_marker_map.clear();
+    g_active_marker_map.clear();g_active_detail.clear();
     g_active_shadow_owner_motion.clear();
     g_active_task_interpolation_allowed = false;
     g_active_task_scene_generation = 0U;
@@ -1013,6 +1019,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
                              std::next(matching));
     g_active_matrix_map = std::move(frame.matrices);
     g_active_marker_map = std::move(frame.markers);
+    g_active_detail=std::move(frame.details);
     g_active_shadow_owner_motion = std::move(frame.shadow_owner_motion);
     g_active_task_interpolation_allowed = frame.interpolation_allowed;
     g_active_task_scene_generation = frame.scene_generation;
@@ -1025,7 +1032,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
 
 dkr::runtime::presentation::TaskIdentityScope::~TaskIdentityScope() {
     g_active_matrix_map.clear();
-    g_active_marker_map.clear();
+    g_active_marker_map.clear();g_active_detail.clear();
     g_active_shadow_owner_motion.clear();
     g_active_task_interpolation_allowed = false;
     g_active_task_scene_generation = 0U;
@@ -1043,7 +1050,7 @@ dkr::runtime::presentation::TaskIdentityScope::TaskIdentityScope(
     std::span<const OwnedShadowBinding> shadows,std::uint32_t scene,bool allowed,double time) {
     dkr::runtime::netplay::experimental::performance::Scope identity_timing(
         dkr::runtime::netplay::experimental::performance::Stage::Identity);
-    g_active_matrix_map.clear();g_active_marker_map.clear();g_active_shadow_owner_motion.clear();
+    g_active_matrix_map.clear();g_active_marker_map.clear();g_active_detail.clear();g_active_shadow_owner_motion.clear();
     g_active_owned_task=true;
     g_active_task_presentation_time=std::isfinite(time) && time>=0 ? time : 0;
     if(markers.size()>8192 || matrices.size()>8192 || shadows.size()>8192) {
@@ -1237,6 +1244,16 @@ bool dkr::runtime::presentation::record_presentation_marker(
     auto& integrity = g_marker_integrity[g_recording_buffer & 1U];
     if (!integrity.valid) return false;
     auto& markers = g_marker_maps[g_recording_buffer & 1U][physical];
+    const bool metadata_valid=ValidRange(command_address,8U)&&
+        valid_presentation_marker(kind,mode,variant)&&
+        (kind!=PresentationMarkerKind::HudWidget||hud_transform.valid());
+    const bool empty_scope_kind=kind==PresentationMarkerKind::HudPass||
+        kind==PresentationMarkerKind::HudWidget||kind==PresentationMarkerKind::HudRect||
+        is_aspect_marker(kind);
+    if(metadata_valid&&empty_scope_kind&&mode==0&&!markers.empty()&&
+       markers.back().kind==kind&&markers.back().mode==1) {
+        markers.pop_back();return true; // empty-scope-compaction=v1
+    }
     if (!integrity.accept(ValidRange(command_address, 8U) &&
                           valid_presentation_marker(kind, mode, variant) &&
                           (kind != PresentationMarkerKind::HudWidget || hud_transform.valid()),
@@ -1274,6 +1291,16 @@ dkr::runtime::presentation::active_presentation_markers(
     return result;
 }
 
+std::vector<dkr::runtime::presentation::LocatedPresentationMarker>
+dkr::runtime::presentation::camera_world_boundaries() {
+    std::vector<LocatedPresentationMarker> out;
+    if(g_active_owned_task)return out;
+    for(const auto& [address,list]:g_active_marker_map)for(const auto& marker:list)
+        if(marker.kind==PresentationMarkerKind::CameraWorldBegin||marker.kind==PresentationMarkerKind::CameraWorldEnd)
+            out.push_back({address,marker});
+    return out;
+}
+
 extern "C" void dkr_presentation_scene_begin(std::uint8_t*, recomp_context*) {
     std::scoped_lock lock(g_identity_mutex);
     std::uint32_t next =
@@ -1281,6 +1308,7 @@ extern "C" void dkr_presentation_scene_begin(std::uint8_t*, recomp_context*) {
     if (next == 0U) {
         g_scene_generation.store(1U, std::memory_order_relaxed);
     }
+    for(auto& rows:g_detail_maps)rows.clear();
     g_lifetimes.clear();
     g_identity_owners.clear();
     g_collided_identities.clear();
@@ -1304,7 +1332,7 @@ extern "C" void dkr_presentation_scene_begin(std::uint8_t*, recomp_context*) {
     g_presentation_ticks.store(0U, std::memory_order_relaxed);
     g_submitted_frames.clear();
     g_active_matrix_map.clear();
-    g_active_marker_map.clear();
+    g_active_marker_map.clear();g_active_detail.clear();
     g_active_shadow_owner_motion.clear();
     for (auto& map : g_matrix_maps) {
         map.clear();
@@ -1352,7 +1380,7 @@ extern "C" void dkr_presentation_frame_begin(std::uint8_t* rdram,
             dkr::runtime::enhancements::presentation_profile());
     std::scoped_lock lock(g_identity_mutex);
     g_matrix_maps[g_recording_buffer].clear();
-    g_marker_maps[g_recording_buffer].clear();
+    g_marker_maps[g_recording_buffer].clear();g_detail_maps[g_recording_buffer].clear();
     g_marker_integrity[g_recording_buffer] = {};
     g_shadow_owner_motion_maps[g_recording_buffer].clear();
 }
@@ -1510,10 +1538,12 @@ extern "C" void dkr_presentation_task_submitted(std::uint8_t* rdram,
     if (!dkr::runtime::netplay::external_side_effects_allowed()) {
         std::scoped_lock lock(g_identity_mutex);
         g_matrix_maps[g_recording_buffer & 1U].clear();
-        g_marker_maps[g_recording_buffer & 1U].clear();
+        g_marker_maps[g_recording_buffer & 1U].clear();g_detail_maps[g_recording_buffer & 1U].clear();
         g_shadow_owner_motion_maps[g_recording_buffer & 1U].clear();
         return;
     }
+    dkr::runtime::graphics_handoff::capture(rdram,static_cast<std::uint32_t>(context->r4),
+        static_cast<std::uint32_t>(context->r5));
     if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
         return;
     }
@@ -1550,6 +1580,8 @@ extern "C" void dkr_presentation_task_submitted(std::uint8_t* rdram,
                      kMaximumPendingFrames);
         return;
     }
+    frame.details=std::move(g_detail_maps[g_recording_buffer&1U]);
+    g_detail_maps[g_recording_buffer&1U].reserve(dkr::runtime::detail::Observations);
     frame.matrices = std::move(g_matrix_maps[g_recording_buffer & 1U]);
     g_matrix_maps[g_recording_buffer & 1U].reserve(1024U);
     frame.markers = std::move(g_marker_maps[g_recording_buffer & 1U]);
@@ -1561,7 +1593,7 @@ extern "C" void dkr_presentation_task_submitted(std::uint8_t* rdram,
         // Use the existing no-sidecar fallback for this malformed task only.
         // Never publish a truncated begin/end stream, or retain the failure
         // into the next frame/scene. Valid tasks take the unchanged path.
-        frame.markers.clear();
+        frame.markers.clear();frame.details.clear();
         frame.matrices.clear();
         frame.shadow_owner_motion.clear();
         frame.interpolation_allowed = false;
@@ -1672,3 +1704,5 @@ extern "C" void dkr_presentation_finish_camera_node(
     std::scoped_lock lock(g_identity_mutex);
     g_finish_camera_shots[slot].observe_node(owner, node);
 }
+
+#include "detail_observer.inl"

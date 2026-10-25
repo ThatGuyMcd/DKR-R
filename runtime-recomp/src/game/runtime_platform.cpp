@@ -1,10 +1,11 @@
+#include "invite_handoff.hpp"
 #include "runtime_platform.hpp"
 #include "application_layout.hpp"
 #include "audio_equalizer.hpp"
 #include "controller_snapshot.hpp"
 #include "controller_mapping_policy.hpp"
 #include "custom_music.hpp"
-#include "modern_camera.hpp"
+#include "camera_runtime.hpp"
 #include "netplay/online_input_broker.hpp"
 #include "online_input_policy.hpp"
 #include "runtime_input.hpp"
@@ -2420,6 +2421,7 @@ void dkr::runtime::platform::set_audio_frequency(std::uint32_t frequency) {
 void dkr::runtime::platform::poll_input() {
 #if DKR_RUNTIME_HAS_RT64
     if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
+        for(unsigned profile=0;profile<4;++profile)dkr::runtime::camera::actions().publish(profile,{});
         ClearPublishedControllerInput(false);
         if (g_online_input_routing.load(std::memory_order_acquire)) {
             const std::size_t profile = std::min(
@@ -2438,7 +2440,26 @@ void dkr::runtime::platform::poll_input() {
         SDL_GameControllerUpdate();
         RefreshControllers(false);
     }
-    const bool blocked = dkr::runtime::ui::overlay_visible();
+    // A confirm/back press used by the invitation must be released before
+    // it can become racing input. Read the already refreshed physical state;
+    // do not clear or mutate any canonical online controller ports.
+    if(dkr::runtime::invites::release_pending()) {
+        bool held=false;int count=0;const auto* keys=SDL_GetKeyboardState(&count);
+        for(int key=0;key<count;++key)held|=keys[key]!=0;
+        held|=SDL_GetMouseState(nullptr,nullptr)!=0;
+        if(sdl3_native) {
+            for(const auto& device:g_sdl3_input_state.devices)if(device.snapshot.connected) {
+                for(auto button:device.snapshot.buttons)held|=button!=0;
+                for(auto axis:device.snapshot.axes)held|=std::abs(int(axis))>16000;
+            }
+        } else for(auto* controller:g_controllers)if(controller) {
+            for(int button=0;button<SDL_CONTROLLER_BUTTON_MAX;++button)held|=SDL_GameControllerGetButton(controller,SDL_GameControllerButton(button))!=0;
+            for(int axis=0;axis<SDL_CONTROLLER_AXIS_MAX;++axis)held|=std::abs(int(SDL_GameControllerGetAxis(controller,SDL_GameControllerAxis(axis))))>16000;
+        }
+        dkr::runtime::invites::release_if_clear(!held);
+    }
+
+    const bool blocked = dkr::runtime::ui::overlay_visible() || dkr::runtime::camera::editor_open.load();
     const bool window_focused = g_window != nullptr &&
         (SDL_GetWindowFlags(g_window) & SDL_WINDOW_INPUT_FOCUS) != 0U;
     const bool online_routing =
@@ -2488,9 +2509,25 @@ void dkr::runtime::platform::poll_input() {
 #endif
         }
 #endif
-        dkr::runtime::modern_camera::publish_input(
-            player, state.camera_x, state.camera_y, state.look_back,
-            online_routing);
+        dkr::runtime::camera::actions().publish(unsigned(player),
+            {state.camera_actions,state.orbit_x,state.orbit_y,0,
+                gameplay_blocked||!dkr::runtime::camera::owns_controls(unsigned(player)),true});
+        if(dkr::runtime::camera::owns_controls(unsigned(player))) {
+            // Remove only C buttons whose binding is actually shared with a
+            // camera direction. Explicit independent C bindings remain usable.
+            using A=dkr::runtime::input::Action;
+            const A camera[]={A::OrbitUp,A::OrbitDown,A::OrbitLeft,A::OrbitRight};
+            const A native[]={A::CUp,A::CDown,A::CLeft,A::CRight};
+            const unsigned bits[]={8,4,2,1};
+            for(unsigned c=0;c<4;++c)for(unsigned n=0;n<4;++n) {
+                const int cb=dkr::runtime::input::controller_binding(player,camera[c]);
+                const int nb=dkr::runtime::input::controller_binding(player,native[n]);
+                const int ck=dkr::runtime::input::keyboard_binding(player,camera[c]);
+                const int nk=dkr::runtime::input::keyboard_binding(player,native[n]);
+                if((cb>=0&&cb==nb)||(ck>=0&&ck==nk))state.buttons&=std::uint16_t(~bits[n]);
+            }
+            if(state.accelerate)state.buttons|=0x8000U;
+        }
         g_physical_buttons[player].store(state.buttons, std::memory_order_release);
         g_physical_stick_x[player].store(state.stick_x, std::memory_order_release);
         g_physical_stick_y[player].store(state.stick_y, std::memory_order_release);
@@ -2507,12 +2544,6 @@ void dkr::runtime::platform::poll_input() {
                 online_routing);
         if (publish_physical) {
             std::uint16_t buttons = state.buttons;
-            if (dkr::runtime::modern_camera::owns_controls(player)) {
-                // During a race the Modern camera owns the C-button bindings
-                // (they orbit it), and Accelerate presses A.
-                buttons &= static_cast<std::uint16_t>(~0x000FU);
-                if (state.accelerate) buttons |= 0x8000U;
-            }
             g_buttons[player].store(buttons, std::memory_order_release);
             g_stick_x[player].store(state.stick_x, std::memory_order_release);
             g_stick_y[player].store(state.stick_y, std::memory_order_release);
@@ -2532,7 +2563,7 @@ void dkr::runtime::platform::poll_input() {
 
 void dkr::runtime::platform::set_online_input_routing(
     bool enabled, std::uint8_t occupied_mask, std::uint8_t local_slot) {
-    dkr::runtime::modern_camera::set_online_routing(enabled);
+
     g_online_occupied_mask.store(enabled ? occupied_mask : 0U,
                                  std::memory_order_release);
     g_online_local_slot.store(

@@ -23,7 +23,7 @@ RuntimeOnlineSaveStatus runtime_online_save_status();
 bool prepare_runtime_save_context(const std::filesystem::path& root,
     const std::filesystem::path& offline_subfolder,
     const std::filesystem::path& offline_paks, bool online, bool host,
-    std::uint64_t match_id, std::uint64_t expected_hash, std::string& error);
+    std::uint64_t match_id, std::uint64_t expected_hash, std::string& error,bool development=false);
 void retire_runtime_save_context();
 bool runtime_save_context_ready();
 bool runtime_save_writes_allowed();
