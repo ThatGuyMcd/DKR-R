@@ -19,6 +19,10 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 HOOKS = ROOT / "scripts/agent_hooks"
 HOOK_SCRIPTS = {"session_start.py", "pre_edit_guard.py", "post_edit_check.py", "stop_check.py"}
+# The hooks act only inside a git checkout. Packaged source copies (the macOS
+# build kit) have no .git, so the tests that drive them against this repo skip.
+IN_CHECKOUT = (ROOT / ".git").exists()
+SKIP_OUTSIDE_CHECKOUT = unittest.skipUnless(IN_CHECKOUT, "needs a git checkout of the repository")
 SPEC = importlib.util.spec_from_file_location("hooklib", HOOKS / "hooklib.py")
 hooklib = importlib.util.module_from_spec(SPEC)
 sys.modules["hooklib"] = hooklib  # dataclasses resolve their module by name
@@ -59,6 +63,7 @@ def git(root, *args):
     )
 
 
+@SKIP_OUTSIDE_CHECKOUT
 class PreEditGuardTests(unittest.TestCase):
     def test_blocks_a_new_overlay_cmake_layer(self):
         result = run_hook(
@@ -380,6 +385,7 @@ class ConfigTests(unittest.TestCase):
         for command in commands:
             self.assertTrue(command.startswith('"$CLAUDE_PROJECT_DIR"/scripts/agent_hooks/run '), command)
 
+    @SKIP_OUTSIDE_CHECKOUT
     def test_session_state_is_gitignored(self):
         for path in (".claude/session-base", ".claude/settings.local.json"):
             result = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", path])

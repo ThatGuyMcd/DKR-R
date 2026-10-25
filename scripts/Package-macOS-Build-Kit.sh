@@ -41,6 +41,12 @@ for directory in assets packaging patches scripts; do
 done
 rsync -a --exclude=.git --exclude=run-data --exclude=__pycache__ \
   "${project_root}/runtime-recomp/" "${stage}/runtime-recomp/"
+# Inputs of the pattern-guard and agent-hook tests that Build-macOS.sh runs
+# through CTest.
+mkdir -p "${stage}/tests/fixtures" "${stage}/.claude" "${stage}/.codex"
+rsync -a "${project_root}/tests/fixtures/pattern-guard/" "${stage}/tests/fixtures/pattern-guard/"
+install -m 0644 "${project_root}/.claude/settings.json" "${stage}/.claude/settings.json"
+install -m 0644 "${project_root}/.codex/hooks.json" "${stage}/.codex/hooks.json"
 # Preparation fetches the pinned Git checkouts from dependencies.lock.json.
 # Source copies without .git cannot be verified or patched by that pipeline.
 
