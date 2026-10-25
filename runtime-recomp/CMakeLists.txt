@@ -664,6 +664,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/LegacyMods.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomMagicCodes.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomVehicles.cmake")
     foreach(config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
         string(TOUPPER "${config}" config_upper)
         set_target_properties(DKRLegacyModWorker PROPERTIES
@@ -1365,6 +1366,24 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
                         "${DKR_PROBE_DLL}" "$<TARGET_FILE_DIR:${DKR_INTERACTIVE_TARGET}>" VERBATIM)
             endif()
         endforeach()
+    endif()
+endif()
+
+if(DKR_RUNTIME_BUILD_GENERATED)
+    # Camera++, the Mod Store HTTP backend and custom vehicles, linked after
+    # the owned engines in the order v1.0.11 linked them.
+    include(cmake/Camera.cmake)
+    target_link_libraries(DKRPortGame PRIVATE DKRCameraPresentation)
+    if(WIN32)
+        target_link_libraries(DKRPortGame PRIVATE winhttp crypt32 bcrypt)
+    elseif(NOT ANDROID AND NOT APPLE)
+        find_package(CURL REQUIRED)
+        target_link_libraries(DKRPortGame PRIVATE CURL::libcurl)
+    endif()
+    target_link_libraries(DKRPortGame PRIVATE DKRCustomVehicles)
+    if(UNIX)
+        # The online directory's Linux keyring is loaded at run time.
+        target_link_libraries(DKRPortGame PRIVATE ${CMAKE_DL_LIBS})
     endif()
 endif()
 

@@ -581,6 +581,7 @@ patches/release-prep/v1.0.11/BUILDING.txt PG013
 patches/release-prep/v1.0.11/RELEASE-NOTES.txt PG013
 patches/release-prep/v1.0.11/ReleaseOverlay.cmake PG001
 patches/release-prep/v1.0.11/ReleaseOverlay.cmake PG002
+patches/release-prep/v1.0.11/ReleaseOverlay.cmake PG003
 patches/release-prep/v1.0.11/UPDATER.txt PG013
 patches/release-prep/v1.0.11/audit.py PG013
 patches/release-prep/v1.0.11/author.py PG013
