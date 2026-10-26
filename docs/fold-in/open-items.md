@@ -24,7 +24,23 @@
    aborted once under parallel load the same way, and it was the one failure
    before the fold too. Behaviour fixes belong after B10.
 
+## Open questions
+
+- **Android release transforms aren't covered.** The gate and the stage
+  patches are checked on the Linux chain only; the Android-only stages and
+  the release layers' Android transforms are not reproduced or verified.
+  Android releases are discontinued, so this stays open rather than blocking.
+
+## For C5 (tests)
+
+- The layers' remaining check targets and the "Before" negative controls
+  move to C5 with the other promoted fixtures; the fold doesn't port them.
+
 ## For B6 (native macOS)
+
+- `apply_closure.py` respelled absolute staged includes inside `#if` branches
+  no Linux TU takes (Apple, Windows, Android) by path alone. No configure has
+  compiled them, so B6 and the Windows configure are their first check.
 
 - `netplay/online_directory.cpp` (online-directory layer) holds a
   `std::atomic<std::shared_ptr<const View>>`. libstdc++ supports that C++20
@@ -74,7 +90,9 @@
   (achievement, polish, vehicle, render heap) into `<build>/generated/symbols`.
   `title_text_rt64.hpp` and `credits_sky_rt64.hpp` keep their tables inline,
   among hand-written code; `gen_guest_symbols_tests.py` checks the tables
-  against the pinned decomp table.
+  against the pinned decomp table. Splitting those tables into generated
+  `.inc` files is cleanup for after equivalence (it would cost a level 1
+  delta now).
 - The polish header reads `gRareCopyrightString`, which only the decomp symbol
   table has, so a `host-full-nogen` configure needs
   `extern/dkr-decomp/ver/symbols`. That's the sparse "symbols" dependency

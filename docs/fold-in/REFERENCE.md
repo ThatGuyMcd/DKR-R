@@ -40,3 +40,12 @@ Shipped closure: 1368 TUs behind `DKR-R`, `DKR-R-ModWorker`, `DKR-R-Updater`
 and `DKR-R-InputHost`. Of these, 837 first-party files, 40 guest transforms,
 6 guest-derived files and 11 dependency transforms. The first-party files are
 written back by `scripts/fold/apply_closure.py` (step B1).
+
+## Configure-time generation (deliberate)
+
+Guest hooks (`cmake/GuestHooks.cmake`), the guest symbol headers
+(`cmake/GuestSymbols.cmake`) and the Camera++ hook stubs (`cmake/Camera.cmake`)
+run at configure time, like the existing code-mod dispatch staging. The plan
+had build-time `add_custom_command`s; keep them at configure time. The gate's
+header scan and preprocessing read the configured tree without building it,
+so build-time outputs would not exist when it compares them.
