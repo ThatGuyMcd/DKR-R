@@ -18,7 +18,8 @@ than once in its table is an error; nothing is guessed.
     gen_guest_symbols.py --out DIR --check [SPEC...]  fail unless DIR holds them
 
 With no SPEC every runtime-recomp/symbols/*.toml is generated. Headers are
-written only when their bytes change.
+written only when their bytes change, and a *.hpp in DIR that no SPEC names
+is removed (reported, with --check): DIR holds the requested headers only.
 
 Exit status: 0 on success, 1 on a missing/ambiguous symbol or a --check
 difference, 2 on usage errors.
@@ -124,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     except SymbolError as error:
         print(f"gen_guest_symbols: {error}", file=sys.stderr)
         return 1
-    stale = []
+    stale: list[str] = []
     for name, text in sorted(headers.items()):
         path = args.out / name
         current = path.read_bytes() if path.is_file() else None
@@ -135,9 +136,16 @@ def main(argv: list[str] | None = None) -> int:
             continue
         args.out.mkdir(parents=True, exist_ok=True)
         path.write_bytes(text.encode("utf-8"))
+    # A header whose request was deleted must not linger for includers to find.
+    orphans = sorted(path for path in args.out.glob("*.hpp") if path.name not in headers) if args.out.is_dir() else []
+    for path in orphans:
+        if args.check:
+            print(f"gen_guest_symbols: {path} has no request", file=sys.stderr)
+        else:
+            path.unlink()
     for name in stale:
         print(f"gen_guest_symbols: {args.out / name} differs from its request", file=sys.stderr)
-    return 1 if stale else 0
+    return 1 if stale or (args.check and orphans) else 0
 
 
 if __name__ == "__main__":

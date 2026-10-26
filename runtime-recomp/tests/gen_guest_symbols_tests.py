@@ -124,6 +124,15 @@ class GeneratorTests(unittest.TestCase):
         (out / "render_heap_addresses.hpp").write_text("stale\n", encoding="utf-8")
         self.assertEqual(gen_guest_symbols.main(["--out", str(out), "--check", str(spec)]), 1)
 
+    def test_headers_without_a_request_are_removed(self):
+        out = self.root / "out"
+        out.mkdir()
+        (out / "retired_symbols.hpp").write_text("#pragma once\n", encoding="utf-8")
+        spec = gen_guest_symbols.SPECS / "render_heap_addresses.toml"
+        self.assertEqual(gen_guest_symbols.main(["--out", str(out), "--check", str(spec)]), 1)
+        self.assertEqual(gen_guest_symbols.main(["--out", str(out), str(spec)]), 0)
+        self.assertEqual(sorted(path.name for path in out.iterdir()), ["render_heap_addresses.hpp"])
+
 
 if __name__ == "__main__":
     unittest.main()
