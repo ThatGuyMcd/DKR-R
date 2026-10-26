@@ -84,7 +84,8 @@
         "DKR_NETPLAY_WEBRTC": "ON",
         "DKR_EXPERIMENTAL_RACE_TEST": "ON",
         "DKR_VERIFY_BUILD_INPUTS": "ON"
-      }
+      },
+      "description": "Every release preset: generated payloads, RT64, the SDL3 input host, WebRTC, integrated rollback and DKR_VERIFY_BUILD_INPUTS against build-inputs.lock.json."
     },
     {
       "name": "release-windows",
@@ -121,7 +122,8 @@
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Darwin"
-      }
+      },
+      "description": "The one release preset without integrated rollback: DKR_EXPERIMENTAL_RACE_TEST is FATAL on Apple until the rollback RT64 stage patches are rebased onto the Apple chain ('Rollback on Apple' in docs/fold-in/open-items.md)."
     }
   ],
   "buildPresets": [

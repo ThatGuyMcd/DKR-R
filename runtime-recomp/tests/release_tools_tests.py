@@ -8,6 +8,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -190,12 +191,15 @@ class InputLockTests(unittest.TestCase):
         self.assertEqual(lock_inputs.digest(lf), lock_inputs.digest(crlf))
         changed = self.tree("changed", {"funcs_0.c": b"int a;\nint c;\n", "sub/x.h": b"#pragma once\n"})
         self.assertNotEqual(lock_inputs.digest(lf), lock_inputs.digest(changed))
+        raw = self.tree("raw", {"blob.bin": b"a\r\n"})
+        raw_lf = self.tree("raw-lf", {"blob.bin": b"a\n"})
+        self.assertNotEqual(lock_inputs.digest(raw), lock_inputs.digest(raw_lf), "non-text files hash raw")
         renamed = self.tree("renamed", {"funcs_1.c": b"int a;\nint b;\n", "sub/x.h": b"#pragma once\n"})
         self.assertNotEqual(lock_inputs.digest(lf), lock_inputs.digest(renamed))
 
     @unittest.skipUnless(shutil.which("cmake"), "needs cmake")
     def test_cmake_computes_the_same_digest(self):
-        base = self.tree("in", {"b.c": b"int b;\r\n", "a/z.h": b"x\n", "a/y.toml": b"path"})
+        base = self.tree("in", {"b.c": b"int b;\r\n", "a/z.h": b"x\n", "a/y.toml": b"path", "blob.bin": b"a\r\nb"})
         script = self.root / "digest.cmake"
         script.write_text(
             f'include("{(ROOT / "runtime-recomp/cmake/BuildInputs.cmake").as_posix()}")\n'
@@ -206,7 +210,7 @@ class InputLockTests(unittest.TestCase):
 
     def test_the_lock_names_every_prepared_input(self):
         lock = json.loads(lock_inputs.LOCK.read_text())
-        self.assertEqual(sorted(lock["inputs"]), sorted(lock_inputs.INPUTS))
+        self.assertEqual(sorted(lock["inputs"]), sorted(lock_inputs.INPUTS + lock_inputs.POLICIES))
         self.assertEqual(set(lock["pins"]), {"n64recomp", "dkr-decomp"})
 
 
@@ -243,6 +247,73 @@ class TagTests(unittest.TestCase):
         bad = subprocess.run([sys.executable, str(script), "--tag", f"v{v}"], capture_output=True, text=True)
         self.assertNotEqual(bad.returncode, 0)
         self.assertIn("doesn't match VERSION", bad.stderr)
+
+
+class LockCoverageTests(unittest.TestCase):
+    """Nothing the lock leaves out (provenance JSON/TOML) is a real input."""
+
+    MANIFESTS = ("manifest", "primary_manifest", "rev_a_manifest", "DKR_OWNED_MANIFEST")
+
+    def cmake_sources(self):
+        files = sorted((ROOT / "runtime-recomp/cmake").glob("*.cmake")) + [ROOT / "runtime-recomp/CMakeLists.txt"]
+        return {path: path.read_text(encoding="utf-8") for path in files}
+
+    def test_every_manifest_field_the_configure_reads_is_locked(self):
+        locked = {f.lstrip("#") for fields in lock_inputs.CONFIGURE_FIELDS.values() for f in fields}
+        pattern = re.compile(
+            r'string\(\s*JSON\s+\w+(?:\s+ERROR_VARIABLE\s+\w+)?\s+(?:GET|LENGTH)\s+"\$\{(\w+)\}"\s+(\$\{\w+\}|\w+)'
+        )
+        read: set[str] = set()
+        for path, text in self.cmake_sources().items():
+            for variable, field in pattern.findall(text):
+                if variable in self.MANIFESTS:
+                    read.add(field)
+        # ExperimentalOwnedGame.cmake loops over a field list.
+        loop = re.search(
+            r"foreach\(\s*field\s+([\w\s]+?)\)",
+            self.cmake_sources()[ROOT / "runtime-recomp/cmake/ExperimentalOwnedGame.cmake"],
+        )
+        self.assertIsNotNone(loop)
+        read |= set(loop.group(1).split())
+        read.discard("${field}")
+        self.assertTrue(read)
+        self.assertEqual(read - locked, set())
+
+    def test_no_provenance_file_is_configured_into_the_build(self):
+        offenders = [
+            f"{path.name}: {line.strip()}"
+            for path, text in self.cmake_sources().items()
+            for line in text.splitlines()
+            if "configure_file(" in line and re.search(r"\.(json|toml)\b", line)
+        ]
+        self.assertEqual(offenders, [])
+
+    @unittest.skipUnless(any((ROOT / "build").glob("release-*/.cmake/api/v1/reply")), "needs a release build")
+    def test_a_release_build_reads_no_unlocked_provenance(self):
+        build = sorted((ROOT / "build").glob("release-*/.cmake/api/v1/reply"))[0].parents[3]
+        cache = (build / "CMakeCache.txt").read_text(errors="replace")
+        prepared = Path(re.search(r"^DKR_PREPARED_DIR:PATH=(.*)$", cache, re.M).group(1))
+        excluded = lambda p: Path(p).suffix in lock_inputs.PROVENANCE and Path(p).is_relative_to(prepared)  # noqa: E731
+        reply = build / ".cmake/api/v1/reply"
+        index = json.loads(sorted(reply.glob("index-*.json"))[-1].read_text())
+        model = json.loads((reply / index["reply"]["codemodel-v2"]["jsonFile"]).read_text())
+        compiled = [
+            source["path"]
+            for entry in model["configurations"][0]["targets"]
+            for source in json.loads((reply / entry["jsonFile"]).read_text()).get("sources", [])
+        ]
+        self.assertEqual([p for p in compiled if excluded(p)], [])
+        if shutil.which("ninja") and (build / "build.ninja").is_file():
+            deps = subprocess.run(["ninja", "-C", str(build), "-t", "deps"], capture_output=True, text=True).stdout
+            self.assertEqual([line.strip() for line in deps.splitlines() if excluded(line.strip())], [])
+        files = index["reply"].get("cmakeFiles-v1")
+        if files:
+            inputs = json.loads((reply / files["jsonFile"]).read_text())["inputs"]
+            read = {Path(i["path"]).name for i in inputs if excluded(i["path"])}
+            # The configure reads these: the policies are locked, the manifests'
+            # fields are (the test above), and prepared.json is only tested
+            # for existence (PreparedInputs.cmake).
+            self.assertLessEqual(read, {"manifest.json", "v77.toml", "v80.toml", "prepared.json"})
 
 
 if __name__ == "__main__":

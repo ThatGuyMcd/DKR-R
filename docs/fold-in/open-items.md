@@ -45,6 +45,11 @@ checkout (`prepare-dependencies` `decomp-symbols`) and, on Android, the new
 `android-full` dependency profile. actionlint and zizmor are clean locally.
 **Neither job has run yet**; they first run when PR 2 opens.
 
+Also blocking B10 (the merge), from B9b: a dry-run release from a test tag
+on a fork, built on the devops Mac and a second machine, with
+`scripts/release/evidence.py compare` between the two builds and against the
+v1.0.10 evidence (sources, definitions, identity values).
+
 Also blocking the next release (not PR 2): C5 restores the 15 pending release
 checks (see Release tooling); until then `finalize.py` refuses every release.
 
@@ -232,8 +237,10 @@ What the deleted release-prep scripts did, for B9b:
   together with comparing against the v1.0.10 evidence.
 - The release presets don't set `DKR_WERROR`: `cmake/Warnings.cmake` isn't
   wired to any target yet, so the option would do nothing (Phase C).
-- Tag scheme (open question 5): `Version<VERSION>`, as published so far and
-  as the updater expects, unless the owners decide otherwise.
+- Tag scheme (open question 5), settled: `Version<VERSION>`, as published so
+  far and as old clients' updater expects. A switch to `v<VERSION>` changes
+  behaviour for old clients, so it isn't part of the fold; it's a possible
+  C10 item.
 - `runtime-recomp/build-inputs.lock.json` was written from this machine's
   `build/prepared` (the inputs the gate's prepared level matched to v1.0.11).
   A Windows prepare must reproduce the same digests; that's part of the

@@ -68,10 +68,11 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     preset = f"release-{a.platform}"
     build = ROOT / "build" / preset
-    # The CMake File API codemodel evidence.py reads.
-    query = build / ".cmake/api/v1/query/codemodel-v2"
-    query.parent.mkdir(parents=True, exist_ok=True)
-    query.touch()
+    # The CMake File API replies evidence.py and the input-lock test read.
+    queries = build / ".cmake/api/v1/query"
+    queries.mkdir(parents=True, exist_ok=True)
+    for kind in ("codemodel-v2", "cmakeFiles-v1"):
+        (queries / kind).touch()
     steps = (
         ("configure", ["cmake", "--preset", preset, f"-DDKR_PREPARED_DIR={prepared.as_posix()}"]),
         ("build", ["cmake", "--build", "--preset", preset, "--parallel"]),

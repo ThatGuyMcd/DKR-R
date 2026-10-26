@@ -24,7 +24,9 @@ fixtures and the vehicle audit) are pending until C5 restores them.
 
    The release gates job checks the tag matches `VERSION`, runs the guard,
    tooling, closure and formatting checks, and fails while any required
-   check is pending.
+   check is pending. **Until C5 lands it fails on that last step on every
+   tag**, by design: the registry names the 15 pending checks. That is the
+   only reason it isn't green.
 
 ## Build each platform
 
