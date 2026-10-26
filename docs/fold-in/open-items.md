@@ -26,6 +26,28 @@
 - The Mod Store links CURL only off Windows, Android and Apple, as the
   release did; plan B2 lists CURL on Apple for B6.
 
+## Dependency stage patches (B3)
+
+- The 11 dependency transforms are six registered stage patches
+  (`patches/rt64/staged/`, `patches/n64-modern-runtime/staged/`), derived by
+  `scripts/fold/dependency_stages.py` from the Linux chain output and applied
+  after that chain. The gate checks them on Linux. Windows takes the same
+  CMake branches for these files, so its chain input should be the same, but
+  nobody has configured it. Android stages five of the files further
+  (`android-*` stages), and the shipped layers applied on top of whatever the
+  chain produced, so the Android `git apply` is unverified until the
+  `android` job runs.
+- `0001-render-stability` and `0003-present-queue-pacer` are diffs against
+  the rollback stages of `rt64_state`, `rt64_workload_queue` and
+  `rt64_present_queue`. v1.0.11 only shipped that chain
+  (`DKR_EXPERIMENTAL_RACE_TEST=ON`). A configure without those stages
+  (`host-full-nogen`, or any RT64 build with the option off) doesn't apply the
+  two patches and keeps the earlier renderer behaviour. They add no symbols
+  that first-party code calls, so such builds still link.
+- The shipped layers kept the replaced source's include directories; the
+  stage calls pass `KEEP_INCLUDE_DIRECTORIES` to do the same. The other 54
+  calls are unchanged.
+
 ## `patches/` content the build still reads (before B8)
 
 Everything else under `patches/` that the base CMake reads is a dependency

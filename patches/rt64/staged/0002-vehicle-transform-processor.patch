@@ -1,0 +1,34 @@
+diff --git a/src/render/rt64_transform_processor.cpp b/src/render/rt64_transform_processor.cpp
+--- a/src/render/rt64_transform_processor.cpp
++++ b/src/render/rt64_transform_processor.cpp
+@@ -3,6 +3,7 @@
+ //
+ 
+ #include "rt64_transform_processor.h"
++#include "vehicle_wheel_interpolation.hpp"
+ 
+ #include "common/rt64_math.h"
+ #include "hle/rt64_game_frame.h"
+@@ -37,6 +38,8 @@ namespace RT64 {
+             if (prevFrameValid) {
+                 const GameFrameMap::WorkloadMap &workloadMap = p.curFrame->frameMap.workloads[w];
+                 const DrawData &prevDrawData = p.workloadQueue->workloads[workloadMap.prevWorkloadIndex].drawData;
++                const auto currentWheels=dkr::runtime::vehicles::wheel_interpolation::capture(workload);
++                const auto previousWheels=dkr::runtime::vehicles::wheel_interpolation::capture(p.workloadQueue->workloads[workloadMap.prevWorkloadIndex]);
+                 for (size_t t = 0; t < drawData.worldTransforms.size(); t++) {
+                     const GameFrameMap::TransformMap &transformMap = workloadMap.transforms[t];
+                     if (transformMap.mapped) {
+@@ -44,6 +47,13 @@ namespace RT64 {
+                         const hlslpp::float4x4 &curTransform = drawData.worldTransforms[t];
+                         prevMatrix = transformMap.rigidBody.lerp(p.prevFrameWeight, prevTransform, curTransform, true);
+                         curMatrix = transformMap.rigidBody.lerp(p.curFrameWeight, prevTransform, curTransform, true);
++                        if(currentWheels&&dkr::runtime::vehicles::wheel_interpolation::find(*currentWheels,t)) {
++                            if(!dkr::runtime::vehicles::wheel_interpolation::interpolate(previousWheels,currentWheels,
++                                transformMap.prevTransformIndex,t,p.prevFrameWeight,p.curFrameWeight,
++                                prevTransform,curTransform,prevMatrix,curMatrix)) {
++                                prevMatrix=curTransform;curMatrix=curTransform;
++                            }
++                        }
+                         invMatrix = hlslpp::inverse(curMatrix);
+                         invTMatrix = hlslpp::transpose(invMatrix);
+                         lerpWorldTransforms.emplace_back(curMatrix);

@@ -653,6 +653,31 @@ if(DKR_RUNTIME_BUILD_RT64)
     endif()
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/EnhancedWater.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/HleCommandGuard.cmake")
+    # v1.0.11 renderer changes, applied to the end of the chain above
+    # (scripts/fold/dependency_stages.py derives them). The render-stability
+    # and present-pacer patches sit on the rollback stages of rt64_state,
+    # rt64_workload_queue and rt64_present_queue, the only chain v1.0.11
+    # shipped; without those stages the renderer keeps its earlier behaviour.
+    set(rt64_chain "${CMAKE_BINARY_DIR}/generated/hle-command-guard")
+    if(DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
+        dkr_stage_patch(rt64 "${rt64_chain}" rt64-render-stability
+            "${DKRPORT_ROOT}/patches/rt64/staged/0001-render-stability.patch"
+            src/render/rt64_texture_cache.cpp src/render/rt64_framebuffer_renderer.cpp
+            src/hle/rt64_state.cpp src/hle/rt64_workload_queue.cpp
+            HEADERS src/render/rt64_generated_mips.h KEEP_INCLUDE_DIRECTORIES)
+        dkr_stage_patch(rt64 "${rt64_chain}" rt64-present-pacer
+            "${DKRPORT_ROOT}/patches/rt64/staged/0003-present-queue-pacer.patch" src/hle/rt64_present_queue.cpp
+            KEEP_INCLUDE_DIRECTORIES)
+    endif()
+    dkr_stage_patch(rt64 "${rt64_chain}" rt64-vehicle-transform
+        "${DKRPORT_ROOT}/patches/rt64/staged/0002-vehicle-transform-processor.patch"
+        src/render/rt64_transform_processor.cpp KEEP_INCLUDE_DIRECTORIES)
+    dkr_stage_patch(rt64 "${rt64_chain}" rt64-texture-capture
+        "${DKRPORT_ROOT}/patches/rt64/staged/0004-texture-capture-observer.patch" src/hle/rt64_rdp_tmem.cpp
+        KEEP_INCLUDE_DIRECTORIES)
+    dkr_stage_patch(rt64 "${DKR_RT64_SOURCE}" rt64-review-editor
+        "${DKRPORT_ROOT}/patches/rt64/staged/0005-review-editor-imgui.patch"
+        src/contrib/imgui/imgui_widgets.cpp HEADERS src/contrib/imgui/imstb_textedit.h KEEP_INCLUDE_DIRECTORIES)
     if(MSVC AND TARGET rt64)
         # RT64 enables /MP internally. Ensure all compiler workers serialize
         # writes to the target PDB so clean RelWithDebInfo builds are reliable.

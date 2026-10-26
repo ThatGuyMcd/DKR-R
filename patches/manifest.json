@@ -513,6 +513,10 @@
       "sha256": "5570a4cfee2853cdb15894d1ee61c892c52ae5edd3d8c1336884e00ba398e3d2"
     },
     {
+      "path": "patches/n64-modern-runtime/staged/0001-graphics-handoff-events.patch",
+      "sha256": "4b7d1641142574190d634f50ad1626a792cf5c3c9fcc67eb87181f4dc46e7761"
+    },
+    {
       "path": "patches/netplay/experimental-present-queue.patch",
       "sha256": "0eb6f94fad077db2d39553ba6dd764b00c4e1d59e87b7555a0dac668f854d583"
     },
@@ -595,6 +599,26 @@
     {
       "path": "patches/performance/workload-queue-wait.patch",
       "sha256": "a36a946498f9ccf96781c30025c8baefbf3c78ae37f73d76a1574e8fa1711aa5"
+    },
+    {
+      "path": "patches/rt64/staged/0001-render-stability.patch",
+      "sha256": "c9512ef3c2e5a7ce880fd9975553722f80c33478e151f42725a61c02924de1ba"
+    },
+    {
+      "path": "patches/rt64/staged/0002-vehicle-transform-processor.patch",
+      "sha256": "b88ad6044008390949f4a8471bf9b5eb9dab846e7284c4cd9f50c373e58aca2b"
+    },
+    {
+      "path": "patches/rt64/staged/0003-present-queue-pacer.patch",
+      "sha256": "b58452c473d4de00e45ee815afc16e40f6db035238d8e16d4b419a45c9eb2c70"
+    },
+    {
+      "path": "patches/rt64/staged/0004-texture-capture-observer.patch",
+      "sha256": "832b008cb45d948a07aa5aefc8e63f745cb2dac1e63852078e42469bd4aa01a9"
+    },
+    {
+      "path": "patches/rt64/staged/0005-review-editor-imgui.patch",
+      "sha256": "0eb51bdf29fecc325a36acd97b91c6eb8d429d7930ad9294bb81072cc8691d32"
     },
     {
       "path": "patches/rt64/texture-layer-mip-cache.patch",

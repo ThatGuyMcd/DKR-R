@@ -12,7 +12,9 @@
 # built with, by image ID; docker/ci-linux-full/Dockerfile is its recipe).
 #
 # Steps: configure this tree with the reference's options minus the release
-# chain's, then compare per-source compile settings and link lines (targets),
+# chain's, check the dependency stage patches reproduce the shipped
+# third-party files (dependency_stages.py), then compare per-source compile
+# settings and link lines (targets),
 # TU sets, header closures and file bytes (level 1), preprocessed tokens plus
 # compile flags (level 2), and objects for the TUs level 2 lets differ because
 # of a header variant (level 3; DKR_EQUIVALENCE_LEVEL3=0 skips it, it compiles
@@ -60,6 +62,8 @@ if [ ! -f "$reference/depscan-by-target.json" ]; then
 fi
 
 status=0
+echo "== dependency stages"
+python3 "$root/scripts/fold/dependency_stages.py" --reference "$reference" --build "$build" --check || status=1
 echo "== targets"
 python3 "$tool" targets --reference "$reference" --folded-build "$build" || status=1
 echo "== level 1"

@@ -1,0 +1,56 @@
+diff --git a/src/hle/rt64_rdp_tmem.cpp b/src/hle/rt64_rdp_tmem.cpp
+--- a/src/hle/rt64_rdp_tmem.cpp
++++ b/src/hle/rt64_rdp_tmem.cpp
+@@ -3,6 +3,7 @@
+ //
+ 
+ #include "rt64_rdp_tmem.h"
++#include "texture_capture_bridge.hpp"
+ 
+ #include <cassert>
+ #include <cinttypes>
+@@ -140,7 +141,7 @@ namespace RT64 {
+         }
+ 
+         bool calculateRiceAlias(State *state, const LoadTile &drawTile,
+-                                uint32_t tlut, uint64_t &alias) {
++                                uint32_t tlut, uint64_t &alias, char* capturedIdentity=nullptr) {
+             const LoadOperation &loadOp = state->rdp->rice.lastLoadOpByTMEM[drawTile.tmem];
+             int bytesPerRow = 0;
+             int width = 0;
+@@ -250,6 +251,7 @@ namespace RT64 {
+                 if (appended <= 0 || identityLength + appended >= int(sizeof(identityBuffer))) return false;
+             }
+ 
++            if(capturedIdentity)std::snprintf(capturedIdentity,64,"%s",identityBuffer);
+             alias = riceNativeAlias(identityBuffer);
+             return true;
+         }
+@@ -319,6 +321,27 @@ namespace RT64 {
+             textureCache->queueGPUUploadTMEM(hash, creationFrame, TMEM, RDP_TMEM_BYTES, width, height, tlut, loadTile, true);
+         }
+ 
++        // Observation is independent of upload/cache misses and replacement
++        // selection. No guest, GPU lifetime, replacement or simulation state is changed.
++        if (const auto sink=dkr::texture_capture::observer.load(std::memory_order_acquire)) {
++          const auto gate=dkr::texture_capture::gate.load(std::memory_order_acquire);
++          if(gate&&gate(nativeHash)) {
++            dkr::texture_capture::Tile tile{};
++            tile.native_hash=nativeHash;
++            const auto alias=riceAliasMap.find(nativeHash);
++            if(alias!=riceAliasMap.end())tile.rice_alias=alias->second;
++            uint64_t observedAlias=0;
++            if(!calculateRiceAlias(state,loadTile,tlut,observedAlias,tile.rice_name)||observedAlias!=tile.rice_alias)
++                tile.rice_name[0]=0; // Do not invent Rice names from reused source memory.
++            tile.width=width;tile.height=height;tile.tlut=tlut;
++            tile.fmt=loadTile.fmt;tile.siz=loadTile.siz;tile.line=loadTile.line;
++            tile.tmem=loadTile.tmem;tile.palette=loadTile.palette;
++            tile.cms=loadTile.cms;tile.cmt=loadTile.cmt;tile.masks=loadTile.masks;tile.maskt=loadTile.maskt;
++            tile.shifts=loadTile.shifts;tile.shiftt=loadTile.shiftt;
++            tile.uls=loadTile.uls;tile.ult=loadTile.ult;tile.lrs=loadTile.lrs;tile.lrt=loadTile.lrt;
++            sink(tile,TMEM);
++          }
++        }
+         // Dump memory contents into a file if the process is active.
+         if (!state->dumpingTexturesDirectory.empty()) {
+             dumpTexture(nativeHash, state, loadTile, width, height, tlut);

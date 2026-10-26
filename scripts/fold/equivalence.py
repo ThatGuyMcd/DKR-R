@@ -57,6 +57,7 @@ from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import apply_closure  # noqa: E402
+import dependency_stages  # noqa: E402
 
 ROOT = apply_closure.ROOT
 ALLOWED = ROOT / "scripts/fold/allowed-deltas.json"
@@ -145,6 +146,14 @@ class Mapping:
         self.folded_build = folded_build
         self.result = result
         self.aliases = self.build_aliases()
+        # Dependency transforms (B3): each shipped copy pairs with its stage
+        # patch's output in the folded build.
+        staged = dependency_stages.folded_paths(folded_build)
+        self.dependency = {
+            row.staged: staged[row.original]
+            for row in self.reference.rows
+            if row.kind == "dependency-transform" and row.original in staged
+        }
 
     def build_aliases(self) -> dict[str, str]:
         """Build directories named after a content hash whose inputs include
@@ -166,6 +175,8 @@ class Mapping:
         return self.folded_build.joinpath(*parts)
 
     def file(self, path: Path) -> Path | None:
+        if path in self.dependency:
+            return self.dependency[path]
         folded = self.folder.file(path)
         if folded is not None and folded.is_relative_to(self.reference.build):
             return self.build_path(folded)
@@ -190,7 +201,7 @@ class Mapping:
         layer = self.folder.layer_of(path)
         rows = {row.staged: row for row in self.reference.rows}
         row = rows.get(path)
-        if row is not None and row.kind == "dependency-transform":
+        if row is not None and row.kind == "dependency-transform" and path not in self.dependency:
             return "dependency transform (fold step B3)"
         if row is not None and row.kind in ("guest-transform", "guest-derived"):
             return "guest code (fold step B4)"
