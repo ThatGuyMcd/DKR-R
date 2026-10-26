@@ -120,9 +120,8 @@ Known before they run:
   preprocessing see the hooked files without a build step.
 - The Camera++ shadow kernel is first-party (`src/game/camera_shadow_kernel.c`),
   and `Camera.cmake` derives its hook stubs from the prepared kernel, so
-  `DKR_CAMERA_SHADOW_KERNEL_V*` is gone. `DKR_CAMERA_KERNEL_V*` is still a
-  prepared input from `patches/camera-plus/scene_kernel_pipeline.py`, so moving
-  that pipeline out of `patches/` is B8's call.
+  `DKR_CAMERA_SHADOW_KERNEL_V*` is gone. `DKR_CAMERA_KERNEL_V*` is a
+  prepared input from `scripts/camera_scene_kernel.py` (B8a).
 - `scripts/gen_guest_symbols.py` generates the four pure symbol headers
   (achievement, polish, vehicle, render heap) into `<build>/generated/symbols`.
   `title_text_rt64.hpp` and `credits_sky_rt64.hpp` keep their tables inline,
@@ -157,9 +156,29 @@ Everything else under `patches/` that the base CMake reads is a dependency
 | `enhanced-water/native/` | `cmake/EnhancedWater.cmake` (copies the HLSL and headers into RT64's staged tree), `DKREnhancedWaterPolicyTests` include path, `scripts/compose-water-*.py` (write it) | first-party RT64 additions: water and lava shaders, `WaterRayScene.cpp`, policy headers | B3 or B8: either first-party source under `runtime-recomp/` staged into RT64 the same way, or new files inside a registered RT64 patch. Not moved yet: the compose scripts still write into this directory |
 | `startup-memory/` | `RuntimeMemory.cmake` was included by `cmake/PerformancePatches.cmake` | one `dkr_stage_patch` call plus `runtime-memory.patch` | call folded into `PerformancePatches.cmake`; the patch is registered in B3, the directory's other files go in B8 |
 | `custom-magic-codes/` | `cmake/PerformancePatches.cmake` | `runtime-code-heap.patch` only | B3 registers it |
-| `save-layout/` | `scripts/save_layout_pipeline.py` (`guest_save_layout.h`) | guest header for the owned-payload pipeline | B4, with the guest hooks |
-| `character-portraits/` | `scripts/character_portrait_pipeline.py` (`*.inc`) | guest inputs for the portrait payload | B4, with the guest hooks |
+`camera-plus/` is also still read, by `scripts/camera_plus_pipeline.py`
+(the release chain's Camera++ stage, B8 deletes it). The scene kernel's
+generator is `scripts/camera_scene_kernel.py` (B8a).
 
-`camera-plus/` is also still read, by `scripts/camera_plus_pipeline.py` and
-the scene-kernel pipeline that produce the Camera++ kernels; B4 replaces
-them with the generator.
+## Prepared inputs (B8a)
+
+`scripts/prepare_payloads.py` replaces the release chain's prepared inputs:
+the staged payload (save layout, then the in-world portrait), the owned
+engine regenerated after each stage, and the Camera++ and model kernels.
+Their authored guest inputs moved from `patches/save-layout/` and
+`patches/character-portraits/` to `runtime-recomp/guest/`. The gate's
+`prepared` level checks them against the reference
+(`scripts/fold/prepared.py` names the allowed differences).
+
+- The save-layout and portrait stages still rewrite copies of
+  `funcs_*.c`, which AGENTS.md reserves for `guest-hooks/hooks.toml`. They
+  stay stages because the owned engine is generated from their output and
+  has to match the shipped one byte for byte. Moving them into hooks.toml
+  (payloads `funcs` and `owned`) changes the owned manifest, so it's a
+  separate, deliberate step after the fold.
+- The portrait stage's native half edited seven first-party mods sources in
+  a staged copy. B1 folded those edits into `runtime-recomp/src`, so the
+  receipt records the folded files' digests instead of a native stage.
+- `generate_replay_probe.py`'s native audits pin the folded sources. The old
+  pins were v1.0.11's base sources, before the release layers changed them;
+  the folded tree holds what shipped.

@@ -2,7 +2,8 @@
 # draw-only scene kernel per revision. The kernels compile guest-derived code
 # prepared outside the build: DKR_CAMERA_KERNEL_V<rev> holds
 # camera_scene_functions.c and camera_scene_hooks.c from
-# patches/camera-plus/scene_kernel_pipeline.py. Neither input is modified.
+# scripts/camera_scene_kernel.py (scripts/prepare_payloads.py runs it;
+# cmake/PreparedInputs.cmake defaults the paths). Neither input is modified.
 set(DKR_CAMERA_KERNEL_V77 "" CACHE PATH "Prepared Camera++ scene kernel for revision 77")
 set(DKR_CAMERA_KERNEL_V80 "" CACHE PATH "Prepared Camera++ scene kernel for revision 80")
 

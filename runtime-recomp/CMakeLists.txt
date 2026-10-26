@@ -119,6 +119,7 @@ if(IOS)
 endif()
 option(DKR_RUNTIME_BUILD_SDL3_INPUT_HOST
     "Build the isolated SDL3 native controller and sensor host" ON)
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/PreparedInputs.cmake")
 set(DKR_GENERATED_SOURCE_V77 "${CMAKE_CURRENT_LIST_DIR}/RecompiledFuncs" CACHE PATH
     "N64Recomp-generated CPU source for DKR US v1.0")
 set(DKR_GENERATED_SOURCE_V80 "" CACHE PATH

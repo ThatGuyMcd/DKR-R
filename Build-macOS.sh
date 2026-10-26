@@ -79,9 +79,10 @@ if [[ -z "${DKR_MAC_GENERATED_SOURCE:-}" || -z "${DKR_MAC_V80_GENERATED_SOURCE:-
   else
     "${project_root}/scripts/Prepare-DKR-Runtime-macOS.sh"
   fi
-  generated_root="${DKR_GENERATED_ROOT:-${project_root}/build/generated}"
-  DKR_MAC_GENERATED_SOURCE="${generated_root}/v77/RecompiledFuncs"
-  DKR_MAC_V80_GENERATED_SOURCE="${generated_root}/v80/RecompiledFuncs"
+  # It finishes with scripts/prepare_payloads.py; CMake defaults the owned
+  # engine and kernels to the same directory.
+  DKR_MAC_GENERATED_SOURCE="${project_root}/build/prepared/generated-v77"
+  DKR_MAC_V80_GENERATED_SOURCE="${project_root}/build/prepared/generated-v80"
 fi
 
 dkr_require_tools cmake ninja
@@ -136,6 +137,14 @@ revision_80_generated="${DKR_MAC_V80_GENERATED_SOURCE}"
   exit 1
 }
 
+# prepare_payloads.py names its configs v<rev>.toml; N64Recomp's sit beside
+# RecompiledFuncs as dkr.us.v<rev>.toml.
+code_policy() {
+  local parent
+  parent="$(dirname "$1")"
+  if [[ -f "${parent}/v$2.toml" ]]; then echo "${parent}/v$2.toml"; else echo "${parent}/dkr.us.v$2.toml"; fi
+}
+
 cmake -S "${project_root}/runtime-recomp" -B "${build_dir}" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_OSX_DEPLOYMENT_TARGET="${DKR_MACOS_DEPLOYMENT_TARGET:-12.0}" \
@@ -146,8 +155,8 @@ cmake -S "${project_root}/runtime-recomp" -B "${build_dir}" -G Ninja \
   -DDKR_RUNTIME_BUILD_RT64=ON \
   -DDKR_GENERATED_SOURCE_V77="${generated_source}" \
   -DDKR_GENERATED_SOURCE_V80="${revision_80_generated}" \
-  -DDKR_CODE_POLICY_V77="$(dirname "${generated_source}")/dkr.us.v77.toml" \
-  -DDKR_CODE_POLICY_V80="$(dirname "${revision_80_generated}")/dkr.us.v80.toml"
+  -DDKR_CODE_POLICY_V77="$(code_policy "${generated_source}" 77)" \
+  -DDKR_CODE_POLICY_V80="$(code_policy "${revision_80_generated}" 80)"
 cmake --build "${build_dir}" --parallel "${jobs}"
 ctest --test-dir "${build_dir}" --output-on-failure --no-tests=error -R '^DKR'
 

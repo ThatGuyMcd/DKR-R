@@ -93,6 +93,12 @@ force-sort-within-sections = true
 # Strict only for new tooling scripts; everything else is ratcheted in per path.
 include = [
     "scripts/agent_hooks",
+    "scripts/kernel_inputs.py",
+    "scripts/prepare_payloads.py",
+    "scripts/camera_scene_kernel.py",
+    "scripts/character_portrait_pipeline.py",
+    "scripts/save_layout_pipeline.py",
+    "scripts/generate_visual_model_kernel.py",
     "scripts/bootstrap_hooks.py",
     "scripts/check_pinned_bytes.py",
     "scripts/pattern_guard.py",
@@ -105,6 +111,12 @@ include = [
 ]
 strict = [
     "scripts/agent_hooks",
+    "scripts/kernel_inputs.py",
+    "scripts/prepare_payloads.py",
+    "scripts/camera_scene_kernel.py",
+    "scripts/character_portrait_pipeline.py",
+    "scripts/save_layout_pipeline.py",
+    "scripts/generate_visual_model_kernel.py",
     "scripts/bootstrap_hooks.py",
     "scripts/check_pinned_bytes.py",
     "scripts/pattern_guard.py",

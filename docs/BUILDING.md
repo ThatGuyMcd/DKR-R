@@ -78,44 +78,33 @@ Revision translation uses named functions and checked offsets, not a global
 address delta. If translating the base v80 policy, retain and validate its
 revision-specific entries; don't overwrite them with a blind translation.
 
-## Generate the owned rollback payloads
+## Prepare the build inputs
 
-The complete Windows/Linux Public Build also needs two isolated full-scene owned
-outputs. A normal payload or the old single-track probe is not sufficient.
-
-Run `scripts/generate_replay_probe.py --help` for the input contract.
-It reads composed generated CPU inputs and the reviewed `recomp.h`, then emits
-new isolated output; it does not edit the input tree. For each revision use:
-
-```text
-python scripts/generate_replay_probe.py <normal-generated-directory>
-    <pinned-recomp.h> <fresh-owned-output-directory> --revision <77-or-80>
-    --scene-cuts --audio-services --input-services --authored-cpu
-    --isolate-symbols --full-scenes --mod-services --inline-memory
-```
-
-Despite the historical “probe/test” names, these checked full-scene outputs
-supply the integrated backend. Native callback signatures, header hashes,
-service ownership and the manifest are mandatory. Don't loosen a failed check
-or edit generated output to admit a new closure.
-
-## Prepared visual inputs and release configuration
-
-The retained visual-model/vehicle renderer also needs two fresh model-only
-outputs. These are separate from both the normal and owned CPU directories:
+The complete Public Build compiles more than the two normal payloads: each
+revision's payload with its save-layout and in-world portrait stages, its
+isolated full-scene owned rollback engine, its Camera++ scene kernel and its
+local model kernel. `scripts/prepare_payloads.py` derives all of them from the
+normal payloads and writes them to `build/prepared`, where CMake looks for them
+by default (`runtime-recomp/cmake/PreparedInputs.cmake`).
+`Prepare-DKR-Runtime-macOS.sh` runs it last. After the Windows composition
+above:
 
 ```text
-python scripts/generate_visual_model_kernel.py --generated <normal-v77>
-    --header <pinned-recomp.h> --elf <v77.elf> --revision 77
-    --output <fresh-model-v77>
+python scripts/prepare_payloads.py
+    --input 77 <fresh-pipeline-output>/generated-v77 <fresh-pipeline-output>/menu-v77.toml <prepared-v77-ELF-and-ROM-folder>/dkr.us.v77.elf
+    --input 80 <fresh-pipeline-output>/generated-v80 <fresh-pipeline-output>/menu-v80.toml <prepared-v80-ELF-and-ROM-folder>/dkr.us.v80.elf
 ```
 
-Repeat for revision 80 using its own ELF and normal input. The script checks
-the five leaf routine hashes, scalar symbols and memory ABI. It emits only
-the model closure, with checked reads, shadowed guest stores and an operation
-budget; there is no game-world redraw or gameplay/native-import escape.
-Supply both outputs using `DKR_VISUAL_MODEL_GENERATED_V77` and
-`DKR_VISUAL_MODEL_GENERATED_V80`. Without them the local model feature is not
+Then configure without naming any payload: the defaults use
+`build/prepared/generated-v77` and the rest of the set. A configure that names
+its own `DKR_GENERATED_SOURCE_V77` gets none of the prepared set, since the
+owned engine and kernels belong to the payload they were prepared from.
+
+Each stage checks pinned function hashes, native callback signatures, header
+hashes and service ownership, and writes new output only; it never edits its
+input. Despite the historical "probe/test" names, the owned outputs supply the
+integrated backend. Don't loosen a failed check or edit generated output to
+admit a new closure. Without the model kernels the local model feature is not
 compiled and the live Online maximum-detail control remains unavailable.
 
 For an already prepared platform cache, configure through the current overlay:

@@ -70,7 +70,6 @@ patches/camera-plus/native/camera_snapshot.hpp PG006
 patches/camera-plus/native/camera_xr.cpp PG006
 patches/camera-plus/native/camera_xr.hpp PG006
 patches/camera-plus/package_playtest.py PG013
-patches/camera-plus/scene_kernel_pipeline.py PG004
 patches/camera-plus/sdk/dkr/presentation.h PG006
 patches/camera-plus/vr_device_patch.py PG013
 patches/camera-shadow/NativeOverlay.cmake PG001
@@ -101,7 +100,6 @@ patches/character-portraits/inspect_packages.py PG013
 patches/character-portraits/inspect_sources.py PG013
 patches/character-portraits/load_reviewed_portrait.inc PG006
 patches/character-portraits/package-windows.ps1 PG013
-patches/character-portraits/world_portrait.inc PG006
 patches/checkpoint-clock-repair/IMPLEMENTATION.txt PG013
 patches/checkpoint-clock-repair/PLAYTEST.txt PG013
 patches/checkpoint-clock-repair/ReleaseOverlay.cmake PG001
@@ -952,7 +950,6 @@ patches/rollback-scoreboard/package.py PG013
 patches/rollback-scoreboard/pipeline.py PG004
 patches/rollback-scoreboard/transforms.py PG013
 patches/save-layout/README.md PG013
-patches/save-layout/guest_save_layout.h PG006
 patches/save-layout/inspect_packages.py PG013
 patches/save-layout/inspect_sources.py PG013
 patches/save-layout/package-linux.sh PG013
@@ -1229,4 +1226,3 @@ scripts/compose-water-stability.py PG004
 scripts/compose-water-views.py PG004
 scripts/compose-waterfall.py PG004
 scripts/normalize-water-adapter.py PG004
-scripts/save_layout_pipeline.py PG004

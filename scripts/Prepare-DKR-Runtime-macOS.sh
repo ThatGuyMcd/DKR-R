@@ -32,7 +32,9 @@ Usage: $(basename "$0") --rom-v77 <US 1.0 ROM> --rom-v80 <US Rev A ROM> [options
   --skip-deps      Don't install Homebrew packages
   --force          Rebuild the decomp ELFs and payloads even if their inputs are unchanged
   --jobs N         Parallel jobs (default: host CPU count)
-Writes <output>/v77/RecompiledFuncs and <output>/v80/RecompiledFuncs.
+Writes <output>/v77/RecompiledFuncs and <output>/v80/RecompiledFuncs, then
+the build inputs scripts/prepare_payloads.py derives from them to
+build/prepared.
 EOF
 }
 
@@ -320,6 +322,16 @@ PY
 prepare_revision 77 "$ROM_V77" 0cb115d8716dbbc2922fda38e533b9fe63bb9670 0x80065D40
 prepare_revision 80 "$ROM_V80" 6d96743d46f8c0cd0edb0ec5600b003c89b93755 0x80065F80
 
+# The build inputs derived from both payloads (save layout and portrait
+# stages, owned engine, Camera++ and model kernels); CMake reads them by default.
+step "Prepared build inputs"
+prepared_inputs=()
+for revision in 77 80; do
+  prepared_inputs+=(--input "$revision" "$OUTPUT/v$revision/RecompiledFuncs" "$OUTPUT/v$revision/dkr.us.v$revision.toml"
+    "$PROJECT_ROOT/build/decomp/v$revision/build/dkr.us.v$revision.elf")
+done
+python3 -B "$SCRIPT_DIR/prepare_payloads.py" "${prepared_inputs[@]}" || fail "Preparing the build inputs failed."
+
 echo
-echo "[OK] Payloads ready in $OUTPUT"
+echo "[OK] Payloads ready in $OUTPUT, build inputs in $PROJECT_ROOT/build/prepared"
 echo "Full log: $LOG_PATH"
