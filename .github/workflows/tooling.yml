@@ -3,8 +3,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    # labeled/unlabeled rerun the guard when transition-layer is added or removed.
-    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,17 +50,12 @@ jobs:
       - name: Pyright (strict tooling scripts)
         run: npx --yes pyright@1.1.414 --project pyproject.toml
       # The tree check above can't tell new baseline entries from old ones, so
-      # PRs also run the guard against their base. Baseline growth is only
-      # allowed with the transition-layer label, until fold-in-base is tagged.
+      # PRs also run the guard against their base: the baseline never grows.
       - name: Pattern guard against the PR base
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          TRANSITION_LAYER: ${{ contains(github.event.pull_request.labels.*.name, 'transition-layer') }}
-        run: |
-          args=(--diff "$BASE_SHA")
-          if [[ "$TRANSITION_LAYER" == true ]]; then args+=(--transition-layer); fi
-          python3 scripts/pattern_guard.py "${args[@]}"
+        run: python3 scripts/pattern_guard.py --diff "$BASE_SHA"
       # Report only until their baseline commits land: B9 for C/C++ and CMake,
       # and shellcheck once the remaining warnings are fixed by hand. Each line
       # moves into a blocking step, or into check.py --suite format, once green.

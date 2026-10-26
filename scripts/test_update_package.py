@@ -45,6 +45,10 @@ def main():
     parser.add_argument(
         "--case", choices=("normal", "corrupt-stage", "interrupted", "migrate-layout"), default="normal"
     )
+    parser.add_argument(
+        "--previous", help="the preceding release's Windows ZIP to install first (default: --package itself)"
+    )
+    parser.add_argument("--previous-version", default="1.0.6", help="the installed version the update replaces")
     args = parser.parse_args()
     if args.parent:
         return parent(args.parent)
@@ -58,8 +62,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="dkrr-package-update-") as folder:
         root = Path(folder) / "Install with spaces café"
         root.mkdir()
-        with zipfile.ZipFile(args.package) as z:
-            prefix = artifact["root"] + "/"
+        with zipfile.ZipFile(args.previous or args.package) as z:
+            prefix = (Path(args.previous).stem if args.previous else artifact["root"]) + "/"
             for entry in z.infolist():
                 if entry.is_dir():
                     continue
@@ -71,7 +75,7 @@ def main():
         # DLL/exe set is complete, so replacement and retirement are exercised.
         receipt = root / "assets/updates/install.json"
         value = json.loads(receipt.read_text())
-        value["version"] = "1.0.6"
+        value["version"] = args.previous_version
         receipt.write_text(json.dumps(value), encoding="utf-8")
         data = root / "dkr-runtime-data"
         (data / "saves").mkdir(parents=True)
@@ -180,7 +184,7 @@ def main():
         assert (root / "portable.txt").read_text() == "portable\n"
         assert (root / "personal.txt").read_text() == "user-owned\n"
         assert json.loads(receipt.read_text())["version"] == (
-            "1.0.6" if args.case == "corrupt-stage" else manifest["version"]
+            args.previous_version if args.case == "corrupt-stage" else manifest["version"]
         )
         assert not (root / ".dkr-update-transaction").exists()
         if args.case == "corrupt-stage":

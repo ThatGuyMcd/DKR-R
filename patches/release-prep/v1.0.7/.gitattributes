@@ -1,3 +1,0 @@
-# Frozen content-addressed objects must survive Git checkout byte-for-byte.
-# Imported whitespace is part of the accepted source contract, not new styling.
-source-capsule-r2/** -text -eol -whitespace

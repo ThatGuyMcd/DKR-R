@@ -221,7 +221,7 @@ class DiffScopeTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("patches/feature/NOTES.txt:1: PG013", out)
 
-    def test_baseline_growth_needs_the_transition_label(self):
+    def test_baseline_growth_always_fails(self):
         layer = self.root / "patches/new-layer/ReleaseOverlay.cmake"
         layer.parent.mkdir(parents=True)
         layer.write_text('message(STATUS "layer 44")\n')
@@ -229,7 +229,6 @@ class DiffScopeTests(unittest.TestCase):
         status, out, _ = run_guard(self.root, "--diff", "HEAD")
         self.assertEqual(status, 1)
         self.assertIn("PG001 new baseline entry for patches/new-layer/ReleaseOverlay.cmake", out)
-        self.assertEqual(run_guard(self.root, "--diff", "HEAD", "--transition-layer")[0], 0)
 
     def test_shrinking_the_baseline_passes(self):
         (self.root / "patches/feature/CMakeLists.txt").unlink()

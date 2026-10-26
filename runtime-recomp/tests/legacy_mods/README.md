@@ -2,7 +2,7 @@
 
 ## Current release composition
 
-For v1.0.11 use the [release pipeline](../../../patches/release-prep/v1.0.11/BUILDING.txt). The module notes below
+For a release use the [release steps](../../../docs/BUILDING.md#release-packages). The module notes below
 explain this layer; their dated playtest paths are historical inputs, not the
 current release command. The accepted water/source capsule preserves the
 composed behaviour. Dependencies and generated guest checkouts stay read-only.

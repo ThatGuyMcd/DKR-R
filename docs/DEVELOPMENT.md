@@ -2,11 +2,9 @@
 
 ## v1.0.11 release contract
 
-The final release recipe and prepared-input contract are in patches/release-prep/v1.0.11/BUILDING.txt. The SDK 2 Bible/public headers describe supported tools and API 1 compatibility. Gameplay/hardware acceptance is owner-led; compilation and static inspection are not runtime acceptance.
+The release steps and prepared-input contract are in [Building](BUILDING.md#release-packages). The SDK 2 Bible/public headers describe supported tools and API 1 compatibility. Gameplay/hardware acceptance is owner-led; compilation and static inspection are not runtime acceptance.
 
-All edits, including documentation, go through authored Patch Pipeline layers.
-The v1.0.11 documentation overlay records a recoverable baseline and allowed
-document changes; it does not alter native compile inputs.
+Edit source and documentation in place; nothing is layered over the tree.
 
 Keep the changes focused and reproducible. Project-owned runtime code lives in
 `runtime-recomp/src/game`, tests in `runtime-recomp/tests`, release assets in

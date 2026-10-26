@@ -15,8 +15,7 @@ extend-exclude = [
     "extern",
     "patches",
     "tools/blender",
-    # The 1.0.7 source capsule pins this file's bytes as a base (see
-    # scripts/check_pinned_bytes.py). Lint and format it after the fold.
+    # Shipped v1.0.11 bytes the fold gate compares; the B9 format pass takes it.
     "runtime-recomp/tests/replay_probe/test_generator.py",
 ]
 src = [".", "scripts", "runtime-recomp/tests", "modding"]

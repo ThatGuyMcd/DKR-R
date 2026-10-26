@@ -1,19 +1,11 @@
 # Building DKR-R v1.0.11
 
-Use the [v1.0.11 release Patch Pipeline](../patches/release-prep/v1.0.11/BUILDING.txt)
-and its `ReleaseOverlay.cmake`. This includes the memory, render, scheduler
-handoff and updated vehicle repairs, above the retained playtest 4 fixes
-for mod joining, offline copies, race starts and spectator music, plus the Online directory,
-Scoreboard, party repairs, spectators, vehicles, achievements and texture tools,
-plus the previous SDK/Store/save/presentation layers. Building the base target
-alone omits those additions. `VERSION` and the compiled release value are `1.0.11`.
-
-The recipe requires the verified frozen 1.0.7 source capsule and existing normal,
-owned, camera, shadow, visual-model and RSP inputs. These are read-only build
-inputs, not files to edit or rebaseline to pass a check. A fresh contributor
-checkout needs legitimate prepared ROM inputs before it can reproduce them.
-Windows/Linux/ARM64 must share the accepted source ledger. Never relabel
-an earlier binary as a new release.
+The tree is the release: the memory, render, scheduler handoff and vehicle
+repairs, the playtest 4 fixes for mod joining, offline copies, race starts and
+spectator music, the Online directory, Scoreboard, party repairs, spectators,
+vehicles, achievements, texture tools and the SDK/Store/save/presentation
+work are all source here. `VERSION` and the compiled release value are
+`1.0.11`. Prepare the ROM-derived inputs (below), then build the tree.
 
 The v1.0.11 build set and exact static checks are in
 [release validation](../RELEASE-VALIDATION.md). Source build commands for Apple
@@ -84,25 +76,29 @@ revision, run `scripts/compose_payloads.py payload` (`--help` lists its
 inputs). Keep ROMs, generated output and
 local profiles out of source control.
 
-For an already prepared platform cache, configure through the current overlay:
+## Release packages
 
-```text
-python -B patches/release-prep/v1.0.11/release.py configure --build <platform-build> --capsule <verified-capsule> --log <fresh-evidence>/configure.log
-cmake --build <platform-build> --config RelWithDebInfo --target DKRPortGame --parallel
-```
+`scripts/release/` takes a built tree to a signed handoff. Each script's
+`--help` gives its inputs; the order is:
 
-The displayed configuration reuses the cache's reviewed compiler/toolchain,
-normal/owned/RSP inputs and platform dependencies. It is not a universal
-fresh-machine bootstrap command. Select the correct Windows/Linux/ARM64
-cache, never reuse compiled objects across architectures, and retain both visual
-model inputs. Older ARM caches can supply them with
-`--define DKR_VISUAL_MODEL_GENERATED_V77:PATH=<model-v77>` and its V80 equivalent.
-Use the actual platform's build configuration (Ninja uses its configured build
-type); build the required desktop helpers before packaging.
+1. Build each platform (Windows x64, Linux x86_64 and ARM64) from a prepared
+   tree and run its tests with `ctest --output-junit <work>/<platform>/ctest.xml`.
+2. `package_release.py` packages it (allowlisted contents, read back, receipt).
+3. `probe_worker.py` checks the packaged mod worker; `inspect_elf.py` checks
+   each Linux AppDir's libraries and glibc requirements.
+4. `check_docs.py --since <previous tag>` inventories the docs and checks links.
+5. `finalize.py` collects the handoff. It requires every check in
+   `scripts/release/required_checks.toml` to have run and passed on every
+   platform, and refuses while any of them is pending.
+6. `update_assets.py sign` signs the update manifest with the trusted key,
+   `qualify_updates.py` runs the Windows updater checks from the previous
+   release, and `seal.py` writes the upload instructions and checksums.
 
-Use `patches/release-prep/v1.0.11/audit.py` and `package.py` for the release source
-graph and allowlisted package composition. Their `--help` describes explicit
-paths. They retain earlier contract audits and read-only frozen inputs.
+**Until C5 lands, `finalize.py` refuses every release from this tree**: 15 of
+the checks v1.0.11 required (its layer fixtures and the vehicle audit) are
+pending in `required_checks.toml`. Release notes for a version go in
+`docs/releases/<version>/`.
+
 Keep evidence and new outputs outside the repository. Linux packaging must
 produce both AppImages; Steam Deck copies the exact x86_64 payload.
 

@@ -34,9 +34,6 @@ compiled against another one (docs/fold-in/header-decisions.md explains each).
     apply_closure.py --reference DIR --write-variants   refresh header-variants.json
     apply_closure.py --reference DIR                    write the files
 
-Writing also lists the capsule bases whose pins the folded bytes break in
-scripts/fold/released-bases.txt (read by scripts/check_pinned_bytes.py).
-
 Exit status: 0 on success, 1 when the totals, variants or include resolution
 do not check out (nothing is written then), 2 on usage errors.
 """
@@ -58,11 +55,8 @@ import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts"))
-import check_pinned_bytes  # noqa: E402
 
 VARIANTS = Path("scripts/fold/header-variants.json")
-RELEASED_BASES = Path(check_pinned_bytes.RELEASED_BASES)
 
 # Row totals of the v1.0.11 reference (plan 2.3). The script refuses to write
 # anything from a final-sources.json that disagrees.
@@ -651,15 +645,6 @@ def plan(reference: Reference, root: Path) -> Plan:
     return Plan(destinations, contents, dict(rewrites), variants, problems, notes, report)
 
 
-def released_bases(root: Path, written: dict[str, bytes]) -> list[str]:
-    """Capsule bases whose pin the folded bytes break (scripts/check_pinned_bytes.py)."""
-    return sorted(
-        base
-        for base, pin in check_pinned_bytes.base_pins(root).items()
-        if base in written and sha256(written[base].replace(b"\r\n", b"\n")) != pin.sha256
-    )
-
-
 def write_variants(root: Path, report: dict[str, dict[str, object]]) -> None:
     """Keep each decision (chosen_sha256, reason) and recompute the rest."""
     decisions = load_variants(root)
@@ -744,7 +729,6 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.check:
         return 0
-    released = released_bases(root, result.contents)
     written = 0
     for dest, data in sorted(result.contents.items()):
         if dest in GENERATED:
@@ -755,8 +739,7 @@ def main(argv: list[str] | None = None) -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
         written += 1
-    (root / RELEASED_BASES).write_text("".join(f"{base}\n" for base in released), encoding="utf-8")
-    print(f"{len(result.contents)} files in the closure, {written} written; {len(released)} capsule bases released")
+    print(f"{len(result.contents)} files in the closure, {written} written")
     return 0
 
 

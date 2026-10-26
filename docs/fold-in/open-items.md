@@ -45,6 +45,9 @@ checkout (`prepare-dependencies` `decomp-symbols`) and, on Android, the new
 `android-full` dependency profile. actionlint and zizmor are clean locally.
 **Neither job has run yet**; they first run when PR 2 opens.
 
+Also blocking the next release (not PR 2): C5 restores the 15 pending release
+checks (see Release tooling); until then `finalize.py` refuses every release.
+
 Also blocking: a real Windows run of `Prepare-DKR-Runtime.ps1` (both ROMs,
 WSL) followed by `Build-DKR-R-Windows.ps1`, by ThatGuyMcd or Steve. Windows is
 the platform that ships; the scripts only parse-checked here.
@@ -87,6 +90,54 @@ replaces it.
 | `patches/online-directory/delivery.py` | none: it finalized the 1.0.9 public-lobbies playtest delivery only |
 | `patches/mod-store/pipeline.py` (backend), `frontend_pipeline.py` | `services/mod-store/build.py --worker <worker> [--frontend <portal>]`; the native half is in `runtime-recomp/src/game` |
 | `-GeneratedSource` required by `Build-Windows.cmd` | optional; defaults to `build\prepared` |
+| `patches/release-prep/v1.0.11/release.py` (`snapshot`, `apply`, `verify`, `configure --capsule`) | none: documents are edited in place and the tree configures without a capsule |
+| `patches/release-prep/v1.0.11/build.py`, `run_checks.py` | build normally and run `ctest --output-junit`; `finalize.py` checks the result against `scripts/release/required_checks.toml` |
+| `patches/release-prep/v1.0.11/audit.py` | none until C5 (the vehicle audit is pending in `required_checks.toml`); `package_release.py` checks version, contracts and pre-release labels |
+| `patches/release-prep/v1.0.11/package.py` (+ `v1.0.7/package_release.py`) | `scripts/release/package_release.py` |
+| `patches/release-prep/v1.0.11/update_assets.py` (+ `v1.0.9/update_assets.py`) | `scripts/release/update_assets.py` |
+| `patches/release-prep/v1.0.11/{seal,qualify_updates,finalize,check_docs,worker_probe}.py` | `scripts/release/{seal,qualify_updates,finalize,check_docs,probe_worker}.py` |
+| `patches/release-prep/v1.0.7/inspect_elf.py` | `scripts/release/inspect_elf.py` |
+| `patches/release-prep/v1.0.11/{content,author,contributor_checks,dump_prepared}.py` | none (see Release tooling) |
+| `patches/release-prep/v1.0.11/pages/`, `RELEASE-NOTES.txt`, `UPDATER.txt`, `BUILDING.txt` | `docs/releases/1.0.11/` |
+| `qualify_updates.py` exec-patching `scripts/test_update_package.py` | `test_update_package.py --previous ZIP --previous-version V` |
+
+## Release tooling (B8)
+
+**C5 must land before the next release.** `scripts/release/finalize.py`
+refuses every release from this tree while `required_checks.toml` has pending
+entries, and it has 15: the 14 v1.0.11 release fixtures (graphics handoff,
+render stability, liquid residency, memory stability and owned heap per
+revision, spectator admission with its Before control, spectator handler,
+offline retention, race release with its Before control, stability transfer)
+and the vehicle-original-textures audit (7449 checks, legacy packages,
+negative admissions, Before/After, Linux ASan/UBSan, identical prepared
+vehicle data across platforms). They were release-layer targets the fold
+didn't carry. C5 restores each as a CTest test and drops its `pending`.
+
+What the deleted release-prep scripts did, for B9b:
+
+- `release.py`: `snapshot` zipped the authored source as a recoverable
+  baseline; `apply`/`verify` rewrote the release documents from `content.py`
+  over a v1.0.10 baseline and ledgered the changes; `configure` configured the
+  release overlay over the 1.0.7 capsule. The fold edits documents in place
+  and needs no capsule; `check_docs.py --since` covers the link check.
+- `content.py`: the v1.0.11 release prose `release.py apply` wrote into the
+  current guides (now committed). `author.py`: derived the v1.0.11 release
+  tooling (`release.py`, `check_docs.py`, `update_assets.py`) from v1.0.10's
+  by string edits; the keepers are plain source now.
+- `contributor_checks.py`: ran the ROM-free contributor checks on a native
+  Linux filesystem copy of the checkout for the evidence; `scripts/check.py`
+  in CI is that now.
+- `dump_prepared.py`: dumped prepared vehicle numeric data through the
+  production libraries (it injected a diagnostic into a copy of their source);
+  part of the vehicle audit, so pending with it.
+- `run_checks.py` and `build.py`: built and ran the 14 fixtures above (pending).
+- `audit.py`: the vehicle-original-textures source and compiler-binding audit
+  (pending) plus the version and old-playtest-label checks, which
+  `package_release.py` now does on the binaries.
+- Producers finalize needed that v1.0.11 ran by hand: `ARCHIVE-REPORT.json`
+  (now written by `package_release.py`) and `elf-inspection.json`
+  (`inspect_elf.py`, from v1.0.7).
 
 ## Open questions
 
@@ -182,7 +233,7 @@ replaces it.
 ## `patches/` after B8
 
 `patches/` holds `manifest.json` and the registered dependency `*.patch` files
-only (release-prep aside, see below). The enhanced-water RT64 additions are
+only. The enhanced-water RT64 additions are
 first-party source in `runtime-recomp/src/water/`, staged into RT64 by
 `cmake/EnhancedWater.cmake`; the service backends are in `services/`.
 

@@ -6,14 +6,13 @@
 # and workflow-lint.yml (actionlint, zizmor). Bump them together.
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
-# Pinned-byte files: *.patch sha256s live in patches/manifest.json (141 of 226
-# have trailing whitespace on blank context lines), release-prep source capsules
-# are content-addressed, modding/reference-us-v*/* are byte-exact receipts, and
-# the 14 CRLF-pinned files all live under patches/. No fixer may touch them;
-# the pinned-bytes hook below proves it on every commit.
-# The 1.0.7 capsule also pins its first-party "base" files (all of them under
-# runtime-recomp/src/ and runtime-recomp/tests/replay_probe/); those two
-# entries go when the fold deletes the capsule, before C/C++ formatting starts.
+# Pinned-byte files: *.patch sha256s live in patches/manifest.json (many have
+# trailing whitespace on blank context lines), modding/reference-us-v*/* are
+# byte-exact receipts and services/*/baseline/ match their SHA256SUMS. No fixer
+# may touch them; the pinned-bytes hook below proves it on every commit.
+# runtime-recomp/src/ and runtime-recomp/tests/replay_probe/ hold the shipped
+# v1.0.11 bytes the fold gate compares; they stay excluded until the B9
+# format-only commit, so no fixer reformats them piecemeal before that.
 # services/*/baseline/ are deployed bases pinned by their SHA256SUMS,
 # tests/fixtures/ are pattern-guard inputs and packaging/licenses/ are verbatim
 # third-party texts.

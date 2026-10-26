@@ -1,0 +1,125 @@
+# Every check a release must have run and passed, on every platform, before
+# finalize.py hands it off. finalize.py reads each platform's CTest result
+# (ctest --output-junit WORK/<platform>/ctest.xml) and fails unless each entry
+# below ran there and passed.
+#
+# An entry with `pending` is a gate the release needs that the folded tree
+# doesn't have yet. finalize.py refuses to finalize while any entry is
+# pending, naming them: no release is finalized from this tree until the step
+# named in `pending` restores them. Never delete a pending entry to get past
+# that; land the fixture and drop `pending`.
+#
+#   id          a stable name for messages
+#   ctest_label every CTest test with this label (at least one must run)
+#   ctest_test  one CTest test by name
+#   why         what the check proves
+#   pending     the fold step that restores it
+
+[[check]]
+id = "runtime"
+ctest_label = "runtime"
+why = "The runtime unit and regression suites."
+
+[[check]]
+id = "tooling"
+ctest_label = "tooling"
+why = "The build, packaging and release tooling tests."
+
+[[check]]
+id = "graphics"
+ctest_label = "graphics"
+why = "The renderer and shader policy tests."
+
+# The v1.0.11 release fixtures (patches/release-prep/v1.0.11/run_checks.py).
+# They were release-layer check targets; the fold didn't carry them (C5
+# promotes them). Expected markers are what v1.0.11 required.
+
+[[check]]
+id = "graphics-handoff"
+ctest_test = "DKRGraphicsHandoffChecks"
+why = "37 graphics handoff checks; 8000 concurrent transfers."
+pending = "C5"
+
+[[check]]
+id = "render-stability"
+ctest_test = "DKRRenderStabilityChecks"
+why = "30 render stability checks."
+pending = "C5"
+
+[[check]]
+id = "liquid-residency"
+ctest_test = "DKRLiquidResidencyChecks"
+why = "23 water residency checks."
+pending = "C5"
+
+[[check]]
+id = "memory-stability-v77"
+ctest_test = "DKRMemoryStability77Checks"
+why = "184812 memory stability checks, US v1.0."
+pending = "C5"
+
+[[check]]
+id = "memory-stability-v80"
+ctest_test = "DKRMemoryStability80Checks"
+why = "184812 memory stability checks, US v1.1."
+pending = "C5"
+
+[[check]]
+id = "owned-heap-v77"
+ctest_test = "DKRMemoryOwned77Checks"
+why = "13 owned heap entry checks, US v1.0."
+pending = "C5"
+
+[[check]]
+id = "owned-heap-v80"
+ctest_test = "DKRMemoryOwned80Checks"
+why = "13 owned heap entry checks, US v1.1."
+pending = "C5"
+
+[[check]]
+id = "spectator-admission-before"
+ctest_test = "DKRSpectatorAdmissionBeforeChecks"
+why = "Negative control: the pre-fix admission must fail (custom music not prepared at a loading boundary)."
+pending = "C5"
+
+[[check]]
+id = "spectator-admission"
+ctest_test = "DKRSpectatorAdmissionChecks"
+why = "345 spectator admission checks."
+pending = "C5"
+
+[[check]]
+id = "spectator-handler"
+ctest_test = "DKRSpectatorHandlerChecks"
+why = "45 spectator handler checks."
+pending = "C5"
+
+[[check]]
+id = "offline-retention"
+ctest_test = "DKROfflineRetentionChecks"
+why = "68-69 offline retention checks."
+pending = "C5"
+
+[[check]]
+id = "race-release-before"
+ctest_test = "DKRRaceReleaseBeforeChecks"
+why = "Negative control: the pre-fix party runtime discards the first post-load release."
+pending = "C5"
+
+[[check]]
+id = "race-release"
+ctest_test = "DKRRaceReleaseChecks"
+why = "96 party runtime regression checks."
+pending = "C5"
+
+[[check]]
+id = "stability-transfer"
+ctest_test = "DKRStabilityTransferChecks"
+why = "Stability transfer checks."
+pending = "C5"
+
+[[check]]
+id = "vehicle-original-textures"
+ctest_test = "DKRVehicleOriginalAudit"
+why = "7449 vehicle checks over nine legacy packages and eight negative admissions, the Before/After importer control, native Linux ASan/UBSan, and the same prepared vehicle data on every platform."
+pending = "C5"

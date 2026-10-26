@@ -2,7 +2,7 @@
 
 ## v1.0.11 release contract
 
-Use patches/release-prep/v1.0.11/release.py and BUILDING.txt for stable composition. Packaging uses explicit runtime/legal allowlists; no offline Player Guide or old playtest handoff notes. Both US revisions, all owned payloads and exact staged inputs are required. Run only the named synthetic fixtures and ROM-free helper/updater checks; gameplay acceptance remains separate.
+The release steps are `scripts/release/` ([Building](../docs/BUILDING.md#release-packages)). Packaging uses explicit runtime/legal allowlists; no offline Player Guide or old playtest handoff notes. Both US revisions, all owned payloads and exact staged inputs are required. Run only the named synthetic fixtures and ROM-free helper/updater checks; gameplay acceptance remains separate.
 
 Run these commands from the repository root with Python 3.11+ (`python` on
 Windows). Commands with options describe them with `--help`.
@@ -16,8 +16,8 @@ Windows). Commands with options describe them with `--help`.
 | Prepare pinned dependencies | `python3 scripts/bootstrap_dependencies.py` | Git; network for missing revisions |
 | Apply reviewed patches | `python3 scripts/apply_dependency_patches.py` | Prepared dependencies |
 | Inspect patch readiness | `python3 scripts/apply_dependency_patches.py --check` | Read-only checkout validation |
-| Prepare/verify/sign v1.0.11 updates | `python patches/release-prep/v1.0.11/update_assets.py --help` | Finished packages, committed source, original Ed25519 private key for signing only |
-| Apply/audit release docs | `python patches/release-prep/v1.0.11/release.py --help` | Recoverable external baseline; current guide overlay |
+| Prepare/verify/sign updates | `python scripts/release/update_assets.py --help` | Finished packages, committed source, original Ed25519 private key for signing only |
+| Check release docs | `python scripts/release/check_docs.py --help` | The previous release tag |
 | Validate release metadata | `python3 scripts/validate_release_metadata.py` | Repository files |
 | Stage the source code-mod SDK | `python3 scripts/stage_magic_code_sdk.py --output <fresh-directory>` | Authored SDK, guide and address-only kits; optional sample NRMs |
 | Render the modder's book | `python3 scripts/render_magic_code_guide.py --output <fresh-guide.html>` | `modding/MODDERS-GUIDE.txt` and exact public headers; no game execution |

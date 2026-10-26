@@ -20,8 +20,6 @@ SPEC = importlib.util.spec_from_file_location("check_pinned_bytes", ROOT / "scri
 check_pinned_bytes = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(check_pinned_bytes)
 CONFIG = (ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8")
-CAPSULE_TEXT = b"pinned capsule line \r\n"
-CAPSULE_NAME = hashlib.sha256(CAPSULE_TEXT).hexdigest()
 
 
 def sha(data):
@@ -53,7 +51,6 @@ class RepositoryTests(unittest.TestCase):
     def test_each_kind_of_pin_is_found(self):
         sources = {pin.source for pin in check_pinned_bytes.pins(ROOT).values()}
         self.assertIn("patches/manifest.json", sources)
-        self.assertIn("patches/release-prep/v1.0.7/source-capsule-r2/manifest.json", sources)
         self.assertTrue(any(source.startswith("modding/reference-us-v") for source in sources), sources)
         self.assertIn("services/library-workflow/baseline/SHA256SUMS", sources)
 
@@ -113,7 +110,6 @@ class CheckerTests(unittest.TestCase):
         receipt = {"files": {"symbols.ld": sha(self.symbols)}}
         write(self.root / "modding/reference-us-v77/receipt.json", json.dumps(receipt).encode())
         write(self.root / "modding/reference-us-v77/symbols.ld", self.symbols)
-        write(self.root / f"patches/release-prep/v1/source-capsule-r1/{CAPSULE_NAME}.txt", CAPSULE_TEXT)
 
     def test_untouched_pins_pass(self):
         self.assertEqual(run_checker(self.root), (0, ""))
@@ -142,73 +138,11 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("pinned by services/web/baseline/SHA256SUMS", err)
 
-    def test_changed_capsule_file_fails(self):
-        write(self.root / f"patches/release-prep/v1/source-capsule-r1/{CAPSULE_NAME}.txt", CAPSULE_TEXT.strip())
-        status, err = run_checker(self.root)
-        self.assertEqual(status, 1)
-        self.assertIn("pinned by its file name", err)
-
-    def write_capsule_manifest(self, base_text):
-        capsule = {
-            "roles": {
-                "ROLE": {
-                    "object.txt": {"sha256": CAPSULE_NAME, "object": f"{CAPSULE_NAME}.txt"},
-                    "base.py": {"sha256": "0" * 64, "base": "src/base.py", "base_sha256": sha(base_text)},
-                }
-            }
-        }
-        write(self.root / "patches/release-prep/v1/source-capsule-r1/manifest.json", json.dumps(capsule).encode())
-
-    def test_deleted_object_the_capsule_manifest_references_fails(self):
-        self.write_capsule_manifest(b"base\n")
-        write(self.root / "src/base.py", b"base\n")
-        self.assertEqual(run_checker(self.root), (0, ""))
-        (self.root / f"patches/release-prep/v1/source-capsule-r1/{CAPSULE_NAME}.txt").unlink()
-        status, err = run_checker(self.root, "patches/release-prep/v1/source-capsule-r1/manifest.json")
-        self.assertEqual(status, 1)
-        self.assertIn(f"{CAPSULE_NAME}.txt: missing", err)
-
-    def test_capsule_base_is_compared_after_crlf_normalisation(self):
-        self.write_capsule_manifest(b"base\n")
-        write(self.root / "src/base.py", b"base\r\n")
-        self.assertEqual(run_checker(self.root), (0, ""))
-        write(self.root / "src/base.py", b"base  \n")  # what a formatter might leave
-        status, err = run_checker(self.root, "src/base.py")
-        self.assertEqual(status, 1)
-        self.assertIn("pinned by patches/release-prep/v1/source-capsule-r1/manifest.json", err)
-
     def test_missing_pinned_file_fails(self):
         (self.root / "patches/dep/0001.patch").unlink()
         status, err = run_checker(self.root)
         self.assertEqual(status, 1)
         self.assertIn("missing", err)
-
-    def write_capsule_base(self, data):
-        base = b"first-party base\n"
-        manifest = {"roles": {"ROLE": {"x.cpp": {"base": "runtime-recomp/src/x.cpp", "base_sha256": sha(base)}}}}
-        write(self.root / "patches/release-prep/v1/source-capsule-r1/manifest.json", json.dumps(manifest).encode())
-        write(self.root / "runtime-recomp/src/x.cpp", data)
-
-    def test_changed_capsule_base_fails(self):
-        self.write_capsule_base(b"folded bytes\n")
-        status, err = run_checker(self.root)
-        self.assertEqual(status, 1)
-        self.assertIn("runtime-recomp/src/x.cpp: sha256", err)
-
-    def test_released_capsule_base_may_change(self):
-        self.write_capsule_base(b"folded bytes\n")
-        write(self.root / check_pinned_bytes.RELEASED_BASES, b"runtime-recomp/src/x.cpp\n")
-        self.assertEqual(run_checker(self.root), (0, ""))
-
-    def test_released_list_names_only_changed_capsule_bases(self):
-        self.write_capsule_base(b"first-party base\n")
-        write(self.root / check_pinned_bytes.RELEASED_BASES, b"runtime-recomp/src/x.cpp\nscripts/other.py\n")
-        status, err = run_checker(self.root)
-        self.assertEqual(status, 1)
-        self.assertIn("runtime-recomp/src/x.cpp: listed in", err)
-        self.assertIn("matches its pin again", err)
-        self.assertIn("scripts/other.py: listed in", err)
-        self.assertIn("not a capsule base", err)
 
     def test_paths_limit_the_check_and_manifests_expand_to_their_files(self):
         write(self.root / "patches/dep/0001.patch", b"changed\n")

@@ -14,9 +14,10 @@ hits are inventoried in architecture/pattern-guard-baseline.txt, one
 
 * a finding not in the baseline fails;
 * a baseline entry whose file no longer produces that finding fails (delete it);
-* with --diff, a baseline that gained entries since the base fails unless
-  --transition-layer is passed (CI passes it for PRs labelled
-  ``transition-layer`` until ``fold-in-base`` is tagged).
+* with --diff, a baseline that gained entries since the base fails.
+
+The fold (step B8) emptied the baseline; it stays as the mechanism, and stays
+empty.
 
 Scopes: --tree (default) scans tracked and untracked, non-ignored files;
 --diff BASE scans files changed since merge-base(BASE, HEAD) including local
@@ -62,10 +63,9 @@ BASELINE_HEADER = """\
 # Pattern guard baseline: first-party patch-layer mechanisms that predate the
 # guard. One "<path> <rule>" line per finding, sorted, enumerated (never a glob).
 #
-# This file only ever shrinks. scripts/pattern_guard.py fails on a finding that
-# is not listed here, and on a line here whose file no longer produces it. New
-# lines are accepted only on PRs labelled transition-layer, until fold-in-base
-# is tagged; the fold drives this file to empty.
+# This file only ever shrinks, and the fold left it empty. scripts/pattern_guard.py
+# fails on a finding that is not listed here, on a line here whose file no
+# longer produces it, and (with --diff) on any line a change adds.
 #
 # Regenerate after removing hits: python3 scripts/pattern_guard.py --tree --baseline write
 # Explain a rule: python3 scripts/pattern_guard.py --explain PG001
@@ -1041,7 +1041,8 @@ def parse_baseline(text: str, source: str) -> dict[Entry, int]:
 
 def render_baseline(findings: Iterable[Finding]) -> str:
     entries = sorted({(finding.path, finding.rule) for finding in findings})
-    return BASELINE_HEADER + "\n" + "".join(f"{path} {rule}\n" for path, rule in entries)
+    lines = "".join(f"{path} {rule}\n" for path, rule in entries)
+    return BASELINE_HEADER + ("\n" + lines if lines else "")
 
 
 # --- Scopes ------------------------------------------------------------------
@@ -1116,9 +1117,6 @@ def main(argv: list[str] | None = None) -> int:
         default="check",
         help="check findings against the baseline (default), rewrite it, or report every hit",
     )
-    parser.add_argument(
-        "--transition-layer", action="store_true", help="accept new baseline entries (PRs labelled transition-layer)"
-    )
     parser.add_argument("--explain", metavar="PGnnn", help="describe a rule ('all' lists them) and exit")
     parser.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -1167,11 +1165,11 @@ def run(args: argparse.Namespace) -> int:
                 f"{BASELINE}:{number}: {rule} stale entry, {path} no longer matches\n"
                 "    instead: delete the line (the baseline only shrinks)"
             )
-    before = committed_baseline(tree, scope.base) if scope.base and not args.transition_layer else None
+    before = committed_baseline(tree, scope.base) if scope.base else None
     if before is not None:
         problems.extend(
             f"{BASELINE}:{number}: {rule} new baseline entry for {path}\n"
-            "    instead: fix the finding; only transition-layer PRs may add entries"
+            "    instead: fix the finding; the baseline never grows"
             for (path, rule), number in baseline.items()
             if (path, rule) not in before
         )

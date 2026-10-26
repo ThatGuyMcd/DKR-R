@@ -3,7 +3,7 @@
 ## v1.0.11 release contract
 
 This is the project-owned native integration layer. The complete release uses
-the [v1.0.11 overlay](../patches/release-prep/v1.0.11/BUILDING.txt), not this base
+the [release steps](../docs/BUILDING.md#release-packages), not this base
 target alone: guarded heap, renderer ownership, water residency, updated
 vehicle exports, directory, Scoreboard, party/spectator repairs, vehicles,
 achievements, texture tools and the preceding SDK/Store/save/presentation layers.

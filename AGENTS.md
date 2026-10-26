@@ -24,14 +24,11 @@ strict version.
 - Third-party fixes: a `*.patch` under `patches/<dep>/` plus a `manifest.json` entry with its sha256. Never vendor a
   modified translation unit.
 
-> Transition note: the fold is in progress. Through v1.0.11 the release was
-> built from a chain of first-party layers under `patches/`, and those
-> directories and their pipelines still exist. They are listed in
-> `architecture/pattern-guard-baseline.txt`; the guard tolerates them and fails
-> on anything new. Editing a listed file is fine, adding a new layer is not.
-> `guest-hooks/hooks.toml`, `symbols/*.toml`, `scripts/guest_hooks.py`,
-> `scripts/gen_guest_symbols.py` and `netplay/legacy_identity.hpp` arrive with
-> later fold steps. Until a path exists, don't invent a stand-in for it; ask.
+- Server-side code lives in `services/<name>/` (`services/README.md`); each service's `build.py` splices its deployed
+  base, which is outside the repo. The guard's pipeline rules don't apply there; everything else here does.
+
+> Through v1.0.11 the release was built from a chain of first-party layers under `patches/`. The fold replaced them
+> with source; `architecture/pattern-guard-baseline.txt` is empty and stays empty.
 
 ## How to add a feature
 
@@ -72,7 +69,4 @@ Some files must keep their exact bytes; `scripts/check_pinned_bytes.py` (a pre-c
 Never reformat or "tidy" them:
 
 - `*.patch` files listed in `patches/manifest.json`, and `modding/reference-us-v*/`.
-- Until the fold deletes the 1.0.7 source capsule: everything under `runtime-recomp/src/` and
-  `runtime-recomp/tests/replay_probe/` that the capsule pins as a base. Real code changes there are fine; formatting
-  passes and whitespace fixes are not. On the fold branch, the bases the fold rewrote are listed in
-  `scripts/fold/released-bases.txt`, which only `scripts/fold/apply_closure.py` writes; never add a path by hand.
+- `services/*/baseline/`, the deployed bases a service splices into, against their `SHA256SUMS`.
