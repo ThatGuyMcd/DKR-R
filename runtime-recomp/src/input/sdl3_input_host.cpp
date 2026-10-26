@@ -66,8 +66,7 @@ struct HostDevice {
     bool gamepad_gyro = false;
     bool raw_deck_gyro = false;
     float gyro_rate_hz = 0.0F;
-    std::array<std::uint8_t, dkr::runtime::controllers::kSnapshotButtonCount>
-        button_bound{};
+    std::array<std::uint8_t, dkr::runtime::controllers::kSnapshotButtonCount> button_bound{};
     std::array<float, 3> gyro_data{};
     std::uint64_t gyro_timestamp_us = 0U;
     bool gyro_valid = false;
@@ -78,8 +77,7 @@ constexpr std::uint16_t kSteamDeckProductId = 0x1205U;
 constexpr std::uint16_t kSteamVirtualGamepadProductId = 0x11FFU;
 constexpr int kSteamDeckControllerInterface = 2;
 constexpr float kSteamDeckGyroRateHz = 250.0F;
-constexpr float kSteamDeckGyroScale =
-    (2000.0F * 0.01745329251994329577F) / 32768.0F;
+constexpr float kSteamDeckGyroScale = (2000.0F * 0.01745329251994329577F) / 32768.0F;
 
 #pragma pack(push, 1)
 struct SteamDeckHidReport {
@@ -126,13 +124,12 @@ struct SteamDeckGyroSample {
     bool imu_active = false;
 };
 
-bool DecodeSteamDeckGyro(const void* bytes, std::size_t size,
-                         SteamDeckGyroSample& sample) {
-    if (bytes == nullptr || size != sizeof(SteamDeckHidReport)) return false;
+bool DecodeSteamDeckGyro(const void* bytes, std::size_t size, SteamDeckGyroSample& sample) {
+    if (bytes == nullptr || size != sizeof(SteamDeckHidReport))
+        return false;
     SteamDeckHidReport report{};
     std::memcpy(&report, bytes, sizeof(report));
-    if (report.version != 1U || report.type != 9U ||
-        report.length != sizeof(SteamDeckHidReport)) {
+    if (report.version != 1U || report.type != 9U || report.length != sizeof(SteamDeckHidReport)) {
         return false;
     }
 
@@ -141,12 +138,10 @@ bool DecodeSteamDeckGyro(const void* bytes, std::size_t size,
     sample.data[0] = static_cast<float>(report.gyro_x) * kSteamDeckGyroScale;
     sample.data[1] = static_cast<float>(report.gyro_z) * kSteamDeckGyroScale;
     sample.data[2] = -static_cast<float>(report.gyro_y) * kSteamDeckGyroScale;
-    sample.timestamp_us =
-        static_cast<std::uint64_t>(report.packet_number) * 4000U;
+    sample.timestamp_us = static_cast<std::uint64_t>(report.packet_number) * 4000U;
     sample.packet_number = report.packet_number;
-    sample.imu_active = report.accel_x != 0 || report.accel_y != 0 ||
-        report.accel_z != 0 || report.gyro_x != 0 || report.gyro_y != 0 ||
-        report.gyro_z != 0;
+    sample.imu_active = report.accel_x != 0 || report.accel_y != 0 || report.accel_z != 0 || report.gyro_x != 0 ||
+                        report.gyro_y != 0 || report.gyro_z != 0;
     return true;
 }
 
@@ -161,43 +156,35 @@ bool SteamDeckDecoderSelfTest() {
     report.gyro_y = -8192;
     report.gyro_z = 4096;
     SteamDeckGyroSample sample{};
-    if (!DecodeSteamDeckGyro(&report, sizeof(report), sample) ||
-        !sample.imu_active || sample.timestamp_us != 492000U) {
+    if (!DecodeSteamDeckGyro(&report, sizeof(report), sample) || !sample.imu_active || sample.timestamp_us != 492000U) {
         return false;
     }
     constexpr float kTolerance = 0.0001F;
-    return std::fabs(sample.data[0] - 1000.0F *
-        0.01745329251994329577F) < kTolerance &&
-        std::fabs(sample.data[1] - 250.0F *
-        0.01745329251994329577F) < kTolerance &&
-        std::fabs(sample.data[2] - 500.0F *
-        0.01745329251994329577F) < kTolerance;
+    return std::fabs(sample.data[0] - 1000.0F * 0.01745329251994329577F) < kTolerance &&
+           std::fabs(sample.data[1] - 250.0F * 0.01745329251994329577F) < kTolerance &&
+           std::fabs(sample.data[2] - 500.0F * 0.01745329251994329577F) < kTolerance;
 }
 
 std::string Lowercase(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
     return value;
 }
 
 HostDevice* SteamDeckGyroTarget(std::vector<HostDevice>& devices) {
-    const auto direct_match = std::find_if(
-        devices.begin(), devices.end(), [](const HostDevice& device) {
-            return device.vendor == kValveVendorId &&
-                (device.product == kSteamVirtualGamepadProductId ||
-                 device.product == kSteamDeckProductId);
-        });
-    if (direct_match != devices.end()) return &*direct_match;
+    const auto direct_match = std::find_if(devices.begin(), devices.end(), [](const HostDevice& device) {
+        return device.vendor == kValveVendorId &&
+               (device.product == kSteamVirtualGamepadProductId || device.product == kSteamDeckProductId);
+    });
+    if (direct_match != devices.end())
+        return &*direct_match;
 
-    const auto named_match = std::find_if(
-        devices.begin(), devices.end(), [](const HostDevice& device) {
-            const std::string name = Lowercase(device.name);
-            return name.find("steam deck") != std::string::npos ||
-                name.find("steam virtual gamepad") != std::string::npos;
-        });
-    if (named_match != devices.end()) return &*named_match;
+    const auto named_match = std::find_if(devices.begin(), devices.end(), [](const HostDevice& device) {
+        const std::string name = Lowercase(device.name);
+        return name.find("steam deck") != std::string::npos || name.find("steam virtual gamepad") != std::string::npos;
+    });
+    if (named_match != devices.end())
+        return &*named_match;
 
     // Some SteamOS revisions expose the builtin controls with a generic
     // evdev name. The presence of the physical Deck HID endpoint makes a
@@ -207,9 +194,13 @@ HostDevice* SteamDeckGyroTarget(std::vector<HostDevice>& devices) {
 
 class SteamDeckRawGyro {
   public:
-    ~SteamDeckRawGyro() { Close(); }
+    ~SteamDeckRawGyro() {
+        Close();
+    }
 
-    void Shutdown() { Close(); }
+    void Shutdown() {
+        Close();
+    }
 
     void Pump(std::vector<HostDevice>& devices) {
         ClearAttachment(devices);
@@ -219,22 +210,21 @@ class SteamDeckRawGyro {
             Close();
             return;
         }
-        if (!EnsureOpen()) return;
+        if (!EnsureOpen())
+            return;
 
         std::array<std::uint8_t, sizeof(SteamDeckHidReport)> bytes{};
         for (int report_index = 0; report_index < 64; ++report_index) {
             const int count = SDL_hid_read(device_, bytes.data(), bytes.size());
-            if (count == 0) break;
+            if (count == 0)
+                break;
             if (count < 0) {
-                std::fprintf(stderr,
-                             "[input][sdl3][deck-gyro] HID read failed: %s\n",
-                             SDL_GetError());
+                std::fprintf(stderr, "[input][sdl3][deck-gyro] HID read failed: %s\n", SDL_GetError());
                 Close();
                 return;
             }
             SteamDeckGyroSample sample{};
-            if (!DecodeSteamDeckGyro(bytes.data(),
-                                     static_cast<std::size_t>(count), sample) ||
+            if (!DecodeSteamDeckGyro(bytes.data(), static_cast<std::size_t>(count), sample) ||
                 (have_packet_ && sample.packet_number == last_packet_)) {
                 continue;
             }
@@ -266,7 +256,8 @@ class SteamDeckRawGyro {
   private:
     void ClearAttachment(std::vector<HostDevice>& devices) {
         for (HostDevice& device : devices) {
-            if (!device.raw_deck_gyro) continue;
+            if (!device.raw_deck_gyro)
+                continue;
             device.raw_deck_gyro = false;
             if (!device.gamepad_gyro) {
                 device.gyro = false;
@@ -280,21 +271,21 @@ class SteamDeckRawGyro {
 
 #if defined(__linux__)
     bool EnsureOpen() {
-        if (device_ != nullptr) return true;
+        if (device_ != nullptr)
+            return true;
         const auto now = std::chrono::steady_clock::now();
-        if (now < next_probe_) return false;
+        if (now < next_probe_)
+            return false;
         next_probe_ = now + std::chrono::seconds{1};
 
-        SDL_hid_device_info* devices = SDL_hid_enumerate(
-            kValveVendorId, kSteamDeckProductId);
-        for (SDL_hid_device_info* candidate = devices; candidate != nullptr;
-             candidate = candidate->next) {
-            if (candidate->interface_number != kSteamDeckControllerInterface ||
-                candidate->path == nullptr) {
+        SDL_hid_device_info* devices = SDL_hid_enumerate(kValveVendorId, kSteamDeckProductId);
+        for (SDL_hid_device_info* candidate = devices; candidate != nullptr; candidate = candidate->next) {
+            if (candidate->interface_number != kSteamDeckControllerInterface || candidate->path == nullptr) {
                 continue;
             }
             SDL_hid_device* opened = SDL_hid_open_path(candidate->path);
-            if (opened == nullptr) continue;
+            if (opened == nullptr)
+                continue;
             if (SDL_hid_set_nonblocking(opened, 1) != 0) {
                 SDL_hid_close(opened);
                 continue;
@@ -318,14 +309,17 @@ class SteamDeckRawGyro {
         reported_missing_ = false;
         std::fprintf(stderr,
                      "[input][sdl3][deck-gyro] opened physical Steam Deck "
-                     "gyro fallback at %s\n", path_.c_str());
+                     "gyro fallback at %s\n",
+                     path_.c_str());
         return true;
     }
 
     void MaybeEnableImu() {
-        if (device_ == nullptr || zero_imu_reports_ < 32U) return;
+        if (device_ == nullptr || zero_imu_reports_ < 32U)
+            return;
         const auto now = std::chrono::steady_clock::now();
-        if (now < next_enable_attempt_) return;
+        if (now < next_enable_attempt_)
+            return;
         next_enable_attempt_ = now + std::chrono::seconds{2};
 
         // Steam can turn off raw IMU reporting when its controller layout has
@@ -336,13 +330,11 @@ class SteamDeckRawGyro {
         command[2] = 0x03U; // one packed controller setting
         command[3] = 0x30U; // SETTING_IMU_MODE
         command[4] = 0x18U; // raw accelerometer | raw gyro
-        const int written = SDL_hid_send_feature_report(
-            device_, command.data(), command.size());
+        const int written = SDL_hid_send_feature_report(device_, command.data(), command.size());
         std::fprintf(stderr,
                      "[input][sdl3][deck-gyro] raw IMU was disabled; "
                      "enable request %s\n",
-                     written == static_cast<int>(command.size())
-                         ? "sent" : "failed");
+                     written == static_cast<int>(command.size()) ? "sent" : "failed");
         zero_imu_reports_ = 0U;
     }
 #endif
@@ -375,7 +367,8 @@ class SteamDeckRawGyro {
 };
 
 void CloseSocket(NativeSocket& socket) {
-    if (socket == kInvalidSocket) return;
+    if (socket == kInvalidSocket)
+        return;
 #if defined(_WIN32)
     closesocket(socket);
 #else
@@ -388,12 +381,12 @@ bool SendAll(NativeSocket socket, const void* data, std::size_t size) {
     const auto* bytes = static_cast<const std::uint8_t*>(data);
     while (size > 0U) {
 #if defined(_WIN32)
-        const int chunk = send(socket, reinterpret_cast<const char*>(bytes),
-                               static_cast<int>(size), 0);
+        const int chunk = send(socket, reinterpret_cast<const char*>(bytes), static_cast<int>(size), 0);
 #else
         const ssize_t chunk = send(socket, bytes, size, MSG_NOSIGNAL);
 #endif
-        if (chunk <= 0) return false;
+        if (chunk <= 0)
+            return false;
         bytes += static_cast<std::size_t>(chunk);
         size -= static_cast<std::size_t>(chunk);
     }
@@ -404,12 +397,12 @@ bool ReceiveAll(NativeSocket socket, void* data, std::size_t size) {
     auto* bytes = static_cast<std::uint8_t*>(data);
     while (size > 0U) {
 #if defined(_WIN32)
-        const int chunk = recv(socket, reinterpret_cast<char*>(bytes),
-                               static_cast<int>(size), 0);
+        const int chunk = recv(socket, reinterpret_cast<char*>(bytes), static_cast<int>(size), 0);
 #else
         const ssize_t chunk = recv(socket, bytes, size, 0);
 #endif
-        if (chunk <= 0) return false;
+        if (chunk <= 0)
+            return false;
         bytes += static_cast<std::size_t>(chunk);
         size -= static_cast<std::size_t>(chunk);
     }
@@ -428,14 +421,15 @@ bool Readable(NativeSocket socket) {
 #endif
 }
 
-bool ParseHexToken(const std::string& text,
-                   std::array<std::uint8_t, kTokenBytes>& token) {
-    if (text.size() != token.size() * 2U) return false;
+bool ParseHexToken(const std::string& text, std::array<std::uint8_t, kTokenBytes>& token) {
+    if (text.size() != token.size() * 2U)
+        return false;
     for (std::size_t index = 0U; index < token.size(); ++index) {
         const std::string byte = text.substr(index * 2U, 2U);
         char* end = nullptr;
         const unsigned long value = std::strtoul(byte.c_str(), &end, 16);
-        if (end == nullptr || *end != '\0' || value > 0xFFU) return false;
+        if (end == nullptr || *end != '\0' || value > 0xFFU)
+            return false;
         token[index] = static_cast<std::uint8_t>(value);
     }
     return true;
@@ -449,11 +443,13 @@ std::optional<Options> ParseOptions(int argc, char** argv) {
             options.self_test = true;
         } else if (argument == "--port" && index + 1 < argc) {
             const int port = std::atoi(argv[++index]);
-            if (port <= 0 || port > 65535) return std::nullopt;
+            if (port <= 0 || port > 65535)
+                return std::nullopt;
             options.port = static_cast<std::uint16_t>(port);
         } else if (argument == "--token" && index + 1 < argc) {
             options.token_present = ParseHexToken(argv[++index], options.token);
-            if (!options.token_present) return std::nullopt;
+            if (!options.token_present)
+                return std::nullopt;
         } else if (argument == "--mappings" && index + 1 < argc) {
             options.mappings = std::filesystem::path(argv[++index]);
         } else {
@@ -474,16 +470,13 @@ void ConfigureSdlHints() {
 
 std::string PersistentKey(SDL_Gamepad* gamepad) {
     std::string identity;
-    if (const char* serial = SDL_GetGamepadSerial(gamepad);
-        serial != nullptr && *serial != '\0') {
+    if (const char* serial = SDL_GetGamepadSerial(gamepad); serial != nullptr && *serial != '\0') {
         identity = "serial:" + std::string(serial);
-    } else if (const char* path = SDL_GetGamepadPath(gamepad);
-               path != nullptr && *path != '\0') {
+    } else if (const char* path = SDL_GetGamepadPath(gamepad); path != nullptr && *path != '\0') {
         identity = "path:" + std::string(path);
     } else {
         char guid_text[64]{};
-        SDL_GUIDToString(SDL_GetGamepadGUIDForID(SDL_GetGamepadID(gamepad)),
-                         guid_text, sizeof(guid_text));
+        SDL_GUIDToString(SDL_GetGamepadGUIDForID(SDL_GetGamepadID(gamepad)), guid_text, sizeof(guid_text));
         identity = "guid:" + std::string(guid_text);
     }
     identity += ":" + std::to_string(SDL_GetGamepadVendor(gamepad));
@@ -514,11 +507,9 @@ void PopulateButtonBindings(HostDevice& device) {
     if (bindings != nullptr) {
         for (int index = 0; index < count; ++index) {
             const SDL_GamepadBinding* binding = bindings[index];
-            if (binding != nullptr &&
-                binding->output_type == SDL_GAMEPAD_BINDTYPE_BUTTON) {
+            if (binding != nullptr && binding->output_type == SDL_GAMEPAD_BINDTYPE_BUTTON) {
                 const int button = static_cast<int>(binding->output.button);
-                if (button >= 0 && button <
-                    static_cast<int>(device.button_bound.size())) {
+                if (button >= 0 && button < static_cast<int>(device.button_bound.size())) {
                     device.button_bound[static_cast<std::size_t>(button)] = 1U;
                 }
             }
@@ -530,14 +521,13 @@ void PopulateButtonBindings(HostDevice& device) {
     if (std::none_of(device.button_bound.begin(), device.button_bound.end(),
                      [](std::uint8_t value) { return value != 0U; })) {
         for (std::size_t index = 0U; index < device.button_bound.size(); ++index) {
-            device.button_bound[index] = SDL_GamepadHasButton(
-                device.gamepad, static_cast<SDL_GamepadButton>(index)) ? 1U : 0U;
+            device.button_bound[index] =
+                SDL_GamepadHasButton(device.gamepad, static_cast<SDL_GamepadButton>(index)) ? 1U : 0U;
         }
     }
 }
 
-void RefreshDevices(std::vector<HostDevice>& devices,
-                    std::int32_t& next_public_instance) {
+void RefreshDevices(std::vector<HostDevice>& devices, std::int32_t& next_public_instance) {
     int count = 0;
     SDL_JoystickID* ids = SDL_GetGamepads(&count);
     std::vector<SDL_JoystickID> connected;
@@ -547,8 +537,7 @@ void RefreshDevices(std::vector<HostDevice>& devices,
     SDL_free(ids);
 
     for (auto iterator = devices.begin(); iterator != devices.end();) {
-        if (std::find(connected.begin(), connected.end(), iterator->sdl_id) ==
-            connected.end()) {
+        if (std::find(connected.begin(), connected.end(), iterator->sdl_id) == connected.end()) {
             CloseDevice(*iterator);
             iterator = devices.erase(iterator);
         } else {
@@ -556,15 +545,15 @@ void RefreshDevices(std::vector<HostDevice>& devices,
         }
     }
     for (const SDL_JoystickID id : connected) {
-        if (devices.size() >= kMaximumDevices) break;
+        if (devices.size() >= kMaximumDevices)
+            break;
         if (std::any_of(devices.begin(), devices.end(),
-                        [id](const HostDevice& device) {
-                            return device.sdl_id == id;
-                        })) {
+                        [id](const HostDevice& device) { return device.sdl_id == id; })) {
             continue;
         }
         SDL_Gamepad* gamepad = SDL_OpenGamepad(id);
-        if (gamepad == nullptr) continue;
+        if (gamepad == nullptr)
+            continue;
         HostDevice device{};
         device.sdl_id = id;
         device.public_instance = next_public_instance++;
@@ -575,15 +564,13 @@ void RefreshDevices(std::vector<HostDevice>& devices,
         device.name = name != nullptr && *name != '\0' ? name : "SDL3 gamepad";
         device.persistent_key = PersistentKey(gamepad);
         const SDL_PropertiesID properties = SDL_GetGamepadProperties(gamepad);
-        device.rumble = SDL_GetBooleanProperty(
-            properties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
+        device.rumble = SDL_GetBooleanProperty(properties, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false);
         device.gamepad_gyro = SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO);
         if (device.gamepad_gyro) {
             if (!SDL_SetGamepadSensorEnabled(gamepad, SDL_SENSOR_GYRO, true)) {
                 device.gamepad_gyro = false;
             } else {
-                device.gyro_rate_hz = SDL_GetGamepadSensorDataRate(
-                    gamepad, SDL_SENSOR_GYRO);
+                device.gyro_rate_hz = SDL_GetGamepadSensorDataRate(gamepad, SDL_SENSOR_GYRO);
             }
         }
         device.gyro = device.gamepad_gyro;
@@ -592,8 +579,7 @@ void RefreshDevices(std::vector<HostDevice>& devices,
     }
 }
 
-template <std::size_t Size>
-void CopyText(std::array<char, Size>& destination, const std::string& source) {
+template <std::size_t Size> void CopyText(std::array<char, Size>& destination, const std::string& source) {
     const std::size_t length = std::min(source.size(), destination.size() - 1U);
     std::memcpy(destination.data(), source.data(), length);
     destination[length] = '\0';
@@ -609,56 +595,49 @@ void FillDevicePacket(DevicePacket& packet, const HostDevice& device) {
     packet.gyro_valid = device.gyro_valid ? 1U : 0U;
     packet.button_bound = device.button_bound;
     for (std::size_t index = 0U; index < packet.buttons.size(); ++index) {
-        packet.buttons[index] = SDL_GetGamepadButton(
-            device.gamepad, static_cast<SDL_GamepadButton>(index)) ? 1U : 0U;
+        packet.buttons[index] = SDL_GetGamepadButton(device.gamepad, static_cast<SDL_GamepadButton>(index)) ? 1U : 0U;
     }
     for (std::size_t index = 0U; index < packet.axes.size(); ++index) {
-        packet.axes[index] = SDL_GetGamepadAxis(
-            device.gamepad, static_cast<SDL_GamepadAxis>(index));
+        packet.axes[index] = SDL_GetGamepadAxis(device.gamepad, static_cast<SDL_GamepadAxis>(index));
     }
     packet.gyro_data = device.gyro_data;
     packet.gyro_timestamp_us = device.gyro_timestamp_us;
     packet.gyro_rate_hz = device.gyro_rate_hz;
     CopyText(packet.name, device.name);
     CopyText(packet.persistent_key, device.persistent_key);
-    CopyText(packet.mapping_source, device.raw_deck_gyro
-        ? "SDL3 native mapping + direct Steam Deck gyro"
-        : "SDL3 native mapping");
+    CopyText(packet.mapping_source,
+             device.raw_deck_gyro ? "SDL3 native mapping + direct Steam Deck gyro" : "SDL3 native mapping");
 }
 
 enum class CommandResult { Continue, Shutdown, Disconnected };
 
-CommandResult ProcessCommand(NativeSocket socket,
-                             const std::array<std::uint8_t, kTokenBytes>& token,
+CommandResult ProcessCommand(NativeSocket socket, const std::array<std::uint8_t, kTokenBytes>& token,
                              std::vector<HostDevice>& devices) {
-    if (!Readable(socket)) return CommandResult::Continue;
+    if (!Readable(socket))
+        return CommandResult::Continue;
     PacketHeader header{};
     if (!ReceiveAll(socket, &header, sizeof(header))) {
         return CommandResult::Disconnected;
     }
-    if (header.magic != kMagic || header.version != kVersion ||
-        header.token != token || header.size < sizeof(PacketHeader)) {
+    if (header.magic != kMagic || header.version != kVersion || header.token != token ||
+        header.size < sizeof(PacketHeader)) {
         return CommandResult::Disconnected;
     }
-    if (header.type == PacketType::Shutdown &&
-        header.size == sizeof(ShutdownPacket)) {
+    if (header.type == PacketType::Shutdown && header.size == sizeof(ShutdownPacket)) {
         return CommandResult::Shutdown;
     }
-    if (header.type == PacketType::Rumble &&
-        header.size == sizeof(RumblePacket)) {
+    if (header.type == PacketType::Rumble && header.size == sizeof(RumblePacket)) {
         RumblePacket packet{};
         packet.header = header;
         auto* remainder = reinterpret_cast<std::uint8_t*>(&packet) + sizeof(header);
         if (!ReceiveAll(socket, remainder, sizeof(packet) - sizeof(header))) {
             return CommandResult::Disconnected;
         }
-        const auto device = std::find_if(
-            devices.begin(), devices.end(), [&](const HostDevice& candidate) {
-                return candidate.public_instance == packet.instance;
-            });
+        const auto device = std::find_if(devices.begin(), devices.end(), [&](const HostDevice& candidate) {
+            return candidate.public_instance == packet.instance;
+        });
         if (device != devices.end() && device->gamepad != nullptr) {
-            SDL_RumbleGamepad(device->gamepad, packet.low_frequency,
-                              packet.high_frequency, packet.duration_ms);
+            SDL_RumbleGamepad(device->gamepad, packet.low_frequency, packet.high_frequency, packet.duration_ms);
         }
         return CommandResult::Continue;
     }
@@ -667,19 +646,18 @@ CommandResult ProcessCommand(NativeSocket socket,
 
 NativeSocket Connect(std::uint16_t port) {
     NativeSocket socket_handle = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (socket_handle == kInvalidSocket) return kInvalidSocket;
+    if (socket_handle == kInvalidSocket)
+        return kInvalidSocket;
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = htons(port);
-    if (connect(socket_handle, reinterpret_cast<const sockaddr*>(&address),
-                sizeof(address)) != 0) {
+    if (connect(socket_handle, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0) {
         CloseSocket(socket_handle);
         return kInvalidSocket;
     }
     int enabled = 1;
-    setsockopt(socket_handle, IPPROTO_TCP, TCP_NODELAY,
-               reinterpret_cast<const char*>(&enabled), sizeof(enabled));
+    setsockopt(socket_handle, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&enabled), sizeof(enabled));
     return socket_handle;
 }
 
@@ -689,10 +667,10 @@ int SelfTest(const std::filesystem::path& mappings) {
         std::fprintf(stderr, "SDL3 input self-test failed: %s\n", SDL_GetError());
         return 2;
     }
-    if (!mappings.empty()) SDL_AddGamepadMappingsFromFile(mappings.string().c_str());
+    if (!mappings.empty())
+        SDL_AddGamepadMappingsFromFile(mappings.string().c_str());
     if (!SteamDeckDecoderSelfTest()) {
-        std::fprintf(stderr,
-                     "SDL3 input self-test failed: Steam Deck report decoder\n");
+        std::fprintf(stderr, "SDL3 input self-test failed: Steam Deck report decoder\n");
         SDL_Quit();
         return 3;
     }
@@ -700,38 +678,29 @@ int SelfTest(const std::filesystem::path& mappings) {
     SDL_JoystickID* ids = SDL_GetGamepads(&count);
     for (int index = 0; ids != nullptr && index < count; ++index) {
         SDL_Gamepad* gamepad = SDL_OpenGamepad(ids[index]);
-        if (gamepad == nullptr) continue;
-        std::fprintf(stderr,
-                     "SDL3 gamepad %d: name=%s vid=%04x pid=%04x gyro=%s\n",
-                     index,
-                     SDL_GetGamepadName(gamepad) != nullptr
-                         ? SDL_GetGamepadName(gamepad) : "unknown",
-                     SDL_GetGamepadVendor(gamepad),
-                     SDL_GetGamepadProduct(gamepad),
-                     SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO)
-                         ? "yes" : "no");
+        if (gamepad == nullptr)
+            continue;
+        std::fprintf(stderr, "SDL3 gamepad %d: name=%s vid=%04x pid=%04x gyro=%s\n", index,
+                     SDL_GetGamepadName(gamepad) != nullptr ? SDL_GetGamepadName(gamepad) : "unknown",
+                     SDL_GetGamepadVendor(gamepad), SDL_GetGamepadProduct(gamepad),
+                     SDL_GamepadHasSensor(gamepad, SDL_SENSOR_GYRO) ? "yes" : "no");
         SDL_CloseGamepad(gamepad);
     }
     SDL_free(ids);
 #if defined(__linux__)
     int raw_deck_interfaces = 0;
-    SDL_hid_device_info* hid_devices = SDL_hid_enumerate(
-        kValveVendorId, kSteamDeckProductId);
-    for (SDL_hid_device_info* candidate = hid_devices; candidate != nullptr;
-         candidate = candidate->next) {
+    SDL_hid_device_info* hid_devices = SDL_hid_enumerate(kValveVendorId, kSteamDeckProductId);
+    for (SDL_hid_device_info* candidate = hid_devices; candidate != nullptr; candidate = candidate->next) {
         if (candidate->interface_number == kSteamDeckControllerInterface) {
             ++raw_deck_interfaces;
         }
     }
     SDL_hid_free_enumeration(hid_devices);
-    std::fprintf(stderr,
-                 "SDL3 Steam Deck physical gyro interfaces=%d\n",
-                 raw_deck_interfaces);
+    std::fprintf(stderr, "SDL3 Steam Deck physical gyro interfaces=%d\n", raw_deck_interfaces);
 #endif
     const int version = SDL_GetVersion();
-    std::fprintf(stderr, "SDL3 input self-test passed: version=%d.%d.%d gamepads=%d\n",
-                 SDL_VERSIONNUM_MAJOR(version), SDL_VERSIONNUM_MINOR(version),
-                 SDL_VERSIONNUM_MICRO(version), count);
+    std::fprintf(stderr, "SDL3 input self-test passed: version=%d.%d.%d gamepads=%d\n", SDL_VERSIONNUM_MAJOR(version),
+                 SDL_VERSIONNUM_MINOR(version), SDL_VERSIONNUM_MICRO(version), count);
     SDL_Quit();
     return 0;
 }
@@ -741,16 +710,17 @@ int SelfTest(const std::filesystem::path& mappings) {
 int main(int argc, char** argv) {
     const auto options = ParseOptions(argc, argv);
     if (!options.has_value()) {
-        std::fprintf(stderr,
-                     "Usage: DKR-R-InputHost --port PORT --token HEX [--mappings FILE]\n"
-                     "       DKR-R-InputHost --self-test [--mappings FILE]\n");
+        std::fprintf(stderr, "Usage: DKR-R-InputHost --port PORT --token HEX [--mappings FILE]\n"
+                             "       DKR-R-InputHost --self-test [--mappings FILE]\n");
         return 1;
     }
-    if (options->self_test) return SelfTest(options->mappings);
+    if (options->self_test)
+        return SelfTest(options->mappings);
 
 #if defined(_WIN32)
     WSADATA socket_data{};
-    if (WSAStartup(MAKEWORD(2, 2), &socket_data) != 0) return 2;
+    if (WSAStartup(MAKEWORD(2, 2), &socket_data) != 0)
+        return 2;
 #endif
     NativeSocket socket_handle = Connect(options->port);
     if (socket_handle == kInvalidSocket) {
@@ -765,8 +735,7 @@ int main(int argc, char** argv) {
     ConfigureSdlHints();
     if (!SDL_Init(SDL_INIT_GAMEPAD | SDL_INIT_SENSOR | SDL_INIT_HAPTIC)) {
         hello.ready = 0U;
-        CopyText(hello.detail, std::string("SDL3 initialization failed: ") +
-                               SDL_GetError());
+        CopyText(hello.detail, std::string("SDL3 initialization failed: ") + SDL_GetError());
         SendAll(socket_handle, &hello, sizeof(hello));
         CloseSocket(socket_handle);
 #if defined(_WIN32)
@@ -816,16 +785,13 @@ int main(int argc, char** argv) {
         SDL_Event event{};
         bool refresh = false;
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_GAMEPAD_ADDED ||
-                event.type == SDL_EVENT_GAMEPAD_REMOVED ||
+            if (event.type == SDL_EVENT_GAMEPAD_ADDED || event.type == SDL_EVENT_GAMEPAD_REMOVED ||
                 event.type == SDL_EVENT_GAMEPAD_REMAPPED) {
                 refresh = true;
-            } else if (event.type == SDL_EVENT_GAMEPAD_SENSOR_UPDATE &&
-                       event.gsensor.sensor == SDL_SENSOR_GYRO) {
-                const auto device = std::find_if(
-                    devices.begin(), devices.end(), [&](const HostDevice& candidate) {
-                        return candidate.sdl_id == event.gsensor.which;
-                    });
+            } else if (event.type == SDL_EVENT_GAMEPAD_SENSOR_UPDATE && event.gsensor.sensor == SDL_SENSOR_GYRO) {
+                const auto device = std::find_if(devices.begin(), devices.end(), [&](const HostDevice& candidate) {
+                    return candidate.sdl_id == event.gsensor.which;
+                });
                 if (device != devices.end()) {
                     std::copy_n(event.gsensor.data, 3, device->gyro_data.begin());
                     device->gyro_timestamp_us = event.gsensor.sensor_timestamp / 1000U;
@@ -833,29 +799,27 @@ int main(int argc, char** argv) {
                 }
             }
         }
-        if (refresh) RefreshDevices(devices, next_public_instance);
+        if (refresh)
+            RefreshDevices(devices, next_public_instance);
         raw_deck_gyro.Pump(devices);
-        const CommandResult command = ProcessCommand(socket_handle, options->token,
-                                                     devices);
+        const CommandResult command = ProcessCommand(socket_handle, options->token, devices);
         if (command != CommandResult::Continue) {
             running = false;
             continue;
         }
         StatePacket state{};
         initialise(state, PacketType::State, options->token);
-        state.device_count = static_cast<std::uint32_t>(
-            std::min(devices.size(), state.devices.size()));
+        state.device_count = static_cast<std::uint32_t>(std::min(devices.size(), state.devices.size()));
         for (std::size_t index = 0U; index < state.device_count; ++index) {
             FillDevicePacket(state.devices[index], devices[index]);
         }
-        const bool state_changed = !previous_state_valid ||
-            state.device_count != previous_state.device_count ||
-            std::memcmp(state.devices.data(), previous_state.devices.data(),
-                        sizeof(state.devices)) != 0;
+        const bool state_changed =
+            !previous_state_valid || state.device_count != previous_state.device_count ||
+            std::memcmp(state.devices.data(), previous_state.devices.data(), sizeof(state.devices)) != 0;
         const auto now = std::chrono::steady_clock::now();
-        if (state_changed) last_state_change = now;
-        const bool heartbeat_due =
-            now - last_state_send >= kHeartbeatInterval;
+        if (state_changed)
+            last_state_change = now;
+        const bool heartbeat_due = now - last_state_send >= kHeartbeatInterval;
         if (state_changed || heartbeat_due) {
             state.sequence = ++sequence;
             if (!SendAll(socket_handle, &state, sizeof(state))) {
@@ -882,20 +846,18 @@ int main(int argc, char** argv) {
     }
 
     const double input_elapsed_seconds =
-        std::chrono::duration<double>(std::chrono::steady_clock::now() -
-                                      input_epoch).count();
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - input_epoch).count();
     std::fprintf(stderr,
                  "[perf][sdl3-host] elapsed=%.2fs packets=%llu changed=%llu "
                  "heartbeats=%llu active-polls=%llu idle-polls=%llu\n",
-                 input_elapsed_seconds,
-                 static_cast<unsigned long long>(state_packets_sent),
+                 input_elapsed_seconds, static_cast<unsigned long long>(state_packets_sent),
                  static_cast<unsigned long long>(changed_packets_sent),
                  static_cast<unsigned long long>(heartbeat_packets_sent),
-                 static_cast<unsigned long long>(active_iterations),
-                 static_cast<unsigned long long>(idle_iterations));
+                 static_cast<unsigned long long>(active_iterations), static_cast<unsigned long long>(idle_iterations));
 
     raw_deck_gyro.Shutdown();
-    for (HostDevice& device : devices) CloseDevice(device);
+    for (HostDevice& device : devices)
+        CloseDevice(device);
     SDL_Quit();
     CloseSocket(socket_handle);
 #if defined(_WIN32)

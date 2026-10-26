@@ -10,11 +10,13 @@ namespace dkr::runtime {
 // serialized: defer() and retry() are called by its current execution owner,
 // so a receive cannot race between the failed send and its deferral. Native
 // producers only enqueue; they never inspect or mutate guest memory.
-template<class Message>
-class DeferredEventQueue {
-public:
+template <class Message> class DeferredEventQueue {
+  public:
     bool enqueue(Message message) {
-        { std::lock_guard lock(mutex_); ready_.push_back(std::move(message)); }
+        {
+            std::lock_guard lock(mutex_);
+            ready_.push_back(std::move(message));
+        }
         changed_.notify_one();
         return true;
     }
@@ -22,8 +24,7 @@ public:
         std::lock_guard lock(mutex_);
         blocked_.push_back(std::move(message));
     }
-    template<class Key>
-    void retry(Key queue) {
+    template <class Key> void retry(Key queue) {
         bool moved = false;
         {
             std::lock_guard lock(mutex_);
@@ -32,10 +33,12 @@ public:
                     ready_.push_back(std::move(*it));
                     it = blocked_.erase(it);
                     moved = true;
-                } else ++it;
+                } else
+                    ++it;
             }
         }
-        if (moved) changed_.notify_one();
+        if (moved)
+            changed_.notify_one();
     }
     bool try_dequeue(Message& message) {
         std::lock_guard lock(mutex_);
@@ -52,20 +55,24 @@ public:
         changed_.wait(lock, [&] { return !ready_.empty(); });
         pop(ready_, message);
     }
-    template<class Rep, class Period>
-    bool wait_dequeue_timed(Message& message,
-                           std::chrono::duration<Rep, Period> timeout) {
+    template <class Rep, class Period>
+    bool wait_dequeue_timed(Message& message, std::chrono::duration<Rep, Period> timeout) {
         std::unique_lock lock(mutex_);
-        if (!changed_.wait_for(lock, timeout, [&] { return !ready_.empty(); })) return false;
+        if (!changed_.wait_for(lock, timeout, [&] { return !ready_.empty(); }))
+            return false;
         return pop(ready_, message);
     }
-private:
+
+  private:
     static bool pop(std::deque<Message>& queue, Message& message) {
-        if (queue.empty()) return false;
-        message = std::move(queue.front()); queue.pop_front(); return true;
+        if (queue.empty())
+            return false;
+        message = std::move(queue.front());
+        queue.pop_front();
+        return true;
     }
     std::mutex mutex_;
     std::condition_variable changed_;
     std::deque<Message> ready_, blocked_;
 };
-}
+} // namespace dkr::runtime

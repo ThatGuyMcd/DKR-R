@@ -15,9 +15,8 @@ namespace dkr::runtime::netplay {
 // state rather than emulated state by design: its output may vary visually or
 // aurally across peers, but can never influence racer physics or race progress.
 class PresentationRandomStream final {
-public:
-    explicit constexpr PresentationRandomStream(
-        std::uint32_t seed = 0xD1DD7A11U)
+  public:
+    explicit constexpr PresentationRandomStream(std::uint32_t seed = 0xD1DD7A11U)
         : state_(seed != 0U ? seed : 0xD1DD7A11U) {}
 
     constexpr std::uint32_t next() {
@@ -29,30 +28,24 @@ public:
         return state_;
     }
 
-    constexpr std::int32_t range(std::int32_t minimum,
-                                 std::int32_t maximum) {
+    constexpr std::int32_t range(std::int32_t minimum, std::int32_t maximum) {
         if (maximum < minimum) {
             const std::int32_t temporary = minimum;
             minimum = maximum;
             maximum = temporary;
         }
         const std::uint64_t span =
-            static_cast<std::uint64_t>(
-                static_cast<std::int64_t>(maximum) -
-                static_cast<std::int64_t>(minimum)) +
-            1ULL;
+            static_cast<std::uint64_t>(static_cast<std::int64_t>(maximum) - static_cast<std::int64_t>(minimum)) + 1ULL;
         const std::uint64_t offset =
-            span == (1ULL << 32U)
-                ? static_cast<std::uint64_t>(next())
-                : static_cast<std::uint64_t>(next()) % span;
-        return static_cast<std::int32_t>(
-            static_cast<std::int64_t>(minimum) +
-            static_cast<std::int64_t>(offset));
+            span == (1ULL << 32U) ? static_cast<std::uint64_t>(next()) : static_cast<std::uint64_t>(next()) % span;
+        return static_cast<std::int32_t>(static_cast<std::int64_t>(minimum) + static_cast<std::int64_t>(offset));
     }
 
-    constexpr std::uint32_t state() const { return state_; }
+    constexpr std::uint32_t state() const {
+        return state_;
+    }
 
-private:
+  private:
     std::uint32_t state_;
 };
 

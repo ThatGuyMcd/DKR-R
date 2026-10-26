@@ -54,7 +54,7 @@ std::map<std::string, std::uintmax_t> g_managed_sizes;
 struct TrackPackOwnerRecord {
     std::string track_id;
     std::string digest;
-    std::string fingerprint;   // ArchiveFingerprint of the imported archive
+    std::string fingerprint; // ArchiveFingerprint of the imported archive
 };
 std::map<std::string, TrackPackOwnerRecord> g_track_pack_owners;
 std::set<std::string> g_applied_ids;
@@ -90,19 +90,16 @@ std::vector<PendingDeletion> g_pending_deletions;
 // stop and joins before those dependencies begin static destruction.
 std::jthread g_background_refresh;
 
-bool ReportImportProgress(
-    const dkr::runtime::texture_packs::ImportProgressCallback& callback,
-    float fraction, std::string stage, bool commit_started = false) {
-    if (!callback) return true;
-    return callback({std::clamp(fraction, 0.0F, 1.0F), std::move(stage),
-                     commit_started});
+bool ReportImportProgress(const dkr::runtime::texture_packs::ImportProgressCallback& callback, float fraction,
+                          std::string stage, bool commit_started = false) {
+    if (!callback)
+        return true;
+    return callback({std::clamp(fraction, 0.0F, 1.0F), std::move(stage), commit_started});
 }
 
 std::string Lower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
     return value;
 }
 
@@ -129,10 +126,15 @@ std::string FileTimeText(std::filesystem::file_time_type time) {
     using Unsigned = std::make_unsigned_t<decltype(ticks)>;
     const bool negative = ticks < 0;
     auto magnitude = static_cast<Unsigned>(ticks);
-    if (negative) magnitude = Unsigned{0} - magnitude;
+    if (negative)
+        magnitude = Unsigned{0} - magnitude;
     std::string text;
-    do { text.push_back(static_cast<char>('0' + magnitude % 10)); magnitude /= 10; } while (magnitude);
-    if (negative) text.push_back('-');
+    do {
+        text.push_back(static_cast<char>('0' + magnitude % 10));
+        magnitude /= 10;
+    } while (magnitude);
+    if (negative)
+        text.push_back('-');
     std::reverse(text.begin(), text.end());
     return text;
 }
@@ -140,23 +142,22 @@ std::string FileTimeText(std::filesystem::file_time_type time) {
 std::string FileSignature(const std::filesystem::path& path) {
     std::error_code error;
     const auto size = std::filesystem::file_size(path, error);
-    if (error) return "missing";
+    if (error)
+        return "missing";
     const auto modified = std::filesystem::last_write_time(path, error);
-    if (error) return "missing";
-    return std::to_string(size) + ":" +
-        FileTimeText(modified);
+    if (error)
+        return "missing";
+    return std::to_string(size) + ":" + FileTimeText(modified);
 }
 
-std::string PackFingerprint(const std::filesystem::path& path,
-                            bool directory) {
-    if (!directory) return "file:" + FileSignature(path);
+std::string PackFingerprint(const std::filesystem::path& path, bool directory) {
+    if (!directory)
+        return "file:" + FileSignature(path);
     std::error_code error;
     const auto modified = std::filesystem::last_write_time(path, error);
-    const std::string directory_time = error
-        ? "missing" : FileTimeText(modified);
-    return "directory:" + directory_time + ":database:" +
-        FileSignature(path / "rt64.json") + ":report:" +
-        FileSignature(path / "dkr-r-rice-import.json");
+    const std::string directory_time = error ? "missing" : FileTimeText(modified);
+    return "directory:" + directory_time + ":database:" + FileSignature(path / "rt64.json") +
+           ":report:" + FileSignature(path / "dkr-r-rice-import.json");
 }
 
 std::uintmax_t ManagedSize(const std::filesystem::path& path) {
@@ -166,17 +167,18 @@ std::uintmax_t ManagedSize(const std::filesystem::path& path) {
         return error ? 0U : size;
     }
     error.clear();
-    if (!std::filesystem::is_directory(path, error)) return 0U;
+    if (!std::filesystem::is_directory(path, error))
+        return 0U;
 
     std::uintmax_t total = 0U;
     std::filesystem::recursive_directory_iterator iterator(
-        path, std::filesystem::directory_options::skip_permission_denied,
-        error);
+        path, std::filesystem::directory_options::skip_permission_denied, error);
     const std::filesystem::recursive_directory_iterator end;
     while (!error && iterator != end) {
         if (iterator->is_regular_file(error)) {
             const auto size = iterator->file_size(error);
-            if (!error) total += size;
+            if (!error)
+                total += size;
         }
         error.clear();
         iterator.increment(error);
@@ -187,31 +189,27 @@ std::uintmax_t ManagedSize(const std::filesystem::path& path) {
 std::int64_t ManagedTimestamp(const std::filesystem::path& path) {
     std::error_code error;
     const auto written = std::filesystem::last_write_time(path, error);
-    if (error) return 0;
+    if (error)
+        return 0;
     const auto system_time = std::chrono::time_point_cast<std::chrono::seconds>(
-        written - decltype(written)::clock::now() +
-        std::chrono::system_clock::now());
+        written - decltype(written)::clock::now() + std::chrono::system_clock::now());
     return system_time.time_since_epoch().count();
 }
 
 std::int64_t CurrentTimestamp() {
-    return std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+        .count();
 }
 
 bool IsImage(const std::string& entry) {
-    const std::string extension = Lower(
-        std::filesystem::path(entry).extension().string());
-    return extension == ".png" || extension == ".dds" ||
-           extension == ".jpg" || extension == ".jpeg";
+    const std::string extension = Lower(std::filesystem::path(entry).extension().string());
+    return extension == ".png" || extension == ".dds" || extension == ".jpg" || extension == ".jpeg";
 }
 
 bool LooksLikeRiceName(const std::string& entry) {
     const std::string lower = Lower(entry);
-    return lower.find("#0#") != std::string::npos ||
-           lower.find("_rgb") != std::string::npos ||
-           lower.find("_all") != std::string::npos ||
-           lower.find("_ci") != std::string::npos;
+    return lower.find("#0#") != std::string::npos || lower.find("_rgb") != std::string::npos ||
+           lower.find("_all") != std::string::npos || lower.find("_ci") != std::string::npos;
 }
 
 void LoadSettingsLocked() {
@@ -225,7 +223,8 @@ void LoadSettingsLocked() {
     std::ifstream input(g_settings_path);
     std::string line;
     while (std::getline(input, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
         constexpr const char* enabled_prefix = "enabled=";
         constexpr const char* priority_prefix = "priority=";
         constexpr const char* hidden_prefix = "hidden=";
@@ -242,16 +241,14 @@ void LoadSettingsLocked() {
             }
             const auto second = value.find('\t', first + 1U);
             const std::string id = Lower(value.substr(0, first));
-            const std::string track_id = second == std::string::npos
-                ? value.substr(first + 1U)
-                : value.substr(first + 1U, second - first - 1U);
+            const std::string track_id =
+                second == std::string::npos ? value.substr(first + 1U) : value.substr(first + 1U, second - first - 1U);
             std::string digest;
             std::string fingerprint;
             if (second != std::string::npos) {
                 const auto third = value.find('\t', second + 1U);
-                digest = third == std::string::npos
-                    ? value.substr(second + 1U)
-                    : value.substr(second + 1U, third - second - 1U);
+                digest = third == std::string::npos ? value.substr(second + 1U)
+                                                    : value.substr(second + 1U, third - second - 1U);
                 if (third != std::string::npos) {
                     fingerprint = value.substr(third + 1U);
                 }
@@ -264,8 +261,8 @@ void LoadSettingsLocked() {
         if (line.rfind(priority_prefix, 0) == 0 && line.size() > 9) {
             const std::string value = line.substr(9);
             const auto separator = value.find('\t');
-            if (separator == std::string::npos || separator == 0U ||
-                separator + 1U >= value.size()) continue;
+            if (separator == std::string::npos || separator == 0U || separator + 1U >= value.size())
+                continue;
             std::size_t priority = 0U;
             const char* begin = value.data() + separator + 1U;
             const char* end = value.data() + value.size();
@@ -282,23 +279,20 @@ void LoadSettingsLocked() {
         } else if (line.rfind(imported_prefix, 0) == 0 && line.size() > 12) {
             const std::string value = line.substr(12);
             const auto separator = value.find('\t');
-            if (separator == std::string::npos || separator == 0U ||
-                separator + 1U >= value.size()) {
+            if (separator == std::string::npos || separator == 0U || separator + 1U >= value.size()) {
                 continue;
             }
             std::int64_t timestamp = 0;
             const char* begin = value.data() + separator + 1U;
             const char* end = value.data() + value.size();
             const auto parsed = std::from_chars(begin, end, timestamp);
-            if (parsed.ec == std::errc{} && parsed.ptr == end &&
-                timestamp > 0) {
+            if (parsed.ec == std::errc{} && parsed.ptr == end && timestamp > 0) {
                 g_imported_at[Lower(value.substr(0, separator))] = timestamp;
             }
         } else if (line.rfind(size_prefix, 0) == 0 && line.size() > 13) {
             const std::string value = line.substr(13);
             const auto separator = value.find('\t');
-            if (separator == std::string::npos || separator == 0U ||
-                separator + 1U >= value.size()) {
+            if (separator == std::string::npos || separator == 0U || separator + 1U >= value.size()) {
                 continue;
             }
             std::uintmax_t size = 0U;
@@ -310,7 +304,8 @@ void LoadSettingsLocked() {
             }
         }
     }
-    for (const auto& id : g_hidden_ids) g_enabled_ids.erase(id);
+    for (const auto& id : g_hidden_ids)
+        g_enabled_ids.erase(id);
 }
 
 bool SaveSettingsLocked() {
@@ -326,11 +321,13 @@ bool SaveSettingsLocked() {
     if (!g_last_selected_id.empty()) {
         output << "last_selected=" << g_last_selected_id << '\n';
     }
-    for (const auto& id : g_enabled_ids) output << "enabled=" << id << '\n';
+    for (const auto& id : g_enabled_ids)
+        output << "enabled=" << id << '\n';
     for (const auto& [id, priority] : g_priorities) {
         output << "priority=" << id << '\t' << priority << '\n';
     }
-    for (const auto& id : g_hidden_ids) output << "hidden=" << id << '\n';
+    for (const auto& id : g_hidden_ids)
+        output << "hidden=" << id << '\n';
     for (const auto& [id, timestamp] : g_imported_at) {
         output << "imported_at=" << id << '\t' << timestamp << '\n';
     }
@@ -338,8 +335,8 @@ bool SaveSettingsLocked() {
         output << "managed_size=" << id << '\t' << size << '\n';
     }
     for (const auto& [id, owner] : g_track_pack_owners) {
-        output << "track_pack=" << id << '\t' << owner.track_id << '\t'
-               << owner.digest << '\t' << owner.fingerprint << '\n';
+        output << "track_pack=" << id << '\t' << owner.track_id << '\t' << owner.digest << '\t' << owner.fingerprint
+               << '\n';
     }
     output.close();
     if (!output) {
@@ -353,40 +350,37 @@ bool SaveSettingsLocked() {
         error.clear();
         std::filesystem::rename(temporary, g_settings_path, error);
     }
-    if (error) g_status = "Texture-pack preferences could not be committed.";
+    if (error)
+        g_status = "Texture-pack preferences could not be committed.";
     return !error;
 }
 
 void LoadPackIndexLocked() {
     g_pack_index.clear();
     std::ifstream input(g_index_path);
-    if (!input) return;
+    if (!input)
+        return;
     try {
         const auto root = nlohmann::json::parse(input);
-        if (!root.is_object() || root.value("version", 0) != 1 ||
-            !root.contains("packs") || !root["packs"].is_array()) {
+        if (!root.is_object() || root.value("version", 0) != 1 || !root.contains("packs") ||
+            !root["packs"].is_array()) {
             return;
         }
         for (const auto& value : root["packs"]) {
-            if (!value.is_object()) continue;
+            if (!value.is_object())
+                continue;
             CachedPackInfo cached{};
             cached.info.id = Lower(value.value("id", std::string{}));
             cached.fingerprint = value.value("fingerprint", std::string{});
             cached.info.name = value.value("name", std::string{});
-            cached.info.zip_base_path =
-                value.value("zipBasePath", std::string{});
-            const int format = value.value(
-                "format", static_cast<int>(
-                              dkr::runtime::texture_packs::Format::Unknown));
+            cached.info.zip_base_path = value.value("zipBasePath", std::string{});
+            const int format = value.value("format", static_cast<int>(dkr::runtime::texture_packs::Format::Unknown));
             if (cached.info.id.empty() || cached.fingerprint.empty() ||
-                format < static_cast<int>(
-                             dkr::runtime::texture_packs::Format::NativeRt64) ||
-                format > static_cast<int>(
-                             dkr::runtime::texture_packs::Format::Unknown)) {
+                format < static_cast<int>(dkr::runtime::texture_packs::Format::NativeRt64) ||
+                format > static_cast<int>(dkr::runtime::texture_packs::Format::Unknown)) {
                 continue;
             }
-            cached.info.format =
-                static_cast<dkr::runtime::texture_packs::Format>(format);
+            cached.info.format = static_cast<dkr::runtime::texture_packs::Format>(format);
             cached.info.compatible = value.value("compatible", false);
             cached.info.image_count = value.value("imageCount", std::size_t{0});
             cached.info.detail = value.value("detail", std::string{});
@@ -398,7 +392,8 @@ void LoadPackIndexLocked() {
 }
 
 void SavePackIndexLocked() {
-    if (g_index_path.empty()) return;
+    if (g_index_path.empty())
+        return;
     nlohmann::json root;
     root["version"] = 1;
     root["packs"] = nlohmann::json::array();
@@ -416,11 +411,12 @@ void SavePackIndexLocked() {
     }
     std::error_code error;
     std::filesystem::create_directories(g_index_path.parent_path(), error);
-    if (error) return;
-    const std::filesystem::path temporary =
-        std::filesystem::path(g_index_path.string() + ".tmp");
+    if (error)
+        return;
+    const std::filesystem::path temporary = std::filesystem::path(g_index_path.string() + ".tmp");
     std::ofstream output(temporary, std::ios::trunc);
-    if (!output) return;
+    if (!output)
+        return;
     output << root.dump(2) << '\n';
     output.close();
     if (!output) {
@@ -428,16 +424,17 @@ void SavePackIndexLocked() {
         return;
     }
     std::filesystem::rename(temporary, g_index_path, error);
-    if (!error) return;
+    if (!error)
+        return;
     error.clear();
     std::filesystem::remove(g_index_path, error);
     error.clear();
     std::filesystem::rename(temporary, g_index_path, error);
-    if (error) std::filesystem::remove(temporary, error);
+    if (error)
+        std::filesystem::remove(temporary, error);
 }
 
-dkr::runtime::texture_packs::PackInfo InspectArchive(
-    const std::filesystem::path& path) {
+dkr::runtime::texture_packs::PackInfo InspectArchive(const std::filesystem::path& path) {
     using dkr::runtime::texture_packs::Format;
     using dkr::runtime::texture_packs::PackInfo;
 
@@ -446,8 +443,7 @@ dkr::runtime::texture_packs::PackInfo InspectArchive(
     info.name = DisplayName(path);
     info.path = path;
 
-    std::unique_ptr<RT64::FileSystem> archive =
-        RT64::FileSystemZip::create(path, "");
+    std::unique_ptr<RT64::FileSystem> archive = RT64::FileSystemZip::create(path, "");
     if (!archive) {
         info.detail = "The archive is unreadable or uses an unsupported ZIP compression method.";
         return info;
@@ -469,13 +465,15 @@ dkr::runtime::texture_packs::PackInfo InspectArchive(
         if (std::filesystem::path(lower).filename() == "pack.xml") {
             has_jabo_manifest = true;
         }
-        if (LooksLikeRiceName(entry)) has_rice_names = true;
+        if (LooksLikeRiceName(entry))
+            has_rice_names = true;
         if (IsImage(entry)) {
             ++info.image_count;
-            const std::string extension = Lower(
-                std::filesystem::path(entry).extension().string());
-            if (extension == ".png" || extension == ".dds") ++png_or_dds_count;
-            else ++jpg_count;
+            const std::string extension = Lower(std::filesystem::path(entry).extension().string());
+            if (extension == ".png" || extension == ".dds")
+                ++png_or_dds_count;
+            else
+                ++jpg_count;
         }
     }
 
@@ -487,8 +485,7 @@ dkr::runtime::texture_packs::PackInfo InspectArchive(
         }
         try {
             const auto parsed = nlohmann::json::parse(database.begin(), database.end());
-            if (!parsed.is_object() || !parsed.contains("configuration") ||
-                !parsed.contains("textures")) {
+            if (!parsed.is_object() || !parsed.contains("configuration") || !parsed.contains("textures")) {
                 info.detail = "rt64.json is present but does not contain a native RT64 config.";
                 return info;
             }
@@ -497,29 +494,26 @@ dkr::runtime::texture_packs::PackInfo InspectArchive(
             return info;
         }
         const auto slash = database_entry.find_last_of('/');
-        info.zip_base_path = slash == std::string::npos
-            ? std::string{} : database_entry.substr(0, slash);
+        info.zip_base_path = slash == std::string::npos ? std::string{} : database_entry.substr(0, slash);
         info.format = Format::NativeRt64;
         info.compatible = true;
-        info.detail = std::to_string(info.image_count) +
-            " replacement images; validated native RT64 database.";
+        info.detail = std::to_string(info.image_count) + " replacement images; validated native RT64 database.";
         return info;
     }
 
     if (has_jabo_manifest) {
         info.format = Format::LegacyJabo;
         info.detail = "Unsupported: " + std::to_string(info.image_count) +
-            " images use the legacy Jabo pack.xml/hash layout" +
-            (jpg_count > 0 ? ", including " + std::to_string(jpg_count) +
-                " JPG files" : std::string{}) +
-            ". DKR-R cannot enable this format.";
+                      " images use the legacy Jabo pack.xml/hash layout" +
+                      (jpg_count > 0 ? ", including " + std::to_string(jpg_count) + " JPG files" : std::string{}) +
+                      ". DKR-R cannot enable this format.";
     } else if (has_rice_names) {
         info.format = Format::LegacyRice;
-        info.detail = std::to_string(info.image_count) +
+        info.detail =
+            std::to_string(info.image_count) +
             " images. Legacy Rice filename layout detected. Convert it with RT64's texture tools to produce rt64.json.";
     } else {
-        info.detail = std::to_string(info.image_count) +
-            " images, but no rt64.json replacement database was found.";
+        info.detail = std::to_string(info.image_count) + " images, but no rt64.json replacement database was found.";
     }
     (void)png_or_dds_count;
     return info;
@@ -530,45 +524,36 @@ std::filesystem::path UniqueDestination(const std::filesystem::path& source) {
     const std::string stem = destination.stem().string();
     const std::string extension = destination.extension().string();
     std::error_code error;
-    for (int suffix = 2; std::filesystem::exists(destination, error) && suffix < 1000;
-         ++suffix) {
-        destination = g_pack_directory /
-            (stem + "-" + std::to_string(suffix) + extension);
+    for (int suffix = 2; std::filesystem::exists(destination, error) && suffix < 1000; ++suffix) {
+        destination = g_pack_directory / (stem + "-" + std::to_string(suffix) + extension);
     }
     return destination;
 }
 
 std::filesystem::path UniqueManagedDestination(const std::filesystem::path& source) {
-    std::filesystem::path destination =
-        g_pack_directory / (source.stem().string() + ".rice");
+    std::filesystem::path destination = g_pack_directory / (source.stem().string() + ".rice");
     const std::string stem = destination.stem().string();
     std::error_code error;
-    for (int suffix = 2; std::filesystem::exists(destination, error) && suffix < 1000;
-         ++suffix) {
-        destination = g_pack_directory /
-            (stem + "-" + std::to_string(suffix) + ".rice");
+    for (int suffix = 2; std::filesystem::exists(destination, error) && suffix < 1000; ++suffix) {
+        destination = g_pack_directory / (stem + "-" + std::to_string(suffix) + ".rice");
     }
     return destination;
 }
 
-bool EnsureManagedRiceCoordinatePolicy(const std::filesystem::path& database_path,
-                                       nlohmann::json& database,
+bool EnsureManagedRiceCoordinatePolicy(const std::filesystem::path& database_path, nlohmann::json& database,
                                        std::string& error_text) {
-    if (!database.contains("configuration") ||
-        !database["configuration"].is_object()) {
+    if (!database.contains("configuration") || !database["configuration"].is_object()) {
         error_text = "Managed Rice database has no RT64 configuration.";
         return false;
     }
     auto& configuration = database["configuration"];
-    if (configuration.value("defaultShift", std::string{}) ==
-        dkr::runtime::rice_texture::kLegacyCoordinateShift) {
+    if (configuration.value("defaultShift", std::string{}) == dkr::runtime::rice_texture::kLegacyCoordinateShift) {
         return true;
     }
 
     // DKR-R owns directories carrying dkr-r-rice-import.json. Upgrade only
     // those managed bridges; native RT64 packs retain the author's shift.
-    configuration["defaultShift"] = std::string(
-        dkr::runtime::rice_texture::kLegacyCoordinateShift);
+    configuration["defaultShift"] = std::string(dkr::runtime::rice_texture::kLegacyCoordinateShift);
     std::ofstream database_file(database_path, std::ios::trunc);
     if (!database_file) {
         error_text = "Managed Rice coordinates could not be upgraded safely.";
@@ -583,8 +568,7 @@ bool EnsureManagedRiceCoordinatePolicy(const std::filesystem::path& database_pat
     return true;
 }
 
-dkr::runtime::texture_packs::PackInfo InspectDirectory(
-    const std::filesystem::path& path) {
+dkr::runtime::texture_packs::PackInfo InspectDirectory(const std::filesystem::path& path) {
     using dkr::runtime::texture_packs::Format;
     using dkr::runtime::texture_packs::PackInfo;
 
@@ -605,13 +589,12 @@ dkr::runtime::texture_packs::PackInfo InspectDirectory(
     try {
         std::ifstream database_file(database_path);
         auto database = nlohmann::json::parse(database_file);
-        if (!database.is_object() || !database.contains("configuration") ||
-            !database.contains("textures") || !database["textures"].is_array()) {
+        if (!database.is_object() || !database.contains("configuration") || !database.contains("textures") ||
+            !database["textures"].is_array()) {
             info.detail = "Managed rt64.json does not contain a native RT64 database.";
             return info;
         }
-        if (managed_rice && !EnsureManagedRiceCoordinatePolicy(
-                database_path, database, info.detail)) {
+        if (managed_rice && !EnsureManagedRiceCoordinatePolicy(database_path, database, info.detail)) {
             return info;
         }
         if (!managed_rice) {
@@ -620,24 +603,19 @@ dkr::runtime::texture_packs::PackInfo InspectDirectory(
             std::set<std::string> rice_identities;
             std::set<std::string> native_aliases;
             for (const auto& texture : database["textures"]) {
-                if (!texture.is_object() || !texture.contains("hashes") ||
-                    !texture["hashes"].is_object()) {
+                if (!texture.is_object() || !texture.contains("hashes") || !texture["hashes"].is_object()) {
                     info.detail = "Managed RT64 database contains an invalid texture entry.";
                     return info;
                 }
-                const std::string rice = Lower(
-                    texture["hashes"].value("rice", std::string{}));
-                const std::string alias = Lower(
-                    texture["hashes"].value("rt64", std::string{}));
+                const std::string rice = Lower(texture["hashes"].value("rice", std::string{}));
+                const std::string alias = Lower(texture["hashes"].value("rt64", std::string{}));
                 if (!dkr::runtime::rice_texture::valid_identity(rice) ||
                     alias != dkr::runtime::rice_texture::native_alias_string(rice) ||
-                    !rice_identities.insert(rice).second ||
-                    !native_aliases.insert(alias).second) {
+                    !rice_identities.insert(rice).second || !native_aliases.insert(alias).second) {
                     info.detail = "Managed Rice database has an invalid, duplicate, or mismatched identity.";
                     return info;
                 }
-                const auto image_path = path /
-                    ("Diddy Kong Racing#" + rice + "_all.png");
+                const auto image_path = path / ("Diddy Kong Racing#" + rice + "_all.png");
                 if (!std::filesystem::is_regular_file(image_path, error)) {
                     info.detail = "Managed Rice database is missing a converted PNG for " + rice + ".";
                     return info;
@@ -657,14 +635,12 @@ dkr::runtime::texture_packs::PackInfo InspectDirectory(
             const std::size_t source_images = report.value("sourceImages", 0U);
             const std::size_t identities = report.value("convertedIdentities", 0U);
             const std::size_t pairs = report.value("mergedRgbAlphaPairs", 0U);
-            info.name = std::filesystem::path(
-                report.value("sourceArchive", path.filename().string())).stem().string();
+            info.name = std::filesystem::path(report.value("sourceArchive", path.filename().string())).stem().string();
             info.format = Format::RiceRt64;
             info.compatible = identities > 0 && identities == info.image_count;
-            info.detail = std::to_string(identities) + "/" +
-                std::to_string(identities) + " Rice identities ready from " +
-                std::to_string(source_images) + " source PNGs; " +
-                std::to_string(pairs) + " split RGB/alpha pairs reconstructed.";
+            info.detail = std::to_string(identities) + "/" + std::to_string(identities) +
+                          " Rice identities ready from " + std::to_string(source_images) + " source PNGs; " +
+                          std::to_string(pairs) + " split RGB/alpha pairs reconstructed.";
             return info;
         } catch (const std::exception& exception) {
             info.detail = std::string("Rice import report is invalid: ") + exception.what();
@@ -674,25 +650,23 @@ dkr::runtime::texture_packs::PackInfo InspectDirectory(
 
     info.format = Format::NativeRt64;
     info.compatible = true;
-    info.detail = std::to_string(info.image_count) +
-        " replacement identities; validated native RT64 directory.";
+    info.detail = std::to_string(info.image_count) + " replacement identities; validated native RT64 directory.";
     return info;
 }
 
 bool IsDirectManagedChild(const std::filesystem::path& path) {
-    if (g_pack_directory.empty() || path.empty()) return false;
+    if (g_pack_directory.empty() || path.empty())
+        return false;
     std::error_code error;
-    const std::filesystem::path root =
-        std::filesystem::absolute(g_pack_directory, error).lexically_normal();
-    if (error) return false;
+    const std::filesystem::path root = std::filesystem::absolute(g_pack_directory, error).lexically_normal();
+    if (error)
+        return false;
     error.clear();
-    const std::filesystem::path candidate =
-        std::filesystem::absolute(path, error).lexically_normal();
+    const std::filesystem::path candidate = std::filesystem::absolute(path, error).lexically_normal();
     return !error && candidate != root && candidate.parent_path() == root;
 }
 
-bool RemoveManagedPath(const std::filesystem::path& path,
-                       std::string& error_text) {
+bool RemoveManagedPath(const std::filesystem::path& path, std::string& error_text) {
     if (!IsDirectManagedChild(path)) {
         error_text = "DKR-R refused to delete a path outside its managed texture-pack folder.";
         return false;
@@ -700,8 +674,7 @@ bool RemoveManagedPath(const std::filesystem::path& path,
     std::error_code error;
     const auto status = std::filesystem::symlink_status(path, error);
     if (error && error != std::errc::no_such_file_or_directory) {
-        error_text = "The managed texture pack could not be inspected: " +
-            error.message();
+        error_text = "The managed texture pack could not be inspected: " + error.message();
         return false;
     }
     error.clear();
@@ -713,8 +686,7 @@ bool RemoveManagedPath(const std::filesystem::path& path,
         std::filesystem::remove_all(path, error);
     }
     if (error) {
-        error_text = "The managed texture pack could not be deleted: " +
-            error.message();
+        error_text = "The managed texture pack could not be deleted: " + error.message();
         return false;
     }
     return true;
@@ -727,8 +699,7 @@ bool RemoveManagedPath(const std::filesystem::path& path,
 std::string ArchiveFingerprint(const std::filesystem::path& path) {
     try {
         mz_zip_archive zip{};
-        if (mz_zip_reader_init_file(&zip, path.string().c_str(), 0) ==
-            MZ_FALSE) {
+        if (mz_zip_reader_init_file(&zip, path.string().c_str(), 0) == MZ_FALSE) {
             return {};
         }
         std::vector<std::string> entries;
@@ -740,14 +711,13 @@ std::string ArchiveFingerprint(const std::filesystem::path& path) {
                 continue;
             }
             char suffix[48];
-            std::snprintf(suffix, sizeof(suffix), ":%08x:%llu",
-                          static_cast<unsigned>(stat.m_crc32),
+            std::snprintf(suffix, sizeof(suffix), ":%08x:%llu", static_cast<unsigned>(stat.m_crc32),
                           static_cast<unsigned long long>(stat.m_uncomp_size));
             entries.push_back(std::string(stat.m_filename) + suffix);
         }
         mz_zip_reader_end(&zip);
         std::sort(entries.begin(), entries.end());
-        std::uint64_t hash = 14695981039346656037ULL;   // FNV-1a
+        std::uint64_t hash = 14695981039346656037ULL; // FNV-1a
         for (const std::string& entry : entries) {
             for (const unsigned char character : entry) {
                 hash = (hash ^ character) * 1099511628211ULL;
@@ -755,8 +725,7 @@ std::string ArchiveFingerprint(const std::filesystem::path& path) {
             hash = (hash ^ 0x0AU) * 1099511628211ULL;
         }
         char text[17];
-        std::snprintf(text, sizeof(text), "%016llx",
-                      static_cast<unsigned long long>(hash));
+        std::snprintf(text, sizeof(text), "%016llx", static_cast<unsigned long long>(hash));
         return text;
     } catch (const std::exception&) {
         return {};
@@ -769,11 +738,16 @@ namespace dkr::runtime::texture_packs {
 
 const char* format_name(Format format) {
     switch (format) {
-    case Format::NativeRt64: return "Native RT64";
-    case Format::RiceRt64: return "Rice / RT64 Bridge";
-    case Format::LegacyRice: return "Legacy Rice";
-    case Format::LegacyJabo: return "Legacy Jabo";
-    default: return "Unknown";
+    case Format::NativeRt64:
+        return "Native RT64";
+    case Format::RiceRt64:
+        return "Rice / RT64 Bridge";
+    case Format::LegacyRice:
+        return "Legacy Rice";
+    case Format::LegacyJabo:
+        return "Legacy Jabo";
+    default:
+        return "Unknown";
     }
 }
 
@@ -786,9 +760,8 @@ PackInfo PlaceholderInfo(const std::filesystem::path& path, bool directory) {
     info.path = path;
     if (directory) {
         std::error_code error;
-        info.format = std::filesystem::is_regular_file(
-                          path / "dkr-r-rice-import.json", error)
-            ? Format::RiceRt64 : Format::NativeRt64;
+        info.format = std::filesystem::is_regular_file(path / "dkr-r-rice-import.json", error) ? Format::RiceRt64
+                                                                                               : Format::NativeRt64;
     } else if (Lower(path.extension().string()) == ".rtz") {
         info.format = Format::NativeRt64;
     }
@@ -796,11 +769,9 @@ PackInfo PlaceholderInfo(const std::filesystem::path& path, bool directory) {
     return info;
 }
 
-void ScanLibrary(bool cache_only, bool force_deep,
-                 std::stop_token stop_token = {}) {
+void ScanLibrary(bool cache_only, bool force_deep, std::stop_token stop_token = {}) {
     std::scoped_lock refresh_lock(g_refresh_mutex);
-    const auto refresh_started_at =
-        dkr::runtime::startup_performance::Clock::now();
+    const auto refresh_started_at = dkr::runtime::startup_performance::Clock::now();
     std::filesystem::path directory;
     std::set<std::string> enabled;
     std::set<std::string> hidden;
@@ -840,8 +811,7 @@ void ScanLibrary(bool cache_only, bool force_deep,
         const auto managed_size = managed_sizes.find(info.id);
         if (managed_size != managed_sizes.end()) {
             info.managed_size_bytes = managed_size->second;
-        } else if (allow_deep_size ||
-                   std::filesystem::is_regular_file(info.path)) {
+        } else if (allow_deep_size || std::filesystem::is_regular_file(info.path)) {
             info.managed_size_bytes = ManagedSize(info.path);
             managed_sizes[info.id] = info.managed_size_bytes;
             imported_metadata_changed = true;
@@ -862,28 +832,29 @@ void ScanLibrary(bool cache_only, bool force_deep,
     if (!directory.empty()) {
         std::filesystem::create_directories(directory, error);
         for (const auto& entry : std::filesystem::directory_iterator(directory, error)) {
-            if (stop_token.stop_requested()) return;
-            if (error) break;
+            if (stop_token.stop_requested())
+                return;
+            if (error)
+                break;
             const bool is_directory = entry.is_directory(error);
-            if (error) break;
-            if (is_directory &&
-                Lower(entry.path().extension().string()) == ".importing") {
+            if (error)
+                break;
+            if (is_directory && Lower(entry.path().extension().string()) == ".importing") {
                 continue;
             }
             if (!is_directory) {
-                if (!entry.is_regular_file(error)) continue;
-                const std::string extension =
-                    Lower(entry.path().extension().string());
-                if (extension != ".zip" && extension != ".rtz") continue;
+                if (!entry.is_regular_file(error))
+                    continue;
+                const std::string extension = Lower(entry.path().extension().string());
+                if (extension != ".zip" && extension != ".rtz")
+                    continue;
             }
             const std::string id = StableId(entry.path());
-            const std::string fingerprint =
-                PackFingerprint(entry.path(), is_directory);
+            const std::string fingerprint = PackFingerprint(entry.path(), is_directory);
             PackInfo info{};
             bool fully_inspected = false;
             const auto cached = pack_index.find(id);
-            if (!force_deep && cached != pack_index.end() &&
-                cached->second.fingerprint == fingerprint) {
+            if (!force_deep && cached != pack_index.end() && cached->second.fingerprint == fingerprint) {
                 info = cached->second.info;
                 info.path = entry.path();
                 fully_inspected = true;
@@ -892,8 +863,7 @@ void ScanLibrary(bool cache_only, bool force_deep,
                 info = PlaceholderInfo(entry.path(), is_directory);
                 ++placeholders;
             } else {
-                info = is_directory ? InspectDirectory(entry.path())
-                                    : InspectArchive(entry.path());
+                info = is_directory ? InspectDirectory(entry.path()) : InspectArchive(entry.path());
                 fully_inspected = true;
                 ++deep_scans;
             }
@@ -918,9 +888,7 @@ void ScanLibrary(bool cache_only, bool force_deep,
         }
     }
     std::sort(scanned.begin(), scanned.end(),
-              [](const PackInfo& left, const PackInfo& right) {
-                  return Lower(left.name) < Lower(right.name);
-              });
+              [](const PackInfo& left, const PackInfo& right) { return Lower(left.name) < Lower(right.name); });
     const std::size_t scanned_count = scanned.size();
     {
         std::scoped_lock lock(g_mutex);
@@ -936,8 +904,7 @@ void ScanLibrary(bool cache_only, bool force_deep,
                 info.texture_digest = owner->second.digest;
             }
             info.hidden = g_hidden_ids.contains(info.id);
-            info.enabled = !info.hidden && info.compatible &&
-                           g_enabled_ids.contains(info.id);
+            info.enabled = !info.hidden && info.compatible && g_enabled_ids.contains(info.id);
         }
         if (imported_metadata_changed) {
             g_imported_at = std::move(imported_at);
@@ -949,10 +916,13 @@ void ScanLibrary(bool cache_only, bool force_deep,
         }
         g_packs = std::move(scanned);
         const bool priorities_changed = texture_priority::normalize(g_packs, g_priorities);
-        if (imported_metadata_changed || priorities_changed) SaveSettingsLocked();
+        if (imported_metadata_changed || priorities_changed)
+            SaveSettingsLocked();
         ++g_generation;
-        if (error) g_status = "The texture-pack folder could not be scanned: " + error.message();
-        else if (g_packs.empty()) g_status = "No texture packs imported yet.";
+        if (error)
+            g_status = "The texture-pack folder could not be scanned: " + error.message();
+        else if (g_packs.empty())
+            g_status = "No texture packs imported yet.";
         else if (placeholders > 0U)
             g_status = "Texture-pack details will be indexed when the library is opened.";
     }
@@ -960,16 +930,16 @@ void ScanLibrary(bool cache_only, bool force_deep,
                  "[perf][startup] texture-pack-count=%zu cache-hits=%zu "
                  "deep-scans=%zu deferred=%zu\n",
                  scanned_count, cache_hits, deep_scans, placeholders);
-    dkr::runtime::startup_performance::report(
-        cache_only ? "texture-pack-index-load" : "texture-pack-refresh",
-        refresh_started_at);
+    dkr::runtime::startup_performance::report(cache_only ? "texture-pack-index-load" : "texture-pack-refresh",
+                                              refresh_started_at);
 }
 
 } // namespace
 
 void configure(const std::filesystem::path& config_directory) {
     g_background_refresh.request_stop();
-    if (g_background_refresh.joinable()) g_background_refresh.join();
+    if (g_background_refresh.joinable())
+        g_background_refresh.join();
     g_background_refresh_started.store(false, std::memory_order_release);
     {
         std::scoped_lock lock(g_mutex);
@@ -993,19 +963,18 @@ void configure(const std::filesystem::path& config_directory) {
 
 void request_background_refresh() {
     bool expected = false;
-    if (!g_background_refresh_started.compare_exchange_strong(
-            expected, true, std::memory_order_acq_rel)) {
+    if (!g_background_refresh_started.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
         return;
     }
-    if (g_background_refresh.joinable()) g_background_refresh.join();
-    g_background_refresh = std::jthread([](std::stop_token stop_token) {
-        ScanLibrary(false, false, stop_token);
-    });
+    if (g_background_refresh.joinable())
+        g_background_refresh.join();
+    g_background_refresh = std::jthread([](std::stop_token stop_token) { ScanLibrary(false, false, stop_token); });
 }
 
 void refresh() {
     g_background_refresh.request_stop();
-    if (g_background_refresh.joinable()) g_background_refresh.join();
+    if (g_background_refresh.joinable())
+        g_background_refresh.join();
     g_background_refresh_started.store(true, std::memory_order_release);
     ScanLibrary(false, true);
 }
@@ -1018,14 +987,16 @@ std::vector<PackInfo> snapshot(bool include_hidden) {
     };
     if (include_hidden) {
         auto result = g_packs;
-        for (auto& pack : result) pack = named(std::move(pack));
+        for (auto& pack : result)
+            pack = named(std::move(pack));
         return result;
     }
     std::vector<PackInfo> visible;
     visible.reserve(g_packs.size());
     std::copy_if(g_packs.begin(), g_packs.end(), std::back_inserter(visible),
                  [](const PackInfo& pack) { return !pack.hidden; });
-    for (auto& pack : visible) pack = named(std::move(pack));
+    for (auto& pack : visible)
+        pack = named(std::move(pack));
     return visible;
 }
 
@@ -1035,16 +1006,18 @@ std::uint64_t generation() {
 }
 
 bool import_archive(const std::filesystem::path& source, std::string& status_text,
-                    const ImportProgressCallback& progress,
-                    const TrackPackOwner* owner) {
+                    const ImportProgressCallback& progress, const TrackPackOwner* owner) {
     // See g_import_apply_hold: whatever this import changes reaches RT64 as a
     // single reload, after it returns, however many steps it takes to get there.
     struct ApplyHold {
-        ApplyHold() { g_import_apply_hold.fetch_add(1, std::memory_order_acq_rel); }
-        ~ApplyHold() { g_import_apply_hold.fetch_sub(1, std::memory_order_acq_rel); }
+        ApplyHold() {
+            g_import_apply_hold.fetch_add(1, std::memory_order_acq_rel);
+        }
+        ~ApplyHold() {
+            g_import_apply_hold.fetch_sub(1, std::memory_order_acq_rel);
+        }
     } apply_hold;
-    if (!ReportImportProgress(progress, 0.01F,
-                              "Validating texture-pack archive")) {
+    if (!ReportImportProgress(progress, 0.01F, "Validating texture-pack archive")) {
         status_text = "Texture-pack import cancelled.";
         return false;
     }
@@ -1058,8 +1031,7 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
         status_text = "Texture packs must be supplied as ZIP or RTZ archives.";
         return false;
     }
-    constexpr std::uintmax_t maximum_archive_size =
-        static_cast<std::uintmax_t>(4) * 1024U * 1024U * 1024U;
+    constexpr std::uintmax_t maximum_archive_size = static_cast<std::uintmax_t>(4) * 1024U * 1024U * 1024U;
     const auto size = std::filesystem::file_size(source, error);
     if (error || size == 0 || size > maximum_archive_size) {
         status_text = "The texture-pack archive is empty, unreadable, or larger than 4 GB.";
@@ -1075,29 +1047,25 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
     // over the wrong byte order, and a fixed re-export changed every name but
     // not one payload. A record from before fingerprints existed never
     // matches, so such an install heals on its next import.
-    const std::string fingerprint =
-        owner != nullptr ? ArchiveFingerprint(source) : std::string{};
+    const std::string fingerprint = owner != nullptr ? ArchiveFingerprint(source) : std::string{};
     std::string stale_track_pack_id;
     std::size_t stale_track_priority = 0U;
     if (owner != nullptr) {
         std::scoped_lock lock(g_mutex);
         for (const auto& pack : g_packs) {
-            if (pack.origin != Origin::TrackPack) continue;
+            if (pack.origin != Origin::TrackPack)
+                continue;
             const auto record = g_track_pack_owners.find(pack.id);
-            const bool same_pack =
-                !owner->texture_digest.empty() && !fingerprint.empty() &&
-                pack.texture_digest == owner->texture_digest &&
-                record != g_track_pack_owners.end() &&
-                record->second.fingerprint == fingerprint;
+            const bool same_pack = !owner->texture_digest.empty() && !fingerprint.empty() &&
+                                   pack.texture_digest == owner->texture_digest &&
+                                   record != g_track_pack_owners.end() && record->second.fingerprint == fingerprint;
             if (same_pack) {
-                if (pack.compatible && !pack.hidden &&
-                    !g_enabled_ids.contains(pack.id)) {
+                if (pack.compatible && !pack.hidden && !g_enabled_ids.contains(pack.id)) {
                     g_enabled_ids.insert(pack.id);
                     SaveSettingsLocked();
                     ++g_generation;
                 }
-                status_text =
-                    pack.name + " is already installed for this track.";
+                status_text = pack.name + " is already installed for this track.";
                 return true;
             }
             if (pack.owner_track_id == owner->track_id) {
@@ -1108,22 +1076,22 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
     }
     if (!stale_track_pack_id.empty()) {
         std::string ignored;
-        if (!delete_managed(stale_track_pack_id, ignored)) stale_track_priority = 0U;
+        if (!delete_managed(stale_track_pack_id, ignored))
+            stale_track_priority = 0U;
     }
 
     const auto record_track_pack = [&](const std::filesystem::path& dest) {
-        if (owner == nullptr) return;
+        if (owner == nullptr)
+            return;
         const std::string id = StableId(dest);
         std::scoped_lock lock(g_mutex);
-        g_track_pack_owners[id] = {owner->track_id, owner->texture_digest,
-                                   fingerprint};
-        g_enabled_ids.insert(id);   // a track pack is born enabled
+        g_track_pack_owners[id] = {owner->track_id, owner->texture_digest, fingerprint};
+        g_enabled_ids.insert(id); // a track pack is born enabled
         SaveSettingsLocked();
         ++g_generation;
     };
 
-    if (!ReportImportProgress(progress, 0.04F,
-                              "Inspecting texture-pack archive")) {
+    if (!ReportImportProgress(progress, 0.04F, "Inspecting texture-pack archive")) {
         status_text = "Texture-pack import cancelled.";
         return false;
     }
@@ -1134,8 +1102,7 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
     }
 
     if (inspection.format == Format::LegacyRice) {
-        std::unique_ptr<RT64::FileSystem> archive =
-            RT64::FileSystemZip::create(source, "");
+        std::unique_ptr<RT64::FileSystem> archive = RT64::FileSystemZip::create(source, "");
         if (!archive) {
             status_text = "The Rice archive could not be reopened for conversion.";
             return false;
@@ -1149,8 +1116,7 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
         }
         const std::filesystem::path temporary =
             destination.parent_path() / (destination.filename().string() + ".importing");
-        if (temporary.parent_path() != g_pack_directory ||
-            destination.parent_path() != g_pack_directory) {
+        if (temporary.parent_path() != g_pack_directory || destination.parent_path() != g_pack_directory) {
             status_text = "The managed Rice destination failed its safety check.";
             return false;
         }
@@ -1159,29 +1125,21 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
 
         rice_texture::ImportResult conversion;
         std::string conversion_error;
-        const auto rice_progress = [&](std::size_t completed,
-                                       std::size_t total,
-                                       const char* stage) {
-            const float conversion_fraction = total == 0
-                ? 0.08F
-                : 0.08F + 0.82F * static_cast<float>(completed) /
-                    static_cast<float>(total);
+        const auto rice_progress = [&](std::size_t completed, std::size_t total, const char* stage) {
+            const float conversion_fraction =
+                total == 0 ? 0.08F : 0.08F + 0.82F * static_cast<float>(completed) / static_cast<float>(total);
             return ReportImportProgress(progress, conversion_fraction, stage);
         };
-        if (!rice_texture::convert_archive(*archive, temporary,
-                                           source.filename().string(),
-                                           conversion, conversion_error,
-                                           rice_progress)) {
+        if (!rice_texture::convert_archive(*archive, temporary, source.filename().string(), conversion,
+                                           conversion_error, rice_progress)) {
             std::filesystem::remove_all(temporary, error);
-            status_text = conversion_error == "Import cancelled."
-                ? "Texture-pack import cancelled."
-                : "Rice import failed: " + conversion_error;
+            status_text = conversion_error == "Import cancelled." ? "Texture-pack import cancelled."
+                                                                  : "Rice import failed: " + conversion_error;
             return false;
         }
         // From this point forward cancellation is disabled: rename is the
         // atomic commit and must be allowed to finish once announced.
-        ReportImportProgress(progress, 0.94F,
-                             "Committing converted texture pack", true);
+        ReportImportProgress(progress, 0.94F, "Committing converted texture pack", true);
         std::filesystem::rename(temporary, destination, error);
         if (error) {
             const std::string rename_error = error.message();
@@ -1202,8 +1160,8 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
             set_priority(StableId(destination), stale_track_priority, ignored);
         }
         const auto imported = InspectDirectory(destination);
-        status_text = "Imported " + source.filename().string() + " as " +
-            format_name(imported.format) + ". " + imported.detail;
+        status_text =
+            "Imported " + source.filename().string() + " as " + format_name(imported.format) + ". " + imported.detail;
         {
             std::scoped_lock lock(g_mutex);
             g_status = status_text;
@@ -1218,10 +1176,9 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
         std::filesystem::create_directories(g_pack_directory, error);
         destination = UniqueDestination(source);
     }
-    const std::filesystem::path temporary = destination.parent_path() /
-        (destination.filename().string() + ".importing");
-    if (temporary.parent_path() != g_pack_directory ||
-        destination.parent_path() != g_pack_directory) {
+    const std::filesystem::path temporary =
+        destination.parent_path() / (destination.filename().string() + ".importing");
+    if (temporary.parent_path() != g_pack_directory || destination.parent_path() != g_pack_directory) {
         status_text = "The managed texture-pack destination failed its safety check.";
         return false;
     }
@@ -1243,7 +1200,8 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
     while (input) {
         input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
         const std::streamsize count = input.gcount();
-        if (count <= 0) break;
+        if (count <= 0)
+            break;
         output.write(buffer.data(), count);
         if (!output) {
             output.close();
@@ -1252,10 +1210,8 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
             return false;
         }
         copied += static_cast<std::uintmax_t>(count);
-        const float copy_fraction = 0.08F + 0.84F *
-            static_cast<float>(copied) / static_cast<float>(size);
-        if (!ReportImportProgress(progress, copy_fraction,
-                                  "Copying texture-pack archive")) {
+        const float copy_fraction = 0.08F + 0.84F * static_cast<float>(copied) / static_cast<float>(size);
+        if (!ReportImportProgress(progress, copy_fraction, "Copying texture-pack archive")) {
             output.close();
             input.close();
             std::filesystem::remove(temporary, error);
@@ -1291,8 +1247,8 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
         set_priority(StableId(destination), stale_track_priority, ignored);
     }
     const auto imported = InspectArchive(destination);
-    status_text = "Imported " + destination.filename().string() + " as " +
-        format_name(imported.format) + ". " + imported.detail;
+    status_text =
+        "Imported " + destination.filename().string() + " as " + format_name(imported.format) + ". " + imported.detail;
     {
         std::scoped_lock lock(g_mutex);
         g_status = status_text;
@@ -1304,13 +1260,16 @@ bool import_archive(const std::filesystem::path& source, std::string& status_tex
 void set_enabled(const std::string& id, bool enabled) {
     std::scoped_lock lock(g_mutex);
     const std::string normalized = Lower(id);
-    const auto match = std::find_if(g_packs.begin(), g_packs.end(),
-        [&](const PackInfo& pack) { return pack.id == normalized; });
-    if (match == g_packs.end() || !match->compatible || match->hidden) return;
+    const auto match =
+        std::find_if(g_packs.begin(), g_packs.end(), [&](const PackInfo& pack) { return pack.id == normalized; });
+    if (match == g_packs.end() || !match->compatible || match->hidden)
+        return;
     match->enabled = enabled;
     g_last_selected_id = normalized;
-    if (enabled) g_enabled_ids.insert(normalized);
-    else g_enabled_ids.erase(normalized);
+    if (enabled)
+        g_enabled_ids.insert(normalized);
+    else
+        g_enabled_ids.erase(normalized);
     ++g_generation;
     SaveSettingsLocked();
     g_status = match->name + (enabled ? " queued for live activation." : " queued for live removal.");
@@ -1319,8 +1278,8 @@ void set_enabled(const std::string& id, bool enabled) {
 bool set_priority(const std::string& id, std::size_t priority, std::string& status_text) {
     std::scoped_lock lock(g_mutex);
     const std::string normalized = Lower(id);
-    const auto match = std::find_if(g_packs.begin(), g_packs.end(),
-        [&](const PackInfo& pack) { return pack.id == normalized; });
+    const auto match =
+        std::find_if(g_packs.begin(), g_packs.end(), [&](const PackInfo& pack) { return pack.id == normalized; });
     if (match == g_packs.end() || priority == 0U || priority > g_packs.size()) {
         status_text = "Choose an available texture-pack priority.";
         return false;
@@ -1331,7 +1290,8 @@ bool set_priority(const std::string& id, std::size_t priority, std::string& stat
         return true;
     }
     const auto previous = g_priorities;
-    if (!texture_priority::move(g_packs, g_priorities, normalized, priority)) return false;
+    if (!texture_priority::move(g_packs, g_priorities, normalized, priority))
+        return false;
     if (!SaveSettingsLocked()) {
         g_priorities = previous;
         texture_priority::normalize(g_packs, g_priorities);
@@ -1340,7 +1300,7 @@ bool set_priority(const std::string& id, std::size_t priority, std::string& stat
     }
     ++g_generation;
     g_status = name + " moved to priority " + std::to_string(priority) +
-        ". Lower numbers win texture clashes; the order applies live.";
+               ". Lower numbers win texture clashes; the order applies live.";
     status_text = g_status;
     return true;
 }
@@ -1348,22 +1308,20 @@ bool set_priority(const std::string& id, std::size_t priority, std::string& stat
 bool toggle_last_selected(std::string& status) {
     std::scoped_lock lock(g_mutex);
     auto match = std::find_if(g_packs.begin(), g_packs.end(),
-        [](const PackInfo& pack) {
-            return Lower(pack.id) == g_last_selected_id;
-        });
+                              [](const PackInfo& pack) { return Lower(pack.id) == g_last_selected_id; });
     if (match == g_packs.end() || !match->compatible || match->hidden) {
         status = "No available texture pack has been selected yet.";
         g_status = status;
         return false;
     }
     match->enabled = !match->enabled;
-    if (match->enabled) g_enabled_ids.insert(g_last_selected_id);
-    else g_enabled_ids.erase(g_last_selected_id);
+    if (match->enabled)
+        g_enabled_ids.insert(g_last_selected_id);
+    else
+        g_enabled_ids.erase(g_last_selected_id);
     SaveSettingsLocked();
     ++g_generation;
-    status = match->name + (match->enabled
-        ? " queued for live activation."
-        : " queued for live removal.");
+    status = match->name + (match->enabled ? " queued for live activation." : " queued for live removal.");
     g_status = status;
     return true;
 }
@@ -1371,8 +1329,8 @@ bool toggle_last_selected(std::string& status) {
 bool set_hidden(const std::string& id, bool hidden, std::string& status_text) {
     std::scoped_lock lock(g_mutex);
     const std::string normalized = Lower(id);
-    const auto match = std::find_if(g_packs.begin(), g_packs.end(),
-        [&](const PackInfo& pack) { return pack.id == normalized; });
+    const auto match =
+        std::find_if(g_packs.begin(), g_packs.end(), [&](const PackInfo& pack) { return pack.id == normalized; });
     if (match == g_packs.end()) {
         status_text = "The selected texture pack is no longer available.";
         return false;
@@ -1387,9 +1345,8 @@ bool set_hidden(const std::string& id, bool hidden, std::string& status_text) {
     }
     ++g_generation;
     SaveSettingsLocked();
-    g_status = match->name + (hidden
-        ? " is hidden. Its managed files remain on disk."
-        : " is visible in the texture-pack library again.");
+    g_status = match->name + (hidden ? " is hidden. Its managed files remain on disk."
+                                     : " is visible in the texture-pack library again.");
     status_text = g_status;
     return true;
 }
@@ -1400,8 +1357,8 @@ bool delete_managed(const std::string& id, std::string& status_text) {
     bool defer_until_reload = false;
     {
         std::scoped_lock lock(g_mutex);
-        const auto match = std::find_if(g_packs.begin(), g_packs.end(),
-            [&](const PackInfo& pack) { return pack.id == normalized; });
+        const auto match =
+            std::find_if(g_packs.begin(), g_packs.end(), [&](const PackInfo& pack) { return pack.id == normalized; });
         if (match == g_packs.end()) {
             status_text = "The selected texture pack is no longer available.";
             return false;
@@ -1415,7 +1372,8 @@ bool delete_managed(const std::string& id, std::string& status_text) {
     }
 
     if (!defer_until_reload) {
-        if (!RemoveManagedPath(selected.path, status_text)) return false;
+        if (!RemoveManagedPath(selected.path, status_text))
+            return false;
     }
 
     {
@@ -1426,8 +1384,7 @@ bool delete_managed(const std::string& id, std::string& status_text) {
             // the archive/directory. A crash before the next reload therefore
             // leaves the pack hidden rather than silently re-enabling it.
             g_hidden_ids.insert(normalized);
-            g_pending_deletions.push_back(
-                {normalized, selected.path, selected.name});
+            g_pending_deletions.push_back({normalized, selected.path, selected.name});
         } else {
             g_hidden_ids.erase(normalized);
             g_imported_at.erase(normalized);
@@ -1435,35 +1392,31 @@ bool delete_managed(const std::string& id, std::string& status_text) {
         }
         g_track_pack_owners.erase(normalized);
         g_priorities.erase(normalized);
-        g_packs.erase(std::remove_if(g_packs.begin(), g_packs.end(),
-            [&](const PackInfo& pack) { return pack.id == normalized; }),
+        g_packs.erase(
+            std::remove_if(g_packs.begin(), g_packs.end(), [&](const PackInfo& pack) { return pack.id == normalized; }),
             g_packs.end());
         texture_priority::normalize(g_packs, g_priorities);
         ++g_generation;
         SaveSettingsLocked();
         g_status = defer_until_reload
-            ? selected.name +
-                " will be permanently deleted after RT64 releases the active pack."
-            : selected.name + " was permanently deleted from DKR-R's managed library.";
+                       ? selected.name + " will be permanently deleted after RT64 releases the active pack."
+                       : selected.name + " was permanently deleted from DKR-R's managed library.";
         status_text = g_status;
     }
     return true;
 }
 
-TrackPackState track_pack_state(const std::string& track_id,
-                                const std::string& expected_digest) {
+TrackPackState track_pack_state(const std::string& track_id, const std::string& expected_digest) {
     std::scoped_lock lock(g_mutex);
     TrackPackState state;
     for (const auto& pack : g_packs) {
-        if (pack.origin != Origin::TrackPack ||
-            pack.owner_track_id != track_id) {
+        if (pack.origin != Origin::TrackPack || pack.owner_track_id != track_id) {
             continue;
         }
         state.installed = true;
         state.pack_id = pack.id;
         state.enabled = pack.enabled;
-        state.digest_matches = !expected_digest.empty() &&
-                               pack.texture_digest == expected_digest;
+        state.digest_matches = !expected_digest.empty() && pack.texture_digest == expected_digest;
     }
     return state;
 }
@@ -1512,11 +1465,13 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
     std::uint64_t generation = 0;
     // An import in flight applies once, when it is done. The generation is left
     // unconsumed, so the frame after the hold lifts picks it up.
-    if (g_import_apply_hold.load(std::memory_order_acquire) > 0) return;
+    if (g_import_apply_hold.load(std::memory_order_acquire) > 0)
+        return;
     {
         std::scoped_lock lock(g_mutex);
         generation = g_generation;
-        if (generation == g_applied_generation && modern_profile == g_applied_modern) return;
+        if (generation == g_applied_generation && modern_profile == g_applied_modern)
+            return;
         previous_replacements = g_applied_replacements;
         if (modern_profile) {
             for (const auto* pack : texture_priority::load_order(g_packs)) {
@@ -1527,14 +1482,16 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
         // Native menu art is part of the build, not a user texture pack.
         // Keep it installed in both presentation styles and after user packs,
         // without changing their enabled states or priority ordering.
-        if(char* base=SDL_GetBasePath()) {
-            auto directory=std::filesystem::u8path(base);
+        if (char* base = SDL_GetBasePath()) {
+            auto directory = std::filesystem::u8path(base);
 #if defined(_WIN32)
-            directory=dkr::runtime::layout::windows_application_directory(directory/"DKR-R-Runtime.exe");
+            directory = dkr::runtime::layout::windows_application_directory(directory / "DKR-R-Runtime.exe");
 #endif
-            const auto builtin=directory/"assets/ui/CustomTrackBackgrounds";
-            SDL_free(base);std::error_code error;
-            if(std::filesystem::is_regular_file(builtin/"rt64.json",error))replacements.emplace_back(builtin);
+            const auto builtin = directory / "assets/ui/CustomTrackBackgrounds";
+            SDL_free(base);
+            std::error_code error;
+            if (std::filesystem::is_regular_file(builtin / "rt64.json", error))
+                replacements.emplace_back(builtin);
         }
         // Only a changed replacement set is worth handing to RT64. The reload
         // is transactional - streaming stops, every mapping is cleared and
@@ -1544,16 +1501,12 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
         // moves for changes that never reach RT64 (a rescan, hiding a disabled
         // pack), so compare the set itself.
         const bool same_set =
-            g_applied_generation != 0 && !g_force_replacement_reload &&
-            modern_profile == g_applied_modern &&
+            g_applied_generation != 0 && !g_force_replacement_reload && modern_profile == g_applied_modern &&
             g_pending_deletions.empty() &&
-            std::equal(replacements.begin(), replacements.end(),
-                       g_applied_replacements.begin(),
+            std::equal(replacements.begin(), replacements.end(), g_applied_replacements.begin(),
                        g_applied_replacements.end(),
-                       [](const RT64::ReplacementDirectory& left,
-                          const RT64::ReplacementDirectory& right) {
-                           return left.dirOrZipPath == right.dirOrZipPath &&
-                                  left.zipBasePath == right.zipBasePath;
+                       [](const RT64::ReplacementDirectory& left, const RT64::ReplacementDirectory& right) {
+                           return left.dirOrZipPath == right.dirOrZipPath && left.zipBasePath == right.zipBasePath;
                        });
         if (same_set) {
             g_applied_generation = generation;
@@ -1563,12 +1516,10 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
     }
 
     const bool cache_available = application.textureCache != nullptr;
-    bool success = cache_available &&
-        application.textureCache->loadReplacementDirectories(replacements);
+    bool success = cache_available && application.textureCache->loadReplacementDirectories(replacements);
     bool restored = false;
     if (!success && cache_available) {
-        restored = application.textureCache->loadReplacementDirectories(
-            previous_replacements);
+        restored = application.textureCache->loadReplacementDirectories(previous_replacements);
     }
     // One line per real reload - rare, since unchanged sets are skipped above -
     // because a rejected or slow reload is otherwise invisible in the log.
@@ -1577,8 +1528,7 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
                  "accepted=%d restored=%d\n",
                  replacements.size(), success ? 1 : 0, restored ? 1 : 0);
     for (const auto& directory : replacements) {
-        std::fprintf(stderr, "[texture-packs]   %s\n",
-                     directory.dirOrZipPath.string().c_str());
+        std::fprintf(stderr, "[texture-packs]   %s\n", directory.dirOrZipPath.string().c_str());
     }
     {
         std::scoped_lock lock(g_mutex);
@@ -1588,18 +1538,20 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
             g_applied_replacements = replacements;
             g_applied_ids = replacement_ids;
             completed_deletions.swap(g_pending_deletions);
-            g_status = replacements.empty()
-                ? "Native texture replacements are disabled."
-                : std::to_string(replacements.size()) +
-                    " texture pack(s) active. Lower priority numbers win clashes. Existing textures were reloaded safely.";
+            g_status =
+                replacements.empty()
+                    ? "Native texture replacements are disabled."
+                    : std::to_string(replacements.size()) +
+                          " texture pack(s) active. Lower priority numbers win clashes. Existing textures were reloaded safely.";
         } else {
             // Mark this generation as consumed so a rejected archive cannot
             // trigger an expensive reload on every presented frame.
             g_applied_generation = generation;
             g_applied_modern = modern_profile;
-            g_status = restored
-                ? "RT64 rejected the replacement set; the previous texture set was restored."
-                : "RT64 rejected the replacement set and could not restore it. Disable the affected pack before continuing.";
+            g_status =
+                restored
+                    ? "RT64 rejected the replacement set; the previous texture set was restored."
+                    : "RT64 rejected the replacement set and could not restore it. Disable the affected pack before continuing.";
         }
     }
     if (success && !completed_deletions.empty()) {
@@ -1621,14 +1573,12 @@ void apply_pending(RT64::Application& application, bool modern_profile) {
         }
         SaveSettingsLocked();
         if (!deletion_error.empty()) {
-            g_status = "RT64 released the texture pack, but permanent deletion failed: " +
-                deletion_error;
+            g_status = "RT64 released the texture pack, but permanent deletion failed: " + deletion_error;
         } else {
             g_status = completed_deletions.size() == 1
-                ? completed_deletions.front().name +
-                    " was permanently deleted from DKR-R's managed library."
-                : std::to_string(completed_deletions.size()) +
-                    " texture packs were permanently deleted from DKR-R's managed library.";
+                           ? completed_deletions.front().name + " was permanently deleted from DKR-R's managed library."
+                           : std::to_string(completed_deletions.size()) +
+                                 " texture packs were permanently deleted from DKR-R's managed library.";
         }
     }
 }

@@ -66,8 +66,7 @@ struct FriendLobbyAdvertisement {
     bool hosting = false;
     std::string quick_join_code;
     std::uint32_t players = 0U;
-    std::uint32_t maximum_players =
-        static_cast<std::uint32_t>(kSupportedOnlinePlayers);
+    std::uint32_t maximum_players = static_cast<std::uint32_t>(kSupportedOnlinePlayers);
     std::string synchronization;
     std::string compatibility;
 };
@@ -81,8 +80,7 @@ struct FriendLobbyInviteView {
     std::string synchronization;
     std::string compatibility;
     std::uint32_t players = 0U;
-    std::uint32_t maximum_players =
-        static_cast<std::uint32_t>(kSupportedOnlinePlayers);
+    std::uint32_t maximum_players = static_cast<std::uint32_t>(kSupportedOnlinePlayers);
     std::uint64_t expires_unix = 0U;
     secure::Key admission{};
     FriendLobbyInviteStatus status = FriendLobbyInviteStatus::Sent;
@@ -99,14 +97,13 @@ struct FriendServiceSnapshot {
 };
 
 class FriendService {
-public:
+  public:
     FriendService();
     ~FriendService();
     FriendService(const FriendService&) = delete;
     FriendService& operator=(const FriendService&) = delete;
 
-    void configure(const std::filesystem::path& config_directory,
-                   std::string_view display_name);
+    void configure(const std::filesystem::path& config_directory, std::string_view display_name);
     void shutdown();
     void pump(const FriendLobbyAdvertisement& advertisement);
     std::shared_ptr<const FriendServiceSnapshot> snapshot() const;
@@ -121,9 +118,8 @@ public:
     bool allow_lobby_invites() const;
     bool set_allow_lobby_invites(bool enabled, std::string& error);
 
-    bool create_invite(FriendInviteLifetime lifetime,
-                       std::chrono::seconds duration,
-                       FriendInviteView& invite, std::string& error);
+    bool create_invite(FriendInviteLifetime lifetime, std::chrono::seconds duration, FriendInviteView& invite,
+                       std::string& error);
     bool revoke_invite(std::uint64_t invite_id, std::string& error);
     std::vector<FriendInviteView> invitations() const;
 
@@ -132,30 +128,22 @@ public:
     std::string diagnostics() const;
     std::vector<FriendRequestView> pending_requests() const;
     bool accept_request(std::uint64_t request_id, std::string& error);
-    bool reject_request(std::uint64_t request_id, bool block,
-                        std::string& error);
+    bool reject_request(std::uint64_t request_id, bool block, std::string& error);
 
     std::vector<FriendView> friends(bool include_blocked = false) const;
-    bool set_friend_nickname(std::string_view identity,
-                             std::string_view nickname,
-                             std::string& error);
+    bool set_friend_nickname(std::string_view identity, std::string_view nickname, std::string& error);
     bool remove_friend(std::string_view identity, std::string& error);
     bool block_friend(std::string_view identity, std::string& error);
     bool unblock_friend(std::string_view identity, std::string& error);
 
-    bool send_lobby_invite(std::string_view friend_identity,
-                           const FriendLobbyAdvertisement& lobby,
-                           const secure::Key& admission,
-                           FriendLobbyInviteView& invite,
-                           std::string& error);
+    bool send_lobby_invite(std::string_view friend_identity, const FriendLobbyAdvertisement& lobby,
+                           const secure::Key& admission, FriendLobbyInviteView& invite, std::string& error);
     std::vector<FriendLobbyInviteView> incoming_lobby_invites() const;
     std::vector<FriendLobbyInviteView> outgoing_lobby_invites() const;
-    bool respond_lobby_invite(std::uint64_t invite_id, bool accept,
-                              FriendLobbyInviteView& invite,
-                              std::string& error);
+    bool respond_lobby_invite(std::uint64_t invite_id, bool accept, FriendLobbyInviteView& invite, std::string& error);
     bool cancel_lobby_invite(std::uint64_t invite_id, std::string& error);
 
-private:
+  private:
     friend struct FriendServiceTestAccess;
     struct Impl;
     std::shared_ptr<Impl> impl_;

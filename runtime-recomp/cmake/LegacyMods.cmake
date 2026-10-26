@@ -13,9 +13,12 @@ function(dkr_xdelta_file name digest)
             return()
         endif()
     endif()
-    file(DOWNLOAD
-        "https://raw.githubusercontent.com/jmacd/xdelta/${_dkr_xdelta_rev}/xdelta3/${name}"
-        "${path}" EXPECTED_HASH "SHA256=${digest}" TLS_VERIFY ON)
+    file(
+        DOWNLOAD "https://raw.githubusercontent.com/jmacd/xdelta/${_dkr_xdelta_rev}/xdelta3/${name}"
+        "${path}"
+        EXPECTED_HASH "SHA256=${digest}"
+        TLS_VERIFY ON
+    )
 endfunction()
 dkr_xdelta_file(xdelta3.c 7859a6c730de096f9d3a342d43de33df2d1ea7119e179d938a75aba8a52ea9ab)
 dkr_xdelta_file(xdelta3.h 72371206cc4b7ee5a9c7f52c56e1eb92d204756db433a718caae2062097382f2)
@@ -42,31 +45,51 @@ function(dkr_mods_lzma)
     set(XZ_TOOL_SCRIPTS OFF)
     set(XZ_TOOL_SYMLINKS OFF)
     set(XZ_DOC OFF)
-    FetchContent_Declare(dkr_mods_xz
+    FetchContent_Declare(
+        dkr_mods_xz
         URL https://codeload.github.com/tukaani-project/xz/tar.gz/refs/tags/v5.8.1
-        URL_HASH SHA256=bdbc23fbf9098843357e71e49685724fda2c320c29cb1b25fd90505f14bb0b3d)
+        URL_HASH SHA256=bdbc23fbf9098843357e71e49685724fda2c320c29cb1b25fd90505f14bb0b3d
+    )
     FetchContent_MakeAvailable(dkr_mods_xz)
     set(_dkr_mod_lzma_api "${dkr_mods_xz_SOURCE_DIR}/src/liblzma/api" PARENT_SCOPE)
 endfunction()
 dkr_mods_lzma()
-add_library(DKRLegacyDelta STATIC "${_dkr_xdelta_dir}/xdelta3.c"
-    "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/legacy_mod_lzma_boundary.c")
-set_property(SOURCE "${_dkr_xdelta_dir}/xdelta3.c" APPEND PROPERTY
-    COMPILE_DEFINITIONS lzma_stream_decoder=dkr_mods_lzma_stream_decoder)
+add_library(
+    DKRLegacyDelta
+    STATIC
+    "${_dkr_xdelta_dir}/xdelta3.c"
+    "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/legacy_mod_lzma_boundary.c"
+)
+set_property(
+    SOURCE "${_dkr_xdelta_dir}/xdelta3.c"
+    APPEND
+    PROPERTY COMPILE_DEFINITIONS lzma_stream_decoder=dkr_mods_lzma_stream_decoder
+)
 target_include_directories(DKRLegacyDelta PUBLIC "${_dkr_xdelta_dir}")
-target_include_directories(DKRLegacyDelta PRIVATE
-    "${_dkr_mod_lzma_api}")
-target_compile_definitions(DKRLegacyDelta PUBLIC
-    SIZEOF_SIZE_T=8 SIZEOF_UNSIGNED_LONG_LONG=8
-    XD3_ENCODER=0 XD3_MAIN=0 SECONDARY_LZMA=1 SECONDARY_DJW=1 SECONDARY_FGK=0
-    HAVE_LZMA_H=1 XD3_HARDMAXWINSIZE=16777216 NOMINMAX)
+target_include_directories(DKRLegacyDelta PRIVATE "${_dkr_mod_lzma_api}")
+target_compile_definitions(
+    DKRLegacyDelta
+    PUBLIC
+        SIZEOF_SIZE_T=8
+        SIZEOF_UNSIGNED_LONG_LONG=8
+        XD3_ENCODER=0
+        XD3_MAIN=0
+        SECONDARY_LZMA=1
+        SECONDARY_DJW=1
+        SECONDARY_FGK=0
+        HAVE_LZMA_H=1
+        XD3_HARDMAXWINSIZE=16777216
+        NOMINMAX
+)
 target_compile_definitions(DKRLegacyDelta PRIVATE LZMA_API_STATIC)
 target_link_libraries(DKRLegacyDelta PUBLIC liblzma)
 
 set(_dkr_mod_src "${DKRPORT_ROOT}/runtime-recomp/src/game/mods")
 add_library(DKRMusicSequenceValidator STATIC "${_dkr_mod_src}/../custom_music_sequence.cpp")
 target_compile_features(DKRMusicSequenceValidator PUBLIC cxx_std_20)
-add_library(DKRLegacyModCore STATIC
+add_library(
+    DKRLegacyModCore
+    STATIC
     "${_dkr_mod_src}/online_mod_manifest.cpp"
     "${_dkr_mod_src}/online_mod_package.cpp"
     "${_dkr_mod_src}/online_mod_transfer.cpp"
@@ -94,35 +117,38 @@ add_library(DKRLegacyModCore STATIC
     "${_dkr_mod_src}/legacy_track_menu.cpp"
     "${_dkr_mod_src}/legacy_track_menu_adapter.cpp"
     "${_dkr_mod_src}/legacy_runtime_session.cpp"
-    "${_dkr_mod_src}/legacy_mod_stage.cpp")
+    "${_dkr_mod_src}/legacy_mod_stage.cpp"
+)
 target_compile_features(DKRLegacyModCore PUBLIC cxx_std_20)
-target_include_directories(DKRLegacyModCore PUBLIC "${_dkr_mod_src}"
-    "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib"
-    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
+target_include_directories(
+    DKRLegacyModCore
+    PUBLIC
+        "${_dkr_mod_src}"
+        "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib"
+        "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty"
+)
 target_compile_definitions(DKRLegacyModCore PRIVATE NOMINMAX)
 target_link_libraries(DKRLegacyModCore PRIVATE DKRLegacyDelta PUBLIC DKRMusicSequenceValidator)
 
 # Reuse the exact pinned compression and hashing code already shipped with
 # DKR-R. A standalone importer test does not need the renderer or networking.
-add_library(DKRLegacyModMiniz STATIC
-    "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/miniz/miniz.c")
+add_library(DKRLegacyModMiniz STATIC "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/miniz/miniz.c")
 if(TARGET mbedcrypto)
     # Use the application's existing hashing provider and its ABI/configuration.
     set(_dkr_mod_hash mbedcrypto)
 else()
-    add_library(DKRLegacyModHash STATIC
+    add_library(
+        DKRLegacyModHash
+        STATIC
         "${DKR_DEPENDENCIES_DIR}/mbedtls/library/sha256.c"
-        "${DKR_DEPENDENCIES_DIR}/mbedtls/library/platform_util.c")
-    target_include_directories(DKRLegacyModHash PRIVATE
-        "${_dkr_mod_src}" "${DKR_DEPENDENCIES_DIR}/mbedtls/include")
-    target_compile_definitions(DKRLegacyModHash PRIVATE
-        MBEDTLS_CONFIG_FILE="legacy_mod_hash_config.h")
-    target_compile_definitions(DKRLegacyModCore PRIVATE
-        MBEDTLS_CONFIG_FILE="legacy_mod_hash_config.h")
+        "${DKR_DEPENDENCIES_DIR}/mbedtls/library/platform_util.c"
+    )
+    target_include_directories(DKRLegacyModHash PRIVATE "${_dkr_mod_src}" "${DKR_DEPENDENCIES_DIR}/mbedtls/include")
+    target_compile_definitions(DKRLegacyModHash PRIVATE MBEDTLS_CONFIG_FILE="legacy_mod_hash_config.h")
+    target_compile_definitions(DKRLegacyModCore PRIVATE MBEDTLS_CONFIG_FILE="legacy_mod_hash_config.h")
     set(_dkr_mod_hash DKRLegacyModHash)
 endif()
-target_include_directories(DKRLegacyModCore PRIVATE
-    "${DKR_DEPENDENCIES_DIR}/mbedtls/include")
+target_include_directories(DKRLegacyModCore PRIVATE "${DKR_DEPENDENCIES_DIR}/mbedtls/include")
 target_link_libraries(DKRLegacyModCore PRIVATE ${_dkr_mod_hash})
 if(TARGET rt64)
     # The game gets miniz from RT64's existing archive, exactly once. The child
@@ -139,15 +165,18 @@ else()
     target_include_directories(DKRLegacyModCore PRIVATE "${_dkr_mod_src}/..")
 endif()
 
-add_library(DKRLegacyGuestIO STATIC "${_dkr_mod_src}/legacy_runtime_io.cpp"
+add_library(
+    DKRLegacyGuestIO
+    STATIC
+    "${_dkr_mod_src}/legacy_runtime_io.cpp"
     "${_dkr_mod_src}/legacy_runtime_character.cpp"
     "${_dkr_mod_src}/legacy_character_menu_render.cpp"
     "${_dkr_mod_src}/legacy_character_stage.cpp"
     "${_dkr_mod_src}/legacy_character_presentation.cpp"
     "${_dkr_mod_src}/legacy_guest_checkpoint.cpp"
-    "${_dkr_mod_src}/legacy_runtime_assets.cpp")
-target_include_directories(DKRLegacyGuestIO PUBLIC
-    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include")
+    "${_dkr_mod_src}/legacy_runtime_assets.cpp"
+)
+target_include_directories(DKRLegacyGuestIO PUBLIC "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include")
 target_link_libraries(DKRLegacyGuestIO PUBLIC DKRLegacyModCore)
 if(BUILD_TESTING)
     add_executable(DKRLegacyBehaviourTests "${DKRPORT_ROOT}/runtime-recomp/tests/legacy_behaviour_tests.cpp")
@@ -157,8 +186,13 @@ if(BUILD_TESTING)
         # headless build uses its small compression provider instead.
         set(_dkr_behaviour_sdl "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
         target_link_directories(DKRLegacyBehaviourTests PRIVATE "${_dkr_behaviour_sdl}")
-        add_custom_command(TARGET DKRLegacyBehaviourTests POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_dkr_behaviour_sdl}/SDL2.dll" "$<TARGET_FILE_DIR:DKRLegacyBehaviourTests>/SDL2.dll")
+        add_custom_command(
+            TARGET DKRLegacyBehaviourTests
+            POST_BUILD
+            COMMAND
+                "${CMAKE_COMMAND}" -E copy_if_different "${_dkr_behaviour_sdl}/SDL2.dll"
+                "$<TARGET_FILE_DIR:DKRLegacyBehaviourTests>/SDL2.dll"
+        )
     endif()
     add_test(NAME DKRLegacyBehaviourTests COMMAND DKRLegacyBehaviourTests)
 endif()
@@ -175,48 +209,68 @@ set_target_properties(DKRLegacyModWorker PROPERTIES OUTPUT_NAME "DKR-R-ModWorker
 if(ANDROID)
     # Android only permits execution from the installed, read-only native
     # library directory. Package this PIE helper there using a .so filename.
-    set_target_properties(DKRLegacyModWorker PROPERTIES
-        OUTPUT_NAME "libDKR-R-ModWorker.so"
-        BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+    set_target_properties(
+        DKRLegacyModWorker
+        PROPERTIES OUTPUT_NAME "libDKR-R-ModWorker.so" BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN"
+    )
     # Android's CMake platform suppresses automatic RPATH emission. This
     # executable is spawned independently of Java's loaded-library namespace.
     target_link_options(DKRLegacyModWorker PRIVATE "-Wl,-rpath,$ORIGIN")
 endif()
 add_library(DKRLegacyWorkerCore STATIC $<TARGET_OBJECTS:DKRLegacyModCore>)
-target_include_directories(DKRLegacyWorkerCore PUBLIC
-    "$<TARGET_PROPERTY:DKRLegacyModCore,INTERFACE_INCLUDE_DIRECTORIES>")
-target_link_libraries(DKRLegacyWorkerCore PRIVATE DKRLegacyDelta DKRLegacyModMiniz ${_dkr_mod_hash} DKRMusicSequenceValidator)
+target_include_directories(
+    DKRLegacyWorkerCore
+    PUBLIC "$<TARGET_PROPERTY:DKRLegacyModCore,INTERFACE_INCLUDE_DIRECTORIES>"
+)
+target_link_libraries(
+    DKRLegacyWorkerCore
+    PRIVATE DKRLegacyDelta DKRLegacyModMiniz ${_dkr_mod_hash} DKRMusicSequenceValidator
+)
 target_link_libraries(DKRLegacyModWorker PRIVATE DKRLegacyWorkerCore DKRLegacyModProcess)
 
-add_library(DKRLegacyImportLibrary STATIC "${_dkr_mod_src}/legacy_import_library.cpp"
+add_library(
+    DKRLegacyImportLibrary
+    STATIC
+    "${_dkr_mod_src}/legacy_import_library.cpp"
     "${_dkr_mod_src}/online_mod_bundle.cpp"
     "${_dkr_mod_src}/online_mod_profile.cpp"
     "${_dkr_mod_src}/online_mod_native_prepare.cpp"
     "${_dkr_mod_src}/online_mod_sync.cpp"
     "${_dkr_mod_src}/legacy_mod_library.cpp"
     "${_dkr_mod_src}/legacy_track_catalog.cpp"
-    "${_dkr_mod_src}/../offline_keep.cpp")
+    "${_dkr_mod_src}/../offline_keep.cpp"
+)
 target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRLegacyModCore DKRLegacyModProcess)
-target_include_directories(DKRLegacyImportLibrary PRIVATE
-    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include")
+target_include_directories(
+    DKRLegacyImportLibrary
+    PRIVATE "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
+)
 
-add_library(DKRLegacyModLaunch STATIC "${_dkr_mod_src}/legacy_mod_launch.cpp"
+add_library(
+    DKRLegacyModLaunch
+    STATIC
+    "${_dkr_mod_src}/legacy_mod_launch.cpp"
     "${_dkr_mod_src}/online_mod_runtime.cpp"
     "${_dkr_mod_src}/online_mod_music.cpp"
     "${_dkr_mod_src}/../custom_music_decode.cpp"
-    "${_dkr_mod_src}/../resident_music.cpp")
-target_include_directories(DKRLegacyModLaunch BEFORE PRIVATE "${_dkr_mod_src}/.."
-    "${DKRPORT_ROOT}/runtime-recomp/tests/replay_probe")
-target_include_directories(DKRLegacyModLaunch PRIVATE "${DKRPORT_ROOT}/runtime-recomp/third_party/dr_libs"
-    "${_dkr_mod_src}")
+    "${_dkr_mod_src}/../resident_music.cpp"
+)
+target_include_directories(
+    DKRLegacyModLaunch
+    BEFORE
+    PRIVATE "${_dkr_mod_src}/.." "${DKRPORT_ROOT}/runtime-recomp/tests/replay_probe"
+)
+target_include_directories(
+    DKRLegacyModLaunch
+    PRIVATE "${DKRPORT_ROOT}/runtime-recomp/third_party/dr_libs" "${_dkr_mod_src}"
+)
 # .dkrmap table logic. A mod launch publishes the tracks' artwork into the
 # character-augmented boot bank, so the launch owns this dependency.
 # A track's native music sequence is validated at scan, so its checker
 # (custom_music_sequence.cpp, no dependencies of its own) comes along.
 add_library(DKRCustomTracksCore STATIC "${_dkr_mod_src}/../custom_tracks.cpp")
 target_link_libraries(DKRCustomTracksCore PUBLIC DKRMusicSequenceValidator)
-target_include_directories(DKRCustomTracksCore PUBLIC "${_dkr_mod_src}/.."
-    "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
+target_include_directories(DKRCustomTracksCore PUBLIC "${_dkr_mod_src}/.." "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
 target_compile_features(DKRCustomTracksCore PUBLIC cxx_std_20)
 target_compile_definitions(DKRCustomTracksCore PRIVATE NOMINMAX)
 if(TARGET rt64)
@@ -228,8 +282,12 @@ endif()
 target_link_libraries(DKRLegacyModLaunch PUBLIC DKRLegacyImportLibrary DKRCustomTracksCore DKRLegacyGuestIO)
 # Separate worker archive: no renderer/window dependency is pulled into the
 # process that handles untrusted online patches and package metadata.
-add_library(DKROnlineModPreparation STATIC "${_dkr_mod_src}/online_mod_prepare.cpp"
-    "${_dkr_mod_src}/online_mod_native_prepare.cpp")
+add_library(
+    DKROnlineModPreparation
+    STATIC
+    "${_dkr_mod_src}/online_mod_prepare.cpp"
+    "${_dkr_mod_src}/online_mod_native_prepare.cpp"
+)
 add_library(DKRCustomTracksWorkerCore STATIC $<TARGET_OBJECTS:DKRCustomTracksCore>)
 target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRCustomTracksCore)
 target_link_libraries(DKRCustomTracksWorkerCore PRIVATE DKRLegacyModMiniz DKRMusicSequenceValidator)

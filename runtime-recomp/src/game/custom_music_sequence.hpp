@@ -32,24 +32,25 @@ struct SequenceReport {
     std::uint32_t notes = 0;
     std::uint16_t track_mask = 0;
     std::uint16_t channel_mask = 0;
-    std::uint32_t initial_tempo = 0;   // microseconds per beat at tick 0; 0 if none
+    std::uint32_t initial_tempo = 0; // microseconds per beat at tick 0; 0 if none
     bool loops_forever = false;
 };
 
 struct SequenceCheck {
-    std::string code;      // "ok" or the shared error code
-    std::string message;   // for the log; empty when ok
+    std::string code;    // "ok" or the shared error code
+    std::string message; // for the log; empty when ok
     SequenceReport report;
 
-    [[nodiscard]] bool ok() const { return code == "ok"; }
+    [[nodiscard]] bool ok() const {
+        return code == "ok";
+    }
 };
 
 // `programs`, when given, marks which of the bank's 128 program slots are
 // non-null.
-[[nodiscard]] SequenceCheck validate_sequence(
-    std::span<const std::uint8_t> data,
-    std::uint32_t capacity = kRetailSequenceCapacity,
-    const std::array<bool, 128>* programs = nullptr,
-    bool native_legacy_notes = false);
+[[nodiscard]] SequenceCheck validate_sequence(std::span<const std::uint8_t> data,
+                                              std::uint32_t capacity = kRetailSequenceCapacity,
+                                              const std::array<bool, 128>* programs = nullptr,
+                                              bool native_legacy_notes = false);
 
 } // namespace dkr::runtime::custom_music

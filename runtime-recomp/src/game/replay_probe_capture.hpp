@@ -14,14 +14,14 @@ bool dkr_experimental_bootstrap_arm(const std::filesystem::path& output, std::st
 bool dkr_experimental_bootstrap_completed();
 // Same-process cold-boot ownership handoff. No map selection, scripted menu
 // input, child/file/configuration rewrite, or capture before workers retire.
-bool dkr_experimental_bootstrap_arm_memory(std::uint8_t players, bool host,
-    std::uint64_t match_id, std::uint64_t save_hash, std::string& error);
+bool dkr_experimental_bootstrap_arm_memory(std::uint8_t players, bool host, std::uint64_t match_id,
+                                           std::uint64_t save_hash, std::string& error);
 // Frozen launch identity survives the temporary offline construction binding.
 bool dkr_experimental_bootstrap_activate_save(std::string& error);
 std::uint8_t dkr_experimental_bootstrap_players();
 bool dkr_experimental_bootstrap_active();
 struct DkrExperimentalBootstrap {
-    std::vector<std::uint8_t> memory,code;
+    std::vector<std::uint8_t> memory, code;
     std::string error;
 };
 // Single-use transaction: RAM continuation and code state share one boundary.

@@ -37,7 +37,7 @@ class Service {
     void save_preferences();
     void read_installation_result();
     void run(std::function<void(std::stop_token)>);
-    HttpResponse request(HttpRequest, std::stop_token, const Progress & = {});
+    HttpResponse request(HttpRequest, std::stop_token, const Progress& = {});
     void discover(std::stop_token);
 
   public:
@@ -52,15 +52,15 @@ class Service {
     void skip();
     // This only stages and starts a helper; it never shuts the caller down.
     // The launcher exits normally after Snapshot state Preparing becomes ready.
-    bool install(std::string &error);
+    bool install(std::string& error);
     bool install_handoff_ready() const;
     void launcher_ready();
-    const Configuration &configuration() const {
+    const Configuration& configuration() const {
         return config;
     }
 };
-void configure(const std::filesystem::path &data, const std::filesystem::path &application,
-               const std::filesystem::path &helper, std::string version);
-Service *service();
-void remember_arguments(int argc, char **argv);
+void configure(const std::filesystem::path& data, const std::filesystem::path& application,
+               const std::filesystem::path& helper, std::string version);
+Service* service();
+void remember_arguments(int argc, char** argv);
 } // namespace dkr::updates

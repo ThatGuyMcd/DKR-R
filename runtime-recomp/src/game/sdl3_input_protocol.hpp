@@ -87,8 +87,7 @@ static_assert(std::is_trivially_copyable_v<RumblePacket>);
 static_assert(std::is_trivially_copyable_v<ShutdownPacket>);
 
 template <typename Packet>
-void initialise(Packet& packet, PacketType type,
-                const std::array<std::uint8_t, kTokenBytes>& token) {
+void initialise(Packet& packet, PacketType type, const std::array<std::uint8_t, kTokenBytes>& token) {
     packet = {};
     packet.header.magic = kMagic;
     packet.header.version = kVersion;
@@ -97,11 +96,9 @@ void initialise(Packet& packet, PacketType type,
     packet.header.token = token;
 }
 
-inline bool valid_header(
-    const PacketHeader& header, PacketType type, std::size_t size,
-    const std::array<std::uint8_t, kTokenBytes>& token) {
-    return header.magic == kMagic && header.version == kVersion &&
-           header.type == type && header.size == size &&
+inline bool valid_header(const PacketHeader& header, PacketType type, std::size_t size,
+                         const std::array<std::uint8_t, kTokenBytes>& token) {
+    return header.magic == kMagic && header.version == kVersion && header.type == type && header.size == size &&
            header.token == token;
 }
 

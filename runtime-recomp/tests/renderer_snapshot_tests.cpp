@@ -34,13 +34,16 @@ int main() {
 
     std::puts("[test][renderer-snapshot] PASS");
     {
-        dkr::runtime::RendererSnapshotScope scope(core,state,&submission);
-        scope.restore();scope.restore();
-        if(core!=&live_core||state!=&live_state)return 1;
+        dkr::runtime::RendererSnapshotScope scope(core, state, &submission);
+        scope.restore();
+        scope.restore();
+        if (core != &live_core || state != &live_state)
+            return 1;
         // Early release is idempotent; destruction must not clobber a later
         // binding after all submission CPU readers have completed.
-        core=&submission;
+        core = &submission;
     }
-    if(core!=&submission||state!=&live_state)return 1;
+    if (core != &submission || state != &live_state)
+        return 1;
     return 0;
 }

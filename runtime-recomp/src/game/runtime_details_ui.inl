@@ -8,7 +8,8 @@
 
 // .launcher-detail-page p: 16 / 1.5, 13 px under each paragraph.
 void DetailText(std::string_view text, float width, unsigned colour = kSetText, float after = 13.0F) {
-    if (text.empty()) return;
+    if (text.empty())
+        return;
     PaddockText(PaddockReading(16.0F, false, 1.5F), PaddockRgb(colour), text, width);
     PaddockGap(after);
 }
@@ -30,17 +31,18 @@ bool DetailRaceButton(const char* label, float width, unsigned fill = 0x0A6EA1, 
 
 // Two race buttons side by side, or stacked on a narrow panel
 // (.launcher-detail-actions).
-template <typename Left, typename Right>
-void DetailActionPair(float width, bool stacked, Left&& left, Right&& right) {
+template <typename Left, typename Right> void DetailActionPair(float width, bool stacked, Left&& left, Right&& right) {
     const float half = stacked ? width : std::floor((width - 12.0F) * 0.5F);
     left(half);
-    if (stacked) PaddockGap(12.0F); else ImGui::SameLine(0.0F, 12.0F);
+    if (stacked)
+        PaddockGap(12.0F);
+    else
+        ImGui::SameLine(0.0F, 12.0F);
     right(stacked ? width : width - half - 12.0F);
 }
 
 // A detail card (.card): 18 x 20 px of padding inside a 2 px border.
-template <typename Content>
-float DetailCard(float width, ImVec2 padding, Content&& content, float min_height = 0.0F) {
+template <typename Content> float DetailCard(float width, ImVec2 padding, Content&& content, float min_height = 0.0F) {
     PaddockBox box(width, {padding.x + 2.0F, padding.y + 2.0F}, min_height);
     content(box.Inner());
     return box.End([](ImDrawList* draw, ImVec2 a, ImVec2 b) {
@@ -52,7 +54,8 @@ float DetailCard(float width, ImVec2 padding, Content&& content, float min_heigh
 bool DetailSectionSign(const char* label, bool& open, float width) {
     PaddockGap(22.0F);
     const ImVec2 at = ImGui::GetCursorScreenPos();
-    if (PaddockSectionTab(label, open, width)) open = !open;
+    if (PaddockSectionTab(label, open, width))
+        open = !open;
     const float bottom = at.y + PaddockSectionTabHeight() + 16.0F;
     ImGui::GetWindowDrawList()->AddRectFilled({at.x, bottom}, {at.x + width, bottom + 2.0F}, PaddockCol(0x24495B));
     ImGui::SetCursorScreenPos(at);
@@ -73,15 +76,15 @@ void DrawTexturePackLibrary(float width) {
     using namespace dkr::runtime;
     using namespace dkr::runtime::texture_browser;
     texture_packs::request_background_refresh();
-    DetailText("Enable multiple packs. Lower priority numbers win when textures overlap.",
-               width, kSetMuted);
+    DetailText("Enable multiple packs. Lower priority numbers win when textures overlap.", width, kSetMuted);
 
     // Search (.field): a field that opens the on-screen keyboard.
     PaddockText(PaddockReading(16.0F, false, 1.5F), PaddockRgb(kSetText), "Search", width);
     PaddockGap(13.0F);
     {
         const PaddockPress press = PaddockBeginPress("##texture-search", {width, 48.0F});
-        if (press.pressed) RequestTextEntryKeyboard(TextEntryTarget::TexturePackSearch);
+        if (press.pressed)
+            RequestTextEntryKeyboard(TextEntryTarget::TexturePackSearch);
         ImDrawList* draw = ImGui::GetWindowDrawList();
         const PaddockRadii radii = PaddockRound(12.0F);
         PaddockFill(draw, press.min, press.max, radii, PaddockCol(0x0B2E40, 245U));
@@ -89,8 +92,8 @@ void DrawTexturePackLibrary(float width) {
                       PaddockApply(PaddockMix(PaddockRgb(kSetBorder), PaddockRgb(0x5A97B1), press.hover)), 1.0F);
         const bool empty = g_texture_pack_search[0] == '\0';
         const PaddockType type = PaddockReading(16.0F, false, 1.4F);
-        const std::string shown = PaddockEllipsize(type, empty ? "Search texture packs..." : g_texture_pack_search,
-                                                   width - 34.0F);
+        const std::string shown =
+            PaddockEllipsize(type, empty ? "Search texture packs..." : g_texture_pack_search, width - 34.0F);
         PaddockDrawRun(draw, type, {press.min.x + 17.0F, std::round(press.min.y + (48.0F - type.line) * 0.5F)},
                        PaddockCol(empty ? 0x7F9DABU : kSetText), shown.data(), shown.data() + shown.size());
         PaddockEndPress(press, 12.0F, 0.98F);
@@ -106,24 +109,38 @@ void DrawTexturePackLibrary(float width) {
             std::vector<SettingsChoice> items;
         };
         const std::array<Filter, 5> kFilters{{
-            {"sort", "Sort", &g_texture_pack_sort,
-             {"Name A-Z", "Name Z-A", "Largest first", "Smallest first", "Newest first", "Oldest first", "Type", "Priority"}},
-            {"state", "State", &g_texture_pack_state_filter, {{"All", {}, false}, {"Active", {}, false}, {"Inactive", {}, false}}},
-            {"compatibility", "Compatibility", &g_texture_pack_compatibility_filter,
+            {"sort",
+             "Sort",
+             &g_texture_pack_sort,
+             {"Name A-Z", "Name Z-A", "Largest first", "Smallest first", "Newest first", "Oldest first", "Type",
+              "Priority"}},
+            {"state",
+             "State",
+             &g_texture_pack_state_filter,
+             {{"All", {}, false}, {"Active", {}, false}, {"Inactive", {}, false}}},
+            {"compatibility",
+             "Compatibility",
+             &g_texture_pack_compatibility_filter,
              {"All", "Compatible", "Incompatible"}},
-            {"type", "Type", &g_texture_pack_type_filter,
+            {"type",
+             "Type",
+             &g_texture_pack_type_filter,
              {"All", "Native RT64", "Rice / RT64 Bridge", "Legacy Rice", "Legacy Jabo"}},
-            {"visibility", "Visibility", &g_texture_pack_visibility_filter,
+            {"visibility",
+             "Visibility",
+             &g_texture_pack_visibility_filter,
              {"Visible", "All", "Hidden", "Track packs"}},
         }};
         const int per_row = width >= 1100.0F ? 5 : width >= 700.0F ? 3 : width >= 460.0F ? 2 : 1;
-        const float column = std::floor((width - 12.0F * static_cast<float>(per_row - 1)) / static_cast<float>(per_row));
+        const float column =
+            std::floor((width - 12.0F * static_cast<float>(per_row - 1)) / static_cast<float>(per_row));
         const ImVec2 at = ImGui::GetCursorScreenPos();
         const PaddockType label_type = PaddockReading(14.0F, false, 1.5F);
         float row_top = at.y;
         for (std::size_t index = 0; index < kFilters.size(); ++index) {
             const int slot = static_cast<int>(index) % per_row;
-            if (slot == 0 && index > 0U) row_top += label_type.line + 7.0F + 52.0F + 12.0F;
+            if (slot == 0 && index > 0U)
+                row_top += label_type.line + 7.0F + 52.0F + 12.0F;
             ImGui::SetCursorScreenPos({at.x + (column + 12.0F) * static_cast<float>(slot), row_top});
             ImGui::BeginGroup();
             PaddockText(label_type, PaddockRgb(kSetMuted), kFilters[index].label, column);
@@ -141,11 +158,21 @@ void DrawTexturePackLibrary(float width) {
     filters.compatibility = static_cast<CompatibilityFilter>(std::clamp(g_texture_pack_compatibility_filter, 0, 2));
     filters.visibility = static_cast<VisibilityFilter>(std::clamp(g_texture_pack_visibility_filter, 0, 3));
     switch (std::clamp(g_texture_pack_type_filter, 0, 4)) {
-        case 1: filters.format = texture_packs::Format::NativeRt64; break;
-        case 2: filters.format = texture_packs::Format::RiceRt64; break;
-        case 3: filters.format = texture_packs::Format::LegacyRice; break;
-        case 4: filters.format = texture_packs::Format::LegacyJabo; break;
-        default: filters.format = texture_packs::Format::Unknown; break;
+    case 1:
+        filters.format = texture_packs::Format::NativeRt64;
+        break;
+    case 2:
+        filters.format = texture_packs::Format::RiceRt64;
+        break;
+    case 3:
+        filters.format = texture_packs::Format::LegacyRice;
+        break;
+    case 4:
+        filters.format = texture_packs::Format::LegacyJabo;
+        break;
+    default:
+        filters.format = texture_packs::Format::Unknown;
+        break;
     }
     // The library and its filtered view change only with the library or a
     // filter, not every frame.
@@ -158,11 +185,10 @@ void DrawTexturePackLibrary(float width) {
     };
     static LibraryCache cache;
     const std::uint64_t generation = texture_packs::generation();
-    const std::array<int, 5> current{std::clamp(g_texture_pack_sort, 0, 7),
-                                     std::clamp(g_texture_pack_state_filter, 0, 2),
-                                     std::clamp(g_texture_pack_compatibility_filter, 0, 2),
-                                     std::clamp(g_texture_pack_type_filter, 0, 4),
-                                     std::clamp(g_texture_pack_visibility_filter, 0, 3)};
+    const std::array<int, 5> current{
+        std::clamp(g_texture_pack_sort, 0, 7), std::clamp(g_texture_pack_state_filter, 0, 2),
+        std::clamp(g_texture_pack_compatibility_filter, 0, 2), std::clamp(g_texture_pack_type_filter, 0, 4),
+        std::clamp(g_texture_pack_visibility_filter, 0, 3)};
     const auto names_generation = dkr::store::library_names_generation();
     if (cache.generation != generation || cache.names_generation != names_generation) {
         cache.names_generation = names_generation;
@@ -177,16 +203,21 @@ void DrawTexturePackLibrary(float width) {
     }
 
     PaddockGap(16.0F);
-    const std::string count = std::to_string(cache.shown.size()) +
-                              (cache.shown.size() == 1U ? " PACK SHOWN" : " PACKS SHOWN");
+    const std::string count =
+        std::to_string(cache.shown.size()) + (cache.shown.size() == 1U ? " PACK SHOWN" : " PACKS SHOWN");
     PaddockText(PaddockReading(13.0F, true, 1.5F), PaddockRgb(kSetMuted), count, width);
     PaddockGap(16.0F);
     const bool busy = TexturePackImportRunning() || DialogJobRunning() || dkr::store::installations().view()->busy;
-    DetailActionPair(width, width <= 520.0F, [&](float cell) {
-        if (DetailRaceButton("IMPORT TEXTURE PACK", cell, 0x0A6EA1, busy)) ImportTexturePackWithDialog();
-    }, [&](float cell) {
-        if (DetailRaceButton("REFRESH PACKS", cell, 0x0A6EA1, busy)) texture_packs::refresh();
-    });
+    DetailActionPair(
+        width, width <= 520.0F,
+        [&](float cell) {
+            if (DetailRaceButton("IMPORT TEXTURE PACK", cell, 0x0A6EA1, busy))
+                ImportTexturePackWithDialog();
+        },
+        [&](float cell) {
+            if (DetailRaceButton("REFRESH PACKS", cell, 0x0A6EA1, busy))
+                texture_packs::refresh();
+        });
     PaddockGap(16.0F);
 
     if (cache.shown.empty()) {
@@ -197,12 +228,12 @@ void DrawTexturePackLibrary(float width) {
         // The library (.texture-library): cards of at least 260 px, 14 apart;
         // a row's cards share the tallest one's height.
         const int columns = std::max(1, static_cast<int>((width + 14.0F) / (260.0F + 14.0F)));
-        const float column = std::floor((width - 14.0F * static_cast<float>(columns - 1)) / static_cast<float>(columns));
+        const float column =
+            std::floor((width - 14.0F * static_cast<float>(columns - 1)) / static_cast<float>(columns));
         const PaddockType name_type = PaddockReading(16.0F, true, 1.5F);
         const PaddockType detail_type = PaddockReading(16.0F, false, 1.5F);
-        const bool priority_stacked = column - 32.0F <
-            PaddockRaceButtonWidth("HIGHER", 16.0F) +
-            PaddockRaceButtonWidth("LOWER", 16.0F) + 8.0F;
+        const bool priority_stacked =
+            column - 32.0F < PaddockRaceButtonWidth("HIGHER", 16.0F) + PaddockRaceButtonWidth("LOWER", 16.0F) + 8.0F;
         const float priority_actions_height = priority_stacked ? 96.0F : 44.0F;
         const ImVec2 at = ImGui::GetCursorScreenPos();
         float row_top = at.y;
@@ -213,11 +244,12 @@ void DrawTexturePackLibrary(float width) {
             for (std::size_t index = first; index < last; ++index) {
                 name_height = std::max(name_height,
                                        PaddockTextHeight(name_type, cache.shown[index].name, column - 32.0F - 36.0F));
-                type_height = std::max(type_height, PaddockTextHeight(detail_type,
-                    texture_packs::format_name(cache.shown[index].format), column - 32.0F));
+                type_height = std::max(
+                    type_height, PaddockTextHeight(detail_type, texture_packs::format_name(cache.shown[index].format),
+                                                   column - 32.0F));
             }
-            const float card_height = 16.0F + name_height + 8.0F + type_height + 10.0F +
-                detail_type.line + 8.0F + priority_actions_height + 12.0F + 44.0F + 16.0F;
+            const float card_height = 16.0F + name_height + 8.0F + type_height + 10.0F + detail_type.line + 8.0F +
+                                      priority_actions_height + 12.0F + 44.0F + 16.0F;
             for (std::size_t index = first; index < last; ++index) {
                 const auto& pack = cache.shown[index];
                 ImGui::PushID(pack.id.c_str());
@@ -233,9 +265,9 @@ void DrawTexturePackLibrary(float width) {
                 }
                 ImGui::SetCursorScreenPos({card.x + 16.0F, card.y + 16.0F + name_height + 8.0F});
                 const std::string type = texture_packs::format_name(pack.format);
-                PaddockText(detail_type, PaddockRgb(pack.compatible ? 0x1AC2A3U : kSetWarm),
-                            type, column - 32.0F);
-                if (!pack.compatible && ImGui::IsItemHovered()) ImGui::SetTooltip("This pack can't be enabled. Open Manage for details.");
+                PaddockText(detail_type, PaddockRgb(pack.compatible ? 0x1AC2A3U : kSetWarm), type, column - 32.0F);
+                if (!pack.compatible && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("This pack can't be enabled. Open Manage for details.");
                 const float priority_y = card.y + 16.0F + name_height + 8.0F + type_height + 10.0F;
                 ImGui::SetCursorScreenPos({card.x + 16.0F, priority_y});
                 PaddockText(detail_type, PaddockRgb(pack.priority == 1U ? kSetWarm : kSetText),
@@ -244,8 +276,8 @@ void DrawTexturePackLibrary(float width) {
                     ImGui::SetTooltip("Lower numbers win. Sorting and filtering don't change priority.");
                 }
                 const ImVec2 actions{card.x + 16.0F, priority_y + detail_type.line + 8.0F};
-                const float action_width = priority_stacked ? column - 32.0F
-                    : std::floor((column - 32.0F - 8.0F) * 0.5F);
+                const float action_width =
+                    priority_stacked ? column - 32.0F : std::floor((column - 32.0F - 8.0F) * 0.5F);
                 RaceButtonLook priority_look;
                 priority_look.font_px = 16.0F;
                 const auto priority_button = [&](const char* label, ImVec2 position, bool disabled) {
@@ -256,10 +288,10 @@ void DrawTexturePackLibrary(float width) {
                 if (priority_button("HIGHER", actions, busy || pack.priority <= 1U)) {
                     texture_packs::set_priority(pack.id, pack.priority - 1U, g_texture_pack_status);
                 }
-                const ImVec2 lower_at = priority_stacked
-                    ? ImVec2{actions.x, actions.y + 52.0F}
-                    : ImVec2{actions.x + action_width + 8.0F, actions.y};
-                if (priority_button("LOWER", lower_at, busy || pack.priority == 0U || pack.priority >= cache.all.size())) {
+                const ImVec2 lower_at = priority_stacked ? ImVec2{actions.x, actions.y + 52.0F}
+                                                         : ImVec2{actions.x + action_width + 8.0F, actions.y};
+                if (priority_button("LOWER", lower_at,
+                                    busy || pack.priority == 0U || pack.priority >= cache.all.size())) {
                     texture_packs::set_priority(pack.id, pack.priority + 1U, g_texture_pack_status);
                 }
                 ImGui::SetCursorScreenPos({card.x + 16.0F, card.y + card_height - 16.0F - 44.0F});
@@ -293,14 +325,15 @@ void DrawCrtOverlaySection(float width) {
         SaveSettings();
     }
     PaddockGap(8.0F);
-    DetailText("Applies to the game image, not the menus.",
-               width, kSetMuted);
+    DetailText("Applies to the game image, not the menus.", width, kSetMuted);
     if (g_crt_enabled) {
         const float field = std::min(width, 680.0F);
         if (!g_crt_filters.empty()) {
             std::vector<SettingsChoice> filters;
-            for (const auto& filter : g_crt_filters) filters.push_back({filter.label, {}, false});
-            if (SettingsDropdown("crt-filter", "Filter image", &g_crt_filter_index, filters, field)) SaveSettings();
+            for (const auto& filter : g_crt_filters)
+                filters.push_back({filter.label, {}, false});
+            if (SettingsDropdown("crt-filter", "Filter image", &g_crt_filter_index, filters, field))
+                SaveSettings();
             PaddockGap(13.0F);
         }
         if (SettingsDropdown("crt-scaling", "Scaling", &g_crt_scale_mode,
@@ -316,7 +349,8 @@ void DrawCrtOverlaySection(float width) {
         }
         PaddockGap(13.0F);
     }
-    if (DetailRaceButton("IMPORT CUSTOM CRT FILTER", width)) ImportCrtFilterWithDialog();
+    if (DetailRaceButton("IMPORT CUSTOM CRT FILTER", width))
+        ImportCrtFilterWithDialog();
     if (!g_crt_status.empty()) {
         PaddockGap(13.0F);
         DrawFriendlyStatus(g_crt_status, width, dkr::runtime::copy::Area::Textures);
@@ -335,16 +369,14 @@ void DrawTexturesPage(float width) {
         if (modern) {
             DrawTexturePackLibrary(width);
         } else {
-            DetailText("Requires Modern graphics.",
-                       width, kSetMuted);
+            DetailText("Requires Modern graphics.", width, kSetMuted);
         }
     }
     if (DetailSectionSign("CRT OVERLAYS##crt", state.crt_open, width)) {
         if (modern) {
             DrawCrtOverlaySection(width);
         } else {
-            DetailText("Requires Modern graphics.",
-                       width, kSetMuted);
+            DetailText("Requires Modern graphics.", width, kSetMuted);
         }
     }
     ImGui::PopStyleVar();
@@ -389,7 +421,8 @@ void DrawAboutPatchNotes() {
                                                     ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
-    if (!visible) return;
+    if (!visible)
+        return;
     g_paddock_modal_frame = ImGui::GetFrameCount();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
     const float inner = width - 52.0F;
@@ -401,13 +434,20 @@ void DrawAboutPatchNotes() {
         PaddockGap(1.0F + 22.0F);
     }
     constexpr std::array<std::pair<const char*, const char*>, 7> kNotes{{
-        {"QUICK START", "Skip opening logos and choose the start menu or character select. Portable mode keeps data beside DKR-R."},
-        {"ONLINE", "Online play uses Rollback. Lobby mods can be downloaded from the host and kept for offline play. Online saves stay separate."},
-        {"CUSTOM MODS", "Browse custom characters with L / R, use custom tracks, compare duplicate mods and prepare saved imports again. Some custom features need additional support."},
-        {"GRAPHICS", "Enhanced water, reflections, waterfalls and lava, with separate lava lighting and quality controls. Widescreen track menus and custom-row backgrounds."},
-        {"TEXTURES AND CONTROLS", "Mix texture packs using priorities. Switch controller backends without closing the game. Adjust bindings, steering and gyro."},
-        {"SAVES AND SOUND", "Manage offline, online and modded saves separately. Back up, transfer and edit progress. Adjust sound levels and music for 3-4 player races."},
-        {"LAUNCHER AND UPDATES", "Shorter settings help and clearer dialogs, with technical details available when needed. Check for updates from Play or About; downloads and installation stay optional."},
+        {"QUICK START",
+         "Skip opening logos and choose the start menu or character select. Portable mode keeps data beside DKR-R."},
+        {"ONLINE",
+         "Online play uses Rollback. Lobby mods can be downloaded from the host and kept for offline play. Online saves stay separate."},
+        {"CUSTOM MODS",
+         "Browse custom characters with L / R, use custom tracks, compare duplicate mods and prepare saved imports again. Some custom features need additional support."},
+        {"GRAPHICS",
+         "Enhanced water, reflections, waterfalls and lava, with separate lava lighting and quality controls. Widescreen track menus and custom-row backgrounds."},
+        {"TEXTURES AND CONTROLS",
+         "Mix texture packs using priorities. Switch controller backends without closing the game. Adjust bindings, steering and gyro."},
+        {"SAVES AND SOUND",
+         "Manage offline, online and modded saves separately. Back up, transfer and edit progress. Adjust sound levels and music for 3-4 player races."},
+        {"LAUNCHER AND UPDATES",
+         "Shorter settings help and clearer dialogs, with technical details available when needed. Check for updates from Play or About; downloads and installation stay optional."},
     }};
     const float footer = 24.0F + 44.0F;
     ImGui::BeginChild("##patch-body", {inner, std::max(ImGui::GetContentRegionAvail().y - footer, 80.0F)}, false,
@@ -415,7 +455,8 @@ void DrawAboutPatchNotes() {
     const float text_width = inner - ImGui::GetStyle().ScrollbarSize - 8.0F;
     DetailText("DKR-R " + std::string(DKR_RELEASE_VERSION), text_width, kSetMuted);
     for (std::size_t index = 0; index < kNotes.size(); ++index) {
-        if (index > 0U) PaddockGap(11.0F);
+        if (index > 0U)
+            PaddockGap(11.0F);
         DetailHeading(kNotes[index].first, text_width, kSetWarm);
         DetailText(kNotes[index].second, text_width);
     }
@@ -423,7 +464,8 @@ void DrawAboutPatchNotes() {
     PaddockGap(24.0F);
     const float close_width = PaddockRaceButtonWidth("CLOSE PATCH NOTES");
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + inner - close_width);
-    if (DetailRaceButton("CLOSE PATCH NOTES", close_width)) ImGui::CloseCurrentPopup();
+    if (DetailRaceButton("CLOSE PATCH NOTES", close_width))
+        ImGui::CloseCurrentPopup();
     ImGui::PopStyleVar();
     ImGui::EndPopup();
 }
@@ -432,7 +474,11 @@ void DrawAboutPatchNotes() {
 // rather than clipping labels or growing into several full-width rows.
 void DrawSupportActionRow(float width) {
     enum class Action { Export, Logs, Dumps, Reports, Performance, StartupLogs };
-    struct Button { const char* label; const char* hint; Action action; };
+    struct Button {
+        const char* label;
+        const char* hint;
+        Action action;
+    };
     constexpr Button buttons[]{
 #if defined(__ANDROID__)
         {"PERFORMANCE", "Record a performance report", Action::Performance},
@@ -446,45 +492,57 @@ void DrawSupportActionRow(float width) {
     constexpr float gap = 8.0F;
     constexpr float font = 17.0F;
     float total = -gap;
-    for (const Button& button : buttons) total += PaddockRaceButtonWidth(button.label, font) + gap;
+    for (const Button& button : buttons)
+        total += PaddockRaceButtonWidth(button.label, font) + gap;
     const float height = 44.0F + (total > width ? ImGui::GetStyle().ScrollbarSize + 2.0F : 0.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
     ImGui::SetNextWindowContentSize({total, 44.0F});
     if (ImGui::BeginChild("##support-actions", {width, height}, false,
-                         ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NavFlattened |
-                         ImGuiWindowFlags_NoBackground)) {
+                          ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NavFlattened |
+                              ImGuiWindowFlags_NoBackground)) {
         RaceButtonLook look;
         look.font_px = font;
         look.hover_in = 0.12F;
         for (std::size_t index = 0; index < std::size(buttons); ++index) {
             const Button& button = buttons[index];
-            if (index != 0U) ImGui::SameLine(0.0F, gap);
-            const bool pressed = PaddockRaceButton(button.label,
-                {PaddockRaceButtonWidth(button.label, font), 44.0F}, look);
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", button.hint);
-            if (!pressed) continue;
+            if (index != 0U)
+                ImGui::SameLine(0.0F, gap);
+            const bool pressed =
+                PaddockRaceButton(button.label, {PaddockRaceButtonWidth(button.label, font), 44.0F}, look);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", button.hint);
+            if (!pressed)
+                continue;
             switch (button.action) {
             case Action::Export: {
                 std::filesystem::path output;
                 std::string error;
                 g_support_action_status = dkr::runtime::support::export_report(BuildSupportReport(), output, error)
-                    ? "Support report saved." : error;
+                                              ? "Support report saved."
+                                              : error;
                 break;
             }
             case Action::Logs:
                 dkr::runtime::support::open_directory(dkr::runtime::support::log_directory(), g_support_action_status);
                 break;
             case Action::Dumps:
-                dkr::runtime::support::open_directory(dkr::runtime::support::crash_dump_directory(), g_support_action_status);
+                dkr::runtime::support::open_directory(dkr::runtime::support::crash_dump_directory(),
+                                                      g_support_action_status);
                 break;
             case Action::Reports:
-                dkr::runtime::support::open_directory(dkr::runtime::support::support_report_directory(), g_support_action_status);
+                dkr::runtime::support::open_directory(dkr::runtime::support::support_report_directory(),
+                                                      g_support_action_status);
                 break;
 #if defined(__ANDROID__)
-            case Action::Performance: dkr::runtime::android::performance_tools(); break;
-            case Action::StartupLogs: dkr::runtime::android::export_diagnostics(); break;
+            case Action::Performance:
+                dkr::runtime::android::performance_tools();
+                break;
+            case Action::StartupLogs:
+                dkr::runtime::android::export_diagnostics();
+                break;
 #endif
-            default: break;
+            default:
+                break;
             }
         }
     }
@@ -511,8 +569,7 @@ void DrawAboutSupport(float width) {
             {"Graphics API", SupportGraphicsApiName(config.api_option)},
             {"HUD size", hud},
             {"Enabled texture packs", std::to_string(EnabledTexturePackCount())},
-            {"Online synchronization",
-             dkr::runtime::netplay::rollback_policy::name(CurrentOnlineSynchronization())},
+            {"Online synchronization", dkr::runtime::netplay::rollback_policy::name(CurrentOnlineSynchronization())},
         };
 #if defined(__ANDROID__)
         facts.push_back({"Android build", dkr::runtime::android::build_identity()});
@@ -534,7 +591,8 @@ void DrawAboutSupport(float width) {
         const float value_width = std::max(inner - label_width - 16.0F, 1.0F);
         const PaddockType type = PaddockReading(16.0F, false, 1.5F);
         for (std::size_t index = 0; index < facts.size(); ++index) {
-            if (index > 0U) PaddockGap(8.0F);
+            if (index > 0U)
+                PaddockGap(8.0F);
             const ImVec2 at = ImGui::GetCursorScreenPos();
             PaddockText(type, PaddockRgb(kSetMuted), facts[index].first, label_width);
             const float label_bottom = ImGui::GetItemRectMax().y;
@@ -592,36 +650,39 @@ void DrawAboutPage(float width, bool support) {
     DetailText("Diddy Kong Racing - Recompiled", width, kSetMuted, 0.0F);
     PaddockGap(24.0F);
     DetailCard(width, {22.0F, 22.0F}, [&](float inner) {
-        DetailText("A native recompile of Diddy Kong Racing with modern graphics, online play and mods.",
-                   inner);
-        DetailText("",
-                   inner);
+        DetailText("A native recompile of Diddy Kong Racing with modern graphics, online play and mods.", inner);
+        DetailText("", inner);
         DetailHeading("CREATED BY THATGUYMCD", inner, kSetWarm);
-        DetailText("Official downloads are available on GitHub.",
-                   inner);
+        DetailText("Official downloads are available on GitHub.", inner);
         DetailText("", inner, kSetMuted, 3.0F);
         PaddockGap(16.0F);
-        DetailActionPair(inner, inner <= 520.0F, [&](float cell) {
-            if (DetailRaceButton("VISIT GITHUB PAGE", cell)) SDL_OpenURL("https://github.com/ThatGuyMcd/DKR-R");
-        }, [&](float cell) {
-            if (DetailRaceButton("VIEW RELEASE NOTES", cell, 0xE82E21)) g_patch_notes_requested = true;
-        });
+        DetailActionPair(
+            inner, inner <= 520.0F,
+            [&](float cell) {
+                if (DetailRaceButton("VISIT GITHUB PAGE", cell))
+                    SDL_OpenURL("https://github.com/ThatGuyMcd/DKR-R");
+            },
+            [&](float cell) {
+                if (DetailRaceButton("VIEW RELEASE NOTES", cell, 0xE82E21))
+                    g_patch_notes_requested = true;
+            });
         PaddockGap(16.0F);
     });
 
     AboutSectionTitle("Release information", width);
     DetailText(std::string("DKR-R ") + DKR_RELEASE_VERSION, width);
     DetailText("", width);
-    DetailText("Requires your own legally obtained, supported Diddy Kong Racing ROM.",
-               width, kSetMuted, 0.0F);
+    DetailText("Requires your own legally obtained, supported Diddy Kong Racing ROM.", width, kSetMuted, 0.0F);
 
     DrawUpdatesCard(width);
-    if (support) DrawAboutSupport(width);
+    if (support)
+        DrawAboutSupport(width);
     AboutSectionTitle("Credits", width);
     DetailCard(width, {20.0F, 18.0F}, [&](float inner) {
         DetailHeading("POOTERMAN - DKR-R ICON", inner, kSetWarm);
         DetailText("DKR-R\xE2\x80\x99s application icon was created by POOTERMAN.", inner);
-        if (DetailRaceButton("VISIT POOTERMAN ON DEVIANTART", inner)) SDL_OpenURL("https://www.deviantart.com/pooterman");
+        if (DetailRaceButton("VISIT POOTERMAN ON DEVIANTART", inner))
+            SDL_OpenURL("https://www.deviantart.com/pooterman");
         PaddockGap(26.0F);
         DetailHeading("CORE TECHNOLOGY AND RESEARCH", inner, kSetWarm);
         // .about-technology: the name, then a 190 px button (stacked when narrow).
@@ -633,7 +694,8 @@ void DrawAboutPage(float width, bool support) {
             if (stacked) {
                 PaddockText(type, PaddockRgb(kSetText), credit.name, inner);
                 PaddockGap(8.0F);
-                if (DetailRaceButton("VISIT GITHUB", inner)) SDL_OpenURL(credit.repository);
+                if (DetailRaceButton("VISIT GITHUB", inner))
+                    SDL_OpenURL(credit.repository);
             } else {
                 // Keep long acknowledgements clear of the fixed-width action.
                 const float label_width = inner - 206.0F;
@@ -642,7 +704,8 @@ void DrawAboutPage(float width, bool support) {
                 ImGui::SetCursorScreenPos({at.x, at.y + (row_height - label_height) * 0.5F});
                 PaddockText(type, PaddockRgb(kSetText), credit.name, label_width);
                 ImGui::SetCursorScreenPos({at.x + inner - 190.0F, at.y + (row_height - 44.0F) * 0.5F});
-                if (DetailRaceButton("VISIT GITHUB", 190.0F)) SDL_OpenURL(credit.repository);
+                if (DetailRaceButton("VISIT GITHUB", 190.0F))
+                    SDL_OpenURL(credit.repository);
                 ImGui::SetCursorScreenPos({at.x, at.y + row_height});
             }
             PaddockGap(12.0F);
@@ -650,14 +713,16 @@ void DrawAboutPage(float width, bool support) {
         }
         DetailText("Thanks to all developers and contributors.", inner, kSetMuted, 0.0F);
         PaddockGap(12.0F);
-        DetailText("Thanks to elliotttate and the Wave Race contributors for the enhanced-water rendering reference.", inner, kSetMuted, 0.0F);
+        DetailText("Thanks to elliotttate and the Wave Race contributors for the enhanced-water rendering reference.",
+                   inner, kSetMuted, 0.0F);
         PaddockGap(26.0F);
         DetailHeading("DKR-R HDR TEXTURE PACK PROJECT", inner, kSetWarm);
         DetailText("A community project re-imagining Diddy Kong Racing in crisp HD while remaining faithful to the "
                    "original art direction. Project lead: sr.gu. Thank you to every artist, tester and contributor "
                    "involved.",
                    inner);
-        if (DetailRaceButton("JOIN THE DKR-R HDR DISCORD", inner)) SDL_OpenURL("https://discord.gg/AMWfXdBjNP");
+        if (DetailRaceButton("JOIN THE DKR-R HDR DISCORD", inner))
+            SDL_OpenURL("https://discord.gg/AMWfXdBjNP");
     });
     ImGui::PopStyleVar();
     DrawAboutPatchNotes();

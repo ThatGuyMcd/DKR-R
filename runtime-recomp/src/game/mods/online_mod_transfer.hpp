@@ -6,46 +6,64 @@
 #include <map>
 
 namespace dkr::mods::online {
-inline constexpr std::size_t MaxChunkBytes=8192;
-inline constexpr std::size_t TransferWindowBytes=256*1024;
-inline constexpr unsigned UploadBurstPackets=8;
+inline constexpr std::size_t MaxChunkBytes = 8192;
+inline constexpr std::size_t TransferWindowBytes = 256 * 1024;
+inline constexpr unsigned UploadBurstPackets = 8;
 inline constexpr std::size_t transfer_window_bytes(std::size_t chunk) {
-    return chunk && chunk<=MaxChunkBytes?(TransferWindowBytes/chunk)*chunk:0;
+    return chunk && chunk <= MaxChunkBytes ? (TransferWindowBytes / chunk) * chunk : 0;
 }
 enum class Operation : std::uint8_t {
-    Offer=1,ManifestRequest,ManifestChunk,Consent,PayloadRequest,PayloadChunk,
-    Preparing,Verified,Cancel,ConsentAck,PreparingAck,Progress,ManifestCredit,PayloadCredit
+    Offer = 1,
+    ManifestRequest,
+    ManifestChunk,
+    Consent,
+    PayloadRequest,
+    PayloadChunk,
+    Preparing,
+    Verified,
+    Cancel,
+    ConsentAck,
+    PreparingAck,
+    Progress,
+    ManifestCredit,
+    PayloadCredit
 };
-enum class ProgressPhase : std::uint8_t {Review=1,Downloading,Preparing,Verified};
+enum class ProgressPhase : std::uint8_t { Review = 1, Downloading, Preparing, Verified };
 struct Message {
-    Operation operation=Operation::Offer;
-    std::string manifest,payload;
-    std::uint32_t offset=0,total=0;
+    Operation operation = Operation::Offer;
+    std::string manifest, payload;
+    std::uint32_t offset = 0, total = 0;
     Bytes bytes;
-    bool operator==(const Message&)const=default;
+    bool operator==(const Message&) const = default;
 };
 Bytes encode_message(const Message& message);
 Message decode_message(View bytes);
-enum class TransferPhase {None,Manifest,Consent,Payloads,Preparing,Verified,Cancelled};
+enum class TransferPhase { None, Manifest, Consent, Payloads, Preparing, Verified, Cancelled };
 // One serial worker owns this state. Network/UI threads exchange bounded
 // messages and immutable views; they never decode/import or write files.
 class Download {
-public:
-    void offer(std::string digest,std::uint32_t manifest_bytes);
+  public:
+    void offer(std::string digest, std::uint32_t manifest_bytes);
     bool manifest_chunk(const Message& message);
-    const Manifest& manifest()const;
-    const std::string& digest()const{return digest_;}
-    TransferPhase phase()const{return phase_;}
-    std::uint32_t offset()const{return offset_;}
+    const Manifest& manifest() const;
+    const std::string& digest() const {
+        return digest_;
+    }
+    TransferPhase phase() const {
+        return phase_;
+    }
+    std::uint32_t offset() const {
+        return offset_;
+    }
     void consent();
     void cancel() noexcept;
     // The worker may skip a payload only after checking its full cached hash.
-    void cached(std::string_view digest,std::uint64_t size);
+    void cached(std::string_view digest, std::uint64_t size);
     // Rejoin may reuse a saved prefix only after renewed consent.
     // Its complete SHA is still mandatory; a prefix is never an asset proof.
-    void resume_prefix(std::string_view digest,std::uint64_t bytes);
-    Message request(std::size_t chunk_bytes)const;
-    bool accept_payload_chunk(const Message& message)const;
+    void resume_prefix(std::string_view digest, std::uint64_t bytes);
+    Message request(std::size_t chunk_bytes) const;
+    bool accept_payload_chunk(const Message& message) const;
     // Called ONLY after the staging writer has completely accepted these bytes.
     // The writer flushes bounded batches and always flushes before publication.
     // Partial data never counts as a verified/prepared mod.
@@ -53,49 +71,66 @@ public:
     // Called ONLY after the completed staging file's size and SHA-256 match.
     void payload_verified();
     void prepared(std::string_view locally_verified_manifest);
-    std::uint64_t received_bytes()const{return received_;}
-private:
+    std::uint64_t received_bytes() const {
+        return received_;
+    }
+
+  private:
     void next_payload();
-    TransferPhase phase_=TransferPhase::None;
+    TransferPhase phase_ = TransferPhase::None;
     std::string digest_;
-    std::uint32_t manifest_size_=0,offset_=0;
+    std::uint32_t manifest_size_ = 0, offset_ = 0;
     Bytes metadata_;
     std::optional<Manifest> manifest_;
-    std::size_t payload_=0;
-    std::uint64_t received_=0;
+    std::size_t payload_ = 0;
+    std::uint64_t received_ = 0;
 };
 // Worker-owned per-recipient window. Each request opens at most 256 KiB, not
 // an unbounded stream. A receiver retries its first missing offset; reordering
 // and loss cannot silently advance it. The coordinator schedules peers fairly.
 class Upload {
-public:
+  public:
     explicit Upload(std::shared_ptr<const Bundle> bundle);
-    void request(const Message& message,std::size_t chunk_bytes);
-    std::optional<Message> next()const;
+    void request(const Message& message, std::size_t chunk_bytes);
+    std::optional<Message> next() const;
     void sent();
-    bool consented()const{return consented_;}
-    bool preparing()const{return preparing_;}
-    bool cancelled()const{return cancelled_;}
-private:
+    bool consented() const {
+        return consented_;
+    }
+    bool preparing() const {
+        return preparing_;
+    }
+    bool cancelled() const {
+        return cancelled_;
+    }
+
+  private:
     std::shared_ptr<const Bundle> bundle_;
-    std::shared_ptr<const Bytes> metadata_,source_;
-    std::string digest_,payload_;
-    std::uint32_t offset_=0,end_=0,sent_high_water_=0;
-    std::size_t chunk_=0;
-    bool consented_=false,preparing_=false,cancelled_=false;
+    std::shared_ptr<const Bytes> metadata_, source_;
+    std::string digest_, payload_;
+    std::uint32_t offset_ = 0, end_ = 0, sent_high_water_ = 0;
+    std::size_t chunk_ = 0;
+    bool consented_ = false, preparing_ = false, cancelled_ = false;
 };
 // SCTP's bulk lane is reliable but unordered. Keep a bounded window instead of
 // discarding all later chunks when one arrives late. No chunk advances the
 // download until its exact preceding offset has been written/verified.
 class ChunkInbox {
-public:
-    bool push(const Message& chunk,const Message& request);
+  public:
+    bool push(const Message& chunk, const Message& request);
     std::optional<Message> take(const Message& request);
-    void clear(){chunks_.clear();bytes_=0;payload_.clear();}
-    std::size_t bytes()const{return bytes_;}
-private:
-    std::map<std::uint32_t,Message> chunks_;
-    std::size_t bytes_=0;
+    void clear() {
+        chunks_.clear();
+        bytes_ = 0;
+        payload_.clear();
+    }
+    std::size_t bytes() const {
+        return bytes_;
+    }
+
+  private:
+    std::map<std::uint32_t, Message> chunks_;
+    std::size_t bytes_ = 0;
     std::string payload_;
 };
-}
+} // namespace dkr::mods::online

@@ -11,27 +11,40 @@ namespace dkr::mods::online {
 // Neither receipt metadata nor sharing another world's resident caches can
 // stand in for this preparation.
 class RuntimeResources {
-public:
+  public:
     static std::shared_ptr<const RuntimeResources> prepare(std::shared_ptr<const Profile> profile,
-        const std::filesystem::path& original_rom,std::stop_token stop={},std::string_view host_version="1.0.7");
-    std::shared_ptr<RuntimeSession> new_session()const;
-    const std::shared_ptr<const Profile>& profile()const{return profile_;}
-    const std::shared_ptr<const dkr::runtime::custom_tracks::PreparedTracks>& authored()const{return authored_;}
-    const std::string& fingerprint()const{return fingerprint_;}
-    const std::shared_ptr<const MusicLibrary>& music()const{return music_;}
-    const std::shared_ptr<const code::FrozenSet>& code()const{return code_;}
-private:
+                                                           const std::filesystem::path& original_rom,
+                                                           std::stop_token stop = {},
+                                                           std::string_view host_version = "1.0.7");
+    std::shared_ptr<RuntimeSession> new_session() const;
+    const std::shared_ptr<const Profile>& profile() const {
+        return profile_;
+    }
+    const std::shared_ptr<const dkr::runtime::custom_tracks::PreparedTracks>& authored() const {
+        return authored_;
+    }
+    const std::string& fingerprint() const {
+        return fingerprint_;
+    }
+    const std::shared_ptr<const MusicLibrary>& music() const {
+        return music_;
+    }
+    const std::shared_ptr<const code::FrozenSet>& code() const {
+        return code_;
+    }
+
+  private:
     std::shared_ptr<const Profile> profile_;
     std::shared_ptr<const AssetBank> stock_;
     std::shared_ptr<const CharacterNamespace> characters_;
     std::shared_ptr<const dkr::runtime::custom_tracks::PreparedTracks> authored_;
     std::vector<PreparedTrack> tracks_;
     AssetBank::Overrides additions_;
-    std::array<std::size_t,7> base_counts_{};
+    std::array<std::size_t, 7> base_counts_{};
     std::string fingerprint_;
     std::shared_ptr<const MusicLibrary> music_;
     std::shared_ptr<const RuntimeSession> prepared_world_;
     std::shared_ptr<const code::FrozenSet> code_;
-    std::shared_ptr<const AssetBank> augment(std::shared_ptr<const AssetBank>)const;
+    std::shared_ptr<const AssetBank> augment(std::shared_ptr<const AssetBank>) const;
 };
-}
+} // namespace dkr::mods::online

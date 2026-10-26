@@ -3,9 +3,9 @@
 
 namespace dkr::mods {
 struct GeometrySummary {
-    unsigned segments=0;
-    unsigned triangles=0;
-    std::size_t constructed_bytes=0;
+    unsigned segments = 0;
+    unsigned triangles = 0;
+    std::size_t constructed_bytes = 0;
     std::vector<unsigned> textures;
 };
 // Structural checks only; this does not certify texture/object dependencies,

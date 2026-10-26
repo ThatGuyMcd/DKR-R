@@ -43,20 +43,13 @@ gpr RdramAddress(std::uint32_t address) {
 }
 
 #if DKR_RUNTIME_HAS_RT64
-const std::uint32_t& kOrthoMatrixAddress =
-    dkr::runtime::revision_addresses::OrthoMatrix;
-const std::uint32_t& kViewProjectionMatrixAddress =
-    dkr::runtime::revision_addresses::ViewProjectionMatrix;
-const std::uint32_t& kTrackDisplayListAddress =
-    dkr::runtime::revision_addresses::TrackDisplayList;
-const std::uint32_t& kVoidLateralXAddress =
-    dkr::runtime::revision_addresses::VoidLateralX;
-const std::uint32_t& kVoidLateralZAddress =
-    dkr::runtime::revision_addresses::VoidLateralZ;
-const std::uint32_t& kVoidCentreXAddress =
-    dkr::runtime::revision_addresses::VoidCentreX;
-const std::uint32_t& kVoidCentreZAddress =
-    dkr::runtime::revision_addresses::VoidCentreZ;
+const std::uint32_t& kOrthoMatrixAddress = dkr::runtime::revision_addresses::OrthoMatrix;
+const std::uint32_t& kViewProjectionMatrixAddress = dkr::runtime::revision_addresses::ViewProjectionMatrix;
+const std::uint32_t& kTrackDisplayListAddress = dkr::runtime::revision_addresses::TrackDisplayList;
+const std::uint32_t& kVoidLateralXAddress = dkr::runtime::revision_addresses::VoidLateralX;
+const std::uint32_t& kVoidLateralZAddress = dkr::runtime::revision_addresses::VoidLateralZ;
+const std::uint32_t& kVoidCentreXAddress = dkr::runtime::revision_addresses::VoidCentreX;
+const std::uint32_t& kVoidCentreZAddress = dkr::runtime::revision_addresses::VoidCentreZ;
 constexpr float kOriginalAspect = 4.0F / 3.0F;
 using dkr::runtime::presentation::PresentationMarkerKind;
 constexpr float kSplitViewportCoverQuantisation = 1024.0F;
@@ -108,8 +101,7 @@ float ExpandedCoverScale() {
     if (width <= 0 || height <= 0) {
         return 1.0F;
     }
-    return std::max(1.0F,
-        (static_cast<float>(width) / static_cast<float>(height)) / kOriginalAspect);
+    return std::max(1.0F, (static_cast<float>(width) / static_cast<float>(height)) / kOriginalAspect);
 }
 
 float ReadRdramFloat(std::uint8_t* rdram, std::uint32_t address) {
@@ -128,43 +120,33 @@ bool PostraceFullViewScope(std::uint8_t* rdram, float cover) {
         return static_cast<std::int32_t>(MEM_W(0, RdramAddress(address)));
     };
     return dkr::runtime::presentation::postrace_full_view_scope(
-        dkr::runtime::enhancements::modern_presentation_enabled(),
-        cover > 1.0001F, word(addresses::GameMode) == 0,
+        dkr::runtime::enhancements::modern_presentation_enabled(), cover > 1.0001F, word(addresses::GameMode) == 0,
         static_cast<std::int8_t>(MEM_B(0, RdramAddress(addresses::PostRaceViewport))),
-        word(addresses::NumberOfActivePlayers), word(addresses::TrophyRaceWorldId),
-        word(addresses::ViewportLayout));
+        word(addresses::NumberOfActivePlayers), word(addresses::TrophyRaceWorldId), word(addresses::ViewportLayout));
 }
 
-bool AppendPresentationGroupCommand(std::uint8_t* rdram,
-                                    gpr display_list_pointer,
-                                    PresentationGroupMode mode,
-                                    std::uint16_t token = 0U,
-                                    std::uint8_t variant = 0U,
-                                    PresentationMarkerKind kind =
-                                        PresentationMarkerKind::Geometry) {
+bool AppendPresentationGroupCommand(std::uint8_t* rdram, gpr display_list_pointer, PresentationGroupMode mode,
+                                    std::uint16_t token = 0U, std::uint8_t variant = 0U,
+                                    PresentationMarkerKind kind = PresentationMarkerKind::Geometry) {
     if (display_list_pointer == 0) {
         return false;
     }
-    const std::uint32_t current = static_cast<std::uint32_t>(
-        MEM_W(0, display_list_pointer));
+    const std::uint32_t current = static_cast<std::uint32_t>(MEM_W(0, display_list_pointer));
     if (current < 0x80000000U || current > 0x807FFFF8U) {
         return false;
     }
     (void)rdram;
-    return dkr::runtime::presentation::record_presentation_marker(
-        current, static_cast<std::uint8_t>(mode), token, variant, kind);
+    return dkr::runtime::presentation::record_presentation_marker(current, static_cast<std::uint8_t>(mode), token,
+                                                                  variant, kind);
 }
 
 void EnsureLevelSegmentInterpolation(std::uint8_t* rdram) {
-    if (g_level_segment_interpolation_active ||
-        g_level_segment_pending_key.token == 0U) {
+    if (g_level_segment_interpolation_active || g_level_segment_pending_key.token == 0U) {
         return;
     }
     g_level_segment_interpolation_active = AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress),
-        PresentationGroupMode::LevelSegment,
-        g_level_segment_pending_key.token,
-        g_level_segment_pending_key.variant);
+        rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::LevelSegment,
+        g_level_segment_pending_key.token, g_level_segment_pending_key.variant);
 }
 
 #endif
@@ -176,8 +158,7 @@ bool IsRdramWordAddress(std::uint32_t address, std::uint32_t final_offset) {
     // libultra passes both KSEG0 pointers and, in a few low-level paths,
     // physical RDRAM offsets. Reject every other segment before MEM_W masks
     // the address so a stale host completion cannot alias arbitrary memory.
-    return dkr::runtime::scheduler::is_rdram_word_address(address,
-                                                           final_offset);
+    return dkr::runtime::scheduler::is_rdram_word_address(address, final_offset);
 }
 
 using AudioEventQueueGuard = dkr_audio_queue_guard;
@@ -208,11 +189,10 @@ AudioEventQueueGuard& AudioGuardFor(std::uint32_t queue) {
     // DKR owns three sequence players and one sound player. Reusing the
     // quietest slot here remains bounded even if a damaged pointer invents
     // more queue identities than the retail audio heap can contain.
-    auto& guard = *std::min_element(
-        g_audio_event_guards.begin(), g_audio_event_guards.end(),
-        [](const AudioEventQueueGuard& lhs, const AudioEventQueueGuard& rhs) {
-            return lhs.immediate_events < rhs.immediate_events;
-        });
+    auto& guard = *std::min_element(g_audio_event_guards.begin(), g_audio_event_guards.end(),
+                                    [](const AudioEventQueueGuard& lhs, const AudioEventQueueGuard& rhs) {
+                                        return lhs.immediate_events < rhs.immediate_events;
+                                    });
     guard = {};
     guard.queue = queue;
     return guard;
@@ -232,50 +212,49 @@ void ResumeNativeSequence(void* user, std::uint8_t* rdram, std::uint32_t player)
     next.f_odd = next.mips3_float_mode ? &next.f1.u32l : &next.f0.u32h;
     next.r4 = RdramAddress(player);
     const std::uint32_t entry = dkr::runtime::revision_addresses::MusicPlayer == 0x800DC630U
-        ? 0x800629CCU : 0x80062C0CU; // __CSPPostNextSeqEvent, checked retail maps.
+                                    ? 0x800629CCU
+                                    : 0x80062C0CU; // __CSPPostNextSeqEvent, checked retail maps.
     get_function(static_cast<std::int32_t>(entry))(rdram, &next);
 }
 
 } // namespace
 
 extern "C" void dkr_audio_event_queue_initialize(std::uint8_t*, recomp_context* context) {
-    if (!context) return;
+    if (!context)
+        return;
     std::scoped_lock lock(g_audio_event_mutex);
     AudioEventQueueGuard& guard = AudioGuardFor(static_cast<std::uint32_t>(context->r4));
     if (!dkr_audio_register_queue(&guard, static_cast<std::uint32_t>(context->r4),
-            static_cast<std::uint32_t>(context->r5), static_cast<std::uint32_t>(context->r6))) {
+                                  static_cast<std::uint32_t>(context->r5), static_cast<std::uint32_t>(context->r6))) {
         guard = {}; // Invalid arguments never license pool reconstruction.
     }
 }
 
-extern "C" std::uint32_t dkr_audio_event_queue_next(
-    std::uint8_t* rdram, recomp_context* context) {
-    const std::uint32_t queue = context != nullptr
-        ? static_cast<std::uint32_t>(context->r4)
-        : 0U;
-    const std::uint32_t destination = context != nullptr
-        ? static_cast<std::uint32_t>(context->r5)
-        : 0U;
+extern "C" std::uint32_t dkr_audio_event_queue_next(std::uint8_t* rdram, recomp_context* context) {
+    const std::uint32_t queue = context != nullptr ? static_cast<std::uint32_t>(context->r4) : 0U;
+    const std::uint32_t destination = context != nullptr ? static_cast<std::uint32_t>(context->r5) : 0U;
 
     std::scoped_lock lock(g_audio_event_mutex);
     AudioEventQueueGuard& guard = AudioGuardFor(queue);
     unsigned status = DKR_AUDIO_QUEUE_INVALID;
     std::uint32_t delay = DKR_AUDIO_FRAME_US;
-    if (rdram && context) delay = dkr_audio_queue_next(rdram, &guard, destination,
-        dkr::runtime::revision_addresses::MusicPlayer, ResumeNativeSequence, context, &status);
+    if (rdram && context)
+        delay = dkr_audio_queue_next(rdram, &guard, destination, dkr::runtime::revision_addresses::MusicPlayer,
+                                     ResumeNativeSequence, context, &status);
     if (status == DKR_AUDIO_QUEUE_INVALID || status == DKR_AUDIO_QUEUE_EMPTY) {
         // A corrupt caller must not overwrite the queue/pool while returning
         // a harmless idle event. Apply the same output-alias fence as the
         // shared dequeue policy, including its newly adopted pool metadata.
         if (rdram && dkr_audio_range(queue, 20) && dkr_audio_range(destination, 16) &&
             !(destination < queue + 20 && queue < destination + 16) &&
-            !(guard.item_count && destination < guard.items + guard.item_count * 28 &&
-                guard.items < destination + 16)) dkr_audio_empty_event(rdram, destination);
+            !(guard.item_count && destination < guard.items + guard.item_count * 28 && guard.items < destination + 16))
+            dkr_audio_empty_event(rdram, destination);
     }
     if (status && !(guard.logged_corrupt & status)) {
-        std::fprintf(stderr, "[stability][audio] queue=%08X status=%u delay=%u us "
-            "pool=%u; valid burst events retained, recovery restricted to native owners\n",
-            queue, status, delay, guard.item_count);
+        std::fprintf(stderr,
+                     "[stability][audio] queue=%08X status=%u delay=%u us "
+                     "pool=%u; valid burst events retained, recovery restricted to native owners\n",
+                     queue, status, delay, guard.item_count);
         guard.logged_corrupt |= status;
     }
     return delay;
@@ -284,26 +263,21 @@ extern "C" std::uint32_t dkr_audio_event_queue_next(
 extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t*, recomp_context*);
 extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t*, recomp_context*);
 
-extern "C" void dkr_runtime_scene_reset(std::uint8_t* rdram,
-                                          recomp_context* context) {
+extern "C" void dkr_runtime_scene_reset(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     // A transition can abandon one of these scoped patches before its normal
     // end hook runs. Restore any in-place matrix edit while the outgoing scene
     // still owns the backing storage, then clear every host-only draw scope.
     if (rdram != nullptr && g_transition_cover_active) {
         WriteRdramFloat(rdram, kOrthoMatrixAddress, g_saved_transition_x);
-        WriteRdramFloat(rdram,
-                        kOrthoMatrixAddress + 5U * sizeof(float),
-                        g_saved_transition_y);
+        WriteRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float), g_saved_transition_y);
     }
     if (rdram != nullptr && g_sky_cover_active) {
         for (std::uint32_t row = 0U; row < 4U; ++row) {
             for (std::uint32_t column = 0U; column < 2U; ++column) {
                 const std::uint32_t slot = row * 2U + column;
-                const std::uint32_t address = kViewProjectionMatrixAddress +
-                    (row * 4U + column) * sizeof(float);
-                WriteRdramFloat(rdram, address,
-                                g_saved_sky_projection_columns[slot]);
+                const std::uint32_t address = kViewProjectionMatrixAddress + (row * 4U + column) * sizeof(float);
+                WriteRdramFloat(rdram, address, g_saved_sky_projection_columns[slot]);
             }
         }
     }
@@ -366,22 +340,21 @@ extern "C" void dkr_postrace_presentation_start(std::uint8_t*, recomp_context*) 
 
 extern "C" void dkr_postrace_wooden_frame_draw(std::uint8_t* rdram, recomp_context*) {
 #if DKR_RUNTIME_HAS_RT64
-    if (!rdram) return;
+    if (!rdram)
+        return;
     // This hook is the actual menu_element_render(4) call in postrace_viewport,
     // after retail has updated the rectangle; asset-loading/stage gates have
     // already passed. Merely entering postrace_start cannot trigger this.
     const auto viewport = RdramAddress(dkr::runtime::revision_addresses::ScreenViewports);
-    g_postrace_frame_gate.observe_wood(
-        MEM_W(0, viewport), MEM_W(4, viewport), MEM_W(8, viewport), MEM_W(12, viewport),
-        dkr::runtime::presentation::kCanonicalViWidth,
-        dkr::runtime::presentation::kCanonicalViHeight);
+    g_postrace_frame_gate.observe_wood(MEM_W(0, viewport), MEM_W(4, viewport), MEM_W(8, viewport), MEM_W(12, viewport),
+                                       dkr::runtime::presentation::kCanonicalViWidth,
+                                       dkr::runtime::presentation::kCanonicalViHeight);
 #else
     (void)rdram;
 #endif
 }
 
-extern "C" void dkr_fix_fullscreen_clear_scissor(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_fix_fullscreen_clear_scissor(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (rdram == nullptr || context == nullptr) {
         return;
@@ -390,95 +363,75 @@ extern "C" void dkr_fix_fullscreen_clear_scissor(
     if (!IsRdramWordAddress(command, 7U)) {
         return;
     }
-    const auto command_address = static_cast<gpr>(
-        static_cast<std::int32_t>(command));
-    const auto lower_right = static_cast<std::uint32_t>(
-        MEM_W(4, command_address));
-    MEM_W(4, command_address) =
-        dkr::runtime::presentation::correct_fullscreen_clear_scissor(
-            lower_right,
-            dkr::runtime::presentation::kCanonicalViWidth,
-            dkr::runtime::presentation::kCanonicalViHeight);
+    const auto command_address = static_cast<gpr>(static_cast<std::int32_t>(command));
+    const auto lower_right = static_cast<std::uint32_t>(MEM_W(4, command_address));
+    MEM_W(4, command_address) = dkr::runtime::presentation::correct_fullscreen_clear_scissor(
+        lower_right, dkr::runtime::presentation::kCanonicalViWidth, dkr::runtime::presentation::kCanonicalViHeight);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_split_screen_viewport_fill(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_split_screen_viewport_fill(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (rdram == nullptr || context == nullptr) {
         return;
     }
-    AppendPresentationGroupCommand(rdram,context->r17,PresentationGroupMode::World,
-        std::uint16_t(MEM_W(0,RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId))&3U),
-        0U,PresentationMarkerKind::CameraWorldBegin);
+    AppendPresentationGroupCommand(
+        rdram, context->r17, PresentationGroupMode::World,
+        std::uint16_t(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId)) & 3U), 0U,
+        PresentationMarkerKind::CameraWorldBegin);
     const float cover = ExpandedCoverScale();
     const bool postrace = PostraceFullViewScope(rdram, cover);
-    g_postrace_world_framed = postrace &&
-        g_postrace_frame_gate.contracted_frame_submitted;
+    g_postrace_world_framed = postrace && g_postrace_frame_gate.contracted_frame_submitted;
     if (postrace && !g_postrace_world_framed) {
         // Presentation-only viewport/scissor correction: leave the authored
         // viewport, camera, menu animation and shared simulation RAM intact.
-        AppendPresentationGroupCommand(
-            rdram, context->r17, PresentationGroupMode::World, 0U,
-            0U, PresentationMarkerKind::PostraceFullViewport);
+        AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::World, 0U, 0U,
+                                       PresentationMarkerKind::PostraceFullViewport);
     }
-    const int viewport_layout = static_cast<std::int32_t>(
-        MEM_W(0, RdramAddress(
-            dkr::runtime::revision_addresses::ViewportLayout)));
+    const int viewport_layout =
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
     if (!dkr::runtime::enhancements::needs_split_world_aspect_adjust(
-            dkr::runtime::enhancements::modern_presentation_enabled(),
-            cover > 1.0001F, viewport_layout)) {
+            dkr::runtime::enhancements::modern_presentation_enabled(), cover > 1.0001F, viewport_layout)) {
         return;
     }
 
     const auto camera = static_cast<std::uint16_t>(
-        static_cast<std::uint32_t>(MEM_W(
-            0, RdramAddress(
-                   dkr::runtime::revision_addresses::ActiveCameraId))) &
-        3U);
-    const auto quantised_cover = static_cast<std::uint16_t>(std::clamp(
-        std::lround(cover * kSplitViewportCoverQuantisation),
-        0L, 0x3FFFL));
-    const auto token = static_cast<std::uint16_t>(
-        (quantised_cover << 2U) | camera);
-    AppendPresentationGroupCommand(
-        rdram, context->r17, PresentationGroupMode::World, token,
-        0U, PresentationMarkerKind::SplitViewport);
+        static_cast<std::uint32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId))) & 3U);
+    const auto quantised_cover =
+        static_cast<std::uint16_t>(std::clamp(std::lround(cover * kSplitViewportCoverQuantisation), 0L, 0x3FFFL));
+    const auto token = static_cast<std::uint16_t>((quantised_cover << 2U) | camera);
+    AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::World, token, 0U,
+                                   PresentationMarkerKind::SplitViewport);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_split_screen_world_aspect_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_split_screen_world_aspect_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_split_world_aspect_active = false;
     g_postrace_framed_scope_active = false;
     if (rdram == nullptr || context == nullptr) {
         return;
     }
-    const int viewport_layout = static_cast<std::int32_t>(
-        MEM_W(0, RdramAddress(
-            dkr::runtime::revision_addresses::ViewportLayout)));
+    const int viewport_layout =
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
     const auto policy = dkr::runtime::enhancements::world_aspect_policy(
-        dkr::runtime::enhancements::modern_presentation_enabled(),
-        ExpandedCoverScale() > 1.0001F, viewport_layout);
-    if (policy ==
-        dkr::runtime::enhancements::WorldAspectPolicy::AdjustToHost) {
-        g_split_world_aspect_active = AppendPresentationGroupCommand(
-            rdram, context->r17, PresentationGroupMode::AspectAdjust);
+        dkr::runtime::enhancements::modern_presentation_enabled(), ExpandedCoverScale() > 1.0001F, viewport_layout);
+    if (policy == dkr::runtime::enhancements::WorldAspectPolicy::AdjustToHost) {
+        g_split_world_aspect_active =
+            AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::AspectAdjust);
     }
 
     // Use the SAME decision as the pre-viewport hook. No competing menu-stage
     // predicate can enable 4:3 before the first contracted frame was submitted.
     if (g_postrace_world_framed) {
         g_postrace_framed_scope_active = AppendPresentationGroupCommand(
-            rdram, context->r17, PresentationGroupMode::StaticAuto, 0U,
-            0U, PresentationMarkerKind::FramedResults);
+            rdram, context->r17, PresentationGroupMode::StaticAuto, 0U, 0U, PresentationMarkerKind::FramedResults);
     }
 #else
     (void)rdram;
@@ -486,26 +439,24 @@ extern "C" void dkr_split_screen_world_aspect_begin(
 #endif
 }
 
-extern "C" void dkr_split_screen_world_aspect_end(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_split_screen_world_aspect_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (rdram == nullptr || context == nullptr) {
         return;
     }
-    AppendPresentationGroupCommand(rdram,context->r17,PresentationGroupMode::World,
-        std::uint16_t(MEM_W(0,RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId))&3U),
-        0U,PresentationMarkerKind::CameraWorldEnd);
+    AppendPresentationGroupCommand(
+        rdram, context->r17, PresentationGroupMode::World,
+        std::uint16_t(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ActiveCameraId)) & 3U), 0U,
+        PresentationMarkerKind::CameraWorldEnd);
     // Close in reverse order. Dedicated markers restore the exact renderer
     // state they captured, so they cannot consume an unrelated group scope.
     if (g_postrace_framed_scope_active) {
-        AppendPresentationGroupCommand(
-            rdram, context->r17, PresentationGroupMode::World, 0U,
-            0U, PresentationMarkerKind::FramedResults);
+        AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::World, 0U, 0U,
+                                       PresentationMarkerKind::FramedResults);
         g_postrace_framed_scope_active = false;
     }
     if (g_split_world_aspect_active) {
-        AppendPresentationGroupCommand(
-            rdram, context->r17, PresentationGroupMode::World);
+        AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::World);
         g_split_world_aspect_active = false;
     }
 #else
@@ -514,8 +465,7 @@ extern "C" void dkr_split_screen_world_aspect_end(
 #endif
 }
 
-extern "C" void dkr_track_select_fullscreen_preview(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_track_select_fullscreen_preview(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (rdram == nullptr || context == nullptr) {
         return;
@@ -524,20 +474,15 @@ extern "C" void dkr_track_select_fullscreen_preview(
     if (!IsRdramWordAddress(viewport, 0x2FU)) {
         return;
     }
-    const auto address = static_cast<gpr>(
-        static_cast<std::int32_t>(viewport));
+    const auto address = static_cast<gpr>(static_cast<std::int32_t>(viewport));
     const auto read_signed = [rdram, address](std::uint32_t offset) {
         return static_cast<std::int32_t>(MEM_W(offset, address));
     };
-    constexpr int width = static_cast<int>(
-        dkr::runtime::presentation::kCanonicalViWidth);
-    constexpr int height = static_cast<int>(
-        dkr::runtime::presentation::kCanonicalViHeight);
+    constexpr int width = static_cast<int>(dkr::runtime::presentation::kCanonicalViWidth);
+    constexpr int height = static_cast<int>(dkr::runtime::presentation::kCanonicalViHeight);
     if (!dkr::runtime::enhancements::is_fullscreen_track_preview(
-            read_signed(0x00U), read_signed(0x04U),
-            read_signed(0x08U), read_signed(0x0CU),
-            read_signed(0x20U), read_signed(0x24U),
-            read_signed(0x28U), read_signed(0x2CU), width, height)) {
+            read_signed(0x00U), read_signed(0x04U), read_signed(0x08U), read_signed(0x0CU), read_signed(0x20U),
+            read_signed(0x24U), read_signed(0x28U), read_signed(0x2CU), width, height)) {
         return;
     }
     MEM_W(0x28U, address) = width;
@@ -548,27 +493,30 @@ extern "C" void dkr_track_select_fullscreen_preview(
 #endif
 }
 
-extern "C" unsigned dkr_track_select_draw(std::uint8_t* rdram,recomp_context* context,
-    unsigned event,unsigned parameter) {
+extern "C" unsigned dkr_track_select_draw(std::uint8_t* rdram, recomp_context* context, unsigned event,
+                                          unsigned parameter) {
     static thread_local dkr_track_draw_state draw{};
-    if(!rdram || !context)return 0;
-    const auto result=dkr_track_draw_guest(&draw,rdram,context,event);
+    if (!rdram || !context)
+        return 0;
+    const auto result = dkr_track_draw_guest(&draw, rdram, context, event);
 #if DKR_RUNTIME_HAS_RT64
     using namespace dkr::runtime::presentation;
-    if(event==0 || event==1) {
-        const auto cover=static_cast<std::uint16_t>(track_select_cover_token(ExpandedCoverScale()));
-        AppendPresentationGroupCommand(rdram,RdramAddress(parameter),
-            event==0?PresentationGroupMode::StaticAuto:PresentationGroupMode::World,
-            cover,0U,PresentationMarkerKind::TrackSelectUi);
-    } else if(event==9) {
-        const auto cover=static_cast<std::uint16_t>(track_select_cover_token(ExpandedCoverScale()));
+    if (event == 0 || event == 1) {
+        const auto cover = static_cast<std::uint16_t>(track_select_cover_token(ExpandedCoverScale()));
+        AppendPresentationGroupCommand(rdram, RdramAddress(parameter),
+                                       event == 0 ? PresentationGroupMode::StaticAuto : PresentationGroupMode::World,
+                                       cover, 0U, PresentationMarkerKind::TrackSelectUi);
+    } else if (event == 9) {
+        const auto cover = static_cast<std::uint16_t>(track_select_cover_token(ExpandedCoverScale()));
         std::int32_t frame[4];
-        if(dkr_track_preview_bounds(rdram,context,parameter,frame)) {
+        if (dkr_track_preview_bounds(rdram, context, parameter, frame)) {
             dkr::runtime::hud::groups::Transform bounds{};
-            bounds.x=float(frame[0]*4);bounds.y=float(frame[2]*4);
-            bounds.clip_top=float(frame[1]*4);bounds.clip_bottom=float(frame[3]*4);
-            record_presentation_marker(static_cast<std::uint32_t>(context->r2),
-                0U,cover,0U,PresentationMarkerKind::TrackSelectPreview,bounds);
+            bounds.x = float(frame[0] * 4);
+            bounds.y = float(frame[2] * 4);
+            bounds.clip_top = float(frame[1] * 4);
+            bounds.clip_bottom = float(frame[3] * 4);
+            record_presentation_marker(static_cast<std::uint32_t>(context->r2), 0U, cover, 0U,
+                                       PresentationMarkerKind::TrackSelectPreview, bounds);
         }
     }
 #else
@@ -577,63 +525,48 @@ extern "C" unsigned dkr_track_select_draw(std::uint8_t* rdram,recomp_context* co
     return result;
 }
 
-extern "C" void dkr_track_select_lens_flare_tint_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_track_select_lens_flare_tint_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_track_select_lens_flare_scope_active = false;
     if (rdram == nullptr || context == nullptr ||
-        !IsRdramWordAddress(
-            dkr::runtime::revision_addresses::ScreenViewports, 0x2FU)) {
+        !IsRdramWordAddress(dkr::runtime::revision_addresses::ScreenViewports, 0x2FU)) {
         return;
     }
 
-    const auto viewport = RdramAddress(
-        dkr::runtime::revision_addresses::ScreenViewports);
+    const auto viewport = RdramAddress(dkr::runtime::revision_addresses::ScreenViewports);
     const auto read_viewport = [rdram, viewport](const std::uint32_t offset) {
         return static_cast<std::int32_t>(MEM_W(offset, viewport));
     };
-    constexpr int width = static_cast<int>(
-        dkr::runtime::presentation::kCanonicalViWidth);
-    constexpr int height = static_cast<int>(
-        dkr::runtime::presentation::kCanonicalViHeight);
-    const bool fullscreen_preview =
-        dkr::runtime::enhancements::is_presented_fullscreen_track_preview(
-            read_viewport(0x00U), read_viewport(0x04U),
-            read_viewport(0x08U), read_viewport(0x0CU),
-            read_viewport(0x20U), read_viewport(0x24U),
-            read_viewport(0x28U), read_viewport(0x2CU), width, height);
-    const bool tracks_menu_active = MEM_W(
-        0, RdramAddress(
-            dkr::runtime::revision_addresses::IsInTracksMenu)) != 0;
-    const bool postrace_lens=PostraceFullViewScope(rdram,ExpandedCoverScale());
+    constexpr int width = static_cast<int>(dkr::runtime::presentation::kCanonicalViWidth);
+    constexpr int height = static_cast<int>(dkr::runtime::presentation::kCanonicalViHeight);
+    const bool fullscreen_preview = dkr::runtime::enhancements::is_presented_fullscreen_track_preview(
+        read_viewport(0x00U), read_viewport(0x04U), read_viewport(0x08U), read_viewport(0x0CU), read_viewport(0x20U),
+        read_viewport(0x24U), read_viewport(0x28U), read_viewport(0x2CU), width, height);
+    const bool tracks_menu_active = MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::IsInTracksMenu)) != 0;
+    const bool postrace_lens = PostraceFullViewScope(rdram, ExpandedCoverScale());
     if (!postrace_lens && !dkr::runtime::enhancements::preserve_track_select_lens_flare_tint(
-            dkr::runtime::enhancements::modern_presentation_enabled(),
-            ExpandedCoverScale() > 1.0001F, tracks_menu_active,
-            fullscreen_preview)) {
+                              dkr::runtime::enhancements::modern_presentation_enabled(), ExpandedCoverScale() > 1.0001F,
+                              tracks_menu_active, fullscreen_preview)) {
         return;
     }
 
     g_track_select_lens_flare_scope_active =
-        AppendPresentationGroupCommand(
-            rdram, context->r17, PresentationGroupMode::StaticAuto,
-            postrace_lens&&!g_postrace_frame_gate.contracted_frame_submitted?1U:0U,
-            0U, PresentationMarkerKind::TrackSelectLensFlare);
+        AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::StaticAuto,
+                                       postrace_lens && !g_postrace_frame_gate.contracted_frame_submitted ? 1U : 0U, 0U,
+                                       PresentationMarkerKind::TrackSelectLensFlare);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_track_select_lens_flare_tint_end(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_track_select_lens_flare_tint_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
-    if (!g_track_select_lens_flare_scope_active ||
-        rdram == nullptr || context == nullptr) {
+    if (!g_track_select_lens_flare_scope_active || rdram == nullptr || context == nullptr) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, context->r17, PresentationGroupMode::World, 0U,
-        0U, PresentationMarkerKind::TrackSelectLensFlare);
+    AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::World, 0U, 0U,
+                                   PresentationMarkerKind::TrackSelectLensFlare);
     g_track_select_lens_flare_scope_active = false;
 #else
     (void)rdram;
@@ -641,10 +574,11 @@ extern "C" void dkr_track_select_lens_flare_tint_end(
 #endif
 }
 
-extern "C" void dkr_scheduler_keep_host_tasks(std::uint8_t* rdram,
-    std::uint32_t scheduler, std::uint32_t sp_counter, std::uint32_t dp_counter) {
-    if (!rdram || !IsRdramWordAddress(scheduler, 0x278U) ||
-        !IsRdramWordAddress(sp_counter, 0U) || !IsRdramWordAddress(dp_counter, 0U)) return;
+extern "C" void dkr_scheduler_keep_host_tasks(std::uint8_t* rdram, std::uint32_t scheduler, std::uint32_t sp_counter,
+                                              std::uint32_t dp_counter) {
+    if (!rdram || !IsRdramWordAddress(scheduler, 0x278U) || !IsRdramWordAddress(sp_counter, 0U) ||
+        !IsRdramWordAddress(dp_counter, 0U))
+        return;
     using namespace dkr::runtime::host_tasks;
     const gpr sc = static_cast<std::int32_t>(scheduler);
     const auto protect = [&](std::uint32_t task, std::uint32_t counter, Engine engine) {
@@ -654,98 +588,79 @@ extern "C" void dkr_scheduler_keep_host_tasks(std::uint8_t* rdram,
         // the task as failed N64 hardware. Native work can legitimately take
         // longer (shader compilation, scheduling, slower drivers). Do not let
         // the guest recycle its task/buffers while the host still owns them.
-        if (ticks >= 10 && task && IsRdramWordAddress(task, 0x4CU) &&
-            registry.protect(task + 0x10U, engine, ticks)) MEM_W(0, address) = 0;
+        if (ticks >= 10 && task && IsRdramWordAddress(task, 0x4CU) && registry.protect(task + 0x10U, engine, ticks))
+            MEM_W(0, address) = 0;
     };
     protect(static_cast<std::uint32_t>(MEM_W(0x274, sc)), sp_counter, Engine::Sp);
     protect(static_cast<std::uint32_t>(MEM_W(0x278, sc)), dp_counter, Engine::Dp);
 }
 
-extern "C" int dkr_scheduler_sp_event_valid(std::uint8_t* rdram,
-                                               recomp_context* context) {
+extern "C" int dkr_scheduler_sp_event_valid(std::uint8_t* rdram, recomp_context* context) {
     if (rdram != nullptr && context != nullptr) {
-        const std::uint32_t scheduler =
-            static_cast<std::uint32_t>(context->r4);
+        const std::uint32_t scheduler = static_cast<std::uint32_t>(context->r4);
         if (IsRdramWordAddress(scheduler, 0x274U)) {
-            const std::uint32_t task = static_cast<std::uint32_t>(
-                MEM_W(0x274, static_cast<gpr>(
-                    static_cast<std::int32_t>(scheduler))));
+            const std::uint32_t task =
+                static_cast<std::uint32_t>(MEM_W(0x274, static_cast<gpr>(static_cast<std::int32_t>(scheduler))));
             // __scHandleRSP's first task access is task + 0x10. A null task
             // means the scheduler already consumed this SP edge; it is not a
             // valid retail task and must not reach that unchecked load.
             if (dkr::runtime::scheduler::is_valid_sp_task_pointer(task)) {
                 using namespace dkr::runtime::host_tasks;
-                const auto token=registry.lookup(task+0x10U,Engine::Sp);
-                dkr::lobby_stability::bootstrap_event("SP-handler-consumed",scheduler,task,token.generation);
-                registry.consume(token,Engine::Sp);
+                const auto token = registry.lookup(task + 0x10U, Engine::Sp);
+                dkr::lobby_stability::bootstrap_event("SP-handler-consumed", scheduler, task, token.generation);
+                registry.consume(token, Engine::Sp);
                 return 1;
             }
         }
     }
 
-    const std::uint64_t late_event =
-        g_scheduler_sp_late_events.fetch_add(1, std::memory_order_relaxed) + 1U;
+    const std::uint64_t late_event = g_scheduler_sp_late_events.fetch_add(1, std::memory_order_relaxed) + 1U;
     if (late_event <= 8U) {
-        const std::uint32_t scheduler = context != nullptr
-            ? static_cast<std::uint32_t>(context->r4)
-            : 0U;
+        const std::uint32_t scheduler = context != nullptr ? static_cast<std::uint32_t>(context->r4) : 0U;
         std::uint32_t task = 0U;
         if (rdram != nullptr && IsRdramWordAddress(scheduler, 0x274U)) {
-            task = static_cast<std::uint32_t>(MEM_W(
-                0x274,
-                static_cast<gpr>(static_cast<std::int32_t>(scheduler))));
+            task = static_cast<std::uint32_t>(MEM_W(0x274, static_cast<gpr>(static_cast<std::int32_t>(scheduler))));
         }
         std::fprintf(stderr,
                      "[boot][scheduler] dropped late SP completion "
                      "scheduler=%08X task=%08X count=%llu\n",
-                     scheduler, task,
-                     static_cast<unsigned long long>(late_event));
+                     scheduler, task, static_cast<unsigned long long>(late_event));
     }
 
     // The normal acknowledgement lives at __scHandleRSP's common exit. This
     // early-return path must publish the same acknowledgement exactly once or
     // the host worker can remain blocked behind the discarded completion.
-    ultramodern::acknowledge_external_message_src(
-        ultramodern::EventMessageSource::Sp);
+    ultramodern::acknowledge_external_message_src(ultramodern::EventMessageSource::Sp);
     return 0;
 }
 
-extern "C" int dkr_scheduler_dp_event_valid(std::uint8_t* rdram,
-                                               recomp_context* context) {
+extern "C" int dkr_scheduler_dp_event_valid(std::uint8_t* rdram, recomp_context* context) {
     if (rdram != nullptr && context != nullptr) {
-        const std::uint32_t scheduler =
-            static_cast<std::uint32_t>(context->r4);
+        const std::uint32_t scheduler = static_cast<std::uint32_t>(context->r4);
         if (IsRdramWordAddress(scheduler, 0x278U)) {
-            const std::uint32_t task = static_cast<std::uint32_t>(
-                MEM_W(0x278, static_cast<gpr>(
-                    static_cast<std::int32_t>(scheduler))));
+            const std::uint32_t task =
+                static_cast<std::uint32_t>(MEM_W(0x278, static_cast<gpr>(static_cast<std::int32_t>(scheduler))));
             if (dkr::runtime::scheduler::is_valid_dp_task_pointer(task)) {
                 using namespace dkr::runtime::host_tasks;
-                const auto token=registry.lookup(task+0x10U,Engine::Dp);
-                dkr::lobby_stability::bootstrap_event("DP-handler-consumed",scheduler,task,token.generation);
-                registry.consume(token,Engine::Dp);
+                const auto token = registry.lookup(task + 0x10U, Engine::Dp);
+                dkr::lobby_stability::bootstrap_event("DP-handler-consumed", scheduler, task, token.generation);
+                registry.consume(token, Engine::Dp);
                 return 1;
             }
         }
     }
 
-    const std::uint64_t late_event =
-        g_scheduler_dp_late_events.fetch_add(1, std::memory_order_relaxed) + 1U;
+    const std::uint64_t late_event = g_scheduler_dp_late_events.fetch_add(1, std::memory_order_relaxed) + 1U;
     if (late_event <= 8U) {
-        const std::uint32_t scheduler = context != nullptr
-            ? static_cast<std::uint32_t>(context->r4)
-            : 0U;
+        const std::uint32_t scheduler = context != nullptr ? static_cast<std::uint32_t>(context->r4) : 0U;
         std::uint32_t task = 0U;
         if (rdram != nullptr && IsRdramWordAddress(scheduler, 0x278U)) {
-            task = static_cast<std::uint32_t>(MEM_W(
-                0x278,
-                static_cast<gpr>(static_cast<std::int32_t>(scheduler))));
+            task = static_cast<std::uint32_t>(MEM_W(0x278, static_cast<gpr>(static_cast<std::int32_t>(scheduler))));
         }
         std::fprintf(stderr,
                      "[boot][scheduler] dropped late DP completion "
                      "scheduler=%08X task=%08X count=%llu\n",
-                     scheduler, task,
-                     static_cast<unsigned long long>(late_event));
+                     scheduler, task, static_cast<unsigned long long>(late_event));
     }
 
     // DP completion publication is non-blocking in N64ModernRuntime, unlike
@@ -756,20 +671,17 @@ extern "C" int dkr_scheduler_dp_event_valid(std::uint8_t* rdram,
 }
 
 extern "C" void dkr_scheduler_sp_handled(std::uint8_t*, recomp_context*) {
-    dkr::lobby_stability::bootstrap_event("SP-handler-acknowledging",0,0);
+    dkr::lobby_stability::bootstrap_event("SP-handler-acknowledging", 0, 0);
     // The host graphics/audio worker cannot safely publish a dependent DP edge
     // until DKR's scheduler has finished clearing and rescheduling the active
     // SP task. This hook is placed at the common exit of __scHandleRSP by the
     // Patch Pipeline and provides that exact acknowledgement.
-    ultramodern::acknowledge_external_message_src(
-        ultramodern::EventMessageSource::Sp);
+    ultramodern::acknowledge_external_message_src(ultramodern::EventMessageSource::Sp);
 }
 
-extern "C" void dkr_scheduler_dp_handled(std::uint8_t*, recomp_context*) {
-}
+extern "C" void dkr_scheduler_dp_handled(std::uint8_t*, recomp_context*) {}
 
-extern "C" void dkr_shadow_interpolation_begin(std::uint8_t* rdram,
-                                                  recomp_context* context) {
+extern "C" void dkr_shadow_interpolation_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_shadow_interpolation_active = false;
     if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
@@ -777,24 +689,21 @@ extern "C" void dkr_shadow_interpolation_begin(std::uint8_t* rdram,
     }
     const std::uint32_t object = static_cast<std::uint32_t>(context->r6);
     const std::uint32_t shadow = static_cast<std::uint32_t>(context->r7);
-    const auto key = dkr::runtime::presentation::shadow_presentation_key(
-        rdram, object, shadow);
+    const auto key = dkr::runtime::presentation::shadow_presentation_key(rdram, object, shadow);
     // Keep failed/unknown shadow captures inside the explicit shadow scope.
     // A zero token maps to G_EX_ID_IGNORE and cleanly disables interpolation;
     // StaticAuto can otherwise match this frame's reused shadow heap against
     // unrelated vertices from the preceding authored frame.
     const PresentationGroupMode mode = PresentationGroupMode::DynamicShadow;
-    g_shadow_interpolation_active = AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress), mode, key.token,
-        key.batch_count);
+    g_shadow_interpolation_active =
+        AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), mode, key.token, key.batch_count);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_vehicle_part_interpolation_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_vehicle_part_interpolation_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_vehicle_part_interpolation_active = false;
     if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
@@ -808,70 +717,56 @@ extern "C" void dkr_vehicle_part_interpolation_begin(
     // propellers and steering wheels distinct while allowing directional
     // sprite frames to change discretely (vehicle-part vertices are never
     // interpolated by the F3DDKR bridge).
-    const std::uint32_t matrix_reference =
-        static_cast<std::uint32_t>(context->r6);
+    const std::uint32_t matrix_reference = static_cast<std::uint32_t>(context->r6);
     if (matrix_reference < 0x80000000U || matrix_reference > 0x807FFFFCU) {
         return;
     }
-    const std::uint32_t attachment_matrix = static_cast<std::uint32_t>(
-        MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(
-                     matrix_reference))));
-    const auto key =
-        dkr::runtime::presentation::active_vehicle_part_presentation_key(
-            attachment_matrix);
-    if (key.attachment_token == 0U ||
-        key.attachment_slot ==
-            dkr::runtime::presentation::kInvalidVehiclePartSlot) {
+    const std::uint32_t attachment_matrix =
+        static_cast<std::uint32_t>(MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(matrix_reference))));
+    const auto key = dkr::runtime::presentation::active_vehicle_part_presentation_key(attachment_matrix);
+    if (key.attachment_token == 0U || key.attachment_slot == dkr::runtime::presentation::kInvalidVehiclePartSlot) {
         return;
     }
-    const std::uint32_t sprite = static_cast<std::uint32_t>(
-        MEM_W(0x70, context->r29));
+    const std::uint32_t sprite = static_cast<std::uint32_t>(MEM_W(0x70, context->r29));
     if (sprite < 0x80000000U || sprite > 0x807FFFFCU) {
         return;
     }
-    const std::uint16_t frame_count = static_cast<std::uint16_t>(
-        MEM_H(0, static_cast<gpr>(static_cast<std::int32_t>(sprite))));
+    const std::uint16_t frame_count =
+        static_cast<std::uint16_t>(MEM_H(0, static_cast<gpr>(static_cast<std::int32_t>(sprite))));
     const std::uint8_t frame_variant =
-        dkr::runtime::presentation::vehicle_part_frame_variant(
-            static_cast<std::uint32_t>(context->r18), frame_count);
+        dkr::runtime::presentation::vehicle_part_frame_variant(static_cast<std::uint32_t>(context->r18), frame_count);
     g_vehicle_part_interpolation_active = AppendPresentationGroupCommand(
-        rdram, context->r17, PresentationGroupMode::DynamicVehiclePart,
-        key.attachment_token, frame_variant);
+        rdram, context->r17, PresentationGroupMode::DynamicVehiclePart, key.attachment_token, frame_variant);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_vehicle_part_matrix_identity(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_vehicle_part_matrix_identity(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
         return;
     }
     const std::uint32_t transform = static_cast<std::uint32_t>(context->r16);
-    const std::uint32_t matrix_reference = static_cast<std::uint32_t>(
-        MEM_W(0x64, context->r29));
+    const std::uint32_t matrix_reference = static_cast<std::uint32_t>(MEM_W(0x64, context->r29));
     if (matrix_reference < 0x80000000U || matrix_reference > 0x807FFFFCU) {
         return;
     }
-    const std::uint32_t matrix = static_cast<std::uint32_t>(
-        MEM_W(0, RdramAddress(matrix_reference)));
+    const std::uint32_t matrix = static_cast<std::uint32_t>(MEM_W(0, RdramAddress(matrix_reference)));
     // render_sprite_billboard owns this flag. It is initialised for the
     // normal attachment half and cleared when DKR selects the mirrored half.
     // Keep those histories distinct instead of inferring handedness from a
     // camera- or frame-dependent transform.
     const bool mirrored = MEM_W(0x30, context->r29) == 0U;
-    dkr::runtime::presentation::register_active_vehicle_part_matrix(
-        transform, matrix, mirrored);
+    dkr::runtime::presentation::register_active_vehicle_part_matrix(transform, matrix, mirrored);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_billboard_interpolation_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_billboard_interpolation_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_billboard_interpolation_active = false;
     if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
@@ -883,31 +778,24 @@ extern "C" void dkr_billboard_interpolation_begin(
     // its ObjectTransform* in s0/r16, not the owning Object*. Use the validated
     // render_object capture established by the surrounding Patch Pipeline hook;
     // calls outside render_object have no active capture and remain discrete.
-    const std::uint16_t token =
-        dkr::runtime::presentation::presentation_token_for_active_capture();
-    const std::uint32_t sprite = static_cast<std::uint32_t>(
-        MEM_W(0x70, context->r29));
+    const std::uint16_t token = dkr::runtime::presentation::presentation_token_for_active_capture();
+    const std::uint32_t sprite = static_cast<std::uint32_t>(MEM_W(0x70, context->r29));
     if (token == 0U || sprite == 0U) {
-        dkr::runtime::presentation::interpolation_trace_billboard(
-            token != 0U, sprite != 0U, false);
+        dkr::runtime::presentation::interpolation_trace_billboard(token != 0U, sprite != 0U, false);
         return;
     }
 
-    const std::uint8_t variant =
-        dkr::runtime::presentation::presentation_variant_for_address(sprite);
-    g_billboard_interpolation_active = AppendPresentationGroupCommand(
-        rdram, context->r17, PresentationGroupMode::DynamicBillboard,
-        token, variant);
-    dkr::runtime::presentation::interpolation_trace_billboard(
-        true, true, g_billboard_interpolation_active);
+    const std::uint8_t variant = dkr::runtime::presentation::presentation_variant_for_address(sprite);
+    g_billboard_interpolation_active =
+        AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::DynamicBillboard, token, variant);
+    dkr::runtime::presentation::interpolation_trace_billboard(true, true, g_billboard_interpolation_active);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_fix_car_steering_wheel_material(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_fix_car_steering_wheel_material(std::uint8_t* rdram, recomp_context* context) {
     using namespace dkr::runtime::steering_wheel;
 
     if (rdram == nullptr || context == nullptr) {
@@ -918,41 +806,30 @@ extern "C" void dkr_fix_car_steering_wheel_material(
     const auto batch = static_cast<std::uint32_t>(context->r2);
     const auto texture = static_cast<std::uint32_t>(context->r18);
     const auto stack = static_cast<std::uint32_t>(context->r29);
-    if (!is_valid_render_pointer(object_model, 0x28U) ||
-        !is_valid_render_pointer(batch, 0x08U) ||
-        !is_valid_render_pointer(texture, 0x06U) ||
-        !is_valid_render_pointer(stack, 0xB4U)) {
+    if (!is_valid_render_pointer(object_model, 0x28U) || !is_valid_render_pointer(batch, 0x08U) ||
+        !is_valid_render_pointer(texture, 0x06U) || !is_valid_render_pointer(stack, 0xB4U)) {
         return;
     }
 
-    const auto object = static_cast<std::uint32_t>(
-        MEM_W(0xB4, static_cast<gpr>(static_cast<std::int32_t>(stack))));
+    const auto object = static_cast<std::uint32_t>(MEM_W(0xB4, static_cast<gpr>(static_cast<std::int32_t>(stack))));
     if (!is_valid_render_pointer(object, 0x64U)) {
         return;
     }
 
-    const auto model_address =
-        static_cast<gpr>(static_cast<std::int32_t>(object_model));
-    const auto batch_address =
-        static_cast<gpr>(static_cast<std::int32_t>(batch));
-    const auto texture_address =
-        static_cast<gpr>(static_cast<std::int32_t>(texture));
-    const auto object_address =
-        static_cast<gpr>(static_cast<std::int32_t>(object));
+    const auto model_address = static_cast<gpr>(static_cast<std::int32_t>(object_model));
+    const auto batch_address = static_cast<gpr>(static_cast<std::int32_t>(batch));
+    const auto texture_address = static_cast<gpr>(static_cast<std::int32_t>(texture));
+    const auto object_address = static_cast<gpr>(static_cast<std::int32_t>(object));
 
     BatchIdentity identity{};
-    identity.behaviour =
-        static_cast<std::uint16_t>(MEM_H(0x48, object_address));
+    identity.behaviour = static_cast<std::uint16_t>(MEM_H(0x48, object_address));
     if (identity.behaviour == kRacerBehaviour) {
-        const auto racer =
-            static_cast<std::uint32_t>(MEM_W(0x64, object_address));
+        const auto racer = static_cast<std::uint32_t>(MEM_W(0x64, object_address));
         if (!is_valid_render_pointer(racer, 0x1D6U)) {
             return;
         }
-        const auto racer_address =
-            static_cast<gpr>(static_cast<std::int32_t>(racer));
-        identity.vehicle =
-            static_cast<std::int8_t>(MEM_BU(0x1D6, racer_address));
+        const auto racer_address = static_cast<gpr>(static_cast<std::int32_t>(racer));
+        identity.vehicle = static_cast<std::int8_t>(MEM_BU(0x1D6, racer_address));
     } else if (identity.behaviour == kTitleVehicleAnimationBehaviour) {
         // Object+0x64 is AnimatedObject state in the title demo, not a Racer.
         identity.vehicle = kNoVehicle;
@@ -960,8 +837,7 @@ extern "C" void dkr_fix_car_steering_wheel_material(
         return;
     }
 
-    identity.batch_count =
-        static_cast<std::uint16_t>(MEM_H(0x28, model_address));
+    identity.batch_count = static_cast<std::uint16_t>(MEM_H(0x28, model_address));
     identity.batch_index = static_cast<std::uint16_t>(context->r10);
     identity.texture_index = MEM_BU(0x00, batch_address);
     identity.vertex_count = static_cast<std::int32_t>(context->r17);
@@ -970,8 +846,7 @@ extern "C" void dkr_fix_car_steering_wheel_material(
     identity.texture_width = MEM_BU(0x00, texture_address);
     identity.texture_height = MEM_BU(0x01, texture_address);
     identity.texture_format = MEM_BU(0x02, texture_address);
-    identity.texture_flags =
-        static_cast<std::uint16_t>(MEM_H(0x06, texture_address));
+    identity.texture_flags = static_cast<std::uint16_t>(MEM_H(0x06, texture_address));
 
     // A loaded ObjectModel texture table stores one eight-byte TextureInfo per
     // entry. Require this batch's table entry to resolve to the same loaded
@@ -979,41 +854,29 @@ extern "C" void dkr_fix_car_steering_wheel_material(
     // otherwise exact four-vertex steering-wheel predicate. This avoids
     // relying on a revision-specific ROM address while remaining much narrower
     // than matching render flags alone.
-    const auto texture_count =
-        static_cast<std::uint16_t>(MEM_H(0x22, model_address));
-    const auto texture_table =
-        static_cast<std::uint32_t>(MEM_W(0x00, model_address));
+    const auto texture_count = static_cast<std::uint16_t>(MEM_H(0x22, model_address));
+    const auto texture_table = static_cast<std::uint32_t>(MEM_W(0x00, model_address));
     if (identity.texture_index < texture_count && texture_table != 0U) {
-        const auto entry_offset =
-            static_cast<std::uint32_t>(identity.texture_index) * 8U;
+        const auto entry_offset = static_cast<std::uint32_t>(identity.texture_index) * 8U;
         if (IsRdramWordAddress(texture_table, entry_offset + 7U)) {
-            const auto table_address =
-                static_cast<gpr>(static_cast<std::int32_t>(texture_table));
+            const auto table_address = static_cast<gpr>(static_cast<std::int32_t>(texture_table));
             identity.texture_asset_matches =
-                static_cast<std::uint32_t>(
-                    MEM_W(entry_offset, table_address)) == texture &&
-                MEM_BU(entry_offset + 4U, table_address) ==
-                    identity.texture_width &&
-                MEM_BU(entry_offset + 5U, table_address) ==
-                    identity.texture_height &&
-                MEM_BU(entry_offset + 6U, table_address) ==
-                    identity.texture_format;
+                static_cast<std::uint32_t>(MEM_W(entry_offset, table_address)) == texture &&
+                MEM_BU(entry_offset + 4U, table_address) == identity.texture_width &&
+                MEM_BU(entry_offset + 5U, table_address) == identity.texture_height &&
+                MEM_BU(entry_offset + 6U, table_address) == identity.texture_format;
         }
     }
 
-    context->r6 = static_cast<gpr>(corrected_material_flags(
-        identity, static_cast<std::uint32_t>(context->r6)));
+    context->r6 = static_cast<gpr>(corrected_material_flags(identity, static_cast<std::uint32_t>(context->r6)));
 }
 
-extern "C" void dkr_vehicle_part_interpolation_end(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_vehicle_part_interpolation_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
-    if (!g_vehicle_part_interpolation_active &&
-        !g_billboard_interpolation_active) {
+    if (!g_vehicle_part_interpolation_active && !g_billboard_interpolation_active) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, context->r17, PresentationGroupMode::World);
+    AppendPresentationGroupCommand(rdram, context->r17, PresentationGroupMode::World);
     g_vehicle_part_interpolation_active = false;
     g_billboard_interpolation_active = false;
 #else
@@ -1022,23 +885,19 @@ extern "C" void dkr_vehicle_part_interpolation_end(
 #endif
 }
 
-extern "C" void dkr_shadow_interpolation_end(std::uint8_t* rdram,
-                                                recomp_context*) {
+extern "C" void dkr_shadow_interpolation_end(std::uint8_t* rdram, recomp_context*) {
 #if DKR_RUNTIME_HAS_RT64
     if (!g_shadow_interpolation_active) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress),
-        PresentationGroupMode::World);
+    AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::World);
     g_shadow_interpolation_active = false;
 #else
     (void)rdram;
 #endif
 }
 
-extern "C" void dkr_surface_interpolation_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_surface_interpolation_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_surface_interpolation_active = false;
     // This hook runs only after DKR accepts a batch for drawing. Begin the
@@ -1050,84 +909,67 @@ extern "C" void dkr_surface_interpolation_begin(
         (static_cast<std::uint32_t>(context->r17) & kRenderWater) == 0U) {
         return;
     }
-    const auto key = dkr::runtime::presentation::surface_presentation_key(
-        static_cast<std::uint32_t>(context->r5));
+    const auto key = dkr::runtime::presentation::surface_presentation_key(static_cast<std::uint32_t>(context->r5));
     if (key.token == 0U) {
         return;
     }
     g_surface_interpolation_active = AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress),
-        PresentationGroupMode::DynamicSurface, key.token, key.variant);
+        rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::DynamicSurface, key.token, key.variant);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_level_segment_interpolation_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_level_segment_interpolation_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_level_segment_interpolation_active = false;
     g_level_segment_pending_key = {};
-    if (rdram == nullptr || context == nullptr ||
-        !dkr::runtime::enhancements::modern_presentation_enabled()) {
+    if (rdram == nullptr || context == nullptr || !dkr::runtime::enhancements::modern_presentation_enabled()) {
         return;
     }
-    g_level_segment_pending_key =
-        dkr::runtime::presentation::level_segment_presentation_key(
-            static_cast<std::uint32_t>(context->r4), context->r5 != 0);
+    g_level_segment_pending_key = dkr::runtime::presentation::level_segment_presentation_key(
+        static_cast<std::uint32_t>(context->r4), context->r5 != 0);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_surface_interpolation_end(
-    std::uint8_t* rdram, recomp_context*) {
+extern "C" void dkr_surface_interpolation_end(std::uint8_t* rdram, recomp_context*) {
 #if DKR_RUNTIME_HAS_RT64
     if (!g_surface_interpolation_active) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress),
-        PresentationGroupMode::World);
+    AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::World);
     g_surface_interpolation_active = false;
 #else
     (void)rdram;
 #endif
 }
 
-extern "C" void dkr_level_segment_interpolation_end(
-    std::uint8_t* rdram, recomp_context*) {
+extern "C" void dkr_level_segment_interpolation_end(std::uint8_t* rdram, recomp_context*) {
 #if DKR_RUNTIME_HAS_RT64
     g_level_segment_pending_key = {};
     if (!g_level_segment_interpolation_active) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, RdramAddress(kTrackDisplayListAddress),
-        PresentationGroupMode::World);
+    AppendPresentationGroupCommand(rdram, RdramAddress(kTrackDisplayListAddress), PresentationGroupMode::World);
     g_level_segment_interpolation_active = false;
 #else
     (void)rdram;
 #endif
 }
 
-extern "C" void dkr_title_intro_audio_tail(
-    std::uint8_t* rdram, recomp_context* context) {
-    const std::uint32_t kTitleDemoIndexAddress =
-        dkr::runtime::revision_addresses::TitleDemoIndex;
-    const std::uint32_t kTitleRevealTimerAddress =
-        dkr::runtime::revision_addresses::TitleRevealTimer;
+extern "C" void dkr_title_intro_audio_tail(std::uint8_t* rdram, recomp_context* context) {
+    const std::uint32_t kTitleDemoIndexAddress = dkr::runtime::revision_addresses::TitleDemoIndex;
+    const std::uint32_t kTitleRevealTimerAddress = dkr::runtime::revision_addresses::TitleRevealTimer;
     const bool cinematic_complete = context->r2 != 0;
-    const bool first_title_demo =
-        MEM_W(0, RdramAddress(kTitleDemoIndexAddress)) == 0;
-    const bool title_revealed =
-        MEM_W(0, RdramAddress(kTitleRevealTimerAddress)) != 0;
-    const std::uint32_t update_rate = std::max(
-        static_cast<std::uint32_t>(MEM_W(0x30, context->r29)), 1U);
-    const auto action = g_title_intro_tail_gate.update(
-        cinematic_complete, first_title_demo, title_revealed, update_rate);
+    const bool first_title_demo = MEM_W(0, RdramAddress(kTitleDemoIndexAddress)) == 0;
+    const bool title_revealed = MEM_W(0, RdramAddress(kTitleRevealTimerAddress)) != 0;
+    const std::uint32_t update_rate = std::max(static_cast<std::uint32_t>(MEM_W(0x30, context->r29)), 1U);
+    const auto action =
+        g_title_intro_tail_gate.update(cinematic_complete, first_title_demo, title_revealed, update_rate);
     if (action == dkr::runtime::intro::TailAction::Hold) {
         context->r2 = 0;
         // sp28 is the title-demo timer completion path. Suppress it together
@@ -1140,22 +982,20 @@ extern "C" void dkr_title_intro_audio_tail(
     }
 }
 
-extern "C" void dkr_transition_cover_begin(std::uint8_t* rdram,
-                                             recomp_context* context) {
+extern "C" void dkr_transition_cover_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     const float cover_zoom = ExpandedCoverScale();
     if (cover_zoom <= 1.0001F) {
         return;
     }
     if (dkr::runtime::enhancements::modern_presentation_enabled()) {
-        g_transition_interpolation_active = AppendPresentationGroupCommand(
-            rdram, context->r16, PresentationGroupMode::StaticAuto);
+        g_transition_interpolation_active =
+            AppendPresentationGroupCommand(rdram, context->r16, PresentationGroupMode::StaticAuto);
     }
     g_saved_transition_x = ReadRdramFloat(rdram, kOrthoMatrixAddress);
     g_saved_transition_y = ReadRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float));
     WriteRdramFloat(rdram, kOrthoMatrixAddress, g_saved_transition_x * cover_zoom);
-    WriteRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float),
-                    g_saved_transition_y * cover_zoom);
+    WriteRdramFloat(rdram, kOrthoMatrixAddress + 5U * sizeof(float), g_saved_transition_y * cover_zoom);
     g_transition_cover_active = true;
 #else
     (void)rdram;
@@ -1167,16 +1007,13 @@ extern "C" void dkr_widen_gradient_sky(std::uint8_t* rdram, recomp_context* cont
     if (rdram == nullptr || context == nullptr || context->r3 == 0) {
         return;
     }
-    const int viewport_layout = static_cast<std::int32_t>(
-        MEM_W(0, RdramAddress(
-            dkr::runtime::revision_addresses::ViewportLayout)));
+    const int viewport_layout =
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
     const float cover_scale = ExpandedCoverScale();
     const float horizontal_scale =
-        dkr::runtime::enhancements::split_sky_horizontal_cover_scale(
-            cover_scale, viewport_layout);
+        dkr::runtime::enhancements::split_sky_horizontal_cover_scale(cover_scale, viewport_layout);
     const float vertical_scale =
-        dkr::runtime::enhancements::split_sky_vertical_cover_scale(
-            cover_scale, viewport_layout);
+        dkr::runtime::enhancements::split_sky_vertical_cover_scale(cover_scale, viewport_layout);
     if (horizontal_scale <= 1.0001F && vertical_scale <= 1.0001F) {
         return;
     }
@@ -1189,16 +1026,11 @@ extern "C" void dkr_widen_gradient_sky(std::uint8_t* rdram, recomp_context* cont
     // of this correction.
     for (gpr offset : {gpr{0}, gpr{10}, gpr{20}, gpr{30}}) {
         const std::int16_t x = static_cast<std::int16_t>(MEM_H(offset, context->r3));
-        const std::int16_t y = static_cast<std::int16_t>(
-            MEM_H(offset + 2U, context->r3));
-        const long widened = std::lround(
-            static_cast<float>(x) * horizontal_scale);
-        const long covered_y = std::lround(
-            static_cast<float>(y) * vertical_scale);
-        MEM_H(offset, context->r3) = static_cast<std::int16_t>(
-            std::clamp(widened, -32768L, 32767L));
-        MEM_H(offset + 2U, context->r3) = static_cast<std::int16_t>(
-            std::clamp(covered_y, -32768L, 32767L));
+        const std::int16_t y = static_cast<std::int16_t>(MEM_H(offset + 2U, context->r3));
+        const long widened = std::lround(static_cast<float>(x) * horizontal_scale);
+        const long covered_y = std::lround(static_cast<float>(y) * vertical_scale);
+        MEM_H(offset, context->r3) = static_cast<std::int16_t>(std::clamp(widened, -32768L, 32767L));
+        MEM_H(offset + 2U, context->r3) = static_cast<std::int16_t>(std::clamp(covered_y, -32768L, 32767L));
     }
 #else
     (void)rdram;
@@ -1219,12 +1051,10 @@ extern "C" void dkr_transition_cover_end(std::uint8_t* rdram, recomp_context*) {
 #endif
 }
 
-extern "C" void dkr_transition_interpolation_end(std::uint8_t* rdram,
-                                                   recomp_context* context) {
+extern "C" void dkr_transition_interpolation_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (g_transition_interpolation_active) {
-        AppendPresentationGroupCommand(
-            rdram, context->r16, PresentationGroupMode::World);
+        AppendPresentationGroupCommand(rdram, context->r16, PresentationGroupMode::World);
         g_transition_interpolation_active = false;
     }
 #else
@@ -1233,16 +1063,14 @@ extern "C" void dkr_transition_interpolation_end(std::uint8_t* rdram,
 #endif
 }
 
-extern "C" void dkr_background_fill_stretch_begin(std::uint8_t* rdram,
-                                                     recomp_context* context) {
+extern "C" void dkr_background_fill_stretch_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_background_fill_stretch_active = false;
     if (ExpandedCoverScale() <= 1.0001F) {
         return;
     }
     g_background_fill_stretch_active = AppendPresentationGroupCommand(
-        rdram, context->r16, PresentationGroupMode::StaticAuto, 1U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+        rdram, context->r16, PresentationGroupMode::StaticAuto, 1U, 0U, PresentationMarkerKind::BackgroundAspect);
 #else
     (void)rdram;
     (void)context;
@@ -1251,47 +1079,44 @@ extern "C" void dkr_background_fill_stretch_begin(std::uint8_t* rdram,
 
 // These two hooks bracket only divider_draw's optional lower-right fill,
 // after retail has decided whether to show the map/AI panel or T.T. camera.
-extern "C" void dkr_three_player_panel_begin(std::uint8_t* rdram,
-                                             recomp_context* context) {
+extern "C" void dkr_three_player_panel_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_three_player_panel_active = false;
-    if (rdram == nullptr || context == nullptr ||
-        !dkr::runtime::enhancements::modern_presentation_enabled() ||
+    if (rdram == nullptr || context == nullptr || !dkr::runtime::enhancements::modern_presentation_enabled() ||
         ExpandedCoverScale() <= 1.0001F ||
-        MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)) != 2) return;
+        MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)) != 2)
+        return;
     // Token two extends the fill from centre to right. Token one is the
     // unrelated full-width clear; a rect-aspect override alone cannot affect
     // RT64's fill-cycle clear path.
-    g_three_player_panel_active = AppendPresentationGroupCommand(
-        rdram, context->r16, PresentationGroupMode::StaticAuto, 2U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+    g_three_player_panel_active = AppendPresentationGroupCommand(rdram, context->r16, PresentationGroupMode::StaticAuto,
+                                                                 2U, 0U, PresentationMarkerKind::BackgroundAspect);
 #else
-    (void)rdram; (void)context;
+    (void)rdram;
+    (void)context;
 #endif
 }
 
-extern "C" void dkr_three_player_panel_end(std::uint8_t* rdram,
-                                           recomp_context* context) {
+extern "C" void dkr_three_player_panel_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
-    if (!g_three_player_panel_active) return;
-    AppendPresentationGroupCommand(
-        rdram, context->r16, PresentationGroupMode::World, 0U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+    if (!g_three_player_panel_active)
+        return;
+    AppendPresentationGroupCommand(rdram, context->r16, PresentationGroupMode::World, 0U, 0U,
+                                   PresentationMarkerKind::BackgroundAspect);
     g_three_player_panel_active = false;
 #else
-    (void)rdram; (void)context;
+    (void)rdram;
+    (void)context;
 #endif
 }
 
-extern "C" void dkr_background_fill_stretch_end(std::uint8_t* rdram,
-                                                   recomp_context* context) {
+extern "C" void dkr_background_fill_stretch_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (!g_background_fill_stretch_active) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, context->r16, PresentationGroupMode::World, 0U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+    AppendPresentationGroupCommand(rdram, context->r16, PresentationGroupMode::World, 0U, 0U,
+                                   PresentationMarkerKind::BackgroundAspect);
     g_background_fill_stretch_active = false;
 #else
     (void)rdram;
@@ -1299,12 +1124,10 @@ extern "C" void dkr_background_fill_stretch_end(std::uint8_t* rdram,
 #endif
 }
 
-extern "C" void dkr_postrace_background_stretch_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_postrace_background_stretch_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_postrace_background_stretch_active = false;
-    if (!dkr::runtime::enhancements::modern_presentation_enabled() ||
-        ExpandedCoverScale() <= 1.0001F) {
+    if (!dkr::runtime::enhancements::modern_presentation_enabled() || ExpandedCoverScale() <= 1.0001F) {
         return;
     }
 
@@ -1313,23 +1136,20 @@ extern "C" void dkr_postrace_background_stretch_begin(
     // edges while the framed race viewport and every menu/HUD coordinate keep
     // their authored 4:3 placement.
     g_postrace_background_stretch_active = AppendPresentationGroupCommand(
-        rdram, context->r4, PresentationGroupMode::StaticAuto, 0U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+        rdram, context->r4, PresentationGroupMode::StaticAuto, 0U, 0U, PresentationMarkerKind::BackgroundAspect);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_postrace_background_stretch_end(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_postrace_background_stretch_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (!g_postrace_background_stretch_active) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, context->r4, PresentationGroupMode::World, 0U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+    AppendPresentationGroupCommand(rdram, context->r4, PresentationGroupMode::World, 0U, 0U,
+                                   PresentationMarkerKind::BackgroundAspect);
     g_postrace_background_stretch_active = false;
 #else
     (void)rdram;
@@ -1337,35 +1157,30 @@ extern "C" void dkr_postrace_background_stretch_end(
 #endif
 }
 
-extern "C" void dkr_chequer_background_stretch_begin(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_chequer_background_stretch_begin(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     g_chequer_background_stretch_active = false;
-    if (!dkr::runtime::enhancements::modern_presentation_enabled() ||
-        ExpandedCoverScale() <= 1.0001F) {
+    if (!dkr::runtime::enhancements::modern_presentation_enabled() || ExpandedCoverScale() <= 1.0001F) {
         return;
     }
     // Battle/challenge results select bgdraw_chequer rather than the normal
     // post-race mosaic. It is the same background-only layer, so give it the
     // same host-width policy without widening the authored replay viewport.
     g_chequer_background_stretch_active = AppendPresentationGroupCommand(
-        rdram, context->r4, PresentationGroupMode::StaticAuto, 0U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+        rdram, context->r4, PresentationGroupMode::StaticAuto, 0U, 0U, PresentationMarkerKind::BackgroundAspect);
 #else
     (void)rdram;
     (void)context;
 #endif
 }
 
-extern "C" void dkr_chequer_background_stretch_end(
-    std::uint8_t* rdram, recomp_context* context) {
+extern "C" void dkr_chequer_background_stretch_end(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (!g_chequer_background_stretch_active) {
         return;
     }
-    AppendPresentationGroupCommand(
-        rdram, context->r4, PresentationGroupMode::World, 0U,
-        0U, PresentationMarkerKind::BackgroundAspect);
+    AppendPresentationGroupCommand(rdram, context->r4, PresentationGroupMode::World, 0U, 0U,
+                                   PresentationMarkerKind::BackgroundAspect);
     g_chequer_background_stretch_active = false;
 #else
     (void)rdram;
@@ -1373,18 +1188,15 @@ extern "C" void dkr_chequer_background_stretch_end(
 #endif
 }
 
-extern "C" void dkr_widen_void_primitive(std::uint8_t* rdram,
-                                            recomp_context* context) {
+extern "C" void dkr_widen_void_primitive(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     if (rdram == nullptr || context == nullptr || context->r2 < 40U) {
         return;
     }
-    const int viewport_layout = static_cast<std::int32_t>(
-        MEM_W(0, RdramAddress(
-            dkr::runtime::revision_addresses::ViewportLayout)));
+    const int viewport_layout =
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::revision_addresses::ViewportLayout)));
     const float cover_scale =
-        dkr::runtime::enhancements::split_sky_horizontal_cover_scale(
-            ExpandedCoverScale(), viewport_layout);
+        dkr::runtime::enhancements::split_sky_horizontal_cover_scale(ExpandedCoverScale(), viewport_layout);
     if (cover_scale <= 1.0001F) {
         return;
     }
@@ -1404,29 +1216,22 @@ extern "C" void dkr_widen_void_primitive(std::uint8_t* rdram,
     const float lateral_z = ReadRdramFloat(rdram, kVoidLateralZAddress);
     const float centre_x = ReadRdramFloat(rdram, kVoidCentreXAddress);
     const float centre_z = ReadRdramFloat(rdram, kVoidCentreZAddress);
-    const float basis_length_sq =
-        lateral_x * lateral_x + lateral_z * lateral_z;
-    if (!std::isfinite(lateral_x) || !std::isfinite(lateral_z) ||
-        !std::isfinite(centre_x) || !std::isfinite(centre_z) ||
-        basis_length_sq < 0.5F || basis_length_sq > 1.5F) {
+    const float basis_length_sq = lateral_x * lateral_x + lateral_z * lateral_z;
+    if (!std::isfinite(lateral_x) || !std::isfinite(lateral_z) || !std::isfinite(centre_x) ||
+        !std::isfinite(centre_z) || basis_length_sq < 0.5F || basis_length_sq > 1.5F) {
         return;
     }
 
     for (std::uint32_t index = 0; index < 4U; ++index) {
         const gpr vertex = vertices + static_cast<gpr>(index * 10U);
-        const float x = static_cast<float>(
-            static_cast<std::int16_t>(MEM_H(0, vertex)));
-        const float z = static_cast<float>(
-            static_cast<std::int16_t>(MEM_H(4, vertex)));
+        const float x = static_cast<float>(static_cast<std::int16_t>(MEM_H(0, vertex)));
+        const float z = static_cast<float>(static_cast<std::int16_t>(MEM_H(4, vertex)));
         const float dx = x - centre_x;
         const float dz = z - centre_z;
-        const float lateral =
-            (dx * lateral_x + dz * lateral_z) / basis_length_sq;
+        const float lateral = (dx * lateral_x + dz * lateral_z) / basis_length_sq;
         const float expansion = lateral * (cover_scale - 1.0F);
-        const long widened_x = std::clamp(
-            std::lround(x + expansion * lateral_x), -32768L, 32767L);
-        const long widened_z = std::clamp(
-            std::lround(z + expansion * lateral_z), -32768L, 32767L);
+        const long widened_x = std::clamp(std::lround(x + expansion * lateral_x), -32768L, 32767L);
+        const long widened_z = std::clamp(std::lround(z + expansion * lateral_z), -32768L, 32767L);
         MEM_H(0, vertex) = static_cast<std::int16_t>(widened_x);
         MEM_H(4, vertex) = static_cast<std::int16_t>(widened_z);
     }
@@ -1437,8 +1242,7 @@ extern "C" void dkr_widen_void_primitive(std::uint8_t* rdram,
 #endif
 }
 
-extern "C" void dkr_track_select_background_cover(std::uint8_t* rdram,
-                                                     recomp_context* context) {
+extern "C" void dkr_track_select_background_cover(std::uint8_t* rdram, recomp_context* context) {
 #if DKR_RUNTIME_HAS_RT64
     const float cover_zoom = ExpandedCoverScale();
     if (cover_zoom <= 1.0001F || context->r8 == 0) {
@@ -1450,12 +1254,10 @@ extern "C" void dkr_track_select_background_cover(std::uint8_t* rdram,
     // Writing absolute coordinates makes this idempotent across frames and
     // avoids mutating gOrthoMatrixF or gViewProjMatrixF, which are shared by
     // subsequent menu, HUD, and world draws.
-    const long half_width = std::clamp(
-        std::lround(160.0F * cover_zoom), 160L, 32767L);
+    const long half_width = std::clamp(std::lround(160.0F * cover_zoom), 160L, 32767L);
     for (std::uint32_t vertex = 0; vertex < 4U; ++vertex) {
         const long x = ((vertex & 1U) == 0U) ? -half_width : half_width;
-        MEM_H(static_cast<gpr>(vertex * 10U), context->r8) =
-            static_cast<std::int16_t>(x);
+        MEM_H(static_cast<gpr>(vertex * 10U), context->r8) = static_cast<std::int16_t>(x);
     }
 
 #else
@@ -1464,8 +1266,7 @@ extern "C" void dkr_track_select_background_cover(std::uint8_t* rdram,
 #endif
 }
 
-extern "C" void dkr_skybox_cover_begin(std::uint8_t* rdram,
-                                         recomp_context*) {
+extern "C" void dkr_skybox_cover_begin(std::uint8_t* rdram, recomp_context*) {
 #if DKR_RUNTIME_HAS_RT64
     const float cover_zoom = ExpandedCoverScale();
     if (cover_zoom <= 1.0001F || g_sky_cover_active) {
@@ -1479,13 +1280,11 @@ extern "C" void dkr_skybox_cover_begin(std::uint8_t* rdram,
     for (std::uint32_t row = 0; row < 4U; ++row) {
         for (std::uint32_t column = 0; column < 2U; ++column) {
             const std::uint32_t slot = row * 2U + column;
-            const std::uint32_t address = kViewProjectionMatrixAddress +
-                (row * 4U + column) * sizeof(float);
+            const std::uint32_t address = kViewProjectionMatrixAddress + (row * 4U + column) * sizeof(float);
             g_saved_sky_projection_columns[slot] = ReadRdramFloat(rdram, address);
             WriteRdramFloat(rdram, address,
                             g_saved_sky_projection_columns[slot] *
-                                dkr::runtime::enhancements::sky_projection_column_scale(
-                                    cover_zoom, column));
+                                dkr::runtime::enhancements::sky_projection_column_scale(cover_zoom, column));
         }
     }
     g_sky_cover_active = true;
@@ -1502,8 +1301,7 @@ extern "C" void dkr_skybox_cover_end(std::uint8_t* rdram, recomp_context*) {
     for (std::uint32_t row = 0; row < 4U; ++row) {
         for (std::uint32_t column = 0; column < 2U; ++column) {
             const std::uint32_t slot = row * 2U + column;
-            const std::uint32_t address = kViewProjectionMatrixAddress +
-                (row * 4U + column) * sizeof(float);
+            const std::uint32_t address = kViewProjectionMatrixAddress + (row * 4U + column) * sizeof(float);
             WriteRdramFloat(rdram, address, g_saved_sky_projection_columns[slot]);
         }
     }
@@ -1517,14 +1315,10 @@ extern "C" int dkr_audio_voice_guard(std::uint8_t* rdram, recomp_context* contex
     const auto synth_address = static_cast<std::uint32_t>(context->r4);
     const auto voice_address = static_cast<std::uint32_t>(context->r5);
     const auto requested_bus = static_cast<std::uint16_t>(context->r6);
-    const auto is_rdram_address = [](std::uint32_t address) {
-        return address >= 0x80000000U && address < 0x80800000U;
-    };
-    if (!is_rdram_address(synth_address) || !is_rdram_address(voice_address) ||
-        requested_bus > 1U) {
-        std::fprintf(stderr,
-                     "[boot][audio] ignored invalid voice route synth=%08X voice=%08X bus=%u\n",
-                     synth_address, voice_address, static_cast<unsigned>(requested_bus));
+    const auto is_rdram_address = [](std::uint32_t address) { return address >= 0x80000000U && address < 0x80800000U; };
+    if (!is_rdram_address(synth_address) || !is_rdram_address(voice_address) || requested_bus > 1U) {
+        std::fprintf(stderr, "[boot][audio] ignored invalid voice route synth=%08X voice=%08X bus=%u\n", synth_address,
+                     voice_address, static_cast<unsigned>(requested_bus));
         return 1;
     }
 
@@ -1550,8 +1344,7 @@ extern "C" int dkr_audio_voice_guard(std::uint8_t* rdram, recomp_context* contex
         }
     }
     if (!found_voice) {
-        std::fprintf(stderr,
-                     "[boot][audio] ignored voice outside synth lists synth=%08X voice=%08X bus=%u\n",
+        std::fprintf(stderr, "[boot][audio] ignored voice outside synth lists synth=%08X voice=%08X bus=%u\n",
                      synth_address, voice_address, static_cast<unsigned>(requested_bus));
         return 1;
     }
@@ -1559,9 +1352,8 @@ extern "C" int dkr_audio_voice_guard(std::uint8_t* rdram, recomp_context* contex
     const auto signed_voice = static_cast<gpr>(static_cast<std::int32_t>(voice_address));
     const auto current_bus = static_cast<std::uint32_t>(MEM_BU(0xDC, signed_voice));
     if (current_bus > 1U) {
-        std::fprintf(stderr,
-                     "[boot][audio] normalized uninitialized voice bus voice=%08X value=%u\n",
-                     voice_address, current_bus);
+        std::fprintf(stderr, "[boot][audio] normalized uninitialized voice bus voice=%08X value=%u\n", voice_address,
+                     current_bus);
         MEM_B(0xDC, signed_voice) = 0;
     }
     return 0;
@@ -1569,15 +1361,11 @@ extern "C" int dkr_audio_voice_guard(std::uint8_t* rdram, recomp_context* contex
 
 extern "C" int dkr_audio_bus_guard(std::uint8_t* rdram, recomp_context* context) {
     const auto bus_address = static_cast<std::uint32_t>(context->r4);
-    const auto is_rdram_address = [](std::uint32_t address) {
-        return address >= 0x80000000U && address < 0x80800000U;
-    };
+    const auto is_rdram_address = [](std::uint32_t address) { return address >= 0x80000000U && address < 0x80800000U; };
 
     if (!is_rdram_address(bus_address)) {
-        std::fprintf(stderr,
-                     "[boot][audio] ignored invalid auxiliary bus=%08X param=%u source=%08X\n",
-                     bus_address, static_cast<unsigned>(context->r5),
-                     static_cast<unsigned>(context->r6));
+        std::fprintf(stderr, "[boot][audio] ignored invalid auxiliary bus=%08X param=%u source=%08X\n", bus_address,
+                     static_cast<unsigned>(context->r5), static_cast<unsigned>(context->r6));
         context->r2 = 0;
         return 1;
     }
@@ -1589,8 +1377,7 @@ extern "C" int dkr_audio_bus_guard(std::uint8_t* rdram, recomp_context* context)
         std::fprintf(stderr,
                      "[boot][audio] ignored malformed auxiliary bus=%08X param=%u "
                      "count=%u sources=%08X\n",
-                     bus_address, static_cast<unsigned>(context->r5), source_count,
-                     sources_address);
+                     bus_address, static_cast<unsigned>(context->r5), source_count, sources_address);
         context->r2 = 0;
         return 1;
     }

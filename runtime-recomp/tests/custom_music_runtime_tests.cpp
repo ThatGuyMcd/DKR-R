@@ -24,7 +24,9 @@
 // custom_tracks_hooks.cpp asks for the retail payload on paths this test never
 // takes; there is no game here.
 namespace dkr::runtime {
-const GamePayload* active_payload() { return nullptr; }
+const GamePayload* active_payload() {
+    return nullptr;
+}
 } // namespace dkr::runtime
 
 namespace ct = dkr::runtime::custom_tracks;
@@ -33,7 +35,7 @@ namespace addresses = dkr::runtime::revision_addresses;
 
 namespace {
 
-constexpr std::uint32_t kPlayer = 0x80300000U;   // where the fake ALCSPlayer lives
+constexpr std::uint32_t kPlayer = 0x80300000U; // where the fake ALCSPlayer lives
 constexpr std::uint32_t kRate = 44100U;
 
 std::vector<std::uint8_t> g_memory(8U * 1024U * 1024U);
@@ -42,8 +44,7 @@ gpr guest(std::uint32_t address) {
     return static_cast<gpr>(static_cast<std::int32_t>(address));
 }
 
-void set_song(std::uint8_t current, std::uint8_t next, std::int32_t state,
-              std::int16_t bpm, std::uint8_t base = 127U) {
+void set_song(std::uint8_t current, std::uint8_t next, std::int32_t state, std::int16_t bpm, std::uint8_t base = 127U) {
     std::uint8_t* rdram = g_memory.data();
     MEM_W(0, guest(addresses::MusicPlayer)) = static_cast<std::int32_t>(kPlayer);
     MEM_W(0x2C, guest(kPlayer)) = state;
@@ -81,28 +82,27 @@ int main() {
     std::filesystem::remove_all(root);
     const std::filesystem::path track = root / "tone.dkrmap";
     std::filesystem::create_directories(track / "music");
-    const std::filesystem::path mp3 =
-        std::filesystem::path(DKR_MUSIC_FIXTURES) / "sine_stereo_44k.mp3";
+    const std::filesystem::path mp3 = std::filesystem::path(DKR_MUSIC_FIXTURES) / "sine_stereo_44k.mp3";
     std::filesystem::copy_file(mp3, track / "music" / "main.mp3");
     std::string header(0xC8, '\0');
     header[0x37] = 1;
     header[0xBB] = 1;
     header[ct::kHeaderMusic] = 12;
     write_text(track / "h.bin", header);
-    write_text(track / "manifest.json",
-               "{\"schemaVersion\":2,\"id\":\"tone\",\"name\":\"Tone\","
-               "\"music\":{\"format\":\"audio-stream-v1\",\"codec\":\"mp3\","
-               "\"file\":\"music/main.mp3\",\"sha256\":"
-               "\"ae1103b3a8882b10e9fb8ef729e46127737b7d4ec0e68f32c062cc0bc49193b5\","
-               "\"bytes\":" + std::to_string(std::filesystem::file_size(mp3)) +
-               ",\"sampleRate\":44100,\"channels\":2,\"frames\":88200,"
-               "\"carrierSequence\":12,\"volume\":100,\"loopStartFrame\":0,"
-               "\"loopEndFrame\":0,\"finalLap\":\"speedup\"},"
-               "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
+    write_text(track / "manifest.json", "{\"schemaVersion\":2,\"id\":\"tone\",\"name\":\"Tone\","
+                                        "\"music\":{\"format\":\"audio-stream-v1\",\"codec\":\"mp3\","
+                                        "\"file\":\"music/main.mp3\",\"sha256\":"
+                                        "\"ae1103b3a8882b10e9fb8ef729e46127737b7d4ec0e68f32c062cc0bc49193b5\","
+                                        "\"bytes\":" +
+                                            std::to_string(std::filesystem::file_size(mp3)) +
+                                            ",\"sampleRate\":44100,\"channels\":2,\"frames\":88200,"
+                                            "\"carrierSequence\":12,\"volume\":100,\"loopStartFrame\":0,"
+                                            "\"loopEndFrame\":0,\"finalLap\":\"speedup\"},"
+                                            "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
     ct::scan(root);
     assert(ct::tracks().size() == 1U);
     const std::int32_t retail[] = {0x0, 0x100, 0x250, 0x400, -1};
-    (void) ct::build_extended_table(ct::Section::LevelHeaders, retail);
+    (void)ct::build_extended_table(ct::Section::LevelHeaders, retail);
     const std::int32_t level = ct::resolved_level_id("tone");
     assert(level >= 0);
 
@@ -152,11 +152,11 @@ int main() {
 
     // The pause menu halves twice over: base * slider >> 2.
     assert(cm::intercept_music_volume(rdram, (127 * 256) >> 2));
-    (void) block_peak();   // the ramp down
+    (void)block_peak(); // the ramp down
     peak = block_peak();
     assert(peak > 600.0F && peak < 760.0F);
     assert(cm::intercept_music_volume(rdram, 127 * 256));
-    (void) block_peak();
+    (void)block_peak();
 
     // The final lap: the tempo rises and the file follows (no crash, still
     // sounding). The loop wraps the 2 s file many times over without silence.
@@ -169,7 +169,7 @@ int main() {
     // The carrier stops: one ramp out, then silence.
     set_song(12, 0, 0, 134);
     cm::tick(rdram);
-    (void) block_peak();
+    (void)block_peak();
     assert(block_peak() == 0.0F);
 
     // Leaving for a retail level clears everything.
@@ -187,11 +187,10 @@ int main() {
     {
         const std::filesystem::path tune = root / "tune.dkrmap";
         std::filesystem::create_directories(tune / "music");
-        const std::string hex =
-            "00000044000000000000000000000000000000000000000000000000000000000000"
-            "00000000000000000000000000000000000000000000000000000000000000000180"
-            "00ff5107a12000c00100ff2e00ff00903c648140830090436481408300ff2dffff00"
-            "00001700ff2f";
+        const std::string hex = "00000044000000000000000000000000000000000000000000000000000000000000"
+                                "00000000000000000000000000000000000000000000000000000000000000000180"
+                                "00ff5107a12000c00100ff2e00ff00903c648140830090436481408300ff2dffff00"
+                                "00001700ff2f";
         std::vector<std::uint8_t> song;
         for (std::size_t i = 0; i < hex.size(); i += 2) {
             song.push_back(static_cast<std::uint8_t>(std::stoi(hex.substr(i, 2), nullptr, 16)));
@@ -201,8 +200,7 @@ int main() {
         song.push_back(0x00);
         {
             std::ofstream out(tune / "music" / "main.cseq", std::ios::binary);
-            out.write(reinterpret_cast<const char*>(song.data()),
-                      static_cast<std::streamsize>(song.size()));
+            out.write(reinterpret_cast<const char*>(song.data()), static_cast<std::streamsize>(song.size()));
         }
         std::string header(0xC8, '\0');
         header[0x37] = 1;
@@ -211,18 +209,17 @@ int main() {
         header[ct::kHeaderInstruments] = '\xFF';
         header[ct::kHeaderInstruments + 1] = '\xFF';
         write_text(tune / "h.bin", header);
-        write_text(tune / "manifest.json",
-                   "{\"schemaVersion\":2,\"id\":\"tune\",\"name\":\"Tune\","
-                   "\"music\":{\"format\":\"dkr-alcseq-v1\",\"bank\":\"dkr-stock-v1\","
-                   "\"file\":\"music/main.cseq\",\"sha256\":\"" +
-                       cm::sha256_hex(song.data(), song.size()) + "\",\"bytes\":" +
-                       std::to_string(song.size()) +
-                       ",\"carrierSequence\":12,\"tempoBpm\":120,\"volume\":100,"
-                       "\"reverb\":0,\"channelMask\":65535},"
-                   "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
+        write_text(tune / "manifest.json", "{\"schemaVersion\":2,\"id\":\"tune\",\"name\":\"Tune\","
+                                           "\"music\":{\"format\":\"dkr-alcseq-v1\",\"bank\":\"dkr-stock-v1\","
+                                           "\"file\":\"music/main.cseq\",\"sha256\":\"" +
+                                               cm::sha256_hex(song.data(), song.size()) +
+                                               "\",\"bytes\":" + std::to_string(song.size()) +
+                                               ",\"carrierSequence\":12,\"tempoBpm\":120,\"volume\":100,"
+                                               "\"reverb\":0,\"channelMask\":65535},"
+                                               "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
         ct::scan(root);
         assert(ct::tracks().size() == 1U);
-        (void) ct::build_extended_table(ct::Section::LevelHeaders, retail);
+        (void)ct::build_extended_table(ct::Section::LevelHeaders, retail);
         const std::int32_t tune_level = ct::resolved_level_id("tune");
         assert(tune_level >= 0);
 

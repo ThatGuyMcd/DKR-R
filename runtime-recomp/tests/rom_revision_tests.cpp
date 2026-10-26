@@ -15,16 +15,13 @@ namespace {
 std::vector<std::uint8_t> read_file(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     assert(input);
-    return {std::istreambuf_iterator<char>(input),
-            std::istreambuf_iterator<char>()};
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
-void write_file(const std::filesystem::path& path,
-                const std::vector<std::uint8_t>& bytes) {
+void write_file(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes) {
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     assert(output);
-    output.write(reinterpret_cast<const char*>(bytes.data()),
-                 static_cast<std::streamsize>(bytes.size()));
+    output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
 }
 
 std::vector<std::uint8_t> swap32(std::vector<std::uint8_t> bytes) {
@@ -52,10 +49,10 @@ int main(int argc, char** argv) {
     assert(v80_a.canonical_xxh3 == v80_b.canonical_xxh3);
     assert(v77.supported() && v77.revision == dkr::runtime::rom::Revision::UsV77);
 
-    const auto test_identity = std::to_string(std::hash<std::string>{}(
-        std::filesystem::absolute(std::filesystem::u8path(argv[0])).string()));
-    const auto temporary = std::filesystem::temp_directory_path() /
-        ("dkr-r-rom-revision-test-" + test_identity + ".n64");
+    const auto test_identity =
+        std::to_string(std::hash<std::string>{}(std::filesystem::absolute(std::filesystem::u8path(argv[0])).string()));
+    const auto temporary =
+        std::filesystem::temp_directory_path() / ("dkr-r-rom-revision-test-" + test_identity + ".n64");
     write_file(temporary, swap32(read_file(v77_z64)));
     const auto v77_little = dkr::runtime::rom::inspect(temporary);
     std::filesystem::remove(temporary);
@@ -63,22 +60,21 @@ int main(int argc, char** argv) {
     assert(v77_little.revision == dkr::runtime::rom::Revision::UsV77);
     assert(v77_little.byte_order == dkr::runtime::rom::ByteOrder::LittleEndian32);
 
-    const auto canonical_cache = std::filesystem::temp_directory_path() /
-        ("dkr-r-rom-revision-canonical-cache-" + test_identity);
+    const auto canonical_cache =
+        std::filesystem::temp_directory_path() / ("dkr-r-rom-revision-canonical-cache-" + test_identity);
     std::filesystem::remove_all(canonical_cache);
     std::filesystem::path canonical_path;
     std::string canonical_error;
-    assert(dkr::runtime::rom::materialize_canonical(
-        v80_swapped, v80_b, canonical_cache, canonical_path, canonical_error));
+    assert(
+        dkr::runtime::rom::materialize_canonical(v80_swapped, v80_b, canonical_cache, canonical_path, canonical_error));
     assert(read_file(canonical_path) == read_file(v80_z64));
     const auto canonical_identity = dkr::runtime::rom::inspect(canonical_path);
     assert(canonical_identity.supported());
-    assert(canonical_identity.byte_order ==
-           dkr::runtime::rom::ByteOrder::BigEndian);
+    assert(canonical_identity.byte_order == dkr::runtime::rom::ByteOrder::BigEndian);
     std::filesystem::remove_all(canonical_cache);
 
-    const auto identity_cache = std::filesystem::temp_directory_path() /
-        ("dkr-r-rom-identity-cache-test-" + test_identity);
+    const auto identity_cache =
+        std::filesystem::temp_directory_path() / ("dkr-r-rom-identity-cache-test-" + test_identity);
     std::filesystem::remove_all(identity_cache);
     std::filesystem::create_directories(identity_cache);
     const auto cached_rom = identity_cache / "cached.z64";
@@ -96,9 +92,8 @@ int main(int argc, char** argv) {
     auto changed_bytes = read_file(cached_rom);
     changed_bytes.front() ^= 0xFFU;
     write_file(cached_rom, changed_bytes);
-    std::filesystem::last_write_time(
-        cached_rom, std::filesystem::file_time_type::clock::now() +
-                        std::chrono::seconds(2));
+    std::filesystem::last_write_time(cached_rom,
+                                     std::filesystem::file_time_type::clock::now() + std::chrono::seconds(2));
     assert(!dkr::runtime::rom::cached_identity(cached_rom).has_value());
     assert(!dkr::runtime::rom::inspect(cached_rom).supported());
     std::filesystem::remove_all(identity_cache);

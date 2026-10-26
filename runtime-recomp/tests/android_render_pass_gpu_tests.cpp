@@ -4,7 +4,11 @@
 #include <cstring>
 #include <stdexcept>
 
-#define CHECK(x) do { if (!(x)) throw std::runtime_error(#x); } while (false)
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x))                                                                                                      \
+            throw std::runtime_error(#x);                                                                              \
+    } while (false)
 int main() {
     using namespace plume;
     using namespace dkr::runtime;
@@ -40,13 +44,13 @@ int main() {
         list->begin();
         list->resetQueryPool(timing.get(), 0, 3);
         list->writeTimestamp(timing.get(), 0);
-        list->barriers(RenderBarrierStage::GRAPHICS, {
-            {color.get(), RenderTextureLayout::COLOR_WRITE},
-            {other.get(), RenderTextureLayout::COLOR_WRITE},
-            {depth.get(), RenderTextureLayout::DEPTH_WRITE}});
+        list->barriers(RenderBarrierStage::GRAPHICS, {{color.get(), RenderTextureLayout::COLOR_WRITE},
+                                                      {other.get(), RenderTextureLayout::COLOR_WRITE},
+                                                      {depth.get(), RenderTextureLayout::DEPTH_WRITE}});
         list->setFramebuffer(alternate.get());
         list->clearColor(0, RenderColor(1, 1, 0, 1));
-        list->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(other.get(), RenderTextureLayout::SHADER_READ));
+        list->barriers(RenderBarrierStage::GRAPHICS,
+                       RenderTextureBarrier(other.get(), RenderTextureLayout::SHADER_READ));
         list->setFramebuffer(writable.get());
         std::puts("Writable target bound");
         list->clearColor(0, RenderColor(1, 0, 0, 1));
@@ -59,11 +63,13 @@ int main() {
         for (unsigned bind = 0; bind < 1000; ++bind) {
             list->setFramebuffer(writable.get());
             CHECK(actual->activeRenderPass == pass);
-            list->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(other.get(), RenderTextureLayout::SHADER_READ));
+            list->barriers(RenderBarrierStage::GRAPHICS,
+                           RenderTextureBarrier(other.get(), RenderTextureLayout::SHADER_READ));
             CHECK(actual->activeRenderPass == pass);
         }
         // A new consumer stage needs a real dependency, even in the same layout.
-        list->barriers(RenderBarrierStage::COMPUTE, RenderTextureBarrier(other.get(), RenderTextureLayout::SHADER_READ));
+        list->barriers(RenderBarrierStage::COMPUTE,
+                       RenderTextureBarrier(other.get(), RenderTextureLayout::SHADER_READ));
         CHECK(actual->activeRenderPass == VK_NULL_HANDLE);
         list->clearColor(0, RenderColor(1, 0, 0, 1));
         // Mixed calls retain buffer barriers even when the image part is redundant.
@@ -75,7 +81,8 @@ int main() {
         std::puts("Repeated bindings retained");
         list->clearColor(0, RenderColor(0, 1, 0, 1), &left, 1);
         // Real layout changes still end the pass and perform barriers.
-        list->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(depth.get(), RenderTextureLayout::DEPTH_READ));
+        list->barriers(RenderBarrierStage::GRAPHICS,
+                       RenderTextureBarrier(depth.get(), RenderTextureLayout::DEPTH_READ));
         CHECK(actual->activeRenderPass == VK_NULL_HANDLE);
         list->setFramebuffer(readonly.get());
         std::puts("Read-only target bound");
@@ -91,17 +98,17 @@ int main() {
         CHECK(actual->activeRenderPass == VK_NULL_HANDLE && actual->targetFramebuffer == nullptr);
         list->setFramebuffer(readonly.get());
         list->clearColor(0, RenderColor(0, 0, 1, 1), &topRight, 1);
-        list->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(other.get(), RenderTextureLayout::COLOR_WRITE));
+        list->barriers(RenderBarrierStage::GRAPHICS,
+                       RenderTextureBarrier(other.get(), RenderTextureLayout::COLOR_WRITE));
         list->setFramebuffer(alternate.get());
         CHECK(actual->activeRenderPass == VK_NULL_HANDLE);
         list->clearColor(0, RenderColor(1, 1, 0, 1));
         std::puts("Alternate target cleared");
-        list->barriers(RenderBarrierStage::COPY, {
-            {color.get(), RenderTextureLayout::COPY_SOURCE}, {depth.get(), RenderTextureLayout::COPY_SOURCE}});
+        list->barriers(RenderBarrierStage::COPY, {{color.get(), RenderTextureLayout::COPY_SOURCE},
+                                                  {depth.get(), RenderTextureLayout::COPY_SOURCE}});
         std::puts("Copy texture barriers recorded");
-        list->barriers(RenderBarrierStage::COPY, {
-            RenderBufferBarrier(readback.get(), RenderBufferAccess::WRITE),
-            RenderBufferBarrier(depthback.get(), RenderBufferAccess::WRITE)});
+        list->barriers(RenderBarrierStage::COPY, {RenderBufferBarrier(readback.get(), RenderBufferAccess::WRITE),
+                                                  RenderBufferBarrier(depthback.get(), RenderBufferAccess::WRITE)});
         std::puts("Copy buffer barriers recorded");
         // Plume does not implement image -> buffer copyTextureRegion. Use the
         // Vulkan test harness for readback, not that unsupported production API.
@@ -109,10 +116,12 @@ int main() {
         copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
         copy.imageExtent = {W, H, 1};
         vkCmdCopyImageToBuffer(actual->vk, static_cast<VulkanTexture*>(color.get())->vk,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, static_cast<VulkanBuffer*>(readback.get())->vk, 1, &copy);
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, static_cast<VulkanBuffer*>(readback.get())->vk, 1,
+                               &copy);
         copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
         vkCmdCopyImageToBuffer(actual->vk, static_cast<VulkanTexture*>(depth.get())->vk,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, static_cast<VulkanBuffer*>(depthback.get())->vk, 1, &copy);
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, static_cast<VulkanBuffer*>(depthback.get())->vk, 1,
+                               &copy);
         list->writeTimestamp(timing.get(), 2);
         list->end();
         std::printf("Submitting iteration %u\n", iteration);
@@ -126,17 +135,20 @@ int main() {
         auto* rgba = static_cast<const unsigned char*>(readback->map(0, &all));
         auto* z = static_cast<const float*>(depthback->map(0, &all));
         CHECK(rgba && z);
-        for (unsigned y = 0; y < H; ++y) for (unsigned x = 0; x < W; ++x) {
-            const auto p = (y * W + x) * 4;
-            CHECK(rgba[p] == ((x >= W / 2 && y >= H / 2) ? 255 : 0));
-            CHECK(rgba[p + 1] == (x < W / 2 ? 255 : 0));
-            CHECK(rgba[p + 2] == ((x >= W / 2 && y < H / 2) ? 255 : 0));
-            CHECK(rgba[p + 3] == 255 && z[y * W + x] == 0.25f);
-        }
-        readback->unmap(0, &none); depthback->unmap(0, &none);
+        for (unsigned y = 0; y < H; ++y)
+            for (unsigned x = 0; x < W; ++x) {
+                const auto p = (y * W + x) * 4;
+                CHECK(rgba[p] == ((x >= W / 2 && y >= H / 2) ? 255 : 0));
+                CHECK(rgba[p + 1] == (x < W / 2 ? 255 : 0));
+                CHECK(rgba[p + 2] == ((x >= W / 2 && y < H / 2) ? 255 : 0));
+                CHECK(rgba[p + 3] == 255 && z[y * W + x] == 0.25f);
+            }
+        readback->unmap(0, &none);
+        depthback->unmap(0, &none);
     }
     CHECK(render_metrics::counts[static_cast<std::size_t>(render_metrics::Event::RedundantBind)].load() == 3003);
     CHECK(render_metrics::counts[static_cast<std::size_t>(render_metrics::Event::ReadBarrierRemoved)].load() == 3003);
     CHECK(render_metrics::counts[static_cast<std::size_t>(render_metrics::Event::PassBreakRemoved)].load() == 3000);
-    std::puts("PASS: actual staged Vulkan backend, 3003 redundant binds and read barriers removed, 3000 pass breaks avoided, exact color/depth readback; new stages, real barriers, null unbind and target changes retained");
+    std::puts(
+        "PASS: actual staged Vulkan backend, 3003 redundant binds and read barriers removed, 3000 pass breaks avoided, exact color/depth readback; new stages, real barriers, null unbind and target changes retained");
 }

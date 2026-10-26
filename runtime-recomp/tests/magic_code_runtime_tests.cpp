@@ -15,8 +15,10 @@
 // Only the network replay gate is substituted; no sockets or user saves exist.
 static bool allow_side_effects = true;
 namespace dkr::runtime::netplay {
-bool external_side_effects_allowed() { return allow_side_effects; }
+bool external_side_effects_allowed() {
+    return allow_side_effects;
 }
+} // namespace dkr::runtime::netplay
 extern "C" void dkr_apply_launch_magic_codes(std::uint8_t*, recomp_context*);
 extern "C" void dkr_magic_code_credits_started(std::uint8_t*, recomp_context*);
 extern "C" void dkr_magic_code_balloon_awarded(std::uint8_t*, recomp_context*);
@@ -25,9 +27,9 @@ extern "C" void dkr_magic_codes_frame_complete(std::uint8_t*, recomp_context*);
 int main() {
     using namespace dkr::runtime::magic_codes;
     namespace addresses = dkr::runtime::revision_addresses;
-    const auto directory = std::filesystem::temp_directory_path() /
-        ("dkr-magic-test-" + std::to_string(
-            std::chrono::steady_clock::now().time_since_epoch().count()));
+    const auto directory =
+        std::filesystem::temp_directory_path() /
+        ("dkr-magic-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     assert(std::filesystem::create_directory(directory));
     configure(directory);
     std::string error;
@@ -38,8 +40,7 @@ int main() {
     recomp_context context{};
     context.r4 = 0x12345678U;
     const recomp_context before = context;
-    for (const auto revision : {dkr::runtime::rom::Revision::UsV77,
-                               dkr::runtime::rom::Revision::UsV80}) {
+    for (const auto revision : {dkr::runtime::rom::Revision::UsV77, dkr::runtime::rom::Revision::UsV80}) {
         assert(addresses::select(revision));
         const gpr active = static_cast<std::int32_t>(addresses::ActiveMagicCodes);
         const gpr unlocked = static_cast<std::int32_t>(addresses::UnlockedMagicCodes);
@@ -107,9 +108,16 @@ int main() {
     // Queue setter transactions may not lose concurrent edits.
     for (int trial = 0; trial < 16; ++trial) {
         assert(set_queued_one_shot_mask(0U, error));
-        std::thread a([] { std::string e; assert(set_enabled(10, true, e)); });
-        std::thread b([] { std::string e; assert(set_enabled(26, true, e)); });
-        a.join(); b.join();
+        std::thread a([] {
+            std::string e;
+            assert(set_enabled(10, true, e));
+        });
+        std::thread b([] {
+            std::string e;
+            assert(set_enabled(26, true, e));
+        });
+        a.join();
+        b.join();
         assert(queued_one_shot_mask() == (credits | balloon));
     }
     // A failed disk replacement leaves memory unchanged and exposes an error.
@@ -134,5 +142,6 @@ int main() {
     assert(queued_one_shot_mask() == credits);
     assert(clear_all(error));
     assert(std::filesystem::remove(directory));
-    std::puts("[test][magic-code-runtime] PASS: both revisions, lifecycle, native completion, replay, immutable online selection, requeue, concurrency, IO retry");
+    std::puts(
+        "[test][magic-code-runtime] PASS: both revisions, lifecycle, native completion, replay, immutable online selection, requeue, concurrency, IO retry");
 }

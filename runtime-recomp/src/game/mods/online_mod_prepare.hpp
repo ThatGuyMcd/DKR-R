@@ -7,13 +7,14 @@ namespace dkr::mods::online {
 // Native course packages contain only declared, bounded assets. They need no
 // ROM reconstruction or legacy child process. The caller is a storage worker,
 // never the UI/game thread; publication still requires full profile validation.
-void prepare_track_lab_library(const Manifest&,const std::filesystem::path& payload_directory,
-    const std::filesystem::path& fresh_destination,std::stop_token stop={},const ProgressCallback& progress={});
+void prepare_track_lab_library(const Manifest&, const std::filesystem::path& payload_directory,
+                               const std::filesystem::path& fresh_destination, std::stop_token stop = {},
+                               const ProgressCallback& progress = {});
 // Child-worker entry point. It reconstructs artifacts from patches against
 // locally owned ROMs; it never trusts host-prepared executable/artifact bytes.
 // All writes target a fresh private session tree, never the offline library.
-void prepare_library(const Manifest& manifest,const std::filesystem::path& payload_directory,
-    const std::vector<std::filesystem::path>& owned_roms,
-    const std::filesystem::path& fresh_destination,const ProgressCallback& progress={},
-    ImportPreparation* shared_sources=nullptr);
-}
+void prepare_library(const Manifest& manifest, const std::filesystem::path& payload_directory,
+                     const std::vector<std::filesystem::path>& owned_roms,
+                     const std::filesystem::path& fresh_destination, const ProgressCallback& progress = {},
+                     ImportPreparation* shared_sources = nullptr);
+} // namespace dkr::mods::online

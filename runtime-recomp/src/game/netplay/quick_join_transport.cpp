@@ -33,10 +33,9 @@ std::string normalize_code(std::string_view code) {
     std::string result;
     result.reserve(code.size());
     for (const char character : code) {
-        if (std::isspace(static_cast<unsigned char>(character)) ||
-            character == '-') continue;
-        result.push_back(static_cast<char>(std::toupper(
-            static_cast<unsigned char>(character))));
+        if (std::isspace(static_cast<unsigned char>(character)) || character == '-')
+            continue;
+        result.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(character))));
     }
     return result;
 }
@@ -44,8 +43,7 @@ std::string normalize_code(std::string_view code) {
 std::string random_token(std::size_t size, std::string_view alphabet) {
     std::random_device seed;
     std::mt19937 generator(seed());
-    std::uniform_int_distribution<std::size_t> distribution(
-        0U, alphabet.size() - 1U);
+    std::uniform_int_distribution<std::size_t> distribution(0U, alphabet.size() - 1U);
     std::string result;
     result.reserve(size);
     for (std::size_t index = 0U; index < size; ++index) {
@@ -56,8 +54,8 @@ std::string random_token(std::size_t size, std::string_view alphabet) {
 
 std::uint64_t steady_milliseconds() {
     return static_cast<std::uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count());
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+            .count());
 }
 
 PeerAddress quick_address(std::uint64_t identifier) {
@@ -68,8 +66,7 @@ PeerAddress quick_address(std::uint64_t identifier) {
     result.storage[2] = 'Q';
     result.storage[3] = 'J';
     for (std::size_t index = 0U; index < 8U; ++index) {
-        result.storage[4U + index] = static_cast<std::uint8_t>(
-            identifier >> ((7U - index) * 8U));
+        result.storage[4U + index] = static_cast<std::uint8_t>(identifier >> ((7U - index) * 8U));
     }
     return result;
 }
@@ -102,8 +99,7 @@ p/SgguMh1YQdc4acLa/KNJvxn7kjNuK8YAOdgLOaVsjh4rsUecrNIdSUtUlD
 )PEM";
 
 std::string signaling_ca_bundle() {
-    if (const char* configured = std::getenv("SSL_CERT_FILE");
-        configured != nullptr && configured[0] != '\0') {
+    if (const char* configured = std::getenv("SSL_CERT_FILE"); configured != nullptr && configured[0] != '\0') {
         std::error_code error;
         if (std::filesystem::is_regular_file(configured, error)) {
             return configured;
@@ -127,10 +123,11 @@ std::string signaling_ca_bundle() {
 }
 
 class QuickJoinTransport final : public SessionTransport {
-public:
-    QuickJoinTransport(bool host, std::string code)
-        : host_(host), code_(std::move(code)) {}
-    ~QuickJoinTransport() override { close(); }
+  public:
+    QuickJoinTransport(bool host, std::string code) : host_(host), code_(std::move(code)) {}
+    ~QuickJoinTransport() override {
+        close();
+    }
 
     bool open(std::uint16_t, std::string& error) override {
         close();
@@ -145,12 +142,9 @@ public:
         route_retry_requested_.store(false, std::memory_order_release);
         next_route_retry_ms_.store(0U, std::memory_order_release);
         next_signaling_retry_ms_.store(0U, std::memory_order_release);
-        local_peer_id_ = host_
-            ? "dkrr-31-" + code_
-            : "dkrr-31-client-" + random_token(16U, kCodeAlphabet);
+        local_peer_id_ = host_ ? "dkrr-31-" + code_ : "dkrr-31-client-" + random_token(16U, kCodeAlphabet);
         remote_host_id_ = "dkrr-31-" + code_;
-        const std::uint64_t generation =
-            next_signaling_generation_.fetch_add(1U, std::memory_order_acq_rel) + 1U;
+        const std::uint64_t generation = next_signaling_generation_.fetch_add(1U, std::memory_order_acq_rel) + 1U;
         signaling_generation_.store(generation);
         signaling_started_ms_.store(steady_milliseconds());
         websocket_ = make_signaling_socket(generation);
@@ -200,32 +194,44 @@ public:
         }
         for (auto& [identifier, peer] : peers) {
             peer->current.store(false, std::memory_order_release);
-            if (peer->control_channel) peer->control_channel->close();
-            if (peer->authority_channel) peer->authority_channel->close();
-            if (peer->realtime_channel) peer->realtime_channel->close();
-            if (peer->replica_channel) peer->replica_channel->close();
-            if (peer->checkpoint_channel) peer->checkpoint_channel->close();
-            if (peer->connection) peer->connection->close();
+            if (peer->control_channel)
+                peer->control_channel->close();
+            if (peer->authority_channel)
+                peer->authority_channel->close();
+            if (peer->realtime_channel)
+                peer->realtime_channel->close();
+            if (peer->replica_channel)
+                peer->replica_channel->close();
+            if (peer->checkpoint_channel)
+                peer->checkpoint_channel->close();
+            if (peer->connection)
+                peer->connection->close();
         }
         for (const auto& peer : retired) {
             peer->current.store(false, std::memory_order_release);
-            if (peer->connection) peer->connection->close();
+            if (peer->connection)
+                peer->connection->close();
         }
-        if (websocket) websocket->close();
-        if (pending && pending->socket) pending->socket->close();
+        if (websocket)
+            websocket->close();
+        if (pending && pending->socket)
+            pending->socket->close();
         connection_closer_.stop();
     }
 
     bool is_open() const override {
         return open_.load(std::memory_order_acquire);
     }
-    std::uint16_t local_port() const override { return 0U; }
-    bool quick_join() const override { return true; }
+    std::uint16_t local_port() const override {
+        return 0U;
+    }
+    bool quick_join() const override {
+        return true;
+    }
     void retain_peer_route(const PeerAddress& address) override {
         std::scoped_lock lock(mutex_);
         for (const auto& [id, peer] : peers_) {
-            if (peer->address == address &&
-                (pinned_routes_.contains(peer->remote_id) || pinned_routes_.size() < 16U)) {
+            if (peer->address == address && (pinned_routes_.contains(peer->remote_id) || pinned_routes_.size() < 16U)) {
                 pinned_routes_[peer->remote_id] = {id, address};
                 return;
             }
@@ -233,21 +239,23 @@ public:
     }
     void release_peer_route(const PeerAddress& address) override {
         std::scoped_lock lock(mutex_);
-        std::erase_if(pinned_routes_, [&](const auto& entry) {
-            return entry.second.second == address;
-        });
+        std::erase_if(pinned_routes_, [&](const auto& entry) { return entry.second.second == address; });
     }
     bool take_peer_departure(PeerAddress& address) override {
         std::scoped_lock lock(mutex_);
-        while(!departed_peers_.empty()) {
-            const auto peer=departed_peers_.front().lock();departed_peers_.pop_front();
+        while (!departed_peers_.empty()) {
+            const auto peer = departed_peers_.front().lock();
+            departed_peers_.pop_front();
             // A late callback from a replaced route cannot end a new match.
-            if(!peer||!peer->current.load(std::memory_order_acquire))continue;
-            const auto current=peers_.find(peer->identifier);
-            const auto pinned=pinned_routes_.find(peer->remote_id);
-            if(current==peers_.end()||current->second!=peer||pinned==pinned_routes_.end()||
-               !(pinned->second.second==peer->address))continue;
-            address=peer->address;return true;
+            if (!peer || !peer->current.load(std::memory_order_acquire))
+                continue;
+            const auto current = peers_.find(peer->identifier);
+            const auto pinned = pinned_routes_.find(peer->remote_id);
+            if (current == peers_.end() || current->second != peer || pinned == pinned_routes_.end() ||
+                !(pinned->second.second == peer->address))
+                continue;
+            address = peer->address;
+            return true;
         }
         return false;
     }
@@ -258,23 +266,28 @@ public:
         std::scoped_lock lock(mutex_);
         switch (traffic) {
         case TransportTrafficClass::Checkpoint:
-            for (const auto& packet : checkpoint_inbound_) release_packet_bytes_locked(packet);
+            for (const auto& packet : checkpoint_inbound_)
+                release_packet_bytes_locked(packet);
             checkpoint_inbound_.clear();
             break;
         case TransportTrafficClass::Control:
-            for (const auto& packet : control_inbound_) release_packet_bytes_locked(packet);
+            for (const auto& packet : control_inbound_)
+                release_packet_bytes_locked(packet);
             control_inbound_.clear();
             break;
         case TransportTrafficClass::Authoritative:
-            for (const auto& packet : authority_inbound_) release_packet_bytes_locked(packet);
+            for (const auto& packet : authority_inbound_)
+                release_packet_bytes_locked(packet);
             authority_inbound_.clear();
             break;
         case TransportTrafficClass::Realtime:
-            for (const auto& packet : realtime_inbound_) release_packet_bytes_locked(packet);
+            for (const auto& packet : realtime_inbound_)
+                release_packet_bytes_locked(packet);
             realtime_inbound_.clear();
             break;
         case TransportTrafficClass::Replica:
-            for (const auto& packet : replica_inbound_) release_packet_bytes_locked(packet);
+            for (const auto& packet : replica_inbound_)
+                release_packet_bytes_locked(packet);
             replica_inbound_.clear();
             break;
         }
@@ -292,16 +305,20 @@ public:
         auto pending = std::make_shared<PendingRekey>();
         {
             std::scoped_lock lock(mutex_);
-            do { pending->code = random_token(5U, kCodeAlphabet); }
-            while (pending->code == code_);
+            do {
+                pending->code = random_token(5U, kCodeAlphabet);
+            } while (pending->code == code_);
             pending->bootstrap = std::move(bootstrap);
             pending->generation = next_signaling_generation_.fetch_add(1U) + 1U;
             pending_rekey_ = pending;
         }
         rekey_state_.store(QuickJoinRekeyStatus::Pending);
         pending->socket = make_signaling_socket(pending->generation, pending);
-        try { pending->socket->open(signaling_url("dkrr-31-" + pending->code)); }
-        catch (...) { pending->failed.store(true); }
+        try {
+            pending->socket->open(signaling_url("dkrr-31-" + pending->code));
+        } catch (...) {
+            pending->failed.store(true);
+        }
         error.clear();
         return true;
     }
@@ -310,11 +327,8 @@ public:
         return rekey_state_.load(std::memory_order_acquire);
     }
 
-    DatagramSendStatus send_status(
-        const PeerAddress& destination,
-        std::span<const std::uint8_t> bytes,
-        TransportTrafficClass traffic,
-        std::string& error) override {
+    DatagramSendStatus send_status(const PeerAddress& destination, std::span<const std::uint8_t> bytes,
+                                   TransportTrafficClass traffic, std::string& error) override {
         std::shared_ptr<rtc::DataChannel> channel;
         std::shared_ptr<Peer> target;
         std::array<std::shared_ptr<rtc::DataChannel>, 5> peer_channels{};
@@ -323,8 +337,8 @@ public:
             for (const auto& [identifier, peer] : peers_) {
                 if (peer->address == destination) {
                     target = peer;
-                    peer_channels = {peer->control_channel, peer->authority_channel,
-                        peer->realtime_channel, peer->checkpoint_channel, peer->replica_channel};
+                    peer_channels = {peer->control_channel, peer->authority_channel, peer->realtime_channel,
+                                     peer->checkpoint_channel, peer->replica_channel};
                     switch (quick_join_delivery_class(traffic)) {
                     case TransportTrafficClass::Checkpoint:
                         channel = peer->checkpoint_channel;
@@ -357,7 +371,9 @@ public:
         // feeding SCTP as soon as one useful state is already in flight.
         const auto buffered = channel->bufferedAmount();
         std::size_t aggregate = 0;
-        for (const auto& lane : peer_channels) if (lane) aggregate += lane->bufferedAmount();
+        for (const auto& lane : peer_channels)
+            if (lane)
+                aggregate += lane->bufferedAmount();
         if (!quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U)) {
             error.clear();
             return DatagramSendStatus::WouldBlock;
@@ -371,8 +387,9 @@ public:
         try {
             const bool immediate = channel->send(std::move(framed));
             if (!quick_join_send_accepted(immediate, channel->isOpen(),
-                    target && target->connection->state() == rtc::PeerConnection::State::Connected,
-                    target && target->current.load(std::memory_order_acquire))) {
+                                          target &&
+                                              target->connection->state() == rtc::PeerConnection::State::Connected,
+                                          target && target->current.load(std::memory_order_acquire))) {
                 request_route_retry(target);
                 error.clear();
                 return DatagramSendStatus::WouldBlock;
@@ -382,16 +399,14 @@ public:
             // authenticated packet on DirectSession's queue and rebuild the
             // logical route instead of silently dropping a reliable commit.
             request_route_retry(target);
-            error = std::string("Quick Join route is rebuilding: ") +
-                    exception.what();
+            error = std::string("Quick Join route is rebuilding: ") + exception.what();
             return DatagramSendStatus::WouldBlock;
         }
         error.clear();
         return DatagramSendStatus::Sent;
     }
 
-    bool receive(PeerAddress& source, std::vector<std::uint8_t>& bytes,
-                 std::string& error) override {
+    bool receive(PeerAddress& source, std::vector<std::uint8_t>& bytes, std::string& error) override {
         std::scoped_lock lock(mutex_);
         if (failed_.load(std::memory_order_acquire)) {
             error = failure_;
@@ -401,15 +416,16 @@ public:
         // A sustained control/ledger backlog must not starve a required
         // checkpoint. Preserve priority with weighted service, but guarantee
         // each ready lane an opportunity across bounded receive batches.
-        constexpr std::array<unsigned, 13> schedule{
-            0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4};
+        constexpr std::array<unsigned, 13> schedule{0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4};
         const std::array<std::deque<InboundPacket>*, 5> queues{
-            &control_inbound_, &authority_inbound_, &realtime_inbound_,
-            &checkpoint_inbound_, &replica_inbound_};
+            &control_inbound_, &authority_inbound_, &realtime_inbound_, &checkpoint_inbound_, &replica_inbound_};
         for (unsigned attempt = 0; attempt < schedule.size(); ++attempt) {
             auto* candidate = queues[schedule[receive_service_cursor_]];
             receive_service_cursor_ = (receive_service_cursor_ + 1U) % schedule.size();
-            if (!candidate->empty()) { queue = candidate; break; }
+            if (!candidate->empty()) {
+                queue = candidate;
+                break;
+            }
         }
         if (queue == nullptr) {
             source = {};
@@ -460,13 +476,11 @@ public:
         return total;
     }
 
-    bool traffic_ready(const PeerAddress& destination,
-                       TransportTrafficClass traffic) const override {
+    bool traffic_ready(const PeerAddress& destination, TransportTrafficClass traffic) const override {
         std::scoped_lock lock(mutex_);
         for (const auto& [identifier, peer] : peers_) {
             (void)identifier;
-            if (!peer || peer->address != destination ||
-                !peer->current.load(std::memory_order_acquire)) {
+            if (!peer || peer->address != destination || !peer->current.load(std::memory_order_acquire)) {
                 continue;
             }
             std::shared_ptr<rtc::DataChannel> channel;
@@ -487,8 +501,7 @@ public:
                 channel = peer->replica_channel;
                 break;
             }
-            return peer->route_ready.load(std::memory_order_acquire) &&
-                   channel && channel->isOpen();
+            return peer->route_ready.load(std::memory_order_acquire) && channel && channel->isOpen();
         }
         return false;
     }
@@ -496,8 +509,7 @@ public:
     void service() override {
         const auto now = std::chrono::steady_clock::now();
         finish_rekey();
-        if (signaling_connecting_.load() &&
-            steady_milliseconds() - signaling_started_ms_.load() > 15000U) {
+        if (signaling_connecting_.load() && steady_milliseconds() - signaling_started_ms_.load() > 15000U) {
             signaling_connecting_.store(false);
             request_signaling_retry();
         }
@@ -507,14 +519,16 @@ public:
             for (auto it = peers_.begin(); it != peers_.end();) {
                 const auto& peer = it->second;
                 const bool pinned = pinned_routes_.contains(peer->remote_id);
-                if (!peer->current.load() || (!pinned && !peer->route_ready.load() && now - peer->created > std::chrono::seconds(30))) {
+                if (!peer->current.load() ||
+                    (!pinned && !peer->route_ready.load() && now - peer->created > std::chrono::seconds(30))) {
                     request_route_retry(peer);
                     peer->current.store(false);
                     purge_peer_packets_locked(peer);
                     remote_to_identifier_.erase(peer->remote_id + "\n" + peer->connection_id);
                     retired.push_back(peer);
                     it = peers_.erase(it);
-                } else ++it;
+                } else
+                    ++it;
             }
             retired.insert(retired.end(), retired_peers_.begin(), retired_peers_.end());
             retired_peers_.clear();
@@ -527,7 +541,11 @@ public:
                 continue;
             }
             if (!connection_closer_.post([this, peer] {
-                    try { if (peer->connection) peer->connection->close(); } catch (...) {}
+                    try {
+                        if (peer->connection)
+                            peer->connection->close();
+                    } catch (...) {
+                    }
                     pending_retirements_.fetch_sub(1U);
                 })) {
                 pending_retirements_.fetch_sub(1U);
@@ -539,14 +557,12 @@ public:
         if (signaling_retry_requested_.load(std::memory_order_acquire) &&
             !signaling_ready_.load(std::memory_order_acquire) &&
             !signaling_connecting_.load(std::memory_order_acquire) &&
-            now_ms >= next_signaling_retry_ms_.load(
-                          std::memory_order_acquire)) {
+            now_ms >= next_signaling_retry_ms_.load(std::memory_order_acquire)) {
             reconnect_signaling();
         }
         if (signaling_ready_.load(std::memory_order_acquire) &&
-            route_retry_requested_.load(std::memory_order_acquire) &&
-            !host_ && now_ms >= next_route_retry_ms_.load(
-                              std::memory_order_acquire)) {
+            route_retry_requested_.load(std::memory_order_acquire) && !host_ &&
+            now_ms >= next_route_retry_ms_.load(std::memory_order_acquire)) {
             route_retry_requested_.store(false, std::memory_order_release);
             // Give this negotiation its own time budget. Send retries cannot
             // restart either the first retry timer or an in-flight offer.
@@ -558,8 +574,7 @@ public:
             }
             create_offer(remote);
         }
-        if (signaling_ready_.load(std::memory_order_acquire) &&
-            now - last_heartbeat_ >= std::chrono::seconds(5)) {
+        if (signaling_ready_.load(std::memory_order_acquire) && now - last_heartbeat_ >= std::chrono::seconds(5)) {
             send_signal(Json{{"type", "HEARTBEAT"}});
             last_heartbeat_ = now;
         }
@@ -576,20 +591,21 @@ public:
                 }
             }
         }
-        for (const auto& channel : channels) send_bootstrap(channel);
+        for (const auto& channel : channels)
+            send_bootstrap(channel);
     }
 
-    bool take_quick_join_bootstrap(std::string& bootstrap,
-                                   PeerAddress& peer) override {
+    bool take_quick_join_bootstrap(std::string& bootstrap, PeerAddress& peer) override {
         std::scoped_lock lock(mutex_);
-        if (bootstrap_.empty() || !bootstrap_peer_) return false;
+        if (bootstrap_.empty() || !bootstrap_peer_)
+            return false;
         bootstrap = std::move(bootstrap_);
         peer = bootstrap_peer_;
         bootstrap_peer_ = {};
         return true;
     }
 
-private:
+  private:
     friend struct QuickJoinTestAccess;
     CallbackLifetime callbacks_;
     struct PendingRekey {
@@ -610,9 +626,11 @@ private:
         {
             std::scoped_lock lock(mutex_);
             pending = pending_rekey_;
-            if (!pending) return;
+            if (!pending)
+                return;
             if (!pending->ready.load() && !pending->failed.load() &&
-                std::chrono::steady_clock::now() - pending->started < std::chrono::seconds(15)) return;
+                std::chrono::steady_clock::now() - pending->started < std::chrono::seconds(15))
+                return;
             committed = pending->ready.load() && !pending->failed.load();
             if (committed) {
                 previous = std::move(websocket_);
@@ -632,13 +650,23 @@ private:
             pending_rekey_.reset();
             rekey_state_.store(committed ? QuickJoinRekeyStatus::Committed : QuickJoinRekeyStatus::Failed);
         }
-        if (!committed) { if (pending->socket) pending->socket->close(); return; }
+        if (!committed) {
+            if (pending->socket)
+                pending->socket->close();
+            return;
+        }
         for (const auto& channel : channels) {
             rtc::binary framed{static_cast<std::byte>(3U)};
-            for (unsigned char c : pending->code) framed.push_back(static_cast<std::byte>(c));
-            try { if (channel->isOpen()) channel->send(std::move(framed)); } catch (...) {}
+            for (unsigned char c : pending->code)
+                framed.push_back(static_cast<std::byte>(c));
+            try {
+                if (channel->isOpen())
+                    channel->send(std::move(framed));
+            } catch (...) {
+            }
         }
-        if (previous) previous->close();
+        if (previous)
+            previous->close();
     }
     struct Peer {
         std::uint64_t identifier = 0U;
@@ -670,7 +698,8 @@ private:
     }
 
     void purge_peer_packets_locked(const std::shared_ptr<Peer>& peer) {
-        for (auto* queue : {&control_inbound_, &authority_inbound_, &checkpoint_inbound_, &realtime_inbound_, &replica_inbound_}) {
+        for (auto* queue :
+             {&control_inbound_, &authority_inbound_, &checkpoint_inbound_, &realtime_inbound_, &replica_inbound_}) {
             std::erase_if(*queue, [&](const InboundPacket& packet) { return packet.source == peer->address; });
         }
         peer->queued_bytes = 0U;
@@ -680,88 +709,91 @@ private:
 #ifdef DKR_QUICK_JOIN_TESTING
         return quick_test_signaling_endpoint + "/" + std::string(peer_id);
 #endif
-        return "wss://0.peerjs.com/peerjs?key=peerjs&id=" +
-               std::string(peer_id) + "&token=" +
-               random_token(24U, kCodeAlphabet) + "&version=1.5.5";
+        return "wss://0.peerjs.com/peerjs?key=peerjs&id=" + std::string(peer_id) +
+               "&token=" + random_token(24U, kCodeAlphabet) + "&version=1.5.5";
     }
 
     bool current_signaling_generation(std::uint64_t generation) const {
-        return signaling_generation_.load(std::memory_order_acquire) ==
-               generation;
+        return signaling_generation_.load(std::memory_order_acquire) == generation;
     }
 
-    std::shared_ptr<rtc::WebSocket> make_signaling_socket(
-        std::uint64_t generation, std::weak_ptr<PendingRekey> pending = {}) {
+    std::shared_ptr<rtc::WebSocket> make_signaling_socket(std::uint64_t generation,
+                                                          std::weak_ptr<PendingRekey> pending = {}) {
         rtc::WebSocket::Configuration configuration{};
         configuration.caCertificatePemFile = signaling_ca_bundle();
         configuration.connectionTimeout = std::chrono::seconds(15);
-        auto websocket = std::make_shared<rtc::WebSocket>(
-            std::move(configuration));
+        auto websocket = std::make_shared<rtc::WebSocket>(std::move(configuration));
         // WebSocket open is not PeerJS registration; wait for its OPEN packet.
         websocket->onClosed(callbacks_.wrap([this, generation, pending] {
-            if (const auto staged = pending.lock()) staged->failed.store(true);
-            if (!current_signaling_generation(generation)) return;
+            if (const auto staged = pending.lock())
+                staged->failed.store(true);
+            if (!current_signaling_generation(generation))
+                return;
             signaling_ready_.store(false, std::memory_order_release);
             signaling_connecting_.store(false, std::memory_order_release);
             request_signaling_retry();
         }));
         websocket->onError(callbacks_.wrap([this, generation, pending](std::string) {
-            if (const auto staged = pending.lock()) staged->failed.store(true);
-            if (!current_signaling_generation(generation)) return;
+            if (const auto staged = pending.lock())
+                staged->failed.store(true);
+            if (!current_signaling_generation(generation))
+                return;
             signaling_ready_.store(false, std::memory_order_release);
             signaling_connecting_.store(false, std::memory_order_release);
             request_signaling_retry();
         }));
-        websocket->onMessage(
-            callbacks_.wrap([this, generation, pending](rtc::message_variant message) {
-                if (std::holds_alternative<std::string>(message)) {
-                    if (const auto staged = pending.lock(); staged && !current_signaling_generation(generation)) {
-                        const auto& text = std::get<std::string>(message);
-                        if (text.size() > 65536U) return;
-                        const auto value = Json::parse(text, nullptr, false);
-                        if (!valid_signaling_message(value)) return;
-                        const auto type = value.value("type", "");
-                        if (type == "OPEN") staged->ready.store(true);
-                        if (type == "ERROR" || type == "ID-TAKEN") staged->failed.store(true);
+        websocket->onMessage(callbacks_.wrap([this, generation, pending](rtc::message_variant message) {
+            if (std::holds_alternative<std::string>(message)) {
+                if (const auto staged = pending.lock(); staged && !current_signaling_generation(generation)) {
+                    const auto& text = std::get<std::string>(message);
+                    if (text.size() > 65536U)
                         return;
-                    }
-                    if (!current_signaling_generation(generation)) return;
-                    handle_signal(std::get<std::string>(message));
+                    const auto value = Json::parse(text, nullptr, false);
+                    if (!valid_signaling_message(value))
+                        return;
+                    const auto type = value.value("type", "");
+                    if (type == "OPEN")
+                        staged->ready.store(true);
+                    if (type == "ERROR" || type == "ID-TAKEN")
+                        staged->failed.store(true);
+                    return;
                 }
-            }));
+                if (!current_signaling_generation(generation))
+                    return;
+                handle_signal(std::get<std::string>(message));
+            }
+        }));
         return websocket;
     }
 
     bool has_established_route() const {
         std::scoped_lock lock(mutex_);
-        return std::any_of(peers_.begin(), peers_.end(),
-            [](const auto& entry) {
-                const auto& peer = entry.second;
-                return peer && peer->current.load(std::memory_order_acquire) &&
-                       peer->route_ready.load(std::memory_order_acquire) &&
-                       peer->control_channel && peer->control_channel->isOpen();
-            });
+        return std::any_of(peers_.begin(), peers_.end(), [](const auto& entry) {
+            const auto& peer = entry.second;
+            return peer && peer->current.load(std::memory_order_acquire) &&
+                   peer->route_ready.load(std::memory_order_acquire) && peer->control_channel &&
+                   peer->control_channel->isOpen();
+        });
     }
 
     void request_signaling_retry() {
-        if (closing_.load(std::memory_order_acquire) ||
-            failed_.load(std::memory_order_acquire) ||
-            !open_.load(std::memory_order_acquire)) return;
+        if (closing_.load(std::memory_order_acquire) || failed_.load(std::memory_order_acquire) ||
+            !open_.load(std::memory_order_acquire))
+            return;
         std::uint64_t unscheduled = 0U;
-        next_signaling_retry_ms_.compare_exchange_strong(
-            unscheduled, steady_milliseconds() + 750U, std::memory_order_acq_rel);
+        next_signaling_retry_ms_.compare_exchange_strong(unscheduled, steady_milliseconds() + 750U,
+                                                         std::memory_order_acq_rel);
         signaling_retry_requested_.store(true, std::memory_order_release);
     }
 
     void reconnect_signaling() {
-        if (closing_.load(std::memory_order_acquire) ||
-            failed_.load(std::memory_order_acquire) ||
-            !open_.load(std::memory_order_acquire)) return;
+        if (closing_.load(std::memory_order_acquire) || failed_.load(std::memory_order_acquire) ||
+            !open_.load(std::memory_order_acquire))
+            return;
         bool expected = false;
-        if (!signaling_connecting_.compare_exchange_strong(
-                expected, true, std::memory_order_acq_rel)) return;
-        const std::uint64_t generation =
-            next_signaling_generation_.fetch_add(1U, std::memory_order_acq_rel) + 1U;
+        if (!signaling_connecting_.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+            return;
+        const std::uint64_t generation = next_signaling_generation_.fetch_add(1U, std::memory_order_acq_rel) + 1U;
         signaling_generation_.store(generation);
         signaling_started_ms_.store(steady_milliseconds());
         next_signaling_retry_ms_.store(steady_milliseconds() + 2000U);
@@ -772,40 +804,47 @@ private:
             previous = std::move(websocket_);
             websocket_ = replacement;
         }
-        if (previous) previous->close();
+        if (previous)
+            previous->close();
         try {
             replacement->open(signaling_url(local_peer_id_));
         } catch (...) {
             signaling_connecting_.store(false, std::memory_order_release);
-            next_signaling_retry_ms_.store(
-                steady_milliseconds() + 2000U, std::memory_order_release);
+            next_signaling_retry_ms_.store(steady_milliseconds() + 2000U, std::memory_order_release);
             signaling_retry_requested_.store(true, std::memory_order_release);
         }
     }
 
     void report_peer_departure(const std::shared_ptr<Peer>& peer,
-                              const std::shared_ptr<rtc::DataChannel>& control = {}) {
+                               const std::shared_ptr<rtc::DataChannel>& control = {}) {
         std::scoped_lock lock(mutex_);
-        if(!peer||!peer->current.load(std::memory_order_acquire)||closing_.load()||peer->departure_reported)return;
-        const auto current=peers_.find(peer->identifier);
-        if(current==peers_.end()||current->second!=peer||!pinned_routes_.contains(peer->remote_id))return;
-        if(control&&peer->control_channel!=control)return;
-        peer->departure_reported=true;
-        std::erase_if(departed_peers_,[](const auto& p){const auto live=p.lock();return !live||!live->current.load();});
-        if(departed_peers_.size()<16U)departed_peers_.push_back(peer);
-        if(receive_signal_)receive_signal_->notify();
+        if (!peer || !peer->current.load(std::memory_order_acquire) || closing_.load() || peer->departure_reported)
+            return;
+        const auto current = peers_.find(peer->identifier);
+        if (current == peers_.end() || current->second != peer || !pinned_routes_.contains(peer->remote_id))
+            return;
+        if (control && peer->control_channel != control)
+            return;
+        peer->departure_reported = true;
+        std::erase_if(departed_peers_, [](const auto& p) {
+            const auto live = p.lock();
+            return !live || !live->current.load();
+        });
+        if (departed_peers_.size() < 16U)
+            departed_peers_.push_back(peer);
+        if (receive_signal_)
+            receive_signal_->notify();
     }
 
     void request_route_retry(const std::shared_ptr<Peer>& peer) {
-        if (!peer || !peer->current.load(std::memory_order_acquire) ||
-            closing_.load(std::memory_order_acquire) ||
-            failed_.load(std::memory_order_acquire)) return;
+        if (!peer || !peer->current.load(std::memory_order_acquire) || closing_.load(std::memory_order_acquire) ||
+            failed_.load(std::memory_order_acquire))
+            return;
         peer->route_ready.store(false, std::memory_order_release);
         if (!host_) {
             std::uint64_t unscheduled = 0U;
-            next_route_retry_ms_.compare_exchange_strong(
-                unscheduled, steady_milliseconds() + 750U,
-                std::memory_order_acq_rel);
+            next_route_retry_ms_.compare_exchange_strong(unscheduled, steady_milliseconds() + 750U,
+                                                         std::memory_order_acq_rel);
             route_retry_requested_.store(true, std::memory_order_release);
             if (!signaling_ready_.load(std::memory_order_acquire)) {
                 request_signaling_retry();
@@ -825,13 +864,15 @@ private:
             std::scoped_lock lock(mutex_);
             websocket = websocket_;
         }
-        if (!websocket || !websocket->isOpen()) return;
-        try { websocket->send(message.dump()); } catch (...) {}
+        if (!websocket || !websocket->isOpen())
+            return;
+        try {
+            websocket->send(message.dump());
+        } catch (...) {
+        }
     }
 
-    std::shared_ptr<Peer> create_peer(std::string remote,
-                                      std::string connection_id,
-                                      bool offer = false,
+    std::shared_ptr<Peer> create_peer(std::string remote, std::string connection_id, bool offer = false,
                                       const Json* remote_sdp = nullptr) {
         auto peer = std::make_shared<Peer>();
         peer->remote_id = std::move(remote);
@@ -841,12 +882,13 @@ private:
             std::scoped_lock lock(mutex_);
             if (peer->remote_id.size() > 128U || peer->connection_id.size() > 128U ||
                 retired_peers_.size() + pending_retirements_.load() >= 16U ||
-                (peers_.size() >= 16U && std::none_of(peers_.begin(), peers_.end(), [&](const auto& entry) { return entry.second->remote_id == peer->remote_id; }))) return {};
-            auto existing = std::find_if(
-                peers_.begin(), peers_.end(), [&](const auto& entry) {
-                    return entry.second &&
-                           entry.second->remote_id == peer->remote_id;
-                });
+                (peers_.size() >= 16U && std::none_of(peers_.begin(), peers_.end(), [&](const auto& entry) {
+                     return entry.second->remote_id == peer->remote_id;
+                 })))
+                return {};
+            auto existing = std::find_if(peers_.begin(), peers_.end(), [&](const auto& entry) {
+                return entry.second && entry.second->remote_id == peer->remote_id;
+            });
             const auto pinned = pinned_routes_.find(peer->remote_id);
             if (existing == peers_.end() && pinned != pinned_routes_.end()) {
                 existing = peers_.find(pinned->second.first);
@@ -859,29 +901,26 @@ private:
                 peer->identifier = pinned->second.first;
                 peer->address = pinned->second.second;
             } else {
-                peer->identifier = next_peer_identifier_.fetch_add(
-                    1U, std::memory_order_relaxed);
+                peer->identifier = next_peer_identifier_.fetch_add(1U, std::memory_order_relaxed);
                 peer->address = quick_address(peer->identifier);
             }
         }
         try {
-        route_construction_check(0);
-        rtc::Configuration configuration;
+            route_construction_check(0);
+            rtc::Configuration configuration;
 #ifndef DKR_QUICK_JOIN_TESTING
-        configuration.iceServers.emplace_back(
-            "stun:stun.l.google.com:19302");
+            configuration.iceServers.emplace_back("stun:stun.l.google.com:19302");
 #endif
-        peer->connection = std::make_shared<rtc::PeerConnection>(configuration);
-        const std::weak_ptr<Peer> weak_peer(peer);
-        peer->connection->onLocalDescription(
-            callbacks_.wrap([this, weak_peer](rtc::Description description) {
+            peer->connection = std::make_shared<rtc::PeerConnection>(configuration);
+            const std::weak_ptr<Peer> weak_peer(peer);
+            peer->connection->onLocalDescription(callbacks_.wrap([this, weak_peer](rtc::Description description) {
                 const auto locked = weak_peer.lock();
-                if (!locked || !locked->current.load()) return;
+                if (!locked || !locked->current.load())
+                    return;
                 const std::string type = description.typeString();
                 Json payload{{"connectionId", locked->connection_id},
                              {"type", "data"},
-                             {"sdp", {{"sdp", std::string(description)},
-                                      {"type", type}}}};
+                             {"sdp", {{"sdp", std::string(description)}, {"type", type}}}};
                 if (type == "offer") {
                     payload["label"] = locked->connection_id;
                     payload["reliable"] = true;
@@ -891,30 +930,28 @@ private:
                                  {"dst", locked->remote_id},
                                  {"payload", std::move(payload)}});
             }));
-        peer->connection->onLocalCandidate(
-            callbacks_.wrap([this, weak_peer](rtc::Candidate candidate) {
+            peer->connection->onLocalCandidate(callbacks_.wrap([this, weak_peer](rtc::Candidate candidate) {
                 const auto locked = weak_peer.lock();
-                if (!locked || !locked->current.load()) return;
-                send_signal(Json{
-                    {"type", "CANDIDATE"}, {"dst", locked->remote_id},
-                    {"payload", {
-                        {"connectionId", locked->connection_id},
-                        {"type", "data"},
-                        {"candidate", {
-                            {"candidate", candidate.candidate()},
-                            {"sdpMid", candidate.mid()}}}}}});
+                if (!locked || !locked->current.load())
+                    return;
+                send_signal(
+                    Json{{"type", "CANDIDATE"},
+                         {"dst", locked->remote_id},
+                         {"payload",
+                          {{"connectionId", locked->connection_id},
+                           {"type", "data"},
+                           {"candidate", {{"candidate", candidate.candidate()}, {"sdpMid", candidate.mid()}}}}}});
             }));
-        peer->connection->onDataChannel(
-            callbacks_.wrap([this, weak_peer](std::shared_ptr<rtc::DataChannel> channel) {
-                if (const auto locked = weak_peer.lock()) {
-                    bind_channel(locked, std::move(channel));
-                }
-            }));
-        peer->connection->onStateChange(
-            callbacks_.wrap([this, weak_peer](rtc::PeerConnection::State state) {
+            peer->connection->onDataChannel(
+                callbacks_.wrap([this, weak_peer](std::shared_ptr<rtc::DataChannel> channel) {
+                    if (const auto locked = weak_peer.lock()) {
+                        bind_channel(locked, std::move(channel));
+                    }
+                }));
+            peer->connection->onStateChange(callbacks_.wrap([this, weak_peer](rtc::PeerConnection::State state) {
                 const auto locked = weak_peer.lock();
-                if (!locked || !locked->current.load(
-                        std::memory_order_acquire)) return;
+                if (!locked || !locked->current.load(std::memory_order_acquire))
+                    return;
                 if (state == rtc::PeerConnection::State::Connected) {
                     locked->route_ready.store(true, std::memory_order_release);
                     if (!host_) {
@@ -922,40 +959,39 @@ private:
                         route_retry_requested_.store(false, std::memory_order_release);
                     }
                 } else if (state == rtc::PeerConnection::State::Disconnected ||
-                           state == rtc::PeerConnection::State::Failed ||
-                           state == rtc::PeerConnection::State::Closed) {
-                    if(state!=rtc::PeerConnection::State::Disconnected)report_peer_departure(locked);
+                           state == rtc::PeerConnection::State::Failed || state == rtc::PeerConnection::State::Closed) {
+                    if (state != rtc::PeerConnection::State::Disconnected)
+                        report_peer_departure(locked);
                     request_route_retry(locked);
                 }
             }));
-        if (offer) create_offer_channels(peer);
-        route_construction_check(6);
-        if (remote_sdp) {
-            peer->connection->setRemoteDescription(rtc::Description(
-                remote_sdp->value("sdp", ""), remote_sdp->value("type", "")));
-        }
-        {
-            std::scoped_lock lock(mutex_);
-            // Do not retire the usable route until replacement construction
-            // and initial negotiation have succeeded.
-            const auto current = peers_.find(peer->identifier);
-            if (current != peers_.end() && current->second != replaced)
-                throw std::runtime_error("A newer route already replaced this construction");
-            if (replaced) {
-                replaced->current.store(false, std::memory_order_release);
-                purge_peer_packets_locked(replaced);
-                remote_to_identifier_.erase(
-                    replaced->remote_id + "\n" + replaced->connection_id);
+            if (offer)
+                create_offer_channels(peer);
+            route_construction_check(6);
+            if (remote_sdp) {
+                peer->connection->setRemoteDescription(
+                    rtc::Description(remote_sdp->value("sdp", ""), remote_sdp->value("type", "")));
             }
-            remote_to_identifier_[peer->remote_id + "\n" +
-                                  peer->connection_id] = peer->identifier;
-            peers_[peer->identifier] = peer;
-        }
-        if (replaced) {
-            std::scoped_lock lock(mutex_);
-            retired_peers_.push_back(std::move(replaced));
-        }
-        return peer;
+            {
+                std::scoped_lock lock(mutex_);
+                // Do not retire the usable route until replacement construction
+                // and initial negotiation have succeeded.
+                const auto current = peers_.find(peer->identifier);
+                if (current != peers_.end() && current->second != replaced)
+                    throw std::runtime_error("A newer route already replaced this construction");
+                if (replaced) {
+                    replaced->current.store(false, std::memory_order_release);
+                    purge_peer_packets_locked(replaced);
+                    remote_to_identifier_.erase(replaced->remote_id + "\n" + replaced->connection_id);
+                }
+                remote_to_identifier_[peer->remote_id + "\n" + peer->connection_id] = peer->identifier;
+                peers_[peer->identifier] = peer;
+            }
+            if (replaced) {
+                std::scoped_lock lock(mutex_);
+                retired_peers_.push_back(std::move(replaced));
+            }
+            return peer;
         } catch (const std::exception&) {
             request_route_retry(peer);
             peer->current.store(false, std::memory_order_release);
@@ -980,8 +1016,7 @@ private:
 
     void create_offer_channels(const std::shared_ptr<Peer>& peer) {
         route_construction_check(1);
-        bind_channel(peer,
-            peer->connection->createDataChannel("dkr-r-control"));
+        bind_channel(peer, peer->connection->createDataChannel("dkr-r-control"));
 
         // Frame commits and input-repair batches are reliable, but unordered.
         // Each batch carries an authenticated frame chain and overlapping
@@ -990,83 +1025,76 @@ private:
         rtc::DataChannelInit authority{};
         authority.reliability.unordered = true;
         route_construction_check(2);
-        bind_channel(peer, peer->connection->createDataChannel(
-            "dkr-r-authority", authority));
+        bind_channel(peer, peer->connection->createDataChannel("dkr-r-authority", authority));
         // Required snapshots are reliable, but cannot block the ordered
         // release/control stream or the immutable frame-commit stream.
         route_construction_check(3);
-        bind_channel(peer, peer->connection->createDataChannel(
-            "dkr-r-checkpoint", authority));
+        bind_channel(peer, peer->connection->createDataChannel("dkr-r-checkpoint", authority));
 
         rtc::DataChannelInit realtime{};
         realtime.reliability.unordered = true;
         realtime.reliability.maxRetransmits = 0U;
         route_construction_check(4);
-        bind_channel(peer, peer->connection->createDataChannel(
-            "dkr-r-realtime", realtime));
+        bind_channel(peer, peer->connection->createDataChannel("dkr-r-realtime", realtime));
 
         rtc::DataChannelInit replica{};
         replica.reliability.unordered = true;
         replica.reliability.maxRetransmits = 0U;
         route_construction_check(5);
-        bind_channel(peer, peer->connection->createDataChannel(
-            "dkr-r-replica", replica));
+        bind_channel(peer, peer->connection->createDataChannel("dkr-r-replica", replica));
     }
 
-    std::shared_ptr<Peer> find_peer(const std::string& remote,
-                                    const std::string& connection_id) {
+    std::shared_ptr<Peer> find_peer(const std::string& remote, const std::string& connection_id) {
         std::scoped_lock lock(mutex_);
-        const auto found = remote_to_identifier_.find(
-            remote + "\n" + connection_id);
-        if (found == remote_to_identifier_.end()) return {};
+        const auto found = remote_to_identifier_.find(remote + "\n" + connection_id);
+        if (found == remote_to_identifier_.end())
+            return {};
         const auto peer = peers_.find(found->second);
         return peer == peers_.end() ? std::shared_ptr<Peer>{} : peer->second;
     }
 
-    void bind_channel(const std::shared_ptr<Peer>& peer,
-                      std::shared_ptr<rtc::DataChannel> channel) {
-        if (!channel) return;
+    void bind_channel(const std::shared_ptr<Peer>& peer, std::shared_ptr<rtc::DataChannel> channel) {
+        if (!channel)
+            return;
         const std::string label = channel->label();
-        if (label != "dkr-r-control" && label != "dkr-r" && label != "dkr-r-authority" &&
-            label != "dkr-r-realtime" && label != "dkr-r-replica" && label != "dkr-r-checkpoint") {
+        if (label != "dkr-r-control" && label != "dkr-r" && label != "dkr-r-authority" && label != "dkr-r-realtime" &&
+            label != "dkr-r-replica" && label != "dkr-r-checkpoint") {
             channel->close();
             return;
         }
         const auto bound = channel;
         {
-        std::scoped_lock lock(mutex_);
-        if (!peer->current.load(std::memory_order_acquire)) return;
-        if (label == "dkr-r-checkpoint") {
-            peer->checkpoint_channel = std::move(channel);
-        } else if (label == "dkr-r-authority") {
-            peer->authority_channel = std::move(channel);
-        } else if (label == "dkr-r-realtime") {
-            peer->realtime_channel = std::move(channel);
-        } else if (label == "dkr-r-replica") {
-            peer->replica_channel = std::move(channel);
-        } else {
-            // Accept the legacy label as control during a rolling upgrade. The
-            // compatibility manifest prevents mixed gameplay builds, but this
-            // also keeps admission diagnostics intelligible.
-            peer->control_channel = std::move(channel);
-        }
+            std::scoped_lock lock(mutex_);
+            if (!peer->current.load(std::memory_order_acquire))
+                return;
+            if (label == "dkr-r-checkpoint") {
+                peer->checkpoint_channel = std::move(channel);
+            } else if (label == "dkr-r-authority") {
+                peer->authority_channel = std::move(channel);
+            } else if (label == "dkr-r-realtime") {
+                peer->realtime_channel = std::move(channel);
+            } else if (label == "dkr-r-replica") {
+                peer->replica_channel = std::move(channel);
+            } else {
+                // Accept the legacy label as control during a rolling upgrade. The
+                // compatibility manifest prevents mixed gameplay builds, but this
+                // also keeps admission diagnostics intelligible.
+                peer->control_channel = std::move(channel);
+            }
         }
         const std::weak_ptr<Peer> weak_peer(peer);
         const auto opened = std::make_shared<std::atomic<bool>>(false);
         const auto on_open = callbacks_.wrap([this, weak_peer, label, opened] {
-            if (opened->exchange(true)) return;
+            if (opened->exchange(true))
+                return;
             const auto locked = weak_peer.lock();
-            if (!locked || !locked->current.load(
-                    std::memory_order_acquire)) return;
-            if (label != "dkr-r-authority" &&
-                label != "dkr-r-checkpoint" &&
-                label != "dkr-r-realtime" &&
+            if (!locked || !locked->current.load(std::memory_order_acquire))
+                return;
+            if (label != "dkr-r-authority" && label != "dkr-r-checkpoint" && label != "dkr-r-realtime" &&
                 label != "dkr-r-replica") {
                 locked->route_ready.store(true, std::memory_order_release);
             }
-            if (host_ && label != "dkr-r-authority" &&
-                label != "dkr-r-checkpoint" &&
-                label != "dkr-r-realtime" &&
+            if (host_ && label != "dkr-r-authority" && label != "dkr-r-checkpoint" && label != "dkr-r-realtime" &&
                 label != "dkr-r-replica") {
                 send_bootstrap(locked->control_channel);
             }
@@ -1075,9 +1103,10 @@ private:
         const std::weak_ptr<rtc::DataChannel> weak_channel(bound);
         bound->onClosed(callbacks_.wrap([this, weak_peer, weak_channel, label] {
             if (const auto locked = weak_peer.lock()) {
-                if(label!="dkr-r-authority"&&label!="dkr-r-checkpoint"&&
-                   label!="dkr-r-realtime"&&label!="dkr-r-replica") {
-                    if(const auto control=weak_channel.lock())report_peer_departure(locked,control);
+                if (label != "dkr-r-authority" && label != "dkr-r-checkpoint" && label != "dkr-r-realtime" &&
+                    label != "dkr-r-replica") {
+                    if (const auto control = weak_channel.lock())
+                        report_peer_departure(locked, control);
                 }
                 request_route_retry(locked);
             }
@@ -1087,84 +1116,89 @@ private:
                 request_route_retry(locked);
             }
         }));
-        bound->onMessage(
-            callbacks_.wrap([this, weak_peer, label](rtc::message_variant message) {
-                const auto locked = weak_peer.lock();
-                if (!locked || !locked->current.load(std::memory_order_acquire) ||
-                    closing_.load(std::memory_order_acquire) || !std::holds_alternative<rtc::binary>(message)) {
-                    return;
-                }
-                const rtc::binary& framed = std::get<rtc::binary>(message);
-                // Allow the authenticated envelope above the plaintext limit,
-                // but reject oversized payloads before a second allocation.
-                if (framed.empty() || framed.size() > protocol::kMaximumQuickJoinDatagramBytes + 512U) return;
-                const std::uint8_t kind = std::to_integer<std::uint8_t>(framed[0]);
-                std::vector<std::uint8_t> bytes;
-                bytes.reserve(framed.size() - 1U);
-                for (std::size_t index = 1U; index < framed.size(); ++index) {
-                    bytes.push_back(std::to_integer<std::uint8_t>(framed[index]));
-                }
-                std::scoped_lock lock(mutex_);
-                if (!locked->current.load(std::memory_order_acquire) || closing_.load()) return;
-                if (kind == 2U && !host_) {
-                    bootstrap_.assign(bytes.begin(), bytes.end());
-                    bootstrap_peer_ = locked->address;
-                } else if (kind == 3U && !host_) {
-                    const std::string replacement(bytes.begin(), bytes.end());
-                    if (valid_quick_join_code(replacement)) {
-                        const std::string new_remote = "dkrr-31-" + normalize_code(replacement);
-                        const auto pinned = pinned_routes_.find(remote_host_id_);
-                        if (pinned != pinned_routes_.end()) {
-                            const auto route = pinned->second;
-                            pinned_routes_.erase(pinned);
-                            pinned_routes_[new_remote] = route;
-                        }
-                        remote_host_id_ = new_remote;
+        bound->onMessage(callbacks_.wrap([this, weak_peer, label](rtc::message_variant message) {
+            const auto locked = weak_peer.lock();
+            if (!locked || !locked->current.load(std::memory_order_acquire) ||
+                closing_.load(std::memory_order_acquire) || !std::holds_alternative<rtc::binary>(message)) {
+                return;
+            }
+            const rtc::binary& framed = std::get<rtc::binary>(message);
+            // Allow the authenticated envelope above the plaintext limit,
+            // but reject oversized payloads before a second allocation.
+            if (framed.empty() || framed.size() > protocol::kMaximumQuickJoinDatagramBytes + 512U)
+                return;
+            const std::uint8_t kind = std::to_integer<std::uint8_t>(framed[0]);
+            std::vector<std::uint8_t> bytes;
+            bytes.reserve(framed.size() - 1U);
+            for (std::size_t index = 1U; index < framed.size(); ++index) {
+                bytes.push_back(std::to_integer<std::uint8_t>(framed[index]));
+            }
+            std::scoped_lock lock(mutex_);
+            if (!locked->current.load(std::memory_order_acquire) || closing_.load())
+                return;
+            if (kind == 2U && !host_) {
+                bootstrap_.assign(bytes.begin(), bytes.end());
+                bootstrap_peer_ = locked->address;
+            } else if (kind == 3U && !host_) {
+                const std::string replacement(bytes.begin(), bytes.end());
+                if (valid_quick_join_code(replacement)) {
+                    const std::string new_remote = "dkrr-31-" + normalize_code(replacement);
+                    const auto pinned = pinned_routes_.find(remote_host_id_);
+                    if (pinned != pinned_routes_.end()) {
+                        const auto route = pinned->second;
+                        pinned_routes_.erase(pinned);
+                        pinned_routes_[new_remote] = route;
                     }
-                } else if (kind == 1U && !bytes.empty()) {
-                    std::deque<InboundPacket>* queue = &control_inbound_;
-                    std::size_t maximum = 4096U;
-                    bool latest_wins = false;
-                    if (label == "dkr-r-checkpoint") {
-                        queue = &checkpoint_inbound_;
-                        maximum = 512U;
-                    } else if (label == "dkr-r-authority") {
-                        // Frame commits are the simulation ledger. Never let a
-                        // replica/input burst evict them from the receive path.
-                        queue = &authority_inbound_;
-                        maximum = 16384U;
-                    } else if (label == "dkr-r-realtime") {
-                        queue = &realtime_inbound_;
-                        maximum = 2048U;
-                        latest_wins = true;
-                    } else if (label == "dkr-r-replica") {
-                        queue = &replica_inbound_;
-                        maximum = 512U;
-                        latest_wins = true;
-                    }
-                    while (queue->size() >= maximum || locked->queued_bytes + bytes.size() > (16U << 20U)) {
-                        if (latest_wins) {
-                            const auto discard = std::find_if(queue->begin(), queue->end(),
-                                [&](const InboundPacket& packet) { return packet.source == locked->address; });
-                            if (discard == queue->end()) return;
-                            release_packet_bytes_locked(*discard);
-                            queue->erase(discard);
-                        } else {
-                            // Only retire the overflowing route. The service
-                            // pass closes it outside this receive-state lock.
-                            request_route_retry(locked);
-                            locked->current.store(false, std::memory_order_release);
+                    remote_host_id_ = new_remote;
+                }
+            } else if (kind == 1U && !bytes.empty()) {
+                std::deque<InboundPacket>* queue = &control_inbound_;
+                std::size_t maximum = 4096U;
+                bool latest_wins = false;
+                if (label == "dkr-r-checkpoint") {
+                    queue = &checkpoint_inbound_;
+                    maximum = 512U;
+                } else if (label == "dkr-r-authority") {
+                    // Frame commits are the simulation ledger. Never let a
+                    // replica/input burst evict them from the receive path.
+                    queue = &authority_inbound_;
+                    maximum = 16384U;
+                } else if (label == "dkr-r-realtime") {
+                    queue = &realtime_inbound_;
+                    maximum = 2048U;
+                    latest_wins = true;
+                } else if (label == "dkr-r-replica") {
+                    queue = &replica_inbound_;
+                    maximum = 512U;
+                    latest_wins = true;
+                }
+                while (queue->size() >= maximum || locked->queued_bytes + bytes.size() > (16U << 20U)) {
+                    if (latest_wins) {
+                        const auto discard =
+                            std::find_if(queue->begin(), queue->end(),
+                                         [&](const InboundPacket& packet) { return packet.source == locked->address; });
+                        if (discard == queue->end())
                             return;
-                        }
+                        release_packet_bytes_locked(*discard);
+                        queue->erase(discard);
+                    } else {
+                        // Only retire the overflowing route. The service
+                        // pass closes it outside this receive-state lock.
+                        request_route_retry(locked);
+                        locked->current.store(false, std::memory_order_release);
+                        return;
                     }
-                    locked->queued_bytes += bytes.size();
-                    queue->push_back({locked->address, std::move(bytes)});
                 }
-                if (receive_signal_) receive_signal_->notify();
-            }));
+                locked->queued_bytes += bytes.size();
+                queue->push_back({locked->address, std::move(bytes)});
+            }
+            if (receive_signal_)
+                receive_signal_->notify();
+        }));
         // SDK open events are not replayed when callbacks are installed late.
         // Handle an already-open accepted channel once, after wiring messages.
-        if (bound->isOpen()) on_open();
+        if (bound->isOpen())
+            on_open();
     }
 
     void send_bootstrap(const std::shared_ptr<rtc::DataChannel>& channel) {
@@ -1173,21 +1207,31 @@ private:
             std::scoped_lock lock(mutex_);
             bootstrap = host_bootstrap_;
         }
-        if (bootstrap.empty() || !channel || !channel->isOpen()) return;
+        if (bootstrap.empty() || !channel || !channel->isOpen())
+            return;
         rtc::binary framed;
         framed.reserve(bootstrap.size() + 1U);
         framed.push_back(static_cast<std::byte>(2U));
         for (const unsigned char character : bootstrap) {
             framed.push_back(static_cast<std::byte>(character));
         }
-        try { channel->send(std::move(framed)); } catch (...) {}
+        try {
+            channel->send(std::move(framed));
+        } catch (...) {
+        }
     }
 
     void handle_signal(const std::string& text) {
         Json message;
-        if (text.size() > 65536U) return;
-        try { message = Json::parse(text); } catch (...) { return; }
-        if (!valid_signaling_message(message)) return;
+        if (text.size() > 65536U)
+            return;
+        try {
+            message = Json::parse(text);
+        } catch (...) {
+            return;
+        }
+        if (!valid_signaling_message(message))
+            return;
         const std::string type = message.value("type", "");
         if (type == "OPEN") {
             signaling_established_once_.store(true);
@@ -1204,11 +1248,8 @@ private:
             return;
         }
         if (type == "ID-TAKEN" || type == "ERROR") {
-            if (type == "ID-TAKEN" &&
-                !signaling_established_once_.load(
-                    std::memory_order_acquire)) {
-                set_failure(
-                    "That Quick Join code is already in use. Create a new lobby code.");
+            if (type == "ID-TAKEN" && !signaling_established_once_.load(std::memory_order_acquire)) {
+                set_failure("That Quick Join code is already in use. Create a new lobby code.");
             } else {
                 signaling_ready_.store(false, std::memory_order_release);
                 signaling_connecting_.store(false, std::memory_order_release);
@@ -1216,35 +1257,36 @@ private:
             }
             return;
         }
-        if (type != "OFFER" && type != "ANSWER" &&
-            type != "CANDIDATE" && type != "LEAVE") return;
+        if (type != "OFFER" && type != "ANSWER" && type != "CANDIDATE" && type != "LEAVE")
+            return;
         const std::string remote = message.value("src", "");
-        if (remote.empty()) return;
-        if (type == "LEAVE") return;
-        if (!message.contains("payload") ||
-            !message["payload"].is_object()) return;
+        if (remote.empty())
+            return;
+        if (type == "LEAVE")
+            return;
+        if (!message.contains("payload") || !message["payload"].is_object())
+            return;
         const Json& payload = message["payload"];
         const std::string connection_id = payload.value("connectionId", "");
-        if (connection_id.empty()) return;
+        if (connection_id.empty())
+            return;
         std::shared_ptr<Peer> peer = find_peer(remote, connection_id);
         if (!peer && type == "OFFER" && host_) {
-            if (!payload.contains("sdp") || !payload["sdp"].is_object()) return;
+            if (!payload.contains("sdp") || !payload["sdp"].is_object())
+                return;
             (void)create_peer(remote, connection_id, false, &payload["sdp"]);
             return;
         }
-        if (!peer) return;
+        if (!peer)
+            return;
         try {
-            if ((type == "OFFER" || type == "ANSWER") &&
-                payload.contains("sdp")) {
+            if ((type == "OFFER" || type == "ANSWER") && payload.contains("sdp")) {
                 const Json& sdp = payload["sdp"];
-                peer->connection->setRemoteDescription(rtc::Description(
-                    sdp.value("sdp", ""), sdp.value("type", "")));
-            } else if (type == "CANDIDATE" &&
-                       payload.contains("candidate")) {
+                peer->connection->setRemoteDescription(rtc::Description(sdp.value("sdp", ""), sdp.value("type", "")));
+            } else if (type == "CANDIDATE" && payload.contains("candidate")) {
                 const Json& candidate = payload["candidate"];
-                peer->connection->addRemoteCandidate(rtc::Candidate(
-                    candidate.value("candidate", ""),
-                    candidate.value("sdpMid", "")));
+                peer->connection->addRemoteCandidate(
+                    rtc::Candidate(candidate.value("candidate", ""), candidate.value("sdpMid", "")));
             }
         } catch (const std::exception& exception) {
             // A malformed new offer is not a reason to fail a healthy lobby.
@@ -1311,17 +1353,17 @@ private:
 
 bool valid_quick_join_code(std::string_view code) {
     const std::string normalized = normalize_code(code);
-    return normalized.size() == 5U &&
-           std::all_of(normalized.begin(), normalized.end(), [](char value) {
+    return normalized.size() == 5U && std::all_of(normalized.begin(), normalized.end(), [](char value) {
                return kCodeAlphabet.find(value) != std::string_view::npos;
            });
 }
 
-std::unique_ptr<SessionTransport> make_quick_join_session_transport(
-    bool host, std::string_view requested_code, std::string& error) {
+std::unique_ptr<SessionTransport> make_quick_join_session_transport(bool host, std::string_view requested_code,
+                                                                    std::string& error) {
 #if DKR_NETPLAY_WEBRTC
     std::string code = normalize_code(requested_code);
-    if (host && code.empty()) code = random_token(5U, kCodeAlphabet);
+    if (host && code.empty())
+        code = random_token(5U, kCodeAlphabet);
     if (!valid_quick_join_code(code)) {
         error = "Quick Join codes contain five letters or numbers.";
         return {};

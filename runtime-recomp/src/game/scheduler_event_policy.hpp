@@ -4,18 +4,14 @@
 
 namespace dkr::runtime::scheduler {
 
-constexpr bool is_rdram_word_address(std::uint32_t address,
-                                     std::uint32_t final_offset) {
-    const bool valid_segment =
-        address <= 0x007FFFFCU ||
-        (address >= 0x80000000U && address <= 0x807FFFFCU) ||
-        (address >= 0xA0000000U && address <= 0xA07FFFFCU);
+constexpr bool is_rdram_word_address(std::uint32_t address, std::uint32_t final_offset) {
+    const bool valid_segment = address <= 0x007FFFFCU || (address >= 0x80000000U && address <= 0x807FFFFCU) ||
+                               (address >= 0xA0000000U && address <= 0xA07FFFFCU);
     if (!valid_segment) {
         return false;
     }
     const std::uint32_t physical = address & 0x1FFFFFFFU;
-    return final_offset <= 0x007FFFFCU &&
-        physical <= 0x007FFFFCU - final_offset;
+    return final_offset <= 0x007FFFFCU && physical <= 0x007FFFFCU - final_offset;
 }
 
 // Physical RDRAM address zero is technically addressable, but a zero

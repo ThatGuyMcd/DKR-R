@@ -18,20 +18,20 @@
 #include <sys/file.h>
 #include <sys/wait.h>
 #include <unistd.h>
-extern char **environ;
+extern char** environ;
 #endif
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
 namespace dkr::updates {
-std::string path_utf8(const std::filesystem::path &p) {
+std::string path_utf8(const std::filesystem::path& p) {
     auto value = p.u8string();
-    return {reinterpret_cast<const char *>(value.data()), value.size()};
+    return {reinterpret_cast<const char*>(value.data()), value.size()};
 }
 std::string unique_id() {
     std::random_device random;
     std::array<std::uint8_t, 16> bytes{};
-    for (auto &b : bytes)
+    for (auto& b : bytes)
         b = std::uint8_t(random());
     return hex(bytes);
 }
@@ -55,7 +55,7 @@ std::filesystem::path application_executable() {
     if (!_NSGetExecutablePath(text.data(), &n))
         return std::filesystem::canonical(text.c_str());
 #else
-    if (auto *image = std::getenv("APPIMAGE"); image && *image) {
+    if (auto* image = std::getenv("APPIMAGE"); image && *image) {
         auto p = std::filesystem::u8path(image);
         if (p.is_absolute() && std::filesystem::is_regular_file(p))
             return std::filesystem::canonical(p);
@@ -83,49 +83,44 @@ struct InstallLock::Impl {
     int handle = -1;
 #endif
 };
-InstallLock::InstallLock(const std::filesystem::path &root, unsigned timeout, bool shared)
+InstallLock::InstallLock(const std::filesystem::path& root, unsigned timeout, bool shared)
     : impl(std::make_unique<Impl>()) {
     auto canonical = std::filesystem::canonical(root);
     require_private_tree(canonical);
     auto identity_text = path_utf8(canonical);
 #ifdef _WIN32
-    for (auto &c : identity_text)
+    for (auto& c : identity_text)
         c = char(std::tolower(static_cast<unsigned char>(c)));
     auto directory = std::filesystem::temp_directory_path() / "DKR-R-InstallLocks";
 #else
-    auto directory = std::filesystem::temp_directory_path() /
-                     ("dkrr-install-locks-" + std::to_string(geteuid()));
+    auto directory = std::filesystem::temp_directory_path() / ("dkrr-install-locks-" + std::to_string(geteuid()));
 #endif
     std::filesystem::create_directory(directory);
     require_private_tree(directory);
 #ifndef _WIN32
-    std::filesystem::permissions(directory, std::filesystem::perms::owner_all,
-                                 std::filesystem::perm_options::replace);
+    std::filesystem::permissions(directory, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
 #endif
-    auto identity = hash(std::span(reinterpret_cast<const std::uint8_t *>(identity_text.data()),
-                                   identity_text.size()));
+    auto identity = hash(std::span(reinterpret_cast<const std::uint8_t*>(identity_text.data()), identity_text.size()));
     auto file = directory / identity;
 #ifdef _WIN32
-    impl->handle = CreateFileW(file.c_str(), GENERIC_READ | GENERIC_WRITE,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
-                               OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    impl->handle =
+        CreateFileW(file.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                    nullptr, OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (impl->handle == INVALID_HANDLE_VALUE) {
         impl->handle = nullptr;
         throw std::runtime_error("Could not open installation lock.");
     }
     BY_HANDLE_FILE_INFORMATION info{};
-    if (!GetFileInformationByHandle(impl->handle, &info) ||
-        (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || info.nNumberOfLinks != 1) {
+    if (!GetFileInformationByHandle(impl->handle, &info) || (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ||
+        info.nNumberOfLinks != 1) {
         CloseHandle(impl->handle);
         impl->handle = nullptr;
         throw std::runtime_error("Installation lock is not an ordinary private file.");
     }
     auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
     do {
-        impl->acquired =
-            LockFileEx(impl->handle,
-                       LOCKFILE_FAIL_IMMEDIATELY | (shared ? 0 : LOCKFILE_EXCLUSIVE_LOCK), 0, 1, 0,
-                       &impl->overlapped) != 0;
+        impl->acquired = LockFileEx(impl->handle, LOCKFILE_FAIL_IMMEDIATELY | (shared ? 0 : LOCKFILE_EXCLUSIVE_LOCK), 0,
+                                    1, 0, &impl->overlapped) != 0;
         if (impl->acquired)
             break;
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -178,16 +173,14 @@ namespace {
 std::wstring utf16(std::string_view value) {
     if (value.empty())
         return {};
-    int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), int(value.size()),
-                                nullptr, 0);
+    int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), int(value.size()), nullptr, 0);
     if (!n)
         throw std::runtime_error("Invalid update process argument.");
     std::wstring out(n, L'\0');
-    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), int(value.size()), out.data(),
-                        n);
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), int(value.size()), out.data(), n);
     return out;
 }
-std::wstring quote(const std::wstring &value) {
+std::wstring quote(const std::wstring& value) {
     std::wstring out = L"\"";
     unsigned slashes = 0;
     for (auto c : value) {
@@ -208,23 +201,22 @@ std::wstring quote(const std::wstring &value) {
 }
 } // namespace
 #endif
-Child::Child(const std::filesystem::path &exe, const std::vector<std::string> &arguments,
-             const std::filesystem::path &directory, bool inherit)
+Child::Child(const std::filesystem::path& exe, const std::vector<std::string>& arguments,
+             const std::filesystem::path& directory, bool inherit)
     : impl(std::make_unique<Impl>()) {
 #ifdef _WIN32
     (void)inherit;
     std::wstring command = quote(exe.native());
-    for (auto &argument : arguments)
+    for (auto& argument : arguments)
         command += L" " + quote(utf16(argument));
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
     // No shell, no command interpolation and no visible console for the helper.
-    if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
-                        nullptr, directory.empty() ? nullptr : directory.c_str(), &startup,
-                        &process))
-        throw std::runtime_error("Could not start update process (Windows error " +
-                                 std::to_string(GetLastError()) + ").");
+    if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr,
+                        directory.empty() ? nullptr : directory.c_str(), &startup, &process))
+        throw std::runtime_error("Could not start update process (Windows error " + std::to_string(GetLastError()) +
+                                 ").");
     CloseHandle(process.hThread);
     impl->handle = process.hProcess;
 #elif defined(__ANDROID__) || defined(DKR_IOS)
@@ -232,36 +224,33 @@ Child::Child(const std::filesystem::path &exe, const std::vector<std::string> &a
     (void)arguments;
     (void)directory;
     (void)inherit;
-    throw std::runtime_error(
-        "This platform uses its system installation route, not a child updater.");
+    throw std::runtime_error("This platform uses its system installation route, not a child updater.");
 #else
     std::vector<std::string> values{path_utf8(exe)};
     values.insert(values.end(), arguments.begin(), arguments.end());
-    std::vector<char *> argv;
-    for (auto &s : values)
+    std::vector<char*> argv;
+    for (auto& s : values)
         argv.push_back(s.data());
     argv.push_back(nullptr);
     // posix_spawn avoids unsafe heap/environment operations after fork in the
     // multithreaded launcher. Filter the old mount before spawning its successor.
     std::vector<std::string> environment;
-    for (char **e = environ; e && *e; ++e) {
+    for (char** e = environ; e && *e; ++e) {
         std::string value = *e;
-        if (value.starts_with("APPIMAGE=") || value.starts_with("APPDIR=") ||
-            value.starts_with("ARGV0="))
+        if (value.starts_with("APPIMAGE=") || value.starts_with("APPDIR=") || value.starts_with("ARGV0="))
             continue;
-        if (!inherit &&
-            (value.starts_with("DKR_UPDATE_TOKEN=") || value.starts_with("DKR_UPDATE_DATA=")))
+        if (!inherit && (value.starts_with("DKR_UPDATE_TOKEN=") || value.starts_with("DKR_UPDATE_DATA=")))
             continue;
         environment.push_back(std::move(value));
     }
-    std::vector<char *> env;
-    for (auto &e : environment)
+    std::vector<char*> env;
+    for (auto& e : environment)
         env.push_back(e.data());
     env.push_back(nullptr);
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
     struct Free {
-        posix_spawn_file_actions_t &a;
+        posix_spawn_file_actions_t& a;
         ~Free() {
             posix_spawn_file_actions_destroy(&a);
         }
@@ -329,7 +318,7 @@ bool parent_alive(std::uint64_t pid) {
     return kill(pid_t(pid), 0) == 0 || errno == EPERM;
 #endif
 }
-void wait_for_parent(std::uint64_t pid, const std::filesystem::path &ready) {
+void wait_for_parent(std::uint64_t pid, const std::filesystem::path& ready) {
     if (pid == 0 || pid > 0x7fffffff)
         throw std::runtime_error("Invalid update parent.");
 #ifdef _WIN32
@@ -354,8 +343,7 @@ void wait_for_parent(std::uint64_t pid, const std::filesystem::path &ready) {
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(120);
     while (std::uint64_t(getppid()) == pid) {
         if (std::chrono::steady_clock::now() > end)
-            throw std::runtime_error(
-                "DKR-R did not close normally; no update files were installed.");
+            throw std::runtime_error("DKR-R did not close normally; no update files were installed.");
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 #endif

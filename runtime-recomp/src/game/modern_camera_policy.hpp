@@ -36,52 +36,42 @@ enum class SceneryRetentionMode : int {
 };
 
 constexpr SceneryRetentionMode normalise_scenery_retention_mode(int mode) {
-    return static_cast<SceneryRetentionMode>(std::clamp(
-        mode, static_cast<int>(SceneryRetentionMode::Authored),
-        static_cast<int>(SceneryRetentionMode::FullForwardView)));
+    return static_cast<SceneryRetentionMode>(std::clamp(mode, static_cast<int>(SceneryRetentionMode::Authored),
+                                                        static_cast<int>(SceneryRetentionMode::FullForwardView)));
 }
 
 constexpr int clamp_fov_offset(int offset) {
     return std::clamp(offset, kMinimumFovOffset, kMaximumFovOffset);
 }
 
-constexpr int effective_gameplay_fov(PresentationProfile profile,
-                                     int authored_fov, int offset) {
+constexpr int effective_gameplay_fov(PresentationProfile profile, int authored_fov, int offset) {
     if (normalise_presentation_profile(profile) != PresentationProfile::Modern) {
         return authored_fov;
     }
-    return std::clamp(authored_fov + clamp_fov_offset(offset),
-                      kMinimumGameplayFov, kMaximumGameplayFov);
+    return std::clamp(authored_fov + clamp_fov_offset(offset), kMinimumGameplayFov, kMaximumGameplayFov);
 }
 
 constexpr int clamp_view_distance_multiplier(int multiplier) {
-    return std::clamp(multiplier, kMinimumViewDistanceMultiplier,
-                      kMaximumViewDistanceMultiplier);
+    return std::clamp(multiplier, kMinimumViewDistanceMultiplier, kMaximumViewDistanceMultiplier);
 }
 
 constexpr int clamp_animated_scenery_multiplier(int multiplier) {
-    return std::clamp(multiplier, kMinimumClassViewDistanceMultiplier,
-                      kMaximumAnimatedSceneryMultiplier);
+    return std::clamp(multiplier, kMinimumClassViewDistanceMultiplier, kMaximumAnimatedSceneryMultiplier);
 }
 
 constexpr int clamp_billboard_effect_multiplier(int multiplier) {
-    return std::clamp(multiplier, kMinimumClassViewDistanceMultiplier,
-                      kMaximumBillboardEffectMultiplier);
+    return std::clamp(multiplier, kMinimumClassViewDistanceMultiplier, kMaximumBillboardEffectMultiplier);
 }
 
 constexpr int clamp_water_lava_detail_multiplier(int multiplier) {
-    return std::clamp(multiplier, kMinimumClassViewDistanceMultiplier,
-                      kMaximumWaterLavaDetailMultiplier);
+    return std::clamp(multiplier, kMinimumClassViewDistanceMultiplier, kMaximumWaterLavaDetailMultiplier);
 }
 
-constexpr int effective_view_distance(PresentationProfile profile,
-                                      int authored_distance, int multiplier) {
-    if (normalise_presentation_profile(profile) != PresentationProfile::Modern ||
-        authored_distance <= 0) {
+constexpr int effective_view_distance(PresentationProfile profile, int authored_distance, int multiplier) {
+    if (normalise_presentation_profile(profile) != PresentationProfile::Modern || authored_distance <= 0) {
         return authored_distance;
     }
-    const int scaled = authored_distance *
-        clamp_view_distance_multiplier(multiplier);
+    const int scaled = authored_distance * clamp_view_distance_multiplier(multiplier);
     return std::min(scaled, 32767);
 }
 
@@ -89,20 +79,16 @@ constexpr int effective_view_distance(PresentationProfile profile,
 // Compensate at that existing hook, without changing an object's authored
 // header or its fade behaviour, so Modern's multiplier means the same in all
 // four local viewports. Accurate retains the retail reduction.
-constexpr int object_distance_before_multiplayer_reduction(
-    PresentationProfile profile,int authored,int multiplier,int layout) {
-    const int distance=effective_view_distance(profile,authored,multiplier);
-    return profile==PresentationProfile::Modern && authored>0 && layout==3
-        ? distance*2:distance;
+constexpr int object_distance_before_multiplayer_reduction(PresentationProfile profile, int authored, int multiplier,
+                                                           int layout) {
+    const int distance = effective_view_distance(profile, authored, multiplier);
+    return profile == PresentationProfile::Modern && authored > 0 && layout == 3 ? distance * 2 : distance;
 }
 
 constexpr bool is_gameplay_scenery_race_type(int race_type) {
     return race_type >= 0 &&
-        (race_type == kRaceTypeDefault ||
-         race_type == kRaceTypeHorseshoeGulch ||
-         race_type == kRaceTypeHubWorld ||
-         race_type == kRaceTypeBoss ||
-         (race_type & kRaceTypeChallengeMask) != 0);
+           (race_type == kRaceTypeDefault || race_type == kRaceTypeHorseshoeGulch || race_type == kRaceTypeHubWorld ||
+            race_type == kRaceTypeBoss || (race_type & kRaceTypeChallengeMask) != 0);
 }
 
 constexpr bool is_hub_scenery_race_type(int race_type) {
@@ -114,14 +100,11 @@ constexpr bool is_minigame_scenery_race_type(int race_type) {
 }
 
 constexpr bool is_track_or_boss_scenery_race_type(int race_type) {
-    return race_type == kRaceTypeDefault ||
-        race_type == kRaceTypeHorseshoeGulch ||
-        race_type == kRaceTypeBoss;
+    return race_type == kRaceTypeDefault || race_type == kRaceTypeHorseshoeGulch || race_type == kRaceTypeBoss;
 }
 
-constexpr bool scenery_retention_enabled_for_race_type(
-    PresentationProfile profile, int race_type, bool keep_hub,
-    bool keep_track_and_boss, bool keep_minigame_and_battle) {
+constexpr bool scenery_retention_enabled_for_race_type(PresentationProfile profile, int race_type, bool keep_hub,
+                                                       bool keep_track_and_boss, bool keep_minigame_and_battle) {
     if (normalise_presentation_profile(profile) != PresentationProfile::Modern) {
         return false;
     }
@@ -131,67 +114,50 @@ constexpr bool scenery_retention_enabled_for_race_type(
     if (is_minigame_scenery_race_type(race_type)) {
         return keep_minigame_and_battle;
     }
-    return is_track_or_boss_scenery_race_type(race_type) &&
-        keep_track_and_boss;
+    return is_track_or_boss_scenery_race_type(race_type) && keep_track_and_boss;
 }
 
 // DKR allocates fixed selector and vertex pools for either a 3x3 or 5x5 HQ
 // wave window. Five is the largest safe value; intermediate allocation sizes
 // and values above five are deliberately never produced.
-constexpr int effective_wave_view_distance(PresentationProfile profile,
-                                           int detail_multiplier,
-                                           int race_type,
+constexpr int effective_wave_view_distance(PresentationProfile profile, int detail_multiplier, int race_type,
                                            int authored_distance) {
     return normalise_presentation_profile(profile) == PresentationProfile::Modern &&
-            clamp_water_lava_detail_multiplier(detail_multiplier) ==
-                kMaximumWaterLavaDetailMultiplier &&
-            is_gameplay_scenery_race_type(race_type)
-        ? kMaximumWaveViewDistance
-        : authored_distance;
+                   clamp_water_lava_detail_multiplier(detail_multiplier) == kMaximumWaterLavaDetailMultiplier &&
+                   is_gameplay_scenery_race_type(race_type)
+               ? kMaximumWaveViewDistance
+               : authored_distance;
 }
 
-constexpr bool persistent_water_override_enabled(PresentationProfile profile,
-                                                  int detail_multiplier,
-                                                  int race_type) {
+constexpr bool persistent_water_override_enabled(PresentationProfile profile, int detail_multiplier, int race_type) {
     return normalise_presentation_profile(profile) == PresentationProfile::Modern &&
-        clamp_water_lava_detail_multiplier(detail_multiplier) >= 2 &&
-        is_gameplay_scenery_race_type(race_type);
+           clamp_water_lava_detail_multiplier(detail_multiplier) >= 2 && is_gameplay_scenery_race_type(race_type);
 }
 
-constexpr int persistent_water_hq_fade(PresentationProfile profile,
-                                       int detail_multiplier,
-                                       bool selected_for_hq,
+constexpr int persistent_water_hq_fade(PresentationProfile profile, int detail_multiplier, bool selected_for_hq,
                                        int authored_fade) {
     return normalise_presentation_profile(profile) == PresentationProfile::Modern &&
-            clamp_water_lava_detail_multiplier(detail_multiplier) >= 2 &&
-            selected_for_hq
-        ? 0
-        : authored_fade;
+                   clamp_water_lava_detail_multiplier(detail_multiplier) >= 2 && selected_for_hq
+               ? 0
+               : authored_fade;
 }
 
-constexpr bool relax_scenery_segment_bitfield(
-    PresentationProfile profile, int race_type, SceneryRetentionMode mode,
-    bool keep_hub, bool keep_track_and_boss,
-    bool keep_minigame_and_battle) {
-    return scenery_retention_enabled_for_race_type(
-               profile, race_type, keep_hub, keep_track_and_boss,
-               keep_minigame_and_battle) &&
-        (mode == SceneryRetentionMode::VisibleAndAdjacent ||
-         mode == SceneryRetentionMode::FullForwardView);
+constexpr bool relax_scenery_segment_bitfield(PresentationProfile profile, int race_type, SceneryRetentionMode mode,
+                                              bool keep_hub, bool keep_track_and_boss, bool keep_minigame_and_battle) {
+    return scenery_retention_enabled_for_race_type(profile, race_type, keep_hub, keep_track_and_boss,
+                                                   keep_minigame_and_battle) &&
+           (mode == SceneryRetentionMode::VisibleAndAdjacent || mode == SceneryRetentionMode::FullForwardView);
 }
 
-constexpr float scenery_retention_frustum_scale(
-    PresentationProfile profile, int race_type, SceneryRetentionMode mode,
-    int multiplier, bool keep_hub, bool keep_track_and_boss,
-    bool keep_minigame_and_battle) {
+constexpr float scenery_retention_frustum_scale(PresentationProfile profile, int race_type, SceneryRetentionMode mode,
+                                                int multiplier, bool keep_hub, bool keep_track_and_boss,
+                                                bool keep_minigame_and_battle) {
     if (mode != SceneryRetentionMode::FullForwardView ||
-        !scenery_retention_enabled_for_race_type(
-            profile, race_type, keep_hub, keep_track_and_boss,
-            keep_minigame_and_battle)) {
+        !scenery_retention_enabled_for_race_type(profile, race_type, keep_hub, keep_track_and_boss,
+                                                 keep_minigame_and_battle)) {
         return 1.0F;
     }
-    return 1.0F + 0.08F * static_cast<float>(
-        clamp_view_distance_multiplier(multiplier) - 1);
+    return 1.0F + 0.08F * static_cast<float>(clamp_view_distance_multiplier(multiplier) - 1);
 }
 
 // Behaviour IDs are the decompiled ObjectBehaviour enum. These allow the
@@ -199,9 +165,23 @@ constexpr float scenery_retention_frustum_scale(
 // multiplying every object in every scene.
 constexpr bool is_animated_scenery_behaviour(int behaviour) {
     switch (behaviour) {
-    case 12: case 14: case 36: case 38: case 40: case 50: case 67:
-    case 68: case 75: case 81: case 84: case 85: case 86: case 96:
-    case 97: case 101: case 102:
+    case 12:
+    case 14:
+    case 36:
+    case 38:
+    case 40:
+    case 50:
+    case 67:
+    case 68:
+    case 75:
+    case 81:
+    case 84:
+    case 85:
+    case 86:
+    case 96:
+    case 97:
+    case 101:
+    case 102:
         return true;
     default:
         return false;
@@ -210,10 +190,33 @@ constexpr bool is_animated_scenery_behaviour(int behaviour) {
 
 constexpr bool is_billboard_or_effect_behaviour(int behaviour) {
     switch (behaviour) {
-    case 3: case 6: case 17: case 22: case 23: case 28: case 32:
-    case 37: case 41: case 43: case 45: case 47: case 57: case 61:
-    case 64: case 73: case 76: case 77: case 78: case 80: case 82:
-    case 87: case 88: case 89: case 90: case 93: case 95:
+    case 3:
+    case 6:
+    case 17:
+    case 22:
+    case 23:
+    case 28:
+    case 32:
+    case 37:
+    case 41:
+    case 43:
+    case 45:
+    case 47:
+    case 57:
+    case 61:
+    case 64:
+    case 73:
+    case 76:
+    case 77:
+    case 78:
+    case 80:
+    case 82:
+    case 87:
+    case 88:
+    case 89:
+    case 90:
+    case 93:
+    case 95:
         return true;
     default:
         return false;
@@ -222,59 +225,51 @@ constexpr bool is_billboard_or_effect_behaviour(int behaviour) {
 
 constexpr bool is_water_or_lava_behaviour(int behaviour) {
     switch (behaviour) {
-    case 40: case 57: case 59: case 60: case 67: case 68: case 75:
+    case 40:
+    case 57:
+    case 59:
+    case 60:
+    case 67:
+    case 68:
+    case 75:
         return true;
     default:
         return false;
     }
 }
 
-constexpr int object_view_distance_multiplier(
-    int behaviour, int overall_multiplier, int animated_multiplier,
-    int billboard_multiplier, int water_lava_multiplier) {
+constexpr int object_view_distance_multiplier(int behaviour, int overall_multiplier, int animated_multiplier,
+                                              int billboard_multiplier, int water_lava_multiplier) {
     int result = clamp_view_distance_multiplier(overall_multiplier);
     if (is_animated_scenery_behaviour(behaviour)) {
-        result = std::max(result,
-                          clamp_animated_scenery_multiplier(animated_multiplier));
+        result = std::max(result, clamp_animated_scenery_multiplier(animated_multiplier));
     }
     if (is_billboard_or_effect_behaviour(behaviour)) {
-        result = std::max(result,
-                          clamp_billboard_effect_multiplier(billboard_multiplier));
+        result = std::max(result, clamp_billboard_effect_multiplier(billboard_multiplier));
     }
     if (is_water_or_lava_behaviour(behaviour)) {
-        result = std::max(result,
-                          clamp_water_lava_detail_multiplier(water_lava_multiplier));
+        result = std::max(result, clamp_water_lava_detail_multiplier(water_lava_multiplier));
     }
     return result;
 }
 
 constexpr int clamp_frustum_guard_percent(int percent) {
-    return std::clamp(percent, kMinimumFrustumGuardPercent,
-                      kMaximumFrustumGuardPercent);
+    return std::clamp(percent, kMinimumFrustumGuardPercent, kMaximumFrustumGuardPercent);
 }
 
-constexpr float active_viewport_aspect(float window_aspect,
-                                       int viewport_layout) {
+constexpr float active_viewport_aspect(float window_aspect, int viewport_layout) {
     return viewport_layout == 1 ? window_aspect * 2.0F : window_aspect;
 }
 
-constexpr float frustum_horizontal_scale(PresentationProfile profile,
-                                         bool fit_to_window,
-                                         bool extended_culling,
-                                         float window_aspect,
-                                         int viewport_layout,
-                                         int guard_percent) {
-    if (normalise_presentation_profile(profile) != PresentationProfile::Modern ||
-        !fit_to_window || !extended_culling || window_aspect <= 0.0F) {
+constexpr float frustum_horizontal_scale(PresentationProfile profile, bool fit_to_window, bool extended_culling,
+                                         float window_aspect, int viewport_layout, int guard_percent) {
+    if (normalise_presentation_profile(profile) != PresentationProfile::Modern || !fit_to_window || !extended_culling ||
+        window_aspect <= 0.0F) {
         return 1.0F;
     }
-    const float aspect_scale = std::max(
-        1.0F,
-        active_viewport_aspect(window_aspect, viewport_layout) /
-            kOriginalAspectRatio);
-    const float guard = 1.0F +
-        static_cast<float>(clamp_frustum_guard_percent(guard_percent)) /
-            100.0F;
+    const float aspect_scale =
+        std::max(1.0F, active_viewport_aspect(window_aspect, viewport_layout) / kOriginalAspectRatio);
+    const float guard = 1.0F + static_cast<float>(clamp_frustum_guard_percent(guard_percent)) / 100.0F;
     return aspect_scale * guard;
 }
 

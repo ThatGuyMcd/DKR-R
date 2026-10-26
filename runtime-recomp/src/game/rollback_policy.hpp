@@ -16,12 +16,13 @@ inline constexpr const char* unsupported_lobby =
     "This lobby uses a sync mode that is no longer supported. Ask the host to update DKR-R and create a Rollback lobby.";
 static_assert(static_cast<unsigned>(mode) == 2);
 
-constexpr bool supported(SynchronizationMode value) { return value == mode; }
+constexpr bool supported(SynchronizationMode value) {
+    return value == mode;
+}
 constexpr const char* name(SynchronizationMode value) {
     return supported(value) ? "Rollback" : "Unsupported sync mode";
 }
-constexpr const char* admission_error(SynchronizationMode value,
-                                    bool adapter_available = false) {
+constexpr const char* admission_error(SynchronizationMode value, bool adapter_available = false) {
     if (!supported(value))
         return unsupported_lobby;
     if (!adapter_available)
@@ -47,4 +48,4 @@ static_assert(default_rules().rollback_window == 14);
 static_assert(default_rules().manual_input_delay == 6 && kMaximumInputDelayFrames >= 6);
 static_assert(!default_rules().automatic_input_delay && !default_rules().record_replay);
 static_assert(!default_rules().development);
-}
+} // namespace dkr::runtime::netplay::rollback_policy

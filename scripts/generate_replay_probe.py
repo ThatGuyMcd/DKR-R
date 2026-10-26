@@ -564,15 +564,15 @@ INPUT_NATIVE_HASH = {
     "extern/n64-modern-runtime/librecomp/src/cont.cpp": "84441a9fb63dbc992a771d3cf15ec452aee4db68cceff8c29235cc2a256e3352",
     # Save-protection pass: disk leases/atomic publication only. The owned
     # Pak path continues to use its separate checkpointed in-memory services.
-    "runtime-recomp/src/game/virtual_pak.cpp": "0dd5e4b81817f4d50db6e701d0d1ad517b47a94e721bf29d4ee94ae65d121747",
+    "runtime-recomp/src/game/virtual_pak.cpp": "c147dc2ff680c0e0d4f57649b8501700bf337d2b68e27e775216d40628b46937",
     # Oct 1 reviewed opt-in capture hook; stable drive/input branches unchanged.
-    "runtime-recomp/src/game/runtime_netplay.cpp": "4cb001dd32e158978221f1536ff6c8695b5ab0c330e7fcaa9dc06686c3376709",
-    "runtime-recomp/src/game/runtime_magic_codes.cpp": "e7d661472bb041991b3e8cfc6373c1d647b0fa300281d21448ed74efdb01021f",
+    "runtime-recomp/src/game/runtime_netplay.cpp": "e3e759a99f20eb026f490215b18f58fb6bf526f21bb971dc95bae718a9c5f3c3",
+    "runtime-recomp/src/game/runtime_magic_codes.cpp": "eea6a34c2855745d4d7d0318e38429f3b8a630c7e3891eeb0074387f240685b1",
     # Frozen online course sizing/ID routing bypasses the offline catalogue.
     # The no-session path remains the prior offline/vanilla implementation.
     # Oct 11: aligned, RAM-bounded scans/copies; frozen online tables still
     # bypass offline expansion before reaching the changed implementation.
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "86314b49a57dd14c141c367d92d2a6b6d12b2fcf87aa60847672efd7935da46d",
+    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "7a60851bf21889b28b66569ff3430726c4f7b888483127a307595308d7f0db1e",
     # Online mod owner: same no-session returns, explicit TLS namespace and
     # closed private guest callback table; no live/default dispatch fallback.
     # Oct 6: bounded sparse model-slot scan and pre-dereference allocation
@@ -582,71 +582,71 @@ INPUT_NATIVE_HASH = {
     # Oct 12: reviewed merge with PR56's frozen-course guard BEFORE any live
     # transport read. Retains caller-owned background lists and offline vehicle
     # selection; neither changes owned checkpoint semantics or asset routing.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4ee51ab618aeaaa661b6cd97c73a3b04d9952298f95f761bba065c86ddef095b",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eed24ad82e27d94c30c8b7f6fb77e62eb9fb59b30baf7f51ea36cb755986d799",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
-    "runtime-recomp/src/game/mods/legacy_memory_safety.h": "17b293ec170dd7d8d25377a01a73b9c5cdfca9636b2c959d06930c178d02cd85",
-    "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "64520d21f6721b9caf40ee51f88548266ffaf5bc8821a7c17e6bdc72fa244bb7",
+    "runtime-recomp/src/game/mods/legacy_memory_safety.h": "e4eb9ee8218c6f76ccfbfe9f5f0604c3b7f8725db7ca28dfe6e3e7c15ae2c48f",
+    "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "6b98ab3841104b67ec1295653657c9c1065290abea57648336d77e9665a277a8",
     # Expanded character identities, sparse retained presentation and one
     # immutable sample mount are shared by offline and replay-owned sessions.
-    "runtime-recomp/src/game/mods/legacy_character_limits.hpp": "d74576f3bcd7aa61283ac4e8e68d3a234e9182dca5f09f6398f285ca9353c55a",
-    "runtime-recomp/src/game/mods/legacy_character_audio.cpp": "00fdd1fa4dbae442ee471cd4ef71631db95c4df6055ea092c9b368f1cf12d124",
-    "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "2270d3efce0dcfcef2f5364e946fe70a5d5401f11b1960917ba5449678423563",
-    "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "311f633c84b103a63d5e2538af1caa377c07e311df3aae1cf52a3fb77aa208b7",
+    "runtime-recomp/src/game/mods/legacy_character_limits.hpp": "a22e3c2c15674ffb5f954a28e2a268641a0ffbe2acb5459a7fc5b43a156e955a",
+    "runtime-recomp/src/game/mods/legacy_character_audio.cpp": "603b776b2cdbc4bfe0e8d4c1283c929a8a524fe966e29bd99b51a32f73bafae3",
+    "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "0f1eddcbdd225a488913d76492dec6b805d446ea1baaa68990df083ea24b5dbd",
+    "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "09a5c45ccad79f4fb63abc68f0702bae47aeba8ecfb13b3e1a551aae3510c1f0",
     # Preserve the already-shipped stock-preview restore correction: empty
     # custom identity is allowed only for a pending retail preview, not races.
-    "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "e204c7cc1dfac8205d8078b359f911e799fbdd33c4b94a351c0a37508b562094",
+    "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
     # Prepared immutable-template instantiation preserves mount/allocation
     # order and owns a separate mutable bus for every replay world.
     # Scene identity diagnostics flush before the existing prepare/commit;
     # no new state, callback, guest mutation or ownership route is introduced.
-    "runtime-recomp/src/game/mods/legacy_runtime_session.cpp": "6d0392831c4e97db11232d5a402dd8209b99dce99b9709f2911d087564ffacf2",
+    "runtime-recomp/src/game/mods/legacy_runtime_session.cpp": "e0c577eb17bf696a1f840be0bc83b6eaa1e8308a6121c12a3d296abd12df7ba8",
     # Oct 10: closed constant-load components and finite per-instance data;
     # immutable identities only. No memory instructions, new guest globals,
     # filesystem/network operations, or non-checkpointed interpreter state.
-    "runtime-recomp/src/game/mods/legacy_behaviour.cpp": "816919b222963f63c0687703b899aa2633028fa409a9a22a37edac117a8ee1f4",
-    "runtime-recomp/src/game/mods/legacy_behaviour.hpp": "1ba4348c9b61d81c9a876880da71c1f048fe6b39b376e62337303b66aaee09c9",
-    "runtime-recomp/src/game/mods/legacy_runtime_character.cpp": "837ec834348710886f0182696632c8a2f55e7b0737102be660298d9e5fe71055",
-    "runtime-recomp/src/game/mods/legacy_character_roster.cpp": "4b8da3ee4ecefd8b9e73fa9ddd58d51dcfa3fc95cc2933a50881513ba28ceeb8",
+    "runtime-recomp/src/game/mods/legacy_behaviour.cpp": "f5fd6fac497716550c5a40dba59346c0369bf9f28c4fe97c2e7df3f3cdf64d1d",
+    "runtime-recomp/src/game/mods/legacy_behaviour.hpp": "b5263d08404731789e779f7acbf627bf0c2f0d3eff49aebb6d32f28080c64614",
+    "runtime-recomp/src/game/mods/legacy_runtime_character.cpp": "6c2dc43a80d66ce217a8d66a502282f82262cf8aebc72fd3c68129ec6da85e5b",
+    "runtime-recomp/src/game/mods/legacy_character_roster.cpp": "cba46e095827e67e733377a75712af87b5b82bb0970df6db970ddeda61ee060c",
     # Pure immutable namespace capacities; stock limits retained. Guards stop
     # before cache stores/null racer writes and cannot mutate replay state.
-    "runtime-recomp/src/game/mods/legacy_asset_capacity.hpp": "bc6bc05cd6702a80c8e841dafc56348335a0baee3a47d48e88b219944a21386d",
+    "runtime-recomp/src/game/mods/legacy_asset_capacity.hpp": "2f4f811c821e490f4d989defc54b2974384b5785f96902275aebf48b3eacdf5c",
     # Fixed-point song cursor/gain, checked guest rows and pointer-free replay
     # sidecar; no decoder/file/device access can be invoked by a replay tick.
-    "runtime-recomp/src/game/mods/online_mod_music.cpp": "220ff38aa88bb6453e0c7a4635193e55d42e90b2037184f263e0fe63a191faea",
+    "runtime-recomp/src/game/mods/online_mod_music.cpp": "ebfac20c1abf85d8e2eee11b4de3a77ce9c3cc556f43c43140a96bd4710abd4c",
 }
 
 # Additional native participants reached by full retail menus. The tail latch
 # is checkpointed; water diagnostics retain their exact disabled branch.
 FULL_SCENE_NATIVE_HASH = {
-    "runtime-recomp/src/game/finish_presentation_policy.hpp": "0368b5447ae477d1debd7d32829a989a690a9e809fd95223a391a8574a9aed6a",
+    "runtime-recomp/src/game/finish_presentation_policy.hpp": "9cd526d9403da5275314641fa8e6b449e03f307f3a0e8d058ecb326edc9a70e5",
     # PR49 ultrawide sky: presentation-only column scaling; no new gameplay,
     # I/O, ownership or checkpoint fields.
-    "runtime-recomp/src/game/widescreen_policy.hpp": "0d6080326b9794cf468e5c54f2b93bfbb01f43f39b6c6eaf04cbd9f1e53df0dd",
+    "runtime-recomp/src/game/widescreen_policy.hpp": "3c3ff51000c969d6c7a9628364345fe1293e1c26de057197120728e79f975f36",
     # Oct 12: scoped signed Track Select drawing and observation-only clips.
     # CPU coordinates/visible neighbourhood are canonical on every peer.
     # PR56 additionally moves the same TailGate/RdramAddress definitions outside
     # the RT64 guard for headless audio/input. Rendered/owned hooks are unchanged.
-    "runtime-recomp/src/game/runtime_stubs.cpp": "26671b332bf72c27eeef253a784abc5f438ad84ddd51f7f72e15fc2988e43bd8",
-    "runtime-recomp/src/game/track_select_draw_guest.h": "6bc51e7168679d32c9602988793cc47e983b116343981db00f3feac6fbc13912",
-    "runtime-recomp/src/game/audio_event_queue.h": "efb6c0cdadbc5a1fbab30ee7ff524f558ea54523a43a3424727bba4a997535c2",
-    "runtime-recomp/src/game/audio_event_queue_state.h": "ca400d843e9018f5d69c2aa75ec40889a303574c7789a7297185369dcde79b18",
-    "runtime-recomp/src/game/intro_tail_policy.hpp": "5f5362ff5de40f5f9aa3a653c6e3849b8f27997b9db4592abd833022b9d47a36",
-    "runtime-recomp/src/game/water_profile.cpp": "d04da9797b34f8001e9304ccbd76171ead1eef8acc4fe2a1c215406b71064efb",
+    "runtime-recomp/src/game/runtime_stubs.cpp": "89570845e37a6e1d7ed227c1c363ae5138488927a52ee76fadde8aff5190e9a8",
+    "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
+    "runtime-recomp/src/game/audio_event_queue.h": "7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
+    "runtime-recomp/src/game/audio_event_queue_state.h": "7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
+    "runtime-recomp/src/game/intro_tail_policy.hpp": "5433ebb8ad644d4c4ff1d4b539494dbd8488225740008343415f5c87af50428f",
+    "runtime-recomp/src/game/water_profile.cpp": "e674ca4e4464e00a00eb1e77af9c926adbac4e86fb6911ac1da58ccd4ee8f04d",
     # Both revisions keep the water UV masks and append PR46's music globals.
-    "runtime-recomp/src/game/revision_addresses.hpp": "d8dd9d0f964082f69c86b8a9486ca12ecd47272702d141b03ab9de9cb898d43e",
+    "runtime-recomp/src/game/revision_addresses.hpp": "603770010a38b56b95505787a307c610300a2a359ef9ff2399b0df55a8d87735",
     # Frozen online binding diverts before offline decoder/global song reads.
     # Without a ModWorld the private hooks retain their prior identity branch.
-    "runtime-recomp/src/game/custom_music.cpp": "66176450b2e98228da437b5ec36b203a64d831ef048f8172af90f3fc8437f4d2",
-    "runtime-recomp/src/game/online_roster_policy.hpp": "3c914fdcad650d62839eed84f76ea22d5743a2fbf1d30512b88d2317e38892f4",
+    "runtime-recomp/src/game/custom_music.cpp": "09953f14e30fa72c5161801b3eafebeff7c5c2a04b5d63f912367e87bfa7421b",
+    "runtime-recomp/src/game/online_roster_policy.hpp": "125cddacb96b2633d96617724898bd0ca1e42c3020b2df4432fd974790b4a153",
     # Re-audited headless SDL guard: RT64 code is unchanged; without a window
     # the frustum hook retains its original no-op after defensive restoration.
     # The private canonical presentation hook remains an explicit identity.
     # Beta 5: four-player range compensation and a normal-runtime-only
     # noninteractive sprite retention hook. Both remain explicit identities
     # in the owned CPU; per-player preferences are consumed by the decoder.
-    "runtime-recomp/src/game/runtime_enhancements.cpp": "14b77607f65e926c3a18c7cee9a9a073f23f83a70726c11f4aef58815cd8edb8",
-    "runtime-recomp/src/game/character_select_animation_policy.hpp": "ab8a0f4220c00ce1b5726ff75953f0c4944b5b4e24eba942b442e07268ad04da",
-    "runtime-recomp/src/game/character_select_music_policy.hpp": "e2e308c4821e2b11cba32ecafd7195cdf7ed9cc4c4166c8b4078ec513441da6c",
+    "runtime-recomp/src/game/runtime_enhancements.cpp": "977c5b2e6dca9a5cf50e0a881ba96b6c83512743d0c7ed0cd1c027bec0b9e0a2",
+    "runtime-recomp/src/game/character_select_animation_policy.hpp": "03e0f77cd2969926a48ca434964e4a2b813efa93a0dc31e4b779eb7037a547b1",
+    "runtime-recomp/src/game/character_select_music_policy.hpp": "0a762402cc3308eb5197dd97eaac81778079bfdfa0f81a2f4aeb98cbc0ec7c22",
 }
 
 
@@ -680,8 +680,8 @@ REVIEWED_MAIN_MERGE_HASH = {
     # transient semantic cursor scopes cannot cross a checkpoint. Track Lab
     # requests use their admitted appended IDs, not legacy retail carriers.
     # DMA/save/character dispatch signatures and ownership remain unchanged.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4ee51ab618aeaaa661b6cd97c73a3b04d9952298f95f761bba065c86ddef095b",
-    "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "e204c7cc1dfac8205d8078b359f911e799fbdd33c4b94a351c0a37508b562094",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eed24ad82e27d94c30c8b7f6fb77e62eb9fb59b30baf7f51ea36cb755986d799",
+    "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
 }
 
 

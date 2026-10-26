@@ -20,7 +20,8 @@ enum class PresentationMarkerKind : std::uint8_t {
     HudRect,
     TrackSelectUi,
     TrackSelectPreview,
-    CameraWorldBegin, CameraWorldEnd,
+    CameraWorldBegin,
+    CameraWorldEnd,
 };
 
 // An overflowed nested begin and its end are one rejected pair. Never let
@@ -28,12 +29,14 @@ enum class PresentationMarkerKind : std::uint8_t {
 struct RejectedMarkerScopes {
     std::size_t depth = 0U;
     bool reject_begin(std::size_t accepted_depth, std::size_t capacity) {
-        if (depth == 0U && accepted_depth < capacity) return false;
+        if (depth == 0U && accepted_depth < capacity)
+            return false;
         ++depth;
         return true;
     }
     bool consume_end() {
-        if (depth == 0U) return false;
+        if (depth == 0U)
+            return false;
         --depth;
         return true;
     }
@@ -50,22 +53,21 @@ struct MarkerRecordingIntegrity {
 };
 
 constexpr bool is_aspect_marker(PresentationMarkerKind kind) {
-    return kind == PresentationMarkerKind::FramedResults ||
-           kind == PresentationMarkerKind::FixedUi ||
-           kind == PresentationMarkerKind::BackgroundAspect ||
-           kind == PresentationMarkerKind::TrackSelectUi ||
+    return kind == PresentationMarkerKind::FramedResults || kind == PresentationMarkerKind::FixedUi ||
+           kind == PresentationMarkerKind::BackgroundAspect || kind == PresentationMarkerKind::TrackSelectUi ||
            kind == PresentationMarkerKind::TrackSelectLensFlare;
 }
 
-constexpr bool valid_presentation_marker(PresentationMarkerKind kind,
-                                         std::uint8_t mode,
-                                         std::uint8_t variant) {
-    if (variant > 31U) return false;
-    if(kind==PresentationMarkerKind::CameraWorldBegin||kind==PresentationMarkerKind::CameraWorldEnd)return mode==0&&variant==0;
-    if (kind == PresentationMarkerKind::Geometry) return mode <= 9U;
-    if (kind == PresentationMarkerKind::SplitViewport ||
-        kind == PresentationMarkerKind::PostraceFullViewport ||
-        kind == PresentationMarkerKind::TrackSelectPreview) return mode == 0U;
+constexpr bool valid_presentation_marker(PresentationMarkerKind kind, std::uint8_t mode, std::uint8_t variant) {
+    if (variant > 31U)
+        return false;
+    if (kind == PresentationMarkerKind::CameraWorldBegin || kind == PresentationMarkerKind::CameraWorldEnd)
+        return mode == 0 && variant == 0;
+    if (kind == PresentationMarkerKind::Geometry)
+        return mode <= 9U;
+    if (kind == PresentationMarkerKind::SplitViewport || kind == PresentationMarkerKind::PostraceFullViewport ||
+        kind == PresentationMarkerKind::TrackSelectPreview)
+        return mode == 0U;
     return (is_aspect_marker(kind) || kind == PresentationMarkerKind::HudPass ||
             kind == PresentationMarkerKind::HudWidget || kind == PresentationMarkerKind::HudRect) &&
            mode <= 1U;
@@ -74,18 +76,24 @@ constexpr bool valid_presentation_marker(PresentationMarkerKind kind,
 // Compatibility only for the old encoded MoveWord entry point. Current
 // producers use typed sidecars. Legacy control commands used modes 0/1;
 // dynamic geometry modes must never be decoded as controls, even here.
-constexpr PresentationMarkerKind legacy_presentation_marker_kind(
-    std::uint8_t mode, std::uint8_t variant) {
-    if (mode > 1U) return PresentationMarkerKind::Geometry;
+constexpr PresentationMarkerKind legacy_presentation_marker_kind(std::uint8_t mode, std::uint8_t variant) {
+    if (mode > 1U)
+        return PresentationMarkerKind::Geometry;
     switch (variant) {
-    case 26U: return PresentationMarkerKind::FramedResults;
-    case 27U: return PresentationMarkerKind::FixedUi;
-    case 28U: return PresentationMarkerKind::BackgroundAspect;
-    case 29U: return PresentationMarkerKind::HudPass;
-    case 30U: return PresentationMarkerKind::TrackSelectLensFlare;
-    case 31U: return mode == 0U ? PresentationMarkerKind::SplitViewport
-                              : PresentationMarkerKind::Geometry;
-    default: return PresentationMarkerKind::Geometry;
+    case 26U:
+        return PresentationMarkerKind::FramedResults;
+    case 27U:
+        return PresentationMarkerKind::FixedUi;
+    case 28U:
+        return PresentationMarkerKind::BackgroundAspect;
+    case 29U:
+        return PresentationMarkerKind::HudPass;
+    case 30U:
+        return PresentationMarkerKind::TrackSelectLensFlare;
+    case 31U:
+        return mode == 0U ? PresentationMarkerKind::SplitViewport : PresentationMarkerKind::Geometry;
+    default:
+        return PresentationMarkerKind::Geometry;
     }
 }
 
@@ -99,7 +107,8 @@ struct PresentationDiagnosticBudget {
     bool record(std::uint64_t task) {
         ++total;
         ++pending;
-        if (total != 1U && task - last_report_task < 120U) return false;
+        if (total != 1U && task - last_report_task < 120U)
+            return false;
         last_report_task = task;
         return true;
     }

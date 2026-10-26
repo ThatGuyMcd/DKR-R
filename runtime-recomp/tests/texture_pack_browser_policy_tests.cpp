@@ -5,13 +5,10 @@
 
 namespace {
 
-dkr::runtime::texture_packs::PackInfo pack(
-    const char* id, const char* name,
-    dkr::runtime::texture_packs::Format format, bool enabled,
-    bool compatible, bool hidden, std::uintmax_t size,
-    std::int64_t imported,
-    dkr::runtime::texture_packs::Origin origin =
-        dkr::runtime::texture_packs::Origin::User) {
+dkr::runtime::texture_packs::PackInfo
+pack(const char* id, const char* name, dkr::runtime::texture_packs::Format format, bool enabled, bool compatible,
+     bool hidden, std::uintmax_t size, std::int64_t imported,
+     dkr::runtime::texture_packs::Origin origin = dkr::runtime::texture_packs::Origin::User) {
     dkr::runtime::texture_packs::PackInfo result{};
     result.id = id;
     result.name = name;
@@ -31,12 +28,9 @@ int main() {
     using namespace dkr::runtime;
     using namespace texture_browser;
     const std::vector<texture_packs::PackInfo> packs{
-        pack("charlie", "Charlie HD", texture_packs::Format::RiceRt64,
-             true, true, false, 300U, 30),
-        pack("alpha", "alpha native", texture_packs::Format::NativeRt64,
-             false, true, false, 100U, 10),
-        pack("bravo", "Bravo Jabo", texture_packs::Format::LegacyJabo,
-             false, false, true, 200U, 20),
+        pack("charlie", "Charlie HD", texture_packs::Format::RiceRt64, true, true, false, 300U, 30),
+        pack("alpha", "alpha native", texture_packs::Format::NativeRt64, false, true, false, 100U, 10),
+        pack("bravo", "Bravo Jabo", texture_packs::Format::LegacyJabo, false, false, true, 200U, 20),
     };
 
     Filters filters{};
@@ -89,8 +83,7 @@ int main() {
     selected = select(layers, Filters{}, SortMode::Priority);
     assert(selected.size() == 2U && selected.front().id == "alpha");
     // Adding a new layer never unexpectedly replaces an existing winner.
-    layers.push_back(pack("zulu", "Zulu", texture_packs::Format::NativeRt64,
-                          true, true, false, 100U, 40));
+    layers.push_back(pack("zulu", "Zulu", texture_packs::Format::NativeRt64, true, true, false, 100U, 40));
     assert(texture_priority::normalize(layers, priorities));
     assert(layers.back().priority == 4U && layers[1].priority == 1U);
     assert(texture_priority::move(layers, priorities, "alpha", 4U));
@@ -98,7 +91,8 @@ int main() {
     assert(loading.front()->id == "alpha" && loading.back()->id == "charlie");
     // Restart/rescan restores saved ranks rather than name or input order.
     std::reverse(layers.begin(), layers.end());
-    for (auto& layer : layers) layer.priority = 0U;
+    for (auto& layer : layers)
+        layer.priority = 0U;
     assert(!texture_priority::normalize(layers, priorities));
     loading = texture_priority::load_order(layers);
     assert(loading.front()->id == "alpha" && loading.back()->id == "charlie");
@@ -107,7 +101,8 @@ int main() {
     priorities["charlie"] = 1U;
     texture_priority::normalize(layers, priorities);
     std::set<std::size_t> unique_priorities;
-    for (const auto& layer : layers) unique_priorities.insert(layer.priority);
+    for (const auto& layer : layers)
+        unique_priorities.insert(layer.priority);
     assert(unique_priorities.size() == layers.size() && *unique_priorities.begin() == 1U);
 
     assert(responsive_column_count(259.0F, 8.0F) == 1);
@@ -118,29 +113,22 @@ int main() {
     // A pack that came with a custom track is kept out of every ordinary view
     // and appears only under the "Track packs" filter.
     const std::vector<texture_packs::PackInfo> with_track_pack{
-        pack("alpha", "alpha native", texture_packs::Format::NativeRt64,
-             true, true, false, 100U, 10),
-        pack("remix-hd", "Ancient Lake Remix HD",
-             texture_packs::Format::RiceRt64, true, true, false, 500U, 40,
+        pack("alpha", "alpha native", texture_packs::Format::NativeRt64, true, true, false, 100U, 10),
+        pack("remix-hd", "Ancient Lake Remix HD", texture_packs::Format::RiceRt64, true, true, false, 500U, 40,
              texture_packs::Origin::TrackPack),
     };
     Filters track_filters{};
-    assert(select(with_track_pack, track_filters,
-                  SortMode::NameAscending).size() == 1U);
-    assert(select(with_track_pack, track_filters,
-                  SortMode::NameAscending)[0].id == "alpha");
+    assert(select(with_track_pack, track_filters, SortMode::NameAscending).size() == 1U);
+    assert(select(with_track_pack, track_filters, SortMode::NameAscending)[0].id == "alpha");
     track_filters.visibility = VisibilityFilter::All;
-    assert(select(with_track_pack, track_filters,
-                  SortMode::NameAscending).size() == 1U);
+    assert(select(with_track_pack, track_filters, SortMode::NameAscending).size() == 1U);
     track_filters.visibility = VisibilityFilter::Hidden;
-    assert(select(with_track_pack, track_filters,
-                  SortMode::NameAscending).empty());
+    assert(select(with_track_pack, track_filters, SortMode::NameAscending).empty());
     track_filters.visibility = VisibilityFilter::TrackPacks;
     selected = select(with_track_pack, track_filters, SortMode::NameAscending);
     assert(selected.size() == 1U && selected[0].id == "remix-hd");
     // The other filters still narrow within the track-pack view.
     track_filters.state = StateFilter::Inactive;
-    assert(select(with_track_pack, track_filters,
-                  SortMode::NameAscending).empty());
+    assert(select(with_track_pack, track_filters, SortMode::NameAscending).empty());
     return 0;
 }

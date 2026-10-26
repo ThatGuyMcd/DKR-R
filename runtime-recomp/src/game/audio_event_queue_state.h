@@ -16,13 +16,15 @@ enum {
     DKR_AUDIO_QUEUE_YIELDED = 8
 };
 static inline int dkr_audio_guard_valid(const dkr_audio_queue_guard* g) {
-    if(g->immediate_events>=DKR_AUDIO_IMMEDIATE_BUDGET || g->logged_empty>1 ||
-       g->logged_corrupt>15 ||
-       (g->queue && ((g->queue&3) || g->queue<0x80000000U || g->queue>0x807FFFECU))) return 0;
-    if(!g->queue && (g->immediate_events || g->logged_empty || g->logged_corrupt || g->items || g->item_count)) return 0;
-    if(!g->item_count)return g->items==0;
-    return g->item_count>=2 && g->item_count<=512 && !(g->items&3) &&
-        g->items>=0x80000000U && g->items<=0x80800000U-g->item_count*28 &&
-        !(g->items<g->queue+20 && g->queue<g->items+g->item_count*28);
+    if (g->immediate_events >= DKR_AUDIO_IMMEDIATE_BUDGET || g->logged_empty > 1 || g->logged_corrupt > 15 ||
+        (g->queue && ((g->queue & 3) || g->queue < 0x80000000U || g->queue > 0x807FFFECU)))
+        return 0;
+    if (!g->queue && (g->immediate_events || g->logged_empty || g->logged_corrupt || g->items || g->item_count))
+        return 0;
+    if (!g->item_count)
+        return g->items == 0;
+    return g->item_count >= 2 && g->item_count <= 512 && !(g->items & 3) && g->items >= 0x80000000U &&
+           g->items <= 0x80800000U - g->item_count * 28 &&
+           !(g->items < g->queue + 20 && g->queue < g->items + g->item_count * 28);
 }
 #endif

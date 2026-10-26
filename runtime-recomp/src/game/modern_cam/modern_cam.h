@@ -73,22 +73,22 @@ typedef struct {
 
 /* Estado do veículo neste tick. */
 typedef struct {
-    MCVec3 pos;        /* posição do veículo (unidades do jogo) */
-    MCVec3 vel;        /* velocidade (unidades do jogo por SEGUNDO) */
-    float yaw;         /* direção do nariz, em radianos */
-    float slopePitch;  /* inclinação do chão no sentido do nariz (+ = subida); 0 se não souber */
-    int grounded;      /* 1 = rodas no chão */
-    int drifting;      /* 1 = derrapando / power slide */
-    float boost;       /* 0..1, intensidade de turbo neste tick */
-    float stickX;      /* analógico direito, -1..1 (0 se não houver) */
+    MCVec3 pos;       /* posição do veículo (unidades do jogo) */
+    MCVec3 vel;       /* velocidade (unidades do jogo por SEGUNDO) */
+    float yaw;        /* direção do nariz, em radianos */
+    float slopePitch; /* inclinação do chão no sentido do nariz (+ = subida); 0 se não souber */
+    int grounded;     /* 1 = rodas no chão */
+    int drifting;     /* 1 = derrapando / power slide */
+    float boost;      /* 0..1, intensidade de turbo neste tick */
+    float stickX;     /* analógico direito, -1..1 (0 se não houver) */
     float stickY;
-    int lookBack;      /* 1 = olhar para trás pressionado */
-    float steer;       /* volante, -1..1, + = virando para yaw POSITIVO (0 se não usar a antecipação) */
+    int lookBack; /* 1 = olhar para trás pressionado */
+    float steer;  /* volante, -1..1, + = virando para yaw POSITIVO (0 se não usar a antecipação) */
 } MCInput;
 
 /* Ajuste fino. ModernCam_DefaultParams preenche valores bons para kart. */
 typedef struct {
-    float unitScale;            /* multiplica todas as distâncias e velocidades */
+    float unitScale; /* multiplica todas as distâncias e velocidades */
 
     /* enquadramento */
     float distMin, distMax;     /* distância atrás do carro, parado / velocidade máxima (m) */
@@ -98,80 +98,80 @@ typedef struct {
     float zoomSharpness;        /* quão rápido o zoom acompanha a velocidade (1/s) */
 
     /* direção */
-    float minAlignSpeed;        /* abaixo disso ignora a direção da velocidade (m/s) */
-    float velocityAlign;        /* 0 = segue o nariz, 1 = segue a velocidade (pilotagem normal) */
-    float driftAlign;           /* mesmo, durante drift */
-    float driftLead;            /* giro extra para dentro da curva no drift (rad), estilo Mario Kart; 0 desliga */
-    float spinFollowSpeed;      /* acima disso, numa rodada a câmera segue a velocidade (m/s) */
-    float alignSharpness;       /* quão rápido o alinhamento com a velocidade muda (1/s) */
+    float minAlignSpeed;   /* abaixo disso ignora a direção da velocidade (m/s) */
+    float velocityAlign;   /* 0 = segue o nariz, 1 = segue a velocidade (pilotagem normal) */
+    float driftAlign;      /* mesmo, durante drift */
+    float driftLead;       /* giro extra para dentro da curva no drift (rad), estilo Mario Kart; 0 desliga */
+    float spinFollowSpeed; /* acima disso, numa rodada a câmera segue a velocidade (m/s) */
+    float alignSharpness;  /* quão rápido o alinhamento com a velocidade muda (1/s) */
 
     /* mola do yaw */
-    float yawFreq;              /* frequência natural (Hz): maior = câmera mais presa */
-    float yawFreqSpeedBoost;    /* Hz extras na velocidade máxima */
-    float yawDamping;           /* 1 = sem balanço; < 1 = balança um pouco ao voltar */
-    float yawKeepUp;            /* 0..1: quanto do atraso da mola numa curva constante é compensado */
+    float yawFreq;           /* frequência natural (Hz): maior = câmera mais presa */
+    float yawFreqSpeedBoost; /* Hz extras na velocidade máxima */
+    float yawDamping;        /* 1 = sem balanço; < 1 = balança um pouco ao voltar */
+    float yawKeepUp;         /* 0..1: quanto do atraso da mola numa curva constante é compensado */
 
     /* seguimento de posição */
-    float posSharpness;         /* horizontal (1/s) */
-    float posKeepUp;            /* 0..1: quanto do atraso em velocidade constante é compensado (mola ou não) */
-    float heightSharpness;      /* vertical no chão (1/s) */
-    float airHeightSharpness;   /* vertical no ar (1/s) */
-    float maxVerticalLag;       /* atraso vertical máximo permitido (m) */
+    float posSharpness;       /* horizontal (1/s) */
+    float posKeepUp;          /* 0..1: quanto do atraso em velocidade constante é compensado (mola ou não) */
+    float heightSharpness;    /* vertical no chão (1/s) */
+    float airHeightSharpness; /* vertical no ar (1/s) */
+    float maxVerticalLag;     /* atraso vertical máximo permitido (m) */
 
     /* terreno */
-    float slopeFollow;          /* 0..1, quanto a câmera acompanha a inclinação */
+    float slopeFollow; /* 0..1, quanto a câmera acompanha a inclinação */
     float slopeSharpness;
 
     /* look-ahead */
-    float lookAhead;            /* segundos de velocidade somados ao alvo */
-    float lookAheadMax;         /* limite (m) */
+    float lookAhead;    /* segundos de velocidade somados ao alvo */
+    float lookAheadMax; /* limite (m) */
     float lookAheadSharpness;
 
     /* FOV (graus, vertical) */
     float fovBase;
-    float fovSpeed;             /* graus extras na velocidade máxima */
+    float fovSpeed; /* graus extras na velocidade máxima */
     float fovSharpness;
-    float fovBoost;             /* graus extras com turbo cheio */
+    float fovBoost; /* graus extras com turbo cheio */
     float boostFovAttack, boostFovRelease;
 
     /* roll */
-    float rollFromYawRate;      /* rad de roll por rad/s de giro; inverta o sinal se inclinar para o lado errado */
+    float rollFromYawRate; /* rad de roll por rad/s de giro; inverta o sinal se inclinar para o lado errado */
     float rollMax;
     float rollSharpness;
 
     /* órbita manual */
     float orbitSpeedYaw, orbitSpeedPitch; /* rad/s com o analógico no máximo */
-    float recenterDelay;        /* segundos sem mexer até recentralizar */
+    float recenterDelay;                  /* segundos sem mexer até recentralizar */
     float recenterSharpness;
 
     /* colisão */
-    float collisionRadius;      /* (m) */
+    float collisionRadius; /* (m) */
     float collisionReleaseSharpness;
 
     /* tremor */
-    float traumaDecay;          /* por segundo */
-    float boostTrauma;          /* trauma mínimo enquanto em turbo cheio */
-    float landingTrauma;        /* trauma numa aterrissagem forte */
-    float landingSpeedForMax;   /* velocidade de queda que dá trauma máximo (m/s) */
-    float shakeFreq;            /* Hz */
-    float shakeMaxAngle;        /* rad */
-    float shakeMaxOffset;       /* m */
+    float traumaDecay;        /* por segundo */
+    float boostTrauma;        /* trauma mínimo enquanto em turbo cheio */
+    float landingTrauma;      /* trauma numa aterrissagem forte */
+    float landingSpeedForMax; /* velocidade de queda que dá trauma máximo (m/s) */
+    float shakeFreq;          /* Hz */
+    float shakeMaxAngle;      /* rad */
+    float shakeMaxOffset;     /* m */
 
-    float teleportDistance;     /* salto maior que isso reseta a câmera (m) */
+    float teleportDistance; /* salto maior que isso reseta a câmera (m) */
 
     /* melhorias: enable* = 1 liga, 0 desliga */
-    int enableSteerLead;        /* antecipação pelo volante (usa MCInput.steer) */
-    float steerLead;            /* giro extra com o volante no máximo (rad) */
-    int enablePosSpring;        /* mola de 2ª ordem na posição horizontal (substitui posSharpness) */
-    float posFreq;              /* Hz */
-    float posDamping;           /* 1 = sem balanço */
-    int enableLandingDip;       /* afundada na aterrissagem */
-    float landingDip;           /* profundidade (m) numa queda de landingSpeedForMax */
+    int enableSteerLead;  /* antecipação pelo volante (usa MCInput.steer) */
+    float steerLead;      /* giro extra com o volante no máximo (rad) */
+    int enablePosSpring;  /* mola de 2ª ordem na posição horizontal (substitui posSharpness) */
+    float posFreq;        /* Hz */
+    float posDamping;     /* 1 = sem balanço */
+    int enableLandingDip; /* afundada na aterrissagem */
+    float landingDip;     /* profundidade (m) numa queda de landingSpeedForMax */
     float dipFreq, dipDamping;
-    int enableBoostKick;        /* puxão no início do turbo */
-    float boostKick;            /* quanto o braço estica (m) */
+    int enableBoostKick; /* puxão no início do turbo */
+    float boostKick;     /* quanto o braço estica (m) */
     float kickFreq, kickDamping;
-    int rotationalShake;        /* 1 = tremor só rotacional, com ruído em camadas */
+    int rotationalShake; /* 1 = tremor só rotacional, com ruído em camadas */
 } MCParams;
 
 /* Estado interno; zere com ModernCam_Reset (ou deixe initialized = 0). */
@@ -198,10 +198,10 @@ typedef struct {
     float prevSpeed01Raw;
     float prevTargetYaw;
     /* alinhamento filtrado e compensação do atraso de giro */
-    float slipSm;               /* escorregamento filtrado (rad) */
-    float turnRate;             /* taxa de giro filtrada que a mola do yaw acompanha (rad/s) */
-    float prevVelYaw;           /* direção da velocidade no tick anterior (rad) */
-    MCVec3 prevVel;             /* velocidade medida no tick anterior (xz) */
+    float slipSm;     /* escorregamento filtrado (rad) */
+    float turnRate;   /* taxa de giro filtrada que a mola do yaw acompanha (rad/s) */
+    float prevVelYaw; /* direção da velocidade no tick anterior (rad) */
+    MCVec3 prevVel;   /* velocidade medida no tick anterior (xz) */
     /* melhorias */
     MCVec3 anchorVel;
     float steerSm;
@@ -211,12 +211,12 @@ typedef struct {
 } MCState;
 
 typedef struct {
-    MCVec3 eye;     /* posição da câmera */
-    MCVec3 target;  /* ponto para onde olha */
-    MCVec3 up;      /* vetor "para cima" já com roll */
-    float fovDeg;   /* FOV vertical em graus */
-    float yaw;      /* yaw da direção de visão (mesma convenção do input) */
-    float pitch;    /* pitch da direção de visão (+ = olhando para cima) */
+    MCVec3 eye;    /* posição da câmera */
+    MCVec3 target; /* ponto para onde olha */
+    MCVec3 up;     /* vetor "para cima" já com roll */
+    float fovDeg;  /* FOV vertical em graus */
+    float yaw;     /* yaw da direção de visão (mesma convenção do input) */
+    float pitch;   /* pitch da direção de visão (+ = olhando para cima) */
     float roll;
 } MCOutput;
 
@@ -230,8 +230,8 @@ typedef int (*MCRaycastFn)(void* user, MCVec3 from, MCVec3 to, float radius, flo
 void ModernCam_DefaultParams(MCParams* p);
 void ModernCam_Reset(MCState* s, const MCParams* p, const MCInput* in);
 void ModernCam_AddTrauma(MCState* s, float amount);
-void ModernCam_Update(MCState* s, const MCParams* p, const MCInput* in, float dt,
-                      MCRaycastFn raycast, void* user, MCOutput* out);
+void ModernCam_Update(MCState* s, const MCParams* p, const MCInput* in, float dt, MCRaycastFn raycast, void* user,
+                      MCOutput* out);
 
 /* Radianos -> ângulo binário de 16 bits do N64 (0x10000 = volta completa). */
 static inline short ModernCam_ToBinAngle(float rad) {

@@ -66,7 +66,7 @@ struct StoreLease {
             handle = -1;
             throw Failure("Another DKR-R copy is changing this mod library. Finish there, then retry.");
         }
-        struct stat info{};
+        struct stat info {};
         if (fstat(handle, &info) || !S_ISREG(info.st_mode) || info.st_nlink != 1 || info.st_uid != geteuid()) {
             close(handle);
             handle = -1;
@@ -283,15 +283,17 @@ std::string name_stamp(const fs::path& input) {
     std::map<std::string, std::string> entries;
     ordinary(path, fs::is_directory(path));
     if (fs::is_regular_file(path))
-        entries["file"] = std::to_string(fs::file_size(path)) + ":" +
-                          std::to_string(static_cast<std::int64_t>(fs::last_write_time(path).time_since_epoch().count()));
+        entries["file"] =
+            std::to_string(fs::file_size(path)) + ":" +
+            std::to_string(static_cast<std::int64_t>(fs::last_write_time(path).time_since_epoch().count()));
     else
         for (const auto& e : fs::directory_iterator(path)) {
             ordinary(e.path(), false);
             if (entries.size() >= 200005)
                 return {};
             entries[path_text(e.path().filename())] =
-                std::to_string(e.file_size()) + ":" + std::to_string(static_cast<std::int64_t>(e.last_write_time().time_since_epoch().count()));
+                std::to_string(e.file_size()) + ":" +
+                std::to_string(static_cast<std::int64_t>(e.last_write_time().time_since_epoch().count()));
         }
     const auto bytes = Json(entries).dump();
     return dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()));
@@ -303,7 +305,8 @@ std::string track_stamp(const fs::path& input) {
     for (const auto& e : fs::recursive_directory_iterator(path))
         if (e.is_regular_file())
             entries[path_text(e.path().lexically_relative(path))] =
-                std::to_string(e.file_size()) + ":" + std::to_string(static_cast<std::int64_t>(e.last_write_time().time_since_epoch().count()));
+                std::to_string(e.file_size()) + ":" +
+                std::to_string(static_cast<std::int64_t>(e.last_write_time().time_since_epoch().count()));
     const auto bytes = Json(entries).dump();
     return dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()));
 }
@@ -342,11 +345,14 @@ bool managed_target(const std::string& s) {
         if (hash_string(leaf_after(prefix)))
             return true;
     const auto car = leaf_after("mods/vehicles/packages/");
-    for(const auto* suffix : {".dkrkart", ".dkrhover", ".dkrplane"})
-        if(car.ends_with(suffix) && hash_string(car.substr(0, car.size()-std::char_traits<char>::length(suffix)))) return true;
+    for (const auto* suffix : {".dkrkart", ".dkrhover", ".dkrplane"})
+        if (car.ends_with(suffix) && hash_string(car.substr(0, car.size() - std::char_traits<char>::length(suffix))))
+            return true;
     const auto portrait = leaf_after("mods/vehicles/portraits/");
-    if(portrait.ends_with(".rgba") && hash_string(portrait.substr(0,portrait.size()-5))) return true;
-    if(s=="mods/vehicles/library.json") return true;
+    if (portrait.ends_with(".rgba") && hash_string(portrait.substr(0, portrait.size() - 5)))
+        return true;
+    if (s == "mods/vehicles/library.json")
+        return true;
     const auto code = leaf_after("mods/custom-magic-codes/packages/");
     if (code.ends_with(".dkrcode") && hash_string(code.substr(0, code.size() - 8)))
         return true;
@@ -370,11 +376,14 @@ bool managed_member(const Json& member, const std::string& path) {
     if (!managed_target(path))
         return false;
     const auto kind = text(member, "kind", 40);
-    if(kind=="vehicle") {
-        const auto digest=text(member,"digest",64);
-        if(!hash_string(digest)||text(member,"id",256)!="vehicle:"+digest||text(member,"key",512)!="vehicle:"+digest) return false;
-        for(const auto* suffix:{".dkrkart",".dkrhover",".dkrplane"})
-            if(path=="mods/vehicles/packages/"+digest+suffix) return true;
+    if (kind == "vehicle") {
+        const auto digest = text(member, "digest", 64);
+        if (!hash_string(digest) || text(member, "id", 256) != "vehicle:" + digest ||
+            text(member, "key", 512) != "vehicle:" + digest)
+            return false;
+        for (const auto* suffix : {".dkrkart", ".dkrhover", ".dkrplane"})
+            if (path == "mods/vehicles/packages/" + digest + suffix)
+                return true;
         return false;
     }
     return (kind == "texture" && path.starts_with("texture-packs/")) ||
@@ -851,7 +860,8 @@ std::pair<bool, bool> InstallManager::Impl::protect_metadata(const Json& members
         protect("mods/legacy/character-catalog.json");
         protect("mods/legacy/character-library.json");
     }
-    if (vehicles) protect("mods/vehicles/library.json");
+    if (vehicles)
+        protect("mods/vehicles/library.json");
     if (code)
         protect("mods/custom-magic-codes/library.json");
     return {tracks, textures};
@@ -1323,9 +1333,11 @@ Json InstallManager::Impl::candidates() const {
                 identity = true;
         const bool strong = identity || text(local, "digest", 64) == proposed.digest;
         bool possible = name_key(text(local, "name", 200)) == name_key(proposed.title);
-        if(text(local,"kind",40)=="vehicle") for(const auto& incoming:prepared.native.value("members",Json::array()))
-            possible |= text(incoming,"kind",40)=="vehicle" && incoming.value("type",0U)==local.value("type",0U) &&
-                name_key(text(incoming,"name",240))==name_key(text(local,"name",240));
+        if (text(local, "kind", 40) == "vehicle")
+            for (const auto& incoming : prepared.native.value("members", Json::array()))
+                possible |= text(incoming, "kind", 40) == "vehicle" &&
+                            incoming.value("type", 0U) == local.value("type", 0U) &&
+                            name_key(text(incoming, "name", 240)) == name_key(text(local, "name", 240));
         if (!strong && !possible)
             continue;
         bool already = false;
@@ -1360,17 +1372,21 @@ void InstallManager::Impl::prepare(std::vector<fs::path> roms, std::stop_token s
     auto extension = proposed.file.extension().string();
     for (auto& c : extension)
         c = char(std::tolower(static_cast<unsigned char>(c)));
-    const bool legacy_patch=extension==".xdelta"||extension==".bps"||extension==".ips";
-    bool historical_legacy_archive=false;
-    if(vehicle_store_category(proposed.category)&&extension==".zip")
-        for(const auto& receipt:registry["records"]) for(const auto* edition:{&receipt,receipt.contains("previous")?&receipt["previous"]:&receipt})
-            if(text(*edition,"digest",64)==proposed.digest)
-                for(const auto& m:edition->value("members",Json::array()))
-                    historical_legacy_archive |= text(m,"kind",40).starts_with("legacy-");
-    if(vehicle_store_extension(extension)||(vehicle_store_category(proposed.category)&&!legacy_patch&&!historical_legacy_archive)) {
-        if(!vehicle_store_category(proposed.category)) throw Failure("This vehicle is listed under the wrong Store category. Ask its publisher to choose Vehicles.");
-        progress(.05F,"Validating vehicle models, portraits and driver seats");
-        prepared=prepare_store_vehicle(proposed.file,transaction/"payload",stop);
+    const bool legacy_patch = extension == ".xdelta" || extension == ".bps" || extension == ".ips";
+    bool historical_legacy_archive = false;
+    if (vehicle_store_category(proposed.category) && extension == ".zip")
+        for (const auto& receipt : registry["records"])
+            for (const auto* edition : {&receipt, receipt.contains("previous") ? &receipt["previous"] : &receipt})
+                if (text(*edition, "digest", 64) == proposed.digest)
+                    for (const auto& m : edition->value("members", Json::array()))
+                        historical_legacy_archive |= text(m, "kind", 40).starts_with("legacy-");
+    if (vehicle_store_extension(extension) ||
+        (vehicle_store_category(proposed.category) && !legacy_patch && !historical_legacy_archive)) {
+        if (!vehicle_store_category(proposed.category))
+            throw Failure(
+                "This vehicle is listed under the wrong Store category. Ask its publisher to choose Vehicles.");
+        progress(.05F, "Validating vehicle models, portraits and driver seats");
+        prepared = prepare_store_vehicle(proposed.file, transaction / "payload", stop);
     } else if (extension == ".nrm" || extension == ".dkrcode") {
         const auto bytes = dkr::mods::read_file(proposed.file, dkr::mods::code::MaxPackage);
         const auto package = dkr::mods::code::inspect(bytes, version);
@@ -1529,7 +1545,7 @@ void InstallManager::Impl::prepare(std::vector<fs::path> roms, std::stop_token s
                       {"modified", modified},
                       {"identityChanged", identity_changed},
                       {"code", prepared.native.contains("codeId")},
-                      {"canRunCopies", proposed.category == "textures" || prepared.native.value("vehicle",false)}};
+                      {"canRunCopies", proposed.category == "textures" || prepared.native.value("vehicle", false)}};
     });
 }
 void InstallManager::Impl::retire_legacy(const Json& old, const Json& members, std::stop_token stop) {
@@ -1709,8 +1725,9 @@ void InstallManager::Impl::commit(std::string mode, std::string instance, std::s
     begin_journal();
     Json members = prepared.native.value("members", Json::array());
     std::pair<bool, bool> native_changes{false, false};
-    const bool stored = (mode == "add" && proposed.category != "textures" && !prepared.native.value("vehicle",false)) ||
-                        (old.value("stored", false) && proposed.intent != "activate");
+    const bool stored =
+        (mode == "add" && proposed.category != "textures" && !prepared.native.value("vehicle", false)) ||
+        (old.value("stored", false) && proposed.intent != "activate");
     if (proposed.intent == "activate")
         for (auto& r : registry["records"])
             if (text(r, "item", 160) == proposed.item && text(r, "instance", 32) != instance)
@@ -1762,7 +1779,8 @@ void InstallManager::Impl::commit(std::string mode, std::string instance, std::s
                 throw Failure("Prepared mod content changed before publication.");
             if (path_exists(child(config, target))) {
                 const auto current = tree_hash(child(config, target), stop);
-                if ((kind == "legacy-group" || kind == "legacy-review" || kind == "code" || kind == "vehicle" || kind == "vehicle-portrait") &&
+                if ((kind == "legacy-group" || kind == "legacy-review" || kind == "code" || kind == "vehicle" ||
+                     kind == "vehicle-portrait") &&
                     current != text(output, "content", 64))
                     throw Failure("An immutable mod identity has different content. Existing files were kept.");
                 bool shared = false;
@@ -1822,12 +1840,14 @@ void InstallManager::Impl::commit(std::string mode, std::string instance, std::s
                                    {"enabled", previous.value("enabled", true)}});
             }
         }
-        if(prepared.native.value("vehicle",false)) {
-            progress(.92F,"Updating the vehicle library");
-            Json other_owners=Json::array();
-            for(const auto& r:registry["records"]) if(text(r,"instance",32)!=instance&&!r.value("stored",false))
-                for(const auto& m:r.value("members",Json::array())) other_owners.push_back(m);
-            members=publish_store_vehicles(config,prepared,old.value("members",Json::array()),other_owners,stop);
+        if (prepared.native.value("vehicle", false)) {
+            progress(.92F, "Updating the vehicle library");
+            Json other_owners = Json::array();
+            for (const auto& r : registry["records"])
+                if (text(r, "instance", 32) != instance && !r.value("stored", false))
+                    for (const auto& m : r.value("members", Json::array()))
+                        other_owners.push_back(m);
+            members = publish_store_vehicles(config, prepared, old.value("members", Json::array()), other_owners, stop);
         }
         // Code admission uses the existing verifier and trust model. Changed
         // executable bytes are NEVER approved or enabled by a Store update.
@@ -1886,7 +1906,8 @@ void InstallManager::Impl::commit(std::string mode, std::string instance, std::s
                         library.remove(text(m, "digest", 64));
                 }
         }
-        if (prepared.native.contains("members") && !prepared.native.contains("codeId") && !prepared.native.value("vehicle",false)) {
+        if (prepared.native.contains("members") && !prepared.native.contains("codeId") &&
+            !prepared.native.value("vehicle", false)) {
             progress(.93F, "Updating the legacy library");
             // Build survivor groups in private storage. The live library never
             // receives a second, nested removal journal during Store commit.
@@ -2187,7 +2208,7 @@ void InstallManager::Impl::remove_instance(std::string instance, bool remove_fil
                     continue;
             }
             if (kind == "vehicle") {
-                remove_store_vehicle(config,member,stop);
+                remove_store_vehicle(config, member, stop);
             } else if (kind == "code") {
                 dkr::mods::code::Library library(config / "mods/custom-magic-codes", version);
                 library.remove(text(member, "digest", 64));

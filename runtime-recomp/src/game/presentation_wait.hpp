@@ -17,23 +17,30 @@ inline constexpr std::chrono::microseconds presentation_tail_guard(bool android)
 // use this wait. Keep the upstream measured short-sleep/spin tail intact.
 #if defined(_WIN32) && !defined(DKR_PRESENTATION_LEGACY_WAIT)
 class PresentationTimer {
-public:
-    PresentationTimer() : handle_(CreateWaitableTimerExW(nullptr, nullptr,
-        0x00000002 /* CREATE_WAITABLE_TIMER_HIGH_RESOLUTION */, TIMER_ALL_ACCESS)) {}
-    ~PresentationTimer() { if (handle_) CloseHandle(handle_); }
+  public:
+    PresentationTimer()
+        : handle_(CreateWaitableTimerExW(nullptr, nullptr, 0x00000002 /* CREATE_WAITABLE_TIMER_HIGH_RESOLUTION */,
+                                         TIMER_ALL_ACCESS)) {}
+    ~PresentationTimer() {
+        if (handle_)
+            CloseHandle(handle_);
+    }
     PresentationTimer(const PresentationTimer&) = delete;
     PresentationTimer& operator=(const PresentationTimer&) = delete;
     bool wait(std::chrono::nanoseconds remaining) {
-        if (!handle_) return false;
-        if (remaining.count() <= 0) return true;
+        if (!handle_)
+            return false;
+        if (remaining.count() <= 0)
+            return true;
         LARGE_INTEGER due{};
         // Negative = relative. Round up so the kernel wait cannot finish early
         // merely from truncation to Windows' 100 ns units.
         due.QuadPart = -(remaining.count() / 100 + (remaining.count() % 100 != 0));
-        return SetWaitableTimerEx(handle_, &due, 0, nullptr, nullptr, nullptr, 0)
-            && WaitForSingleObject(handle_, INFINITE) == WAIT_OBJECT_0;
+        return SetWaitableTimerEx(handle_, &due, 0, nullptr, nullptr, nullptr, 0) &&
+               WaitForSingleObject(handle_, INFINITE) == WAIT_OBJECT_0;
     }
-private:
+
+  private:
     HANDLE handle_;
 };
 #endif
@@ -51,7 +58,8 @@ void coarse_presentation_wait(std::chrono::time_point<Clock, Duration> deadline)
     if (use_native_timer) {
         thread_local PresentationTimer timer;
         const auto remaining = deadline - Clock::now() - std::chrono::microseconds(500);
-        if (timer.wait(std::chrono::duration_cast<std::chrono::nanoseconds>(remaining))) return;
+        if (timer.wait(std::chrono::duration_cast<std::chrono::nanoseconds>(remaining)))
+            return;
     }
 #endif
     // Android's old 2 ms tail wakes for many calibrated micro-sleeps/spins per
@@ -59,11 +67,12 @@ void coarse_presentation_wait(std::chrono::time_point<Clock, Duration> deadline)
     // that tail. No simulation clocks, images or user FPS settings change.
     const auto coarse_deadline = deadline - presentation_tail_guard(
 #if defined(__ANDROID__)
-        true
+                                                true
 #else
-        false
+                                                false
 #endif
-    );
-    if (Clock::now() < coarse_deadline) std::this_thread::sleep_until(coarse_deadline);
+                                            );
+    if (Clock::now() < coarse_deadline)
+        std::this_thread::sleep_until(coarse_deadline);
 }
-}
+} // namespace dkr::runtime

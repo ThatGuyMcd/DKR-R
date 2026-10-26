@@ -31,22 +31,18 @@ int main() {
         temporal[index] ^= static_cast<std::uint8_t>(index);
     }
     constexpr std::uint32_t keyframe_frame = 120U;
-    const auto delta = encode_authoritative_state_delta_wire(
-        temporal, keyframe, keyframe_frame);
+    const auto delta = encode_authoritative_state_delta_wire(temporal, keyframe, keyframe_frame);
     assert(!delta.empty());
     assert(delta.size() < temporal.size() / 8U);
     assert(authoritative_state_wire_is_delta(delta));
-    assert(decode_authoritative_state_delta_wire(
-        delta, keyframe, keyframe_frame, 8192U, decoded, error));
+    assert(decode_authoritative_state_delta_wire(delta, keyframe, keyframe_frame, 8192U, decoded, error));
     assert(decoded == temporal);
-    assert(!decode_authoritative_state_delta_wire(
-        delta, keyframe, keyframe_frame + 1U, 8192U, decoded, error));
+    assert(!decode_authoritative_state_delta_wire(delta, keyframe, keyframe_frame + 1U, 8192U, decoded, error));
     assert(!error.empty());
 
     auto corrupt_delta = delta;
     corrupt_delta.pop_back();
-    assert(!decode_authoritative_state_delta_wire(
-        corrupt_delta, keyframe, keyframe_frame, 8192U, decoded, error));
+    assert(!decode_authoritative_state_delta_wire(corrupt_delta, keyframe, keyframe_frame, 8192U, decoded, error));
     assert(!error.empty());
 
     auto corrupt = compact;

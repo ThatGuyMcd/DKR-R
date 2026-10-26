@@ -5,8 +5,7 @@
 int main() {
     using namespace dkr::runtime::controllers;
     DesiredAssignments desired{};
-    const std::vector<Device> devices{{10, "pad-a"}, {20, "pad-b"},
-                                      {30, "pad-c"}, {40, "pad-d"}};
+    const std::vector<Device> devices{{10, "pad-a"}, {20, "pad-b"}, {30, "pad-c"}, {40, "pad-d"}};
 
     populate_automatic_claims(desired, devices);
     assert((desired == DesiredAssignments{"pad-a", "pad-b", "pad-c", "pad-d"}));
@@ -19,14 +18,11 @@ int main() {
     assert((resolve(desired, devices) == ResolvedAssignments{30, 20, 10, 40}));
 
     // Disconnecting a pad leaves that port neutral without shifting players.
-    const std::vector<Device> disconnected{{10, "pad-a"}, {20, "pad-b"},
-                                           {40, "pad-d"}};
-    assert((resolve(desired, disconnected) ==
-            ResolvedAssignments{-1, 20, 10, 40}));
+    const std::vector<Device> disconnected{{10, "pad-a"}, {20, "pad-b"}, {40, "pad-d"}};
+    assert((resolve(desired, disconnected) == ResolvedAssignments{-1, 20, 10, 40}));
 
     // A reconnect reclaims its previous player regardless of enumeration order.
-    const std::vector<Device> reconnected{{40, "pad-d"}, {30, "pad-c"},
-                                          {10, "pad-a"}, {20, "pad-b"}};
+    const std::vector<Device> reconnected{{40, "pad-d"}, {30, "pad-c"}, {10, "pad-a"}, {20, "pad-b"}};
     assert((resolve(desired, reconnected) == ResolvedAssignments{30, 20, 10, 40}));
 
     assert(clear(desired, 2));

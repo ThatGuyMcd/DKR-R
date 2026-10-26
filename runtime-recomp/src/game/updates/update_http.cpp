@@ -23,8 +23,7 @@ struct HttpSink::Impl {
     bool opened = false;
     std::chrono::steady_clock::time_point deadline;
 };
-HttpSink::HttpSink(const HttpRequest &r, std::stop_token s, const Progress &p)
-    : impl(std::make_unique<Impl>()) {
+HttpSink::HttpSink(const HttpRequest& r, std::stop_token s, const Progress& p) : impl(std::make_unique<Impl>()) {
     impl->request = r;
     impl->stop = s;
     impl->progress = p;
@@ -41,7 +40,7 @@ bool HttpSink::header(std::string_view name, std::string_view value) {
         return false;
     }
     std::string key(name), v(value);
-    for (auto &c : key)
+    for (auto& c : key)
         c = char(std::tolower(static_cast<unsigned char>(c)));
     while (!v.empty() && (v.back() == '\r' || v.back() == '\n' || v.back() == ' '))
         v.pop_back();
@@ -68,8 +67,7 @@ bool HttpSink::write(std::span<const std::uint8_t> bytes) {
             if (response.status == 206) {
                 auto field = response.headers.find("content-range");
                 auto prefix = "bytes " + std::to_string(impl->request.offset) + "-";
-                if (!impl->request.offset || field == response.headers.end() ||
-                    !field->second.starts_with(prefix))
+                if (!impl->request.offset || field == response.headers.end() || !field->second.starts_with(prefix))
                     throw std::runtime_error("Server returned an unexpected update byte range.");
                 impl->base = impl->request.offset;
             }
@@ -78,37 +76,32 @@ bool HttpSink::write(std::span<const std::uint8_t> bytes) {
                 std::error_code ec;
                 auto status = std::filesystem::symlink_status(impl->request.file, ec);
                 if (status.type() != std::filesystem::file_type::not_found &&
-                    (ec || !std::filesystem::is_regular_file(status) ||
-                     std::filesystem::is_symlink(status) ||
+                    (ec || !std::filesystem::is_regular_file(status) || std::filesystem::is_symlink(status) ||
                      std::filesystem::hard_link_count(impl->request.file) != 1))
-                    throw std::runtime_error(
-                        "Update download destination is not a private ordinary file.");
+                    throw std::runtime_error("Update download destination is not a private ordinary file.");
                 if (impl->base && std::filesystem::file_size(impl->request.file) != impl->base)
                     throw std::runtime_error("Partial update changed before resuming.");
                 impl->output.open(impl->request.file,
-                                  std::ios::binary |
-                                      (impl->base ? std::ios::app : std::ios::trunc));
+                                  std::ios::binary | (impl->base ? std::ios::app : std::ios::trunc));
                 if (!impl->output)
                     throw std::runtime_error("Could not open update download destination.");
             }
             impl->opened = true;
         }
-        if (bytes.size() >
-            impl->request.limit - std::min(impl->request.limit, impl->base + impl->received))
+        if (bytes.size() > impl->request.limit - std::min(impl->request.limit, impl->base + impl->received))
             throw std::runtime_error("Update response exceeded its declared size limit.");
         if (impl->request.file.empty())
-            response.body.append(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            response.body.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
         else {
-            impl->output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            impl->output.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
             if (!impl->output)
-                throw std::runtime_error(
-                    "Update download could not be written; check free disk space.");
+                throw std::runtime_error("Update download could not be written; check free disk space.");
         }
         impl->received += bytes.size();
         if (impl->progress)
             impl->progress(impl->base + impl->received);
         return true;
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
         error = e.what();
         return false;
     }
@@ -147,18 +140,17 @@ std::wstring wide(std::string_view s) {
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, s.data(), int(s.size()), out.data(), n);
     return out;
 }
-HttpResponse single(const HttpRequest &r, std::stop_token stop, const Progress &progress) {
+HttpResponse single(const HttpRequest& r, std::stop_token stop, const Progress& progress) {
     auto url = wide(r.url);
     URL_COMPONENTS parts{};
     parts.dwStructSize = sizeof(parts);
     parts.dwHostNameLength = DWORD(-1);
     parts.dwUrlPathLength = DWORD(-1);
     parts.dwExtraInfoLength = DWORD(-1);
-    if (!WinHttpCrackUrl(url.c_str(), DWORD(url.size()), 0, &parts) ||
-        parts.nScheme != INTERNET_SCHEME_HTTPS)
+    if (!WinHttpCrackUrl(url.c_str(), DWORD(url.size()), 0, &parts) || parts.nScheme != INTERNET_SCHEME_HTTPS)
         throw std::runtime_error("Invalid HTTPS update URL.");
-    Handle session{WinHttpOpen(L"DKR-R-Updater/1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-                               WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0)};
+    Handle session{WinHttpOpen(L"DKR-R-Updater/1", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
+                               WINHTTP_NO_PROXY_BYPASS, 0)};
     if (!session.value)
         throw std::runtime_error("Could not initialize update networking.");
     WinHttpSetTimeouts(session, 4000, 4000, 4000, 4000);
@@ -168,46 +160,38 @@ HttpResponse single(const HttpRequest &r, std::stop_token stop, const Progress &
 #endif
     if (!WinHttpSetOption(session, WINHTTP_OPTION_SECURE_PROTOCOLS, &protocols, sizeof(protocols)))
         throw std::runtime_error("Could not require modern TLS for updates.");
-    std::wstring host(parts.lpszHostName, parts.dwHostNameLength),
-        path(parts.lpszUrlPath, parts.dwUrlPathLength);
+    std::wstring host(parts.lpszHostName, parts.dwHostNameLength), path(parts.lpszUrlPath, parts.dwUrlPathLength);
     if (parts.dwExtraInfoLength)
         path.append(parts.lpszExtraInfo, parts.dwExtraInfoLength);
     Handle connection{WinHttpConnect(session, host.c_str(), parts.nPort, 0)};
-    Handle request{connection.value
-                       ? WinHttpOpenRequest(connection, L"GET", path.c_str(), nullptr,
-                                            WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                            WINHTTP_FLAG_SECURE)
-                       : nullptr};
+    Handle request{connection.value ? WinHttpOpenRequest(connection, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                                         WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE)
+                                    : nullptr};
     if (!request.value)
         throw std::runtime_error("Could not open the update connection.");
     DWORD redirects = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
     WinHttpSetOption(request, WINHTTP_OPTION_REDIRECT_POLICY, &redirects, sizeof(redirects));
-    std::wstring headers =
-        L"Accept: application/vnd.github+json\r\nX-GitHub-Api-Version: 2022-11-28\r\n";
+    std::wstring headers = L"Accept: application/vnd.github+json\r\nX-GitHub-Api-Version: 2022-11-28\r\n";
     if (!r.etag.empty() && r.etag.find_first_of("\r\n") == r.etag.npos)
         headers += wide(std::string(r.offset ? "If-Range: " : "If-None-Match: ") + r.etag + "\r\n");
     if (r.offset)
         headers += wide("Range: bytes=" + std::to_string(r.offset) + "-\r\n");
     if (stop.stop_requested() ||
-        !WinHttpSendRequest(request, headers.c_str(), DWORD(headers.size()),
-                            WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpSendRequest(request, headers.c_str(), DWORD(headers.size()), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
         !WinHttpReceiveResponse(request, nullptr))
-        throw std::runtime_error(
-            "Could not contact GitHub securely. Check the connection and try again.");
+        throw std::runtime_error("Could not contact GitHub securely. Check the connection and try again.");
     HttpSink sink(r, stop, progress);
     DWORD size = sizeof(DWORD);
-    WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-                        WINHTTP_HEADER_NAME_BY_INDEX, &sink.response.status, &size,
-                        WINHTTP_NO_HEADER_INDEX);
+    WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX,
+                        &sink.response.status, &size, WINHTTP_NO_HEADER_INDEX);
     DWORD required = 0;
-    WinHttpQueryHeaders(request, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX,
-                        nullptr, &required, WINHTTP_NO_HEADER_INDEX);
+    WinHttpQueryHeaders(request, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX, nullptr, &required,
+                        WINHTTP_NO_HEADER_INDEX);
     if (required > 65536)
         throw std::runtime_error("Update response headers are too large.");
     std::wstring raw(required / sizeof(wchar_t), L'\0');
-    if (required &&
-        WinHttpQueryHeaders(request, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX,
-                            raw.data(), &required, WINHTTP_NO_HEADER_INDEX)) {
+    if (required && WinHttpQueryHeaders(request, WINHTTP_QUERY_RAW_HEADERS_CRLF, WINHTTP_HEADER_NAME_BY_INDEX,
+                                        raw.data(), &required, WINHTTP_NO_HEADER_INDEX)) {
         std::string ascii;
         for (auto c : raw)
             if (c)
@@ -228,8 +212,7 @@ HttpResponse single(const HttpRequest &r, std::stop_token stop, const Progress &
     DWORD read = 0;
     while (!sink.cancelled()) {
         if (!WinHttpReadData(request, buffer.data(), DWORD(buffer.size()), &read))
-            throw std::runtime_error(
-                "Update connection interrupted. The partial download can be resumed.");
+            throw std::runtime_error("Update connection interrupted. The partial download can be resumed.");
         if (!read)
             break;
         if (!sink.write(std::span(buffer.data(), read)))
@@ -239,28 +222,28 @@ HttpResponse single(const HttpRequest &r, std::stop_token stop, const Progress &
     return sink.response;
 }
 #else
-HttpResponse single(const HttpRequest &r, std::stop_token stop, const Progress &progress) {
+HttpResponse single(const HttpRequest& r, std::stop_token stop, const Progress& progress) {
     static const auto init = curl_global_init(CURL_GLOBAL_DEFAULT);
     if (init != CURLE_OK)
         throw std::runtime_error("Could not initialize update networking.");
-    auto *curl = curl_easy_init();
+    auto* curl = curl_easy_init();
     if (!curl)
         throw std::runtime_error("Could not open update networking.");
     struct Cleanup {
-        CURL *c;
-        curl_slist *h{};
+        CURL* c;
+        curl_slist* h{};
         ~Cleanup() {
             curl_slist_free_all(h);
             curl_easy_cleanup(c);
         }
     } cleanup{curl};
     HttpSink sink(r, stop, progress);
-    for (const auto &h : {std::string("Accept: application/vnd.github+json"),
-                          std::string("X-GitHub-Api-Version: 2022-11-28")})
+    for (const auto& h :
+         {std::string("Accept: application/vnd.github+json"), std::string("X-GitHub-Api-Version: 2022-11-28")})
         cleanup.h = curl_slist_append(cleanup.h, h.c_str());
     if (!r.etag.empty() && r.etag.find_first_of("\r\n") == r.etag.npos)
-        cleanup.h = curl_slist_append(
-            cleanup.h, (std::string(r.offset ? "If-Range: " : "If-None-Match: ") + r.etag).c_str());
+        cleanup.h =
+            curl_slist_append(cleanup.h, (std::string(r.offset ? "If-Range: " : "If-None-Match: ") + r.etag).c_str());
     std::string range;
     if (r.offset) {
         range = std::to_string(r.offset) + "-";
@@ -282,8 +265,8 @@ HttpResponse single(const HttpRequest &r, std::stop_token stop, const Progress &
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &sink);
     curl_easy_setopt(
         curl, CURLOPT_HEADERFUNCTION,
-        +[](char *bytes, std::size_t size, std::size_t count, void *context) -> std::size_t {
-            auto &s = *static_cast<HttpSink *>(context);
+        +[](char* bytes, std::size_t size, std::size_t count, void* context) -> std::size_t {
+            auto& s = *static_cast<HttpSink*>(context);
             std::string_view line(bytes, size * count);
             if (line.starts_with("HTTP/")) {
                 auto at = line.find(' ');
@@ -300,37 +283,34 @@ HttpResponse single(const HttpRequest &r, std::stop_token stop, const Progress &
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &sink);
     curl_easy_setopt(
         curl, CURLOPT_WRITEFUNCTION,
-        +[](char *bytes, std::size_t size, std::size_t count, void *context) -> std::size_t {
+        +[](char* bytes, std::size_t size, std::size_t count, void* context) -> std::size_t {
             auto n = size * count;
-            return static_cast<HttpSink *>(context)->write(
-                       std::span(reinterpret_cast<const std::uint8_t *>(bytes), n))
+            return static_cast<HttpSink*>(context)->write(std::span(reinterpret_cast<const std::uint8_t*>(bytes), n))
                        ? n
                        : 0;
         });
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &sink);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(
-        curl, CURLOPT_XFERINFOFUNCTION,
-        +[](void *context, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
-            return static_cast<HttpSink *>(context)->cancelled() ? 1 : 0;
+        curl, CURLOPT_XFERINFOFUNCTION, +[](void* context, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+            return static_cast<HttpSink*>(context)->cancelled() ? 1 : 0;
         });
     auto code = curl_easy_perform(curl);
     sink.finish();
     if (code != CURLE_OK)
-        throw std::runtime_error(
-            "Update connection interrupted or TLS verification failed. Nothing was installed.");
+        throw std::runtime_error("Update connection interrupted or TLS verification failed. Nothing was installed.");
     return sink.response;
 }
 #endif
 } // namespace
-HttpResponse https_get(const HttpRequest &request, std::stop_token stop, const Progress &progress) {
+HttpResponse https_get(const HttpRequest& request, std::stop_token stop, const Progress& progress) {
     HttpRequest current = request;
     for (unsigned hop = 0; hop < 6; ++hop) {
         if (!allowed_https_url(current.url))
             throw std::runtime_error("Update URL is not an approved HTTPS release endpoint.");
         auto result = single(current, stop, progress);
-        if (result.status != 301 && result.status != 302 && result.status != 303 &&
-            result.status != 307 && result.status != 308)
+        if (result.status != 301 && result.status != 302 && result.status != 303 && result.status != 307 &&
+            result.status != 308)
             return result;
         auto location = result.headers.find("location");
         if (location == result.headers.end())

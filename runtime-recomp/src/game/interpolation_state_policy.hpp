@@ -29,8 +29,7 @@ inline constexpr std::uint8_t kAspectOriginalScopeMode = 8U;
 inline constexpr std::uint8_t kLevelSegmentScopeMode = 9U;
 
 constexpr bool is_aspect_policy_scope(std::uint8_t mode) {
-    return mode == kAspectAdjustScopeMode ||
-           mode == kAspectOriginalScopeMode;
+    return mode == kAspectAdjustScopeMode || mode == kAspectOriginalScopeMode;
 }
 
 // A projected shadow owns world-space geometry and must not inherit the
@@ -42,9 +41,7 @@ constexpr bool is_aspect_policy_scope(std::uint8_t mode) {
 // matrix-relative. Static segment vertices do not deform; the selected world
 // matrix supplies the interpolated camera transform.
 constexpr bool scope_identity_uses_selected_matrix(std::uint8_t mode) {
-    return mode == kVehiclePartScopeMode ||
-           mode == kBillboardScopeMode ||
-           mode == kSurfaceScopeMode ||
+    return mode == kVehiclePartScopeMode || mode == kBillboardScopeMode || mode == kSurfaceScopeMode ||
            mode == kLevelSegmentScopeMode;
 }
 
@@ -53,8 +50,7 @@ constexpr bool scope_identity_uses_selected_matrix(std::uint8_t mode) {
 // tiles and can spend tens of milliseconds searching each authored frame.
 // Geometry and UV interpolation remain enabled; only tile-state interpolation
 // falls back to the authored cadence while the title demo owns the frontend.
-constexpr bool effective_tile_interpolation(bool requested,
-                                            std::uint32_t current_menu_id) {
+constexpr bool effective_tile_interpolation(bool requested, std::uint32_t current_menu_id) {
     return requested && current_menu_id != kTitleMenuId;
 }
 
@@ -75,7 +71,7 @@ struct EndScopeResult {
 };
 
 class GroupState {
-public:
+  public:
     constexpr void reset() {
         matrix_groups_ = {};
         scopes_ = {};
@@ -85,16 +81,13 @@ public:
         rejected_scope_depth_ = 0U;
     }
 
-    constexpr void load_matrix(std::size_t slot, std::uint32_t identity,
-                               bool interpolate_vertices = false,
-                               bool interpolate_texcoords = false,
-                               bool interpolate_tiles = false,
-                               bool procedural_water = false,
-                               std::uint8_t water_scroll_tag = 0U) {
+    constexpr void load_matrix(std::size_t slot, std::uint32_t identity, bool interpolate_vertices = false,
+                               bool interpolate_texcoords = false, bool interpolate_tiles = false,
+                               bool procedural_water = false, std::uint8_t water_scroll_tag = 0U) {
         selected_matrix_ = clamp_slot(slot);
-        matrix_groups_[selected_matrix_] = Group{
-            identity, interpolate_vertices, interpolate_texcoords,
-            interpolate_tiles, 0U, procedural_water, water_scroll_tag};
+        matrix_groups_[selected_matrix_] =
+            Group{identity, interpolate_vertices, interpolate_texcoords, interpolate_tiles,
+                  0U,       procedural_water,     water_scroll_tag};
     }
 
     constexpr void select_matrix(std::size_t slot) {
@@ -109,19 +102,14 @@ public:
         return matrix_groups_[clamp_slot(slot)];
     }
 
-    [[nodiscard]] constexpr bool begin_scope(std::uint8_t mode,
-                                             std::uint32_t identity,
-                                             bool interpolate_vertices,
-                                             bool interpolate_texcoords = false,
-                                             bool interpolate_tiles = false) {
+    [[nodiscard]] constexpr bool begin_scope(std::uint8_t mode, std::uint32_t identity, bool interpolate_vertices,
+                                             bool interpolate_texcoords = false, bool interpolate_tiles = false) {
         if (rejected_scope_depth_ != 0U || scope_depth_ >= scopes_.size()) {
             ++rejected_scope_begins_;
             ++rejected_scope_depth_;
             return false;
         }
-        scopes_[scope_depth_++] = Group{
-            identity, interpolate_vertices, interpolate_texcoords,
-            interpolate_tiles, mode};
+        scopes_[scope_depth_++] = Group{identity, interpolate_vertices, interpolate_texcoords, interpolate_tiles, mode};
         return true;
     }
 
@@ -141,8 +129,7 @@ public:
     }
 
     [[nodiscard]] constexpr Group active_group() const {
-        if (scope_depth_ == 0U ||
-            is_aspect_policy_scope(scopes_[scope_depth_ - 1U].mode)) {
+        if (scope_depth_ == 0U || is_aspect_policy_scope(scopes_[scope_depth_ - 1U].mode)) {
             // Aspect scopes carry only RT64 projection policy. They must not
             // replace the selected matrix's interpolation identity, including
             // when a new world matrix is loaded after the scope begins.
@@ -151,10 +138,13 @@ public:
             // not grant the water fast path to an enclosing shadow, scenery
             // or vehicle scope. Only provenance changes; identity policy does
             // not. Rejected scopes also fall back to the original draw path.
-            if (rejected_scope_depth_ != 0U) group.procedural_water = false;
+            if (rejected_scope_depth_ != 0U)
+                group.procedural_water = false;
             for (std::size_t i = 0; group.procedural_water && i < scope_depth_; ++i)
-                if (!is_aspect_policy_scope(scopes_[i].mode)) group.procedural_water = false;
-            if (!group.procedural_water) group.water_scroll_tag = 0U;
+                if (!is_aspect_policy_scope(scopes_[i].mode))
+                    group.procedural_water = false;
+            if (!group.procedural_water)
+                group.water_scroll_tag = 0U;
             return group;
         }
         return scopes_[scope_depth_ - 1U];
@@ -185,7 +175,7 @@ public:
         return false;
     }
 
-private:
+  private:
     [[nodiscard]] static constexpr std::size_t clamp_slot(std::size_t slot) {
         return slot < kMatrixSlotCount ? slot : kMatrixSlotCount - 1U;
     }

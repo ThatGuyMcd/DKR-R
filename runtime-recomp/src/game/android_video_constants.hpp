@@ -12,4 +12,4 @@ struct VideoConstants {
 };
 static_assert(sizeof(VideoConstants) == 24);
 static_assert(offsetof(VideoConstants, rotation) == 20);
-}
+} // namespace dkr::runtime::android_rotation

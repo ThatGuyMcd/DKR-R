@@ -17,14 +17,13 @@ struct LanLobby {
     std::string invite;
     Revision revision = Revision::UsV77;
     std::uint8_t players = 0U;
-    std::uint8_t maximum_players =
-        static_cast<std::uint8_t>(kSupportedOnlinePlayers);
+    std::uint8_t maximum_players = static_cast<std::uint8_t>(kSupportedOnlinePlayers);
     bool in_progress = false;
     std::chrono::steady_clock::time_point last_seen{};
 };
 
 class LanDiscovery final {
-public:
+  public:
     LanDiscovery();
     ~LanDiscovery();
     LanDiscovery(const LanDiscovery&) = delete;
@@ -38,9 +37,11 @@ public:
     void set_probe_addresses(std::vector<std::string> addresses);
     void request_refresh();
     void pump();
-    const std::vector<LanLobby>& lobbies() const { return lobbies_; }
+    const std::vector<LanLobby>& lobbies() const {
+        return lobbies_;
+    }
 
-private:
+  private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
     std::vector<LanLobby> lobbies_;

@@ -28,11 +28,9 @@ inline std::uint64_t consume_delta(std::uint64_t completed, Snapshot& snapshot) 
 // select an uninitialised Present whose framebuffer storage has no backing
 // bytes. Only replay an image after the queue has proved that one was actually
 // presented.
-inline bool can_repeat_last_present(std::uint64_t vi_callbacks,
-                                    bool queue_ready,
+inline bool can_repeat_last_present(std::uint64_t vi_callbacks, bool queue_ready,
                                     std::uint64_t completed_presentations) {
-    return vi_callbacks != 0U && queue_ready &&
-           completed_presentations != 0U;
+    return vi_callbacks != 0U && queue_ready && completed_presentations != 0U;
 }
 
 } // namespace dkr::runtime::presentation_counter

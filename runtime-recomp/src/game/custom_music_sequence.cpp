@@ -78,7 +78,7 @@ struct Reader {
         }
         const std::uint8_t following = raw(position++);
         if (following == kBlock) {
-            return kBlock;  // FE FE is a literal FE.
+            return kBlock; // FE FE is a literal FE.
         }
         const std::size_t distance = (std::size_t{following} << 8) | raw(position);
         const std::size_t length = raw(position + 1);
@@ -175,15 +175,14 @@ Event read_event(Reader& reader, std::uint8_t& last_status) {
             event.kind = Kind::LoopEnd;
             event.loop_count = reader.data[at];
             event.loop_current = reader.data[at + 1U];
-            event.loop_target = static_cast<std::int64_t>(at + 6U) -
-                                static_cast<std::int64_t>(be32(reader.data, at + 2U));
+            event.loop_target =
+                static_cast<std::int64_t>(at + 6U) - static_cast<std::int64_t>(be32(reader.data, at + 2U));
             reader.position = at + 6U;
             last_status = 0;
             return event;
         }
         // Release builds leave event->type uninitialised here.
-        reader.fail_track("meta-unknown", "has meta event " + hex2(kind) +
-                                              ", which DKR's player does not understand.");
+        reader.fail_track("meta-unknown", "has meta event " + hex2(kind) + ", which DKR's player does not understand.");
     }
     if ((status & 0x80U) != 0U) {
         if (status >= 0xF0U) {
@@ -196,9 +195,8 @@ Event read_event(Reader& reader, std::uint8_t& last_status) {
         last_status = status;
     } else {
         if (last_status == 0U) {
-            reader.fail_track("running-status",
-                              "uses running status with no status before it (after a meta "
-                              "event or at a loop start every event must carry its own).");
+            reader.fail_track("running-status", "uses running status with no status before it (after a meta "
+                                                "event or at a loop start every event must carry its own).");
         }
         event.status = last_status;
         event.byte1 = status;
@@ -211,8 +209,7 @@ Event read_event(Reader& reader, std::uint8_t& last_status) {
         }
     }
     if (event.byte1 > 0x7FU || event.byte2 > 0x7FU) {
-        reader.fail_track("data-byte", "has a data byte above 0x7F in a " + hex2(event.status) +
-                                           " message.");
+        reader.fail_track("data-byte", "has a data byte above 0x7F in a " + hex2(event.status) + " message.");
     }
     return event;
 }
@@ -255,17 +252,15 @@ TrackScan scan_track(std::span<const std::uint8_t> data, std::size_t track, std:
         if (event.kind == Kind::LoopEnd) {
             loop_ends.emplace_back(tick, event);
             if (event.loop_current == kInfinite) {
-                break;  // never passed: what follows is unreachable
+                break; // never passed: what follows is unreachable
             }
         }
     }
     for (const auto& [end_tick, event] : loop_ends) {
-        const auto found = event.loop_target < 0
-                               ? scan.boundaries.end()
-                               : scan.boundaries.find(static_cast<std::size_t>(event.loop_target));
+        const auto found = event.loop_target < 0 ? scan.boundaries.end()
+                                                 : scan.boundaries.find(static_cast<std::size_t>(event.loop_target));
         if (found == scan.boundaries.end()) {
-            reader.fail_track("loop-target",
-                              "loops back to a byte that is not the start of an event.");
+            reader.fail_track("loop-target", "loops back to a byte that is not the start of an event.");
         }
         if (found->second >= end_tick) {
             // A loop over no ticks would replay forever within one frame.
@@ -284,12 +279,11 @@ struct TrackState {
     bool done = false;
 };
 
-void check_midi(const Event& event, std::uint64_t tick, std::size_t track,
-                SequenceReport& report, const std::array<bool, 128>* programs, bool native_legacy_notes) {
+void check_midi(const Event& event, std::uint64_t tick, std::size_t track, SequenceReport& report,
+                const std::array<bool, 128>* programs, bool native_legacy_notes) {
     const std::uint8_t kind = event.status & 0xF0U;
     const unsigned channel = event.status & 0x0FU;
-    const std::string where = "Track " + std::to_string(track + 1) + ", tick " +
-                              std::to_string(tick);
+    const std::string where = "Track " + std::to_string(track + 1) + ", tick " + std::to_string(tick);
     if (kind == kNoteOn) {
         if (event.byte2 == 0U && !native_legacy_notes) {
             fail("velocity-zero", where + ": a note-on with velocity zero; compact sequences "
@@ -306,34 +300,31 @@ void check_midi(const Event& event, std::uint64_t tick, std::size_t track,
     } else if (kind == kProgram) {
         // __setInstChanState dereferences the slot: a null one crashes.
         if (programs != nullptr && !(*programs)[event.byte1]) {
-            fail("program-missing", where + ": program " + std::to_string(event.byte1) +
-                                        " does not exist in DKR's instrument bank.");
+            fail("program-missing",
+                 where + ": program " + std::to_string(event.byte1) + " does not exist in DKR's instrument bank.");
         }
     } else if (kind == kControl) {
         if ((event.byte1 == 0x6AU || event.byte1 == 0x6CU) && event.byte2 > 15U) {
-            fail("channel-switch", where + ": a channel switch names channel " +
-                                       std::to_string(event.byte2 + 1U) + ".");
+            fail("channel-switch",
+                 where + ": a channel switch names channel " + std::to_string(event.byte2 + 1U) + ".");
         }
     }
 }
 
-SequenceReport check(std::span<const std::uint8_t> data, std::uint32_t capacity,
-                     const std::array<bool, 128>* programs, bool native_legacy_notes) {
+SequenceReport check(std::span<const std::uint8_t> data, std::uint32_t capacity, const std::array<bool, 128>* programs,
+                     bool native_legacy_notes) {
     SequenceReport report;
     report.size = static_cast<std::uint32_t>(std::min<std::size_t>(data.size(), UINT32_MAX));
     if (data.size() < kHeaderBytes) {
-        fail("too-short", "Too short to be a DKR sequence (" + std::to_string(data.size()) +
-                              " bytes).");
+        fail("too-short", "Too short to be a DKR sequence (" + std::to_string(data.size()) + " bytes).");
     }
     if (data.size() > capacity) {
-        fail("too-large", "The sequence is " + std::to_string(data.size()) +
-                              " bytes; DKR's music buffer holds " + std::to_string(capacity) +
-                              ".");
+        fail("too-large", "The sequence is " + std::to_string(data.size()) + " bytes; DKR's music buffer holds " +
+                              std::to_string(capacity) + ".");
     }
     report.division = be32(data, 64);
     if (report.division == 0U || report.division > 0x7FFFU) {
-        fail("division", "The time division (" + std::to_string(report.division) +
-                             " ticks per beat) is not usable.");
+        fail("division", "The time division (" + std::to_string(report.division) + " ticks per beat) is not usable.");
     }
     std::array<std::size_t, kTracks> offsets{};
     for (std::size_t track = 0; track < kTracks; ++track) {
@@ -347,8 +338,7 @@ SequenceReport check(std::span<const std::uint8_t> data, std::uint32_t capacity,
     }
     for (std::size_t track = 0; track < kTracks; ++track) {
         if (offsets[track] != 0U && (offsets[track] < kHeaderBytes || offsets[track] >= data.size())) {
-            fail("track-offset", "Track " + std::to_string(track + 1) +
-                                     " starts outside the sequence.");
+            fail("track-offset", "Track " + std::to_string(track + 1) + " starts outside the sequence.");
         }
     }
 
@@ -400,8 +390,7 @@ SequenceReport check(std::span<const std::uint8_t> data, std::uint32_t capacity,
         same_tick = state.next_tick == tick ? same_tick + 1U : 0U;
         tick = state.next_tick;
         if (same_tick > kMaxEventsPerTick) {
-            fail("zero-time", "Track " + std::to_string(next + 1) +
-                                  " produces events forever without time passing.");
+            fail("zero-time", "Track " + std::to_string(next + 1) + " produces events forever without time passing.");
         }
         if (++events > kMaxEvents) {
             fail("too-many-events", "The song has more events than the validator will follow.");

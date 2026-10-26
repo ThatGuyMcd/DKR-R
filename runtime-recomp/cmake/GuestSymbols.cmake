@@ -13,12 +13,19 @@ function(dkr_guest_symbols target)
     file(GLOB requests CONFIGURE_DEPENDS "${DKRPORT_ROOT}/runtime-recomp/symbols/*.toml")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${script}" ${requests})
     foreach(revision IN ITEMS 77 80)
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-            "${DKRPORT_ROOT}/modding/reference-us-v${revision}/data.toml"
-            "${DKRPORT_ROOT}/extern/dkr-decomp/ver/symbols/symbol_addrs.us.v${revision}.txt")
+        set_property(
+            DIRECTORY
+            APPEND
+            PROPERTY
+                CMAKE_CONFIGURE_DEPENDS
+                    "${DKRPORT_ROOT}/modding/reference-us-v${revision}/data.toml"
+                    "${DKRPORT_ROOT}/extern/dkr-decomp/ver/symbols/symbol_addrs.us.v${revision}.txt"
+        )
     endforeach()
-    execute_process(COMMAND "${Python3_EXECUTABLE}" "${script}" --out "${out}" ${requests}
-        RESULT_VARIABLE status)
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}" "${script}" --out "${out}" ${requests}
+        RESULT_VARIABLE status
+    )
     if(NOT status EQUAL 0)
         message(FATAL_ERROR "Guest symbol headers could not be generated; see above")
     endif()

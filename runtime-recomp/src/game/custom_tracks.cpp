@@ -50,11 +50,10 @@ std::size_t section_slot(Section section) {
 // pointed at the object map its own track supplied.
 struct AddedEntry {
     std::string track_id;
-    dkr::runtime::custom_tracks::MapSlot slot =
-        dkr::runtime::custom_tracks::MapSlot::None;
-    std::uint32_t offset = 0;   // absolute section offset
+    dkr::runtime::custom_tracks::MapSlot slot = dkr::runtime::custom_tracks::MapSlot::None;
+    std::uint32_t offset = 0; // absolute section offset
     std::uint32_t size = 0;
-    std::uint32_t index = 0;    // index assigned within this section
+    std::uint32_t index = 0; // index assigned within this section
     // Position among the entries THIS track contributed to THIS section, which
     // is manifest order. A track adds one header and one model, so for those it
     // is always zero; for textures it is the whole of how one is told from
@@ -65,7 +64,7 @@ struct AddedEntry {
 struct SectionState {
     bool built = false;
     std::uint32_t end_offset = 0;
-    std::vector<std::uint8_t> blob;      // enabled payloads, concatenated
+    std::vector<std::uint8_t> blob; // enabled payloads, concatenated
     std::uint32_t retail_count = 0;
     std::vector<AddedEntry> added;
 };
@@ -163,25 +162,22 @@ constexpr std::uint8_t kContainerTag = 0x09;
 constexpr std::int32_t kMaxModelTextures = 255;
 
 std::uint32_t read_be32(const std::uint8_t* bytes) {
-    return (static_cast<std::uint32_t>(bytes[0]) << 24) |
-           (static_cast<std::uint32_t>(bytes[1]) << 16) |
-           (static_cast<std::uint32_t>(bytes[2]) << 8) |
-           static_cast<std::uint32_t>(bytes[3]);
+    return (static_cast<std::uint32_t>(bytes[0]) << 24) | (static_cast<std::uint32_t>(bytes[1]) << 16) |
+           (static_cast<std::uint32_t>(bytes[2]) << 8) | static_cast<std::uint32_t>(bytes[3]);
 }
 
 void write_be32(std::uint8_t* bytes, std::uint32_t value) {
     for (std::size_t byte = 0; byte < 4U; ++byte) {
-        bytes[byte] =
-            static_cast<std::uint8_t>((value >> (24U - byte * 8U)) & 0xFFU);
+        bytes[byte] = static_cast<std::uint8_t>((value >> (24U - byte * 8U)) & 0xFFU);
     }
 }
 
 // Declared here, defined after the section state it reads.
-std::int32_t own_entry_index(Section section, const std::string& track_id,
-    std::uint32_t ordinal, const std::array<SectionState,kSectionCount>& sections=g_sections);
+std::int32_t own_entry_index(Section section, const std::string& track_id, std::uint32_t ordinal,
+                             const std::array<SectionState, kSectionCount>& sections = g_sections);
 
-std::int32_t own_texture_index(const std::string& track_id,
-    std::uint32_t ordinal, const std::array<SectionState,kSectionCount>& sections) {
+std::int32_t own_texture_index(const std::string& track_id, std::uint32_t ordinal,
+                               const std::array<SectionState, kSectionCount>& sections) {
     return own_entry_index(Section::Textures3D, track_id, ordinal, sections);
 }
 
@@ -191,14 +187,9 @@ std::uint32_t stored_prefix(const std::uint8_t* bytes, std::size_t size) {
     if (size < kStoredPrefixAt || bytes[4] != kContainerTag) {
         return 0;
     }
-    const std::uint32_t length =
-        static_cast<std::uint32_t>(bytes[6]) |
-        (static_cast<std::uint32_t>(bytes[7]) << 8);
-    const std::uint32_t complement =
-        static_cast<std::uint32_t>(bytes[8]) |
-        (static_cast<std::uint32_t>(bytes[9]) << 8);
-    if ((bytes[5] & 0x07U) != 0x00U || complement != ((~length) & 0xFFFFU) ||
-        kStoredPrefixAt + length > size) {
+    const std::uint32_t length = static_cast<std::uint32_t>(bytes[6]) | (static_cast<std::uint32_t>(bytes[7]) << 8);
+    const std::uint32_t complement = static_cast<std::uint32_t>(bytes[8]) | (static_cast<std::uint32_t>(bytes[9]) << 8);
+    if ((bytes[5] & 0x07U) != 0x00U || complement != ((~length) & 0xFFFFU) || kStoredPrefixAt + length > size) {
         return 0;
     }
     return length;
@@ -211,10 +202,9 @@ std::uint32_t stored_prefix(const std::uint8_t* bytes, std::size_t size) {
 // index it range-checks and then uses anyway - textures_sprites.c sets `id = 0`
 // on a failed check but still indexes with the unclamped value. Texture 0 is
 // wrong and visible, which is the better of the two.
-void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
-    const std::string& track_id, const std::array<SectionState,kSectionCount>& sections) {
-    if (size < kStoredPrefixAt + kLevelModelTextureCount + 2U ||
-        bytes[4] != kContainerTag) {
+void resolve_model_textures(std::uint8_t* bytes, std::size_t size, const std::string& track_id,
+                            const std::array<SectionState, kSectionCount>& sections) {
+    if (size < kStoredPrefixAt + kLevelModelTextureCount + 2U || bytes[4] != kContainerTag) {
         return; // Not a container this can read.
     }
 
@@ -222,21 +212,16 @@ void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
     // below mean nothing. A package from an older exporter compresses from the
     // first byte; that is a "leave it alone", because such a package predates
     // custom textures and has none to resolve.
-    const std::uint32_t length =
-        static_cast<std::uint32_t>(bytes[6]) |
-        (static_cast<std::uint32_t>(bytes[7]) << 8);
-    const std::uint32_t complement =
-        static_cast<std::uint32_t>(bytes[8]) |
-        (static_cast<std::uint32_t>(bytes[9]) << 8);
+    const std::uint32_t length = static_cast<std::uint32_t>(bytes[6]) | (static_cast<std::uint32_t>(bytes[7]) << 8);
+    const std::uint32_t complement = static_cast<std::uint32_t>(bytes[8]) | (static_cast<std::uint32_t>(bytes[9]) << 8);
     if ((bytes[5] & 0x07U) != 0x00U || complement != ((~length) & 0xFFFFU)) {
         return;
     }
 
     const std::uint8_t* model = bytes + kStoredPrefixAt;
     const std::uint32_t table = read_be32(model + kLevelModelTexturesPointer);
-    const auto count = static_cast<std::int16_t>(
-        (static_cast<std::uint16_t>(model[kLevelModelTextureCount]) << 8) |
-        model[kLevelModelTextureCount + 1U]);
+    const auto count = static_cast<std::int16_t>((static_cast<std::uint16_t>(model[kLevelModelTextureCount]) << 8) |
+                                                 model[kLevelModelTextureCount + 1U]);
     if (count <= 0 || count > kMaxModelTextures) {
         return;
     }
@@ -244,9 +229,7 @@ void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
     // The table has to lie inside the stored prefix. Past it the bytes are
     // Huffman-coded, and a write there would corrupt the stream rather than
     // change an id.
-    const std::uint64_t span = static_cast<std::uint64_t>(table) +
-                               static_cast<std::uint64_t>(count) *
-                                   kTextureInfoSize;
+    const std::uint64_t span = static_cast<std::uint64_t>(table) + static_cast<std::uint64_t>(count) * kTextureInfoSize;
     if (span > length || kStoredPrefixAt + span > size) {
         std::fprintf(stderr,
                      "[custom-tracks] %s puts its %d model textures at +%u, "
@@ -258,16 +241,14 @@ void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
     int resolved = 0;
     int lost = 0;
     for (std::int16_t entry = 0; entry < count; ++entry) {
-        std::uint8_t* at = bytes + kStoredPrefixAt + table +
-                           static_cast<std::size_t>(entry) * kTextureInfoSize;
+        std::uint8_t* at = bytes + kStoredPrefixAt + table + static_cast<std::size_t>(entry) * kTextureInfoSize;
         const auto identifier = static_cast<std::int32_t>(read_be32(at));
         if (identifier < dkr::runtime::custom_tracks::kCustomTextureIdBase ||
             identifier >= dkr::runtime::custom_tracks::kCustomTextureIdBase +
                               dkr::runtime::custom_tracks::kCustomTextureIdCount) {
             continue; // A retail texture; the author meant exactly that one.
         }
-        const auto ordinal = static_cast<std::uint32_t>(
-            identifier - dkr::runtime::custom_tracks::kCustomTextureIdBase);
+        const auto ordinal = static_cast<std::uint32_t>(identifier - dkr::runtime::custom_tracks::kCustomTextureIdBase);
         const std::int32_t index = own_texture_index(track_id, ordinal, sections);
         if (index < 0) {
             write_be32(at, 0U);
@@ -300,24 +281,21 @@ void resolve_model_textures(std::uint8_t* bytes, std::size_t size,
 // sprite 0 rather than an index load_sprite_info refuses, and the header that
 // names this model is served with its "no minimap" bit set (minimap_hidden),
 // so the HUD draws no minimap rather than a stray one.
-void resolve_model_minimap(std::uint8_t* bytes, std::size_t size,
-    const std::string& track_id, const std::array<SectionState,kSectionCount>& sections) {
+void resolve_model_minimap(std::uint8_t* bytes, std::size_t size, const std::string& track_id,
+                           const std::array<SectionState, kSectionCount>& sections) {
     const std::uint32_t length = stored_prefix(bytes, size);
     if (length < dkr::runtime::custom_tracks::kModelMinimapSprite + 4U) {
         return;
     }
-    std::uint8_t* at = bytes + kStoredPrefixAt +
-                       dkr::runtime::custom_tracks::kModelMinimapSprite;
+    std::uint8_t* at = bytes + kStoredPrefixAt + dkr::runtime::custom_tracks::kModelMinimapSprite;
     const auto identifier = static_cast<std::int32_t>(read_be32(at));
     if (identifier < dkr::runtime::custom_tracks::kCustomSpriteIdBase ||
-        identifier >= dkr::runtime::custom_tracks::kCustomSpriteIdBase +
-                          dkr::runtime::custom_tracks::kCustomSpriteIdCount) {
+        identifier >=
+            dkr::runtime::custom_tracks::kCustomSpriteIdBase + dkr::runtime::custom_tracks::kCustomSpriteIdCount) {
         return; // A retail sprite: the track kept the minimap it had.
     }
-    const auto ordinal = static_cast<std::uint32_t>(
-        identifier - dkr::runtime::custom_tracks::kCustomSpriteIdBase);
-    const std::int32_t index =
-        own_entry_index(Section::Sprites, track_id, ordinal, sections);
+    const auto ordinal = static_cast<std::uint32_t>(identifier - dkr::runtime::custom_tracks::kCustomSpriteIdBase);
+    const std::int32_t index = own_entry_index(Section::Sprites, track_id, ordinal, sections);
     if (index < 0) {
         write_be32(at, 0U);
         std::fprintf(stderr,
@@ -327,36 +305,33 @@ void resolve_model_minimap(std::uint8_t* bytes, std::size_t size,
         return;
     }
     write_be32(at, static_cast<std::uint32_t>(index));
-    std::fprintf(stderr, "[custom-tracks] %s: minimap sprite resolved to %d\n",
-                 track_id.c_str(), index);
+    std::fprintf(stderr, "[custom-tracks] %s: minimap sprite resolved to %d\n", track_id.c_str(), index);
 }
 
 // Point a sprite at the 2D textures its own track shipped, in place. The
 // sprite table is published after the 2D texture table (tex_init_textures
 // loads them in that order), so the texture's index is known here.
-void resolve_sprite_texture(std::uint8_t* bytes, std::size_t size,
-    const std::string& track_id, const std::array<SectionState,kSectionCount>& sections) {
+void resolve_sprite_texture(std::uint8_t* bytes, std::size_t size, const std::string& track_id,
+                            const std::array<SectionState, kSectionCount>& sections) {
     if (size < 2U) {
         return;
     }
-    const auto identifier = static_cast<std::int16_t>(
-        (static_cast<std::uint16_t>(bytes[0]) << 8) | bytes[1]);
+    const auto identifier = static_cast<std::int16_t>((static_cast<std::uint16_t>(bytes[0]) << 8) | bytes[1]);
     if (identifier < dkr::runtime::custom_tracks::kCustomTexture2DIdBase ||
         identifier >= dkr::runtime::custom_tracks::kCustomTexture2DIdBase +
                           dkr::runtime::custom_tracks::kCustomTexture2DIdCount) {
         return; // A retail texture; the author meant exactly that one.
     }
-    const auto ordinal = static_cast<std::uint32_t>(
-        identifier - dkr::runtime::custom_tracks::kCustomTexture2DIdBase);
-    const std::int32_t index =
-        own_entry_index(Section::Textures2D, track_id, ordinal, sections);
+    const auto ordinal = static_cast<std::uint32_t>(identifier - dkr::runtime::custom_tracks::kCustomTexture2DIdBase);
+    const std::int32_t index = own_entry_index(Section::Textures2D, track_id, ordinal, sections);
     const std::uint32_t value = index < 0 ? 0U : static_cast<std::uint32_t>(index);
     bytes[0] = static_cast<std::uint8_t>((value >> 8) & 0xFFU);
     bytes[1] = static_cast<std::uint8_t>(value & 0xFFU);
     if (index < 0) {
         std::fprintf(stderr,
                      "[custom-tracks] %s: its minimap sprite names a 2D texture "
-                     "that is not published\n", track_id.c_str());
+                     "that is not published\n",
+                     track_id.c_str());
     }
 }
 
@@ -374,8 +349,8 @@ const Track* track_owning(Section section, const Entry* entry, const std::vector
 // The index a track's `ordinal`-th own entry in `section` received in the
 // published table, or -1. Assumes g_mutex is held, which it is: every caller
 // runs inside build_extended_table or takes the lock itself.
-std::int32_t own_entry_index(Section section, const std::string& track_id,
-    std::uint32_t ordinal, const std::array<SectionState,kSectionCount>& sections) {
+std::int32_t own_entry_index(Section section, const std::string& track_id, std::uint32_t ordinal,
+                             const std::array<SectionState, kSectionCount>& sections) {
     const SectionState& table = sections[section_slot(section)];
     if (!table.built || track_id.empty()) {
         // The texture and sprite tables are published once, at boot. Not
@@ -395,11 +370,10 @@ std::int32_t own_entry_index(Section section, const std::string& track_id,
 
 namespace dkr::runtime::custom_tracks {
 
-
 // Defined below; all assume g_mutex is already held.
 void scan_locked(const std::filesystem::path& directory);
-void save_state_locked();   // writes armed track + auto boot to disk
-void load_state_locked();   // reads them back, called from scan_locked
+void save_state_locked(); // writes armed track + auto boot to disk
+void load_state_locked(); // reads them back, called from scan_locked
 
 std::vector<Track> tracks() {
     std::scoped_lock lock(g_mutex);
@@ -408,9 +382,8 @@ std::vector<Track> tracks() {
 
 std::size_t enabled_count() {
     std::scoped_lock lock(g_mutex);
-    return static_cast<std::size_t>(std::count_if(
-        g_tracks.begin(), g_tracks.end(),
-        [](const Track& track) { return track.enabled; }));
+    return static_cast<std::size_t>(
+        std::count_if(g_tracks.begin(), g_tracks.end(), [](const Track& track) { return track.enabled; }));
 }
 
 void set_enabled(const std::string& id, bool enabled) {
@@ -435,8 +408,7 @@ std::optional<MusicInfo> music_for_level(std::int32_t level_id) {
     }
     for (const Track& track : g_tracks) {
         const auto resolved = g_resolved_level_ids.find(track.id);
-        if (track.enabled && track.music && resolved != g_resolved_level_ids.end() &&
-            resolved->second == level_id) {
+        if (track.enabled && track.music && resolved != g_resolved_level_ids.end() && resolved->second == level_id) {
             return track.music;
         }
     }
@@ -445,9 +417,9 @@ std::optional<MusicInfo> music_for_level(std::int32_t level_id) {
 
 std::optional<water::enhanced::Metadata> water_for_level(std::int32_t level_id) {
     std::scoped_lock lock(g_mutex);
-    for(const auto& track:g_tracks) {
-        const auto resolved=g_resolved_level_ids.find(track.id);
-        if(track.enabled && track.water && resolved!=g_resolved_level_ids.end() && resolved->second==level_id)
+    for (const auto& track : g_tracks) {
+        const auto resolved = g_resolved_level_ids.find(track.id);
+        if (track.enabled && track.water && resolved != g_resolved_level_ids.end() && resolved->second == level_id)
             return track.water;
     }
     return {};
@@ -459,14 +431,16 @@ std::vector<TrackSelectEntry> track_select_entries() {
     for (const Track& track : g_tracks) {
         const auto resolved = g_resolved_level_ids.find(track.id);
         // Native preview/selection stores level IDs in signed bytes.
-        if (!track.enabled || resolved == g_resolved_level_ids.end() ||
-            resolved->second < 0 || resolved->second >= 128) continue;
+        if (!track.enabled || resolved == g_resolved_level_ids.end() || resolved->second < 0 || resolved->second >= 128)
+            continue;
         const auto header = std::find_if(track.entries.begin(), track.entries.end(),
-            [](const Entry& entry) { return entry.section == Section::LevelHeaders; });
-        if (header == track.entries.end() || header->bytes.size() < 0xC8 ||
-            header->bytes[0] != kCustomTrackWorld || header->bytes[0x4C] != 0) continue;
+                                         [](const Entry& entry) { return entry.section == Section::LevelHeaders; });
+        if (header == track.entries.end() || header->bytes.size() < 0xC8 || header->bytes[0] != kCustomTrackWorld ||
+            header->bytes[0x4C] != 0)
+            continue;
         const auto vehicles = header->bytes[0x4E];
-        if (!vehicles || (vehicles & ~7U)) continue;
+        if (!vehicles || (vehicles & ~7U))
+            continue;
         result.push_back({track.id, track.name, resolved->second, vehicles});
     }
     return result;
@@ -488,8 +462,7 @@ HdPack hd_pack(const std::string& track_id) {
     return {};
 }
 
-bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
-                             TextureInfo& info, std::string& error) {
+bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes, TextureInfo& info, std::string& error) {
     // TextureHeader, from include/structs.h.
     constexpr std::size_t kHeaderSize = 32U;
     constexpr std::size_t kFormat = 0x02U;
@@ -497,8 +470,7 @@ bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
     constexpr std::size_t kTextureSize = 0x16U;
     constexpr std::size_t kIsCompressed = 0x1DU;
     // Bits per texel, by the format's low nibble.
-    constexpr std::array<std::uint32_t, 9> kBits{32U, 16U, 8U, 4U, 16U,
-                                                  8U, 4U, 4U, 8U};
+    constexpr std::array<std::uint32_t, 9> kBits{32U, 16U, 8U, 4U, 16U, 8U, 4U, 4U, 8U};
 
     info = TextureInfo{};
     // load_texture pulls sizeof(TempTexHeader) bytes to find the frame count
@@ -506,19 +478,16 @@ bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
     // far as it goes and the rest comes from whatever the ROM holds past the
     // section: a header made of nothing and an allocation sized by it.
     if (bytes.size() < kMinimumTexturePayload) {
-        error = std::to_string(bytes.size()) +
-                " bytes; a texture is at least " +
-                std::to_string(kMinimumTexturePayload) +
-                ", which is what load_texture reads before it knows the size";
+        error = std::to_string(bytes.size()) + " bytes; a texture is at least " +
+                std::to_string(kMinimumTexturePayload) + ", which is what load_texture reads before it knows the size";
         return false;
     }
     // load_texture puts the display lists it builds at align16(tex +
     // assetSize) inside an allocation of exactly assetSize plus those lists,
     // so an unaligned payload pushes the last one past its own block.
     if ((bytes.size() % 16U) != 0U) {
-        error = std::to_string(bytes.size()) +
-                " bytes, and a texture payload has to be a multiple of 16 or "
-                "load_texture's display list overruns its allocation";
+        error = std::to_string(bytes.size()) + " bytes, and a texture payload has to be a multiple of 16 or "
+                                               "load_texture's display list overruns its allocation";
         return false;
     }
 
@@ -531,8 +500,7 @@ bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
     info.translucent = texture_translucent(info.format, info.render_mode);
 
     if (info.format >= kBits.size()) {
-        error = "format " + std::to_string(info.format) +
-                " is not one material_init knows";
+        error = "format " + std::to_string(info.format) + " is not one material_init knows";
         return false;
     }
     if (info.format == 7U || info.format == 8U) {
@@ -541,8 +509,7 @@ bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
         return false;
     }
     if (info.render_mode > 3U) {
-        error = "render mode " + std::to_string(info.render_mode) +
-                " is not one of the four material_init knows";
+        error = "render mode " + std::to_string(info.render_mode) + " is not one of the four material_init knows";
         return false;
     }
     if (info.frames == 0U) {
@@ -557,30 +524,24 @@ bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
     for (std::uint32_t frame = 0; frame < info.frames; ++frame) {
         const std::string which = "frame " + std::to_string(frame + 1U);
         if (at + kHeaderSize > bytes.size()) {
-            error = which + " of " + std::to_string(info.frames) +
-                    " starts past the end of the payload";
+            error = which + " of " + std::to_string(info.frames) + " starts past the end of the payload";
             return false;
         }
         const std::uint32_t width = bytes[at];
         const std::uint32_t height = bytes[at + 1U];
         if (width == 0U || height == 0U) {
-            error = which + " is " + std::to_string(width) + "x" +
-                    std::to_string(height);
+            error = which + " is " + std::to_string(width) + "x" + std::to_string(height);
             return false;
         }
         if ((bytes[at + kFormat] & 0x0FU) != info.format) {
             error = which + " is in another format than the first";
             return false;
         }
-        const std::size_t texels =
-            (static_cast<std::size_t>(width) * height * kBits[info.format] +
-             7U) / 8U;
+        const std::size_t texels = (static_cast<std::size_t>(width) * height * kBits[info.format] + 7U) / 8U;
         const std::size_t size =
-            (static_cast<std::size_t>(bytes[at + kTextureSize]) << 8U) |
-            bytes[at + kTextureSize + 1U];
+            (static_cast<std::size_t>(bytes[at + kTextureSize]) << 8U) | bytes[at + kTextureSize + 1U];
         if (size < kHeaderSize + texels) {
-            error = which + " says it is " + std::to_string(size) +
-                    " bytes, and its header and texels take " +
+            error = which + " says it is " + std::to_string(size) + " bytes, and its header and texels take " +
                     std::to_string(kHeaderSize + texels);
             return false;
         }
@@ -593,20 +554,19 @@ bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
     return true;
 }
 
-bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes,
-                            SpriteInfo& info, std::string& error) {
+bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes, SpriteInfo& info, std::string& error) {
     // SpriteHeader in the asset tool's fileTypes/sprite.hpp.
     constexpr std::size_t kHeaderSize = 12U;
     info = SpriteInfo{};
     if (bytes.size() < kHeaderSize + 2U) {
-        error = std::to_string(bytes.size()) + " bytes; a sprite is at least " +
-                std::to_string(kHeaderSize + 2U);
+        error = std::to_string(bytes.size()) + " bytes; a sprite is at least " + std::to_string(kHeaderSize + 2U);
         return false;
     }
     if (bytes.size() > kMaxSpritePayload) {
-        error = std::to_string(bytes.size()) + " bytes, and asset_load copies a "
-                "sprite whole into a " + std::to_string(kMaxSpritePayload) +
-                "-byte buffer";
+        error = std::to_string(bytes.size()) +
+                " bytes, and asset_load copies a "
+                "sprite whole into a " +
+                std::to_string(kMaxSpritePayload) + "-byte buffer";
         return false;
     }
     const auto be16 = [&bytes](std::size_t at) {
@@ -617,8 +577,7 @@ bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes,
     info.anchor_x = static_cast<std::int16_t>(be16(4));
     info.anchor_y = static_cast<std::int16_t>(be16(6));
     if (info.frames == 0U || info.frames > 0x7FFFU) {
-        error = "the sprite says it has " + std::to_string(info.frames) +
-                " frames";
+        error = "the sprite says it has " + std::to_string(info.frames) + " frames";
         return false;
     }
     if (kHeaderSize + info.frames + 1U > bytes.size()) {
@@ -631,15 +590,13 @@ bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes,
     }
     for (std::uint32_t frame = 0; frame < info.frames; ++frame) {
         if (bytes[kHeaderSize + frame + 1U] <= bytes[kHeaderSize + frame]) {
-            error = "sprite frame " + std::to_string(frame + 1U) +
-                    " has no textures";
+            error = "sprite frame " + std::to_string(frame + 1U) + " has no textures";
             return false;
         }
     }
     info.textures = bytes[kHeaderSize + info.frames];
     if (info.base_texture < 0) {
-        error = "the sprite's first texture is " +
-                std::to_string(info.base_texture);
+        error = "the sprite's first texture is " + std::to_string(info.base_texture);
         return false;
     }
     return true;
@@ -650,8 +607,7 @@ std::int64_t model_minimap_sprite(const std::vector<std::uint8_t>& bytes) {
     if (length < kModelMinimapSprite + 4U) {
         return -1;
     }
-    return static_cast<std::int32_t>(
-        read_be32(bytes.data() + kStoredPrefixAt + kModelMinimapSprite));
+    return static_cast<std::int32_t>(read_be32(bytes.data() + kStoredPrefixAt + kModelMinimapSprite));
 }
 
 bool minimap_hidden(std::uint32_t header_offset) {
@@ -659,8 +615,7 @@ bool minimap_hidden(std::uint32_t header_offset) {
     const SectionState& headers = g_sections[section_slot(Section::LevelHeaders)];
     const AddedEntry* header = nullptr;
     for (const AddedEntry& added : headers.added) {
-        if (header_offset >= added.offset &&
-            header_offset < added.offset + added.size) {
+        if (header_offset >= added.offset && header_offset < added.offset + added.size) {
             header = &added;
             break;
         }
@@ -684,8 +639,7 @@ bool minimap_hidden(std::uint32_t header_offset) {
         const SpriteInfo& sprite = track->sprites[ordinal];
         if (sprite.base_texture >= kCustomTexture2DIdBase &&
             own_entry_index(Section::Textures2D, track->id,
-                            static_cast<std::uint32_t>(
-                                sprite.base_texture - kCustomTexture2DIdBase)) < 0) {
+                            static_cast<std::uint32_t>(sprite.base_texture - kCustomTexture2DIdBase)) < 0) {
             return true;
         }
     }
@@ -712,8 +666,7 @@ ArtworkSummary artwork(const std::string& track_id) {
 
 bool track_textures_published(const std::string& track_id) {
     std::scoped_lock lock(g_mutex);
-    const SectionState& textures =
-        g_sections[section_slot(Section::Textures3D)];
+    const SectionState& textures = g_sections[section_slot(Section::Textures3D)];
     if (!textures.built) {
         return false;
     }
@@ -735,8 +688,7 @@ void arm_track_override(std::string track_id) {
     if (g_armed_track.empty()) {
         std::fprintf(stderr, "[custom-tracks] track override cleared\n");
     } else {
-        std::fprintf(stderr, "[custom-tracks] track override armed: %s\n",
-                     g_armed_track.c_str());
+        std::fprintf(stderr, "[custom-tracks] track override armed: %s\n", g_armed_track.c_str());
     }
 }
 
@@ -754,8 +706,7 @@ void set_auto_boot(bool enabled) {
     // A fresh toggle re-arms this launch's one-shot; disabling clears it.
     g_auto_boot_consumed = false;
     save_state_locked();
-    std::fprintf(stderr, "[custom-tracks] auto boot %s\n",
-                 enabled ? "enabled" : "disabled");
+    std::fprintf(stderr, "[custom-tracks] auto boot %s\n", enabled ? "enabled" : "disabled");
 }
 
 bool auto_boot_enabled() {
@@ -783,14 +734,13 @@ std::int32_t track_override() {
     // Resolved late on purpose: the id only exists once build_extended_table
     // has run, so arming in the launcher and racing later both work.
     const auto found = g_resolved_level_ids.find(g_armed_track);
-    return found == g_resolved_level_ids.end() ? kNoTrackOverride
-                                                : found->second;
+    return found == g_resolved_level_ids.end() ? kNoTrackOverride : found->second;
 }
 
 bool owns_level_id(std::int32_t level_id) {
     std::scoped_lock lock(g_mutex);
-    return std::any_of(g_resolved_level_ids.begin(),g_resolved_level_ids.end(),
-        [level_id](const auto& entry){return entry.second==level_id;});
+    return std::any_of(g_resolved_level_ids.begin(), g_resolved_level_ids.end(),
+                       [level_id](const auto& entry) { return entry.second == level_id; });
 }
 
 std::int32_t count_level_model_batches(const std::uint8_t* bytes, std::size_t size) {
@@ -813,23 +763,19 @@ std::int32_t count_level_model_batches(const std::uint8_t* bytes, std::size_t si
     }
     std::vector<std::uint8_t> model(inflated_size);
     // No TINFL_FLAG_PARSE_ZLIB_HEADER: the container holds raw DEFLATE.
-    if (tinfl_decompress_mem_to_mem(model.data(), model.size(), bytes + kContainerHeader,
-                                    size - kContainerHeader, 0) != model.size()) {
+    if (tinfl_decompress_mem_to_mem(model.data(), model.size(), bytes + kContainerHeader, size - kContainerHeader, 0) !=
+        model.size()) {
         return -1;
     }
-    const auto be16 = [&](std::size_t at) {
-        return static_cast<std::int16_t>((model[at] << 8) | model[at + 1U]);
-    };
+    const auto be16 = [&](std::size_t at) { return static_cast<std::int16_t>((model[at] << 8) | model[at + 1U]); };
     const std::uint32_t segments = read_be32(model.data() + kSegmentsPointer);
     const std::int16_t count = be16(kSegmentCount);
-    if (count < 0 ||
-        std::uint64_t(segments) + std::uint64_t(count) * kSegmentSize > model.size()) {
+    if (count < 0 || std::uint64_t(segments) + std::uint64_t(count) * kSegmentSize > model.size()) {
         return -1;
     }
     std::int32_t batches = 0;
     for (std::int16_t segment = 0; segment < count; ++segment) {
-        batches += std::max<std::int16_t>(
-            0, be16(segments + std::size_t(segment) * kSegmentSize + kSegmentBatchCount));
+        batches += std::max<std::int16_t>(0, be16(segments + std::size_t(segment) * kSegmentSize + kSegmentBatchCount));
     }
     return batches;
 }
@@ -897,13 +843,11 @@ std::int32_t measure_level_model_arena(const std::uint8_t* bytes, std::size_t si
     }
     std::vector<std::uint8_t> model(inflated_size);
     // No TINFL_FLAG_PARSE_ZLIB_HEADER: the container holds raw DEFLATE.
-    if (tinfl_decompress_mem_to_mem(model.data(), model.size(), bytes + kContainerHeader,
-                                    size - kContainerHeader, 0) != model.size()) {
+    if (tinfl_decompress_mem_to_mem(model.data(), model.size(), bytes + kContainerHeader, size - kContainerHeader, 0) !=
+        model.size()) {
         return -1;
     }
-    const auto fits = [&](std::uint64_t at, std::uint64_t length) {
-        return at + length <= model.size();
-    };
+    const auto fits = [&](std::uint64_t at, std::uint64_t length) { return at + length <= model.size(); };
     const auto be16 = [&](std::size_t at) -> std::uint32_t {
         return static_cast<std::uint32_t>(model[at] << 8) | model[at + 1U];
     };
@@ -963,8 +907,8 @@ std::int32_t measure_level_model_arena(const std::uint8_t* bytes, std::size_t si
         std::vector<std::array<std::uint32_t, 3>> edges(triangle_count);
         for (std::uint32_t triangle = 0; triangle < triangle_count; ++triangle) {
             for (unsigned edge = 0; edge < 3; ++edge) {
-                edges[triangle][edge] = be16(facets + std::size_t(triangle) * kFacetStride +
-                                             2U + std::size_t(edge) * 2U);
+                edges[triangle][edge] =
+                    be16(facets + std::size_t(triangle) * kFacetStride + 2U + std::size_t(edge) * 2U);
             }
         }
         // An edge still naming a base plane has not been built yet: build one,
@@ -1031,9 +975,10 @@ std::int32_t level_model_arena_bytes(std::int32_t level_id) {
 
 namespace {
 std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* retail_table,
-    const std::vector<Track>& tracks, std::array<SectionState,kSectionCount>& sections,
-    std::unordered_map<std::string,std::int32_t>& resolved,
-    std::size_t table_words = 4096U) {
+                                         const std::vector<Track>& tracks,
+                                         std::array<SectionState, kSectionCount>& sections,
+                                         std::unordered_map<std::string, std::int32_t>& resolved,
+                                         std::size_t table_words = 4096U) {
     std::vector<std::int32_t> result;
     if (retail_table == nullptr) {
         return result;
@@ -1050,22 +995,22 @@ std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* re
         ++counted;
     }
     if (counted == 0 || counted >= sanity_limit) {
-        std::fprintf(stderr,
-                     "[custom-tracks] refusing an unterminated asset table\n");
+        std::fprintf(stderr, "[custom-tracks] refusing an unterminated asset table\n");
         return result;
     }
     const std::uint32_t retail_count = counted - 1U;
 
-    const std::vector<const Entry*> entries = enabled_entries(section,tracks);
-    if(entries.size()>32767U-retail_count)
+    const std::vector<const Entry*> entries = enabled_entries(section, tracks);
+    if (entries.size() > 32767U - retail_count)
         throw std::runtime_error("Track Lab artwork exceeds the game's signed asset-ID range.");
-    for(std::uint32_t i=0;i<counted;++i) {
-        if(retail_table[i]<0 || (i && retail_table[i]<retail_table[i-1]))
+    for (std::uint32_t i = 0; i < counted; ++i) {
+        if (retail_table[i] < 0 || (i && retail_table[i] < retail_table[i - 1]))
             throw std::runtime_error("Track Lab received an invalid asset-offset table.");
     }
-    std::uint64_t end=static_cast<std::uint32_t>(retail_table[retail_count]);
-    for(const auto* entry:entries)end+=entry->bytes.size();
-    if(end>0x7FFFFFFFU)
+    std::uint64_t end = static_cast<std::uint32_t>(retail_table[retail_count]);
+    for (const auto* entry : entries)
+        end += entry->bytes.size();
+    if (end > 0x7FFFFFFFU)
         throw std::runtime_error("Track Lab asset offsets exceed the game's signed offset range.");
     SectionState& state = sections[section_slot(section)];
     state.retail_count = retail_count;
@@ -1096,20 +1041,14 @@ std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* re
     std::unordered_map<std::string, std::uint32_t> seen_per_track;
     for (std::uint32_t ordinal = 0; ordinal < entries.size(); ++ordinal) {
         const Entry* entry = entries[ordinal];
-        const Track* owner = track_owning(section, entry,tracks);
-        const std::uint32_t entry_size =
-            static_cast<std::uint32_t>(entry->bytes.size());
-        const std::string owner_id =
-            owner == nullptr ? std::string{} : owner->id;
+        const Track* owner = track_owning(section, entry, tracks);
+        const std::uint32_t entry_size = static_cast<std::uint32_t>(entry->bytes.size());
+        const std::string owner_id = owner == nullptr ? std::string{} : owner->id;
         const std::uint32_t within = seen_per_track[owner_id]++;
 
-        state.added.push_back(AddedEntry{
-            owner_id,
-            entry->slot,
-            running, entry_size, retail_count + ordinal, within});
+        state.added.push_back(AddedEntry{owner_id, entry->slot, running, entry_size, retail_count + ordinal, within});
 
-        state.blob.insert(state.blob.end(), entry->bytes.begin(),
-                          entry->bytes.end());
+        state.blob.insert(state.blob.end(), entry->bytes.begin(), entry->bytes.end());
         if (section == Section::LevelModels && entry_size != 0U) {
             // A model names its own track's textures by ordinal, and only the
             // published texture table knows which index each one got. The copy
@@ -1117,139 +1056,138 @@ std::vector<std::int32_t> assemble_table(Section section, const std::int32_t* re
             // rewritten - `entry->bytes` stays as the file wrote it, which is
             // what makes a rebuild on the next level load idempotent rather
             // than cumulative.
-            resolve_model_textures(state.blob.data() + state.blob.size() -
-                                       entry_size,
-                                   entry_size, owner_id,sections);
-            resolve_model_minimap(state.blob.data() + state.blob.size() -
-                                      entry_size,
-                                  entry_size, owner_id,sections);
+            resolve_model_textures(state.blob.data() + state.blob.size() - entry_size, entry_size, owner_id, sections);
+            resolve_model_minimap(state.blob.data() + state.blob.size() - entry_size, entry_size, owner_id, sections);
         }
         if (section == Section::Sprites && entry_size != 0U) {
-            resolve_sprite_texture(state.blob.data() + state.blob.size() -
-                                       entry_size,
-                                   entry_size, owner_id,sections);
+            resolve_sprite_texture(state.blob.data() + state.blob.size() - entry_size, entry_size, owner_id, sections);
         }
         running += entry_size;
         result.push_back(static_cast<std::int32_t>(running));
 
         if (section == Section::LevelHeaders && owner != nullptr) {
-            resolved[owner->id] =
-                static_cast<std::int32_t>(retail_count + ordinal);
+            resolved[owner->id] = static_cast<std::int32_t>(retail_count + ordinal);
         }
     }
     result.push_back(-1);
 
-    std::fprintf(stderr,
-                 "[custom-tracks] section %zu: %u retail + %zu added\n",
-                 section_slot(section), retail_count, entries.size());
+    std::fprintf(stderr, "[custom-tracks] section %zu: %u retail + %zu added\n", section_slot(section), retail_count,
+                 entries.size());
     return result;
 }
 } // namespace
 
-std::vector<std::int32_t> build_extended_table(
-    Section section, const std::int32_t* retail_table, std::size_t table_words) {
+std::vector<std::int32_t> build_extended_table(Section section, const std::int32_t* retail_table,
+                                               std::size_t table_words) {
     std::scoped_lock lock(g_mutex);
     if (g_rescan_pending) {
         std::fprintf(stderr, "[custom-tracks] applying deferred rescan\n");
         scan_locked(g_directory);
     }
-    return assemble_table(section,retail_table,g_tracks,g_sections,g_resolved_level_ids,table_words);
+    return assemble_table(section, retail_table, g_tracks, g_sections, g_resolved_level_ids, table_words);
 }
 
-PreparedTracks prepare_tracks(std::vector<Track> tracks,
-    const std::array<std::vector<std::int32_t>,7>& tables) {
+PreparedTracks prepare_tracks(std::vector<Track> tracks, const std::array<std::vector<std::int32_t>, 7>& tables) {
     // Caller supplies canonical order from the frozen manifest. Do not use
     // directory iteration order or the launcher's enabled Track Lab list.
     std::set<std::string> identities;
-    for(auto& track:tracks) {
-        if(track.id.empty() || !identities.insert(track.id).second)
+    for (auto& track : tracks) {
+        if (track.id.empty() || !identities.insert(track.id).second)
             throw std::runtime_error("Online Track Lab namespace has duplicate or empty identities.");
-        track.enabled=true;
+        track.enabled = true;
     }
-    std::array<SectionState,kSectionCount> sections{};
-    std::unordered_map<std::string,std::int32_t> resolved;
+    std::array<SectionState, kSectionCount> sections{};
+    std::unordered_map<std::string, std::int32_t> resolved;
     // Dependencies first: sprite -> 2D texture, model -> 3D/sprite, then header
     // -> model and both object maps. This never touches the offline globals.
-    constexpr Section order[]{Section::Textures3D,Section::Textures2D,Section::Sprites,
-        Section::LevelObjectMaps,Section::LevelModels,Section::LevelNames,Section::LevelHeaders};
-    for(const auto section:order) {
-        const auto& table=tables[section_slot(section)];
-        if(table.size()<2 || table.size()>32768 || table.back()!=-1 || table.front()!=0)
+    constexpr Section order[]{Section::Textures3D,  Section::Textures2D, Section::Sprites,     Section::LevelObjectMaps,
+                              Section::LevelModels, Section::LevelNames, Section::LevelHeaders};
+    for (const auto section : order) {
+        const auto& table = tables[section_slot(section)];
+        if (table.size() < 2 || table.size() > 32768 || table.back() != -1 || table.front() != 0)
             throw std::runtime_error("Online Track Lab base table is malformed.");
-        for(std::size_t i=1;i+1<table.size();++i)if(table[i]<table[i-1])
-            throw std::runtime_error("Online Track Lab base table is not monotonic.");
-        const auto added=enabled_entries(section,tracks);
-        if(table.size()-2+added.size()>32766)
+        for (std::size_t i = 1; i + 1 < table.size(); ++i)
+            if (table[i] < table[i - 1])
+                throw std::runtime_error("Online Track Lab base table is not monotonic.");
+        const auto added = enabled_entries(section, tracks);
+        if (table.size() - 2 + added.size() > 32766)
             throw std::runtime_error("Online Track Lab namespace exceeds the asset ID range.");
-        std::uint64_t bytes=table[table.size()-2];
-        for(const auto* entry:added) {
-            bytes+=entry->bytes.size();
-            if(entry->bytes.empty() || bytes>64ULL*1024*1024)
+        std::uint64_t bytes = table[table.size() - 2];
+        for (const auto* entry : added) {
+            bytes += entry->bytes.size();
+            if (entry->bytes.empty() || bytes > 64ULL * 1024 * 1024)
                 throw std::runtime_error("Online Track Lab section exceeds its bounded address space.");
         }
-        (void)assemble_table(section,table.data(),tracks,sections,resolved,table.size());
+        (void)assemble_table(section, table.data(), tracks, sections, resolved, table.size());
     }
-    if(sections[section_slot(Section::LevelHeaders)].retail_count+tracks.size()>128)
+    if (sections[section_slot(Section::LevelHeaders)].retail_count + tracks.size() > 128)
         throw std::runtime_error("This Game Pak has no more additive level IDs below the game's signed-byte limit.");
     PreparedTracks out;
-    for(std::size_t i=0;i<sections.size();++i) {
-        const auto& section=sections[i];
-        for(const auto& added:section.added) {
-            const auto offset=added.offset-section.end_offset;
-            auto bytes=std::vector<std::uint8_t>(section.blob.begin()+offset,
-                section.blob.begin()+offset+added.size);
-            if(i==section_slot(Section::LevelHeaders)) {
-                if(bytes.size()<0xC8 || bytes[0]!=kCustomTrackWorld || bytes[0x4C]!=0 ||
-                   !bytes[0x4E] || (bytes[0x4E]&~7U))
+    for (std::size_t i = 0; i < sections.size(); ++i) {
+        const auto& section = sections[i];
+        for (const auto& added : section.added) {
+            const auto offset = added.offset - section.end_offset;
+            auto bytes =
+                std::vector<std::uint8_t>(section.blob.begin() + offset, section.blob.begin() + offset + added.size);
+            if (i == section_slot(Section::LevelHeaders)) {
+                if (bytes.size() < 0xC8 || bytes[0] != kCustomTrackWorld || bytes[0x4C] != 0 || !bytes[0x4E] ||
+                    (bytes[0x4E] & ~7U))
                     throw std::runtime_error("Online Track Lab course is not a playable Custom Tracks race.");
-                const auto found=std::find_if(tracks.begin(),tracks.end(),[&](const Track& t){return t.id==added.track_id;});
-                if(found==tracks.end())throw std::runtime_error("Online Track Lab header lost its owner.");
-                out.courses.push_back({found->id,found->name,static_cast<std::int32_t>(added.index),bytes[0x4E]});
+                const auto found =
+                    std::find_if(tracks.begin(), tracks.end(), [&](const Track& t) { return t.id == added.track_id; });
+                if (found == tracks.end())
+                    throw std::runtime_error("Online Track Lab header lost its owner.");
+                out.courses.push_back({found->id, found->name, static_cast<std::int32_t>(added.index), bytes[0x4E]});
                 // The sixth world is a menu category only. The game indexes
                 // fixed five-world save/background arrays; serve Dino Domain.
-                bytes[0]=1;
-                for(const auto [at,target,slot]:{
-                    std::tuple{0x34,Section::LevelModels,MapSlot::None},
-                    std::tuple{0x36,Section::LevelObjectMaps,MapSlot::Collectables},
-                    std::tuple{0xBA,Section::LevelObjectMaps,MapSlot::Structure}}) {
-                    const auto& siblings=sections[section_slot(target)].added;
-                    const auto sibling=std::find_if(siblings.begin(),siblings.end(),[&](const AddedEntry& s){
-                        return s.track_id==added.track_id && s.slot==slot;});
-                    if(sibling!=siblings.end()) {bytes[at]=sibling->index>>8;bytes[at+1]=sibling->index;}
+                bytes[0] = 1;
+                for (const auto [at, target, slot] : {std::tuple{0x34, Section::LevelModels, MapSlot::None},
+                                                      std::tuple{0x36, Section::LevelObjectMaps, MapSlot::Collectables},
+                                                      std::tuple{0xBA, Section::LevelObjectMaps, MapSlot::Structure}}) {
+                    const auto& siblings = sections[section_slot(target)].added;
+                    const auto sibling = std::find_if(siblings.begin(), siblings.end(), [&](const AddedEntry& s) {
+                        return s.track_id == added.track_id && s.slot == slot;
+                    });
+                    if (sibling != siblings.end()) {
+                        bytes[at] = sibling->index >> 8;
+                        bytes[at + 1] = sibling->index;
+                    }
                 }
             }
             out.additions[i].push_back(std::move(bytes));
         }
     }
-    for(const auto& course:out.courses) {
-        const auto found=std::find_if(tracks.begin(),tracks.end(),[&](const Track& t){return t.id==course.id;});
-        const auto model=std::find_if(found->entries.begin(),found->entries.end(),[](const Entry& e){return e.section==Section::LevelModels;});
-        out.model_arenas.push_back(model==found->entries.end()?-1:measure_level_model_arena(model->bytes.data(),model->bytes.size()));
-        out.model_batches.push_back(model==found->entries.end()?-1:count_level_model_batches(model->bytes.data(),model->bytes.size()));
+    for (const auto& course : out.courses) {
+        const auto found =
+            std::find_if(tracks.begin(), tracks.end(), [&](const Track& t) { return t.id == course.id; });
+        const auto model = std::find_if(found->entries.begin(), found->entries.end(),
+                                        [](const Entry& e) { return e.section == Section::LevelModels; });
+        out.model_arenas.push_back(
+            model == found->entries.end() ? -1 : measure_level_model_arena(model->bytes.data(), model->bytes.size()));
+        out.model_batches.push_back(
+            model == found->entries.end() ? -1 : count_level_model_batches(model->bytes.data(), model->bytes.size()));
     }
-    if(out.courses.size()!=tracks.size())throw std::runtime_error("Each online Track Lab course must contribute exactly one playable header.");
-    out.tracks=std::move(tracks);return out;
+    if (out.courses.size() != tracks.size())
+        throw std::runtime_error("Each online Track Lab course must contribute exactly one playable header.");
+    out.tracks = std::move(tracks);
+    return out;
 }
 
-const std::uint8_t* payload_for(Section section, std::uint32_t offset,
-                                 std::int32_t size) {
+const std::uint8_t* payload_for(Section section, std::uint32_t offset, std::int32_t size) {
     std::scoped_lock lock(g_mutex);
     const SectionState& state = g_sections[section_slot(section)];
     if (!state.built || size <= 0 || offset < state.end_offset) {
         return nullptr; // Retail range: the ROM loader owns it.
     }
-    const std::uint64_t relative =
-        static_cast<std::uint64_t>(offset) - state.end_offset;
+    const std::uint64_t relative = static_cast<std::uint64_t>(offset) - state.end_offset;
     if (relative + static_cast<std::uint64_t>(size) > state.blob.size()) {
-        std::fprintf(stderr,
-                     "[custom-tracks] rejecting out-of-range custom read\n");
+        std::fprintf(stderr, "[custom-tracks] rejecting out-of-range custom read\n");
         return nullptr;
     }
     return state.blob.data() + relative;
 }
 
-std::int32_t sibling_index(Section from, std::uint32_t offset, Section to,
-                            MapSlot slot) {
+std::int32_t sibling_index(Section from, std::uint32_t offset, Section to, MapSlot slot) {
     std::scoped_lock lock(g_mutex);
     const SectionState& source = g_sections[section_slot(from)];
     const SectionState& target = g_sections[section_slot(to)];
@@ -1275,7 +1213,6 @@ std::int32_t sibling_index(Section from, std::uint32_t offset, Section to,
 
 } // namespace dkr::runtime::custom_tracks
 
-
 namespace {
 
 const std::unordered_map<std::string, Section>& section_names() {
@@ -1291,33 +1228,29 @@ const std::unordered_map<std::string, Section>& section_names() {
     return names;
 }
 
-bool read_file(const std::filesystem::path& path,
-               std::vector<std::uint8_t>& bytes) {
+bool read_file(const std::filesystem::path& path, std::vector<std::uint8_t>& bytes) {
     // Manifest entries use '/' separators. Windows extended paths do not
     // translate those separators, and a narrow fopen also loses Unicode
     // directory names. Retain the native path for both stat and file I/O.
-    auto native_path=path;
+    auto native_path = path;
     native_path.make_preferred();
     std::error_code code;
     const auto size = std::filesystem::file_size(native_path, code);
     if (code || size == 0 || size > (16U * 1024U * 1024U)) {
         return false;
     }
-    std::ifstream file(native_path,std::ios::binary);
+    std::ifstream file(native_path, std::ios::binary);
     if (!file) {
         return false;
     }
     bytes.resize(static_cast<std::size_t>(size));
-    return bool(file.read(reinterpret_cast<char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size())));
+    return bool(file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size())));
 }
 
 std::string lower_extension(const std::filesystem::path& path) {
     std::string extension = path.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
     return extension;
 }
 
@@ -1325,22 +1258,19 @@ std::string lower_extension(const std::filesystem::path& path) {
 // Used for the pack stamp; the payloads a track ships are plain files.
 #include "store_track_zip.inl"
 
-bool read_zip_entry(const std::filesystem::path& path, const char* name,
-                    std::vector<std::uint8_t>& bytes) {
+bool read_zip_entry(const std::filesystem::path& path, const char* name, std::vector<std::uint8_t>& bytes) {
     return StoreReadTrackZipEntry(path, name, bytes);
 }
 
 // The textureDigest stamped into a <track>-hd.zip by the Blender export
 // (rice_pack.STAMP_NAME). Equal to the track manifest's hdTexturePack digest
 // exactly when the pack is from this export of this track.
-bool read_hd_pack_digest(const std::filesystem::path& archive,
-                         std::string& digest) {
+bool read_hd_pack_digest(const std::filesystem::path& archive, std::string& digest) {
     std::vector<std::uint8_t> bytes;
     if (!read_zip_entry(archive, "dkr-r-track.json", bytes)) {
         return false;
     }
-    const nlohmann::json stamp = nlohmann::json::parse(
-        bytes.begin(), bytes.end(), nullptr, false);
+    const nlohmann::json stamp = nlohmann::json::parse(bytes.begin(), bytes.end(), nullptr, false);
     if (stamp.is_discarded() || !stamp.is_object()) {
         return false;
     }
@@ -1350,8 +1280,8 @@ bool read_hd_pack_digest(const std::filesystem::path& archive,
 
 // Unpacks every entry of `zip_path` under `destination`. Rejects absolute
 // paths and `..` so an archive can never write outside the target directory.
-bool extract_zip(const std::filesystem::path& path, const std::filesystem::path& destination,
-                 std::string& error, std::stop_token stop = {}) {
+bool extract_zip(const std::filesystem::path& path, const std::filesystem::path& destination, std::string& error,
+                 std::stop_token stop = {}) {
     return StoreExtractTrackZip(path, destination, error, stop);
 }
 
@@ -1372,12 +1302,11 @@ const Entry* level_header_of(const Track& track) {
 // path, no "..", and after resolving symlinks it must still be under the
 // resolved track directory. It must end in `extension`, exist, be no larger
 // than `limit` and have the size the manifest records.
-bool resolve_music_file(const std::string& file, const char* extension,
-                        std::int64_t recorded, std::uint64_t limit,
-                        const std::filesystem::path& root,
-                        std::filesystem::path& resolved, std::uint64_t& bytes,
+bool resolve_music_file(const std::string& file, const char* extension, std::int64_t recorded, std::uint64_t limit,
+                        const std::filesystem::path& root, std::filesystem::path& resolved, std::uint64_t& bytes,
                         std::string& error) {
-    if(!dkr::runtime::custom_tracks::files::resolve(root,file,resolved,error))return false;
+    if (!dkr::runtime::custom_tracks::files::resolve(root, file, resolved, error))
+        return false;
     if (lower_extension(std::filesystem::u8path(file)) != extension) {
         error = "file \"" + file + "\" does not end in " + extension;
         return false;
@@ -1398,16 +1327,13 @@ bool resolve_music_file(const std::string& file, const char* extension,
 }
 
 bool is_sha256_hex(const std::string& digest) {
-    return digest.size() == 64 &&
-           std::all_of(digest.begin(), digest.end(), [](char c) {
-               return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-           });
+    return digest.size() == 64 && std::all_of(digest.begin(), digest.end(),
+                                              [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
 }
 
 // The carrier is the song this track's header starts. A descriptor naming
 // another would never activate, so the contradiction is refused.
-bool check_carrier(std::int64_t carrier, const Track& track, std::uint8_t& out,
-                   std::string& error) {
+bool check_carrier(std::int64_t carrier, const Track& track, std::uint8_t& out, std::string& error) {
     namespace ct = dkr::runtime::custom_tracks;
     const Entry* header = level_header_of(track);
     if (header == nullptr || header->bytes.size() <= ct::kHeaderInstruments + 1) {
@@ -1419,8 +1345,7 @@ bool check_carrier(std::int64_t carrier, const Track& track, std::uint8_t& out,
         return false;
     }
     if (header->bytes[ct::kHeaderMusic] != carrier) {
-        error = "carrierSequence " + std::to_string(carrier) +
-                " is not the header's music (" +
+        error = "carrierSequence " + std::to_string(carrier) + " is not the header's music (" +
                 std::to_string(header->bytes[ct::kHeaderMusic]) + ")";
         return false;
     }
@@ -1430,18 +1355,15 @@ bool check_carrier(std::int64_t carrier, const Track& track, std::uint8_t& out,
 
 // manifest.music with format "audio-stream-v1": an MP3 or WAV the runtime
 // decodes and mixes over the silent carrier.
-bool parse_recording(const nlohmann::json& music, const std::filesystem::path& root,
-                     Track& track, std::string& error) {
+bool parse_recording(const nlohmann::json& music, const std::filesystem::path& root, Track& track, std::string& error) {
     namespace ct = dkr::runtime::custom_tracks;
     const auto text = [&music](const char* key) {
         const auto found = music.find(key);
-        return found != music.end() && found->is_string() ? found->get<std::string>()
-                                                          : std::string{};
+        return found != music.end() && found->is_string() ? found->get<std::string>() : std::string{};
     };
     const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
         const auto found = music.find(key);
-        return found != music.end() && found->is_number_integer()
-            ? found->get<std::int64_t>() : fallback;
+        return found != music.end() && found->is_number_integer() ? found->get<std::int64_t>() : fallback;
     };
 
     ct::MusicInfo info;
@@ -1461,8 +1383,8 @@ bool parse_recording(const nlohmann::json& music, const std::filesystem::path& r
 
     const std::string file = text("file");
     std::filesystem::path resolved;
-    if (!resolve_music_file(file, extension, number("bytes", -1), ct::kMaxMusicBytes, root,
-                            resolved, info.bytes, error)) {
+    if (!resolve_music_file(file, extension, number("bytes", -1), ct::kMaxMusicBytes, root, resolved, info.bytes,
+                            error)) {
         return false;
     }
     info.file = resolved;
@@ -1478,14 +1400,10 @@ bool parse_recording(const nlohmann::json& music, const std::filesystem::path& r
             return false;
         }
     }
-    const bool riff = std::memcmp(head.data(), "RIFF", 4) == 0 &&
-                      std::memcmp(head.data() + 8, "WAVE", 4) == 0;
-    const bool mpeg = std::memcmp(head.data(), "ID3", 3) == 0 ||
-                      (head[0] == 0xFF && (head[1] & 0xE0) == 0xE0);
-    if ((info.codec == ct::MusicCodec::Wav && !riff) ||
-        (info.codec == ct::MusicCodec::Mp3 && !mpeg)) {
-        error = file + " is not a" + std::string(info.codec == ct::MusicCodec::Wav
-                                                      ? " WAV" : "n MP3") + " file";
+    const bool riff = std::memcmp(head.data(), "RIFF", 4) == 0 && std::memcmp(head.data() + 8, "WAVE", 4) == 0;
+    const bool mpeg = std::memcmp(head.data(), "ID3", 3) == 0 || (head[0] == 0xFF && (head[1] & 0xE0) == 0xE0);
+    if ((info.codec == ct::MusicCodec::Wav && !riff) || (info.codec == ct::MusicCodec::Mp3 && !mpeg)) {
+        error = file + " is not a" + std::string(info.codec == ct::MusicCodec::Wav ? " WAV" : "n MP3") + " file";
         return false;
     }
 
@@ -1545,32 +1463,28 @@ bool parse_recording(const nlohmann::json& music, const std::filesystem::path& r
 // references and the 13 KB music buffer - so a song the player would mishandle
 // is refused at scan; which programs exist is only known in game, and is
 // checked again when the song is copied in.
-bool parse_sequence(const nlohmann::json& music, const std::filesystem::path& root,
-                    Track& track, std::string& error) {
+bool parse_sequence(const nlohmann::json& music, const std::filesystem::path& root, Track& track, std::string& error) {
     namespace ct = dkr::runtime::custom_tracks;
     namespace cm = dkr::runtime::custom_music;
     const auto text = [&music](const char* key) {
         const auto found = music.find(key);
-        return found != music.end() && found->is_string() ? found->get<std::string>()
-                                                          : std::string{};
+        return found != music.end() && found->is_string() ? found->get<std::string>() : std::string{};
     };
     const auto number = [&music](const char* key, std::int64_t fallback) -> std::int64_t {
         const auto found = music.find(key);
-        return found != music.end() && found->is_number_integer()
-            ? found->get<std::int64_t>() : fallback;
+        return found != music.end() && found->is_number_integer() ? found->get<std::int64_t>() : fallback;
     };
 
     ct::MusicInfo info;
     info.kind = ct::MusicKind::Sequence;
     if (text("bank") != ct::kSequenceBank) {
-        error = "unknown instrument bank \"" + text("bank") + "\"; expected " +
-                ct::kSequenceBank;
+        error = "unknown instrument bank \"" + text("bank") + "\"; expected " + ct::kSequenceBank;
         return false;
     }
     const std::string file = text("file");
     std::filesystem::path resolved;
-    if (!resolve_music_file(file, ".cseq", number("bytes", -1), ct::kMaxSequenceBytes, root,
-                            resolved, info.bytes, error)) {
+    if (!resolve_music_file(file, ".cseq", number("bytes", -1), ct::kMaxSequenceBytes, root, resolved, info.bytes,
+                            error)) {
         return false;
     }
     info.file = resolved;
@@ -1621,11 +1535,11 @@ bool parse_sequence(const nlohmann::json& music, const std::filesystem::path& ro
     // silently drop parts of the composition.
     const std::int64_t mask = number("channelMask", 0xFFFF);
     const Entry* header = level_header_of(track);
-    const std::uint16_t header_mask = static_cast<std::uint16_t>(
-        (header->bytes[ct::kHeaderInstruments] << 8) | header->bytes[ct::kHeaderInstruments + 1]);
+    const std::uint16_t header_mask = static_cast<std::uint16_t>((header->bytes[ct::kHeaderInstruments] << 8) |
+                                                                 header->bytes[ct::kHeaderInstruments + 1]);
     if (mask < 0 || mask > 0xFFFF || mask != header_mask) {
-        error = "channelMask " + std::to_string(mask) +
-                " is not the header's instruments (" + std::to_string(header_mask) + ")";
+        error = "channelMask " + std::to_string(mask) + " is not the header's instruments (" +
+                std::to_string(header_mask) + ")";
         return false;
     }
     info.channel_mask = static_cast<std::uint16_t>(mask);
@@ -1638,16 +1552,14 @@ bool parse_sequence(const nlohmann::json& music, const std::filesystem::path& ro
 // the runtime acts on is checked here, so a bad package is named at scan
 // rather than going silent at the starting line. Needs the track's header
 // already parsed: the carrier must be the song that header actually starts.
-bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
-                 Track& track, std::string& error) {
+bool parse_music(const nlohmann::json& music, const std::filesystem::path& root, Track& track, std::string& error) {
     namespace ct = dkr::runtime::custom_tracks;
     if (!music.is_object()) {
         error = "the descriptor is not an object";
         return false;
     }
     const auto format = music.find("format");
-    const std::string name = format != music.end() && format->is_string()
-        ? format->get<std::string>() : std::string{};
+    const std::string name = format != music.end() && format->is_string() ? format->get<std::string>() : std::string{};
     if (name == ct::kMusicFormat) {
         return parse_recording(music, root, track, error);
     }
@@ -1661,17 +1573,15 @@ bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
 // Parses one unpacked track. `.dkrmap` archives are unpacked into this form by
 // the importer; the directory form is also what an author edits in place, so
 // reload() can pick up an editor's save without a repack.
-bool parse_track(const std::filesystem::path& input_root, Track& track,
-                 std::string& error) {
-    const auto root=dkr::runtime::custom_tracks::files::storage(input_root);
+bool parse_track(const std::filesystem::path& input_root, Track& track, std::string& error) {
+    const auto root = dkr::runtime::custom_tracks::files::storage(input_root);
     std::vector<std::uint8_t> manifest_bytes;
     if (!read_file(root / "manifest.json", manifest_bytes)) {
         error = "manifest.json is missing or unreadable";
         return false;
     }
 
-    nlohmann::json manifest = nlohmann::json::parse(
-        manifest_bytes.begin(), manifest_bytes.end(), nullptr, false);
+    nlohmann::json manifest = nlohmann::json::parse(manifest_bytes.begin(), manifest_bytes.end(), nullptr, false);
     if (manifest.is_discarded() || !manifest.is_object()) {
         error = "manifest.json is not valid JSON";
         return false;
@@ -1685,8 +1595,7 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         return false;
     }
     if ((schema == 2) != manifest.contains("music")) {
-        error = schema == 2 ? "schemaVersion 2 without a music descriptor"
-                            : "a music descriptor needs schemaVersion 2";
+        error = schema == 2 ? "schemaVersion 2 without a music descriptor" : "a music descriptor needs schemaVersion 2";
         return false;
     }
 
@@ -1705,8 +1614,7 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
     const auto hd = manifest.find("hdTexturePack");
     if (hd != manifest.end() && hd->is_object()) {
         const std::string file = hd->value("file", std::string{});
-        if (!file.empty() && file.find("..") == std::string::npos &&
-            file.find('/') == std::string::npos &&
+        if (!file.empty() && file.find("..") == std::string::npos && file.find('/') == std::string::npos &&
             file.find('\\') == std::string::npos) {
             track.hd_pack_file = file;
             track.hd_pack_digest = hd->value("textureDigest", std::string{});
@@ -1719,8 +1627,7 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         return false;
     }
     for (const auto& item : *adds) {
-        const auto named =
-            section_names().find(item.value("section", std::string{}));
+        const auto named = section_names().find(item.value("section", std::string{}));
         if (named == section_names().end()) {
             error = "unknown section in adds";
             return false;
@@ -1740,10 +1647,9 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
             } else if (slot == "collectables") {
                 entry.slot = MapSlot::Collectables;
             } else {
-                error = slot.empty()
-                    ? "a LEVEL_OBJECT_MAPS entry needs \"slot\": "
-                      "\"structure\" or \"collectables\""
-                    : "unknown object map slot \"" + slot + "\"";
+                error = slot.empty() ? "a LEVEL_OBJECT_MAPS entry needs \"slot\": "
+                                       "\"structure\" or \"collectables\""
+                                     : "unknown object map slot \"" + slot + "\"";
                 return false;
             }
         }
@@ -1751,7 +1657,8 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         // Keep payloads inside the track directory: a manifest must not be
         // able to name an arbitrary path on the user's machine.
         std::filesystem::path payload;
-        if(!dkr::runtime::custom_tracks::files::resolve(root,file,payload,error))return false;
+        if (!dkr::runtime::custom_tracks::files::resolve(root, file, payload, error))
+            return false;
         if (!read_file(payload, entry.bytes)) {
             error = "could not read " + file;
             return false;
@@ -1764,8 +1671,7 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         if (entry.section == Section::Textures3D) {
             dkr::runtime::custom_tracks::TextureInfo info;
             std::string reason;
-            if (!dkr::runtime::custom_tracks::inspect_texture_payload(
-                    entry.bytes, info, reason)) {
+            if (!dkr::runtime::custom_tracks::inspect_texture_payload(entry.bytes, info, reason)) {
                 error = file + ": " + reason;
                 return false;
             }
@@ -1776,8 +1682,7 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         if (entry.section == Section::Textures2D) {
             dkr::runtime::custom_tracks::TextureInfo info;
             std::string reason;
-            if (!dkr::runtime::custom_tracks::inspect_texture_payload(
-                    entry.bytes, info, reason)) {
+            if (!dkr::runtime::custom_tracks::inspect_texture_payload(entry.bytes, info, reason)) {
                 error = file + ": " + reason;
                 return false;
             }
@@ -1786,8 +1691,7 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         if (entry.section == Section::Sprites) {
             dkr::runtime::custom_tracks::SpriteInfo info;
             std::string reason;
-            if (!dkr::runtime::custom_tracks::inspect_sprite_payload(
-                    entry.bytes, info, reason)) {
+            if (!dkr::runtime::custom_tracks::inspect_sprite_payload(entry.bytes, info, reason)) {
                 error = file + ": " + reason;
                 return false;
             }
@@ -1805,14 +1709,16 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         if (base < dkr::runtime::custom_tracks::kCustomTexture2DIdBase) {
             continue;
         }
-        const std::int32_t first =
-            base - dkr::runtime::custom_tracks::kCustomTexture2DIdBase;
+        const std::int32_t first = base - dkr::runtime::custom_tracks::kCustomTexture2DIdBase;
         if (first >= dkr::runtime::custom_tracks::kCustomTexture2DIdCount ||
-            static_cast<std::size_t>(first) + sprite.textures >
-                track.textures_2d.size()) {
-            error = "sprite " + std::to_string(index + 1U) + " draws the track's "
-                    "2D texture " + std::to_string(first + 1) + " onward, and "
-                    "the track ships " + std::to_string(track.textures_2d.size());
+            static_cast<std::size_t>(first) + sprite.textures > track.textures_2d.size()) {
+            error = "sprite " + std::to_string(index + 1U) +
+                    " draws the track's "
+                    "2D texture " +
+                    std::to_string(first + 1) +
+                    " onward, and "
+                    "the track ships " +
+                    std::to_string(track.textures_2d.size());
             return false;
         }
     }
@@ -1820,34 +1726,32 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         if (entry.section != Section::LevelModels) {
             continue;
         }
-        const std::int64_t named =
-            dkr::runtime::custom_tracks::model_minimap_sprite(entry.bytes);
+        const std::int64_t named = dkr::runtime::custom_tracks::model_minimap_sprite(entry.bytes);
         if (named < dkr::runtime::custom_tracks::kCustomSpriteIdBase ||
-            named >= dkr::runtime::custom_tracks::kCustomSpriteIdBase +
-                         dkr::runtime::custom_tracks::kCustomSpriteIdCount) {
+            named >=
+                dkr::runtime::custom_tracks::kCustomSpriteIdBase + dkr::runtime::custom_tracks::kCustomSpriteIdCount) {
             continue;
         }
-        const std::int64_t ordinal =
-            named - dkr::runtime::custom_tracks::kCustomSpriteIdBase;
+        const std::int64_t ordinal = named - dkr::runtime::custom_tracks::kCustomSpriteIdBase;
         if (static_cast<std::size_t>(ordinal) >= track.sprites.size()) {
-            error = "the model names minimap sprite " +
-                    std::to_string(ordinal + 1) + " of the track's own, and the "
-                    "track ships " + std::to_string(track.sprites.size()) +
-                    " - its minimap would point nowhere";
+            error = "the model names minimap sprite " + std::to_string(ordinal + 1) +
+                    " of the track's own, and the "
+                    "track ships " +
+                    std::to_string(track.sprites.size()) + " - its minimap would point nowhere";
             return false;
         }
     }
 
     if (manifest.contains("enhancedWater")) {
         dkr::runtime::water::enhanced::Metadata appearance;
-        if(!dkr::runtime::water::enhanced::parse_metadata(manifest["enhancedWater"],appearance,error)) {
-            error="enhancedWater: "+error;return false;
+        if (!dkr::runtime::water::enhanced::parse_metadata(manifest["enhancedWater"], appearance, error)) {
+            error = "enhancedWater: " + error;
+            return false;
         }
-        track.water=appearance;
+        track.water = appearance;
     }
 
-    if (manifest.contains("music") &&
-        !parse_music(manifest["music"], root, track, error)) {
+    if (manifest.contains("music") && !parse_music(manifest["music"], root, track, error)) {
         error = "music: " + error;
         return false;
     }
@@ -1865,12 +1769,9 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
     }
     if (header != nullptr) {
         const auto supplies = [&track](MapSlot slot) {
-            return std::any_of(track.entries.begin(), track.entries.end(),
-                               [slot](const Entry& e) {
-                                   return e.section ==
-                                              Section::LevelObjectMaps &&
-                                          e.slot == slot;
-                               });
+            return std::any_of(track.entries.begin(), track.entries.end(), [slot](const Entry& e) {
+                return e.section == Section::LevelObjectMaps && e.slot == slot;
+            });
         };
         // Reading the authored value matters: a header carrying a real retail
         // index needs no payload and is perfectly valid. Only a zero is
@@ -1881,11 +1782,13 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
             }
             return (header->bytes[offset] << 8) | header->bytes[offset + 1];
         };
-        struct Check { std::size_t offset; MapSlot slot; const char* name; };
-        for (const Check& check : {Check{0x36, MapSlot::Collectables,
-                                         "collectables"},
-                                   Check{0xBA, MapSlot::Structure,
-                                         "structure"}}) {
+        struct Check {
+            std::size_t offset;
+            MapSlot slot;
+            const char* name;
+        };
+        for (const Check& check :
+             {Check{0x36, MapSlot::Collectables, "collectables"}, Check{0xBA, MapSlot::Structure, "structure"}}) {
             if (field_at(check.offset) == 0 && !supplies(check.slot)) {
                 error = std::string("the header leaves its ") + check.name +
                         " object map at 0 and the track supplies none; 0 is "
@@ -1902,8 +1805,8 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
 
 namespace dkr::runtime::custom_tracks {
 
-bool inspect_package(const std::filesystem::path& directory,Track& track,std::string& error) {
-    return parse_track(directory,track,error);
+bool inspect_package(const std::filesystem::path& directory, Track& track, std::string& error) {
+    return parse_track(directory, track, error);
 }
 
 namespace {
@@ -1911,30 +1814,27 @@ namespace {
 std::filesystem::path working_setting_file() {
     // Beside the install directory, so it lives with the rest of the
     // configuration rather than in the tracks folder it points away from.
-    return g_directory.empty()
-        ? std::filesystem::path{}
-        : g_directory.parent_path() / "custom-tracks-path.txt";
+    return g_directory.empty() ? std::filesystem::path{} : g_directory.parent_path() / "custom-tracks-path.txt";
 }
 
 std::filesystem::path state_setting_file() {
-    return g_directory.empty()
-        ? std::filesystem::path{}
-        : g_directory.parent_path() / "custom-tracks-state.txt";
+    return g_directory.empty() ? std::filesystem::path{} : g_directory.parent_path() / "custom-tracks-state.txt";
 }
 
 std::filesystem::path selection_setting_file() {
-    return g_directory.empty() ? std::filesystem::path{}
-        : g_directory.parent_path() / "custom-tracks-enabled.json";
+    return g_directory.empty() ? std::filesystem::path{} : g_directory.parent_path() / "custom-tracks-enabled.json";
 }
 
 void load_selection_locked() {
     g_disabled_tracks.clear();
     g_selection_error.clear();
     const auto file = selection_setting_file();
-    if (file.empty()) return;
+    if (file.empty())
+        return;
     std::error_code code;
     const auto status = std::filesystem::symlink_status(file, code);
-    if (status.type() == std::filesystem::file_type::not_found) return;
+    if (status.type() == std::filesystem::file_type::not_found)
+        return;
     if (code || !std::filesystem::is_regular_file(status)) {
         g_selection_error = "The saved track selection could not be read.";
         return;
@@ -1946,9 +1846,8 @@ void load_selection_locked() {
         return;
     }
     const auto settings = nlohmann::json::parse(bytes.begin(), bytes.end(), nullptr, false);
-    if (!settings.is_object() || !settings.contains("schemaVersion") ||
-        settings["schemaVersion"] != 1 || !settings.contains("disabled") ||
-        !settings["disabled"].is_array()) {
+    if (!settings.is_object() || !settings.contains("schemaVersion") || settings["schemaVersion"] != 1 ||
+        !settings.contains("disabled") || !settings["disabled"].is_array()) {
         g_selection_error = "The saved track selection needs repair. Its file was kept.";
         return;
     }
@@ -1963,36 +1862,44 @@ void load_selection_locked() {
 }
 
 bool save_selection_locked(const std::set<std::string>& disabled, std::string& error) {
-    if (!g_selection_error.empty()) { error = g_selection_error; return false; }
+    if (!g_selection_error.empty()) {
+        error = g_selection_error;
+        return false;
+    }
     const auto file = selection_setting_file();
-    if (file.empty()) { error = "The track library is not ready yet."; return false; }
+    if (file.empty()) {
+        error = "The track library is not ready yet.";
+        return false;
+    }
     const auto text = nlohmann::json{{"schemaVersion", 1}, {"disabled", disabled}}.dump(2) + '\n';
     if (text.size() > 1024U * 1024U) {
-        error = "The saved track selection is too large."; return false;
+        error = "The saved track selection is too large.";
+        return false;
     }
     std::error_code code;
     const auto status = std::filesystem::symlink_status(file, code);
-    if (status.type() != std::filesystem::file_type::not_found &&
-        (code || !std::filesystem::is_regular_file(status))) {
-        error = "The track selection must be an ordinary local file."; return false;
+    if (status.type() != std::filesystem::file_type::not_found && (code || !std::filesystem::is_regular_file(status))) {
+        error = "The track selection must be an ordinary local file.";
+        return false;
     }
-    const auto temp = file.parent_path() / (".custom-tracks-selection-" +
-        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp");
+    const auto temp =
+        file.parent_path() / (".custom-tracks-selection-" +
+                              std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp");
     bool written = false;
 #if defined(_WIN32)
     const auto attributes = GetFileAttributesW(file.c_str());
     if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-        error = "The track selection must be an ordinary local file."; return false;
+        error = "The track selection must be an ordinary local file.";
+        return false;
     }
-    HANDLE output = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
-                                FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE output = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (output != INVALID_HANDLE_VALUE) {
         DWORD count = 0;
         written = WriteFile(output, text.data(), static_cast<DWORD>(text.size()), &count, nullptr) &&
                   count == text.size() && FlushFileBuffers(output);
         CloseHandle(output);
-        if (written) written = MoveFileExW(temp.c_str(), file.c_str(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+        if (written)
+            written = MoveFileExW(temp.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
     }
 #else
     const int output = open(temp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
@@ -2000,13 +1907,18 @@ bool save_selection_locked(const std::set<std::string>& disabled, std::string& e
         std::size_t count = 0;
         while (count < text.size()) {
             const auto n = write(output, text.data() + count, text.size() - count);
-            if (n < 0 && errno == EINTR) continue;
-            if (n <= 0) break;
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n <= 0)
+                break;
             count += static_cast<std::size_t>(n);
         }
         written = count == text.size() && fsync(output) == 0;
         close(output);
-        if (written) { std::filesystem::rename(temp, file, code); written = !code; }
+        if (written) {
+            std::filesystem::rename(temp, file, code);
+            written = !code;
+        }
     }
 #endif
     if (!written) {
@@ -2054,8 +1966,7 @@ void load_state_locked() {
         }
         std::string line = text.substr(pos, end - pos);
         pos = end + 1;
-        while (!line.empty() &&
-               (line.back() == '\r' || line.back() == ' ')) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
             line.pop_back();
         }
         if (line.rfind("armed=", 0) == 0) {
@@ -2072,8 +1983,7 @@ namespace {
 // and, when set, for the author's working directory.
 void scan_one(const std::filesystem::path& directory, const char* label) {
     std::error_code code;
-    if (directory.empty() ||
-        !std::filesystem::is_directory(directory, code)) {
+    if (directory.empty() || !std::filesystem::is_directory(directory, code)) {
         return;
     }
     // Filesystems enumerate entries differently. Assign appended asset indices
@@ -2093,8 +2003,7 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
         Track track;
         std::string error;
         if (!parse_track(item.path(), track, error)) {
-            std::fprintf(stderr, "[custom-tracks] skipped %s: %s\n",
-                         item.path().filename().string().c_str(),
+            std::fprintf(stderr, "[custom-tracks] skipped %s: %s\n", item.path().filename().string().c_str(),
                          error.c_str());
             continue;
         }
@@ -2107,7 +2016,8 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
             if (std::filesystem::is_regular_file(std::filesystem::symlink_status(marker, code)) && !code) {
                 std::ifstream state(marker, std::ios::binary);
                 char value = 0, extra = 0;
-                if (state.get(value) && !state.get(extra)) track.enabled = value == '1';
+                if (state.get(value) && !state.get(extra))
+                    track.enabled = value == '1';
             }
         }
         if (!track.kept_online)
@@ -2122,8 +2032,7 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
             std::fprintf(stderr,
                          "[custom-tracks] %s ships %zu texture(s): %zu "
                          "see-through, %zu animated\n",
-                         track.id.c_str(), track.textures.size(), translucent,
-                         animated);
+                         track.id.c_str(), track.textures.size(), translucent, animated);
         }
 
         // Resolve the HD pack sibling against the folder this track was read
@@ -2131,13 +2040,11 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
         // the pack is not there - install() handed it to the importer already;
         // for a working folder the sibling the exporter just wrote is present.
         if (!track.hd_pack_file.empty()) {
-            const std::filesystem::path sibling =
-                item.path().parent_path() / track.hd_pack_file;
+            const std::filesystem::path sibling = item.path().parent_path() / track.hd_pack_file;
             std::error_code sib;
             if (std::filesystem::is_regular_file(sibling, sib)) {
                 std::string digest;
-                if (read_hd_pack_digest(sibling, digest) &&
-                    digest == track.hd_pack_digest &&
+                if (read_hd_pack_digest(sibling, digest) && digest == track.hd_pack_digest &&
                     !track.hd_pack_digest.empty()) {
                     track.hd_pack_sibling = sibling;
                 } else {
@@ -2152,25 +2059,18 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
         // aimed at the other copy's maps. Importing a track that is also being
         // watched in a working folder produces exactly that pair, so refuse
         // the duplicate rather than load it.
-        const auto clash = std::find_if(
-            g_tracks.begin(), g_tracks.end(),
-            [&track](const Track& existing) {
-                return existing.id == track.id;
-            });
+        const auto clash = std::find_if(g_tracks.begin(), g_tracks.end(),
+                                        [&track](const Track& existing) { return existing.id == track.id; });
         if (clash != g_tracks.end()) {
             std::fprintf(stderr,
                          "[custom-tracks] skipped %s: id \"%s\" is already "
                          "loaded from %s\n",
-                         item.path().filename().string().c_str(),
-                         track.id.c_str(),
-                         clash->source.string().c_str());
+                         item.path().filename().string().c_str(), track.id.c_str(), clash->source.string().c_str());
             continue;
         }
 
-        std::fprintf(stderr, "[custom-tracks] loaded %s by %s (%s)\n",
-                     track.name.c_str(),
-                     track.author.empty() ? "unknown" : track.author.c_str(),
-                     label);
+        std::fprintf(stderr, "[custom-tracks] loaded %s by %s (%s)\n", track.name.c_str(),
+                     track.author.empty() ? "unknown" : track.author.c_str(), label);
         g_tracks.push_back(std::move(track));
     }
 }
@@ -2194,8 +2094,7 @@ void scan_locked(const std::filesystem::path& directory) {
         std::vector<std::uint8_t> stored;
         if (read_file(working_setting_file(), stored) && !stored.empty()) {
             std::string text(stored.begin(), stored.end());
-            while (!text.empty() &&
-                   (text.back() == '\n' || text.back() == '\r')) {
+            while (!text.empty() && (text.back() == '\n' || text.back() == '\r')) {
                 text.pop_back();
             }
             g_working_directory = std::filesystem::u8path(text);
@@ -2228,13 +2127,11 @@ void set_working_directory(const std::filesystem::path& directory) {
                 const auto utf8 = directory.u8string();
                 const std::string text(utf8.begin(), utf8.end());
                 std::ofstream out(setting, std::ios::binary);
-                out.write(text.data(),
-                          static_cast<std::streamsize>(text.size()));
+                out.write(text.data(), static_cast<std::streamsize>(text.size()));
             }
         }
         std::fprintf(stderr, "[custom-tracks] working folder %s\n",
-                     directory.empty() ? "cleared"
-                                       : directory.string().c_str());
+                     directory.empty() ? "cleared" : directory.string().c_str());
     }
     reload();
 }
@@ -2264,13 +2161,11 @@ static bool valid_folder_id(const std::string& id) {
     if (id.empty() || id == "." || id == ".." || id.back() == '.' || id.back() == ' ') {
         return false;
     }
-    return std::none_of(id.begin(), id.end(), [](unsigned char c) {
-        return c < 0x20 || std::strchr("/\\:<>\"|?*", c) != nullptr;
-    });
+    return std::none_of(id.begin(), id.end(),
+                        [](unsigned char c) { return c < 0x20 || std::strchr("/\\:<>\"|?*", c) != nullptr; });
 }
 
-bool install(const std::filesystem::path& source, std::string& error,
-             InstallOutcome* outcome) {
+bool install(const std::filesystem::path& source, std::string& error, InstallOutcome* outcome) {
     std::filesystem::path destination_root;
     {
         std::scoped_lock lock(g_mutex);
@@ -2292,13 +2187,10 @@ bool install(const std::filesystem::path& source, std::string& error,
     std::filesystem::path temp_root;
     std::filesystem::path wrapped_hd_pack;
 
-    if (std::filesystem::is_regular_file(source, code) &&
-        lower_extension(source) == ".zip") {
-        temp_root = destination_root.parent_path() /
-            (".custom-track-import-" +
-             std::to_string(std::chrono::steady_clock::now()
-                                .time_since_epoch()
-                                .count()));
+    if (std::filesystem::is_regular_file(source, code) && lower_extension(source) == ".zip") {
+        temp_root =
+            destination_root.parent_path() /
+            (".custom-track-import-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         std::filesystem::remove_all(temp_root, code);
         std::filesystem::create_directories(temp_root, code);
         std::string extract_error;
@@ -2341,9 +2233,7 @@ bool install(const std::filesystem::path& source, std::string& error,
         return false;
     }
     const std::string folder_name =
-        track_dir.extension() == ".dkrmap"
-            ? track_dir.filename().string()
-            : probe.id + ".dkrmap";
+        track_dir.extension() == ".dkrmap" ? track_dir.filename().string() : probe.id + ".dkrmap";
     const std::filesystem::path destination = destination_root / folder_name;
     std::filesystem::create_directories(destination_root, code);
     // Copy beside the installed track and swap it in, so a failed copy keeps
@@ -2352,8 +2242,7 @@ bool install(const std::filesystem::path& source, std::string& error,
     const std::filesystem::path previous = destination_root / (folder_name + ".previous");
     std::error_code ignored;
     std::filesystem::remove_all(staged, ignored);
-    std::filesystem::copy(track_dir, staged,
-                          std::filesystem::copy_options::recursive, code);
+    std::filesystem::copy(track_dir, staged, std::filesystem::copy_options::recursive, code);
     if (code) {
         std::filesystem::remove_all(staged, ignored);
         discard_install_temp(temp_root);
@@ -2365,7 +2254,8 @@ bool install(const std::filesystem::path& source, std::string& error,
         std::filesystem::remove_all(previous, ignored);
         std::filesystem::rename(destination, previous, code);
     }
-    if (!code) std::filesystem::rename(staged, destination, code);
+    if (!code)
+        std::filesystem::rename(staged, destination, code);
     if (code) {
         if (replacing && !std::filesystem::exists(destination, ignored)) {
             std::filesystem::rename(previous, destination, ignored);
@@ -2375,7 +2265,8 @@ bool install(const std::filesystem::path& source, std::string& error,
         error = "Could not replace the installed track: " + code.message();
         return false;
     }
-    if (replacing) std::filesystem::remove_all(previous, ignored);
+    if (replacing)
+        std::filesystem::remove_all(previous, ignored);
 
     if (outcome != nullptr) {
         *outcome = InstallOutcome{};
@@ -2384,13 +2275,10 @@ bool install(const std::filesystem::path& source, std::string& error,
         if (!probe.hd_pack_file.empty()) {
             // Beside the source on disk, or lifted out of the wrapper zip.
             const std::filesystem::path sibling =
-                wrapped_hd_pack.empty()
-                    ? source.parent_path() / probe.hd_pack_file
-                    : wrapped_hd_pack;
+                wrapped_hd_pack.empty() ? source.parent_path() / probe.hd_pack_file : wrapped_hd_pack;
             std::string digest;
             if (std::filesystem::is_regular_file(sibling, code)) {
-                if (read_hd_pack_digest(sibling, digest) &&
-                    !probe.hd_pack_digest.empty() &&
+                if (read_hd_pack_digest(sibling, digest) && !probe.hd_pack_digest.empty() &&
                     digest == probe.hd_pack_digest) {
                     outcome->hd_pack_archive = sibling;
                     // The caller imports from here, then cleans the temp up.
@@ -2414,13 +2302,17 @@ namespace {
 // Resolve both paths before allowing deletion: a symlink/junction must not
 // turn a managed-looking path into a deletion in the author's source folder.
 bool installed_path_locked(const std::filesystem::path& source) {
-    if (g_directory.empty() || source.extension() != ".dkrmap") return false;
+    if (g_directory.empty() || source.extension() != ".dkrmap")
+        return false;
     std::error_code code;
     const auto root = std::filesystem::canonical(g_directory, code);
-    if (code) return false;
-    if (!std::filesystem::equivalent(source.parent_path(), root, code) || code) return false;
+    if (code)
+        return false;
+    if (!std::filesystem::equivalent(source.parent_path(), root, code) || code)
+        return false;
     const auto resolved = std::filesystem::canonical(source, code);
-    if (code || resolved == root) return false;
+    if (code || resolved == root)
+        return false;
     return std::filesystem::equivalent(resolved.parent_path(), root, code) && !code;
 }
 
@@ -2432,45 +2324,56 @@ bool is_installed(const Track& track) {
 }
 
 static bool set_kept_enabled_locked(const std::string& id, bool enabled, std::string& error) {
-    const auto found = std::find_if(g_tracks.begin(), g_tracks.end(),
-        [&](const Track& track) { return track.id == id; });
+    const auto found =
+        std::find_if(g_tracks.begin(), g_tracks.end(), [&](const Track& track) { return track.id == id; });
     if (found == g_tracks.end() || !found->kept_online || !installed_path_locked(found->source)) {
-        error = "This is not a managed offline copy of an online course."; return false;
+        error = "This is not a managed offline copy of an online course.";
+        return false;
     }
     const auto marker = found->source / ".online-keep-state";
     std::error_code code;
     if (!std::filesystem::is_regular_file(std::filesystem::symlink_status(marker, code)) || code) {
-        error = "The course's local activation file needs repair."; return false;
+        error = "The course's local activation file needs repair.";
+        return false;
     }
-    const auto temp = found->source / (".online-keep-" + std::to_string(
-        std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp");
+    const auto temp =
+        found->source /
+        (".online-keep-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp");
     const char value = enabled ? '1' : '0';
     bool written = false;
 #if defined(_WIN32)
     const auto attributes = GetFileAttributesW(marker.c_str());
     if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-        error = "The course activation file must be an ordinary local file."; return false;
+        error = "The course activation file must be an ordinary local file.";
+        return false;
     }
     HANDLE file = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file != INVALID_HANDLE_VALUE) {
         DWORD count = 0;
         written = WriteFile(file, &value, 1, &count, nullptr) && count == 1 && FlushFileBuffers(file);
         CloseHandle(file);
-        if (written) written = MoveFileExW(temp.c_str(), marker.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+        if (written)
+            written = MoveFileExW(temp.c_str(), marker.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
     }
 #else
     const int file = open(temp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
     if (file >= 0) {
         written = write(file, &value, 1) == 1 && fsync(file) == 0;
         close(file);
-        if (written) { std::filesystem::rename(temp, marker, code); written = !code; }
+        if (written) {
+            std::filesystem::rename(temp, marker, code);
+            written = !code;
+        }
     }
 #endif
     if (!written) {
         std::filesystem::remove(temp, code);
-        error = "Could not save the course's activation. Its existing state was kept."; return false;
+        error = "Could not save the course's activation. Its existing state was kept.";
+        return false;
     }
-    found->enabled = enabled; error.clear(); return true;
+    found->enabled = enabled;
+    error.clear();
+    return true;
 }
 
 bool set_kept_enabled(const std::string& id, bool enabled, std::string& error) {
@@ -2480,15 +2383,23 @@ bool set_kept_enabled(const std::string& id, bool enabled, std::string& error) {
 
 bool set_enabled(const std::string& id, bool enabled, std::string& error) {
     std::scoped_lock lock(g_mutex);
-    const auto found = std::find_if(g_tracks.begin(), g_tracks.end(),
-        [&](const Track& track) { return track.id == id; });
-    if (found == g_tracks.end()) { error = "This track is no longer in the library."; return false; }
+    const auto found =
+        std::find_if(g_tracks.begin(), g_tracks.end(), [&](const Track& track) { return track.id == id; });
+    if (found == g_tracks.end()) {
+        error = "This track is no longer in the library.";
+        return false;
+    }
     if (found->kept_online) {
-        if (!set_kept_enabled_locked(id, enabled, error)) return false;
+        if (!set_kept_enabled_locked(id, enabled, error))
+            return false;
     } else {
         auto disabled = g_disabled_tracks;
-        if (enabled) disabled.erase(id); else disabled.insert(id);
-        if (!save_selection_locked(disabled, error)) return false;
+        if (enabled)
+            disabled.erase(id);
+        else
+            disabled.insert(id);
+        if (!save_selection_locked(disabled, error))
+            return false;
         g_disabled_tracks = std::move(disabled);
         found->enabled = enabled;
     }
@@ -2504,8 +2415,8 @@ bool set_enabled(const std::string& id, bool enabled, std::string& error) {
 
 bool uninstall(const std::string& id, std::string& error) {
     std::scoped_lock lock(g_mutex);
-    const auto found = std::find_if(g_tracks.begin(), g_tracks.end(),
-        [&id](const Track& track) { return track.id == id; });
+    const auto found =
+        std::find_if(g_tracks.begin(), g_tracks.end(), [&id](const Track& track) { return track.id == id; });
     if (found == g_tracks.end()) {
         error = "This track is no longer in the library.";
         return false;
@@ -2540,8 +2451,7 @@ void reload() {
     // level load, which is the only safe moment.
     if (g_sections[section_slot(Section::LevelHeaders)].built) {
         g_rescan_pending = true;
-        std::fprintf(stderr,
-                     "[custom-tracks] rescan deferred to the next level load\n");
+        std::fprintf(stderr, "[custom-tracks] rescan deferred to the next level load\n");
         return;
     }
 

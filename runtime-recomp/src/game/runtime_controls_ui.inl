@@ -8,12 +8,13 @@
 // Stick response / Motion / Shortcuts. Rarely used settings sit behind
 // disclosures, and restoring bindings or stick response can be undone.
 
-constexpr unsigned kCtlLine = 0x365361;     // --controls-line
-constexpr unsigned kCtlSurface = 0x102C3C;  // --controls-surface
+constexpr unsigned kCtlLine = 0x365361;    // --controls-line
+constexpr unsigned kCtlSurface = 0x102C3C; // --controls-surface
 
 struct ControlsSnapshot {
     std::array<std::array<std::array<int, 3>, static_cast<std::size_t>(dkr::runtime::input::Action::Count)>,
-               dkr::runtime::input::kPlayerCount> bindings{};
+               dkr::runtime::input::kPlayerCount>
+        bindings{};
     float deadzone = 0.0F;
     float anti_deadzone = 0.0F;
     float sensitivity = 0.0F;
@@ -58,8 +59,7 @@ ControlsSnapshot TakeControlsSnapshot() {
     snapshot.stick_y_inverted = input::stick_y_inverted();
     for (std::size_t vehicle = 0; vehicle < snapshot.vehicles.size(); ++vehicle) {
         const auto type = static_cast<input::VehicleClass>(vehicle);
-        snapshot.vehicles[vehicle] = {input::vehicle_stick_x_inverted(type),
-                                      input::vehicle_stick_y_inverted(type)};
+        snapshot.vehicles[vehicle] = {input::vehicle_stick_x_inverted(type), input::vehicle_stick_y_inverted(type)};
     }
     return snapshot;
 }
@@ -91,19 +91,35 @@ void RestoreControlsSnapshot(const ControlsSnapshot& snapshot) {
 // SDL's binding names, in the words a player knows (controls.js friendly()).
 std::string FriendlyBinding(const std::string& value) {
     static const std::map<std::string, std::string> kNames{
-        {"Unbound", "Not assigned"}, {"a", "A"}, {"b", "B"}, {"x", "X"}, {"y", "Y"},
-        {"start", "Menu / Start"}, {"back", "View / Select"}, {"guide", "Guide"},
-        {"leftshoulder", "Left shoulder"}, {"rightshoulder", "Right shoulder"},
-        {"leftstick", "Left stick click"}, {"rightstick", "Right stick click"},
-        {"dpup", "D-pad \xE2\x86\x91"}, {"dpdown", "D-pad \xE2\x86\x93"},
-        {"dpleft", "D-pad \xE2\x86\x90"}, {"dpright", "D-pad \xE2\x86\x92"},
-        {"lefttrigger +", "Left trigger"}, {"righttrigger +", "Right trigger"},
-        {"leftx -", "Left stick \xE2\x86\x90"}, {"leftx +", "Left stick \xE2\x86\x92"},
-        {"lefty -", "Left stick \xE2\x86\x91"}, {"lefty +", "Left stick \xE2\x86\x93"},
-        {"rightx -", "Right stick \xE2\x86\x90"}, {"rightx +", "Right stick \xE2\x86\x92"},
-        {"righty -", "Right stick \xE2\x86\x91"}, {"righty +", "Right stick \xE2\x86\x93"},
+        {"Unbound", "Not assigned"},
+        {"a", "A"},
+        {"b", "B"},
+        {"x", "X"},
+        {"y", "Y"},
+        {"start", "Menu / Start"},
+        {"back", "View / Select"},
+        {"guide", "Guide"},
+        {"leftshoulder", "Left shoulder"},
+        {"rightshoulder", "Right shoulder"},
+        {"leftstick", "Left stick click"},
+        {"rightstick", "Right stick click"},
+        {"dpup", "D-pad \xE2\x86\x91"},
+        {"dpdown", "D-pad \xE2\x86\x93"},
+        {"dpleft", "D-pad \xE2\x86\x90"},
+        {"dpright", "D-pad \xE2\x86\x92"},
+        {"lefttrigger +", "Left trigger"},
+        {"righttrigger +", "Right trigger"},
+        {"leftx -", "Left stick \xE2\x86\x90"},
+        {"leftx +", "Left stick \xE2\x86\x92"},
+        {"lefty -", "Left stick \xE2\x86\x91"},
+        {"lefty +", "Left stick \xE2\x86\x93"},
+        {"rightx -", "Right stick \xE2\x86\x90"},
+        {"rightx +", "Right stick \xE2\x86\x92"},
+        {"righty -", "Right stick \xE2\x86\x91"},
+        {"righty +", "Right stick \xE2\x86\x93"},
     };
-    if (const auto found = kNames.find(value); found != kNames.end()) return found->second;
+    if (const auto found = kNames.find(value); found != kNames.end())
+        return found->second;
     // A two-input shortcut: name each half.
     if (const std::size_t plus = value.find(" + "); plus != std::string::npos) {
         return FriendlyBinding(value.substr(0, plus)) + " + " + FriendlyBinding(value.substr(plus + 3U));
@@ -139,7 +155,8 @@ bool ControlsDisclosure(const char* id, std::string_view label, bool& open, floa
     draw->AddRectFilled(at, {at.x + width, at.y + 1.0F}, PaddockCol(kCtlLine));
     ImGui::SetCursorScreenPos({at.x, at.y + 1.0F});
     const PaddockPress press = PaddockBeginPress(id, {width, 48.0F});
-    if (press.pressed) open = !open;
+    if (press.pressed)
+        open = !open;
     const PaddockType type = PaddockReading(14.0F, true, 1.35F);
     const ImU32 ink = PaddockApply(PaddockMix(PaddockRgb(kSetText), PaddockRgb(0xFFFFFF), press.hover));
     const float top = std::round(press.min.y + (48.0F - type.line) * 0.5F);
@@ -152,13 +169,13 @@ bool ControlsDisclosure(const char* id, std::string_view label, bool& open, floa
         draw->AddRect({press.min.x - 4.5F, press.min.y - 1.5F}, {press.max.x + 4.5F, press.max.y + 1.5F},
                       PaddockCol(0xFFD078), 8.0F, 0, 3.0F);
     }
-    if (open) PaddockGap(8.0F);
+    if (open)
+        PaddockGap(8.0F);
     return open;
 }
 
 // Two equal cells side by side (.controls-row), 12 px apart.
-template <typename Left, typename Right>
-void ControlsRow(float width, Left&& left, Right&& right) {
+template <typename Left, typename Right> void ControlsRow(float width, Left&& left, Right&& right) {
     const float half = std::floor((width - 12.0F) * 0.5F);
     const ImVec2 at = ImGui::GetCursorScreenPos();
     ImGui::BeginGroup();
@@ -180,8 +197,8 @@ void ControlsAxis(std::string_view label, float value, bool live, float width) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const PaddockType type = PaddockReading(14.0F, false, 1.45F);
     const float mid = at.y + 16.0F;
-    PaddockDrawRun(draw, type, {at.x, std::round(mid - type.line * 0.5F)}, PaddockCol(kSetText),
-                   label.data(), label.data() + label.size());
+    PaddockDrawRun(draw, type, {at.x, std::round(mid - type.line * 0.5F)}, PaddockCol(kSetText), label.data(),
+                   label.data() + label.size());
     const float meter_x = at.x + 100.0F + 12.0F;
     const float meter_end = at.x + width - 52.0F - 12.0F;
     if (live) {
@@ -194,11 +211,12 @@ void ControlsAxis(std::string_view label, float value, bool live, float width) {
         draw->AddRect(a, b, PaddockCol(0x476373));
     }
     char text[16]{};
-    if (live) std::snprintf(text, sizeof(text), "%.2f", static_cast<double>(value));
+    if (live)
+        std::snprintf(text, sizeof(text), "%.2f", static_cast<double>(value));
     const std::string_view shown = live ? std::string_view(text) : std::string_view("\xE2\x80\x94");
     const float shown_width = PaddockMeasure(type, shown);
-    PaddockDrawRun(draw, type, {at.x + width - shown_width, std::round(mid - type.line * 0.5F)},
-                   PaddockCol(kSetText), shown.data(), shown.data() + shown.size());
+    PaddockDrawRun(draw, type, {at.x + width - shown_width, std::round(mid - type.line * 0.5F)}, PaddockCol(kSetText),
+                   shown.data(), shown.data() + shown.size());
     ImGui::Dummy({width, 32.0F});
 }
 
@@ -236,10 +254,12 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
         if (device.assigned_player >= 0 && device.assigned_player != static_cast<int>(g_selected_player)) {
             detail = "Player " + std::to_string(device.assigned_player + 1);
         }
-        if (!device.mapped) detail += std::string(detail.empty() ? "" : " \xC2\xB7 ") + "Setup required";
+        if (!device.mapped)
+            detail += std::string(detail.empty() ? "" : " \xC2\xB7 ") + "Setup required";
         choices.push_back({label, detail, false});
         instances.push_back(device.instance);
-        if (device.instance == current_instance) selected = static_cast<int>(choices.size()) - 1;
+        if (device.instance == current_instance)
+            selected = static_cast<int>(choices.size()) - 1;
     }
     if (status.assigned && !status.connected) {
         choices.push_back({"Assigned controller \xC2\xB7 disconnected", {}, true});
@@ -266,10 +286,11 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
     PaddockGap(16.0F);
     // The connection line: a dot, then what the player has.
     {
-        std::string line = status.connected ? "Connected"
-                         : status.assigned ? "Disconnected" : "No controller assigned";
-        if (status.connected && status.rumble) line += " \xC2\xB7 Rumble";
-        if (status.connected && status.gyro) line += " \xC2\xB7 Motion";
+        std::string line = status.connected ? "Connected" : status.assigned ? "Disconnected" : "No controller assigned";
+        if (status.connected && status.rumble)
+            line += " \xC2\xB7 Rumble";
+        if (status.connected && status.gyro)
+            line += " \xC2\xB7 Motion";
         const ImVec2 at = ImGui::GetCursorScreenPos();
         const PaddockType type = PaddockReading(16.0F, true, 1.45F);
         ImGui::GetWindowDrawList()->AddCircleFilled({at.x + 4.0F, at.y + type.line * 0.5F}, 4.0F,
@@ -286,18 +307,21 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
     } else if (!status.mapping_source.empty()) {
         ControlsNote("Input map: " + status.mapping_source, width);
     }
-    ControlsRow(width, [&](float cell) {
-        if (SettingsButton("Press a button to assign", cell)) {
-            BeginControllerCapture(kAssignControllerCaptureAction, CaptureDevice::Controller);
-        }
-    }, [&](float cell) {
-        if (SettingsButton("Identify with vibration", cell, !status.connected || !status.rumble,
-                           SettingsButtonTone::Plain, false,
-                           status.connected ? "This controller does not report vibration support."
-                                            : "Connect and assign a controller first.")) {
-            platform::identify_controller(g_selected_player);
-        }
-    });
+    ControlsRow(
+        width,
+        [&](float cell) {
+            if (SettingsButton("Press a button to assign", cell)) {
+                BeginControllerCapture(kAssignControllerCaptureAction, CaptureDevice::Controller);
+            }
+        },
+        [&](float cell) {
+            if (SettingsButton("Identify with vibration", cell, !status.connected || !status.rumble,
+                               SettingsButtonTone::Plain, false,
+                               status.connected ? "This controller does not report vibration support."
+                                                : "Connect and assign a controller first.")) {
+                platform::identify_controller(g_selected_player);
+            }
+        });
     PaddockGap(20.0F);
 
     // The input test (.controls-preview).
@@ -306,16 +330,16 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
         const float inner = box.Inner();
         PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), "Input test", inner);
         PaddockGap(6.0F);
-        ControlsNote(status.connected ? "Move the stick or press a button."
-                                      : "Connect a controller to test input.",
+        ControlsNote(status.connected ? "Move the stick or press a button." : "Connect a controller to test input.",
                      inner);
         const auto preview = platform::player_input_preview(g_selected_player);
         ControlsAxis("Horizontal", preview.stick_x, status.connected, inner);
         ControlsAxis("Vertical", preview.stick_y, status.connected, inner);
         PaddockGap(10.0F);
         PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetText),
-                    std::string("Buttons: ") + (!status.connected ? "Unavailable"
-                                                : preview.buttons != 0U ? "Pressed" : "None pressed"),
+                    std::string("Buttons: ") + (!status.connected       ? "Unavailable"
+                                                : preview.buttons != 0U ? "Pressed"
+                                                                        : "None pressed"),
                     inner);
         box.End([](ImDrawList* draw, ImVec2 a, ImVec2 b) {
             PaddockPanel(draw, a, b, {PaddockRound(8.0F), PaddockRgb(kCtlSurface), PaddockRgb(kCtlLine), 1.0F});
@@ -343,8 +367,8 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
         if (SettingsDropdown("assignment", "Controller assignment", &assignment,
                              {"Automatic \xC2\xB7 first available player", "Manual"}, width)) {
             platform::set_controller_assignment_mode(assignment == 1
-                ? dkr::runtime::controllers::AssignmentMode::Manual
-                : dkr::runtime::controllers::AssignmentMode::Automatic);
+                                                         ? dkr::runtime::controllers::AssignmentMode::Manual
+                                                         : dkr::runtime::controllers::AssignmentMode::Automatic);
             commit();
         }
         PaddockGap(16.0F);
@@ -361,8 +385,8 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
             commit();
         }
         PaddockGap(8.0F);
-        if (rumble_pak && dkr::runtime::enhancements::modern_options_visible(
-                              dkr::runtime::enhancements::presentation_profile())) {
+        if (rumble_pak &&
+            dkr::runtime::enhancements::modern_options_visible(dkr::runtime::enhancements::presentation_profile())) {
             int strength = static_cast<int>(std::lround(platform::rumble_strength() * 100.0F));
             if (SettingsRange("##rumble-strength", "Rumble strength", &strength, 0, 100, width,
                               [](int value) { return SettingsRangeValue{std::to_string(value), "%"}; })) {
@@ -371,51 +395,52 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
             }
             PaddockGap(16.0F);
         }
-        ControlsNote("Memory Pak stores game data. Rumble Pak enables vibration. Both can stay enabled.",
-                     width);
+        ControlsNote("Memory Pak stores game data. Rumble Pak enables vibration. Both can stay enabled.", width);
     }
 
     if (ControlsDisclosure("##advanced", "Advanced compatibility", state.advanced_open, width)) {
         ControlsScope(true, width);
         int backend = static_cast<int>(platform::requested_input_backend());
-        if (SettingsDropdown("backend", "Controller backend", &backend,
-                             {"Auto", "SDL2", "SDL3"}, width)) {
-            platform::set_requested_input_backend(
-                backend == static_cast<int>(platform::InputBackend::SDL2Compatibility)
-                    ? platform::InputBackend::SDL2Compatibility
-                : backend == static_cast<int>(platform::InputBackend::SDL3Native)
-                    ? platform::InputBackend::SDL3Native
-                    : platform::InputBackend::Automatic);
+        if (SettingsDropdown("backend", "Controller backend", &backend, {"Auto", "SDL2", "SDL3"}, width)) {
+            platform::set_requested_input_backend(backend == static_cast<int>(platform::InputBackend::SDL2Compatibility)
+                                                      ? platform::InputBackend::SDL2Compatibility
+                                                  : backend == static_cast<int>(platform::InputBackend::SDL3Native)
+                                                      ? platform::InputBackend::SDL3Native
+                                                      : platform::InputBackend::Automatic);
             commit();
         }
         PaddockGap(8.0F);
-        ControlsNote(std::string("Active: ") + platform::input_backend_name(platform::active_input_backend()), width, kSetText);
+        ControlsNote(std::string("Active: ") + platform::input_backend_name(platform::active_input_backend()), width,
+                     kSetText);
         if (dkr::runtime::copy::looks_like_error(platform::input_backend_detail()))
             DrawIssue(platform::input_backend_detail(), dkr::runtime::copy::Area::Controller);
-        else DrawTechnicalDetails(platform::input_backend_detail(), "Controller details");
-        ControlsNote(platform::input_backend_switch_pending()
-                         ? "Switching controller backend..."
-                         : "",
-                     width, platform::input_backend_switch_pending() ? kSetWarm : kSetMuted);
+        else
+            DrawTechnicalDetails(platform::input_backend_detail(), "Controller details");
+        ControlsNote(platform::input_backend_switch_pending() ? "Switching controller backend..." : "", width,
+                     platform::input_backend_switch_pending() ? kSetWarm : kSetMuted);
         ControlsNote(sdl3_native ? "Switch to SDL2 to create or import controller mappings."
                                  : "Import or export custom controller mappings.",
                      width);
-        ControlsRow(width, [&](float cell) {
-            if (SettingsButton("Remap this controller", cell, sdl3_native || !status.connected,
-                               SettingsButtonTone::Plain, false,
-                               sdl3_native ? "Requires SDL2." : "Connect and assign a controller first.") &&
-                platform::begin_controller_mapping(current_instance, g_selected_player)) {
-                g_controller_mapping_popup_pending = true;
-                g_controller_mapping_completion_saved = false;
-            }
-        }, [&](float cell) {
-            if (SettingsButton("Import controller maps", cell, sdl3_native, SettingsButtonTone::Plain, false,
-                               "Requires SDL2.")) {
-                ImportControllerMappingsWithDialog();
-            }
-        });
+        ControlsRow(
+            width,
+            [&](float cell) {
+                if (SettingsButton("Remap this controller", cell, sdl3_native || !status.connected,
+                                   SettingsButtonTone::Plain, false,
+                                   sdl3_native ? "Requires SDL2." : "Connect and assign a controller first.") &&
+                    platform::begin_controller_mapping(current_instance, g_selected_player)) {
+                    g_controller_mapping_popup_pending = true;
+                    g_controller_mapping_completion_saved = false;
+                }
+            },
+            [&](float cell) {
+                if (SettingsButton("Import controller maps", cell, sdl3_native, SettingsButtonTone::Plain, false,
+                                   "Requires SDL2.")) {
+                    ImportControllerMappingsWithDialog();
+                }
+            });
         PaddockGap(12.0F);
-        if (SettingsButton("Export custom maps")) ExportControllerMappingsWithDialog();
+        if (SettingsButton("Export custom maps"))
+            ExportControllerMappingsWithDialog();
         if (!g_controller_mapping_status.empty()) {
             PaddockGap(12.0F);
             DrawFriendlyStatus(g_controller_mapping_status, width, dkr::runtime::copy::Area::Controller);
@@ -449,7 +474,8 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
         const ImVec2 at = ImGui::GetCursorScreenPos();
         int slot = 0;
         for (int index = 0; index < 4; ++index) {
-            if (index == 1 && !keyboard) continue;
+            if (index == 1 && !keyboard)
+                continue;
             PaddockDrawRun(draw, head, {at.x + column * static_cast<float>(slot) + 8.0F, at.y + 10.0F},
                            PaddockCol(kSetMuted), kHeads[index], kHeads[index] + std::strlen(kHeads[index]));
             ++slot;
@@ -473,7 +499,8 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
         PaddockGap(8.0F);
         int row_index = 0;
         for (const int index : actions) {
-            if (index < 0) continue;
+            if (index < 0)
+                continue;
             const auto action = static_cast<input::Action>(index);
             const ImVec2 at = ImGui::GetCursorScreenPos();
             ImGui::PushID(index);
@@ -482,16 +509,17 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
                 const bool is_keyboard = device_column == 0;
                 const bool secondary = device_column == 2;
                 const int source = is_keyboard ? input::keyboard_binding(g_selected_player, action)
-                                 : secondary ? input::secondary_controller_binding(g_selected_player, action)
-                                             : input::controller_binding(g_selected_player, action);
+                                   : secondary ? input::secondary_controller_binding(g_selected_player, action)
+                                               : input::controller_binding(g_selected_player, action);
                 const bool unbound = source == input::kUnbound;
-                const std::string name = FriendlyBinding(
-                    is_keyboard ? input::keyboard_binding_name(source) : input::controller_binding_name(source));
+                const std::string name = FriendlyBinding(is_keyboard ? input::keyboard_binding_name(source)
+                                                                     : input::controller_binding_name(source));
                 ImGui::PushID(device_column);
                 const std::string label = name + "##binding";
                 if (SettingsButton(label.c_str(), cell_width, false,
-                                   unbound ? SettingsButtonTone::Unbound
-                                   : secondary ? SettingsButtonTone::Outline : SettingsButtonTone::Plain,
+                                   unbound     ? SettingsButtonTone::Unbound
+                                   : secondary ? SettingsButtonTone::Outline
+                                               : SettingsButtonTone::Plain,
                                    true, nullptr, 8.0F)) {
                     BeginControllerCapture(index, is_keyboard ? CaptureDevice::Keyboard : CaptureDevice::Controller,
                                            secondary);
@@ -506,11 +534,13 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
                 draw->AddRectFilled({at.x, at.y + row_height - 1.0F}, {at.x + width, at.y + row_height},
                                     PaddockCol(0xFFFFFF, 12U));
                 const char* label = input::action_label(action);
-                PaddockDrawRun(draw, label_type, {at.x + 8.0F, std::round(at.y + (row_height - label_type.line) * 0.5F)},
+                PaddockDrawRun(draw, label_type,
+                               {at.x + 8.0F, std::round(at.y + (row_height - label_type.line) * 0.5F)},
                                PaddockCol(kSetText), label, label + std::strlen(label));
                 int slot = 1;
                 for (int device_column = 0; device_column < 3; ++device_column) {
-                    if (device_column == 0 && !keyboard) continue;
+                    if (device_column == 0 && !keyboard)
+                        continue;
                     ImGui::SetCursorScreenPos({at.x + column * static_cast<float>(slot) + 4.0F, at.y + 4.0F});
                     binding_button(device_column, column - 8.0F);
                     ++slot;
@@ -530,7 +560,8 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
                 int slot = 0;
                 float bottom = row_at.y;
                 for (int device_column = 0; device_column < 3; ++device_column) {
-                    if (device_column == 0 && !keyboard) continue;
+                    if (device_column == 0 && !keyboard)
+                        continue;
                     ImGui::SetCursorScreenPos({row_at.x + cell * static_cast<float>(slot) + 4.0F, row_at.y});
                     ImGui::BeginGroup();
                     PaddockText(PaddockReading(12.0F, false, 1.45F), PaddockRgb(kSetMuted),
@@ -572,7 +603,8 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
         }
         if (SettingsButton("Restore all players\xE2\x80\x99 bindings")) {
             ControlsSnapshot before = TakeControlsSnapshot();
-            for (std::size_t index = 0; index < input::kPlayerCount; ++index) input::reset_defaults(index);
+            for (std::size_t index = 0; index < input::kPlayerCount; ++index)
+                input::reset_defaults(index);
             commit();
             state.undo = before;
             state.undo_message = "All player bindings restored.";
@@ -629,7 +661,8 @@ void DrawControlsDriving(ControlsPageState& state, float width, const std::funct
             const auto type = static_cast<input::VehicleClass>(vehicle);
             const float row_height = 8.0F + 44.0F + 8.0F;
             PaddockDrawRun(draw, row_type, {at.x + 8.0F, std::round(y + (row_height - row_type.line) * 0.5F)},
-                           PaddockCol(kSetText), kVehicles[vehicle], kVehicles[vehicle] + std::strlen(kVehicles[vehicle]));
+                           PaddockCol(kSetText), kVehicles[vehicle],
+                           kVehicles[vehicle] + std::strlen(kVehicles[vehicle]));
             ImGui::PushID(static_cast<int>(vehicle));
             bool invert_x = input::vehicle_stick_x_inverted(type);
             ImGui::SetCursorScreenPos({at.x + column + 8.0F, y + 8.0F});
@@ -682,8 +715,7 @@ void DrawControlsDriving(ControlsPageState& state, float width, const std::funct
         ControlsNote("How far a trigger must be pressed.", width);
     }
     PaddockGap(12.0F);
-    ControlsNote("",
-                 width);
+    ControlsNote("", width);
     if (SettingsButton("Restore stick response and inversions")) {
         ControlsSnapshot before = TakeControlsSnapshot();
         input::set_stick_deadzone(23.95F);
@@ -717,7 +749,8 @@ void DrawControlsMotion(float width, bool live, const std::function<void()>& com
     }
     PaddockGap(8.0F);
     ControlsNote("Requires a motion-enabled controller.", width);
-    if (!gyro) return;
+    if (!gyro)
+        return;
     int axis = static_cast<int>(input::gyro_axis(player));
     if (SettingsDropdown("motion-style", "Motion style", &axis,
                          {"Roll controller like a wheel", "Turn controller left and right"}, width)) {
@@ -775,17 +808,20 @@ void DrawControlsMotion(float width, bool live, const std::function<void()>& com
     }
     PaddockGap(20.0F);
     const char* reason = !live ? "Available from the in-game overlay." : "No motion sensor was reported.";
-    ControlsRow(width, [&](float cell) {
-        if (SettingsButton("Recenter steering", cell, !live || !available, SettingsButtonTone::Plain, false,
-                           reason)) {
-            input::recenter_gyro(player);
-        }
-    }, [&](float cell) {
-        if (SettingsButton("Calibrate controller", cell, !live || !available || input::gyro_calibrating(player),
-                           SettingsButtonTone::Plain, false, reason)) {
-            input::begin_gyro_calibration(player);
-        }
-    });
+    ControlsRow(
+        width,
+        [&](float cell) {
+            if (SettingsButton("Recenter steering", cell, !live || !available, SettingsButtonTone::Plain, false,
+                               reason)) {
+                input::recenter_gyro(player);
+            }
+        },
+        [&](float cell) {
+            if (SettingsButton("Calibrate controller", cell, !live || !available || input::gyro_calibrating(player),
+                               SettingsButtonTone::Plain, false, reason)) {
+                input::begin_gyro_calibration(player);
+            }
+        });
     PaddockGap(12.0F);
     if (input::gyro_calibrating(player)) {
         char text[64]{};
@@ -821,34 +857,38 @@ void DrawControlsShortcuts(float width, const std::function<void()>& commit) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     PaddockGap(8.0F);
     for (const auto& [shortcut, label] : kShortcuts) {
-        if (shortcut == input::ShortcutAction::QuickRestart && !quick_restart) continue;
+        if (shortcut == input::ShortcutAction::QuickRestart && !quick_restart)
+            continue;
         ImGui::PushID(static_cast<int>(shortcut));
         PaddockGap(20.0F);
         PaddockText(PaddockReading(16.0F, true, 1.4F), PaddockRgb(kSetText), label, width);
         PaddockGap(12.0F);
-        ControlsRow(width, [&](float cell) {
-            PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Keyboard", cell);
-            PaddockGap(6.0F);
-            const auto binding = input::shortcut_keyboard_binding(shortcut);
-            const std::string name =
-                FriendlyBinding(ShortcutBindingName(CaptureDevice::Keyboard, binding)) + "##keyboard";
-            if (SettingsButton(name.c_str(), cell, false,
-                               binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
-                                                                  : SettingsButtonTone::Plain)) {
-                BeginShortcutCapture(CaptureDevice::Keyboard, shortcut);
-            }
-        }, [&](float cell) {
-            PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Controller", cell);
-            PaddockGap(6.0F);
-            const auto binding = input::shortcut_controller_binding(shortcut);
-            const std::string name =
-                FriendlyBinding(ShortcutBindingName(CaptureDevice::Controller, binding)) + "##controller";
-            if (SettingsButton(name.c_str(), cell, false,
-                               binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
-                                                                  : SettingsButtonTone::Plain)) {
-                BeginShortcutCapture(CaptureDevice::Controller, shortcut);
-            }
-        });
+        ControlsRow(
+            width,
+            [&](float cell) {
+                PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Keyboard", cell);
+                PaddockGap(6.0F);
+                const auto binding = input::shortcut_keyboard_binding(shortcut);
+                const std::string name =
+                    FriendlyBinding(ShortcutBindingName(CaptureDevice::Keyboard, binding)) + "##keyboard";
+                if (SettingsButton(name.c_str(), cell, false,
+                                   binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
+                                                                      : SettingsButtonTone::Plain)) {
+                    BeginShortcutCapture(CaptureDevice::Keyboard, shortcut);
+                }
+            },
+            [&](float cell) {
+                PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Controller", cell);
+                PaddockGap(6.0F);
+                const auto binding = input::shortcut_controller_binding(shortcut);
+                const std::string name =
+                    FriendlyBinding(ShortcutBindingName(CaptureDevice::Controller, binding)) + "##controller";
+                if (SettingsButton(name.c_str(), cell, false,
+                                   binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
+                                                                      : SettingsButtonTone::Plain)) {
+                    BeginShortcutCapture(CaptureDevice::Controller, shortcut);
+                }
+            });
         PaddockGap(20.0F);
         const ImVec2 at = ImGui::GetCursorScreenPos();
         draw->AddRectFilled({at.x, at.y - 1.0F}, {at.x + width, at.y}, PaddockCol(kCtlLine));
@@ -880,11 +920,11 @@ void DrawControlsCaptureModal() {
     const bool visible = ImGui::BeginPopupModal(kCapturePopup, nullptr,
                                                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                                                     ImGuiWindowFlags_NoSavedSettings |
-                                                    ImGuiWindowFlags_AlwaysAutoResize |
-                                                    ImGuiWindowFlags_NoScrollbar);
+                                                    ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(4);
-    if (!visible) return;
+    if (!visible)
+        return;
     g_paddock_modal_frame = ImGui::GetFrameCount();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
     const float inner = width - 52.0F;
@@ -900,9 +940,8 @@ void DrawControlsCaptureModal() {
     if (g_capture_action >= 0) {
         heading = "Player " + std::to_string(g_selected_player + 1U) + " \xC2\xB7 " +
                   dkr::runtime::input::action_label(static_cast<Action>(g_capture_action));
-        help = g_capture_device == CaptureDevice::Keyboard
-            ? "Press a keyboard key. Escape cancels."
-            : "Press a button or move the stick. Escape cancels.";
+        help = g_capture_device == CaptureDevice::Keyboard ? "Press a keyboard key. Escape cancels."
+                                                           : "Press a button or move the stick. Escape cancels.";
     } else if (g_capture_action == kShortcutCaptureAction) {
         heading = ShortcutActionLabel(g_capture_shortcut_action);
         help = std::string("Press one ") + (g_capture_device == CaptureDevice::Keyboard ? "key" : "controller button") +
@@ -922,8 +961,8 @@ void DrawControlsCaptureModal() {
                     "Captured: " + FriendlyBinding(ShortcutBindingName(g_capture_device, pending)), inner);
     }
     PaddockGap(24.0F);
-    const char* clear_label = g_capture_action == kAssignControllerCaptureAction ? "Clear assignment"
-                                                                                 : "Remove binding";
+    const char* clear_label =
+        g_capture_action == kAssignControllerCaptureAction ? "Clear assignment" : "Remove binding";
     const float clear_width = SettingsButtonWidth(clear_label);
     const float cancel_width = SettingsButtonWidth("Cancel");
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + inner - clear_width - 12.0F - cancel_width);
@@ -952,7 +991,8 @@ void DrawControlsCaptureModal() {
         g_capture_finished = true;
     }
     ImGui::SameLine(0.0F, 12.0F);
-    if (SettingsButton("Cancel", cancel_width)) g_capture_finished = true;
+    if (SettingsButton("Cancel", cancel_width))
+        g_capture_finished = true;
     if (g_capture_finished) {
         ImGui::CloseCurrentPopup();
         g_capture_action = -1;
@@ -993,8 +1033,8 @@ void DrawControlsPage(float available_width, bool live) {
     // h1 { min-height: 0; margin-bottom: 10px }: the heading's box is 6 px
     // taller than the study's 58 px line.
     PaddockGap(4.0F);
-    PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted),
-                "Set up controllers and button bindings.", width);
+    PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Set up controllers and button bindings.",
+                width);
     PaddockGap(24.0F);
 
     // The local player (.controls-player-bar): four painted chips.
@@ -1018,10 +1058,10 @@ void DrawControlsPage(float available_width, bool live) {
             chips_width = width;
             chips_y = ImGui::GetCursorScreenPos().y;
         } else {
-            ImGui::GetWindowDrawList()->AddText(label_type.font, label_type.size,
-                                                {at.x, std::round(at.y + (chip_height - label_type.line) * 0.5F) +
-                                                           PaddockGlyphTop(label_type)},
-                                                PaddockCol(kSetMuted), "Local player");
+            ImGui::GetWindowDrawList()->AddText(
+                label_type.font, label_type.size,
+                {at.x, std::round(at.y + (chip_height - label_type.line) * 0.5F) + PaddockGlyphTop(label_type)},
+                PaddockCol(kSetMuted), "Local player");
         }
         const float chip_width = std::floor((chips_width - 30.0F) / 4.0F);
         for (std::size_t player = 0; player < dkr::runtime::input::kPlayerCount; ++player) {
@@ -1035,10 +1075,11 @@ void DrawControlsPage(float available_width, bool live) {
         ImGui::Dummy({width, 0.0F});
     }
     PaddockGap(20.0F);
-    const int picked = SettingsSecondaryNav("controls-sections",
-                                            {"Device", "Button mapping", "Stick response", "Motion", "Shortcuts"},
-                                            g_controls_section, width);
-    if (picked >= 0) g_controls_section = picked;
+    const int picked =
+        SettingsSecondaryNav("controls-sections", {"Device", "Button mapping", "Stick response", "Motion", "Shortcuts"},
+                             g_controls_section, width);
+    if (picked >= 0)
+        g_controls_section = picked;
     PaddockGap(22.0F);
 
     // The undo bar (.controls-feedback).
@@ -1066,14 +1107,14 @@ void DrawControlsPage(float available_width, bool live) {
         PaddockGap(20.0F);
     }
 
-    const bool modern = dkr::runtime::enhancements::modern_options_visible(
-        dkr::runtime::enhancements::presentation_profile());
+    const bool modern =
+        dkr::runtime::enhancements::modern_options_visible(dkr::runtime::enhancements::presentation_profile());
     if ((g_controls_section == 2 || g_controls_section == 3) && !modern) {
         ControlsScope(g_controls_section == 2, width);
         ControlsHeading(g_controls_section == 2 ? "Stick response" : "Motion steering", width);
-        ControlsNote("Requires Modern graphics.",
-                     width);
-        if (SettingsButton("Open graphics settings")) g_page_navigation_request = kPageGraphics;
+        ControlsNote("Requires Modern graphics.", width);
+        if (SettingsButton("Open graphics settings"))
+            g_page_navigation_request = kPageGraphics;
     } else if (g_controls_section == 0) {
         DrawControlsDevice(state, width, commit);
     } else if (g_controls_section == 1) {
@@ -1091,8 +1132,8 @@ void DrawControlsPage(float available_width, bool live) {
         const ImVec2 at = ImGui::GetCursorScreenPos();
         ImGui::GetWindowDrawList()->AddRectFilled(at, {at.x + width, at.y + 1.0F}, PaddockCol(kCtlLine));
         PaddockGap(1.0F + 14.0F);
-        PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted),
-                    "Changes are saved automatically.", width);
+        PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(kSetMuted), "Changes are saved automatically.",
+                    width);
     }
     ImGui::PopStyleVar();
     --g_settings_regular_labels;

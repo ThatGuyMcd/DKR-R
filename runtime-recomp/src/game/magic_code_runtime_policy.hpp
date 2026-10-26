@@ -24,28 +24,24 @@ struct MagicCodeWordUpdate {
     std::uint32_t applied_mask = 0U;
 };
 
-constexpr MagicCodeSessionState begin_magic_code_session(
-    std::uint32_t persistent, std::uint32_t deferred_actions,
-    bool online = false) {
+constexpr MagicCodeSessionState begin_magic_code_session(std::uint32_t persistent, std::uint32_t deferred_actions,
+                                                         bool online = false) {
     return {
         normalise_magic_code_mask(persistent) & kPersistentMagicCodeMask,
-        deferred_actions & kOneShotMagicCodeMask &
-            (online ? ~magic_code_bit(10) : 0xFFFFFFFFU),
+        deferred_actions & kOneShotMagicCodeMask & (online ? ~magic_code_bit(10) : 0xFFFFFFFFU),
         0U,
         0U,
         false,
     };
 }
 
-constexpr MagicCodeWordUpdate apply_magic_code_session(
-    MagicCodeSessionState state, std::uint32_t active,
-    std::uint32_t unlocked) {
+constexpr MagicCodeWordUpdate apply_magic_code_session(MagicCodeSessionState state, std::uint32_t active,
+                                                       std::uint32_t unlocked) {
     if (state.applied) {
         return {state, active, unlocked, 0U};
     }
 
-    const std::uint32_t selected = normalise_magic_code_mask(
-        state.persistent_mask | state.deferred_action_mask);
+    const std::uint32_t selected = normalise_magic_code_mask(state.persistent_mask | state.deferred_action_mask);
     state.applied = true;
     state.armed_action_mask = selected & kOneShotMagicCodeMask;
     return {
@@ -59,16 +55,15 @@ constexpr MagicCodeWordUpdate apply_magic_code_session(
 // Only branch-specific native success hooks may record completion. Clearing
 // or toggling a bit in the native menu is NOT evidence of an executed action.
 // Speculative/replayed ticks must not produce persistent host-side events.
-constexpr MagicCodeSessionState complete_magic_code_action(
-    MagicCodeSessionState state, std::uint32_t action, bool authoritative) {
+constexpr MagicCodeSessionState complete_magic_code_action(MagicCodeSessionState state, std::uint32_t action,
+                                                           bool authoritative) {
     if (authoritative) {
         state.completed_action_mask |= action & state.armed_action_mask;
     }
     return state;
 }
 
-constexpr MagicCodeSessionState acknowledge_magic_code_actions(
-    MagicCodeSessionState state, std::uint32_t consumed) {
+constexpr MagicCodeSessionState acknowledge_magic_code_actions(MagicCodeSessionState state, std::uint32_t consumed) {
     state.armed_action_mask &= ~consumed;
     state.completed_action_mask &= ~consumed;
     // Keep the original launch selection immutable, including consumed codes.

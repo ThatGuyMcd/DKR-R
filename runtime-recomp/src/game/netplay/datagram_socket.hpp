@@ -16,7 +16,9 @@ struct PeerAddress {
     std::uint32_t size = 0;
 
     bool operator==(const PeerAddress&) const;
-    explicit operator bool() const { return size != 0U; }
+    explicit operator bool() const {
+        return size != 0U;
+    }
 };
 
 enum class DatagramSendStatus : std::uint8_t {
@@ -26,7 +28,7 @@ enum class DatagramSendStatus : std::uint8_t {
 };
 
 class DatagramSocket final {
-public:
+  public:
     DatagramSocket();
     ~DatagramSocket();
     DatagramSocket(const DatagramSocket&) = delete;
@@ -36,20 +38,16 @@ public:
     void close();
     bool is_open() const;
     std::uint16_t local_port() const;
-    bool send(const PeerAddress& destination,
-              std::span<const std::uint8_t> bytes, std::string& error);
-    DatagramSendStatus send_status(const PeerAddress& destination,
-                                   std::span<const std::uint8_t> bytes,
+    bool send(const PeerAddress& destination, std::span<const std::uint8_t> bytes, std::string& error);
+    DatagramSendStatus send_status(const PeerAddress& destination, std::span<const std::uint8_t> bytes,
                                    std::string& error);
-    bool receive(PeerAddress& source, std::vector<std::uint8_t>& bytes,
-                 std::string& error);
+    bool receive(PeerAddress& source, std::vector<std::uint8_t>& bytes, std::string& error);
 
-    static bool resolve(std::string_view host, std::uint16_t port,
-                        PeerAddress& address, std::string& error);
+    static bool resolve(std::string_view host, std::uint16_t port, PeerAddress& address, std::string& error);
     static std::string describe(const PeerAddress& address);
     static std::string describe_host(const PeerAddress& address);
 
-private:
+  private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

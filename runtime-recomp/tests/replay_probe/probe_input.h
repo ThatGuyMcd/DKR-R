@@ -11,7 +11,9 @@ typedef struct dkr_probe_input_state {
     uint32_t requested, ready, delivered, motors;
     dkr_probe_pad pads[4];
 } dkr_probe_input_state;
-typedef struct dkr_probe_motor_event { uint32_t channel, enabled; } dkr_probe_motor_event;
+typedef struct dkr_probe_motor_event {
+    uint32_t channel, enabled;
+} dkr_probe_motor_event;
 void dkr_probe_input_configure(int enabled);
 int dkr_probe_input_enabled(void);
 void dkr_probe_input_initialize(void);

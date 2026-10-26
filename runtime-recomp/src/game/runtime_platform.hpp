@@ -58,18 +58,15 @@ void poll_input();
 // profile feeds that racer; the synchronized session then routes the sample to
 // its immutable online slot. The occupied mask also virtualizes identical N64
 // controller ports on every peer.
-void set_online_input_routing(bool enabled, std::uint8_t occupied_mask = 0U,
-                              std::uint8_t local_slot = 0xFFU);
+void set_online_input_routing(bool enabled, std::uint8_t occupied_mask = 0U, std::uint8_t local_slot = 0xFFU);
 void set_online_input_profile(std::size_t profile);
 std::size_t online_input_profile();
 bool get_input(int controller, std::uint16_t* buttons, float* x, float* y);
 // Reads the latest private physical sample for a local control profile. Online
 // netcode consumes this lane before publishing a complete synchronized frame
 // to DKR's virtual controller ports.
-bool get_physical_input(int controller, std::uint16_t* buttons, float* x,
-                        float* y);
-bool get_local_online_input(std::uint16_t* buttons, float* x, float* y,
-                            bool* blocked = nullptr);
+bool get_physical_input(int controller, std::uint16_t* buttons, float* x, float* y);
+bool get_local_online_input(std::uint16_t* buttons, float* x, float* y, bool* blocked = nullptr);
 void set_rumble(int controller, bool enabled);
 bool rumble_enabled();
 void set_rumble_enabled(bool enabled);
@@ -130,13 +127,10 @@ bool handle_controller_mapping_event(const void* event);
 void cancel_controller_mapping();
 void dismiss_controller_mapping();
 ControllerMappingProgress controller_mapping_progress();
-bool import_controller_mappings(const std::filesystem::path& source,
-                                std::string& status);
-bool export_controller_mappings(const std::filesystem::path& destination,
-                                std::string& status);
+bool import_controller_mappings(const std::filesystem::path& source, std::string& status);
+bool export_controller_mappings(const std::filesystem::path& destination, std::string& status);
 controllers::DesiredAssignments controller_assignment_keys();
-void restore_controller_assignments(
-    controllers::AssignmentMode mode,
-    const controllers::DesiredAssignments& assignments);
+void restore_controller_assignments(controllers::AssignmentMode mode,
+                                    const controllers::DesiredAssignments& assignments);
 
 } // namespace dkr::runtime::platform

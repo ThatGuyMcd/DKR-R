@@ -42,53 +42,82 @@ struct Model final : Simulation {
     bool reject_capture = false, reject_restore = false, reject_tick = false, reject_commit = false;
     bool transition = false, excessive_effects = false;
     bool hidden_native_state = false;
-    unsigned restore_waits=0;
-    bool waiting_retired=false;
+    unsigned restore_waits = 0;
+    bool waiting_retired = false;
     unsigned hidden_counter = 0U;
     unsigned confirmed_from = UINT32_MAX, tick_waits = 0, tick_preparations = 0;
     bool reject_tick_preparation = false;
-    unsigned resource_frame=UINT32_MAX;
-    bool agreed_tick=false;
-    std::uint8_t dependencies=15;
-    std::uint8_t input_dependencies()const override {return dependencies;}
-    SimulationContract contract() const override { return declared; }
-    bool requires_confirmed_tick() const override { return world.ticks >= confirmed_from; }
+    unsigned resource_frame = UINT32_MAX;
+    bool agreed_tick = false;
+    std::uint8_t dependencies = 15;
+    std::uint8_t input_dependencies() const override {
+        return dependencies;
+    }
+    SimulationContract contract() const override {
+        return declared;
+    }
+    bool requires_confirmed_tick() const override {
+        return world.ticks >= confirmed_from;
+    }
     RestoreStep prepare_tick(std::uint64_t, std::uint32_t frame, bool confirmed, std::string& error) override {
         assert(frame == world.ticks);
         ++tick_preparations;
-        agreed_tick=confirmed;
-        if (requires_confirmed_tick()) assert(confirmed);
-        if (reject_tick_preparation) { error="injected tick admission failure";return RestoreStep::Failed; }
-        if (tick_waits) { --tick_waits;return RestoreStep::Pending; }
+        agreed_tick = confirmed;
+        if (requires_confirmed_tick())
+            assert(confirmed);
+        if (reject_tick_preparation) {
+            error = "injected tick admission failure";
+            return RestoreStep::Failed;
+        }
+        if (tick_waits) {
+            --tick_waits;
+            return RestoreStep::Pending;
+        }
         return RestoreStep::Ready;
     }
-    bool before_restore(std::uint64_t epoch,std::uint32_t frame,std::string& error) override {
-        ++retirements; retired_epoch=epoch; retired_frame=frame;
-        ticks_at_retirement=world.ticks;
-        if(reject_retirement) {error="injected retirement failure";return false;}
+    bool before_restore(std::uint64_t epoch, std::uint32_t frame, std::string& error) override {
+        ++retirements;
+        retired_epoch = epoch;
+        retired_frame = frame;
+        ticks_at_retirement = world.ticks;
+        if (reject_retirement) {
+            error = "injected retirement failure";
+            return false;
+        }
         return true;
     }
-    RestoreStep prepare_restore(std::uint64_t epoch,std::uint32_t frame,std::string& error) override {
-        if(restore_waits||waiting_retired) {
-            if(!waiting_retired||retired_epoch!=epoch||retired_frame!=frame) {
-                if(!before_restore(epoch,frame,error))return RestoreStep::Failed;
-                waiting_retired=true;
+    RestoreStep prepare_restore(std::uint64_t epoch, std::uint32_t frame, std::string& error) override {
+        if (restore_waits || waiting_retired) {
+            if (!waiting_retired || retired_epoch != epoch || retired_frame != frame) {
+                if (!before_restore(epoch, frame, error))
+                    return RestoreStep::Failed;
+                waiting_retired = true;
             }
-            if(restore_waits){--restore_waits;return RestoreStep::Pending;}
-            waiting_retired=false;return RestoreStep::Ready;
+            if (restore_waits) {
+                --restore_waits;
+                return RestoreStep::Pending;
+            }
+            waiting_retired = false;
+            return RestoreStep::Ready;
         }
-        return Simulation::prepare_restore(epoch,frame,error);
+        return Simulation::prepare_restore(epoch, frame, error);
     }
     bool capture(std::span<std::uint8_t> state, std::string& error) override {
         ++captures;
-        if (reject_capture) { error = "injected capture failure"; return false; }
+        if (reject_capture) {
+            error = "injected capture failure";
+            return false;
+        }
         assert(state.size() == sizeof(World));
         std::memcpy(state.data(), &world, sizeof(world));
         return true;
     }
     bool restore(std::span<const std::uint8_t> state, std::string& error) override {
         ++restores;
-        if (reject_restore) { error = "injected restore failure"; return false; }
+        if (reject_restore) {
+            error = "injected restore failure";
+            return false;
+        }
         assert(state.size() == sizeof(World));
         std::memcpy(&world, state.data(), sizeof(world));
         return true;
@@ -96,12 +125,17 @@ struct Model final : Simulation {
     bool tick(std::uint32_t frame, const FrameInputs& inputs, TickOutput& output, std::string& error) override {
         assert(frame == world.ticks);
         ++ticks;
-        if(frame==resource_frame && !agreed_tick) {
-            ++world.random;output.effects={99};output.confirmation_required=true;return true;
+        if (frame == resource_frame && !agreed_tick) {
+            ++world.random;
+            output.effects = {99};
+            output.confirmation_required = true;
+            return true;
         }
-        if (hidden_native_state) world.random += ++hidden_counter;
+        if (hidden_native_state)
+            world.random += ++hidden_counter;
         for (std::size_t slot = 0; slot < inputs.size(); ++slot) {
-            if(!(dependencies&(1U<<slot)))continue;
+            if (!(dependencies & (1U << slot)))
+                continue;
             const auto pressed = inputs[slot].buttons & ~world.buttons[slot];
             world.buttons[slot] = inputs[slot].buttons;
             world.positions[slot] += inputs[slot].stick_x * 7 + inputs[slot].stick_y;
@@ -110,7 +144,8 @@ struct Model final : Simulation {
                 world.actors[world.spawns++ % world.actors.size()] = world.random;
                 output.effects.push_back(static_cast<std::uint8_t>(slot + 1));
             }
-            if (inputs[slot].buttons & 2U) world.actors[(frame + slot) % world.actors.size()] = 0;
+            if (inputs[slot].buttons & 2U)
+                world.actors[(frame + slot) % world.actors.size()] = 0;
         }
         // Interaction: one player's input changes another player's result.
         if ((inputs[1].buttons & 4U) && (inputs[0].buttons & 4U)) {
@@ -118,17 +153,24 @@ struct Model final : Simulation {
             ++world.collisions;
         }
         output.scene_boundary = transition && (inputs[1].buttons & 0x8000U);
-        if (excessive_effects) output.effects.resize(192U * 1024U + 1U);
+        if (excessive_effects)
+            output.effects.resize(192U * 1024U + 1U);
         world.padding[frame % world.padding.size()] = static_cast<std::uint8_t>(world.random);
         ++world.ticks;
-        if (reject_tick) { error = "injected tick failure"; return false; }
+        if (reject_tick) {
+            error = "injected tick failure";
+            return false;
+        }
         return true;
     }
-    bool commit(std::uint64_t epoch, std::uint32_t frame,
-                std::span<const std::uint8_t> bytes, bool, std::string& error) override {
+    bool commit(std::uint64_t epoch, std::uint32_t frame, std::span<const std::uint8_t> bytes, bool,
+                std::string& error) override {
         assert(epoch != 0);
         ++commits;
-        if (reject_commit) { error = "injected commit failure"; return false; }
+        if (reject_commit) {
+            error = "injected commit failure";
+            return false;
+        }
         assert(effects.empty() || effects.back().first + 1 == frame);
         effects.emplace_back(frame, std::vector<std::uint8_t>(bytes.begin(), bytes.end()));
         return true;
@@ -147,7 +189,9 @@ void delayed_corrections(unsigned players, unsigned window, unsigned seed) {
     std::string error;
     assert(driver.start({9, static_cast<std::uint8_t>(players), static_cast<std::uint8_t>(window)}, error));
     constexpr unsigned frames = 350;
-    struct Packet { unsigned delivery, frame, player; };
+    struct Packet {
+        unsigned delivery, frame, player;
+    };
     std::vector<Packet> packets;
     std::mt19937 rng(seed);
     std::vector<std::vector<std::uint8_t>> expected_effects;
@@ -168,20 +212,26 @@ void delayed_corrections(unsigned players, unsigned window, unsigned seed) {
     for (unsigned time = 0; time < frames + 1000; ++time) {
         while (packet < packets.size() && packets[packet].delivery <= time) {
             const auto p = packets[packet];
-            const auto result = driver.receive(9, static_cast<std::uint8_t>(p.player), p.frame, input_for(p.frame, p.player));
+            const auto result =
+                driver.receive(9, static_cast<std::uint8_t>(p.player), p.frame, input_for(p.frame, p.player));
             assert(result == InputResult::Accepted);
-            assert(driver.receive(9, static_cast<std::uint8_t>(p.player), p.frame, input_for(p.frame, p.player)) == InputResult::Duplicate);
+            assert(driver.receive(9, static_cast<std::uint8_t>(p.player), p.frame, input_for(p.frame, p.player)) ==
+                   InputResult::Duplicate);
             ++packet;
         }
         // Bounded service budget, independent of a potentially long replay.
         for (unsigned budget = 0; budget < 5; ++budget) {
-            if (driver.statistics().next_frame == frames && !driver.correcting()) break;
+            if (driver.statistics().next_frame == frames && !driver.correcting())
+                break;
             const auto step = driver.step();
-            if (step == Step::Failed) std::cerr << driver.error() << '\n';
+            if (step == Step::Failed)
+                std::cerr << driver.error() << '\n';
             assert(step != Step::Failed);
-            if (step != Step::Replayed) break;
+            if (step != Step::Replayed)
+                break;
         }
-        if (packet == packets.size() && driver.statistics().next_frame == frames && !driver.correcting()) break;
+        if (packet == packets.size() && driver.statistics().next_frame == frames && !driver.correcting())
+            break;
     }
     assert(packet == packets.size());
     assert(driver.statistics().next_frame == frames);
@@ -191,7 +241,8 @@ void delayed_corrections(unsigned players, unsigned window, unsigned seed) {
     assert(driver.statistics().largest_rollback <= window);
     assert(model.world == reference.world);
     assert(model.effects.size() == frames);
-    for (unsigned frame = 0; frame < frames; ++frame) assert(model.effects[frame].second == expected_effects[frame]);
+    for (unsigned frame = 0; frame < frames; ++frame)
+        assert(model.effects[frame].second == expected_effects[frame]);
 }
 
 void predictions_never_confirm() {
@@ -203,14 +254,16 @@ void predictions_never_confirm() {
         assert(driver.receive(1, 0, frame, input_for(frame, 0)) == InputResult::Accepted);
         assert(driver.step() == Step::Advanced);
     }
-    for (unsigned i = 0; i < 50; ++i) assert(driver.step() == Step::PredictionLimit);
+    for (unsigned i = 0; i < 50; ++i)
+        assert(driver.step() == Step::PredictionLimit);
     assert(driver.statistics().next_frame == 3);
     assert(driver.statistics().confirmed_frames == 0);
     assert(model.effects.empty());
     assert(!driver.start({2, 2, 3}, error)); // Cannot discard an unconfirmed timeline.
     for (unsigned frame = 0; frame < 3; ++frame)
         assert(driver.receive(1, 1, frame, input_for(frame, 1)) == InputResult::Accepted);
-    for (unsigned i = 0; i < 3; ++i) assert(driver.step() == Step::Replayed);
+    for (unsigned i = 0; i < 3; ++i)
+        assert(driver.step() == Step::Replayed);
     assert(driver.statistics().confirmed_frames == 3);
     assert(model.effects.size() == 3);
     assert(driver.receive(0, 1, 0, {}) == InputResult::StaleEpoch);
@@ -227,7 +280,8 @@ void corrected_boundary() {
     Driver driver(model);
     std::string error;
     assert(driver.start({1, 2, 6}, error));
-    for (unsigned frame = 0; frame < 5; ++frame) assert(driver.step() == Step::Advanced);
+    for (unsigned frame = 0; frame < 5; ++frame)
+        assert(driver.step() == Step::Advanced);
     assert(driver.receive(1, 1, 1, {0x8000, 0, 0}) == InputResult::Accepted);
     assert(driver.step() == Step::Replayed);
     assert(driver.statistics().next_frame == 2);
@@ -276,10 +330,14 @@ void faults() {
         Model model;
         Driver driver(model);
         assert(driver.start({1, 2, 6}, error));
-        if (fault == 0) model.reject_capture = true;
-        if (fault == 1) model.reject_tick = true;
-        if (fault == 2) model.excessive_effects = true;
-        if (fault == 3) model.reject_commit = true;
+        if (fault == 0)
+            model.reject_capture = true;
+        if (fault == 1)
+            model.reject_tick = true;
+        if (fault == 2)
+            model.excessive_effects = true;
+        if (fault == 3)
+            model.reject_commit = true;
         if (fault == 4) {
             assert(driver.step() == Step::Advanced);
             model.reject_restore = true;
@@ -291,14 +349,16 @@ void faults() {
         assert(driver.step() == Step::Failed);
         assert(model.ticks == ticks && model.commits == commits);
         assert(model.effects.empty());
-        if (fault == 1 || fault == 2) assert(model.world == World{});
+        if (fault == 1 || fault == 2)
+            assert(model.world == World{});
     }
 }
 
 void qualification() {
     std::array<FrameInputs, 12> inputs{};
     for (unsigned frame = 0; frame < inputs.size(); ++frame)
-        for (unsigned slot = 0; slot < 4; ++slot) inputs[frame][slot] = input_for(frame, slot);
+        for (unsigned slot = 0; slot < 4; ++slot)
+            inputs[frame][slot] = input_for(frame, slot);
     Model good;
     auto result = qualify_replay(good, inputs);
     assert(result.passed());
@@ -319,22 +379,26 @@ void qualification() {
 }
 
 void retirement_before_ram_restore() {
-    for(bool reject:{false,true}) {
-        Model model;Driver driver(model);std::string error;
-        assert(driver.start({11,2,6},error));
-        for(unsigned f=0;f<3;++f) {
-            assert(driver.receive(11,0,f,{0,12,0})==InputResult::Accepted);
-            assert(driver.step()==Step::Advanced);
+    for (bool reject : {false, true}) {
+        Model model;
+        Driver driver(model);
+        std::string error;
+        assert(driver.start({11, 2, 6}, error));
+        for (unsigned f = 0; f < 3; ++f) {
+            assert(driver.receive(11, 0, f, {0, 12, 0}) == InputResult::Accepted);
+            assert(driver.step() == Step::Advanced);
         }
-        const auto before=model.world;model.reject_retirement=reject;
-        assert(driver.receive(11,1,1,{1,-24,0})==InputResult::Accepted);
-        const auto step=driver.step(false);
-        assert(model.retirements==1 && model.retired_epoch==11 && model.retired_frame==1 &&
-               model.ticks_at_retirement==3);
-        if(reject) {
-            assert(step==Step::Failed && model.restores==0 && model.world==before && model.commits==0);
-            assert(driver.step()==Step::Failed && model.retirements==1);
-        } else assert(step==Step::Replayed && model.restores==1 && model.world.ticks==2);
+        const auto before = model.world;
+        model.reject_retirement = reject;
+        assert(driver.receive(11, 1, 1, {1, -24, 0}) == InputResult::Accepted);
+        const auto step = driver.step(false);
+        assert(model.retirements == 1 && model.retired_epoch == 11 && model.retired_frame == 1 &&
+               model.ticks_at_retirement == 3);
+        if (reject) {
+            assert(step == Step::Failed && model.restores == 0 && model.world == before && model.commits == 0);
+            assert(driver.step() == Step::Failed && model.retirements == 1);
+        } else
+            assert(step == Step::Replayed && model.restores == 1 && model.world.ticks == 2);
     }
 }
 
@@ -349,8 +413,8 @@ void distinct_modes() {
             assert(select_host_backend(choice, stable, enabled, automatic));
             assert(host_backend_choice(stable, enabled, automatic) == choice);
             assert(resolved_host_backend(stable, enabled, automatic) ==
-                (choice == 0 ? SynchronizationMode::ExperimentalRollback :
-                 static_cast<SynchronizationMode>(choice - 1)));
+                   (choice == 0 ? SynchronizationMode::ExperimentalRollback
+                                : static_cast<SynchronizationMode>(choice - 1)));
         }
         const int retained = stable;
         assert(!select_host_backend(-1, stable, enabled, automatic));
@@ -358,8 +422,8 @@ void distinct_modes() {
         assert(stable == retained && enabled && automatic);
     }
     static_assert(migrated_automatic_backend(false, false, false)); // clean profile
-    static_assert(!migrated_automatic_backend(false, true, true)); // preserve older explicit selection
-    static_assert(migrated_automatic_backend(true, true, true)); // key order independent
+    static_assert(!migrated_automatic_backend(false, true, true));  // preserve older explicit selection
+    static_assert(migrated_automatic_backend(true, true, true));    // key order independent
     static_assert(!migrated_automatic_backend(true, false, false));
     for (int original : {0, 1}) {
         int stable = original;
@@ -398,130 +462,148 @@ void distinct_modes() {
     assert(!valid_rules(rules));
 }
 void asynchronous_retirement_drain() {
-    Model model,reference;Driver driver(model);std::string error;
-    assert(driver.start({19,2,6},error));
-    for(unsigned f=0;f<3;++f) {
-        assert(driver.receive(19,0,f,input_for(f,0))==InputResult::Accepted);
-        assert(driver.step()==Step::Advanced);
+    Model model, reference;
+    Driver driver(model);
+    std::string error;
+    assert(driver.start({19, 2, 6}, error));
+    for (unsigned f = 0; f < 3; ++f) {
+        assert(driver.receive(19, 0, f, input_for(f, 0)) == InputResult::Accepted);
+        assert(driver.step() == Step::Advanced);
     }
-    const auto future=model.world;
-    model.restore_waits=1003;
-    assert(driver.receive(19,1,1,input_for(1,1))==InputResult::Accepted);
-    assert(driver.step(false)==Step::WaitingForPresentation);
-    assert(driver.statistics().restore_checkpoint_loads==1);
-    for(unsigned pulse=0;pulse<1000;++pulse)assert(driver.step(false)==Step::WaitingForPresentation);
-    assert(driver.statistics().restore_checkpoint_loads==1);
+    const auto future = model.world;
+    model.restore_waits = 1003;
+    assert(driver.receive(19, 1, 1, input_for(1, 1)) == InputResult::Accepted);
+    assert(driver.step(false) == Step::WaitingForPresentation);
+    assert(driver.statistics().restore_checkpoint_loads == 1);
+    for (unsigned pulse = 0; pulse < 1000; ++pulse)
+        assert(driver.step(false) == Step::WaitingForPresentation);
+    assert(driver.statistics().restore_checkpoint_loads == 1);
     // An EARLIER actual packet during the nonblocking drain changes the rewind
     // point. Do not resume the first request or overwrite immutable inputs.
-    assert(driver.receive(19,1,0,input_for(0,1))==InputResult::Accepted);
-    for(unsigned pulse=0;pulse<2;++pulse)assert(driver.step(false)==Step::WaitingForPresentation);
-    assert(driver.statistics().restore_checkpoint_loads==2);
-    assert(model.world==future&&model.restores==0&&model.commits==0&&
-           driver.statistics().next_frame==3&&driver.statistics().rollbacks==0&&
-           model.retirements==2&&model.retired_frame==0);
-    assert(driver.step(false)==Step::Replayed);
-    assert(model.restores==1&&driver.statistics().rollbacks==1&&driver.statistics().next_frame==1);
-    assert(driver.receive(19,1,2,input_for(2,1))==InputResult::Accepted);
-    while(driver.statistics().confirmed_frames<3)assert(driver.step(false)!=Step::Failed);
-    for(unsigned f=0;f<3;++f) {
-        FrameInputs input{};input[0]=input_for(f,0);input[1]=input_for(f,1);TickOutput output;
-        assert(reference.tick(f,input,output,error)&&reference.commit(19,f,output.effects,false,error));
+    assert(driver.receive(19, 1, 0, input_for(0, 1)) == InputResult::Accepted);
+    for (unsigned pulse = 0; pulse < 2; ++pulse)
+        assert(driver.step(false) == Step::WaitingForPresentation);
+    assert(driver.statistics().restore_checkpoint_loads == 2);
+    assert(model.world == future && model.restores == 0 && model.commits == 0 && driver.statistics().next_frame == 3 &&
+           driver.statistics().rollbacks == 0 && model.retirements == 2 && model.retired_frame == 0);
+    assert(driver.step(false) == Step::Replayed);
+    assert(model.restores == 1 && driver.statistics().rollbacks == 1 && driver.statistics().next_frame == 1);
+    assert(driver.receive(19, 1, 2, input_for(2, 1)) == InputResult::Accepted);
+    while (driver.statistics().confirmed_frames < 3)
+        assert(driver.step(false) != Step::Failed);
+    for (unsigned f = 0; f < 3; ++f) {
+        FrameInputs input{};
+        input[0] = input_for(f, 0);
+        input[1] = input_for(f, 1);
+        TickOutput output;
+        assert(reference.tick(f, input, output, error) && reference.commit(19, f, output.effects, false, error));
     }
-    assert(model.world==reference.world&&model.effects==reference.effects);
+    assert(model.world == reference.world && model.effects == reference.effects);
 }
 void confirmed_loader_tick_admission() {
-    Model model;Driver driver(model);std::string error;
-    model.confirmed_from=2;
-    assert(driver.start({23,2,6},error));
-    for (unsigned f=0;f<3;++f)
-        assert(driver.receive(23,0,f,input_for(f,0))==InputResult::Accepted);
+    Model model;
+    Driver driver(model);
+    std::string error;
+    model.confirmed_from = 2;
+    assert(driver.start({23, 2, 6}, error));
+    for (unsigned f = 0; f < 3; ++f)
+        assert(driver.receive(23, 0, f, input_for(f, 0)) == InputResult::Accepted);
     // Ordinary gameplay is still predicted. Entering a loader-capable scene
     // cannot free resources while either earlier tick remains speculative.
-    assert(driver.step()==Step::Advanced);
-    assert(driver.step()==Step::Advanced);
-    const auto future=model.world;
-    const auto captures=model.captures,preparations=model.tick_preparations;
-    assert(driver.receive(23,1,2,input_for(2,1))==InputResult::Accepted);
-    for (unsigned pulse=0;pulse<100;++pulse)
-        assert(driver.step()==Step::WaitingForConfirmedInput);
-    assert(model.world==future && model.captures==captures && model.tick_preparations==preparations);
+    assert(driver.step() == Step::Advanced);
+    assert(driver.step() == Step::Advanced);
+    const auto future = model.world;
+    const auto captures = model.captures, preparations = model.tick_preparations;
+    assert(driver.receive(23, 1, 2, input_for(2, 1)) == InputResult::Accepted);
+    for (unsigned pulse = 0; pulse < 100; ++pulse)
+        assert(driver.step() == Step::WaitingForConfirmedInput);
+    assert(model.world == future && model.captures == captures && model.tick_preparations == preparations);
     // Corrections of the earlier gameplay must still run before admission.
-    for (unsigned f=0;f<2;++f)
-        assert(driver.receive(23,1,f,input_for(f,1))==InputResult::Accepted);
-    assert(driver.step(false)==Step::Replayed);
-    assert(driver.step(false)==Step::Replayed);
-    assert(driver.statistics().confirmed_frames==2);
-    model.tick_waits=100;
-    const auto checkpointed=model.world;
-    const auto before_capture=model.captures;
-    for (unsigned pulse=0;pulse<100;++pulse)
-        assert(driver.step()==Step::WaitingForPresentation);
-    assert(model.world==checkpointed && model.captures==before_capture);
-    assert(driver.step()==Step::Advanced);
-    assert(driver.statistics().confirmed_frames==3 && model.commits==3);
-    assert(driver.statistics().predicted_frames==2);
+    for (unsigned f = 0; f < 2; ++f)
+        assert(driver.receive(23, 1, f, input_for(f, 1)) == InputResult::Accepted);
+    assert(driver.step(false) == Step::Replayed);
+    assert(driver.step(false) == Step::Replayed);
+    assert(driver.statistics().confirmed_frames == 2);
+    model.tick_waits = 100;
+    const auto checkpointed = model.world;
+    const auto before_capture = model.captures;
+    for (unsigned pulse = 0; pulse < 100; ++pulse)
+        assert(driver.step() == Step::WaitingForPresentation);
+    assert(model.world == checkpointed && model.captures == before_capture);
+    assert(driver.step() == Step::Advanced);
+    assert(driver.statistics().confirmed_frames == 3 && model.commits == 3);
+    assert(driver.statistics().predicted_frames == 2);
     // Repeated polling never consumes physical input or advances the world.
-    assert(driver.receive(23,0,3,input_for(3,0))==InputResult::Accepted);
-    assert(driver.step()==Step::WaitingForConfirmedInput);
-    assert(driver.receive(23,1,3,input_for(3,1))==InputResult::Accepted);
-    model.reject_tick_preparation=true;
-    const auto before_fail=model.world;
-    assert(driver.step()==Step::Failed && model.world==before_fail);
-    assert(driver.statistics().confirmed_frames==3);
+    assert(driver.receive(23, 0, 3, input_for(3, 0)) == InputResult::Accepted);
+    assert(driver.step() == Step::WaitingForConfirmedInput);
+    assert(driver.receive(23, 1, 3, input_for(3, 1)) == InputResult::Accepted);
+    model.reject_tick_preparation = true;
+    const auto before_fail = model.world;
+    assert(driver.step() == Step::Failed && model.world == before_fail);
+    assert(driver.statistics().confirmed_frames == 3);
 }
 
 void confirmed_checkpoint_retirement() {
-    constexpr unsigned bytes=RollbackStateStore::kPageBytes*4;
-    RollbackStateStore store(bytes,32,4,0);
-    std::vector<std::uint8_t> state(bytes),restored(bytes);
-    for(unsigned f=0;f<20;++f) {
-        std::fill(state.begin(),state.end(),std::uint8_t(f));
-        assert(store.save(f,state,f));
+    constexpr unsigned bytes = RollbackStateStore::kPageBytes * 4;
+    RollbackStateStore store(bytes, 32, 4, 0);
+    std::vector<std::uint8_t> state(bytes), restored(bytes);
+    for (unsigned f = 0; f < 20; ++f) {
+        std::fill(state.begin(), state.end(), std::uint8_t(f));
+        assert(store.save(f, state, f));
     }
-    const auto before=store.allocated_bytes();
+    const auto before = store.allocated_bytes();
     store.retire_before(17);
-    assert(store.allocated_bytes()<before && !store.contains(15) && store.contains(16));
-    for(unsigned f=16;f<20;++f) {
-        std::uint64_t checksum=0;
-        assert(store.load(f,restored,&checksum) && checksum==f);
-        assert(std::all_of(restored.begin(),restored.end(),[f](auto value){return value==f;}));
+    assert(store.allocated_bytes() < before && !store.contains(15) && store.contains(16));
+    for (unsigned f = 16; f < 20; ++f) {
+        std::uint64_t checksum = 0;
+        assert(store.load(f, restored, &checksum) && checksum == f);
+        assert(std::all_of(restored.begin(), restored.end(), [f](auto value) { return value == f; }));
     }
     // Rewind leaves the retained predecessor checkpoint/deltas reconstructible.
     store.discard_after(17);
-    std::fill(state.begin(),state.end(),17); state[17]=99;
-    assert(store.save(18,state,18) && store.load(18,restored) && restored==state);
+    std::fill(state.begin(), state.end(), 17);
+    state[17] = 99;
+    assert(store.save(18, state, 18) && store.load(18, restored) && restored == state);
     store.retire_before(0); // Must not remove its necessary predecessor.
-    assert(store.load(18,restored) && restored==state);
+    assert(store.load(18, restored) && restored == state);
 }
 
 } // namespace
 
 int main() {
     {
-        Model model;model.dependencies=1;Driver driver(model);std::string error;
-        assert(driver.start({17,2,6},error));
-        assert(driver.receive(17,0,0,{})==InputResult::Accepted && driver.step()==Step::Advanced);
-        assert(driver.receive(17,1,0,{3,80,80})==InputResult::Accepted);
-        assert(driver.step(false)==Step::WaitingForLocalInput);
-        assert(driver.statistics().rollbacks==0&&driver.statistics().confirmed_frames==1&&model.world.positions[1]==0);
+        Model model;
+        model.dependencies = 1;
+        Driver driver(model);
+        std::string error;
+        assert(driver.start({17, 2, 6}, error));
+        assert(driver.receive(17, 0, 0, {}) == InputResult::Accepted && driver.step() == Step::Advanced);
+        assert(driver.receive(17, 1, 0, {3, 80, 80}) == InputResult::Accepted);
+        assert(driver.step(false) == Step::WaitingForLocalInput);
+        assert(driver.statistics().rollbacks == 0 && driver.statistics().confirmed_frames == 1 &&
+               model.world.positions[1] == 0);
     }
-    assert(automatic_delay(0,6)==1&&automatic_delay(100,6)==1);
-    assert(automatic_delay(100,2)==4&&automatic_delay(1000,20)==9);
+    assert(automatic_delay(0, 6) == 1 && automatic_delay(100, 6) == 1);
+    assert(automatic_delay(100, 2) == 4 && automatic_delay(1000, 20) == 9);
     {
-        Model model;model.resource_frame=1;Driver driver(model);std::string error;
-        assert(driver.start({19,2,6},error));
-        assert(driver.receive(19,0,0,{})==InputResult::Accepted);
-        assert(driver.step()==Step::Advanced);
-        const auto before=model.world;
-        assert(driver.receive(19,0,1,{})==InputResult::Accepted);
-        assert(driver.step()==Step::WaitingForConfirmedInput && model.world==before);
-        const auto ticks=model.ticks;
-        for(unsigned i=0;i<1000;++i)assert(driver.step()==Step::WaitingForConfirmedInput);
-        assert(model.ticks==ticks&&driver.statistics().resource_fences==1&&model.commits==0);
-        assert(driver.receive(19,1,0,{})==InputResult::Accepted);
-        assert(driver.receive(19,1,1,{})==InputResult::Accepted);
-        assert(driver.step()==Step::Advanced&&driver.statistics().confirmed_frames==2&&model.commits==2);
-        assert(driver.start({20,2,6},error)); // Fences cannot leak into a new epoch.
+        Model model;
+        model.resource_frame = 1;
+        Driver driver(model);
+        std::string error;
+        assert(driver.start({19, 2, 6}, error));
+        assert(driver.receive(19, 0, 0, {}) == InputResult::Accepted);
+        assert(driver.step() == Step::Advanced);
+        const auto before = model.world;
+        assert(driver.receive(19, 0, 1, {}) == InputResult::Accepted);
+        assert(driver.step() == Step::WaitingForConfirmedInput && model.world == before);
+        const auto ticks = model.ticks;
+        for (unsigned i = 0; i < 1000; ++i)
+            assert(driver.step() == Step::WaitingForConfirmedInput);
+        assert(model.ticks == ticks && driver.statistics().resource_fences == 1 && model.commits == 0);
+        assert(driver.receive(19, 1, 0, {}) == InputResult::Accepted);
+        assert(driver.receive(19, 1, 1, {}) == InputResult::Accepted);
+        assert(driver.step() == Step::Advanced && driver.statistics().confirmed_frames == 2 && model.commits == 2);
+        assert(driver.start({20, 2, 6}, error)); // Fences cannot leak into a new epoch.
     }
     predictions_never_confirm();
     corrected_boundary();
@@ -535,7 +617,8 @@ int main() {
     confirmed_checkpoint_retirement();
     for (unsigned players : {2, 3, 4})
         for (unsigned window : {2, 6, 20})
-            for (unsigned seed = 0; seed < 12; ++seed) delayed_corrections(players, window, seed);
+            for (unsigned seed = 0; seed < 12; ++seed)
+                delayed_corrections(players, window, seed);
     std::cout << "Experimental rollback: 108 delayed/reordered 350-frame worlds match confirmed-input references.\n";
     std::cout << "This is driver validation, NOT qualification of the DKR game-state adapter.\n";
 }

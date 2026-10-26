@@ -8,9 +8,12 @@ namespace dkr::runtime::android_graphics {
 inline bool supported_texture_copy(const plume::RenderTextureCopyLocation& dst,
                                    const plume::RenderTextureCopyLocation& src) noexcept {
     using plume::RenderTextureCopyType;
-    if (dst.type != RenderTextureCopyType::SUBRESOURCE || dst.texture == nullptr) return false;
-    if (src.type == RenderTextureCopyType::SUBRESOURCE) return src.texture != nullptr;
-    if (src.type == RenderTextureCopyType::PLACED_FOOTPRINT) return src.buffer != nullptr;
+    if (dst.type != RenderTextureCopyType::SUBRESOURCE || dst.texture == nullptr)
+        return false;
+    if (src.type == RenderTextureCopyType::SUBRESOURCE)
+        return src.texture != nullptr;
+    if (src.type == RenderTextureCopyType::PLACED_FOOTPRINT)
+        return src.buffer != nullptr;
     return false;
 }
-}
+} // namespace dkr::runtime::android_graphics

@@ -35,26 +35,27 @@ SharedState& shared_state() {
 void adapter_free(void*) {}
 
 void adapter_send(GekkoNetAddress* address, const char* data, int length) {
-    if (address == nullptr || address->data == nullptr || address->size != 1U ||
-        data == nullptr || length <= 0) {
+    if (address == nullptr || address->data == nullptr || address->size != 1U || data == nullptr || length <= 0) {
         return;
     }
     auto& shared = shared_state();
     std::scoped_lock lock(shared.mutex);
-    if (shared.active == nullptr || !shared.active->active()) return;
+    if (shared.active == nullptr || !shared.active->active())
+        return;
     const auto target = *static_cast<const std::uint8_t*>(address->data);
     shared.active->session()->send_rollback_packet(
-        target, {reinterpret_cast<const std::uint8_t*>(data),
-                 static_cast<std::size_t>(length)});
+        target, {reinterpret_cast<const std::uint8_t*>(data), static_cast<std::size_t>(length)});
 }
 
 GekkoNetResult** adapter_receive(int* length) {
-    if (length == nullptr) return nullptr;
+    if (length == nullptr)
+        return nullptr;
     *length = 0;
     auto& shared = shared_state();
     std::scoped_lock lock(shared.mutex);
     shared.results.clear();
-    if (shared.active == nullptr || !shared.active->active()) return nullptr;
+    if (shared.active == nullptr || !shared.active->active())
+        return nullptr;
 
     shared.active->session()->take_rollback_packets(shared.packets);
     shared.slots.resize(shared.packets.size());
@@ -66,10 +67,8 @@ GekkoNetResult** adapter_receive(int* length) {
         slot.result = {};
         slot.result.addr.data = &slot.source;
         slot.result.addr.size = 1U;
-        slot.result.data = packet.bytes.empty()
-            ? nullptr : packet.bytes.data();
-        slot.result.data_len =
-            static_cast<unsigned int>(packet.bytes.size());
+        slot.result.data = packet.bytes.empty() ? nullptr : packet.bytes.data();
+        slot.result.data_len = static_cast<unsigned int>(packet.bytes.size());
         shared.results[index] = &slot.result;
     }
     *length = static_cast<int>(shared.results.size());
@@ -80,12 +79,15 @@ GekkoNetAdapter g_adapter{adapter_send, adapter_receive, adapter_free};
 
 } // namespace
 
-GekkoDirectAdapter::~GekkoDirectAdapter() { deactivate(); }
+GekkoDirectAdapter::~GekkoDirectAdapter() {
+    deactivate();
+}
 
 bool GekkoDirectAdapter::activate(DirectSession& session) {
     auto& shared = shared_state();
     std::scoped_lock lock(shared.mutex);
-    if (shared.active != nullptr && shared.active != this) return false;
+    if (shared.active != nullptr && shared.active != this)
+        return false;
     session_ = &session;
     shared.active = this;
     return true;
@@ -103,7 +105,11 @@ void GekkoDirectAdapter::deactivate() {
     session_ = nullptr;
 }
 
-bool GekkoDirectAdapter::active() const { return session_ != nullptr; }
-GekkoNetAdapter* GekkoDirectAdapter::adapter() { return &g_adapter; }
+bool GekkoDirectAdapter::active() const {
+    return session_ != nullptr;
+}
+GekkoNetAdapter* GekkoDirectAdapter::adapter() {
+    return &g_adapter;
+}
 
 } // namespace dkr::runtime::netplay

@@ -135,7 +135,8 @@ void StoreActionLine(const std::vector<std::pair<std::string, std::function<void
     }
     ImGui::SetCursorScreenPos({start.x, start.y + y + height + 9});
 }
-void StoreField(const char* key, const char* label, float width, std::size_t maximum = 500, bool multiline = false, bool review = false) {
+void StoreField(const char* key, const char* label, float width, std::size_t maximum = 500, bool multiline = false,
+                bool review = false) {
     width = std::max(1.F, std::min(width, ImGui::GetContentRegionAvail().x));
     auto& value = g_mod_store.fields[key];
     ImGui::PushID(key);
@@ -172,8 +173,10 @@ void StoreField(const char* key, const char* label, float width, std::size_t max
     std::memcpy(buffer.data(), value.data(), copy);
     if (review)
         ImGui::PushFont(PaddockReading(14.F, false, 1.45F).font);
-    const bool changed = review && multiline
-        ? DkrReviewInputText("##text", buffer.data(), buffer.size(), {edit, ImGui::GetTextLineHeight() * 6.F + ImGui::GetStyle().FramePadding.y * 2.F})
+    const bool changed =
+        review && multiline
+            ? DkrReviewInputText("##text", buffer.data(), buffer.size(),
+                                 {edit, ImGui::GetTextLineHeight() * 6.F + ImGui::GetStyle().FramePadding.y * 2.F})
         : multiline ? ImGui::InputTextMultiline("##text", buffer.data(), buffer.size(), {edit, 90.F})
                     : ImGui::InputText("##text", buffer.data(), buffer.size());
     if (review)
@@ -458,7 +461,10 @@ void StoreDownloadButton(const StoreJson& row, const StoreJson& release, float w
         if (installed) {
             g_mods_page.section = 0;
             const auto category = StoreText(row, "category", 32);
-            g_mods_page.category = category == "magic" ? 2 : category == "characters" ? 1 : category == "legacy" || category == "vehicles" ? 3 : 0;
+            g_mods_page.category = category == "magic"                              ? 2
+                                   : category == "characters"                       ? 1
+                                   : category == "legacy" || category == "vehicles" ? 3
+                                                                                    : 0;
         } else if (ready) {
             StoreQueueRelease(row, release);
         } else if (!found || retry) {
@@ -482,8 +488,8 @@ void StoreDownloadButton(const StoreJson& row, const StoreJson& release, float w
     }
 }
 void StoreStartQueuedInstall(bool locked) {
-    if (locked || dkr::store::installations().view()->busy || !g_mod_store.pending_key.empty() ||
-        StoreVehiclesBusy() || g_legacy_imports.snapshot().busy || g_code_library.view()->busy || TexturePackImportRunning() ||
+    if (locked || dkr::store::installations().view()->busy || !g_mod_store.pending_key.empty() || StoreVehiclesBusy() ||
+        g_legacy_imports.snapshot().busy || g_code_library.view()->busy || TexturePackImportRunning() ||
         DialogJobRunning())
         return;
     const auto store = dkr::store::service().view();
@@ -593,8 +599,8 @@ void StoreBrowser(float width, const dkr::store::Snapshot& store) {
     }
     PaddockGap(12.F);
     std::vector<std::string> categories;
-    constexpr const char* short_categories[] = {"All downloads",      "Tracks",      "Characters",
-                                                "Vehicles", "Magic Codes", "Texture packs"};
+    constexpr const char* short_categories[] = {"All downloads", "Tracks",      "Characters",
+                                                "Vehicles",      "Magic Codes", "Texture packs"};
     for (int i = 0; i < 6; ++i) {
         std::size_t count = 0;
         for (const auto& item : StoreItems(store))
@@ -763,7 +769,8 @@ void StoreChooseUpload(std::string kind, std::string resume = {}) {
             return [] {};
         nfdu8char_t* result = nullptr;
         const nfdfilteritem_t image[] = {{"Cover image", "png,jpg,jpeg,webp"}},
-                              packages[] = {{"Mod package", "zip,rtz,dkrmap,dkrkart,dkrhover,dkrplane,xdelta,nrm,dkrcode,bps,ips,7z"}};
+                              packages[] = {{"Mod package",
+                                             "zip,rtz,dkrmap,dkrkart,dkrhover,dkrplane,xdelta,nrm,dkrcode,bps,ips,7z"}};
         const auto dialog = NFD_OpenDialogU8(&result, kind == "image" ? image : packages, 1, nullptr);
         std::filesystem::path path;
         if (dialog == NFD_OKAY) {

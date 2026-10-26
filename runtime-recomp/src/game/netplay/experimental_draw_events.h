@@ -6,122 +6,209 @@
    renderer, live identity registry or local graphics setting is read by CPU
    replay. The immutable frame owner applies them ONLY to its decode copy. */
 enum dkr_owned_draw_kind {
-    DKR_OWNED_BACKGROUND_BEGIN=1, DKR_OWNED_BACKGROUND_END,
+    DKR_OWNED_BACKGROUND_BEGIN = 1,
+    DKR_OWNED_BACKGROUND_END,
     DKR_OWNED_BACKGROUND_QUAD,
     DKR_OWNED_POSTRACE_FULL_VIEWPORT,
-    DKR_OWNED_FRAMED_BEGIN, DKR_OWNED_FRAMED_END,
-    DKR_OWNED_LENS_BEGIN, DKR_OWNED_LENS_END,
+    DKR_OWNED_FRAMED_BEGIN,
+    DKR_OWNED_FRAMED_END,
+    DKR_OWNED_LENS_BEGIN,
+    DKR_OWNED_LENS_END,
     DKR_OWNED_SPLIT_VIEWPORT,
-    DKR_OWNED_SPLIT_WORLD_BEGIN, DKR_OWNED_SPLIT_WORLD_END,
-    DKR_OWNED_SPLIT_SKY_QUAD, DKR_OWNED_SPLIT_VOID_QUAD,
-    DKR_OWNED_MATRIX, DKR_OWNED_GEOMETRY, DKR_OWNED_SHADOW,
-    DKR_OWNED_HUD_PASS, DKR_OWNED_HUD_WIDGET, DKR_OWNED_HUD_RECT,
-    DKR_OWNED_TRANSITION, DKR_OWNED_SKY_MATRIX, DKR_OWNED_FRAME_METADATA,
+    DKR_OWNED_SPLIT_WORLD_BEGIN,
+    DKR_OWNED_SPLIT_WORLD_END,
+    DKR_OWNED_SPLIT_SKY_QUAD,
+    DKR_OWNED_SPLIT_VOID_QUAD,
+    DKR_OWNED_MATRIX,
+    DKR_OWNED_GEOMETRY,
+    DKR_OWNED_SHADOW,
+    DKR_OWNED_HUD_PASS,
+    DKR_OWNED_HUD_WIDGET,
+    DKR_OWNED_HUD_RECT,
+    DKR_OWNED_TRANSITION,
+    DKR_OWNED_SKY_MATRIX,
+    DKR_OWNED_FRAME_METADATA,
     DKR_OWNED_LOCAL_SCENERY,
-    DKR_OWNED_TRACK_UI_BEGIN, DKR_OWNED_TRACK_UI_END, DKR_OWNED_TRACK_PREVIEW,
-    DKR_OWNED_ONLINE_VIEW, DKR_OWNED_ONLINE_HUD, DKR_OWNED_ONLINE_SHARED,
-    DKR_OWNED_ONLINE_DIVIDER_BEGIN, DKR_OWNED_ONLINE_DIVIDER_END,
-    DKR_OWNED_ONLINE_RACER,DKR_OWNED_ONLINE_HUD_WIDGET_BEGIN,DKR_OWNED_ONLINE_HUD_WIDGET_END,
-    DKR_OWNED_LOCAL_MODEL,DKR_OWNED_LOCAL_OBJECT,DKR_OWNED_CAMERA_WORLD_END
+    DKR_OWNED_TRACK_UI_BEGIN,
+    DKR_OWNED_TRACK_UI_END,
+    DKR_OWNED_TRACK_PREVIEW,
+    DKR_OWNED_ONLINE_VIEW,
+    DKR_OWNED_ONLINE_HUD,
+    DKR_OWNED_ONLINE_SHARED,
+    DKR_OWNED_ONLINE_DIVIDER_BEGIN,
+    DKR_OWNED_ONLINE_DIVIDER_END,
+    DKR_OWNED_ONLINE_RACER,
+    DKR_OWNED_ONLINE_HUD_WIDGET_BEGIN,
+    DKR_OWNED_ONLINE_HUD_WIDGET_END,
+    DKR_OWNED_LOCAL_MODEL,
+    DKR_OWNED_LOCAL_OBJECT,
+    DKR_OWNED_CAMERA_WORLD_END
 };
 typedef struct dkr_owned_draw_event {
-    uint32_t kind,address,token;
+    uint32_t kind, address, token;
     /* Void's camera basis changes between quadrants. Capture its four float
        bits at the draw site, not the final camera's globals at decode time. */
     uint32_t parameters[16];
 } dkr_owned_draw_event;
 
 static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
-    if(e->kind<DKR_OWNED_BACKGROUND_BEGIN || e->kind>DKR_OWNED_CAMERA_WORLD_END ||
-       e->address<0x80000000U || e->address>0x807FFFD8U)return 0;
-    const int quad=e->kind==DKR_OWNED_BACKGROUND_QUAD ||
-        e->kind==DKR_OWNED_SPLIT_SKY_QUAD || e->kind==DKR_OWNED_SPLIT_VOID_QUAD;
-    if(e->address&(quad ? 1U:7U))return 0;
-    if(e->kind>=DKR_OWNED_MATRIX) {
-        unsigned used=0;
-        switch(e->kind) {
+    if (e->kind < DKR_OWNED_BACKGROUND_BEGIN || e->kind > DKR_OWNED_CAMERA_WORLD_END || e->address < 0x80000000U ||
+        e->address > 0x807FFFD8U)
+        return 0;
+    const int quad = e->kind == DKR_OWNED_BACKGROUND_QUAD || e->kind == DKR_OWNED_SPLIT_SKY_QUAD ||
+                     e->kind == DKR_OWNED_SPLIT_VOID_QUAD;
+    if (e->address & (quad ? 1U : 7U))
+        return 0;
+    if (e->kind >= DKR_OWNED_MATRIX) {
+        unsigned used = 0;
+        switch (e->kind) {
         case DKR_OWNED_MATRIX:
             /* Low four bits are interpolation flags; bit 8 identifies the
                authored camera root for local renderer effects. No other
                flags are accepted, and this remains presentation metadata. */
-            if(e->address>0x807FFFC0U || (e->parameters[0]&~0x10FU) || e->parameters[1]>1U || e->parameters[3]>255U)return 0;
-            if(!dkr_world_projection_metadata_valid(e->parameters[4],e->parameters[5],e->parameters[6]))return 0;
-            used=7;break;
-        case DKR_OWNED_SKY_MATRIX:case DKR_OWNED_TRANSITION:
-            if(e->address>0x807FFFC0U || e->token)return 0;break;
+            if (e->address > 0x807FFFC0U || (e->parameters[0] & ~0x10FU) || e->parameters[1] > 1U ||
+                e->parameters[3] > 255U)
+                return 0;
+            if (!dkr_world_projection_metadata_valid(e->parameters[4], e->parameters[5], e->parameters[6]))
+                return 0;
+            used = 7;
+            break;
+        case DKR_OWNED_SKY_MATRIX:
+        case DKR_OWNED_TRANSITION:
+            if (e->address > 0x807FFFC0U || e->token)
+                return 0;
+            break;
         case DKR_OWNED_GEOMETRY:
-            if(e->token>65535U || e->parameters[0]>9U || e->parameters[1]>31U)return 0;
-            used=2;break;
+            if (e->token > 65535U || e->parameters[0] > 9U || e->parameters[1] > 31U)
+                return 0;
+            used = 2;
+            break;
         case DKR_OWNED_SHADOW:
-            if(e->token>65535U || e->parameters[0]>16U || e->parameters[1]>65535U || e->parameters[2]>65535U ||
-                (int32_t)e->parameters[3]<-128 || (int32_t)e->parameters[3]>127 || e->parameters[4]>255U ||
-                (int32_t)e->parameters[8]<-32768 || (int32_t)e->parameters[8]>32767)return 0;
-            used=9;break;
+            if (e->token > 65535U || e->parameters[0] > 16U || e->parameters[1] > 65535U || e->parameters[2] > 65535U ||
+                (int32_t)e->parameters[3] < -128 || (int32_t)e->parameters[3] > 127 || e->parameters[4] > 255U ||
+                (int32_t)e->parameters[8] < -32768 || (int32_t)e->parameters[8] > 32767)
+                return 0;
+            used = 9;
+            break;
         case DKR_OWNED_HUD_PASS:
-            if(e->token>3U || e->parameters[0]>1U)return 0;used=1;break;
+            if (e->token > 3U || e->parameters[0] > 1U)
+                return 0;
+            used = 1;
+            break;
         case DKR_OWNED_HUD_WIDGET:
-            if(e->token>1U || e->parameters[0]>3U || e->parameters[1]>=4U || e->parameters[2]>59U || e->parameters[3]>24U ||
-                e->parameters[4]>255U || e->parameters[5]>1U || e->parameters[6]>1U || e->parameters[9]>1U || e->parameters[10]>2U)return 0;
-            used=11;break;
+            if (e->token > 1U || e->parameters[0] > 3U || e->parameters[1] >= 4U || e->parameters[2] > 59U ||
+                e->parameters[3] > 24U || e->parameters[4] > 255U || e->parameters[5] > 1U || e->parameters[6] > 1U ||
+                e->parameters[9] > 1U || e->parameters[10] > 2U)
+                return 0;
+            used = 11;
+            break;
         case DKR_OWNED_HUD_RECT:
-            if(e->token>1U || e->parameters[0]>3U)return 0;used=1;break;
+            if (e->token > 1U || e->parameters[0] > 3U)
+                return 0;
+            used = 1;
+            break;
         case DKR_OWNED_FRAME_METADATA:
-            if(e->token || e->address!=0x80000000U || !e->parameters[0])return 0;used=1;break;
+            if (e->token || e->address != 0x80000000U || !e->parameters[0])
+                return 0;
+            used = 1;
+            break;
         case DKR_OWNED_LOCAL_SCENERY:
-            if(e->token>3U || !e->parameters[0] || e->parameters[1]>127U || e->parameters[6]>1U ||
-               !e->parameters[8] || e->parameters[8]>=128U || e->parameters[13]>7U || !e->parameters[14] || e->parameters[15]>1U)return 0;
-            for(unsigned segment=e->parameters[8];segment<128;++segment)
-                if(e->parameters[9+segment/32]&(1U<<(segment&31U)))return 0;
-            used=16;break;
-        case DKR_OWNED_TRACK_UI_BEGIN:case DKR_OWNED_TRACK_UI_END:
-            if(e->token)return 0;break;
+            if (e->token > 3U || !e->parameters[0] || e->parameters[1] > 127U || e->parameters[6] > 1U ||
+                !e->parameters[8] || e->parameters[8] >= 128U || e->parameters[13] > 7U || !e->parameters[14] ||
+                e->parameters[15] > 1U)
+                return 0;
+            for (unsigned segment = e->parameters[8]; segment < 128; ++segment)
+                if (e->parameters[9 + segment / 32] & (1U << (segment & 31U)))
+                    return 0;
+            used = 16;
+            break;
+        case DKR_OWNED_TRACK_UI_BEGIN:
+        case DKR_OWNED_TRACK_UI_END:
+            if (e->token)
+                return 0;
+            break;
         case DKR_OWNED_TRACK_PREVIEW:
-            if(e->token)return 0;
-            for(unsigned i=0;i<4;++i)if((int32_t)e->parameters[i]<-4096 || (int32_t)e->parameters[i]>4096)return 0;
-            if((int32_t)e->parameters[0]>=(int32_t)e->parameters[2] ||
-               (int32_t)e->parameters[1]>=(int32_t)e->parameters[3])return 0;
-            used=4;break;
+            if (e->token)
+                return 0;
+            for (unsigned i = 0; i < 4; ++i)
+                if ((int32_t)e->parameters[i] < -4096 || (int32_t)e->parameters[i] > 4096)
+                    return 0;
+            if ((int32_t)e->parameters[0] >= (int32_t)e->parameters[2] ||
+                (int32_t)e->parameters[1] >= (int32_t)e->parameters[3])
+                return 0;
+            used = 4;
+            break;
         case DKR_OWNED_ONLINE_VIEW:
-            if(e->token>3||e->parameters[0]>3||e->parameters[1]>32||
-               e->parameters[2]>255||e->parameters[3]>1||e->parameters[4]>4)return 0;
-            used=5;break;
+            if (e->token > 3 || e->parameters[0] > 3 || e->parameters[1] > 32 || e->parameters[2] > 255 ||
+                e->parameters[3] > 1 || e->parameters[4] > 4)
+                return 0;
+            used = 5;
+            break;
         case DKR_OWNED_CAMERA_WORLD_END:
-            if(e->token>3)return 0;break;
+            if (e->token > 3)
+                return 0;
+            break;
         case DKR_OWNED_ONLINE_HUD:
-            if(e->token>3)return 0;break;
-        case DKR_OWNED_ONLINE_SHARED:case DKR_OWNED_ONLINE_DIVIDER_BEGIN:case DKR_OWNED_ONLINE_DIVIDER_END:
-            if(e->token)return 0;break;
+            if (e->token > 3)
+                return 0;
+            break;
+        case DKR_OWNED_ONLINE_SHARED:
+        case DKR_OWNED_ONLINE_DIVIDER_BEGIN:
+        case DKR_OWNED_ONLINE_DIVIDER_END:
+            if (e->token)
+                return 0;
+            break;
         case DKR_OWNED_ONLINE_RACER:
-            if(e->token>3||e->parameters[0]>3||e->parameters[1]<1||e->parameters[1]>8)return 0;
-            used=6;break;
+            if (e->token > 3 || e->parameters[0] > 3 || e->parameters[1] < 1 || e->parameters[1] > 8)
+                return 0;
+            used = 6;
+            break;
         case DKR_OWNED_ONLINE_HUD_WIDGET_BEGIN:
-            if(e->token>3||e->parameters[2]>59)return 0;used=5;break;
+            if (e->token > 3 || e->parameters[2] > 59)
+                return 0;
+            used = 5;
+            break;
         case DKR_OWNED_ONLINE_HUD_WIDGET_END:
-            if(e->token>3)return 0;break;
+            if (e->token > 3)
+                return 0;
+            break;
         case DKR_OWNED_LOCAL_MODEL:
-            if(e->token>3 || e->parameters[0]<=e->address || e->parameters[0]>0x807FFFD8U ||
-               (e->parameters[0]&7U) || e->parameters[0]-e->address>65536U ||
-               e->parameters[1]<0x80000000U || e->parameters[1]>0x807FFF80U ||
-               e->parameters[2]<0x80000000U || e->parameters[2]>0x807FFFDCU ||
-               e->parameters[3]>65535U || e->parameters[4]>255U ||
-               e->parameters[6]>1U || e->parameters[7]>1U || e->parameters[8]>65535U)return 0;
-            used=10;break;
+            if (e->token > 3 || e->parameters[0] <= e->address || e->parameters[0] > 0x807FFFD8U ||
+                (e->parameters[0] & 7U) || e->parameters[0] - e->address > 65536U || e->parameters[1] < 0x80000000U ||
+                e->parameters[1] > 0x807FFF80U || e->parameters[2] < 0x80000000U || e->parameters[2] > 0x807FFFDCU ||
+                e->parameters[3] > 65535U || e->parameters[4] > 255U || e->parameters[6] > 1U ||
+                e->parameters[7] > 1U || e->parameters[8] > 65535U)
+                return 0;
+            used = 10;
+            break;
         case DKR_OWNED_LOCAL_OBJECT:
-            if(e->token>3 || e->parameters[0]<0x80000000U || e->parameters[0]>0x807FFF80U)return 0;
-            used=1;break;
-        default:return 0;
+            if (e->token > 3 || e->parameters[0] < 0x80000000U || e->parameters[0] > 0x807FFF80U)
+                return 0;
+            used = 1;
+            break;
+        default:
+            return 0;
         }
-        for(unsigned i=used;i<16;++i)if(e->parameters[i])return 0;
+        for (unsigned i = used; i < 16; ++i)
+            if (e->parameters[i])
+                return 0;
         return 1;
     }
-    if(e->kind==DKR_OWNED_SPLIT_VIEWPORT) {if(e->token>3)return 0;}
-    else if(e->kind==DKR_OWNED_SPLIT_SKY_QUAD || e->kind==DKR_OWNED_SPLIT_VOID_QUAD) {
-        if(e->token<1 || e->token>3)return 0;
-    } else if(e->kind==DKR_OWNED_BACKGROUND_BEGIN) {if(e->token>2)return 0;}
-    else if(e->token>1)return 0;
-    for(unsigned i=0;i<16;++i)
-        if((e->kind!=DKR_OWNED_SPLIT_VOID_QUAD || i>=4) && e->parameters[i])return 0;
+    if (e->kind == DKR_OWNED_SPLIT_VIEWPORT) {
+        if (e->token > 3)
+            return 0;
+    } else if (e->kind == DKR_OWNED_SPLIT_SKY_QUAD || e->kind == DKR_OWNED_SPLIT_VOID_QUAD) {
+        if (e->token < 1 || e->token > 3)
+            return 0;
+    } else if (e->kind == DKR_OWNED_BACKGROUND_BEGIN) {
+        if (e->token > 2)
+            return 0;
+    } else if (e->token > 1)
+        return 0;
+    for (unsigned i = 0; i < 16; ++i)
+        if ((e->kind != DKR_OWNED_SPLIT_VOID_QUAD || i >= 4) && e->parameters[i])
+            return 0;
     return 1;
 }
-enum { DKR_OWNED_MAX_DRAW_EVENTS=8192 };
+enum { DKR_OWNED_MAX_DRAW_EVENTS = 8192 };
 #endif

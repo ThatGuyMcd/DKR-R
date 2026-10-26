@@ -9,7 +9,7 @@ namespace dkr::runtime::ios {
 // Only value-owned SDL events consumed by ImGui may cross this queue. In
 // particular, drop and extended editing events own pointers and stay outside.
 class UiEventQueue {
-public:
+  public:
     struct Batch {
         std::vector<SDL_Event> events;
         bool reset_inputs = false;
@@ -56,9 +56,9 @@ public:
         pending_.reset_inputs = false;
     }
 
-private:
+  private:
     std::mutex mutex_;
     Batch pending_;
 };
 
-}  // namespace dkr::runtime::ios
+} // namespace dkr::runtime::ios

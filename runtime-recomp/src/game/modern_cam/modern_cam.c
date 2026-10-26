@@ -3,9 +3,9 @@
  */
 #include "modern_cam.h"
 
-#define MC_PI      3.14159265358979f
+#define MC_PI 3.14159265358979f
 #define MC_HALF_PI 1.57079632679490f
-#define MC_TWO_PI  6.28318530717959f
+#define MC_TWO_PI 6.28318530717959f
 
 /* ------------------------------------------------------------------------- */
 /* Backend matemático                                                         */
@@ -18,11 +18,11 @@ static float mc_floor(float x) {
 
 #ifndef MC_NO_LIBM
 #include <math.h>
-#define MC_SIN(x)     sinf(x)
-#define MC_COS(x)     cosf(x)
+#define MC_SIN(x) sinf(x)
+#define MC_COS(x) cosf(x)
 #define MC_ATAN2(y, x) atan2f((y), (x))
-#define MC_SQRT(x)    sqrtf(x)
-#define MC_EXP(x)     expf(x)
+#define MC_SQRT(x) sqrtf(x)
+#define MC_EXP(x) expf(x)
 #else
 /* Aproximações sem libm. Erro < 1e-5, sobra para câmera. */
 typedef union {
@@ -88,7 +88,8 @@ static float mc_atan2_impl(float y, float x) {
     }
     a = (ax > ay) ? ay / ax : ax / ay;
     s = a * a;
-    r = a * (0.99997726f + s * (-0.33262347f + s * (0.19354346f + s * (-0.11643287f + s * (0.05265332f + s * -0.01172120f)))));
+    r = a * (0.99997726f +
+             s * (-0.33262347f + s * (0.19354346f + s * (-0.11643287f + s * (0.05265332f + s * -0.01172120f)))));
     if (ay > ax) {
         r = MC_HALF_PI - r;
     }
@@ -101,11 +102,11 @@ static float mc_atan2_impl(float y, float x) {
     return r;
 }
 
-#define MC_SIN(x)      mc_sin_impl(x)
-#define MC_COS(x)      mc_cos_impl(x)
+#define MC_SIN(x) mc_sin_impl(x)
+#define MC_COS(x) mc_cos_impl(x)
 #define MC_ATAN2(y, x) mc_atan2_impl((y), (x))
-#define MC_SQRT(x)     mc_sqrt_impl(x)
-#define MC_EXP(x)      mc_exp_impl(x)
+#define MC_SQRT(x) mc_sqrt_impl(x)
+#define MC_EXP(x) mc_exp_impl(x)
 #endif
 
 /* ------------------------------------------------------------------------- */
@@ -226,7 +227,8 @@ static float mc_noise(unsigned int seed, float t) {
 
 /* Três camadas de ruído: tremor mais orgânico. */
 static float mc_fbm(unsigned int seed, float t) {
-    return mc_noise(seed, t) * 0.57f + mc_noise(seed + 17u, t * 2.13f) * 0.29f + mc_noise(seed + 31u, t * 4.37f) * 0.14f;
+    return mc_noise(seed, t) * 0.57f + mc_noise(seed + 17u, t * 2.13f) * 0.29f +
+           mc_noise(seed + 31u, t * 4.37f) * 0.14f;
 }
 
 /* Mola amortecida (massa-mola) integrada em sub-passos de até 1/240 s. */
@@ -372,8 +374,8 @@ void ModernCam_AddTrauma(MCState* s, float amount) {
     s->trauma = mc_clamp(s->trauma + amount, 0.0f, 1.0f);
 }
 
-void ModernCam_Update(MCState* s, const MCParams* p, const MCInput* in, float dt,
-                      MCRaycastFn raycast, void* user, MCOutput* out) {
+void ModernCam_Update(MCState* s, const MCParams* p, const MCInput* in, float dt, MCRaycastFn raycast, void* user,
+                      MCOutput* out) {
     const MCVec3 worldUp = mc_v3(0.0f, 1.0f, 0.0f);
     const float sc = p->unitScale;
     MCVec3 flatVel, pivot, eyeDesired, eye, target, boomDir;

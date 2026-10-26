@@ -15,13 +15,19 @@ function(dkr_camera_hook_stubs out kernel revision)
     file(READ "${kernel}/camera_scene_hooks.c" stubs)
     string(REPLACE "\r\n" "\n" stubs "${stubs}")
     # One space after each comma is optional, as clang-format writes it.
-    file(STRINGS "${shadow}" defined REGEX "^unsigned dkr_[a-z_]+\\(uint8_t\\* ram, ?recomp_context\\* ctx, ?\\.\\.\\.\\) \\{$")
+    file(
+        STRINGS "${shadow}"
+        defined
+        REGEX "^unsigned dkr_[a-z_]+\\(uint8_t\\* ram, ?recomp_context\\* ctx, ?\\.\\.\\.\\) \\{$"
+    )
     if(NOT defined)
         message(FATAL_ERROR "camera_shadow_kernel.c defines no scene hooks")
     endif()
     foreach(line IN LISTS defined)
         string(REGEX MATCH "^unsigned (dkr_[a-z_]+)" name "${line}")
-        set(stub "unsigned dkr_camera_v${revision}_${CMAKE_MATCH_1}(uint8_t* ram,recomp_context* ctx,...){(void)ram;(void)ctx;return 0;}\n")
+        set(stub
+            "unsigned dkr_camera_v${revision}_${CMAKE_MATCH_1}(uint8_t* ram,recomp_context* ctx,...){(void)ram;(void)ctx;return 0;}\n"
+        )
         string(FIND "${stubs}" "${stub}" at)
         if(at EQUAL -1)
             message(FATAL_ERROR "The prepared US v${revision} Camera++ kernel has no stub for ${CMAKE_MATCH_1}")
@@ -44,11 +50,14 @@ function(dkr_camera_scene_kernel target revision)
         message(FATAL_ERROR "Set DKR_CAMERA_KERNEL_V${revision} to a NEW draw-only Camera++ kernel")
     endif()
     dkr_camera_hook_stubs(hooks "${kernel}" "${revision}")
-    add_library(${target} STATIC
+    add_library(
+        ${target}
+        STATIC
         "${kernel}/camera_scene_functions.c"
         "${hooks}"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game/camera_kernel.c"
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game/camera_shadow_kernel.c")
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game/camera_shadow_kernel.c"
+    )
     target_include_directories(${target} BEFORE PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game" "${kernel}")
     target_compile_features(${target} PRIVATE c_std_11)
     foreach(helper access step fault)
@@ -58,13 +67,22 @@ function(dkr_camera_scene_kernel target revision)
     if(MSVC)
         target_compile_options(${target} PRIVATE /fp:strict /FS /wd4244 /wd4267)
     else()
-        target_compile_options(${target} PRIVATE -fno-strict-aliasing -ffp-contract=off
-            -fno-fast-math -frounding-math -Werror=implicit-function-declaration)
+        target_compile_options(
+            ${target}
+            PRIVATE
+                -fno-strict-aliasing
+                -ffp-contract=off
+                -fno-fast-math
+                -frounding-math
+                -Werror=implicit-function-declaration
+        )
         target_link_libraries(${target} PRIVATE m)
     endif()
 endfunction()
 
-add_library(DKRCameraPresentation STATIC
+add_library(
+    DKRCameraPresentation
+    STATIC
     src/game/camera_presentation.cpp
     src/game/camera_scene.cpp
     src/game/camera_snapshot.cpp
@@ -72,11 +90,13 @@ add_library(DKRCameraPresentation STATIC
     src/game/camera_actions.cpp
     src/game/camera_session.cpp
     src/game/camera_runtime.cpp
-    src/game/camera_rt64.cpp)
+    src/game/camera_rt64.cpp
+)
 target_compile_features(DKRCameraPresentation PUBLIC cxx_std_20)
-target_include_directories(DKRCameraPresentation PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/game")
+target_include_directories(
+    DKRCameraPresentation
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/game"
+)
 target_include_directories(DKRCameraPresentation PRIVATE "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
 target_link_libraries(DKRCameraPresentation PUBLIC DKRCustomMagicCodes)
 if(MSVC)

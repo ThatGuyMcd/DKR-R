@@ -20,14 +20,12 @@ struct LoopRange {
     double end = 0.0;
 };
 
-[[nodiscard]] inline LoopRange loop_range(std::uint64_t frames,
-                                          std::uint64_t loop_start,
-                                          std::uint64_t loop_end) {
+[[nodiscard]] inline LoopRange loop_range(std::uint64_t frames, std::uint64_t loop_start, std::uint64_t loop_end) {
     LoopRange range;
     range.end = static_cast<double>(loop_end != 0U && loop_end <= frames ? loop_end : frames);
     range.start = static_cast<double>(std::min<std::uint64_t>(loop_start, frames));
     if (range.start >= range.end) {
-        range.start = 0.0;  // A loop the scan would have refused: loop it all.
+        range.start = 0.0; // A loop the scan would have refused: loop it all.
     }
     return range;
 }
@@ -62,8 +60,7 @@ struct LoopRange {
     position += step;
     if (position >= loop.end) {
         const double length = loop.end - loop.start;
-        position = length > 0.0 ? loop.start + std::fmod(position - loop.end, length)
-                                : 0.0;
+        position = length > 0.0 ? loop.start + std::fmod(position - loop.end, length) : 0.0;
     }
     return position;
 }
@@ -74,9 +71,8 @@ struct LoopRange {
 // after the last one in the loop being the loop's first, so the seam is as
 // smooth as the author cut it. The gain ramps from `gain_from` to `gain_to`
 // across the block, so fades and the carrier stopping never click.
-inline void render(const std::int16_t* pcm, std::uint64_t source_frames,
-                   const LoopRange& loop, double& position, double step,
-                   float gain_from, float gain_to, float* out, std::size_t frames) {
+inline void render(const std::int16_t* pcm, std::uint64_t source_frames, const LoopRange& loop, double& position,
+                   double step, float gain_from, float gain_to, float* out, std::size_t frames) {
     if (pcm == nullptr || source_frames == 0U || frames == 0U || loop.end <= 0.0) {
         return;
     }
@@ -95,10 +91,8 @@ inline void render(const std::int16_t* pcm, std::uint64_t source_frames,
         }
         const std::uint64_t next = index >= last_in_loop ? loop_first : index + 1U;
         const float fraction = static_cast<float>(position - static_cast<double>(index));
-        const float left = pcm[index * 2U] +
-                           (pcm[next * 2U] - pcm[index * 2U]) * fraction;
-        const float right = pcm[index * 2U + 1U] +
-                            (pcm[next * 2U + 1U] - pcm[index * 2U + 1U]) * fraction;
+        const float left = pcm[index * 2U] + (pcm[next * 2U] - pcm[index * 2U]) * fraction;
+        const float right = pcm[index * 2U + 1U] + (pcm[next * 2U + 1U] - pcm[index * 2U + 1U]) * fraction;
         out[frame * 2U] += left * gain;
         out[frame * 2U + 1U] += right * gain;
         position = advance(position, step, loop);

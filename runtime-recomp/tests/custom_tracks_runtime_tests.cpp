@@ -34,8 +34,12 @@ int vehicle = 0;
 unsigned allowed = 1;
 int saved_vehicle = -1;
 std::array<int, 8> committed{};
-gpr addr(std::uint32_t value) { return static_cast<std::int32_t>(value); }
-bool rev80() { return addresses::selected_revision() == dkr::runtime::rom::Revision::UsV80; }
+gpr addr(std::uint32_t value) {
+    return static_cast<std::int32_t>(value);
+}
+bool rev80() {
+    return addresses::selected_revision() == dkr::runtime::rom::Revision::UsV80;
+}
 
 // Guest-call substitutes check prerequisites at the real host boundary. The
 // native AI algorithm itself remains untouched; these checks catch a missing
@@ -43,16 +47,23 @@ bool rev80() { return addresses::selected_revision() == dkr::runtime::rom::Revis
 void controller(std::uint8_t* rdram, recomp_context* ctx) {
     assert(stage++ == 0 && ctx->r4 == 0);
     MEM_W(0, addr(addresses::NumberOfActivePlayers)) = 1;
-    for (int i = 0; i < 4; ++i) MEM_B(i, addr(addresses::ActivePlayersArray)) = i == 0;
+    for (int i = 0; i < 4; ++i)
+        MEM_B(i, addr(addresses::ActivePlayersArray)) = i == 0;
     ctx->r4 = 999;
 }
-void inputs(std::uint8_t*, recomp_context*) { assert(stage++ == 1); }
+void inputs(std::uint8_t*, recomp_context*) {
+    assert(stage++ == 1);
+}
 void time_trial(std::uint8_t* rdram, recomp_context* ctx) {
     assert(stage++ == 2 && ctx->r4 == 0);
     assert(MEM_W(0, addr(addresses::TracksMode)) == 1);
 }
-void drumstick(std::uint8_t*, recomp_context* ctx) { ctx->r2 = unlocks & 1; }
-void tt(std::uint8_t*, recomp_context* ctx) { ctx->r2 = unlocks & 2; }
+void drumstick(std::uint8_t*, recomp_context* ctx) {
+    ctx->r2 = unlocks & 1;
+}
+void tt(std::uint8_t*, recomp_context* ctx) {
+    ctx->r2 = unlocks & 2;
+}
 void ai(std::uint8_t* rdram, recomp_context* ctx) {
     assert(stage++ == 3 && ctx->r4 == 1);
     const std::uint32_t tables77[] = {0x800DFDD0, 0x800DFE40, 0x800DFEC0, 0x800DFF40};
@@ -64,12 +75,14 @@ void ai(std::uint8_t* rdram, recomp_context* ctx) {
     for (int i = 0; i < 4; ++i)
         assert(MEM_B(i, addr(addresses::CharacterSelectStatus)) == (i == 0 ? 2 : 0));
     assert(MEM_B(0, addr(addresses::CharacterIdSlots)) == 9);
-    for (int i = 1; i < 8; ++i) MEM_B(i, addr(addresses::CharacterIdSlots)) = i - 1;
+    for (int i = 1; i < 8; ++i)
+        MEM_B(i, addr(addresses::CharacterIdSlots)) = i - 1;
     ctx->r2 = 999;
 }
 void headers(std::uint8_t* rdram, recomp_context*) {
     assert(stage++ == 4);
-    for (int i = 0; i < 8; ++i) committed[i] = MEM_B(i, addr(addresses::CharacterIdSlots));
+    for (int i = 0; i < 8; ++i)
+        committed[i] = MEM_B(i, addr(addresses::CharacterIdSlots));
 }
 void default_vehicle(std::uint8_t*, recomp_context* ctx) {
     assert(ctx->r4 == static_cast<gpr>(tracks::track_override()));
@@ -80,20 +93,25 @@ void usable(std::uint8_t*, recomp_context* ctx) {
     assert(ctx->r4 == static_cast<gpr>(tracks::track_override()));
     ctx->r2 = allowed;
 }
-void save_vehicle(std::uint8_t*, recomp_context* ctx) { saved_vehicle = static_cast<int>(ctx->r4); }
+void save_vehicle(std::uint8_t*, recomp_context* ctx) {
+    saved_vehicle = static_cast<int>(ctx->r4);
 }
+} // namespace
 namespace dkr::runtime {
-const GamePayload* active_payload() { return payload_available ? &payload : nullptr; }
+const GamePayload* active_payload() {
+    return payload_available ? &payload : nullptr;
 }
+} // namespace dkr::runtime
 
 int main() {
-    const auto root = std::filesystem::temp_directory_path() /
+    const auto root =
+        std::filesystem::temp_directory_path() /
         ("dkr-track-lab-runtime-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto folder = root / "tracks" / "test.dkrmap";
     std::filesystem::create_directories(folder);
-    std::ofstream(folder / "manifest.json") <<
-        R"({"schemaVersion":1,"id":"test","name":"Test","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
-        R"({"section":"LEVEL_MODELS","file":"model.bin"}]})";
+    std::ofstream(folder / "manifest.json")
+        << R"({"schemaVersion":1,"id":"test","name":"Test","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
+           R"({"section":"LEVEL_MODELS","file":"model.bin"}]})";
     std::string header(196, '\0');
     header[0x37] = 73; // Inherit Ancient Lake's retail object maps.
     header[0xBB] = 5;
@@ -105,9 +123,16 @@ int main() {
     model[0x4C + 0x21] = 3;
     model[0x4C + 0x44 + 0x21] = 4;
     const auto length = static_cast<std::uint16_t>(model.size());
-    std::string container{static_cast<char>(length & 0xFF), static_cast<char>(length >> 8), 0, 0, 0x09,
-                          0x01, static_cast<char>(length & 0xFF), static_cast<char>(length >> 8),
-                          static_cast<char>(~length & 0xFF), static_cast<char>((~length >> 8) & 0xFF)};
+    std::string container{static_cast<char>(length & 0xFF),
+                          static_cast<char>(length >> 8),
+                          0,
+                          0,
+                          0x09,
+                          0x01,
+                          static_cast<char>(length & 0xFF),
+                          static_cast<char>(length >> 8),
+                          static_cast<char>(~length & 0xFF),
+                          static_cast<char>((~length >> 8) & 0xFF)};
     std::ofstream(folder / "model.bin", std::ios::binary) << container << model;
     tracks::scan(root / "tracks");
     const std::int32_t retail[] = {0, 196, -1};
@@ -150,7 +175,8 @@ int main() {
             expected.r2 = 0x201;
             assert(std::memcmp(&context, &expected, sizeof(context)) == 0);
             assert(stage == 5 && committed[0] == 9);
-            for (int i = 1; i < 8; ++i) assert(committed[i] == i - 1);
+            for (int i = 1; i < 8; ++i)
+                assert(committed[i] == i - 1);
             assert(MEM_W(0, addr(rev80() ? 0x80123A80 : 0x80123500)) == 0);
             // This is a HUD byte, not gGameNumPlayers; never overwrite it.
             assert(static_cast<unsigned char>(MEM_B(0, addr(addresses::NumberOfGameplayPlayers))) == 0xA5);
@@ -170,7 +196,8 @@ int main() {
                 context.r7 = 99;
                 auto expected = context;
                 expected.r7 = vehicle;
-                for (int i = 0; i < 4; ++i) MEM_B(i, addr(addresses::PlayerSelectVehicle)) = 99;
+                for (int i = 0; i < 4; ++i)
+                    MEM_B(i, addr(addresses::PlayerSelectVehicle)) = 99;
                 dkr_custom_tracks_prepare_vehicle(rdram, &context);
                 assert(std::memcmp(&context, &expected, sizeof(context)) == 0);
                 assert(saved_vehicle == vehicle);
@@ -195,7 +222,8 @@ int main() {
         for (int inactive = 0; inactive < 4; ++inactive) {
             context.r4 = inactive == 0 ? 0 : 1;
             context.r5 = inactive == 1 ? static_cast<gpr>(-1) : 0;
-            if (inactive == 2) tracks::arm_track_override("");
+            if (inactive == 2)
+                tracks::arm_track_override("");
             if (inactive == 3) {
                 tracks::arm_track_override("test");
                 MEM_W(0, addr(addresses::GameMode)) = 1; // menu preview with racers
@@ -213,7 +241,8 @@ int main() {
         const std::uint32_t slots = 0x8012D3F0;
         const auto slot = [&](int index) { return addr(slots + index * 0x14U); };
         const auto make_pool = [&](std::uint32_t tail_end, bool tail_free, int used) {
-            for (int i = 0; i < 1600; ++i) MEM_H(14, slot(i)) = static_cast<std::int16_t>(i);
+            for (int i = 0; i < 1600; ++i)
+                MEM_H(14, slot(i)) = static_cast<std::int16_t>(i);
             MEM_W(0, slot(0)) = 0x80135100;
             MEM_W(4, slot(0)) = 0x100;
             MEM_H(8, slot(0)) = 1;
@@ -294,17 +323,19 @@ int main() {
         };
         assert(tracks::level_model_batches(custom) == 7);
         const std::int32_t retail_commands[] = {4500, 7000, 11000, 11000};
-        for (int players = 0; players < 4; ++players) MEM_W(players * 4, addr(table)) = retail_commands[players];
+        for (int players = 0; players < 4; ++players)
+            MEM_W(players * 4, addr(table)) = retail_commands[players];
         make_pool(0x80400000, true, 2);
         load_level(custom);
         for (int players = 0; players < 4; ++players)
             assert(commands(players) == retail_commands[players] + 7 * 10 * (players + 1));
         assert(MEM_W(0, addr(previous_players)) == -1); // the heap is rebuilt now
-        assert(MEM_W(4, slot(1)) == 0x6CAE00);            // with the pool grown first
-        load_level(custom); // L+Z: the heap already fits
+        assert(MEM_W(4, slot(1)) == 0x6CAE00);          // with the pool grown first
+        load_level(custom);                             // L+Z: the heap already fits
         assert(MEM_W(0, addr(previous_players)) == 0);
         load_level(0);
-        for (int players = 0; players < 4; ++players) assert(commands(players) == retail_commands[players]);
+        for (int players = 0; players < 4; ++players)
+            assert(commands(players) == retail_commands[players]);
         assert(MEM_W(0, addr(previous_players)) == -1);
         load_level(0);
         assert(MEM_W(0, addr(previous_players)) == 0);
@@ -346,29 +377,33 @@ int main() {
             return out;
         };
         const auto measure = [](const std::string& container) {
-            return tracks::measure_level_model_arena(
-                reinterpret_cast<const std::uint8_t*>(container.data()), container.size());
+            return tracks::measure_level_model_arena(reinterpret_cast<const std::uint8_t*>(container.data()),
+                                                     container.size());
         };
 
         // One segment, one batch, two collidable triangles sharing an edge.
         std::string small(0x200, '\0');
-        be32_into(small, 0x04, 0x4C);          // segments
-        be16_into(small, 0x1A, 1);             // one of them
-        be32_into(small, 0x48, 0x200);         // modelSize: where the arena starts
-        be32_into(small, 0x4C + 0x04, 0x90);   // triangles
-        be32_into(small, 0x4C + 0x0C, 0xB0);   // batches
-        be32_into(small, 0x4C + 0x14, 0xC8);   // collision facets
-        be16_into(small, 0x4C + 0x1E, 2);      // two triangles
-        be16_into(small, 0x4C + 0x20, 1);      // one batch
-        be16_into(small, 0xB0 + 4, 0);         // drawing triangles [0, 2)
-        be16_into(small, 0xBC + 4, 2);         // as its sentinel says
+        be32_into(small, 0x04, 0x4C);        // segments
+        be16_into(small, 0x1A, 1);           // one of them
+        be32_into(small, 0x48, 0x200);       // modelSize: where the arena starts
+        be32_into(small, 0x4C + 0x04, 0x90); // triangles
+        be32_into(small, 0x4C + 0x0C, 0xB0); // batches
+        be32_into(small, 0x4C + 0x14, 0xC8); // collision facets
+        be16_into(small, 0x4C + 0x1E, 2);    // two triangles
+        be16_into(small, 0x4C + 0x20, 1);    // one batch
+        be16_into(small, 0xB0 + 4, 0);       // drawing triangles [0, 2)
+        be16_into(small, 0xBC + 4, 2);       // as its sentinel says
         // An edge with no neighbour names its own triangle's plane, which is
         // how retail spells "put a wall straight up from this edge". Edge 1 of
         // each triangle names the other, so that pair shares one plane.
-        be16_into(small, 0xC8 + 0, 0); be16_into(small, 0xC8 + 2, 0);
-        be16_into(small, 0xC8 + 4, 1); be16_into(small, 0xC8 + 6, 0);
-        be16_into(small, 0xD0 + 0, 1); be16_into(small, 0xD0 + 2, 1);
-        be16_into(small, 0xD0 + 4, 0); be16_into(small, 0xD0 + 6, 1);
+        be16_into(small, 0xC8 + 0, 0);
+        be16_into(small, 0xC8 + 2, 0);
+        be16_into(small, 0xC8 + 4, 1);
+        be16_into(small, 0xC8 + 6, 0);
+        be16_into(small, 0xD0 + 0, 1);
+        be16_into(small, 0xD0 + 2, 1);
+        be16_into(small, 0xD0 + 4, 0);
+        be16_into(small, 0xD0 + 6, 1);
         // Two base planes, then five edge planes rather than six: the shared
         // edge is built once. align16(0x200 + 2 * 2) + 7 * 16 = 640.
         assert(measure(container_for(small)) == 640);
@@ -408,9 +443,9 @@ int main() {
         const auto grown = root / "grown";
         const auto folder = grown / "big.dkrmap";
         std::filesystem::create_directories(folder);
-        std::ofstream(folder / "manifest.json") <<
-            R"({"schemaVersion":1,"id":"big","name":"Big","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
-            R"({"section":"LEVEL_MODELS","file":"model.bin"}]})";
+        std::ofstream(folder / "manifest.json")
+            << R"({"schemaVersion":1,"id":"big","name":"Big","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
+               R"({"section":"LEVEL_MODELS","file":"model.bin"}]})";
         std::string big_header(196, '\0');
         big_header[0x37] = 73;
         big_header[0xBB] = 5;
@@ -478,9 +513,9 @@ int main() {
         const auto library = root / "track-select";
         const auto folder = library / "preview.dkrmap";
         std::filesystem::create_directories(folder);
-        std::ofstream(folder / "manifest.json") <<
-            R"({"schemaVersion":1,"id":"preview","name":"Preview","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
-            R"({"section":"LEVEL_MODELS","file":"model.bin"}]})";
+        std::ofstream(folder / "manifest.json")
+            << R"({"schemaVersion":1,"id":"preview","name":"Preview","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
+               R"({"section":"LEVEL_MODELS","file":"model.bin"}]})";
         std::string race(200, '\0');
         race[0] = static_cast<char>(tracks::kCustomTrackWorld);
         race[0x4E] = 7; // car, hovercraft and plane
@@ -494,9 +529,16 @@ int main() {
         model[0x4C + 0x20] = 0x02;
         model[0x4C + 0x21] = static_cast<char>(0xBC);
         const auto length = static_cast<std::uint16_t>(model.size());
-        std::string container{static_cast<char>(length & 0xFF), static_cast<char>(length >> 8), 0, 0, 0x09,
-                              0x01, static_cast<char>(length & 0xFF), static_cast<char>(length >> 8),
-                              static_cast<char>(~length & 0xFF), static_cast<char>((~length >> 8) & 0xFF)};
+        std::string container{static_cast<char>(length & 0xFF),
+                              static_cast<char>(length >> 8),
+                              0,
+                              0,
+                              0x09,
+                              0x01,
+                              static_cast<char>(length & 0xFF),
+                              static_cast<char>(length >> 8),
+                              static_cast<char>(~length & 0xFF),
+                              static_cast<char>((~length >> 8) & 0xFF)};
         std::ofstream(folder / "model.bin", std::ios::binary) << container << model;
         tracks::scan(library);
 
@@ -504,7 +546,8 @@ int main() {
         payload.mempool_alloc_safe = [](std::uint8_t*, recomp_context* ctx) { ctx->r2 = addr(0x80300000); };
         const std::uint32_t retail_table = 0x80200000;
         const std::int32_t retail_headers[] = {0, 196, -1};
-        for (int i = 0; i < 3; ++i) MEM_W(i * 4, addr(retail_table)) = retail_headers[i];
+        for (int i = 0; i < 3; ++i)
+            MEM_W(i * 4, addr(retail_table)) = retail_headers[i];
         const std::uint32_t table = 0x800DD3B0, previous_players = 0x8012350C, lists = 0x801211F0;
         const std::int32_t retail_commands[] = {4500, 7000, 11000, 11000};
         const auto set_table = [&] {
@@ -525,7 +568,8 @@ int main() {
         // can come out of expansion RAM.
         const std::uint32_t pool = 0x80123580, slots = 0x8012D3F0;
         const auto slot = [&](int index) { return addr(slots + index * 0x14U); };
-        for (int i = 0; i < 1600; ++i) MEM_H(14, slot(i)) = static_cast<std::int16_t>(i);
+        for (int i = 0; i < 1600; ++i)
+            MEM_H(14, slot(i)) = static_cast<std::int16_t>(i);
         MEM_W(0, slot(0)) = 0x80135100;
         MEM_W(4, slot(0)) = 0x100;
         MEM_H(8, slot(0)) = 1;
@@ -548,7 +592,8 @@ int main() {
         const std::int32_t level = tracks::resolved_level_id("preview");
         assert(level == 1 && tracks::track_select_entries().size() == 1);
         constexpr std::int32_t kFloor = 4500 + 700 * 10;
-        for (int players = 0; players < 4; ++players) assert(commands(players) == kFloor);
+        for (int players = 0; players < 4; ++players)
+            assert(commands(players) == kFloor);
         assert(MEM_W(4, slot(1)) == 0x6CAE00 && MEM_W(12, addr(pool)) == 0x2D2C10 + 0x400000);
 
         // The game indexes five-world arrays with the header's world, so it is
@@ -573,7 +618,8 @@ int main() {
         MEM_W(0, addr(lists)) = 0x80140000;
         set_table();
         load_headers();
-        for (int players = 0; players < 4; ++players) assert(commands(players) == retail_commands[players]);
+        for (int players = 0; players < 4; ++players)
+            assert(commands(players) == retail_commands[players]);
 
         // A retail race keeps the floor, so the heap it leaves for the menu can
         // still draw every preview; a .dkrmap race adds its own on top.
@@ -584,7 +630,8 @@ int main() {
             dkr_custom_tracks_prepare_level(rdram, &level_context);
         };
         load_level(0);
-        for (int players = 0; players < 4; ++players) assert(commands(players) == kFloor);
+        for (int players = 0; players < 4; ++players)
+            assert(commands(players) == kFloor);
         assert(MEM_W(0, addr(previous_players)) == -1);
         load_level(0);
         assert(MEM_W(0, addr(previous_players)) == 0);
@@ -598,9 +645,11 @@ int main() {
         MEM_W(0, addr(lists)) = 0;
         set_table();
         load_headers();
-        for (int players = 0; players < 4; ++players) assert(commands(players) == retail_commands[players]);
+        for (int players = 0; players < 4; ++players)
+            assert(commands(players) == retail_commands[players]);
         load_level(0);
-        for (int players = 0; players < 4; ++players) assert(commands(players) == retail_commands[players]);
+        for (int players = 0; players < 4; ++players)
+            assert(commands(players) == retail_commands[players]);
         payload.mempool_alloc_safe = nullptr;
     }
 
@@ -608,36 +657,52 @@ int main() {
     // 4096 words. Exercise the real guest hook on both supported revisions,
     // including the highest supported record count after one appended image.
     {
-        std::string texture(544,'\0');texture[0]=16;texture[1]=16;texture[2]=0x11;
-        texture[5]=1;texture[0x12]=1;texture[0x16]=2;texture[0x17]=0x20;
-        std::ofstream(folder/"texture.bin",std::ios::binary)<<texture;
-        std::ofstream(folder/"manifest.json")<<
-            R"({"schemaVersion":1,"id":"test","name":"Test","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
-            R"({"section":"LEVEL_MODELS","file":"model.bin"},{"section":"TEXTURES_2D","file":"texture.bin"}]})";
-        tracks::scan(root/"tracks");
-        payload.mempool_alloc_safe=[](std::uint8_t*,recomp_context* ctx){ctx->r2=addr(0x80600000);};
-        for(const auto revision:{dkr::runtime::rom::Revision::UsV77,dkr::runtime::rom::Revision::UsV80}) {
+        std::string texture(544, '\0');
+        texture[0] = 16;
+        texture[1] = 16;
+        texture[2] = 0x11;
+        texture[5] = 1;
+        texture[0x12] = 1;
+        texture[0x16] = 2;
+        texture[0x17] = 0x20;
+        std::ofstream(folder / "texture.bin", std::ios::binary) << texture;
+        std::ofstream(folder / "manifest.json")
+            << R"({"schemaVersion":1,"id":"test","name":"Test","adds":[{"section":"LEVEL_HEADERS","file":"header.bin"},)"
+               R"({"section":"LEVEL_MODELS","file":"model.bin"},{"section":"TEXTURES_2D","file":"texture.bin"}]})";
+        tracks::scan(root / "tracks");
+        payload.mempool_alloc_safe = [](std::uint8_t*, recomp_context* ctx) { ctx->r2 = addr(0x80600000); };
+        for (const auto revision : {dkr::runtime::rom::Revision::UsV77, dkr::runtime::rom::Revision::UsV80}) {
             assert(addresses::select(revision));
-            for(const unsigned count:{5000U,32766U}) {
-                const auto source=0x80200000U;
-                for(unsigned i=0;i<=count;++i)MEM_W(i*4,addr(source))=i*16;
-                MEM_W((count+1)*4,addr(source))=-1;
-                recomp_context begin{};begin.r4=5;dkr_custom_tracks_table_load_begin(rdram,&begin);
-                recomp_context end{};end.r2=addr(source);dkr_custom_tracks_table_load_end(rdram,&end);
-                assert(static_cast<std::uint32_t>(end.r2)==0x80600000);
-                assert(MEM_W(count*4,end.r2)==count*16);
-                assert(MEM_W((count+1)*4,end.r2)==count*16+texture.size());
-                assert(MEM_W((count+2)*4,end.r2)==-1);
+            for (const unsigned count : {5000U, 32766U}) {
+                const auto source = 0x80200000U;
+                for (unsigned i = 0; i <= count; ++i)
+                    MEM_W(i * 4, addr(source)) = i * 16;
+                MEM_W((count + 1) * 4, addr(source)) = -1;
+                recomp_context begin{};
+                begin.r4 = 5;
+                dkr_custom_tracks_table_load_begin(rdram, &begin);
+                recomp_context end{};
+                end.r2 = addr(source);
+                dkr_custom_tracks_table_load_end(rdram, &end);
+                assert(static_cast<std::uint32_t>(end.r2) == 0x80600000);
+                assert(MEM_W(count * 4, end.r2) == count * 16);
+                assert(MEM_W((count + 1) * 4, end.r2) == count * 16 + texture.size());
+                assert(MEM_W((count + 2) * 4, end.r2) == -1);
             }
             // No sentinel before the end of RDRAM: refuse without reading
             // beyond the guest or changing the returned table pointer.
-            const auto source=0x807FFFB0U;
-            for(unsigned at=source;at<0x80800000U;at+=4)MEM_W(0,addr(at))=0;
-            recomp_context begin{};begin.r4=5;dkr_custom_tracks_table_load_begin(rdram,&begin);
-            recomp_context end{};end.r2=addr(source);dkr_custom_tracks_table_load_end(rdram,&end);
-            assert(static_cast<std::uint32_t>(end.r2)==source);
+            const auto source = 0x807FFFB0U;
+            for (unsigned at = source; at < 0x80800000U; at += 4)
+                MEM_W(0, addr(at)) = 0;
+            recomp_context begin{};
+            begin.r4 = 5;
+            dkr_custom_tracks_table_load_begin(rdram, &begin);
+            recomp_context end{};
+            end.r2 = addr(source);
+            dkr_custom_tracks_table_load_end(rdram, &end);
+            assert(static_cast<std::uint32_t>(end.r2) == source);
         }
-        payload.mempool_alloc_safe=nullptr;
+        payload.mempool_alloc_safe = nullptr;
     }
     tracks::set_auto_boot(false);
     tracks::arm_track_override("");

@@ -35,11 +35,9 @@ constexpr std::uint32_t normalise_identity(std::uint32_t value) {
     return value;
 }
 
-constexpr std::uint32_t make_object_identity(std::uint32_t scene_generation,
-                                              std::uint32_t object_address,
-                                              std::uint32_t lifetime_generation,
-                                              std::uint16_t object_id,
-                                              std::uint16_t behaviour_id) {
+constexpr std::uint32_t make_object_identity(std::uint32_t scene_generation, std::uint32_t object_address,
+                                             std::uint32_t lifetime_generation, std::uint16_t object_id,
+                                             std::uint16_t behaviour_id) {
     std::uint32_t value = scene_generation * 0x9E3779B9U;
     value ^= object_address * 0x85EBCA6BU;
     value ^= lifetime_generation * 0xC2B2AE35U;
@@ -48,10 +46,8 @@ constexpr std::uint32_t make_object_identity(std::uint32_t scene_generation,
     return normalise_identity(value);
 }
 
-constexpr std::uint32_t make_matrix_identity(std::uint32_t object_identity,
-                                              std::uint32_t matrix_ordinal) {
-    return normalise_identity(object_identity ^
-        ((matrix_ordinal + 1U) * 0x27D4EB2DU));
+constexpr std::uint32_t make_matrix_identity(std::uint32_t object_identity, std::uint32_t matrix_ordinal) {
+    return normalise_identity(object_identity ^ ((matrix_ordinal + 1U) * 0x27D4EB2DU));
 }
 
 // Camera-owned matrices are rebuilt in DKR's authored frame before any level
@@ -59,9 +55,8 @@ constexpr std::uint32_t make_matrix_identity(std::uint32_t object_identity,
 // static terrain can interpolate with camera motion without inheriting an
 // object, billboard, or shadow identity. Scene generation prevents history
 // from crossing a load or cutscene boundary.
-constexpr std::uint32_t make_camera_matrix_identity(
-    std::uint32_t scene_generation, std::uint32_t camera_id,
-    std::uint8_t matrix_role, std::uint32_t continuity_epoch = 0U) {
+constexpr std::uint32_t make_camera_matrix_identity(std::uint32_t scene_generation, std::uint32_t camera_id,
+                                                    std::uint8_t matrix_role, std::uint32_t continuity_epoch = 0U) {
     std::uint32_t value = 0x43414D52U;
     value ^= scene_generation * 0x9E3779B9U;
     value ^= (camera_id + 1U) * 0x85EBCA6BU;
@@ -74,9 +69,8 @@ constexpr std::uint32_t make_camera_matrix_identity(
 // matching history when that camera performs an authored cut. Keeping this
 // key separate from the matrix role lets object, attachment, wave and scoped
 // presentation identities inherit exactly the same continuity boundary.
-constexpr std::uint32_t make_camera_continuity_identity(
-    std::uint32_t scene_generation, std::uint32_t camera_id,
-    std::uint32_t continuity_epoch) {
+constexpr std::uint32_t make_camera_continuity_identity(std::uint32_t scene_generation, std::uint32_t camera_id,
+                                                        std::uint32_t continuity_epoch) {
     std::uint32_t value = 0x43435458U;
     value ^= scene_generation * 0x9E3779B9U;
     value ^= (camera_id + 1U) * 0x85EBCA6BU;
@@ -84,13 +78,11 @@ constexpr std::uint32_t make_camera_continuity_identity(
     return normalise_identity(value);
 }
 
-constexpr std::uint32_t with_camera_continuity(
-    std::uint32_t identity, std::uint32_t camera_identity) {
+constexpr std::uint32_t with_camera_continuity(std::uint32_t identity, std::uint32_t camera_identity) {
     if (identity == kIgnoredIdentity || camera_identity == kIgnoredIdentity) {
         return kIgnoredIdentity;
     }
-    return normalise_identity(
-        identity ^ mix_identity(camera_identity + 0xD3A2646CU));
+    return normalise_identity(identity ^ mix_identity(camera_identity + 0xD3A2646CU));
 }
 
 struct CameraContinuitySample {
@@ -103,11 +95,8 @@ struct CameraContinuitySample {
     std::int16_t roll = 0;
 };
 
-constexpr std::uint32_t camera_angle_distance(std::int16_t previous,
-                                               std::int16_t current) {
-    const std::uint32_t forward =
-        static_cast<std::uint16_t>(current) -
-        static_cast<std::uint16_t>(previous);
+constexpr std::uint32_t camera_angle_distance(std::int16_t previous, std::int16_t current) {
+    const std::uint32_t forward = static_cast<std::uint16_t>(current) - static_cast<std::uint16_t>(previous);
     const std::uint32_t wrapped = forward & 0xFFFFU;
     return std::min(wrapped, 0x10000U - wrapped);
 }
@@ -121,19 +110,13 @@ constexpr std::uint32_t camera_angle_distance(std::int16_t previous,
 // ordinary scenery object's interpolation history for one presentation frame.
 // Authored camera cuts which do not move the camera are handled by the explicit
 // scene/camera discontinuity hooks instead.
-inline bool camera_sample_discontinuous(
-    const CameraContinuitySample& previous,
-    const CameraContinuitySample& current,
-    float maximum_position_step = 640.0F,
-    std::uint32_t = 0x3000U,
-    float maximum_fov_step = 20.0F) {
-    if (!std::isfinite(previous.x) || !std::isfinite(previous.y) ||
-        !std::isfinite(previous.z) || !std::isfinite(previous.fov) ||
-        !std::isfinite(current.x) || !std::isfinite(current.y) ||
-        !std::isfinite(current.z) || !std::isfinite(current.fov) ||
-        !std::isfinite(maximum_position_step) ||
-        !std::isfinite(maximum_fov_step) ||
-        maximum_position_step <= 0.0F || maximum_fov_step <= 0.0F) {
+inline bool camera_sample_discontinuous(const CameraContinuitySample& previous, const CameraContinuitySample& current,
+                                        float maximum_position_step = 640.0F, std::uint32_t = 0x3000U,
+                                        float maximum_fov_step = 20.0F) {
+    if (!std::isfinite(previous.x) || !std::isfinite(previous.y) || !std::isfinite(previous.z) ||
+        !std::isfinite(previous.fov) || !std::isfinite(current.x) || !std::isfinite(current.y) ||
+        !std::isfinite(current.z) || !std::isfinite(current.fov) || !std::isfinite(maximum_position_step) ||
+        !std::isfinite(maximum_fov_step) || maximum_position_step <= 0.0F || maximum_fov_step <= 0.0F) {
         return true;
     }
 
@@ -141,11 +124,9 @@ inline bool camera_sample_discontinuous(
     const float dy = current.y - previous.y;
     const float dz = current.z - previous.z;
     const float distance_squared = dx * dx + dy * dy + dz * dz;
-    const float maximum_distance_squared =
-        maximum_position_step * maximum_position_step;
-    return !std::isfinite(distance_squared) ||
-        distance_squared > maximum_distance_squared ||
-        std::abs(current.fov - previous.fov) > maximum_fov_step;
+    const float maximum_distance_squared = maximum_position_step * maximum_position_step;
+    return !std::isfinite(distance_squared) || distance_squared > maximum_distance_squared ||
+           std::abs(current.fov - previous.fov) > maximum_fov_step;
 }
 
 // HQ waves alternate between authored vertex/triangle buffers every frame.
@@ -153,11 +134,10 @@ inline bool camera_sample_discontinuous(
 // stable identities. The WaveBlockModel entry, tile transform and viewport
 // are stable across both buffers and uniquely identify the procedural surface
 // draw within a scene.
-constexpr std::uint32_t make_wave_matrix_identity(
-    std::uint32_t scene_generation, std::uint32_t viewport_id,
-    std::uint32_t wave_block_address,
-    std::uint32_t transform_x_bits, std::uint32_t transform_y_bits,
-    std::uint32_t transform_z_bits, std::uint32_t topology_variant) {
+constexpr std::uint32_t make_wave_matrix_identity(std::uint32_t scene_generation, std::uint32_t viewport_id,
+                                                  std::uint32_t wave_block_address, std::uint32_t transform_x_bits,
+                                                  std::uint32_t transform_y_bits, std::uint32_t transform_z_bits,
+                                                  std::uint32_t topology_variant) {
     std::uint32_t value = 0x57415645U;
     value ^= scene_generation * 0x9E3779B9U;
     value ^= (viewport_id + 1U) * 0x85EBCA6BU;
@@ -181,9 +161,8 @@ constexpr bool valid_wave_selection_pattern(std::uint8_t selection_pattern) {
     return selection_pattern <= 25U;
 }
 
-constexpr std::uint32_t make_wave_topology_variant(
-    std::uint32_t subdivisions, bool double_density,
-    std::uint8_t selection_pattern, std::uint32_t scale_bits) {
+constexpr std::uint32_t make_wave_topology_variant(std::uint32_t subdivisions, bool double_density,
+                                                   std::uint8_t selection_pattern, std::uint32_t scale_bits) {
     const bool fallback_quad = double_density && selection_pattern == 0U;
     const bool full_grid = selection_pattern != 0U;
     std::uint32_t value = subdivisions & 0xFFU;
@@ -201,14 +180,12 @@ constexpr std::uint32_t make_wave_topology_variant(
 // collapse the sprite quad to zero area for an intermediate presentation
 // frame. Keep interpolation continuous within each hemisphere and discrete at
 // the original game's mirror transition.
-constexpr std::uint32_t make_vehicle_part_matrix_identity(
-    std::uint32_t object_identity, std::uint32_t transform_address,
-    bool mirrored) {
+constexpr std::uint32_t make_vehicle_part_matrix_identity(std::uint32_t object_identity,
+                                                          std::uint32_t transform_address, bool mirrored) {
     return object_identity == kIgnoredIdentity
-        ? kIgnoredIdentity
-        : normalise_identity(object_identity ^ 0x56504D58U ^
-              ((transform_address & 0x007FFFFFU) * 0x9E3779B9U) ^
-              (mirrored ? 0x4D495252U : 0U));
+               ? kIgnoredIdentity
+               : normalise_identity(object_identity ^ 0x56504D58U ^ ((transform_address & 0x007FFFFFU) * 0x9E3779B9U) ^
+                                    (mirrored ? 0x4D495252U : 0U));
 }
 
 // A shadow's owner lifetime and authored scene are its interpolation identity.
@@ -217,29 +194,26 @@ constexpr std::uint32_t make_vehicle_part_matrix_identity(
 // batches before they reach RT64. Including the full scene generation prevents
 // a freshly loaded track from inheriting history when its 16-bit owner token
 // is reused.
-constexpr std::uint32_t make_shadow_group_identity(
-    std::uint16_t token, std::uint32_t scene_generation = 0U) {
-    return token == 0U ? kIgnoredIdentity :
-        normalise_identity(0x53484457U ^ static_cast<std::uint32_t>(token) ^
-            (scene_generation * 0x9E3779B9U));
+constexpr std::uint32_t make_shadow_group_identity(std::uint16_t token, std::uint32_t scene_generation = 0U) {
+    return token == 0U
+               ? kIgnoredIdentity
+               : normalise_identity(0x53484457U ^ static_cast<std::uint32_t>(token) ^ (scene_generation * 0x9E3779B9U));
 }
 
 // Canonical shadow pages are submitted as separate RT64 transform groups. This
 // lets a page whose clipped topology changed use current vertices immediately
 // without disabling interpolation for the rest of the vehicle shadow.
-constexpr std::uint32_t make_shadow_page_group_identity(
-    std::uint32_t shadow_identity, std::size_t page,
-    std::uint32_t continuity_epoch = 0U) {
+constexpr std::uint32_t make_shadow_page_group_identity(std::uint32_t shadow_identity, std::size_t page,
+                                                        std::uint32_t continuity_epoch = 0U) {
     return shadow_identity == kIgnoredIdentity
-        ? kIgnoredIdentity
-        : normalise_identity(shadow_identity ^ 0x53485047U ^
-              ((static_cast<std::uint32_t>(page) + 1U) * 0x85EBCA6BU) ^
-              (continuity_epoch * 0xC2B2AE35U));
+               ? kIgnoredIdentity
+               : normalise_identity(shadow_identity ^ 0x53485047U ^
+                                    ((static_cast<std::uint32_t>(page) + 1U) * 0x85EBCA6BU) ^
+                                    (continuity_epoch * 0xC2B2AE35U));
 }
 
 constexpr std::uint32_t make_vehicle_part_group_identity(std::uint16_t token) {
-    return token == 0U ? kIgnoredIdentity :
-        normalise_identity(0x56505254U ^ static_cast<std::uint32_t>(token));
+    return token == 0U ? kIgnoredIdentity : normalise_identity(0x56505254U ^ static_cast<std::uint32_t>(token));
 }
 
 inline constexpr std::uint8_t kInvalidVehiclePartSlot = 0xFFU;
@@ -248,8 +222,7 @@ inline constexpr std::uint8_t kInvalidVehiclePartSlot = 0xFFU;
 // owning render_object call. The ordinal is stable across the two authored
 // frame buffers, whereas the matrix address itself and the shared transform
 // scratch address are not valid attachment identities.
-constexpr std::uint8_t vehicle_part_attachment_slot(
-    std::uint32_t first_matrix, std::uint32_t attachment_matrix) {
+constexpr std::uint8_t vehicle_part_attachment_slot(std::uint32_t first_matrix, std::uint32_t attachment_matrix) {
     constexpr std::uint32_t kMatrixBytes = 64U;
     constexpr std::uint32_t kEncodableSlots = 32U;
     if (attachment_matrix < first_matrix) {
@@ -260,52 +233,43 @@ constexpr std::uint8_t vehicle_part_attachment_slot(
         return kInvalidVehiclePartSlot;
     }
     const std::uint32_t ordinal = offset / kMatrixBytes;
-    return ordinal < kEncodableSlots
-        ? static_cast<std::uint8_t>(ordinal)
-        : kInvalidVehiclePartSlot;
+    return ordinal < kEncodableSlots ? static_cast<std::uint8_t>(ordinal) : kInvalidVehiclePartSlot;
 }
 
-constexpr std::uint8_t vehicle_part_frame_variant(
-    std::uint32_t normalised_frame, std::uint16_t frame_count) {
+constexpr std::uint8_t vehicle_part_frame_variant(std::uint32_t normalised_frame, std::uint16_t frame_count) {
     if (frame_count == 0U) {
         return 0U;
     }
-    const std::uint32_t selected =
-        ((normalised_frame & 0xFFU) * frame_count) >> 8U;
+    const std::uint32_t selected = ((normalised_frame & 0xFFU) * frame_count) >> 8U;
     return static_cast<std::uint8_t>(selected & 0x1FU);
 }
 
-constexpr std::uint8_t presentation_variant_for_address(
-    std::uint32_t address) {
-    return static_cast<std::uint8_t>(
-        mix_identity(address & 0x007FFFFFU) & 0x1FU);
+constexpr std::uint8_t presentation_variant_for_address(std::uint32_t address) {
+    return static_cast<std::uint8_t>(mix_identity(address & 0x007FFFFFU) & 0x1FU);
 }
 
-constexpr std::uint32_t make_billboard_group_identity(
-    std::uint16_t token, std::uint8_t sprite_variant = 0U) {
-    return token == 0U ? kIgnoredIdentity :
-        normalise_identity(0x42494C4CU ^ static_cast<std::uint32_t>(token) ^
-            (static_cast<std::uint32_t>(sprite_variant & 0x1FU) *
-             0x9E3779B9U));
+constexpr std::uint32_t make_billboard_group_identity(std::uint16_t token, std::uint8_t sprite_variant = 0U) {
+    return token == 0U ? kIgnoredIdentity
+                       : normalise_identity(0x42494C4CU ^ static_cast<std::uint32_t>(token) ^
+                                            (static_cast<std::uint32_t>(sprite_variant & 0x1FU) * 0x9E3779B9U));
 }
 
-constexpr std::uint32_t make_surface_group_identity(
-    std::uint16_t token, std::uint8_t variant) {
-    return token == 0U ? kIgnoredIdentity :
-        normalise_identity(0x53555246U ^ static_cast<std::uint32_t>(token) ^
-            (static_cast<std::uint32_t>(variant & 0x1FU) * 0x9E3779B9U));
+constexpr std::uint32_t make_surface_group_identity(std::uint16_t token, std::uint8_t variant) {
+    return token == 0U ? kIgnoredIdentity
+                       : normalise_identity(0x53555246U ^ static_cast<std::uint32_t>(token) ^
+                                            (static_cast<std::uint32_t>(variant & 0x1FU) * 0x9E3779B9U));
 }
 
 // The token is segmentId + 1 (zero remains the ignored sentinel) and variant
 // is the authored opaque/transparent pass. Scene ownership is explicit so a
 // level reload can never revive an older segment's interpolation history.
-constexpr std::uint32_t make_level_segment_group_identity(
-    std::uint16_t token, std::uint8_t pass,
-    std::uint32_t scene_generation) {
-    return token == 0U || scene_generation == 0U ? kIgnoredIdentity :
-        normalise_identity(0x5345474DU ^ static_cast<std::uint32_t>(token) ^
-            (static_cast<std::uint32_t>(pass & 1U) * 0x85EBCA6BU) ^
-            (scene_generation * 0x9E3779B9U));
+constexpr std::uint32_t make_level_segment_group_identity(std::uint16_t token, std::uint8_t pass,
+                                                          std::uint32_t scene_generation) {
+    return token == 0U || scene_generation == 0U
+               ? kIgnoredIdentity
+               : normalise_identity(0x5345474DU ^ static_cast<std::uint32_t>(token) ^
+                                    (static_cast<std::uint32_t>(pass & 1U) * 0x85EBCA6BU) ^
+                                    (scene_generation * 0x9E3779B9U));
 }
 
 struct PresentationKey {
@@ -313,14 +277,12 @@ struct PresentationKey {
     std::uint8_t variant = 0U;
 };
 
-constexpr PresentationKey level_segment_presentation_key(
-    std::uint32_t segment_id, bool non_opaque) {
+constexpr PresentationKey level_segment_presentation_key(std::uint32_t segment_id, bool non_opaque) {
     // Retail DKR levels are bounded to 512 segments. Keeping the exact ordinal
     // in the token avoids hash collisions within a scene.
-    return segment_id < 512U
-        ? PresentationKey{static_cast<std::uint16_t>(segment_id + 1U),
-                          static_cast<std::uint8_t>(non_opaque ? 1U : 0U)}
-        : PresentationKey{};
+    return segment_id < 512U ? PresentationKey{static_cast<std::uint16_t>(segment_id + 1U),
+                                               static_cast<std::uint8_t>(non_opaque ? 1U : 0U)}
+                             : PresentationKey{};
 }
 
 struct ShadowVertexSample {
@@ -333,9 +295,8 @@ struct ShadowVertexSample {
 // The owner's measured translation remains exact, while a newly born seam
 // point that has no nearby historical counterpart converges over subsequent
 // authored frames instead of generating one very long interpolation vector.
-inline ShadowVertexSample bounded_shadow_presentation_vertex(
-    ShadowVertexSample previous, ShadowVertexSample current,
-    ShadowVertexSample translation, float maximum_residual) {
+inline ShadowVertexSample bounded_shadow_presentation_vertex(ShadowVertexSample previous, ShadowVertexSample current,
+                                                             ShadowVertexSample translation, float maximum_residual) {
     const ShadowVertexSample predicted{
         previous.x + translation.x,
         previous.y + translation.y,
@@ -421,27 +382,40 @@ struct TajShadowSurfacePoint {
     std::uint8_t v_quarters = 0U;
 };
 
-inline constexpr std::array<TajShadowSurfacePoint,
-                            kTajShadowSurfaceVertexCount>
-    kTajShadowSurfacePoints{{
-        {0U, 0U}, {2U, 0U}, {4U, 0U},
-        {0U, 2U}, {2U, 2U}, {4U, 2U},
-        {0U, 4U}, {2U, 4U}, {4U, 4U},
-        {1U, 1U}, {3U, 1U}, {1U, 3U}, {3U, 3U},
-    }};
+inline constexpr std::array<TajShadowSurfacePoint, kTajShadowSurfaceVertexCount> kTajShadowSurfacePoints{{
+    {0U, 0U},
+    {2U, 0U},
+    {4U, 0U},
+    {0U, 2U},
+    {2U, 2U},
+    {4U, 2U},
+    {0U, 4U},
+    {2U, 4U},
+    {4U, 4U},
+    {1U, 1U},
+    {3U, 1U},
+    {1U, 3U},
+    {3U, 3U},
+}};
 
-inline constexpr std::array<std::array<std::uint8_t, 3>,
-                            kTajShadowSurfaceTriangleCount>
-    kTajShadowSurfaceTriangles{{
-        {0U, 1U, 9U}, {1U, 4U, 9U},
-        {4U, 3U, 9U}, {3U, 0U, 9U},
-        {1U, 2U, 10U}, {2U, 5U, 10U},
-        {5U, 4U, 10U}, {4U, 1U, 10U},
-        {3U, 4U, 11U}, {4U, 7U, 11U},
-        {7U, 6U, 11U}, {6U, 3U, 11U},
-        {4U, 5U, 12U}, {5U, 8U, 12U},
-        {8U, 7U, 12U}, {7U, 4U, 12U},
-    }};
+inline constexpr std::array<std::array<std::uint8_t, 3>, kTajShadowSurfaceTriangleCount> kTajShadowSurfaceTriangles{{
+    {0U, 1U, 9U},
+    {1U, 4U, 9U},
+    {4U, 3U, 9U},
+    {3U, 0U, 9U},
+    {1U, 2U, 10U},
+    {2U, 5U, 10U},
+    {5U, 4U, 10U},
+    {4U, 1U, 10U},
+    {3U, 4U, 11U},
+    {4U, 7U, 11U},
+    {7U, 6U, 11U},
+    {6U, 3U, 11U},
+    {4U, 5U, 12U},
+    {5U, 8U, 12U},
+    {8U, 7U, 12U},
+    {7U, 4U, 12U},
+}};
 
 struct TajShadowReceiverSurface {
     std::array<ShadowVertexSample, kTajShadowSurfaceVertexCount> vertices{};
@@ -458,22 +432,17 @@ struct RigidShadowShapeMetrics {
     bool valid = false;
 };
 
-inline RigidShadowShapeMetrics rigid_shadow_shape_metrics(
-    const RigidShadowQuad& quad) {
+inline RigidShadowShapeMetrics rigid_shadow_shape_metrics(const RigidShadowQuad& quad) {
     RigidShadowShapeMetrics result{};
-    if (!quad.valid) return result;
-    const auto subtract = [](const ShadowVertexSample& lhs,
-                             const ShadowVertexSample& rhs) {
-        return ShadowVertexSample{
-            lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+    if (!quad.valid)
+        return result;
+    const auto subtract = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
+        return ShadowVertexSample{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
     };
-    const auto dot = [](const ShadowVertexSample& lhs,
-                        const ShadowVertexSample& rhs) {
+    const auto dot = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
         return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
     };
-    const auto length = [&](const ShadowVertexSample& value) {
-        return std::sqrt(std::max(0.0F, dot(value, value)));
-    };
+    const auto length = [&](const ShadowVertexSample& value) { return std::sqrt(std::max(0.0F, dot(value, value))); };
     for (const auto& vertex : quad.vertices) {
         result.centre.x += vertex.x * 0.25F;
         result.centre.y += vertex.y * 0.25F;
@@ -481,20 +450,14 @@ inline RigidShadowShapeMetrics rigid_shadow_shape_metrics(
     }
     std::array<ShadowVertexSample, 4> edges{};
     for (std::size_t edge = 0U; edge < edges.size(); ++edge) {
-        edges[edge] = subtract(
-            quad.vertices[(edge + 1U) % quad.vertices.size()],
-            quad.vertices[edge]);
+        edges[edge] = subtract(quad.vertices[(edge + 1U) % quad.vertices.size()], quad.vertices[edge]);
         result.edge_lengths[edge] = length(edges[edge]);
     }
-    result.diagonal_lengths[0] =
-        length(subtract(quad.vertices[2], quad.vertices[0]));
-    result.diagonal_lengths[1] =
-        length(subtract(quad.vertices[3], quad.vertices[1]));
-    const float adjacent_product =
-        result.edge_lengths[0] * result.edge_lengths[1];
+    result.diagonal_lengths[0] = length(subtract(quad.vertices[2], quad.vertices[0]));
+    result.diagonal_lengths[1] = length(subtract(quad.vertices[3], quad.vertices[1]));
+    const float adjacent_product = result.edge_lengths[0] * result.edge_lengths[1];
     if (adjacent_product > 1.0e-6F) {
-        result.adjacent_edge_cosine =
-            dot(edges[0], edges[1]) / adjacent_product;
+        result.adjacent_edge_cosine = dot(edges[0], edges[1]) / adjacent_product;
     }
     const ShadowVertexSample cross{
         edges[0].y * edges[1].z - edges[0].z * edges[1].y,
@@ -502,9 +465,8 @@ inline RigidShadowShapeMetrics rigid_shadow_shape_metrics(
         edges[0].x * edges[1].y - edges[0].y * edges[1].x,
     };
     result.area = length(cross);
-    result.valid = std::isfinite(result.area) &&
-        std::all_of(result.edge_lengths.begin(), result.edge_lengths.end(),
-                    [](float value) { return std::isfinite(value); });
+    result.valid = std::isfinite(result.area) && std::all_of(result.edge_lengths.begin(), result.edge_lengths.end(),
+                                                             [](float value) { return std::isfinite(value); });
     return result;
 }
 
@@ -513,34 +475,26 @@ inline RigidShadowShapeMetrics rigid_shadow_shape_metrics(
 // its two edge lengths come from the first trusted frame and its basis is kept
 // orthonormal. Terrain seams can therefore translate or rotate the shadow as a
 // whole, but can never shear, stretch or independently move one corner.
-inline RigidShadowQuad rigid_shadow_fixed_shape_quad(
-    const RigidShadowQuad& current,
-    const RigidShadowQuad& reference) {
+inline RigidShadowQuad rigid_shadow_fixed_shape_quad(const RigidShadowQuad& current, const RigidShadowQuad& reference) {
     RigidShadowQuad result{};
     const auto current_metrics = rigid_shadow_shape_metrics(current);
     const auto reference_metrics = rigid_shadow_shape_metrics(reference);
-    if (!current_metrics.valid || !reference_metrics.valid) return result;
+    if (!current_metrics.valid || !reference_metrics.valid)
+        return result;
 
-    const auto subtract = [](const ShadowVertexSample& lhs,
-                             const ShadowVertexSample& rhs) {
-        return ShadowVertexSample{
-            lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+    const auto subtract = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
+        return ShadowVertexSample{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
     };
     const auto scale = [](const ShadowVertexSample& value, float factor) {
-        return ShadowVertexSample{
-            value.x * factor, value.y * factor, value.z * factor};
+        return ShadowVertexSample{value.x * factor, value.y * factor, value.z * factor};
     };
-    const auto add = [](const ShadowVertexSample& lhs,
-                        const ShadowVertexSample& rhs) {
-        return ShadowVertexSample{
-            lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
+    const auto add = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
+        return ShadowVertexSample{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
     };
-    const auto dot = [](const ShadowVertexSample& lhs,
-                        const ShadowVertexSample& rhs) {
+    const auto dot = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
         return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
     };
-    const auto cross = [](const ShadowVertexSample& lhs,
-                          const ShadowVertexSample& rhs) {
+    const auto cross = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
         return ShadowVertexSample{
             lhs.y * rhs.z - lhs.z * rhs.y,
             lhs.z * rhs.x - lhs.x * rhs.z,
@@ -567,14 +521,9 @@ inline RigidShadowQuad rigid_shadow_fixed_shape_quad(
         t_axis = scale(t_axis, -1.0F);
     }
 
-    const float s_length = 0.5F *
-        (reference_metrics.edge_lengths[0] +
-         reference_metrics.edge_lengths[2]);
-    const float t_length = 0.5F *
-        (reference_metrics.edge_lengths[1] +
-         reference_metrics.edge_lengths[3]);
-    if (!std::isfinite(s_length) || !std::isfinite(t_length) ||
-        s_length <= 1.0e-4F || t_length <= 1.0e-4F) {
+    const float s_length = 0.5F * (reference_metrics.edge_lengths[0] + reference_metrics.edge_lengths[2]);
+    const float t_length = 0.5F * (reference_metrics.edge_lengths[1] + reference_metrics.edge_lengths[3]);
+    if (!std::isfinite(s_length) || !std::isfinite(t_length) || s_length <= 1.0e-4F || t_length <= 1.0e-4F) {
         return result;
     }
     const auto half_s = scale(s_axis, s_length * 0.5F);
@@ -585,18 +534,15 @@ inline RigidShadowQuad rigid_shadow_fixed_shape_quad(
     result.vertices[2] = add(add(centre, half_s), half_t);
     result.vertices[3] = add(subtract(centre, half_s), half_t);
     result.texcoords = reference.texcoords;
-    result.valid = std::all_of(
-        result.vertices.begin(), result.vertices.end(),
-        [](const ShadowVertexSample& vertex) {
-            return std::isfinite(vertex.x) && std::isfinite(vertex.y) &&
-                   std::isfinite(vertex.z);
-        });
+    result.valid = std::all_of(result.vertices.begin(), result.vertices.end(), [](const ShadowVertexSample& vertex) {
+        return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z);
+    });
     return result;
 }
 
-inline RigidShadowQuad translated_rigid_shadow_quad(
-    RigidShadowQuad quad, const ShadowVertexSample& translation) {
-    if (!quad.valid) return {};
+inline RigidShadowQuad translated_rigid_shadow_quad(RigidShadowQuad quad, const ShadowVertexSample& translation) {
+    if (!quad.valid)
+        return {};
     for (auto& vertex : quad.vertices) {
         vertex.x += translation.x;
         vertex.y += translation.y;
@@ -611,44 +557,39 @@ inline RigidShadowQuad translated_rigid_shadow_quad(
 // horizontal motion and yaw. The decomp uses this same object yaw to author the
 // shadow UV axes; owner altitude is never a valid replacement for ground height.
 // As soon as DKR emits ground geometry again, that authored quad is authoritative.
-inline RigidShadowQuad plane_shadow_missing_frame_quad(
-    RigidShadowQuad quad, const ShadowVertexSample& translation,
-    std::int16_t previous_yaw, std::int16_t current_yaw) {
-    if (!quad.valid) return {};
+inline RigidShadowQuad plane_shadow_missing_frame_quad(RigidShadowQuad quad, const ShadowVertexSample& translation,
+                                                       std::int16_t previous_yaw, std::int16_t current_yaw) {
+    if (!quad.valid)
+        return {};
 
     const auto metrics = rigid_shadow_shape_metrics(quad);
-    if (!metrics.valid) return {};
+    if (!metrics.valid)
+        return {};
 
-    std::int32_t yaw_delta =
-        static_cast<std::int32_t>(static_cast<std::uint16_t>(current_yaw)) -
-        static_cast<std::int32_t>(static_cast<std::uint16_t>(previous_yaw));
+    std::int32_t yaw_delta = static_cast<std::int32_t>(static_cast<std::uint16_t>(current_yaw)) -
+                             static_cast<std::int32_t>(static_cast<std::uint16_t>(previous_yaw));
     if (yaw_delta > 32767) {
         yaw_delta -= 65536;
     } else if (yaw_delta < -32768) {
         yaw_delta += 65536;
     }
 
-    constexpr float kAnglePerYawUnit =
-        6.2831853071795864769F / 65536.0F;
+    constexpr float kAnglePerYawUnit = 6.2831853071795864769F / 65536.0F;
     const float angle = static_cast<float>(yaw_delta) * kAnglePerYawUnit;
     const float cosine = std::cos(angle);
     const float sine = std::sin(angle);
-    if (!std::isfinite(cosine) || !std::isfinite(sine)) return {};
+    if (!std::isfinite(cosine) || !std::isfinite(sine))
+        return {};
 
     for (auto& vertex : quad.vertices) {
         const float local_x = vertex.x - metrics.centre.x;
         const float local_z = vertex.z - metrics.centre.z;
-        vertex.x = metrics.centre.x + local_x * cosine + local_z * sine +
-            translation.x;
-        vertex.z = metrics.centre.z - local_x * sine + local_z * cosine +
-            translation.z;
+        vertex.x = metrics.centre.x + local_x * cosine + local_z * sine + translation.x;
+        vertex.z = metrics.centre.z - local_x * sine + local_z * cosine + translation.z;
     }
-    quad.valid = std::all_of(
-        quad.vertices.begin(), quad.vertices.end(),
-        [](const ShadowVertexSample& vertex) {
-            return std::isfinite(vertex.x) && std::isfinite(vertex.y) &&
-                   std::isfinite(vertex.z);
-        });
+    quad.valid = std::all_of(quad.vertices.begin(), quad.vertices.end(), [](const ShadowVertexSample& vertex) {
+        return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z);
+    });
     return quad;
 }
 
@@ -663,18 +604,14 @@ inline constexpr std::uint64_t kMaximumTransientRigidShadowSourceGapTasks = 8U;
 // plane follow him through an extended interval without authored geometry.
 inline constexpr std::uint64_t kMaximumTransientTajShadowSourceGapTasks = 1U;
 
-constexpr bool rigid_shadow_source_history_is_fresh(
-    std::uint64_t current_task, std::uint64_t last_source_task) {
+constexpr bool rigid_shadow_source_history_is_fresh(std::uint64_t current_task, std::uint64_t last_source_task) {
     return last_source_task != 0U && current_task >= last_source_task &&
-        current_task - last_source_task <=
-            kMaximumTransientRigidShadowSourceGapTasks;
+           current_task - last_source_task <= kMaximumTransientRigidShadowSourceGapTasks;
 }
 
-constexpr bool taj_shadow_source_history_is_fresh(
-    std::uint64_t current_task, std::uint64_t last_source_task) {
+constexpr bool taj_shadow_source_history_is_fresh(std::uint64_t current_task, std::uint64_t last_source_task) {
     return last_source_task != 0U && current_task >= last_source_task &&
-        current_task - last_source_task <=
-            kMaximumTransientTajShadowSourceGapTasks;
+           current_task - last_source_task <= kMaximumTransientTajShadowSourceGapTasks;
 }
 
 // DKR projects shadow UVs from world X/Z before terrain height is applied.
@@ -682,32 +619,25 @@ constexpr bool taj_shadow_source_history_is_fresh(
 // one orthogonal receiver-plane quad. This preserves DKR's intentional uniform
 // height-dependent shadow scale without allowing terrain seams to shear or
 // independently resize either axis.
-inline RigidShadowQuad rigid_shadow_authored_scale_quad(
-    const RigidShadowQuad& current) {
+inline RigidShadowQuad rigid_shadow_authored_scale_quad(const RigidShadowQuad& current) {
     RigidShadowQuad result{};
     const auto current_metrics = rigid_shadow_shape_metrics(current);
-    if (!current_metrics.valid) return result;
+    if (!current_metrics.valid)
+        return result;
 
-    const auto subtract = [](const ShadowVertexSample& lhs,
-                             const ShadowVertexSample& rhs) {
-        return ShadowVertexSample{
-            lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
+    const auto subtract = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
+        return ShadowVertexSample{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
     };
     const auto scale = [](const ShadowVertexSample& value, float factor) {
-        return ShadowVertexSample{
-            value.x * factor, value.y * factor, value.z * factor};
+        return ShadowVertexSample{value.x * factor, value.y * factor, value.z * factor};
     };
-    const auto add = [](const ShadowVertexSample& lhs,
-                        const ShadowVertexSample& rhs) {
-        return ShadowVertexSample{
-            lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
+    const auto add = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
+        return ShadowVertexSample{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
     };
-    const auto dot = [](const ShadowVertexSample& lhs,
-                        const ShadowVertexSample& rhs) {
+    const auto dot = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
         return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
     };
-    const auto cross = [](const ShadowVertexSample& lhs,
-                          const ShadowVertexSample& rhs) {
+    const auto cross = [](const ShadowVertexSample& lhs, const ShadowVertexSample& rhs) {
         return ShadowVertexSample{
             lhs.y * rhs.z - lhs.z * rhs.y,
             lhs.z * rhs.x - lhs.x * rhs.z,
@@ -722,23 +652,19 @@ inline RigidShadowQuad rigid_shadow_authored_scale_quad(
         return scale(value, 1.0F / std::sqrt(length_squared));
     };
     const auto horizontal_length = [](const ShadowVertexSample& value) {
-        return std::sqrt(std::max(
-            0.0F, value.x * value.x + value.z * value.z));
+        return std::sqrt(std::max(0.0F, value.x * value.x + value.z * value.z));
     };
 
     const auto current_s = subtract(current.vertices[1], current.vertices[0]);
     const auto current_t = subtract(current.vertices[3], current.vertices[0]);
     const auto opposite_s = subtract(current.vertices[2], current.vertices[3]);
     const auto opposite_t = subtract(current.vertices[2], current.vertices[1]);
-    const float authored_horizontal_length = 0.25F *
-        (horizontal_length(current_s) + horizontal_length(opposite_s) +
-         horizontal_length(current_t) + horizontal_length(opposite_t));
+    const float authored_horizontal_length = 0.25F * (horizontal_length(current_s) + horizontal_length(opposite_s) +
+                                                      horizontal_length(current_t) + horizontal_length(opposite_t));
     auto s_axis = normalise(current_s);
     const auto plane_normal = normalise(cross(current_s, current_t));
-    if (!std::isfinite(authored_horizontal_length) ||
-        authored_horizontal_length <= 1.0e-4F ||
-        dot(s_axis, s_axis) <= 0.0F ||
-        dot(plane_normal, plane_normal) <= 0.0F) {
+    if (!std::isfinite(authored_horizontal_length) || authored_horizontal_length <= 1.0e-4F ||
+        dot(s_axis, s_axis) <= 0.0F || dot(plane_normal, plane_normal) <= 0.0F) {
         return result;
     }
     auto t_axis = normalise(cross(plane_normal, s_axis));
@@ -751,32 +677,27 @@ inline RigidShadowQuad rigid_shadow_authored_scale_quad(
         return result;
     }
 
-    const auto half_s = scale(
-        s_axis, authored_horizontal_length * 0.5F / s_horizontal);
-    const auto half_t = scale(
-        t_axis, authored_horizontal_length * 0.5F / t_horizontal);
+    const auto half_s = scale(s_axis, authored_horizontal_length * 0.5F / s_horizontal);
+    const auto half_t = scale(t_axis, authored_horizontal_length * 0.5F / t_horizontal);
     const auto centre = current_metrics.centre;
     result.vertices[0] = subtract(subtract(centre, half_s), half_t);
     result.vertices[1] = add(subtract(centre, half_t), half_s);
     result.vertices[2] = add(add(centre, half_s), half_t);
     result.vertices[3] = add(subtract(centre, half_s), half_t);
     result.texcoords = current.texcoords;
-    result.valid = std::all_of(
-        result.vertices.begin(), result.vertices.end(),
-        [](const ShadowVertexSample& vertex) {
-            return std::isfinite(vertex.x) && std::isfinite(vertex.y) &&
-                   std::isfinite(vertex.z);
-        });
+    result.valid = std::all_of(result.vertices.begin(), result.vertices.end(), [](const ShadowVertexSample& vertex) {
+        return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z);
+    });
     return result;
 }
 
 inline float rigid_shadow_horizontal_size(const RigidShadowQuad& quad) {
-    if (!quad.valid) return 0.0F;
+    if (!quad.valid)
+        return 0.0F;
     float total = 0.0F;
     for (std::size_t edge = 0U; edge < quad.vertices.size(); ++edge) {
         const auto& first = quad.vertices[edge];
-        const auto& second =
-            quad.vertices[(edge + 1U) % quad.vertices.size()];
+        const auto& second = quad.vertices[(edge + 1U) % quad.vertices.size()];
         const float dx = second.x - first.x;
         const float dz = second.z - first.z;
         total += std::sqrt(std::max(0.0F, dx * dx + dz * dz));
@@ -788,34 +709,26 @@ inline float rigid_shadow_horizontal_size(const RigidShadowQuad& quad) {
 // authored horizontal footprint recovered from the current UV projection.
 // This is used when a roof/wall mixture makes the current receiver plane
 // unusable but the X/Z projection still carries DKR's intended shadow size.
-inline RigidShadowQuad rigid_shadow_horizontal_resized_quad(
-    const RigidShadowQuad& trusted, float target_horizontal_size) {
+inline RigidShadowQuad rigid_shadow_horizontal_resized_quad(const RigidShadowQuad& trusted,
+                                                            float target_horizontal_size) {
     RigidShadowQuad result{};
     const auto trusted_metrics = rigid_shadow_shape_metrics(trusted);
     const float trusted_horizontal_size = rigid_shadow_horizontal_size(trusted);
-    if (!trusted_metrics.valid || !std::isfinite(target_horizontal_size) ||
-        target_horizontal_size <= 1.0e-4F ||
-        !std::isfinite(trusted_horizontal_size) ||
-        trusted_horizontal_size <= 1.0e-4F) {
+    if (!trusted_metrics.valid || !std::isfinite(target_horizontal_size) || target_horizontal_size <= 1.0e-4F ||
+        !std::isfinite(trusted_horizontal_size) || trusted_horizontal_size <= 1.0e-4F) {
         return result;
     }
 
     result = trusted;
     const float scale = target_horizontal_size / trusted_horizontal_size;
     for (auto& vertex : result.vertices) {
-        vertex.x = trusted_metrics.centre.x +
-            (vertex.x - trusted_metrics.centre.x) * scale;
-        vertex.y = trusted_metrics.centre.y +
-            (vertex.y - trusted_metrics.centre.y) * scale;
-        vertex.z = trusted_metrics.centre.z +
-            (vertex.z - trusted_metrics.centre.z) * scale;
+        vertex.x = trusted_metrics.centre.x + (vertex.x - trusted_metrics.centre.x) * scale;
+        vertex.y = trusted_metrics.centre.y + (vertex.y - trusted_metrics.centre.y) * scale;
+        vertex.z = trusted_metrics.centre.z + (vertex.z - trusted_metrics.centre.z) * scale;
     }
-    result.valid = std::all_of(
-        result.vertices.begin(), result.vertices.end(),
-        [](const ShadowVertexSample& vertex) {
-            return std::isfinite(vertex.x) && std::isfinite(vertex.y) &&
-                   std::isfinite(vertex.z);
-        });
+    result.valid = std::all_of(result.vertices.begin(), result.vertices.end(), [](const ShadowVertexSample& vertex) {
+        return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z);
+    });
     return result;
 }
 
@@ -825,20 +738,19 @@ inline RigidShadowQuad rigid_shadow_horizontal_resized_quad(
 // yaw, but place the complete rigid quad on one horizontal receiver. The
 // caller supplies its stable height/clearance policy. This makes the texture
 // incapable of deforming across a terrain seam.
-inline RigidShadowQuad rigid_shadow_horizontal_receiver_quad(
-    const RigidShadowQuad& current, float receiver_y) {
+inline RigidShadowQuad rigid_shadow_horizontal_receiver_quad(const RigidShadowQuad& current, float receiver_y) {
     RigidShadowQuad result{};
     const auto metrics = rigid_shadow_shape_metrics(current);
     const float side_length = rigid_shadow_horizontal_size(current);
-    if (!metrics.valid || !std::isfinite(receiver_y) ||
-        !std::isfinite(side_length) || side_length <= 1.0e-4F) {
+    if (!metrics.valid || !std::isfinite(receiver_y) || !std::isfinite(side_length) || side_length <= 1.0e-4F) {
         return result;
     }
 
     const float s_x = current.vertices[1].x - current.vertices[0].x;
     const float s_z = current.vertices[1].z - current.vertices[0].z;
     const float s_length = std::sqrt(std::max(0.0F, s_x * s_x + s_z * s_z));
-    if (!std::isfinite(s_length) || s_length <= 1.0e-4F) return result;
+    if (!std::isfinite(s_length) || s_length <= 1.0e-4F)
+        return result;
 
     const float unit_s_x = s_x / s_length;
     const float unit_s_z = s_z / s_length;
@@ -857,22 +769,15 @@ inline RigidShadowQuad rigid_shadow_horizontal_receiver_quad(
     const float half_t_x = unit_t_x * half_side;
     const float half_t_z = unit_t_z * half_side;
     result.vertices = {{
-        {metrics.centre.x - half_s_x - half_t_x, receiver_y,
-         metrics.centre.z - half_s_z - half_t_z},
-        {metrics.centre.x + half_s_x - half_t_x, receiver_y,
-         metrics.centre.z + half_s_z - half_t_z},
-        {metrics.centre.x + half_s_x + half_t_x, receiver_y,
-         metrics.centre.z + half_s_z + half_t_z},
-        {metrics.centre.x - half_s_x + half_t_x, receiver_y,
-         metrics.centre.z - half_s_z + half_t_z},
+        {metrics.centre.x - half_s_x - half_t_x, receiver_y, metrics.centre.z - half_s_z - half_t_z},
+        {metrics.centre.x + half_s_x - half_t_x, receiver_y, metrics.centre.z + half_s_z - half_t_z},
+        {metrics.centre.x + half_s_x + half_t_x, receiver_y, metrics.centre.z + half_s_z + half_t_z},
+        {metrics.centre.x - half_s_x + half_t_x, receiver_y, metrics.centre.z - half_s_z + half_t_z},
     }};
     result.texcoords = current.texcoords;
-    result.valid = std::all_of(
-        result.vertices.begin(), result.vertices.end(),
-        [](const ShadowVertexSample& vertex) {
-            return std::isfinite(vertex.x) && std::isfinite(vertex.y) &&
-                   std::isfinite(vertex.z);
-        });
+    result.valid = std::all_of(result.vertices.begin(), result.vertices.end(), [](const ShadowVertexSample& vertex) {
+        return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z);
+    });
     return result;
 }
 
@@ -881,19 +786,15 @@ inline RigidShadowQuad rigid_shadow_horizontal_receiver_quad(
 // Quantise one X/Z edge, derive the other as its exact integer perpendicular,
 // and build every corner from those two vectors. The submitted shape then has
 // equal edges and right angles by construction at every authored frame.
-inline RigidShadowQuad rigid_shadow_integer_square_quad(
-    const RigidShadowQuad& current) {
+inline RigidShadowQuad rigid_shadow_integer_square_quad(const RigidShadowQuad& current) {
     RigidShadowQuad result{};
-    if (!current.valid) return result;
+    if (!current.valid)
+        return result;
 
-    const float desired_s_x =
-        current.vertices[1].x - current.vertices[0].x;
-    const float desired_s_z =
-        current.vertices[1].z - current.vertices[0].z;
-    const float desired_t_x =
-        current.vertices[3].x - current.vertices[0].x;
-    const float desired_t_z =
-        current.vertices[3].z - current.vertices[0].z;
+    const float desired_s_x = current.vertices[1].x - current.vertices[0].x;
+    const float desired_s_z = current.vertices[1].z - current.vertices[0].z;
+    const float desired_t_x = current.vertices[3].x - current.vertices[0].x;
+    const float desired_t_z = current.vertices[3].z - current.vertices[0].z;
     float integer_s_x = std::round(desired_s_x);
     float integer_s_z = std::round(desired_s_z);
     if (!std::isfinite(integer_s_x) || !std::isfinite(integer_s_z) ||
@@ -913,94 +814,75 @@ inline RigidShadowQuad rigid_shadow_integer_square_quad(
     result.vertices = {{
         {origin_x, origin_y, origin_z},
         {origin_x + integer_s_x, origin_y, origin_z + integer_s_z},
-        {origin_x + integer_s_x + integer_t_x, origin_y,
-         origin_z + integer_s_z + integer_t_z},
+        {origin_x + integer_s_x + integer_t_x, origin_y, origin_z + integer_s_z + integer_t_z},
         {origin_x + integer_t_x, origin_y, origin_z + integer_t_z},
     }};
     result.texcoords = current.texcoords;
-    result.valid = std::all_of(
-        result.vertices.begin(), result.vertices.end(),
-        [](const ShadowVertexSample& vertex) {
-            return std::isfinite(vertex.x) && std::isfinite(vertex.y) &&
-                   std::isfinite(vertex.z);
-        });
+    result.valid = std::all_of(result.vertices.begin(), result.vertices.end(), [](const ShadowVertexSample& vertex) {
+        return std::isfinite(vertex.x) && std::isfinite(vertex.y) && std::isfinite(vertex.z);
+    });
     return result;
 }
 
-inline bool rigid_shadow_scale_is_discontinuous(
-    const RigidShadowQuad& previous, const RigidShadowQuad& current) {
+inline bool rigid_shadow_scale_is_discontinuous(const RigidShadowQuad& previous, const RigidShadowQuad& current) {
     const float previous_size = rigid_shadow_horizontal_size(previous);
     const float current_size = rigid_shadow_horizontal_size(current);
-    if (!std::isfinite(previous_size) || !std::isfinite(current_size) ||
-        previous_size <= 1.0e-4F || current_size <= 1.0e-4F) {
+    if (!std::isfinite(previous_size) || !std::isfinite(current_size) || previous_size <= 1.0e-4F ||
+        current_size <= 1.0e-4F) {
         return false;
     }
-    const float ratio = std::max(previous_size, current_size) /
-        std::min(previous_size, current_size);
+    const float ratio = std::max(previous_size, current_size) / std::min(previous_size, current_size);
     // DKR's authored height factor is linear (1 + 0.005 * height). A 25%
     // single-tick size jump cannot be ordinary flight but can result from a
     // degenerate clipped fit, so retain the previous trusted footprint.
     return ratio > 1.25F;
 }
 
-inline bool rigid_shadow_receiver_fit_is_implausible(
-    const RigidShadowShapeMetrics& shape) {
-    if (!shape.valid) return true;
-    const auto [minimum_edge, maximum_edge] = std::minmax_element(
-        shape.edge_lengths.begin(), shape.edge_lengths.end());
-    if (minimum_edge == shape.edge_lengths.end() ||
-        !std::isfinite(*minimum_edge) || !std::isfinite(*maximum_edge) ||
+inline bool rigid_shadow_receiver_fit_is_implausible(const RigidShadowShapeMetrics& shape) {
+    if (!shape.valid)
+        return true;
+    const auto [minimum_edge, maximum_edge] = std::minmax_element(shape.edge_lengths.begin(), shape.edge_lengths.end());
+    if (minimum_edge == shape.edge_lengths.end() || !std::isfinite(*minimum_edge) || !std::isfinite(*maximum_edge) ||
         *minimum_edge <= 1.0e-4F) {
         return true;
     }
     // A square shadow projected onto an ordinary ground plane remains close
     // to orthogonal with comparable edge lengths. Roof/wall mixtures instead
     // produce the severe shear and aspect ratios seen in the Banjo trace.
-    return *maximum_edge / *minimum_edge > 1.5F ||
-        std::abs(shape.adjacent_edge_cosine) > 0.25F;
+    return *maximum_edge / *minimum_edge > 1.5F || std::abs(shape.adjacent_edge_cosine) > 0.25F;
 }
 
-inline bool rigid_shadow_receiver_fit_is_near_square(
-    const RigidShadowShapeMetrics& shape) {
-    if (!shape.valid) return false;
-    const auto [minimum_edge, maximum_edge] = std::minmax_element(
-        shape.edge_lengths.begin(), shape.edge_lengths.end());
-    if (minimum_edge == shape.edge_lengths.end() ||
-        !std::isfinite(*minimum_edge) || !std::isfinite(*maximum_edge) ||
+inline bool rigid_shadow_receiver_fit_is_near_square(const RigidShadowShapeMetrics& shape) {
+    if (!shape.valid)
+        return false;
+    const auto [minimum_edge, maximum_edge] = std::minmax_element(shape.edge_lengths.begin(), shape.edge_lengths.end());
+    if (minimum_edge == shape.edge_lengths.end() || !std::isfinite(*minimum_edge) || !std::isfinite(*maximum_edge) ||
         *minimum_edge <= 1.0e-4F) {
         return false;
     }
-    return *maximum_edge / *minimum_edge <= 1.1F &&
-        std::abs(shape.adjacent_edge_cosine) <= 0.1F;
+    return *maximum_edge / *minimum_edge <= 1.1F && std::abs(shape.adjacent_edge_cosine) <= 0.1F;
 }
 
-inline bool rigid_shadow_receiver_can_reacquire(
-    const RigidShadowShapeMetrics& previous,
-    const RigidShadowShapeMetrics& current, float horizontal_motion) {
-    if (!previous.valid || !current.valid ||
-        rigid_shadow_receiver_fit_is_implausible(current) ||
+inline bool rigid_shadow_receiver_can_reacquire(const RigidShadowShapeMetrics& previous,
+                                                const RigidShadowShapeMetrics& current, float horizontal_motion) {
+    if (!previous.valid || !current.valid || rigid_shadow_receiver_fit_is_implausible(current) ||
         !std::isfinite(horizontal_motion)) {
         return false;
     }
-    const float allowed_height_difference =
-        std::max(6.0F, std::max(0.0F, horizontal_motion) * 0.75F);
-    return std::abs(current.centre.y - previous.centre.y) <=
-        allowed_height_difference;
+    const float allowed_height_difference = std::max(6.0F, std::max(0.0F, horizontal_motion) * 0.75F);
+    return std::abs(current.centre.y - previous.centre.y) <= allowed_height_difference;
 }
 
-inline bool plane_shadow_receiver_is_upward_discontinuity(
-    float previous_height, float current_height,
-    float horizontal_motion) {
-    if (!std::isfinite(previous_height) || !std::isfinite(current_height) ||
-        !std::isfinite(horizontal_motion)) {
+inline bool plane_shadow_receiver_is_upward_discontinuity(float previous_height, float current_height,
+                                                          float horizontal_motion) {
+    if (!std::isfinite(previous_height) || !std::isfinite(current_height) || !std::isfinite(horizontal_motion)) {
         return false;
     }
     // Authored ground can rise continuously as the plane moves forward. A
     // roof takeover is different: the receiver rises several world units in
     // one 30 Hz step without a matching horizontal traversal. Scale the
     // allowance with motion, retaining a small minimum for quantisation.
-    const float allowed_upward_motion =
-        std::max(3.0F, std::max(0.0F, horizontal_motion) * 0.5F);
+    const float allowed_upward_motion = std::max(3.0F, std::max(0.0F, horizontal_motion) * 0.5F);
     return current_height - previous_height > allowed_upward_motion;
 }
 
@@ -1011,14 +893,11 @@ inline bool plane_shadow_receiver_is_upward_discontinuity(
 // BHV_PARK_WARDEN_2 (the alternate Taj actor). MagicCarpet deliberately does
 // not appear here: it shares BHV_ANIMATED_OBJECT with many unrelated cutscene
 // actors and must be selected by its exact object ID below.
-constexpr bool shadow_behaviour_uses_rigid_actor_proxy(
-    std::uint16_t behaviour) {
-    return behaviour == 1U || behaviour == 56U || behaviour == 62U ||
-           behaviour == 80U;
+constexpr bool shadow_behaviour_uses_rigid_actor_proxy(std::uint16_t behaviour) {
+    return behaviour == 1U || behaviour == 56U || behaviour == 62U || behaviour == 80U;
 }
 
-constexpr bool shadow_behaviour_is_park_warden_actor(
-    std::uint16_t behaviour) {
+constexpr bool shadow_behaviour_is_park_warden_actor(std::uint16_t behaviour) {
     return behaviour == 62U || behaviour == 80U;
 }
 
@@ -1030,10 +909,8 @@ inline constexpr std::uint16_t kObjectAssetIdMask = 0x01FFU;
 // in both the v1.0 and v1.1 asset tables. Requiring both fields prevents the
 // other shadow-bearing BHV_ANIMATED_OBJECT actors (bosses, dancers, etc.) from
 // inheriting the carpet-only terrain proxy.
-constexpr bool shadow_owner_is_magic_carpet(std::uint16_t behaviour,
-                                            std::uint16_t object_id) {
-    return behaviour == 50U &&
-        (object_id & kObjectAssetIdMask) == kMagicCarpetObjectId;
+constexpr bool shadow_owner_is_magic_carpet(std::uint16_t behaviour, std::uint16_t object_id) {
+    return behaviour == 50U && (object_id & kObjectAssetIdMask) == kMagicCarpetObjectId;
 }
 
 enum class RigidShadowOwnerKind : std::uint8_t {
@@ -1071,9 +948,9 @@ struct RigidShadowOwnerPolicy {
     }
 
     constexpr ShadowTexcoordBounds authored_texcoord_bounds() const {
-        if (texture_width == 0U) return {};
-        const auto extent = static_cast<std::int16_t>(
-            static_cast<std::uint16_t>(texture_width) * 32U);
+        if (texture_width == 0U)
+            return {};
+        const auto extent = static_cast<std::int16_t>(static_cast<std::uint16_t>(texture_width) * 32U);
         return {0, 0, extent, extent, true};
     }
 };
@@ -1083,35 +960,27 @@ struct RigidShadowOwnerPolicy {
 // decomp-authored terrain triangle to own the Modern rigid proxy. In
 // particular, the wide carpet projection must never fit one plane through the
 // complete floor/roof/wall cloud produced at geometry seams.
-constexpr bool rigid_shadow_policy_inspects_decomp_receiver(
-    const RigidShadowOwnerPolicy& policy) {
-    return policy.kind == RigidShadowOwnerKind::Racer ||
-        policy.kind == RigidShadowOwnerKind::TitleVehicle ||
-        policy.terrain_conforming_actor();
+constexpr bool rigid_shadow_policy_inspects_decomp_receiver(const RigidShadowOwnerPolicy& policy) {
+    return policy.kind == RigidShadowOwnerKind::Racer || policy.kind == RigidShadowOwnerKind::TitleVehicle ||
+           policy.terrain_conforming_actor();
 }
 
-constexpr bool rigid_shadow_policy_uses_decomp_receiver(
-    const RigidShadowOwnerPolicy& policy) {
-    return policy.plane() ||
-        policy.kind == RigidShadowOwnerKind::TitleVehicle ||
-        policy.terrain_conforming_actor();
+constexpr bool rigid_shadow_policy_uses_decomp_receiver(const RigidShadowOwnerPolicy& policy) {
+    return policy.plane() || policy.kind == RigidShadowOwnerKind::TitleVehicle || policy.terrain_conforming_actor();
 }
 
-constexpr RigidShadowOwnerPolicy rigid_shadow_owner_policy(
-    std::uint16_t behaviour, std::int8_t vehicle = -1,
-    std::uint8_t texture_width = 0U, std::uint16_t object_id = 0U) {
+constexpr RigidShadowOwnerPolicy rigid_shadow_owner_policy(std::uint16_t behaviour, std::int8_t vehicle = -1,
+                                                           std::uint8_t texture_width = 0U,
+                                                           std::uint16_t object_id = 0U) {
     const std::uint16_t asset_id = object_id & kObjectAssetIdMask;
     if (shadow_owner_is_magic_carpet(behaviour, asset_id)) {
-        return {RigidShadowOwnerKind::MagicCarpet, -1, texture_width,
-                asset_id};
+        return {RigidShadowOwnerKind::MagicCarpet, -1, texture_width, asset_id};
     }
     if (behaviour == 1U) {
-        return {RigidShadowOwnerKind::Racer, vehicle, texture_width,
-                asset_id};
+        return {RigidShadowOwnerKind::Racer, vehicle, texture_width, asset_id};
     }
     if (behaviour == 56U) {
-        return {RigidShadowOwnerKind::TitleVehicle, -1, texture_width,
-                asset_id};
+        return {RigidShadowOwnerKind::TitleVehicle, -1, texture_width, asset_id};
     }
     if (shadow_behaviour_is_park_warden_actor(behaviour)) {
         return {RigidShadowOwnerKind::Taj, -1, texture_width, asset_id};
@@ -1119,11 +988,11 @@ constexpr RigidShadowOwnerPolicy rigid_shadow_owner_policy(
     return {};
 }
 
-inline ShadowTexcoordBounds shadow_texcoord_bounds(
-    std::span<const ShadowTexcoordSample> texcoords) {
+inline ShadowTexcoordBounds shadow_texcoord_bounds(std::span<const ShadowTexcoordSample> texcoords) {
     ShadowTexcoordBounds result{};
     for (const auto& texcoord : texcoords) {
-        if (!texcoord.valid) continue;
+        if (!texcoord.valid)
+            continue;
         if (!result.valid) {
             result.minimum_s = result.maximum_s = texcoord.s;
             result.minimum_t = result.maximum_t = texcoord.t;
@@ -1144,10 +1013,9 @@ inline ShadowTexcoordBounds shadow_texcoord_bounds(
 // plane in shadow-UV space and evaluate a fixed four-corner proxy instead. The
 // proxy retains DKR's position, rotation, scale and local ground slope while it
 // is mathematically incapable of growing seam wedges or changing silhouette.
-inline RigidShadowQuad rigid_shadow_quad(
-    std::span<const ShadowTexcoordSample> texcoords,
-    std::span<const ShadowVertexSample> vertices,
-    ShadowTexcoordBounds bounds = {}) {
+inline RigidShadowQuad rigid_shadow_quad(std::span<const ShadowTexcoordSample> texcoords,
+                                         std::span<const ShadowVertexSample> vertices,
+                                         ShadowTexcoordBounds bounds = {}) {
     RigidShadowQuad result{};
     if (texcoords.size() != vertices.size() || vertices.size() < 3U) {
         return result;
@@ -1155,8 +1023,7 @@ inline RigidShadowQuad rigid_shadow_quad(
     if (!bounds.valid) {
         bounds = shadow_texcoord_bounds(texcoords);
     }
-    if (!bounds.valid || bounds.minimum_s == bounds.maximum_s ||
-        bounds.minimum_t == bounds.maximum_t) {
+    if (!bounds.valid || bounds.minimum_s == bounds.maximum_s || bounds.minimum_t == bounds.maximum_t) {
         return result;
     }
 
@@ -1167,8 +1034,8 @@ inline RigidShadowQuad rigid_shadow_quad(
     double mean_z = 0.0;
     std::size_t valid_count = 0U;
     for (std::size_t i = 0U; i < vertices.size(); ++i) {
-        if (!texcoords[i].valid || !std::isfinite(vertices[i].x) ||
-            !std::isfinite(vertices[i].y) || !std::isfinite(vertices[i].z)) {
+        if (!texcoords[i].valid || !std::isfinite(vertices[i].x) || !std::isfinite(vertices[i].y) ||
+            !std::isfinite(vertices[i].z)) {
             continue;
         }
         mean_s += texcoords[i].s;
@@ -1178,7 +1045,8 @@ inline RigidShadowQuad rigid_shadow_quad(
         mean_z += vertices[i].z;
         ++valid_count;
     }
-    if (valid_count < 3U) return result;
+    if (valid_count < 3U)
+        return result;
     const double inverse_count = 1.0 / static_cast<double>(valid_count);
     mean_s *= inverse_count;
     mean_t *= inverse_count;
@@ -1192,8 +1060,8 @@ inline RigidShadowQuad rigid_shadow_quad(
     std::array<double, 3> sp{};
     std::array<double, 3> tp{};
     for (std::size_t i = 0U; i < vertices.size(); ++i) {
-        if (!texcoords[i].valid || !std::isfinite(vertices[i].x) ||
-            !std::isfinite(vertices[i].y) || !std::isfinite(vertices[i].z)) {
+        if (!texcoords[i].valid || !std::isfinite(vertices[i].x) || !std::isfinite(vertices[i].y) ||
+            !std::isfinite(vertices[i].z)) {
             continue;
         }
         const double ds = static_cast<double>(texcoords[i].s) - mean_s;
@@ -1210,18 +1078,15 @@ inline RigidShadowQuad rigid_shadow_quad(
     }
     const double determinant = ss * tt - st * st;
     const double covariance_scale = std::max(1.0, ss * tt);
-    if (!std::isfinite(determinant) ||
-        std::abs(determinant) <= covariance_scale * 1.0e-9) {
+    if (!std::isfinite(determinant) || std::abs(determinant) <= covariance_scale * 1.0e-9) {
         return result;
     }
 
     std::array<double, 3> s_axis{};
     std::array<double, 3> t_axis{};
     for (std::size_t component = 0U; component < 3U; ++component) {
-        s_axis[component] =
-            (sp[component] * tt - tp[component] * st) / determinant;
-        t_axis[component] =
-            (tp[component] * ss - sp[component] * st) / determinant;
+        s_axis[component] = (sp[component] * tt - tp[component] * st) / determinant;
+        t_axis[component] = (tp[component] * ss - sp[component] * st) / determinant;
     }
     const std::array<double, 3> mean_position{mean_x, mean_y, mean_z};
     const std::array<ShadowTexcoordSample, 4> corners{{
@@ -1238,8 +1103,7 @@ inline RigidShadowQuad rigid_shadow_quad(
             mean_position[1] + s_axis[1] * ds + t_axis[1] * dt,
             mean_position[2] + s_axis[2] * ds + t_axis[2] * dt,
         };
-        if (!std::isfinite(position[0]) || !std::isfinite(position[1]) ||
-            !std::isfinite(position[2])) {
+        if (!std::isfinite(position[0]) || !std::isfinite(position[1]) || !std::isfinite(position[2])) {
             return {};
         }
         result.vertices[corner] = {
@@ -1266,23 +1130,17 @@ inline RigidShadowQuad rigid_shadow_quad(
 // choose the lowest surface below the owner so an overhead roof cannot take
 // ownership of the shadow.
 inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
-    std::span<const ShadowTexcoordSample> corner_texcoords,
-    std::span<const ShadowVertexSample> corner_vertices,
-    std::span<const ShadowTriangleSample> triangles,
-    ShadowTexcoordBounds bounds, float owner_y = 0.0F,
-    bool owner_y_valid = false, float previous_receiver_y = 0.0F,
-    bool previous_receiver_valid = false) {
+    std::span<const ShadowTexcoordSample> corner_texcoords, std::span<const ShadowVertexSample> corner_vertices,
+    std::span<const ShadowTriangleSample> triangles, ShadowTexcoordBounds bounds, float owner_y = 0.0F,
+    bool owner_y_valid = false, float previous_receiver_y = 0.0F, bool previous_receiver_valid = false) {
     DecompShadowReceiverQuad result{};
-    const auto horizontal_quad = rigid_shadow_quad(
-        corner_texcoords, corner_vertices, bounds);
+    const auto horizontal_quad = rigid_shadow_quad(corner_texcoords, corner_vertices, bounds);
     if (!horizontal_quad.valid || triangles.empty() || !bounds.valid) {
         return result;
     }
 
-    const double centre_s = 0.5 *
-        (static_cast<double>(bounds.minimum_s) + bounds.maximum_s);
-    const double centre_t = 0.5 *
-        (static_cast<double>(bounds.minimum_t) + bounds.maximum_t);
+    const double centre_s = 0.5 * (static_cast<double>(bounds.minimum_s) + bounds.maximum_s);
+    const double centre_t = 0.5 * (static_cast<double>(bounds.minimum_t) + bounds.maximum_t);
     struct Candidate {
         std::array<ShadowTexcoordSample, 3> texcoords{};
         std::array<ShadowVertexSample, 3> vertices{};
@@ -1293,22 +1151,18 @@ inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
         bool below_owner = false;
         bool valid = false;
     };
-    std::array<Candidate,
-               kMaximumCanonicalShadowBatches * 16U> candidates{};
+    std::array<Candidate, kMaximumCanonicalShadowBatches * 16U> candidates{};
     std::size_t candidate_count = 0U;
 
-    const auto point_segment_distance_squared = [](
-        double point_s, double point_t, double first_s, double first_t,
-        double second_s, double second_t) {
+    const auto point_segment_distance_squared = [](double point_s, double point_t, double first_s, double first_t,
+                                                   double second_s, double second_t) {
         const double edge_s = second_s - first_s;
         const double edge_t = second_t - first_t;
         const double length_squared = edge_s * edge_s + edge_t * edge_t;
         double amount = 0.0;
         if (length_squared > 1.0e-12) {
-            amount = std::clamp(
-                ((point_s - first_s) * edge_s +
-                 (point_t - first_t) * edge_t) / length_squared,
-                0.0, 1.0);
+            amount =
+                std::clamp(((point_s - first_s) * edge_s + (point_t - first_t) * edge_t) / length_squared, 0.0, 1.0);
         }
         const double closest_s = first_s + edge_s * amount;
         const double closest_t = first_t + edge_t * amount;
@@ -1317,22 +1171,14 @@ inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
         return distance_s * distance_s + distance_t * distance_t;
     };
 
-    for (std::size_t triangle_index = 0U;
-         triangle_index < triangles.size() &&
-         candidate_count < candidates.size(); ++triangle_index) {
+    for (std::size_t triangle_index = 0U; triangle_index < triangles.size() && candidate_count < candidates.size();
+         ++triangle_index) {
         const auto& triangle = triangles[triangle_index];
-        if (std::any_of(
-                triangle.texcoords.begin(), triangle.texcoords.end(),
-                [](const ShadowTexcoordSample& sample) {
-                    return !sample.valid;
-                }) ||
-            std::any_of(
-                triangle.vertices.begin(), triangle.vertices.end(),
-                [](const ShadowVertexSample& vertex) {
-                    return !std::isfinite(vertex.x) ||
-                        !std::isfinite(vertex.y) ||
-                        !std::isfinite(vertex.z);
-                })) {
+        if (std::any_of(triangle.texcoords.begin(), triangle.texcoords.end(),
+                        [](const ShadowTexcoordSample& sample) { return !sample.valid; }) ||
+            std::any_of(triangle.vertices.begin(), triangle.vertices.end(), [](const ShadowVertexSample& vertex) {
+                return !std::isfinite(vertex.x) || !std::isfinite(vertex.y) || !std::isfinite(vertex.z);
+            })) {
             continue;
         }
 
@@ -1342,40 +1188,29 @@ inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
         const double t1 = triangle.texcoords[1].t;
         const double s2 = triangle.texcoords[2].s;
         const double t2 = triangle.texcoords[2].t;
-        const double determinant =
-            (t1 - t2) * (s0 - s2) + (s2 - s1) * (t0 - t2);
+        const double determinant = (t1 - t2) * (s0 - s2) + (s2 - s1) * (t0 - t2);
         if (!std::isfinite(determinant) || std::abs(determinant) <= 1.0e-6) {
             continue;
         }
-        const double weight0 =
-            ((t1 - t2) * (centre_s - s2) +
-             (s2 - s1) * (centre_t - t2)) / determinant;
-        const double weight1 =
-            ((t2 - t0) * (centre_s - s2) +
-             (s0 - s2) * (centre_t - t2)) / determinant;
+        const double weight0 = ((t1 - t2) * (centre_s - s2) + (s2 - s1) * (centre_t - t2)) / determinant;
+        const double weight1 = ((t2 - t0) * (centre_s - s2) + (s0 - s2) * (centre_t - t2)) / determinant;
         const double weight2 = 1.0 - weight0 - weight1;
         const double receiver_y =
-            weight0 * triangle.vertices[0].y +
-            weight1 * triangle.vertices[1].y +
-            weight2 * triangle.vertices[2].y;
-        if (!std::isfinite(receiver_y)) continue;
+            weight0 * triangle.vertices[0].y + weight1 * triangle.vertices[1].y + weight2 * triangle.vertices[2].y;
+        if (!std::isfinite(receiver_y))
+            continue;
 
-        const ShadowVertexSample edge0{
-            triangle.vertices[1].x - triangle.vertices[0].x,
-            triangle.vertices[1].y - triangle.vertices[0].y,
-            triangle.vertices[1].z - triangle.vertices[0].z};
-        const ShadowVertexSample edge1{
-            triangle.vertices[2].x - triangle.vertices[0].x,
-            triangle.vertices[2].y - triangle.vertices[0].y,
-            triangle.vertices[2].z - triangle.vertices[0].z};
-        const ShadowVertexSample normal{
-            edge0.y * edge1.z - edge0.z * edge1.y,
-            edge0.z * edge1.x - edge0.x * edge1.z,
-            edge0.x * edge1.y - edge0.y * edge1.x};
-        const double normal_length = std::sqrt(
-            static_cast<double>(normal.x) * normal.x +
-            static_cast<double>(normal.y) * normal.y +
-            static_cast<double>(normal.z) * normal.z);
+        const ShadowVertexSample edge0{triangle.vertices[1].x - triangle.vertices[0].x,
+                                       triangle.vertices[1].y - triangle.vertices[0].y,
+                                       triangle.vertices[1].z - triangle.vertices[0].z};
+        const ShadowVertexSample edge1{triangle.vertices[2].x - triangle.vertices[0].x,
+                                       triangle.vertices[2].y - triangle.vertices[0].y,
+                                       triangle.vertices[2].z - triangle.vertices[0].z};
+        const ShadowVertexSample normal{edge0.y * edge1.z - edge0.z * edge1.y, edge0.z * edge1.x - edge0.x * edge1.z,
+                                        edge0.x * edge1.y - edge0.y * edge1.x};
+        const double normal_length =
+            std::sqrt(static_cast<double>(normal.x) * normal.x + static_cast<double>(normal.y) * normal.y +
+                      static_cast<double>(normal.z) * normal.z);
         // The decomp rejects exactly vertical collision planes. A small bound
         // additionally excludes near-vertical tunnel walls whose integer UVs
         // cannot provide a numerically stable full-footprint receiver.
@@ -1386,17 +1221,14 @@ inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
 
         constexpr double kBarycentricTolerance = 0.02;
         const bool centre_covered =
-            weight0 >= -kBarycentricTolerance &&
-            weight1 >= -kBarycentricTolerance &&
-            weight2 >= -kBarycentricTolerance;
-        const double uv_distance_squared = centre_covered ? 0.0 : std::min({
-            point_segment_distance_squared(
-                centre_s, centre_t, s0, t0, s1, t1),
-            point_segment_distance_squared(
-                centre_s, centre_t, s1, t1, s2, t2),
-            point_segment_distance_squared(
-                centre_s, centre_t, s2, t2, s0, t0),
-        });
+            weight0 >= -kBarycentricTolerance && weight1 >= -kBarycentricTolerance && weight2 >= -kBarycentricTolerance;
+        const double uv_distance_squared = centre_covered
+                                               ? 0.0
+                                               : std::min({
+                                                     point_segment_distance_squared(centre_s, centre_t, s0, t0, s1, t1),
+                                                     point_segment_distance_squared(centre_s, centre_t, s1, t1, s2, t2),
+                                                     point_segment_distance_squared(centre_s, centre_t, s2, t2, s0, t0),
+                                                 });
         constexpr double kDecompVertexLiftAllowance = 4.0;
         candidates[candidate_count++] = {
             triangle.texcoords,
@@ -1405,22 +1237,18 @@ inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
             uv_distance_squared,
             triangle_index,
             centre_covered,
-            !owner_y_valid ||
-                receiver_y <= static_cast<double>(owner_y) +
-                    kDecompVertexLiftAllowance,
+            !owner_y_valid || receiver_y <= static_cast<double>(owner_y) + kDecompVertexLiftAllowance,
             true,
         };
     }
-    if (candidate_count == 0U) return result;
+    if (candidate_count == 0U)
+        return result;
 
-    const bool any_centre_covered = std::any_of(
-        candidates.begin(), candidates.begin() + candidate_count,
-        [](const Candidate& candidate) { return candidate.centre_covered; });
-    const bool any_below_owner = std::any_of(
-        candidates.begin(), candidates.begin() + candidate_count,
-        [&](const Candidate& candidate) {
-            return (!any_centre_covered || candidate.centre_covered) &&
-                candidate.below_owner;
+    const bool any_centre_covered = std::any_of(candidates.begin(), candidates.begin() + candidate_count,
+                                                [](const Candidate& candidate) { return candidate.centre_covered; });
+    const bool any_below_owner =
+        std::any_of(candidates.begin(), candidates.begin() + candidate_count, [&](const Candidate& candidate) {
+            return (!any_centre_covered || candidate.centre_covered) && candidate.below_owner;
         });
     if (owner_y_valid && !any_below_owner) {
         // Shadows project downwards. Over water there may be no solid receiver,
@@ -1433,45 +1261,39 @@ inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
     const Candidate* selected = nullptr;
     for (std::size_t index = 0U; index < candidate_count; ++index) {
         const Candidate& candidate = candidates[index];
-        if (any_centre_covered && !candidate.centre_covered) continue;
-        if (any_below_owner && !candidate.below_owner) continue;
+        if (any_centre_covered && !candidate.centre_covered)
+            continue;
+        if (any_below_owner && !candidate.below_owner)
+            continue;
         if (selected == nullptr) {
             selected = &candidate;
             continue;
         }
         const double distance_epsilon = 1.0e-6;
-        if (!any_centre_covered &&
-            candidate.uv_distance_squared + distance_epsilon <
-                selected->uv_distance_squared) {
+        if (!any_centre_covered && candidate.uv_distance_squared + distance_epsilon < selected->uv_distance_squared) {
             selected = &candidate;
             continue;
         }
-        if (!any_centre_covered &&
-            candidate.uv_distance_squared >
-                selected->uv_distance_squared + distance_epsilon) {
+        if (!any_centre_covered && candidate.uv_distance_squared > selected->uv_distance_squared + distance_epsilon) {
             continue;
         }
-        const double candidate_height_score = previous_receiver_valid
-            ? std::abs(candidate.centre_y - previous_receiver_y)
-            : candidate.centre_y;
-        const double selected_height_score = previous_receiver_valid
-            ? std::abs(selected->centre_y - previous_receiver_y)
-            : selected->centre_y;
+        const double candidate_height_score =
+            previous_receiver_valid ? std::abs(candidate.centre_y - previous_receiver_y) : candidate.centre_y;
+        const double selected_height_score =
+            previous_receiver_valid ? std::abs(selected->centre_y - previous_receiver_y) : selected->centre_y;
         if (candidate_height_score + 1.0e-6 < selected_height_score ||
-            (std::abs(candidate_height_score - selected_height_score) <=
-                 1.0e-6 &&
-             candidate.index < selected->index)) {
+            (std::abs(candidate_height_score - selected_height_score) <= 1.0e-6 && candidate.index < selected->index)) {
             selected = &candidate;
         }
     }
-    if (selected == nullptr) return result;
+    if (selected == nullptr)
+        return result;
 
-    const auto receiver_quad = rigid_shadow_quad(
-        selected->texcoords, selected->vertices, bounds);
-    if (!receiver_quad.valid) return result;
+    const auto receiver_quad = rigid_shadow_quad(selected->texcoords, selected->vertices, bounds);
+    if (!receiver_quad.valid)
+        return result;
     result.quad = horizontal_quad;
-    for (std::size_t corner = 0U; corner < result.quad.vertices.size();
-         ++corner) {
+    for (std::size_t corner = 0U; corner < result.quad.vertices.size(); ++corner) {
         result.quad.vertices[corner].y = receiver_quad.vertices[corner].y;
     }
     result.centre_y = static_cast<float>(selected->centre_y);
@@ -1487,11 +1309,10 @@ inline DecompShadowReceiverQuad decomp_shadow_receiver_quad(
 // terrain triangles, matching the per-vertex collision-plane evaluation in
 // func_8002F2AC. A selected receiver-plane sample is the fallback and the
 // height reference used to reject stacked roofs.
-inline TajShadowReceiverSurface taj_shadow_receiver_surface(
-    const DecompShadowReceiverQuad& receiver,
-    std::span<const ShadowTriangleSample> triangles,
-    ShadowTexcoordBounds bounds, float owner_y = 0.0F,
-    bool owner_y_valid = false) {
+inline TajShadowReceiverSurface taj_shadow_receiver_surface(const DecompShadowReceiverQuad& receiver,
+                                                            std::span<const ShadowTriangleSample> triangles,
+                                                            ShadowTexcoordBounds bounds, float owner_y = 0.0F,
+                                                            bool owner_y_valid = false) {
     TajShadowReceiverSurface result{};
     if (!receiver.valid || !receiver.quad.valid || !bounds.valid) {
         return result;
@@ -1504,32 +1325,25 @@ inline TajShadowReceiverSurface taj_shadow_receiver_surface(
         const double weight3 = (1.0 - u) * v;
         const auto& vertices = receiver.quad.vertices;
         return ShadowVertexSample{
-            static_cast<float>(
-                vertices[0].x * weight0 + vertices[1].x * weight1 +
-                vertices[2].x * weight2 + vertices[3].x * weight3),
-            static_cast<float>(
-                vertices[0].y * weight0 + vertices[1].y * weight1 +
-                vertices[2].y * weight2 + vertices[3].y * weight3),
-            static_cast<float>(
-                vertices[0].z * weight0 + vertices[1].z * weight1 +
-                vertices[2].z * weight2 + vertices[3].z * weight3),
+            static_cast<float>(vertices[0].x * weight0 + vertices[1].x * weight1 + vertices[2].x * weight2 +
+                               vertices[3].x * weight3),
+            static_cast<float>(vertices[0].y * weight0 + vertices[1].y * weight1 + vertices[2].y * weight2 +
+                               vertices[3].y * weight3),
+            static_cast<float>(vertices[0].z * weight0 + vertices[1].z * weight1 + vertices[2].z * weight2 +
+                               vertices[3].z * weight3),
         };
     };
 
-    for (std::size_t point_index = 0U;
-         point_index < kTajShadowSurfacePoints.size(); ++point_index) {
+    for (std::size_t point_index = 0U; point_index < kTajShadowSurfacePoints.size(); ++point_index) {
         const auto point = kTajShadowSurfacePoints[point_index];
         const double u = static_cast<double>(point.u_quarters) * 0.25;
         const double v = static_cast<double>(point.v_quarters) * 0.25;
         const double target_s =
-            static_cast<double>(bounds.minimum_s) +
-            (static_cast<double>(bounds.maximum_s) - bounds.minimum_s) * u;
+            static_cast<double>(bounds.minimum_s) + (static_cast<double>(bounds.maximum_s) - bounds.minimum_s) * u;
         const double target_t =
-            static_cast<double>(bounds.minimum_t) +
-            (static_cast<double>(bounds.maximum_t) - bounds.minimum_t) * v;
+            static_cast<double>(bounds.minimum_t) + (static_cast<double>(bounds.maximum_t) - bounds.minimum_t) * v;
         const auto reference = bilinear_position(u, v);
-        if (!std::isfinite(reference.x) || !std::isfinite(reference.y) ||
-            !std::isfinite(reference.z)) {
+        if (!std::isfinite(reference.x) || !std::isfinite(reference.y) || !std::isfinite(reference.z)) {
             return {};
         }
 
@@ -1537,18 +1351,11 @@ inline TajShadowReceiverSurface taj_shadow_receiver_surface(
         double selected_score = std::numeric_limits<double>::max();
         bool selected = false;
         for (const auto& triangle : triangles) {
-            if (std::any_of(
-                    triangle.texcoords.begin(), triangle.texcoords.end(),
-                    [](const ShadowTexcoordSample& sample) {
-                        return !sample.valid;
-                    }) ||
-                std::any_of(
-                    triangle.vertices.begin(), triangle.vertices.end(),
-                    [](const ShadowVertexSample& vertex) {
-                        return !std::isfinite(vertex.x) ||
-                            !std::isfinite(vertex.y) ||
-                            !std::isfinite(vertex.z);
-                    })) {
+            if (std::any_of(triangle.texcoords.begin(), triangle.texcoords.end(),
+                            [](const ShadowTexcoordSample& sample) { return !sample.valid; }) ||
+                std::any_of(triangle.vertices.begin(), triangle.vertices.end(), [](const ShadowVertexSample& vertex) {
+                    return !std::isfinite(vertex.x) || !std::isfinite(vertex.y) || !std::isfinite(vertex.z);
+                })) {
                 continue;
             }
 
@@ -1558,64 +1365,46 @@ inline TajShadowReceiverSurface taj_shadow_receiver_surface(
             const double t1 = triangle.texcoords[1].t;
             const double s2 = triangle.texcoords[2].s;
             const double t2 = triangle.texcoords[2].t;
-            const double determinant =
-                (t1 - t2) * (s0 - s2) + (s2 - s1) * (t0 - t2);
-            if (!std::isfinite(determinant) ||
-                std::abs(determinant) <= 1.0e-6) {
+            const double determinant = (t1 - t2) * (s0 - s2) + (s2 - s1) * (t0 - t2);
+            if (!std::isfinite(determinant) || std::abs(determinant) <= 1.0e-6) {
                 continue;
             }
-            const double weight0 =
-                ((t1 - t2) * (target_s - s2) +
-                 (s2 - s1) * (target_t - t2)) / determinant;
-            const double weight1 =
-                ((t2 - t0) * (target_s - s2) +
-                 (s0 - s2) * (target_t - t2)) / determinant;
+            const double weight0 = ((t1 - t2) * (target_s - s2) + (s2 - s1) * (target_t - t2)) / determinant;
+            const double weight1 = ((t2 - t0) * (target_s - s2) + (s0 - s2) * (target_t - t2)) / determinant;
             const double weight2 = 1.0 - weight0 - weight1;
             constexpr double kBarycentricTolerance = 0.02;
-            if (weight0 < -kBarycentricTolerance ||
-                weight1 < -kBarycentricTolerance ||
+            if (weight0 < -kBarycentricTolerance || weight1 < -kBarycentricTolerance ||
                 weight2 < -kBarycentricTolerance) {
                 continue;
             }
 
-            const ShadowVertexSample edge0{
-                triangle.vertices[1].x - triangle.vertices[0].x,
-                triangle.vertices[1].y - triangle.vertices[0].y,
-                triangle.vertices[1].z - triangle.vertices[0].z};
-            const ShadowVertexSample edge1{
-                triangle.vertices[2].x - triangle.vertices[0].x,
-                triangle.vertices[2].y - triangle.vertices[0].y,
-                triangle.vertices[2].z - triangle.vertices[0].z};
-            const ShadowVertexSample normal{
-                edge0.y * edge1.z - edge0.z * edge1.y,
-                edge0.z * edge1.x - edge0.x * edge1.z,
-                edge0.x * edge1.y - edge0.y * edge1.x};
-            const double normal_length = std::sqrt(
-                static_cast<double>(normal.x) * normal.x +
-                static_cast<double>(normal.y) * normal.y +
-                static_cast<double>(normal.z) * normal.z);
+            const ShadowVertexSample edge0{triangle.vertices[1].x - triangle.vertices[0].x,
+                                           triangle.vertices[1].y - triangle.vertices[0].y,
+                                           triangle.vertices[1].z - triangle.vertices[0].z};
+            const ShadowVertexSample edge1{triangle.vertices[2].x - triangle.vertices[0].x,
+                                           triangle.vertices[2].y - triangle.vertices[0].y,
+                                           triangle.vertices[2].z - triangle.vertices[0].z};
+            const ShadowVertexSample normal{edge0.y * edge1.z - edge0.z * edge1.y,
+                                            edge0.z * edge1.x - edge0.x * edge1.z,
+                                            edge0.x * edge1.y - edge0.y * edge1.x};
+            const double normal_length =
+                std::sqrt(static_cast<double>(normal.x) * normal.x + static_cast<double>(normal.y) * normal.y +
+                          static_cast<double>(normal.z) * normal.z);
             if (!std::isfinite(normal_length) || normal_length <= 1.0e-6 ||
-                std::abs(static_cast<double>(normal.y)) / normal_length <
-                    0.1) {
+                std::abs(static_cast<double>(normal.y)) / normal_length < 0.1) {
                 continue;
             }
 
             const double sample_y =
-                weight0 * triangle.vertices[0].y +
-                weight1 * triangle.vertices[1].y +
-                weight2 * triangle.vertices[2].y;
+                weight0 * triangle.vertices[0].y + weight1 * triangle.vertices[1].y + weight2 * triangle.vertices[2].y;
             constexpr double kDecompVertexLiftAllowance = 4.0;
             if (!std::isfinite(sample_y) ||
-                (owner_y_valid &&
-                 sample_y > static_cast<double>(owner_y) +
-                     kDecompVertexLiftAllowance)) {
+                (owner_y_valid && sample_y > static_cast<double>(owner_y) + kDecompVertexLiftAllowance)) {
                 continue;
             }
-            const double score =
-                std::abs(sample_y - static_cast<double>(reference.y));
+            const double score = std::abs(sample_y - static_cast<double>(reference.y));
             if (!selected || score + 1.0e-6 < selected_score ||
-                (std::abs(score - selected_score) <= 1.0e-6 &&
-                 sample_y < selected_y)) {
+                (std::abs(score - selected_score) <= 1.0e-6 && sample_y < selected_y)) {
                 selected = true;
                 selected_y = sample_y;
                 selected_score = score;
@@ -1625,10 +1414,8 @@ inline TajShadowReceiverSurface taj_shadow_receiver_surface(
         result.vertices[point_index] = reference;
         result.vertices[point_index].y = static_cast<float>(selected_y);
         result.texcoords[point_index] = {
-            static_cast<std::int16_t>(std::clamp(
-                std::lround(target_s), -32768L, 32767L)),
-            static_cast<std::int16_t>(std::clamp(
-                std::lround(target_t), -32768L, 32767L)),
+            static_cast<std::int16_t>(std::clamp(std::lround(target_s), -32768L, 32767L)),
+            static_cast<std::int16_t>(std::clamp(std::lround(target_t), -32768L, 32767L)),
             true,
         };
     }
@@ -1642,10 +1429,9 @@ inline TajShadowReceiverSurface taj_shadow_receiver_surface(
 // the half-unit loss that rounding can otherwise introduce. Since both the
 // terrain triangles and each half of the proxy are planar, testing the clipped
 // source vertices covers the extrema over the complete projected footprint.
-inline float rigid_shadow_vertical_clearance(
-    std::span<const ShadowTexcoordSample> texcoords,
-    std::span<const ShadowVertexSample> vertices,
-    const RigidShadowQuad& submitted_quad) {
+inline float rigid_shadow_vertical_clearance(std::span<const ShadowTexcoordSample> texcoords,
+                                             std::span<const ShadowVertexSample> vertices,
+                                             const RigidShadowQuad& submitted_quad) {
     if (!submitted_quad.valid || texcoords.size() != vertices.size()) {
         return 0.0F;
     }
@@ -1653,52 +1439,38 @@ inline float rigid_shadow_vertical_clearance(
     const auto& uv2 = submitted_quad.texcoords[2];
     const double extent_s = static_cast<double>(uv2.s) - uv0.s;
     const double extent_t = static_cast<double>(uv2.t) - uv0.t;
-    if (extent_s == 0.0 || extent_t == 0.0) return 0.0F;
+    if (extent_s == 0.0 || extent_t == 0.0)
+        return 0.0F;
 
     float clearance = 0.0F;
     for (std::size_t index = 0U; index < vertices.size(); ++index) {
         if (!texcoords[index].valid || !std::isfinite(vertices[index].y)) {
             continue;
         }
-        const double u = std::clamp(
-            (static_cast<double>(texcoords[index].s) - uv0.s) / extent_s,
-            0.0, 1.0);
-        const double v = std::clamp(
-            (static_cast<double>(texcoords[index].t) - uv0.t) / extent_t,
-            0.0, 1.0);
+        const double u = std::clamp((static_cast<double>(texcoords[index].s) - uv0.s) / extent_s, 0.0, 1.0);
+        const double v = std::clamp((static_cast<double>(texcoords[index].t) - uv0.t) / extent_t, 0.0, 1.0);
         double proxy_y = 0.0;
         if (u >= v) {
-            proxy_y =
-                (1.0 - u) * submitted_quad.vertices[0].y +
-                (u - v) * submitted_quad.vertices[1].y +
-                v * submitted_quad.vertices[2].y;
+            proxy_y = (1.0 - u) * submitted_quad.vertices[0].y + (u - v) * submitted_quad.vertices[1].y +
+                      v * submitted_quad.vertices[2].y;
         } else {
-            proxy_y =
-                (1.0 - v) * submitted_quad.vertices[0].y +
-                u * submitted_quad.vertices[2].y +
-                (v - u) * submitted_quad.vertices[3].y;
+            proxy_y = (1.0 - v) * submitted_quad.vertices[0].y + u * submitted_quad.vertices[2].y +
+                      (v - u) * submitted_quad.vertices[3].y;
         }
-        clearance = std::max(
-            clearance,
-            static_cast<float>(static_cast<double>(vertices[index].y) -
-                               proxy_y));
+        clearance = std::max(clearance, static_cast<float>(static_cast<double>(vertices[index].y) - proxy_y));
     }
     return std::isfinite(clearance) ? clearance : 0.0F;
 }
 
 struct ShadowCanonicalSlotMap {
-    std::array<std::uint8_t, kCanonicalShadowBatchVertices>
-        source_for_slot{};
-    std::array<std::uint8_t, kCanonicalShadowBatchVertices>
-        slot_for_source{};
+    std::array<std::uint8_t, kCanonicalShadowBatchVertices> source_for_slot{};
+    std::array<std::uint8_t, kCanonicalShadowBatchVertices> slot_for_source{};
 };
 
-inline ShadowVertexSample shadow_cloud_translation(
-    std::span<const ShadowTexcoordSample> previous_texcoords,
-    std::span<const ShadowVertexSample> previous_vertices,
-    std::span<const ShadowVertexSample> current_vertices) {
-    if (previous_texcoords.size() != previous_vertices.size() ||
-        current_vertices.empty()) {
+inline ShadowVertexSample shadow_cloud_translation(std::span<const ShadowTexcoordSample> previous_texcoords,
+                                                   std::span<const ShadowVertexSample> previous_vertices,
+                                                   std::span<const ShadowVertexSample> current_vertices) {
+    if (previous_texcoords.size() != previous_vertices.size() || current_vertices.empty()) {
         return {};
     }
 
@@ -1708,7 +1480,8 @@ inline ShadowVertexSample shadow_cloud_translation(
     ShadowVertexSample current_max = current_vertices.front();
     bool have_previous = false;
     for (std::size_t index = 0U; index < previous_vertices.size(); ++index) {
-        if (!previous_texcoords[index].valid) continue;
+        if (!previous_texcoords[index].valid)
+            continue;
         const auto& sample = previous_vertices[index];
         if (!have_previous) {
             previous_min = sample;
@@ -1723,7 +1496,8 @@ inline ShadowVertexSample shadow_cloud_translation(
             previous_max.z = std::max(previous_max.z, sample.z);
         }
     }
-    if (!have_previous) return {};
+    if (!have_previous)
+        return {};
 
     for (const auto& sample : current_vertices.subspan(1U)) {
         current_min.x = std::min(current_min.x, sample.x);
@@ -1734,12 +1508,9 @@ inline ShadowVertexSample shadow_cloud_translation(
         current_max.z = std::max(current_max.z, sample.z);
     }
     return {
-        (current_min.x + current_max.x - previous_min.x - previous_max.x) *
-            0.5F,
-        (current_min.y + current_max.y - previous_min.y - previous_max.y) *
-            0.5F,
-        (current_min.z + current_max.z - previous_min.z - previous_max.z) *
-            0.5F,
+        (current_min.x + current_max.x - previous_min.x - previous_max.x) * 0.5F,
+        (current_min.y + current_max.y - previous_min.y - previous_max.y) * 0.5F,
+        (current_min.z + current_max.z - previous_min.z - previous_max.z) * 0.5F,
     };
 }
 
@@ -1750,20 +1521,18 @@ inline ShadowVertexSample shadow_cloud_translation(
 // its old point is on a different roof or track polygon. A minimum-cost
 // assignment also avoids the single bad leftover pair produced by a greedy
 // nearest-neighbour pass.
-inline ShadowCanonicalSlotMap canonical_shadow_motion_slot_map(
-    std::span<const ShadowTexcoordSample> previous_texcoords,
-    std::span<const ShadowVertexSample> previous_vertices,
-    std::span<const ShadowTexcoordSample> current_texcoords,
-    std::span<const ShadowVertexSample> current_vertices,
-    ShadowVertexSample translation) {
+inline ShadowCanonicalSlotMap canonical_shadow_motion_slot_map(std::span<const ShadowTexcoordSample> previous_texcoords,
+                                                               std::span<const ShadowVertexSample> previous_vertices,
+                                                               std::span<const ShadowTexcoordSample> current_texcoords,
+                                                               std::span<const ShadowVertexSample> current_vertices,
+                                                               ShadowVertexSample translation) {
     ShadowCanonicalSlotMap result{};
     result.source_for_slot.fill(kInvalidShadowVertexSlot);
     result.slot_for_source.fill(kInvalidShadowVertexSlot);
     if (previous_texcoords.size() != kCanonicalShadowBatchVertices ||
         previous_vertices.size() != kCanonicalShadowBatchVertices ||
         current_texcoords.size() != current_vertices.size() ||
-        current_vertices.size() > kCanonicalShadowBatchVertices ||
-        current_vertices.empty()) {
+        current_vertices.size() > kCanonicalShadowBatchVertices || current_vertices.empty()) {
         return result;
     }
 
@@ -1780,16 +1549,11 @@ inline ShadowCanonicalSlotMap canonical_shadow_motion_slot_map(
     const double extent_x = current_max.x - current_min.x;
     const double extent_y = current_max.y - current_min.y;
     const double extent_z = current_max.z - current_min.z;
-    const double footprint_squared = std::max(
-        1.0, extent_x * extent_x + extent_y * extent_y +
-                 extent_z * extent_z);
+    const double footprint_squared = std::max(1.0, extent_x * extent_x + extent_y * extent_y + extent_z * extent_z);
     const double semantic_weight = footprint_squared * 4.0;
-    const double safe_active_residual_squared =
-        std::max(36.0, footprint_squared * 0.0625);
-    const double inactive_slot_penalty =
-        std::max(64.0, footprint_squared * 8.0);
-    const double unsafe_active_slot_penalty =
-        std::max(128.0, footprint_squared * 16.0);
+    const double safe_active_residual_squared = std::max(36.0, footprint_squared * 0.0625);
+    const double inactive_slot_penalty = std::max(64.0, footprint_squared * 8.0);
+    const double unsafe_active_slot_penalty = std::max(128.0, footprint_squared * 16.0);
 
     const std::size_t rows = current_vertices.size();
     const std::size_t columns = kCanonicalShadowBatchVertices;
@@ -1799,27 +1563,23 @@ inline ShadowCanonicalSlotMap canonical_shadow_motion_slot_map(
     std::array<std::size_t, kCanonicalShadowBatchVertices + 1U> previous_column{};
     const auto cost = [&](std::size_t source, std::size_t slot) {
         const double dx = static_cast<double>(current_vertices[source].x) -
-            (static_cast<double>(previous_vertices[slot].x) + translation.x);
+                          (static_cast<double>(previous_vertices[slot].x) + translation.x);
         const double dy = static_cast<double>(current_vertices[source].y) -
-            (static_cast<double>(previous_vertices[slot].y) + translation.y);
+                          (static_cast<double>(previous_vertices[slot].y) + translation.y);
         const double dz = static_cast<double>(current_vertices[source].z) -
-            (static_cast<double>(previous_vertices[slot].z) + translation.z);
+                          (static_cast<double>(previous_vertices[slot].z) + translation.z);
         double value = dx * dx + dy * dy + dz * dz;
-        if (previous_texcoords[slot].valid &&
-            value > safe_active_residual_squared) {
+        if (previous_texcoords[slot].valid && value > safe_active_residual_squared) {
             // A recycled UV on another terrain polygon is not continuity.
             // Prefer a dormant slot near the new point instead of forcing a
             // remote active slot to keep its old semantic label.
             value += unsafe_active_slot_penalty;
         }
         if (previous_texcoords[slot].valid && current_texcoords[source].valid) {
-            const double ds = static_cast<double>(current_texcoords[source].s) -
-                              previous_texcoords[slot].s;
-            const double dt = static_cast<double>(current_texcoords[source].t) -
-                              previous_texcoords[slot].t;
+            const double ds = static_cast<double>(current_texcoords[source].s) - previous_texcoords[slot].s;
+            const double dt = static_cast<double>(current_texcoords[source].t) - previous_texcoords[slot].t;
             const double uv_squared = ds * ds + dt * dt;
-            value += semantic_weight *
-                     (uv_squared / (uv_squared + 65536.0));
+            value += semantic_weight * (uv_squared / (uv_squared + 65536.0));
         } else {
             // When an active semantic match remains spatially safe it must win
             // over a dormant slot that happens to be a little closer. This is
@@ -1844,15 +1604,14 @@ inline ShadowCanonicalSlotMap canonical_shadow_motion_slot_map(
             double delta = std::numeric_limits<double>::infinity();
             std::size_t column1 = 0U;
             for (std::size_t column = 1U; column <= columns; ++column) {
-                if (used[column]) continue;
-                const double reduced = cost(row0 - 1U, column - 1U) -
-                    row_potential[row0] - column_potential[column];
+                if (used[column])
+                    continue;
+                const double reduced = cost(row0 - 1U, column - 1U) - row_potential[row0] - column_potential[column];
                 if (reduced < minimum[column]) {
                     minimum[column] = reduced;
                     previous_column[column] = column0;
                 }
-                if (minimum[column] < delta ||
-                    (minimum[column] == delta && column < column1)) {
+                if (minimum[column] < delta || (minimum[column] == delta && column < column1)) {
                     delta = minimum[column];
                     column1 = column;
                 }
@@ -1875,7 +1634,8 @@ inline ShadowCanonicalSlotMap canonical_shadow_motion_slot_map(
     }
 
     for (std::size_t column = 1U; column <= columns; ++column) {
-        if (matched_row[column] == 0U) continue;
+        if (matched_row[column] == 0U)
+            continue;
         const std::size_t source = matched_row[column] - 1U;
         const std::size_t slot = column - 1U;
         result.source_for_slot[slot] = static_cast<std::uint8_t>(source);
@@ -1889,14 +1649,11 @@ inline ShadowCanonicalSlotMap canonical_shadow_motion_slot_map(
 // the complete current page instead of clustering them at whichever old point
 // happened to be nearest. A seam vertex can then be born from a nearby point
 // inside the existing footprint while vertex interpolation remains enabled.
-constexpr std::size_t canonical_shadow_dormant_source(
-    std::size_t slot, std::size_t source_count) {
-    if (source_count == 0U) return 0U;
-    const std::size_t bounded_slot =
-        std::min(slot, kCanonicalShadowBatchVertices - 1U);
-    return std::min(
-        source_count - 1U,
-        bounded_slot * source_count / kCanonicalShadowBatchVertices);
+constexpr std::size_t canonical_shadow_dormant_source(std::size_t slot, std::size_t source_count) {
+    if (source_count == 0U)
+        return 0U;
+    const std::size_t bounded_slot = std::min(slot, kCanonicalShadowBatchVertices - 1U);
+    return std::min(source_count - 1U, bounded_slot * source_count / kCanonicalShadowBatchVertices);
 }
 
 // Every valid semantic shadow page owns a fixed 24-vertex stream. Topology and
@@ -1912,38 +1669,30 @@ constexpr bool shadow_page_vertex_interpolation(std::uint32_t shadow_identity) {
 // shadow owner's measured translation is removed. Newly clipped seam vertices
 // still receive slots so the fixed stream stays complete, but they must render
 // from their current positions instead of inheriting unrelated velocity.
-inline bool canonical_shadow_slot_map_corresponds(
-    std::span<const ShadowTexcoordSample> previous_texcoords,
-    std::span<const ShadowVertexSample> previous_vertices,
-    std::span<const ShadowVertexSample> current_vertices,
-    const ShadowCanonicalSlotMap& slot_map,
-    ShadowVertexSample translation,
-    float maximum_residual) {
+inline bool canonical_shadow_slot_map_corresponds(std::span<const ShadowTexcoordSample> previous_texcoords,
+                                                  std::span<const ShadowVertexSample> previous_vertices,
+                                                  std::span<const ShadowVertexSample> current_vertices,
+                                                  const ShadowCanonicalSlotMap& slot_map,
+                                                  ShadowVertexSample translation, float maximum_residual) {
     if (previous_texcoords.size() != kCanonicalShadowBatchVertices ||
-        previous_vertices.size() != kCanonicalShadowBatchVertices ||
-        current_vertices.empty() ||
-        current_vertices.size() > kCanonicalShadowBatchVertices ||
-        !std::isfinite(maximum_residual) || maximum_residual <= 0.0F) {
+        previous_vertices.size() != kCanonicalShadowBatchVertices || current_vertices.empty() ||
+        current_vertices.size() > kCanonicalShadowBatchVertices || !std::isfinite(maximum_residual) ||
+        maximum_residual <= 0.0F) {
         return false;
     }
 
     const float maximum_residual_squared = maximum_residual * maximum_residual;
     for (std::size_t source = 0U; source < current_vertices.size(); ++source) {
         const std::uint8_t slot = slot_map.slot_for_source[source];
-        if (slot == kInvalidShadowVertexSlot ||
-            slot >= kCanonicalShadowBatchVertices ||
+        if (slot == kInvalidShadowVertexSlot || slot >= kCanonicalShadowBatchVertices ||
             !previous_texcoords[slot].valid) {
             return false;
         }
-        const float dx = current_vertices[source].x -
-            (previous_vertices[slot].x + translation.x);
-        const float dy = current_vertices[source].y -
-            (previous_vertices[slot].y + translation.y);
-        const float dz = current_vertices[source].z -
-            (previous_vertices[slot].z + translation.z);
+        const float dx = current_vertices[source].x - (previous_vertices[slot].x + translation.x);
+        const float dy = current_vertices[source].y - (previous_vertices[slot].y + translation.y);
+        const float dz = current_vertices[source].z - (previous_vertices[slot].z + translation.z);
         const float residual_squared = dx * dx + dy * dy + dz * dz;
-        if (!std::isfinite(residual_squared) ||
-            residual_squared > maximum_residual_squared) {
+        if (!std::isfinite(residual_squared) || residual_squared > maximum_residual_squared) {
             return false;
         }
     }
@@ -1955,9 +1704,8 @@ inline bool canonical_shadow_slot_map_corresponds(
 // recycled source index cannot acquire an unrelated velocity. Existing slots
 // are matched first; newly clipped vertices consume unused slots and never
 // shift surviving vertices merely because their source order changed.
-inline ShadowCanonicalSlotMap canonical_shadow_slot_map(
-    std::span<const ShadowTexcoordSample> previous_slots,
-    std::span<const ShadowTexcoordSample> current_vertices) {
+inline ShadowCanonicalSlotMap canonical_shadow_slot_map(std::span<const ShadowTexcoordSample> previous_slots,
+                                                        std::span<const ShadowTexcoordSample> current_vertices) {
     ShadowCanonicalSlotMap result{};
     result.source_for_slot.fill(kInvalidShadowVertexSlot);
     result.slot_for_source.fill(kInvalidShadowVertexSlot);
@@ -1973,39 +1721,31 @@ inline ShadowCanonicalSlotMap canonical_shadow_slot_map(
     // Repeatedly take the globally closest unused UV pair. The deterministic
     // slot/source tie-break keeps the result identical across host platforms.
     for (;;) {
-        std::uint64_t best_distance =
-            std::numeric_limits<std::uint64_t>::max();
+        std::uint64_t best_distance = std::numeric_limits<std::uint64_t>::max();
         std::size_t best_slot = kCanonicalShadowBatchVertices;
         std::size_t best_source = kCanonicalShadowBatchVertices;
         for (std::size_t slot = 0U; slot < previous_slots.size(); ++slot) {
-            if (slot_used[slot] || !previous_slots[slot].valid) continue;
+            if (slot_used[slot] || !previous_slots[slot].valid)
+                continue;
             for (std::size_t source = 0U; source < current_count; ++source) {
                 if (source_used[source] || !current_vertices[source].valid) {
                     continue;
                 }
-                const std::int64_t ds =
-                    static_cast<std::int64_t>(current_vertices[source].s) -
-                    previous_slots[slot].s;
-                const std::int64_t dt =
-                    static_cast<std::int64_t>(current_vertices[source].t) -
-                    previous_slots[slot].t;
-                const std::uint64_t distance =
-                    static_cast<std::uint64_t>(ds * ds + dt * dt);
+                const std::int64_t ds = static_cast<std::int64_t>(current_vertices[source].s) - previous_slots[slot].s;
+                const std::int64_t dt = static_cast<std::int64_t>(current_vertices[source].t) - previous_slots[slot].t;
+                const std::uint64_t distance = static_cast<std::uint64_t>(ds * ds + dt * dt);
                 if (distance < best_distance ||
-                    (distance == best_distance &&
-                     (slot < best_slot ||
-                      (slot == best_slot && source < best_source)))) {
+                    (distance == best_distance && (slot < best_slot || (slot == best_slot && source < best_source)))) {
                     best_distance = distance;
                     best_slot = slot;
                     best_source = source;
                 }
             }
         }
-        if (best_slot == kCanonicalShadowBatchVertices) break;
-        result.source_for_slot[best_slot] =
-            static_cast<std::uint8_t>(best_source);
-        result.slot_for_source[best_source] =
-            static_cast<std::uint8_t>(best_slot);
+        if (best_slot == kCanonicalShadowBatchVertices)
+            break;
+        result.source_for_slot[best_slot] = static_cast<std::uint8_t>(best_source);
+        result.slot_for_source[best_source] = static_cast<std::uint8_t>(best_slot);
         slot_used[best_slot] = true;
         source_used[best_source] = true;
     }
@@ -2015,42 +1755,38 @@ inline ShadowCanonicalSlotMap canonical_shadow_slot_map(
     for (;;) {
         std::size_t next_source = kCanonicalShadowBatchVertices;
         for (std::size_t source = 0U; source < current_count; ++source) {
-            if (source_used[source] || !current_vertices[source].valid) continue;
+            if (source_used[source] || !current_vertices[source].valid)
+                continue;
             if (next_source == kCanonicalShadowBatchVertices ||
                 current_vertices[source].s < current_vertices[next_source].s ||
                 (current_vertices[source].s == current_vertices[next_source].s &&
                  (current_vertices[source].t < current_vertices[next_source].t ||
-                  (current_vertices[source].t == current_vertices[next_source].t &&
-                   source < next_source)))) {
+                  (current_vertices[source].t == current_vertices[next_source].t && source < next_source)))) {
                 next_source = source;
             }
         }
-        if (next_source == kCanonicalShadowBatchVertices) break;
+        if (next_source == kCanonicalShadowBatchVertices)
+            break;
 
         std::size_t free_slot = 0U;
-        while (free_slot < kCanonicalShadowBatchVertices &&
-               slot_used[free_slot]) {
+        while (free_slot < kCanonicalShadowBatchVertices && slot_used[free_slot]) {
             ++free_slot;
         }
-        if (free_slot == kCanonicalShadowBatchVertices) break;
-        result.source_for_slot[free_slot] =
-            static_cast<std::uint8_t>(next_source);
-        result.slot_for_source[next_source] =
-            static_cast<std::uint8_t>(free_slot);
+        if (free_slot == kCanonicalShadowBatchVertices)
+            break;
+        result.source_for_slot[free_slot] = static_cast<std::uint8_t>(next_source);
+        result.slot_for_source[next_source] = static_cast<std::uint8_t>(free_slot);
         slot_used[free_slot] = true;
         source_used[next_source] = true;
     }
     return result;
 }
 
-using ShadowCanonicalPage =
-    std::array<ShadowTexcoordSample, kCanonicalShadowBatchVertices>;
+using ShadowCanonicalPage = std::array<ShadowTexcoordSample, kCanonicalShadowBatchVertices>;
 
 struct ShadowCanonicalPageMap {
-    std::array<std::uint8_t, kMaximumCanonicalShadowBatches>
-        batch_for_page{};
-    std::array<std::uint8_t, kMaximumCanonicalShadowBatches>
-        page_for_batch{};
+    std::array<std::uint8_t, kMaximumCanonicalShadowBatches> batch_for_page{};
+    std::array<std::uint8_t, kMaximumCanonicalShadowBatches> page_for_batch{};
 };
 
 inline constexpr std::uint8_t kInvalidShadowPage = 0xFFU;
@@ -2060,9 +1796,8 @@ inline constexpr std::uint8_t kInvalidShadowPage = 0xFFU;
 // batch even though the shadow itself remains continuous. Match all current
 // batches to persistent canonical pages before submitting any vertices, using
 // their object-relative UV clouds rather than their temporary draw ordinal.
-inline ShadowCanonicalPageMap canonical_shadow_page_map(
-    std::span<const ShadowCanonicalPage> previous_pages,
-    std::span<const ShadowCanonicalPage> current_batches) {
+inline ShadowCanonicalPageMap canonical_shadow_page_map(std::span<const ShadowCanonicalPage> previous_pages,
+                                                        std::span<const ShadowCanonicalPage> current_batches) {
     ShadowCanonicalPageMap result{};
     result.batch_for_page.fill(kInvalidShadowPage);
     result.page_for_batch.fill(kInvalidShadowPage);
@@ -2074,77 +1809,62 @@ inline ShadowCanonicalPageMap canonical_shadow_page_map(
     std::array<bool, kMaximumCanonicalShadowBatches> page_used{};
     std::array<bool, kMaximumCanonicalShadowBatches> batch_used{};
     const auto page_valid = [](const ShadowCanonicalPage& page) {
-        return std::any_of(page.begin(), page.end(),
-                           [](const ShadowTexcoordSample& sample) {
-                               return sample.valid;
-                           });
+        return std::any_of(page.begin(), page.end(), [](const ShadowTexcoordSample& sample) { return sample.valid; });
     };
-    const auto cloud_distance = [](const ShadowCanonicalPage& previous,
-                                   const ShadowCanonicalPage& current) {
+    const auto cloud_distance = [](const ShadowCanonicalPage& previous, const ShadowCanonicalPage& current) {
         std::uint64_t total = 0U;
         std::size_t matches = 0U;
         for (const auto& sample : current) {
-            if (!sample.valid) continue;
-            std::uint64_t nearest =
-                std::numeric_limits<std::uint64_t>::max();
+            if (!sample.valid)
+                continue;
+            std::uint64_t nearest = std::numeric_limits<std::uint64_t>::max();
             for (const auto& candidate : previous) {
-                if (!candidate.valid) continue;
-                const std::int64_t ds =
-                    static_cast<std::int64_t>(sample.s) - candidate.s;
-                const std::int64_t dt =
-                    static_cast<std::int64_t>(sample.t) - candidate.t;
-                nearest = std::min(
-                    nearest, static_cast<std::uint64_t>(ds * ds + dt * dt));
+                if (!candidate.valid)
+                    continue;
+                const std::int64_t ds = static_cast<std::int64_t>(sample.s) - candidate.s;
+                const std::int64_t dt = static_cast<std::int64_t>(sample.t) - candidate.t;
+                nearest = std::min(nearest, static_cast<std::uint64_t>(ds * ds + dt * dt));
             }
             if (nearest != std::numeric_limits<std::uint64_t>::max()) {
                 total += nearest;
                 ++matches;
             }
         }
-        return matches == 0U
-            ? std::numeric_limits<std::uint64_t>::max()
-            : total / matches;
+        return matches == 0U ? std::numeric_limits<std::uint64_t>::max() : total / matches;
     };
 
     // Greedy global minimum is deterministic and avoids allowing an early
     // source batch to claim a page that is a much better match for a later
     // batch. The reverse cloud term distinguishes partial-overlap ties.
     for (;;) {
-        std::uint64_t best_distance =
-            std::numeric_limits<std::uint64_t>::max();
+        std::uint64_t best_distance = std::numeric_limits<std::uint64_t>::max();
         std::size_t best_page = kMaximumCanonicalShadowBatches;
         std::size_t best_batch = kMaximumCanonicalShadowBatches;
         for (std::size_t page = 0U; page < previous_pages.size(); ++page) {
-            if (page_used[page] || !page_valid(previous_pages[page])) continue;
-            for (std::size_t batch = 0U; batch < current_batches.size();
-                 ++batch) {
+            if (page_used[page] || !page_valid(previous_pages[page]))
+                continue;
+            for (std::size_t batch = 0U; batch < current_batches.size(); ++batch) {
                 if (batch_used[batch] || !page_valid(current_batches[batch])) {
                     continue;
                 }
-                const std::uint64_t forward = cloud_distance(
-                    previous_pages[page], current_batches[batch]);
-                const std::uint64_t reverse = cloud_distance(
-                    current_batches[batch], previous_pages[page]);
-                const std::uint64_t distance =
-                    forward == std::numeric_limits<std::uint64_t>::max() ||
-                            reverse == std::numeric_limits<std::uint64_t>::max()
-                        ? std::numeric_limits<std::uint64_t>::max()
-                        : forward / 2U + reverse / 2U;
+                const std::uint64_t forward = cloud_distance(previous_pages[page], current_batches[batch]);
+                const std::uint64_t reverse = cloud_distance(current_batches[batch], previous_pages[page]);
+                const std::uint64_t distance = forward == std::numeric_limits<std::uint64_t>::max() ||
+                                                       reverse == std::numeric_limits<std::uint64_t>::max()
+                                                   ? std::numeric_limits<std::uint64_t>::max()
+                                                   : forward / 2U + reverse / 2U;
                 if (distance < best_distance ||
-                    (distance == best_distance &&
-                     (page < best_page ||
-                      (page == best_page && batch < best_batch)))) {
+                    (distance == best_distance && (page < best_page || (page == best_page && batch < best_batch)))) {
                     best_distance = distance;
                     best_page = page;
                     best_batch = batch;
                 }
             }
         }
-        if (best_page == kMaximumCanonicalShadowBatches) break;
-        result.batch_for_page[best_page] =
-            static_cast<std::uint8_t>(best_batch);
-        result.page_for_batch[best_batch] =
-            static_cast<std::uint8_t>(best_page);
+        if (best_page == kMaximumCanonicalShadowBatches)
+            break;
+        result.batch_for_page[best_page] = static_cast<std::uint8_t>(best_batch);
+        result.page_for_batch[best_batch] = static_cast<std::uint8_t>(best_page);
         page_used[best_page] = true;
         batch_used[best_batch] = true;
     }
@@ -2156,37 +1876,38 @@ inline ShadowCanonicalPageMap canonical_shadow_page_map(
         std::int64_t next_s = 0;
         std::int64_t next_t = 0;
         for (std::size_t batch = 0U; batch < current_batches.size(); ++batch) {
-            if (batch_used[batch]) continue;
+            if (batch_used[batch])
+                continue;
             std::int64_t sum_s = 0;
             std::int64_t sum_t = 0;
             std::int64_t count = 0;
             for (const auto& sample : current_batches[batch]) {
-                if (!sample.valid) continue;
+                if (!sample.valid)
+                    continue;
                 sum_s += sample.s;
                 sum_t += sample.t;
                 ++count;
             }
-            if (count == 0) continue;
+            if (count == 0)
+                continue;
             const std::int64_t centroid_s = sum_s / count;
             const std::int64_t centroid_t = sum_t / count;
-            if (next_batch == kMaximumCanonicalShadowBatches ||
-                centroid_s < next_s ||
-                (centroid_s == next_s &&
-                 (centroid_t < next_t ||
-                  (centroid_t == next_t && batch < next_batch)))) {
+            if (next_batch == kMaximumCanonicalShadowBatches || centroid_s < next_s ||
+                (centroid_s == next_s && (centroid_t < next_t || (centroid_t == next_t && batch < next_batch)))) {
                 next_batch = batch;
                 next_s = centroid_s;
                 next_t = centroid_t;
             }
         }
-        if (next_batch == kMaximumCanonicalShadowBatches) break;
+        if (next_batch == kMaximumCanonicalShadowBatches)
+            break;
         std::size_t page = 0U;
         while (page < kMaximumCanonicalShadowBatches && page_used[page]) {
             ++page;
         }
-        if (page == kMaximumCanonicalShadowBatches) break;
-        result.batch_for_page[page] =
-            static_cast<std::uint8_t>(next_batch);
+        if (page == kMaximumCanonicalShadowBatches)
+            break;
+        result.batch_for_page[page] = static_cast<std::uint8_t>(next_batch);
         result.page_for_batch[next_batch] = static_cast<std::uint8_t>(page);
         page_used[page] = true;
         batch_used[next_batch] = true;
@@ -2194,11 +1915,9 @@ inline ShadowCanonicalPageMap canonical_shadow_page_map(
     return result;
 }
 
-inline constexpr std::uint64_t kShadowTopologyHashOffset =
-    1469598103934665603ULL;
+inline constexpr std::uint64_t kShadowTopologyHashOffset = 1469598103934665603ULL;
 
-constexpr std::uint64_t shadow_topology_hash_value(std::uint64_t hash,
-                                                    std::uint32_t value) {
+constexpr std::uint64_t shadow_topology_hash_value(std::uint64_t hash, std::uint32_t value) {
     for (std::uint32_t shift = 0U; shift < 32U; shift += 8U) {
         hash ^= (value >> shift) & 0xFFU;
         hash *= 1099511628211ULL;
@@ -2219,8 +1938,7 @@ struct ShadowBatchTopology {
 // topology epoch or RT64 loses an otherwise valid interpolation pair for one
 // presentation frame. Geometry counts and triangle indices remain part of the
 // signature and the ordered vertex samples are validated separately below.
-constexpr std::uint64_t shadow_batch_topology_hash(
-    std::uint64_t hash, const ShadowBatchTopology& batch) {
+constexpr std::uint64_t shadow_batch_topology_hash(std::uint64_t hash, const ShadowBatchTopology& batch) {
     hash = shadow_topology_hash_value(hash, batch.triangle_count);
     return shadow_topology_hash_value(hash, batch.vertex_count);
 }
@@ -2229,9 +1947,8 @@ constexpr std::uint64_t shadow_batch_topology_hash(
 // terrain height changes. Only an authored topology change should advance the
 // interpolation epoch; scene and object-lifetime changes are handled by the
 // surrounding presentation lifetime policy.
-constexpr bool shadow_topology_epoch_should_advance(
-    bool previous_valid, std::uint64_t previous_signature,
-    std::uint64_t current_signature) {
+constexpr bool shadow_topology_epoch_should_advance(bool previous_valid, std::uint64_t previous_signature,
+                                                    std::uint64_t current_signature) {
     return previous_valid && previous_signature != current_signature;
 }
 
@@ -2244,20 +1961,16 @@ constexpr bool shadow_topology_epoch_should_advance(
 // ground-plane displacement shared by the complete shadow. This accounts for
 // ordinary slope projection without permitting independently moving batches,
 // reordered vertices, large terrain jumps, or shape changes.
-inline bool shadow_geometry_corresponds(
-    std::span<const ShadowVertexSample> previous,
-    std::span<const ShadowVertexSample> current,
-    std::span<const std::uint16_t> batch_vertex_counts,
-    float object_delta_x, float object_delta_z,
-    float maximum_residual) {
-    if (previous.size() != current.size() || previous.empty() ||
-        !std::isfinite(object_delta_x) || !std::isfinite(object_delta_z) ||
-        !std::isfinite(maximum_residual) || maximum_residual <= 0.0F) {
+inline bool shadow_geometry_corresponds(std::span<const ShadowVertexSample> previous,
+                                        std::span<const ShadowVertexSample> current,
+                                        std::span<const std::uint16_t> batch_vertex_counts, float object_delta_x,
+                                        float object_delta_z, float maximum_residual) {
+    if (previous.size() != current.size() || previous.empty() || !std::isfinite(object_delta_x) ||
+        !std::isfinite(object_delta_z) || !std::isfinite(maximum_residual) || maximum_residual <= 0.0F) {
         return false;
     }
 
-    const float maximum_residual_squared =
-        maximum_residual * maximum_residual;
+    const float maximum_residual_squared = maximum_residual * maximum_residual;
     std::size_t batch_start = 0U;
     ShadowVertexSample coherent_residual{};
     for (const std::uint16_t count_value : batch_vertex_counts) {
@@ -2268,19 +1981,14 @@ inline bool shadow_geometry_corresponds(
 
         for (std::size_t local = 0U; local < count; ++local) {
             const std::size_t index = batch_start + local;
-            if (!std::isfinite(previous[index].x) ||
-                !std::isfinite(previous[index].y) ||
-                !std::isfinite(previous[index].z) ||
-                !std::isfinite(current[index].x) ||
-                !std::isfinite(current[index].y) ||
-                !std::isfinite(current[index].z)) {
+            if (!std::isfinite(previous[index].x) || !std::isfinite(previous[index].y) ||
+                !std::isfinite(previous[index].z) || !std::isfinite(current[index].x) ||
+                !std::isfinite(current[index].y) || !std::isfinite(current[index].z)) {
                 return false;
             }
-            coherent_residual.x += current[index].x - object_delta_x -
-                                   previous[index].x;
+            coherent_residual.x += current[index].x - object_delta_x - previous[index].x;
             coherent_residual.y += current[index].y - previous[index].y;
-            coherent_residual.z += current[index].z - object_delta_z -
-                                   previous[index].z;
+            coherent_residual.z += current[index].z - object_delta_z - previous[index].z;
         }
         batch_start += count;
     }
@@ -2292,25 +2000,19 @@ inline bool shadow_geometry_corresponds(
     coherent_residual.x *= reciprocal_count;
     coherent_residual.y *= reciprocal_count;
     coherent_residual.z *= reciprocal_count;
-    const float coherent_distance =
-        coherent_residual.x * coherent_residual.x +
-        coherent_residual.y * coherent_residual.y +
-        coherent_residual.z * coherent_residual.z;
-    if (!std::isfinite(coherent_distance) ||
-        coherent_distance > maximum_residual_squared) {
+    const float coherent_distance = coherent_residual.x * coherent_residual.x +
+                                    coherent_residual.y * coherent_residual.y +
+                                    coherent_residual.z * coherent_residual.z;
+    if (!std::isfinite(coherent_distance) || coherent_distance > maximum_residual_squared) {
         return false;
     }
 
     for (std::size_t index = 0U; index < current.size(); ++index) {
-        const float dx = current[index].x - object_delta_x -
-                         previous[index].x - coherent_residual.x;
-        const float dy = current[index].y - previous[index].y -
-                         coherent_residual.y;
-        const float dz = current[index].z - object_delta_z -
-                         previous[index].z - coherent_residual.z;
+        const float dx = current[index].x - object_delta_x - previous[index].x - coherent_residual.x;
+        const float dy = current[index].y - previous[index].y - coherent_residual.y;
+        const float dz = current[index].z - object_delta_z - previous[index].z - coherent_residual.z;
         const float ordered_distance = dx * dx + dy * dy + dz * dz;
-        if (!std::isfinite(ordered_distance) ||
-            ordered_distance > maximum_residual_squared) {
+        if (!std::isfinite(ordered_distance) || ordered_distance > maximum_residual_squared) {
             return false;
         }
     }
@@ -2328,14 +2030,11 @@ struct MatrixInterpolation {
     bool camera_root = false;
 };
 
-MatrixInterpolation matrix_interpolation(
-    std::uint32_t physical_matrix_address);
+MatrixInterpolation matrix_interpolation(std::uint32_t physical_matrix_address);
 std::uint32_t matrix_identity(std::uint32_t physical_matrix_address);
 PresentationKey surface_presentation_key(std::uint32_t batch_address);
-std::uint16_t presentation_token_for_object(std::uint8_t* rdram,
-                                            std::uint32_t object_address);
-std::uint16_t presentation_token_for_registered_object(
-    std::uint8_t* rdram, std::uint32_t object_address);
+std::uint16_t presentation_token_for_object(std::uint8_t* rdram, std::uint32_t object_address);
+std::uint16_t presentation_token_for_registered_object(std::uint8_t* rdram, std::uint32_t object_address);
 std::uint16_t presentation_token_for_active_capture();
 
 struct VehiclePartPresentationKey {
@@ -2343,13 +2042,10 @@ struct VehiclePartPresentationKey {
     std::uint8_t attachment_slot = kInvalidVehiclePartSlot;
 };
 
-VehiclePartPresentationKey active_vehicle_part_presentation_key(
-    std::uint32_t attachment_matrix_address);
+VehiclePartPresentationKey active_vehicle_part_presentation_key(std::uint32_t attachment_matrix_address);
 
-std::uint32_t register_active_vehicle_part_matrix(
-    std::uint32_t attachment_transform_address,
-    std::uint32_t attachment_matrix_address,
-    bool mirrored);
+std::uint32_t register_active_vehicle_part_matrix(std::uint32_t attachment_transform_address,
+                                                  std::uint32_t attachment_matrix_address, bool mirrored);
 
 struct ShadowPresentationKey {
     std::uint16_t token = 0U;
@@ -2362,16 +2058,13 @@ struct ShadowOwnerMotionSample {
     bool valid = false;
 };
 
-ShadowPresentationKey shadow_presentation_key(
-    std::uint8_t* rdram, std::uint32_t object_address,
-    std::uint32_t shadow_address);
+ShadowPresentationKey shadow_presentation_key(std::uint8_t* rdram, std::uint32_t object_address,
+                                              std::uint32_t shadow_address);
 
 bool shadow_owner_uses_rigid_actor_proxy(std::uint64_t shadow_history_key);
 bool shadow_owner_is_taj_carpet_actor(std::uint64_t shadow_history_key);
-RigidShadowOwnerPolicy shadow_owner_rigid_policy(
-    std::uint64_t shadow_history_key);
-ShadowOwnerMotionSample shadow_owner_motion_sample(
-    std::uint64_t shadow_history_key);
+RigidShadowOwnerPolicy shadow_owner_rigid_policy(std::uint64_t shadow_history_key);
+ShadowOwnerMotionSample shadow_owner_motion_sample(std::uint64_t shadow_history_key);
 
 struct PresentationMarker {
     std::uint8_t mode = 0U;
@@ -2387,51 +2080,54 @@ struct PresentationMarkerList {
     std::array<PresentationMarker, kMaximumMarkersPerCommand> markers{};
     std::size_t count = 0U;
 };
-struct LocatedPresentationMarker {std::uint32_t address;PresentationMarker marker;};
+struct LocatedPresentationMarker {
+    std::uint32_t address;
+    PresentationMarker marker;
+};
 std::vector<LocatedPresentationMarker> camera_world_boundaries();
-struct OwnedMatrixBinding {std::uint32_t address;MatrixInterpolation interpolation;bool weak=false;};
-struct OwnedShadowBinding {std::uint16_t token;RigidShadowOwnerPolicy policy;ShadowOwnerMotionSample motion;};
+struct OwnedMatrixBinding {
+    std::uint32_t address;
+    MatrixInterpolation interpolation;
+    bool weak = false;
+};
+struct OwnedShadowBinding {
+    std::uint16_t token;
+    RigidShadowOwnerPolicy policy;
+    ShadowOwnerMotionSample motion;
+};
 
 // DKR flips gSPTaskNum immediately after gfxtask_run_xbus returns. A renderer
 // snapshot may therefore contain the parity of the next display-list buffer,
 // not the task being decoded. The frozen task's scene and data_ptr are the
 // durable ownership key; comparing the mutable parity drops valid sidecars.
-constexpr bool submitted_task_matches(std::uint32_t submitted_scene,
-                                      std::uint32_t submitted_display_list,
-                                      std::uint32_t rendered_scene,
-                                      std::uint32_t rendered_display_list) {
+constexpr bool submitted_task_matches(std::uint32_t submitted_scene, std::uint32_t submitted_display_list,
+                                      std::uint32_t rendered_scene, std::uint32_t rendered_display_list) {
     constexpr std::uint32_t kRdramAddressMask = 0x007FFFFFU;
     return submitted_scene == rendered_scene &&
-        (submitted_display_list & kRdramAddressMask) ==
-            (rendered_display_list & kRdramAddressMask);
+           (submitted_display_list & kRdramAddressMask) == (rendered_display_list & kRdramAddressMask);
 }
 
 // Presentation scopes are host metadata, not authored F3DDKR commands. Keep
 // them in the immutable task sidecar so patches never consume or overwrite a
 // slot in DKR's fixed-size display-list heaps.
-bool record_presentation_marker(std::uint32_t command_address,
-                                std::uint8_t mode,
-                                std::uint16_t token,
-                                std::uint8_t variant,
-                                PresentationMarkerKind kind,
+bool record_presentation_marker(std::uint32_t command_address, std::uint8_t mode, std::uint16_t token,
+                                std::uint8_t variant, PresentationMarkerKind kind,
                                 hud::groups::Transform hud_transform = {});
-PresentationMarkerList active_presentation_markers(
-    std::uint32_t command_address);
+PresentationMarkerList active_presentation_markers(std::uint32_t command_address);
 
 // Activates the immutable identity sidecar captured alongside one submitted
 // graphics task. The renderer owns this scope for the entire F3DDKR decode so
 // a delayed task can never observe identities from a newer frame that reused
 // the same N64 display-list buffer.
 class TaskIdentityScope {
-public:
-    TaskIdentityScope(std::uint8_t* rdram_snapshot,
-                      std::uint32_t display_list_address);
+  public:
+    TaskIdentityScope(std::uint8_t* rdram_snapshot, std::uint32_t display_list_address);
     // Private copied-image decode only. Does not consume the stable producer's
     // submission queue or install metadata from rewindable/live CPU globals.
     explicit TaskIdentityScope(std::span<const LocatedPresentationMarker> owned_markers);
     TaskIdentityScope(std::span<const LocatedPresentationMarker> owned_markers,
-        std::span<const OwnedMatrixBinding> matrices,std::span<const OwnedShadowBinding> shadows,
-        std::uint32_t scene,bool interpolation_allowed,double presentation_time=0.0);
+                      std::span<const OwnedMatrixBinding> matrices, std::span<const OwnedShadowBinding> shadows,
+                      std::uint32_t scene, bool interpolation_allowed, double presentation_time = 0.0);
     ~TaskIdentityScope();
 
     TaskIdentityScope(const TaskIdentityScope&) = delete;
@@ -2462,16 +2158,10 @@ std::uint32_t current_camera_continuity_identity();
 // alter authored state or RT64 group selection; they only expose which
 // continuity boundary failed when DKR_INTERPOLATION_TRACE is enabled.
 bool interpolation_trace_enabled();
-void interpolation_trace_segment_region(std::uint8_t* rdram,
-                                        std::uint32_t segment_id,
-                                        int race_type,
-                                        bool authored_region_visible,
-                                        bool effective_region_visible,
+void interpolation_trace_segment_region(std::uint8_t* rdram, std::uint32_t segment_id, int race_type,
+                                        bool authored_region_visible, bool effective_region_visible,
                                         bool retention_active);
-void interpolation_trace_segment_block(std::uint8_t* rdram,
-                                       std::uint32_t segment_id,
-                                       bool block_visible);
-void interpolation_trace_billboard(bool has_owner_token, bool has_sprite,
-                                   bool marker_recorded);
+void interpolation_trace_segment_block(std::uint8_t* rdram, std::uint32_t segment_id, bool block_visible);
+void interpolation_trace_billboard(bool has_owner_token, bool has_sprite, bool marker_recorded);
 
 } // namespace dkr::runtime::presentation

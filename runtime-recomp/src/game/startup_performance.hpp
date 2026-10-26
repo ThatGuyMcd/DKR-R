@@ -11,14 +11,14 @@ void mark(const char* event) noexcept;
 void report(const char* phase, Clock::time_point started_at) noexcept;
 
 class ScopedPhase {
-public:
+  public:
     explicit ScopedPhase(const char* phase) noexcept;
     ~ScopedPhase();
 
     ScopedPhase(const ScopedPhase&) = delete;
     ScopedPhase& operator=(const ScopedPhase&) = delete;
 
-private:
+  private:
     const char* phase_;
     Clock::time_point started_at_;
 };

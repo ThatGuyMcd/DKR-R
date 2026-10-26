@@ -2,14 +2,12 @@
 // one review widget; ordinary launcher inputs retain upstream behaviour.
 static thread_local float DkrReviewWrapWidth = 0.0f;
 
-static float DkrReviewAdvance(ImWchar c)
-{
+static float DkrReviewAdvance(ImWchar c) {
     ImGuiContext& g = *GImGui;
     return c == '\r' || c == '\n' ? 0.0f : g.Font->GetCharAdvance(c) * (g.FontSize / g.Font->FontSize);
 }
 
-static float DkrReviewMeasure(const ImWchar* begin, const ImWchar* end)
-{
+static float DkrReviewMeasure(const ImWchar* begin, const ImWchar* end) {
     float width = 0.0f;
     for (; begin < end; ++begin)
         width += DkrReviewAdvance(*begin);
@@ -18,12 +16,10 @@ static float DkrReviewMeasure(const ImWchar* begin, const ImWchar* end)
 
 // Keep every character (including spaces) in the edit buffer. Both STB's
 // hit-testing/navigation and our drawing use these exact visual row breaks.
-static const ImWchar* DkrReviewRowEnd(const ImWchar* begin, const ImWchar* end)
-{
+static const ImWchar* DkrReviewRowEnd(const ImWchar* begin, const ImWchar* end) {
     float width = 0.0f;
     const ImWchar* word_break = NULL;
-    for (const ImWchar* p = begin; p < end; ++p)
-    {
+    for (const ImWchar* p = begin; p < end; ++p) {
         if (*p == '\n')
             return p + 1;
         const float advance = DkrReviewAdvance(*p);
@@ -36,22 +32,18 @@ static const ImWchar* DkrReviewRowEnd(const ImWchar* begin, const ImWchar* end)
     return end;
 }
 
-static const ImWchar* DkrReviewInkEnd(const ImWchar* begin, const ImWchar* end)
-{
+static const ImWchar* DkrReviewInkEnd(const ImWchar* begin, const ImWchar* end) {
     while (end > begin && (end[-1] == '\n' || end[-1] == '\r'))
         --end;
     return end;
 }
 
-static ImVec2 DkrReviewPosition(const ImWchar* begin, const ImWchar* end, int index, bool row_end = false)
-{
+static ImVec2 DkrReviewPosition(const ImWchar* begin, const ImWchar* end, int index, bool row_end = false) {
     const ImWchar* cursor = begin + ImClamp(index, 0, (int)(end - begin));
     float y = GImGui->FontSize;
-    while (begin < end)
-    {
+    while (begin < end) {
         const ImWchar* next = DkrReviewRowEnd(begin, end);
-        if (cursor < next || (row_end && cursor == next && next[-1] != '\n') ||
-            (next == end && end[-1] != '\n'))
+        if (cursor < next || (row_end && cursor == next && next[-1] != '\n') || (next == end && end[-1] != '\n'))
             return ImVec2(DkrReviewMeasure(begin, cursor), y);
         begin = next;
         y += GImGui->FontSize;
@@ -59,13 +51,11 @@ static ImVec2 DkrReviewPosition(const ImWchar* begin, const ImWchar* end, int in
     return ImVec2(0.0f, y);
 }
 
-static int DkrReviewRowBoundary(ImGuiInputTextState* state, int index, bool last)
-{
+static int DkrReviewRowBoundary(ImGuiInputTextState* state, int index, bool last) {
     const ImWchar* begin = state->TextW.Data;
     const ImWchar* end = begin + state->CurLenW;
     const ImWchar* cursor = begin + ImClamp(index, 0, state->CurLenW);
-    for (const ImWchar* row = begin; row < end; )
-    {
+    for (const ImWchar* row = begin; row < end;) {
         const ImWchar* next = DkrReviewRowEnd(row, end);
         if (cursor < next || (state->Stb.cursor_at_end_of_line && cursor == next && next[-1] != '\n') ||
             (next == end && end[-1] != '\n'))
@@ -75,25 +65,21 @@ static int DkrReviewRowBoundary(ImGuiInputTextState* state, int index, bool last
     return state->CurLenW;
 }
 
-static int DkrReviewPreviousRow(ImGuiInputTextState* state, int current)
-{
+static int DkrReviewPreviousRow(ImGuiInputTextState* state, int current) {
     const ImWchar* begin = state->TextW.Data;
     const ImWchar* end = begin + state->CurLenW;
     int previous = 0;
-    for (const ImWchar* row = begin; row < end && row - begin < current; )
-    {
+    for (const ImWchar* row = begin; row < end && row - begin < current;) {
         previous = (int)(row - begin);
         row = DkrReviewRowEnd(row, end);
     }
     return previous;
 }
 
-static bool DkrReviewVerticalRowEnd(ImGuiInputTextState* state)
-{
+static bool DkrReviewVerticalRowEnd(ImGuiInputTextState* state) {
     const ImWchar* begin = state->TextW.Data;
     const ImWchar* end = begin + state->CurLenW;
-    for (const ImWchar* row = begin; row < end; )
-    {
+    for (const ImWchar* row = begin; row < end;) {
         const ImWchar* next = DkrReviewRowEnd(row, end);
         if (next - begin == state->Stb.cursor && next[-1] != '\n')
             return state->Stb.has_preferred_x && state->Stb.preferred_x >= DkrReviewMeasure(row, next) - 0.5f;
@@ -102,11 +88,9 @@ static bool DkrReviewVerticalRowEnd(ImGuiInputTextState* state)
     return false;
 }
 
-static float DkrReviewHeight(const ImWchar* begin, const ImWchar* end)
-{
+static float DkrReviewHeight(const ImWchar* begin, const ImWchar* end) {
     float height = GImGui->FontSize;
-    while (begin < end)
-    {
+    while (begin < end) {
         const ImWchar* next = DkrReviewRowEnd(begin, end);
         if (next < end || next[-1] == '\n')
             height += GImGui->FontSize;
@@ -115,18 +99,14 @@ static float DkrReviewHeight(const ImWchar* begin, const ImWchar* end)
     return height;
 }
 
-static void DkrReviewSelection(ImDrawList* draw, ImVec2 origin, const ImVec4& clip,
-                               const ImWchar* begin, const ImWchar* end,
-                               int selected_begin, int selected_end, ImU32 colour)
-{
+static void DkrReviewSelection(ImDrawList* draw, ImVec2 origin, const ImVec4& clip, const ImWchar* begin,
+                               const ImWchar* end, int selected_begin, int selected_end, ImU32 colour) {
     int first = 0;
-    for (const ImWchar* row = begin; row < end; )
-    {
+    for (const ImWchar* row = begin; row < end;) {
         const ImWchar* next = DkrReviewRowEnd(row, end);
         const int last = (int)(next - begin);
         const int a = ImMax(first, selected_begin), b = ImMin(last, selected_end);
-        if (a < b)
-        {
+        if (a < b) {
             const float x = DkrReviewMeasure(row, begin + a);
             const float width = ImMax(1.0f, DkrReviewMeasure(begin + a, begin + b));
             ImRect rect(origin + ImVec2(x, 0), origin + ImVec2(x + width, GImGui->FontSize));
@@ -142,9 +122,7 @@ static void DkrReviewSelection(ImDrawList* draw, ImVec2 origin, const ImVec4& cl
 
 // UTF-8 remains the sole stored/submitted representation. The temporary wide
 // buffer is only a layout view, as in upstream InputText's active edit state.
-static float DkrReviewDraw(ImDrawList* draw, ImVec2 origin, ImU32 colour,
-                            const char* text, const char* text_end)
-{
+static float DkrReviewDraw(ImDrawList* draw, ImVec2 origin, ImU32 colour, const char* text, const char* text_end) {
     if (!text_end)
         text_end = text + strlen(text);
     ImVector<ImWchar> wide;
@@ -154,8 +132,7 @@ static float DkrReviewDraw(ImDrawList* draw, ImVec2 origin, ImU32 colour,
     const float height = DkrReviewHeight(wide.Data, end);
     ImVector<char> row_text;
     row_text.resize(length * 4 + 1);
-    for (const ImWchar* row = wide.Data; row < end; )
-    {
+    for (const ImWchar* row = wide.Data; row < end;) {
         const ImWchar* next = DkrReviewRowEnd(row, end);
         const ImWchar* ink_end = DkrReviewInkEnd(row, next);
         const int bytes = ImTextStrToUtf8(row_text.Data, row_text.Size, row, ink_end);
@@ -168,25 +145,23 @@ static float DkrReviewDraw(ImDrawList* draw, ImVec2 origin, ImU32 colour,
 
 // Public only to the launcher translation unit. No global flag, ABI changes,
 // new dependency version or modification of the checked-out ImGui is needed.
-bool DkrReviewInputText(const char* label, char* buffer, size_t capacity, const ImVec2& size)
-{
-    struct WrapScope
-    {
+bool DkrReviewInputText(const char* label, char* buffer, size_t capacity, const ImVec2& size) {
+    struct WrapScope {
         float previous = DkrReviewWrapWidth;
-        ~WrapScope() { DkrReviewWrapWidth = previous; }
+        ~WrapScope() {
+            DkrReviewWrapWidth = previous;
+        }
     } scope;
     // Reserve the scrollbar from the start: typing the first overflowing row
     // must not change line widths and cause an oscillating reflow.
-    DkrReviewWrapWidth = ImMax(1.0f, size.x - ImGui::GetStyle().FramePadding.x * 2.0f
-                                    - ImGui::GetStyle().ScrollbarSize - 1.0f);
+    DkrReviewWrapWidth =
+        ImMax(1.0f, size.x - ImGui::GetStyle().FramePadding.x * 2.0f - ImGui::GetStyle().ScrollbarSize - 1.0f);
     const ImGuiID id = ImGui::GetID(label);
     ImGuiStorage* storage = ImGui::GetStateStorage();
     const ImGuiID width_id = ImHashStr("review-wrap-width", 0, id);
     const ImGuiID font_id = ImHashStr("review-wrap-font", 0, id);
-    if (storage->GetFloat(width_id) != DkrReviewWrapWidth || storage->GetFloat(font_id) != GImGui->FontSize)
-    {
-        if (ImGuiInputTextState* state = ImGui::GetInputTextState(id))
-        {
+    if (storage->GetFloat(width_id) != DkrReviewWrapWidth || storage->GetFloat(font_id) != GImGui->FontSize) {
+        if (ImGuiInputTextState* state = ImGui::GetInputTextState(id)) {
             state->CursorFollow = true;
             state->Stb.has_preferred_x = 0;
             state->Stb.cursor_at_end_of_line = 0;

@@ -25,14 +25,19 @@
 namespace dkr::runtime::netplay {
 
 class BlockingRealtimeTransport : public SessionTransport {
-public:
-    bool open(std::uint16_t, std::string&) override { return true; }
+  public:
+    bool open(std::uint16_t, std::string&) override {
+        return true;
+    }
     void close() override {}
-    bool is_open() const override { return true; }
-    std::uint16_t local_port() const override { return 0U; }
-    DatagramSendStatus send_status(
-        const PeerAddress&, std::span<const std::uint8_t>,
-        TransportTrafficClass traffic, std::string&) override {
+    bool is_open() const override {
+        return true;
+    }
+    std::uint16_t local_port() const override {
+        return 0U;
+    }
+    DatagramSendStatus send_status(const PeerAddress&, std::span<const std::uint8_t>, TransportTrafficClass traffic,
+                                   std::string&) override {
         if (traffic == TransportTrafficClass::Realtime) {
             ++realtime_attempts;
             return DatagramSendStatus::WouldBlock;
@@ -42,8 +47,7 @@ public:
         }
         return DatagramSendStatus::Sent;
     }
-    bool receive(PeerAddress&, std::vector<std::uint8_t>&,
-                 std::string&) override {
+    bool receive(PeerAddress&, std::vector<std::uint8_t>&, std::string&) override {
         return false;
     }
 
@@ -65,7 +69,8 @@ struct DirectSessionTestAccess {
     // the live network worker from observing that deliberately incomplete
     // session; otherwise it runs gameplay and timeout paths against it.
     static void stop_worker(DirectSession& session) {
-        if (!session.network_worker_.joinable()) return;
+        if (!session.network_worker_.joinable())
+            return;
         {
             // Match production shutdown: change the wait predicate under its
             // mutex so a notification cannot slip between predicate and wait.
@@ -82,34 +87,47 @@ struct DirectSessionTestAccess {
         assert(receiver.owned_backend_available());
         {
             std::scoped_lock lock(receiver.mutex_);
-            receiver.state_=ConnectionState::Loading;receiver.local_slot_=0;receiver.is_host_=true;
-            LaunchDescriptor descriptor{};descriptor.occupied_mask=3;descriptor.player_count=2;
-            descriptor.synchronization=SynchronizationMode::Lockstep;receiver.launch_descriptor_=descriptor;
-            protocol::Datagram packet{};packet.header.type=protocol::MessageType::ExperimentalInput;packet.payload={1,2,3};
-            assert(receiver.receive_owned_packet_locked(1,packet)&&receiver.owned_inbound_.empty());
-            receiver.launch_descriptor_->synchronization=SynchronizationMode::ExperimentalRollback;
-            assert(receiver.receive_owned_packet_locked(2,packet)&&receiver.owned_inbound_.empty());
-            assert(receiver.receive_owned_packet_locked(255,packet)&&receiver.owned_inbound_.empty());
-            assert(receiver.receive_owned_packet_locked(0,packet)&&receiver.owned_inbound_.empty());
-            const auto launch_hash=launch_descriptor_hash(*receiver.launch_descriptor_);
+            receiver.state_ = ConnectionState::Loading;
+            receiver.local_slot_ = 0;
+            receiver.is_host_ = true;
+            LaunchDescriptor descriptor{};
+            descriptor.occupied_mask = 3;
+            descriptor.player_count = 2;
+            descriptor.synchronization = SynchronizationMode::Lockstep;
+            receiver.launch_descriptor_ = descriptor;
+            protocol::Datagram packet{};
+            packet.header.type = protocol::MessageType::ExperimentalInput;
+            packet.payload = {1, 2, 3};
+            assert(receiver.receive_owned_packet_locked(1, packet) && receiver.owned_inbound_.empty());
+            receiver.launch_descriptor_->synchronization = SynchronizationMode::ExperimentalRollback;
+            assert(receiver.receive_owned_packet_locked(2, packet) && receiver.owned_inbound_.empty());
+            assert(receiver.receive_owned_packet_locked(255, packet) && receiver.owned_inbound_.empty());
+            assert(receiver.receive_owned_packet_locked(0, packet) && receiver.owned_inbound_.empty());
+            const auto launch_hash = launch_descriptor_hash(*receiver.launch_descriptor_);
             packet.payload.clear();
-            for(int shift=56;shift>=0;shift-=8)packet.payload.push_back(std::uint8_t(launch_hash>>shift));
-            packet.payload.insert(packet.payload.end(),{1,2,3});
-            for(auto type:{protocol::MessageType::ExperimentalInput,protocol::MessageType::ExperimentalControl,protocol::MessageType::ExperimentalRepair}) {
-                packet.header.type=type;assert(receiver.receive_owned_packet_locked(1,packet));
+            for (int shift = 56; shift >= 0; shift -= 8)
+                packet.payload.push_back(std::uint8_t(launch_hash >> shift));
+            packet.payload.insert(packet.payload.end(), {1, 2, 3});
+            for (auto type : {protocol::MessageType::ExperimentalInput, protocol::MessageType::ExperimentalControl,
+                              protocol::MessageType::ExperimentalRepair}) {
+                packet.header.type = type;
+                assert(receiver.receive_owned_packet_locked(1, packet));
             }
-            assert(receiver.owned_inbound_.size()==3&&receiver.owned_inbound_bytes_==9);
+            assert(receiver.owned_inbound_.size() == 3 && receiver.owned_inbound_bytes_ == 9);
         }
         DirectSession::OwnedPacket taken;
-        assert(receiver.take_owned_packet(taken)&&taken.source==1&&taken.traffic==TransportTrafficClass::Realtime);
-        assert(receiver.take_owned_packet(taken)&&taken.traffic==TransportTrafficClass::Control);
-        assert(receiver.take_owned_packet(taken)&&taken.traffic==TransportTrafficClass::Authoritative);
+        assert(receiver.take_owned_packet(taken) && taken.source == 1 &&
+               taken.traffic == TransportTrafficClass::Realtime);
+        assert(receiver.take_owned_packet(taken) && taken.traffic == TransportTrafficClass::Control);
+        assert(receiver.take_owned_packet(taken) && taken.traffic == TransportTrafficClass::Authoritative);
         assert(!receiver.take_owned_packet(taken));
         std::string error;
-        assert(receiver.send_owned_packet(255,std::array<std::uint8_t,1>{1},TransportTrafficClass::Realtime,error)==DatagramSendStatus::Error);
+        assert(receiver.send_owned_packet(255, std::array<std::uint8_t, 1>{1}, TransportTrafficClass::Realtime,
+                                          error) == DatagramSendStatus::Error);
         assert(!receiver.enable_owned_backend(false)); // capability is immutable during a launch
-        receiver.disconnect();assert(!receiver.take_owned_packet(taken));
-        assert(receiver.enable_owned_backend(false)&&!receiver.owned_backend_available());
+        receiver.disconnect();
+        assert(!receiver.take_owned_packet(taken));
+        assert(receiver.enable_owned_backend(false) && !receiver.owned_backend_available());
     }
     DKR_TEST_NOINLINE static void experimental_admission_isolation() {
         DirectSession receiver;
@@ -124,8 +142,7 @@ struct DirectSessionTestAccess {
         assert(!receiver.launch_descriptor_);
         assert(receiver.launch_stage_ == LaunchStage::Idle);
     }
-    DKR_TEST_NOINLINE static void experimental_host_preserves_lobby(DirectSession& host,
-                                                                   const Rules& rules) {
+    DKR_TEST_NOINLINE static void experimental_host_preserves_lobby(DirectSession& host, const Rules& rules) {
         // Keep these large view temporaries out of main's existing multi-peer
         // fixture stack frame, particularly on Windows' 1 MiB default stack.
         const auto before = host.view();
@@ -135,8 +152,7 @@ struct DirectSessionTestAccess {
         experiment.synchronization = SynchronizationMode::Lockstep;
         experiment.rollback_window = 0U;
         std::string error;
-        assert(!host.host(0U, "127.0.0.1", "Experiment", ConnectionMethod::Lan,
-                          "Host", experiment, error));
+        assert(!host.host(0U, "127.0.0.1", "Experiment", ConnectionMethod::Lan, "Host", experiment, error));
         assert(error == rollback_policy::unsupported_lobby);
         const auto after = host.view();
         assert(after.state == before.state);
@@ -159,17 +175,19 @@ struct DirectSessionTestAccess {
         client.authoritative_inputs_valid_ = true;
         client.authoritative_input_frame_ = 100U;
         FrameInputs inputs{};
-        assert(client.synchronize_inputs_result(100U, {}, inputs,
-            std::chrono::milliseconds(0)) == InputSynchronizationResult::Pending);
+        assert(client.synchronize_inputs_result(100U, {}, inputs, std::chrono::milliseconds(0)) ==
+               InputSynchronizationResult::Pending);
         const PackedInput pressed{0x8000U, 40, -20};
-        assert(client.synchronize_inputs_result(100U, pressed, inputs,
-            std::chrono::milliseconds(0)) == InputSynchronizationResult::Pending);
+        assert(client.synchronize_inputs_result(100U, pressed, inputs, std::chrono::milliseconds(0)) ==
+               InputSynchronizationResult::Pending);
         assert(client.local_history_.size() == 1U);
         for (bool repair : {false, true}) {
             const auto batch = client.make_local_history_batch(102U, repair, 102U);
             assert(batch.inputs.size() == 1U && batch.inputs.front() == pressed);
         }
-        PeerAddress destination{}; destination.size = 1U; destination.storage[0] = 1U;
+        PeerAddress destination{};
+        destination.size = 1U;
+        destination.storage[0] = 1U;
         client.high_priority_outbound_.clear();
         for (unsigned i = 0; i < 90U; ++i)
             client.enqueue_outbound(destination, protocol::MessageType::Input, {1U}, i);
@@ -185,13 +203,14 @@ struct DirectSessionTestAccess {
         client.session_save_generation_ = 9U;
         client.manifest_.session_save_hash = 1234U;
         client.room_view_.generation = 7U;
-        for (auto& player : client.room_view_.players) player.occupied = true;
+        for (auto& player : client.room_view_.players)
+            player.occupied = true;
         protocol::OnlineSaveStatusPayload status{7U, 9U, 1234U, 15U};
         client.apply_online_save_status_locked(status);
         assert(!client.local_online_save_acknowledged_ && !client.online_save_status_); // not installed
         client.local_online_save_ready_ = true;
-        for (const auto invalid : {protocol::OnlineSaveStatusPayload{7U, 8U, 1234U, 15U},
-                 {7U, 9U, 4567U, 15U}, {6U, 9U, 1234U, 15U}}) {
+        for (const auto invalid :
+             {protocol::OnlineSaveStatusPayload{7U, 8U, 1234U, 15U}, {7U, 9U, 4567U, 15U}, {6U, 9U, 1234U, 15U}}) {
             client.apply_online_save_status_locked(invalid);
             assert(!client.local_online_save_acknowledged_ && !client.online_save_status_);
         }
@@ -199,10 +218,12 @@ struct DirectSessionTestAccess {
         // host confirmation in a periodic roster status packet.
         client.apply_online_save_status_locked(status);
         assert(client.local_online_save_acknowledged_);
-        for (const bool ready : client.view().online_save_ready) assert(ready);
+        for (const bool ready : client.view().online_save_ready)
+            assert(ready);
         status.verified_mask = 1U;
         client.apply_online_save_status_locked(status); // reordered older mask
-        for (const bool ready : client.view().online_save_ready) assert(ready);
+        for (const bool ready : client.view().online_save_ready)
+            assert(ready);
         // A leave/rejoin uses a new roster generation. The former player's
         // verification cannot be inherited by a new occupant of the slot.
         protocol::LobbyStatePayload roster{};
@@ -218,19 +239,24 @@ struct DirectSessionTestAccess {
         status.verified_mask = 15U;
         client.apply_online_save_status_locked(status); // stale generation 7
         assert(!client.view().online_save_ready[2]);
-        status.room_generation = 8U; status.verified_mask = 11U;
+        status.room_generation = 8U;
+        status.verified_mask = 11U;
         client.apply_online_save_status_locked(status);
         assert(!client.view().online_save_ready[2] && client.view().online_save_ready[3]);
         // Future status can precede LobbyState; never display its bits early.
         client.local_online_save_acknowledged_ = false;
-        status.room_generation = 9U; status.verified_mask = 15U;
+        status.room_generation = 9U;
+        status.verified_mask = 15U;
         client.apply_online_save_status_locked(status);
         assert(!client.local_online_save_acknowledged_ && !client.view().online_save_ready[2]);
         roster.generation = 9U;
         client.apply_lobby_payload(roster);
-        for (const bool ready : client.view().online_save_ready) assert(ready);
+        for (const bool ready : client.view().online_save_ready)
+            assert(ready);
         // Status remains advisory and latest-wins under send backpressure.
-        PeerAddress destination{}; destination.size = 1U; destination.storage[0] = 1U;
+        PeerAddress destination{};
+        destination.size = 1U;
+        destination.storage[0] = 1U;
         for (unsigned i = 0; i < 1000; ++i)
             client.enqueue_outbound(destination, protocol::MessageType::OnlineSaveStatus, {1U});
         assert(client.normal_priority_outbound_.size() == 1U && client.critical_outbound_.empty());
@@ -251,10 +277,13 @@ struct DirectSessionTestAccess {
             host.launch_descriptor_ = LaunchDescriptor{};
             host.launch_descriptor_->occupied_mask = 3U;
             host.launch_descriptor_->player_count = 2U;
-            PeerAddress address{}; address.size = 1U; address.storage[0] = 1U;
+            PeerAddress address{};
+            address.size = 1U;
+            address.storage[0] = 1U;
             host.peers_[1] = {true, 2U, address, 1U, secure::generate_key()};
             protocol::FrameCommitPayload commit{};
-            commit.epoch = host.authority_epoch(); commit.frame = 100U;
+            commit.epoch = host.authority_epoch();
+            commit.frame = 100U;
             commit.occupied_mask = 3U;
             commit.commit_hash = protocol::frame_commit_hash(host.match_id_, commit);
             host.commit_history_.push_back(commit);
@@ -262,8 +291,8 @@ struct DirectSessionTestAccess {
             request.header.type = protocol::MessageType::FrameCommitRequest;
             request.header.frame = 100U;
             request.payload = protocol::encode_frame_commit_request({host.authority_epoch(), 1U, 100U});
-            for (auto lifecycle : {DirectSession::AuthorityLifecycle::Racing,
-                                   DirectSession::AuthorityLifecycle::SealingFinish}) {
+            for (auto lifecycle :
+                 {DirectSession::AuthorityLifecycle::Racing, DirectSession::AuthorityLifecycle::SealingFinish}) {
                 host.authority_lifecycle_ = lifecycle;
                 host.finish_seal_frame_ = 100U;
                 host.commit_outbound_.clear();
@@ -272,9 +301,16 @@ struct DirectSessionTestAccess {
             }
             host.authoritative_phase_active_ = false;
             host.authority_lifecycle_ = DirectSession::AuthorityLifecycle::Inactive;
-            host.gameplay_handoff_ = DirectSession::GameplayHandoffState{
-                host.input_epoch_, host.input_epoch_ + 1U, 101U, 101U, 12U, true, true, false,
-                std::chrono::steady_clock::now() + std::chrono::seconds(90)};
+            host.gameplay_handoff_ =
+                DirectSession::GameplayHandoffState{host.input_epoch_,
+                                                    host.input_epoch_ + 1U,
+                                                    101U,
+                                                    101U,
+                                                    12U,
+                                                    true,
+                                                    true,
+                                                    false,
+                                                    std::chrono::steady_clock::now() + std::chrono::seconds(90)};
             host.commit_outbound_.clear();
             host.handle_host_packet(address, 2U, request);
             assert(host.commit_outbound_.size() == 1U);
@@ -284,7 +320,9 @@ struct DirectSessionTestAccess {
             assert(host.state_ == ConnectionState::Running);
             assert(host.critical_outbound_.size() == 1U);
             struct InertTransport : BlockingRealtimeTransport {
-                bool is_open() const override { return false; }
+                bool is_open() const override {
+                    return false;
+                }
             };
             host.transport_ = std::make_unique<InertTransport>();
             host.gameplay_handoff_.reset();
@@ -310,7 +348,10 @@ struct DirectSessionTestAccess {
         }
         unsigned installations = 0;
         std::string error;
-        auto install = [&] { ++installations; return true; };
+        auto install = [&] {
+            ++installations;
+            return true;
+        };
         assert(guest.install_fast_forward(104U, install, error) == SessionPollResult::Pending);
         assert(installations == 0 && next_commit_frame(guest) == 100U);
         {
@@ -321,7 +362,8 @@ struct DirectSessionTestAccess {
         assert(guest.install_fast_forward(104U, install, error) == SessionPollResult::Pending);
         assert(installations == 0 && next_commit_frame(guest) == 100U);
         {
-            std::scoped_lock lock(guest.mutex_); guest.recovery_frame_.reset();
+            std::scoped_lock lock(guest.mutex_);
+            guest.recovery_frame_.reset();
         }
         assert(guest.install_fast_forward(104U, [] { return false; }, error) == SessionPollResult::Pending);
         assert(next_commit_frame(guest) == 100U);
@@ -375,21 +417,25 @@ struct DirectSessionTestAccess {
             preflight.connection_test_draining_ = true;
             preflight.connection_test_id_ = 7U;
             for (unsigned slot = 1; slot < 4; ++slot) {
-                PeerAddress address{}; address.size = 1U; address.storage[0] = slot;
-                preflight.peers_[slot] = {true, slot + 1U, address,
-                    static_cast<std::uint8_t>(slot), secure::generate_key()};
+                PeerAddress address{};
+                address.size = 1U;
+                address.storage[0] = slot;
+                preflight.peers_[slot] = {true, slot + 1U, address, static_cast<std::uint8_t>(slot),
+                                          secure::generate_key()};
                 for (unsigned lane = 0; lane < 5; ++lane) {
                     preflight.connection_test_sent_[slot][lane] = 10U;
                     preflight.connection_test_received_[slot][lane] = 10U;
-                    preflight.connection_test_rtt_samples_[slot][lane].assign(10U,
-                        slot == 1U ? 10.0 : slot == 2U ? 120.0 : 500.0);
+                    preflight.connection_test_rtt_samples_[slot][lane].assign(10U, slot == 1U   ? 10.0
+                                                                                   : slot == 2U ? 120.0
+                                                                                                : 500.0);
                 }
             }
             // Superseded in v1.0.11 (rollback-connection): the legacy per-guest
             // score is never computed; the isolated Rollback check in
             // assessment.hpp rates connections instead. It must stay gone.
             preflight.service_connection_test_locked(std::chrono::steady_clock::now());
-            for (unsigned slot = 1; slot < 4; ++slot) assert(preflight.connection_test_results_[slot].score == 0U);
+            for (unsigned slot = 1; slot < 4; ++slot)
+                assert(preflight.connection_test_results_[slot].score == 0U);
         }
     }
     static void stale_boundary_and_history_regression() {
@@ -409,7 +455,8 @@ struct DirectSessionTestAccess {
                 client.handle_client_packet(packet);
                 assert(!client.recovery_frame_);
                 packet.header.type = protocol::MessageType::TransitionBarrier;
-                packet.payload = protocol::encode_transition_barrier({7U, 80U, 1U, 0U, protocol::TransitionBarrierStage::Begin});
+                packet.payload =
+                    protocol::encode_transition_barrier({7U, 80U, 1U, 0U, protocol::TransitionBarrierStage::Begin});
                 client.handle_client_packet(packet);
                 assert(!client.transition_barrier_);
                 assert(client.state_ == ConnectionState::Running);
@@ -429,8 +476,8 @@ struct DirectSessionTestAccess {
         // v1.0.11 (rollback-only): lobbies are Rollback lobbies, which need the
         // owned engines; a unit test declares them available.
         assert(reset_host.enable_owned_backend(true));
-        assert(reset_host.host(0U, "127.0.0.1", "Reset test",
-                               ConnectionMethod::Lan, "Host", rollback_policy::default_rules(), join_error));
+        assert(reset_host.host(0U, "127.0.0.1", "Reset test", ConnectionMethod::Lan, "Host",
+                               rollback_policy::default_rules(), join_error));
         assert(client.join(reset_host.view().invite, "Reset test", join_error));
         {
             std::scoped_lock lock(client.mutex_);
@@ -444,7 +491,9 @@ struct DirectSessionTestAccess {
         host.state_ = ConnectionState::Running;
         host.next_commit_frame_ = 100U;
         host.launch_descriptor_ = LaunchDescriptor{};
-        PeerAddress source{}; source.size = 1U; source.storage[0] = 1U;
+        PeerAddress source{};
+        source.size = 1U;
+        source.storage[0] = 1U;
         host.peers_[1] = {true, 2U, source, 1U, secure::generate_key()};
         protocol::Datagram request{};
         request.header.type = protocol::MessageType::FrameCommitRequest;
@@ -458,13 +507,14 @@ struct DirectSessionTestAccess {
         struct CheckpointBlockedTransport : BlockingRealtimeTransport {
             bool blocked = true;
             unsigned controls = 0U, checkpoints = 0U;
-            DatagramSendStatus send_status(const PeerAddress&,
-                std::span<const std::uint8_t>, TransportTrafficClass traffic,
-                std::string&) override {
+            DatagramSendStatus send_status(const PeerAddress&, std::span<const std::uint8_t>,
+                                           TransportTrafficClass traffic, std::string&) override {
                 if (traffic == TransportTrafficClass::Checkpoint) {
                     ++checkpoints;
-                    if (blocked) return DatagramSendStatus::WouldBlock;
-                } else if (traffic == TransportTrafficClass::Control) ++controls;
+                    if (blocked)
+                        return DatagramSendStatus::WouldBlock;
+                } else if (traffic == TransportTrafficClass::Control)
+                    ++controls;
                 return DatagramSendStatus::Sent;
             }
         };
@@ -474,7 +524,9 @@ struct DirectSessionTestAccess {
         auto* raw = transport.get();
         host.transport_ = std::move(transport);
         host.is_host_ = true;
-        PeerAddress address{}; address.size = 1U; address.storage[0] = 1U;
+        PeerAddress address{};
+        address.size = 1U;
+        address.storage[0] = 1U;
         host.peers_[1] = {true, 2U, address, 1U, secure::generate_key()};
         const std::vector<std::uint8_t> payload{1U, 2U, 3U};
         for (unsigned i = 0; i < 1000U; ++i)
@@ -530,12 +582,17 @@ struct DirectSessionTestAccess {
         DirectSession host;
         std::string error;
         PeerAddress source{};
-        source.size = 1U; source.storage[0] = 1U;
+        source.size = 1U;
+        source.storage[0] = 1U;
         {
             std::scoped_lock lock(host.mutex_);
-            host.is_host_ = true; host.state_ = ConnectionState::Running;
-            host.local_slot_ = 0U; host.sender_id_ = 1U; host.match_id_ = 1U;
-            host.scene_epoch_ = 7U; host.authoritative_phase_active_ = true;
+            host.is_host_ = true;
+            host.state_ = ConnectionState::Running;
+            host.local_slot_ = 0U;
+            host.sender_id_ = 1U;
+            host.match_id_ = 1U;
+            host.scene_epoch_ = 7U;
+            host.authoritative_phase_active_ = true;
             host.peers_[1] = {true, 2U, source, 1U, secure::generate_key()};
             host.gameplay_barrier_ = DirectSession::GameplayBarrierState{7U, 42U, 2U};
             host.gameplay_barrier_->epoch_synchronized = true;
@@ -550,7 +607,8 @@ struct DirectSessionTestAccess {
             host.critical_outbound_.clear();
             protocol::Datagram packet{};
             packet.header.type = protocol::MessageType::GameplayBarrier;
-            packet.payload = protocol::encode_gameplay_barrier({7U, 42U, 2U, 1U, protocol::GameplayBarrierStage::Armed});
+            packet.payload =
+                protocol::encode_gameplay_barrier({7U, 42U, 2U, 1U, protocol::GameplayBarrierStage::Armed});
             host.handle_host_packet(source, 2U, packet);
             assert(!host.critical_outbound_.empty());
         }
@@ -585,7 +643,8 @@ struct DirectSessionTestAccess {
             host.critical_outbound_.clear();
             protocol::Datagram packet{};
             packet.header.type = protocol::MessageType::TransitionBarrier;
-            packet.payload = protocol::encode_transition_barrier({7U, 80U, 1U, 1U, protocol::TransitionBarrierStage::Acknowledge});
+            packet.payload =
+                protocol::encode_transition_barrier({7U, 80U, 1U, 1U, protocol::TransitionBarrierStage::Acknowledge});
             host.handle_host_packet(source, 2U, packet);
             assert(!host.critical_outbound_.empty());
         }
@@ -593,16 +652,36 @@ struct DirectSessionTestAccess {
     static void staged_rekey_regression() {
         struct RekeyTransport : SessionTransport {
             QuickJoinRekeyStatus status = QuickJoinRekeyStatus::Idle;
-            bool open(std::uint16_t, std::string&) override { return true; }
+            bool open(std::uint16_t, std::string&) override {
+                return true;
+            }
             void close() override {}
-            bool is_open() const override { return true; }
-            std::uint16_t local_port() const override { return 0; }
-            bool quick_join() const override { return true; }
-            bool rekey_quick_join(std::string, std::string&) override { status = QuickJoinRekeyStatus::Pending; return true; }
-            QuickJoinRekeyStatus rekey_status() const override { return status; }
-            std::string quick_join_code() const override { return status == QuickJoinRekeyStatus::Committed ? "FGHJK" : "ABCDE"; }
-            DatagramSendStatus send_status(const PeerAddress&, std::span<const std::uint8_t>, TransportTrafficClass, std::string&) override { return DatagramSendStatus::Sent; }
-            bool receive(PeerAddress&, std::vector<std::uint8_t>&, std::string&) override { return false; }
+            bool is_open() const override {
+                return true;
+            }
+            std::uint16_t local_port() const override {
+                return 0;
+            }
+            bool quick_join() const override {
+                return true;
+            }
+            bool rekey_quick_join(std::string, std::string&) override {
+                status = QuickJoinRekeyStatus::Pending;
+                return true;
+            }
+            QuickJoinRekeyStatus rekey_status() const override {
+                return status;
+            }
+            std::string quick_join_code() const override {
+                return status == QuickJoinRekeyStatus::Committed ? "FGHJK" : "ABCDE";
+            }
+            DatagramSendStatus send_status(const PeerAddress&, std::span<const std::uint8_t>, TransportTrafficClass,
+                                           std::string&) override {
+                return DatagramSendStatus::Sent;
+            }
+            bool receive(PeerAddress&, std::vector<std::uint8_t>&, std::string&) override {
+                return false;
+            }
         };
         DirectSession s;
         auto transport = std::make_unique<RekeyTransport>();
@@ -610,8 +689,10 @@ struct DirectSessionTestAccess {
         {
             std::scoped_lock lock(s.mutex_);
             s.transport_ = std::move(transport);
-            s.is_host_ = true; s.method_ = ConnectionMethod::QuickJoin;
-            s.advertised_host_ = "quick"; s.invite_ = "ABCDE";
+            s.is_host_ = true;
+            s.method_ = ConnectionMethod::QuickJoin;
+            s.advertised_host_ = "quick";
+            s.invite_ = "ABCDE";
             s.invitation_capability_ = secure::generate_key();
             s.host_key_pair_ = secure::generate_key_pair();
         }
@@ -641,8 +722,10 @@ struct DirectSessionTestAccess {
         session.is_host_ = false;
         session.state_ = ConnectionState::Lobby;
         unsigned save_writes = 0;
-        session.save_installer_ = [&](std::uint64_t, std::span<const std::uint8_t>, std::filesystem::path&, std::string&) {
-            ++save_writes; return true;
+        session.save_installer_ = [&](std::uint64_t, std::span<const std::uint8_t>, std::filesystem::path&,
+                                      std::string&) {
+            ++save_writes;
+            return true;
         };
         protocol::Datagram packet{};
         packet.header.type = protocol::MessageType::JoinPending;
@@ -698,21 +781,18 @@ struct DirectSessionTestAccess {
         // The production worker is deliberately allowed to advance the
         // countdown concurrently. On a loaded CI host it can acquire the
         // mutex and complete the five-second gate before this test helper.
-        assert(session.state_ == ConnectionState::Loading ||
-               session.launch_requested_);
+        assert(session.state_ == ConnectionState::Loading || session.launch_requested_);
     }
 
-    static void forget_remote_countdown_ack(DirectSession& session,
-                                            std::uint8_t slot) {
+    static void forget_remote_countdown_ack(DirectSession& session, std::uint8_t slot) {
         std::scoped_lock lock(session.mutex_);
         assert(slot < session.countdown_acks_.size());
         session.countdown_acks_[slot] = false;
     }
 
-    static std::chrono::milliseconds launch_control_timeout(
-        DirectSession& session, double rtt_ms, double jitter_ms,
-        float loss_percent, std::chrono::milliseconds minimum,
-        std::chrono::milliseconds maximum) {
+    static std::chrono::milliseconds launch_control_timeout(DirectSession& session, double rtt_ms, double jitter_ms,
+                                                            float loss_percent, std::chrono::milliseconds minimum,
+                                                            std::chrono::milliseconds maximum) {
         std::scoped_lock lock(session.mutex_);
         session.peers_[1].active = true;
         session.peers_[1].slot = 1U;
@@ -722,34 +802,28 @@ struct DirectSessionTestAccess {
         return session.launch_control_timeout_locked(minimum, maximum);
     }
 
-    static bool enqueue_checkpoint(DirectSession& session,
-                                   std::uint8_t marker) {
+    static bool enqueue_checkpoint(DirectSession& session, std::uint8_t marker) {
         std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
-        return session.enqueue_outbound(
-            destination, protocol::MessageType::StateSnapshot,
-            std::vector<std::uint8_t>{marker});
+        return session.enqueue_outbound(destination, protocol::MessageType::StateSnapshot,
+                                        std::vector<std::uint8_t>{marker});
     }
     static std::size_t checkpoint_queue_size(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.authority_outbound_.size();
     }
-    static std::uint8_t oldest_checkpoint_marker(
-        const DirectSession& session) {
+    static std::uint8_t oldest_checkpoint_marker(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.authority_outbound_.front().bytes.front();
     }
-    static bool enqueue_admission(DirectSession& session,
-                                  protocol::MessageType type,
-                                  std::uint8_t marker) {
+    static bool enqueue_admission(DirectSession& session, protocol::MessageType type, std::uint8_t marker) {
         std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
-        return session.enqueue_outbound(
-            destination, type, std::vector<std::uint8_t>{marker});
+        return session.enqueue_outbound(destination, type, std::vector<std::uint8_t>{marker});
     }
     static std::size_t admission_queue_size(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
@@ -767,8 +841,7 @@ struct DirectSessionTestAccess {
         std::scoped_lock lock(session.mutex_);
         return session.packets_received_;
     }
-    static std::uint64_t forced_prediction_frames(
-        const DirectSession& session) {
+    static std::uint64_t forced_prediction_frames(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.forced_prediction_frames_;
     }
@@ -776,8 +849,7 @@ struct DirectSessionTestAccess {
         std::scoped_lock lock(session.mutex_);
         return session.scene_epoch_;
     }
-    static std::uint32_t rollback_transport_epoch(
-        const DirectSession& session) {
+    static std::uint32_t rollback_transport_epoch(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.rollback_transport_epoch_;
     }
@@ -785,9 +857,8 @@ struct DirectSessionTestAccess {
         std::scoped_lock lock(session.mutex_);
         return session.next_commit_frame_;
     }
-    static void prepare_fast_forward_guest(
-        DirectSession& session, std::uint32_t first_frame,
-        std::uint32_t frame_count, bool break_last_link = false) {
+    static void prepare_fast_forward_guest(DirectSession& session, std::uint32_t first_frame, std::uint32_t frame_count,
+                                           bool break_last_link = false) {
         stop_worker(session);
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
@@ -797,8 +868,7 @@ struct DirectSessionTestAccess {
         session.input_epoch_ = 9U;
         session.scene_epoch_ = 3U;
         session.authoritative_phase_active_ = true;
-        session.authority_lifecycle_ =
-            DirectSession::AuthorityLifecycle::Racing;
+        session.authority_lifecycle_ = DirectSession::AuthorityLifecycle::Racing;
         LaunchDescriptor descriptor{};
         descriptor.match_id = session.match_id_;
         descriptor.occupied_mask = 0x03U;
@@ -817,132 +887,104 @@ struct DirectSessionTestAccess {
             commit.epoch = session.authority_epoch();
             commit.frame = first_frame + offset;
             commit.occupied_mask = descriptor.occupied_mask;
-            commit.inputs[0] = {0x8000U,
-                static_cast<std::int8_t>(offset), 0};
-            commit.inputs[1] = {0x4000U,
-                static_cast<std::int8_t>(-static_cast<int>(offset)), 0};
+            commit.inputs[0] = {0x8000U, static_cast<std::int8_t>(offset), 0};
+            commit.inputs[1] = {0x4000U, static_cast<std::int8_t>(-static_cast<int>(offset)), 0};
             commit.previous_hash = previous_hash;
             if (break_last_link && offset + 1U == frame_count) {
                 commit.previous_hash ^= 1U;
             }
-            commit.commit_hash = protocol::frame_commit_hash(
-                session.match_id_, commit);
+            commit.commit_hash = protocol::frame_commit_hash(session.match_id_, commit);
             session.frame_commits_[commit.frame] = commit;
             previous_hash = commit.commit_hash;
         }
-        session.authoritative_input_frame_ =
-            first_frame + frame_count - 1U;
+        session.authoritative_input_frame_ = first_frame + frame_count - 1U;
     }
-    static std::uint32_t simulation_completed_frame(
-        const DirectSession& session, std::uint8_t slot) {
+    static std::uint32_t simulation_completed_frame(const DirectSession& session, std::uint8_t slot) {
         std::scoped_lock lock(session.mutex_);
         assert(slot < session.simulation_completed_frame_.size());
         return session.simulation_completed_frame_[slot];
     }
-    static bool simulation_progress_present(
-        const DirectSession& session, std::uint8_t slot) {
+    static bool simulation_progress_present(const DirectSession& session, std::uint8_t slot) {
         std::scoped_lock lock(session.mutex_);
         assert(slot < session.simulation_progress_present_.size());
         return session.simulation_progress_present_[slot];
     }
-    static std::uint32_t retired_authority_epoch(
-        const DirectSession& session) {
+    static std::uint32_t retired_authority_epoch(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.retired_authority_epoch_;
     }
-    static std::uint64_t stale_epoch_packets(
-        const DirectSession& session) {
+    static std::uint64_t stale_epoch_packets(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.stale_epoch_packets_;
     }
-    static std::uint32_t applied_correction_generation(
-        const DirectSession& session) {
+    static std::uint32_t applied_correction_generation(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.applied_frame_correction_generation_;
     }
-    static bool correction_transmission_pending(
-        const DirectSession& session) {
+    static bool correction_transmission_pending(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.frame_correction_transmission_.has_value();
     }
-    static std::uint32_t host_first_missing_input(
-        const DirectSession& session) {
+    static std::uint32_t host_first_missing_input(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.host_input_first_missing_frame_;
     }
-    static std::uint32_t peer_first_missing_input(
-        const DirectSession& session, std::uint8_t slot) {
+    static std::uint32_t peer_first_missing_input(const DirectSession& session, std::uint8_t slot) {
         std::scoped_lock lock(session.mutex_);
         assert(slot < session.peer_input_first_missing_frame_.size());
         return session.peer_input_first_missing_frame_[slot];
     }
-    static void inject_client_input(DirectSession& host,
-                                    std::uint8_t player_slot,
-                                    const protocol::InputBatch& batch) {
+    static void inject_client_input(DirectSession& host, std::uint8_t player_slot, const protocol::InputBatch& batch) {
+        std::scoped_lock lock(host.mutex_);
+        assert(player_slot < host.peers_.size());
+        const DirectSession::PeerRecord& peer = host.peers_[player_slot];
+        assert(peer.active && peer.slot == player_slot);
+        const protocol::Datagram datagram{{protocol::MessageType::Input, host.match_id_, 1U, batch.first_frame},
+                                          protocol::encode_input_batch(batch)};
+        host.handle_host_packet(peer.address, peer.sender_id, datagram);
+    }
+    static void inject_transition_acknowledgement(DirectSession& host, std::uint8_t player_slot,
+                                                  std::uint32_t scene_epoch, std::uint32_t frame,
+                                                  std::uint8_t transition_kind) {
         std::scoped_lock lock(host.mutex_);
         assert(player_slot < host.peers_.size());
         const DirectSession::PeerRecord& peer = host.peers_[player_slot];
         assert(peer.active && peer.slot == player_slot);
         const protocol::Datagram datagram{
-            {protocol::MessageType::Input, host.match_id_, 1U,
-             batch.first_frame},
-            protocol::encode_input_batch(batch)};
+            {protocol::MessageType::TransitionBarrier, host.match_id_, 1U, frame},
+            protocol::encode_transition_barrier(
+                {scene_epoch, frame, transition_kind, player_slot, protocol::TransitionBarrierStage::Acknowledge})};
         host.handle_host_packet(peer.address, peer.sender_id, datagram);
     }
-    static void inject_transition_acknowledgement(
-        DirectSession& host, std::uint8_t player_slot,
-        std::uint32_t scene_epoch, std::uint32_t frame,
-        std::uint8_t transition_kind) {
-        std::scoped_lock lock(host.mutex_);
-        assert(player_slot < host.peers_.size());
-        const DirectSession::PeerRecord& peer = host.peers_[player_slot];
-        assert(peer.active && peer.slot == player_slot);
-        const protocol::Datagram datagram{
-            {protocol::MessageType::TransitionBarrier, host.match_id_, 1U,
-             frame},
-            protocol::encode_transition_barrier({
-                scene_epoch, frame, transition_kind, player_slot,
-                protocol::TransitionBarrierStage::Acknowledge})};
-        host.handle_host_packet(peer.address, peer.sender_id, datagram);
-    }
-    static bool has_resumed_transition_barrier(
-        const DirectSession& session) {
+    static bool has_resumed_transition_barrier(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
-        return session.transition_barrier_.has_value() &&
-               session.transition_barrier_->resumed;
+        return session.transition_barrier_.has_value() && session.transition_barrier_->resumed;
     }
-    static bool has_frame_commit(const DirectSession& session,
-                                 std::uint32_t frame) {
+    static bool has_frame_commit(const DirectSession& session, std::uint32_t frame) {
         std::scoped_lock lock(session.mutex_);
         return session.frame_commits_.contains(frame);
     }
-    static void discard_frame_commit(DirectSession& session,
-                                     std::uint32_t frame) {
+    static void discard_frame_commit(DirectSession& session, std::uint32_t frame) {
         std::scoped_lock lock(session.mutex_);
         session.frame_commits_.erase(frame);
     }
-    static void discard_frame_commit_range(DirectSession& session,
-                                           std::uint32_t first_frame,
-                                           std::uint32_t count) {
+    static void discard_frame_commit_range(DirectSession& session, std::uint32_t first_frame, std::uint32_t count) {
         std::scoped_lock lock(session.mutex_);
         for (std::uint32_t offset = 0U; offset < count; ++offset) {
             session.frame_commits_.erase(first_frame + offset);
         }
     }
-    static std::uint64_t commit_repair_requests_sent(
-        const DirectSession& session) {
+    static std::uint64_t commit_repair_requests_sent(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.commit_repair_requests_sent_;
     }
-    static std::uint64_t commit_repair_requests_received(
-        const DirectSession& session) {
+    static std::uint64_t commit_repair_requests_received(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         return session.commit_repair_requests_received_;
     }
-    static protocol::InputBatch retained_input_batch(
-        DirectSession& session, std::uint32_t retained_first,
-        std::uint32_t retained_count, std::uint32_t first_missing,
-        bool reliable_repair) {
+    static protocol::InputBatch retained_input_batch(DirectSession& session, std::uint32_t retained_first,
+                                                     std::uint32_t retained_count, std::uint32_t first_missing,
+                                                     bool reliable_repair) {
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
         session.local_slot_ = 1U;
@@ -952,17 +994,13 @@ struct DirectSessionTestAccess {
         for (std::uint32_t offset = 0U; offset < retained_count; ++offset) {
             const std::uint32_t frame = retained_first + offset;
             session.local_history_.emplace_back(
-                frame, PackedInput{
-                    static_cast<std::uint16_t>(frame & 0xFFFFU),
-                    static_cast<std::int8_t>(frame % 63U),
-                    static_cast<std::int8_t>(-(static_cast<int>(frame % 63U)))});
+                frame, PackedInput{static_cast<std::uint16_t>(frame & 0xFFFFU), static_cast<std::int8_t>(frame % 63U),
+                                   static_cast<std::int8_t>(-(static_cast<int>(frame % 63U)))});
         }
-        return session.make_local_history_batch(
-            retained_first + retained_count - 1U, reliable_repair);
+        return session.make_local_history_batch(retained_first + retained_count - 1U, reliable_repair);
     }
-    static protocol::InputBatch repair_unproduced_input(
-        DirectSession& session, std::uint32_t submitted_frame,
-        std::uint32_t requested_frame, PackedInput held) {
+    static protocol::InputBatch repair_unproduced_input(DirectSession& session, std::uint32_t submitted_frame,
+                                                        std::uint32_t requested_frame, PackedInput held) {
         stop_worker(session);
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
@@ -978,19 +1016,16 @@ struct DirectSessionTestAccess {
         descriptor.occupied_mask = 0x03U;
         descriptor.player_count = 2U;
         session.launch_descriptor_ = descriptor;
-        const protocol::InputRepairRequestPayload request{
-            session.authority_epoch(), session.local_slot_, requested_frame};
+        const protocol::InputRepairRequestPayload request{session.authority_epoch(), session.local_slot_,
+                                                          requested_frame};
         const protocol::Datagram datagram{
-            {protocol::MessageType::InputRepairRequest, session.match_id_, 1U,
-             requested_frame},
+            {protocol::MessageType::InputRepairRequest, session.match_id_, 1U, requested_frame},
             protocol::encode_input_repair_request(request)};
         session.handle_client_packet(datagram);
-        return session.make_local_history_batch(
-            session.local_input_submitted_frame_, true, requested_frame);
+        return session.make_local_history_batch(session.local_input_submitted_frame_, true, requested_frame);
     }
-    static bool repair_created_input_while_gameplay_is_parked(
-        DirectSession& session, std::uint32_t submitted_frame,
-        std::uint32_t requested_frame, PackedInput held) {
+    static bool repair_created_input_while_gameplay_is_parked(DirectSession& session, std::uint32_t submitted_frame,
+                                                              std::uint32_t requested_frame, PackedInput held) {
         stop_worker(session);
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
@@ -1006,43 +1041,41 @@ struct DirectSessionTestAccess {
         descriptor.occupied_mask = 0x03U;
         descriptor.player_count = 2U;
         session.launch_descriptor_ = descriptor;
-        session.gameplay_handoff_ = DirectSession::GameplayHandoffState{
-            7U, 8U, requested_frame, submitted_frame, 42U, true, true, false,
-            std::chrono::steady_clock::now() + std::chrono::seconds(5)};
-        const protocol::InputRepairRequestPayload request{
-            session.authority_epoch(), session.local_slot_, requested_frame};
+        session.gameplay_handoff_ =
+            DirectSession::GameplayHandoffState{7U,
+                                                8U,
+                                                requested_frame,
+                                                submitted_frame,
+                                                42U,
+                                                true,
+                                                true,
+                                                false,
+                                                std::chrono::steady_clock::now() + std::chrono::seconds(5)};
+        const protocol::InputRepairRequestPayload request{session.authority_epoch(), session.local_slot_,
+                                                          requested_frame};
         const protocol::Datagram datagram{
-            {protocol::MessageType::InputRepairRequest, session.match_id_, 1U,
-             requested_frame},
+            {protocol::MessageType::InputRepairRequest, session.match_id_, 1U, requested_frame},
             protocol::encode_input_repair_request(request)};
         session.handle_client_packet(datagram);
-        return std::any_of(
-            session.local_history_.begin(), session.local_history_.end(),
-            [requested_frame](const auto& entry) {
-                return entry.first == requested_frame;
-            });
+        return std::any_of(session.local_history_.begin(), session.local_history_.end(),
+                           [requested_frame](const auto& entry) { return entry.first == requested_frame; });
     }
-    static bool enqueue_input_repair(DirectSession& session,
-                                     std::uint32_t frame = 0U) {
+    static bool enqueue_input_repair(DirectSession& session, std::uint32_t frame = 0U) {
         std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
-        return session.enqueue_outbound(
-            destination, protocol::MessageType::InputRepair,
-            std::vector<std::uint8_t>{0x52U}, frame);
+        return session.enqueue_outbound(destination, protocol::MessageType::InputRepair,
+                                        std::vector<std::uint8_t>{0x52U}, frame);
     }
     static bool enqueue_realtime_input(DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
         PeerAddress destination{};
         destination.size = 1U;
         destination.storage[0] = 1U;
-        return session.enqueue_outbound(
-            destination, protocol::MessageType::Input,
-            std::vector<std::uint8_t>{0x49U});
+        return session.enqueue_outbound(destination, protocol::MessageType::Input, std::vector<std::uint8_t>{0x49U});
     }
-    static BlockingRealtimeTransport* install_blocking_transport(
-        DirectSession& session) {
+    static BlockingRealtimeTransport* install_blocking_transport(DirectSession& session) {
         // This case explicitly drives flush_outbound_locked itself. A live
         // worker could concurrently send through the fake and race its plain
         // counters (particularly under ARM emulation). Stop it for this one
@@ -1066,15 +1099,12 @@ struct DirectSessionTestAccess {
         std::scoped_lock lock(session.mutex_);
         return session.high_priority_outbound_.size();
     }
-    static std::size_t simulation_queue_size(
-        const DirectSession& session) {
+    static std::size_t simulation_queue_size(const DirectSession& session) {
         std::scoped_lock lock(session.mutex_);
-        return session.repair_outbound_.size() +
-               session.high_priority_outbound_.size();
+        return session.repair_outbound_.size() + session.high_priority_outbound_.size();
     }
-    static bool install_authoritative_frontend_handoff(
-        DirectSession& session, std::uint32_t next_commit_frame,
-        std::uint32_t boundary_frame, std::string& error) {
+    static bool install_authoritative_frontend_handoff(DirectSession& session, std::uint32_t next_commit_frame,
+                                                       std::uint32_t boundary_frame, std::string& error) {
         std::scoped_lock lock(session.mutex_);
         session.is_host_ = false;
         session.state_ = ConnectionState::Running;
@@ -1088,33 +1118,32 @@ struct DirectSessionTestAccess {
         descriptor.player_count = 2U;
         descriptor.synchronization = SynchronizationMode::Rollback;
         session.launch_descriptor_ = descriptor;
-        const protocol::GameplayHandoffPayload handoff{
-            session.input_epoch_, session.input_epoch_ + 1U,
-            boundary_frame, 42U, 0U,
-            protocol::GameplayHandoffStage::Suspend};
-        return session.adopt_gameplay_handoff_locked(
-            handoff, false, error);
+        const protocol::GameplayHandoffPayload handoff{session.input_epoch_,
+                                                       session.input_epoch_ + 1U,
+                                                       boundary_frame,
+                                                       42U,
+                                                       0U,
+                                                       protocol::GameplayHandoffStage::Suspend};
+        return session.adopt_gameplay_handoff_locked(handoff, false, error);
     }
-    static bool apply_delayed_local_frontend_load(
-        DirectSession& session, std::uint32_t local_boundary_frame,
-        std::string& error) {
+    static bool apply_delayed_local_frontend_load(DirectSession& session, std::uint32_t local_boundary_frame,
+                                                  std::string& error) {
         std::scoped_lock lock(session.mutex_);
-        const protocol::GameplayHandoffPayload handoff{
-            session.input_epoch_, 0U, local_boundary_frame, 42U,
-            session.local_slot_, protocol::GameplayHandoffStage::Request};
-        return session.adopt_gameplay_handoff_locked(
-            handoff, true, error);
+        const protocol::GameplayHandoffPayload handoff{session.input_epoch_, 0U,
+                                                       local_boundary_frame, 42U,
+                                                       session.local_slot_,  protocol::GameplayHandoffStage::Request};
+        return session.adopt_gameplay_handoff_locked(handoff, true, error);
     }
-    static bool reapply_authoritative_frontend_handoff(
-        DirectSession& session, std::uint32_t boundary_frame,
-        std::string& error) {
+    static bool reapply_authoritative_frontend_handoff(DirectSession& session, std::uint32_t boundary_frame,
+                                                       std::string& error) {
         std::scoped_lock lock(session.mutex_);
-        const protocol::GameplayHandoffPayload handoff{
-            session.input_epoch_, session.input_epoch_ + 1U,
-            boundary_frame, 42U, 0U,
-            protocol::GameplayHandoffStage::Suspend};
-        return session.adopt_gameplay_handoff_locked(
-            handoff, false, error);
+        const protocol::GameplayHandoffPayload handoff{session.input_epoch_,
+                                                       session.input_epoch_ + 1U,
+                                                       boundary_frame,
+                                                       42U,
+                                                       0U,
+                                                       protocol::GameplayHandoffStage::Suspend};
+        return session.adopt_gameplay_handoff_locked(handoff, false, error);
     }
 };
 
@@ -1124,17 +1153,15 @@ namespace {
 
 const char* test_host_address() {
     const char* configured = std::getenv("DKR_TEST_HOST_ADDRESS");
-    return configured != nullptr && *configured != '\0'
-        ? configured : "127.0.0.1";
+    return configured != nullptr && *configured != '\0' ? configured : "127.0.0.1";
 }
 
 dkr::runtime::netplay::CompatibilityManifest manifest() {
     using namespace dkr::runtime::netplay;
     CompatibilityManifest value{};
     value.release_version = "1.0.0-netplay-admission-restore-rc6";
-    value.build_fingerprint =
-        "DKR-R/1.0.0-gameplay-handoff-rc13/netplay-protocol-27/"
-        "runtime-ae1ffbb9/gekkonet-5924b5c7";
+    value.build_fingerprint = "DKR-R/1.0.0-gameplay-handoff-rc13/netplay-protocol-27/"
+                              "runtime-ae1ffbb9/gekkonet-5924b5c7";
     value.revision = Revision::UsV77;
     value.canonical_rom_hash = 1U;
     value.patch_policy_hash = 2U;
@@ -1154,37 +1181,29 @@ std::vector<std::uint8_t> online_test_save() {
     return save;
 }
 
-void configure_online_session(
-    dkr::runtime::netplay::DirectSession& session,
-    dkr::runtime::netplay::CompatibilityManifest value = manifest()) {
+void configure_online_session(dkr::runtime::netplay::DirectSession& session,
+                              dkr::runtime::netplay::CompatibilityManifest value = manifest()) {
     session.configure_manifest(value);
     // v1.0.11 (rollback-only): every lobby is a Rollback lobby, which host and
     // clients admit only with the owned engines; the shipped game has them.
     assert(session.enable_owned_backend(true));
-    session.configure_session_save(
-        online_test_save(),
-        [](std::uint64_t match_id, std::span<const std::uint8_t> bytes,
-           std::filesystem::path& installed_path, std::string& error) {
-            if (match_id == 0U || bytes.size() != 512U) {
-                error = "The test online save contract was invalid.";
-                return false;
-            }
-            installed_path = std::filesystem::path("online-test") /
-                std::to_string(match_id) / "dkr.us.v77.bin";
-            error.clear();
-            return true;
-        });
+    session.configure_session_save(online_test_save(), [](std::uint64_t match_id, std::span<const std::uint8_t> bytes,
+                                                          std::filesystem::path& installed_path, std::string& error) {
+        if (match_id == 0U || bytes.size() != 512U) {
+            error = "The test online save contract was invalid.";
+            return false;
+        }
+        installed_path = std::filesystem::path("online-test") / std::to_string(match_id) / "dkr.us.v77.bin";
+        error.clear();
+        return true;
+    });
 }
 
-void mark_online_game_loaded(
-    dkr::runtime::netplay::DirectSession& session,
-    std::uint64_t bootstrap_hash) {
+void mark_online_game_loaded(dkr::runtime::netplay::DirectSession& session, std::uint64_t bootstrap_hash) {
     const auto runtime = session.runtime_view();
     assert(runtime.online_save_generation != 0U);
     assert(runtime.online_save_hash != 0U);
-    session.mark_game_loaded(bootstrap_hash,
-                             runtime.online_save_generation,
-                             runtime.online_save_hash);
+    session.mark_game_loaded(bootstrap_hash, runtime.online_save_generation, runtime.online_save_hash);
 }
 
 // Fixture settling uses a one-millisecond schedule, not one scheduler sleep
@@ -1192,8 +1211,7 @@ void mark_online_game_loaded(
 // that overshoot again for every poll turned this test into a two-minute wait.
 // Keep every requested pump and the intended settling duration. Late wakeups
 // catch up to the same steady-clock deadline instead of accumulating drift.
-template <typename Pump>
-void pump_scheduled(int attempts, Pump&& pump) {
+template <typename Pump> void pump_scheduled(int attempts, Pump&& pump) {
     auto next_poll = std::chrono::steady_clock::now();
     for (int attempt = 0; attempt < attempts; ++attempt) {
         pump();
@@ -1202,8 +1220,7 @@ void pump_scheduled(int attempts, Pump&& pump) {
     }
 }
 
-void pump_pair(dkr::runtime::netplay::DirectSession& host,
-               dkr::runtime::netplay::DirectSession& client,
+void pump_pair(dkr::runtime::netplay::DirectSession& host, dkr::runtime::netplay::DirectSession& client,
                int attempts = 200) {
     pump_scheduled(attempts, [&] {
         host.pump();
@@ -1214,14 +1231,14 @@ void pump_pair(dkr::runtime::netplay::DirectSession& host,
 // Network completion is a predicate, not a guessed number of timer ticks.
 // The deadline bounds failed exchanges while healthy peers return immediately.
 template <typename Ready>
-void pump_pair_until(dkr::runtime::netplay::DirectSession& host,
-                     dkr::runtime::netplay::DirectSession& client,
+void pump_pair_until(dkr::runtime::netplay::DirectSession& host, dkr::runtime::netplay::DirectSession& client,
                      const char* stage, Ready&& ready) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     do {
         host.pump();
         client.pump();
-        if (ready()) return;
+        if (ready())
+            return;
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     } while (std::chrono::steady_clock::now() < deadline);
     std::cerr << "Timed out waiting for " << stage << '\n';
@@ -1229,11 +1246,10 @@ void pump_pair_until(dkr::runtime::netplay::DirectSession& host,
 }
 
 template <std::size_t Count>
-void pump_sessions(
-    const std::array<dkr::runtime::netplay::DirectSession*, Count>& sessions,
-    int attempts = 200) {
+void pump_sessions(const std::array<dkr::runtime::netplay::DirectSession*, Count>& sessions, int attempts = 200) {
     pump_scheduled(attempts, [&] {
-        for (auto* session : sessions) session->pump();
+        for (auto* session : sessions)
+            session->pump();
     });
 }
 
@@ -1245,28 +1261,27 @@ int main() {
     dkr::runtime::netplay::DirectSessionTestAccess::input_freshness_regression();
     dkr::runtime::netplay::DirectSessionTestAccess::online_save_status_regression();
     dkr::runtime::netplay::DirectSessionTestAccess::remaining_gaps_regression();
-    if (std::getenv("DKR_REMAINING_GAPS_REGRESSION")) return 0;
+    if (std::getenv("DKR_REMAINING_GAPS_REGRESSION"))
+        return 0;
     dkr::runtime::netplay::DirectSessionTestAccess::delayed_probe_regression();
     dkr::runtime::netplay::DirectSessionTestAccess::recovery_budget_regression();
     dkr::runtime::netplay::DirectSessionTestAccess::stale_boundary_and_history_regression();
     for (unsigned cycle = 0; cycle < 1000U; ++cycle)
         dkr::runtime::netplay::DirectSessionTestAccess::terminal_release_regression();
-    if (std::getenv("DKR_TERMINAL_RELEASE_REGRESSION")) return 0;
+    if (std::getenv("DKR_TERMINAL_RELEASE_REGRESSION"))
+        return 0;
     dkr::runtime::netplay::DirectSessionTestAccess::stale_admission_and_preflight_regression();
     using namespace dkr::runtime::netplay;
     {
         DirectSession timeout_policy;
         const auto minimum = std::chrono::seconds(5);
         const auto maximum = std::chrono::seconds(15);
-        assert(DirectSessionTestAccess::launch_control_timeout(
-                   timeout_policy, 0.0, 0.0, 0.0F, minimum, maximum) ==
+        assert(DirectSessionTestAccess::launch_control_timeout(timeout_policy, 0.0, 0.0, 0.0F, minimum, maximum) ==
                minimum);
-        assert(DirectSessionTestAccess::launch_control_timeout(
-                   timeout_policy, 100.0, 20.0, 2.0F, minimum, maximum) ==
+        assert(DirectSessionTestAccess::launch_control_timeout(timeout_policy, 100.0, 20.0, 2.0F, minimum, maximum) ==
                std::chrono::milliseconds(5620));
-        assert(DirectSessionTestAccess::launch_control_timeout(
-                   timeout_policy, 2000.0, 1000.0, 100.0F, minimum, maximum) ==
-               maximum);
+        assert(DirectSessionTestAccess::launch_control_timeout(timeout_policy, 2000.0, 1000.0, 100.0F, minimum,
+                                                               maximum) == maximum);
     }
     {
         // Player 1 has consumed frame 100's one-shot Track Select confirm and
@@ -1276,8 +1291,8 @@ int main() {
         // that guest in Track Select while Player 1 waits on a black screen.
         DirectSession lagging_frontend_guest;
         std::string handoff_error;
-        assert(DirectSessionTestAccess::install_authoritative_frontend_handoff(
-            lagging_frontend_guest, 100U, 101U, handoff_error));
+        assert(DirectSessionTestAccess::install_authoritative_frontend_handoff(lagging_frontend_guest, 100U, 101U,
+                                                                               handoff_error));
         assert(handoff_error.empty());
         assert(!lagging_frontend_guest.gameplay_handoff_suspended(100U));
         assert(lagging_frontend_guest.gameplay_handoff_suspended(101U));
@@ -1286,8 +1301,8 @@ int main() {
         // acknowledged it.  Duplicate authenticated packets must therefore
         // be idempotent and must not move the boundary back to the guest's
         // current cursor.
-        assert(DirectSessionTestAccess::reapply_authoritative_frontend_handoff(
-            lagging_frontend_guest, 101U, handoff_error));
+        assert(DirectSessionTestAccess::reapply_authoritative_frontend_handoff(lagging_frontend_guest, 101U,
+                                                                               handoff_error));
         assert(handoff_error.empty());
         assert(!lagging_frontend_guest.gameplay_handoff_suspended(100U));
         assert(lagging_frontend_guest.gameplay_handoff_suspended(101U));
@@ -1295,31 +1310,24 @@ int main() {
         // The local level-load callback can run after the authoritative packet
         // on a reordered network path.  It must not pull the suspend boundary
         // back to frame 100 after the host has committed frame 101.
-        assert(DirectSessionTestAccess::apply_delayed_local_frontend_load(
-            lagging_frontend_guest, 100U, handoff_error));
+        assert(DirectSessionTestAccess::apply_delayed_local_frontend_load(lagging_frontend_guest, 100U, handoff_error));
         assert(handoff_error.empty());
         assert(!lagging_frontend_guest.gameplay_handoff_suspended(100U));
         assert(lagging_frontend_guest.gameplay_handoff_suspended(101U));
     }
     {
         DirectSession fast_forward_guest;
-        DirectSessionTestAccess::prepare_fast_forward_guest(
-            fast_forward_guest, 120U, 6U);
+        DirectSessionTestAccess::prepare_fast_forward_guest(fast_forward_guest, 120U, 6U);
         std::string fast_forward_error;
-        assert(fast_forward_guest.fast_forward_authoritative_commits(
-            126U, fast_forward_error));
+        assert(fast_forward_guest.fast_forward_authoritative_commits(126U, fast_forward_error));
         assert(fast_forward_error.empty());
-        assert(DirectSessionTestAccess::next_commit_frame(
-                   fast_forward_guest) == 126U);
+        assert(DirectSessionTestAccess::next_commit_frame(fast_forward_guest) == 126U);
 
         DirectSession broken_fast_forward_guest;
-        DirectSessionTestAccess::prepare_fast_forward_guest(
-            broken_fast_forward_guest, 240U, 6U, true);
-        assert(!broken_fast_forward_guest.fast_forward_authoritative_commits(
-            246U, fast_forward_error));
+        DirectSessionTestAccess::prepare_fast_forward_guest(broken_fast_forward_guest, 240U, 6U, true);
+        assert(!broken_fast_forward_guest.fast_forward_authoritative_commits(246U, fast_forward_error));
         assert(!fast_forward_error.empty());
-        assert(DirectSessionTestAccess::next_commit_frame(
-                   broken_fast_forward_guest) == 240U);
+        assert(DirectSessionTestAccess::next_commit_frame(broken_fast_forward_guest) == 240U);
     }
     if (const char* host_invite_file = std::getenv("DKR_TEST_HOST_INVITE_FILE");
         host_invite_file != nullptr && *host_invite_file != '\0') {
@@ -1328,23 +1336,20 @@ int main() {
         Rules rules = rollback_policy::default_rules();
         std::string error;
         assert(host_probe.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        if (!host_probe.host(0U, test_host_address(), "Admission Host",
-                             ConnectionMethod::VirtualLan, "Host", rules,
+        if (!host_probe.host(0U, test_host_address(), "Admission Host", ConnectionMethod::VirtualLan, "Host", rules,
                              error)) {
             std::cerr << "host setup failed: " << error << '\n';
             return 4;
         }
         {
-            std::ofstream invite_output(host_invite_file,
-                                        std::ios::binary | std::ios::trunc);
+            std::ofstream invite_output(host_invite_file, std::ios::binary | std::ios::trunc);
             invite_output << host_probe.view().invite;
             if (!invite_output.good()) {
                 std::cerr << "could not publish host test invitation\n";
                 return 5;
             }
         }
-        const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(15);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
         while (std::chrono::steady_clock::now() < deadline) {
             const SessionView view = host_probe.view();
             if (!view.pending_joins.empty()) {
@@ -1355,9 +1360,7 @@ int main() {
         }
         std::cerr << "cross-process host received no admission request; sent="
                   << DirectSessionTestAccess::packets_sent(host_probe)
-                  << " received="
-                  << DirectSessionTestAccess::packets_received(host_probe)
-                  << '\n';
+                  << " received=" << DirectSessionTestAccess::packets_received(host_probe) << '\n';
         return 6;
     }
     if (const char* remote_invite = std::getenv("DKR_TEST_REMOTE_INVITE");
@@ -1369,12 +1372,10 @@ int main() {
             std::cerr << "join setup failed: " << error << '\n';
             return 2;
         }
-        const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(10);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while (std::chrono::steady_clock::now() < deadline) {
             const SessionView view = probe.view();
-            if (view.state == ConnectionState::AwaitingApproval ||
-                view.state == ConnectionState::Lobby ||
+            if (view.state == ConnectionState::AwaitingApproval || view.state == ConnectionState::Lobby ||
                 view.state == ConnectionState::Failed) {
                 std::cout << "remote admission response: " << view.status << '\n';
                 return 0;
@@ -1382,11 +1383,9 @@ int main() {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         const SessionView view = probe.view();
-        std::cerr << "remote admission received no response; sent="
-                  << DirectSessionTestAccess::packets_sent(probe)
-                  << " received="
-                  << DirectSessionTestAccess::packets_received(probe)
-                  << " status=" << view.status << '\n';
+        std::cerr << "remote admission received no response; sent=" << DirectSessionTestAccess::packets_sent(probe)
+                  << " received=" << DirectSessionTestAccess::packets_received(probe) << " status=" << view.status
+                  << '\n';
         return 3;
     }
     {
@@ -1397,13 +1396,11 @@ int main() {
         // that previously left a client with live audio and a frozen picture.
         DirectSession retained_history;
         const protocol::InputBatch live =
-            DirectSessionTestAccess::retained_input_batch(
-                retained_history, 100U, 180U, 121U, false);
+            DirectSessionTestAccess::retained_input_batch(retained_history, 100U, 180U, 121U, false);
         assert(live.first_frame == 264U);
         assert(live.inputs.size() == 16U);
         const protocol::InputBatch repair =
-            DirectSessionTestAccess::retained_input_batch(
-                retained_history, 100U, 180U, 121U, true);
+            DirectSessionTestAccess::retained_input_batch(retained_history, 100U, 180U, 121U, true);
         assert(repair.epoch != 0U);
         assert(repair.player_slot == 1U);
         assert(repair.first_frame == 121U);
@@ -1419,8 +1416,7 @@ int main() {
         DirectSession unproduced_history;
         const PackedInput held{0x4321U, -27, 19};
         const protocol::InputBatch unproduced_repair =
-            DirectSessionTestAccess::repair_unproduced_input(
-                unproduced_history, 1455U, 1456U, held);
+            DirectSessionTestAccess::repair_unproduced_input(unproduced_history, 1455U, 1456U, held);
         assert(unproduced_repair.epoch != 0U);
         assert(unproduced_repair.player_slot == 1U);
         assert(unproduced_repair.first_frame == 1456U);
@@ -1430,45 +1426,34 @@ int main() {
         // A repair request must never create race input while that authored
         // thread is still parked on the black loading frame.
         DirectSession parked_repair;
-        assert(!DirectSessionTestAccess::
-            repair_created_input_while_gameplay_is_parked(
-                parked_repair, 1455U, 1456U, held));
-        assert(DirectSessionTestAccess::enqueue_input_repair(
-            retained_history));
-        assert(DirectSessionTestAccess::simulation_queue_size(
-                   retained_history) == 1U);
-        assert(DirectSessionTestAccess::checkpoint_queue_size(
-                   retained_history) == 0U);
+        assert(
+            !DirectSessionTestAccess::repair_created_input_while_gameplay_is_parked(parked_repair, 1455U, 1456U, held));
+        assert(DirectSessionTestAccess::enqueue_input_repair(retained_history));
+        assert(DirectSessionTestAccess::simulation_queue_size(retained_history) == 1U);
+        assert(DirectSessionTestAccess::checkpoint_queue_size(retained_history) == 0U);
     }
     {
         // Reliable repair retries are cumulative.  A blocked route must keep
         // only the newest repair for its peer rather than eventually ending a
         // healthy session through queue exhaustion.
         DirectSession coalesced_repairs;
-        assert(DirectSessionTestAccess::enqueue_input_repair(
-            coalesced_repairs, 100U));
-        assert(DirectSessionTestAccess::enqueue_input_repair(
-            coalesced_repairs, 100U));
-        assert(DirectSessionTestAccess::enqueue_input_repair(
-            coalesced_repairs, 116U));
-        assert(DirectSessionTestAccess::repair_queue_size(
-                   coalesced_repairs) == 1U);
+        assert(DirectSessionTestAccess::enqueue_input_repair(coalesced_repairs, 100U));
+        assert(DirectSessionTestAccess::enqueue_input_repair(coalesced_repairs, 100U));
+        assert(DirectSessionTestAccess::enqueue_input_repair(coalesced_repairs, 116U));
+        assert(DirectSessionTestAccess::repair_queue_size(coalesced_repairs) == 1U);
     }
     {
         // A blocked disposable WebRTC input channel must not starve the
         // independent reliable channel carrying the repair for that input.
         DirectSession isolated_lanes;
-        BlockingRealtimeTransport* transport =
-            DirectSessionTestAccess::install_blocking_transport(isolated_lanes);
+        BlockingRealtimeTransport* transport = DirectSessionTestAccess::install_blocking_transport(isolated_lanes);
         assert(DirectSessionTestAccess::enqueue_realtime_input(isolated_lanes));
         assert(DirectSessionTestAccess::enqueue_input_repair(isolated_lanes));
         DirectSessionTestAccess::flush_outbound(isolated_lanes);
         assert(transport->realtime_attempts == 1U);
         assert(transport->authoritative_sends == 1U);
-        assert(DirectSessionTestAccess::realtime_queue_size(isolated_lanes) ==
-               1U);
-        assert(DirectSessionTestAccess::repair_queue_size(isolated_lanes) ==
-               0U);
+        assert(DirectSessionTestAccess::realtime_queue_size(isolated_lanes) == 1U);
+        assert(DirectSessionTestAccess::repair_queue_size(isolated_lanes) == 0U);
     }
     {
         // The launcher must not be part of the transport scheduler. This is a
@@ -1481,25 +1466,19 @@ int main() {
         Rules worker_rules = rollback_policy::default_rules();
         std::string worker_error;
         assert(worker_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        if (!worker_host.host(0U, test_host_address(), "Worker Lobby",
-                              ConnectionMethod::VirtualLan, "Host",
+        if (!worker_host.host(0U, test_host_address(), "Worker Lobby", ConnectionMethod::VirtualLan, "Host",
                               worker_rules, worker_error)) {
-            std::cerr << "worker admission host setup failed: "
-                      << worker_error << '\n';
+            std::cerr << "worker admission host setup failed: " << worker_error << '\n';
             return 20;
         }
-        if (!worker_client.join(worker_host.view().invite, "Client",
-                                worker_error)) {
-            std::cerr << "worker admission client setup failed: "
-                      << worker_error << '\n';
+        if (!worker_client.join(worker_host.view().invite, "Client", worker_error)) {
+            std::cerr << "worker admission client setup failed: " << worker_error << '\n';
             return 21;
         }
-        const auto pending_deadline = std::chrono::steady_clock::now() +
-                                      std::chrono::seconds(3);
+        const auto pending_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
         while (std::chrono::steady_clock::now() < pending_deadline &&
                (worker_host.view().pending_joins.empty() ||
-                worker_client.view().state !=
-                    ConnectionState::AwaitingApproval)) {
+                worker_client.view().state != ConnectionState::AwaitingApproval)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         const SessionView pending_view = worker_host.view();
@@ -1507,19 +1486,14 @@ int main() {
             worker_client.view().state != ConnectionState::AwaitingApproval) {
             std::cerr << "worker admission did not reach host; sent="
                       << DirectSessionTestAccess::packets_sent(worker_client)
-                      << " host-received="
-                      << DirectSessionTestAccess::packets_received(worker_host)
-                      << '\n';
+                      << " host-received=" << DirectSessionTestAccess::packets_received(worker_host) << '\n';
             return 22;
         }
-        if (!worker_host.approve_join(
-                pending_view.pending_joins.front().request_id, worker_error)) {
-            std::cerr << "worker admission approval failed: "
-                      << worker_error << '\n';
+        if (!worker_host.approve_join(pending_view.pending_joins.front().request_id, worker_error)) {
+            std::cerr << "worker admission approval failed: " << worker_error << '\n';
             return 23;
         }
-        const auto lobby_deadline = std::chrono::steady_clock::now() +
-                                    std::chrono::seconds(3);
+        const auto lobby_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
         while (std::chrono::steady_clock::now() < lobby_deadline &&
                worker_client.view().state != ConnectionState::Lobby) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -1540,17 +1514,13 @@ int main() {
         Rules rules = rollback_policy::default_rules();
         std::string error;
         assert(friend_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        assert(friend_host.host(0U, test_host_address(), "Friend Invite Lobby",
-            ConnectionMethod::VirtualLan, "Host", rules, error));
+        assert(friend_host.host(0U, test_host_address(), "Friend Invite Lobby", ConnectionMethod::VirtualLan, "Host",
+                                rules, error));
         secure::Key admission{};
-        assert(friend_host.create_friend_admission(
-            admission, std::chrono::minutes(5), error));
-        assert(friend_client.join_friend_invite(
-            friend_host.view().invite, "Invited", admission, error));
-        const auto deadline = std::chrono::steady_clock::now() +
-                              std::chrono::seconds(3);
-        while (std::chrono::steady_clock::now() < deadline &&
-               friend_client.view().state != ConnectionState::Lobby) {
+        assert(friend_host.create_friend_admission(admission, std::chrono::minutes(5), error));
+        assert(friend_client.join_friend_invite(friend_host.view().invite, "Invited", admission, error));
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (std::chrono::steady_clock::now() < deadline && friend_client.view().state != ConnectionState::Lobby) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         assert(friend_client.view().state == ConnectionState::Lobby);
@@ -1559,13 +1529,10 @@ int main() {
 
         DirectSession replay_client;
         configure_online_session(replay_client);
-        assert(replay_client.join_friend_invite(
-            friend_host.view().invite, "Replay", admission, error));
-        const auto replay_deadline = std::chrono::steady_clock::now() +
-                                     std::chrono::seconds(3);
+        assert(replay_client.join_friend_invite(friend_host.view().invite, "Replay", admission, error));
+        const auto replay_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
         while (std::chrono::steady_clock::now() < replay_deadline &&
-               replay_client.view().state !=
-                   ConnectionState::AwaitingApproval) {
+               replay_client.view().state != ConnectionState::AwaitingApproval) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         assert(replay_client.view().state == ConnectionState::AwaitingApproval);
@@ -1576,12 +1543,9 @@ int main() {
         // packets share the ordinary worker-owned UDP queue and are never sent
         // directly from the launcher/UI thread.
         DirectSession admission;
-        assert(DirectSessionTestAccess::enqueue_admission(
-            admission, protocol::MessageType::Hello, 1U));
-        assert(DirectSessionTestAccess::enqueue_admission(
-            admission, protocol::MessageType::JoinPending, 2U));
-        assert(DirectSessionTestAccess::enqueue_admission(
-            admission, protocol::MessageType::HelloAck, 3U));
+        assert(DirectSessionTestAccess::enqueue_admission(admission, protocol::MessageType::Hello, 1U));
+        assert(DirectSessionTestAccess::enqueue_admission(admission, protocol::MessageType::JoinPending, 2U));
+        assert(DirectSessionTestAccess::enqueue_admission(admission, protocol::MessageType::HelloAck, 3U));
         assert(DirectSessionTestAccess::admission_queue_size(admission) == 0U);
         assert(DirectSessionTestAccess::ordinary_queue_size(admission) == 3U);
     }
@@ -1591,26 +1555,21 @@ int main() {
         // let the race continue with an incomplete state stream.
         DirectSession pressured;
         for (std::size_t index = 0U; index < 512U; ++index) {
-            assert(DirectSessionTestAccess::enqueue_checkpoint(
-                pressured, static_cast<std::uint8_t>(index)));
+            assert(DirectSessionTestAccess::enqueue_checkpoint(pressured, static_cast<std::uint8_t>(index)));
         }
-        assert(DirectSessionTestAccess::checkpoint_queue_size(pressured) ==
-               512U);
-        assert(DirectSessionTestAccess::oldest_checkpoint_marker(pressured) ==
-               0U);
+        assert(DirectSessionTestAccess::checkpoint_queue_size(pressured) == 512U);
+        assert(DirectSessionTestAccess::oldest_checkpoint_marker(pressured) == 0U);
         assert(!DirectSessionTestAccess::enqueue_checkpoint(pressured, 0xFFU));
-        assert(DirectSessionTestAccess::checkpoint_queue_size(pressured) ==
-               512U);
-        assert(DirectSessionTestAccess::oldest_checkpoint_marker(pressured) ==
-               0U);
+        assert(DirectSessionTestAccess::checkpoint_queue_size(pressured) == 512U);
+        assert(DirectSessionTestAccess::oldest_checkpoint_marker(pressured) == 0U);
     }
     {
         DirectSession diagnostic_host;
         DirectSession diagnostic_client;
         std::vector<std::uint8_t> host_save(512U, 0x42U);
         auto host_manifest = manifest();
-        host_manifest.session_save_hash = stable_hash(std::string_view(
-            reinterpret_cast<const char*>(host_save.data()), host_save.size()));
+        host_manifest.session_save_hash =
+            stable_hash(std::string_view(reinterpret_cast<const char*>(host_save.data()), host_save.size()));
         auto mismatched = manifest();
         mismatched.session_save_hash = host_manifest.session_save_hash ^ 1U;
         bool installed = false;
@@ -1618,36 +1577,28 @@ int main() {
         diagnostic_host.configure_manifest(host_manifest);
         diagnostic_host.configure_session_save(host_save, {});
         diagnostic_client.configure_manifest(mismatched);
-        diagnostic_client.configure_session_save({},
-            [&](std::uint64_t match_id,
-                std::span<const std::uint8_t> bytes,
-                std::filesystem::path& installed_path,
-                std::string& install_error) {
-                assert(match_id != 0U);
-                installed_save.assign(bytes.begin(), bytes.end());
-                installed = true;
-                installed_path = "test-online-save.bin";
-                install_error.clear();
-                return true;
-            });
+        diagnostic_client.configure_session_save({}, [&](std::uint64_t match_id, std::span<const std::uint8_t> bytes,
+                                                         std::filesystem::path& installed_path,
+                                                         std::string& install_error) {
+            assert(match_id != 0U);
+            installed_save.assign(bytes.begin(), bytes.end());
+            installed = true;
+            installed_path = "test-online-save.bin";
+            install_error.clear();
+            return true;
+        });
         Rules diagnostic_rules = rollback_policy::default_rules();
         std::string diagnostic_error;
         assert(diagnostic_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        assert(diagnostic_host.host(0U, test_host_address(), "Save Diagnostic",
-            ConnectionMethod::Lan, "Host", diagnostic_rules,
-            diagnostic_error));
-        assert(diagnostic_client.join(diagnostic_host.view().invite,
-            "Client", diagnostic_error));
+        assert(diagnostic_host.host(0U, test_host_address(), "Save Diagnostic", ConnectionMethod::Lan, "Host",
+                                    diagnostic_rules, diagnostic_error));
+        assert(diagnostic_client.join(diagnostic_host.view().invite, "Client", diagnostic_error));
         pump_pair(diagnostic_host, diagnostic_client, 80);
-        assert(diagnostic_client.view().state ==
-               ConnectionState::AwaitingApproval);
+        assert(diagnostic_client.view().state == ConnectionState::AwaitingApproval);
         assert(diagnostic_host.view().pending_joins.size() == 1U);
         assert(diagnostic_host.view().pending_joins[0].compatible);
-        assert(diagnostic_host.view().pending_joins[0].compatibility.find(
-                   "synchronized") != std::string::npos);
-        assert(diagnostic_host.approve_join(
-            diagnostic_host.view().pending_joins[0].request_id,
-            diagnostic_error));
+        assert(diagnostic_host.view().pending_joins[0].compatibility.find("synchronized") != std::string::npos);
+        assert(diagnostic_host.approve_join(diagnostic_host.view().pending_joins[0].request_id, diagnostic_error));
         pump_pair(diagnostic_host, diagnostic_client, 80);
         assert(diagnostic_client.view().state == ConnectionState::Lobby);
         assert(installed && installed_save == host_save);
@@ -1666,14 +1617,12 @@ int main() {
         Rules rules = rollback_policy::default_rules();
         std::string error;
         assert(no_save_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        assert(no_save_host.host(0U, test_host_address(), "No Save Lobby",
-            ConnectionMethod::Lan, "Host", rules, error));
-        assert(mismatched_client.join(no_save_host.view().invite,
-            "Client", error));
+        assert(
+            no_save_host.host(0U, test_host_address(), "No Save Lobby", ConnectionMethod::Lan, "Host", rules, error));
+        assert(mismatched_client.join(no_save_host.view().invite, "Client", error));
         pump_pair(no_save_host, mismatched_client, 80);
         assert(mismatched_client.view().state == ConnectionState::Failed);
-        assert(mismatched_client.view().status.find("validated save") !=
-               std::string::npos);
+        assert(mismatched_client.view().status.find("validated save") != std::string::npos);
     }
     {
         DirectSession guarded_host;
@@ -1683,8 +1632,8 @@ int main() {
         Rules guarded_rules = rollback_policy::default_rules();
         std::string guarded_error;
         assert(guarded_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        assert(guarded_host.host(0U, test_host_address(), "Guarded Lobby",
-            ConnectionMethod::Lan, "Host", guarded_rules, guarded_error));
+        assert(guarded_host.host(0U, test_host_address(), "Guarded Lobby", ConnectionMethod::Lan, "Host", guarded_rules,
+                                 guarded_error));
         const std::string first_invite = guarded_host.view().invite;
         assert(guarded_host.set_lobby_locked(true, guarded_error));
         assert(rejected_client.join(first_invite, "Rejected", guarded_error));
@@ -1700,8 +1649,7 @@ int main() {
         assert(admitted_client.join(guarded_host.view().invite, "Admitted", guarded_error));
         pump_pair(guarded_host, admitted_client, 80);
         assert(guarded_host.view().pending_joins.size() == 1U);
-        assert(guarded_host.approve_join(
-            guarded_host.view().pending_joins[0].request_id, guarded_error));
+        assert(guarded_host.approve_join(guarded_host.view().pending_joins[0].request_id, guarded_error));
         pump_pair(guarded_host, admitted_client, 80);
         assert(admitted_client.view().state == ConnectionState::Lobby);
         assert(guarded_host.kick_player(1U, guarded_error));
@@ -1718,15 +1666,11 @@ int main() {
         checkpoint_rules.automatic_input_delay = false;
         std::string checkpoint_error;
         assert(checkpoint_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        assert(checkpoint_host.host(0U, test_host_address(), "Checkpoint Lobby",
-            ConnectionMethod::Lan, "Host", checkpoint_rules,
-            checkpoint_error));
-        assert(checkpoint_client.join(checkpoint_host.view().invite, "Client",
-                                      checkpoint_error));
+        assert(checkpoint_host.host(0U, test_host_address(), "Checkpoint Lobby", ConnectionMethod::Lan, "Host",
+                                    checkpoint_rules, checkpoint_error));
+        assert(checkpoint_client.join(checkpoint_host.view().invite, "Client", checkpoint_error));
         pump_pair(checkpoint_host, checkpoint_client);
-        assert(checkpoint_host.approve_join(
-            checkpoint_host.view().pending_joins[0].request_id,
-            checkpoint_error));
+        assert(checkpoint_host.approve_join(checkpoint_host.view().pending_joins[0].request_id, checkpoint_error));
         pump_pair(checkpoint_host, checkpoint_client);
         // v1.0.11 (rollback-connection): the connection check is the isolated
         // Rollback diagnostic, which never starts the legacy preflight. The
@@ -1740,73 +1684,69 @@ int main() {
     }
     if constexpr (kSupportedOnlinePlayers == 4U) {
         const auto check_multi_racer = []<std::size_t PlayerCount>() {
-        // Four active racers must cross the same lobby, track-baseline and
-        // authored-input contracts. Earlier coverage only exercised Player 1
-        // and one client, so a slot-3/slot-4 relay or acknowledgement defect
-        // could survive every automated test and appear only when several
-        // people began steering in a minigame.
-        // Keep multi-peer transport fixtures off Windows' 1 MiB stack. Their
-        // bounded queues are intentionally large even when they are empty.
-        auto four_host_storage = std::make_unique<DirectSession>();
-        auto four_client_2_storage = std::make_unique<DirectSession>();
-        auto four_client_3_storage = std::make_unique<DirectSession>();
-        auto four_client_4_storage = std::make_unique<DirectSession>();
-        auto& four_host = *four_host_storage;
-        auto& four_client_2 = *four_client_2_storage;
-        auto& four_client_3 = *four_client_3_storage;
-        auto& four_client_4 = *four_client_4_storage;
-        const std::array<DirectSession*, 4U> available_sessions{
-            &four_host, &four_client_2, &four_client_3, &four_client_4};
-        std::array<DirectSession*, PlayerCount> sessions{};
-        std::copy_n(available_sessions.begin(), PlayerCount, sessions.begin());
-        for (DirectSession* session : sessions) {
-            configure_online_session(*session);
-        }
-        Rules four_rules = rollback_policy::default_rules();
-        four_rules.maximum_players = static_cast<std::uint8_t>(PlayerCount);
-        four_rules.automatic_input_delay = false;
-        four_rules.manual_input_delay = 2U;
-        std::string four_error;
-        assert(four_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-        assert(four_host.host(0U, test_host_address(), "Four Racer Lobby",
-                              ConnectionMethod::Lan, "Host", four_rules,
-                              four_error));
-        const std::array<std::pair<DirectSession*, const char*>, 3U> joins{{
-            {&four_client_2, "Player 2"},
-            {&four_client_3, "Player 3"},
-            {&four_client_4, "Player 4"},
-        }};
-        for (const auto& [client_session, name] :
-             std::span(joins).first(PlayerCount - 1U)) {
-            assert(client_session->join(four_host.view().invite, name,
-                                        four_error));
-            pump_sessions(sessions, 80);
-            const auto pending = four_host.view().pending_joins;
-            assert(pending.size() == 1U);
-            assert(four_host.approve_join(pending.front().request_id,
-                                          four_error));
-            pump_sessions(sessions, 80);
-            assert(client_session->view().state == ConnectionState::Lobby);
-        }
-        const auto room = four_host.view().room;
-        // Every instance must display the same host-confirmed save status
-        // for every occupied card, not only its own acknowledgement.
-        pump_sessions(sessions, 300);
-        for (const auto* session : sessions)
-            for (std::size_t slot = 0; slot < PlayerCount; ++slot)
-                assert(session->view().online_save_ready[slot]);
-        for (std::size_t slot = 0U; slot < sessions.size(); ++slot) {
-            assert(room.players[slot].occupied);
-            assert(sessions[slot]->view().local_slot == slot);
-            assert(sessions[slot]->set_ready(true, four_error));
-        }
-        // v1.0.11 (rollback-only): from here the scenario drove the legacy
-        // host-prediction launch and relayed input epochs through
-        // DirectSession. Rollback lobbies run gameplay in the owned engines
-        // instead, which a unit test does not have; that path is superseded
-        // here, and the private replay and playtests (fold level 4) cover the
-        // Rollback launch. The lobby contract above still holds for 3 and 4
-        // racers.
+            // Four active racers must cross the same lobby, track-baseline and
+            // authored-input contracts. Earlier coverage only exercised Player 1
+            // and one client, so a slot-3/slot-4 relay or acknowledgement defect
+            // could survive every automated test and appear only when several
+            // people began steering in a minigame.
+            // Keep multi-peer transport fixtures off Windows' 1 MiB stack. Their
+            // bounded queues are intentionally large even when they are empty.
+            auto four_host_storage = std::make_unique<DirectSession>();
+            auto four_client_2_storage = std::make_unique<DirectSession>();
+            auto four_client_3_storage = std::make_unique<DirectSession>();
+            auto four_client_4_storage = std::make_unique<DirectSession>();
+            auto& four_host = *four_host_storage;
+            auto& four_client_2 = *four_client_2_storage;
+            auto& four_client_3 = *four_client_3_storage;
+            auto& four_client_4 = *four_client_4_storage;
+            const std::array<DirectSession*, 4U> available_sessions{&four_host, &four_client_2, &four_client_3,
+                                                                    &four_client_4};
+            std::array<DirectSession*, PlayerCount> sessions{};
+            std::copy_n(available_sessions.begin(), PlayerCount, sessions.begin());
+            for (DirectSession* session : sessions) {
+                configure_online_session(*session);
+            }
+            Rules four_rules = rollback_policy::default_rules();
+            four_rules.maximum_players = static_cast<std::uint8_t>(PlayerCount);
+            four_rules.automatic_input_delay = false;
+            four_rules.manual_input_delay = 2U;
+            std::string four_error;
+            assert(four_host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
+            assert(four_host.host(0U, test_host_address(), "Four Racer Lobby", ConnectionMethod::Lan, "Host",
+                                  four_rules, four_error));
+            const std::array<std::pair<DirectSession*, const char*>, 3U> joins{{
+                {&four_client_2, "Player 2"},
+                {&four_client_3, "Player 3"},
+                {&four_client_4, "Player 4"},
+            }};
+            for (const auto& [client_session, name] : std::span(joins).first(PlayerCount - 1U)) {
+                assert(client_session->join(four_host.view().invite, name, four_error));
+                pump_sessions(sessions, 80);
+                const auto pending = four_host.view().pending_joins;
+                assert(pending.size() == 1U);
+                assert(four_host.approve_join(pending.front().request_id, four_error));
+                pump_sessions(sessions, 80);
+                assert(client_session->view().state == ConnectionState::Lobby);
+            }
+            const auto room = four_host.view().room;
+            // Every instance must display the same host-confirmed save status
+            // for every occupied card, not only its own acknowledgement.
+            pump_sessions(sessions, 300);
+            for (const auto* session : sessions)
+                for (std::size_t slot = 0; slot < PlayerCount; ++slot)
+                    assert(session->view().online_save_ready[slot]);
+            for (std::size_t slot = 0U; slot < sessions.size(); ++slot) {
+                assert(room.players[slot].occupied);
+                assert(sessions[slot]->view().local_slot == slot);
+                assert(sessions[slot]->set_ready(true, four_error));
+            }
+            // v1.0.11 (rollback-only): from here the scenario drove the legacy
+            // host-prediction launch and relayed input epochs through
+            // DirectSession. Rollback lobbies run gameplay in the owned engines
+            // instead, which a unit test does not have; that path is superseded
+            // here, and the private replay and playtests (fold level 4) cover the
+            // Rollback launch. The lobby contract above still holds for 3 and 4
+            // racers.
         };
         check_multi_racer.template operator()<3U>();
         check_multi_racer.template operator()<4U>();
@@ -1821,8 +1761,8 @@ int main() {
         lockstep_rules.rollback_window = 0U;
         std::string lockstep_error;
         assert(lockstep_host.enable_owned_backend(true));
-        assert(!lockstep_host.host(0U, test_host_address(), "Lockstep Lobby",
-            ConnectionMethod::Lan, "Host", lockstep_rules, lockstep_error));
+        assert(!lockstep_host.host(0U, test_host_address(), "Lockstep Lobby", ConnectionMethod::Lan, "Host",
+                                   lockstep_rules, lockstep_error));
         assert(lockstep_error == rollback_policy::unsupported_lobby);
     }
 
@@ -1839,8 +1779,7 @@ int main() {
     rules.rollback_window = 3U;
     std::string error;
     assert(host.enable_owned_backend(true)); // v1.0.11: Rollback lobbies need the owned engines
-    assert(host.host(0U, test_host_address(), "Loopback Lobby", ConnectionMethod::Lan,
-                     "Host", rules, error));
+    assert(host.host(0U, test_host_address(), "Loopback Lobby", ConnectionMethod::Lan, "Host", rules, error));
     assert(host.view().invite.starts_with("dkr-r://v7/"));
     // Experimental admission failure must not retire the already working
     // stable lobby, rotate its invite, change its rules, or touch its save.
@@ -1865,15 +1804,12 @@ int main() {
     assert(client.set_ready(true, error));
     pump_pair(host, client);
     assert(host.request_start(error));
-    pump_pair_until(host, client, "client launch countdown", [&] {
-        return client.view().launch_countdown_active;
-    });
+    pump_pair_until(host, client, "client launch countdown", [&] { return client.view().launch_countdown_active; });
     const auto countdown_host_view = host.view();
     const auto countdown_client_view = client.view();
     assert(countdown_host_view.launch_countdown_active);
     assert(countdown_client_view.launch_countdown_active);
-    assert(countdown_host_view.launch_countdown_generation ==
-           countdown_client_view.launch_countdown_generation);
+    assert(countdown_host_view.launch_countdown_generation == countdown_client_view.launch_countdown_generation);
     assert(countdown_host_view.launch_countdown_remaining_ms <= 5000U);
     assert(countdown_client_view.launch_countdown_remaining_ms <= 5000U);
     // Countdown delivery is presentation telemetry, not the authority gate.
@@ -1882,8 +1818,7 @@ int main() {
     DirectSessionTestAccess::forget_remote_countdown_ack(host, 1U);
     DirectSessionTestAccess::expire_launch_countdown(host);
     pump_pair_until(host, client, "launch release", [&] {
-        return DirectSessionTestAccess::launch_pending(host) &&
-               DirectSessionTestAccess::launch_pending(client);
+        return DirectSessionTestAccess::launch_pending(host) && DirectSessionTestAccess::launch_pending(client);
     });
     assert(host.consume_launch_request());
     assert(client.consume_launch_request());
@@ -1898,9 +1833,7 @@ int main() {
 
     mark_online_game_loaded(host, 0x1122334455667788ULL);
     mark_online_game_loaded(client, 0x1122334455667788ULL);
-    pump_pair_until(host, client, "loaded race", [&] {
-        return host.running() && client.running();
-    });
+    pump_pair_until(host, client, "loaded race", [&] { return host.running() && client.running(); });
     assert(host.running());
     assert(client.running());
 
@@ -1908,10 +1841,8 @@ int main() {
     // publishes frame zero, Player 2 must latch and transmit its one physical
     // sample, report Pending immediately, and remain in the live session.
     FrameInputs initial_pending_inputs{};
-    assert(client.synchronize_inputs_result(
-               0U, {0x4000U, -30, 8}, initial_pending_inputs,
-               std::chrono::milliseconds(0)) ==
-           InputSynchronizationResult::Pending);
+    assert(client.synchronize_inputs_result(0U, {0x4000U, -30, 8}, initial_pending_inputs,
+                                            std::chrono::milliseconds(0)) == InputSynchronizationResult::Pending);
     assert(client.running());
 
     // Presentation-only frontend state is not a gameplay authority contract.
@@ -1932,14 +1863,10 @@ int main() {
         FrameInputs host_inputs{};
         FrameInputs client_inputs{};
         auto host_future = std::async(std::launch::async, [&] {
-            return host.synchronize_inputs(frame, {0x8000U, 25, -5},
-                                           host_inputs,
-                                           std::chrono::seconds(2));
+            return host.synchronize_inputs(frame, {0x8000U, 25, -5}, host_inputs, std::chrono::seconds(2));
         });
         auto client_future = std::async(std::launch::async, [&] {
-            return client.synchronize_inputs(frame, {0x4000U, -30, 8},
-                                             client_inputs,
-                                             std::chrono::seconds(2));
+            return client.synchronize_inputs(frame, {0x4000U, -30, 8}, client_inputs, std::chrono::seconds(2));
         });
         assert(host_future.get());
         assert(client_future.get());
@@ -1951,16 +1878,14 @@ int main() {
     // session, and keep the authored boundary frozen for the race baseline.
     FrameInputs parked_host_inputs{};
     auto parked_host = std::async(std::launch::async, [&] {
-        return host.synchronize_inputs_result(
-            frontend_frames, {0x8000U, 25, -5}, parked_host_inputs,
-            std::chrono::seconds(2));
+        return host.synchronize_inputs_result(frontend_frames, {0x8000U, 25, -5}, parked_host_inputs,
+                                              std::chrono::seconds(2));
     });
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
     assert(client.begin_gameplay_handoff(frontend_frames, 42U, error));
     std::uint32_t host_transition_frame = frontend_frames;
     InputSynchronizationResult parked_result = parked_host.get();
-    const auto handoff_deadline = std::chrono::steady_clock::now() +
-        std::chrono::seconds(2);
+    const auto handoff_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     while (parked_result == InputSynchronizationResult::Committed) {
         // This fixture has no 30 Hz game clock. Yield to BOTH transport
         // workers before another authored frame, rather than generating
@@ -1970,9 +1895,8 @@ int main() {
         assert(std::chrono::steady_clock::now() < handoff_deadline);
         pump_pair(host, client, 1);
         ++host_transition_frame;
-        parked_result = host.synchronize_inputs_result(
-            host_transition_frame, {0x8000U, 25, -5}, parked_host_inputs,
-            std::chrono::seconds(2));
+        parked_result = host.synchronize_inputs_result(host_transition_frame, {0x8000U, 25, -5}, parked_host_inputs,
+                                                       std::chrono::seconds(2));
     }
     assert(parked_result == InputSynchronizationResult::Suspended);
     assert(host.running());
@@ -2000,20 +1924,16 @@ int main() {
     std::string host_barrier_error;
     std::string client_barrier_error;
     auto host_ready = std::async(std::launch::async, [&] {
-        return host.wait_gameplay_ready(
-            42U, resolved_boss_intro_map, 8U, std::chrono::seconds(2),
-            host_barrier_error);
+        return host.wait_gameplay_ready(42U, resolved_boss_intro_map, 8U, std::chrono::seconds(2), host_barrier_error);
     });
     auto client_ready = std::async(std::launch::async, [&] {
-        return client.wait_gameplay_ready(42U, resolved_boss_intro_map, 8U,
-                                          std::chrono::seconds(2),
+        return client.wait_gameplay_ready(42U, resolved_boss_intro_map, 8U, std::chrono::seconds(2),
                                           client_barrier_error);
     });
     assert(host_ready.get());
     assert(client_ready.get());
     assert(DirectSessionTestAccess::scene_epoch(host) != 0U);
-    assert(DirectSessionTestAccess::scene_epoch(host) ==
-           DirectSessionTestAccess::scene_epoch(client));
+    assert(DirectSessionTestAccess::scene_epoch(host) == DirectSessionTestAccess::scene_epoch(client));
     std::vector<std::uint8_t> gameplay_baseline(3713U);
     for (std::size_t index = 0U; index < gameplay_baseline.size(); ++index) {
         gameplay_baseline[index] = static_cast<std::uint8_t>(index * 13U + 7U);
@@ -2021,37 +1941,28 @@ int main() {
     assert(host.publish_authoritative_state(0U, gameplay_baseline, error));
     auto client_baseline = std::async(std::launch::async, [&] {
         std::vector<std::uint8_t> received;
-        if (!client.wait_authoritative_state(
-                0U, received, std::chrono::seconds(2)) ||
-            received != gameplay_baseline) {
+        if (!client.wait_authoritative_state(0U, received, std::chrono::seconds(2)) || received != gameplay_baseline) {
             return false;
         }
         client.confirm_authoritative_state(0U, false);
         return true;
     });
-    assert(host.wait_authoritative_acknowledgements(
-        0U, std::chrono::seconds(2)));
+    assert(host.wait_authoritative_acknowledgements(0U, std::chrono::seconds(2)));
     assert(client_baseline.get());
-    assert(host.poll_gameplay_resume(resolved_boss_intro_map, 8U,
-                                     host_barrier_error) ==
-           SessionPollResult::Pending);
-    pump_pair_until(host, client, "client Arm announcement", [&] {
-        return DirectSessionTestAccess::resume_arm_announced(client);
-    });
-    assert(client.poll_gameplay_resume(resolved_boss_intro_map, 8U,
-                                       client_barrier_error) ==
+    assert(host.poll_gameplay_resume(resolved_boss_intro_map, 8U, host_barrier_error) == SessionPollResult::Pending);
+    pump_pair_until(host, client, "client Arm announcement",
+                    [&] { return DirectSessionTestAccess::resume_arm_announced(client); });
+    assert(client.poll_gameplay_resume(resolved_boss_intro_map, 8U, client_barrier_error) ==
            SessionPollResult::Pending);
     // Receiving Arm is not enough: both authored threads remain parked until
     // Player 1 has received every Armed acknowledgement and broadcasts Go.
     pump_pair_until(host, client, "host resume Ready", [&] {
-        const auto result = host.poll_gameplay_resume(
-            resolved_boss_intro_map, 8U, host_barrier_error);
+        const auto result = host.poll_gameplay_resume(resolved_boss_intro_map, 8U, host_barrier_error);
         assert(result != SessionPollResult::Failed);
         return result == SessionPollResult::Ready;
     });
     pump_pair_until(host, client, "client resume Ready", [&] {
-        const auto result = client.poll_gameplay_resume(
-            resolved_boss_intro_map, 8U, client_barrier_error);
+        const auto result = client.poll_gameplay_resume(resolved_boss_intro_map, 8U, client_barrier_error);
         assert(result != SessionPollResult::Failed);
         return result == SessionPollResult::Ready;
     });
@@ -2065,25 +1976,21 @@ int main() {
     // delayed by a VPN or Wi-Fi queue until after the race opens. It is stale
     // traffic, not a determinism failure and must never mutate the fresh race
     // timeline.
-    const std::uint64_t stale_before =
-        DirectSessionTestAccess::stale_epoch_packets(host);
+    const std::uint64_t stale_before = DirectSessionTestAccess::stale_epoch_packets(host);
     protocol::InputBatch stale_input{};
-    stale_input.epoch =
-        DirectSessionTestAccess::retired_authority_epoch(host);
+    stale_input.epoch = DirectSessionTestAccess::retired_authority_epoch(host);
     stale_input.player_slot = 1U;
     stale_input.first_frame = host_resume_frame;
     stale_input.inputs.push_back({0xFFFFU, 127, -127});
     DirectSessionTestAccess::inject_client_input(host, 1U, stale_input);
-    assert(DirectSessionTestAccess::stale_epoch_packets(host) ==
-           stale_before + 1U);
+    assert(DirectSessionTestAccess::stale_epoch_packets(host) == stale_before + 1U);
     assert(host.running());
 
     // Superseded in v1.0.11 (rollback-only): the Gekko rollback transport
     // served host-prediction lobbies. Rollback lobbies carry owned-engine
     // packets instead (send_owned_packet). It must stay gone: the legacy
     // transport refuses to send in a Rollback lobby.
-    const std::array<std::uint8_t, 7> host_rollback{
-        0x44U, 0x4BU, 0x52U, 0x01U, 0x80U, 25U, 0xFBU};
+    const std::array<std::uint8_t, 7> host_rollback{0x44U, 0x4BU, 0x52U, 0x01U, 0x80U, 25U, 0xFBU};
     assert(!host.send_rollback_packet(1U, host_rollback));
 
     // Superseded in v1.0.11 (rollback-only): the rest of this scenario soaked
@@ -2094,18 +2001,14 @@ int main() {
     // confirmed frames, and the owned engines do the rollback. It must stay
     // gone: Player 1 gets just the input-delay runway, then waits without
     // predicting.
-    for (std::uint32_t frame = host_resume_frame;
-         frame < host_resume_frame + rules.manual_input_delay; ++frame) {
+    for (std::uint32_t frame = host_resume_frame; frame < host_resume_frame + rules.manual_input_delay; ++frame) {
         FrameInputs host_inputs{};
-        assert(host.synchronize_inputs_result(frame, {0x8000U, 25, -5}, host_inputs,
-                                              std::chrono::milliseconds(0)) ==
+        assert(host.synchronize_inputs_result(frame, {0x8000U, 25, -5}, host_inputs, std::chrono::milliseconds(0)) ==
                InputSynchronizationResult::Committed);
         pump_pair(host, client, 4);
     }
     FrameInputs waiting_inputs{};
-    assert(host.synchronize_inputs_result(host_resume_frame + rules.manual_input_delay, {},
-                                          waiting_inputs, std::chrono::milliseconds(0)) ==
-           InputSynchronizationResult::Pending);
+    assert(host.synchronize_inputs_result(host_resume_frame + rules.manual_input_delay, {}, waiting_inputs,
+                                          std::chrono::milliseconds(0)) == InputSynchronizationResult::Pending);
     assert(host.view().prediction_limit_waits == 0U);
-
 }

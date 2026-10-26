@@ -104,9 +104,9 @@ enum class Section {
 // objects would spawn with the collectable flag while the retail structure map
 // kept spawning alongside.
 enum class MapSlot {
-    None,          // not an object map
-    Structure,     // header 0xBA
-    Collectables,  // header 0x36
+    None,         // not an object map
+    Structure,    // header 0xBA
+    Collectables, // header 0x36
 };
 
 struct Entry {
@@ -142,26 +142,25 @@ struct Entry {
 struct TextureInfo {
     std::uint8_t width = 0;
     std::uint8_t height = 0;
-    std::uint8_t format = 0;        // TextureHeader.format & 0x0F
-    std::uint8_t render_mode = 0;   // TextureHeader.format >> 4
-    std::uint16_t frames = 0;       // TextureHeader.numOfTextures >> 8
-    bool compressed = false;        // TextureHeader.isCompressed
-    bool translucent = false;       // what material_init makes of it
+    std::uint8_t format = 0;      // TextureHeader.format & 0x0F
+    std::uint8_t render_mode = 0; // TextureHeader.format >> 4
+    std::uint16_t frames = 0;     // TextureHeader.numOfTextures >> 8
+    bool compressed = false;      // TextureHeader.isCompressed
+    bool translucent = false;     // what material_init makes of it
 };
 
 // material_init's rule for RENDER_SEMI_TRANSPARENT, format by format.
-[[nodiscard]] constexpr bool texture_translucent(std::uint8_t format,
-                                                 std::uint8_t render_mode) noexcept {
+[[nodiscard]] constexpr bool texture_translucent(std::uint8_t format, std::uint8_t render_mode) noexcept {
     switch (format) {
-    case 0U:   // RGBA32
-    case 1U:   // RGBA16
-    case 7U:   // CI4
+    case 0U: // RGBA32
+    case 1U: // RGBA16
+    case 7U: // CI4
         return render_mode == 0U || render_mode == 2U;
-    case 4U:   // IA16
-    case 5U:   // IA8
-    case 6U:   // IA4
+    case 4U: // IA16
+    case 5U: // IA8
+    case 6U: // IA4
         return true;
-    default:   // I8, I4, CI8
+    default: // I8, I4, CI8
         return false;
     }
 }
@@ -177,11 +176,11 @@ struct TextureInfo {
 // textures from ASSET_TEXTURES_2D starting at baseTextureId, and
 // minimap_marker_pos places every racer's dot relative to the anchor.
 struct SpriteInfo {
-    std::int16_t base_texture = 0;   // baseTextureId as the payload holds it
+    std::int16_t base_texture = 0; // baseTextureId as the payload holds it
     std::uint16_t frames = 0;
     std::int16_t anchor_x = 0;
     std::int16_t anchor_y = 0;
-    std::uint16_t textures = 0;      // frameTexOffsets[frames]
+    std::uint16_t textures = 0; // frameTexOffsets[frames]
 };
 
 // gCurrentSpriteAsset is a 512-byte buffer (MAX_SPRITE_ASSET_SIZE), and
@@ -212,8 +211,7 @@ inline constexpr std::uint8_t kHeaderNoMinimap = 0x01;
 // one the loader would misread: shorter than its own header and frame table,
 // longer than the buffer asset_load copies it into, no frames, or frame
 // boundaries that do not start at 0 and climb.
-[[nodiscard]] bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes,
-                                          SpriteInfo& info, std::string& error);
+[[nodiscard]] bool inspect_sprite_payload(const std::vector<std::uint8_t>& bytes, SpriteInfo& info, std::string& error);
 
 // The minimapSpriteIndex a LEVEL_MODELS payload carries in its stored prefix,
 // or -1 when the payload has no readable stored prefix (an older exporter's,
@@ -241,8 +239,8 @@ inline constexpr std::uint8_t kHeaderNoMinimap = 0x01;
 inline constexpr const char* kMusicFormat = "audio-stream-v1";
 inline constexpr std::uint64_t kMaxMusicBytes = 64ULL * 1024ULL * 1024ULL;
 inline constexpr std::uint32_t kMaxMusicVolume = 200;   // percent
-inline constexpr std::size_t kHeaderMusic = 0x52;        // level header /music
-inline constexpr std::size_t kHeaderInstruments = 0x54;  // level header /instruments (u16)
+inline constexpr std::size_t kHeaderMusic = 0x52;       // level header /music
+inline constexpr std::size_t kHeaderInstruments = 0x54; // level header /instruments (u16)
 
 // The other kind of music a track can carry: a native DKR sequence (compact
 // ALCSeq, `music/main.cseq`), usually converted from a MIDI file by the addon.
@@ -253,7 +251,7 @@ inline constexpr std::size_t kHeaderInstruments = 0x54;  // level header /instru
 inline constexpr const char* kSequenceFormat = "dkr-alcseq-v1";
 inline constexpr const char* kSequenceBank = "dkr-stock-v1";
 inline constexpr std::uint32_t kMaxSequenceBytes = 64U * 1024U;
-inline constexpr std::uint32_t kMaxSequenceVolume = 127;  // gMusicBaseVolume
+inline constexpr std::uint32_t kMaxSequenceVolume = 127; // gMusicBaseVolume
 
 enum class MusicKind : std::uint8_t { Recording, Sequence };
 enum class MusicCodec : std::uint8_t { Mp3, Wav };
@@ -261,17 +259,17 @@ enum class MusicCodec : std::uint8_t { Mp3, Wav };
 struct MusicInfo {
     MusicKind kind = MusicKind::Recording;
     MusicCodec codec = MusicCodec::Mp3;
-    std::filesystem::path file;          // absolute, inside the track directory
-    std::string sha256;                  // lowercase hex, as the manifest says
+    std::filesystem::path file; // absolute, inside the track directory
+    std::string sha256;         // lowercase hex, as the manifest says
     std::uint64_t bytes = 0;
-    std::uint32_t sample_rate = 0;       // what the addon measured
+    std::uint32_t sample_rate = 0; // what the addon measured
     std::uint32_t channels = 0;
-    std::uint64_t frames = 0;            // decoded sample frames
-    std::uint8_t carrier = 0;            // header /music, never 0
-    std::uint32_t volume = 100;          // percent of the file's own level
-    std::uint64_t loop_start = 0;        // sample frames
-    std::uint64_t loop_end = 0;          // sample frames; 0 is the end of file
-    bool final_lap_speedup = true;       // follow the carrier's tempo changes
+    std::uint64_t frames = 0;      // decoded sample frames
+    std::uint8_t carrier = 0;      // header /music, never 0
+    std::uint32_t volume = 100;    // percent of the file's own level
+    std::uint64_t loop_start = 0;  // sample frames
+    std::uint64_t loop_end = 0;    // sample frames; 0 is the end of file
+    bool final_lap_speedup = true; // follow the carrier's tempo changes
 
     // MusicKind::Sequence only. The bytes are read at scan (they are small),
     // so a race never touches the disk; `volume` is then DKR's own base
@@ -298,11 +296,11 @@ struct Track {
     bool kept_online = false; // Local offline copy; activation is a local sidecar, never part of its manifest.
     // manifest.hdTexturePack, and the sibling archive resolved at scan time.
     // See "A track's high-resolution texture pack" below.
-    std::string hd_pack_file;                 // hdTexturePack.file, "" when none
-    std::string hd_pack_digest;               // hdTexturePack.textureDigest
-    std::filesystem::path hd_pack_sibling;    // matched <track>-hd.zip, else empty
-    bool hd_pack_sibling_mismatch = false;    // sibling present, digest differs
-    std::optional<MusicInfo> music;           // manifest.music (schema 2)
+    std::string hd_pack_file;                       // hdTexturePack.file, "" when none
+    std::string hd_pack_digest;                     // hdTexturePack.textureDigest
+    std::filesystem::path hd_pack_sibling;          // matched <track>-hd.zip, else empty
+    bool hd_pack_sibling_mismatch = false;          // sibling present, digest differs
+    std::optional<MusicInfo> music;                 // manifest.music (schema 2)
     std::optional<water::enhanced::Metadata> water; // Renderer-only appearance.
 };
 
@@ -333,8 +331,8 @@ struct InstallOutcome {
     // digest, ready for texture_packs::import_archive. Empty when the track
     // declares no pack, or the sibling was absent or from another export.
     std::filesystem::path hd_pack_archive;
-    std::string hd_pack_digest;           // manifest digest, for import idempotence
-    bool hd_pack_mismatch = false;        // sibling present but from another export
+    std::string hd_pack_digest;    // manifest digest, for import idempotence
+    bool hd_pack_mismatch = false; // sibling present but from another export
     // Set when hd_pack_archive points inside a temporary unpacking of a wrapper
     // zip. The caller imports the pack, then calls discard_install_temp(this).
     std::filesystem::path temp_root;
@@ -344,8 +342,7 @@ struct InstallOutcome {
 // *.dkrmap directory, a *.zip of that directory, or a *.zip that also wraps the
 // <track>-hd.zip beside it. Returns false with a reason in `error` when the
 // source is not a track. `outcome`, when given, reports the HD pack sibling.
-bool install(const std::filesystem::path& source, std::string& error,
-             InstallOutcome* outcome = nullptr);
+bool install(const std::filesystem::path& source, std::string& error, InstallOutcome* outcome = nullptr);
 
 // Only managed copies directly inside directory() can be uninstalled. Tracks
 // read from the author's working folder are never deleted by the launcher.
@@ -363,7 +360,7 @@ void discard_install_temp(const std::filesystem::path& temp_root);
 [[nodiscard]] std::vector<Track> tracks();
 // Independent package validation for the isolated online import worker.
 // Does not change the installed library, activation, auto-boot or working path.
-bool inspect_package(const std::filesystem::path& directory,Track& track,std::string& error);
+bool inspect_package(const std::filesystem::path& directory, Track& track, std::string& error);
 [[nodiscard]] std::size_t enabled_count();
 // Transient selection; library UI uses the persistent, error-reporting overload.
 void set_enabled(const std::string& id, bool enabled);
@@ -406,13 +403,13 @@ struct TrackSelectEntry {
 // Once prepared, replay reads immutable records: no rescans, file I/O,
 // sticky boot overrides or mutable process-global table state are involved.
 struct PreparedTracks {
-    std::array<std::vector<std::vector<std::uint8_t>>,7> additions;
+    std::array<std::vector<std::vector<std::uint8_t>>, 7> additions;
     std::vector<TrackSelectEntry> courses;
     std::vector<Track> tracks;
-    std::vector<std::int32_t> model_arenas,model_batches;
+    std::vector<std::int32_t> model_arenas, model_batches;
 };
 [[nodiscard]] PreparedTracks prepare_tracks(std::vector<Track> tracks,
-    const std::array<std::vector<std::int32_t>,7>& base_tables);
+                                            const std::array<std::vector<std::int32_t>, 7>& base_tables);
 [[nodiscard]] std::vector<TrackSelectEntry> track_select_entries();
 
 // Triangle batches in the level model the track at `level_id` ships, summed
@@ -422,8 +419,7 @@ struct PreparedTracks {
 // own, or the model cannot be read.
 [[nodiscard]] std::int32_t level_model_batches(std::int32_t level_id);
 // The same count for one compressed LEVEL_MODELS payload.
-[[nodiscard]] std::int32_t count_level_model_batches(const std::uint8_t* bytes,
-                                                     std::size_t size);
+[[nodiscard]] std::int32_t count_level_model_batches(const std::uint8_t* bytes, std::size_t size);
 
 // The retail size of gTrackModelHeap: LEVEL_MODEL_MAX_SIZE in tracks.c. It
 // covers the inflated blob AND the scratch arena the loader appends past
@@ -442,8 +438,7 @@ inline constexpr std::int32_t kRetailTrackHeap = 0x82A00;
 // .dkrmap track, ships no model of its own, or the payload cannot be read.
 [[nodiscard]] std::int32_t level_model_arena_bytes(std::int32_t level_id);
 // The same measurement for one compressed LEVEL_MODELS payload.
-[[nodiscard]] std::int32_t measure_level_model_arena(const std::uint8_t* bytes,
-                                                      std::size_t size);
+[[nodiscard]] std::int32_t measure_level_model_arena(const std::uint8_t* bytes, std::size_t size);
 
 // ---------------------------------------------------------------------------
 // A track's high-resolution texture pack
@@ -459,11 +454,11 @@ inline constexpr std::int32_t kRetailTrackHeap = 0x82A00;
 // track. Nothing here imports or enables the pack - that is the UI layer's
 // job, next to texture_packs - this only reports what is on disk.
 struct HdPack {
-    std::string file;                        // hdTexturePack.file ("" when none)
-    std::string digest;                      // hdTexturePack.textureDigest
-    std::filesystem::path sibling_archive;   // <track>-hd.zip beside the source,
-                                             // digest matched; else empty
-    bool sibling_mismatch = false;           // sibling present but another export
+    std::string file;                      // hdTexturePack.file ("" when none)
+    std::string digest;                    // hdTexturePack.textureDigest
+    std::filesystem::path sibling_archive; // <track>-hd.zip beside the source,
+                                           // digest matched; else empty
+    bool sibling_mismatch = false;         // sibling present but another export
 };
 
 // The HD pack the given track declares, resolved against the folder it was
@@ -500,7 +495,7 @@ struct HdPack {
 // it rather than the retail menus. An empty string clears it and the file.
 inline constexpr std::int32_t kNoTrackOverride = -1;
 
-void arm_track_override(std::string track_id);   // empty string disarms
+void arm_track_override(std::string track_id); // empty string disarms
 [[nodiscard]] std::string armed_track_id();
 [[nodiscard]] std::int32_t track_override();
 
@@ -535,14 +530,13 @@ void set_auto_boot(bool enabled);
 // must publish the retail table unchanged.
 // Pass the readable word count for additive namespaces; the default is only
 // the legacy stock-table scan bound, not a limit on published mod libraries.
-[[nodiscard]] std::vector<std::int32_t> build_extended_table(
-    Section section, const std::int32_t* retail_table, std::size_t table_words = 4096U);
+[[nodiscard]] std::vector<std::int32_t> build_extended_table(Section section, const std::int32_t* retail_table,
+                                                             std::size_t table_words = 4096U);
 
 // Resolves an offset produced by build_extended_table. Returns nullptr when
 // the offset belongs to the ROM or does not cover `size` bytes, in which case
 // the caller must fall back to the retail loader.
-[[nodiscard]] const std::uint8_t* payload_for(
-    Section section, std::uint32_t offset, std::int32_t size);
+[[nodiscard]] const std::uint8_t* payload_for(Section section, std::uint32_t offset, std::int32_t size);
 
 // A level header names its object map by index, and that index only exists once
 // the extended object-map table has been built. Given a custom entry in `from`
@@ -554,8 +548,7 @@ void set_auto_boot(bool enabled);
 // to `to`, or when `to`'s table has not been built yet.
 // `slot` selects between a section's two payloads where one exists; pass
 // MapSlot::None for sections that have only one.
-[[nodiscard]] std::int32_t sibling_index(Section from, std::uint32_t offset,
-                                          Section to, MapSlot slot);
+[[nodiscard]] std::int32_t sibling_index(Section from, std::uint32_t offset, Section to, MapSlot slot);
 
 // The id range the exporter writes into a level model's texture table for the
 // track's own artwork, standing in for indices only the runtime can assign.
@@ -583,8 +576,7 @@ inline constexpr std::size_t kMinimumTexturePayload = 40;
 // render mode material_init does not know, no frames, or a frame whose header
 // or texels run past the payload. A compressed payload's frames are packed and
 // are not walked; its first header, which the loader reads raw, still is.
-[[nodiscard]] bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes,
-                                           TextureInfo& info,
+[[nodiscard]] bool inspect_texture_payload(const std::vector<std::uint8_t>& bytes, TextureInfo& info,
                                            std::string& error);
 
 // What an installed track's own artwork is, for Track Lab.
@@ -592,7 +584,7 @@ struct ArtworkSummary {
     std::size_t textures = 0;
     std::size_t translucent = 0;
     std::size_t animated = 0;
-    bool minimap = false;   // ships a minimap of its own
+    bool minimap = false; // ships a minimap of its own
 };
 [[nodiscard]] ArtworkSummary artwork(const std::string& track_id);
 

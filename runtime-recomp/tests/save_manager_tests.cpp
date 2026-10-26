@@ -13,8 +13,7 @@
 
 namespace {
 
-void write_u32(std::vector<std::uint8_t>& bytes, std::size_t offset,
-               std::uint32_t value) {
+void write_u32(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uint32_t value) {
     bytes[offset + 0U] = static_cast<std::uint8_t>(value);
     bytes[offset + 1U] = static_cast<std::uint8_t>(value >> 8U);
     bytes[offset + 2U] = static_cast<std::uint8_t>(value >> 16U);
@@ -33,8 +32,7 @@ std::uint32_t pak_checksum(std::vector<std::uint8_t> bytes) {
 
 std::vector<std::uint8_t> valid_pak() {
     std::vector<std::uint8_t> bytes(32U * 1024U, 0U);
-    const std::array<std::uint8_t, 8> magic{
-        'D', 'K', 'R', 'M', 'P', 'K', '1', 0};
+    const std::array<std::uint8_t, 8> magic{'D', 'K', 'R', 'M', 'P', 'K', '1', 0};
     std::copy(magic.begin(), magic.end(), bytes.begin());
     write_u32(bytes, 8U, 1U);
     write_u32(bytes, 12U, 1U);
@@ -42,27 +40,24 @@ std::vector<std::uint8_t> valid_pak() {
     return bytes;
 }
 
-void write_bytes(const std::filesystem::path& path,
-                 const std::vector<std::uint8_t>& bytes) {
+void write_bytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes) {
     std::filesystem::create_directories(path.parent_path());
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    output.write(reinterpret_cast<const char*>(bytes.data()),
-                 static_cast<std::streamsize>(bytes.size()));
+    output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     assert(output.good());
 }
 
 std::vector<std::uint8_t> read_bytes(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
-    return {std::istreambuf_iterator<char>(input),
-            std::istreambuf_iterator<char>()};
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
 }
 
 } // namespace
 
 int main() {
-    const auto root = std::filesystem::temp_directory_path() /
-        ("dkr-save-manager-test-" + std::to_string(
-            std::chrono::steady_clock::now().time_since_epoch().count()));
+    const auto root =
+        std::filesystem::temp_directory_path() /
+        ("dkr-save-manager-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(root);
     dkr::runtime::saves::configure(root);
     std::fputs("[test][save-manager] adventure lifecycle\n", stderr);
@@ -89,8 +84,7 @@ int main() {
     // game data and must remain importable/editable even though it is not the
     // canonical checksummed blank emitted by the Save Builder.
     auto erased_slot_adventure = dkr::runtime::saves::codec::blank_bytes();
-    std::fill(erased_slot_adventure.begin() + 0x28U,
-              erased_slot_adventure.begin() + 0x50U, 0xFFU);
+    std::fill(erased_slot_adventure.begin() + 0x28U, erased_slot_adventure.begin() + 0x50U, 0xFFU);
     const auto erased_slot = root / "retail-erased-slot.bin";
     write_bytes(erased_slot, erased_slot_adventure);
     assert(dkr::runtime::saves::import_adventure(erased_slot, error));
@@ -108,19 +102,16 @@ int main() {
     assert(!dkr::runtime::saves::adventure_info().valid);
     bool repaired = false;
     std::filesystem::path repair_backup;
-    assert(dkr::runtime::saves::repair_adventure_checksums(
-        repaired, repair_backup, error));
+    assert(dkr::runtime::saves::repair_adventure_checksums(repaired, repair_backup, error));
     assert(repaired && std::filesystem::exists(repair_backup));
     assert(read_bytes(repair_backup) == corrupt_live);
     assert(dkr::runtime::saves::adventure_info().valid);
     std::vector<std::uint8_t> canonical_live;
-    assert(dkr::runtime::saves::canonical_adventure_bytes(
-        canonical_live, error));
+    assert(dkr::runtime::saves::canonical_adventure_bytes(canonical_live, error));
     assert(canonical_live == dkr::runtime::saves::codec::blank_bytes());
     repaired = true;
     repair_backup.clear();
-    assert(dkr::runtime::saves::repair_adventure_checksums(
-        repaired, repair_backup, error));
+    assert(dkr::runtime::saves::repair_adventure_checksums(repaired, repair_backup, error));
     assert(!repaired && repair_backup.empty());
 
     const auto invalid = root / "invalid.bin";
@@ -144,93 +135,81 @@ int main() {
     host_image.slots[0].name = "NET";
     host_image.slots[0].balloons = {1, 0, 0, 0, 0, 0};
     const auto host_save = dkr::runtime::saves::codec::encode(host_image);
-    const auto single_player_before_online = read_bytes(
-        dkr::runtime::saves::adventure_info().path);
-    const std::size_t backups_before_online =
-        dkr::runtime::saves::adventure_backups().size();
+    const auto single_player_before_online = read_bytes(dkr::runtime::saves::adventure_info().path);
+    const std::size_t backups_before_online = dkr::runtime::saves::adventure_backups().size();
     std::vector<std::uint8_t> seeded_online;
-    assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::CopySinglePlayer,
-        seeded_online, error));
+    assert(dkr::runtime::saves::prepare_host_online_adventure(dkr::runtime::saves::OnlineSaveSeedMode::CopySinglePlayer,
+                                                              seeded_online, error));
     assert(seeded_online == single_player_before_online);
-    assert(read_bytes(dkr::runtime::saves::adventure_info().path) ==
-           single_player_before_online);
+    assert(read_bytes(dkr::runtime::saves::adventure_info().path) == single_player_before_online);
 
-    assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::Fresh,
-        seeded_online, error));
+    assert(dkr::runtime::saves::prepare_host_online_adventure(dkr::runtime::saves::OnlineSaveSeedMode::Fresh,
+                                                              seeded_online, error));
     assert(seeded_online == dkr::runtime::saves::codec::blank_bytes());
     assert(!dkr::runtime::saves::previous_online_adventure_info().exists);
     std::vector<std::uint8_t> activated_host;
     std::filesystem::path activated_host_path;
     assert(dkr::runtime::saves::read_online_adventure(true, 1U, activated_host, activated_host_path, error));
     assert(activated_host == seeded_online);
-    const auto host_online_info =
-        dkr::runtime::saves::previous_online_adventure_info();
+    const auto host_online_info = dkr::runtime::saves::previous_online_adventure_info();
     assert(host_online_info.exists && host_online_info.valid);
     write_bytes(host_online_info.path, host_save);
-    assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::Fresh, seeded_online, error));
+    assert(dkr::runtime::saves::prepare_host_online_adventure(dkr::runtime::saves::OnlineSaveSeedMode::Fresh,
+                                                              seeded_online, error));
     // Simulate failed/cancelled lobby creation: the old file must be untouched.
     assert(read_bytes(host_online_info.path) == host_save);
     assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,
-        seeded_online, error));
+        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession, seeded_online, error));
     assert(seeded_online == host_save);
 
     constexpr std::uint64_t match_id = 0x1234ABCDEF987654ULL;
     std::filesystem::path installed_online;
-    assert(dkr::runtime::saves::install_synchronized_online_adventure(
-        match_id, host_save, installed_online, error));
+    assert(dkr::runtime::saves::install_synchronized_online_adventure(match_id, host_save, installed_online, error));
     assert(read_bytes(installed_online) == host_save);
     assert(installed_online.parent_path().filename() == "1234abcdef987654");
     std::vector<std::uint8_t> readback_online;
     std::filesystem::path readback_path;
-    assert(dkr::runtime::saves::read_online_adventure(
-        false, match_id, readback_online, readback_path, error));
+    assert(dkr::runtime::saves::read_online_adventure(false, match_id, readback_online, readback_path, error));
     assert(readback_path == installed_online && readback_online == host_save);
-    assert(!dkr::runtime::saves::install_synchronized_online_adventure(
-        0U, host_save, installed_online, error));
-    assert(read_bytes(dkr::runtime::saves::adventure_info().path) ==
-           single_player_before_online);
-    assert(dkr::runtime::saves::adventure_backups().size() ==
-           backups_before_online);
+    assert(!dkr::runtime::saves::install_synchronized_online_adventure(0U, host_save, installed_online, error));
+    assert(read_bytes(dkr::runtime::saves::adventure_info().path) == single_player_before_online);
+    assert(dkr::runtime::saves::adventure_backups().size() == backups_before_online);
 
     // Superseded in v1.0.11 (shared-saves): host progress is no longer keyed
     // by the mod manifest; every mod set continues the one host Adventure
     // ("mod manifests identify simulation, never durable progress"). The
     // per-mod folders must stay gone. Clients still use their authenticated
     // session folder, and malformed profiles are still refused.
-    const std::string mod_a(64,'a'),mod_b(64,'b');
-    assert(!dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::Fresh,seeded_online,error,"../escape"));
-    assert(dkr::runtime::saves::previous_online_adventure_info(mod_a).path==
+    const std::string mod_a(64, 'a'), mod_b(64, 'b');
+    assert(!dkr::runtime::saves::prepare_host_online_adventure(dkr::runtime::saves::OnlineSaveSeedMode::Fresh,
+                                                               seeded_online, error, "../escape"));
+    assert(dkr::runtime::saves::previous_online_adventure_info(mod_a).path ==
            dkr::runtime::saves::previous_online_adventure_info(mod_b).path);
-    assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::CopySinglePlayer,seeded_online,error,mod_a));
-    assert(seeded_online==single_player_before_online);
-    assert(dkr::runtime::saves::bind_staged_host_online_adventure(20,error));
-    assert(dkr::runtime::saves::read_online_adventure(true,20,activated_host,activated_host_path,error));
-    assert(activated_host_path==root/"saves"/"online"/"host"/"dkr.us.v77.bin");
-    assert(dkr::runtime::saves::commit_online_adventure(true,20,host_save,error));
+    assert(dkr::runtime::saves::prepare_host_online_adventure(dkr::runtime::saves::OnlineSaveSeedMode::CopySinglePlayer,
+                                                              seeded_online, error, mod_a));
+    assert(seeded_online == single_player_before_online);
+    assert(dkr::runtime::saves::bind_staged_host_online_adventure(20, error));
+    assert(dkr::runtime::saves::read_online_adventure(true, 20, activated_host, activated_host_path, error));
+    assert(activated_host_path == root / "saves" / "online" / "host" / "dkr.us.v77.bin");
+    assert(dkr::runtime::saves::commit_online_adventure(true, 20, host_save, error));
     assert(dkr::runtime::saves::previous_online_adventure_info(mod_a).valid);
     assert(dkr::runtime::saves::previous_online_adventure_info(mod_b).valid);
-    assert(!std::filesystem::exists(root/"saves"/"online"/"host"/"mod-profiles"));
+    assert(!std::filesystem::exists(root / "saves" / "online" / "host" / "mod-profiles"));
     assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error,mod_b));
-    assert(seeded_online==host_save && read_bytes(host_online_info.path)==host_save);
+        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession, seeded_online, error, mod_b));
+    assert(seeded_online == host_save && read_bytes(host_online_info.path) == host_save);
     dkr::runtime::saves::discard_staged_host_online_adventure();
     assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error));
-    assert(seeded_online==host_save);
-    assert(read_bytes(dkr::runtime::saves::adventure_info().path)==single_player_before_online);
+        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession, seeded_online, error));
+    assert(seeded_online == host_save);
+    assert(read_bytes(dkr::runtime::saves::adventure_info().path) == single_player_before_online);
 
     // Joining cannot grant any operation permission to replace personal saves.
     dkr::runtime::saves::set_online_save_protection(true);
     assert(!dkr::runtime::saves::reset_adventure(error));
     assert(!dkr::runtime::saves::import_adventure(host_online_info.path, error));
     assert(!dkr::runtime::saves::export_stored_adventure(host_online_info.path,
-        dkr::runtime::saves::adventure_info().path, error));
+                                                         dkr::runtime::saves::adventure_info().path, error));
     assert(!dkr::runtime::saves::export_bundle(dkr::runtime::saves::adventure_info().path, error));
     assert(!dkr::runtime::saves::export_bundle(root / "save-history" / "controller-pak-1.mpk" / "history.bin", error));
     assert(read_bytes(dkr::runtime::saves::adventure_info().path) == single_player_before_online);
@@ -241,12 +220,11 @@ int main() {
     // the successful readback remains the authoritative client session path.
     assert(std::filesystem::exists(readback_path.parent_path() / "experimental-controller-paks.bin"));
     const auto inventory = dkr::runtime::saves::stored_adventures();
-    assert(std::any_of(inventory.begin(), inventory.end(), [](const auto& record) {
-        return record.scope == 1 && record.info.valid;
-    }));
+    assert(std::any_of(inventory.begin(), inventory.end(),
+                       [](const auto& record) { return record.scope == 1 && record.info.valid; }));
     assert(std::any_of(inventory.begin(), inventory.end(), [](const auto& record) {
         return record.scope == 1 && record.info.valid &&
-            record.kind == dkr::runtime::saves::StoredSaveKind::ExperimentalPaks;
+               record.kind == dkr::runtime::saves::StoredSaveKind::ExperimentalPaks;
     }));
     dkr::runtime::saves::set_online_save_protection(false);
 
@@ -294,8 +272,7 @@ int main() {
     std::vector<std::uint8_t> corrupt_bundle;
     {
         std::ifstream input(bundle, std::ios::binary);
-        corrupt_bundle.assign(std::istreambuf_iterator<char>(input),
-                              std::istreambuf_iterator<char>());
+        corrupt_bundle.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
     }
     corrupt_bundle.back() ^= 1U;
     const auto bad_bundle = root / "bad.dkrsave";

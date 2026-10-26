@@ -23,8 +23,7 @@ function(dkr_stage_patch target source stage_name patch)
         file(MAKE_DIRECTORY "${scratch}/${parent}")
         configure_file("${source}/${file}" "${scratch}/${file}" COPYONLY)
     endforeach()
-    execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${scratch}"
-        COMMAND_ERROR_IS_FATAL ANY)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${scratch}" COMMAND_ERROR_IS_FATAL ANY)
     foreach(mode IN ITEMS check apply)
         # Checkout EOLs differ between Windows and Linux. Ignore context-only
         # whitespace; added lines still pass the strict whitespace check.
@@ -32,8 +31,11 @@ function(dkr_stage_patch target source stage_name patch)
         if(mode STREQUAL "check")
             list(APPEND flags --check)
         endif()
-        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${scratch}" apply ${flags} "${patch}"
-            RESULT_VARIABLE result ERROR_VARIABLE error)
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" -C "${scratch}" apply ${flags} "${patch}"
+            RESULT_VARIABLE result
+            ERROR_VARIABLE error
+        )
         if(NOT result EQUAL 0)
             message(FATAL_ERROR "${stage_name} ${mode} failed: ${error}")
         endif()
@@ -41,8 +43,10 @@ function(dkr_stage_patch target source stage_name patch)
     foreach(file IN LISTS staged)
         get_filename_component(parent "${file}" DIRECTORY)
         file(MAKE_DIRECTORY "${stage}/${parent}")
-        execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${scratch}/${file}" "${stage}/${file}" COMMAND_ERROR_IS_FATAL ANY)
+        execute_process(
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${scratch}/${file}" "${stage}/${file}"
+            COMMAND_ERROR_IS_FATAL ANY
+        )
     endforeach()
     get_target_property(sources ${target} SOURCES)
     foreach(file IN LISTS files)
@@ -65,8 +69,11 @@ function(dkr_stage_patch target source stage_name patch)
         endif()
         list(APPEND includes "${DKRPORT_ROOT}/runtime-recomp/src/game")
         list(REMOVE_DUPLICATES includes)
-        set_source_files_properties("${stage}/${file}" TARGET_DIRECTORY ${target}
-            PROPERTIES INCLUDE_DIRECTORIES "${includes}")
+        set_source_files_properties(
+            "${stage}/${file}"
+            TARGET_DIRECTORY ${target}
+            PROPERTIES INCLUDE_DIRECTORIES "${includes}"
+        )
     endforeach()
     set_property(TARGET ${target} PROPERTY SOURCES "${sources}")
 endfunction()

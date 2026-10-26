@@ -31,8 +31,7 @@ int main() {
     }
 
     PresentationRandomStream full_width(0xCAFEBABEU);
-    (void)full_width.range(std::numeric_limits<std::int32_t>::min(),
-                           std::numeric_limits<std::int32_t>::max());
+    (void)full_width.range(std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max());
     assert(full_width.state() != 0U);
     return 0;
 }

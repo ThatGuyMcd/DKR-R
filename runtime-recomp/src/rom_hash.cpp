@@ -22,16 +22,13 @@ int main(int argc, char** argv) {
         return 3;
     }
 
-    std::vector<std::uint8_t> bytes{
-        std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    if (bytes.size() < 0x40 || bytes[0] != 0x80 || bytes[1] != 0x37 ||
-        bytes[2] != 0x12 || bytes[3] != 0x40) {
+    std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    if (bytes.size() < 0x40 || bytes[0] != 0x80 || bytes[1] != 0x37 || bytes[2] != 0x12 || bytes[3] != 0x40) {
         std::cerr << "Input is not a canonical big-endian N64 ROM.\n";
         return 4;
     }
 
     const std::uint64_t hash = XXH3_64bits(bytes.data(), bytes.size());
-    std::cout << "0x" << std::uppercase << std::hex << std::setw(16)
-              << std::setfill('0') << hash << "ULL\n";
+    std::cout << "0x" << std::uppercase << std::hex << std::setw(16) << std::setfill('0') << hash << "ULL\n";
     return 0;
 }

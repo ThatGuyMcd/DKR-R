@@ -16,29 +16,23 @@ inline constexpr std::uint32_t kDeterminismHashInterval = 3U;
 inline constexpr std::uint32_t kAuthorityCheckpointInterval = 3U;
 inline constexpr std::uint32_t kDeterminismNotArmed = 0xFFFFFFFFU;
 
-constexpr std::uint32_t first_determinism_hash_frame(
-    std::uint32_t race_ready_frame) {
+constexpr std::uint32_t first_determinism_hash_frame(std::uint32_t race_ready_frame) {
     return race_ready_frame + kDeterminismGraceFrames;
 }
 
-constexpr bool determinism_race_ready(std::uint32_t active_players,
-                                      std::uint32_t racer_count,
+constexpr bool determinism_race_ready(std::uint32_t active_players, std::uint32_t racer_count,
                                       std::uint8_t expected_players) {
-    return expected_players >= 2U && expected_players <= 4U &&
-           active_players == expected_players &&
+    return expected_players >= 2U && expected_players <= 4U && active_players == expected_players &&
            racer_count >= expected_players && racer_count <= 10U;
 }
 
-constexpr bool should_submit_determinism_hash(std::uint32_t frame,
-                                              std::uint32_t first_frame) {
+constexpr bool should_submit_determinism_hash(std::uint32_t frame, std::uint32_t first_frame) {
     return first_frame != kDeterminismNotArmed && frame >= first_frame &&
            ((frame - first_frame) % kDeterminismHashInterval) == 0U;
 }
 
-constexpr bool should_publish_authority_checkpoint(
-    std::uint32_t completed_frame, std::uint32_t first_hash_frame) {
-    return first_hash_frame != kDeterminismNotArmed &&
-           (completed_frame % kAuthorityCheckpointInterval) == 0U;
+constexpr bool should_publish_authority_checkpoint(std::uint32_t completed_frame, std::uint32_t first_hash_frame) {
+    return first_hash_frame != kDeterminismNotArmed && (completed_frame % kAuthorityCheckpointInterval) == 0U;
 }
 
 } // namespace dkr::runtime::netplay

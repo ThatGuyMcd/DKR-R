@@ -24,7 +24,8 @@ bool can_write(const std::filesystem::path& path) {
 } // namespace
 
 int main() {
-    const auto root = std::filesystem::temp_directory_path() /
+    const auto root =
+        std::filesystem::temp_directory_path() /
         ("dkr-mod-sandbox-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const auto inside = root / "transaction";
     std::filesystem::create_directories(inside);
@@ -37,8 +38,10 @@ int main() {
         } catch (...) {
             _exit(10);
         }
-        if (!can_write(inside / "staged.bin")) _exit(11);
-        if (can_write(root / "escaped.bin")) _exit(12);
+        if (!can_write(inside / "staged.bin"))
+            _exit(11);
+        if (can_write(root / "escaped.bin"))
+            _exit(12);
         const int network = socket(AF_INET, SOCK_STREAM, 0);
         sockaddr_in loopback{};
         loopback.sin_family = AF_INET;
@@ -46,14 +49,19 @@ int main() {
         loopback.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         // Seatbelt may refuse the socket or the connect; either way with EPERM.
         if (network < 0) {
-            if (errno != EPERM) _exit(16);
+            if (errno != EPERM)
+                _exit(16);
         } else {
-            if (connect(network, reinterpret_cast<sockaddr*>(&loopback), sizeof(loopback)) == 0) _exit(13);
-            if (errno != EPERM) _exit(14);
+            if (connect(network, reinterpret_cast<sockaddr*>(&loopback), sizeof(loopback)) == 0)
+                _exit(13);
+            if (errno != EPERM)
+                _exit(14);
         }
         const pid_t grandchild = fork();
-        if (grandchild == 0) _exit(0);
-        if (grandchild > 0 || errno != EPERM) _exit(17);
+        if (grandchild == 0)
+            _exit(0);
+        if (grandchild > 0 || errno != EPERM)
+            _exit(17);
         char* arguments[] = {const_cast<char*>("/usr/bin/true"), nullptr};
         execv(arguments[0], arguments);
         _exit(errno == EPERM ? 0 : 15);
@@ -62,7 +70,8 @@ int main() {
     assert(waitpid(child, &status, 0) == child);
     const int code = WIFEXITED(status) ? WEXITSTATUS(status) : 100;
     std::filesystem::remove_all(root);
-    if (code != 0) std::fprintf(stderr, "sandbox check failed: %d\n", code);
+    if (code != 0)
+        std::fprintf(stderr, "sandbox check failed: %d\n", code);
     assert(code == 0);
     std::puts("[test][mod-sandbox] writes confined, network, fork and exec denied");
 
@@ -78,15 +87,23 @@ int main() {
         const pid_t worker = fork();
         if (worker == 0) {
             close(ready_pipe[0]);
-            try { dkr::mods::constrain_import_worker(); } catch (...) { _exit(10); }
+            try {
+                dkr::mods::constrain_import_worker();
+            } catch (...) {
+                _exit(10);
+            }
             const char armed = 1;
-            if (write(ready_pipe[1], &armed, 1) != 1) _exit(10);
-            for (;;) pause();
+            if (write(ready_pipe[1], &armed, 1) != 1)
+                _exit(10);
+            for (;;)
+                pause();
         }
         close(ready_pipe[1]);
         char armed = 0;
-        if (worker < 0 || read(ready_pipe[0], &armed, 1) != 1) _exit(12);
-        if (write(pid_pipe[1], &worker, sizeof(worker)) != sizeof(worker)) _exit(11);
+        if (worker < 0 || read(ready_pipe[0], &armed, 1) != 1)
+            _exit(12);
+        if (write(pid_pipe[1], &worker, sizeof(worker)) != sizeof(worker))
+            _exit(11);
         _exit(0);
     }
     close(pid_pipe[1]);
@@ -101,9 +118,13 @@ int main() {
     bool exited = false;
     for (int attempt = 0; attempt < 200 && !exited; ++attempt) {
         exited = kill(worker, 0) != 0 && errno == ESRCH;
-        if (!exited) std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        if (!exited)
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
-    if (!exited) { kill(worker, SIGKILL); std::fprintf(stderr, "worker outlived its parent\n"); }
+    if (!exited) {
+        kill(worker, SIGKILL);
+        std::fprintf(stderr, "worker outlived its parent\n");
+    }
     assert(exited);
     std::puts("[test][mod-sandbox] worker exits with its parent");
     return 0;

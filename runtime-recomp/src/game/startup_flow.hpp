@@ -14,13 +14,15 @@ inline std::atomic<Destination> launch_destination{Destination::StartMenu};
 inline std::atomic<bool> character_select_pending{false};
 
 inline Destination parse_destination(std::string_view value) {
-    if (!value.empty() && value.back() == '\r') value.remove_suffix(1);
+    if (!value.empty() && value.back() == '\r')
+        value.remove_suffix(1);
     return value == "1" ? Destination::CharacterSelect : Destination::StartMenu;
 }
 
 inline bool parse_skip_intro(std::string_view value) {
     // Settings copied from Windows retain CRLF when read on Linux/Android.
-    if (!value.empty() && value.back() == '\r') value.remove_suffix(1);
+    if (!value.empty() && value.back() == '\r')
+        value.remove_suffix(1);
     return value == "1";
 }
 
@@ -28,8 +30,7 @@ inline void prepare_launch(bool requested, bool online, bool direct_track_boot,
                            Destination destination = Destination::StartMenu) {
     character_select_pending.store(false, std::memory_order_release);
     launch_destination.store(destination, std::memory_order_release);
-    skip_intro_pending.store(requested && !online && !direct_track_boot,
-                            std::memory_order_release);
+    skip_intro_pending.store(requested && !online && !direct_track_boot, std::memory_order_release);
 }
 
 inline bool skip_logos() {

@@ -50,23 +50,20 @@ float unpack_input_axis(std::int8_t value);
 // Physical polling only updates LocalInputSample; DirectSession or Gekko then
 // publishes one complete immutable FrameInputs value for DKR to consume.
 class OnlineInputBroker final {
-public:
-    void configure(bool enabled, std::uint8_t occupied_mask,
-                   std::uint8_t local_slot);
+  public:
+    void configure(bool enabled, std::uint8_t occupied_mask, std::uint8_t local_slot);
     void set_local_profile(std::size_t profile);
     void begin_epoch();
     void reset();
 
-    void capture_local(std::size_t profile, std::uint16_t buttons,
-                       float stick_x, float stick_y, bool blocked);
+    void capture_local(std::size_t profile, std::uint16_t buttons, float stick_x, float stick_y, bool blocked);
     LocalInputSample local_sample() const;
 
-    bool publish(std::uint32_t frame, InputFrameSource source,
-                 const FrameInputs& inputs);
+    bool publish(std::uint32_t frame, InputFrameSource source, const FrameInputs& inputs);
     PackedInput input_for_port(std::size_t port) const;
     OnlineInputBrokerView view() const;
 
-private:
+  private:
     void clear_committed_locked();
 
     mutable std::mutex mutex_;

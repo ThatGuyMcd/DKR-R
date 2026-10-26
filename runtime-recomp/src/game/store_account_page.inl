@@ -13,13 +13,16 @@ void StoreAccount(float width, const dkr::store::Snapshot& store) {
                 dkr::store::service().cancel_login();
         } else {
 #ifdef _WIN32
-            const bool can_remember=true;
+            const bool can_remember = true;
 #else
-            const bool can_remember=dkr::online::keyring::available();
+            const bool can_remember = dkr::online::keyring::available();
 #endif
-            if(can_remember){bool remember=store.remember;
-                if(StoreCheck("Keep me signed in on this PC",remember,panel.inner()))dkr::store::service().remember(remember);
-            }else StoreNote("Session-only sign-in. A desktop keyring is unavailable.",panel.inner());
+            if (can_remember) {
+                bool remember = store.remember;
+                if (StoreCheck("Keep me signed in on this PC", remember, panel.inner()))
+                    dkr::store::service().remember(remember);
+            } else
+                StoreNote("Session-only sign-in. A desktop keyring is unavailable.", panel.inner());
             if (StoreButton("Continue with Discord", 0, true))
                 dkr::store::service().login();
         }
@@ -84,7 +87,8 @@ void StoreAccount(float width, const dkr::store::Snapshot& store) {
 #ifdef _WIN32
         StoreNote(store.remember ? "This PC remembers your sign-in." : "Signed in for this session.", session.inner());
 #else
-        StoreNote(store.remember?"Your desktop keyring remembers this sign-in.":"Signed in for this session.",session.inner());
+        StoreNote(store.remember ? "Your desktop keyring remembers this sign-in." : "Signed in for this session.",
+                  session.inner());
 #endif
         ImGui::BeginDisabled(StoreBusyAction(store));
         if (StoreButton("Sign out"))

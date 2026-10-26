@@ -32,10 +32,9 @@ inline std::string lowercase(std::string_view value) {
 
 inline bool looks_like_error(std::string_view value) {
     const auto text = lowercase(value);
-    for (const auto marker :
-         {"could not", "couldn't", "cannot ", "can't ", "failed", "failure", "invalid",
-          "unsupported", "not supported", "stopped unexpectedly", "stopped safely", "cancelled",
-          "not available", "unavailable", "exceeds", "exceeded"}) {
+    for (const auto marker : {"could not", "couldn't", "cannot ", "can't ", "failed", "failure", "invalid",
+                              "unsupported", "not supported", "stopped unexpectedly", "stopped safely", "cancelled",
+                              "not available", "unavailable", "exceeds", "exceeded"}) {
         if (text.find(marker) != std::string::npos)
             return true;
     }
@@ -72,8 +71,8 @@ inline std::string error_summary(std::string_view diagnostic, Area area) {
         if (has("signing identity"))
             return "This update doesn't match the installed app. Don't uninstall it to work around "
                    "this.";
-        if (has("signature") || has("checksum") || has("verification") || has("verify") ||
-            has("unsafe") || has("manifest") || has("unlisted") || has("changed"))
+        if (has("signature") || has("checksum") || has("verification") || has("verify") || has("unsafe") ||
+            has("manifest") || has("unlisted") || has("changed"))
             return "The update couldn't be verified. Check Details before trying again.";
         if (has("ownership receipt") || has("qualified updater") || has("not an appimage"))
             return "Automatic installation isn't available here. Open Releases to update manually.";
@@ -101,8 +100,7 @@ inline std::string error_summary(std::string_view diagnostic, Area area) {
         return "Couldn't complete the save operation. Check Details before trying again.";
     }
     if (area == Area::Textures || area == Area::Mods) {
-        if (has("source rom") || has("original game pak") || has("different original") ||
-            has("different rom"))
+        if (has("source rom") || has("original game pak") || has("different original") || has("different rom"))
             return "This patch needs a different ROM version. Choose the required ROM and prepare "
                    "it again.";
         if (has("missing") && (has("worker") || has("importer") || has("helper")))
@@ -137,18 +135,17 @@ inline std::string error_summary(std::string_view diagnostic, Area area) {
 
 inline std::string progress(std::string_view diagnostic) {
     std::string value(diagnostic);
-    for (const auto &[from, to] :
-         {std::pair<std::string_view, std::string_view>{"Reconstructing locally owned assets",
-                                                        "Preparing installed mods"},
-          {"Reconstructing downloaded assets", "Preparing downloaded mods"},
-          {"Host mods frozen and ready", "Lobby mods ready"},
-          {"Checking prepared assets", "Checking mods"},
-          {"Verifying runtime resources", "Checking mods"},
-          {"Materializing", "Preparing"},
-          {"Preparing legacy import", "Preparing import"},
-          {"Import review ready", "Import ready"},
-          {"Import stopped safely", "Import stopped"},
-          {"Preparing texture-pack import", "Checking texture pack"}}) {
+    for (const auto& [from, to] : {std::pair<std::string_view, std::string_view>{"Reconstructing locally owned assets",
+                                                                                 "Preparing installed mods"},
+                                   {"Reconstructing downloaded assets", "Preparing downloaded mods"},
+                                   {"Host mods frozen and ready", "Lobby mods ready"},
+                                   {"Checking prepared assets", "Checking mods"},
+                                   {"Verifying runtime resources", "Checking mods"},
+                                   {"Materializing", "Preparing"},
+                                   {"Preparing legacy import", "Preparing import"},
+                                   {"Import review ready", "Import ready"},
+                                   {"Import stopped safely", "Import stopped"},
+                                   {"Preparing texture-pack import", "Checking texture pack"}}) {
         if (const auto at = value.find(from); at != std::string::npos)
             value.replace(at, from.size(), to);
     }
@@ -157,13 +154,11 @@ inline std::string progress(std::string_view diagnostic) {
 
 inline std::string mod_support(std::string_view diagnostic, bool behaviour) {
     const auto value = lowercase(diagnostic);
-    if (value.find("remain unclassified") != std::string::npos ||
-        value.find("unresolved") != std::string::npos ||
+    if (value.find("remain unclassified") != std::string::npos || value.find("unresolved") != std::string::npos ||
         value.find("not supported") != std::string::npos)
         return "Some custom gameplay changes aren't supported. See Details.";
-    return behaviour
-               ? "Includes supported custom gameplay changes. See Details for limitations."
-               : "Uses original game behaviour. Prepare the source again to check custom features.";
+    return behaviour ? "Includes supported custom gameplay changes. See Details for limitations."
+                     : "Uses original game behaviour. Prepare the source again to check custom features.";
 }
 
 // Explicit manual checks may reopen the result, even when this release was

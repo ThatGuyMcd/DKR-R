@@ -17,16 +17,20 @@
 double process_cpu_ms() {
 #if defined(_WIN32)
     FILETIME created{}, exited{}, kernel{}, user{};
-    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) return -1;
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
+        return -1;
     ULARGE_INTEGER k{}, u{};
-    k.LowPart = kernel.dwLowDateTime; k.HighPart = kernel.dwHighDateTime;
-    u.LowPart = user.dwLowDateTime; u.HighPart = user.dwHighDateTime;
+    k.LowPart = kernel.dwLowDateTime;
+    k.HighPart = kernel.dwHighDateTime;
+    u.LowPart = user.dwLowDateTime;
+    u.HighPart = user.dwHighDateTime;
     return (k.QuadPart + u.QuadPart) / 10000.0;
 #else
     rusage usage{};
-    if (getrusage(RUSAGE_SELF, &usage) != 0) return -1;
-    return (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) * 1000.0
-        + (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000.0;
+    if (getrusage(RUSAGE_SELF, &usage) != 0)
+        return -1;
+    return (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) * 1000.0 +
+           (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1000.0;
 #endif
 }
 
@@ -37,7 +41,8 @@ double process_cpu_ms() {
 #endif
 NOINLINE unsigned consume(const std::uint8_t* bytes, std::size_t size) {
     unsigned value = 0;
-    for (std::size_t i = 0; i < size; i += 4096) value += bytes[i];
+    for (std::size_t i = 0; i < size; i += 4096)
+        value += bytes[i];
     return value;
 }
 int main() {
@@ -63,7 +68,7 @@ int main() {
             }
         }
         std::printf("snapshot_%s_300_tasks_ms=%.3f\n", pooled ? "pooled" : "baseline",
-            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
     }
     const auto cpu = process_cpu_ms();
     const auto start = RT64::Timer::current();
@@ -76,11 +81,13 @@ int main() {
         const double late = double(RT64::Timer::deltaMicroseconds(deadline, RT64::Timer::current()));
         total_late_us += late;
         lateness.push_back(late);
-        if (late > max_late_us) max_late_us = late;
+        if (late > max_late_us)
+            max_late_us = late;
     }
     const auto consumed = process_cpu_ms() - cpu;
     std::sort(lateness.begin(), lateness.end());
-    std::printf("pacing_600_frames_cpu_ms=%.3f mean_late_us=%.2f p95_late_us=%.2f p99_late_us=%.2f max_late_us=%.2f checksum=%u\n",
+    std::printf(
+        "pacing_600_frames_cpu_ms=%.3f mean_late_us=%.2f p95_late_us=%.2f p99_late_us=%.2f max_late_us=%.2f checksum=%u\n",
         consumed, total_late_us / lateness.size(), lateness[569], lateness[593], max_late_us, checksum);
 #if defined(_WIN32)
     timeEndPeriod(1);

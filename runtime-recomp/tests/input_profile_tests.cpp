@@ -37,26 +37,16 @@ int main() {
     const ShortcutBinding texture_shortcut{23, kUnbound};
     const ShortcutBinding fullscreen_shortcut{24, 25};
     const ShortcutBinding recenter_shortcut{26, 27};
-    set_shortcut_controller_binding(ShortcutAction::ToggleOverlay,
-                                    overlay_shortcut);
-    set_shortcut_controller_binding(ShortcutAction::ToggleTexturePack,
-                                    texture_shortcut);
-    set_shortcut_controller_binding(ShortcutAction::ToggleFullscreen,
-                                    fullscreen_shortcut);
-    set_shortcut_controller_binding(ShortcutAction::RecenterGyro,
-                                    recenter_shortcut);
-    assert(shortcut_controller_binding(ShortcutAction::ToggleOverlay).primary ==
-           overlay_shortcut.primary);
-    assert(shortcut_controller_binding(ShortcutAction::ToggleOverlay).secondary ==
-           overlay_shortcut.secondary);
-    assert(shortcut_controller_binding(ShortcutAction::ToggleTexturePack).primary ==
-           texture_shortcut.primary);
-    assert(shortcut_controller_binding(ShortcutAction::ToggleFullscreen).secondary ==
-           fullscreen_shortcut.secondary);
-    assert(shortcut_controller_binding(ShortcutAction::RecenterGyro).primary ==
-           recenter_shortcut.primary);
-    assert(shortcut_controller_binding(ShortcutAction::RecenterGyro).secondary ==
-           recenter_shortcut.secondary);
+    set_shortcut_controller_binding(ShortcutAction::ToggleOverlay, overlay_shortcut);
+    set_shortcut_controller_binding(ShortcutAction::ToggleTexturePack, texture_shortcut);
+    set_shortcut_controller_binding(ShortcutAction::ToggleFullscreen, fullscreen_shortcut);
+    set_shortcut_controller_binding(ShortcutAction::RecenterGyro, recenter_shortcut);
+    assert(shortcut_controller_binding(ShortcutAction::ToggleOverlay).primary == overlay_shortcut.primary);
+    assert(shortcut_controller_binding(ShortcutAction::ToggleOverlay).secondary == overlay_shortcut.secondary);
+    assert(shortcut_controller_binding(ShortcutAction::ToggleTexturePack).primary == texture_shortcut.primary);
+    assert(shortcut_controller_binding(ShortcutAction::ToggleFullscreen).secondary == fullscreen_shortcut.secondary);
+    assert(shortcut_controller_binding(ShortcutAction::RecenterGyro).primary == recenter_shortcut.primary);
+    assert(shortcut_controller_binding(ShortcutAction::RecenterGyro).secondary == recenter_shortcut.secondary);
 
     // Vehicle inversion is deliberately independent. Inverting planes must
     // not alter car or hovercraft steering.

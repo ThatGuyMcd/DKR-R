@@ -9,11 +9,10 @@
 #endif
 
 using namespace dkr::updates;
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     if (argc >= 2 && std::string_view(argv[1]) == "--child-arguments") {
 #ifdef _WIN32
-        const bool unicode =
-            std::wstring_view(GetCommandLineW()).find(L"caf\u00e9") != std::wstring_view::npos;
+        const bool unicode = std::wstring_view(GetCommandLineW()).find(L"caf\u00e9") != std::wstring_view::npos;
 #else
         const bool unicode = argc == 5 && std::string_view(argv[4]) == "caf\xC3\xA9";
 #endif
@@ -36,8 +35,7 @@ int main(int argc, char **argv) {
     assert(windows_application_directory(root / "DKR-R-Runtime.exe") == root);
     assert(windows_application_directory(root / "libexec/dkr-r/DKR-R-Runtime.exe") == root);
     assert(windows_application_directory(root / "LIBEXEC/DkR-R/DKR-R-Runtime.exe") == root);
-    assert(windows_application_directory(root / "libexec/other/program.exe") ==
-           root / "libexec/other");
+    assert(windows_application_directory(root / "libexec/other/program.exe") == root / "libexec/other");
     struct Cleanup {
         std::filesystem::path root;
         ~Cleanup() {
@@ -49,25 +47,19 @@ int main(int argc, char **argv) {
         bool rejected = false;
         try {
             InstallLock exclusive(root, 100);
-        } catch (const std::exception &) {
+        } catch (const std::exception&) {
             rejected = true;
         }
         assert(rejected);
     }
-    {
-        InstallLock exclusive(root, 100);
-    }
+    { InstallLock exclusive(root, 100); }
     // Lock storage is outside the application, including a read-only install.
 #ifndef _WIN32
-    std::filesystem::permissions(root, std::filesystem::perms::owner_read |
-                                           std::filesystem::perms::owner_exec);
-    {
-        InstallLock read_only(root, 100, true);
-    }
+    std::filesystem::permissions(root, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec);
+    { InstallLock read_only(root, 100, true); }
     std::filesystem::permissions(root, std::filesystem::perms::owner_all);
 #endif
-    Child arguments(application_executable(),
-                    {"--child-arguments", "", "quoted \"text\" with spaces\\", "caf\xC3\xA9"},
+    Child arguments(application_executable(), {"--child-arguments", "", "quoted \"text\" with spaces\\", "caf\xC3\xA9"},
                     root);
     assert(arguments.wait(10000) == 42);
     assert(arguments.wait(0) == 42);

@@ -49,23 +49,14 @@ void end_dialogue_pass(std::uint8_t* rdram, recomp_context* context);
 
 extern "C" void dkr_hud_element_begin(std::uint8_t* rdram, recomp_context* context);
 extern "C" void dkr_hud_element_end(std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_hud_minimap_begin(std::uint8_t* rdram,
-                                        recomp_context* context);
-extern "C" void dkr_hud_minimap_end(std::uint8_t* rdram,
-                                      recomp_context* context);
-extern "C" void dkr_hud_player_pass_begin(std::uint8_t* rdram,
-                                            recomp_context* context);
-extern "C" void dkr_hud_player_pass_end(std::uint8_t* rdram,
-                                          recomp_context* context);
-extern "C" void dkr_hud_general_pass_begin(std::uint8_t* rdram,
-                                             recomp_context* context);
-extern "C" void dkr_hud_general_pass_end(std::uint8_t* rdram,
-                                           recomp_context* context);
-extern "C" void dkr_hud_dialogue_pass_begin(std::uint8_t* rdram,
-                                              recomp_context* context);
-extern "C" void dkr_hud_dialogue_pass_end(std::uint8_t* rdram,
-                                            recomp_context* context);
-extern "C" void dkr_refresh_combined_accessories(std::uint8_t* rdram,
-                                                   recomp_context* context);
+extern "C" void dkr_hud_minimap_begin(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_hud_minimap_end(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_hud_player_pass_begin(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_hud_player_pass_end(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_hud_general_pass_begin(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_hud_general_pass_end(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_hud_dialogue_pass_begin(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_hud_dialogue_pass_end(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_refresh_combined_accessories(std::uint8_t* rdram, recomp_context* context);
 extern "C" void dkr_hud_timer_begin(std::uint8_t* rdram, recomp_context* context);
 extern "C" void dkr_hud_timer_end(std::uint8_t* rdram, recomp_context* context);

@@ -19,14 +19,14 @@ static_assert(sizeof(ReplayHeader) == 32U);
 
 std::string safe_name(std::string value) {
     for (char& character : value) {
-        const bool safe = (character >= 'a' && character <= 'z') ||
-            (character >= 'A' && character <= 'Z') ||
-            (character >= '0' && character <= '9') || character == '-' || character == '_';
-        if (!safe) character = '_';
+        const bool safe = (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+                          (character >= '0' && character <= '9') || character == '-' || character == '_';
+        if (!safe)
+            character = '_';
     }
     return value.empty() ? "session" : value;
 }
-}
+} // namespace
 
 void ReplayRecorder::configure(std::filesystem::path directory) {
     directory_ = std::move(directory);
@@ -36,15 +36,16 @@ void ReplayRecorder::begin(const Room& room) {
     frames_.clear();
     room_id_ = room.room_id;
     manifest_hash_ = manifest_hash(room.manifest);
-    player_count_ = static_cast<std::uint8_t>(std::count_if(
-        room.players.begin(), room.players.end(),
-        [](const Player& player) { return player.occupied; }));
+    player_count_ = static_cast<std::uint8_t>(
+        std::count_if(room.players.begin(), room.players.end(), [](const Player& player) { return player.occupied; }));
     active_ = room.rules.record_replay && !directory_.empty();
 }
 
 void ReplayRecorder::record(std::uint32_t frame, const FrameInputs& inputs) {
-    if (!active_) return;
-    if (!frames_.empty() && frame <= frames_.back().frame) return;
+    if (!active_)
+        return;
+    if (!frames_.empty() && frame <= frames_.back().frame)
+        return;
     frames_.push_back({frame, inputs});
 }
 
@@ -64,18 +65,21 @@ bool ReplayRecorder::finalize(std::string& error) {
         error = "Could not create the netplay replay directory.";
         return false;
     }
-    const auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    last_path_ = directory_ /
-        (safe_name(room_id_) + "-" + std::to_string(stamp) + ".dkrreplay");
+    const auto stamp =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    last_path_ = directory_ / (safe_name(room_id_) + "-" + std::to_string(stamp) + ".dkrreplay");
     std::ofstream stream(last_path_, std::ios::binary | std::ios::trunc);
     if (!stream) {
         error = "Could not create the netplay replay file.";
         return false;
     }
     const ReplayHeader header{{'D', 'K', 'R', 'R', 'E', 'P', 'L', 'Y'},
-        manifest_hash_, static_cast<std::uint32_t>(frames_.size()), 1U,
-        player_count_, {}};
+                              manifest_hash_,
+                              static_cast<std::uint32_t>(frames_.size()),
+                              1U,
+                              player_count_,
+                              {}};
     stream.write(reinterpret_cast<const char*>(&header), sizeof(header));
     stream.write(reinterpret_cast<const char*>(frames_.data()),
                  static_cast<std::streamsize>(frames_.size() * sizeof(ReplayFrame)));

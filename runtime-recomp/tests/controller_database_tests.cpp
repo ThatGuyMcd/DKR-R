@@ -68,14 +68,10 @@ int main(int argc, char** argv) {
 
         has_8bitdo_n64 |= line.find(",8BitDo N64,") != std::string::npos;
         has_nso_n64 |= line.find(",NSO N64 Controller,") != std::string::npos;
-        has_hyperkin_n64 |=
-            line.find(",Hyperkin Admiral N64 Controller,") != std::string::npos;
-        has_mayflash_n64 |=
-            line.find(",Mayflash N64 Adapter,") != std::string::npos;
-        has_raphnet_n64 |=
-            line.find(",Raphnet N64 Adapter,") != std::string::npos;
-        has_retrousb_n64 |=
-            line.find(",RetroUSB N64 RetroPort,") != std::string::npos;
+        has_hyperkin_n64 |= line.find(",Hyperkin Admiral N64 Controller,") != std::string::npos;
+        has_mayflash_n64 |= line.find(",Mayflash N64 Adapter,") != std::string::npos;
+        has_raphnet_n64 |= line.find(",Raphnet N64 Adapter,") != std::string::npos;
+        has_retrousb_n64 |= line.find(",RetroUSB N64 RetroPort,") != std::string::npos;
     }
 
     assert(mappings >= 2200U);

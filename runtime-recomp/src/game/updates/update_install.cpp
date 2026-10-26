@@ -15,19 +15,19 @@
 namespace dkr::updates {
 namespace {
 using Json = nlohmann::json;
-Json parse(const std::filesystem::path &file) {
+Json parse(const std::filesystem::path& file) {
     auto bytes = read_text(file);
-    return Json::parse(bytes.begin(), bytes.end(), [](int depth, Json::parse_event_t, Json &) {
+    return Json::parse(bytes.begin(), bytes.end(), [](int depth, Json::parse_event_t, Json&) {
         if (depth > 32)
             throw std::runtime_error("Update request is too deeply nested.");
         return true;
     });
 }
-std::filesystem::path health(const std::filesystem::path &data, const std::string &token) {
+std::filesystem::path health(const std::filesystem::path& data, const std::string& token) {
     unhex(token, 16);
     return data / "updates" / ("health-" + token + ".json");
 }
-void set_health_environment(const std::string &token, const std::filesystem::path &data) {
+void set_health_environment(const std::string& token, const std::filesystem::path& data) {
 #ifdef _WIN32
     auto wide_token = std::wstring(token.begin(), token.end());
     SetEnvironmentVariableW(L"DKR_UPDATE_TOKEN", token.empty() ? nullptr : wide_token.c_str());
@@ -42,7 +42,7 @@ void set_health_environment(const std::string &token, const std::filesystem::pat
     }
 #endif
 }
-std::filesystem::path bundle(const std::filesystem::path &executable) {
+std::filesystem::path bundle(const std::filesystem::path& executable) {
     auto root = executable.parent_path().parent_path().parent_path();
     if (root.extension() != ".app")
         throw std::runtime_error("This macOS build is not an application bundle.");
@@ -66,11 +66,10 @@ std::filesystem::path actual_target() {
     return application_executable();
 #endif
 }
-void ordinary(const std::filesystem::path &path) {
+void ordinary(const std::filesystem::path& path) {
     (void)hash_file(path);
 }
-void restore_single(const std::filesystem::path &target, const std::filesystem::path &backup,
-                    bool directory) {
+void restore_single(const std::filesystem::path& target, const std::filesystem::path& backup, bool directory) {
     if (!directory)
         ordinary(backup);
     else
@@ -89,7 +88,7 @@ void restore_single(const std::filesystem::path &target, const std::filesystem::
     }
 }
 } // namespace
-std::string installation_unavailable(const Configuration &config) {
+std::string installation_unavailable(const Configuration& config) {
 #if defined(__ANDROID__)
     (void)config;
     return {}; // The Android adapter uses the system installer.
@@ -107,21 +106,21 @@ std::string installation_unavailable(const Configuration &config) {
         (void)installed_files(target);
         ordinary(target / "DKR-R.exe");
 #elif !defined(__APPLE__)
-        auto *image = std::getenv("APPIMAGE");
+        auto* image = std::getenv("APPIMAGE");
         if (!image || !*image)
             return "This is not an AppImage installation. Update through your package manager or "
                    "install the downloaded release manually.";
         ordinary(target);
 #endif
         return {};
-    } catch (const std::exception &) {
+    } catch (const std::exception&) {
         return "This build/location has no qualified updater helper or ownership receipt. Open the "
                "release page and update manually.";
     }
 #endif
 }
-void prepare_install(const Configuration &config, const Manifest &manifest,
-                     const std::filesystem::path &package, std::stop_token stop) {
+void prepare_install(const Configuration& config, const Manifest& manifest, const std::filesystem::path& package,
+                     std::stop_token stop) {
 #if defined(__ANDROID__) || defined(DKR_IOS)
     (void)config;
     (void)manifest;
@@ -129,7 +128,7 @@ void prepare_install(const Configuration &config, const Manifest &manifest,
     (void)stop;
     throw std::runtime_error("Use the platform installer for this package.");
 #else
-    const auto *artifact = manifest.find(config.platform);
+    const auto* artifact = manifest.find(config.platform);
     if (!artifact)
         throw std::runtime_error("Update does not support this platform.");
     if (hash_file(package, kMaxPackageBytes) != artifact->sha256 ||
@@ -150,12 +149,11 @@ void prepare_install(const Configuration &config, const Manifest &manifest,
         if (hash_file(stage) != artifact->sha256)
             throw std::runtime_error("Could not verify the staged AppImage.");
 #ifndef _WIN32
-        std::filesystem::permissions(
-            stage,
-            std::filesystem::perms::owner_all | std::filesystem::perms::group_read |
-                std::filesystem::perms::group_exec | std::filesystem::perms::others_read |
-                std::filesystem::perms::others_exec,
-            std::filesystem::perm_options::replace);
+        std::filesystem::permissions(stage,
+                                     std::filesystem::perms::owner_all | std::filesystem::perms::group_read |
+                                         std::filesystem::perms::group_exec | std::filesystem::perms::others_read |
+                                         std::filesystem::perms::others_exec,
+                                     std::filesystem::perm_options::replace);
 #endif
     }
     if (stop.stop_requested())
@@ -164,8 +162,7 @@ void prepare_install(const Configuration &config, const Manifest &manifest,
     auto helper = job / config.helper.filename();
     copy_file_durable(config.helper, helper);
 #ifndef _WIN32
-    std::filesystem::permissions(helper, std::filesystem::perms::owner_all,
-                                 std::filesystem::perm_options::replace);
+    std::filesystem::permissions(helper, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
 #endif
     auto manifest_bytes = read_text(config.data / "updates/manifest.json"),
          signature = read_text(config.data / "updates/manifest.sig", 128);
@@ -193,17 +190,15 @@ void prepare_install(const Configuration &config, const Manifest &manifest,
         if (std::filesystem::exists(job / "ready"))
             return;
         if (child.wait(0) >= 0)
-            throw std::runtime_error(
-                "Update helper could not accept the handoff; the current app remains open.");
+            throw std::runtime_error("Update helper could not accept the handoff; the current app remains open.");
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    throw std::runtime_error(
-        "Update helper did not acknowledge the handoff; no installed files were changed.");
+    throw std::runtime_error("Update helper did not acknowledge the handoff; no installed files were changed.");
 #endif
 }
-void acknowledge_updated_launcher(const Configuration &config) {
-    auto *token = std::getenv("DKR_UPDATE_TOKEN");
-    auto *data = std::getenv("DKR_UPDATE_DATA");
+void acknowledge_updated_launcher(const Configuration& config) {
+    auto* token = std::getenv("DKR_UPDATE_TOKEN");
+    auto* data = std::getenv("DKR_UPDATE_DATA");
     if (!token || !data)
         return;
     try {
@@ -212,15 +207,14 @@ void acknowledge_updated_launcher(const Configuration &config) {
             throw std::runtime_error("The updated launcher selected a different data folder.");
         auto id = std::string(token);
         unhex(id, 16);
-        durable_write(
-            health(config.data, id),
-            Json{{"schema", 1}, {"id", id}, {"version", config.version}, {"ready", true}}.dump());
+        durable_write(health(config.data, id),
+                      Json{{"schema", 1}, {"id", id}, {"version", config.version}, {"ready", true}}.dump());
         set_health_environment({}, {});
-    } catch (const std::exception &e) {
+    } catch (const std::exception& e) {
         std::fprintf(stderr, "[updates][health] %s\n", e.what());
     }
 }
-int updater_main(int argc, char **argv) {
+int updater_main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--self-test") {
         std::puts("DKR-R updater protocol 1");
         return 0;
@@ -245,19 +239,17 @@ int updater_main(int argc, char **argv) {
             throw std::runtime_error("Unsupported update request.");
         auto id = r.at("id").get<std::string>();
         unhex(id, 16);
-        auto data =
-            std::filesystem::canonical(std::filesystem::u8path(r.at("data").get<std::string>()));
+        auto data = std::filesystem::canonical(std::filesystem::u8path(r.at("data").get<std::string>()));
         if (job != data / "updates" / ("handoff-" + id))
             throw std::runtime_error("Update request is outside its private handoff directory.");
-        auto manifest = verify_manifest(read_text(job / "manifest.json"),
-                                        read_text(job / "manifest.sig", 128), kUpdatePublicKey);
+        auto manifest =
+            verify_manifest(read_text(job / "manifest.json"), read_text(job / "manifest.sig", 128), kUpdatePublicKey);
         if (r.at("platform") != platform())
             throw std::runtime_error("Update helper architecture does not match.");
-        auto *artifact = manifest.find(platform());
+        auto* artifact = manifest.find(platform());
         if (!artifact)
             throw std::runtime_error("No update package for this helper.");
-        target = std::filesystem::weakly_canonical(
-            std::filesystem::u8path(r.at("target").get<std::string>()));
+        target = std::filesystem::weakly_canonical(std::filesystem::u8path(r.at("target").get<std::string>()));
         if (target == target.root_path())
             throw std::runtime_error("Refusing to update a filesystem root.");
         package_kind = r.at("kind").get<std::string>();
@@ -265,8 +257,7 @@ int updater_main(int argc, char **argv) {
             throw std::runtime_error("Unexpected update installation kind.");
         auto root = package_kind == "zip" ? target : target.parent_path();
         if (package_kind == "bundle" && target.extension() != ".app")
-            throw std::runtime_error(
-                "Update recovery is restricted to the exact application bundle.");
+            throw std::runtime_error("Update recovery is restricted to the exact application bundle.");
         if (recover_only) {
             InstallLock recovery(root, 5000);
             if (package_kind == "zip") {
@@ -275,12 +266,9 @@ int updater_main(int argc, char **argv) {
             } else {
                 auto record = parse(job / "single-journal.json");
                 auto backup = root / (".dkr-update-backup-" + id);
-                if (record.at("target") != path_utf8(target) ||
-                    record.at("backup") != path_utf8(backup))
-                    throw std::runtime_error(
-                        "Recovery record does not match its exact application.");
-                if (package_kind == "appimage" &&
-                    hash_file(backup) != record.at("old_hash").get<std::string>())
+                if (record.at("target") != path_utf8(target) || record.at("backup") != path_utf8(backup))
+                    throw std::runtime_error("Recovery record does not match its exact application.");
+                if (package_kind == "appimage" && hash_file(backup) != record.at("old_hash").get<std::string>())
                     throw std::runtime_error("The recovery backup changed; nothing was restored.");
                 restore_single(target, backup, package_kind == "bundle");
             }
@@ -300,7 +288,7 @@ int updater_main(int argc, char **argv) {
         std::vector<std::string> arguments = r.at("arguments").get<std::vector<std::string>>();
         if (arguments.size() > 128)
             throw std::runtime_error("Too many relaunch arguments.");
-        for (auto &arg : arguments)
+        for (auto& arg : arguments)
             if (arg.size() > 32768 || arg.find('\0') != arg.npos)
                 throw std::runtime_error("Invalid relaunch argument.");
         restart_executable = executable;
@@ -319,8 +307,7 @@ int updater_main(int argc, char **argv) {
                 auto current = parse(target / "assets/updates/install.json");
                 if (Version::parse(manifest.version)
                         .compare(Version::parse(current.at("version").get<std::string>())) <= 0)
-                    throw std::runtime_error(
-                        "Refusing an automatic downgrade or same-version replacement.");
+                    throw std::runtime_error("Refusing an automatic downgrade or same-version replacement.");
                 install_files(target, stage, *artifact);
                 authorize_updated_launch(target, id, data, manifest.version);
             } else {
@@ -329,8 +316,7 @@ int updater_main(int argc, char **argv) {
                 if (std::filesystem::exists(backup))
                     throw std::runtime_error("Backup destination already exists.");
                 if (package_kind == "appimage") {
-                    if (std::filesystem::file_size(stage) != artifact->bytes ||
-                        hash_file(stage) != artifact->sha256)
+                    if (std::filesystem::file_size(stage) != artifact->bytes || hash_file(stage) != artifact->sha256)
                         throw std::runtime_error("Staged AppImage failed verification.");
                     copy_file_durable(target, backup);
                     durable_write(job / "single-journal.json", Json{{"schema", 1},
@@ -345,9 +331,8 @@ int updater_main(int argc, char **argv) {
                     require_private_tree(stage);
                     if (target.extension() != ".app")
                         throw std::runtime_error("Unsafe bundle target.");
-                    for (auto &file : artifact->files)
-                        if (file.link.empty() &&
-                            hash_file(stage / std::filesystem::u8path(file.path)) != file.sha256)
+                    for (auto& file : artifact->files)
+                        if (file.link.empty() && hash_file(stage / std::filesystem::u8path(file.path)) != file.sha256)
                             throw std::runtime_error("Staged bundle failed verification.");
                     durable_write(job / "single-journal.json", Json{{"schema", 1},
                                                                     {"state", "prepared"},
@@ -386,8 +371,7 @@ int updater_main(int argc, char **argv) {
                 commit_files(target);
                 archive_transaction(target);
             }
-            durable_write(job / "result.json",
-                          Json{{"state", "complete"}, {"version", manifest.version}}.dump());
+            durable_write(job / "result.json", Json{{"state", "complete"}, {"version", manifest.version}}.dump());
             return 0;
         }
         // Never overwrite a still-running failed successor. The bootstrap can
@@ -405,12 +389,11 @@ int updater_main(int argc, char **argv) {
         }
         durable_write(
             job / "result.json",
-            Json{{"state", "recovered"},
-                 {"error", "Updated launcher did not start; previous application restored."}}
+            Json{{"state", "recovered"}, {"error", "Updated launcher did not start; previous application restored."}}
                 .dump());
         Child previous(executable, arguments, root);
         return 1;
-    } catch (const std::exception &error) {
+    } catch (const std::exception& error) {
         std::fprintf(stderr, "[updates][installer] %s\n", error.what());
         if (!successor_started && !target.empty() && package_kind == "zip") {
             try {
@@ -419,23 +402,21 @@ int updater_main(int argc, char **argv) {
                     recover_files(target);
                     archive_transaction(target);
                 }
-            } catch (const std::exception &recovery_error) {
+            } catch (const std::exception& recovery_error) {
                 std::fprintf(stderr, "[updates][recovery] %s\n", recovery_error.what());
             }
         }
-        if (!successor_started && !single_backup.empty() &&
-            std::filesystem::exists(single_backup)) {
+        if (!successor_started && !single_backup.empty() && std::filesystem::exists(single_backup)) {
             try {
                 InstallLock recovery(target.parent_path(), 5000);
                 restore_single(target, single_backup, package_kind == "bundle");
-            } catch (const std::exception &recovery_error) {
+            } catch (const std::exception& recovery_error) {
                 std::fprintf(stderr, "[updates][recovery] %s\n", recovery_error.what());
             }
         }
         try {
             if (!job.empty())
-                durable_write(job / "result.json",
-                              Json{{"state", "failed"}, {"error", error.what()}}.dump());
+                durable_write(job / "result.json", Json{{"state", "failed"}, {"error", error.what()}}.dump());
         } catch (...) {
         }
         if (parent_closed && !successor_started && !restart_executable.empty()) {

@@ -11,7 +11,7 @@
 using namespace dkr::updates;
 using Json = nlohmann::json;
 namespace {
-void idle(Service &service) {
+void idle(Service& service) {
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (service.snapshot().busy) {
         assert(std::chrono::steady_clock::now() < end);
@@ -29,8 +29,7 @@ struct Feed {
         seed[0] = 79;
         crypto_ed25519_key_pair(secret.data(), pub.data(), seed.data());
         key = hex(pub);
-        auto sha =
-            hash(std::span(reinterpret_cast<const std::uint8_t *>(package.data()), package.size()));
+        auto sha = hash(std::span(reinterpret_cast<const std::uint8_t*>(package.data()), package.size()));
         Json value = {{"schema", 1},
                       {"minimum_updater", 1},
                       {"version", "1.0.7"},
@@ -45,24 +44,21 @@ struct Feed {
                                                   {"sha256", sha},
                                                   {"files", Json::array()}}})}};
         manifest = value.dump();
-        crypto_ed25519_sign(sig.data(), secret.data(),
-                            reinterpret_cast<const std::uint8_t *>(manifest.data()),
+        crypto_ed25519_sign(sig.data(), secret.data(), reinterpret_cast<const std::uint8_t*>(manifest.data()),
                             manifest.size());
         signature = hex(sig);
-        release = {
-            {"tag_name", "Version1.0.7"},
-            {"draft", false},
-            {"prerelease", false},
-            {"html_url", value["notes"]},
-            {"assets",
-             Json::array({{{"name", "DKR-R-update.json"},
-                           {"browser_download_url", "https://github.com/ThatGuyMcd/DKR-R/releases/"
-                                                    "download/Version1.0.7/DKR-R-update.json"}},
-                          {{"name", "DKR-R-update.sig"},
-                           {"browser_download_url", "https://github.com/ThatGuyMcd/DKR-R/releases/"
-                                                    "download/Version1.0.7/DKR-R-update.sig"}}})}};
+        release = {{"tag_name", "Version1.0.7"},
+                   {"draft", false},
+                   {"prerelease", false},
+                   {"html_url", value["notes"]},
+                   {"assets", Json::array({{{"name", "DKR-R-update.json"},
+                                            {"browser_download_url", "https://github.com/ThatGuyMcd/DKR-R/releases/"
+                                                                     "download/Version1.0.7/DKR-R-update.json"}},
+                                           {{"name", "DKR-R-update.sig"},
+                                            {"browser_download_url", "https://github.com/ThatGuyMcd/DKR-R/releases/"
+                                                                     "download/Version1.0.7/DKR-R-update.sig"}}})}};
     }
-    HttpResponse get(const HttpRequest &r, std::stop_token stop, const Progress &progress) {
+    HttpResponse get(const HttpRequest& r, std::stop_token stop, const Progress& progress) {
         ++calls;
         while (blocked && !stop.stop_requested())
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -100,18 +96,16 @@ struct Feed {
         HttpSink sink(r, stop, progress);
         sink.response.status = 200;
         sink.header("etag", "\"package-1\"");
-        assert(sink.write(
-            std::span(reinterpret_cast<const std::uint8_t *>(package.data()), package.size())));
+        assert(sink.write(std::span(reinterpret_cast<const std::uint8_t*>(package.data()), package.size())));
         sink.finish();
         return sink.response;
     }
 };
 } // namespace
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     auto root = std::filesystem::temp_directory_path() /
-                std::filesystem::path(
-                    "dkrr-update-service-" +
-                    std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+                std::filesystem::path("dkrr-update-service-" +
+                                      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directory(root);
     struct Cleanup {
         std::filesystem::path p;
@@ -120,24 +114,20 @@ int main(int argc, char **argv) {
         }
     } cleanup{root};
     if (argc == 2 && std::string_view(argv[1]) == "--github-smoke") {
-        Service live(
-            Configuration{root, root, {}, "1.0.6", std::string(kUpdatePublicKey), platform(), {}});
+        Service live(Configuration{root, root, {}, "1.0.6", std::string(kUpdatePublicKey), platform(), {}});
         live.check();
         auto end = std::chrono::steady_clock::now() + std::chrono::seconds(20);
         while (live.snapshot().busy && std::chrono::steady_clock::now() < end)
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
         auto state = live.snapshot();
         std::cout << state.message << '\n';
-        return !state.busy && (state.state == State::Current || state.state == State::Available)
-                   ? 0
-                   : 1;
+        return !state.busy && (state.state == State::Current || state.state == State::Available) ? 0 : 1;
     }
-    auto test = [&](const char *name, Feed &feed) {
+    auto test = [&](const char* name, Feed& feed) {
         auto data = root / name;
         std::filesystem::create_directory(data);
-        return std::make_unique<Service>(
-            Configuration{data, root, {}, "1.0.6", feed.key, "linux-x86_64", {}},
-            [&feed](auto &r, auto stop, auto &p) { return feed.get(r, stop, p); });
+        return std::make_unique<Service>(Configuration{data, root, {}, "1.0.6", feed.key, "linux-x86_64", {}},
+                                         [&feed](auto& r, auto stop, auto& p) { return feed.get(r, stop, p); });
     };
     Feed good;
     auto app = test("good", good);
@@ -162,8 +152,7 @@ int main(int argc, char **argv) {
     auto previous = root / "previous" / "updates";
     std::filesystem::create_directories(previous / ("handoff-" + previous_id));
     durable_write(previous / "last-install.json", Json{{"id", previous_id}}.dump());
-    durable_write(previous / ("handoff-" + previous_id) / "result.json",
-                  Json{{"state", "recovered"}}.dump());
+    durable_write(previous / ("handoff-" + previous_id) / "result.json", Json{{"state", "recovered"}}.dump());
     auto restored = test("previous", good);
     assert(restored->snapshot().installation_result.find("restored") != std::string::npos);
     Feed bad;
@@ -203,8 +192,7 @@ int main(int argc, char **argv) {
     auto old_release = test("manual", manual);
     old_release->check();
     idle(*old_release);
-    assert(old_release->snapshot().manual_only &&
-           old_release->snapshot().state == State::Available);
+    assert(old_release->snapshot().manual_only && old_release->snapshot().state == State::Available);
     Feed beta;
     beta.beta_list = true;
     auto beta_app = test("beta", beta);

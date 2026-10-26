@@ -40,15 +40,15 @@ gpr guest(std::uint32_t address) {
 // which the decoder fills in under g_mutex.
 struct Binding {
     custom_tracks::MusicInfo info;
-    std::string identity;      // file digest plus every playback setting
+    std::string identity; // file digest plus every playback setting
     LoopRange loop;
-    float volume = 1.0F;       // the author's level, 0..2
+    float volume = 1.0F; // the author's level, 0..2
     std::shared_ptr<const DecodedMusic> pcm;
 };
 
 std::mutex g_mutex;
-std::shared_ptr<Binding> g_binding;            // null: the level has no music file
-std::shared_ptr<const DecodedMusic> g_cache;   // the last file decoded, kept for restarts
+std::shared_ptr<Binding> g_binding;          // null: the level has no music file
+std::shared_ptr<const DecodedMusic> g_cache; // the last file decoded, kept for restarts
 std::string g_cache_key;
 
 // The decoder: one worker at a time, joined before the next starts and at exit.
@@ -63,12 +63,14 @@ struct Decoder {
         }
         cancel.store(false, std::memory_order_relaxed);
     }
-    ~Decoder() { stop(); }
+    ~Decoder() {
+        stop();
+    }
 };
 Decoder g_decoder;
 
 // Published by the game thread, read by the audio output.
-std::atomic<std::uint8_t> g_carrier{0};        // 0 when nothing is bound
+std::atomic<std::uint8_t> g_carrier{0}; // 0 when nothing is bound
 std::atomic<bool> g_carrier_playing{false};
 std::atomic<float> g_game_gain{1.0F};
 std::atomic<float> g_tempo{1.0F};
@@ -98,7 +100,7 @@ struct SequenceSong {
     std::uint32_t starts = 0;
 };
 
-std::shared_ptr<SequenceSong> g_sequence;      // under g_mutex
+std::shared_ptr<SequenceSong> g_sequence; // under g_mutex
 
 // ALCSPlayer_Custom's bank (0x20); ALBank's instCount (0) and instArray (0x0C);
 // ALSeqFile's seqCount (2); MusicData is {volume, tempo, reverb}.
@@ -117,9 +119,8 @@ struct SavedRow {
 SavedRow g_saved_row;
 
 std::string sequence_identity(const custom_tracks::MusicInfo& info) {
-    return info.sha256 + "|" + std::to_string(info.carrier) + "|" +
-           std::to_string(info.volume) + "|" + std::to_string(info.tempo_bpm) + "|" +
-           std::to_string(info.reverb) + "|" + std::to_string(info.channel_mask);
+    return info.sha256 + "|" + std::to_string(info.carrier) + "|" + std::to_string(info.volume) + "|" +
+           std::to_string(info.tempo_bpm) + "|" + std::to_string(info.reverb) + "|" + std::to_string(info.channel_mask);
 }
 
 void restore_row(std::uint8_t* rdram) {
@@ -127,8 +128,7 @@ void restore_row(std::uint8_t* rdram) {
         return;
     }
     for (std::uint32_t index = 0; index < kMusicDataBytes; ++index) {
-        MEM_B(index, guest(g_saved_row.address)) =
-            static_cast<std::int8_t>(g_saved_row.bytes[index]);
+        MEM_B(index, guest(g_saved_row.address)) = static_cast<std::int8_t>(g_saved_row.bytes[index]);
     }
     g_saved_row.held = false;
 }
@@ -143,8 +143,8 @@ bool check_against_rom(std::uint8_t* rdram, std::uint32_t player, SequenceSong& 
     if (table != 0U && lengths != 0U) {
         const auto count = static_cast<std::int16_t>(MEM_H(kSeqFileCountOffset, guest(table)));
         for (std::int32_t index = 0; index < count; ++index) {
-            capacity = std::max(capacity, static_cast<std::uint32_t>(
-                MEM_W(static_cast<std::int32_t>(index * 4), guest(lengths))));
+            capacity = std::max(
+                capacity, static_cast<std::uint32_t>(MEM_W(static_cast<std::int32_t>(index * 4), guest(lengths))));
         }
     }
     if (capacity == 0U) {
@@ -158,8 +158,7 @@ bool check_against_rom(std::uint8_t* rdram, std::uint32_t player, SequenceSong& 
         const auto count = static_cast<std::int16_t>(MEM_H(0, guest(bank)));
         for (std::int32_t index = 0; index < 128 && index < count; ++index) {
             programs[static_cast<std::size_t>(index)] =
-                MEM_W(static_cast<std::int32_t>(kBankInstrumentsOffset + index * 4U),
-                      guest(bank)) != 0;
+                MEM_W(static_cast<std::int32_t>(kBankInstrumentsOffset + index * 4U), guest(bank)) != 0;
         }
         known = &programs;
     }
@@ -168,16 +167,16 @@ bool check_against_rom(std::uint8_t* rdram, std::uint32_t player, SequenceSong& 
     const dkr::runtime::custom_music::SequenceCheck check =
         dkr::runtime::custom_music::validate_sequence(bytes, capacity, known);
     if (!check.ok()) {
-        std::fprintf(stderr, "[custom-music] %s cannot play in this game: %s (%s); the "
+        std::fprintf(stderr,
+                     "[custom-music] %s cannot play in this game: %s (%s); the "
                      "track plays sequence %d instead\n",
-                     song.info.file.filename().string().c_str(), check.message.c_str(),
-                     check.code.c_str(), static_cast<int>(song.info.carrier));
+                     song.info.file.filename().string().c_str(), check.message.c_str(), check.code.c_str(),
+                     static_cast<int>(song.info.carrier));
         return false;
     }
     std::fprintf(stderr, "[custom-music] %s: %u bytes of %u, %u notes, %d BPM\n",
-                 song.info.file.filename().string().c_str(),
-                 static_cast<unsigned>(bytes.size()), static_cast<unsigned>(capacity),
-                 static_cast<unsigned>(check.report.notes),
+                 song.info.file.filename().string().c_str(), static_cast<unsigned>(bytes.size()),
+                 static_cast<unsigned>(capacity), static_cast<unsigned>(check.report.notes),
                  static_cast<int>(song.info.tempo_bpm));
     return true;
 }
@@ -187,42 +186,41 @@ std::string cache_key(const custom_tracks::MusicInfo& info) {
 }
 
 std::string identity_of(const custom_tracks::MusicInfo& info) {
-    return cache_key(info) + "|" + std::to_string(info.volume) + "|" +
-           std::to_string(info.loop_start) + "|" + std::to_string(info.loop_end) + "|" +
-           std::to_string(info.carrier) + "|" + (info.final_lap_speedup ? "s" : "c");
+    return cache_key(info) + "|" + std::to_string(info.volume) + "|" + std::to_string(info.loop_start) + "|" +
+           std::to_string(info.loop_end) + "|" + std::to_string(info.carrier) + "|" +
+           (info.final_lap_speedup ? "s" : "c");
 }
 
 void decode_for(std::weak_ptr<Binding> target, custom_tracks::MusicInfo info) {
     auto decoded = std::make_shared<DecodedMusic>();
     std::string error;
-    if (!dkr::runtime::custom_music::decode_file(info.file, info.codec, info.sha256,
-                                                 *decoded, error, &g_decoder.cancel)) {
+    if (!dkr::runtime::custom_music::decode_file(info.file, info.codec, info.sha256, *decoded, error,
+                                                 &g_decoder.cancel)) {
         if (error != "cancelled") {
-            std::fprintf(stderr, "[custom-music] %s: %s; the track plays its game song "
-                         "silently instead\n", info.file.filename().string().c_str(),
-                         error.c_str());
+            std::fprintf(stderr,
+                         "[custom-music] %s: %s; the track plays its game song "
+                         "silently instead\n",
+                         info.file.filename().string().c_str(), error.c_str());
         }
         return;
     }
     if (decoded->frames != info.frames) {
         // The addon measured with the same decoders, so this is a file it did
         // not write. Play it anyway; the loop is clamped to what decoded.
-        std::fprintf(stderr, "[custom-music] %s decoded to %llu frames, the manifest "
-                     "says %llu\n", info.file.filename().string().c_str(),
-                     static_cast<unsigned long long>(decoded->frames),
+        std::fprintf(stderr,
+                     "[custom-music] %s decoded to %llu frames, the manifest "
+                     "says %llu\n",
+                     info.file.filename().string().c_str(), static_cast<unsigned long long>(decoded->frames),
                      static_cast<unsigned long long>(info.frames));
     }
     std::scoped_lock lock(g_mutex);
     g_cache = decoded;
     g_cache_key = cache_key(info);
     if (auto binding = target.lock()) {
-        binding->loop = dkr::runtime::custom_music::loop_range(
-            decoded->frames, info.loop_start, info.loop_end);
+        binding->loop = dkr::runtime::custom_music::loop_range(decoded->frames, info.loop_start, info.loop_end);
         binding->pcm = decoded;
-        std::fprintf(stderr, "[custom-music] ready: %s, %.1f s at %u Hz\n",
-                     info.file.filename().string().c_str(),
-                     static_cast<double>(decoded->frames) / decoded->sample_rate,
-                     decoded->sample_rate);
+        std::fprintf(stderr, "[custom-music] ready: %s, %.1f s at %u Hz\n", info.file.filename().string().c_str(),
+                     static_cast<double>(decoded->frames) / decoded->sample_rate, decoded->sample_rate);
     }
 }
 
@@ -242,16 +240,14 @@ void on_level_load(std::int32_t level) {
     std::unique_lock lock(g_mutex);
     if (!info || info->kind == custom_tracks::MusicKind::Sequence) {
         if (g_binding) {
-            std::fprintf(stderr, "[custom-music] level %d has no music file\n",
-                         static_cast<int>(level));
+            std::fprintf(stderr, "[custom-music] level %d has no music file\n", static_cast<int>(level));
         }
         g_binding.reset();
         g_carrier.store(0, std::memory_order_release);
     }
     if (!info || info->kind != custom_tracks::MusicKind::Sequence) {
         if (g_sequence) {
-            std::fprintf(stderr, "[custom-music] level %d has no sequence of its own\n",
-                         static_cast<int>(level));
+            std::fprintf(stderr, "[custom-music] level %d has no sequence of its own\n", static_cast<int>(level));
         }
         g_sequence.reset();
     }
@@ -261,42 +257,40 @@ void on_level_load(std::int32_t level) {
     if (info->kind == custom_tracks::MusicKind::Sequence) {
         const std::string identity = sequence_identity(*info);
         if (g_sequence && g_sequence->identity == identity) {
-            return;  // A restart of the same track: keep what was checked.
+            return; // A restart of the same track: keep what was checked.
         }
         g_sequence.reset();
         // Read at scan; a digest that disagrees means the manifest was edited
         // by hand, and the bytes are not the ones the addon validated.
         const auto& bytes = *info->sequence;
         if (dkr::runtime::custom_music::sha256_hex(bytes.data(), bytes.size()) != info->sha256) {
-            std::fprintf(stderr, "[custom-music] %s does not match the manifest's sha256; "
+            std::fprintf(stderr,
+                         "[custom-music] %s does not match the manifest's sha256; "
                          "the track plays sequence %d instead\n",
-                         info->file.filename().string().c_str(),
-                         static_cast<int>(info->carrier));
+                         info->file.filename().string().c_str(), static_cast<int>(info->carrier));
             return;
         }
         auto song = std::make_shared<SequenceSong>();
         song->info = *info;
         song->identity = identity;
         g_sequence = std::move(song);
-        std::fprintf(stderr, "[custom-music] level %d plays %s in place of sequence %d\n",
-                     static_cast<int>(level), info->file.filename().string().c_str(),
-                     static_cast<int>(info->carrier));
+        std::fprintf(stderr, "[custom-music] level %d plays %s in place of sequence %d\n", static_cast<int>(level),
+                     info->file.filename().string().c_str(), static_cast<int>(info->carrier));
         return;
     }
     g_follow_tempo.store(info->final_lap_speedup, std::memory_order_release);
     g_carrier.store(info->carrier, std::memory_order_release);
     const std::string identity = identity_of(*info);
     if (g_binding && g_binding->identity == identity) {
-        return;  // A restart of the same track: keep what is decoded.
+        return; // A restart of the same track: keep what is decoded.
     }
 
     auto binding = std::make_shared<Binding>();
     binding->info = *info;
     binding->identity = identity;
     binding->volume = static_cast<float>(info->volume) / 100.0F;
-    std::fprintf(stderr, "[custom-music] level %d plays %s over sequence %d\n",
-                 static_cast<int>(level), info->file.filename().string().c_str(),
-                 static_cast<int>(info->carrier));
+    std::fprintf(stderr, "[custom-music] level %d plays %s over sequence %d\n", static_cast<int>(level),
+                 info->file.filename().string().c_str(), static_cast<int>(info->carrier));
     if (g_cache && g_cache_key == cache_key(*info)) {
         binding->pcm = g_cache;
         binding->loop = loop_range(g_cache->frames, info->loop_start, info->loop_end);
@@ -329,16 +323,15 @@ bool intercept_music_volume(std::uint8_t* rdram, std::int32_t requested) {
 }
 
 void tick(std::uint8_t* rdram) {
-    if(dkr::runtime::legacy::frozen_music_hook("tick",rdram,nullptr))return;
+    if (dkr::runtime::legacy::frozen_music_hook("tick", rdram, nullptr))
+        return;
     const std::uint8_t carrier = g_carrier.load(std::memory_order_acquire);
     bool playing = false;
     if (carrier != 0U) {
         const auto player = static_cast<std::uint32_t>(MEM_W(0, guest(addresses::MusicPlayer)));
         if (player != 0U) {
-            const auto state = static_cast<std::int32_t>(
-                MEM_W(kPlayerStateOffset, guest(player)));
-            playing = state == kAlPlaying &&
-                      MEM_BU(0, guest(addresses::CurrentSequence)) == carrier;
+            const auto state = static_cast<std::int32_t>(MEM_W(kPlayerStateOffset, guest(player)));
+            playing = state == kAlPlaying && MEM_BU(0, guest(addresses::CurrentSequence)) == carrier;
         }
     }
     if (playing && !g_was_playing) {
@@ -355,15 +348,15 @@ void tick(std::uint8_t* rdram) {
         if (g_base_bpm <= 0 && bpm > 0) {
             g_base_bpm = bpm;
         }
-        g_tempo.store(static_cast<float>(tempo_ratio(bpm, g_base_bpm,
-                                                         g_follow_tempo.load(std::memory_order_acquire))),
+        g_tempo.store(static_cast<float>(tempo_ratio(bpm, g_base_bpm, g_follow_tempo.load(std::memory_order_acquire))),
                       std::memory_order_release);
     }
     g_carrier_playing.store(playing, std::memory_order_release);
 }
 
 void render(float* out, std::size_t frames, std::uint32_t output_rate) {
-    if(dkr::runtime::legacy::frozen_music_render(out,frames,output_rate))return;
+    if (dkr::runtime::legacy::frozen_music_render(out, frames, output_rate))
+        return;
     if (out == nullptr || frames == 0U || output_rate == 0U) {
         return;
     }
@@ -392,8 +385,7 @@ void render(float* out, std::size_t frames, std::uint32_t output_rate) {
     const std::uint32_t serial = g_restart_serial.load(std::memory_order_acquire);
     const bool restarting = serial != g_render_serial;
     const bool playing = g_carrier_playing.load(std::memory_order_acquire) && !restarting;
-    const float target = playing
-        ? g_game_gain.load(std::memory_order_acquire) * binding->volume : 0.0F;
+    const float target = playing ? g_game_gain.load(std::memory_order_acquire) * binding->volume : 0.0F;
     if (g_applied_gain <= 0.0F && target <= 0.0F) {
         // Silent: a restart can rewind without a click.
         g_applied_gain = 0.0F;
@@ -403,15 +395,15 @@ void render(float* out, std::size_t frames, std::uint32_t output_rate) {
         }
         return;
     }
-    const double step = static_cast<double>(pcm->sample_rate) / output_rate *
-                        g_tempo.load(std::memory_order_acquire);
-    dkr::runtime::custom_music::render(pcm->samples.data(), pcm->frames, loop, g_position,
-                                       step, g_applied_gain, target, out, frames);
+    const double step = static_cast<double>(pcm->sample_rate) / output_rate * g_tempo.load(std::memory_order_acquire);
+    dkr::runtime::custom_music::render(pcm->samples.data(), pcm->frames, loop, g_position, step, g_applied_gain, target,
+                                       out, frames);
     g_applied_gain = target;
 }
 
 bool active() {
-    if(dkr::runtime::legacy::frozen_online_resources())return true;
+    if (dkr::runtime::legacy::frozen_online_resources())
+        return true;
     std::scoped_lock lock(g_mutex);
     return static_cast<bool>(g_binding);
 }
@@ -423,7 +415,7 @@ bool sequence_active() {
 
 void sequence_loaded(std::uint8_t* rdram, std::uint32_t player, std::uint32_t buffer,
                      std::uint32_t sequence_id_address) {
-    restore_row(rdram);  // Never carry a swapped row past one start.
+    restore_row(rdram); // Never carry a swapped row past one start.
     std::shared_ptr<SequenceSong> song;
     {
         std::scoped_lock lock(g_mutex);
@@ -432,7 +424,7 @@ void sequence_loaded(std::uint8_t* rdram, std::uint32_t player, std::uint32_t bu
     if (!song || player == 0U || buffer == 0U ||
         player != static_cast<std::uint32_t>(MEM_W(0, guest(addresses::MusicPlayer))) ||
         MEM_BU(0, guest(sequence_id_address)) != song->info.carrier) {
-        return;  // A jingle, a menu song, or another level's music.
+        return; // A jingle, a menu song, or another level's music.
     }
     if (!song->checked) {
         song->checked = true;
@@ -448,8 +440,7 @@ void sequence_loaded(std::uint8_t* rdram, std::uint32_t player, std::uint32_t bu
     // retail loader's even lengths imply.
     const auto& bytes = *song->info.sequence;
     for (std::size_t index = 0; index < bytes.size(); ++index) {
-        MEM_B(static_cast<std::int32_t>(index), guest(buffer)) =
-            static_cast<std::int8_t>(bytes[index]);
+        MEM_B(static_cast<std::int32_t>(index), guest(buffer)) = static_cast<std::int8_t>(bytes[index]);
     }
     if ((bytes.size() & 1U) != 0U) {
         MEM_B(static_cast<std::int32_t>(bytes.size()), guest(buffer)) = 0;
@@ -485,7 +476,8 @@ void sequence_started(std::uint8_t* rdram) {
 // player, s1 the buffer and s3 the address of the pending song id (0x800023B4
 // in both US revisions).
 extern "C" void dkr_custom_music_sequence_loaded(std::uint8_t* rdram, recomp_context* ctx) {
-    if(dkr::runtime::legacy::frozen_music_hook("loaded",rdram,ctx))return;
+    if (dkr::runtime::legacy::frozen_music_hook("loaded", rdram, ctx))
+        return;
     dkr::runtime::custom_music::sequence_loaded(rdram, static_cast<std::uint32_t>(ctx->r16),
                                                 static_cast<std::uint32_t>(ctx->r17),
                                                 static_cast<std::uint32_t>(ctx->r19));
@@ -494,6 +486,7 @@ extern "C" void dkr_custom_music_sequence_loaded(std::uint8_t* rdram, recomp_con
 // music_sequence_init, once sound_reverb_set has returned: the row has been
 // read for the last time in this call (0x8000247C in both US revisions).
 extern "C" void dkr_custom_music_sequence_started(std::uint8_t* rdram, recomp_context* ctx) {
-    if(dkr::runtime::legacy::frozen_music_hook("started",rdram,ctx))return;
+    if (dkr::runtime::legacy::frozen_music_hook("started", rdram, ctx))
+        return;
     dkr::runtime::custom_music::sequence_started(rdram);
 }

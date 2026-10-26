@@ -26,64 +26,63 @@ void Put64(std::vector<std::uint8_t>& out, std::uint64_t value) {
     }
 }
 
-bool Take16(std::span<const std::uint8_t> bytes, std::size_t& cursor,
-            std::uint16_t& value) {
-    if (cursor + 2U > bytes.size()) return false;
-    value = static_cast<std::uint16_t>(bytes[cursor] << 8U) |
-            bytes[cursor + 1U];
+bool Take16(std::span<const std::uint8_t> bytes, std::size_t& cursor, std::uint16_t& value) {
+    if (cursor + 2U > bytes.size())
+        return false;
+    value = static_cast<std::uint16_t>(bytes[cursor] << 8U) | bytes[cursor + 1U];
     cursor += 2U;
     return true;
 }
 
-bool Take32(std::span<const std::uint8_t> bytes, std::size_t& cursor,
-            std::uint32_t& value) {
-    if (cursor + 4U > bytes.size()) return false;
+bool Take32(std::span<const std::uint8_t> bytes, std::size_t& cursor, std::uint32_t& value) {
+    if (cursor + 4U > bytes.size())
+        return false;
     value = 0U;
-    for (int i = 0; i < 4; ++i) value = (value << 8U) | bytes[cursor++];
+    for (int i = 0; i < 4; ++i)
+        value = (value << 8U) | bytes[cursor++];
     return true;
 }
 
-bool Take64(std::span<const std::uint8_t> bytes, std::size_t& cursor,
-            std::uint64_t& value) {
-    if (cursor + 8U > bytes.size()) return false;
+bool Take64(std::span<const std::uint8_t> bytes, std::size_t& cursor, std::uint64_t& value) {
+    if (cursor + 8U > bytes.size())
+        return false;
     value = 0U;
-    for (int i = 0; i < 8; ++i) value = (value << 8U) | bytes[cursor++];
+    for (int i = 0; i < 8; ++i)
+        value = (value << 8U) | bytes[cursor++];
     return true;
 }
 
 bool ValidType(std::uint8_t type) {
-    return type==250 || (type >= static_cast<std::uint8_t>(MessageType::Hello) &&
-           type <= static_cast<std::uint8_t>(MessageType::ModData));
+    return type == 250 || (type >= static_cast<std::uint8_t>(MessageType::Hello) &&
+                           type <= static_cast<std::uint8_t>(MessageType::ModData));
 }
 
-bool PutString(std::vector<std::uint8_t>& out, std::string_view value,
-               std::size_t maximum) {
-    if (value.size() > maximum || value.size() > 255U) return false;
+bool PutString(std::vector<std::uint8_t>& out, std::string_view value, std::size_t maximum) {
+    if (value.size() > maximum || value.size() > 255U)
+        return false;
     out.push_back(static_cast<std::uint8_t>(value.size()));
     out.insert(out.end(), value.begin(), value.end());
     return true;
 }
 
-bool TakeString(std::span<const std::uint8_t> bytes, std::size_t& cursor,
-                std::string& value, std::size_t maximum) {
-    if (cursor >= bytes.size()) return false;
+bool TakeString(std::span<const std::uint8_t> bytes, std::size_t& cursor, std::string& value, std::size_t maximum) {
+    if (cursor >= bytes.size())
+        return false;
     const std::size_t length = bytes[cursor++];
-    if (length > maximum || cursor + length > bytes.size()) return false;
+    if (length > maximum || cursor + length > bytes.size())
+        return false;
     value.assign(reinterpret_cast<const char*>(bytes.data() + cursor), length);
     cursor += length;
     return true;
 }
 
-bool PutManifest(std::vector<std::uint8_t>& out,
-                 const CompatibilityManifest& manifest) {
-    if(!valid_mod_manifest_hash(manifest.mod_manifest_hash) ||
-       !valid_mod_manifest_hash(manifest.owned_engine_hash) ||
-       !valid_mod_manifest_hash(manifest.owned_resources_hash))return false;
+bool PutManifest(std::vector<std::uint8_t>& out, const CompatibilityManifest& manifest) {
+    if (!valid_mod_manifest_hash(manifest.mod_manifest_hash) || !valid_mod_manifest_hash(manifest.owned_engine_hash) ||
+        !valid_mod_manifest_hash(manifest.owned_resources_hash))
+        return false;
     Put32(out, manifest.protocol_version);
-    if (!PutString(out, manifest.release_version,
-                   kMaximumReleaseVersionBytes) ||
-        !PutString(out, manifest.build_fingerprint,
-                   kMaximumBuildFingerprintBytes)) {
+    if (!PutString(out, manifest.release_version, kMaximumReleaseVersionBytes) ||
+        !PutString(out, manifest.build_fingerprint, kMaximumBuildFingerprintBytes)) {
         return false;
     }
     out.push_back(static_cast<std::uint8_t>(manifest.revision));
@@ -93,67 +92,61 @@ bool PutManifest(std::vector<std::uint8_t>& out,
     Put64(out, manifest.magic_codes_hash);
     Put64(out, manifest.session_save_hash);
     Put32(out, manifest.simulation_rate);
-    return PutString(out, manifest.architecture, 32U) &&
-           PutString(out, manifest.floating_point_mode, 48U) &&
-           PutString(out, manifest.mod_manifest_hash, 64U) &&
-           PutString(out, manifest.owned_engine_hash, 64U) &&
+    return PutString(out, manifest.architecture, 32U) && PutString(out, manifest.floating_point_mode, 48U) &&
+           PutString(out, manifest.mod_manifest_hash, 64U) && PutString(out, manifest.owned_engine_hash, 64U) &&
            PutString(out, manifest.owned_resources_hash, 64U);
 }
 
-bool TakeManifest(std::span<const std::uint8_t> bytes, std::size_t& cursor,
-                  CompatibilityManifest& manifest) {
+bool TakeManifest(std::span<const std::uint8_t> bytes, std::size_t& cursor, CompatibilityManifest& manifest) {
     std::uint8_t revision = 0U;
     if (!Take32(bytes, cursor, manifest.protocol_version) ||
-        !TakeString(bytes, cursor, manifest.release_version,
-                    kMaximumReleaseVersionBytes) ||
-        !TakeString(bytes, cursor, manifest.build_fingerprint,
-                    kMaximumBuildFingerprintBytes) ||
+        !TakeString(bytes, cursor, manifest.release_version, kMaximumReleaseVersionBytes) ||
+        !TakeString(bytes, cursor, manifest.build_fingerprint, kMaximumBuildFingerprintBytes) ||
         cursor >= bytes.size()) {
         return false;
     }
     revision = bytes[cursor++];
-    if (revision > static_cast<std::uint8_t>(Revision::UsV80) ||
-        !Take64(bytes, cursor, manifest.canonical_rom_hash) ||
-        !Take64(bytes, cursor, manifest.patch_policy_hash) ||
-        !Take64(bytes, cursor, manifest.gameplay_settings_hash) ||
-        !Take64(bytes, cursor, manifest.magic_codes_hash) ||
-        !Take64(bytes, cursor, manifest.session_save_hash) ||
-        !Take32(bytes, cursor, manifest.simulation_rate) ||
-        !TakeString(bytes, cursor, manifest.architecture, 32U) ||
+    if (revision > static_cast<std::uint8_t>(Revision::UsV80) || !Take64(bytes, cursor, manifest.canonical_rom_hash) ||
+        !Take64(bytes, cursor, manifest.patch_policy_hash) || !Take64(bytes, cursor, manifest.gameplay_settings_hash) ||
+        !Take64(bytes, cursor, manifest.magic_codes_hash) || !Take64(bytes, cursor, manifest.session_save_hash) ||
+        !Take32(bytes, cursor, manifest.simulation_rate) || !TakeString(bytes, cursor, manifest.architecture, 32U) ||
         !TakeString(bytes, cursor, manifest.floating_point_mode, 48U) ||
         !TakeString(bytes, cursor, manifest.mod_manifest_hash, 64U) ||
         !TakeString(bytes, cursor, manifest.owned_engine_hash, 64U) ||
         !TakeString(bytes, cursor, manifest.owned_resources_hash, 64U) ||
-        !valid_mod_manifest_hash(manifest.mod_manifest_hash) ||
-        !valid_mod_manifest_hash(manifest.owned_engine_hash) ||
+        !valid_mod_manifest_hash(manifest.mod_manifest_hash) || !valid_mod_manifest_hash(manifest.owned_engine_hash) ||
         !valid_mod_manifest_hash(manifest.owned_resources_hash)) {
         return false;
     }
     manifest.revision = static_cast<Revision>(revision);
-    return !manifest.release_version.empty() &&
-           !manifest.build_fingerprint.empty() &&
-           !manifest.architecture.empty() &&
+    return !manifest.release_version.empty() && !manifest.build_fingerprint.empty() && !manifest.architecture.empty() &&
            !manifest.floating_point_mode.empty();
 }
 
 } // namespace
 
 std::vector<std::uint8_t> encode_mod_offer(const ModOfferPayload& payload) {
-    if(payload.manifest_hash.empty() || !valid_mod_manifest_hash(payload.manifest_hash) ||
-       !payload.manifest_bytes || payload.manifest_bytes>dkr::mods::online::MaxManifestBytes)return {};
-    std::vector<std::uint8_t> out;PutString(out,payload.manifest_hash,64);Put32(out,payload.manifest_bytes);return out;
+    if (payload.manifest_hash.empty() || !valid_mod_manifest_hash(payload.manifest_hash) || !payload.manifest_bytes ||
+        payload.manifest_bytes > dkr::mods::online::MaxManifestBytes)
+        return {};
+    std::vector<std::uint8_t> out;
+    PutString(out, payload.manifest_hash, 64);
+    Put32(out, payload.manifest_bytes);
+    return out;
 }
-bool decode_mod_offer(std::span<const std::uint8_t> bytes,ModOfferPayload& payload) {
-    ModOfferPayload out;std::size_t at=0;
-    if(!TakeString(bytes,at,out.manifest_hash,64) || out.manifest_hash.empty() || !valid_mod_manifest_hash(out.manifest_hash) ||
-       !Take32(bytes,at,out.manifest_bytes) || !out.manifest_bytes || out.manifest_bytes>dkr::mods::online::MaxManifestBytes || at!=bytes.size())return false;
-    payload=std::move(out);return true;
+bool decode_mod_offer(std::span<const std::uint8_t> bytes, ModOfferPayload& payload) {
+    ModOfferPayload out;
+    std::size_t at = 0;
+    if (!TakeString(bytes, at, out.manifest_hash, 64) || out.manifest_hash.empty() ||
+        !valid_mod_manifest_hash(out.manifest_hash) || !Take32(bytes, at, out.manifest_bytes) || !out.manifest_bytes ||
+        out.manifest_bytes > dkr::mods::online::MaxManifestBytes || at != bytes.size())
+        return false;
+    payload = std::move(out);
+    return true;
 }
 
-std::vector<std::uint8_t> encode(
-    const Datagram& datagram, std::size_t maximum_datagram_bytes) {
-    if (maximum_datagram_bytes < 32U ||
-        maximum_datagram_bytes > kMaximumQuickJoinDatagramBytes ||
+std::vector<std::uint8_t> encode(const Datagram& datagram, std::size_t maximum_datagram_bytes) {
+    if (maximum_datagram_bytes < 32U || maximum_datagram_bytes > kMaximumQuickJoinDatagramBytes ||
         datagram.payload.size() + 32U > maximum_datagram_bytes ||
         datagram.payload.size() > std::numeric_limits<std::uint16_t>::max()) {
         return {};
@@ -172,55 +165,46 @@ std::vector<std::uint8_t> encode(
     return out;
 }
 
-bool decode(std::span<const std::uint8_t> bytes, Datagram& datagram,
-            std::string& error, std::size_t maximum_datagram_bytes) {
+bool decode(std::span<const std::uint8_t> bytes, Datagram& datagram, std::string& error,
+            std::size_t maximum_datagram_bytes) {
     datagram = {};
-    if (maximum_datagram_bytes < 32U ||
-        maximum_datagram_bytes > kMaximumQuickJoinDatagramBytes ||
-        bytes.size() < 32U || bytes.size() > maximum_datagram_bytes) {
+    if (maximum_datagram_bytes < 32U || maximum_datagram_bytes > kMaximumQuickJoinDatagramBytes || bytes.size() < 32U ||
+        bytes.size() > maximum_datagram_bytes) {
         error = "Datagram size is outside the protocol limits.";
         return false;
     }
     std::size_t cursor = 0U;
     std::uint32_t magic = 0U;
     std::uint32_t version = 0U;
-    if (!Take32(bytes, cursor, magic) || !Take32(bytes, cursor, version) ||
-        magic != kMagic || version != kProtocolVersion) {
+    if (!Take32(bytes, cursor, magic) || !Take32(bytes, cursor, version) || magic != kMagic ||
+        version != kProtocolVersion) {
         error = "Datagram magic or protocol version is invalid.";
         return false;
     }
     const std::uint8_t type = bytes[cursor++];
     const std::uint8_t reserved = bytes[cursor++];
     std::uint16_t payload_size = 0U;
-    if (!ValidType(type) || reserved != 0U ||
-        !Take16(bytes, cursor, payload_size) ||
-        !Take64(bytes, cursor, datagram.header.match_id) ||
-        !Take64(bytes, cursor, datagram.header.sequence) ||
-        !Take32(bytes, cursor, datagram.header.frame) ||
-        cursor + payload_size != bytes.size()) {
+    if (!ValidType(type) || reserved != 0U || !Take16(bytes, cursor, payload_size) ||
+        !Take64(bytes, cursor, datagram.header.match_id) || !Take64(bytes, cursor, datagram.header.sequence) ||
+        !Take32(bytes, cursor, datagram.header.frame) || cursor + payload_size != bytes.size()) {
         error = "Datagram header or payload length is invalid.";
         return false;
     }
     datagram.header.type = static_cast<MessageType>(type);
-    datagram.payload.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
-                            bytes.end());
+    datagram.payload.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor), bytes.end());
     error.clear();
     return true;
 }
 
 std::vector<std::uint8_t> encode_input_batch(const InputBatch& batch) {
-    if (batch.epoch == 0U || batch.player_slot >= kMaximumPlayers ||
-        batch.inputs.empty() ||
-        batch.inputs.size() > 64U ||
-        (!batch.revisions.empty() && batch.revisions.size() != batch.inputs.size()) ||
+    if (batch.epoch == 0U || batch.player_slot >= kMaximumPlayers || batch.inputs.empty() ||
+        batch.inputs.size() > 64U || (!batch.revisions.empty() && batch.revisions.size() != batch.inputs.size()) ||
         batch.first_frame >
-            std::numeric_limits<std::uint32_t>::max() -
-                static_cast<std::uint32_t>(batch.inputs.size() - 1U)) {
+            std::numeric_limits<std::uint32_t>::max() - static_cast<std::uint32_t>(batch.inputs.size() - 1U)) {
         return {};
     }
     std::vector<std::uint8_t> out;
-    out.reserve(10U + batch.inputs.size() * 8U +
-                (batch.simulation_progress_present ? 8U : 0U));
+    out.reserve(10U + batch.inputs.size() * 8U + (batch.simulation_progress_present ? 8U : 0U));
     Put32(out, batch.epoch);
     out.push_back(batch.player_slot);
     out.push_back(static_cast<std::uint8_t>(batch.inputs.size()));
@@ -228,7 +212,8 @@ std::vector<std::uint8_t> encode_input_batch(const InputBatch& batch) {
     for (std::size_t i = 0; i < batch.inputs.size(); ++i) {
         const PackedInput input = batch.inputs[i];
         const auto revision = batch.revisions.empty() ? 1U : batch.revisions[i];
-        if (revision == 0U) return {};
+        if (revision == 0U)
+            return {};
         Put16(out, input.buttons);
         out.push_back(static_cast<std::uint8_t>(input.stick_x));
         out.push_back(static_cast<std::uint8_t>(input.stick_y));
@@ -241,8 +226,7 @@ std::vector<std::uint8_t> encode_input_batch(const InputBatch& batch) {
     return out;
 }
 
-bool decode_input_batch(std::span<const std::uint8_t> bytes,
-                        InputBatch& batch, std::string& error) {
+bool decode_input_batch(std::span<const std::uint8_t> bytes, InputBatch& batch, std::string& error) {
     batch = {};
     if (bytes.size() < 18U) {
         error = "Input batch is truncated.";
@@ -255,15 +239,11 @@ bool decode_input_batch(std::span<const std::uint8_t> bytes,
     }
     batch.player_slot = bytes[cursor++];
     const std::uint8_t count = bytes[cursor++];
-    const std::size_t input_bytes =
-        10U + static_cast<std::size_t>(count) * 8U;
-    if (batch.epoch == 0U || batch.player_slot >= kMaximumPlayers ||
-        count == 0U || count > 64U ||
+    const std::size_t input_bytes = 10U + static_cast<std::size_t>(count) * 8U;
+    if (batch.epoch == 0U || batch.player_slot >= kMaximumPlayers || count == 0U || count > 64U ||
         (bytes.size() != input_bytes && bytes.size() != input_bytes + 8U) ||
         !Take32(bytes, cursor, batch.first_frame) ||
-        batch.first_frame >
-            std::numeric_limits<std::uint32_t>::max() -
-                static_cast<std::uint32_t>(count - 1U)) {
+        batch.first_frame > std::numeric_limits<std::uint32_t>::max() - static_cast<std::uint32_t>(count - 1U)) {
         error = "Input batch metadata is invalid.";
         return false;
     }
@@ -302,10 +282,8 @@ bool decode_input_batch(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_input_acknowledge(
-    const InputAcknowledgePayload& acknowledgement) {
-    if (acknowledgement.epoch == 0U ||
-        acknowledgement.player_slot >= kMaximumPlayers) {
+std::vector<std::uint8_t> encode_input_acknowledge(const InputAcknowledgePayload& acknowledgement) {
+    if (acknowledgement.epoch == 0U || acknowledgement.player_slot >= kMaximumPlayers) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -317,23 +295,17 @@ std::vector<std::uint8_t> encode_input_acknowledge(
     return out;
 }
 
-bool decode_input_acknowledge(
-    std::span<const std::uint8_t> bytes,
-    InputAcknowledgePayload& acknowledgement) {
+bool decode_input_acknowledge(std::span<const std::uint8_t> bytes, InputAcknowledgePayload& acknowledgement) {
     acknowledgement = {};
     std::size_t cursor = 0U;
-    return bytes.size() == 13U &&
-           Take32(bytes, cursor, acknowledgement.epoch) &&
-           cursor < bytes.size() &&
-           (acknowledgement.player_slot = bytes[cursor++]) <
-               kMaximumPlayers &&
+    return bytes.size() == 13U && Take32(bytes, cursor, acknowledgement.epoch) && cursor < bytes.size() &&
+           (acknowledgement.player_slot = bytes[cursor++]) < kMaximumPlayers &&
            Take32(bytes, cursor, acknowledgement.newest_frame) &&
-           Take32(bytes, cursor, acknowledgement.first_missing_frame) &&
-           acknowledgement.epoch != 0U && cursor == bytes.size();
+           Take32(bytes, cursor, acknowledgement.first_missing_frame) && acknowledgement.epoch != 0U &&
+           cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_input_repair_request(
-    const InputRepairRequestPayload& request) {
+std::vector<std::uint8_t> encode_input_repair_request(const InputRepairRequestPayload& request) {
     if (request.epoch == 0U || request.player_slot >= kMaximumPlayers) {
         return {};
     }
@@ -345,20 +317,15 @@ std::vector<std::uint8_t> encode_input_repair_request(
     return out;
 }
 
-bool decode_input_repair_request(
-    std::span<const std::uint8_t> bytes,
-    InputRepairRequestPayload& request) {
+bool decode_input_repair_request(std::span<const std::uint8_t> bytes, InputRepairRequestPayload& request) {
     request = {};
     std::size_t cursor = 0U;
-    return bytes.size() == 9U && Take32(bytes, cursor, request.epoch) &&
-           cursor < bytes.size() &&
+    return bytes.size() == 9U && Take32(bytes, cursor, request.epoch) && cursor < bytes.size() &&
            (request.player_slot = bytes[cursor++]) < kMaximumPlayers &&
-           Take32(bytes, cursor, request.first_missing_frame) &&
-           request.epoch != 0U && cursor == bytes.size();
+           Take32(bytes, cursor, request.first_missing_frame) && request.epoch != 0U && cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_frame_commit_request(
-    const FrameCommitRequestPayload& request) {
+std::vector<std::uint8_t> encode_frame_commit_request(const FrameCommitRequestPayload& request) {
     if (request.epoch == 0U || request.player_slot >= kMaximumPlayers) {
         return {};
     }
@@ -370,27 +337,19 @@ std::vector<std::uint8_t> encode_frame_commit_request(
     return out;
 }
 
-bool decode_frame_commit_request(
-    std::span<const std::uint8_t> bytes,
-    FrameCommitRequestPayload& request) {
+bool decode_frame_commit_request(std::span<const std::uint8_t> bytes, FrameCommitRequestPayload& request) {
     request = {};
     std::size_t cursor = 0U;
-    return bytes.size() == 9U && Take32(bytes, cursor, request.epoch) &&
-           cursor < bytes.size() &&
+    return bytes.size() == 9U && Take32(bytes, cursor, request.epoch) && cursor < bytes.size() &&
            (request.player_slot = bytes[cursor++]) < kMaximumPlayers &&
-           Take32(bytes, cursor, request.first_missing_frame) &&
-           request.epoch != 0U && cursor == bytes.size();
+           Take32(bytes, cursor, request.first_missing_frame) && request.epoch != 0U && cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_gameplay_handoff(
-    const GameplayHandoffPayload& handoff) {
-    if (handoff.current_input_epoch == 0U ||
-        handoff.player_slot >= kMaximumPlayers ||
+std::vector<std::uint8_t> encode_gameplay_handoff(const GameplayHandoffPayload& handoff) {
+    if (handoff.current_input_epoch == 0U || handoff.player_slot >= kMaximumPlayers ||
         handoff.stage > GameplayHandoffStage::Suspend ||
-        (handoff.stage == GameplayHandoffStage::Request &&
-         handoff.resume_input_epoch != 0U) ||
-        (handoff.stage == GameplayHandoffStage::Suspend &&
-         handoff.resume_input_epoch == 0U)) {
+        (handoff.stage == GameplayHandoffStage::Request && handoff.resume_input_epoch != 0U) ||
+        (handoff.stage == GameplayHandoffStage::Suspend && handoff.resume_input_epoch == 0U)) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -404,35 +363,26 @@ std::vector<std::uint8_t> encode_gameplay_handoff(
     return out;
 }
 
-bool decode_gameplay_handoff(std::span<const std::uint8_t> bytes,
-                             GameplayHandoffPayload& handoff) {
+bool decode_gameplay_handoff(std::span<const std::uint8_t> bytes, GameplayHandoffPayload& handoff) {
     handoff = {};
     std::size_t cursor = 0U;
     std::uint8_t stage = 0U;
-    if (bytes.size() != 18U ||
-        !Take32(bytes, cursor, handoff.current_input_epoch) ||
-        !Take32(bytes, cursor, handoff.resume_input_epoch) ||
-        !Take32(bytes, cursor, handoff.boundary_frame) ||
+    if (bytes.size() != 18U || !Take32(bytes, cursor, handoff.current_input_epoch) ||
+        !Take32(bytes, cursor, handoff.resume_input_epoch) || !Take32(bytes, cursor, handoff.boundary_frame) ||
         !Take32(bytes, cursor, handoff.map) || cursor >= bytes.size() ||
-        (handoff.player_slot = bytes[cursor++]) >= kMaximumPlayers ||
-        cursor >= bytes.size() ||
-        (stage = bytes[cursor++]) >
-            static_cast<std::uint8_t>(GameplayHandoffStage::Suspend) ||
+        (handoff.player_slot = bytes[cursor++]) >= kMaximumPlayers || cursor >= bytes.size() ||
+        (stage = bytes[cursor++]) > static_cast<std::uint8_t>(GameplayHandoffStage::Suspend) ||
         handoff.current_input_epoch == 0U || cursor != bytes.size()) {
         return false;
     }
     handoff.stage = static_cast<GameplayHandoffStage>(stage);
-    return (handoff.stage == GameplayHandoffStage::Request &&
-            handoff.resume_input_epoch == 0U) ||
-           (handoff.stage == GameplayHandoffStage::Suspend &&
-            handoff.resume_input_epoch != 0U);
+    return (handoff.stage == GameplayHandoffStage::Request && handoff.resume_input_epoch == 0U) ||
+           (handoff.stage == GameplayHandoffStage::Suspend && handoff.resume_input_epoch != 0U);
 }
 
-std::vector<std::uint8_t> encode_rollback_payload(
-    const RollbackPayload& payload) {
+std::vector<std::uint8_t> encode_rollback_payload(const RollbackPayload& payload) {
     constexpr std::size_t kHeaderBytes = 10U;
-    if (payload.scene_epoch == 0U || payload.transport_epoch == 0U ||
-        payload.source_slot >= kMaximumPlayers ||
+    if (payload.scene_epoch == 0U || payload.transport_epoch == 0U || payload.source_slot >= kMaximumPlayers ||
         payload.target_slot >= kMaximumPlayers || payload.bytes.empty() ||
         payload.bytes.size() + kHeaderBytes > kMaximumDatagramBytes - 64U) {
         return {};
@@ -447,35 +397,26 @@ std::vector<std::uint8_t> encode_rollback_payload(
     return out;
 }
 
-bool decode_rollback_payload(std::span<const std::uint8_t> bytes,
-                             RollbackPayload& payload,
-                             std::string& error) {
+bool decode_rollback_payload(std::span<const std::uint8_t> bytes, RollbackPayload& payload, std::string& error) {
     payload = {};
     constexpr std::size_t kHeaderBytes = 10U;
     std::size_t cursor = 0U;
-    if (bytes.size() <= kHeaderBytes ||
-        bytes.size() > kMaximumDatagramBytes - 64U ||
-        !Take32(bytes, cursor, payload.scene_epoch) ||
-        !Take32(bytes, cursor, payload.transport_epoch) ||
-        payload.scene_epoch == 0U || payload.transport_epoch == 0U ||
-        bytes[cursor] >= kMaximumPlayers ||
+    if (bytes.size() <= kHeaderBytes || bytes.size() > kMaximumDatagramBytes - 64U ||
+        !Take32(bytes, cursor, payload.scene_epoch) || !Take32(bytes, cursor, payload.transport_epoch) ||
+        payload.scene_epoch == 0U || payload.transport_epoch == 0U || bytes[cursor] >= kMaximumPlayers ||
         bytes[cursor + 1U] >= kMaximumPlayers) {
         error = "Rollback transport payload is invalid.";
         return false;
     }
     payload.source_slot = bytes[cursor++];
     payload.target_slot = bytes[cursor++];
-    payload.bytes.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
-                         bytes.end());
+    payload.bytes.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor), bytes.end());
     error.clear();
     return true;
 }
 
-std::vector<std::uint8_t> encode_gameplay_barrier(
-    const GameplayBarrierPayload& barrier) {
-    if (barrier.scene_epoch == 0U ||
-        barrier.racer_count > 10U ||
-        barrier.player_slot >= kMaximumPlayers ||
+std::vector<std::uint8_t> encode_gameplay_barrier(const GameplayBarrierPayload& barrier) {
+    if (barrier.scene_epoch == 0U || barrier.racer_count > 10U || barrier.player_slot >= kMaximumPlayers ||
         barrier.stage > GameplayBarrierStage::Go) {
         return {};
     }
@@ -489,27 +430,19 @@ std::vector<std::uint8_t> encode_gameplay_barrier(
     return out;
 }
 
-bool decode_gameplay_barrier(std::span<const std::uint8_t> bytes,
-                             GameplayBarrierPayload& barrier) {
+bool decode_gameplay_barrier(std::span<const std::uint8_t> bytes, GameplayBarrierPayload& barrier) {
     barrier = {};
     std::size_t cursor = 0U;
     std::uint8_t stage = 0U;
-    return bytes.size() == 14U &&
-           Take32(bytes, cursor, barrier.scene_epoch) &&
-           Take32(bytes, cursor, barrier.map) &&
-           Take32(bytes, cursor, barrier.racer_count) &&
-           cursor < bytes.size() &&
-           (barrier.player_slot = bytes[cursor++]) < kMaximumPlayers &&
-           cursor < bytes.size() &&
-           (stage = bytes[cursor++]) <=
-               static_cast<std::uint8_t>(GameplayBarrierStage::Go) &&
-           (barrier.stage = static_cast<GameplayBarrierStage>(stage), true) &&
-           barrier.scene_epoch != 0U &&
+    return bytes.size() == 14U && Take32(bytes, cursor, barrier.scene_epoch) && Take32(bytes, cursor, barrier.map) &&
+           Take32(bytes, cursor, barrier.racer_count) && cursor < bytes.size() &&
+           (barrier.player_slot = bytes[cursor++]) < kMaximumPlayers && cursor < bytes.size() &&
+           (stage = bytes[cursor++]) <= static_cast<std::uint8_t>(GameplayBarrierStage::Go) &&
+           (barrier.stage = static_cast<GameplayBarrierStage>(stage), true) && barrier.scene_epoch != 0U &&
            barrier.racer_count <= 10U && cursor == bytes.size();
 }
 
-std::uint64_t frame_commit_hash(std::uint64_t match_id,
-                                const FrameCommitPayload& commit) {
+std::uint64_t frame_commit_hash(std::uint64_t match_id, const FrameCommitPayload& commit) {
     // FNV-1a is used only as an ordering/checkpoint fingerprint inside an
     // already authenticated packet.  Monocypher provides authenticity; this
     // hash makes missing, reordered or accidentally mutated commits explicit.
@@ -535,12 +468,11 @@ std::uint64_t frame_commit_hash(std::uint64_t match_id,
     return hash != 0U ? hash : 1U;
 }
 
-std::vector<std::uint8_t> encode_frame_commit_batch(
-    const FrameCommitBatch& batch) {
-    if (batch.commits.empty() || batch.commits.size() > 16U) return {};
-    if (batch.correction &&
-        (batch.generation == 0U ||
-         batch.correction_first > batch.correction_last)) return {};
+std::vector<std::uint8_t> encode_frame_commit_batch(const FrameCommitBatch& batch) {
+    if (batch.commits.empty() || batch.commits.size() > 16U)
+        return {};
+    if (batch.correction && (batch.generation == 0U || batch.correction_first > batch.correction_last))
+        return {};
     std::vector<std::uint8_t> out;
     out.reserve(14U + batch.commits.size() * 44U);
     out.push_back(static_cast<std::uint8_t>(batch.commits.size()));
@@ -549,8 +481,8 @@ std::vector<std::uint8_t> encode_frame_commit_batch(
     Put32(out, batch.correction_first);
     Put32(out, batch.correction_last);
     for (const FrameCommitPayload& commit : batch.commits) {
-        if (commit.epoch == 0U || commit.occupied_mask == 0U ||
-            commit.commit_hash == 0U) return {};
+        if (commit.epoch == 0U || commit.occupied_mask == 0U || commit.commit_hash == 0U)
+            return {};
         Put32(out, commit.epoch);
         Put32(out, commit.frame);
         Put16(out, commit.revision);
@@ -567,55 +499,44 @@ std::vector<std::uint8_t> encode_frame_commit_batch(
     return out;
 }
 
-bool decode_frame_commit_batch(std::span<const std::uint8_t> bytes,
-                               FrameCommitBatch& batch,
-                               std::string& error) {
+bool decode_frame_commit_batch(std::span<const std::uint8_t> bytes, FrameCommitBatch& batch, std::string& error) {
     batch = {};
-    if (bytes.size() < 14U || bytes[0] == 0U || bytes[0] > 16U ||
-        bytes[1] > 1U ||
+    if (bytes.size() < 14U || bytes[0] == 0U || bytes[0] > 16U || bytes[1] > 1U ||
         bytes.size() != 14U + static_cast<std::size_t>(bytes[0]) * 44U) {
         error = "Frame commit batch metadata is invalid.";
         return false;
     }
     std::size_t cursor = 2U;
-    if (!Take32(bytes, cursor, batch.generation) ||
-        !Take32(bytes, cursor, batch.correction_first) ||
+    if (!Take32(bytes, cursor, batch.generation) || !Take32(bytes, cursor, batch.correction_first) ||
         !Take32(bytes, cursor, batch.correction_last)) {
         error = "Frame commit batch metadata is truncated.";
         return false;
     }
     batch.correction = bytes[1] != 0U;
-    if (batch.correction &&
-        (batch.generation == 0U ||
-         batch.correction_first > batch.correction_last)) {
+    if (batch.correction && (batch.generation == 0U || batch.correction_first > batch.correction_last)) {
         error = "Frame correction range is invalid.";
         return false;
     }
     batch.commits.reserve(bytes[0]);
     for (std::uint8_t index = 0U; index < bytes[0]; ++index) {
         FrameCommitPayload commit{};
-        if (!Take32(bytes, cursor, commit.epoch) ||
-            !Take32(bytes, cursor, commit.frame) ||
-            !Take16(bytes, cursor, commit.revision) ||
-            cursor + 2U > bytes.size()) {
+        if (!Take32(bytes, cursor, commit.epoch) || !Take32(bytes, cursor, commit.frame) ||
+            !Take16(bytes, cursor, commit.revision) || cursor + 2U > bytes.size()) {
             error = "Frame commit batch is truncated.";
             return false;
         }
         commit.occupied_mask = bytes[cursor++];
         commit.predicted_mask = bytes[cursor++];
         for (PackedInput& input : commit.inputs) {
-            if (!Take16(bytes, cursor, input.buttons) ||
-                cursor + 2U > bytes.size()) {
+            if (!Take16(bytes, cursor, input.buttons) || cursor + 2U > bytes.size()) {
                 error = "Frame commit inputs are truncated.";
                 return false;
             }
             input.stick_x = static_cast<std::int8_t>(bytes[cursor++]);
             input.stick_y = static_cast<std::int8_t>(bytes[cursor++]);
         }
-        if (!Take64(bytes, cursor, commit.previous_hash) ||
-            !Take64(bytes, cursor, commit.commit_hash) ||
-            commit.epoch == 0U || commit.occupied_mask == 0U ||
-            (commit.predicted_mask & ~commit.occupied_mask) != 0U ||
+        if (!Take64(bytes, cursor, commit.previous_hash) || !Take64(bytes, cursor, commit.commit_hash) ||
+            commit.epoch == 0U || commit.occupied_mask == 0U || (commit.predicted_mask & ~commit.occupied_mask) != 0U ||
             commit.commit_hash == 0U) {
             error = "Frame commit chain is invalid.";
             return false;
@@ -626,10 +547,11 @@ bool decode_frame_commit_batch(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_frame_correction_acknowledge(
-    const FrameCorrectionAcknowledgePayload& acknowledgement) {
+std::vector<std::uint8_t>
+encode_frame_correction_acknowledge(const FrameCorrectionAcknowledgePayload& acknowledgement) {
     if (acknowledgement.epoch == 0U || acknowledgement.generation == 0U ||
-        acknowledgement.player_slot >= kMaximumPlayers) return {};
+        acknowledgement.player_slot >= kMaximumPlayers)
+        return {};
     std::vector<std::uint8_t> out;
     out.reserve(9U);
     Put32(out, acknowledgement.epoch);
@@ -638,30 +560,24 @@ std::vector<std::uint8_t> encode_frame_correction_acknowledge(
     return out;
 }
 
-bool decode_frame_correction_acknowledge(
-    std::span<const std::uint8_t> bytes,
-    FrameCorrectionAcknowledgePayload& acknowledgement) {
+bool decode_frame_correction_acknowledge(std::span<const std::uint8_t> bytes,
+                                         FrameCorrectionAcknowledgePayload& acknowledgement) {
     acknowledgement = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 9U ||
-        !Take32(bytes, cursor, acknowledgement.epoch) ||
-        !Take32(bytes, cursor, acknowledgement.generation) ||
-        cursor >= bytes.size()) return false;
+    if (bytes.size() != 9U || !Take32(bytes, cursor, acknowledgement.epoch) ||
+        !Take32(bytes, cursor, acknowledgement.generation) || cursor >= bytes.size())
+        return false;
     acknowledgement.player_slot = bytes[cursor];
-    return acknowledgement.epoch != 0U &&
-           acknowledgement.generation != 0U &&
+    return acknowledgement.epoch != 0U && acknowledgement.generation != 0U &&
            acknowledgement.player_slot < kMaximumPlayers;
 }
 
-std::vector<std::uint8_t> encode_state_snapshot_chunk(
-    const StateSnapshotChunk& chunk, std::size_t maximum_datagram_bytes) {
+std::vector<std::uint8_t> encode_state_snapshot_chunk(const StateSnapshotChunk& chunk,
+                                                      std::size_t maximum_datagram_bytes) {
     constexpr std::size_t header_bytes = 24U;
-    if (maximum_datagram_bytes < header_bytes + 32U ||
-        maximum_datagram_bytes > kMaximumQuickJoinDatagramBytes ||
-        chunk.scene_epoch == 0U || chunk.checksum == 0U ||
-        chunk.total_size == 0U ||
-        chunk.chunk_count == 0U || chunk.chunk_index >= chunk.chunk_count ||
-        chunk.bytes.empty() ||
+    if (maximum_datagram_bytes < header_bytes + 32U || maximum_datagram_bytes > kMaximumQuickJoinDatagramBytes ||
+        chunk.scene_epoch == 0U || chunk.checksum == 0U || chunk.total_size == 0U || chunk.chunk_count == 0U ||
+        chunk.chunk_index >= chunk.chunk_count || chunk.bytes.empty() ||
         chunk.bytes.size() + header_bytes > maximum_datagram_bytes - 32U) {
         return {};
     }
@@ -677,27 +593,18 @@ std::vector<std::uint8_t> encode_state_snapshot_chunk(
     return out;
 }
 
-bool decode_state_snapshot_chunk(std::span<const std::uint8_t> bytes,
-                                 StateSnapshotChunk& chunk,
-                                 std::string& error) {
+bool decode_state_snapshot_chunk(std::span<const std::uint8_t> bytes, StateSnapshotChunk& chunk, std::string& error) {
     chunk = {};
     std::size_t cursor = 0U;
-    if (bytes.size() <= 24U ||
-        !Take32(bytes, cursor, chunk.scene_epoch) ||
-        !Take32(bytes, cursor, chunk.frame) ||
-        !Take64(bytes, cursor, chunk.checksum) ||
-        !Take32(bytes, cursor, chunk.total_size) ||
-        !Take16(bytes, cursor, chunk.chunk_index) ||
-        !Take16(bytes, cursor, chunk.chunk_count) ||
-        chunk.scene_epoch == 0U || chunk.checksum == 0U ||
-        chunk.total_size == 0U || chunk.total_size > 14336U ||
-        chunk.chunk_count == 0U || chunk.chunk_count > 16U ||
-        chunk.chunk_index >= chunk.chunk_count) {
+    if (bytes.size() <= 24U || !Take32(bytes, cursor, chunk.scene_epoch) || !Take32(bytes, cursor, chunk.frame) ||
+        !Take64(bytes, cursor, chunk.checksum) || !Take32(bytes, cursor, chunk.total_size) ||
+        !Take16(bytes, cursor, chunk.chunk_index) || !Take16(bytes, cursor, chunk.chunk_count) ||
+        chunk.scene_epoch == 0U || chunk.checksum == 0U || chunk.total_size == 0U || chunk.total_size > 14336U ||
+        chunk.chunk_count == 0U || chunk.chunk_count > 16U || chunk.chunk_index >= chunk.chunk_count) {
         error = "Authoritative snapshot chunk metadata is invalid.";
         return false;
     }
-    chunk.bytes.assign(
-        bytes.begin() + static_cast<std::ptrdiff_t>(cursor), bytes.end());
+    chunk.bytes.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor), bytes.end());
     if (chunk.bytes.empty()) {
         error = "Authoritative snapshot chunk is empty.";
         return false;
@@ -706,11 +613,10 @@ bool decode_state_snapshot_chunk(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_state_request(
-    const StateRequestPayload& request) {
+std::vector<std::uint8_t> encode_state_request(const StateRequestPayload& request) {
     std::vector<std::uint8_t> out;
-    if (request.scene_epoch == 0U || request.chunk_count == 0U ||
-        request.chunk_count > 16U || request.missing_chunks == 0U) {
+    if (request.scene_epoch == 0U || request.chunk_count == 0U || request.chunk_count > 16U ||
+        request.missing_chunks == 0U) {
         return {};
     }
     Put32(out, request.scene_epoch);
@@ -720,24 +626,17 @@ std::vector<std::uint8_t> encode_state_request(
     return out;
 }
 
-bool decode_state_request(std::span<const std::uint8_t> bytes,
-                          StateRequestPayload& request) {
+bool decode_state_request(std::span<const std::uint8_t> bytes, StateRequestPayload& request) {
     request = {};
     std::size_t cursor = 0U;
-    return bytes.size() == 12U &&
-           Take32(bytes, cursor, request.scene_epoch) &&
-           Take32(bytes, cursor, request.frame) &&
-           Take16(bytes, cursor, request.chunk_count) &&
-           Take16(bytes, cursor, request.missing_chunks) &&
-           request.scene_epoch != 0U && request.chunk_count > 0U &&
-           request.chunk_count <= 16U && request.missing_chunks != 0U &&
-           cursor == bytes.size();
+    return bytes.size() == 12U && Take32(bytes, cursor, request.scene_epoch) && Take32(bytes, cursor, request.frame) &&
+           Take16(bytes, cursor, request.chunk_count) && Take16(bytes, cursor, request.missing_chunks) &&
+           request.scene_epoch != 0U && request.chunk_count > 0U && request.chunk_count <= 16U &&
+           request.missing_chunks != 0U && cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_state_acknowledge(
-    const StateAcknowledgePayload& acknowledgement) {
-    if (acknowledgement.scene_epoch == 0U ||
-        acknowledgement.checksum == 0U ||
+std::vector<std::uint8_t> encode_state_acknowledge(const StateAcknowledgePayload& acknowledgement) {
+    if (acknowledgement.scene_epoch == 0U || acknowledgement.checksum == 0U ||
         acknowledgement.player_slot >= kMaximumPlayers) {
         return {};
     }
@@ -750,24 +649,16 @@ std::vector<std::uint8_t> encode_state_acknowledge(
     return out;
 }
 
-bool decode_state_acknowledge(
-    std::span<const std::uint8_t> bytes,
-    StateAcknowledgePayload& acknowledgement) {
+bool decode_state_acknowledge(std::span<const std::uint8_t> bytes, StateAcknowledgePayload& acknowledgement) {
     acknowledgement = {};
     std::size_t cursor = 0U;
-    return bytes.size() == 17U &&
-           Take32(bytes, cursor, acknowledgement.scene_epoch) &&
-           Take32(bytes, cursor, acknowledgement.frame) &&
-           Take64(bytes, cursor, acknowledgement.checksum) &&
-           cursor < bytes.size() &&
-           (acknowledgement.player_slot = bytes[cursor++]) <
-               kMaximumPlayers &&
-           acknowledgement.scene_epoch != 0U &&
-           acknowledgement.checksum != 0U && cursor == bytes.size();
+    return bytes.size() == 17U && Take32(bytes, cursor, acknowledgement.scene_epoch) &&
+           Take32(bytes, cursor, acknowledgement.frame) && Take64(bytes, cursor, acknowledgement.checksum) &&
+           cursor < bytes.size() && (acknowledgement.player_slot = bytes[cursor++]) < kMaximumPlayers &&
+           acknowledgement.scene_epoch != 0U && acknowledgement.checksum != 0U && cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_recovery(
-    const RecoveryPayload& recovery) {
+std::vector<std::uint8_t> encode_recovery(const RecoveryPayload& recovery) {
     if (recovery.scene_epoch == 0U || recovery.player_slot >= kMaximumPlayers) {
         return {};
     }
@@ -778,23 +669,16 @@ std::vector<std::uint8_t> encode_recovery(
     return out;
 }
 
-bool decode_recovery(std::span<const std::uint8_t> bytes,
-                     RecoveryPayload& recovery) {
+bool decode_recovery(std::span<const std::uint8_t> bytes, RecoveryPayload& recovery) {
     recovery = {};
     std::size_t cursor = 0U;
-    return bytes.size() == 9U &&
-           Take32(bytes, cursor, recovery.scene_epoch) &&
-           Take32(bytes, cursor, recovery.frame) &&
-           cursor < bytes.size() &&
-           (recovery.player_slot = bytes[cursor++]) < kMaximumPlayers &&
+    return bytes.size() == 9U && Take32(bytes, cursor, recovery.scene_epoch) && Take32(bytes, cursor, recovery.frame) &&
+           cursor < bytes.size() && (recovery.player_slot = bytes[cursor++]) < kMaximumPlayers &&
            recovery.scene_epoch != 0U && cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_transition_barrier(
-    const TransitionBarrierPayload& transition) {
-    if (transition.scene_epoch == 0U ||
-        transition.transition_kind == 0U ||
-        transition.player_slot >= kMaximumPlayers ||
+std::vector<std::uint8_t> encode_transition_barrier(const TransitionBarrierPayload& transition) {
+    if (transition.scene_epoch == 0U || transition.transition_kind == 0U || transition.player_slot >= kMaximumPlayers ||
         transition.stage > TransitionBarrierStage::Resume) {
         return {};
     }
@@ -807,29 +691,21 @@ std::vector<std::uint8_t> encode_transition_barrier(
     return out;
 }
 
-bool decode_transition_barrier(std::span<const std::uint8_t> bytes,
-                               TransitionBarrierPayload& transition) {
+bool decode_transition_barrier(std::span<const std::uint8_t> bytes, TransitionBarrierPayload& transition) {
     transition = {};
     std::size_t cursor = 0U;
     std::uint8_t stage = 0U;
-    return bytes.size() == 11U &&
-           Take32(bytes, cursor, transition.scene_epoch) &&
-           Take32(bytes, cursor, transition.frame) &&
-           cursor < bytes.size() &&
-           (transition.transition_kind = bytes[cursor++]) != 0U &&
-           cursor < bytes.size() &&
-           (transition.player_slot = bytes[cursor++]) < kMaximumPlayers &&
-           cursor < bytes.size() &&
-           (stage = bytes[cursor++]) <=
-               static_cast<std::uint8_t>(TransitionBarrierStage::Resume) &&
-           (transition.stage = static_cast<TransitionBarrierStage>(stage), true) &&
-           transition.scene_epoch != 0U && cursor == bytes.size();
+    return bytes.size() == 11U && Take32(bytes, cursor, transition.scene_epoch) &&
+           Take32(bytes, cursor, transition.frame) && cursor < bytes.size() &&
+           (transition.transition_kind = bytes[cursor++]) != 0U && cursor < bytes.size() &&
+           (transition.player_slot = bytes[cursor++]) < kMaximumPlayers && cursor < bytes.size() &&
+           (stage = bytes[cursor++]) <= static_cast<std::uint8_t>(TransitionBarrierStage::Resume) &&
+           (transition.stage = static_cast<TransitionBarrierStage>(stage), true) && transition.scene_epoch != 0U &&
+           cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_simulation_progress(
-    const SimulationProgressPayload& progress) {
-    if (progress.input_epoch == 0U ||
-        progress.player_slot >= kMaximumPlayers) {
+std::vector<std::uint8_t> encode_simulation_progress(const SimulationProgressPayload& progress) {
+    if (progress.input_epoch == 0U || progress.player_slot >= kMaximumPlayers) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -840,22 +716,16 @@ std::vector<std::uint8_t> encode_simulation_progress(
     return out;
 }
 
-bool decode_simulation_progress(std::span<const std::uint8_t> bytes,
-                                SimulationProgressPayload& progress) {
+bool decode_simulation_progress(std::span<const std::uint8_t> bytes, SimulationProgressPayload& progress) {
     progress = {};
     std::size_t cursor = 0U;
-    return bytes.size() == 13U &&
-           Take32(bytes, cursor, progress.scene_epoch) &&
-           Take32(bytes, cursor, progress.input_epoch) &&
-           Take32(bytes, cursor, progress.completed_frame) &&
-           cursor < bytes.size() &&
-           (progress.player_slot = bytes[cursor++]) < kMaximumPlayers &&
-           progress.input_epoch != 0U &&
-           cursor == bytes.size();
+    return bytes.size() == 13U && Take32(bytes, cursor, progress.scene_epoch) &&
+           Take32(bytes, cursor, progress.input_epoch) && Take32(bytes, cursor, progress.completed_frame) &&
+           cursor < bytes.size() && (progress.player_slot = bytes[cursor++]) < kMaximumPlayers &&
+           progress.input_epoch != 0U && cursor == bytes.size();
 }
 
-std::vector<std::uint8_t> encode_racer_orientation(
-    const RacerOrientationPayload& orientation) {
+std::vector<std::uint8_t> encode_racer_orientation(const RacerOrientationPayload& orientation) {
     if (orientation.scene_epoch == 0U || orientation.state.empty() ||
         orientation.state.size() > kMaximumRacerOrientationBytes) {
         return {};
@@ -869,48 +739,38 @@ std::vector<std::uint8_t> encode_racer_orientation(
     return out;
 }
 
-bool decode_racer_orientation(std::span<const std::uint8_t> bytes,
-                              RacerOrientationPayload& orientation) {
+bool decode_racer_orientation(std::span<const std::uint8_t> bytes, RacerOrientationPayload& orientation) {
     orientation = {};
     std::size_t cursor = 0U;
     std::uint16_t state_size = 0U;
-    if (bytes.size() < 11U ||
-        !Take32(bytes, cursor, orientation.scene_epoch) ||
-        !Take32(bytes, cursor, orientation.frame) ||
-        !Take16(bytes, cursor, state_size) ||
-        orientation.scene_epoch == 0U || state_size == 0U ||
-        state_size > kMaximumRacerOrientationBytes ||
+    if (bytes.size() < 11U || !Take32(bytes, cursor, orientation.scene_epoch) ||
+        !Take32(bytes, cursor, orientation.frame) || !Take16(bytes, cursor, state_size) ||
+        orientation.scene_epoch == 0U || state_size == 0U || state_size > kMaximumRacerOrientationBytes ||
         cursor + state_size != bytes.size()) {
         return false;
     }
-    orientation.state.assign(bytes.begin() +
-                                 static_cast<std::ptrdiff_t>(cursor),
-                             bytes.end());
+    orientation.state.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor), bytes.end());
     return true;
 }
 
 std::vector<std::uint8_t> encode_hello(const HelloPayload& payload) {
     std::vector<std::uint8_t> out;
-    if (!PutString(out, payload.display_name, kMaximumPlayerNameBytes) ||
-        !PutManifest(out, payload.manifest)) return {};
-    out.insert(out.end(), payload.friend_admission.begin(),
-               payload.friend_admission.end());
+    if (!PutString(out, payload.display_name, kMaximumPlayerNameBytes) || !PutManifest(out, payload.manifest))
+        return {};
+    out.insert(out.end(), payload.friend_admission.begin(), payload.friend_admission.end());
     return out;
 }
 
-bool decode_hello(std::span<const std::uint8_t> bytes, HelloPayload& payload,
-                  std::string& error) {
+bool decode_hello(std::span<const std::uint8_t> bytes, HelloPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
     if (!TakeString(bytes, cursor, payload.display_name, kMaximumPlayerNameBytes) ||
-        !TakeManifest(bytes, cursor, payload.manifest) ||
-        cursor + payload.friend_admission.size() != bytes.size() ||
+        !TakeManifest(bytes, cursor, payload.manifest) || cursor + payload.friend_admission.size() != bytes.size() ||
         !valid_display_name(payload.display_name)) {
         error = "Hello payload is invalid.";
         return false;
     }
-    std::copy_n(bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
-                payload.friend_admission.size(),
+    std::copy_n(bytes.begin() + static_cast<std::ptrdiff_t>(cursor), payload.friend_admission.size(),
                 payload.friend_admission.begin());
     error.clear();
     return true;
@@ -918,21 +778,17 @@ bool decode_hello(std::span<const std::uint8_t> bytes, HelloPayload& payload,
 
 std::vector<std::uint8_t> encode_hello_ack(const HelloAckPayload& payload) {
     if (payload.player_slot >= kMaximumPlayers ||
-        (!payload.synchronized_save.empty() &&
-         payload.synchronized_save.size() != 512U) ||
-        (payload.accepted &&
-         (payload.synchronized_save.size() != 512U ||
-          payload.online_save_generation == 0U ||
-          payload.online_save_hash == 0U))) return {};
-    std::vector<std::uint8_t> out{
-        static_cast<std::uint8_t>(payload.accepted ? 1U : 0U), payload.player_slot};
-    if (!PutString(out, payload.message, 160U)) return {};
+        (!payload.synchronized_save.empty() && payload.synchronized_save.size() != 512U) ||
+        (payload.accepted && (payload.synchronized_save.size() != 512U || payload.online_save_generation == 0U ||
+                              payload.online_save_hash == 0U)))
+        return {};
+    std::vector<std::uint8_t> out{static_cast<std::uint8_t>(payload.accepted ? 1U : 0U), payload.player_slot};
+    if (!PutString(out, payload.message, 160U))
+        return {};
     Put16(out, static_cast<std::uint16_t>(payload.synchronized_save.size()));
-    out.insert(out.end(), payload.synchronized_save.begin(),
-               payload.synchronized_save.end());
+    out.insert(out.end(), payload.synchronized_save.begin(), payload.synchronized_save.end());
     out.push_back(payload.compatibility_offer.has_value() ? 1U : 0U);
-    if (payload.compatibility_offer &&
-        !PutManifest(out, *payload.compatibility_offer)) {
+    if (payload.compatibility_offer && !PutManifest(out, *payload.compatibility_offer)) {
         return {};
     }
     Put32(out, payload.online_save_generation);
@@ -940,8 +796,7 @@ std::vector<std::uint8_t> encode_hello_ack(const HelloAckPayload& payload) {
     return out;
 }
 
-bool decode_hello_ack(std::span<const std::uint8_t> bytes,
-                      HelloAckPayload& payload, std::string& error) {
+bool decode_hello_ack(std::span<const std::uint8_t> bytes, HelloAckPayload& payload, std::string& error) {
     payload = {};
     if (bytes.size() < 6U || bytes[0] > 1U || bytes[1] >= kMaximumPlayers) {
         error = "Hello acknowledgement is invalid.";
@@ -951,16 +806,13 @@ bool decode_hello_ack(std::span<const std::uint8_t> bytes,
     payload.player_slot = bytes[1];
     std::size_t cursor = 2U;
     std::uint16_t save_size = 0U;
-    if (!TakeString(bytes, cursor, payload.message, 160U) ||
-        !Take16(bytes, cursor, save_size) ||
-        (save_size != 0U && save_size != 512U) ||
-        cursor + save_size >= bytes.size()) {
+    if (!TakeString(bytes, cursor, payload.message, 160U) || !Take16(bytes, cursor, save_size) ||
+        (save_size != 0U && save_size != 512U) || cursor + save_size >= bytes.size()) {
         error = "Hello acknowledgement is truncated.";
         return false;
     }
-    payload.synchronized_save.assign(
-        bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
-        bytes.begin() + static_cast<std::ptrdiff_t>(cursor + save_size));
+    payload.synchronized_save.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor),
+                                     bytes.begin() + static_cast<std::ptrdiff_t>(cursor + save_size));
     cursor += save_size;
     if (bytes[cursor] > 1U) {
         error = "Hello acknowledgement compatibility offer is invalid.";
@@ -975,13 +827,10 @@ bool decode_hello_ack(std::span<const std::uint8_t> bytes,
         }
         payload.compatibility_offer = std::move(offer);
     }
-    if (!Take32(bytes, cursor, payload.online_save_generation) ||
-        !Take64(bytes, cursor, payload.online_save_hash) ||
+    if (!Take32(bytes, cursor, payload.online_save_generation) || !Take64(bytes, cursor, payload.online_save_hash) ||
         cursor != bytes.size() ||
-        (payload.accepted &&
-         (payload.synchronized_save.size() != 512U ||
-          payload.online_save_generation == 0U ||
-          payload.online_save_hash == 0U))) {
+        (payload.accepted && (payload.synchronized_save.size() != 512U || payload.online_save_generation == 0U ||
+                              payload.online_save_hash == 0U))) {
         error = "Hello acknowledgement has invalid online save metadata.";
         return false;
     }
@@ -989,10 +838,8 @@ bool decode_hello_ack(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_online_save_ready(
-    const OnlineSaveReadyPayload& payload) {
-    if (payload.player_slot >= kMaximumPlayers || payload.generation == 0U ||
-        payload.hash == 0U) {
+std::vector<std::uint8_t> encode_online_save_ready(const OnlineSaveReadyPayload& payload) {
+    if (payload.player_slot >= kMaximumPlayers || payload.generation == 0U || payload.hash == 0U) {
         return {};
     }
     std::vector<std::uint8_t> out{payload.player_slot};
@@ -1001,8 +848,7 @@ std::vector<std::uint8_t> encode_online_save_ready(
     return out;
 }
 
-bool decode_online_save_ready(std::span<const std::uint8_t> bytes,
-                              OnlineSaveReadyPayload& payload,
+bool decode_online_save_ready(std::span<const std::uint8_t> bytes, OnlineSaveReadyPayload& payload,
                               std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
@@ -1011,9 +857,8 @@ bool decode_online_save_ready(std::span<const std::uint8_t> bytes,
         return false;
     }
     payload.player_slot = bytes[cursor++];
-    if (!Take32(bytes, cursor, payload.generation) ||
-        !Take64(bytes, cursor, payload.hash) || payload.generation == 0U ||
-        payload.hash == 0U || cursor != bytes.size()) {
+    if (!Take32(bytes, cursor, payload.generation) || !Take64(bytes, cursor, payload.hash) ||
+        payload.generation == 0U || payload.hash == 0U || cursor != bytes.size()) {
         error = "Online save readiness identity is invalid.";
         return false;
     }
@@ -1022,8 +867,9 @@ bool decode_online_save_ready(std::span<const std::uint8_t> bytes,
 }
 
 std::vector<std::uint8_t> encode_online_save_status(const OnlineSaveStatusPayload& payload) {
-    if (!payload.room_generation || !payload.save_generation || !payload.save_hash ||
-        !(payload.verified_mask & 1U) || (payload.verified_mask >> kMaximumPlayers)) return {};
+    if (!payload.room_generation || !payload.save_generation || !payload.save_hash || !(payload.verified_mask & 1U) ||
+        (payload.verified_mask >> kMaximumPlayers))
+        return {};
     std::vector<std::uint8_t> out;
     Put64(out, payload.room_generation);
     Put32(out, payload.save_generation);
@@ -1032,8 +878,8 @@ std::vector<std::uint8_t> encode_online_save_status(const OnlineSaveStatusPayloa
     return out;
 }
 
-bool decode_online_save_status(std::span<const std::uint8_t> bytes,
-                               OnlineSaveStatusPayload& payload, std::string& error) {
+bool decode_online_save_status(std::span<const std::uint8_t> bytes, OnlineSaveStatusPayload& payload,
+                               std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
     if (bytes.size() != 21U || !Take64(bytes, cursor, payload.room_generation) ||
@@ -1054,9 +900,9 @@ std::vector<std::uint8_t> encode_lobby_state(const LobbyStatePayload& payload) {
     std::vector<std::uint8_t> out;
     Put64(out, payload.generation);
     out.push_back(static_cast<std::uint8_t>(payload.phase));
-    if (!PutString(out, payload.room_name, kMaximumLobbyNameBytes) ||
-        !valid_room_name(payload.room_name) || !valid_rules(payload.rules) ||
-        payload.visibility > Visibility::Lan) return {};
+    if (!PutString(out, payload.room_name, kMaximumLobbyNameBytes) || !valid_room_name(payload.room_name) ||
+        !valid_rules(payload.rules) || payload.visibility > Visibility::Lan)
+        return {};
     out.push_back(static_cast<std::uint8_t>(payload.visibility));
     out.push_back(static_cast<std::uint8_t>(payload.rules.host_control));
     out.push_back(payload.rules.maximum_players);
@@ -1068,32 +914,33 @@ std::vector<std::uint8_t> encode_lobby_state(const LobbyStatePayload& payload) {
     out.push_back(payload.rules.manual_input_delay);
     out.push_back(payload.rules.rollback_window);
     out.push_back(static_cast<std::uint8_t>(payload.rules.synchronization));
-    if (payload.input_delay_frames > 9U) return {};
+    if (payload.input_delay_frames > 9U)
+        return {};
     out.push_back(payload.input_delay_frames);
     out.push_back(payload.countdown_active ? 1U : 0U);
     Put32(out, payload.countdown_remaining_ms);
     Put32(out, payload.countdown_generation);
     for (std::size_t index = 0; index < payload.players.size(); ++index) {
         const auto& player = payload.players[index];
-        if (player.slot != index ||
-            (player.occupied && !valid_display_name(player.display_name)) ||
-            player.route > Route::Relay) return {};
+        if (player.slot != index || (player.occupied && !valid_display_name(player.display_name)) ||
+            player.route > Route::Relay)
+            return {};
         std::uint8_t flags = player.occupied ? 1U : 0U;
         flags |= player.ready ? 2U : 0U;
         flags |= player.loaded ? 4U : 0U;
         out.push_back(flags);
-        if (!PutString(out, player.display_name, kMaximumPlayerNameBytes)) return {};
+        if (!PutString(out, player.display_name, kMaximumPlayerNameBytes))
+            return {};
         out.push_back(static_cast<std::uint8_t>(player.route));
         Put16(out, player.ping_ms);
         Put16(out, player.jitter_ms);
-        Put16(out, static_cast<std::uint16_t>(std::lround(
-            std::clamp(player.packet_loss_percent, 0.0F, 100.0F) * 100.0F)));
+        Put16(out,
+              static_cast<std::uint16_t>(std::lround(std::clamp(player.packet_loss_percent, 0.0F, 100.0F) * 100.0F)));
     }
     return out;
 }
 
-bool decode_lobby_state(std::span<const std::uint8_t> bytes,
-                        LobbyStatePayload& payload, std::string& error) {
+bool decode_lobby_state(std::span<const std::uint8_t> bytes, LobbyStatePayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
     if (!Take64(bytes, cursor, payload.generation) || cursor >= bytes.size() ||
@@ -1102,8 +949,8 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
         return false;
     }
     payload.phase = static_cast<RoomPhase>(bytes[cursor++]);
-    if (!TakeString(bytes, cursor, payload.room_name, kMaximumLobbyNameBytes) ||
-        !valid_room_name(payload.room_name) || cursor + 17U > bytes.size()) {
+    if (!TakeString(bytes, cursor, payload.room_name, kMaximumLobbyNameBytes) || !valid_room_name(payload.room_name) ||
+        cursor + 17U > bytes.size()) {
         error = "Lobby metadata is invalid.";
         return false;
     }
@@ -1122,11 +969,9 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
         return false;
     }
     if (visibility > static_cast<std::uint8_t>(Visibility::Lan) ||
-        host_control > static_cast<std::uint8_t>(HostControlPolicy::EveryAssignedPort) ||
-        (rule_flags & ~15U) != 0U ||
+        host_control > static_cast<std::uint8_t>(HostControlPolicy::EveryAssignedPort) || (rule_flags & ~15U) != 0U ||
         !valid_synchronization_mode(static_cast<SynchronizationMode>(synchronization)) ||
-        payload.input_delay_frames > 9U || countdown_active > 1U ||
-        payload.countdown_remaining_ms > 5000U) {
+        payload.input_delay_frames > 9U || countdown_active > 1U || payload.countdown_remaining_ms > 5000U) {
         error = "Lobby rules are invalid.";
         return false;
     }
@@ -1135,9 +980,8 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
     payload.rules.automatic_input_delay = (rule_flags & 1U) != 0U;
     payload.rules.relay_only = (rule_flags & 2U) != 0U;
     payload.rules.record_replay = (rule_flags & 4U) != 0U;
-    payload.rules.development=(rule_flags&8U)!=0U;
-    payload.rules.synchronization =
-        static_cast<SynchronizationMode>(synchronization);
+    payload.rules.development = (rule_flags & 8U) != 0U;
+    payload.rules.synchronization = static_cast<SynchronizationMode>(synchronization);
     payload.countdown_active = countdown_active != 0U;
     if (!dkr::runtime::netplay::rollback_policy::supported(payload.rules.synchronization)) {
         error = dkr::runtime::netplay::rollback_policy::admission_error(payload.rules.synchronization);
@@ -1162,21 +1006,18 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
         player.occupied = (flags & 1U) != 0U;
         player.ready = (flags & 2U) != 0U;
         player.loaded = (flags & 4U) != 0U;
-        if (!TakeString(bytes, cursor, player.display_name,
-                        kMaximumPlayerNameBytes) ||
+        if (!TakeString(bytes, cursor, player.display_name, kMaximumPlayerNameBytes) ||
             (player.occupied && !valid_display_name(player.display_name))) {
             error = "Lobby player name is invalid.";
             return false;
         }
-        if (cursor >= bytes.size() ||
-            bytes[cursor] > static_cast<std::uint8_t>(Route::Relay)) {
+        if (cursor >= bytes.size() || bytes[cursor] > static_cast<std::uint8_t>(Route::Relay)) {
             error = "Lobby player route is invalid.";
             return false;
         }
         player.route = static_cast<Route>(bytes[cursor++]);
         std::uint16_t loss_hundredths = 0U;
-        if (!Take16(bytes, cursor, player.ping_ms) ||
-            !Take16(bytes, cursor, player.jitter_ms) ||
+        if (!Take16(bytes, cursor, player.ping_ms) || !Take16(bytes, cursor, player.jitter_ms) ||
             !Take16(bytes, cursor, loss_hundredths) || loss_hundredths > 10000U) {
             error = "Lobby player network metrics are invalid.";
             return false;
@@ -1192,8 +1033,8 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
 }
 
 std::vector<std::uint8_t> encode_state_hash(const StateHashPayload& payload) {
-    if (payload.player_slot >= kMaximumPlayers ||
-        payload.racer_count > payload.racer_hashes.size()) return {};
+    if (payload.player_slot >= kMaximumPlayers || payload.racer_count > payload.racer_hashes.size())
+        return {};
     std::vector<std::uint8_t> out;
     Put32(out, payload.scene_epoch);
     out.push_back(payload.player_slot);
@@ -1208,24 +1049,19 @@ std::vector<std::uint8_t> encode_state_hash(const StateHashPayload& payload) {
     return out;
 }
 
-bool decode_state_hash(std::span<const std::uint8_t> bytes,
-                       StateHashPayload& payload, std::string& error) {
+bool decode_state_hash(std::span<const std::uint8_t> bytes, StateHashPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
     constexpr std::size_t kPayloadSize = 37U + 4U + 10U * 8U;
-    if (bytes.size() != kPayloadSize ||
-        !Take32(bytes, cursor, payload.scene_epoch) ||
-        cursor >= bytes.size() || bytes[cursor] >= kMaximumPlayers) {
+    if (bytes.size() != kPayloadSize || !Take32(bytes, cursor, payload.scene_epoch) || cursor >= bytes.size() ||
+        bytes[cursor] >= kMaximumPlayers) {
         error = "State hash payload is invalid.";
         return false;
     }
     payload.player_slot = bytes[cursor++];
-    if (!Take64(bytes, cursor, payload.hash) ||
-        !Take64(bytes, cursor, payload.globals_hash) ||
-        !Take64(bytes, cursor, payload.roster_hash) ||
-        !Take64(bytes, cursor, payload.racers_hash) ||
-        !Take32(bytes, cursor, payload.racer_count) ||
-        payload.racer_count > payload.racer_hashes.size()) {
+    if (!Take64(bytes, cursor, payload.hash) || !Take64(bytes, cursor, payload.globals_hash) ||
+        !Take64(bytes, cursor, payload.roster_hash) || !Take64(bytes, cursor, payload.racers_hash) ||
+        !Take32(bytes, cursor, payload.racer_count) || payload.racer_count > payload.racer_hashes.size()) {
         error = "State hash payload is truncated.";
         return false;
     }
@@ -1244,10 +1080,8 @@ bool decode_state_hash(std::span<const std::uint8_t> bytes,
 }
 
 std::vector<std::uint8_t> encode_loaded(const LoadedPayload& payload) {
-    if (payload.player_slot >= kMaximumPlayers ||
-        payload.bootstrap_hash == 0U ||
-        payload.online_save_generation == 0U ||
-        payload.online_save_hash == 0U) {
+    if (payload.player_slot >= kMaximumPlayers || payload.bootstrap_hash == 0U ||
+        payload.online_save_generation == 0U || payload.online_save_hash == 0U) {
         return {};
     }
     std::vector<std::uint8_t> out{payload.player_slot};
@@ -1257,8 +1091,7 @@ std::vector<std::uint8_t> encode_loaded(const LoadedPayload& payload) {
     return out;
 }
 
-bool decode_loaded(std::span<const std::uint8_t> bytes,
-                   LoadedPayload& payload, std::string& error) {
+bool decode_loaded(std::span<const std::uint8_t> bytes, LoadedPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
     if (bytes.size() != 21U || bytes[0] >= kMaximumPlayers) {
@@ -1266,12 +1099,9 @@ bool decode_loaded(std::span<const std::uint8_t> bytes,
         return false;
     }
     payload.player_slot = bytes[cursor++];
-    if (!Take64(bytes, cursor, payload.bootstrap_hash) ||
-        !Take32(bytes, cursor, payload.online_save_generation) ||
-        !Take64(bytes, cursor, payload.online_save_hash) ||
-        payload.bootstrap_hash == 0U ||
-        payload.online_save_generation == 0U ||
-        payload.online_save_hash == 0U || cursor != bytes.size()) {
+    if (!Take64(bytes, cursor, payload.bootstrap_hash) || !Take32(bytes, cursor, payload.online_save_generation) ||
+        !Take64(bytes, cursor, payload.online_save_hash) || payload.bootstrap_hash == 0U ||
+        payload.online_save_generation == 0U || payload.online_save_hash == 0U || cursor != bytes.size()) {
         error = "Loaded checkpoint hash is invalid.";
         return false;
     }
@@ -1280,15 +1110,20 @@ bool decode_loaded(std::span<const std::uint8_t> bytes,
 }
 
 std::vector<std::uint8_t> encode_experimental_loaded(const ExperimentalLoadedPayload& payload) {
-    auto proof=encode_loaded(payload.loaded);
-    if(!payload.launch_hash||proof.empty())return {};
-    std::vector<std::uint8_t> out;Put64(out,payload.launch_hash);
-    out.insert(out.end(),proof.begin(),proof.end());return out;
+    auto proof = encode_loaded(payload.loaded);
+    if (!payload.launch_hash || proof.empty())
+        return {};
+    std::vector<std::uint8_t> out;
+    Put64(out, payload.launch_hash);
+    out.insert(out.end(), proof.begin(), proof.end());
+    return out;
 }
 bool decode_experimental_loaded(std::span<const std::uint8_t> bytes, ExperimentalLoadedPayload& payload) {
-    payload={};std::size_t cursor=0;std::string error;
-    return bytes.size()==29&&Take64(bytes,cursor,payload.launch_hash)&&payload.launch_hash&&
-        decode_loaded(bytes.subspan(cursor),payload.loaded,error);
+    payload = {};
+    std::size_t cursor = 0;
+    std::string error;
+    return bytes.size() == 29 && Take64(bytes, cursor, payload.launch_hash) && payload.launch_hash &&
+           decode_loaded(bytes.subspan(cursor), payload.loaded, error);
 }
 
 std::vector<std::uint8_t> encode_start(const StartPayload& payload) {
@@ -1306,16 +1141,14 @@ std::vector<std::uint8_t> encode_start(const StartPayload& payload) {
     out.push_back(payload.descriptor.player_count);
     out.push_back(payload.descriptor.input_delay_frames);
     out.push_back(payload.descriptor.rollback_window);
-    out.push_back(static_cast<std::uint8_t>(
-        payload.descriptor.synchronization));
+    out.push_back(static_cast<std::uint8_t>(payload.descriptor.synchronization));
     out.push_back(static_cast<std::uint8_t>(payload.descriptor.host_control));
-    out.push_back(payload.descriptor.development?1U:0U);
+    out.push_back(payload.descriptor.development ? 1U : 0U);
     Put64(out, payload.descriptor_hash);
     return out;
 }
 
-bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
-                  std::string& error) {
+bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload, std::string& error) {
     payload = {};
     if (bytes.size() != 40U || bytes[0] > 1U) {
         error = "Start descriptor is truncated.";
@@ -1337,23 +1170,22 @@ bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
         error = "Start descriptor synchronization mode is invalid.";
         return false;
     }
-    payload.descriptor.synchronization =
-        static_cast<SynchronizationMode>(bytes[cursor++]);
+    payload.descriptor.synchronization = static_cast<SynchronizationMode>(bytes[cursor++]);
     if (!dkr::runtime::netplay::rollback_policy::supported(payload.descriptor.synchronization)) {
         error = dkr::runtime::netplay::rollback_policy::admission_error(payload.descriptor.synchronization);
         return false;
     }
-    if (bytes[cursor] > static_cast<std::uint8_t>(
-                            HostControlPolicy::EveryAssignedPort)) {
+    if (bytes[cursor] > static_cast<std::uint8_t>(HostControlPolicy::EveryAssignedPort)) {
         error = "Start descriptor host policy is invalid.";
         return false;
     }
-    payload.descriptor.host_control =
-        static_cast<HostControlPolicy>(bytes[cursor++]);
-    if(bytes[cursor]>1){error="Invalid development-lobby flag.";return false;}
-    payload.descriptor.development=bytes[cursor++]!=0;
-    if (!Take64(bytes, cursor, payload.descriptor_hash) ||
-        cursor != bytes.size() ||
+    payload.descriptor.host_control = static_cast<HostControlPolicy>(bytes[cursor++]);
+    if (bytes[cursor] > 1) {
+        error = "Invalid development-lobby flag.";
+        return false;
+    }
+    payload.descriptor.development = bytes[cursor++] != 0;
+    if (!Take64(bytes, cursor, payload.descriptor_hash) || cursor != bytes.size() ||
         !valid_launch_descriptor(payload.descriptor) ||
         payload.descriptor_hash != launch_descriptor_hash(payload.descriptor)) {
         error = "Start descriptor failed validation.";
@@ -1363,8 +1195,7 @@ bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
     return true;
 }
 
-std::vector<std::uint8_t> encode_ready_request(
-    const ReadyRequestPayload& payload) {
+std::vector<std::uint8_t> encode_ready_request(const ReadyRequestPayload& payload) {
     if (payload.request_id == 0U || payload.player_slot >= kMaximumPlayers) {
         return {};
     }
@@ -1376,14 +1207,12 @@ std::vector<std::uint8_t> encode_ready_request(
     return out;
 }
 
-bool decode_ready_request(std::span<const std::uint8_t> bytes,
-                          ReadyRequestPayload& payload, std::string& error) {
+bool decode_ready_request(std::span<const std::uint8_t> bytes, ReadyRequestPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
     std::uint32_t request_id = 0U;
-    if (bytes.size() != 6U || !Take32(bytes, cursor, request_id) ||
-        request_id == 0U || bytes[cursor] >= kMaximumPlayers ||
-        bytes[cursor + 1U] > 1U) {
+    if (bytes.size() != 6U || !Take32(bytes, cursor, request_id) || request_id == 0U ||
+        bytes[cursor] >= kMaximumPlayers || bytes[cursor + 1U] > 1U) {
         error = "Ready request payload is invalid.";
         return false;
     }
@@ -1395,8 +1224,7 @@ bool decode_ready_request(std::span<const std::uint8_t> bytes,
 }
 
 std::vector<std::uint8_t> encode_ready_ack(const ReadyAckPayload& payload) {
-    if (payload.request_id == 0U || payload.player_slot >= kMaximumPlayers ||
-        payload.lobby_generation == 0U) {
+    if (payload.request_id == 0U || payload.player_slot >= kMaximumPlayers || payload.lobby_generation == 0U) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -1408,20 +1236,17 @@ std::vector<std::uint8_t> encode_ready_ack(const ReadyAckPayload& payload) {
     return out;
 }
 
-bool decode_ready_ack(std::span<const std::uint8_t> bytes,
-                      ReadyAckPayload& payload, std::string& error) {
+bool decode_ready_ack(std::span<const std::uint8_t> bytes, ReadyAckPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 14U || !Take32(bytes, cursor, payload.request_id) ||
-        payload.request_id == 0U || bytes[cursor] >= kMaximumPlayers ||
-        bytes[cursor + 1U] > 1U) {
+    if (bytes.size() != 14U || !Take32(bytes, cursor, payload.request_id) || payload.request_id == 0U ||
+        bytes[cursor] >= kMaximumPlayers || bytes[cursor + 1U] > 1U) {
         error = "Ready acknowledgement payload is invalid.";
         return false;
     }
     payload.player_slot = bytes[cursor++];
     payload.ready = bytes[cursor++] != 0U;
-    if (!Take64(bytes, cursor, payload.lobby_generation) ||
-        payload.lobby_generation == 0U || cursor != bytes.size()) {
+    if (!Take64(bytes, cursor, payload.lobby_generation) || payload.lobby_generation == 0U || cursor != bytes.size()) {
         error = "Ready acknowledgement generation is invalid.";
         return false;
     }
@@ -1429,10 +1254,8 @@ bool decode_ready_ack(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_countdown_ack(
-    const CountdownAckPayload& payload) {
-    if (payload.countdown_generation == 0U ||
-        payload.player_slot >= kMaximumPlayers) {
+std::vector<std::uint8_t> encode_countdown_ack(const CountdownAckPayload& payload) {
+    if (payload.countdown_generation == 0U || payload.player_slot >= kMaximumPlayers) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -1442,14 +1265,11 @@ std::vector<std::uint8_t> encode_countdown_ack(
     return out;
 }
 
-bool decode_countdown_ack(std::span<const std::uint8_t> bytes,
-                          CountdownAckPayload& payload, std::string& error) {
+bool decode_countdown_ack(std::span<const std::uint8_t> bytes, CountdownAckPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 5U ||
-        !Take32(bytes, cursor, payload.countdown_generation) ||
-        payload.countdown_generation == 0U ||
-        bytes[cursor] >= kMaximumPlayers) {
+    if (bytes.size() != 5U || !Take32(bytes, cursor, payload.countdown_generation) ||
+        payload.countdown_generation == 0U || bytes[cursor] >= kMaximumPlayers) {
         error = "Countdown acknowledgement payload is invalid.";
         return false;
     }
@@ -1458,11 +1278,10 @@ bool decode_countdown_ack(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_launch_prepare(
-    const LaunchPreparePayload& payload) {
+std::vector<std::uint8_t> encode_launch_prepare(const LaunchPreparePayload& payload) {
     const std::vector<std::uint8_t> start = encode_start(payload.start);
-    if (payload.launch_epoch == 0U || payload.lobby_generation == 0U ||
-        payload.countdown_generation == 0U || start.empty()) {
+    if (payload.launch_epoch == 0U || payload.lobby_generation == 0U || payload.countdown_generation == 0U ||
+        start.empty()) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -1474,27 +1293,22 @@ std::vector<std::uint8_t> encode_launch_prepare(
     return out;
 }
 
-bool decode_launch_prepare(std::span<const std::uint8_t> bytes,
-                           LaunchPreparePayload& payload, std::string& error) {
+bool decode_launch_prepare(std::span<const std::uint8_t> bytes, LaunchPreparePayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 55U ||
-        !Take32(bytes, cursor, payload.launch_epoch) ||
-        !Take64(bytes, cursor, payload.lobby_generation) ||
-        !Take32(bytes, cursor, payload.countdown_generation) ||
-        payload.launch_epoch == 0U || payload.lobby_generation == 0U ||
-        payload.countdown_generation == 0U ||
-        !decode_start(bytes.subspan(cursor), payload.start, error) ||
-        payload.start.stage != 0U) {
-        if (error.empty()) error = "Launch prepare payload is invalid.";
+    if (bytes.size() != 55U || !Take32(bytes, cursor, payload.launch_epoch) ||
+        !Take64(bytes, cursor, payload.lobby_generation) || !Take32(bytes, cursor, payload.countdown_generation) ||
+        payload.launch_epoch == 0U || payload.lobby_generation == 0U || payload.countdown_generation == 0U ||
+        !decode_start(bytes.subspan(cursor), payload.start, error) || payload.start.stage != 0U) {
+        if (error.empty())
+            error = "Launch prepare payload is invalid.";
         return false;
     }
     error.clear();
     return true;
 }
 
-std::vector<std::uint8_t> encode_launch_prepare_ack(
-    const LaunchPrepareAckPayload& payload) {
+std::vector<std::uint8_t> encode_launch_prepare_ack(const LaunchPrepareAckPayload& payload) {
     if (payload.launch_epoch == 0U || payload.player_slot >= kMaximumPlayers) {
         return {};
     }
@@ -1506,14 +1320,12 @@ std::vector<std::uint8_t> encode_launch_prepare_ack(
     return out;
 }
 
-bool decode_launch_prepare_ack(std::span<const std::uint8_t> bytes,
-                               LaunchPrepareAckPayload& payload,
+bool decode_launch_prepare_ack(std::span<const std::uint8_t> bytes, LaunchPrepareAckPayload& payload,
                                std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 6U || !Take32(bytes, cursor, payload.launch_epoch) ||
-        payload.launch_epoch == 0U || bytes[cursor] >= kMaximumPlayers ||
-        bytes[cursor + 1U] > 1U) {
+    if (bytes.size() != 6U || !Take32(bytes, cursor, payload.launch_epoch) || payload.launch_epoch == 0U ||
+        bytes[cursor] >= kMaximumPlayers || bytes[cursor + 1U] > 1U) {
         error = "Launch prepare acknowledgement payload is invalid.";
         return false;
     }
@@ -1523,21 +1335,19 @@ bool decode_launch_prepare_ack(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_launch_commit(
-    const LaunchCommitPayload& payload) {
-    if (payload.launch_epoch == 0U) return {};
+std::vector<std::uint8_t> encode_launch_commit(const LaunchCommitPayload& payload) {
+    if (payload.launch_epoch == 0U)
+        return {};
     std::vector<std::uint8_t> out;
     out.reserve(4U);
     Put32(out, payload.launch_epoch);
     return out;
 }
 
-bool decode_launch_commit(std::span<const std::uint8_t> bytes,
-                          LaunchCommitPayload& payload, std::string& error) {
+bool decode_launch_commit(std::span<const std::uint8_t> bytes, LaunchCommitPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 4U || !Take32(bytes, cursor, payload.launch_epoch) ||
-        payload.launch_epoch == 0U) {
+    if (bytes.size() != 4U || !Take32(bytes, cursor, payload.launch_epoch) || payload.launch_epoch == 0U) {
         error = "Launch commit payload is invalid.";
         return false;
     }
@@ -1547,8 +1357,7 @@ bool decode_launch_commit(std::span<const std::uint8_t> bytes,
 
 namespace {
 
-template <typename Payload>
-std::vector<std::uint8_t> EncodeLaunchSlotAck(const Payload& payload) {
+template <typename Payload> std::vector<std::uint8_t> EncodeLaunchSlotAck(const Payload& payload) {
     if (payload.launch_epoch == 0U || payload.player_slot >= kMaximumPlayers) {
         return {};
     }
@@ -1560,13 +1369,12 @@ std::vector<std::uint8_t> EncodeLaunchSlotAck(const Payload& payload) {
 }
 
 template <typename Payload>
-bool DecodeLaunchSlotAck(std::span<const std::uint8_t> bytes,
-                         Payload& payload, std::string& error,
+bool DecodeLaunchSlotAck(std::span<const std::uint8_t> bytes, Payload& payload, std::string& error,
                          std::string_view label) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 5U || !Take32(bytes, cursor, payload.launch_epoch) ||
-        payload.launch_epoch == 0U || bytes[cursor] >= kMaximumPlayers) {
+    if (bytes.size() != 5U || !Take32(bytes, cursor, payload.launch_epoch) || payload.launch_epoch == 0U ||
+        bytes[cursor] >= kMaximumPlayers) {
         error = std::string(label) + " payload is invalid.";
         return false;
     }
@@ -1577,46 +1385,39 @@ bool DecodeLaunchSlotAck(std::span<const std::uint8_t> bytes,
 
 } // namespace
 
-std::vector<std::uint8_t> encode_launch_commit_ack(
-    const LaunchCommitAckPayload& payload) {
+std::vector<std::uint8_t> encode_launch_commit_ack(const LaunchCommitAckPayload& payload) {
     return EncodeLaunchSlotAck(payload);
 }
 
-bool decode_launch_commit_ack(std::span<const std::uint8_t> bytes,
-                              LaunchCommitAckPayload& payload,
+bool decode_launch_commit_ack(std::span<const std::uint8_t> bytes, LaunchCommitAckPayload& payload,
                               std::string& error) {
-    return DecodeLaunchSlotAck(bytes, payload, error,
-                               "Launch commit acknowledgement");
+    return DecodeLaunchSlotAck(bytes, payload, error, "Launch commit acknowledgement");
 }
 
-std::vector<std::uint8_t> encode_launch_release(
-    const LaunchReleasePayload& payload) {
+std::vector<std::uint8_t> encode_launch_release(const LaunchReleasePayload& payload) {
     return encode_launch_commit({payload.launch_epoch});
 }
 
-bool decode_launch_release(std::span<const std::uint8_t> bytes,
-                           LaunchReleasePayload& payload, std::string& error) {
+bool decode_launch_release(std::span<const std::uint8_t> bytes, LaunchReleasePayload& payload, std::string& error) {
     LaunchCommitPayload commit{};
-    if (!decode_launch_commit(bytes, commit, error)) return false;
+    if (!decode_launch_commit(bytes, commit, error))
+        return false;
     payload.launch_epoch = commit.launch_epoch;
     return true;
 }
 
-std::vector<std::uint8_t> encode_launch_release_ack(
-    const LaunchReleaseAckPayload& payload) {
+std::vector<std::uint8_t> encode_launch_release_ack(const LaunchReleaseAckPayload& payload) {
     return EncodeLaunchSlotAck(payload);
 }
 
-bool decode_launch_release_ack(std::span<const std::uint8_t> bytes,
-                               LaunchReleaseAckPayload& payload,
+bool decode_launch_release_ack(std::span<const std::uint8_t> bytes, LaunchReleaseAckPayload& payload,
                                std::string& error) {
-    return DecodeLaunchSlotAck(bytes, payload, error,
-                               "Launch release acknowledgement");
+    return DecodeLaunchSlotAck(bytes, payload, error, "Launch release acknowledgement");
 }
 
-std::vector<std::uint8_t> encode_launch_cancel(
-    const LaunchCancelPayload& payload) {
-    if (payload.launch_epoch == 0U) return {};
+std::vector<std::uint8_t> encode_launch_cancel(const LaunchCancelPayload& payload) {
+    if (payload.launch_epoch == 0U)
+        return {};
     std::vector<std::uint8_t> out;
     out.reserve(4U);
     Put32(out, payload.launch_epoch);
@@ -1624,18 +1425,21 @@ std::vector<std::uint8_t> encode_launch_cancel(
 }
 
 std::vector<std::uint8_t> encode_match_end(const MatchEndPayload& payload) {
-    if (!payload.launch_hash || payload.player_slot >= kMaximumPlayers ||
-        payload.stage > MatchEndStage::ResumeAck || payload.message.size() > 240 ||
+    if (!payload.launch_hash || payload.player_slot >= kMaximumPlayers || payload.stage > MatchEndStage::ResumeAck ||
+        payload.message.size() > 240 ||
         (payload.stage == MatchEndStage::Resume
-            ? (payload.save.size() != 512 || !payload.save_generation || !payload.save_hash)
-            : (!payload.save.empty() || payload.save_generation || payload.save_hash))) return {};
+             ? (payload.save.size() != 512 || !payload.save_generation || !payload.save_hash)
+             : (!payload.save.empty() || payload.save_generation || payload.save_hash)))
+        return {};
     std::vector<std::uint8_t> out;
     Put64(out, payload.launch_hash);
     out.push_back(static_cast<std::uint8_t>(payload.stage));
     out.push_back(payload.player_slot);
-    if (!PutString(out, payload.message, 240)) return {};
+    if (!PutString(out, payload.message, 240))
+        return {};
     if (payload.stage == MatchEndStage::Resume) {
-        Put32(out, payload.save_generation); Put64(out, payload.save_hash);
+        Put32(out, payload.save_generation);
+        Put64(out, payload.save_hash);
         out.insert(out.end(), payload.save.begin(), payload.save.end());
     }
     return out;
@@ -1644,28 +1448,30 @@ std::vector<std::uint8_t> encode_match_end(const MatchEndPayload& payload) {
 bool decode_match_end(std::span<const std::uint8_t> bytes, MatchEndPayload& payload) {
     payload = {};
     std::size_t cursor = 0;
-    if (!Take64(bytes, cursor, payload.launch_hash) || !payload.launch_hash || cursor + 2 > bytes.size()) return false;
+    if (!Take64(bytes, cursor, payload.launch_hash) || !payload.launch_hash || cursor + 2 > bytes.size())
+        return false;
     payload.stage = static_cast<MatchEndStage>(bytes[cursor++]);
     payload.player_slot = bytes[cursor++];
     if (payload.stage > MatchEndStage::ResumeAck || payload.player_slot >= kMaximumPlayers ||
-        !TakeString(bytes, cursor, payload.message, 240)) return false;
+        !TakeString(bytes, cursor, payload.message, 240))
+        return false;
     // Warning text is never markup or terminal control input.
-    if (std::any_of(payload.message.begin(), payload.message.end(), [](unsigned char c) { return c < 32 || c == 127; })) return false;
+    if (std::any_of(payload.message.begin(), payload.message.end(), [](unsigned char c) { return c < 32 || c == 127; }))
+        return false;
     if (payload.stage == MatchEndStage::Resume) {
         if (!Take32(bytes, cursor, payload.save_generation) || !payload.save_generation ||
-            !Take64(bytes, cursor, payload.save_hash) || !payload.save_hash || cursor + 512 != bytes.size()) return false;
+            !Take64(bytes, cursor, payload.save_hash) || !payload.save_hash || cursor + 512 != bytes.size())
+            return false;
         payload.save.assign(bytes.begin() + cursor, bytes.end());
         cursor = bytes.size();
     }
     return cursor == bytes.size();
 }
 
-bool decode_launch_cancel(std::span<const std::uint8_t> bytes,
-                          LaunchCancelPayload& payload, std::string& error) {
+bool decode_launch_cancel(std::span<const std::uint8_t> bytes, LaunchCancelPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 4U || !Take32(bytes, cursor, payload.launch_epoch) ||
-        payload.launch_epoch == 0U) {
+    if (bytes.size() != 4U || !Take32(bytes, cursor, payload.launch_epoch) || payload.launch_epoch == 0U) {
         error = "Launch cancel payload is invalid.";
         return false;
     }
@@ -1673,10 +1479,8 @@ bool decode_launch_cancel(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_preflight_begin(
-    const PreflightBeginPayload& payload) {
-    if (payload.test_id == 0U || payload.duration_ms < 1000U ||
-        payload.duration_ms > 15000U) {
+std::vector<std::uint8_t> encode_preflight_begin(const PreflightBeginPayload& payload) {
+    if (payload.test_id == 0U || payload.duration_ms < 1000U || payload.duration_ms > 15000U) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -1686,14 +1490,11 @@ std::vector<std::uint8_t> encode_preflight_begin(
     return out;
 }
 
-bool decode_preflight_begin(std::span<const std::uint8_t> bytes,
-                            PreflightBeginPayload& payload,
-                            std::string& error) {
+bool decode_preflight_begin(std::span<const std::uint8_t> bytes, PreflightBeginPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 6U || !Take32(bytes, cursor, payload.test_id) ||
-        !Take16(bytes, cursor, payload.duration_ms) || payload.test_id == 0U ||
-        payload.duration_ms < 1000U || payload.duration_ms > 15000U) {
+    if (bytes.size() != 6U || !Take32(bytes, cursor, payload.test_id) || !Take16(bytes, cursor, payload.duration_ms) ||
+        payload.test_id == 0U || payload.duration_ms < 1000U || payload.duration_ms > 15000U) {
         error = "Connection pre-flight begin payload is invalid.";
         return false;
     }
@@ -1701,10 +1502,9 @@ bool decode_preflight_begin(std::span<const std::uint8_t> bytes,
     return true;
 }
 
-std::vector<std::uint8_t> encode_preflight_probe(
-    const PreflightProbePayload& payload) {
-    if (payload.test_id == 0U || payload.sequence == 0U ||
-        payload.sent_time_us == 0U || payload.padding.size() > 920U) {
+std::vector<std::uint8_t> encode_preflight_probe(const PreflightProbePayload& payload) {
+    if (payload.test_id == 0U || payload.sequence == 0U || payload.sent_time_us == 0U ||
+        payload.padding.size() > 920U) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -1718,37 +1518,28 @@ std::vector<std::uint8_t> encode_preflight_probe(
     return out;
 }
 
-bool decode_preflight_probe(std::span<const std::uint8_t> bytes,
-                            PreflightProbePayload& payload,
-                            std::string& error) {
+bool decode_preflight_probe(std::span<const std::uint8_t> bytes, PreflightProbePayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
     std::uint16_t padding_size = 0U;
-    if (bytes.size() < 19U ||
-        !Take32(bytes, cursor, payload.test_id) ||
-        !Take32(bytes, cursor, payload.sequence) ||
-        !Take64(bytes, cursor, payload.sent_time_us) ||
-        cursor >= bytes.size() || bytes[cursor] > 1U) {
+    if (bytes.size() < 19U || !Take32(bytes, cursor, payload.test_id) || !Take32(bytes, cursor, payload.sequence) ||
+        !Take64(bytes, cursor, payload.sent_time_us) || cursor >= bytes.size() || bytes[cursor] > 1U) {
         error = "Connection pre-flight probe payload is invalid.";
         return false;
     }
     payload.echo = bytes[cursor++] != 0U;
-    if (!Take16(bytes, cursor, padding_size) || padding_size > 920U ||
-        cursor + padding_size != bytes.size() || payload.test_id == 0U ||
-        payload.sequence == 0U || payload.sent_time_us == 0U) {
+    if (!Take16(bytes, cursor, padding_size) || padding_size > 920U || cursor + padding_size != bytes.size() ||
+        payload.test_id == 0U || payload.sequence == 0U || payload.sent_time_us == 0U) {
         error = "Connection pre-flight probe payload is invalid.";
         return false;
     }
-    payload.padding.assign(
-        bytes.begin() + static_cast<std::ptrdiff_t>(cursor), bytes.end());
+    payload.padding.assign(bytes.begin() + static_cast<std::ptrdiff_t>(cursor), bytes.end());
     error.clear();
     return true;
 }
 
-std::vector<std::uint8_t> encode_preflight_result(
-    const PreflightResultPayload& payload) {
-    if (payload.test_id == 0U || payload.player_slot >= kMaximumPlayers ||
-        payload.score < 1U || payload.score > 10U) {
+std::vector<std::uint8_t> encode_preflight_result(const PreflightResultPayload& payload) {
+    if (payload.test_id == 0U || payload.player_slot >= kMaximumPlayers || payload.score < 1U || payload.score > 10U) {
         return {};
     }
     std::vector<std::uint8_t> out;
@@ -1764,25 +1555,19 @@ std::vector<std::uint8_t> encode_preflight_result(
     return out;
 }
 
-bool decode_preflight_result(std::span<const std::uint8_t> bytes,
-                             PreflightResultPayload& payload,
-                             std::string& error) {
+bool decode_preflight_result(std::span<const std::uint8_t> bytes, PreflightResultPayload& payload, std::string& error) {
     payload = {};
     std::size_t cursor = 0U;
-    if (bytes.size() != 15U || !Take32(bytes, cursor, payload.test_id) ||
-        cursor + 2U > bytes.size()) {
+    if (bytes.size() != 15U || !Take32(bytes, cursor, payload.test_id) || cursor + 2U > bytes.size()) {
         error = "Connection pre-flight result payload is invalid.";
         return false;
     }
     payload.player_slot = bytes[cursor++];
     payload.score = bytes[cursor++];
-    if (!Take16(bytes, cursor, payload.p95_rtt_ms) ||
-        !Take16(bytes, cursor, payload.jitter_ms) ||
-        !Take16(bytes, cursor, payload.loss_tenths_percent) ||
-        !Take16(bytes, cursor, payload.late_tenths_percent) ||
-        cursor >= bytes.size() || bytes[cursor] > 1U ||
-        payload.test_id == 0U || payload.player_slot >= kMaximumPlayers ||
-        payload.score < 1U || payload.score > 10U) {
+    if (!Take16(bytes, cursor, payload.p95_rtt_ms) || !Take16(bytes, cursor, payload.jitter_ms) ||
+        !Take16(bytes, cursor, payload.loss_tenths_percent) || !Take16(bytes, cursor, payload.late_tenths_percent) ||
+        cursor >= bytes.size() || bytes[cursor] > 1U || payload.test_id == 0U ||
+        payload.player_slot >= kMaximumPlayers || payload.score < 1U || payload.score > 10U) {
         error = "Connection pre-flight result payload is invalid.";
         return false;
     }

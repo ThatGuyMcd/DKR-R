@@ -29,8 +29,8 @@ void StoreReviewForm(const StoreJson& row, float width, const dkr::store::Snapsh
     auto& rating = g_mod_store.fields[prefix + "-rating"];
     StoreNote("Rating", inner);
     const int selected = rating.empty() ? 4 : std::clamp(rating[0] - '1', 0, 4);
-    rating = std::to_string(StoreTabLine({"1 star", "2 stars", "3 stars", "4 stars", "5 stars"},
-                                        selected, inner, "review-rating") + 1);
+    rating = std::to_string(
+        StoreTabLine({"1 star", "2 stars", "3 stars", "4 stars", "5 stars"}, selected, inner, "review-rating") + 1);
     StoreField((prefix + "-text").c_str(), "Review", inner, 4000, true, true);
     StoreField((prefix + "-version").c_str(), "Version played", std::min(inner, 340.F), 80, false, true);
     if (StoreButton("Save review", 0, true)) {

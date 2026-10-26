@@ -13,9 +13,7 @@ namespace dkr::runtime {
 // adventure file when the player selects Rev A.
 inline constexpr char8_t kGameId[] = u8"dkr.us.v77";
 
-bool RegisterGame(const std::filesystem::path& config_directory,
-                  rom::Revision revision, std::string& error);
+bool RegisterGame(const std::filesystem::path& config_directory, rom::Revision revision, std::string& error);
 bool SelectRom(const std::filesystem::path& rom_path, std::string& error);
-bool ValidateRomForLauncher(const std::filesystem::path& rom_path,
-                            rom::Identity& identity, std::string& error);
+bool ValidateRomForLauncher(const std::filesystem::path& rom_path, rom::Identity& identity, std::string& error);
 } // namespace dkr::runtime

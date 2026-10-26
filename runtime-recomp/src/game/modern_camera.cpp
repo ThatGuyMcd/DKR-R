@@ -121,7 +121,8 @@ std::uint64_t g_guest_generation = 0U;
 
 void reset_guest_state_if_needed() {
     const auto generation = g_reset_generation.load(std::memory_order_acquire);
-    if (generation == g_guest_generation) return;
+    if (generation == g_guest_generation)
+        return;
     g_guest_generation = generation;
     g_players = {};
     g_saved = {};
@@ -133,7 +134,8 @@ void reset_guest_state_if_needed() {
 
 bool camera_slot(std::uint32_t camera, std::uint32_t& slot) {
     const std::uint32_t base = dkr::runtime::revision_addresses::Cameras;
-    if (camera < base || (camera - base) % kCameraSize != 0U) return false;
+    if (camera < base || (camera - base) % kCameraSize != 0U)
+        return false;
     slot = (camera - base) / kCameraSize;
     return slot < kPlayerCameras && dkr_cam_span(camera, kCameraSize, 4);
 }
@@ -157,14 +159,16 @@ float read_float(std::uint8_t* rdram, std::uint32_t address) {
 
 void set_fov(std::uint8_t* rdram, recomp_context* context, float fov) {
     const dkr::runtime::GamePayload* payload = dkr::runtime::active_payload();
-    if (payload == nullptr || payload->cam_set_fov == nullptr || context == nullptr) return;
+    if (payload == nullptr || payload->cam_set_fov == nullptr || context == nullptr)
+        return;
     recomp_context call = *context;
     call.f12.fl = fov;
     payload->cam_set_fov(rdram, &call);
 }
 
 void release_fov(std::uint8_t* rdram, recomp_context* context) {
-    if (!g_fov.owned) return;
+    if (!g_fov.owned)
+        return;
     g_fov.owned = false;
     set_fov(rdram, context, g_fov.level);
 }
@@ -174,7 +178,8 @@ void release_fov(std::uint8_t* rdram, recomp_context* context) {
 int segment_at(std::uint8_t* rdram, std::uint32_t model, dkr_cam_vec eye) {
     const std::uint32_t boxes = dkr_cam_word(rdram, model + 8U);
     const unsigned count = static_cast<unsigned>(MEM_H(0x1A, dkr_cam_addr(model)));
-    if (!count || count > 512U || !dkr_cam_span(boxes, count * 12U, 2)) return -1;
+    if (!count || count > 512U || !dkr_cam_span(boxes, count * 12U, 2))
+        return -1;
     int segment = -1;
     double nearest = 1000000.0;
     const int x = static_cast<int>(eye.x), y = static_cast<int>(eye.y), z = static_cast<int>(eye.z);
@@ -211,8 +216,8 @@ double degrees(double radians) {
     return radians * (180.0 / dkr_cam::kPi);
 }
 
-void publish_readout(std::size_t port, const Player& player, const MCInput& in, float nose,
-                     const MCOutput& out, dkr_cam_vec eye, dkr_cam_vec position) {
+void publish_readout(std::size_t port, const Player& player, const MCInput& in, float nose, const MCOutput& out,
+                     dkr_cam_vec eye, dkr_cam_vec position) {
     dkr_cam::Readout readout;
     readout.live = true;
     readout.port = port;
@@ -276,14 +281,17 @@ int raycast(void* user, MCVec3 from, MCVec3 to, float, float* hit) {
     const Raycast& ray = *static_cast<const Raycast*>(user);
     const dkr_cam_vec target = dkr_cam_v(to.x, to.y, to.z);
     double fraction = sweep(ray, target, ray.radius);
-    if (fraction >= 0.0 && fraction < kStartContact) fraction = sweep(ray, target, kThinRay);
-    if (!(fraction >= 0.0 && fraction < 1.0)) return 0;
+    if (fraction >= 0.0 && fraction < kStartContact)
+        fraction = sweep(ray, target, kThinRay);
+    if (!(fraction >= 0.0 && fraction < 1.0))
+        return 0;
     // modern_cam shortens its boom from the pivot: stop it as far short of
     // the desired eye as the hit is.
     const dkr_cam_vec stop = dkr_cam_add(ray.origin, dkr_cam_scale(dkr_cam_sub(target, ray.origin), fraction));
     const dkr_cam_vec boom = dkr_cam_sub(target, dkr_cam_v(from.x, from.y, from.z));
     const double length = std::sqrt(dkr_cam_dot(boom, boom));
-    if (!(length > 1.0)) return 0;
+    if (!(length > 1.0))
+        return 0;
     const dkr_cam_vec short_by = dkr_cam_sub(target, stop);
     *hit = static_cast<float>(std::clamp(1.0 - std::sqrt(dkr_cam_dot(short_by, short_by)) / length, 0.0, 1.0));
     return 1;
@@ -300,10 +308,9 @@ struct Scene {
 
 // The same scene gate as dkr_cam_resolve: a gameplay follow camera for a
 // local player, with no cutscene or dialogue camera in charge.
-bool follow_camera(std::uint8_t* rdram, std::uint32_t object, const std::uint32_t fields[8],
-                   Scene& scene) {
-    if (!dkr_cam_span(object, 0x68, 4) || dkr_cam_word(rdram, fields[0]) != 0U ||
-        MEM_BU(0, dkr_cam_addr(fields[3])) || MEM_H(0, dkr_cam_addr(fields[6]))) {
+bool follow_camera(std::uint8_t* rdram, std::uint32_t object, const std::uint32_t fields[8], Scene& scene) {
+    if (!dkr_cam_span(object, 0x68, 4) || dkr_cam_word(rdram, fields[0]) != 0U || MEM_BU(0, dkr_cam_addr(fields[3])) ||
+        MEM_H(0, dkr_cam_addr(fields[6]))) {
         return false;
     }
     scene.header = dkr_cam_word(rdram, fields[1]);
@@ -319,8 +326,7 @@ bool follow_camera(std::uint8_t* rdram, std::uint32_t object, const std::uint32_
     return dkr_cam_follow_mode(scene.mode);
 }
 
-void write_pose(std::uint8_t* rdram, std::uint32_t camera, const dkr_cam::Pose& pose,
-                std::int16_t roll) {
+void write_pose(std::uint8_t* rdram, std::uint32_t camera, const dkr_cam::Pose& pose, std::int16_t roll) {
     dkr_cam_store(rdram, camera + 0x0CU, pose.x);
     dkr_cam_store(rdram, camera + 0x10U, pose.y);
     dkr_cam_store(rdram, camera + 0x14U, pose.z);
@@ -330,18 +336,19 @@ void write_pose(std::uint8_t* rdram, std::uint32_t camera, const dkr_cam::Pose& 
 }
 
 // One modern_cam step for this tick. Returns false if the inputs are unusable.
-bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t object,
-                 std::uint32_t racer, const Scene& scene, Player& player, std::size_t port,
-                 bool look_back) {
+bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t object, std::uint32_t racer,
+                 const Scene& scene, Player& player, std::size_t port, bool look_back) {
     const std::uint32_t sp = static_cast<std::uint32_t>(context->r29);
     // update_player_camera keeps its float updateRateF argument at sp+0x40:
     // the number of 60 Hz frames this tick advances.
     float rate = dkr_cam_span(sp, 0x44, 4) ? read_float(rdram, sp + 0x40U) : 1.0F;
-    if (!std::isfinite(rate) || rate <= 0.0F || rate > 10.0F) rate = 1.0F;
+    if (!std::isfinite(rate) || rate <= 0.0F || rate > 10.0F)
+        rate = 1.0F;
     const float dt = rate / 60.0F;
 
     const dkr_cam_vec position = dkr_cam_position(rdram, object);
-    if (!dkr_cam_finite(position)) return false;
+    if (!dkr_cam_finite(position))
+        return false;
     if (player.state.initialized) {
         player.velocity = dkr_cam_scale(dkr_cam_sub(position, player.last_position), 1.0 / dt);
     }
@@ -351,21 +358,21 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
     MCParams params = dkr_cam::layout_params(tuning, scene.layout);
     const PortInput& input = g_input[port];
     MCInput in{};
-    in.pos = MCVec3{static_cast<float>(position.x), static_cast<float>(position.y),
-                    static_cast<float>(position.z)};
+    in.pos = MCVec3{static_cast<float>(position.x), static_cast<float>(position.y), static_cast<float>(position.z)};
     const float nose = static_cast<float>(dkr_cam::heading_from_racer_yaw(MEM_H(0x00, dkr_cam_addr(object))));
     const dkr_cam::HitTiming hit_timing = dkr_cam::hit_timing(tuning.hitReaction);
-    const dkr_cam::HitInput steady = dkr_cam::hit_steady_input(
-        MCVec3{static_cast<float>(player.velocity.x), static_cast<float>(player.velocity.y),
-               static_cast<float>(player.velocity.z)},
-        nose, dt, player.bump, hit_timing);
+    const dkr_cam::HitInput steady =
+        dkr_cam::hit_steady_input(MCVec3{static_cast<float>(player.velocity.x), static_cast<float>(player.velocity.y),
+                                         static_cast<float>(player.velocity.z)},
+                                  nose, dt, player.bump, hit_timing);
     in.yaw = steady.heading;
     in.vel = steady.velocity;
-    if (player.bump.hit) ++player.hits;
+    if (player.bump.hit)
+        ++player.hits;
     in.slopePitch = static_cast<float>(dkr_cam::slope_from_racer_pitch(MEM_H(0x02, dkr_cam_addr(object))));
     in.grounded = scene.mode == kCameraModePlane ||
-        static_cast<std::int8_t>(MEM_B(kRacerGroundedWheels, dkr_cam_addr(racer))) > 0 ||
-        static_cast<std::int8_t>(MEM_B(kRacerWaterTimer, dkr_cam_addr(racer))) > 0;
+                  static_cast<std::int8_t>(MEM_B(kRacerGroundedWheels, dkr_cam_addr(racer))) > 0 ||
+                  static_cast<std::int8_t>(MEM_B(kRacerWaterTimer, dkr_cam_addr(racer))) > 0;
     in.drifting = static_cast<std::int8_t>(MEM_B(kRacerDriftDirection, dkr_cam_addr(racer))) != 0;
     in.boost = static_cast<std::int8_t>(MEM_B(kRacerBoostTimer, dkr_cam_addr(racer))) > 0 ? 1.0F : 0.0F;
     // Right on the stick turns the view right: towards lower modern_cam yaw.
@@ -377,25 +384,24 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
     // Retail hits and explosions shake the camera; feed them in as trauma.
     const float shake = std::fabs(read_float(rdram, scene.camera + 0x30U));
     if (std::isfinite(shake) && player.state.initialized) {
-        player.state.trauma = std::max(player.state.trauma,
-                                       std::min(shake / 12.0F, 0.5F) * tuning.retailShake);
+        player.state.trauma = std::max(player.state.trauma, std::min(shake / 12.0F, 0.5F) * tuning.retailShake);
     }
 
-    Raycast ray{rdram, scene.model,
-                dkr_cam_authored_radius(scene.layout, MEM_BU(0x9C, dkr_cam_addr(scene.header))),
+    Raycast ray{rdram, scene.model, dkr_cam_authored_radius(scene.layout, MEM_BU(0x9C, dkr_cam_addr(scene.header))),
                 dkr_cam_add(position, dkr_cam_v(0.0, kClearanceHeight, 0.0))};
     MCOutput out{};
     const float trauma_before = player.state.trauma;
     // While a hit is being steadied the yaw spring is not to keep up with
     // the nose, and a hop off a wall is not a landing: no dip, no shake.
     params = dkr_cam::hit_step_params(params, player.bump);
-    if (player.state.initialized && player.bump.blend > 0.0F) player.state.prevGrounded = in.grounded;
+    if (player.state.initialized && player.bump.blend > 0.0F)
+        player.state.prevGrounded = in.grounded;
     const bool landing = player.state.initialized && in.grounded && !player.state.prevGrounded;
     // modern_cam starts over on its first step and after a teleport.
     const MCVec3 anchor = player.state.anchor;
-    const bool reset = !player.state.initialized ||
-        std::hypot(in.pos.x - anchor.x, in.pos.y - anchor.y, in.pos.z - anchor.z) >
-            params.teleportDistance * params.unitScale;
+    const bool reset =
+        !player.state.initialized || std::hypot(in.pos.x - anchor.x, in.pos.y - anchor.y, in.pos.z - anchor.z) >
+                                         params.teleportDistance * params.unitScale;
     // Mouse orbit. Right turns the view right (lower modern_cam yaw) and up
     // looks up (lower orbit pitch), as the right stick does. Moving the mouse,
     // or holding its right button, keeps the camera where it was put; it
@@ -407,14 +413,15 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
     if (player.state.initialized) {
         const float per_pixel = tuning.mouseOrbit * static_cast<float>(dkr_cam::kPi / 180.0) / 100.0F;
         if (mouse_moved) {
-            player.state.orbitYaw = static_cast<float>(
-                std::remainder(player.state.orbitYaw - mouse_x * per_pixel, 2.0 * dkr_cam::kPi));
+            player.state.orbitYaw =
+                static_cast<float>(std::remainder(player.state.orbitYaw - mouse_x * per_pixel, 2.0 * dkr_cam::kPi));
             player.state.orbitPitch = std::clamp(player.state.orbitPitch + mouse_y * per_pixel, -0.5F, 0.8F);
         }
-        if (mouse_moved || mouse_held) player.state.idleTime = 0.0F;
+        if (mouse_moved || mouse_held)
+            player.state.idleTime = 0.0F;
     }
-    params.recenterSharpness = dkr_cam::eased_recenter_sharpness(
-        params.recenterSharpness, player.state.idleTime + dt, params.recenterDelay, tuning.recenterEase);
+    params.recenterSharpness = dkr_cam::eased_recenter_sharpness(params.recenterSharpness, player.state.idleTime + dt,
+                                                                 params.recenterDelay, tuning.recenterEase);
     ModernCam_Update(&player.state, &params, &in, dt, raycast, &ray, &out);
     if (!std::isfinite(out.eye.x) || !std::isfinite(out.eye.y) || !std::isfinite(out.eye.z) ||
         !std::isfinite(out.yaw) || !std::isfinite(out.pitch) || !std::isfinite(out.roll) ||
@@ -437,20 +444,18 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
                      "retail-shake=%.2f trauma=%.3f->%.3f dip=%.1f kick=%.1f roll=%.2f nose=%.3f heading=%.3f "
                      "view=%.3f pitch=%.3f eye=(%.0f,%.0f,%.0f) racer=(%.0f,%.0f,%.0f) clear=%.2f "
                      "bump-hold=%.2f bump-blend=%.2f hit=%d recovered=%.2f drift=%d boost=%.0f fov=%.1f\n",
-                     port, dt, std::hypot(player.velocity.x, player.velocity.z), player.velocity.y,
-                     in.grounded, landing ? 1 : 0, shake, trauma_before, player.state.trauma,
-                     player.state.dipY, player.state.kick, degrees(out.roll), nose, in.yaw, out.yaw, out.pitch,
-                     eye.x, eye.y, eye.z, position.x, position.y, position.z, player.state.collisionDist,
-                     player.bump.hold, player.bump.blend, player.bump.hit ? 1 : 0, player.bump.recovered,
-                     in.drifting, in.boost, player.fov);
+                     port, dt, std::hypot(player.velocity.x, player.velocity.z), player.velocity.y, in.grounded,
+                     landing ? 1 : 0, shake, trauma_before, player.state.trauma, player.state.dipY, player.state.kick,
+                     degrees(out.roll), nose, in.yaw, out.yaw, out.pitch, eye.x, eye.y, eye.z, position.x, position.y,
+                     position.z, player.state.collisionDist, player.bump.hold, player.bump.blend,
+                     player.bump.hit ? 1 : 0, player.bump.recovered, in.drifting, in.boost, player.fov);
     } else if (trace_level() == 1 && (++player.trace_ticks % 15U) == 0U) {
         const double speed = std::hypot(player.velocity.x, player.velocity.z);
         const double motion = speed > 1.0 ? std::atan2(player.velocity.x, player.velocity.z) : 0.0;
         std::fprintf(stderr,
                      "[modern-camera] port=%zu rate=%.2f speed=%.0fu/s heading=%.3f motion=%.3f "
                      "steer=%.2f grounded=%d drift=%d boost=%.0f fov=%.1f\n",
-                     port, rate, speed, in.yaw, motion, in.steer, in.grounded, in.drifting,
-                     in.boost, player.fov);
+                     port, rate, speed, in.yaw, motion, in.steer, in.grounded, in.drifting, in.boost, player.fov);
     }
     return true;
 }
@@ -503,24 +508,28 @@ dkr::runtime::modern_camera::Readout dkr::runtime::modern_camera::readout() {
     const Clock::time_point now = Clock::now();
     std::scoped_lock lock(g_readout_mutex);
     for (const Published& published : g_readouts) {
-        if (published.readout.live && now - published.at < kReadoutWindow) return published.readout;
+        if (published.readout.live && now - published.at < kReadoutWindow)
+            return published.readout;
     }
     return Readout{};
 }
 
-void dkr::runtime::modern_camera::publish_input(std::size_t port, float camera_x,
-                                                float camera_y, bool look_back,
+void dkr::runtime::modern_camera::publish_input(std::size_t port, float camera_x, float camera_y, bool look_back,
                                                 bool online) {
-    if (g_online.load(std::memory_order_acquire) != online) set_online_routing(online);
-    if (port >= kPorts) return;
+    if (g_online.load(std::memory_order_acquire) != online)
+        set_online_routing(online);
+    if (port >= kPorts)
+        return;
     g_input[port].x.store(camera_x, std::memory_order_relaxed);
     g_input[port].y.store(camera_y, std::memory_order_relaxed);
     g_input[port].look_back.store(look_back, std::memory_order_relaxed);
 }
 
 void dkr::runtime::modern_camera::reset_session() {
-    for (auto& owned : g_owned_until) owned.store(0, std::memory_order_release);
-    for (auto& cut : g_cut) cut.store(false, std::memory_order_release);
+    for (auto& owned : g_owned_until)
+        owned.store(0, std::memory_order_release);
+    for (auto& cut : g_cut)
+        cut.store(false, std::memory_order_release);
     for (auto& mouse : g_mouse) {
         mouse.dx.store(0.0F, std::memory_order_relaxed);
         mouse.dy.store(0.0F, std::memory_order_relaxed);
@@ -530,7 +539,8 @@ void dkr::runtime::modern_camera::reset_session() {
 }
 
 void dkr::runtime::modern_camera::set_online_routing(bool online) {
-    if (g_online.exchange(online, std::memory_order_acq_rel) != online) reset_session();
+    if (g_online.exchange(online, std::memory_order_acq_rel) != online)
+        reset_session();
 }
 
 bool dkr::runtime::modern_camera::mouse_orbit_available(std::size_t port) {
@@ -538,26 +548,28 @@ bool dkr::runtime::modern_camera::mouse_orbit_available(std::size_t port) {
 }
 
 void dkr::runtime::modern_camera::add_mouse_motion(std::size_t port, float dx, float dy) {
-    if (port >= kPorts) return;
+    if (port >= kPorts)
+        return;
     accumulate(g_mouse[port].dx, dx);
     accumulate(g_mouse[port].dy, dy);
 }
 
 void dkr::runtime::modern_camera::set_mouse_orbit_held(std::size_t port, bool held) {
-    if (port < kPorts) g_mouse[port].held.store(held, std::memory_order_relaxed);
+    if (port < kPorts)
+        g_mouse[port].held.store(held, std::memory_order_relaxed);
 }
 
 bool dkr::runtime::modern_camera::owns_controls(std::size_t port) {
     return port < kPorts && !g_online.load(std::memory_order_acquire) && enabled() &&
-        Clock::now().time_since_epoch().count() <
-            g_owned_until[port].load(std::memory_order_acquire);
+           Clock::now().time_since_epoch().count() < g_owned_until[port].load(std::memory_order_acquire);
 }
 
-bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* context,
-                                        std::uint32_t object, const std::uint32_t fields[8]) {
+bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* context, std::uint32_t object,
+                                        const std::uint32_t fields[8]) {
     g_pending = false;
     reset_guest_state_if_needed();
-    if (g_online.load(std::memory_order_acquire)) return false;
+    if (g_online.load(std::memory_order_acquire))
+        return false;
     const bool modern = enabled();
     const bool look_back_allowed = look_back_enabled();
     if (!modern && !look_back_allowed) {
@@ -565,11 +577,13 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
         return false;
     }
     const std::uint32_t player_index = dkr_cam_word(rdram, fields[7]);
-    if (player_index > 3U) return false;
+    if (player_index > 3U)
+        return false;
     // sPlayerID: the controller port driving this player (Adventure Two swaps).
-    const std::uint32_t port = MEM_BU(static_cast<std::int32_t>(player_index),
-        dkr_cam_addr(dkr::runtime::revision_addresses::PlayerIdMap));
-    if (port >= kPorts) return false;
+    const std::uint32_t port =
+        MEM_BU(static_cast<std::int32_t>(player_index), dkr_cam_addr(dkr::runtime::revision_addresses::PlayerIdMap));
+    if (port >= kPorts)
+        return false;
     Player& player = g_players[port];
 
     Scene scene;
@@ -578,7 +592,8 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
     if (!follow_camera(rdram, object, fields, scene) || !dkr_cam_span(racer, 0x1F0, 4)) {
         // Finish, loop and door cameras are retail; start fresh afterwards.
         player.active = false;
-        if (scene.layout == 0U) release_fov(rdram, context);
+        if (scene.layout == 0U)
+            release_fov(rdram, context);
         return false;
     }
     if (!player.active || player.header != scene.header || player.camera != scene.camera) {
@@ -618,25 +633,27 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
         write_pose(rdram, scene.camera, player.pose, player.roll);
         if (scene.layout == 0U && std::isfinite(g_fov.level) && g_fov.level > 0.0F) {
             const float current = read_float(rdram, dkr::runtime::revision_addresses::CurrentCameraFov);
-            if (!(std::fabs(current - player.fov) < 0.01F)) set_fov(rdram, context, player.fov);
+            if (!(std::fabs(current - player.fov) < 0.01F))
+                set_fov(rdram, context, player.fov);
             g_fov.owned = true;
         }
         g_owned_until[port].store((Clock::now() + kOwnershipWindow).time_since_epoch().count(),
                                   std::memory_order_release);
     } else {
         release_fov(rdram, context);
-        if (!look_back) return false;
+        if (!look_back)
+            return false;
         dkr_cam::Pose camera;
         const dkr_cam_vec position = dkr_cam_position(rdram, scene.camera);
         const dkr_cam_vec pivot = dkr_cam_position(rdram, object);
-        if (!dkr_cam_finite(position) || !dkr_cam_finite(pivot)) return false;
+        if (!dkr_cam_finite(position) || !dkr_cam_finite(pivot))
+            return false;
         camera.x = position.x;
         camera.y = position.y;
         camera.z = position.z;
         camera.yaw = retail.yaw;
         camera.pitch = retail.pitch;
-        write_pose(rdram, scene.camera, dkr_cam::turn_around(camera, pivot.x, pivot.z, dkr_cam::kPi),
-                   retail.roll);
+        write_pose(rdram, scene.camera, dkr_cam::turn_around(camera, pivot.x, pivot.z, dkr_cam::kPi), retail.roll);
     }
     g_pending = true;
     g_pending_camera = scene.camera;
@@ -646,46 +663,61 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
 
 void dkr::runtime::modern_camera::commit(std::uint8_t* rdram, const std::uint32_t fields[8]) {
     reset_guest_state_if_needed();
-    if (g_online.load(std::memory_order_acquire)) return;
-    if (!g_pending) return;
+    if (g_online.load(std::memory_order_acquire))
+        return;
+    if (!g_pending)
+        return;
     g_pending = false;
     const std::uint32_t camera = dkr_cam_word(rdram, fields[5]);
     const std::uint32_t model = dkr_cam_word(rdram, fields[4]);
     std::uint32_t slot = 0U;
-    if (camera != g_pending_camera || !camera_slot(camera, slot)) return;
+    if (camera != g_pending_camera || !camera_slot(camera, slot))
+        return;
     // Rendering and BSP selection start from the segment the moved eye is in.
     // The clearance pass only rewrites it when it had to move the eye.
     if (dkr_cam_span(model, 0x40, 4)) {
         const int segment = segment_at(rdram, model, dkr_cam_position(rdram, camera));
-        if (segment >= 0) MEM_H(0x34, dkr_cam_addr(camera)) = static_cast<std::int16_t>(segment);
+        if (segment >= 0)
+            MEM_H(0x34, dkr_cam_addr(camera)) = static_cast<std::int16_t>(segment);
     }
     g_saved[slot] = Saved{true, camera, g_pending_retail, read_fields(rdram, camera)};
 }
 
 void dkr::runtime::modern_camera::restore(std::uint8_t* rdram, const std::uint32_t fields[8]) {
     reset_guest_state_if_needed();
-    if (g_online.load(std::memory_order_acquire)) return;
+    if (g_online.load(std::memory_order_acquire))
+        return;
     const std::uint32_t camera = dkr_cam_word(rdram, fields[5]);
     std::uint32_t slot = 0U;
-    if (!camera_slot(camera, slot)) return;
+    if (!camera_slot(camera, slot))
+        return;
     Saved& saved = g_saved[slot];
-    if (!saved.valid || saved.camera != camera) return;
+    if (!saved.valid || saved.camera != camera)
+        return;
     saved.valid = false;
     // Hand the retail update its own previous pose. A member something else
     // changed since the Modern camera wrote it (respawn, door, reset) is kept.
     const Fields now = read_fields(rdram, camera);
     const gpr base = dkr_cam_addr(camera);
-    if (now.x == saved.written.x) MEM_W(0x0C, base) = static_cast<std::int32_t>(saved.retail.x);
-    if (now.y == saved.written.y) MEM_W(0x10, base) = static_cast<std::int32_t>(saved.retail.y);
-    if (now.z == saved.written.z) MEM_W(0x14, base) = static_cast<std::int32_t>(saved.retail.z);
-    if (now.boom == saved.written.boom) MEM_W(0x1C, base) = static_cast<std::int32_t>(saved.retail.boom);
-    if (now.yaw == saved.written.yaw) MEM_H(0x00, base) = saved.retail.yaw;
-    if (now.pitch == saved.written.pitch) MEM_H(0x02, base) = saved.retail.pitch;
-    if (now.roll == saved.written.roll) MEM_H(0x04, base) = saved.retail.roll;
-    if (now.segment == saved.written.segment) MEM_H(0x34, base) = saved.retail.segment;
+    if (now.x == saved.written.x)
+        MEM_W(0x0C, base) = static_cast<std::int32_t>(saved.retail.x);
+    if (now.y == saved.written.y)
+        MEM_W(0x10, base) = static_cast<std::int32_t>(saved.retail.y);
+    if (now.z == saved.written.z)
+        MEM_W(0x14, base) = static_cast<std::int32_t>(saved.retail.z);
+    if (now.boom == saved.written.boom)
+        MEM_W(0x1C, base) = static_cast<std::int32_t>(saved.retail.boom);
+    if (now.yaw == saved.written.yaw)
+        MEM_H(0x00, base) = saved.retail.yaw;
+    if (now.pitch == saved.written.pitch)
+        MEM_H(0x02, base) = saved.retail.pitch;
+    if (now.roll == saved.written.roll)
+        MEM_H(0x04, base) = saved.retail.roll;
+    if (now.segment == saved.written.segment)
+        MEM_H(0x34, base) = saved.retail.segment;
 }
 
 bool dkr::runtime::modern_camera::consume_cut(std::uint32_t camera_slot) {
     return !g_online.load(std::memory_order_acquire) && camera_slot < kPlayerCameras &&
-        g_cut[camera_slot].exchange(false, std::memory_order_acq_rel);
+           g_cut[camera_slot].exchange(false, std::memory_order_acq_rel);
 }

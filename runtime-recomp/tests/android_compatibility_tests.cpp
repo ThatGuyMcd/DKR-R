@@ -6,10 +6,20 @@
 #include <iostream>
 #include <stdexcept>
 #include <thread>
-#define CHECK(x) do { if (!(x)) throw std::runtime_error(#x); } while (false)
-struct Surface { std::atomic<int> refs{1}; };
-void acquire(Surface* surface) { CHECK(surface->refs.fetch_add(1) > 0); }
-void release(Surface* surface) { CHECK(surface->refs.fetch_sub(1) > 0); }
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x))                                                                                                      \
+            throw std::runtime_error(#x);                                                                              \
+    } while (false)
+struct Surface {
+    std::atomic<int> refs{1};
+};
+void acquire(Surface* surface) {
+    CHECK(surface->refs.fetch_add(1) > 0);
+}
+void release(Surface* surface) {
+    CHECK(surface->refs.fetch_sub(1) > 0);
+}
 int main() {
     using namespace dkr::runtime;
     Surface a, b;
@@ -29,11 +39,15 @@ int main() {
             CHECK(!registry.matches(old.generation));
         }
         CHECK(a.refs == 2);
-        std::thread reader([&] { for (int i = 0; i < 20000; ++i) {
-            Registry::Lease lease(registry);
-            if (lease.window) CHECK(lease.window->refs >= 2);
-        }});
-        for (int i = 0; i < 20000; ++i) registry.publish(i % 3 == 0 ? nullptr : i % 3 == 1 ? &a : &b);
+        std::thread reader([&] {
+            for (int i = 0; i < 20000; ++i) {
+                Registry::Lease lease(registry);
+                if (lease.window)
+                    CHECK(lease.window->refs >= 2);
+            }
+        });
+        for (int i = 0; i < 20000; ++i)
+            registry.publish(i % 3 == 0 ? nullptr : i % 3 == 1 ? &a : &b);
         reader.join();
     }
     CHECK(a.refs == 1 && b.refs == 1);
@@ -50,9 +64,12 @@ int main() {
     CHECK(!android_graphics::mapped_range(4096, true, UINT64_MAX, 0).valid);
     CHECK(android_memory::limit_for_trim(20) == 512ULL * 1024 * 1024);
     CHECK(android_memory::limit_for_trim(40) == 512ULL * 1024 * 1024);
-    android_memory::trim(10); CHECK(android_memory::unused_cache_limit == 128ULL * 1024 * 1024);
-    android_memory::trim(20); CHECK(android_memory::unused_cache_limit == 128ULL * 1024 * 1024);
-    android_memory::trim(15); CHECK(android_memory::unused_cache_limit == 64ULL * 1024 * 1024);
+    android_memory::trim(10);
+    CHECK(android_memory::unused_cache_limit == 128ULL * 1024 * 1024);
+    android_memory::trim(20);
+    CHECK(android_memory::unused_cache_limit == 128ULL * 1024 * 1024);
+    android_memory::trim(15);
+    CHECK(android_memory::unused_cache_limit == 64ULL * 1024 * 1024);
     CHECK(!performance_capture::in_window(0, 0));
     CHECK(performance_capture::in_window(59, 60));
     CHECK(!performance_capture::in_window(60, 60));
@@ -74,5 +91,6 @@ int main() {
     CHECK(performance_trace::describe_delta(base).find("UI-build calls=40000") != std::string::npos);
     performance_capture::start();
     CHECK(performance_capture::finish().find("unavailable") != std::string::npos);
-    std::cout << "PASS: surface generations/reference lifetimes, map ranges, pressure budgets, bounded opt-in capture and counters\n";
+    std::cout
+        << "PASS: surface generations/reference lifetimes, map ranges, pressure budgets, bounded opt-in capture and counters\n";
 }

@@ -13,7 +13,7 @@ namespace dkr::runtime::netplay::experimental {
 // every published owner sample is final. Transport encryption/authentication
 // belongs to SecureChannel; this codec is its bounded plaintext payload only.
 inline constexpr unsigned kOwnerInputBatch = 8;
-inline constexpr unsigned kOwnerInputMaximumBytes = 53+68*kOwnerInputBatch;
+inline constexpr unsigned kOwnerInputMaximumBytes = 53 + 68 * kOwnerInputBatch;
 struct OwnerInputPacket {
     std::uint64_t epoch = 0;
     std::uint32_t first_frame = 0;
@@ -22,7 +22,7 @@ struct OwnerInputPacket {
     // predictions or simulation ACKs. Bit zero names the first missing frame.
     std::array<std::uint32_t, 4> received_bits{};
     std::array<PackedInput, kOwnerInputBatch> inputs{};
-    std::array<dkr::sdk2::Command,kOwnerInputBatch> commands{};
+    std::array<dkr::sdk2::Command, kOwnerInputBatch> commands{};
     std::uint8_t players = 0;
     std::uint8_t owner = 0;
     std::uint8_t count = 0;
@@ -33,32 +33,47 @@ std::optional<OwnerInputPacket> decode_owner_inputs(std::span<const std::uint8_t
 
 enum class OwnerInputResult { Accepted, Duplicate, StaleEpoch, Rejected, Backpressure, Conflict };
 enum class OwnerInputSend { Live, Repair };
-struct FinalOwnerInput { std::uint8_t owner; std::uint32_t frame; PackedInput input; dkr::sdk2::Command command{}; };
+struct FinalOwnerInput {
+    std::uint8_t owner;
+    std::uint32_t frame;
+    PackedInput input;
+    dkr::sdk2::Command command{};
+};
 
 // All methods run on the simulation owner. Receive callbacks enqueue bounded
 // authenticated messages; they never mutate this history or the game directly.
 // Host forwards final owner samples; clients accept relays only from slot 0.
 // ACK means received actual input, NOT simulated/confirmed input.
 class OwnerInputHistory final {
-public:
+  public:
     bool begin(std::uint64_t epoch, std::uint8_t players, std::uint8_t local);
     bool set_simulation_cursor(std::uint32_t cursor);
-    OwnerInputResult publish(std::uint32_t frame, PackedInput input,dkr::sdk2::Command command={});
+    OwnerInputResult publish(std::uint32_t frame, PackedInput input, dkr::sdk2::Command command = {});
     OwnerInputResult receive_authenticated(std::uint8_t peer, const OwnerInputPacket& packet,
-                                          std::vector<FinalOwnerInput>& newly_received);
+                                           std::vector<FinalOwnerInput>& newly_received);
     std::optional<OwnerInputPacket> packet_for(std::uint8_t owner, std::uint8_t peer,
-                                             OwnerInputSend send = OwnerInputSend::Live);
+                                               OwnerInputSend send = OwnerInputSend::Live);
     std::optional<PackedInput> actual(std::uint8_t owner, std::uint32_t frame) const;
-    std::uint32_t received_next(std::uint8_t owner) const { return owner < players_ ? next_[owner] : 0; }
-    dkr::sdk2::Command command(std::uint8_t owner,std::uint32_t frame)const;
-    bool failed() const { return conflict_; }
-private:
+    std::uint32_t received_next(std::uint8_t owner) const {
+        return owner < players_ ? next_[owner] : 0;
+    }
+    dkr::sdk2::Command command(std::uint8_t owner, std::uint32_t frame) const;
+    bool failed() const {
+        return conflict_;
+    }
+
+  private:
     static constexpr unsigned kHistory = 128;
     static constexpr unsigned kFuture = 48;
-    struct Sample { std::uint32_t frame = 0; PackedInput input{}; bool valid = false; dkr::sdk2::Command command{}; };
+    struct Sample {
+        std::uint32_t frame = 0;
+        PackedInput input{};
+        bool valid = false;
+        dkr::sdk2::Command command{};
+    };
     bool within_window(std::uint8_t owner, std::uint32_t frame) const;
     bool may_replace(std::uint8_t owner, std::uint32_t frame) const;
-    void insert(std::uint8_t owner, std::uint32_t frame, PackedInput input,dkr::sdk2::Command command={});
+    void insert(std::uint8_t owner, std::uint32_t frame, PackedInput input, dkr::sdk2::Command command = {});
     std::array<std::array<Sample, kHistory>, 4> samples_{};
     std::array<std::uint32_t, 4> next_{};
     std::array<std::uint32_t, 4> newest_next_{};
@@ -71,4 +86,4 @@ private:
     std::uint8_t players_ = 0, local_ = 0;
     bool conflict_ = false;
 };
-}
+} // namespace dkr::runtime::netplay::experimental

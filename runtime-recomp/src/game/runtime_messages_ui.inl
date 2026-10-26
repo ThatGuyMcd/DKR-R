@@ -1,10 +1,10 @@
-void DrawColoredWrapped(const ImVec4 &color, std::string_view text) {
+void DrawColoredWrapped(const ImVec4& color, std::string_view text) {
     ImGui::PushStyleColor(ImGuiCol_Text, color);
     ImGui::TextWrapped("%.*s", static_cast<int>(text.size()), text.data());
     ImGui::PopStyleColor();
 }
 
-void DrawTechnicalDetails(std::string_view diagnostic, const char *label = "Details") {
+void DrawTechnicalDetails(std::string_view diagnostic, const char* label = "Details") {
     if (diagnostic.empty())
         return;
     ImGui::PushID(diagnostic.data(), diagnostic.data() + diagnostic.size());

@@ -120,11 +120,11 @@ enum class MessageType : std::uint8_t {
 
 struct ModOfferPayload {
     std::string manifest_hash;
-    std::uint32_t manifest_bytes=0;
-    bool operator==(const ModOfferPayload&)const=default;
+    std::uint32_t manifest_bytes = 0;
+    bool operator==(const ModOfferPayload&) const = default;
 };
 std::vector<std::uint8_t> encode_mod_offer(const ModOfferPayload& payload);
-bool decode_mod_offer(std::span<const std::uint8_t> bytes,ModOfferPayload& payload);
+bool decode_mod_offer(std::span<const std::uint8_t> bytes, ModOfferPayload& payload);
 
 enum class MatchEndStage : std::uint8_t { Request, Stop, Returned, Resume, ResumeAck };
 struct MatchEndPayload {
@@ -503,162 +503,88 @@ struct PreflightResultPayload {
     bool queues_drained = false;
 };
 
-std::vector<std::uint8_t> encode(
-    const Datagram& datagram,
-    std::size_t maximum_datagram_bytes = kMaximumDatagramBytes);
-bool decode(std::span<const std::uint8_t> bytes, Datagram& datagram,
-            std::string& error,
+std::vector<std::uint8_t> encode(const Datagram& datagram, std::size_t maximum_datagram_bytes = kMaximumDatagramBytes);
+bool decode(std::span<const std::uint8_t> bytes, Datagram& datagram, std::string& error,
             std::size_t maximum_datagram_bytes = kMaximumDatagramBytes);
 std::vector<std::uint8_t> encode_input_batch(const InputBatch& batch);
-bool decode_input_batch(std::span<const std::uint8_t> bytes,
-                        InputBatch& batch, std::string& error);
-std::vector<std::uint8_t> encode_input_acknowledge(
-    const InputAcknowledgePayload& acknowledgement);
-bool decode_input_acknowledge(std::span<const std::uint8_t> bytes,
-                              InputAcknowledgePayload& acknowledgement);
-std::vector<std::uint8_t> encode_input_repair_request(
-    const InputRepairRequestPayload& request);
-bool decode_input_repair_request(
-    std::span<const std::uint8_t> bytes,
-    InputRepairRequestPayload& request);
-std::vector<std::uint8_t> encode_gameplay_handoff(
-    const GameplayHandoffPayload& handoff);
-bool decode_gameplay_handoff(std::span<const std::uint8_t> bytes,
-                             GameplayHandoffPayload& handoff);
-std::vector<std::uint8_t> encode_rollback_payload(
-    const RollbackPayload& payload);
-bool decode_rollback_payload(std::span<const std::uint8_t> bytes,
-                             RollbackPayload& payload,
-                             std::string& error);
-std::vector<std::uint8_t> encode_gameplay_barrier(
-    const GameplayBarrierPayload& barrier);
-bool decode_gameplay_barrier(std::span<const std::uint8_t> bytes,
-                             GameplayBarrierPayload& barrier);
-std::uint64_t frame_commit_hash(std::uint64_t match_id,
-                                const FrameCommitPayload& commit);
-std::vector<std::uint8_t> encode_frame_commit_batch(
-    const FrameCommitBatch& batch);
-bool decode_frame_commit_batch(std::span<const std::uint8_t> bytes,
-                               FrameCommitBatch& batch,
-                               std::string& error);
-std::vector<std::uint8_t> encode_frame_commit_request(
-    const FrameCommitRequestPayload& request);
-bool decode_frame_commit_request(std::span<const std::uint8_t> bytes,
-                                 FrameCommitRequestPayload& request);
-std::vector<std::uint8_t> encode_frame_correction_acknowledge(
-    const FrameCorrectionAcknowledgePayload& acknowledgement);
-bool decode_frame_correction_acknowledge(
-    std::span<const std::uint8_t> bytes,
-    FrameCorrectionAcknowledgePayload& acknowledgement);
-std::vector<std::uint8_t> encode_state_snapshot_chunk(
-    const StateSnapshotChunk& chunk,
-    std::size_t maximum_datagram_bytes = kMaximumDatagramBytes);
-bool decode_state_snapshot_chunk(std::span<const std::uint8_t> bytes,
-                                 StateSnapshotChunk& chunk,
-                                 std::string& error);
-std::vector<std::uint8_t> encode_state_request(
-    const StateRequestPayload& request);
-bool decode_state_request(std::span<const std::uint8_t> bytes,
-                          StateRequestPayload& request);
-std::vector<std::uint8_t> encode_state_acknowledge(
-    const StateAcknowledgePayload& acknowledgement);
-bool decode_state_acknowledge(std::span<const std::uint8_t> bytes,
-                              StateAcknowledgePayload& acknowledgement);
+bool decode_input_batch(std::span<const std::uint8_t> bytes, InputBatch& batch, std::string& error);
+std::vector<std::uint8_t> encode_input_acknowledge(const InputAcknowledgePayload& acknowledgement);
+bool decode_input_acknowledge(std::span<const std::uint8_t> bytes, InputAcknowledgePayload& acknowledgement);
+std::vector<std::uint8_t> encode_input_repair_request(const InputRepairRequestPayload& request);
+bool decode_input_repair_request(std::span<const std::uint8_t> bytes, InputRepairRequestPayload& request);
+std::vector<std::uint8_t> encode_gameplay_handoff(const GameplayHandoffPayload& handoff);
+bool decode_gameplay_handoff(std::span<const std::uint8_t> bytes, GameplayHandoffPayload& handoff);
+std::vector<std::uint8_t> encode_rollback_payload(const RollbackPayload& payload);
+bool decode_rollback_payload(std::span<const std::uint8_t> bytes, RollbackPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_gameplay_barrier(const GameplayBarrierPayload& barrier);
+bool decode_gameplay_barrier(std::span<const std::uint8_t> bytes, GameplayBarrierPayload& barrier);
+std::uint64_t frame_commit_hash(std::uint64_t match_id, const FrameCommitPayload& commit);
+std::vector<std::uint8_t> encode_frame_commit_batch(const FrameCommitBatch& batch);
+bool decode_frame_commit_batch(std::span<const std::uint8_t> bytes, FrameCommitBatch& batch, std::string& error);
+std::vector<std::uint8_t> encode_frame_commit_request(const FrameCommitRequestPayload& request);
+bool decode_frame_commit_request(std::span<const std::uint8_t> bytes, FrameCommitRequestPayload& request);
+std::vector<std::uint8_t> encode_frame_correction_acknowledge(const FrameCorrectionAcknowledgePayload& acknowledgement);
+bool decode_frame_correction_acknowledge(std::span<const std::uint8_t> bytes,
+                                         FrameCorrectionAcknowledgePayload& acknowledgement);
+std::vector<std::uint8_t> encode_state_snapshot_chunk(const StateSnapshotChunk& chunk,
+                                                      std::size_t maximum_datagram_bytes = kMaximumDatagramBytes);
+bool decode_state_snapshot_chunk(std::span<const std::uint8_t> bytes, StateSnapshotChunk& chunk, std::string& error);
+std::vector<std::uint8_t> encode_state_request(const StateRequestPayload& request);
+bool decode_state_request(std::span<const std::uint8_t> bytes, StateRequestPayload& request);
+std::vector<std::uint8_t> encode_state_acknowledge(const StateAcknowledgePayload& acknowledgement);
+bool decode_state_acknowledge(std::span<const std::uint8_t> bytes, StateAcknowledgePayload& acknowledgement);
 std::vector<std::uint8_t> encode_recovery(const RecoveryPayload& recovery);
-bool decode_recovery(std::span<const std::uint8_t> bytes,
-                     RecoveryPayload& recovery);
-std::vector<std::uint8_t> encode_transition_barrier(
-    const TransitionBarrierPayload& transition);
-bool decode_transition_barrier(std::span<const std::uint8_t> bytes,
-                               TransitionBarrierPayload& transition);
-std::vector<std::uint8_t> encode_simulation_progress(
-    const SimulationProgressPayload& progress);
-bool decode_simulation_progress(std::span<const std::uint8_t> bytes,
-                                SimulationProgressPayload& progress);
-std::vector<std::uint8_t> encode_racer_orientation(
-    const RacerOrientationPayload& orientation);
-bool decode_racer_orientation(std::span<const std::uint8_t> bytes,
-                              RacerOrientationPayload& orientation);
+bool decode_recovery(std::span<const std::uint8_t> bytes, RecoveryPayload& recovery);
+std::vector<std::uint8_t> encode_transition_barrier(const TransitionBarrierPayload& transition);
+bool decode_transition_barrier(std::span<const std::uint8_t> bytes, TransitionBarrierPayload& transition);
+std::vector<std::uint8_t> encode_simulation_progress(const SimulationProgressPayload& progress);
+bool decode_simulation_progress(std::span<const std::uint8_t> bytes, SimulationProgressPayload& progress);
+std::vector<std::uint8_t> encode_racer_orientation(const RacerOrientationPayload& orientation);
+bool decode_racer_orientation(std::span<const std::uint8_t> bytes, RacerOrientationPayload& orientation);
 std::vector<std::uint8_t> encode_hello(const HelloPayload& payload);
-bool decode_hello(std::span<const std::uint8_t> bytes, HelloPayload& payload,
-                  std::string& error);
+bool decode_hello(std::span<const std::uint8_t> bytes, HelloPayload& payload, std::string& error);
 std::vector<std::uint8_t> encode_hello_ack(const HelloAckPayload& payload);
-bool decode_hello_ack(std::span<const std::uint8_t> bytes,
-                      HelloAckPayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_online_save_ready(
-    const OnlineSaveReadyPayload& payload);
-bool decode_online_save_ready(std::span<const std::uint8_t> bytes,
-                              OnlineSaveReadyPayload& payload,
-                              std::string& error);
+bool decode_hello_ack(std::span<const std::uint8_t> bytes, HelloAckPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_online_save_ready(const OnlineSaveReadyPayload& payload);
+bool decode_online_save_ready(std::span<const std::uint8_t> bytes, OnlineSaveReadyPayload& payload, std::string& error);
 std::vector<std::uint8_t> encode_online_save_status(const OnlineSaveStatusPayload& payload);
-bool decode_online_save_status(std::span<const std::uint8_t> bytes,
-                               OnlineSaveStatusPayload& payload, std::string& error);
+bool decode_online_save_status(std::span<const std::uint8_t> bytes, OnlineSaveStatusPayload& payload,
+                               std::string& error);
 std::vector<std::uint8_t> encode_lobby_state(const LobbyStatePayload& payload);
-bool decode_lobby_state(std::span<const std::uint8_t> bytes,
-                        LobbyStatePayload& payload, std::string& error);
+bool decode_lobby_state(std::span<const std::uint8_t> bytes, LobbyStatePayload& payload, std::string& error);
 std::vector<std::uint8_t> encode_state_hash(const StateHashPayload& payload);
-bool decode_state_hash(std::span<const std::uint8_t> bytes,
-                       StateHashPayload& payload, std::string& error);
+bool decode_state_hash(std::span<const std::uint8_t> bytes, StateHashPayload& payload, std::string& error);
 std::vector<std::uint8_t> encode_loaded(const LoadedPayload& payload);
-bool decode_loaded(std::span<const std::uint8_t> bytes,
-                   LoadedPayload& payload, std::string& error);
+bool decode_loaded(std::span<const std::uint8_t> bytes, LoadedPayload& payload, std::string& error);
 std::vector<std::uint8_t> encode_start(const StartPayload& payload);
-bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
-                  std::string& error);
-std::vector<std::uint8_t> encode_ready_request(
-    const ReadyRequestPayload& payload);
-bool decode_ready_request(std::span<const std::uint8_t> bytes,
-                          ReadyRequestPayload& payload, std::string& error);
+bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_ready_request(const ReadyRequestPayload& payload);
+bool decode_ready_request(std::span<const std::uint8_t> bytes, ReadyRequestPayload& payload, std::string& error);
 std::vector<std::uint8_t> encode_ready_ack(const ReadyAckPayload& payload);
-bool decode_ready_ack(std::span<const std::uint8_t> bytes,
-                      ReadyAckPayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_countdown_ack(
-    const CountdownAckPayload& payload);
-bool decode_countdown_ack(std::span<const std::uint8_t> bytes,
-                          CountdownAckPayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_launch_prepare(
-    const LaunchPreparePayload& payload);
-bool decode_launch_prepare(std::span<const std::uint8_t> bytes,
-                           LaunchPreparePayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_launch_prepare_ack(
-    const LaunchPrepareAckPayload& payload);
-bool decode_launch_prepare_ack(std::span<const std::uint8_t> bytes,
-                               LaunchPrepareAckPayload& payload,
+bool decode_ready_ack(std::span<const std::uint8_t> bytes, ReadyAckPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_countdown_ack(const CountdownAckPayload& payload);
+bool decode_countdown_ack(std::span<const std::uint8_t> bytes, CountdownAckPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_launch_prepare(const LaunchPreparePayload& payload);
+bool decode_launch_prepare(std::span<const std::uint8_t> bytes, LaunchPreparePayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_launch_prepare_ack(const LaunchPrepareAckPayload& payload);
+bool decode_launch_prepare_ack(std::span<const std::uint8_t> bytes, LaunchPrepareAckPayload& payload,
                                std::string& error);
-std::vector<std::uint8_t> encode_launch_commit(
-    const LaunchCommitPayload& payload);
-bool decode_launch_commit(std::span<const std::uint8_t> bytes,
-                          LaunchCommitPayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_launch_commit_ack(
-    const LaunchCommitAckPayload& payload);
-bool decode_launch_commit_ack(std::span<const std::uint8_t> bytes,
-                              LaunchCommitAckPayload& payload,
-                              std::string& error);
-std::vector<std::uint8_t> encode_launch_release(
-    const LaunchReleasePayload& payload);
-bool decode_launch_release(std::span<const std::uint8_t> bytes,
-                           LaunchReleasePayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_launch_release_ack(
-    const LaunchReleaseAckPayload& payload);
-bool decode_launch_release_ack(std::span<const std::uint8_t> bytes,
-                               LaunchReleaseAckPayload& payload,
+std::vector<std::uint8_t> encode_launch_commit(const LaunchCommitPayload& payload);
+bool decode_launch_commit(std::span<const std::uint8_t> bytes, LaunchCommitPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_launch_commit_ack(const LaunchCommitAckPayload& payload);
+bool decode_launch_commit_ack(std::span<const std::uint8_t> bytes, LaunchCommitAckPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_launch_release(const LaunchReleasePayload& payload);
+bool decode_launch_release(std::span<const std::uint8_t> bytes, LaunchReleasePayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_launch_release_ack(const LaunchReleaseAckPayload& payload);
+bool decode_launch_release_ack(std::span<const std::uint8_t> bytes, LaunchReleaseAckPayload& payload,
                                std::string& error);
-std::vector<std::uint8_t> encode_launch_cancel(
-    const LaunchCancelPayload& payload);
-bool decode_launch_cancel(std::span<const std::uint8_t> bytes,
-                           LaunchCancelPayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_preflight_begin(
-    const PreflightBeginPayload& payload);
-bool decode_preflight_begin(std::span<const std::uint8_t> bytes,
-                            PreflightBeginPayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_preflight_probe(
-    const PreflightProbePayload& payload);
-bool decode_preflight_probe(std::span<const std::uint8_t> bytes,
-                            PreflightProbePayload& payload, std::string& error);
-std::vector<std::uint8_t> encode_preflight_result(
-    const PreflightResultPayload& payload);
-bool decode_preflight_result(std::span<const std::uint8_t> bytes,
-                             PreflightResultPayload& payload,
-                             std::string& error);
+std::vector<std::uint8_t> encode_launch_cancel(const LaunchCancelPayload& payload);
+bool decode_launch_cancel(std::span<const std::uint8_t> bytes, LaunchCancelPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_preflight_begin(const PreflightBeginPayload& payload);
+bool decode_preflight_begin(std::span<const std::uint8_t> bytes, PreflightBeginPayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_preflight_probe(const PreflightProbePayload& payload);
+bool decode_preflight_probe(std::span<const std::uint8_t> bytes, PreflightProbePayload& payload, std::string& error);
+std::vector<std::uint8_t> encode_preflight_result(const PreflightResultPayload& payload);
+bool decode_preflight_result(std::span<const std::uint8_t> bytes, PreflightResultPayload& payload, std::string& error);
 
 } // namespace dkr::runtime::netplay::protocol

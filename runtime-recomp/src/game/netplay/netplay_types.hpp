@@ -93,9 +93,12 @@ constexpr bool synchronization_has_prediction_window(SynchronizationMode mode) {
 }
 constexpr const char* synchronization_name(SynchronizationMode mode) {
     switch (mode) {
-    case SynchronizationMode::Rollback: return "Host prediction (legacy Rollback)";
-    case SynchronizationMode::Lockstep: return "Strict input sync (Lockstep)";
-    case SynchronizationMode::ExperimentalRollback: return "Experimental rollback";
+    case SynchronizationMode::Rollback:
+        return "Host prediction (legacy Rollback)";
+    case SynchronizationMode::Lockstep:
+        return "Strict input sync (Lockstep)";
+    case SynchronizationMode::ExperimentalRollback:
+        return "Experimental rollback";
     }
     return "Unknown synchronization mode";
 }
@@ -134,8 +137,7 @@ struct CompatibilityManifest {
 };
 
 struct Rules {
-    HostControlPolicy host_control =
-        HostControlPolicy::GuidedUntilCharacterSelect;
+    HostControlPolicy host_control = HostControlPolicy::GuidedUntilCharacterSelect;
     std::uint8_t maximum_players = 2U;
     bool automatic_input_delay = true;
     std::uint8_t manual_input_delay = 2U;
@@ -184,14 +186,12 @@ struct LaunchDescriptor {
     std::uint8_t input_delay_frames = 0U;
     std::uint8_t rollback_window = 0U;
     SynchronizationMode synchronization = SynchronizationMode::Rollback;
-    HostControlPolicy host_control =
-        HostControlPolicy::GuidedUntilCharacterSelect;
+    HostControlPolicy host_control = HostControlPolicy::GuidedUntilCharacterSelect;
 
     bool development = false;
 
     constexpr bool occupied(std::size_t slot) const {
-        return slot < kMaximumPlayers &&
-               (occupied_mask & static_cast<std::uint8_t>(1U << slot)) != 0U;
+        return slot < kMaximumPlayers && (occupied_mask & static_cast<std::uint8_t>(1U << slot)) != 0U;
     }
 
     bool operator==(const LaunchDescriptor&) const = default;
@@ -240,12 +240,13 @@ struct OnlineFailure {
     bool has_magic_code_details = false;
 };
 
-std::string incompatibility_reason(const CompatibilityManifest& expected,
-                                   const CompatibilityManifest& candidate,bool owned=false);
+std::string incompatibility_reason(const CompatibilityManifest& expected, const CompatibilityManifest& candidate,
+                                   bool owned = false);
 // Eligibility only: neither manifest is modified. Actual save installation
 // and consent-based mod reconstruction remain mandatory before admission.
 std::string session_content_sync_incompatibility(const CompatibilityManifest& expected,
-    const CompatibilityManifest& candidate,bool host_offers_mods,bool owned=false);
+                                                 const CompatibilityManifest& candidate, bool host_offers_mods,
+                                                 bool owned = false);
 OnlineFailure classify_online_failure(std::string_view message);
 std::string online_failure_display_message(std::string_view message);
 

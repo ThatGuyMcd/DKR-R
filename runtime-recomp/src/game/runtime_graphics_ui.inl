@@ -22,7 +22,9 @@ struct GraphicsPageState {
 };
 GraphicsPageState g_graphics_page;
 
-SettingsRangeValue GraphicsTimes(int value) { return {std::to_string(value), "x"}; }
+SettingsRangeValue GraphicsTimes(int value) {
+    return {std::to_string(value), "x"};
+}
 
 // A colour swatch field for the performance overlay's text.
 bool GraphicsColourField(const char* id, std::string_view label, ImVec4& colour, float width) {
@@ -31,15 +33,14 @@ bool GraphicsColourField(const char* id, std::string_view label, ImVec4& colour,
     const PaddockPress press = PaddockBeginPress("##swatch", {width, 52.0F});
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const PaddockRadii radii = PaddockRound(8.0F);
-    PaddockFill(draw, press.min, press.max, radii,
-                PaddockMix(PaddockRgb(0x061D2C), PaddockRgb(0x0A2A3D), press.hover));
+    PaddockFill(draw, press.min, press.max, radii, PaddockMix(PaddockRgb(0x061D2C), PaddockRgb(0x0A2A3D), press.hover));
     PaddockStroke(draw, press.min, press.max, radii,
                   PaddockMix(PaddockRgb(0x2F6A86), PaddockRgb(0x5A97B1), press.hover), 1.0F);
     const ImVec2 swatch{press.min.x + 12.0F, press.min.y + 12.0F};
     PaddockFill(draw, swatch, {swatch.x + 28.0F, swatch.y + 28.0F}, PaddockRound(6.0F),
                 ImGui::ColorConvertFloat4ToU32(colour));
-    PaddockStroke(draw, swatch, {swatch.x + 28.0F, swatch.y + 28.0F}, PaddockRound(6.0F),
-                  PaddockRgb(0xFFFFFF, 60U), 1.0F);
+    PaddockStroke(draw, swatch, {swatch.x + 28.0F, swatch.y + 28.0F}, PaddockRound(6.0F), PaddockRgb(0xFFFFFF, 60U),
+                  1.0F);
     char hex[16]{};
     std::snprintf(hex, sizeof(hex), "#%02X%02X%02X", static_cast<int>(colour.x * 255.0F + 0.5F),
                   static_cast<int>(colour.y * 255.0F + 0.5F), static_cast<int>(colour.z * 255.0F + 0.5F));
@@ -47,7 +48,8 @@ bool GraphicsColourField(const char* id, std::string_view label, ImVec4& colour,
     PaddockDrawRun(draw, type, {swatch.x + 28.0F + 12.0F, std::round(press.min.y + (52.0F - type.line) * 0.5F)},
                    PaddockRgb(0xFFFFFF), hex, hex + std::strlen(hex));
     PaddockEndPress(press, 8.0F, 0.98F);
-    if (press.pressed) ImGui::OpenPopup("##colour");
+    if (press.pressed)
+        ImGui::OpenPopup("##colour");
     bool changed = false;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {12.0F, 12.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 12.0F);
@@ -79,8 +81,7 @@ void DrawGraphicsPage(float available_width, bool live) {
 
     GraphicsConfig config = ultramodern::renderer::get_graphics_config();
     bool changed = false;
-    const bool owned_camera_settings_deferred =
-        dkr::runtime::netplay::experimental::owned_runtime_active();
+    const bool owned_camera_settings_deferred = dkr::runtime::netplay::experimental::owned_runtime_active();
     int profile = static_cast<int>(enh::presentation_profile());
     int window = static_cast<int>(config.wm_option);
     int resolution = static_cast<int>(config.res_option);
@@ -98,13 +99,10 @@ void DrawGraphicsPage(float available_width, bool live) {
 
     DrawPageHeading("GRAPHICS");
     PaddockGap(6.0F);
-    PaddockText(PaddockReading(16.0F, false, 1.5F), PaddockRgb(kSetMuted),
-                "Display, effects and scenery.", width);
+    PaddockText(PaddockReading(16.0F, false, 1.5F), PaddockRgb(kSetMuted), "Display, effects and scenery.", width);
     PaddockGap(6.0F);
     PaddockText(SetHelpType(), PaddockRgb(kSetMuted),
-                live ? "Changes apply while playing unless marked otherwise."
-                     : "",
-                width);
+                live ? "Changes apply while playing unless marked otherwise." : "", width);
     PaddockGap(18.0F);
 
     // ------------------------------------------------------------ game display
@@ -126,8 +124,8 @@ void DrawGraphicsPage(float available_width, bool live) {
         const int custom = static_cast<int>(preset_choices.size());
         preset_choices.push_back({"Custom", {}, true});
         const auto applied = enh::modern_presentation_enabled()
-            ? graphics_presets::matching_preset(config, enh::anisotropy_level(), low_load)
-            : std::nullopt;
+                                 ? graphics_presets::matching_preset(config, enh::anisotropy_level(), low_load)
+                                 : std::nullopt;
         const int applied_index = applied ? static_cast<int>(*applied) : custom;
         // Follow the saved settings, but keep a pending pick until it is applied.
         static int preset = 1;
@@ -166,20 +164,18 @@ void DrawGraphicsPage(float available_width, bool live) {
     });
     PaddockGap(18.0F);
     SettingsCard(width, [&](float inner) {
-        SettingsCardHead("Game display",
-                         modern ? ""
-                                : "",
-                         inner);
+        SettingsCardHead("Game display", modern ? "" : "", inner);
         SettingsColumns fields(inner, single);
         fields.Begin();
-        if (SettingsDropdown("presentation", "Presentation style", &profile, {"Accurate", "Modern"},
-                             fields.column, false,
+        if (SettingsDropdown("presentation", "Presentation style", &profile, {"Accurate", "Modern"}, fields.column,
+                             false,
                              "Accurate uses the original 30 FPS presentation. Modern enables graphics enhancements.")) {
             // The player is choosing the profile by hand now; retire any note
             // that Track Lab switched it for them.
             g_track_lab_modern_notice.clear();
             const auto old_profile = enh::presentation_profile();
-            if (old_profile == enh::PresentationProfile::Modern) RememberModernGraphics(config);
+            if (old_profile == enh::PresentationProfile::Modern)
+                RememberModernGraphics(config);
             const auto next_profile = static_cast<enh::PresentationProfile>(profile);
             enh::set_presentation_profile(next_profile);
             ApplyProfileGraphics(config, next_profile);
@@ -198,30 +194,27 @@ void DrawGraphicsPage(float available_width, bool live) {
         modern = enh::modern_options_visible(enh::presentation_profile());
 
         fields.Begin();
-        changed |= SettingsDropdown("window-mode", "Window mode", &window, {"Windowed", "Fullscreen"},
-                                    fields.column, false, "");
+        changed |= SettingsDropdown("window-mode", "Window mode", &window, {"Windowed", "Fullscreen"}, fields.column,
+                                    false, "");
         config.wm_option = static_cast<WindowMode>(window);
         fields.End();
 
         if (modern) {
             fields.Begin();
             changed |= SettingsDropdown("resolution", "Resolution", &resolution,
-                                        {"Original (240p)", "Original 2x", "Automatic integer scale"},
-                                        fields.column, false,
-                                        "Higher resolutions look sharper but use more GPU power.");
+                                        {"Original (240p)", "Original 2x", "Automatic integer scale"}, fields.column,
+                                        false, "Higher resolutions look sharper but use more GPU power.");
             fields.End();
             fields.Begin();
             changed |= SettingsDropdown("aspect", "Aspect ratio", &aspect, {"Original 4:3", "Fit to window"},
-                                        fields.column, false,
-                                        "Fit to window fills the available screen.");
+                                        fields.column, false, "Fit to window fills the available screen.");
             fields.End();
         }
         if (enh::modern_presentation_enabled()) {
             int refresh_mode = g_modern_refresh_mode == RefreshRate::Manual ? 1 : 0;
             fields.Begin();
-            if (SettingsDropdown("presentation-rate", "Frame rate", &refresh_mode,
-                                 {"Match display", "Manual target"}, fields.column, false,
-                                 "Matches your screen's refresh rate.")) {
+            if (SettingsDropdown("presentation-rate", "Frame rate", &refresh_mode, {"Match display", "Manual target"},
+                                 fields.column, false, "Matches your screen's refresh rate.")) {
                 g_modern_refresh_mode = refresh_mode == 0 ? RefreshRate::Display : RefreshRate::Manual;
                 config.rr_option = g_modern_refresh_mode;
                 changed = true;
@@ -229,10 +222,10 @@ void DrawGraphicsPage(float available_width, bool live) {
             fields.End();
             if (g_modern_refresh_mode == RefreshRate::Manual) {
                 fields.Begin();
-                if (SettingsRange("##refresh-target", "Frame-rate target", &g_modern_refresh_target, 30, 500,
-                                  fields.column,
-                                  [](int value) { return SettingsRangeValue{std::to_string(value), "FPS"}; },
-                                  "Higher targets use more CPU and GPU power.")) {
+                if (SettingsRange(
+                        "##refresh-target", "Frame-rate target", &g_modern_refresh_target, 30, 500, fields.column,
+                        [](int value) { return SettingsRangeValue{std::to_string(value), "FPS"}; },
+                        "Higher targets use more CPU and GPU power.")) {
                     g_modern_refresh_target = enh::clamp_presentation_rate(g_modern_refresh_target);
                     config.rr_manual_value = g_modern_refresh_target;
                     changed = true;
@@ -250,8 +243,7 @@ void DrawGraphicsPage(float available_width, bool live) {
         if (!modern) {
             ApplyProfileGraphics(config, enh::PresentationProfile::Accurate);
             PaddockGap(16.0F);
-            PaddockInlineNote("Original 4:3 at 30 FPS.",
-                              "Switch to Modern to customise graphics, HUD and scenery.",
+            PaddockInlineNote("Original 4:3 at 30 FPS.", "Switch to Modern to customise graphics, HUD and scenery.",
                               inner);
             return;
         }
@@ -269,9 +261,8 @@ void DrawGraphicsPage(float available_width, bool live) {
         PaddockGap(16.0F);
         SettingsColumns renderer(inner, single);
         renderer.Begin();
-        changed |= SettingsDropdown("anti-aliasing", "Anti-aliasing", &aa,
-                                    {"None", "MSAA 2x", "MSAA 4x", "MSAA 8x"}, renderer.column, false,
-                                    "Smooths jagged edges. Higher levels use more GPU power.");
+        changed |= SettingsDropdown("anti-aliasing", "Anti-aliasing", &aa, {"None", "MSAA 2x", "MSAA 4x", "MSAA 8x"},
+                                    renderer.column, false, "Smooths jagged edges. Higher levels use more GPU power.");
         renderer.End();
         renderer.Begin();
         {
@@ -291,28 +282,28 @@ void DrawGraphicsPage(float available_width, bool live) {
         }
         renderer.End();
         renderer.Begin();
-        changed |= SettingsDropdown("high-precision", "Colour precision", &hpfb,
-                                    {"Automatic", "On", "Off"}, renderer.column, false,
-                                    "Reduces colour banding in effects and fades.");
+        changed |= SettingsDropdown("high-precision", "Colour precision", &hpfb, {"Automatic", "On", "Off"},
+                                    renderer.column, false, "Reduces colour banding in effects and fades.");
         renderer.End();
         renderer.Begin();
-        changed |= SettingsRange("##downsample", "Supersampling", &downsample, 1, 4, renderer.column,
-                                 [](int value) {
-                                     return value <= 1 ? SettingsRangeValue{"Off", ""}
-                                                       : SettingsRangeValue{std::to_string(value), "x"};
-                                 },
-                                 "Renders extra pixels for a cleaner image. Higher values use much more GPU power.");
+        changed |= SettingsRange(
+            "##downsample", "Supersampling", &downsample, 1, 4, renderer.column,
+            [](int value) {
+                return value <= 1 ? SettingsRangeValue{"Off", ""} : SettingsRangeValue{std::to_string(value), "x"};
+            },
+            "Renders extra pixels for a cleaner image. Higher values use much more GPU power.");
         renderer.End();
         renderer.Begin();
         {
             int bias = static_cast<int>(std::lround(enh::texture_lod_bias() * 20.0F));
-            if (SettingsRange("##lod-bias", "Texture sharpness (LOD bias)", &bias, -40, 40, renderer.column,
-                              [](int value) {
-                                  char text[16]{};
-                                  std::snprintf(text, sizeof(text), "%+.2f", static_cast<double>(value) / 20.0);
-                                  return SettingsRangeValue{text, ""};
-                              },
-                              "Negative values sharpen mipmapped textures; positive values soften them.")) {
+            if (SettingsRange(
+                    "##lod-bias", "Texture sharpness (LOD bias)", &bias, -40, 40, renderer.column,
+                    [](int value) {
+                        char text[16]{};
+                        std::snprintf(text, sizeof(text), "%+.2f", static_cast<double>(value) / 20.0);
+                        return SettingsRangeValue{text, ""};
+                    },
+                    "Negative values sharpen mipmapped textures; positive values soften them.")) {
                 enh::set_texture_lod_bias_hundredths(bias * 5);
                 changed = true;
             }
@@ -321,13 +312,15 @@ void DrawGraphicsPage(float available_width, bool live) {
         renderer.Begin();
         {
 #if defined(_WIN32)
-            int api_choice = config.api_option == GraphicsApi::D3D12 ? 1
-                           : config.api_option == GraphicsApi::Vulkan ? 2 : 0;
+            int api_choice = config.api_option == GraphicsApi::D3D12    ? 1
+                             : config.api_option == GraphicsApi::Vulkan ? 2
+                                                                        : 0;
             if (SettingsDropdown("graphics-api", "Graphics API", &api_choice,
                                  {"Automatic (recommended)", "Direct3D 12", "Vulkan"}, renderer.column, false,
                                  "Leave on Automatic unless troubleshooting. Applies next game.")) {
-                config.api_option = api_choice == 1 ? GraphicsApi::D3D12
-                                  : api_choice == 2 ? GraphicsApi::Vulkan : GraphicsApi::Auto;
+                config.api_option = api_choice == 1   ? GraphicsApi::D3D12
+                                    : api_choice == 2 ? GraphicsApi::Vulkan
+                                                      : GraphicsApi::Auto;
                 changed = true;
             }
 #elif defined(__linux__)
@@ -364,13 +357,12 @@ void DrawGraphicsPage(float available_width, bool live) {
                 SettingsHelp("Change pending. Applies next game.", inner - 36.0F, kSetText);
             const auto stats = RT64::generatedMipStatistics();
             char uploads[256]{};
-            std::snprintf(uploads, sizeof(uploads),
-                          "Texture uploads this game: %llu generated originals, %llu generated replacements, "
-                          "%llu authored mip chains, %llu single-level.",
-                          static_cast<unsigned long long>(stats.originals),
-                          static_cast<unsigned long long>(stats.replacements),
-                          static_cast<unsigned long long>(stats.authored),
-                          static_cast<unsigned long long>(stats.singleLevel));
+            std::snprintf(
+                uploads, sizeof(uploads),
+                "Texture uploads this game: %llu generated originals, %llu generated replacements, "
+                "%llu authored mip chains, %llu single-level.",
+                static_cast<unsigned long long>(stats.originals), static_cast<unsigned long long>(stats.replacements),
+                static_cast<unsigned long long>(stats.authored), static_cast<unsigned long long>(stats.singleLevel));
             DrawTechnicalDetails(uploads, "Texture diagnostics");
             ImGui::Unindent(36.0F);
         }
@@ -444,7 +436,8 @@ void DrawGraphicsPage(float available_width, bool live) {
                     metrics.End();
                 }
                 metrics.Finish();
-                if (custom_changed) SaveSettings();
+                if (custom_changed)
+                    SaveSettings();
             }
         }
         config.msaa_option = static_cast<Antialiasing>(aa);
@@ -454,7 +447,8 @@ void DrawGraphicsPage(float available_width, bool live) {
     });
 
     if (changed) {
-        if (modern) RememberModernGraphics(config);
+        if (modern)
+            RememberModernGraphics(config);
         ultramodern::renderer::set_graphics_config(config);
         SaveSettings();
         state.can_undo = false;
@@ -464,136 +458,150 @@ void DrawGraphicsPage(float available_width, bool live) {
     // ------------------------------------------------------------ hud, scenery
     if (modern) {
         PaddockGap(18.0F);
-        SettingsCardPair("graphics", width, stacked, 18.0F, [&](float inner) {
-            SettingsCardHead("HUD & effects", "", inner);
-            namespace hud = dkr::runtime::hud;
-            int hud_layout = hud::basic_mode(hud::mode()) == hud::LayoutMode::FitToViewport ? 1 : 0;
-            if (SettingsDropdown("hud-layout", "HUD layout", &hud_layout, {"4:3", "Fit to window"}, inner, false,
-                                 "Choose the HUD area for 1-2 players.")) {
-                state.hud_save_failed = !hud::apply_basic_mode(
-                    hud_layout == 1 ? hud::LayoutMode::FitToViewport : hud::LayoutMode::Original);
-            }
-            if (state.hud_save_failed) {
-                PaddockGap(6.0F);
-                SettingsHelp("Could not save HUD settings. The previous layout is still active.", inner, 0xFFCF83);
-            }
-            PaddockGap(16.0F);
-            int fov_offset = enh::fov_offset();
-            ImGui::BeginDisabled(owned_camera_settings_deferred);
-            if (SettingsRange("##fov", "Field of view", &fov_offset, enh::kMinimumFovOffset,
-                              enh::kMaximumFovOffset, inner,
-                              [](int value) {
-                                  return SettingsRangeValue{value > 0 ? "+" + std::to_string(value)
-                                                          : value < 0 ? "-" + std::to_string(-value) : "0",
-                                                            "\xC2\xB0"};
-                              },
-                              "See more of the track. Racing only.")) {
-                enh::set_fov_offset(fov_offset);
-                SaveSettings();
-            }
-            PaddockGap(16.0F);
-            ImGui::EndDisabled();
-            const auto camera_provider=dkr::runtime::camera::activation();
-            SettingsHelp("ModernCamera++ is available as an optional mod in Mods/Hacks.",inner);
-            if(live&&camera_provider&&SettingsButton("Camera++ settings (F7)",inner)) {
-                OpenCameraTuning();g_overlay_visible.store(false,std::memory_order_release);
-            }
+        SettingsCardPair(
+            "graphics", width, stacked, 18.0F,
+            [&](float inner) {
+                SettingsCardHead("HUD & effects", "", inner);
+                namespace hud = dkr::runtime::hud;
+                int hud_layout = hud::basic_mode(hud::mode()) == hud::LayoutMode::FitToViewport ? 1 : 0;
+                if (SettingsDropdown("hud-layout", "HUD layout", &hud_layout, {"4:3", "Fit to window"}, inner, false,
+                                     "Choose the HUD area for 1-2 players.")) {
+                    state.hud_save_failed = !hud::apply_basic_mode(hud_layout == 1 ? hud::LayoutMode::FitToViewport
+                                                                                   : hud::LayoutMode::Original);
+                }
+                if (state.hud_save_failed) {
+                    PaddockGap(6.0F);
+                    SettingsHelp("Could not save HUD settings. The previous layout is still active.", inner, 0xFFCF83);
+                }
+                PaddockGap(16.0F);
+                int fov_offset = enh::fov_offset();
+                ImGui::BeginDisabled(owned_camera_settings_deferred);
+                if (SettingsRange(
+                        "##fov", "Field of view", &fov_offset, enh::kMinimumFovOffset, enh::kMaximumFovOffset, inner,
+                        [](int value) {
+                            return SettingsRangeValue{value > 0   ? "+" + std::to_string(value)
+                                                      : value < 0 ? "-" + std::to_string(-value)
+                                                                  : "0",
+                                                      "\xC2\xB0"};
+                        },
+                        "See more of the track. Racing only.")) {
+                    enh::set_fov_offset(fov_offset);
+                    SaveSettings();
+                }
+                PaddockGap(16.0F);
+                ImGui::EndDisabled();
+                const auto camera_provider = dkr::runtime::camera::activation();
+                SettingsHelp("ModernCamera++ is available as an optional mod in Mods/Hacks.", inner);
+                if (live && camera_provider && SettingsButton("Camera++ settings (F7)", inner)) {
+                    OpenCameraTuning();
+                    g_overlay_visible.store(false, std::memory_order_release);
+                }
 
-            PaddockGap(16.0F);
-            bool crt = g_crt_enabled;
-            if (SettingsCheck("##crt", "Enable CRT filter", &crt, inner,
-                              "Adds a retro screen effect. Choose a filter in Textures.")) {
-                g_crt_enabled = crt;
-                SaveSettings();
-            }
-        }, [&](float inner) {
-            SettingsCardHead("Vehicles & scenery", "Higher detail can reduce performance.", inner);
+                PaddockGap(16.0F);
+                bool crt = g_crt_enabled;
+                if (SettingsCheck("##crt", "Enable CRT filter", &crt, inner,
+                                  "Adds a retro screen effect. Choose a filter in Textures.")) {
+                    g_crt_enabled = crt;
+                    SaveSettings();
+                }
+            },
+            [&](float inner) {
+                SettingsCardHead("Vehicles & scenery", "Higher detail can reduce performance.", inner);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-            bool diagnostics = dkr::runtime::netplay::experimental::performance::enabled();
-            if (SettingsCheck("##rollback-diagnostics", "Record performance details", &diagnostics, inner,
-                              "Records performance details in the log. Enable before starting a match.")) {
-                dkr::runtime::netplay::experimental::performance::set_enabled(diagnostics);
-            }
-            PaddockGap(16.0F);
-#endif
-            if (owned_camera_settings_deferred) {
-                SettingsHelp("These detail and scenery choices are yours alone. Online play keeps the shared course geometry and wave grid unchanged.", inner);
-                PaddockGap(16.0F);
-            }
-            const auto check = [&](const char* id, const char* label, bool value, auto setter,
-                                   const char* help, bool first = false, bool disabled = false) {
-                if (!first) PaddockGap(16.0F);
-                ImGui::BeginDisabled(disabled);
-                if (SettingsCheck(id, label, &value, inner, help)) {
-                    setter(value);
-                    SaveSettings();
+                bool diagnostics = dkr::runtime::netplay::experimental::performance::enabled();
+                if (SettingsCheck("##rollback-diagnostics", "Record performance details", &diagnostics, inner,
+                                  "Records performance details in the log. Enable before starting a match.")) {
+                    dkr::runtime::netplay::experimental::performance::set_enabled(diagnostics);
                 }
-                ImGui::EndDisabled();
-            };
-            check("##max-detail", "Maximum vehicle detail", enh::maximum_detail_requested(),
-                  enh::set_maximum_detail_enabled, "Use the highest-detail characters and vehicles in every view, online and offline. Split-screen uses more graphics power.", true
+                PaddockGap(16.0F);
+#endif
+                if (owned_camera_settings_deferred) {
+                    SettingsHelp(
+                        "These detail and scenery choices are yours alone. Online play keeps the shared course geometry and wave grid unchanged.",
+                        inner);
+                    PaddockGap(16.0F);
+                }
+                const auto check = [&](const char* id, const char* label, bool value, auto setter, const char* help,
+                                       bool first = false, bool disabled = false) {
+                    if (!first)
+                        PaddockGap(16.0F);
+                    ImGui::BeginDisabled(disabled);
+                    if (SettingsCheck(id, label, &value, inner, help)) {
+                        setter(value);
+                        SaveSettings();
+                    }
+                    ImGui::EndDisabled();
+                };
+                check(
+                    "##max-detail", "Maximum vehicle detail", enh::maximum_detail_requested(),
+                    enh::set_maximum_detail_enabled,
+                    "Use the highest-detail characters and vehicles in every view, online and offline. Split-screen uses more graphics power.",
+                    true
 #if !defined(DKR_LOCAL_MODEL_DETAIL)
-                  , owned_camera_settings_deferred
+                    ,
+                    owned_camera_settings_deferred
 #endif
-                  );
-            check("##hub-scenery", "Keep hub scenery rendered", enh::keep_hub_scenery_requested(),
-                  enh::set_keep_hub_scenery_enabled, "Keep visible hub scenery from disappearing.");
-            check("##track-scenery", "Keep track and boss scenery rendered", enh::keep_track_scenery_requested(),
-                  enh::set_keep_track_scenery_enabled,
-                  "Keep visible race and boss scenery from disappearing.");
-            check("##minigame-scenery", "Keep minigame and battle scenery rendered",
-                  enh::keep_minigame_scenery_requested(), enh::set_keep_minigame_scenery_enabled,
-                  "Keep visible minigame scenery from disappearing.");
-            check("##ultrawide", "Reduce wide-screen scenery pop-in", enh::extended_culling_requested(),
-                  enh::set_extended_culling_enabled,
-                  "Keeps scenery visible near wide-screen edges.");
-            if (enh::extended_culling_requested()) {
+                );
+                check("##hub-scenery", "Keep hub scenery rendered", enh::keep_hub_scenery_requested(),
+                      enh::set_keep_hub_scenery_enabled, "Keep visible hub scenery from disappearing.");
+                check("##track-scenery", "Keep track and boss scenery rendered", enh::keep_track_scenery_requested(),
+                      enh::set_keep_track_scenery_enabled, "Keep visible race and boss scenery from disappearing.");
+                check("##minigame-scenery", "Keep minigame and battle scenery rendered",
+                      enh::keep_minigame_scenery_requested(), enh::set_keep_minigame_scenery_enabled,
+                      "Keep visible minigame scenery from disappearing.");
+                check("##ultrawide", "Reduce wide-screen scenery pop-in", enh::extended_culling_requested(),
+                      enh::set_extended_culling_enabled, "Keeps scenery visible near wide-screen edges.");
+                if (enh::extended_culling_requested()) {
+                    PaddockGap(16.0F);
+                    ImGui::Indent(36.0F);
+                    int guard = enh::frustum_guard_percent();
+                    if (SettingsRange(
+                            "##guard", "Visibility margin", &guard, 0, 20, inner - 36.0F,
+                            [](int value) { return SettingsRangeValue{std::to_string(value), "%"}; },
+                            "Extra scenery around the edges of the view.")) {
+                        enh::set_frustum_guard_percent(guard);
+                        SaveSettings();
+                    }
+                    ImGui::Unindent(36.0F);
+                }
+                PaddockGap(18.0F);
+                if (!SettingsDisclosure("##distances", "View distances", state.distances_open, inner))
+                    return;
                 PaddockGap(16.0F);
-                ImGui::Indent(36.0F);
-                int guard = enh::frustum_guard_percent();
-                if (SettingsRange("##guard", "Visibility margin", &guard, 0, 20, inner - 36.0F,
-                                  [](int value) { return SettingsRangeValue{std::to_string(value), "%"}; },
-                                  "Extra scenery around the edges of the view.")) {
-                    enh::set_frustum_guard_percent(guard);
+                const auto distance = [&](const char* id, const char* label, int value, int maximum, auto setter,
+                                          bool disabled = false) {
+                    ImGui::BeginDisabled(disabled);
+                    if (SettingsRange(id, label, &value, enh::kMinimumViewDistanceMultiplier, maximum, inner,
+                                      GraphicsTimes)) {
+                        setter(value);
+                        SaveSettings();
+                    }
+                    ImGui::EndDisabled();
+                    PaddockGap(16.0F);
+                };
+                distance("##view-distance", "Scenery and object distance", enh::view_distance_multiplier(),
+                         enh::kMaximumViewDistanceMultiplier, enh::set_view_distance_multiplier);
+                int retention = static_cast<int>(enh::scenery_retention_mode());
+                if (SettingsDropdown("retention", "Scenery coverage", &retention,
+                                     {"Original", "Current area", "Visible + neighbouring areas", "Full forward view"},
+                                     inner)) {
+                    enh::set_scenery_retention_mode(enh::normalise_scenery_retention_mode(retention));
                     SaveSettings();
                 }
-                ImGui::Unindent(36.0F);
-            }
-            PaddockGap(18.0F);
-            if (!SettingsDisclosure("##distances", "View distances", state.distances_open, inner)) return;
-            PaddockGap(16.0F);
-            const auto distance = [&](const char* id, const char* label, int value, int maximum, auto setter,
-                                      bool disabled = false) {
-                ImGui::BeginDisabled(disabled);
-                if (SettingsRange(id, label, &value, enh::kMinimumViewDistanceMultiplier, maximum, inner,
-                                  GraphicsTimes)) {
-                    setter(value);
-                    SaveSettings();
-                }
-                ImGui::EndDisabled();
                 PaddockGap(16.0F);
-            };
-            distance("##view-distance", "Scenery and object distance", enh::view_distance_multiplier(),
-                     enh::kMaximumViewDistanceMultiplier, enh::set_view_distance_multiplier);
-            int retention = static_cast<int>(enh::scenery_retention_mode());
-            if (SettingsDropdown("retention", "Scenery coverage", &retention,
-                                 {"Original", "Current area", "Visible + neighbouring areas", "Full forward view"}, inner)) {
-                enh::set_scenery_retention_mode(enh::normalise_scenery_retention_mode(retention));
-                SaveSettings();
-            }
-            PaddockGap(16.0F);
-            distance("##animated-distance", "Animated scenery distance",
-                     enh::animated_scenery_distance_multiplier(), enh::kMaximumAnimatedSceneryMultiplier,
-                     enh::set_animated_scenery_distance_multiplier);
-            distance("##billboard-distance", "Sprites and effects distance",
-                     enh::billboard_effect_distance_multiplier(), enh::kMaximumBillboardEffectMultiplier,
-                     enh::set_billboard_effect_distance_multiplier);
-            distance("##water-distance", "Water and lava detail distance", enh::water_lava_detail_multiplier(),
-                     enh::kMaximumWaterLavaDetailMultiplier, enh::set_water_lava_detail_multiplier,
-                     owned_camera_settings_deferred);
-            SettingsHelp("Higher distances and coverage can reduce performance. Scenery behind the camera is not kept.",
-                         inner);
-        });
+                distance("##animated-distance", "Animated scenery distance",
+                         enh::animated_scenery_distance_multiplier(), enh::kMaximumAnimatedSceneryMultiplier,
+                         enh::set_animated_scenery_distance_multiplier);
+                distance("##billboard-distance", "Sprites and effects distance",
+                         enh::billboard_effect_distance_multiplier(), enh::kMaximumBillboardEffectMultiplier,
+                         enh::set_billboard_effect_distance_multiplier);
+                distance("##water-distance", "Water and lava detail distance", enh::water_lava_detail_multiplier(),
+                         enh::kMaximumWaterLavaDetailMultiplier, enh::set_water_lava_detail_multiplier,
+                         owned_camera_settings_deferred);
+                SettingsHelp(
+                    "Higher distances and coverage can reduce performance. Scenery behind the camera is not kept.",
+                    inner);
+            });
     }
 
 #if defined(DKR_ENHANCED_WATER)
@@ -604,136 +612,163 @@ void DrawGraphicsPage(float available_width, bool live) {
         namespace water = dkr::runtime::water::enhanced;
         SettingsCardHead("Ray tracing & water", "Customise water, reflections and lava.", inner);
         ImGui::BeginDisabled(!enh::modern_options_visible(enh::presentation_profile()));
-        int quality=int(water::requested_quality.load());
-        int preset=water::preset();
-        if(SettingsDropdown("water-quality", "Water preset", &preset,
-            {"Original", "Performance", "Balanced", "High", "Custom"}, inner)) {
-            water::apply_preset(preset);quality=int(water::requested_quality.load());SaveSettings();
+        int quality = int(water::requested_quality.load());
+        int preset = water::preset();
+        if (SettingsDropdown("water-quality", "Water preset", &preset,
+                             {"Original", "Performance", "Balanced", "High", "Custom"}, inner)) {
+            water::apply_preset(preset);
+            quality = int(water::requested_quality.load());
+            SaveSettings();
         }
         PaddockGap(16.0F);
-        int reflections=int(water::requested_reflection.load());
-        ImGui::BeginDisabled(quality==0);
-        if(SettingsDropdown("water-reflections", "Reflections", &reflections,
-            {"Sky", "Screen-space", "Hardware ray tracing"}, inner)) {
-            water::set_reflection(reflections); SaveSettings();
+        int reflections = int(water::requested_reflection.load());
+        ImGui::BeginDisabled(quality == 0);
+        if (SettingsDropdown("water-reflections", "Reflections", &reflections,
+                             {"Sky", "Screen-space", "Hardware ray tracing"}, inner)) {
+            water::set_reflection(reflections);
+            SaveSettings();
         }
         PaddockGap(16.0F);
-        bool wakes=water::wakes_enabled.load();
-        if(SettingsCheck("##water-wakes", "Racer wakes", &wakes, inner)) {
-            water::wakes_enabled.store(wakes); SaveSettings();
+        bool wakes = water::wakes_enabled.load();
+        if (SettingsCheck("##water-wakes", "Racer wakes", &wakes, inner)) {
+            water::wakes_enabled.store(wakes);
+            SaveSettings();
         }
         PaddockGap(16.0F);
-        bool spray=water::spray_enabled.load();
-        if(SettingsCheck("##water-spray", "Water spray", &spray, inner)) {
-            water::spray_enabled.store(spray); SaveSettings();
+        bool spray = water::spray_enabled.load();
+        if (SettingsCheck("##water-spray", "Water spray", &spray, inner)) {
+            water::spray_enabled.store(spray);
+            SaveSettings();
         }
         PaddockGap(16.0F);
-        static bool lava_advanced=false;
-        if(SettingsDisclosure("##lava-lighting", "Lava lighting", lava_advanced, inner)) {
-            bool lava_enabled=water::lava_lighting_enabled.load()!=0;
-            if(SettingsCheck("##lava-lighting-enabled","Nearby lava glow",&lava_enabled,inner)) {
-                water::lava_lighting_enabled.store(lava_enabled?1:0);SaveSettings();
+        static bool lava_advanced = false;
+        if (SettingsDisclosure("##lava-lighting", "Lava lighting", lava_advanced, inner)) {
+            bool lava_enabled = water::lava_lighting_enabled.load() != 0;
+            if (SettingsCheck("##lava-lighting-enabled", "Nearby lava glow", &lava_enabled, inner)) {
+                water::lava_lighting_enabled.store(lava_enabled ? 1 : 0);
+                SaveSettings();
             }
-            SettingsHelp("Adds lava glow to nearby walls and ground. Turning it off keeps enhanced water and the lava surface.",inner);
+            SettingsHelp(
+                "Adds lava glow to nearby walls and ground. Turning it off keeps enhanced water and the lava surface.",
+                inner);
             PaddockGap(12.0F);
             ImGui::BeginDisabled(!lava_enabled);
-            const auto lava_percent=[&](const char* id,const char* label,std::atomic<int>& setting,int low,int high,const char* help) {
-                int value=setting.load();
-                if(SettingsRange(id,label,&value,low,high,inner,
-                    [](int v){return SettingsRangeValue{std::to_string(v),"%"};},help)) {
-                    setting.store(value);SaveSettings();
+            const auto lava_percent = [&](const char* id, const char* label, std::atomic<int>& setting, int low,
+                                          int high, const char* help) {
+                int value = setting.load();
+                if (SettingsRange(
+                        id, label, &value, low, high, inner,
+                        [](int v) { return SettingsRangeValue{std::to_string(v), "%"}; }, help)) {
+                    setting.store(value);
+                    SaveSettings();
                 }
                 PaddockGap(12.0F);
             };
-            lava_percent("##lava-intensity","Lighting intensity",water::lava_lighting,0,300,
-                "Brightness of the surrounding glow. Zero turns it off.");
-            lava_percent("##lava-range","Light range",water::lava_light_range,25,200,
-                "How far the glow reaches.");
+            lava_percent("##lava-intensity", "Lighting intensity", water::lava_lighting, 0, 300,
+                         "Brightness of the surrounding glow. Zero turns it off.");
+            lava_percent("##lava-range", "Light range", water::lava_light_range, 25, 200, "How far the glow reaches.");
             ImGui::EndDisabled();
-            lava_percent("##lava-surface-brightness","Lava brightness",water::lava_surface_brightness,25,200,
-                "Brightness of the molten surface.");
-            lava_percent("##lava-pulse","Pulse strength",water::lava_pulse_strength,0,100,
-                "Blends yellow-white heat into orange-red heat. Zero keeps a steady colour.");
-            lava_percent("##lava-speed","Pulse speed",water::lava_pulse_speed,25,200,
-                "How quickly the glow pulses.");
-            SettingsHelp("Nearby glow is lightweight. It doesn't use ray-traced lighting.",inner);
+            lava_percent("##lava-surface-brightness", "Lava brightness", water::lava_surface_brightness, 25, 200,
+                         "Brightness of the molten surface.");
+            lava_percent("##lava-pulse", "Pulse strength", water::lava_pulse_strength, 0, 100,
+                         "Blends yellow-white heat into orange-red heat. Zero keeps a steady colour.");
+            lava_percent("##lava-speed", "Pulse speed", water::lava_pulse_speed, 25, 200,
+                         "How quickly the glow pulses.");
+            SettingsHelp("Nearby glow is lightweight. It doesn't use ray-traced lighting.", inner);
         }
         PaddockGap(16.0F);
-        static bool water_advanced=false;
-        if(SettingsDisclosure("##water-advanced", "Advanced water settings", water_advanced, inner)) {
-            const auto detail=[&](const char* id,const char* label,std::atomic<int>& setting) {
-                int value=setting.load()+1;
-                if(SettingsDropdown(id,label,&value,{"Preset default", "Low", "Medium", "High"},inner)) {
-                    setting.store(value-1);SaveSettings();
+        static bool water_advanced = false;
+        if (SettingsDisclosure("##water-advanced", "Advanced water settings", water_advanced, inner)) {
+            const auto detail = [&](const char* id, const char* label, std::atomic<int>& setting) {
+                int value = setting.load() + 1;
+                if (SettingsDropdown(id, label, &value, {"Preset default", "Low", "Medium", "High"}, inner)) {
+                    setting.store(value - 1);
+                    SaveSettings();
                 }
                 PaddockGap(12.0F);
             };
-            detail("water-reflection-detail","Reflection detail",water::reflection_detail);
-            detail("water-wake-detail","Wake quality",water::wake_detail);
-            detail("water-spray-detail","Spray detail",water::spray_detail);
-            const auto percent=[&](const char* id,const char* label,std::atomic<int>& setting,int low,int high,const char* help) {
-                int value=setting.load();
-                if(SettingsRange(id,label,&value,low,high,inner,
-                    [](int v){return SettingsRangeValue{std::to_string(v),"%"};},help)) {
-                    setting.store(value);SaveSettings();
+            detail("water-reflection-detail", "Reflection detail", water::reflection_detail);
+            detail("water-wake-detail", "Wake quality", water::wake_detail);
+            detail("water-spray-detail", "Spray detail", water::spray_detail);
+            const auto percent = [&](const char* id, const char* label, std::atomic<int>& setting, int low, int high,
+                                     const char* help) {
+                int value = setting.load();
+                if (SettingsRange(
+                        id, label, &value, low, high, inner,
+                        [](int v) { return SettingsRangeValue{std::to_string(v), "%"}; }, help)) {
+                    setting.store(value);
+                    SaveSettings();
                 }
                 PaddockGap(12.0F);
             };
-            percent("##water-ray-range","Hardware reflection distance",water::reflection_distance,25,200,
-                "How far reflected objects can appear. Longer distances use more GPU power.");
-            percent("##water-reflect-strength","Reflection strength",water::reflection_strength,0,200,
-                "Brightness of reflections. Zero turns reflections off.");
-            percent("##water-roughness","Surface roughness",water::roughness_scale,25,200,
-                "Higher values soften reflections and highlights.");
-            percent("##water-ripple-strength","Fine ripple strength",water::ripple_scale,0,200,
-                "Strength of small surface ripples.");
-            percent("##water-foam-strength","Foam intensity",water::foam_scale,0,200,
-                "Amount of surface and shoreline foam.");
-            percent("##water-wake-strength","Wake visibility",water::wake_strength,0,200,
-                "Visibility of trails behind racers.");
-            percent("##water-clarity","Water clarity",water::clarity_scale,25,200,
-                "How clearly you can see below the surface.");
-            percent("##water-refraction","Refraction strength",water::refraction_scale,0,200,
-                "Strength of underwater distortion.");
-            percent("##water-waterfall","Waterfall flowing detail",water::waterfall_detail,0,200,
-                "Brightness of flowing waterfall detail. Zero uses the original artwork.");
-            bool track_colours=water::use_track_colours.load();
-            if(SettingsCheck("##water-track-colours","Use track colours",&track_colours,inner)) {
-                water::use_track_colours.store(track_colours);SaveSettings();
+            percent("##water-ray-range", "Hardware reflection distance", water::reflection_distance, 25, 200,
+                    "How far reflected objects can appear. Longer distances use more GPU power.");
+            percent("##water-reflect-strength", "Reflection strength", water::reflection_strength, 0, 200,
+                    "Brightness of reflections. Zero turns reflections off.");
+            percent("##water-roughness", "Surface roughness", water::roughness_scale, 25, 200,
+                    "Higher values soften reflections and highlights.");
+            percent("##water-ripple-strength", "Fine ripple strength", water::ripple_scale, 0, 200,
+                    "Strength of small surface ripples.");
+            percent("##water-foam-strength", "Foam intensity", water::foam_scale, 0, 200,
+                    "Amount of surface and shoreline foam.");
+            percent("##water-wake-strength", "Wake visibility", water::wake_strength, 0, 200,
+                    "Visibility of trails behind racers.");
+            percent("##water-clarity", "Water clarity", water::clarity_scale, 25, 200,
+                    "How clearly you can see below the surface.");
+            percent("##water-refraction", "Refraction strength", water::refraction_scale, 0, 200,
+                    "Strength of underwater distortion.");
+            percent("##water-waterfall", "Waterfall flowing detail", water::waterfall_detail, 0, 200,
+                    "Brightness of flowing waterfall detail. Zero uses the original artwork.");
+            bool track_colours = water::use_track_colours.load();
+            if (SettingsCheck("##water-track-colours", "Use track colours", &track_colours, inner)) {
+                water::use_track_colours.store(track_colours);
+                SaveSettings();
             }
             PaddockGap(12.0F);
-            if(!track_colours) {
-                percent("##water-red","Water tint: red",water::tint_red,0,200,"100% keeps the original red component.");
-                percent("##water-green","Water tint: green",water::tint_green,0,200,"100% keeps the original green component.");
-                percent("##water-blue","Water tint: blue",water::tint_blue,0,200,"100% keeps the original blue component.");
+            if (!track_colours) {
+                percent("##water-red", "Water tint: red", water::tint_red, 0, 200,
+                        "100% keeps the original red component.");
+                percent("##water-green", "Water tint: green", water::tint_green, 0, 200,
+                        "100% keeps the original green component.");
+                percent("##water-blue", "Water tint: blue", water::tint_blue, 0, 200,
+                        "100% keeps the original blue component.");
             }
-            if(SettingsButton("Reset water appearance")) {water::reset_appearance();SaveSettings();}
+            if (SettingsButton("Reset water appearance")) {
+                water::reset_appearance();
+                SaveSettings();
+            }
             PaddockGap(8.0F);
-            if(SettingsButton("Reset water quality")) {water::reset_tuning();SaveSettings();}
-            PaddockGap(12.0F);
-            bool timings=water::timing_enabled.load();
-            if(SettingsCheck("##water-timings","Record water performance",&timings,inner,
-                "Records water performance in the log. Applies next game.")) {
-                water::timing_enabled.store(timings);SaveSettings();
+            if (SettingsButton("Reset water quality")) {
+                water::reset_tuning();
+                SaveSettings();
             }
             PaddockGap(12.0F);
-            SettingsHelp("Water presets don't change resolution, frame-rate targets or the reflection method.",inner);
+            bool timings = water::timing_enabled.load();
+            if (SettingsCheck("##water-timings", "Record water performance", &timings, inner,
+                              "Records water performance in the log. Applies next game.")) {
+                water::timing_enabled.store(timings);
+                SaveSettings();
+            }
+            PaddockGap(12.0F);
+            SettingsHelp("Water presets don't change resolution, frame-rate targets or the reflection method.", inner);
         }
         ImGui::EndDisabled();
         ImGui::EndDisabled();
         PaddockGap(16.0F);
-        const int active=water::active_reflection.load();
-        if(quality!=0 && active>=0 && active!=reflections)
-            SettingsHelp(active==0 ? "Current water reflections: sky." :
-                active==1 ? "Current water reflections: screen-space." :
-                "Current water reflections: hardware ray tracing.",inner);
-        if(water::scratch_fallbacks.load())
-            SettingsHelp("Water rendering needed a fallback earlier in this game. Details are in the log.",inner);
-        if(reflections==int(water::Reflection::Hardware)) {
-            const int capability=water::hardware_ray_capability.load();
-            SettingsHelp(capability<0 ? "Hardware support is checked when the game starts." :
-                capability==0 ? "Hardware ray tracing isn't supported. Using screen-space reflections." :
-                "", inner);
+        const int active = water::active_reflection.load();
+        if (quality != 0 && active >= 0 && active != reflections)
+            SettingsHelp(active == 0   ? "Current water reflections: sky."
+                         : active == 1 ? "Current water reflections: screen-space."
+                                       : "Current water reflections: hardware ray tracing.",
+                         inner);
+        if (water::scratch_fallbacks.load())
+            SettingsHelp("Water rendering needed a fallback earlier in this game. Details are in the log.", inner);
+        if (reflections == int(water::Reflection::Hardware)) {
+            const int capability = water::hardware_ray_capability.load();
+            SettingsHelp(capability < 0    ? "Hardware support is checked when the game starts."
+                         : capability == 0 ? "Hardware ray tracing isn't supported. Using screen-space reflections."
+                                           : "",
+                         inner);
             PaddockGap(8.0F);
         }
     });
@@ -747,12 +782,10 @@ void DrawGraphicsPage(float available_width, bool live) {
         PaddockGap(1.0F + 18.0F);
         PaddockText(PaddockSign(19.0F, 1.0F, 0.0F), PaddockRgb(kSetText), "Restore original graphics", width);
         PaddockGap(6.0F);
-        SettingsHelp("Switch to Accurate graphics. Your Modern settings are kept.",
-                     width);
+        SettingsHelp("Switch to Accurate graphics. Your Modern settings are kept.", width);
         PaddockGap(12.0F);
         const bool accurate = !enh::modern_options_visible(enh::presentation_profile());
-        if (SettingsRaceButton("RESTORE ORIGINAL GRAPHICS", accurate,
-                               "Already using Accurate graphics.")) {
+        if (SettingsRaceButton("RESTORE ORIGINAL GRAPHICS", accurate, "Already using Accurate graphics.")) {
             RememberModernGraphics(config);
             enh::set_presentation_profile(enh::PresentationProfile::Accurate);
             ApplyProfileGraphics(config, enh::PresentationProfile::Accurate);

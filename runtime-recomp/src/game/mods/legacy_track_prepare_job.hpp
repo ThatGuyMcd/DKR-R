@@ -5,12 +5,12 @@ namespace dkr::mods {
 // Converts an immutable import review into independently verified course
 // artifacts. This runs in ModWorker, never in a UI/network callback. It does
 // not enable a course, alter a ROM, or write a save/catalogue.
-void prepare_imported_tracks(const std::filesystem::path& review,
-    const std::vector<std::filesystem::path>& owned_roms,
-    const std::filesystem::path& fresh_destination,
-    const ProgressCallback& progress={},const ImportPreparation* preparation=nullptr,bool behaviour_enabled=true);
+void prepare_imported_tracks(const std::filesystem::path& review, const std::vector<std::filesystem::path>& owned_roms,
+                             const std::filesystem::path& fresh_destination, const ProgressCallback& progress = {},
+                             const ImportPreparation* preparation = nullptr, bool behaviour_enabled = true);
 void prepare_imported_characters(const std::filesystem::path& review,
-    const std::vector<std::filesystem::path>& owned_roms,
-    const std::filesystem::path& fresh_destination,
-    const ProgressCallback& progress={},const ImportPreparation* preparation=nullptr,bool behaviour_enabled=true,bool legacy_portrait_layout=false);
-}
+                                 const std::vector<std::filesystem::path>& owned_roms,
+                                 const std::filesystem::path& fresh_destination, const ProgressCallback& progress = {},
+                                 const ImportPreparation* preparation = nullptr, bool behaviour_enabled = true,
+                                 bool legacy_portrait_layout = false);
+} // namespace dkr::mods

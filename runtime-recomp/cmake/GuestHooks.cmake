@@ -30,9 +30,12 @@ function(dkr_apply_guest_hooks sources_var source revision payload)
     string(SHA256 identity "${payload}|${revision}|${parts}")
     set(out "${CMAKE_BINARY_DIR}/generated/guest-hooks-${payload}-v${revision}-${identity}")
     if(NOT EXISTS "${out}/hooked.txt")
-        execute_process(COMMAND "${Python3_EXECUTABLE}" "${script}" apply --spec "${spec}"
-            --in "${source}" --out "${out}" --revision "${revision}" --payload "${payload}"
-            RESULT_VARIABLE status)
+        execute_process(
+            COMMAND
+                "${Python3_EXECUTABLE}" "${script}" apply --spec "${spec}" --in "${source}" --out "${out}" --revision
+                "${revision}" --payload "${payload}"
+            RESULT_VARIABLE status
+        )
         if(NOT status EQUAL 0)
             file(REMOVE_RECURSE "${out}")
             message(FATAL_ERROR "Guest hooks for US v${revision} ${payload} did not apply; see above")

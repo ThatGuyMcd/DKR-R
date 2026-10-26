@@ -21,18 +21,17 @@ struct PortMappingView {
 };
 
 class PortMapping final {
-public:
+  public:
     PortMapping();
     ~PortMapping();
     PortMapping(const PortMapping&) = delete;
     PortMapping& operator=(const PortMapping&) = delete;
 
-    bool open(std::string local_address, std::uint16_t local_port,
-              std::string& error);
+    bool open(std::string local_address, std::uint16_t local_port, std::string& error);
     void close();
     const PortMappingView& view() const;
 
-private:
+  private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

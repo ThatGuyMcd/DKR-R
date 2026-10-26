@@ -104,24 +104,22 @@ std::atomic_flag g_crash_filter_active = ATOMIC_FLAG_INIT;
 std::filesystem::path g_crash_directory;
 #endif
 
-bool ConfigurePersistentRuntimeLog(
-    const std::filesystem::path& config_directory) {
+bool ConfigurePersistentRuntimeLog(const std::filesystem::path& config_directory) {
     if (!dkr::runtime::support::diagnostic_logging_enabled()) {
         return true;
     }
     std::error_code error;
-    const std::filesystem::path& log_directory =
-        dkr::runtime::support::log_directory();
+    const std::filesystem::path& log_directory = dkr::runtime::support::log_directory();
     std::filesystem::create_directories(log_directory, error);
     if (error) {
         return false;
     }
     const std::filesystem::path current = log_directory / "runtime.log";
-    if (!dkr::runtime::support::history::rotate(log_directory)) return false;
+    if (!dkr::runtime::support::history::rotate(log_directory))
+        return false;
 #ifdef _WIN32
     FILE* stream = nullptr;
-    if (_wfreopen_s(&stream, current.c_str(), L"w", stderr) != 0 ||
-        stream == nullptr) {
+    if (_wfreopen_s(&stream, current.c_str(), L"w", stderr) != 0 || stream == nullptr) {
         return false;
     }
 #else
@@ -135,8 +133,7 @@ bool ConfigurePersistentRuntimeLog(
     // private log as startup errors so phone users can export both together.
     dup2(STDERR_FILENO, STDOUT_FILENO);
 #endif
-    std::fprintf(stderr, "[boot] DKR-R %s persistent runtime log\n",
-                 DKR_RELEASE_VERSION);
+    std::fprintf(stderr, "[boot] DKR-R %s persistent runtime log\n", DKR_RELEASE_VERSION);
     return true;
 }
 
@@ -155,8 +152,7 @@ std::filesystem::path DefaultConfigDirectory(const char* executable_argument) {
         return std::filesystem::path(app_data) / "DKRPort";
     }
 #else
-    if (const char* xdg_config = std::getenv("XDG_CONFIG_HOME");
-        xdg_config != nullptr && *xdg_config != '\0') {
+    if (const char* xdg_config = std::getenv("XDG_CONFIG_HOME"); xdg_config != nullptr && *xdg_config != '\0') {
         return std::filesystem::path(xdg_config) / "dkr-port";
     }
     if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0') {
@@ -172,7 +168,8 @@ std::vector<std::filesystem::path> RecoverySaveLocations(const char* executable_
     std::vector<std::filesystem::path> roots;
     std::error_code ec;
     const auto executable = std::filesystem::absolute(std::filesystem::u8path(executable_argument), ec);
-    if (!ec) roots.push_back(executable.parent_path() / "dkr-runtime-data");
+    if (!ec)
+        roots.push_back(executable.parent_path() / "dkr-runtime-data");
     roots.push_back(dkr::runtime::portable::application_directory() / "dkr-runtime-data");
 #if defined(_WIN32)
     if (const char* app_data = std::getenv("APPDATA"); app_data && *app_data)
@@ -186,7 +183,8 @@ std::vector<std::filesystem::path> RecoverySaveLocations(const char* executable_
         roots.emplace_back(std::filesystem::path(app_image).parent_path() / "dkr-runtime-data");
 #endif
     const auto working = std::filesystem::current_path(ec);
-    if (!ec) roots.push_back(working); // only known save subdirectories are scanned
+    if (!ec)
+        roots.push_back(working); // only known save subdirectories are scanned
     return roots;
 }
 
@@ -195,8 +193,7 @@ RspExitReason EmptyAudioTask(std::uint8_t*, std::uint32_t) {
 }
 
 RspUcodeFunc* GetRspMicrocode(const OSTask* task) {
-    if (task->t.type == M_AUDTASK &&
-        task->t.ucode == dkr::runtime::revision_addresses::AspMainTextStart) {
+    if (task->t.type == M_AUDTASK && task->t.ucode == dkr::runtime::revision_addresses::AspMainTextStart) {
         // DKR can submit a zero-command audio frame when the host-reported AI
         // queue already satisfies the synthesizer's requested frame size. The
         // original scheduler treats that as completed work; entering the ABI
@@ -204,15 +201,13 @@ RspUcodeFunc* GetRspMicrocode(const OSTask* task) {
         if (task->t.data_size == 0) {
             return EmptyAudioTask;
         }
-        return +[](std::uint8_t* rdram, std::uint32_t ucode_address) {
-            return dkrAspMain(rdram, ucode_address);
-        };
+        return +[](std::uint8_t* rdram, std::uint32_t ucode_address) { return dkrAspMain(rdram, ucode_address); };
     }
     std::fprintf(stderr,
                  "[boot][rsp] unsupported task type=%u flags=0x%08X "
                  "ucode=0x%08X ucode_size=%u ucode_data=0x%08X data=0x%08X data_size=%u\n",
-                 task->t.type, task->t.flags, task->t.ucode, task->t.ucode_size,
-                 task->t.ucode_data, task->t.data_ptr, task->t.data_size);
+                 task->t.type, task->t.flags, task->t.ucode, task->t.ucode_size, task->t.ucode_data, task->t.data_ptr,
+                 task->t.data_size);
     return nullptr;
 }
 
@@ -220,7 +215,8 @@ void MessageBox(const char* message) {
     std::fprintf(stderr, "[boot][runtime-error] %s\n", message);
 #if defined(__ANDROID__)
     const auto failure = dkr::runtime::graphics_health::failure.load();
-    if (failure == 0) dkr::runtime::android::report_graphics_failure(message);
+    if (failure == 0)
+        dkr::runtime::android::report_graphics_failure(message);
 #endif
 }
 
@@ -230,19 +226,16 @@ std::string GetThreadName(const OSThread* thread) {
 
 #ifdef _WIN32
 void WriteWindowsMinidump(EXCEPTION_POINTERS* exception) {
-    if (!dkr::runtime::support::crash_dumps_enabled() ||
-        g_crash_directory.empty()) {
+    if (!dkr::runtime::support::crash_dumps_enabled() || g_crash_directory.empty()) {
         return;
     }
     SYSTEMTIME time{};
     GetSystemTime(&time);
     wchar_t name[96]{};
-    swprintf_s(name, L"DKR-R-crash-%04u%02u%02u-%02u%02u%02u.dmp",
-               time.wYear, time.wMonth, time.wDay,
-               time.wHour, time.wMinute, time.wSecond);
+    swprintf_s(name, L"DKR-R-crash-%04u%02u%02u-%02u%02u%02u.dmp", time.wYear, time.wMonth, time.wDay, time.wHour,
+               time.wMinute, time.wSecond);
     const std::filesystem::path path = g_crash_directory / name;
-    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
-                              nullptr, CREATE_ALWAYS,
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS,
                               FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         return;
@@ -251,13 +244,11 @@ void WriteWindowsMinidump(EXCEPTION_POINTERS* exception) {
     information.ThreadId = GetCurrentThreadId();
     information.ExceptionPointers = exception;
     information.ClientPointers = FALSE;
-    const BOOL written = MiniDumpWriteDump(
-        GetCurrentProcess(), GetCurrentProcessId(), file,
-        MiniDumpWithIndirectlyReferencedMemory,
-        exception != nullptr ? &information : nullptr, nullptr, nullptr);
+    const BOOL written =
+        MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), file, MiniDumpWithIndirectlyReferencedMemory,
+                          exception != nullptr ? &information : nullptr, nullptr, nullptr);
     CloseHandle(file);
-    std::fprintf(stderr, "[boot][crash] minidump=%ls status=%s\n",
-                 path.c_str(), written ? "written" : "failed");
+    std::fprintf(stderr, "[boot][crash] minidump=%ls status=%s\n", path.c_str(), written ? "written" : "failed");
 }
 
 LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
@@ -272,20 +263,19 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
     const DWORD64 fault_address = reinterpret_cast<DWORD64>(exception->ExceptionRecord->ExceptionAddress);
     const DWORD64 module_base = reinterpret_cast<DWORD64>(GetModuleHandleW(nullptr));
     std::fprintf(stderr, "[boot][crash] exception=0x%08lX address=0x%016llX\n",
-                 exception->ExceptionRecord->ExceptionCode,
-                 static_cast<unsigned long long>(fault_address));
+                 exception->ExceptionRecord->ExceptionCode, static_cast<unsigned long long>(fault_address));
     WriteWindowsMinidump(exception);
     if (exception->ExceptionRecord->NumberParameters >= 2U) {
         const ULONG_PTR operation = exception->ExceptionRecord->ExceptionInformation[0];
-        const char* operation_name = operation == 0U ? "read" :
-            operation == 1U ? "write" : operation == 8U ? "execute" : "unknown";
+        const char* operation_name = operation == 0U   ? "read"
+                                     : operation == 1U ? "write"
+                                     : operation == 8U ? "execute"
+                                                       : "unknown";
         std::fprintf(stderr,
                      "[boot][crash] memory-operation=%s(%llu) "
                      "memory-address=0x%016llX\n",
-                     operation_name,
-                     static_cast<unsigned long long>(operation),
-                     static_cast<unsigned long long>(
-                         exception->ExceptionRecord->ExceptionInformation[1]));
+                     operation_name, static_cast<unsigned long long>(operation),
+                     static_cast<unsigned long long>(exception->ExceptionRecord->ExceptionInformation[1]));
     }
     std::fprintf(stderr, "[boot][crash] module-base=0x%016llX rva=0x%llX\n",
                  static_cast<unsigned long long>(module_base),
@@ -333,8 +323,8 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
     symbol->MaxNameLen = MAX_SYM_NAME;
 
     for (unsigned index = 0; index < 32; ++index) {
-        if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(), &frame,
-                         &context, nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr) ||
+        if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(), &frame, &context, nullptr,
+                         SymFunctionTableAccess64, SymGetModuleBase64, nullptr) ||
             frame.AddrPC.Offset == 0) {
             break;
         }
@@ -350,8 +340,7 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
         line.SizeOfStruct = sizeof(line);
         DWORD line_displacement = 0;
         if (SymGetLineFromAddr64(process, frame.AddrPC.Offset, &line_displacement, &line)) {
-            std::fprintf(stderr, "[boot][crash]     %s:%lu+0x%lX\n",
-                         line.FileName, line.LineNumber, line_displacement);
+            std::fprintf(stderr, "[boot][crash]     %s:%lu+0x%lX\n", line.FileName, line.LineNumber, line_displacement);
         }
     }
     SymCleanup(process);
@@ -390,13 +379,12 @@ struct LaunchOptions {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     std::filesystem::path bootstrap_output;
     std::filesystem::path owned_check_invite;
-    bool owned_check_host=false;
-    unsigned owned_check_players=2;
+    bool owned_check_host = false;
+    unsigned owned_check_players = 2;
 #endif
 };
 
-bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options,
-                        std::string& error) {
+bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options, std::string& error) {
     unsigned positional_index = 0;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument = argv[index];
@@ -422,18 +410,29 @@ bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options,
             options.config_directory = std::filesystem::u8path(value);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
         } else if (argument == "--rollback-bootstrap-output") {
-            const char* value=require_value("--rollback-bootstrap-output");
-            if (!value) return false;
-            options.bootstrap_output=std::filesystem::u8path(value);
-        } else if(argument=="--self-test-owned-host"||argument=="--self-test-owned-join") {
-            const char* value=require_value(argv[index]);if(!value)return false;
-            if(!options.owned_check_invite.empty()){error="Only one owned check role is allowed.";return false;}
-            options.owned_check_host=argument=="--self-test-owned-host";
-            options.owned_check_invite=std::filesystem::u8path(value);
-        } else if(argument=="--self-test-owned-players") {
-            const char* value=require_value("--self-test-owned-players");if(!value)return false;
-            if(value[0]<'2'||value[0]>'4'||value[1]){error="Owned check requires 2, 3 or 4 players.";return false;}
-            options.owned_check_players=unsigned(value[0]-'0');
+            const char* value = require_value("--rollback-bootstrap-output");
+            if (!value)
+                return false;
+            options.bootstrap_output = std::filesystem::u8path(value);
+        } else if (argument == "--self-test-owned-host" || argument == "--self-test-owned-join") {
+            const char* value = require_value(argv[index]);
+            if (!value)
+                return false;
+            if (!options.owned_check_invite.empty()) {
+                error = "Only one owned check role is allowed.";
+                return false;
+            }
+            options.owned_check_host = argument == "--self-test-owned-host";
+            options.owned_check_invite = std::filesystem::u8path(value);
+        } else if (argument == "--self-test-owned-players") {
+            const char* value = require_value("--self-test-owned-players");
+            if (!value)
+                return false;
+            if (value[0] < '2' || value[0] > '4' || value[1]) {
+                error = "Owned check requires 2, 3 or 4 players.";
+                return false;
+            }
+            options.owned_check_players = unsigned(value[0] - '0');
 #endif
         } else if (argument == "--timeout") {
             const char* value = require_value("--timeout");
@@ -484,28 +483,23 @@ bool ParseLaunchOptions(int argc, char** argv, LaunchOptions& options,
     return true;
 }
 
-bool PrepareCanonicalRomPath(std::filesystem::path& rom_path,
-                             dkr::runtime::rom::Identity& identity,
-                             const std::filesystem::path& config_directory,
-                             std::string& error) {
+bool PrepareCanonicalRomPath(std::filesystem::path& rom_path, dkr::runtime::rom::Identity& identity,
+                             const std::filesystem::path& config_directory, std::string& error) {
     if (identity.byte_order == dkr::runtime::rom::ByteOrder::BigEndian) {
         return true;
     }
     std::filesystem::path canonical_path;
-    if (!dkr::runtime::rom::materialize_canonical(
-            rom_path, identity, config_directory / "rom-cache",
-            canonical_path, error)) {
+    if (!dkr::runtime::rom::materialize_canonical(rom_path, identity, config_directory / "rom-cache", canonical_path,
+                                                  error)) {
         return false;
     }
     rom_path = canonical_path;
     identity = dkr::runtime::rom::inspect(rom_path);
-    if (!identity.supported() ||
-        identity.byte_order != dkr::runtime::rom::ByteOrder::BigEndian) {
+    if (!identity.supported() || identity.byte_order != dkr::runtime::rom::ByteOrder::BigEndian) {
         error = "The prepared ROM cache did not retain the selected revision.";
         return false;
     }
-    std::fprintf(stderr,
-                 "[boot][rom] normalised selected ROM into the local big-endian cache\n");
+    std::fprintf(stderr, "[boot][rom] normalised selected ROM into the local big-endian cache\n");
     error.clear();
     return true;
 }
@@ -521,13 +515,18 @@ bool RelaunchApplication(int argc, char** argv) {
     return true;
 #elif defined(_WIN32)
     try {
-        auto executable=dkr::updates::application_executable();auto root=dkr::updates::application_directory();auto launcher=root/"DKR-R.exe";
-        if(!std::filesystem::is_regular_file(launcher))launcher=executable;
-        std::vector<std::string> arguments;for(int i=1;i<argc;++i)arguments.emplace_back(argv[i]);
-        dkr::updates::Child next(launcher,arguments,root);
+        auto executable = dkr::updates::application_executable();
+        auto root = dkr::updates::application_directory();
+        auto launcher = root / "DKR-R.exe";
+        if (!std::filesystem::is_regular_file(launcher))
+            launcher = executable;
+        std::vector<std::string> arguments;
+        for (int i = 1; i < argc; ++i)
+            arguments.emplace_back(argv[i]);
+        dkr::updates::Child next(launcher, arguments, root);
         return true;
-    } catch(const std::exception& error) {
-        std::fprintf(stderr,"[boot][restart] %s\n",error.what());
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "[boot][restart] %s\n", error.what());
         return false;
     }
 #else
@@ -535,11 +534,8 @@ bool RelaunchApplication(int argc, char** argv) {
         return false;
     }
     std::error_code error;
-    const std::filesystem::path executable =
-        std::filesystem::absolute(std::filesystem::u8path(argv[0]), error);
-    const std::string executable_utf8 = error
-        ? std::string(argv[0])
-        : executable.string();
+    const std::filesystem::path executable = std::filesystem::absolute(std::filesystem::u8path(argv[0]), error);
+    const std::string executable_utf8 = error ? std::string(argv[0]) : executable.string();
     execv(executable_utf8.c_str(), argv);
     std::fprintf(stderr, "[boot][restart] execv failed: errno=%d\n", errno);
     return false;
@@ -547,23 +543,26 @@ bool RelaunchApplication(int argc, char** argv) {
 }
 
 int DkrMain(int argc, char** argv) {
-    dkr::updates::remember_arguments(argc,argv);
+    dkr::updates::remember_arguments(argc, argv);
 #if !defined(__ANDROID__) && !defined(DKR_IOS)
     // Hold a shared lock for normal play, including multiple local instances.
     // The external updater must obtain exclusive access before any replacement.
     std::unique_ptr<dkr::updates::InstallLock> application_update_lock;
     try {
-        auto executable=dkr::updates::application_executable();
+        auto executable = dkr::updates::application_executable();
 #if defined(__APPLE__)
-        auto install_root=executable.parent_path().parent_path().parent_path();
-        if(install_root.extension()==".app")application_update_lock=std::make_unique<dkr::updates::InstallLock>(install_root.parent_path(),5000,true);
+        auto install_root = executable.parent_path().parent_path().parent_path();
+        if (install_root.extension() == ".app")
+            application_update_lock =
+                std::make_unique<dkr::updates::InstallLock>(install_root.parent_path(), 5000, true);
 #else
-        auto install_root=dkr::updates::application_directory();
-        if(std::filesystem::is_regular_file(install_root/"assets/updates/install.json") || std::getenv("APPIMAGE"))
-            application_update_lock=std::make_unique<dkr::updates::InstallLock>(install_root,5000,true);
+        auto install_root = dkr::updates::application_directory();
+        if (std::filesystem::is_regular_file(install_root / "assets/updates/install.json") || std::getenv("APPIMAGE"))
+            application_update_lock = std::make_unique<dkr::updates::InstallLock>(install_root, 5000, true);
 #endif
-    } catch(const std::exception& error) {
-        std::fprintf(stderr,"[updates][startup-lock] %s\n",error.what());return 6;
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "[updates][startup-lock] %s\n", error.what());
+        return 6;
     }
 #endif
     std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -578,7 +577,8 @@ int DkrMain(int argc, char** argv) {
         // Preserve the exception's cause in the user-exportable log, then let
         // Android capture the native tombstone through its own signal handler.
         try {
-            if (const auto failure = std::current_exception()) std::rethrow_exception(failure);
+            if (const auto failure = std::current_exception())
+                std::rethrow_exception(failure);
             std::fprintf(stderr, "[boot][android] terminate without an active exception\n");
         } catch (const std::exception& error) {
             std::fprintf(stderr, "[boot][android] unhandled exception: %s\n", error.what());
@@ -590,7 +590,8 @@ int DkrMain(int argc, char** argv) {
     });
 #endif
     dkr::runtime::startup_performance::mark("process-entry");
-    std::fprintf(stderr,"[lobby-stability][build] version=%s contract=%s\n",DKR_RELEASE_VERSION,DKR_LOBBY_STABILITY_CONTRACT);
+    std::fprintf(stderr, "[lobby-stability][build] version=%s contract=%s\n", DKR_RELEASE_VERSION,
+                 DKR_LOBBY_STABILITY_CONTRACT);
 #if defined(_WIN32)
     SetUnhandledExceptionFilter(RuntimeCrashFilter);
     if (argc == 4 && std::string_view(argv[1]) == "--self-test-install-layout") {
@@ -600,24 +601,26 @@ int DkrMain(int argc, char** argv) {
         bool passed = std::filesystem::equivalent(root, expected, error) && !error;
         const bool portable_expected = std::string_view(argv[3]) == "on";
         passed = passed && (std::string_view(argv[3]) == "on" || std::string_view(argv[3]) == "off") &&
-            dkr::runtime::portable::enabled_at_startup() == portable_expected &&
-            dkr::runtime::portable::marker_path() == root / "portable.txt";
-        if (portable_expected) passed = passed && DefaultConfigDirectory(argv[0]) == root / "dkr-runtime-data";
-        for (const auto* file : {"DKR-R.exe", "libexec/dkr-r/DKR-R-Runtime.exe",
-             "libexec/dkr-r/DKR-R-ModWorker.exe", "libexec/dkr-r/DKR-R-Updater.exe",
-             "libexec/dkr-r/DKR-R-InputHost.exe", "assets/ui/Icons/DKR-R-Spinning-Icon.png",
-             "assets/ui/Backgrounds/DKR-R-Launcher-Background.png",
-             "assets/ui/CustomTrackBackgrounds/rt64.json", "assets/controllers/gamecontrollerdb.txt"})
+                 dkr::runtime::portable::enabled_at_startup() == portable_expected &&
+                 dkr::runtime::portable::marker_path() == root / "portable.txt";
+        if (portable_expected)
+            passed = passed && DefaultConfigDirectory(argv[0]) == root / "dkr-runtime-data";
+        for (const auto* file :
+             {"DKR-R.exe", "libexec/dkr-r/DKR-R-Runtime.exe", "libexec/dkr-r/DKR-R-ModWorker.exe",
+              "libexec/dkr-r/DKR-R-Updater.exe", "libexec/dkr-r/DKR-R-InputHost.exe",
+              "assets/ui/Icons/DKR-R-Spinning-Icon.png", "assets/ui/Backgrounds/DKR-R-Launcher-Background.png",
+              "assets/ui/CustomTrackBackgrounds/rt64.json", "assets/controllers/gamecontrollerdb.txt"})
             passed = passed && std::filesystem::is_regular_file(root / file);
-        std::fprintf(stderr,"[test][install-layout] %s: public root, private runtime, assets, helpers and portable route\n", passed ? "PASS" : "FAILED");
+        std::fprintf(stderr,
+                     "[test][install-layout] %s: public root, private runtime, assets, helpers and portable route\n",
+                     passed ? "PASS" : "FAILED");
         return passed ? 0 : 1;
     }
 #endif
 
     if (argc >= 2 && std::string_view(argv[1]) == "--self-test-pak") {
-        const std::filesystem::path test_directory = argc >= 3
-            ? std::filesystem::u8path(argv[2])
-            : DefaultConfigDirectory(argv[0]) / "pak-self-test";
+        const std::filesystem::path test_directory =
+            argc >= 3 ? std::filesystem::u8path(argv[2]) : DefaultConfigDirectory(argv[0]) / "pak-self-test";
         std::string error;
         if (!dkr::runtime::pak::self_test(test_directory, error)) {
             std::fprintf(stderr, "[test][pak] FAILED: %s\n", error.c_str());
@@ -630,36 +633,31 @@ int DkrMain(int argc, char** argv) {
 #if DKR_RUNTIME_HAS_RT64
     if (argc >= 3 && std::string_view(argv[1]) == "--self-test-hud-settings") {
         const bool passed = dkr::runtime::hud::self_test_basic_settings(std::filesystem::u8path(argv[2]));
-        std::fprintf(stderr,"[test][hud-settings] %s: preset switching, restart, custom suppression and save failure\n",passed?"PASS":"FAILED");
+        std::fprintf(stderr,
+                     "[test][hud-settings] %s: preset switching, restart, custom suppression and save failure\n",
+                     passed ? "PASS" : "FAILED");
         return passed ? 0 : 1;
     }
-    if (argc >= 2 &&
-        std::string_view(argv[1]) == "--self-test-input-switch") {
-        const std::filesystem::path test_directory = argc >= 3
-            ? std::filesystem::u8path(argv[2])
-            : DefaultConfigDirectory(argv[0]) / "input-switch-self-test";
+    if (argc >= 2 && std::string_view(argv[1]) == "--self-test-input-switch") {
+        const std::filesystem::path test_directory =
+            argc >= 3 ? std::filesystem::u8path(argv[2]) : DefaultConfigDirectory(argv[0]) / "input-switch-self-test";
         std::filesystem::create_directories(test_directory);
         dkr::runtime::platform::configure_input(test_directory);
-        dkr::runtime::platform::set_requested_input_backend(
-            dkr::runtime::platform::InputBackend::SDL2Compatibility);
+        dkr::runtime::platform::set_requested_input_backend(dkr::runtime::platform::InputBackend::SDL2Compatibility);
         if (!dkr::runtime::platform::initialise()) {
-            std::fprintf(stderr,
-                         "[test][input-switch] FAILED: platform initialization\n");
+            std::fprintf(stderr, "[test][input-switch] FAILED: platform initialization\n");
             return 1;
         }
         constexpr Uint32 kInvariantSubsystems = SDL_INIT_VIDEO | SDL_INIT_AUDIO;
-        constexpr Uint32 kControllerSubsystems =
-            SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_SENSOR;
+        constexpr Uint32 kControllerSubsystems = SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_SENSOR;
         const auto fail = [](const char* reason) {
-            std::fprintf(stderr, "[test][input-switch] FAILED: %s (%s)\n",
-                         reason,
+            std::fprintf(stderr, "[test][input-switch] FAILED: %s (%s)\n", reason,
                          dkr::runtime::platform::input_backend_detail().c_str());
             dkr::runtime::platform::shutdown();
             return 1;
         };
         const auto wait_for_backend = [](auto expected) {
-            const auto deadline = std::chrono::steady_clock::now() +
-                std::chrono::seconds(5);
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             do {
                 dkr::runtime::platform::pump_input_backend_events();
                 if (dkr::runtime::platform::active_input_backend() == expected &&
@@ -671,39 +669,31 @@ int DkrMain(int argc, char** argv) {
             return false;
         };
         for (int cycle = 0; cycle < 2; ++cycle) {
-            dkr::runtime::platform::set_requested_input_backend(
-                dkr::runtime::platform::InputBackend::SDL3Native);
-            if (!wait_for_backend(
-                    dkr::runtime::platform::InputBackend::SDL3Native)) {
+            dkr::runtime::platform::set_requested_input_backend(dkr::runtime::platform::InputBackend::SDL3Native);
+            if (!wait_for_backend(dkr::runtime::platform::InputBackend::SDL3Native)) {
                 return fail("SDL2 to SDL3 handover");
             }
-            if ((SDL_WasInit(kInvariantSubsystems) & kInvariantSubsystems) !=
-                kInvariantSubsystems) {
+            if ((SDL_WasInit(kInvariantSubsystems) & kInvariantSubsystems) != kInvariantSubsystems) {
                 return fail("video or audio subsystem changed during SDL3 handover");
             }
-            if ((SDL_WasInit(kControllerSubsystems) &
-                 kControllerSubsystems) != 0U) {
+            if ((SDL_WasInit(kControllerSubsystems) & kControllerSubsystems) != 0U) {
                 return fail("SDL2 retained controller subsystem ownership");
             }
 
             dkr::runtime::platform::set_requested_input_backend(
                 dkr::runtime::platform::InputBackend::SDL2Compatibility);
-            if (!wait_for_backend(
-                    dkr::runtime::platform::InputBackend::SDL2Compatibility)) {
+            if (!wait_for_backend(dkr::runtime::platform::InputBackend::SDL2Compatibility)) {
                 return fail("SDL3 to SDL2 handover");
             }
-            if ((SDL_WasInit(kInvariantSubsystems) & kInvariantSubsystems) !=
-                kInvariantSubsystems) {
+            if ((SDL_WasInit(kInvariantSubsystems) & kInvariantSubsystems) != kInvariantSubsystems) {
                 return fail("video or audio subsystem changed during SDL2 handover");
             }
-            if ((SDL_WasInit(kControllerSubsystems) &
-                 kControllerSubsystems) != kControllerSubsystems) {
+            if ((SDL_WasInit(kControllerSubsystems) & kControllerSubsystems) != kControllerSubsystems) {
                 return fail("SDL2 controller subsystems were not restored");
             }
         }
         dkr::runtime::platform::shutdown();
-        std::fprintf(stderr,
-                     "[test][input-switch] PASS: two live round trips\n");
+        std::fprintf(stderr, "[test][input-switch] PASS: two live round trips\n");
         return 0;
     }
 #endif
@@ -728,8 +718,7 @@ int DkrMain(int argc, char** argv) {
         const std::filesystem::path managed_path = packs.front().path;
         if (!dkr::runtime::texture_packs::set_hidden(pack_id, true, status) ||
             !dkr::runtime::texture_packs::snapshot().empty()) {
-            std::fprintf(stderr, "[test][rice] FAILED: hide-from-list lifecycle failed: %s\n",
-                         status.c_str());
+            std::fprintf(stderr, "[test][rice] FAILED: hide-from-list lifecycle failed: %s\n", status.c_str());
             return 1;
         }
         const auto hidden_packs = dkr::runtime::texture_packs::snapshot(true);
@@ -739,19 +728,15 @@ int DkrMain(int argc, char** argv) {
         }
         if (!dkr::runtime::texture_packs::set_hidden(pack_id, false, status) ||
             dkr::runtime::texture_packs::snapshot().size() != 1) {
-            std::fprintf(stderr, "[test][rice] FAILED: restore-to-list lifecycle failed: %s\n",
-                         status.c_str());
+            std::fprintf(stderr, "[test][rice] FAILED: restore-to-list lifecycle failed: %s\n", status.c_str());
             return 1;
         }
         if (!dkr::runtime::texture_packs::delete_managed(pack_id, status) ||
-            !dkr::runtime::texture_packs::snapshot(true).empty() ||
-            std::filesystem::exists(managed_path)) {
-            std::fprintf(stderr, "[test][rice] FAILED: permanent managed deletion failed: %s\n",
-                         status.c_str());
+            !dkr::runtime::texture_packs::snapshot(true).empty() || std::filesystem::exists(managed_path)) {
+            std::fprintf(stderr, "[test][rice] FAILED: permanent managed deletion failed: %s\n", status.c_str());
             return 1;
         }
-        std::fprintf(stderr,
-                     "[test][rice] PASS: import, hide, restore and permanent deletion\n");
+        std::fprintf(stderr, "[test][rice] PASS: import, hide, restore and permanent deletion\n");
         return 0;
     }
 #endif
@@ -762,7 +747,8 @@ int DkrMain(int argc, char** argv) {
         std::fprintf(stderr,
                      "Usage: DKR-R [rom.z64] [config-directory] [timeout-seconds]\n"
                      "       DKR-R --rom <path> [--config <path>] [--timeout <seconds>]\n"
-                     "[boot][arguments] %s\n", rom_error.c_str());
+                     "[boot][arguments] %s\n",
+                     rom_error.c_str());
         return 2;
     }
     std::filesystem::path& rom_path = launch.rom_path;
@@ -774,47 +760,46 @@ int DkrMain(int argc, char** argv) {
     const unsigned timeout_seconds = launch.timeout_seconds;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     const bool rollback_bootstrap = !launch.bootstrap_output.empty();
-    const bool owned_check=!launch.owned_check_invite.empty();
-    if(owned_check&&(rollback_bootstrap||rom_path.empty()||!config_directory.is_absolute()||
-        std::filesystem::exists(config_directory)||!launch.owned_check_invite.is_absolute()||
-        timeout_seconds<20||timeout_seconds>180)) {
-        std::fprintf(stderr,"[rollback][check] Requires a ROM, NEW absolute profile, absolute invitation file, and a 20-180 second timeout.\n");return 2;
+    const bool owned_check = !launch.owned_check_invite.empty();
+    if (owned_check && (rollback_bootstrap || rom_path.empty() || !config_directory.is_absolute() ||
+                        std::filesystem::exists(config_directory) || !launch.owned_check_invite.is_absolute() ||
+                        timeout_seconds < 20 || timeout_seconds > 180)) {
+        std::fprintf(
+            stderr,
+            "[rollback][check] Requires a ROM, NEW absolute profile, absolute invitation file, and a 20-180 second timeout.\n");
+        return 2;
     }
     if (rollback_bootstrap) {
         // Reject BEFORE any config/save/profile writes. Only a fresh directory
         // beside the requested image is accepted, never a normal user profile.
-        if (rom_path.empty() || !config_directory.is_absolute() ||
-            std::filesystem::exists(config_directory) ||
-            launch.bootstrap_output.lexically_normal().parent_path()!=config_directory.lexically_normal() ||
-            !dkr_experimental_bootstrap_arm(launch.bootstrap_output,rom_error)) {
-            std::fprintf(stderr,"[rollback-test][prepare] Refusing nonisolated bootstrap directory: %s\n",rom_error.c_str());
+        if (rom_path.empty() || !config_directory.is_absolute() || std::filesystem::exists(config_directory) ||
+            launch.bootstrap_output.lexically_normal().parent_path() != config_directory.lexically_normal() ||
+            !dkr_experimental_bootstrap_arm(launch.bootstrap_output, rom_error)) {
+            std::fprintf(stderr, "[rollback-test][prepare] Refusing nonisolated bootstrap directory: %s\n",
+                         rom_error.c_str());
             return 2;
         }
     }
 #endif
     std::filesystem::create_directories(config_directory);
     {
-        dkr::runtime::startup_performance::ScopedPhase phase(
-            "support-configure");
+        dkr::runtime::startup_performance::ScopedPhase phase("support-configure");
         dkr::runtime::support::configure(config_directory);
     }
     bool log_configured = ConfigurePersistentRuntimeLog(config_directory);
     if (!log_configured) {
-        std::fprintf(stderr,
-                     "[boot][log] could not create the persistent runtime log\n");
+        std::fprintf(stderr, "[boot][log] could not create the persistent runtime log\n");
     }
     dkr::runtime::startup_performance::mark("persistent-log-ready");
     {
-        dkr::runtime::startup_performance::ScopedPhase phase(
-            "rom-identity-cache-configure");
+        dkr::runtime::startup_performance::ScopedPhase phase("rom-identity-cache-configure");
         dkr::runtime::rom::configure_identity_cache(config_directory);
     }
 #if defined(_WIN32)
     g_crash_directory = dkr::runtime::support::crash_dump_directory();
     if (dkr::runtime::support::crash_dumps_enabled()) {
         std::error_code crash_directory_error;
-        std::filesystem::create_directories(g_crash_directory,
-                                            crash_directory_error);
+        std::filesystem::create_directories(g_crash_directory, crash_directory_error);
         if (crash_directory_error) {
             g_crash_directory.clear();
         }
@@ -829,13 +814,11 @@ int DkrMain(int argc, char** argv) {
     dkr::runtime::rom::Identity rom_identity{};
     bool rom_identified = false;
     if (!rom_path.empty()) {
-        if (!dkr::runtime::ValidateRomForLauncher(
-                rom_path, rom_identity, rom_error)) {
+        if (!dkr::runtime::ValidateRomForLauncher(rom_path, rom_identity, rom_error)) {
             std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
             return 3;
         }
-        if (!PrepareCanonicalRomPath(rom_path, rom_identity,
-                                     config_directory, rom_error)) {
+        if (!PrepareCanonicalRomPath(rom_path, rom_identity, config_directory, rom_error)) {
             std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
             return 3;
         }
@@ -843,8 +826,7 @@ int DkrMain(int argc, char** argv) {
     }
 
     {
-        dkr::runtime::startup_performance::ScopedPhase phase(
-            "pak-save-input-configure");
+        dkr::runtime::startup_performance::ScopedPhase phase("pak-save-input-configure");
         dkr::runtime::pak::configure(config_directory);
         dkr::runtime::saves::configure(config_directory);
         dkr::runtime::saves::configure_recovery_locations(RecoverySaveLocations(argv[0]));
@@ -864,8 +846,7 @@ int DkrMain(int argc, char** argv) {
     }
 
     {
-        dkr::runtime::startup_performance::ScopedPhase phase(
-            "platform-initialise");
+        dkr::runtime::startup_performance::ScopedPhase phase("platform-initialise");
         if (!dkr::runtime::platform::initialise()) {
             return 4;
         }
@@ -882,8 +863,7 @@ int DkrMain(int argc, char** argv) {
     graphics_config.ar_option = ultramodern::renderer::AspectRatio::Original;
     graphics_config.msaa_option = ultramodern::renderer::Antialiasing::None;
     graphics_config.rr_option = ultramodern::renderer::RefreshRate::Original;
-    graphics_config.hpfb_option =
-        ultramodern::renderer::HighPrecisionFramebuffer::Auto;
+    graphics_config.hpfb_option = ultramodern::renderer::HighPrecisionFramebuffer::Auto;
     graphics_config.rr_manual_value = 30;
     graphics_config.ds_option = 1;
 #if defined(__ANDROID__)
@@ -901,18 +881,16 @@ int DkrMain(int argc, char** argv) {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     if (rollback_bootstrap) {
         dkr::runtime::enhancements::set_presentation_profile(dkr::runtime::enhancements::PresentationProfile::Accurate);
-        graphics_config.res_option=ultramodern::renderer::Resolution::Original2x;
-        graphics_config.api_option=ultramodern::renderer::GraphicsApi::Vulkan;
+        graphics_config.res_option = ultramodern::renderer::Resolution::Original2x;
+        graphics_config.api_option = ultramodern::renderer::GraphicsApi::Vulkan;
         ultramodern::renderer::set_graphics_config(graphics_config);
         dkr::runtime::platform::set_master_volume(0.0F);
     }
 #endif
     dkr::runtime::ui::reset_lifecycle_request();
-    const auto window_started_at =
-        dkr::runtime::startup_performance::Clock::now();
+    const auto window_started_at = dkr::runtime::startup_performance::Clock::now();
     auto window_handle = dkr::runtime::platform::create_window();
-    dkr::runtime::startup_performance::report("window-create",
-                                               window_started_at);
+    dkr::runtime::startup_performance::report("window-create", window_started_at);
 #if defined(_WIN32) || defined(__APPLE__)
     if (window_handle.window == nullptr) {
 #else
@@ -923,57 +901,92 @@ int DkrMain(int argc, char** argv) {
         return 4;
     }
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-    if(owned_check) {
-        auto& online=dkr::runtime::netplay::session();
-        if(!dkr::runtime::ui::configure_owned_online_check(rom_identity,launch.owned_check_host,launch.owned_check_players,rom_error)) {
-            std::fprintf(stderr,"[rollback][check] %s\n",rom_error.c_str());dkr::runtime::platform::shutdown();return 5;
+    if (owned_check) {
+        auto& online = dkr::runtime::netplay::session();
+        if (!dkr::runtime::ui::configure_owned_online_check(rom_identity, launch.owned_check_host,
+                                                            launch.owned_check_players, rom_error)) {
+            std::fprintf(stderr, "[rollback][check] %s\n", rom_error.c_str());
+            dkr::runtime::platform::shutdown();
+            return 5;
         }
-        bool joined=launch.owned_check_host,invitation_written=false,ready=false,started=false,accepted=false;
-        auto report_at=std::chrono::steady_clock::now();
-        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(60);
-        while(std::chrono::steady_clock::now()<deadline&&!accepted) {
+        bool joined = launch.owned_check_host, invitation_written = false, ready = false, started = false,
+             accepted = false;
+        auto report_at = std::chrono::steady_clock::now();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        while (std::chrono::steady_clock::now() < deadline && !accepted) {
             dkr::runtime::platform::pump_window_events(nullptr);
-            const auto state=online.view();
-            if(std::chrono::steady_clock::now()>=report_at) {
-                std::fprintf(stderr,"[rollback][check] lobby state=%d local=%u status=%s\n",int(state.state),unsigned(state.local_slot),state.status.c_str());
-                report_at=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+            const auto state = online.view();
+            if (std::chrono::steady_clock::now() >= report_at) {
+                std::fprintf(stderr, "[rollback][check] lobby state=%d local=%u status=%s\n", int(state.state),
+                             unsigned(state.local_slot), state.status.c_str());
+                report_at = std::chrono::steady_clock::now() + std::chrono::seconds(5);
             }
-            if(state.state==dkr::runtime::netplay::ConnectionState::Failed){rom_error=state.status;break;}
-            if(launch.owned_check_host&&!invitation_written&&dkr::runtime::netplay::valid_quick_join_code(state.invite)) {
-                std::ofstream file(launch.owned_check_invite,std::ios::trunc);file<<state.invite;file.close();
-                if(!file){rom_error="Cannot write the isolated invitation.";break;}invitation_written=true;
+            if (state.state == dkr::runtime::netplay::ConnectionState::Failed) {
+                rom_error = state.status;
+                break;
             }
-            if(!joined) {
-                std::ifstream file(launch.owned_check_invite);std::string invitation;file>>invitation;
-                if(dkr::runtime::netplay::valid_quick_join_code(invitation)) {
-                    if(!online.join(invitation,"Owned check client",rom_error))break;joined=true;
+            if (launch.owned_check_host && !invitation_written &&
+                dkr::runtime::netplay::valid_quick_join_code(state.invite)) {
+                std::ofstream file(launch.owned_check_invite, std::ios::trunc);
+                file << state.invite;
+                file.close();
+                if (!file) {
+                    rom_error = "Cannot write the isolated invitation.";
+                    break;
+                }
+                invitation_written = true;
+            }
+            if (!joined) {
+                std::ifstream file(launch.owned_check_invite);
+                std::string invitation;
+                file >> invitation;
+                if (dkr::runtime::netplay::valid_quick_join_code(invitation)) {
+                    if (!online.join(invitation, "Owned check client", rom_error))
+                        break;
+                    joined = true;
                 }
             }
-            if(launch.owned_check_host)for(const auto& pending:state.pending_joins)if(!online.approve_join(pending.request_id,rom_error))break;
+            if (launch.owned_check_host)
+                for (const auto& pending : state.pending_joins)
+                    if (!online.approve_join(pending.request_id, rom_error))
+                        break;
             // Roster/save admission can clear Ready after the first call.
-            ready=state.local_slot<state.room.players.size()&&state.room.players[state.local_slot].ready;
-            if(!ready&&(state.state==dkr::runtime::netplay::ConnectionState::Hosting||state.state==dkr::runtime::netplay::ConnectionState::Lobby)) {
-                ready=online.set_ready(true,rom_error);
+            ready = state.local_slot < state.room.players.size() && state.room.players[state.local_slot].ready;
+            if (!ready && (state.state == dkr::runtime::netplay::ConnectionState::Hosting ||
+                           state.state == dkr::runtime::netplay::ConnectionState::Lobby)) {
+                ready = online.set_ready(true, rom_error);
             }
-            if(launch.owned_check_host&&ready&&!started) {
-                unsigned occupants=0;bool all_ready=true;
-                for(const auto& racer:state.room.players)if(racer.occupied){++occupants;all_ready=all_ready&&racer.ready;}
-                if(occupants==launch.owned_check_players&&all_ready)started=online.request_start(rom_error);
+            if (launch.owned_check_host && ready && !started) {
+                unsigned occupants = 0;
+                bool all_ready = true;
+                for (const auto& racer : state.room.players)
+                    if (racer.occupied) {
+                        ++occupants;
+                        all_ready = all_ready && racer.ready;
+                    }
+                if (occupants == launch.owned_check_players && all_ready)
+                    started = online.request_start(rom_error);
             }
-            accepted=online.consume_launch_request();
-            if(!accepted)std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            accepted = online.consume_launch_request();
+            if (!accepted)
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
-        if(!accepted){std::fprintf(stderr,"[rollback][check] normal lobby launch failed: %s\n",rom_error.c_str());online.disconnect();dkr::runtime::platform::shutdown();return 5;}
-        std::fprintf(stderr,"[rollback][check] normal Quick Join/countdown accepted; owners=%u\n",launch.owned_check_players);
+        if (!accepted) {
+            std::fprintf(stderr, "[rollback][check] normal lobby launch failed: %s\n", rom_error.c_str());
+            online.disconnect();
+            dkr::runtime::platform::shutdown();
+            return 5;
+        }
+        std::fprintf(stderr, "[rollback][check] normal Quick Join/countdown accepted; owners=%u\n",
+                     launch.owned_check_players);
     }
 #endif
     if (rom_path.empty()) {
-        const auto startup = dkr::runtime::ui::run_startup_screen(
-            static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()));
+        const auto startup =
+            dkr::runtime::ui::run_startup_screen(static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()));
         if (!startup.start_game) {
             dkr::runtime::platform::shutdown();
-            if (startup.lifecycle_request ==
-                dkr::runtime::ui::LifecycleRequest::Restart) {
+            if (startup.lifecycle_request == dkr::runtime::ui::LifecycleRequest::Restart) {
                 return RelaunchApplication(argc, argv) ? 0 : 6;
             }
             return 0;
@@ -991,21 +1004,18 @@ int DkrMain(int argc, char** argv) {
     }
 #endif
 
-    if (!rom_identified && !dkr::runtime::ValidateRomForLauncher(
-            rom_path, rom_identity, rom_error)) {
+    if (!rom_identified && !dkr::runtime::ValidateRomForLauncher(rom_path, rom_identity, rom_error)) {
         std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
         dkr::runtime::platform::shutdown();
         return 3;
     }
-    if (!rom_identified && !PrepareCanonicalRomPath(
-            rom_path, rom_identity, config_directory, rom_error)) {
+    if (!rom_identified && !PrepareCanonicalRomPath(rom_path, rom_identity, config_directory, rom_error)) {
         std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
         dkr::runtime::platform::shutdown();
         return 3;
     }
     if (!log_configured && !ConfigurePersistentRuntimeLog(config_directory)) {
-        std::fprintf(stderr,
-                     "[boot][log] could not create the persistent runtime log\n");
+        std::fprintf(stderr, "[boot][log] could not create the persistent runtime log\n");
     }
 #if DKR_RUNTIME_HAS_RT64
     if (!rom_identified) {
@@ -1015,16 +1025,14 @@ int DkrMain(int argc, char** argv) {
 #else
         if (window_handle == nullptr) {
 #endif
-            std::fprintf(stderr,
-                         "[boot][window] failed to prepare the game renderer window\n");
+            std::fprintf(stderr, "[boot][window] failed to prepare the game renderer window\n");
             dkr::runtime::platform::shutdown();
             return 4;
         }
     }
 #endif
 
-    if (!dkr::runtime::RegisterGame(config_directory, rom_identity.revision,
-                                    rom_error)) {
+    if (!dkr::runtime::RegisterGame(config_directory, rom_identity.revision, rom_error)) {
         std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
         dkr::runtime::platform::shutdown();
         return 3;
@@ -1032,8 +1040,9 @@ int DkrMain(int argc, char** argv) {
     const dkr::runtime::rom::Revision registered_revision = rom_identity.revision;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     if (rollback_bootstrap && !dkr::runtime::netplay::experimental::runtime_available(registered_revision)) {
-        std::fprintf(stderr,"[rollback-test] No linked replay engine for this validated revision.\n");
-        dkr::runtime::platform::shutdown(); return 3;
+        std::fprintf(stderr, "[rollback-test] No linked replay engine for this validated revision.\n");
+        dkr::runtime::platform::shutdown();
+        return 3;
     }
 #endif
     dkr::runtime::startup_performance::mark("game-registered");
@@ -1050,30 +1059,28 @@ int DkrMain(int argc, char** argv) {
         .queue_samples = dkr::runtime::platform::queue_audio,
         .get_frames_remaining = dkr::runtime::platform::audio_frames_remaining,
         .set_frequency = dkr::runtime::platform::set_audio_frequency,
-        .external_work_allowed = []() {
-            return dkr::runtime::netplay::external_side_effects_allowed();
-        },
+        .external_work_allowed = []() { return dkr::runtime::netplay::external_side_effects_allowed(); },
     };
     ultramodern::input::callbacks_t input_callbacks{
         .poll_input = dkr::runtime::platform::poll_input,
         .frame_boundary = dkr::runtime::netplay::on_frame_boundary,
-        .physical_poll_allowed = []() {
-            return dkr::runtime::netplay::physical_input_poll_allowed();
-        },
+        .physical_poll_allowed = []() { return dkr::runtime::netplay::physical_input_poll_allowed(); },
         .get_input = dkr::runtime::platform::get_input,
         .set_rumble = dkr::runtime::platform::set_rumble,
         .get_connected_device_info = dkr::runtime::platform::get_connected_device_info,
     };
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     if (rollback_bootstrap) {
-        input_callbacks.poll_input=+[](){};
-        input_callbacks.get_input=+[](int port,std::uint16_t* buttons,float* x,float* y){
-            *buttons=0;*x=*y=0.0F;return port>=0&&port<2;
+        input_callbacks.poll_input = +[]() {};
+        input_callbacks.get_input = +[](int port, std::uint16_t* buttons, float* x, float* y) {
+            *buttons = 0;
+            *x = *y = 0.0F;
+            return port >= 0 && port < 2;
         };
-        input_callbacks.set_rumble=+[](int,bool){};
-        input_callbacks.get_connected_device_info=+[](int port){
+        input_callbacks.set_rumble = +[](int, bool) {};
+        input_callbacks.get_connected_device_info = +[](int port) {
             return ultramodern::input::connected_device_info_t{
-                port>=0&&port<2?ultramodern::input::Device::Controller:ultramodern::input::Device::None,
+                port >= 0 && port < 2 ? ultramodern::input::Device::Controller : ultramodern::input::Device::None,
                 ultramodern::input::Pak::None};
         };
     }
@@ -1086,22 +1093,21 @@ int DkrMain(int argc, char** argv) {
     // leave Escape, window close and Exit to Desktop unresponsive.
     const ultramodern::gfx_callbacks_t gfx_callbacks{};
     const ultramodern::events::callbacks_t events_callbacks{
-        .authored_simulation_pacing_scale_milli_callback = []() {
-            return dkr::runtime::netplay::
-                authored_simulation_pacing_scale_milli();
-        },
-        .presentation_allowed_callback = []() {
+        .authored_simulation_pacing_scale_milli_callback =
+            []() { return dkr::runtime::netplay::authored_simulation_pacing_scale_milli(); },
+        .presentation_allowed_callback =
+            []() {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-            if(dkr_experimental_bootstrap_active())return dkr::lobby_stability::bootstrap_audio_worker_allowed();
+                if (dkr_experimental_bootstrap_active())
+                    return dkr::lobby_stability::bootstrap_audio_worker_allowed();
 #endif
-            return dkr::runtime::netplay::external_side_effects_allowed();
-        }};
+                return dkr::runtime::netplay::external_side_effects_allowed();
+            }};
     const ultramodern::error_handling::callbacks_t error_callbacks{.message_box = MessageBox};
     const ultramodern::threads::callbacks_t thread_callbacks{.get_game_thread_name = GetThreadName};
 
     recomp::Configuration configuration{
-        .project_version = {.major = 1, .minor = 0, .patch = 0,
-                            .suffix = DKR_RELEASE_VERSION},
+        .project_version = {.major = 1, .minor = 0, .patch = 0, .suffix = DKR_RELEASE_VERSION},
         .window_handle = window_handle,
         .rsp_callbacks = rsp_callbacks,
         .renderer_callbacks = renderer_callbacks,
@@ -1109,13 +1115,15 @@ int DkrMain(int argc, char** argv) {
         .input_callbacks = input_callbacks,
         .gfx_callbacks = gfx_callbacks,
         .events_callbacks = events_callbacks,
-        .save_write_allowed_callback = []() {
+        .save_write_allowed_callback =
+            []() {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-            if(dkr_experimental_bootstrap_active())return false;
+                if (dkr_experimental_bootstrap_active())
+                    return false;
 #endif
-            return dkr::runtime::saves::runtime_save_writes_allowed() &&
-                dkr::runtime::netplay::external_side_effects_allowed();
-        },
+                return dkr::runtime::saves::runtime_save_writes_allowed() &&
+                       dkr::runtime::netplay::external_side_effects_allowed();
+            },
         .error_handling_callbacks = error_callbacks,
         .threads_callbacks = thread_callbacks,
         // DKR's scheduler interrupt queue can briefly be full while the VI and
@@ -1145,8 +1153,8 @@ int DkrMain(int argc, char** argv) {
         // the simulation selection on every peer.
         std::optional<std::uint32_t> online_magic_codes;
         if (dkr::runtime::netplay::session().active()) {
-            online_magic_codes = static_cast<std::uint32_t>(
-                dkr::runtime::netplay::session().view().room.manifest.magic_codes_hash);
+            online_magic_codes =
+                static_cast<std::uint32_t>(dkr::runtime::netplay::session().view().room.manifest.magic_codes_hash);
         }
         dkr::runtime::magic_codes::begin_game_session(online_magic_codes);
         dkr::runtime::netplay::reset_runtime_state();
@@ -1157,126 +1165,182 @@ int DkrMain(int argc, char** argv) {
         bool selecting_save_owner = false;
         std::shared_ptr<const dkr::mods::online::RuntimeResources> online_mods;
         try {
-            selecting_save_owner=true; // resource admission failures also return safely to the launcher
+            selecting_save_owner = true; // resource admission failures also return safely to the launcher
             // Launcher preparation already ran on a worker with a progress
             // modal. Explicit command-line launches validate here instead.
-            if(!prepared_mods)prepared_mods=dkr::mods::prepare_mod_launch(config_directory,rom_path,
-                dkr::runtime::netplay::session().active(),[](const char* stage){std::fprintf(stderr,"[legacy][launch] %s\n",stage);});
-            if(prepared_mods->session && dkr::runtime::netplay::session().active())
+            if (!prepared_mods)
+                prepared_mods = dkr::mods::prepare_mod_launch(
+                    config_directory, rom_path, dkr::runtime::netplay::session().active(),
+                    [](const char* stage) { std::fprintf(stderr, "[legacy][launch] %s\n", stage); });
+            if (prepared_mods->session && dkr::runtime::netplay::session().active())
                 throw dkr::mods::Error("Offline custom assets cannot enter an online runtime.");
-            if(dkr::runtime::netplay::session().active()) {
+            if (dkr::runtime::netplay::session().active()) {
 #if DKR_RUNTIME_HAS_RT64
-                online_mods=dkr::runtime::ui::online_mod_resources();
+                online_mods = dkr::runtime::ui::online_mod_resources();
 #endif
-                if(online_mods)dkr::runtime::legacy::begin_online(online_mods);
-                else dkr::runtime::legacy::begin_prepared(prepared_mods);
-            } else dkr::runtime::legacy::begin_prepared(prepared_mods);
+                if (online_mods)
+                    dkr::runtime::legacy::begin_online(online_mods);
+                else
+                    dkr::runtime::legacy::begin_prepared(prepared_mods);
+            } else
+                dkr::runtime::legacy::begin_prepared(prepared_mods);
             const auto online_save = dkr::runtime::netplay::session().runtime_view();
-            const auto code_set=online_mods?online_mods->code():prepared_mods->code;
-            dkr::runtime::achievements::begin(online_save.active,0,code_set&&!code_set->ordered.empty(),dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())||(code_set&&std::any_of(code_set->ordered.begin(),code_set->ordered.end(),[](const auto& p){return p->development;})));
-            if(code_set&&!code_set->ordered.empty()&&online_save.active&&(!online_save.launch_descriptor||online_save.launch_descriptor->synchronization!=
-                    dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback))
+            const auto code_set = online_mods ? online_mods->code() : prepared_mods->code;
+            dkr::runtime::achievements::begin(
+                online_save.active, 0, code_set && !code_set->ordered.empty(),
+                dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session()) ||
+                    (code_set && std::any_of(code_set->ordered.begin(), code_set->ordered.end(),
+                                             [](const auto& p) { return p->development; })));
+            if (code_set && !code_set->ordered.empty() && online_save.active &&
+                (!online_save.launch_descriptor ||
+                 online_save.launch_descriptor->synchronization !=
+                     dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback))
                 throw dkr::mods::Error("Custom Magic Codes require the owned Rollback engine online.");
-            dkr::runtime::camera::begin(config_directory,DKR_RELEASE_VERSION,registered_revision,online_save.active,code_set&&std::any_of(code_set->ordered.begin(),code_set->ordered.end(),[](const auto& p){return p->api==2&&p->modules.contains("presentation2");}));
-            dkr::runtime::code_mods::begin(code_set,registered_revision,
-                online_save.launch_descriptor?online_save.launch_descriptor->match_id:0x444B52434F444531ULL,online_save.active);
-            const bool development_code=code_set&&std::any_of(code_set->ordered.begin(),code_set->ordered.end(),[](const auto& p){return p->development;});
-              const bool development_session=online_save.active?(online_save.launch_descriptor&&online_save.launch_descriptor->development):development_code;
-              if(development_code&&online_save.active&&!development_session)throw dkr::mods::Error("Enable Development lobby before using development code mods online.");
-              const auto developer_folder=development_session?std::filesystem::path("development")/(code_set?code_set->identity.substr(0,24):"online-"+std::to_string(online_save.launch_descriptor->match_id)):prepared_mods->save_subfolder;
-              const auto developer_paks=development_session?config_directory/"saves"/developer_folder/"paks":prepared_mods->pak_directory;
-              if(development_session&&!online_save.active&&
-                 !dkr::runtime::saves::shared::prepare_development(config_directory,developer_folder,rom_error))throw dkr::mods::Error(rom_error);
-              selecting_save_owner = true;
-            if(dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())) {
-                auto party=dkr::runtime::spectators::party_link(&dkr::runtime::netplay::session());
-                std::vector<std::uint8_t> seed;{std::scoped_lock lock(party->mutex);seed=party->seed;}
-                if(seed.size()!=512)throw dkr::mods::Error("Party bootstrap is missing its verified save seed.");
+            dkr::runtime::camera::begin(
+                config_directory, DKR_RELEASE_VERSION, registered_revision, online_save.active,
+                code_set && std::any_of(code_set->ordered.begin(), code_set->ordered.end(), [](const auto& p) {
+                    return p->api == 2 && p->modules.contains("presentation2");
+                }));
+            dkr::runtime::code_mods::begin(code_set, registered_revision,
+                                           online_save.launch_descriptor ? online_save.launch_descriptor->match_id
+                                                                         : 0x444B52434F444531ULL,
+                                           online_save.active);
+            const bool development_code = code_set && std::any_of(code_set->ordered.begin(), code_set->ordered.end(),
+                                                                  [](const auto& p) { return p->development; });
+            const bool development_session =
+                online_save.active ? (online_save.launch_descriptor && online_save.launch_descriptor->development)
+                                   : development_code;
+            if (development_code && online_save.active && !development_session)
+                throw dkr::mods::Error("Enable Development lobby before using development code mods online.");
+            const auto developer_folder =
+                development_session
+                    ? std::filesystem::path("development") /
+                          (code_set ? code_set->identity.substr(0, 24)
+                                    : "online-" + std::to_string(online_save.launch_descriptor->match_id))
+                    : prepared_mods->save_subfolder;
+            const auto developer_paks = development_session ? config_directory / "saves" / developer_folder / "paks"
+                                                            : prepared_mods->pak_directory;
+            if (development_session && !online_save.active &&
+                !dkr::runtime::saves::shared::prepare_development(config_directory, developer_folder, rom_error))
+                throw dkr::mods::Error(rom_error);
+            selecting_save_owner = true;
+            if (dkr::runtime::spectators::party_enabled(&dkr::runtime::netplay::session())) {
+                auto party = dkr::runtime::spectators::party_link(&dkr::runtime::netplay::session());
+                std::vector<std::uint8_t> seed;
+                {
+                    std::scoped_lock lock(party->mutex);
+                    seed = party->seed;
+                }
+                if (seed.size() != 512)
+                    throw dkr::mods::Error("Party bootstrap is missing its verified save seed.");
                 dkr::runtime::spectators::party_bootstrap_seed(seed);
                 ultramodern::set_save_storage_callbacks({dkr::runtime::spectators::party_bootstrap_path,
-                    dkr::runtime::spectators::party_bootstrap_load,dkr::runtime::spectators::party_bootstrap_write});
+                                                         dkr::runtime::spectators::party_bootstrap_load,
+                                                         dkr::runtime::spectators::party_bootstrap_write});
                 dkr::runtime::pak::begin_session_directory({});
                 std::filesystem::path records;
-                if(online_save.host) {std::vector<std::uint8_t> active;std::filesystem::path owner;
-                    if(!dkr::runtime::saves::read_online_adventure(true,online_save.launch_descriptor->match_id,active,owner,rom_error)||active!=seed)throw dkr::mods::Error("The host online seed changed during party boot: "+rom_error);
-                    records=owner.parent_path()/"custom-records-v1.bin";}
-                if(!dkr::runtime::saves::records::begin(records,false,rom_error))throw dkr::mods::Error(rom_error);
+                if (online_save.host) {
+                    std::vector<std::uint8_t> active;
+                    std::filesystem::path owner;
+                    if (!dkr::runtime::saves::read_online_adventure(true, online_save.launch_descriptor->match_id,
+                                                                    active, owner, rom_error) ||
+                        active != seed)
+                        throw dkr::mods::Error("The host online seed changed during party boot: " + rom_error);
+                    records = owner.parent_path() / "custom-records-v1.bin";
+                }
+                if (!dkr::runtime::saves::records::begin(records, false, rom_error))
+                    throw dkr::mods::Error(rom_error);
             } else {
                 dkr::runtime::spectators::party_bootstrap_seed({});
-            if (!dkr::runtime::saves::prepare_runtime_save_context(config_directory,
-                    developer_folder, developer_paks,
-                    online_save.active, online_save.host,
-                    online_save.launch_descriptor ? online_save.launch_descriptor->match_id : 0,
-                    online_save.online_save_hash, rom_error,development_session)) throw dkr::mods::Error(rom_error);
-            {
-                const auto path=dkr::runtime::saves::runtime_save_path();
-                const auto utf8=path.generic_u8string();
-                std::fprintf(stderr,"[save][selected] owner=%s path=%s progress=%s\n",
-                    online_save.active?"online":development_session?"development":"personal",
-                    std::string(utf8.begin(),utf8.end()).c_str(),dkr::runtime::saves::shared::describe(path).c_str());
+                if (!dkr::runtime::saves::prepare_runtime_save_context(
+                        config_directory, developer_folder, developer_paks, online_save.active, online_save.host,
+                        online_save.launch_descriptor ? online_save.launch_descriptor->match_id : 0,
+                        online_save.online_save_hash, rom_error, development_session))
+                    throw dkr::mods::Error(rom_error);
+                {
+                    const auto path = dkr::runtime::saves::runtime_save_path();
+                    const auto utf8 = path.generic_u8string();
+                    std::fprintf(stderr, "[save][selected] owner=%s path=%s progress=%s\n",
+                                 online_save.active    ? "online"
+                                 : development_session ? "development"
+                                                       : "personal",
+                                 std::string(utf8.begin(), utf8.end()).c_str(),
+                                 dkr::runtime::saves::shared::describe(path).c_str());
+                }
+                ultramodern::set_save_storage_callbacks({dkr::runtime::saves::runtime_save_path,
+                                                         dkr::runtime::saves::load_runtime_save,
+                                                         dkr::runtime::saves::commit_runtime_save});
+                dkr::runtime::pak::begin_session_directory(dkr::runtime::saves::runtime_pak_directory());
+                if (!dkr::runtime::saves::records::begin(
+                        development_session
+                            ? std::filesystem::path{}
+                            : dkr::runtime::saves::runtime_save_path().parent_path() / "custom-records-v1.bin",
+                        !development_session && (!online_save.active || online_save.host), rom_error))
+                    throw dkr::mods::Error(rom_error);
             }
-            ultramodern::set_save_storage_callbacks({
-                dkr::runtime::saves::runtime_save_path,
-                dkr::runtime::saves::load_runtime_save,
-                dkr::runtime::saves::commit_runtime_save});
-            dkr::runtime::pak::begin_session_directory(dkr::runtime::saves::runtime_pak_directory());
-            if(!dkr::runtime::saves::records::begin(development_session?std::filesystem::path{}:
-                dkr::runtime::saves::runtime_save_path().parent_path()/"custom-records-v1.bin",
-                !development_session&&(!online_save.active||online_save.host),rom_error))throw dkr::mods::Error(rom_error);
-            }
-        } catch(const std::exception& error) {
-            std::fprintf(stderr,"[legacy][launch] %s\n",error.what());
+        } catch (const std::exception& error) {
+            std::fprintf(stderr, "[legacy][launch] %s\n", error.what());
 #if DKR_RUNTIME_HAS_RT64
             if (selecting_save_owner) {
                 // No guest producer exists yet. A locked/invalid route is a
                 // recoverable refusal, never permission to open an offline fallback.
                 dkr::runtime::pak::begin_session_directory({});
-                {std::string records_error;if(!dkr::runtime::saves::records::finish(records_error)) {
-            std::fprintf(stderr,"[save][custom-records] %s\n",records_error.c_str());
+                {
+                    std::string records_error;
+                    if (!dkr::runtime::saves::records::finish(records_error)) {
+                        std::fprintf(stderr, "[save][custom-records] %s\n", records_error.c_str());
 #if DKR_RUNTIME_HAS_RT64
-            dkr::runtime::ui::report_mod_error(records_error);
+                        dkr::runtime::ui::report_mod_error(records_error);
 #endif
-        }}
-        dkr::runtime::saves::retire_runtime_save_context();
+                    }
+                }
+                dkr::runtime::saves::retire_runtime_save_context();
                 dkr::runtime::legacy::begin_session(nullptr);
                 dkr::runtime::code_mods::reset();
-        dkr::runtime::camera::reset();
+                dkr::runtime::camera::reset();
                 prepared_mods.reset();
                 if (dkr::runtime::netplay::session().active())
-                    dkr::runtime::netplay::session().fail_runtime_start(std::string("Save protection: ") + error.what());
+                    dkr::runtime::netplay::session().fail_runtime_start(std::string("Save protection: ") +
+                                                                        error.what());
                 dkr::runtime::ui::report_mod_error(std::string("Save protection: ") + error.what());
                 const auto startup = dkr::runtime::ui::run_startup_screen(
                     static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()), rom_path);
                 if (!startup.start_game) {
                     dkr::runtime::platform::shutdown();
                     return startup.lifecycle_request == dkr::runtime::ui::LifecycleRequest::Restart
-                        ? (RelaunchApplication(argc, argv) ? 0 : 6) : 0;
+                               ? (RelaunchApplication(argc, argv) ? 0 : 6)
+                               : 0;
                 }
                 dkr::runtime::rom::Identity next_identity{};
                 auto next_rom = startup.rom_path;
                 if (!dkr::runtime::ValidateRomForLauncher(next_rom, next_identity, rom_error) ||
                     !PrepareCanonicalRomPath(next_rom, next_identity, config_directory, rom_error)) {
                     std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
-                    dkr::runtime::platform::shutdown(); return 3;
+                    dkr::runtime::platform::shutdown();
+                    return 3;
                 }
                 if (next_identity.revision != registered_revision) {
                     dkr::runtime::platform::shutdown();
                     return RelaunchApplication(argc, argv) ? 0 : 6;
                 }
-                rom_path = std::move(next_rom); rom_identity = next_identity; prepared_mods = startup.mods;
+                rom_path = std::move(next_rom);
+                rom_identity = next_identity;
+                prepared_mods = startup.mods;
                 window_handle = dkr::runtime::platform::prepare_window_for_game();
 #if defined(_WIN32) || defined(__APPLE__)
                 if (!window_handle.window) {
 #else
                 if (!window_handle) {
 #endif
-                    dkr::runtime::platform::shutdown(); return 4;
+                    dkr::runtime::platform::shutdown();
+                    return 4;
                 }
                 configuration.window_handle = window_handle;
                 continue;
             }
 #endif
-            dkr::runtime::platform::shutdown();return 4;
+            dkr::runtime::platform::shutdown();
+            return 4;
         }
 #if DKR_LEGACY_QUALIFICATION
         if (const char* recipe = std::getenv("DKR_LEGACY_QUALIFICATION_RECIPE")) {
@@ -1294,12 +1358,11 @@ int DkrMain(int argc, char** argv) {
 #endif
 #if defined(DKR_WATER_QUALIFICATION)
         if (std::getenv("DKR_WATER_TEST_MAP") && dkr::runtime::netplay::session().active()) {
-            std::fprintf(stderr,"[water][qualification] Refusing an online session.\n");
+            std::fprintf(stderr, "[water][qualification] Refusing an online session.\n");
             return 4;
         }
 #endif
-        std::fprintf(stderr,
-                     "[boot] runtime initialized; waiting for first safe VI state\n");
+        std::fprintf(stderr, "[boot] runtime initialized; waiting for first safe VI state\n");
         dkr::runtime::invites::game_running(true);
         std::atomic<bool> runtime_finished{false};
 #if defined(__ANDROID__)
@@ -1307,7 +1370,8 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::graphics_health::resource_failure_reporter.store(
             +[](dkr::runtime::graphics_health::Stage stage, std::int32_t result) {
                 char message[192];
-                std::snprintf(message, sizeof(message),
+                std::snprintf(
+                    message, sizeof(message),
                     "Renderer stopped safely at %s (Vulkan result %d). Export logs here, then close and reopen DKR-R.",
                     dkr::runtime::graphics_health::stage_name(stage), result);
                 std::fprintf(stderr, "[android][graphics] %s\n", message);
@@ -1320,51 +1384,66 @@ int DkrMain(int argc, char** argv) {
         bool return_from_owned = false;
         bool owned_failed = false;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-        auto* admitted_lobby=&dkr::runtime::netplay::session();
-        const auto owned_descriptor=admitted_lobby->launch_descriptor();
-        const bool owned_launch=owned_descriptor && owned_descriptor->synchronization==
-            dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback;
+        auto* admitted_lobby = &dkr::runtime::netplay::session();
+        const auto owned_descriptor = admitted_lobby->launch_descriptor();
+        const bool owned_launch =
+            owned_descriptor &&
+            owned_descriptor->synchronization == dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback;
         std::unique_ptr<dkr::runtime::netplay::DirectSession> local_bootstrap_session;
-        auto session_configuration=configuration;
-        if(owned_launch) {
-            const auto initial_online=admitted_lobby->runtime_view();
-            if(!dkr::runtime::netplay::experimental::runtime_available(registered_revision) ||
-               !dkr_experimental_bootstrap_arm_memory(owned_descriptor->player_count,
-                   initial_online.host,owned_descriptor->match_id,initial_online.online_save_hash,rom_error)) {
-                admitted_lobby->fail_runtime_start(rom_error.empty()?"This ROM does not have an owned rollback payload.":rom_error);
-                dkr::runtime::platform::shutdown();return 5;
+        auto session_configuration = configuration;
+        if (owned_launch) {
+            const auto initial_online = admitted_lobby->runtime_view();
+            if (!dkr::runtime::netplay::experimental::runtime_available(registered_revision) ||
+                !dkr_experimental_bootstrap_arm_memory(owned_descriptor->player_count, initial_online.host,
+                                                       owned_descriptor->match_id, initial_online.online_save_hash,
+                                                       rom_error)) {
+                admitted_lobby->fail_runtime_start(
+                    rom_error.empty() ? "This ROM does not have an owned rollback payload." : rom_error);
+                dkr::runtime::platform::shutdown();
+                return 5;
             }
-            std::fprintf(stderr,"[lobby-start][bootstrap] match=%llu local=%u players=%u resources=%s event=begin-retail-bootstrap\n",
-                static_cast<unsigned long long>(owned_descriptor->match_id),unsigned(initial_online.local_slot),unsigned(owned_descriptor->player_count),online_mods?online_mods->fingerprint().c_str():"stock");
+            std::fprintf(
+                stderr,
+                "[lobby-start][bootstrap] match=%llu local=%u players=%u resources=%s event=begin-retail-bootstrap\n",
+                static_cast<unsigned long long>(owned_descriptor->match_id), unsigned(initial_online.local_slot),
+                unsigned(owned_descriptor->player_count), online_mods ? online_mods->fingerprint().c_str() : "stock");
             dkr::lobby_stability::begin_bootstrap(owned_descriptor->match_id);
-            local_bootstrap_session=std::make_unique<dkr::runtime::netplay::DirectSession>();
+            local_bootstrap_session = std::make_unique<dkr::runtime::netplay::DirectSession>();
             dkr::runtime::netplay::bind_external_session(local_bootstrap_session.get());
             // Local construction has neutral virtual controls. It may neither
             // accept network inputs nor write the user's single-player save.
-            session_configuration.input_callbacks.poll_input=+[](){};
-            session_configuration.input_callbacks.get_input=+[](int port,std::uint16_t* buttons,float* x,float* y) {
-                *buttons=0;*x=*y=0;return port>=0&&port<dkr_experimental_bootstrap_players();
-            };
-            session_configuration.input_callbacks.set_rumble=+[](int,bool){};
-            session_configuration.input_callbacks.get_connected_device_info=+[](int port) {
+            session_configuration.input_callbacks.poll_input = +[]() {};
+            session_configuration.input_callbacks.get_input =
+                +[](int port, std::uint16_t* buttons, float* x, float* y) {
+                    *buttons = 0;
+                    *x = *y = 0;
+                    return port >= 0 && port < dkr_experimental_bootstrap_players();
+                };
+            session_configuration.input_callbacks.set_rumble = +[](int, bool) {};
+            session_configuration.input_callbacks.get_connected_device_info = +[](int port) {
                 return ultramodern::input::connected_device_info_t{
-                    port>=0&&port<dkr_experimental_bootstrap_players()
-                        ? ultramodern::input::Device::Controller:ultramodern::input::Device::None,
+                    port >= 0 && port < dkr_experimental_bootstrap_players() ? ultramodern::input::Device::Controller
+                                                                             : ultramodern::input::Device::None,
                     ultramodern::input::Pak::None};
             };
-            session_configuration.audio_callbacks.queue_samples=+[](std::int16_t*,std::size_t){};
+            session_configuration.audio_callbacks.queue_samples = +[](std::int16_t*, std::size_t) {};
         }
 #else
-        const auto& session_configuration=configuration;
+        const auto& session_configuration = configuration;
 #endif
 #if defined(__ANDROID__)
         const auto report_gpu_failure = [&] {
             const auto gpu_failure = dkr::runtime::graphics_health::failure.load(std::memory_order_relaxed);
-            if (gpu_failure == 0 || graphics_failure_reported) return;
+            if (gpu_failure == 0 || graphics_failure_reported)
+                return;
             graphics_failure_reported = true;
             char message[192];
-            std::snprintf(message, sizeof(message), "Vulkan failure: %s (result %d). Rendering has stopped. Export logs using this dialog, then close and reopen DKR-R.",
-                dkr::runtime::graphics_health::stage_name(static_cast<dkr::runtime::graphics_health::Stage>(gpu_failure >> 32)), static_cast<std::int32_t>(gpu_failure));
+            std::snprintf(
+                message, sizeof(message),
+                "Vulkan failure: %s (result %d). Rendering has stopped. Export logs using this dialog, then close and reopen DKR-R.",
+                dkr::runtime::graphics_health::stage_name(
+                    static_cast<dkr::runtime::graphics_health::Stage>(gpu_failure >> 32)),
+                static_cast<std::int32_t>(gpu_failure));
             std::fprintf(stderr, "[android][graphics] %s\n", message);
             dkr::runtime::android::report_graphics_failure(message);
             // A terminal allocation failure retains resources on the faulting
@@ -1399,19 +1478,27 @@ int DkrMain(int argc, char** argv) {
                 if (dkr::runtime::host_tasks::registry.take_stall(stalled, task_check_now)) {
                     char message[256];
                     std::snprintf(message, sizeof(message),
-                        "Task %llu (%08X, type=%u) has made no progress for 15 seconds at %s (pending=%u). "
-                        "It may still finish. No completion has been forced.",
-                        static_cast<unsigned long long>(stalled.token.generation), stalled.token.address,stalled.type,
-                        dkr::runtime::host_tasks::stage_name(stalled.stage), stalled.pending);
+                                  "Task %llu (%08X, type=%u) has made no progress for 15 seconds at %s (pending=%u). "
+                                  "It may still finish. No completion has been forced.",
+                                  static_cast<unsigned long long>(stalled.token.generation), stalled.token.address,
+                                  stalled.type, dkr::runtime::host_tasks::stage_name(stalled.stage), stalled.pending);
                     std::fprintf(stderr, "[host-task][stall] %s\n", message);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-                    if(owned_launch)std::fprintf(stderr,"[lobby-start][bootstrap] match=%llu bootstrap-active=%u elapsed-ms=%lld task-type=%u task-generation=%llu stage=%s\n",
-                        static_cast<unsigned long long>(owned_descriptor->match_id),unsigned(dkr_experimental_bootstrap_active()),
-                        static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(task_check_now-runtime_started_at).count()),stalled.type,
-                        static_cast<unsigned long long>(stalled.token.generation),dkr::runtime::host_tasks::stage_name(stalled.stage));
+                    if (owned_launch)
+                        std::fprintf(
+                            stderr,
+                            "[lobby-start][bootstrap] match=%llu bootstrap-active=%u elapsed-ms=%lld task-type=%u task-generation=%llu stage=%s\n",
+                            static_cast<unsigned long long>(owned_descriptor->match_id),
+                            unsigned(dkr_experimental_bootstrap_active()),
+                            static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                       task_check_now - runtime_started_at)
+                                                       .count()),
+                            stalled.type, static_cast<unsigned long long>(stalled.token.generation),
+                            dkr::runtime::host_tasks::stage_name(stalled.stage));
 #endif
 #if defined(__ANDROID__)
-                    if (task_stalls_reported == 0) dkr::runtime::android::report_task_stall(message);
+                    if (task_stalls_reported == 0)
+                        dkr::runtime::android::report_task_stall(message);
 #endif
                     ++task_stalls_reported;
                 }
@@ -1426,8 +1513,8 @@ int DkrMain(int argc, char** argv) {
                 task_check_now - runtime_started_at >= std::chrono::seconds(15)) {
                 startup_wait_reported = true;
                 constexpr auto message = "No game frame has been presented after 15 seconds. "
-                    "The renderer may still be initializing or waiting for the GPU. "
-                    "You can keep waiting or export logs; no GPU work has been cancelled.";
+                                         "The renderer may still be initializing or waiting for the GPU. "
+                                         "You can keep waiting or export logs; no GPU work has been cancelled.";
                 std::fprintf(stderr, "[android][startup-wait] %s\n", message);
                 dkr::runtime::android::report_task_stall(message);
             }
@@ -1441,18 +1528,12 @@ int DkrMain(int argc, char** argv) {
             dkr::runtime::service_online_wait_presentation();
 #endif
             if (!timeout_requested && timeout_seconds != 0 &&
-                std::chrono::steady_clock::now() - runtime_started_at >=
-                    std::chrono::seconds(timeout_seconds)) {
+                std::chrono::steady_clock::now() - runtime_started_at >= std::chrono::seconds(timeout_seconds)) {
 #if DKR_RUNTIME_HAS_RT64
-                std::fprintf(
-                    stderr,
-                    "[boot][watchdog] completed-f3ddkr-tasks=%llu\n",
-                    static_cast<unsigned long long>(
-                        dkr::runtime::completed_f3ddkr_task_count()));
+                std::fprintf(stderr, "[boot][watchdog] completed-f3ddkr-tasks=%llu\n",
+                             static_cast<unsigned long long>(dkr::runtime::completed_f3ddkr_task_count()));
 #endif
-                std::fprintf(stderr,
-                             "[boot][watchdog] stopping after %u seconds\n",
-                             timeout_seconds);
+                std::fprintf(stderr, "[boot][watchdog] stopping after %u seconds\n", timeout_seconds);
                 timeout_requested = true;
                 ultramodern::quit();
             }
@@ -1461,38 +1542,52 @@ int DkrMain(int argc, char** argv) {
         runtime_thread.join();
         dkr::runtime::modern_camera::reset_session();
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-        if(owned_launch) {
+        if (owned_launch) {
             dkr::runtime::netplay::bind_external_session(admitted_lobby);
             local_bootstrap_session.reset();
             dkr::lobby_stability::end_bootstrap();
-            auto bootstrap=dkr_experimental_bootstrap_take_state();
-            std::fprintf(stderr,"[lobby-start][bootstrap] match=%llu event=retail-bootstrap-ended elapsed-ms=%lld memory-bytes=%zu error=%s\n",
-                static_cast<unsigned long long>(owned_descriptor->match_id),static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-runtime_started_at).count()),
-                bootstrap.memory.size(),bootstrap.error.c_str());
-            if(runtime_failure==nullptr&&dkr::runtime::ui::lifecycle_request()!=dkr::runtime::ui::LifecycleRequest::StopGame) {
+            auto bootstrap = dkr_experimental_bootstrap_take_state();
+            std::fprintf(
+                stderr,
+                "[lobby-start][bootstrap] match=%llu event=retail-bootstrap-ended elapsed-ms=%lld memory-bytes=%zu error=%s\n",
+                static_cast<unsigned long long>(owned_descriptor->match_id),
+                static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                           std::chrono::steady_clock::now() - runtime_started_at)
+                                           .count()),
+                bootstrap.memory.size(), bootstrap.error.c_str());
+            if (runtime_failure == nullptr &&
+                dkr::runtime::ui::lifecycle_request() != dkr::runtime::ui::LifecycleRequest::StopGame) {
                 std::string owned_error;
-                bool owned_ok=false;
+                bool owned_ok = false;
                 try {
-                    if(!bootstrap.error.empty())throw std::runtime_error("Online bootstrap capture failed: "+bootstrap.error);
+                    if (!bootstrap.error.empty())
+                        throw std::runtime_error("Online bootstrap capture failed: " + bootstrap.error);
                     if (bootstrap.memory.empty()) {
-                        const auto mod_error=dkr::runtime::legacy::failure();
-                        throw std::runtime_error(mod_error.empty()
-                            ? "Retail startup did not reach its safe handoff. No checkpoint or rollback session was started; retry from the lobby."
-                            : "Retail startup stopped before its safe handoff: "+mod_error);
+                        const auto mod_error = dkr::runtime::legacy::failure();
+                        throw std::runtime_error(
+                            mod_error.empty()
+                                ? "Retail startup did not reach its safe handoff. No checkpoint or rollback session was started; retry from the lobby."
+                                : "Retail startup stopped before its safe handoff: " + mod_error);
                     }
-                    auto mod_bootstrap=online_mods?dkr::runtime::legacy::online_bootstrap_checkpoint():dkr::mods::Bytes{};
-                    owned_ok=dkr::runtime::netplay::experimental::run_runtime(window_handle,rom_path,std::move(bootstrap.memory),*admitted_lobby,*owned_descriptor,timeout_seconds,owned_error,owned_check,
-                        online_mods,std::move(mod_bootstrap),std::move(bootstrap.code));
-                } catch(const std::exception& exception) {owned_error=exception.what();}
-                catch(...) {owned_error="The owned runtime could not start safely.";}
-                if(!owned_ok) {
-                    owned_failed=true;
-                    std::fprintf(stderr,"[rollback][owned] %s\n",owned_error.c_str());
+                    auto mod_bootstrap =
+                        online_mods ? dkr::runtime::legacy::online_bootstrap_checkpoint() : dkr::mods::Bytes{};
+                    owned_ok = dkr::runtime::netplay::experimental::run_runtime(
+                        window_handle, rom_path, std::move(bootstrap.memory), *admitted_lobby, *owned_descriptor,
+                        timeout_seconds, owned_error, owned_check, online_mods, std::move(mod_bootstrap),
+                        std::move(bootstrap.code));
+                } catch (const std::exception& exception) {
+                    owned_error = exception.what();
+                } catch (...) {
+                    owned_error = "The owned runtime could not start safely.";
+                }
+                if (!owned_ok) {
+                    owned_failed = true;
+                    std::fprintf(stderr, "[rollback][owned] %s\n", owned_error.c_str());
                     admitted_lobby->fail_runtime_start(owned_error);
-                    dkr::runtime::ui::report_mod_error("Online play stopped safely: "+owned_error);
+                    dkr::runtime::ui::report_mod_error("Online play stopped safely: " + owned_error);
                 }
             }
-            return_from_owned=true;
+            return_from_owned = true;
         }
 #endif
 #if defined(__ANDROID__)
@@ -1502,35 +1597,39 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::pak::begin_session_directory({});
         const auto save_failure = dkr::runtime::saves::runtime_save_failure();
         std::string invite_records_failure;
-        {std::string records_error;if(!dkr::runtime::saves::records::finish(records_error)) {
-            invite_records_failure=records_error;
-            std::fprintf(stderr,"[save][custom-records] %s\n",records_error.c_str());
+        {
+            std::string records_error;
+            if (!dkr::runtime::saves::records::finish(records_error)) {
+                invite_records_failure = records_error;
+                std::fprintf(stderr, "[save][custom-records] %s\n", records_error.c_str());
 #if DKR_RUNTIME_HAS_RT64
-            dkr::runtime::ui::report_mod_error(records_error);
+                dkr::runtime::ui::report_mod_error(records_error);
 #endif
-        }}
+            }
+        }
         dkr::runtime::saves::retire_runtime_save_context();
         dkr::runtime::invites::game_running(false);
 #if DKR_RUNTIME_HAS_RT64
-        if (!save_failure.empty()) dkr::runtime::ui::report_mod_error("Save protection: " + save_failure);
+        if (!save_failure.empty())
+            dkr::runtime::ui::report_mod_error("Save protection: " + save_failure);
 #endif
         prepared_mods.reset();
-        auto mod_failure=dkr::runtime::legacy::failure();
-        const auto code_failure=dkr::runtime::code_mods::failure();
-        if(!code_failure.empty()){if(!mod_failure.empty())mod_failure+="; ";mod_failure+=code_failure;}
+        auto mod_failure = dkr::runtime::legacy::failure();
+        const auto code_failure = dkr::runtime::code_mods::failure();
+        if (!code_failure.empty()) {
+            if (!mod_failure.empty())
+                mod_failure += "; ";
+            mod_failure += code_failure;
+        }
         dkr::runtime::code_mods::reset();
         dkr::runtime::camera::reset();
         dkr::runtime::legacy::begin_session(nullptr);
         if (registered_revision == dkr::runtime::rom::Revision::UsV80) {
-            const auto mutex_stats =
-                dkr::runtime::rev_a_asset_mutex::statistics();
-            std::fprintf(
-                stderr,
-                "[perf][v1.1-asset-mutex] fast=%" PRIu64 "/%" PRIu64
-                " scheduler=%" PRIu64 "/%" PRIu64 "\n",
-                mutex_stats.fast_acquires, mutex_stats.fast_releases,
-                mutex_stats.scheduler_acquires,
-                mutex_stats.scheduler_releases);
+            const auto mutex_stats = dkr::runtime::rev_a_asset_mutex::statistics();
+            std::fprintf(stderr,
+                         "[perf][v1.1-asset-mutex] fast=%" PRIu64 "/%" PRIu64 " scheduler=%" PRIu64 "/%" PRIu64 "\n",
+                         mutex_stats.fast_acquires, mutex_stats.fast_releases, mutex_stats.scheduler_acquires,
+                         mutex_stats.scheduler_releases);
         }
 #if DKR_RUNTIME_HAS_RT64
         const auto lifecycle_request = dkr::runtime::ui::lifecycle_request();
@@ -1540,37 +1639,40 @@ int DkrMain(int argc, char** argv) {
             try {
                 std::rethrow_exception(runtime_failure);
             } catch (const std::exception& error) {
-                std::fprintf(stderr, "[boot] runtime failed: %s\n",
-                             error.what());
+                std::fprintf(stderr, "[boot] runtime failed: %s\n", error.what());
             } catch (...) {
-                std::fprintf(
-                    stderr,
-                    "[boot] runtime failed with an unknown exception\n");
+                std::fprintf(stderr, "[boot] runtime failed with an unknown exception\n");
             }
             return 5;
         }
 #if DKR_RUNTIME_HAS_RT64
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-        if(owned_check){dkr::runtime::platform::shutdown();return owned_failed?5:0;}
+        if (owned_check) {
+            dkr::runtime::platform::shutdown();
+            return owned_failed ? 5 : 0;
+        }
 #endif
-        if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty() || !save_failure.empty() ||
-            (return_from_owned && lifecycle_request==dkr::runtime::ui::LifecycleRequest::None)) {
-            if(!mod_failure.empty())dkr::runtime::ui::report_mod_error("Custom content stopped safely: "+mod_failure);
-            std::fprintf(stderr,
-                         "[boot][stop] game stopped; returning to launcher\n");
-            dkr::runtime::invites::finish_return(!save_failure.empty()?save_failure:!invite_records_failure.empty()?invite_records_failure:!mod_failure.empty()?mod_failure:
-                owned_failed?std::string("The previous online game did not finish safely. Review its error before joining."):std::string{});
+        if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::StopGame || !mod_failure.empty() ||
+            !save_failure.empty() ||
+            (return_from_owned && lifecycle_request == dkr::runtime::ui::LifecycleRequest::None)) {
+            if (!mod_failure.empty())
+                dkr::runtime::ui::report_mod_error("Custom content stopped safely: " + mod_failure);
+            std::fprintf(stderr, "[boot][stop] game stopped; returning to launcher\n");
+            dkr::runtime::invites::finish_return(
+                !save_failure.empty()             ? save_failure
+                : !invite_records_failure.empty() ? invite_records_failure
+                : !mod_failure.empty()            ? mod_failure
+                : owned_failed
+                    ? std::string("The previous online game did not finish safely. Review its error before joining.")
+                    : std::string{});
             dkr::runtime::ui::reset_lifecycle_request();
             const bool software_launcher_return = dkr::runtime::launcher_surface_recovery(
                 owned_failed, return_from_owned, !mod_failure.empty() || !save_failure.empty());
             const auto startup = dkr::runtime::ui::run_startup_screen(
-                static_cast<SDL_Window*>(
-                    dkr::runtime::platform::sdl_window()),
-                rom_path, software_launcher_return);
+                static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()), rom_path, software_launcher_return);
             if (!startup.start_game) {
                 dkr::runtime::platform::shutdown();
-                if (startup.lifecycle_request ==
-                    dkr::runtime::ui::LifecycleRequest::Restart) {
+                if (startup.lifecycle_request == dkr::runtime::ui::LifecycleRequest::Restart) {
                     return RelaunchApplication(argc, argv) ? 0 : 6;
                 }
                 std::fprintf(stderr, "[boot] launcher closed cleanly\n");
@@ -1579,19 +1681,15 @@ int DkrMain(int argc, char** argv) {
 
             dkr::runtime::rom::Identity next_identity{};
             std::filesystem::path next_rom_path = startup.rom_path;
-            if (!dkr::runtime::ValidateRomForLauncher(
-                    next_rom_path, next_identity, rom_error) ||
-                !PrepareCanonicalRomPath(next_rom_path, next_identity,
-                                         config_directory, rom_error)) {
+            if (!dkr::runtime::ValidateRomForLauncher(next_rom_path, next_identity, rom_error) ||
+                !PrepareCanonicalRomPath(next_rom_path, next_identity, config_directory, rom_error)) {
                 std::fprintf(stderr, "[boot][rom] %s\n", rom_error.c_str());
                 dkr::runtime::platform::shutdown();
                 return 3;
             }
             if (next_identity.revision != registered_revision) {
-                std::fprintf(
-                    stderr,
-                    "[boot][rom] changing ROM revisions requires a clean "
-                    "runtime relaunch\n");
+                std::fprintf(stderr, "[boot][rom] changing ROM revisions requires a clean "
+                                     "runtime relaunch\n");
                 dkr::runtime::platform::shutdown();
                 return RelaunchApplication(argc, argv) ? 0 : 6;
             }
@@ -1601,18 +1699,18 @@ int DkrMain(int argc, char** argv) {
             // The return launcher may have replaced the native window. No
             // previous runtime is alive: refresh BOTH the owned renderer handle
             // and the normal bootstrap configuration before the next launch.
-            window_handle=dkr::runtime::platform::prepare_window_for_game();
+            window_handle = dkr::runtime::platform::prepare_window_for_game();
 #if defined(_WIN32) || defined(__APPLE__)
-            if(window_handle.window==nullptr) {
+            if (window_handle.window == nullptr) {
 #else
-            if(window_handle==nullptr) {
+            if (window_handle == nullptr) {
 #endif
-                std::fprintf(stderr,"[boot][window] failed to prepare the next game window\n");
-                dkr::runtime::platform::shutdown();return 4;
+                std::fprintf(stderr, "[boot][window] failed to prepare the next game window\n");
+                dkr::runtime::platform::shutdown();
+                return 4;
             }
-            configuration.window_handle=window_handle;
-            std::fprintf(stderr,
-                         "[boot][start] launching a new game session\n");
+            configuration.window_handle = window_handle;
+            std::fprintf(stderr, "[boot][start] launching a new game session\n");
             continue;
         }
         if (lifecycle_request == dkr::runtime::ui::LifecycleRequest::Restart) {
@@ -1624,7 +1722,8 @@ int DkrMain(int argc, char** argv) {
         dkr::runtime::platform::shutdown();
         std::fprintf(stderr, "[boot] runtime stopped cleanly\n");
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-        if (rollback_bootstrap && !dkr_experimental_bootstrap_completed()) return 5;
+        if (rollback_bootstrap && !dkr_experimental_bootstrap_completed())
+            return 5;
 #endif
         return 0;
     }
@@ -1633,10 +1732,23 @@ int DkrMain(int argc, char** argv) {
 #if defined(_WIN32)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
     // Update relaunches retain Unicode ROM/profile arguments on all backends.
-    int count=0;auto** wide=CommandLineToArgvW(GetCommandLineW(),&count);if(!wide)return 2;
-    std::vector<std::string> text;for(int i=0;i<count;++i){int n=WideCharToMultiByte(CP_UTF8,0,wide[i],-1,nullptr,0,nullptr,nullptr);std::string value(n,'\0');WideCharToMultiByte(CP_UTF8,0,wide[i],-1,value.data(),n,nullptr,nullptr);value.pop_back();text.push_back(std::move(value));}
-    LocalFree(wide);std::vector<char*> arguments;for(auto& value:text)arguments.push_back(value.data());
-    return DkrMain(count,arguments.data());
+    int count = 0;
+    auto** wide = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (!wide)
+        return 2;
+    std::vector<std::string> text;
+    for (int i = 0; i < count; ++i) {
+        int n = WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, nullptr, 0, nullptr, nullptr);
+        std::string value(n, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, wide[i], -1, value.data(), n, nullptr, nullptr);
+        value.pop_back();
+        text.push_back(std::move(value));
+    }
+    LocalFree(wide);
+    std::vector<char*> arguments;
+    for (auto& value : text)
+        arguments.push_back(value.data());
+    return DkrMain(count, arguments.data());
 }
 #else
 int main(int argc, char** argv) {

@@ -17,7 +17,7 @@
 namespace dkr::runtime::custom_music {
 
 struct DecodedMusic {
-    std::vector<std::int16_t> samples;   // interleaved stereo; mono is doubled
+    std::vector<std::int16_t> samples; // interleaved stereo; mono is doubled
     std::uint64_t frames = 0;
     std::uint32_t sample_rate = 0;
 };
@@ -29,17 +29,13 @@ struct DecodedMusic {
 // check) and decodes it as `codec`. False with a reason in `error` for a file
 // that changed since the scan, does not decode, or is outside the bounds the
 // addon enforces. `cancel`, when set during the decode, abandons it.
-[[nodiscard]] bool decode_file(const std::filesystem::path& file,
-                               custom_tracks::MusicCodec codec,
-                               const std::string& sha256, DecodedMusic& out,
-                               std::string& error,
+[[nodiscard]] bool decode_file(const std::filesystem::path& file, custom_tracks::MusicCodec codec,
+                               const std::string& sha256, DecodedMusic& out, std::string& error,
                                const std::atomic<bool>* cancel = nullptr);
 
 // The same, from bytes already in memory (no digest check).
-[[nodiscard]] bool decode_bytes(const std::uint8_t* data, std::size_t size,
-                                custom_tracks::MusicCodec codec, DecodedMusic& out,
-                                std::string& error,
-                                const std::atomic<bool>* cancel = nullptr,
+[[nodiscard]] bool decode_bytes(const std::uint8_t* data, std::size_t size, custom_tracks::MusicCodec codec,
+                                DecodedMusic& out, std::string& error, const std::atomic<bool>* cancel = nullptr,
                                 std::size_t maximum_decoded_bytes = SIZE_MAX);
 
 } // namespace dkr::runtime::custom_music

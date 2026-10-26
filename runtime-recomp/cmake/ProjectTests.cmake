@@ -27,10 +27,18 @@ function(dkr_configure_test_metadata)
     get_property(project_tests DIRECTORY PROPERTY TESTS)
     # Optional SDK-backed tests are labeled only when configured.
     set(flake_tests
-        DKRDirectSession DKRFriendService DKRFriendDelivery
-        DKRFriendLocalIntegration DKRQuickJoinTransport DKRQuickJoinLifecycle
-        DKRExperimentalQuickJoin DKRExperimentalSession DKRExperimentalNetwork
-        DKRExperimentalLaunch DKRNetplayAdverseNetwork)
+        DKRDirectSession
+        DKRFriendService
+        DKRFriendDelivery
+        DKRFriendLocalIntegration
+        DKRQuickJoinTransport
+        DKRQuickJoinLifecycle
+        DKRExperimentalQuickJoin
+        DKRExperimentalSession
+        DKRExperimentalNetwork
+        DKRExperimentalLaunch
+        DKRNetplayAdverseNetwork
+    )
     foreach(test_name IN LISTS project_tests)
         if(NOT test_name MATCHES "^DKR")
             continue()

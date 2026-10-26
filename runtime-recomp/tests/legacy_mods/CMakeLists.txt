@@ -17,23 +17,53 @@ add_test(NAME DKROnlineGamePakTests COMMAND DKROnlineGamePakTests)
 add_executable(DKROnlineModMusicTests ../online_mod_music_tests.cpp)
 target_link_libraries(DKROnlineModMusicTests PRIVATE DKRLegacyModLaunch)
 add_test(NAME DKROnlineModMusicTests COMMAND DKROnlineModMusicTests)
-add_executable(DKRNativeModWorldTests ../native_mod_world_tests.cpp ../native_mod_world_test_boundaries.cpp ../../src/game/runtime_legacy_mods.cpp)
+add_executable(
+    DKRNativeModWorldTests
+    ../native_mod_world_tests.cpp
+    ../native_mod_world_test_boundaries.cpp
+    ../../src/game/runtime_legacy_mods.cpp
+)
 target_link_libraries(DKRNativeModWorldTests PRIVATE DKRLegacyGuestIO DKRLegacyModLaunch)
-target_include_directories(DKRNativeModWorldTests PRIVATE ../../src/game
-    "${DKRPORT_ROOT}/extern/n64-modern-runtime/librecomp/include"
-    "${DKRPORT_ROOT}/extern/n64-modern-runtime/ultramodern/include"
-    "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty/concurrentqueue")
+target_include_directories(
+    DKRNativeModWorldTests
+    PRIVATE
+        ../../src/game
+        "${DKRPORT_ROOT}/extern/n64-modern-runtime/librecomp/include"
+        "${DKRPORT_ROOT}/extern/n64-modern-runtime/ultramodern/include"
+        "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty/concurrentqueue"
+)
 if(MSVC)
     target_compile_options(DKRNativeModWorldTests PRIVATE /EHs /EHc-)
 endif()
-add_executable(DKROwnedModBoundaryTests ../owned_mod_boundary_tests.cpp ../owned_mod_boundary_guest.c ../replay_probe/probe_bridge.c)
-target_include_directories(DKROwnedModBoundaryTests PRIVATE .. ../../src/game "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include")
+add_executable(
+    DKROwnedModBoundaryTests
+    ../owned_mod_boundary_tests.cpp
+    ../owned_mod_boundary_guest.c
+    ../replay_probe/probe_bridge.c
+)
+target_include_directories(
+    DKROwnedModBoundaryTests
+    PRIVATE .. ../../src/game "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include"
+)
 add_test(NAME DKROwnedModBoundaryTests COMMAND DKROwnedModBoundaryTests)
-add_executable(DKROnlineModProfileTests ../online_mod_profile_tests.cpp ../../src/game/rom_revision.cpp ../../src/game/startup_performance.cpp)
-add_executable(DKROnlineModSyncTests ../online_mod_sync_tests.cpp ../../src/game/rom_revision.cpp ../../src/game/startup_performance.cpp)
+add_executable(
+    DKROnlineModProfileTests
+    ../online_mod_profile_tests.cpp
+    ../../src/game/rom_revision.cpp
+    ../../src/game/startup_performance.cpp
+)
+add_executable(
+    DKROnlineModSyncTests
+    ../online_mod_sync_tests.cpp
+    ../../src/game/rom_revision.cpp
+    ../../src/game/startup_performance.cpp
+)
 target_link_libraries(DKROnlineModSyncTests PRIVATE DKRLegacyImportLibrary DKRLegacyModLaunch)
 target_include_directories(DKROnlineModSyncTests PRIVATE "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty")
-target_link_libraries(DKROnlineModProfileTests PRIVATE DKRLegacyImportLibrary DKROnlineModPreparation DKRLegacyModLaunch)
+target_link_libraries(
+    DKROnlineModProfileTests
+    PRIVATE DKRLegacyImportLibrary DKROnlineModPreparation DKRLegacyModLaunch
+)
 target_include_directories(DKROnlineModProfileTests PRIVATE "${DKRPORT_ROOT}/extern/n64-modern-runtime/thirdparty")
 add_test(NAME DKROnlineModProfileTests COMMAND DKROnlineModProfileTests)
 add_executable(DKROnlineModTransferTests ../online_mod_transfer_tests.cpp)
@@ -53,11 +83,17 @@ target_link_libraries(DKRLegacyModManagementTests PRIVATE DKRLegacyImportLibrary
 add_test(NAME DKRLegacyModManagementTests COMMAND DKRLegacyModManagementTests)
 set_tests_properties(DKRLegacyModManagementTests PROPERTIES TIMEOUT 90)
 set(_mod_imgui "${DKRPORT_ROOT}/extern/rt64/src/contrib/imgui")
-add_executable(DKRLegacyModBrowserUiTests ../legacy_mod_browser_ui_tests.cpp
-    "${_mod_imgui}/imgui.cpp" "${_mod_imgui}/imgui_draw.cpp"
-    "${_mod_imgui}/imgui_widgets.cpp" "${_mod_imgui}/imgui_tables.cpp"
-    ../../src/game/generated/racing_banana_font.c ../../src/game/generated/jumpman_font.c
-    ../../src/game/generated/selawik_font.c)
+add_executable(
+    DKRLegacyModBrowserUiTests
+    ../legacy_mod_browser_ui_tests.cpp
+    "${_mod_imgui}/imgui.cpp"
+    "${_mod_imgui}/imgui_draw.cpp"
+    "${_mod_imgui}/imgui_widgets.cpp"
+    "${_mod_imgui}/imgui_tables.cpp"
+    ../../src/game/generated/racing_banana_font.c
+    ../../src/game/generated/jumpman_font.c
+    ../../src/game/generated/selawik_font.c
+)
 target_include_directories(DKRLegacyModBrowserUiTests PRIVATE "${_mod_imgui}" ../../src/game)
 target_link_libraries(DKRLegacyModBrowserUiTests PRIVATE DKRLegacyImportLibrary)
 if(MSVC)
@@ -72,15 +108,17 @@ target_link_libraries(DKRLegacyModLibraryTests PRIVATE DKRLegacyModLaunch)
 add_test(NAME DKRLegacyModLibraryTests COMMAND DKRLegacyModLibraryTests "$<TARGET_FILE:DKRLegacyModWorker>")
 set_tests_properties(DKRLegacyModLibraryTests PROPERTIES TIMEOUT 60)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
-add_test(NAME DKRLegacyModPipelineGuards COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../legacy_mod_pipeline_tests.py")
+add_test(
+    NAME DKRLegacyModPipelineGuards
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../legacy_mod_pipeline_tests.py"
+)
 add_executable(DKRLegacyDkrmapArtworkTests ../legacy_dkrmap_artwork_tests.cpp ../../src/game/dkr_save_codec.cpp)
 target_link_libraries(DKRLegacyDkrmapArtworkTests PRIVATE DKRLegacyModLaunch)
 add_test(NAME DKRLegacyDkrmapArtworkTests COMMAND DKRLegacyDkrmapArtworkTests)
 # The bank checks need an owned ROM; it is never part of a public fixture.
 set(DKR_LEGACY_TEST_ROM "" CACHE FILEPATH "Owned US v1.0/v1.1 ROM for ROM-backed legacy checks")
 if(NOT DKR_LEGACY_TEST_ROM STREQUAL "")
-    add_test(NAME DKRLegacyDkrmapArtworkRomTests
-             COMMAND DKRLegacyDkrmapArtworkTests "${DKR_LEGACY_TEST_ROM}")
+    add_test(NAME DKRLegacyDkrmapArtworkRomTests COMMAND DKRLegacyDkrmapArtworkTests "${DKR_LEGACY_TEST_ROM}")
 endif()
 add_executable(DKRLegacyModTests ../legacy_mod_tests.cpp)
 target_link_libraries(DKRLegacyModTests PRIVATE DKRLegacyModCore DKRLegacyModProcess)
@@ -130,16 +168,26 @@ if(NOT DKR_LEGACY_MENU_PIPELINE_ROOT STREQUAL "")
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
 endif()
 
 # Optional regenerated character function; input remains read-only.
-set(DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT "" CACHE PATH "Private regenerated additive character-menu qualification sources")
+set(DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT
+    ""
+    CACHE PATH
+    "Private regenerated additive character-menu qualification sources"
+)
 if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
     foreach(rev IN ITEMS 77 80)
         set(target DKRLegacySpawnAssetTypeGuestV${rev})
@@ -149,25 +197,42 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
         target_include_directories(${target} PRIVATE "${generated}" ../../src/game/mods)
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
     foreach(rev IN ITEMS 77 80)
         set(target DKRLegacyAssetCapacityGuestV${rev})
         set(generated "${DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT}/RecompiledFuncs-v${rev}")
-        add_executable(${target} ../legacy_asset_capacity_guest_tests.cpp
-            "${generated}/tex_init_textures.c" "${generated}/load_texture.c"
-            "${generated}/tex_load_sprite.c" "${generated}/allocate_object_model_pools.c")
+        add_executable(
+            ${target}
+            ../legacy_asset_capacity_guest_tests.cpp
+            "${generated}/tex_init_textures.c"
+            "${generated}/load_texture.c"
+            "${generated}/tex_load_sprite.c"
+            "${generated}/allocate_object_model_pools.c"
+        )
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
@@ -184,7 +249,10 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
                 # CXX; force this C-compatible declaration header for both.
                 target_compile_options(${target} PRIVATE /FIfuncs.h "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
             else()
-                target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+                target_compile_options(
+                    ${target}
+                    PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+                )
             endif()
             add_test(NAME ${target} COMMAND ${target})
         endforeach()
@@ -193,32 +261,61 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
         set(target DKRLegacyHeapGuestV${rev})
         set(generated "${DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT}/RecompiledFuncs-v${rev}")
         add_executable(${target} ../legacy_heap_guest_tests.cpp)
-        foreach(fn IN ITEMS mempool_init_main mempool_init mempool_alloc mempool_slot_find mempool_slot_assign mempool_free_timer
-                mempool_free_addr mempool_get_pool mempool_slot_clear)
+        foreach(
+            fn
+            IN
+            ITEMS
+                mempool_init_main
+                mempool_init
+                mempool_alloc
+                mempool_slot_find
+                mempool_slot_assign
+                mempool_free_timer
+                mempool_free_addr
+                mempool_get_pool
+                mempool_slot_clear
+        )
             target_sources(${target} PRIVATE "${generated}/${fn}.c")
         endforeach()
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
     foreach(rev IN ITEMS 77 80)
         set(target DKRLegacyModelCacheGuestV${rev})
         set(generated "${DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT}/RecompiledFuncs-v${rev}")
-        add_executable(${target} ../legacy_model_cache_guest_tests.cpp
-            "${generated}/object_model_init.c" "${generated}/model_instance_init.c" "${generated}/mempool_init_main.c"
-            "${generated}/init_object_shading.c")
+        add_executable(
+            ${target}
+            ../legacy_model_cache_guest_tests.cpp
+            "${generated}/object_model_init.c"
+            "${generated}/model_instance_init.c"
+            "${generated}/mempool_init_main.c"
+            "${generated}/init_object_shading.c"
+        )
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
@@ -226,18 +323,41 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
         set(target DKRLegacyCharacterPresentationGuestV${rev})
         set(generated "${DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT}/RecompiledFuncs-v${rev}")
         add_executable(${target} ../legacy_character_presentation_guest_tests.cpp)
-        foreach(fn IN ITEMS postrace_load results_render func_80098774 play_random_character_voice racer_play_sound
-                sound_play_spatial audspat_play_sound_at_position sound_play_direct sound_play
-                hud_eggs_portrait hud_lives_render hud_treasure hud_main_hub hud_element_render menu_cinematic_loop)
+        foreach(
+            fn
+            IN
+            ITEMS
+                postrace_load
+                results_render
+                func_80098774
+                play_random_character_voice
+                racer_play_sound
+                sound_play_spatial
+                audspat_play_sound_at_position
+                sound_play_direct
+                sound_play
+                hud_eggs_portrait
+                hud_lives_render
+                hud_treasure
+                hud_main_hub
+                hud_element_render
+                menu_cinematic_loop
+        )
             target_sources(${target} PRIVATE "${generated}/${fn}.c")
         endforeach()
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
@@ -249,9 +369,15 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
@@ -268,15 +394,22 @@ if(NOT DKR_LEGACY_CHARACTER_MENU_PIPELINE_ROOT STREQUAL "")
         else()
             set(bank_helper static_3_800C7B10)
         endif()
-        add_executable(${target} ../legacy_character_audio_tests.cpp
-            "${generated}/alBnkfNew.c" "${generated}/${bank_helper}.c")
+        add_executable(
+            ${target}
+            ../legacy_character_audio_tests.cpp
+            "${generated}/alBnkfNew.c"
+            "${generated}/${bank_helper}.c"
+        )
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_AUDIO_GUEST=1)
         if(MSVC)
             target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>")
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
@@ -290,9 +423,15 @@ if(NOT DKR_LEGACY_CHARACTER_PIPELINE_ROOT STREQUAL "")
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})
         if(MSVC)
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:/FIfuncs.h>" "$<$<COMPILE_LANGUAGE:CXX>:/EHs;/EHc->"
+            )
         else()
-            target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>")
+            target_compile_options(
+                ${target}
+                PRIVATE "$<$<COMPILE_LANGUAGE:C>:-include;funcs.h;-fno-sanitize=shift-base>"
+            )
         endif()
         add_test(NAME ${target} COMMAND ${target})
     endforeach()
@@ -309,12 +448,22 @@ if(NOT DKR_LEGACY_PIPELINE_ROOT STREQUAL "")
             list(APPEND copy_sources "${generated}/dmacopy_v1.c")
         endif()
         set(target DKRLegacyGuestPipelineV${rev})
-        add_executable(${target} ../legacy_guest_pipeline_tests.cpp
-            ${copy_sources} "${generated}/__amDMA.c"
-            "${generated}/alLink.c" "${generated}/alUnlink.c" "${generated}/tex_free.c" "${generated}/alSeqFileNew.c"
-            "${generated}/asset_table_load.c" "${generated}/asset_load.c"
-            "${generated}/asset_rom_offset.c" "${generated}/asset_table_size.c"
-            "${generated}/asset_table_load_addr.c" "${generated}/asset_table_load_zipped.c")
+        add_executable(
+            ${target}
+            ../legacy_guest_pipeline_tests.cpp
+            ${copy_sources}
+            "${generated}/__amDMA.c"
+            "${generated}/alLink.c"
+            "${generated}/alUnlink.c"
+            "${generated}/tex_free.c"
+            "${generated}/alSeqFileNew.c"
+            "${generated}/asset_table_load.c"
+            "${generated}/asset_load.c"
+            "${generated}/asset_rom_offset.c"
+            "${generated}/asset_table_size.c"
+            "${generated}/asset_table_load_addr.c"
+            "${generated}/asset_table_load_zipped.c"
+        )
         target_link_libraries(${target} PRIVATE DKRLegacyGuestIO)
         target_include_directories(${target} PRIVATE "${generated}")
         target_compile_definitions(${target} PRIVATE DKR_TEST_REVISION=${rev})

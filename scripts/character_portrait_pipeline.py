@@ -26,13 +26,13 @@ WORLD_PORTRAIT = ROOT / "runtime-recomp/guest/world_portrait.inc"
 MODS = ROOT / "runtime-recomp/src/game/mods"
 # The seven native portrait edits as v1.0.11 shipped them (runtime-recomp/src).
 NATIVE_FILES = {
-    "legacy_mod_format.cpp": "b3cdd9d7bcab6f54355592f90eed0e5c9ccf98e92d331746a8e186b06982cf4d",
-    "legacy_character_materialize.hpp": "7fa418bb9fd4da9b79eab21dd98876f2b05b4496330b809e17c9359bf4eef4fb",
-    "legacy_character_materialize.cpp": "2270d3efce0dcfcef2f5364e946fe70a5d5401f11b1960917ba5449678423563",
-    "legacy_track_catalog.cpp": "ad6d37cb7196738dfe9d2a1c07af28e94e69040ebc9909ffbed30aae7055796f",
-    "legacy_track_prepare_job.hpp": "810b3cfa3c62e43c557f9d3c5d134888b7b9e3b9ad4ac7643badfd3c1e75d14c",
-    "legacy_track_prepare_job.cpp": "d1a0f6a906c261f9d8104d167da5ebc3fcf1aef686ec6142efd39c0da3f5d82d",
-    "online_mod_prepare.cpp": "e0ec53916dfd0f75582835f2198b2934164b9e5080d3766e7a2423c24063c9bb",
+    "legacy_mod_format.cpp": "c6e0f5fbd5d0e170d8b9287e003bada8c3d9da2374d36a8651feb5c539c038b1",
+    "legacy_character_materialize.hpp": "0d98b534242e0bb7a70920fe76b4f121fea9917daab777869e824548e528deac",
+    "legacy_character_materialize.cpp": "0f1eddcbdd225a488913d76492dec6b805d446ea1baaa68990df083ea24b5dbd",
+    "legacy_track_catalog.cpp": "01588b37636580694f75df9061ae4b69980d3f0693bc66fe631f8ffb970c27f6",
+    "legacy_track_prepare_job.hpp": "69859c1390da335120d1c3ed14eb91c39a7ec0a5624e6f4fd046e167e62ce4c4",
+    "legacy_track_prepare_job.cpp": "b8ebba4508b45c74a4fc3293b4ea8fdd6a84d620f1a1b8b2666b42fc44dffd38",
+    "online_mod_prepare.cpp": "55aba5aced97380f60e178b144537119430588232ed4b1335d134de45eb19836",
 }
 GUEST_PINS = {
     77: "006cc572caf0097392aeccac974dc4574813eeea81c09b6eabc5b1b7a9199842",

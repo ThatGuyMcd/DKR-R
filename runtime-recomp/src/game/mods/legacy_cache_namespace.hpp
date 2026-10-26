@@ -9,20 +9,25 @@ enum class CacheKind { Texture, Sprite, Model };
 // unchanged model bytes. This catalog is owned by a prepared immutable mount.
 // Methods are used on the serialized scene-loading thread, not per-frame/UI.
 class CacheContent {
-public:
-    CacheContent(std::shared_ptr<const AssetBank>,std::shared_ptr<const AssetBus::Mount>);
-    const std::string& identity(CacheKind kind,std::uint32_t legacy_id);
-    const std::string& revision() const {return bank_->revision();}
-    const std::string& fingerprint()const{return bank_->fingerprint();}
-private:
+  public:
+    CacheContent(std::shared_ptr<const AssetBank>, std::shared_ptr<const AssetBus::Mount>);
+    const std::string& identity(CacheKind kind, std::uint32_t legacy_id);
+    const std::string& revision() const {
+        return bank_->revision();
+    }
+    const std::string& fingerprint() const {
+        return bank_->fingerprint();
+    }
+
+  private:
     std::shared_ptr<const AssetBank> bank_;
     std::shared_ptr<const AssetBus::Mount> mount_;
-    std::map<std::pair<CacheKind,std::uint32_t>,std::string> identities_;
+    std::map<std::pair<CacheKind, std::uint32_t>, std::string> identities_;
 };
 
 struct GuestCacheTable {
     CacheKind kind;
-    std::uint32_t count_address,pointer_address;
+    std::uint32_t count_address, pointer_address;
 };
 
 // Namespace old entries instead of deleting them or changing their refcounts.
@@ -32,45 +37,49 @@ struct GuestCacheTable {
 // the corresponding resident offset tables/asset route in the same transaction.
 class CacheNamespace {
     struct Entry {
-        std::uint32_t pointer=0,legacy_id=0;
+        std::uint32_t pointer = 0, legacy_id = 0;
         std::string identity;
         std::shared_ptr<CacheContent> owner;
     };
-    using Slot=std::pair<CacheKind,unsigned>;
-public:
-    static constexpr std::uint32_t Hidden=0x40000000U;
-    CacheNamespace()=default;
+    using Slot = std::pair<CacheKind, unsigned>;
+
+  public:
+    static constexpr std::uint32_t Hidden = 0x40000000U;
+    CacheNamespace() = default;
     // Match the guest Patch Pipeline's allocation policy exactly. Only the
     // verified boot bank owns these limits; neither a scene nor a checkpoint
     // may enlarge them. The default retains unmodified retail allocations.
     explicit CacheNamespace(const AssetBank& boot);
     struct Plan {
-    private:
+      private:
         friend class CacheNamespace;
         friend class ResidentAssetState;
-        const CacheNamespace* authority=nullptr;
-        const std::uint8_t* guest_data=nullptr;
-        std::size_t guest_size=0;
-        std::uint64_t generation=0;
-        struct Word {std::uint32_t address,expected,value;};
+        const CacheNamespace* authority = nullptr;
+        const std::uint8_t* guest_data = nullptr;
+        std::size_t guest_size = 0;
+        std::uint64_t generation = 0;
+        struct Word {
+            std::uint32_t address, expected, value;
+        };
         std::vector<Word> words;
-        std::map<Slot,Entry> entries;
+        std::map<Slot, Entry> entries;
     };
-    Plan prepare(View guest_words,std::span<const GuestCacheTable> tables,
-        std::shared_ptr<CacheContent> current,std::shared_ptr<CacheContent> next) const;
+    Plan prepare(View guest_words, std::span<const GuestCacheTable> tables, std::shared_ptr<CacheContent> current,
+                 std::shared_ptr<CacheContent> next) const;
     // All compare/range checks precede every write. No allocation or guest
     // scheduler call occurs once the first ID is published. Stale plans fail
     // without changes, including a replay of an already successful plan.
-    bool apply(std::span<std::uint8_t> guest_words,Plan&& plan);
+    bool apply(std::span<std::uint8_t> guest_words, Plan&& plan);
     // Quiesced private-owner rollback. Parsing does not modify guest/native
     // state; owners are resolved from pre-admitted immutable banks.
-    Bytes checkpoint()const;
+    Bytes checkpoint() const;
     CacheNamespace stage_checkpoint(View bytes,
-        const std::map<std::string,std::shared_ptr<CacheContent>>& owners)const;
-private:
-    std::uint32_t capacity(CacheKind kind)const;
-    std::array<std::uint32_t,4> capacities_=legacy_asset_cache_capacities(false,0,0,0,0);
-    std::map<Slot,Entry> entries_;
-    std::uint64_t generation_=0;
+                                    const std::map<std::string, std::shared_ptr<CacheContent>>& owners) const;
+
+  private:
+    std::uint32_t capacity(CacheKind kind) const;
+    std::array<std::uint32_t, 4> capacities_ = legacy_asset_cache_capacities(false, 0, 0, 0, 0);
+    std::map<Slot, Entry> entries_;
+    std::uint64_t generation_ = 0;
 };
 } // namespace dkr::mods

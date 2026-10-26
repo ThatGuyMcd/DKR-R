@@ -23,7 +23,7 @@ QualificationResult qualify_replay(Simulation& isolated, std::span<const FrameIn
     try {
         std::string error;
         std::vector<std::vector<std::uint8_t>> checkpoints(inputs.size() + 1,
-            std::vector<std::uint8_t>(contract.state_bytes));
+                                                           std::vector<std::uint8_t>(contract.state_bytes));
         std::vector<TickOutput> expected(inputs.size());
         std::vector<std::uint8_t> actual(contract.state_bytes);
         if (!isolated.capture(checkpoints[0], error)) {
@@ -44,7 +44,8 @@ QualificationResult qualify_replay(Simulation& isolated, std::span<const FrameIn
                 fail(QualificationFailure::Capture, frame, error);
                 return result;
             }
-            if (expected[frame].scene_boundary) count = frame + 1U;
+            if (expected[frame].scene_boundary)
+                count = frame + 1U;
         }
         // Rewind across allocating/freeing actors, water updates and RNG at
         // every boundary. A test-only world with hidden native state must fail.
@@ -72,11 +73,13 @@ QualificationResult qualify_replay(Simulation& isolated, std::span<const FrameIn
                     return result;
                 }
                 if (output.effects != expected[frame].effects) {
-                    fail(QualificationFailure::EffectMismatch, frame, "Replay produced a different external-effect journal.");
+                    fail(QualificationFailure::EffectMismatch, frame,
+                         "Replay produced a different external-effect journal.");
                     return result;
                 }
                 if (output.scene_boundary != expected[frame].scene_boundary) {
-                    fail(QualificationFailure::BoundaryMismatch, frame, "Replay changed the scene-transition boundary.");
+                    fail(QualificationFailure::BoundaryMismatch, frame,
+                         "Replay changed the scene-transition boundary.");
                     return result;
                 }
             }

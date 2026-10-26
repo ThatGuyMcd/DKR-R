@@ -28,23 +28,21 @@ struct State {
 };
 
 class Client {
-public:
+  public:
     Client();
     ~Client();
     Client(const Client&) = delete;
     Client& operator=(const Client&) = delete;
 
-    bool start(const std::filesystem::path& host,
-               const std::filesystem::path& mapping_database,
-               std::string& error, std::stop_token stop_token = {});
+    bool start(const std::filesystem::path& host, const std::filesystem::path& mapping_database, std::string& error,
+               std::stop_token stop_token = {});
     void stop();
     bool healthy() const;
     std::string detail() const;
     State state() const;
-    bool rumble(int instance, std::uint16_t low_frequency,
-                std::uint16_t high_frequency, std::uint32_t duration_ms);
+    bool rumble(int instance, std::uint16_t low_frequency, std::uint16_t high_frequency, std::uint32_t duration_ms);
 
-private:
+  private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

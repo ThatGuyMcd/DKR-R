@@ -4,14 +4,18 @@
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
-#define CHECK(x) do { if (!(x)) throw std::runtime_error(#x); } while (false)
+#define CHECK(x)                                                                                                       \
+    do {                                                                                                               \
+        if (!(x))                                                                                                      \
+            throw std::runtime_error(#x);                                                                              \
+    } while (false)
 int main() {
     using namespace dkr::runtime::android_rotation;
     CHECK(select(rotate90, 0x1ff) == rotate90);
     CHECK(select(rotate180, rotate180) == rotate180);
     CHECK(select(rotate270, rotate270) == rotate270);
     CHECK(select(16, 0x1ff) == identity); // mirrored fallback
-    CHECK(select(16, 16) == 0); // cannot silently render an unsupported transform
+    CHECK(select(16, 16) == 0);           // cannot silently render an unsupported transform
     CHECK(select(rotate90, identity) == identity);
     CHECK(select_for_extent(rotate90, 15, {1920, 1080}, {1, 1}, {4096, 4096}) == rotate90);
     CHECK(select_for_extent(rotate90, 15, {1920, 1080}, {1920, 1080}, {1920, 1080}) == identity);
@@ -43,8 +47,10 @@ int main() {
     CHECK(dkr::runtime::presentation_tail_guard(true) == std::chrono::microseconds(250));
     CHECK(dkr::runtime::presentation_tail_guard(false) == std::chrono::milliseconds(2));
     dkr::runtime::android_frame_budget::Samples bounded;
-    for (unsigned i = 0; i < 10'000; ++i) bounded.record(double(i));
+    for (unsigned i = 0; i < 10'000; ++i)
+        bounded.record(double(i));
     CHECK(bounded.count == 10'000 && bounded.total == 49'995'000);
     CHECK(bounded.values[9999 % bounded.values.size()] == 9999);
-    std::puts("Android presentation policy: transforms, fallback, extents, crops, UV agreement, bounded diagnostics and wait guard passed.");
+    std::puts(
+        "Android presentation policy: transforms, fallback, extents, crops, UV agreement, bounded diagnostics and wait guard passed.");
 }

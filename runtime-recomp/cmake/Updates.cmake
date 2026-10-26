@@ -1,26 +1,31 @@
 # First-party update boundary. Pinned libraries are compiled unmodified;
 # no generated CPU functions or dependency checkout is edited.
-add_library(DKRUpdateEd25519 STATIC
-    "${DKR_MONOCYPHER_SOURCE}/src/optional/monocypher-ed25519.c")
-target_include_directories(DKRUpdateEd25519 PUBLIC
-    "${DKR_MONOCYPHER_SOURCE}/src/optional")
+add_library(DKRUpdateEd25519 STATIC "${DKR_MONOCYPHER_SOURCE}/src/optional/monocypher-ed25519.c")
+target_include_directories(DKRUpdateEd25519 PUBLIC "${DKR_MONOCYPHER_SOURCE}/src/optional")
 target_link_libraries(DKRUpdateEd25519 PUBLIC DKRNetplayCrypto)
 if(TARGET mbedcrypto)
     set(_dkr_update_hash mbedcrypto)
 else()
-    add_library(DKRUpdateHash STATIC
+    add_library(
+        DKRUpdateHash
+        STATIC
         "${DKR_MBEDTLS_SOURCE}/library/sha256.c"
-        "${DKR_MBEDTLS_SOURCE}/library/platform_util.c")
-    target_include_directories(DKRUpdateHash PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/../src/game/updates" "${DKR_MBEDTLS_SOURCE}/include")
+        "${DKR_MBEDTLS_SOURCE}/library/platform_util.c"
+    )
+    target_include_directories(
+        DKRUpdateHash
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/game/updates" "${DKR_MBEDTLS_SOURCE}/include"
+    )
     target_compile_definitions(DKRUpdateHash PUBLIC MBEDTLS_CONFIG_FILE="update_hash_config.h")
     set(_dkr_update_hash DKRUpdateHash)
 endif()
 add_library(DKRUpdateZip STATIC "${DKR_RT64_SOURCE}/src/contrib/miniz/miniz.c")
 add_library(DKRUpdateCore STATIC src/game/updates/update_core.cpp)
-target_include_directories(DKRUpdateCore PUBLIC src/game/updates PRIVATE
-    "${DKR_RT64_SOURCE}/src/contrib" "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty"
-    "${DKR_MBEDTLS_SOURCE}/include")
+target_include_directories(
+    DKRUpdateCore
+    PUBLIC src/game/updates
+    PRIVATE "${DKR_RT64_SOURCE}/src/contrib" "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty" "${DKR_MBEDTLS_SOURCE}/include"
+)
 target_compile_definitions(DKRUpdateCore PRIVATE NOMINMAX)
 target_link_libraries(DKRUpdateCore PUBLIC DKRUpdateEd25519 PRIVATE DKRUpdateZip ${_dkr_update_hash})
 
@@ -31,8 +36,11 @@ if(NOT _dkr_update_key_length EQUAL 64 OR NOT DKR_UPDATE_PUBLIC_KEY MATCHES "^[0
     message(FATAL_ERROR "Invalid pinned DKR-R update verification key")
 endif()
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated/updates")
-configure_file("${CMAKE_CURRENT_LIST_DIR}/update_trust.hpp.in"
-    "${CMAKE_BINARY_DIR}/generated/updates/update_trust.hpp" @ONLY)
+configure_file(
+    "${CMAKE_CURRENT_LIST_DIR}/update_trust.hpp.in"
+    "${CMAKE_BINARY_DIR}/generated/updates/update_trust.hpp"
+    @ONLY
+)
 target_include_directories(DKRUpdateCore PUBLIC "${CMAKE_BINARY_DIR}/generated/updates")
 find_package(Threads REQUIRED)
 add_library(DKRUpdateInstall STATIC src/game/updates/update_process.cpp src/game/updates/update_install.cpp)
@@ -65,20 +73,28 @@ if(NOT ANDROID AND NOT IOS)
     set_target_properties(DKRUpdateHelper PROPERTIES OUTPUT_NAME "DKR-R-Updater")
     foreach(config Debug Release RelWithDebInfo MinSizeRel)
         string(TOUPPER "${config}" upper)
-        set_target_properties(DKRUpdateHelper PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${upper}
-            "${CMAKE_BINARY_DIR}/bin/${config}/libexec/dkr-r")
+        set_target_properties(
+            DKRUpdateHelper
+            PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${upper} "${CMAKE_BINARY_DIR}/bin/${config}/libexec/dkr-r"
+        )
     endforeach()
     if(WIN32)
         add_executable(DKRUpdateLauncher WIN32 src/game/updates/update_bootstrap_win.cpp resources/dkr-r.rc)
         target_link_libraries(DKRUpdateLauncher PRIVATE DKRUpdateInstall)
         string(REPLACE "." "," _dkr_update_resource_version "${DKR_RELEASE_VERSION_NUMERIC}")
-        target_compile_definitions(DKRUpdateLauncher PRIVATE
-            DKR_RELEASE_VERSION="${DKR_RELEASE_VERSION}"
-            "DKR_RELEASE_RESOURCE_VERSION=${_dkr_update_resource_version},${DKR_RELEASE_BUILD_NUMBER}")
+        target_compile_definitions(
+            DKRUpdateLauncher
+            PRIVATE
+                DKR_RELEASE_VERSION="${DKR_RELEASE_VERSION}"
+                "DKR_RELEASE_RESOURCE_VERSION=${_dkr_update_resource_version},${DKR_RELEASE_BUILD_NUMBER}"
+        )
         set_target_properties(DKRUpdateLauncher PROPERTIES OUTPUT_NAME "DKR-R")
         foreach(config Debug Release RelWithDebInfo MinSizeRel)
             string(TOUPPER "${config}" upper)
-            set_target_properties(DKRUpdateLauncher PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${upper} "${CMAKE_BINARY_DIR}/bin/${config}")
+            set_target_properties(
+                DKRUpdateLauncher
+                PROPERTIES RUNTIME_OUTPUT_DIRECTORY_${upper} "${CMAKE_BINARY_DIR}/bin/${config}"
+            )
         endforeach()
     endif()
 endif()

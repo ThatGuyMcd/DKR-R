@@ -9,8 +9,7 @@ set(_sdl_source "${DKR_ANDROID_SDL2_SOURCE}/src/core/android/SDL_android.c")
 file(MAKE_DIRECTORY "${_sdl_stage}/src/core/android")
 configure_file("${_sdl_source}" "${_sdl_stage}/src/core/android/SDL_android.c" COPYONLY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_sdl_patch}")
-execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${_sdl_stage}"
-    RESULT_VARIABLE _result ERROR_VARIABLE _error)
+execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${_sdl_stage}" RESULT_VARIABLE _result ERROR_VARIABLE _error)
 if(NOT _result EQUAL 0)
     message(FATAL_ERROR "Cannot initialize Android SDL patch stage: ${_error}")
 endif()
@@ -19,9 +18,11 @@ foreach(_mode IN ITEMS check apply)
     if(_mode STREQUAL "check")
         set(_flags --check)
     endif()
-    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_sdl_stage}" apply
-        ${_flags} --whitespace=error "${_sdl_patch}"
-        RESULT_VARIABLE _result ERROR_VARIABLE _error)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${_sdl_stage}" apply ${_flags} --whitespace=error "${_sdl_patch}"
+        RESULT_VARIABLE _result
+        ERROR_VARIABLE _error
+    )
     if(NOT _result EQUAL 0)
         message(FATAL_ERROR "Android SDL patch ${_mode} failed: ${_error}")
     endif()
@@ -35,6 +36,9 @@ if(NOT _count EQUAL 1)
 endif()
 list(REMOVE_ITEM _sources ${_matches})
 list(APPEND _sources "${_sdl_stage}/src/core/android/SDL_android.c")
-set_source_files_properties("${_sdl_stage}/src/core/android/SDL_android.c" TARGET_DIRECTORY SDL2
-    PROPERTIES INCLUDE_DIRECTORIES "${DKR_ANDROID_SDL2_SOURCE}/src/core/android")
+set_source_files_properties(
+    "${_sdl_stage}/src/core/android/SDL_android.c"
+    TARGET_DIRECTORY SDL2
+    PROPERTIES INCLUDE_DIRECTORIES "${DKR_ANDROID_SDL2_SOURCE}/src/core/android"
+)
 set_property(TARGET SDL2 PROPERTY SOURCES "${_sources}")

@@ -72,8 +72,7 @@ std::array<std::atomic<float>, kControllerCount> g_physical_stick_x{};
 std::array<std::atomic<float>, kControllerCount> g_physical_stick_y{};
 std::atomic<bool> g_online_input_routing{false};
 std::atomic<std::uint8_t> g_online_occupied_mask{0U};
-std::atomic<std::uint8_t> g_online_local_slot{
-    dkr::runtime::netplay::kNoOnlinePlayerSlot};
+std::atomic<std::uint8_t> g_online_local_slot{dkr::runtime::netplay::kNoOnlinePlayerSlot};
 std::atomic<std::size_t> g_online_input_profile{0U};
 std::atomic<float> g_master_volume{1.0F};
 std::atomic<float> g_bass_gain{0.0F};
@@ -117,8 +116,7 @@ dkr::runtime::sdl3_input::Client g_sdl3_input_client;
 dkr::runtime::sdl3_input::State g_sdl3_input_state{};
 std::array<int, kControllerCount> g_sdl3_player_instances{-1, -1, -1, -1};
 std::array<int, kControllerCount> g_sdl3_gyro_instances{-1, -1, -1, -1};
-std::unordered_map<int, dkr::runtime::controllers::ControllerSnapshot>
-    g_sdl3_previous_event_state;
+std::unordered_map<int, dkr::runtime::controllers::ControllerSnapshot> g_sdl3_previous_event_state;
 enum class Sdl3ProbeState : std::uint8_t {
     Idle,
     Running,
@@ -184,28 +182,22 @@ bool g_cursor_was_fullscreen = false;
 
 constexpr double kPi = 3.14159265358979323846;
 
-float SynthesiseCartridgeTone(double phase, float progress,
-                              float remaining_fraction) {
+float SynthesiseCartridgeTone(double phase, float progress, float remaining_fraction) {
     const double sine = std::sin(phase);
-    const float triangle = static_cast<float>(
-        (2.0 / kPi) * std::asin(sine));
+    const float triangle = static_cast<float>((2.0 / kPi) * std::asin(sine));
     const float pulse = sine >= 0.0 ? 1.0F : -1.0F;
     const float octave = static_cast<float>(std::sin(phase * 2.0));
     const float voice = triangle * 0.58F + pulse * 0.20F + octave * 0.22F;
 
     const float attack_position = std::clamp(progress / 0.055F, 0.0F, 1.0F);
-    const float attack = attack_position * attack_position *
-                         (3.0F - 2.0F * attack_position);
-    const float release_position = std::clamp(
-        remaining_fraction / 0.28F, 0.0F, 1.0F);
-    const float release = release_position * release_position *
-                          (3.0F - 2.0F * release_position);
+    const float attack = attack_position * attack_position * (3.0F - 2.0F * attack_position);
+    const float release_position = std::clamp(remaining_fraction / 0.28F, 0.0F, 1.0F);
+    const float release = release_position * release_position * (3.0F - 2.0F * release_position);
     const float pluck = 1.0F - progress * 0.30F;
     return voice * 5000.0F * attack * release * pluck;
 }
 
-bool QueueStandaloneUiToneLocked(float frequency_hz,
-                                 std::uint32_t duration_ms) {
+bool QueueStandaloneUiToneLocked(float frequency_hz, std::uint32_t duration_ms) {
     constexpr std::uint32_t kUiSampleRate = 48'000U;
     if (g_ui_audio_device == 0) {
         SDL_AudioSpec desired{};
@@ -214,31 +206,24 @@ bool QueueStandaloneUiToneLocked(float frequency_hz,
         desired.format = AUDIO_S16SYS;
         desired.channels = 2;
         desired.samples = 512;
-        g_ui_audio_device = SDL_OpenAudioDevice(
-            nullptr, 0, &desired, &obtained, 0);
+        g_ui_audio_device = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
         if (g_ui_audio_device == 0) {
-            std::fprintf(stderr,
-                         "[boot][audio] launcher cue device open failed: %s\n",
-                         SDL_GetError());
+            std::fprintf(stderr, "[boot][audio] launcher cue device open failed: %s\n", SDL_GetError());
             return false;
         }
     }
 
-    const std::size_t frame_count = std::max<std::size_t>(
-        (static_cast<std::size_t>(kUiSampleRate) * duration_ms) / 1000U, 1U);
+    const std::size_t frame_count =
+        std::max<std::size_t>((static_cast<std::size_t>(kUiSampleRate) * duration_ms) / 1000U, 1U);
     g_ui_tone_buffer.resize(frame_count * 2U);
     double phase = 0.0;
-    const double phase_step = (2.0 * kPi * static_cast<double>(frequency_hz)) /
-                              static_cast<double>(kUiSampleRate);
+    const double phase_step = (2.0 * kPi * static_cast<double>(frequency_hz)) / static_cast<double>(kUiSampleRate);
     const float master = g_master_volume.load(std::memory_order_relaxed);
     for (std::size_t frame = 0; frame < frame_count; ++frame) {
-        const float progress = static_cast<float>(frame) /
-                               static_cast<float>(frame_count);
+        const float progress = static_cast<float>(frame) / static_cast<float>(frame_count);
         const float remaining = 1.0F - progress;
-        const long sample = std::lround(
-            SynthesiseCartridgeTone(phase, progress, remaining) * master);
-        const auto clamped = static_cast<std::int16_t>(
-            std::clamp(sample, -32768L, 32767L));
+        const long sample = std::lround(SynthesiseCartridgeTone(phase, progress, remaining) * master);
+        const auto clamped = static_cast<std::int16_t>(std::clamp(sample, -32768L, 32767L));
         g_ui_tone_buffer[frame * 2U] = clamped;
         g_ui_tone_buffer[frame * 2U + 1U] = clamped;
         phase += phase_step;
@@ -248,12 +233,9 @@ bool QueueStandaloneUiToneLocked(float frequency_hz,
     }
 
     SDL_ClearQueuedAudio(g_ui_audio_device);
-    const auto byte_count = static_cast<Uint32>(
-        g_ui_tone_buffer.size() * sizeof(std::int16_t));
-    if (SDL_QueueAudio(g_ui_audio_device, g_ui_tone_buffer.data(),
-                       byte_count) != 0) {
-        std::fprintf(stderr, "[boot][audio] launcher cue queue failed: %s\n",
-                     SDL_GetError());
+    const auto byte_count = static_cast<Uint32>(g_ui_tone_buffer.size() * sizeof(std::int16_t));
+    if (SDL_QueueAudio(g_ui_audio_device, g_ui_tone_buffer.data(), byte_count) != 0) {
+        std::fprintf(stderr, "[boot][audio] launcher cue queue failed: %s\n", SDL_GetError());
         return false;
     }
     SDL_PauseAudioDevice(g_ui_audio_device, 0);
@@ -265,15 +247,12 @@ float NormaliseAxis(Sint16 value, Sint16 deadzone = 7849) {
     if (magnitude <= deadzone) {
         return 0.0F;
     }
-    const float scaled = static_cast<float>(magnitude - deadzone) /
-                         static_cast<float>(32767 - deadzone);
+    const float scaled = static_cast<float>(magnitude - deadzone) / static_cast<float>(32767 - deadzone);
     return std::copysign(std::min(scaled, 1.0F), static_cast<float>(value));
 }
 
 float NormalisePreviewAxis(Sint16 value) {
-    return value >= 0
-        ? static_cast<float>(value) / 32767.0F
-        : static_cast<float>(value) / 32768.0F;
+    return value >= 0 ? static_cast<float>(value) / 32767.0F : static_cast<float>(value) / 32768.0F;
 }
 
 std::string HashControllerIdentity(const std::string& identity) {
@@ -283,8 +262,7 @@ std::string HashControllerIdentity(const std::string& identity) {
         hash *= 1099511628211ULL;
     }
     char encoded[17]{};
-    std::snprintf(encoded, sizeof(encoded), "%016llx",
-                  static_cast<unsigned long long>(hash));
+    std::snprintf(encoded, sizeof(encoded), "%016llx", static_cast<unsigned long long>(hash));
     return encoded;
 }
 
@@ -306,30 +284,23 @@ std::filesystem::path RuntimeAssetPath(const std::filesystem::path& relative) {
             return candidate;
         }
     }
-    const std::filesystem::path candidate =
-        std::filesystem::current_path() / relative;
+    const std::filesystem::path candidate = std::filesystem::current_path() / relative;
     std::error_code error;
-    return std::filesystem::is_regular_file(candidate, error)
-        ? candidate : std::filesystem::path{};
+    return std::filesystem::is_regular_file(candidate, error) ? candidate : std::filesystem::path{};
 }
 
 std::string LowerText(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char character) {
-                       return static_cast<char>(std::tolower(character));
-                   });
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
     return value;
 }
 
-dkr::runtime::platform::InputBackend ParseInputBackend(
-    const std::string& value) {
+dkr::runtime::platform::InputBackend ParseInputBackend(const std::string& value) {
     const std::string normalized = LowerText(value);
-    if (normalized == "sdl3" || normalized == "sdl3_native" ||
-        normalized == "2") {
+    if (normalized == "sdl3" || normalized == "sdl3_native" || normalized == "2") {
         return dkr::runtime::platform::InputBackend::SDL3Native;
     }
-    if (normalized == "sdl2" || normalized == "sdl2_compatibility" ||
-        normalized == "1") {
+    if (normalized == "sdl2" || normalized == "sdl2_compatibility" || normalized == "1") {
         return dkr::runtime::platform::InputBackend::SDL2Compatibility;
     }
     return dkr::runtime::platform::InputBackend::Automatic;
@@ -339,19 +310,16 @@ bool IsSteamDeckHost() {
 #if defined(_WIN32)
     return false;
 #else
-    if (const char* deck = std::getenv("SteamDeck");
-        deck != nullptr && std::string(deck) == "1") {
+    if (const char* deck = std::getenv("SteamDeck"); deck != nullptr && std::string(deck) == "1") {
         return true;
     }
-    for (const std::filesystem::path path : {
-             std::filesystem::path("/sys/class/dmi/id/board_vendor"),
-             std::filesystem::path("/sys/class/dmi/id/product_name")}) {
+    for (const std::filesystem::path path : {std::filesystem::path("/sys/class/dmi/id/board_vendor"),
+                                             std::filesystem::path("/sys/class/dmi/id/product_name")}) {
         std::ifstream input(path);
         std::string text;
         std::getline(input, text);
         text = LowerText(text);
-        if (text.find("valve") != std::string::npos ||
-            text.find("jupiter") != std::string::npos ||
+        if (text.find("valve") != std::string::npos || text.find("jupiter") != std::string::npos ||
             text.find("galileo") != std::string::npos) {
             return true;
         }
@@ -361,9 +329,8 @@ bool IsSteamDeckHost() {
 }
 
 bool ShouldTrySdl3Input() {
-    return dkr::runtime::platform::resolve_input_backend(
-               g_requested_input_backend.load(std::memory_order_acquire),
-               IsSteamDeckHost(), DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0) ==
+    return dkr::runtime::platform::resolve_input_backend(g_requested_input_backend.load(std::memory_order_acquire),
+                                                         IsSteamDeckHost(), DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0) ==
            dkr::runtime::platform::InputBackend::SDL3Native;
 }
 
@@ -372,7 +339,8 @@ std::filesystem::path RuntimeInputHostPath() {
         override_path != nullptr && *override_path != '\0') {
         std::filesystem::path candidate(override_path);
         std::error_code error;
-        if (std::filesystem::is_regular_file(candidate, error)) return candidate;
+        if (std::filesystem::is_regular_file(candidate, error))
+            return candidate;
     }
 #if defined(_WIN32)
     constexpr const char* kHostName = "DKR-R-InputHost.exe";
@@ -384,12 +352,10 @@ std::filesystem::path RuntimeInputHostPath() {
         const std::filesystem::path directory(base);
         SDL_free(base);
         candidates.push_back(directory / "libexec" / "dkr-r" / kHostName);
-        candidates.push_back(directory / ".." / "libexec" / "dkr-r" /
-                             kHostName);
+        candidates.push_back(directory / ".." / "libexec" / "dkr-r" / kHostName);
         candidates.push_back(directory / kHostName);
     }
-    candidates.push_back(std::filesystem::current_path() / "libexec" /
-                         "dkr-r" / kHostName);
+    candidates.push_back(std::filesystem::current_path() / "libexec" / "dkr-r" / kHostName);
     for (const auto& candidate : candidates) {
         std::error_code error;
         if (std::filesystem::is_regular_file(candidate, error)) {
@@ -401,20 +367,17 @@ std::filesystem::path RuntimeInputHostPath() {
 
 std::string JoystickGuidText(int device_index) {
     char guid_text[33]{};
-    SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(device_index),
-                              guid_text, sizeof(guid_text));
+    SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(device_index), guid_text, sizeof(guid_text));
     return guid_text;
 }
 
 std::string ControllerPersistentKey(int device_index, SDL_Joystick* joystick) {
     std::string identity;
 #if SDL_VERSION_ATLEAST(2, 0, 14)
-    if (const char* serial = SDL_JoystickGetSerial(joystick);
-        serial != nullptr && *serial != '\0') {
+    if (const char* serial = SDL_JoystickGetSerial(joystick); serial != nullptr && *serial != '\0') {
         identity = "serial:" + std::string(serial);
 #if SDL_VERSION_ATLEAST(2, 24, 0)
-    } else if (const char* path = SDL_JoystickPathForIndex(device_index);
-               path != nullptr && *path != '\0') {
+    } else if (const char* path = SDL_JoystickPathForIndex(device_index); path != nullptr && *path != '\0') {
         identity = "path:" + std::string(path);
 #endif
     }
@@ -428,8 +391,7 @@ std::string ControllerPersistentKey(int device_index, SDL_Joystick* joystick) {
     return HashControllerIdentity(identity);
 }
 
-void CollectMappingGuids(const std::filesystem::path& path,
-                         std::unordered_set<std::string>& output) {
+void CollectMappingGuids(const std::filesystem::path& path, std::unordered_set<std::string>& output) {
     std::ifstream input(path);
     std::string line;
     while (std::getline(input, line)) {
@@ -443,8 +405,7 @@ void CollectMappingGuids(const std::filesystem::path& path,
     }
 }
 
-int LoadControllerMappings(const std::filesystem::path& path,
-                           std::unordered_set<std::string>& guid_set,
+int LoadControllerMappings(const std::filesystem::path& path, std::unordered_set<std::string>& guid_set,
                            const char* label) {
     std::error_code error;
     if (path.empty() || !std::filesystem::is_regular_file(path, error)) {
@@ -453,8 +414,7 @@ int LoadControllerMappings(const std::filesystem::path& path,
     }
     const int count = SDL_GameControllerAddMappingsFromFile(PathUtf8(path).c_str());
     if (count < 0) {
-        std::fprintf(stderr, "[boot][input] %s mappings failed: %s\n",
-                     label, SDL_GetError());
+        std::fprintf(stderr, "[boot][input] %s mappings failed: %s\n", label, SDL_GetError());
         return 0;
     }
     CollectMappingGuids(path, guid_set);
@@ -473,28 +433,21 @@ std::string MappingSourceForGuid(const std::string& guid) {
 }
 
 bool ControllerRecordAttached(const ControllerRecord& record) {
-    return record.mapped
-        ? record.controller != nullptr &&
-              SDL_GameControllerGetAttached(record.controller) == SDL_TRUE
-        : record.joystick != nullptr &&
-              SDL_JoystickGetAttached(record.joystick) == SDL_TRUE;
+    return record.mapped ? record.controller != nullptr && SDL_GameControllerGetAttached(record.controller) == SDL_TRUE
+                         : record.joystick != nullptr && SDL_JoystickGetAttached(record.joystick) == SDL_TRUE;
 }
 
 bool IsNativeSteamDeckGyro(const ControllerRecord& record) {
-    if (!record.mapped || record.controller == nullptr || !record.gyro ||
-        !ControllerRecordAttached(record)) {
+    if (!record.mapped || record.controller == nullptr || !record.gyro || !ControllerRecordAttached(record)) {
         return false;
     }
 
     constexpr char kSteamDeckName[] = "steam deck";
-    return std::search(
-               record.name.begin(), record.name.end(),
-               kSteamDeckName,
-               kSteamDeckName + sizeof(kSteamDeckName) - 1U,
-               [](char left, char right) {
-                   return std::tolower(static_cast<unsigned char>(left)) ==
-                          std::tolower(static_cast<unsigned char>(right));
-               }) != record.name.end();
+    return std::search(record.name.begin(), record.name.end(), kSteamDeckName,
+                       kSteamDeckName + sizeof(kSteamDeckName) - 1U, [](char left, char right) {
+                           return std::tolower(static_cast<unsigned char>(left)) ==
+                                  std::tolower(static_cast<unsigned char>(right));
+                       }) != record.name.end();
 }
 
 void CloseControllerRecord(ControllerRecord& record) {
@@ -515,30 +468,23 @@ void ReconcileControllers() {
         if (!record.mapped || record.controller == nullptr) {
             continue;
         }
-        devices.push_back({static_cast<int>(record.instance),
-                           record.persistent_key});
+        devices.push_back({static_cast<int>(record.instance), record.persistent_key});
         SDL_GameControllerSetPlayerIndex(record.controller, -1);
     }
-    if (g_controller_assignment_mode ==
-        dkr::runtime::controllers::AssignmentMode::Automatic) {
-        dkr::runtime::controllers::populate_automatic_claims(
-            g_controller_assignments, devices);
+    if (g_controller_assignment_mode == dkr::runtime::controllers::AssignmentMode::Automatic) {
+        dkr::runtime::controllers::populate_automatic_claims(g_controller_assignments, devices);
     }
-    const auto resolved = dkr::runtime::controllers::resolve(
-        g_controller_assignments, devices);
+    const auto resolved = dkr::runtime::controllers::resolve(g_controller_assignments, devices);
     const auto previous = g_controllers;
     g_controllers.fill(nullptr);
     for (std::size_t player = 0; player < kControllerCount; ++player) {
-        const auto match = std::find_if(
-            g_controller_devices.begin(), g_controller_devices.end(),
-            [&](const ControllerRecord& record) {
-                return record.mapped &&
-                       record.instance == resolved[player];
+        const auto match =
+            std::find_if(g_controller_devices.begin(), g_controller_devices.end(), [&](const ControllerRecord& record) {
+                return record.mapped && record.instance == resolved[player];
             });
         if (match != g_controller_devices.end()) {
             g_controllers[player] = match->controller;
-            SDL_GameControllerSetPlayerIndex(match->controller,
-                                             static_cast<int>(player));
+            SDL_GameControllerSetPlayerIndex(match->controller, static_cast<int>(player));
         }
         if (previous[player] != g_controllers[player]) {
             g_buttons[player].store(0, std::memory_order_release);
@@ -550,8 +496,7 @@ void ReconcileControllers() {
     for (std::size_t player = 0; player < kControllerCount; ++player) {
         SDL_GameController* selected_gyro = nullptr;
         if (g_controllers[player] != nullptr &&
-            SDL_GameControllerHasSensor(g_controllers[player],
-                                        SDL_SENSOR_GYRO) == SDL_TRUE) {
+            SDL_GameControllerHasSensor(g_controllers[player], SDL_SENSOR_GYRO) == SDL_TRUE) {
             selected_gyro = g_controllers[player];
         }
         // SteamOS can expose gameplay through Steam Input's virtual pad while
@@ -560,9 +505,8 @@ void ReconcileControllers() {
         // use that native sensor only as Player 1's gyro source when the
         // assigned virtual pad has no gyro of its own.
         if (player == 0U && selected_gyro == nullptr) {
-            const auto native_deck = std::find_if(
-                g_controller_devices.begin(), g_controller_devices.end(),
-                IsNativeSteamDeckGyro);
+            const auto native_deck =
+                std::find_if(g_controller_devices.begin(), g_controller_devices.end(), IsNativeSteamDeckGyro);
             if (native_deck != g_controller_devices.end()) {
                 selected_gyro = native_deck->controller;
             }
@@ -570,23 +514,16 @@ void ReconcileControllers() {
         if (selected_gyro != g_gyro_controllers[player]) {
             g_gyro_controllers[player] = selected_gyro;
             if (selected_gyro != nullptr) {
-                if (SDL_GameControllerSetSensorEnabled(
-                        selected_gyro, SDL_SENSOR_GYRO, SDL_TRUE) != 0) {
-                    std::fprintf(stderr,
-                                 "[boot][input] player %zu gyro enable failed: %s\n",
-                                 player + 1U, SDL_GetError());
+                if (SDL_GameControllerSetSensorEnabled(selected_gyro, SDL_SENSOR_GYRO, SDL_TRUE) != 0) {
+                    std::fprintf(stderr, "[boot][input] player %zu gyro enable failed: %s\n", player + 1U,
+                                 SDL_GetError());
                 } else {
-                    const char* source_name =
-                        SDL_GameControllerName(selected_gyro);
-                    const float sensor_rate =
-                        SDL_GameControllerGetSensorDataRate(
-                            selected_gyro, SDL_SENSOR_GYRO);
+                    const char* source_name = SDL_GameControllerName(selected_gyro);
+                    const float sensor_rate = SDL_GameControllerGetSensorDataRate(selected_gyro, SDL_SENSOR_GYRO);
                     std::fprintf(stderr,
                                  "[boot][input] player %zu gyro source=%s "
                                  "rate=%.1fHz timestamped=yes\n",
-                                 player + 1U,
-                                 source_name != nullptr ? source_name
-                                                        : "unnamed SDL controller",
+                                 player + 1U, source_name != nullptr ? source_name : "unnamed SDL controller",
                                  sensor_rate);
                 }
             }
@@ -611,18 +548,16 @@ void RefreshControllers(bool force = true) {
     static auto next_inventory_check = std::chrono::steady_clock::time_point{};
     const auto now = std::chrono::steady_clock::now();
     const bool dirty = g_controller_inventory_dirty.exchange(false, std::memory_order_relaxed);
-    if (!force && !dirty && now < next_inventory_check) return;
+    if (!force && !dirty && now < next_inventory_check)
+        return;
     next_inventory_check = now + std::chrono::seconds(1);
-    for (auto iterator = g_controller_devices.begin();
-         iterator != g_controller_devices.end();) {
+    for (auto iterator = g_controller_devices.begin(); iterator != g_controller_devices.end();) {
         if (!ControllerRecordAttached(*iterator)) {
-            if (g_mapping_session.state ==
-                    ControllerMappingSession::State::Capturing &&
+            if (g_mapping_session.state == ControllerMappingSession::State::Capturing &&
                 g_mapping_session.instance == iterator->instance) {
                 g_mapping_session.state = ControllerMappingSession::State::Complete;
                 g_mapping_session.success = false;
-                g_mapping_session.message =
-                    "The controller disconnected before setup finished.";
+                g_mapping_session.message = "The controller disconnected before setup finished.";
             }
             CloseControllerRecord(*iterator);
             iterator = g_controller_devices.erase(iterator);
@@ -632,11 +567,9 @@ void RefreshControllers(bool force = true) {
     }
     for (int index = 0; index < SDL_NumJoysticks(); ++index) {
         const SDL_JoystickID instance = SDL_JoystickGetDeviceInstanceID(index);
-        const bool already_open = std::any_of(
-            g_controller_devices.begin(), g_controller_devices.end(),
-            [instance](const ControllerRecord& record) {
-                return record.instance == instance;
-            });
+        const bool already_open =
+            std::any_of(g_controller_devices.begin(), g_controller_devices.end(),
+                        [instance](const ControllerRecord& record) { return record.instance == instance; });
         if (already_open) {
             continue;
         }
@@ -648,36 +581,28 @@ void RefreshControllers(bool force = true) {
         if (mapped) {
             record.controller = SDL_GameControllerOpen(index);
             if (record.controller == nullptr) {
-                std::fprintf(stderr,
-                             "[boot][input] failed to open mapped controller: %s\n",
-                             SDL_GetError());
+                std::fprintf(stderr, "[boot][input] failed to open mapped controller: %s\n", SDL_GetError());
                 continue;
             }
             record.joystick = SDL_GameControllerGetJoystick(record.controller);
             const char* name = SDL_GameControllerName(record.controller);
-            record.name = name != nullptr && *name != '\0'
-                ? name : "Game controller";
+            record.name = name != nullptr && *name != '\0' ? name : "Game controller";
             record.persistent_key = ControllerPersistentKey(index, record.joystick);
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-            record.rumble =
-                SDL_GameControllerHasRumble(record.controller) == SDL_TRUE;
+            record.rumble = SDL_GameControllerHasRumble(record.controller) == SDL_TRUE;
 #else
             record.rumble = true;
 #endif
-            record.gyro = SDL_GameControllerHasSensor(
-                record.controller, SDL_SENSOR_GYRO) == SDL_TRUE;
+            record.gyro = SDL_GameControllerHasSensor(record.controller, SDL_SENSOR_GYRO) == SDL_TRUE;
             record.mapping_source = MappingSourceForGuid(guid);
         } else {
             record.joystick = SDL_JoystickOpen(index);
             if (record.joystick == nullptr) {
-                std::fprintf(stderr,
-                             "[boot][input] failed to open raw controller: %s\n",
-                             SDL_GetError());
+                std::fprintf(stderr, "[boot][input] failed to open raw controller: %s\n", SDL_GetError());
                 continue;
             }
             const char* name = SDL_JoystickName(record.joystick);
-            record.name = name != nullptr && *name != '\0'
-                ? name : "Unmapped controller";
+            record.name = name != nullptr && *name != '\0' ? name : "Unmapped controller";
             record.persistent_key = ControllerPersistentKey(index, record.joystick);
 #if SDL_VERSION_ATLEAST(2, 0, 18)
             record.rumble = SDL_JoystickHasRumble(record.joystick) == SDL_TRUE;
@@ -689,18 +614,13 @@ void RefreshControllers(bool force = true) {
             // deterministic session suffix for drivers which expose neither.
             const std::string base_key = record.persistent_key;
             int duplicate = 1;
-            while (std::any_of(g_controller_devices.begin(),
-                               g_controller_devices.end(),
-                               [&](const ControllerRecord& existing) {
-                                   return existing.persistent_key ==
-                                       record.persistent_key;
-                               })) {
-                record.persistent_key = base_key + "-" +
-                                        std::to_string(++duplicate);
+            while (std::any_of(
+                g_controller_devices.begin(), g_controller_devices.end(),
+                [&](const ControllerRecord& existing) { return existing.persistent_key == record.persistent_key; })) {
+                record.persistent_key = base_key + "-" + std::to_string(++duplicate);
             }
-            std::fprintf(stderr,
-                         "[boot][input] connected controller=%s mapping=%s\n",
-                         record.name.c_str(), record.mapping_source.c_str());
+            std::fprintf(stderr, "[boot][input] connected controller=%s mapping=%s\n", record.name.c_str(),
+                         record.mapping_source.c_str());
             g_controller_devices.push_back(std::move(record));
         }
     }
@@ -708,11 +628,10 @@ void RefreshControllers(bool force = true) {
 }
 
 const dkr::runtime::sdl3_input::Device* Sdl3DeviceForInstance(int instance) {
-    const auto match = std::find_if(
-        g_sdl3_input_state.devices.begin(), g_sdl3_input_state.devices.end(),
-        [instance](const dkr::runtime::sdl3_input::Device& device) {
-            return device.instance == instance && device.snapshot.connected;
-        });
+    const auto match = std::find_if(g_sdl3_input_state.devices.begin(), g_sdl3_input_state.devices.end(),
+                                    [instance](const dkr::runtime::sdl3_input::Device& device) {
+                                        return device.instance == instance && device.snapshot.connected;
+                                    });
     return match != g_sdl3_input_state.devices.end() ? &*match : nullptr;
 }
 
@@ -726,32 +645,25 @@ void ReconcileSdl3Controllers() {
     devices.reserve(g_sdl3_input_state.devices.size());
     for (const auto& device : g_sdl3_input_state.devices) {
         if (device.snapshot.connected && device.mapped) {
-            devices.push_back({
-                device.instance,
-                dkr::runtime::platform::canonical_controller_key(
-                    device.persistent_key)});
+            devices.push_back(
+                {device.instance, dkr::runtime::platform::canonical_controller_key(device.persistent_key)});
         }
     }
-    if (g_controller_assignment_mode ==
-        dkr::runtime::controllers::AssignmentMode::Automatic) {
-        dkr::runtime::controllers::populate_automatic_claims(
-            g_controller_assignments, devices);
+    if (g_controller_assignment_mode == dkr::runtime::controllers::AssignmentMode::Automatic) {
+        dkr::runtime::controllers::populate_automatic_claims(g_controller_assignments, devices);
     }
-    const auto resolved = dkr::runtime::controllers::resolve(
-        g_controller_assignments, devices);
+    const auto resolved = dkr::runtime::controllers::resolve(g_controller_assignments, devices);
     const auto previous_players = g_sdl3_player_instances;
     const auto previous_gyro = g_sdl3_gyro_instances;
     for (std::size_t player = 0U; player < kControllerCount; ++player) {
         g_sdl3_player_instances[player] = resolved[player];
         int gyro_instance = -1;
-        if (const auto* assigned = Sdl3DeviceForInstance(resolved[player]);
-            assigned != nullptr && assigned->gyro) {
+        if (const auto* assigned = Sdl3DeviceForInstance(resolved[player]); assigned != nullptr && assigned->gyro) {
             gyro_instance = assigned->instance;
         }
         if (player == 0U && gyro_instance < 0) {
-            const auto native_deck = std::find_if(
-                g_sdl3_input_state.devices.begin(),
-                g_sdl3_input_state.devices.end(), Sdl3NativeDeckGyro);
+            const auto native_deck =
+                std::find_if(g_sdl3_input_state.devices.begin(), g_sdl3_input_state.devices.end(), Sdl3NativeDeckGyro);
             if (native_deck != g_sdl3_input_state.devices.end()) {
                 gyro_instance = native_deck->instance;
             }
@@ -777,21 +689,19 @@ void PushSdl3Events() {
     RefreshSdl3Controllers();
     std::unordered_set<int> present;
     for (const auto& device : g_sdl3_input_state.devices) {
-        if (!device.snapshot.connected) continue;
+        if (!device.snapshot.connected)
+            continue;
         present.insert(device.instance);
         const auto previous = g_sdl3_previous_event_state.find(device.instance);
         const dkr::runtime::controllers::ControllerSnapshot empty{};
-        const auto& before = previous != g_sdl3_previous_event_state.end()
-            ? previous->second : empty;
+        const auto& before = previous != g_sdl3_previous_event_state.end() ? previous->second : empty;
         for (int button = 0; button < SDL_CONTROLLER_BUTTON_MAX; ++button) {
-            const bool was_pressed = before.buttons[
-                static_cast<std::size_t>(button)] != 0U;
-            const bool pressed = device.snapshot.buttons[
-                static_cast<std::size_t>(button)] != 0U;
-            if (was_pressed == pressed) continue;
+            const bool was_pressed = before.buttons[static_cast<std::size_t>(button)] != 0U;
+            const bool pressed = device.snapshot.buttons[static_cast<std::size_t>(button)] != 0U;
+            if (was_pressed == pressed)
+                continue;
             SDL_Event event{};
-            event.type = pressed ? SDL_CONTROLLERBUTTONDOWN
-                                 : SDL_CONTROLLERBUTTONUP;
+            event.type = pressed ? SDL_CONTROLLERBUTTONDOWN : SDL_CONTROLLERBUTTONUP;
             event.cbutton.timestamp = SDL_GetTicks();
             event.cbutton.which = static_cast<SDL_JoystickID>(device.instance);
             event.cbutton.button = static_cast<Uint8>(button);
@@ -799,11 +709,10 @@ void PushSdl3Events() {
             SDL_PushEvent(&event);
         }
         for (int axis = 0; axis < SDL_CONTROLLER_AXIS_MAX; ++axis) {
-            const Sint16 before_value = before.axes[
-                static_cast<std::size_t>(axis)];
-            const Sint16 value = device.snapshot.axes[
-                static_cast<std::size_t>(axis)];
-            if (before_value == value) continue;
+            const Sint16 before_value = before.axes[static_cast<std::size_t>(axis)];
+            const Sint16 value = device.snapshot.axes[static_cast<std::size_t>(axis)];
+            if (before_value == value)
+                continue;
             SDL_Event event{};
             event.type = SDL_CONTROLLERAXISMOTION;
             event.caxis.timestamp = SDL_GetTicks();
@@ -814,8 +723,7 @@ void PushSdl3Events() {
         }
         g_sdl3_previous_event_state[device.instance] = device.snapshot;
     }
-    for (auto iterator = g_sdl3_previous_event_state.begin();
-         iterator != g_sdl3_previous_event_state.end();) {
+    for (auto iterator = g_sdl3_previous_event_state.begin(); iterator != g_sdl3_previous_event_state.end();) {
         if (!present.contains(iterator->first)) {
             iterator = g_sdl3_previous_event_state.erase(iterator);
         } else {
@@ -849,14 +757,12 @@ std::string MappingLineKey(const std::string& line) {
     if (platform != std::string::npos) {
         const std::size_t value = platform + 10U;
         const std::size_t end = line.find(',', value);
-        key += "|" + line.substr(value, end == std::string::npos
-            ? std::string::npos : end - value);
+        key += "|" + line.substr(value, end == std::string::npos ? std::string::npos : end - value);
     }
     return key;
 }
 
-bool WriteUserMappings(const std::vector<std::string>& lines,
-                       std::string& status) {
+bool WriteUserMappings(const std::vector<std::string>& lines, std::string& status) {
     if (g_user_mapping_path.empty()) {
         status = "The controller mapping folder has not been configured.";
         return false;
@@ -867,8 +773,7 @@ bool WriteUserMappings(const std::vector<std::string>& lines,
         status = "Could not create the controller mapping folder.";
         return false;
     }
-    const std::filesystem::path temporary =
-        g_user_mapping_path.string() + ".tmp";
+    const std::filesystem::path temporary = g_user_mapping_path.string() + ".tmp";
     {
         std::ofstream output(temporary, std::ios::trunc);
         if (!output) {
@@ -896,8 +801,7 @@ bool WriteUserMappings(const std::vector<std::string>& lines,
     return true;
 }
 
-bool MergeUserMappings(const std::vector<std::string>& additions,
-                       std::string& status) {
+bool MergeUserMappings(const std::vector<std::string>& additions, std::string& status) {
     std::vector<std::string> merged = ReadMappingLines(g_user_mapping_path);
     for (const std::string& addition : additions) {
         const std::string key = MappingLineKey(addition);
@@ -905,9 +809,8 @@ bool MergeUserMappings(const std::vector<std::string>& additions,
             continue;
         }
         merged.erase(std::remove_if(merged.begin(), merged.end(),
-            [&](const std::string& existing) {
-                return MappingLineKey(existing) == key;
-            }), merged.end());
+                                    [&](const std::string& existing) { return MappingLineKey(existing) == key; }),
+                     merged.end());
         merged.push_back(addition);
     }
     if (!WriteUserMappings(merged, status)) {
@@ -928,29 +831,25 @@ int DeviceIndexForInstance(SDL_JoystickID instance) {
 }
 
 void FinishControllerMapping() {
-    const auto record = std::find_if(
-        g_controller_devices.begin(), g_controller_devices.end(),
-        [](const ControllerRecord& candidate) {
+    const auto record =
+        std::find_if(g_controller_devices.begin(), g_controller_devices.end(), [](const ControllerRecord& candidate) {
             return candidate.instance == g_mapping_session.instance;
         });
     const int device_index = DeviceIndexForInstance(g_mapping_session.instance);
-    if (record == g_controller_devices.end() || record->joystick == nullptr ||
-        device_index < 0) {
+    if (record == g_controller_devices.end() || record->joystick == nullptr || device_index < 0) {
         g_mapping_session.state = ControllerMappingSession::State::Complete;
         g_mapping_session.success = false;
-        g_mapping_session.message =
-            "The controller disconnected before its mapping could be saved.";
+        g_mapping_session.message = "The controller disconnected before its mapping could be saved.";
         return;
     }
 
     const std::string guid = JoystickGuidText(device_index);
-    const std::string mapping = dkr::runtime::controllers::build_sdl_mapping(
-        guid, record->name, SDL_GetPlatform(), g_mapping_session.definition);
+    const std::string mapping = dkr::runtime::controllers::build_sdl_mapping(guid, record->name, SDL_GetPlatform(),
+                                                                             g_mapping_session.definition);
     if (mapping.empty() || SDL_GameControllerAddMapping(mapping.c_str()) < 0) {
         g_mapping_session.state = ControllerMappingSession::State::Complete;
         g_mapping_session.success = false;
-        g_mapping_session.message = std::string(
-            "SDL rejected this mapping: ") + SDL_GetError();
+        g_mapping_session.message = std::string("SDL rejected this mapping: ") + SDL_GetError();
         return;
     }
 
@@ -963,24 +862,19 @@ void FinishControllerMapping() {
     }
 
     const std::string persistent_key = record->persistent_key;
-    dkr::runtime::controllers::claim(g_controller_assignments,
-                                     g_mapping_session.player,
-                                     persistent_key);
-    g_controller_assignment_mode =
-        dkr::runtime::controllers::AssignmentMode::Manual;
+    dkr::runtime::controllers::claim(g_controller_assignments, g_mapping_session.player, persistent_key);
+    g_controller_assignment_mode = dkr::runtime::controllers::AssignmentMode::Manual;
     CloseControllerRecord(*record);
     g_controller_devices.erase(record);
     RefreshControllers();
 
     g_mapping_session.state = ControllerMappingSession::State::Complete;
     g_mapping_session.success = true;
-    g_mapping_session.message =
-        "Controller setup complete. The mapping is active and saved locally.";
+    g_mapping_session.message = "Controller setup complete. The mapping is active and saved locally.";
 }
 
 void ClearPublishedControllerInput(bool recenter_gyro) {
-    const bool online_routing =
-        g_online_input_routing.load(std::memory_order_acquire);
+    const bool online_routing = g_online_input_routing.load(std::memory_order_acquire);
     for (std::size_t player = 0U; player < kControllerCount; ++player) {
         g_physical_buttons[player].store(0U, std::memory_order_release);
         g_physical_stick_x[player].store(0.0F, std::memory_order_release);
@@ -997,7 +891,8 @@ void ClearPublishedControllerInput(bool recenter_gyro) {
 }
 
 void StopSdl2ControllerBackend() {
-    if (!g_sdl2_controller_subsystems_initialized) return;
+    if (!g_sdl2_controller_subsystems_initialized)
+        return;
 
     SDL_GameControllerEventState(SDL_DISABLE);
     SDL_JoystickEventState(SDL_DISABLE);
@@ -1014,19 +909,15 @@ void StopSdl2ControllerBackend() {
         g_controller_devices.clear();
         g_controllers.fill(nullptr);
         g_gyro_controllers.fill(nullptr);
-        if (g_mapping_session.state ==
-            ControllerMappingSession::State::Capturing) {
-            g_mapping_session.state =
-                ControllerMappingSession::State::Complete;
+        if (g_mapping_session.state == ControllerMappingSession::State::Capturing) {
+            g_mapping_session.state = ControllerMappingSession::State::Complete;
             g_mapping_session.success = false;
-            g_mapping_session.message =
-                "Controller setup was cancelled when the input backend changed.";
+            g_mapping_session.message = "Controller setup was cancelled when the input backend changed.";
         }
     }
     SDL_FlushEvents(SDL_JOYAXISMOTION, SDL_JOYDEVICEREMOVED);
     SDL_FlushEvents(SDL_CONTROLLERAXISMOTION, SDL_CONTROLLERSENSORUPDATE);
-    SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC |
-                      SDL_INIT_SENSOR);
+    SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_SENSOR);
     g_sdl2_controller_subsystems_initialized = false;
 }
 
@@ -1044,7 +935,8 @@ void StopSdl3InputBackend() {
         std::scoped_lock lock(g_platform_mutex);
         instances.reserve(g_sdl3_input_state.devices.size());
         for (const auto& device : g_sdl3_input_state.devices) {
-            if (device.snapshot.connected) instances.push_back(device.instance);
+            if (device.snapshot.connected)
+                instances.push_back(device.instance);
         }
     }
     for (const int instance : instances) {
@@ -1056,22 +948,17 @@ void StopSdl3InputBackend() {
 
 bool InitialiseSdl2ControllerBackend(bool subsystems_already_initialised) {
     if (!subsystems_already_initialised &&
-        SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC |
-                          SDL_INIT_SENSOR) != 0) {
-        g_input_backend_detail = std::string(
-            "SDL2 controller fallback failed: ") + SDL_GetError();
-        std::fprintf(stderr, "[boot][input] %s\n",
-                     g_input_backend_detail.c_str());
-        SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC |
-                          SDL_INIT_SENSOR);
+        SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_SENSOR) != 0) {
+        g_input_backend_detail = std::string("SDL2 controller fallback failed: ") + SDL_GetError();
+        std::fprintf(stderr, "[boot][input] %s\n", g_input_backend_detail.c_str());
+        SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_SENSOR);
         return false;
     }
     g_sdl2_controller_subsystems_initialized = true;
     g_database_mapping_guids.clear();
     g_user_mapping_guids.clear();
-    LoadControllerMappings(
-        RuntimeAssetPath("assets/controllers/gamecontrollerdb.txt"),
-        g_database_mapping_guids, "DKR-R database");
+    LoadControllerMappings(RuntimeAssetPath("assets/controllers/gamecontrollerdb.txt"), g_database_mapping_guids,
+                           "DKR-R database");
     LoadControllerMappings(g_user_mapping_path, g_user_mapping_guids, "user");
     SDL_GameControllerEventState(SDL_ENABLE);
     SDL_JoystickEventState(SDL_ENABLE);
@@ -1079,22 +966,18 @@ bool InitialiseSdl2ControllerBackend(bool subsystems_already_initialised) {
         std::scoped_lock lock(g_platform_mutex);
         RefreshControllers();
     }
-    g_active_input_backend.store(
-        dkr::runtime::platform::InputBackend::SDL2Compatibility,
-        std::memory_order_release);
+    g_active_input_backend.store(dkr::runtime::platform::InputBackend::SDL2Compatibility, std::memory_order_release);
     g_input_backend_detail = "Native SDL2 compatibility input active.";
     return true;
 }
 
-bool StartSdl3InputClient(std::string& error,
-                          std::stop_token stop_token = {}) {
+bool StartSdl3InputClient(std::string& error, std::stop_token stop_token = {}) {
 #if !DKR_RUNTIME_HAS_SDL3_INPUT_HOST
     error = "This build does not contain the SDL3 input host.";
     return false;
 #else
     const std::filesystem::path host = RuntimeInputHostPath();
-    const std::filesystem::path mappings = RuntimeAssetPath(
-        "assets/controllers/gamecontrollerdb.txt");
+    const std::filesystem::path mappings = RuntimeAssetPath("assets/controllers/gamecontrollerdb.txt");
     if (host.empty()) {
         error = "The private SDL3 input host was not found beside DKR-R.";
         return false;
@@ -1111,28 +994,21 @@ void ActivateStartedSdl3InputBackend(const char* prefix = nullptr) {
         g_sdl3_previous_event_state.clear();
         for (const auto& device : g_sdl3_input_state.devices) {
             if (device.snapshot.connected) {
-                g_sdl3_previous_event_state.emplace(device.instance,
-                                                     device.snapshot);
+                g_sdl3_previous_event_state.emplace(device.instance, device.snapshot);
             }
         }
     }
-    g_active_input_backend.store(
-        dkr::runtime::platform::InputBackend::SDL3Native,
-        std::memory_order_release);
-    g_input_backend_detail = prefix != nullptr
-        ? std::string(prefix) + g_sdl3_input_client.detail()
-        : g_sdl3_input_client.detail();
-    std::fprintf(stderr, "[boot][input] %s\n",
-                 g_input_backend_detail.c_str());
+    g_active_input_backend.store(dkr::runtime::platform::InputBackend::SDL3Native, std::memory_order_release);
+    g_input_backend_detail =
+        prefix != nullptr ? std::string(prefix) + g_sdl3_input_client.detail() : g_sdl3_input_client.detail();
+    std::fprintf(stderr, "[boot][input] %s\n", g_input_backend_detail.c_str());
 }
 
 bool StartSdl3InputBackend() {
     std::string error;
     if (!StartSdl3InputClient(error)) {
         g_input_backend_detail = error;
-        std::fprintf(stderr,
-                     "[boot][input] SDL3 native host unavailable: %s\n",
-                     error.c_str());
+        std::fprintf(stderr, "[boot][input] SDL3 native host unavailable: %s\n", error.c_str());
         return false;
     }
     ActivateStartedSdl3InputBackend();
@@ -1144,16 +1020,14 @@ void CancelSdl3InputProbe() {
         g_sdl3_probe_worker.request_stop();
         g_sdl3_probe_worker.join();
     }
-    if (g_sdl3_probe_state.load(std::memory_order_acquire) ==
-        Sdl3ProbeState::Succeeded) {
+    if (g_sdl3_probe_state.load(std::memory_order_acquire) == Sdl3ProbeState::Succeeded) {
         g_sdl3_input_client.stop();
     }
     {
         std::scoped_lock lock(g_sdl3_probe_result_mutex);
         g_sdl3_probe_error.clear();
     }
-    g_sdl3_probe_state.store(Sdl3ProbeState::Idle,
-                             std::memory_order_release);
+    g_sdl3_probe_state.store(Sdl3ProbeState::Idle, std::memory_order_release);
 }
 
 bool BeginSdl3InputProbe() {
@@ -1161,63 +1035,53 @@ bool BeginSdl3InputProbe() {
     g_input_backend_detail = "This build does not contain the SDL3 input host.";
     return false;
 #else
-    if (g_sdl3_probe_state.load(std::memory_order_acquire) ==
-        Sdl3ProbeState::Running) {
+    if (g_sdl3_probe_state.load(std::memory_order_acquire) == Sdl3ProbeState::Running) {
         return true;
     }
-    if (g_sdl3_probe_worker.joinable()) g_sdl3_probe_worker.join();
+    if (g_sdl3_probe_worker.joinable())
+        g_sdl3_probe_worker.join();
 
     const std::filesystem::path host = RuntimeInputHostPath();
     if (host.empty()) {
-        g_input_backend_detail =
-            "The private SDL3 input host was not found beside DKR-R.";
+        g_input_backend_detail = "The private SDL3 input host was not found beside DKR-R.";
         return false;
     }
-    const std::filesystem::path mappings = RuntimeAssetPath(
-        "assets/controllers/gamecontrollerdb.txt");
+    const std::filesystem::path mappings = RuntimeAssetPath("assets/controllers/gamecontrollerdb.txt");
     {
         std::scoped_lock lock(g_sdl3_probe_result_mutex);
         g_sdl3_probe_error.clear();
     }
-    g_sdl3_probe_state.store(Sdl3ProbeState::Running,
-                             std::memory_order_release);
+    g_sdl3_probe_state.store(Sdl3ProbeState::Running, std::memory_order_release);
     g_input_backend_switch_in_progress.store(true, std::memory_order_release);
-    g_input_backend_detail =
-        "SDL2 compatibility input is active while SDL3 initializes.";
-    g_sdl3_probe_worker = std::jthread(
-        [host, mappings](std::stop_token stop_token) {
-            dkr::runtime::startup_performance::ScopedPhase phase(
-                "SDL3 input host probe");
-            std::string error;
-            const bool started = g_sdl3_input_client.start(
-                host, mappings, error, stop_token);
-            {
-                std::scoped_lock lock(g_sdl3_probe_result_mutex);
-                g_sdl3_probe_error = std::move(error);
-            }
-            g_sdl3_probe_state.store(
-                started ? Sdl3ProbeState::Succeeded
-                        : Sdl3ProbeState::Failed,
-                std::memory_order_release);
-        });
+    g_input_backend_detail = "SDL2 compatibility input is active while SDL3 initializes.";
+    g_sdl3_probe_worker = std::jthread([host, mappings](std::stop_token stop_token) {
+        dkr::runtime::startup_performance::ScopedPhase phase("SDL3 input host probe");
+        std::string error;
+        const bool started = g_sdl3_input_client.start(host, mappings, error, stop_token);
+        {
+            std::scoped_lock lock(g_sdl3_probe_result_mutex);
+            g_sdl3_probe_error = std::move(error);
+        }
+        g_sdl3_probe_state.store(started ? Sdl3ProbeState::Succeeded : Sdl3ProbeState::Failed,
+                                 std::memory_order_release);
+    });
     return true;
 #endif
 }
 
 void CompleteSdl3InputProbe() {
-    const Sdl3ProbeState state =
-        g_sdl3_probe_state.load(std::memory_order_acquire);
+    const Sdl3ProbeState state = g_sdl3_probe_state.load(std::memory_order_acquire);
     if (state == Sdl3ProbeState::Idle || state == Sdl3ProbeState::Running) {
         return;
     }
-    if (g_sdl3_probe_worker.joinable()) g_sdl3_probe_worker.join();
+    if (g_sdl3_probe_worker.joinable())
+        g_sdl3_probe_worker.join();
 
     std::unique_lock transition_lock(g_input_backend_transition_mutex);
-    const auto target = dkr::runtime::platform::resolve_input_backend(
-        g_requested_input_backend.load(std::memory_order_acquire),
-        IsSteamDeckHost(), DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0);
-    if (state == Sdl3ProbeState::Succeeded &&
-        target == dkr::runtime::platform::InputBackend::SDL3Native) {
+    const auto target =
+        dkr::runtime::platform::resolve_input_backend(g_requested_input_backend.load(std::memory_order_acquire),
+                                                      IsSteamDeckHost(), DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0);
+    if (state == Sdl3ProbeState::Succeeded && target == dkr::runtime::platform::InputBackend::SDL3Native) {
         ClearPublishedControllerInput(true);
         StopSdl2ControllerBackend();
         ActivateStartedSdl3InputBackend("Live switch complete. ");
@@ -1232,112 +1096,94 @@ void CompleteSdl3InputProbe() {
             std::scoped_lock lock(g_sdl3_probe_result_mutex);
             error = g_sdl3_probe_error;
         }
-        if (state == Sdl3ProbeState::Failed &&
-            error != "SDL3 input initialization was cancelled.") {
-            if (error.empty()) error = "SDL3 input initialization failed.";
-            g_input_backend_detail = error +
-                " SDL2 compatibility fallback is active.";
-            std::fprintf(stderr, "[boot][input] %s\n",
-                         g_input_backend_detail.c_str());
+        if (state == Sdl3ProbeState::Failed && error != "SDL3 input initialization was cancelled.") {
+            if (error.empty())
+                error = "SDL3 input initialization failed.";
+            g_input_backend_detail = error + " SDL2 compatibility fallback is active.";
+            std::fprintf(stderr, "[boot][input] %s\n", g_input_backend_detail.c_str());
         }
     }
-    g_sdl3_probe_state.store(Sdl3ProbeState::Idle,
-                             std::memory_order_release);
+    g_sdl3_probe_state.store(Sdl3ProbeState::Idle, std::memory_order_release);
     g_input_backend_switch_in_progress.store(false, std::memory_order_release);
 }
 
 void EnsureInputBackendHealthy() {
-    if (g_active_input_backend.load(std::memory_order_acquire) !=
-            dkr::runtime::platform::InputBackend::SDL3Native ||
+    if (g_active_input_backend.load(std::memory_order_acquire) != dkr::runtime::platform::InputBackend::SDL3Native ||
         g_sdl3_input_client.healthy()) {
         return;
     }
     std::scoped_lock transition_lock(g_input_backend_transition_mutex);
-    if (g_active_input_backend.load(std::memory_order_acquire) !=
-            dkr::runtime::platform::InputBackend::SDL3Native ||
+    if (g_active_input_backend.load(std::memory_order_acquire) != dkr::runtime::platform::InputBackend::SDL3Native ||
         g_sdl3_input_client.healthy()) {
         return;
     }
     g_input_backend_switch_in_progress.store(true, std::memory_order_release);
     ClearPublishedControllerInput(true);
     const std::string failure = g_sdl3_input_client.detail();
-    std::fprintf(stderr,
-                 "[input] SDL3 native host stopped (%s); activating SDL2 fallback\n",
-                 failure.c_str());
+    std::fprintf(stderr, "[input] SDL3 native host stopped (%s); activating SDL2 fallback\n", failure.c_str());
     StopSdl3InputBackend();
     if (InitialiseSdl2ControllerBackend(false)) {
-        g_input_backend_detail = failure +
-            " SDL2 compatibility fallback is active.";
+        g_input_backend_detail = failure + " SDL2 compatibility fallback is active.";
     } else {
-        g_active_input_backend.store(
-            dkr::runtime::platform::InputBackend::SDL2Compatibility,
-            std::memory_order_release);
+        g_active_input_backend.store(dkr::runtime::platform::InputBackend::SDL2Compatibility,
+                                     std::memory_order_release);
     }
     g_input_backend_switch_in_progress.store(false, std::memory_order_release);
 }
 
 void ApplyPendingInputBackendSwitch() {
-    if (!g_input_backend_switch_pending.load(std::memory_order_acquire)) return;
+    if (!g_input_backend_switch_pending.load(std::memory_order_acquire))
+        return;
 
     std::unique_lock transition_lock(g_input_backend_transition_mutex);
-    if (!g_input_backend_switch_pending.exchange(false,
-                                                  std::memory_order_acq_rel)) {
+    if (!g_input_backend_switch_pending.exchange(false, std::memory_order_acq_rel)) {
         return;
     }
-    const auto target = dkr::runtime::platform::resolve_input_backend(
-        g_requested_input_backend.load(std::memory_order_acquire),
-        IsSteamDeckHost(), DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0);
+    const auto target =
+        dkr::runtime::platform::resolve_input_backend(g_requested_input_backend.load(std::memory_order_acquire),
+                                                      IsSteamDeckHost(), DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0);
     const auto previous = g_active_input_backend.load(std::memory_order_acquire);
     if (target == dkr::runtime::platform::InputBackend::SDL2Compatibility &&
-        g_sdl3_probe_state.load(std::memory_order_acquire) !=
-            Sdl3ProbeState::Idle) {
+        g_sdl3_probe_state.load(std::memory_order_acquire) != Sdl3ProbeState::Idle) {
         // Do not hold the transition mutex while joining the cancellable
         // worker: it never touches controller state, but cancellation may
         // briefly wait for a socket poll to finish.
         transition_lock.unlock();
         CancelSdl3InputProbe();
-        g_input_backend_switch_in_progress.store(false,
-                                                  std::memory_order_release);
+        g_input_backend_switch_in_progress.store(false, std::memory_order_release);
         return;
     }
-    if (target == previous) return;
+    if (target == previous)
+        return;
 
     bool switched = false;
     if (target == dkr::runtime::platform::InputBackend::SDL3Native) {
         if (!BeginSdl3InputProbe()) {
-            g_input_backend_detail +=
-                " SDL2 compatibility input remains active.";
-            g_input_backend_switch_in_progress.store(
-                false, std::memory_order_release);
-            std::fprintf(stderr, "[input] %s\n",
-                         g_input_backend_detail.c_str());
+            g_input_backend_detail += " SDL2 compatibility input remains active.";
+            g_input_backend_switch_in_progress.store(false, std::memory_order_release);
+            std::fprintf(stderr, "[input] %s\n", g_input_backend_detail.c_str());
         }
         return;
     } else {
-        g_input_backend_switch_in_progress.store(true,
-                                                 std::memory_order_release);
+        g_input_backend_switch_in_progress.store(true, std::memory_order_release);
         ClearPublishedControllerInput(true);
         StopSdl3InputBackend();
         switched = InitialiseSdl2ControllerBackend(false);
         if (!switched) {
             const std::string activation_failure = g_input_backend_detail;
             if (StartSdl3InputBackend()) {
-                g_input_backend_detail = activation_failure +
-                    " The previous SDL3 backend was restored without "
-                    "restarting DKR-R.";
+                g_input_backend_detail = activation_failure + " The previous SDL3 backend was restored without "
+                                                              "restarting DKR-R.";
             } else {
-                g_active_input_backend.store(
-                    dkr::runtime::platform::InputBackend::SDL2Compatibility,
-                    std::memory_order_release);
-                g_input_backend_detail = activation_failure +
-                    " SDL3 restoration also failed; controller input is "
-                    "currently unavailable.";
+                g_active_input_backend.store(dkr::runtime::platform::InputBackend::SDL2Compatibility,
+                                             std::memory_order_release);
+                g_input_backend_detail = activation_failure + " SDL3 restoration also failed; controller input is "
+                                                              "currently unavailable.";
             }
         }
     }
     if (switched) {
-        g_input_backend_detail = "Live switch complete. " +
-            g_input_backend_detail;
+        g_input_backend_detail = "Live switch complete. " + g_input_backend_detail;
     }
     ClearPublishedControllerInput(true);
     g_input_backend_switch_in_progress.store(false, std::memory_order_release);
@@ -1347,13 +1193,11 @@ void ApplyPendingInputBackendSwitch() {
 
 } // namespace
 
-void dkr::runtime::platform::configure_input(
-    const std::filesystem::path& config_directory) {
+void dkr::runtime::platform::configure_input(const std::filesystem::path& config_directory) {
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
     g_input_config_directory = config_directory;
-    g_user_mapping_path = config_directory / "controllers" /
-                          "gamecontrollerdb.txt";
+    g_user_mapping_path = config_directory / "controllers" / "gamecontrollerdb.txt";
     InputBackend requested = InputBackend::Automatic;
     std::ifstream settings(config_directory / "dkr-port-settings.ini");
     std::string line;
@@ -1375,36 +1219,34 @@ void dkr::runtime::platform::configure_input(
 #endif
 }
 
-dkr::runtime::platform::InputBackend
-dkr::runtime::platform::requested_input_backend() {
+dkr::runtime::platform::InputBackend dkr::runtime::platform::requested_input_backend() {
     return g_requested_input_backend.load(std::memory_order_acquire);
 }
 
-dkr::runtime::platform::InputBackend
-dkr::runtime::platform::active_input_backend() {
+dkr::runtime::platform::InputBackend dkr::runtime::platform::active_input_backend() {
     return g_active_input_backend.load(std::memory_order_acquire);
 }
 
 void dkr::runtime::platform::set_requested_input_backend(InputBackend backend) {
     backend = sanitise_input_backend(backend);
-    const auto previous = g_requested_input_backend.exchange(
-        backend, std::memory_order_acq_rel);
+    const auto previous = g_requested_input_backend.exchange(backend, std::memory_order_acq_rel);
 #if DKR_RUNTIME_HAS_RT64
-    const bool switch_required = input_backend_switch_required(
-        backend, active_input_backend(), IsSteamDeckHost(),
-        DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0);
+    const bool switch_required = input_backend_switch_required(backend, active_input_backend(), IsSteamDeckHost(),
+                                                               DKR_RUNTIME_HAS_SDL3_INPUT_HOST != 0);
 #else
     const bool switch_required = false;
 #endif
-    g_input_backend_switch_pending.store(
-        previous != backend && switch_required, std::memory_order_release);
+    g_input_backend_switch_pending.store(previous != backend && switch_required, std::memory_order_release);
 }
 
 const char* dkr::runtime::platform::input_backend_name(InputBackend backend) {
     switch (backend) {
-    case InputBackend::Automatic: return "Automatic";
-    case InputBackend::SDL2Compatibility: return "SDL2 compatibility";
-    case InputBackend::SDL3Native: return "SDL3 native";
+    case InputBackend::Automatic:
+        return "Automatic";
+    case InputBackend::SDL2Compatibility:
+        return "SDL2 compatibility";
+    case InputBackend::SDL3Native:
+        return "SDL3 native";
     }
     return "Automatic";
 }
@@ -1425,8 +1267,7 @@ bool dkr::runtime::platform::input_backend_switch_pending() {
 
 bool dkr::runtime::platform::initialise() {
 #if DKR_RUNTIME_HAS_RT64
-    dkr::runtime::startup_performance::ScopedPhase platform_phase(
-        "SDL platform and input initialization");
+    dkr::runtime::startup_performance::ScopedPhase platform_phase("SDL platform and input initialization");
     // Request SDL's direct HID paths before controller discovery. String
     // literals retain source compatibility with the bundled Windows SDL while
     // allowing newer Linux/SteamOS SDL builds to expose the built-in Deck pad.
@@ -1438,8 +1279,8 @@ bool dkr::runtime::platform::initialise() {
     // globally opting every controller into background gameplay.
     SDL_SetHint("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1");
     const bool try_sdl3 = ShouldTrySdl3Input();
-    const Uint32 sdl_flags = SDL_INIT_VIDEO | SDL_INIT_AUDIO |
-        SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_SENSOR;
+    const Uint32 sdl_flags =
+        SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC | SDL_INIT_SENSOR;
     if (SDL_Init(sdl_flags) != 0) {
         std::fprintf(stderr, "[boot][platform] SDL initialization failed: %s\n", SDL_GetError());
         return false;
@@ -1448,28 +1289,23 @@ bool dkr::runtime::platform::initialise() {
     SDL_AddEventWatch(ControllerInventoryEvent, nullptr);
     g_controller_inventory_dirty.store(true, std::memory_order_relaxed);
     SDL_GetVersion(&linked_version);
-    std::fprintf(stderr, "[boot][platform] SDL linked=%u.%u.%u\n",
-                 linked_version.major, linked_version.minor,
+    std::fprintf(stderr, "[boot][platform] SDL linked=%u.%u.%u\n", linked_version.major, linked_version.minor,
                  linked_version.patch);
     const char* sdl3_version = SDL_GetHint("SDL3_VERSION");
     std::fprintf(stderr, "[boot][platform] SDL3 backend=%s\n",
-                 sdl3_version != nullptr && *sdl3_version != '\0'
-                     ? sdl3_version : "not reported");
+                 sdl3_version != nullptr && *sdl3_version != '\0' ? sdl3_version : "not reported");
     if (!InitialiseSdl2ControllerBackend(true)) {
         SDL_DelEventWatch(ControllerInventoryEvent, nullptr);
         SDL_Quit();
         return false;
     }
     if (try_sdl3 && !BeginSdl3InputProbe()) {
-        g_input_backend_detail +=
-            " SDL2 compatibility fallback is active.";
-        std::fprintf(stderr, "[boot][input] %s\n",
-                     g_input_backend_detail.c_str());
+        g_input_backend_detail += " SDL2 compatibility fallback is active.";
+        std::fprintf(stderr, "[boot][input] %s\n", g_input_backend_detail.c_str());
     }
 #endif
-    std::fprintf(stderr,
-                 "[boot][input] keyboard: WASD=stick arrows=d-pad Space=A Shift=B "
-                 "Z=Z Enter=Start IJKL=C Q=L E=R\n");
+    std::fprintf(stderr, "[boot][input] keyboard: WASD=stick arrows=d-pad Space=A Shift=B "
+                         "Z=Z Enter=Start IJKL=C Q=L E=R\n");
     return true;
 }
 
@@ -1530,16 +1366,15 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
         // Desktop fullscreen, as on the Mac. Real fullscreen makes SDL restore
         // its display mode on every refocus (Control Center, app switcher),
         // and UIKit records that mode in portrait.
-        const Uint32 flags = SDL_WINDOW_METAL | SDL_WINDOW_ALLOW_HIGHDPI |
-            SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS;
+        const Uint32 flags =
+            SDL_WINDOW_METAL | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS;
 #else
         Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
 #if !defined(__ANDROID__) && !defined(DKR_IOS)
         // ui::configure restores the saved graphics config before this call.
         // Use borderless desktop fullscreen, matching RT64's normal window
         // mode, without changing the user's display mode or resolution.
-        if (ultramodern::renderer::get_graphics_config().wm_option ==
-            ultramodern::renderer::WindowMode::Fullscreen) {
+        if (ultramodern::renderer::get_graphics_config().wm_option == ultramodern::renderer::WindowMode::Fullscreen) {
             flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
         }
 #endif
@@ -1549,8 +1384,7 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
         flags |= SDL_WINDOW_METAL;
 #endif
 #endif
-        g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",
-                                    SDL_WINDOWPOS_CENTERED,
+        g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", SDL_WINDOWPOS_CENTERED,
                                     SDL_WINDOWPOS_CENTERED, 1440, 900, flags);
         if (g_window == nullptr) {
             std::fprintf(stderr, "[boot][window] SDL creation failed: %s\n", SDL_GetError());
@@ -1573,10 +1407,12 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::create_window() {
     }
     return {.window = info.info.win.window, .thread_id = GetCurrentThreadId()};
 #elif defined(__APPLE__)
-    if (g_window == nullptr) return {};
+    if (g_window == nullptr)
+        return {};
     // Own RT64's view independently of the launcher renderer. SDL2-compat
     // may create another view for the launcher instead of reusing this one.
-    if (g_metal_view == nullptr) g_metal_view = SDL_Metal_CreateView(g_window);
+    if (g_metal_view == nullptr)
+        g_metal_view = SDL_Metal_CreateView(g_window);
     if (g_metal_view == nullptr) {
         std::fprintf(stderr, "[boot][window] Metal view failed: %s\n", SDL_GetError());
         return {};
@@ -1606,42 +1442,46 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
         // DXGI can still retain the window surface: give the game a new HWND
         // rather than attempting a second flip-model swap chain on that HWND.
         if (SDL_GetRenderer(g_window) != nullptr) {
-            std::fprintf(stderr,"[boot][window] refused handoff with a live launcher renderer\n");
+            std::fprintf(stderr, "[boot][window] refused handoff with a live launcher renderer\n");
             return {};
         }
-        int x,y,width,height;
-        SDL_GetWindowPosition(g_window,&x,&y);SDL_GetWindowSize(g_window,&width,&height);
-        const Uint32 flags=SDL_GetWindowFlags(g_window);
-        const Uint32 old_id=SDL_GetWindowID(g_window);
-        auto* replacement=SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",x,y,width,height,
-            SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_HIDDEN);
+        int x, y, width, height;
+        SDL_GetWindowPosition(g_window, &x, &y);
+        SDL_GetWindowSize(g_window, &width, &height);
+        const Uint32 flags = SDL_GetWindowFlags(g_window);
+        const Uint32 old_id = SDL_GetWindowID(g_window);
+        auto* replacement = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", x, y, width, height,
+                                             SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
         if (!replacement) {
-            std::fprintf(stderr,"[boot][window] game handoff recreation failed: %s\n",SDL_GetError());
+            std::fprintf(stderr, "[boot][window] game handoff recreation failed: %s\n", SDL_GetError());
             return {};
         }
         // Allocate before retiring so failure cannot destroy the old window.
         // Transfer fullscreen only after releasing the previous SDL ownership.
-        if (flags&SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(g_window,0);
-        SDL_DestroyWindow(g_window);g_window=replacement;
-        g_retire_launcher_window_for_game=false;
-        SDL_SetWindowMinimumSize(g_window,800,600);
-        if (flags&SDL_WINDOW_MAXIMIZED) SDL_MaximizeWindow(g_window);
-        const auto fullscreen=flags&(SDL_WINDOW_FULLSCREEN|SDL_WINDOW_FULLSCREEN_DESKTOP);
-        if (fullscreen&&SDL_SetWindowFullscreen(g_window,fullscreen)!=0)
-            std::fprintf(stderr,"[boot][window] game fullscreen restore failed: %s\n",SDL_GetError());
-        if (!(flags&SDL_WINDOW_HIDDEN)) SDL_ShowWindow(g_window);
-        if (flags&SDL_WINDOW_MINIMIZED) SDL_MinimizeWindow(g_window);
-        std::fprintf(stderr,"[boot][window] retired launcher window=%u; fresh game window=%u\n",
-            unsigned(old_id),unsigned(SDL_GetWindowID(g_window)));
+        if (flags & SDL_WINDOW_FULLSCREEN)
+            SDL_SetWindowFullscreen(g_window, 0);
+        SDL_DestroyWindow(g_window);
+        g_window = replacement;
+        g_retire_launcher_window_for_game = false;
+        SDL_SetWindowMinimumSize(g_window, 800, 600);
+        if (flags & SDL_WINDOW_MAXIMIZED)
+            SDL_MaximizeWindow(g_window);
+        const auto fullscreen = flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
+        if (fullscreen && SDL_SetWindowFullscreen(g_window, fullscreen) != 0)
+            std::fprintf(stderr, "[boot][window] game fullscreen restore failed: %s\n", SDL_GetError());
+        if (!(flags & SDL_WINDOW_HIDDEN))
+            SDL_ShowWindow(g_window);
+        if (flags & SDL_WINDOW_MINIMIZED)
+            SDL_MinimizeWindow(g_window);
+        std::fprintf(stderr, "[boot][window] retired launcher window=%u; fresh game window=%u\n", unsigned(old_id),
+                     unsigned(SDL_GetWindowID(g_window)));
     }
 #endif
 #if defined(__linux__)
     if (g_window != nullptr) {
         const Uint32 existing_flags = SDL_GetWindowFlags(g_window);
-        std::fprintf(stderr,
-                     "[boot][window] launcher handoff flags=0x%08X vulkan=%s\n",
-                     static_cast<unsigned>(existing_flags),
-                     (existing_flags & SDL_WINDOW_VULKAN) != 0 ? "yes" : "no");
+        std::fprintf(stderr, "[boot][window] launcher handoff flags=0x%08X vulkan=%s\n",
+                     static_cast<unsigned>(existing_flags), (existing_flags & SDL_WINDOW_VULKAN) != 0 ? "yes" : "no");
         if ((existing_flags & SDL_WINDOW_VULKAN) == 0) {
             int x = SDL_WINDOWPOS_CENTERED;
             int y = SDL_WINDOWPOS_CENTERED;
@@ -1650,35 +1490,26 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
             SDL_GetWindowPosition(g_window, &x, &y);
             SDL_GetWindowSize(g_window, &width, &height);
             const bool was_hidden = (existing_flags & SDL_WINDOW_HIDDEN) != 0;
-            const bool was_maximized =
-                (existing_flags & SDL_WINDOW_MAXIMIZED) != 0;
-            const Uint32 fullscreen_mode = existing_flags &
-                (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
+            const bool was_maximized = (existing_flags & SDL_WINDOW_MAXIMIZED) != 0;
+            const Uint32 fullscreen_mode = existing_flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
             SDL_DestroyWindow(g_window);
             g_window = nullptr;
 
-            Uint32 replacement_flags =
-                SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN;
+            Uint32 replacement_flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN;
             if (was_hidden) {
                 replacement_flags |= SDL_WINDOW_HIDDEN;
             }
-            g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", x, y, width, height,
-                                        replacement_flags);
+            g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", x, y, width, height, replacement_flags);
             if (g_window == nullptr) {
-                std::fprintf(stderr,
-                             "[boot][window] Vulkan handoff recreation failed: %s\n",
-                             SDL_GetError());
+                std::fprintf(stderr, "[boot][window] Vulkan handoff recreation failed: %s\n", SDL_GetError());
                 return {};
             }
             SDL_SetWindowMinimumSize(g_window, 800, 600);
             if (was_maximized) {
                 SDL_MaximizeWindow(g_window);
             }
-            if (fullscreen_mode != 0U &&
-                SDL_SetWindowFullscreen(g_window, fullscreen_mode) != 0) {
-                std::fprintf(stderr,
-                             "[boot][window] fullscreen handoff restore failed: %s\n",
-                             SDL_GetError());
+            if (fullscreen_mode != 0U && SDL_SetWindowFullscreen(g_window, fullscreen_mode) != 0) {
+                std::fprintf(stderr, "[boot][window] fullscreen handoff restore failed: %s\n", SDL_GetError());
             }
             std::fprintf(stderr,
                          "[boot][window] recreated Vulkan-capable game window "
@@ -1699,34 +1530,40 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
 
 void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surface) {
 #if defined(_WIN32)
-    if(retire_game_surface&&g_window) {
+    if (retire_game_surface && g_window) {
         // Called only after both owned runtime workers and their GPU owners
         // have fully retired. Do not paint SDL's window framebuffer into the
         // HWND/surface previously owned by the game's native swap chains.
-        int x,y,width,height;
-        SDL_GetWindowPosition(g_window,&x,&y);SDL_GetWindowSize(g_window,&width,&height);
-        const Uint32 flags=SDL_GetWindowFlags(g_window);
-        const Uint32 old_id=SDL_GetWindowID(g_window);
-        auto* replacement=SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",x,y,width,height,
-            SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|SDL_WINDOW_HIDDEN);
-        if(!replacement) {
-            std::fprintf(stderr,"[rollback][window-return] replacement creation failed: %s\n",SDL_GetError());
+        int x, y, width, height;
+        SDL_GetWindowPosition(g_window, &x, &y);
+        SDL_GetWindowSize(g_window, &width, &height);
+        const Uint32 flags = SDL_GetWindowFlags(g_window);
+        const Uint32 old_id = SDL_GetWindowID(g_window);
+        auto* replacement = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", x, y, width, height,
+                                             SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
+        if (!replacement) {
+            std::fprintf(stderr, "[rollback][window-return] replacement creation failed: %s\n", SDL_GetError());
             return nullptr;
         }
         // Release SDL's old fullscreen ownership before assigning it to the
         // replacement. No game renderer or overlay still references the HWND.
-        if(flags&SDL_WINDOW_FULLSCREEN)SDL_SetWindowFullscreen(g_window,0);
-        SDL_DestroyWindow(g_window);g_window=replacement;
-        g_retire_launcher_window_for_game=true;
-        SDL_SetWindowMinimumSize(g_window,800,600);
-        if(flags&SDL_WINDOW_MAXIMIZED)SDL_MaximizeWindow(g_window);
-        const auto fullscreen=flags&(SDL_WINDOW_FULLSCREEN|SDL_WINDOW_FULLSCREEN_DESKTOP);
-        if(fullscreen&&SDL_SetWindowFullscreen(g_window,fullscreen)!=0)
-            std::fprintf(stderr,"[rollback][window-return] fullscreen restore failed: %s\n",SDL_GetError());
-        if(!(flags&SDL_WINDOW_HIDDEN))SDL_ShowWindow(g_window);
-        if(flags&SDL_WINDOW_MINIMIZED)SDL_MinimizeWindow(g_window);
-        std::fprintf(stderr,"[rollback][window-return] retired SDL window=%u; fresh launcher window=%u\n",
-            unsigned(old_id),unsigned(SDL_GetWindowID(g_window)));
+        if (flags & SDL_WINDOW_FULLSCREEN)
+            SDL_SetWindowFullscreen(g_window, 0);
+        SDL_DestroyWindow(g_window);
+        g_window = replacement;
+        g_retire_launcher_window_for_game = true;
+        SDL_SetWindowMinimumSize(g_window, 800, 600);
+        if (flags & SDL_WINDOW_MAXIMIZED)
+            SDL_MaximizeWindow(g_window);
+        const auto fullscreen = flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
+        if (fullscreen && SDL_SetWindowFullscreen(g_window, fullscreen) != 0)
+            std::fprintf(stderr, "[rollback][window-return] fullscreen restore failed: %s\n", SDL_GetError());
+        if (!(flags & SDL_WINDOW_HIDDEN))
+            SDL_ShowWindow(g_window);
+        if (flags & SDL_WINDOW_MINIMIZED)
+            SDL_MinimizeWindow(g_window);
+        std::fprintf(stderr, "[rollback][window-return] retired SDL window=%u; fresh launcher window=%u\n",
+                     unsigned(old_id), unsigned(SDL_GetWindowID(g_window)));
     }
 #else
     (void)retire_game_surface;
@@ -1735,24 +1572,26 @@ void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surfa
     // Qualification switch: never allow SDL/OpenGL to convert a live Vulkan
     // window. Both renderers have been destroyed at this launcher boundary.
     const char* opt_in = SDL_getenv("DKR_LINUX_ACCELERATED_LAUNCHER");
-    if (g_window && opt_in && std::string_view(opt_in) == "1" &&
-        (SDL_GetWindowFlags(g_window) & SDL_WINDOW_VULKAN)) {
+    if (g_window && opt_in && std::string_view(opt_in) == "1" && (SDL_GetWindowFlags(g_window) & SDL_WINDOW_VULKAN)) {
         int x, y, width, height;
         SDL_GetWindowPosition(g_window, &x, &y);
         SDL_GetWindowSize(g_window, &width, &height);
         const Uint32 flags = SDL_GetWindowFlags(g_window);
         // Create before destroying so a failed allocation keeps the proven
         // software path and its original window intact.
-        auto* replacement = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",
-            x, y, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
+        auto* replacement = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", x, y, width, height,
+                                             SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
         if (replacement) {
             SDL_DestroyWindow(g_window);
             g_window = replacement;
             SDL_SetWindowMinimumSize(g_window, 800, 600);
-            if (flags & SDL_WINDOW_MAXIMIZED) SDL_MaximizeWindow(g_window);
+            if (flags & SDL_WINDOW_MAXIMIZED)
+                SDL_MaximizeWindow(g_window);
             const auto fullscreen = flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
-            if (fullscreen) SDL_SetWindowFullscreen(g_window, fullscreen);
-            if (!(flags & SDL_WINDOW_HIDDEN)) SDL_ShowWindow(g_window);
+            if (fullscreen)
+                SDL_SetWindowFullscreen(g_window, fullscreen);
+            if (!(flags & SDL_WINDOW_HIDDEN))
+                SDL_ShowWindow(g_window);
         }
     }
 #endif
@@ -1761,8 +1600,7 @@ void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surfa
 
 void dkr::runtime::platform::pump_window_events(void*) {
     pump_input_backend_events();
-    if (dkr::runtime::ui::lifecycle_request() !=
-        dkr::runtime::ui::LifecycleRequest::None) {
+    if (dkr::runtime::ui::lifecycle_request() != dkr::runtime::ui::LifecycleRequest::None) {
         ultramodern::quit();
         return;
     }
@@ -1779,7 +1617,8 @@ void dkr::runtime::platform::pump_window_events(void*) {
         }
 #endif
 #if defined(__APPLE__)
-        if (dkr_handle_fullscreen_event(&event)) continue;
+        if (dkr_handle_fullscreen_event(&event))
+            continue;
 #endif
         update_fullscreen_cursor(&event);
 #if defined(__ANDROID__) && defined(DKR_EXPERIMENTAL_RACE_TEST)
@@ -1790,12 +1629,11 @@ void dkr::runtime::platform::pump_window_events(void*) {
             netplay::session().request_owned_match_end("A racer moved DKR-R to the background. The match has ended.");
         }
 #endif
-        if (event.type == SDL_QUIT ||
-            (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE)) {
+        if (event.type == SDL_QUIT || (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE)) {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-            if(netplay::experimental::runtime_view().active) {
-                std::fprintf(stderr,"[rollback][window] close event type=%u window-event=%u\n",event.type,
-                    event.type==SDL_WINDOWEVENT?unsigned(event.window.event):0U);
+            if (netplay::experimental::runtime_view().active) {
+                std::fprintf(stderr, "[rollback][window] close event type=%u window-event=%u\n", event.type,
+                             event.type == SDL_WINDOWEVENT ? unsigned(event.window.event) : 0U);
                 netplay::experimental::request_runtime_stop();
             }
 #endif
@@ -1806,13 +1644,13 @@ void dkr::runtime::platform::pump_window_events(void*) {
         // Overlay lifecycle commands are host-global. Process them before
         // forwarding the event to ImGui so a focused widget cannot swallow
         // Escape, F1 or Back/View and leave the player trapped in the UI.
-        const bool keyboard_toggle = event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
-            (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE ||
-             event.key.keysym.scancode == SDL_SCANCODE_F1);
+        const bool keyboard_toggle =
+            event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
+            (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE || event.key.keysym.scancode == SDL_SCANCODE_F1);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-        if(keyboard_toggle&&netplay::experimental::runtime_view().active) {
-            std::fprintf(stderr,"[rollback][window] overlay key=%u capture=%d\n",unsigned(event.key.keysym.scancode),
-                int(dkr::runtime::ui::input_capture_active()));
+        if (keyboard_toggle && netplay::experimental::runtime_view().active) {
+            std::fprintf(stderr, "[rollback][window] overlay key=%u capture=%d\n", unsigned(event.key.keysym.scancode),
+                         int(dkr::runtime::ui::input_capture_active()));
         }
 #endif
         if (dkr::runtime::ui::input_capture_active()) {
@@ -1829,25 +1667,20 @@ void dkr::runtime::platform::pump_window_events(void*) {
 
         dkr::runtime::ui::handle_runtime_event(&event);
     }
-    if (dkr::runtime::input::consume_shortcut_request(
-            dkr::runtime::input::ShortcutAction::ToggleOverlay)) {
+    if (dkr::runtime::input::consume_shortcut_request(dkr::runtime::input::ShortcutAction::ToggleOverlay)) {
         dkr::runtime::ui::toggle_overlay();
     }
-    if (dkr::runtime::input::consume_shortcut_request(
-            dkr::runtime::input::ShortcutAction::ToggleTexturePack)) {
+    if (dkr::runtime::input::consume_shortcut_request(dkr::runtime::input::ShortcutAction::ToggleTexturePack)) {
         std::string status;
         dkr::runtime::texture_packs::toggle_last_selected(status);
     }
-    if (dkr::runtime::input::consume_shortcut_request(
-            dkr::runtime::input::ShortcutAction::ToggleFullscreen)) {
+    if (dkr::runtime::input::consume_shortcut_request(dkr::runtime::input::ShortcutAction::ToggleFullscreen)) {
         toggle_fullscreen(true);
     }
-    if (dkr::runtime::input::consume_shortcut_request(
-            dkr::runtime::input::ShortcutAction::RecenterGyro)) {
+    if (dkr::runtime::input::consume_shortcut_request(dkr::runtime::input::ShortcutAction::RecenterGyro)) {
         dkr::runtime::input::recenter_gyro(online_input_profile());
     }
-    if (dkr::runtime::ui::lifecycle_request() !=
-        dkr::runtime::ui::LifecycleRequest::None) {
+    if (dkr::runtime::ui::lifecycle_request() != dkr::runtime::ui::LifecycleRequest::None) {
         ultramodern::quit();
     }
     dkr::runtime::ui::update_camera_mouse();
@@ -1858,7 +1691,8 @@ void dkr::runtime::platform::pump_input_backend_events() {
     CompleteSdl3InputProbe();
     ApplyPendingInputBackendSwitch();
     EnsureInputBackendHealthy();
-    if (active_input_backend() != InputBackend::SDL3Native) return;
+    if (active_input_backend() != InputBackend::SDL3Native)
+        return;
     std::scoped_lock lock(g_platform_mutex);
     PushSdl3Events();
 }
@@ -1867,16 +1701,14 @@ void* dkr::runtime::platform::sdl_window() {
     return g_window;
 }
 
-bool dkr::runtime::platform::handle_window_shortcut(
-    const void* raw_event, bool renderer_active) {
+bool dkr::runtime::platform::handle_window_shortcut(const void* raw_event, bool renderer_active) {
     const auto* event = static_cast<const SDL_Event*>(raw_event);
     if (event == nullptr || event->type != SDL_KEYDOWN || event->key.repeat != 0) {
         return false;
     }
 
     const bool f11 = event->key.keysym.scancode == SDL_SCANCODE_F11;
-    const bool alt_enter = event->key.keysym.scancode == SDL_SCANCODE_RETURN &&
-        (event->key.keysym.mod & KMOD_ALT) != 0;
+    const bool alt_enter = event->key.keysym.scancode == SDL_SCANCODE_RETURN && (event->key.keysym.mod & KMOD_ALT) != 0;
     if (!f11 && !alt_enter) {
         return false;
     }
@@ -1887,11 +1719,9 @@ bool dkr::runtime::platform::handle_window_shortcut(
 
 void dkr::runtime::platform::toggle_fullscreen(bool renderer_active) {
     auto config = ultramodern::renderer::get_graphics_config();
-    const bool fullscreen =
-        config.wm_option == ultramodern::renderer::WindowMode::Fullscreen;
-    config.wm_option = fullscreen
-        ? ultramodern::renderer::WindowMode::Windowed
-        : ultramodern::renderer::WindowMode::Fullscreen;
+    const bool fullscreen = config.wm_option == ultramodern::renderer::WindowMode::Fullscreen;
+    config.wm_option =
+        fullscreen ? ultramodern::renderer::WindowMode::Windowed : ultramodern::renderer::WindowMode::Fullscreen;
     ultramodern::renderer::set_graphics_config(config);
     dkr::runtime::ui::persist_settings();
 
@@ -1901,8 +1731,7 @@ void dkr::runtime::platform::toggle_fullscreen(bool renderer_active) {
     if (!renderer_active && g_window != nullptr) {
         const Uint32 mode = fullscreen ? 0U : SDL_WINDOW_FULLSCREEN_DESKTOP;
         if (SDL_SetWindowFullscreen(g_window, mode) != 0) {
-            std::fprintf(stderr, "[window] fullscreen toggle failed: %s\n",
-                         SDL_GetError());
+            std::fprintf(stderr, "[window] fullscreen toggle failed: %s\n", SDL_GetError());
         }
     }
 
@@ -1922,23 +1751,19 @@ void dkr::runtime::platform::update_fullscreen_cursor(const void* raw_event) {
 
     bool pointer_activity = false;
     if (event != nullptr) {
-        pointer_activity = event->type == SDL_MOUSEMOTION ||
-            event->type == SDL_MOUSEBUTTONDOWN ||
-            event->type == SDL_MOUSEBUTTONUP || event->type == SDL_MOUSEWHEEL;
+        pointer_activity = event->type == SDL_MOUSEMOTION || event->type == SDL_MOUSEBUTTONDOWN ||
+                           event->type == SDL_MOUSEBUTTONUP || event->type == SDL_MOUSEWHEEL;
         if (event->type == SDL_WINDOWEVENT &&
-            (event->window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
-             event->window.event == SDL_WINDOWEVENT_ENTER)) {
+            (event->window.event == SDL_WINDOWEVENT_FOCUS_GAINED || event->window.event == SDL_WINDOWEVENT_ENTER)) {
             pointer_activity = true;
         }
     }
 
     const auto& config = ultramodern::renderer::get_graphics_config();
     const Uint32 flags = g_window != nullptr ? SDL_GetWindowFlags(g_window) : 0U;
-    const bool fullscreen =
-        config.wm_option == ultramodern::renderer::WindowMode::Fullscreen ||
-        (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0U;
-    const bool focused = g_window != nullptr &&
-        (flags & SDL_WINDOW_INPUT_FOCUS) != 0U;
+    const bool fullscreen = config.wm_option == ultramodern::renderer::WindowMode::Fullscreen ||
+                            (flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0U;
+    const bool focused = g_window != nullptr && (flags & SDL_WINDOW_INPUT_FOCUS) != 0U;
 
     if (pointer_activity || fullscreen != g_cursor_was_fullscreen) {
         g_cursor_last_activity_ms = now;
@@ -1949,8 +1774,7 @@ void dkr::runtime::platform::update_fullscreen_cursor(const void* raw_event) {
     }
     g_cursor_was_fullscreen = fullscreen;
 
-    const bool should_hide = fullscreen && focused &&
-        now - g_cursor_last_activity_ms >= kFullscreenCursorIdleMs;
+    const bool should_hide = fullscreen && focused && now - g_cursor_last_activity_ms >= kFullscreenCursorIdleMs;
     if (should_hide != g_cursor_hidden) {
         SDL_ShowCursor(should_hide ? SDL_DISABLE : SDL_ENABLE);
         g_cursor_hidden = should_hide;
@@ -1974,72 +1798,50 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
             io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
         }
         const auto button = [&](ImGuiKey key, std::size_t source) {
-            io.AddKeyEvent(key, connected &&
-                source < controller->buttons.size() &&
-                controller->buttons[source] != 0U);
+            io.AddKeyEvent(key, connected && source < controller->buttons.size() && controller->buttons[source] != 0U);
         };
-        const auto axis = [&](ImGuiKey negative_key, ImGuiKey positive_key,
-                              std::size_t source, bool invert = false) {
-            float value = connected && source < controller->axes.size()
-                ? NormaliseAxis(controller->axes[source]) : 0.0F;
-            if (invert) value = -value;
-            io.AddKeyAnalogEvent(negative_key, value < 0.0F,
-                                 std::max(-value, 0.0F));
-            io.AddKeyAnalogEvent(positive_key, value > 0.0F,
-                                 std::max(value, 0.0F));
+        const auto axis = [&](ImGuiKey negative_key, ImGuiKey positive_key, std::size_t source, bool invert = false) {
+            float value =
+                connected && source < controller->axes.size() ? NormaliseAxis(controller->axes[source]) : 0.0F;
+            if (invert)
+                value = -value;
+            io.AddKeyAnalogEvent(negative_key, value < 0.0F, std::max(-value, 0.0F));
+            io.AddKeyAnalogEvent(positive_key, value > 0.0F, std::max(value, 0.0F));
         };
         using dkr::runtime::controllers::StandardAxis;
         using dkr::runtime::controllers::StandardButton;
-        button(ImGuiKey_GamepadStart,
-               static_cast<std::size_t>(StandardButton::Start));
-        button(ImGuiKey_GamepadBack,
-               static_cast<std::size_t>(StandardButton::Back));
-        button(ImGuiKey_GamepadFaceDown,
-               static_cast<std::size_t>(StandardButton::South));
-        button(ImGuiKey_GamepadFaceRight,
-               static_cast<std::size_t>(StandardButton::East));
-        button(ImGuiKey_GamepadFaceLeft,
-               static_cast<std::size_t>(StandardButton::West));
-        button(ImGuiKey_GamepadFaceUp,
-               static_cast<std::size_t>(StandardButton::North));
-        button(ImGuiKey_GamepadDpadLeft,
-               static_cast<std::size_t>(StandardButton::DpadLeft));
-        button(ImGuiKey_GamepadDpadRight,
-               static_cast<std::size_t>(StandardButton::DpadRight));
-        button(ImGuiKey_GamepadDpadUp,
-               static_cast<std::size_t>(StandardButton::DpadUp));
-        button(ImGuiKey_GamepadDpadDown,
-               static_cast<std::size_t>(StandardButton::DpadDown));
-        button(ImGuiKey_GamepadL1,
-               static_cast<std::size_t>(StandardButton::LeftShoulder));
-        button(ImGuiKey_GamepadR1,
-               static_cast<std::size_t>(StandardButton::RightShoulder));
-        button(ImGuiKey_GamepadL3,
-               static_cast<std::size_t>(StandardButton::LeftStick));
-        button(ImGuiKey_GamepadR3,
-               static_cast<std::size_t>(StandardButton::RightStick));
-        axis(ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight,
-             static_cast<std::size_t>(StandardAxis::LeftX));
-        axis(ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown,
-             static_cast<std::size_t>(StandardAxis::LeftY));
-        axis(ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight,
-             static_cast<std::size_t>(StandardAxis::RightX));
-        axis(ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown,
-             static_cast<std::size_t>(StandardAxis::RightY));
-        const float left_trigger = connected
-            ? std::max(static_cast<float>(controller->axes[
-                  static_cast<std::size_t>(StandardAxis::LeftTrigger)]) /
-                  32767.0F, 0.0F)
-            : 0.0F;
-        const float right_trigger = connected
-            ? std::max(static_cast<float>(controller->axes[
-                  static_cast<std::size_t>(StandardAxis::RightTrigger)]) /
-                  32767.0F, 0.0F)
-            : 0.0F;
-        io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, left_trigger > 0.10F,
-                             left_trigger);
-        io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, right_trigger > 0.10F,
-                             right_trigger);
+        button(ImGuiKey_GamepadStart, static_cast<std::size_t>(StandardButton::Start));
+        button(ImGuiKey_GamepadBack, static_cast<std::size_t>(StandardButton::Back));
+        button(ImGuiKey_GamepadFaceDown, static_cast<std::size_t>(StandardButton::South));
+        button(ImGuiKey_GamepadFaceRight, static_cast<std::size_t>(StandardButton::East));
+        button(ImGuiKey_GamepadFaceLeft, static_cast<std::size_t>(StandardButton::West));
+        button(ImGuiKey_GamepadFaceUp, static_cast<std::size_t>(StandardButton::North));
+        button(ImGuiKey_GamepadDpadLeft, static_cast<std::size_t>(StandardButton::DpadLeft));
+        button(ImGuiKey_GamepadDpadRight, static_cast<std::size_t>(StandardButton::DpadRight));
+        button(ImGuiKey_GamepadDpadUp, static_cast<std::size_t>(StandardButton::DpadUp));
+        button(ImGuiKey_GamepadDpadDown, static_cast<std::size_t>(StandardButton::DpadDown));
+        button(ImGuiKey_GamepadL1, static_cast<std::size_t>(StandardButton::LeftShoulder));
+        button(ImGuiKey_GamepadR1, static_cast<std::size_t>(StandardButton::RightShoulder));
+        button(ImGuiKey_GamepadL3, static_cast<std::size_t>(StandardButton::LeftStick));
+        button(ImGuiKey_GamepadR3, static_cast<std::size_t>(StandardButton::RightStick));
+        axis(ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight, static_cast<std::size_t>(StandardAxis::LeftX));
+        axis(ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown, static_cast<std::size_t>(StandardAxis::LeftY));
+        axis(ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight, static_cast<std::size_t>(StandardAxis::RightX));
+        axis(ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown, static_cast<std::size_t>(StandardAxis::RightY));
+        const float left_trigger =
+            connected
+                ? std::max(static_cast<float>(controller->axes[static_cast<std::size_t>(StandardAxis::LeftTrigger)]) /
+                               32767.0F,
+                           0.0F)
+                : 0.0F;
+        const float right_trigger =
+            connected
+                ? std::max(static_cast<float>(controller->axes[static_cast<std::size_t>(StandardAxis::RightTrigger)]) /
+                               32767.0F,
+                           0.0F)
+                : 0.0F;
+        io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, left_trigger > 0.10F, left_trigger);
+        io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, right_trigger > 0.10F, right_trigger);
         return;
     }
     std::scoped_lock lock(g_platform_mutex);
@@ -2055,14 +1857,11 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
     }
 
     const auto button = [&](ImGuiKey key, SDL_GameControllerButton source) {
-        io.AddKeyEvent(key, connected &&
-            SDL_GameControllerGetButton(controller, source) != 0);
+        io.AddKeyEvent(key, connected && SDL_GameControllerGetButton(controller, source) != 0);
     };
-    const auto axis = [&](ImGuiKey negative_key, ImGuiKey positive_key,
-                          SDL_GameControllerAxis source, bool invert = false) {
-        float value = connected
-            ? NormaliseAxis(SDL_GameControllerGetAxis(controller, source))
-            : 0.0F;
+    const auto axis = [&](ImGuiKey negative_key, ImGuiKey positive_key, SDL_GameControllerAxis source,
+                          bool invert = false) {
+        float value = connected ? NormaliseAxis(SDL_GameControllerGetAxis(controller, source)) : 0.0F;
         if (invert) {
             value = -value;
         }
@@ -2084,48 +1883,44 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
     button(ImGuiKey_GamepadR1, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
     button(ImGuiKey_GamepadL3, SDL_CONTROLLER_BUTTON_LEFTSTICK);
     button(ImGuiKey_GamepadR3, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
-    axis(ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight,
-         SDL_CONTROLLER_AXIS_LEFTX);
-    axis(ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown,
-         SDL_CONTROLLER_AXIS_LEFTY);
-    axis(ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight,
-         SDL_CONTROLLER_AXIS_RIGHTX);
-    axis(ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown,
-         SDL_CONTROLLER_AXIS_RIGHTY);
+    axis(ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight, SDL_CONTROLLER_AXIS_LEFTX);
+    axis(ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown, SDL_CONTROLLER_AXIS_LEFTY);
+    axis(ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight, SDL_CONTROLLER_AXIS_RIGHTX);
+    axis(ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown, SDL_CONTROLLER_AXIS_RIGHTY);
 
-    const float left_trigger = connected
-        ? std::max(static_cast<float>(SDL_GameControllerGetAxis(
-              controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT)) / 32767.0F, 0.0F)
-        : 0.0F;
-    const float right_trigger = connected
-        ? std::max(static_cast<float>(SDL_GameControllerGetAxis(
-              controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT)) / 32767.0F, 0.0F)
-        : 0.0F;
+    const float left_trigger =
+        connected
+            ? std::max(static_cast<float>(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT)) /
+                           32767.0F,
+                       0.0F)
+            : 0.0F;
+    const float right_trigger =
+        connected
+            ? std::max(static_cast<float>(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT)) /
+                           32767.0F,
+                       0.0F)
+            : 0.0F;
     io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, left_trigger > 0.10F, left_trigger);
     io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, right_trigger > 0.10F, right_trigger);
 }
 
 #endif
 
-void dkr::runtime::platform::queue_audio(std::int16_t* samples,
-                                         std::size_t sample_count) {
-    if (!dkr::runtime::netplay::external_side_effects_allowed()) return;
+void dkr::runtime::platform::queue_audio(std::int16_t* samples, std::size_t sample_count) {
+    if (!dkr::runtime::netplay::external_side_effects_allowed())
+        return;
     dkr::runtime::telemetry::record_audio_buffer(sample_count);
     const auto index = ++g_audio_buffers;
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
     if (g_audio_device != 0 && sample_count != 0) {
-        const std::size_t maximum_samples =
-            static_cast<std::size_t>(std::max(g_audio_frequency, 48000U)) * 2U;
+        const std::size_t maximum_samples = static_cast<std::size_t>(std::max(g_audio_frequency, 48000U)) * 2U;
         if (sample_count > maximum_samples || (sample_count & 1U) != 0) {
-            std::fprintf(stderr,
-                         "[boot][audio] rejected invalid buffer samples=%zu maximum=%zu\n",
-                         sample_count, maximum_samples);
+            std::fprintf(stderr, "[boot][audio] rejected invalid buffer samples=%zu maximum=%zu\n", sample_count,
+                         maximum_samples);
             return;
         }
-        const std::size_t queued_frames_before =
-            SDL_GetQueuedAudioSize(g_audio_device) /
-            (2U * sizeof(std::int16_t));
+        const std::size_t queued_frames_before = SDL_GetQueuedAudioSize(g_audio_device) / (2U * sizeof(std::int16_t));
         const std::size_t submitted_frames = sample_count / 2U;
         if (g_audio_nominal_block_frames == 0U) {
             g_audio_nominal_block_frames = submitted_frames;
@@ -2135,16 +1930,12 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples,
         // while online so that replay work never becomes an SDL underrun. The
         // emulated AI length below explicitly excludes this cushion, so game
         // cadence and pitch remain unchanged.
-        const bool online_audio =
-            g_online_input_routing.load(std::memory_order_acquire);
+        const bool online_audio = g_online_input_routing.load(std::memory_order_acquire);
         const std::uint32_t minimum_cushion = online_audio ? 3U : 2U;
-        g_audio_cushion_blocks =
-            (std::max)(g_audio_cushion_blocks, minimum_cushion);
-        const std::size_t cushion_block_frames = std::max(
-            g_audio_nominal_block_frames,
-            static_cast<std::size_t>(g_audio_callback_frames));
-        g_audio_prime_target_frames = cushion_block_frames *
-                                      static_cast<std::size_t>(g_audio_cushion_blocks);
+        g_audio_cushion_blocks = (std::max)(g_audio_cushion_blocks, minimum_cushion);
+        const std::size_t cushion_block_frames =
+            std::max(g_audio_nominal_block_frames, static_cast<std::size_t>(g_audio_callback_frames));
+        g_audio_prime_target_frames = cushion_block_frames * static_cast<std::size_t>(g_audio_cushion_blocks);
         if (index > 1U) {
             if (queued_frames_before == 0U) {
                 if (g_audio_playback_started) {
@@ -2156,38 +1947,30 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples,
                     // emulated AI DMA state to DKR.
                     SDL_PauseAudioDevice(g_audio_device, 1);
                     g_audio_playback_started = false;
-                    const std::uint32_t maximum_cushion =
-                        online_audio ? 4U : 3U;
-                    g_audio_cushion_blocks = std::min(
-                        g_audio_cushion_blocks + 1U, maximum_cushion);
-                    g_audio_prime_target_frames = cushion_block_frames *
-                                                  static_cast<std::size_t>(
-                                                      g_audio_cushion_blocks);
+                    const std::uint32_t maximum_cushion = online_audio ? 4U : 3U;
+                    g_audio_cushion_blocks = std::min(g_audio_cushion_blocks + 1U, maximum_cushion);
+                    g_audio_prime_target_frames =
+                        cushion_block_frames * static_cast<std::size_t>(g_audio_cushion_blocks);
                 }
             }
         }
         g_audio_swap_buffer.resize(sample_count);
         g_audio_equalizer.configure(
             g_audio_frequency,
-            dkr::runtime::enhancements::modern_presentation_enabled()
-                ? g_bass_gain.load(std::memory_order_relaxed) : 0.0F,
-            dkr::runtime::enhancements::modern_presentation_enabled()
-                ? g_mid_gain.load(std::memory_order_relaxed) : 0.0F,
-            dkr::runtime::enhancements::modern_presentation_enabled()
-                ? g_treble_gain.load(std::memory_order_relaxed) : 0.0F);
-        const std::uint64_t tone_generation =
-            g_ui_tone_generation.load(std::memory_order_acquire);
+            dkr::runtime::enhancements::modern_presentation_enabled() ? g_bass_gain.load(std::memory_order_relaxed)
+                                                                      : 0.0F,
+            dkr::runtime::enhancements::modern_presentation_enabled() ? g_mid_gain.load(std::memory_order_relaxed)
+                                                                      : 0.0F,
+            dkr::runtime::enhancements::modern_presentation_enabled() ? g_treble_gain.load(std::memory_order_relaxed)
+                                                                      : 0.0F);
+        const std::uint64_t tone_generation = g_ui_tone_generation.load(std::memory_order_acquire);
         if (tone_generation != g_ui_tone_seen_generation) {
             g_ui_tone_seen_generation = tone_generation;
-            g_ui_tone_active_frequency_hz = std::clamp(
-                g_ui_tone_frequency_hz.load(std::memory_order_relaxed),
-                80.0F, 4000.0F);
-            const std::uint32_t duration_ms = std::clamp(
-                g_ui_tone_duration_ms.load(std::memory_order_relaxed),
-                20U, 500U);
-            g_ui_tone_total_frames =
-                (static_cast<std::size_t>(g_audio_frequency) * duration_ms) /
-                1000U;
+            g_ui_tone_active_frequency_hz =
+                std::clamp(g_ui_tone_frequency_hz.load(std::memory_order_relaxed), 80.0F, 4000.0F);
+            const std::uint32_t duration_ms =
+                std::clamp(g_ui_tone_duration_ms.load(std::memory_order_relaxed), 20U, 500U);
+            g_ui_tone_total_frames = (static_cast<std::size_t>(g_audio_frequency) * duration_ms) / 1000U;
             g_ui_tone_frames_remaining = g_ui_tone_total_frames;
             g_ui_tone_phase = 0.0;
         }
@@ -2196,8 +1979,7 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples,
         const bool custom_music_active = dkr::runtime::custom_music::active();
         if (custom_music_active) {
             g_custom_music_buffer.assign(sample_count, 0.0F);
-            dkr::runtime::custom_music::render(g_custom_music_buffer.data(),
-                                               sample_count / 2U, g_audio_frequency);
+            dkr::runtime::custom_music::render(g_custom_music_buffer.data(), sample_count / 2U, g_audio_frequency);
         }
         for (std::size_t i = 0; i < sample_count; i += 2) {
             // RDRAM's 32-bit word swap leaves each native stereo pair in R,L
@@ -2207,46 +1989,36 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples,
                 static_cast<float>(samples[i + 1]) + (custom_music_active ? g_custom_music_buffer[i] : 0.0F),
                 static_cast<float>(samples[i]) + (custom_music_active ? g_custom_music_buffer[i + 1] : 0.0F));
             float ui_tone = 0.0F;
-            if (g_ui_tone_frames_remaining != 0U &&
-                g_ui_tone_total_frames != 0U && g_audio_frequency != 0U) {
-                const float progress = 1.0F -
-                    static_cast<float>(g_ui_tone_frames_remaining) /
-                    static_cast<float>(g_ui_tone_total_frames);
+            if (g_ui_tone_frames_remaining != 0U && g_ui_tone_total_frames != 0U && g_audio_frequency != 0U) {
+                const float progress =
+                    1.0F - static_cast<float>(g_ui_tone_frames_remaining) / static_cast<float>(g_ui_tone_total_frames);
                 const float attack = std::clamp(progress / 0.08F, 0.0F, 1.0F);
-                const float release = std::clamp(
-                    static_cast<float>(g_ui_tone_frames_remaining) /
-                        (static_cast<float>(g_ui_tone_total_frames) * 0.32F),
-                    0.0F, 1.0F);
+                const float release = std::clamp(static_cast<float>(g_ui_tone_frames_remaining) /
+                                                     (static_cast<float>(g_ui_tone_total_frames) * 0.32F),
+                                                 0.0F, 1.0F);
                 // A softly clipped two-harmonic pulse gives the cue a compact
                 // cartridge-era character without sampling or replacing any
                 // copyrighted game audio.
                 const double fundamental = std::sin(g_ui_tone_phase);
                 const double harmonic = std::sin(g_ui_tone_phase * 2.0) * 0.22;
-                ui_tone = static_cast<float>(fundamental + harmonic) *
-                          5200.0F * attack * release;
-                g_ui_tone_phase +=
-                    (2.0 * 3.14159265358979323846 *
-                     static_cast<double>(g_ui_tone_active_frequency_hz)) /
-                    static_cast<double>(g_audio_frequency);
+                ui_tone = static_cast<float>(fundamental + harmonic) * 5200.0F * attack * release;
+                g_ui_tone_phase += (2.0 * 3.14159265358979323846 * static_cast<double>(g_ui_tone_active_frequency_hz)) /
+                                   static_cast<double>(g_audio_frequency);
                 if (g_ui_tone_phase >= 2.0 * 3.14159265358979323846) {
-                    g_ui_tone_phase = std::fmod(
-                        g_ui_tone_phase, 2.0 * 3.14159265358979323846);
+                    g_ui_tone_phase = std::fmod(g_ui_tone_phase, 2.0 * 3.14159265358979323846);
                 }
                 --g_ui_tone_frames_remaining;
             }
             const long left = std::lround(filtered.first * volume + ui_tone);
             const long right = std::lround(filtered.second * volume + ui_tone);
-            g_audio_swap_buffer[i] = static_cast<std::int16_t>(
-                std::clamp(left, -32768L, 32767L));
-            g_audio_swap_buffer[i + 1] = static_cast<std::int16_t>(
-                std::clamp(right, -32768L, 32767L));
+            g_audio_swap_buffer[i] = static_cast<std::int16_t>(std::clamp(left, -32768L, 32767L));
+            g_audio_swap_buffer[i + 1] = static_cast<std::int16_t>(std::clamp(right, -32768L, 32767L));
         }
         const auto byte_count = static_cast<Uint32>(sample_count * sizeof(std::int16_t));
         if (SDL_QueueAudio(g_audio_device, g_audio_swap_buffer.data(), byte_count) != 0) {
             std::fprintf(stderr, "[boot][audio] queue failed: %s\n", SDL_GetError());
         } else {
-            const std::size_t queued_frames = SDL_GetQueuedAudioSize(g_audio_device) /
-                                              (2U * sizeof(std::int16_t));
+            const std::size_t queued_frames = SDL_GetQueuedAudioSize(g_audio_device) / (2U * sizeof(std::int16_t));
             if (!g_audio_playback_started && g_audio_prime_target_frames != 0U &&
                 queued_frames >= g_audio_prime_target_frames) {
                 SDL_PauseAudioDevice(g_audio_device, 0);
@@ -2259,18 +2031,15 @@ void dkr::runtime::platform::queue_audio(std::int16_t* samples,
 #endif
 }
 
-void dkr::runtime::platform::request_ui_tone(float frequency_hz,
-                                             std::uint32_t duration_ms) {
+void dkr::runtime::platform::request_ui_tone(float frequency_hz, std::uint32_t duration_ms) {
     const float clamped_frequency = std::clamp(frequency_hz, 80.0F, 4000.0F);
     const std::uint32_t clamped_duration = std::clamp(duration_ms, 20U, 500U);
     g_ui_tone_frequency_hz.store(clamped_frequency, std::memory_order_relaxed);
     g_ui_tone_duration_ms.store(clamped_duration, std::memory_order_relaxed);
-    const std::uint64_t generation =
-        g_ui_tone_generation.fetch_add(1U, std::memory_order_release) + 1U;
+    const std::uint64_t generation = g_ui_tone_generation.fetch_add(1U, std::memory_order_release) + 1U;
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
-    if (g_audio_device == 0 &&
-        QueueStandaloneUiToneLocked(clamped_frequency, clamped_duration)) {
+    if (g_audio_device == 0 && QueueStandaloneUiToneLocked(clamped_frequency, clamped_duration)) {
         // The launcher path has already consumed this request. Prevent the
         // first DKR audio buffer from replaying the final countdown note.
         g_ui_tone_seen_generation = generation;
@@ -2291,8 +2060,7 @@ float dkr::runtime::platform::bass_gain() {
 }
 
 void dkr::runtime::platform::set_bass_gain(float decibels) {
-    g_bass_gain.store(dkr::runtime::audio::clamp_eq_gain(decibels),
-                      std::memory_order_release);
+    g_bass_gain.store(dkr::runtime::audio::clamp_eq_gain(decibels), std::memory_order_release);
 }
 
 float dkr::runtime::platform::mid_gain() {
@@ -2300,8 +2068,7 @@ float dkr::runtime::platform::mid_gain() {
 }
 
 void dkr::runtime::platform::set_mid_gain(float decibels) {
-    g_mid_gain.store(dkr::runtime::audio::clamp_eq_gain(decibels),
-                     std::memory_order_release);
+    g_mid_gain.store(dkr::runtime::audio::clamp_eq_gain(decibels), std::memory_order_release);
 }
 
 float dkr::runtime::platform::treble_gain() {
@@ -2309,8 +2076,7 @@ float dkr::runtime::platform::treble_gain() {
 }
 
 void dkr::runtime::platform::set_treble_gain(float decibels) {
-    g_treble_gain.store(dkr::runtime::audio::clamp_eq_gain(decibels),
-                        std::memory_order_release);
+    g_treble_gain.store(dkr::runtime::audio::clamp_eq_gain(decibels), std::memory_order_release);
 }
 
 std::size_t dkr::runtime::platform::audio_frames_remaining() {
@@ -2329,8 +2095,7 @@ std::size_t dkr::runtime::platform::audio_frames_remaining() {
         if (!g_audio_playback_started) {
             return 0U;
         }
-        const std::size_t queued_frames = SDL_GetQueuedAudioSize(g_audio_device) /
-                                          (2U * sizeof(std::int16_t));
+        const std::size_t queued_frames = SDL_GetQueuedAudioSize(g_audio_device) / (2U * sizeof(std::int16_t));
         // DKR's retail audiomgr targets a small active-DMA residual when it
         // chooses the next synthesis quantum. At 22,050 Hz its aligned authored
         // frame is 736 samples; the initial no-DMA quantum is 848, leaving the
@@ -2339,20 +2104,15 @@ std::size_t dkr::runtime::platform::audio_frames_remaining() {
         // lets DKR alternate its original 720/736/752-frame corrections around
         // the queue target instead of slowly draining the cushion.
         const std::size_t authored_frame_frames =
-            (((static_cast<std::size_t>(g_audio_frequency) + 29U) / 30U) + 15U) &
-            ~std::size_t{15U};
-        const std::size_t target_active_residual =
-            g_audio_nominal_block_frames > authored_frame_frames
-                ? g_audio_nominal_block_frames - authored_frame_frames
-                : 0U;
-        const std::size_t protected_host_frames =
-            g_audio_prime_target_frames > target_active_residual
-                ? g_audio_prime_target_frames - target_active_residual
-                : 0U;
+            (((static_cast<std::size_t>(g_audio_frequency) + 29U) / 30U) + 15U) & ~std::size_t{15U};
+        const std::size_t target_active_residual = g_audio_nominal_block_frames > authored_frame_frames
+                                                       ? g_audio_nominal_block_frames - authored_frame_frames
+                                                       : 0U;
+        const std::size_t protected_host_frames = g_audio_prime_target_frames > target_active_residual
+                                                      ? g_audio_prime_target_frames - target_active_residual
+                                                      : 0U;
         const std::size_t feedback_frames =
-            queued_frames > protected_host_frames
-                ? queued_frames - protected_host_frames
-                : 0U;
+            queued_frames > protected_host_frames ? queued_frames - protected_host_frames : 0U;
         // osAiGetLength reports the active N64 DMA, not the sum of both AI
         // slots. DKR uses that distinction when sizing its next audio frame.
         const std::size_t one_dma_frames = std::max(g_audio_frequency / 30U, 1U);
@@ -2395,8 +2155,7 @@ void dkr::runtime::platform::set_audio_frequency(std::uint32_t frequency) {
     desired.samples = 512;
     g_audio_device = SDL_OpenAudioDevice(nullptr, 0, &desired, &obtained, 0);
     if (g_audio_device == 0) {
-        std::fprintf(stderr, "[boot][audio] open failed at %u Hz: %s\n",
-                     frequency, SDL_GetError());
+        std::fprintf(stderr, "[boot][audio] open failed at %u Hz: %s\n", frequency, SDL_GetError());
         g_audio_frequency = 0;
         return;
     }
@@ -2407,8 +2166,8 @@ void dkr::runtime::platform::set_audio_frequency(std::uint32_t frequency) {
     g_audio_prime_target_frames = 0U;
     g_audio_cushion_blocks = 2U;
     g_audio_equalizer.reset();
-    std::fprintf(stderr, "[boot][audio] device opened requested=%u actual=%d format=%04X channels=%u\n",
-                 frequency, obtained.freq, obtained.format, obtained.channels);
+    std::fprintf(stderr, "[boot][audio] device opened requested=%u actual=%d format=%04X channels=%u\n", frequency,
+                 obtained.freq, obtained.format, obtained.channels);
 #else
     std::fprintf(stderr, "[boot][audio] frequency=%u (diagnostic backend)\n", frequency);
 #endif
@@ -2421,14 +2180,13 @@ void dkr::runtime::platform::set_audio_frequency(std::uint32_t frequency) {
 void dkr::runtime::platform::poll_input() {
 #if DKR_RUNTIME_HAS_RT64
     if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
-        for(unsigned profile=0;profile<4;++profile)dkr::runtime::camera::actions().publish(profile,{});
+        for (unsigned profile = 0; profile < 4; ++profile)
+            dkr::runtime::camera::actions().publish(profile, {});
         ClearPublishedControllerInput(false);
         if (g_online_input_routing.load(std::memory_order_acquire)) {
-            const std::size_t profile = std::min(
-                g_online_input_profile.load(std::memory_order_acquire),
-                kControllerCount - 1U);
-            dkr::runtime::netplay::online_input_broker().capture_local(
-                profile, 0U, 0.0F, 0.0F, true);
+            const std::size_t profile =
+                std::min(g_online_input_profile.load(std::memory_order_acquire), kControllerCount - 1U);
+            dkr::runtime::netplay::online_input_broker().capture_local(profile, 0U, 0.0F, 0.0F, true);
         }
         return;
     }
@@ -2443,105 +2201,101 @@ void dkr::runtime::platform::poll_input() {
     // A confirm/back press used by the invitation must be released before
     // it can become racing input. Read the already refreshed physical state;
     // do not clear or mutate any canonical online controller ports.
-    if(dkr::runtime::invites::release_pending()) {
-        bool held=false;int count=0;const auto* keys=SDL_GetKeyboardState(&count);
-        for(int key=0;key<count;++key)held|=keys[key]!=0;
-        held|=SDL_GetMouseState(nullptr,nullptr)!=0;
-        if(sdl3_native) {
-            for(const auto& device:g_sdl3_input_state.devices)if(device.snapshot.connected) {
-                for(auto button:device.snapshot.buttons)held|=button!=0;
-                for(auto axis:device.snapshot.axes)held|=std::abs(int(axis))>16000;
-            }
-        } else for(auto* controller:g_controllers)if(controller) {
-            for(int button=0;button<SDL_CONTROLLER_BUTTON_MAX;++button)held|=SDL_GameControllerGetButton(controller,SDL_GameControllerButton(button))!=0;
-            for(int axis=0;axis<SDL_CONTROLLER_AXIS_MAX;++axis)held|=std::abs(int(SDL_GameControllerGetAxis(controller,SDL_GameControllerAxis(axis))))>16000;
-        }
+    if (dkr::runtime::invites::release_pending()) {
+        bool held = false;
+        int count = 0;
+        const auto* keys = SDL_GetKeyboardState(&count);
+        for (int key = 0; key < count; ++key)
+            held |= keys[key] != 0;
+        held |= SDL_GetMouseState(nullptr, nullptr) != 0;
+        if (sdl3_native) {
+            for (const auto& device : g_sdl3_input_state.devices)
+                if (device.snapshot.connected) {
+                    for (auto button : device.snapshot.buttons)
+                        held |= button != 0;
+                    for (auto axis : device.snapshot.axes)
+                        held |= std::abs(int(axis)) > 16000;
+                }
+        } else
+            for (auto* controller : g_controllers)
+                if (controller) {
+                    for (int button = 0; button < SDL_CONTROLLER_BUTTON_MAX; ++button)
+                        held |= SDL_GameControllerGetButton(controller, SDL_GameControllerButton(button)) != 0;
+                    for (int axis = 0; axis < SDL_CONTROLLER_AXIS_MAX; ++axis)
+                        held |=
+                            std::abs(int(SDL_GameControllerGetAxis(controller, SDL_GameControllerAxis(axis)))) > 16000;
+                }
         dkr::runtime::invites::release_if_clear(!held);
     }
 
     const bool blocked = dkr::runtime::ui::overlay_visible() || dkr::runtime::camera::editor_open.load();
-    const bool window_focused = g_window != nullptr &&
-        (SDL_GetWindowFlags(g_window) & SDL_WINDOW_INPUT_FOCUS) != 0U;
-    const bool online_routing =
-        g_online_input_routing.load(std::memory_order_acquire);
-    const int configured_keyboard_player =
-        dkr::runtime::input::keyboard_player();
-    const std::size_t online_profile = std::min(
-        g_online_input_profile.load(std::memory_order_acquire),
-        kControllerCount - 1U);
+    const bool window_focused = g_window != nullptr && (SDL_GetWindowFlags(g_window) & SDL_WINDOW_INPUT_FOCUS) != 0U;
+    const bool online_routing = g_online_input_routing.load(std::memory_order_acquire);
+    const int configured_keyboard_player = dkr::runtime::input::keyboard_player();
+    const std::size_t online_profile =
+        std::min(g_online_input_profile.load(std::memory_order_acquire), kControllerCount - 1U);
     for (std::size_t player = 0; player < kControllerCount; ++player) {
         const bool owns_keyboard =
-            dkr::runtime::netplay::keyboard_owns_input_port(
-                online_routing, player, configured_keyboard_player);
-        const bool allow_background_controller =
-            dkr::runtime::input::background_input_enabled(player);
-        const bool gameplay_blocked = blocked ||
-            (!window_focused && !allow_background_controller);
+            dkr::runtime::netplay::keyboard_owns_input_port(online_routing, player, configured_keyboard_player);
+        const bool allow_background_controller = dkr::runtime::input::background_input_enabled(player);
+        const bool gameplay_blocked = blocked || (!window_focused && !allow_background_controller);
         dkr::runtime::input::State state{};
         if (sdl3_native) {
-            const auto* controller = Sdl3DeviceForInstance(
-                g_sdl3_player_instances[player]);
-            const auto* gyro = Sdl3DeviceForInstance(
-                g_sdl3_gyro_instances[player]);
+            const auto* controller = Sdl3DeviceForInstance(g_sdl3_player_instances[player]);
+            const auto* gyro = Sdl3DeviceForInstance(g_sdl3_gyro_instances[player]);
             state = dkr::runtime::input::poll_snapshot(
-                player,
-                controller != nullptr ? &controller->snapshot : nullptr,
-                gyro != nullptr ? &gyro->snapshot : nullptr,
-                owns_keyboard && window_focused, gameplay_blocked,
-                !online_routing,
-                player == (online_routing ? online_profile : 0U));
+                player, controller != nullptr ? &controller->snapshot : nullptr,
+                gyro != nullptr ? &gyro->snapshot : nullptr, owns_keyboard && window_focused, gameplay_blocked,
+                !online_routing, player == (online_routing ? online_profile : 0U));
         } else {
-            state = dkr::runtime::input::poll(
-                player, g_controllers[player], g_gyro_controllers[player],
-                owns_keyboard && window_focused, gameplay_blocked,
-                !online_routing,
-                player == (online_routing ? online_profile : 0U));
+            state = dkr::runtime::input::poll(player, g_controllers[player], g_gyro_controllers[player],
+                                              owns_keyboard && window_focused, gameplay_blocked, !online_routing,
+                                              player == (online_routing ? online_profile : 0U));
         }
 #if defined(__ANDROID__) || defined(DKR_IOS)
         if (player == (online_routing ? online_profile : 0U)) {
 #if defined(DKR_IOS)
             // iOS focus flags are flaky; a foreground phone should still receive touch.
-            dkr::runtime::mobile::merge_input(state,
-                blocked || dkr::runtime::mobile::editing());
+            dkr::runtime::mobile::merge_input(state, blocked || dkr::runtime::mobile::editing());
 #else
             dkr::runtime::mobile::merge_input(state,
-                gameplay_blocked || !window_focused || dkr::runtime::mobile::editing());
+                                              gameplay_blocked || !window_focused || dkr::runtime::mobile::editing());
 #endif
         }
 #endif
-        dkr::runtime::camera::actions().publish(unsigned(player),
-            {state.camera_actions,state.orbit_x,state.orbit_y,0,
-                gameplay_blocked||!dkr::runtime::camera::owns_controls(unsigned(player)),true});
-        if(dkr::runtime::camera::owns_controls(unsigned(player))) {
+        dkr::runtime::camera::actions().publish(
+            unsigned(player), {state.camera_actions, state.orbit_x, state.orbit_y, 0,
+                               gameplay_blocked || !dkr::runtime::camera::owns_controls(unsigned(player)), true});
+        if (dkr::runtime::camera::owns_controls(unsigned(player))) {
             // Remove only C buttons whose binding is actually shared with a
             // camera direction. Explicit independent C bindings remain usable.
-            using A=dkr::runtime::input::Action;
-            const A camera[]={A::OrbitUp,A::OrbitDown,A::OrbitLeft,A::OrbitRight};
-            const A native[]={A::CUp,A::CDown,A::CLeft,A::CRight};
-            const unsigned bits[]={8,4,2,1};
-            for(unsigned c=0;c<4;++c)for(unsigned n=0;n<4;++n) {
-                const int cb=dkr::runtime::input::controller_binding(player,camera[c]);
-                const int nb=dkr::runtime::input::controller_binding(player,native[n]);
-                const int ck=dkr::runtime::input::keyboard_binding(player,camera[c]);
-                const int nk=dkr::runtime::input::keyboard_binding(player,native[n]);
-                if((cb>=0&&cb==nb)||(ck>=0&&ck==nk))state.buttons&=std::uint16_t(~bits[n]);
-            }
-            if(state.accelerate)state.buttons|=0x8000U;
+            using A = dkr::runtime::input::Action;
+            const A camera[] = {A::OrbitUp, A::OrbitDown, A::OrbitLeft, A::OrbitRight};
+            const A native[] = {A::CUp, A::CDown, A::CLeft, A::CRight};
+            const unsigned bits[] = {8, 4, 2, 1};
+            for (unsigned c = 0; c < 4; ++c)
+                for (unsigned n = 0; n < 4; ++n) {
+                    const int cb = dkr::runtime::input::controller_binding(player, camera[c]);
+                    const int nb = dkr::runtime::input::controller_binding(player, native[n]);
+                    const int ck = dkr::runtime::input::keyboard_binding(player, camera[c]);
+                    const int nk = dkr::runtime::input::keyboard_binding(player, native[n]);
+                    if ((cb >= 0 && cb == nb) || (ck >= 0 && ck == nk))
+                        state.buttons &= std::uint16_t(~bits[n]);
+                }
+            if (state.accelerate)
+                state.buttons |= 0x8000U;
         }
         g_physical_buttons[player].store(state.buttons, std::memory_order_release);
         g_physical_stick_x[player].store(state.stick_x, std::memory_order_release);
         g_physical_stick_y[player].store(state.stick_y, std::memory_order_release);
         if (online_routing && player == online_profile) {
-            dkr::runtime::netplay::online_input_broker().capture_local(
-                player, state.buttons, state.stick_x, state.stick_y,
-                gameplay_blocked);
+            dkr::runtime::netplay::online_input_broker().capture_local(player, state.buttons, state.stick_x,
+                                                                       state.stick_y, gameplay_blocked);
         }
         // Online physical input is private until the input broker commits a
         // complete synchronized frame. Crucially, a physical poll never
         // clears or mutates the previously committed virtual N64 ports.
-        const bool publish_physical =
-            dkr::runtime::netplay::publish_physical_input_to_virtual_port(
-                online_routing);
+        const bool publish_physical = dkr::runtime::netplay::publish_physical_input_to_virtual_port(online_routing);
         if (publish_physical) {
             std::uint16_t buttons = state.buttons;
             g_buttons[player].store(buttons, std::memory_order_release);
@@ -2561,17 +2315,14 @@ void dkr::runtime::platform::poll_input() {
 #endif
 }
 
-void dkr::runtime::platform::set_online_input_routing(
-    bool enabled, std::uint8_t occupied_mask, std::uint8_t local_slot) {
+void dkr::runtime::platform::set_online_input_routing(bool enabled, std::uint8_t occupied_mask,
+                                                      std::uint8_t local_slot) {
 
-    g_online_occupied_mask.store(enabled ? occupied_mask : 0U,
-                                 std::memory_order_release);
-    g_online_local_slot.store(
-        enabled ? local_slot : dkr::runtime::netplay::kNoOnlinePlayerSlot,
-        std::memory_order_release);
+    g_online_occupied_mask.store(enabled ? occupied_mask : 0U, std::memory_order_release);
+    g_online_local_slot.store(enabled ? local_slot : dkr::runtime::netplay::kNoOnlinePlayerSlot,
+                              std::memory_order_release);
     g_online_input_routing.store(enabled, std::memory_order_release);
-    dkr::runtime::netplay::online_input_broker().configure(
-        enabled, occupied_mask, local_slot);
+    dkr::runtime::netplay::online_input_broker().configure(enabled, occupied_mask, local_slot);
 }
 
 void dkr::runtime::platform::set_online_input_profile(std::size_t profile) {
@@ -2581,19 +2332,16 @@ void dkr::runtime::platform::set_online_input_profile(std::size_t profile) {
 }
 
 std::size_t dkr::runtime::platform::online_input_profile() {
-    return std::min(g_online_input_profile.load(std::memory_order_acquire),
-                    kControllerCount - 1U);
+    return std::min(g_online_input_profile.load(std::memory_order_acquire), kControllerCount - 1U);
 }
 
-bool dkr::runtime::platform::get_input(int controller, std::uint16_t* buttons,
-                                       float* x, float* y) {
+bool dkr::runtime::platform::get_input(int controller, std::uint16_t* buttons, float* x, float* y) {
     if (controller < 0 || controller >= static_cast<int>(kControllerCount)) {
         return false;
     }
     const auto index = static_cast<std::size_t>(controller);
     if (g_online_input_routing.load(std::memory_order_acquire)) {
-        const auto input =
-            dkr::runtime::netplay::online_input_broker().input_for_port(index);
+        const auto input = dkr::runtime::netplay::online_input_broker().input_for_port(index);
         *buttons = input.buttons;
         *x = dkr::runtime::netplay::unpack_input_axis(input.stick_x);
         *y = dkr::runtime::netplay::unpack_input_axis(input.stick_y);
@@ -2605,10 +2353,9 @@ bool dkr::runtime::platform::get_input(int controller, std::uint16_t* buttons,
     return true;
 }
 
-bool dkr::runtime::platform::get_physical_input(
-    int controller, std::uint16_t* buttons, float* x, float* y) {
-    if (controller < 0 || controller >= static_cast<int>(kControllerCount) ||
-        buttons == nullptr || x == nullptr || y == nullptr) {
+bool dkr::runtime::platform::get_physical_input(int controller, std::uint16_t* buttons, float* x, float* y) {
+    if (controller < 0 || controller >= static_cast<int>(kControllerCount) || buttons == nullptr || x == nullptr ||
+        y == nullptr) {
         return false;
     }
     const auto index = static_cast<std::size_t>(controller);
@@ -2618,27 +2365,27 @@ bool dkr::runtime::platform::get_physical_input(
     return true;
 }
 
-bool dkr::runtime::platform::get_local_online_input(
-    std::uint16_t* buttons, float* x, float* y, bool* blocked) {
-    const auto sample =
-        dkr::runtime::netplay::online_input_broker().local_sample();
-    if (!sample.valid) return false;
+bool dkr::runtime::platform::get_local_online_input(std::uint16_t* buttons, float* x, float* y, bool* blocked) {
+    const auto sample = dkr::runtime::netplay::online_input_broker().local_sample();
+    if (!sample.valid)
+        return false;
     *buttons = sample.input.buttons;
     *x = dkr::runtime::netplay::unpack_input_axis(sample.input.stick_x);
     *y = dkr::runtime::netplay::unpack_input_axis(sample.input.stick_y);
-    if (blocked != nullptr) *blocked = sample.blocked;
+    if (blocked != nullptr)
+        *blocked = sample.blocked;
     return true;
 }
 
 void dkr::runtime::platform::set_rumble(int controller, bool enabled) {
-    if (!dkr::runtime::netplay::external_side_effects_allowed()) return;
+    if (!dkr::runtime::netplay::external_side_effects_allowed())
+        return;
 #if DKR_RUNTIME_HAS_RT64
     if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
         return;
     }
     controller = dkr::runtime::netplay::physical_rumble_port(
-        g_online_input_routing.load(std::memory_order_acquire),
-        g_online_local_slot.load(std::memory_order_acquire),
+        g_online_input_routing.load(std::memory_order_acquire), g_online_local_slot.load(std::memory_order_acquire),
         g_online_input_profile.load(std::memory_order_acquire), controller);
     if (controller < 0 || controller >= static_cast<int>(kControllerCount)) {
         return;
@@ -2650,17 +2397,12 @@ void dkr::runtime::platform::set_rumble(int controller, bool enabled) {
             instance = g_sdl3_player_instances[static_cast<std::size_t>(controller)];
         }
         if (instance >= 0) {
-            const bool active = enabled &&
-                g_rumble_enabled.load(std::memory_order_acquire);
-            const auto strength = active
-                ? static_cast<std::uint16_t>(std::lround(
-                      std::clamp(g_rumble_strength.load(
-                                     std::memory_order_relaxed),
-                                 0.0F, 1.0F) * 65535.0F))
-                : 0U;
-            g_sdl3_input_client.rumble(
-                instance, strength, strength,
-                active ? 0xFFFFFFFFU : 0U);
+            const bool active = enabled && g_rumble_enabled.load(std::memory_order_acquire);
+            const auto strength =
+                active ? static_cast<std::uint16_t>(std::lround(
+                             std::clamp(g_rumble_strength.load(std::memory_order_relaxed), 0.0F, 1.0F) * 65535.0F))
+                       : 0U;
+            g_sdl3_input_client.rumble(instance, strength, strength, active ? 0xFFFFFFFFU : 0U);
         }
         return;
     }
@@ -2668,13 +2410,11 @@ void dkr::runtime::platform::set_rumble(int controller, bool enabled) {
     SDL_GameController* game_controller = g_controllers[static_cast<std::size_t>(controller)];
     if (game_controller != nullptr) {
         const bool active = enabled && g_rumble_enabled.load(std::memory_order_acquire);
-        const Uint16 strength = active
-            ? static_cast<Uint16>(std::lround(
-                  std::clamp(g_rumble_strength.load(std::memory_order_relaxed),
-                             0.0F, 1.0F) * 65535.0F))
-            : 0U;
-        SDL_GameControllerRumble(game_controller, strength, strength,
-                                 active ? SDL_HAPTIC_INFINITY : 0U);
+        const Uint16 strength =
+            active ? static_cast<Uint16>(std::lround(
+                         std::clamp(g_rumble_strength.load(std::memory_order_relaxed), 0.0F, 1.0F) * 65535.0F))
+                   : 0U;
+        SDL_GameControllerRumble(game_controller, strength, strength, active ? SDL_HAPTIC_INFINITY : 0U);
     }
 #else
     (void)controller;
@@ -2687,8 +2427,7 @@ float dkr::runtime::platform::rumble_strength() {
 }
 
 void dkr::runtime::platform::set_rumble_strength(float strength) {
-    g_rumble_strength.store(std::clamp(strength, 0.0F, 1.0F),
-                            std::memory_order_release);
+    g_rumble_strength.store(std::clamp(strength, 0.0F, 1.0F), std::memory_order_release);
 }
 
 bool dkr::runtime::platform::rumble_enabled() {
@@ -2726,57 +2465,42 @@ bool dkr::runtime::platform::gyro_available(std::size_t player) {
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
     if (active_input_backend() == InputBackend::SDL3Native) {
-        const auto* device = Sdl3DeviceForInstance(
-            g_sdl3_gyro_instances[std::min(player, kControllerCount - 1U)]);
-        return device != nullptr && device->gyro &&
-               device->snapshot.gyro.available;
+        const auto* device = Sdl3DeviceForInstance(g_sdl3_gyro_instances[std::min(player, kControllerCount - 1U)]);
+        return device != nullptr && device->gyro && device->snapshot.gyro.available;
     }
-    SDL_GameController* controller = g_gyro_controllers[
-        std::min(player, kControllerCount - 1U)];
-    return controller != nullptr &&
-           SDL_GameControllerGetAttached(controller) == SDL_TRUE &&
-           SDL_GameControllerHasSensor(
-               controller, SDL_SENSOR_GYRO) == SDL_TRUE;
+    SDL_GameController* controller = g_gyro_controllers[std::min(player, kControllerCount - 1U)];
+    return controller != nullptr && SDL_GameControllerGetAttached(controller) == SDL_TRUE &&
+           SDL_GameControllerHasSensor(controller, SDL_SENSOR_GYRO) == SDL_TRUE;
 #else
     return false;
 #endif
 }
 
-ultramodern::input::connected_device_info_t
-dkr::runtime::platform::get_connected_device_info(int controller) {
+ultramodern::input::connected_device_info_t dkr::runtime::platform::get_connected_device_info(int controller) {
     if (controller < 0 || controller >= static_cast<int>(kControllerCount)) {
         return {ultramodern::input::Device::None, ultramodern::input::Pak::None};
     }
 #if DKR_RUNTIME_HAS_RT64
     const bool expose_rumble =
-        dkr::runtime::pak::policy::expose_rumble_pak(
-            g_rumble_enabled.load(std::memory_order_acquire), true);
-    const bool online_routing =
-        g_online_input_routing.load(std::memory_order_acquire);
-    if (dkr::runtime::netplay::online_port_occupied(
-            online_routing,
-            g_online_occupied_mask.load(std::memory_order_acquire),
-            static_cast<std::size_t>(controller))) {
+        dkr::runtime::pak::policy::expose_rumble_pak(g_rumble_enabled.load(std::memory_order_acquire), true);
+    const bool online_routing = g_online_input_routing.load(std::memory_order_acquire);
+    if (dkr::runtime::netplay::online_port_occupied(online_routing,
+                                                    g_online_occupied_mask.load(std::memory_order_acquire),
+                                                    static_cast<std::size_t>(controller))) {
         // All peers must expose the same virtual N64 ports. Local physical
         // layout is deliberately irrelevant to game-side roster discovery.
         return {ultramodern::input::Device::Controller,
-                expose_rumble ? ultramodern::input::Pak::RumblePak
-                              : ultramodern::input::Pak::None};
+                expose_rumble ? ultramodern::input::Pak::RumblePak : ultramodern::input::Pak::None};
     }
     std::scoped_lock lock(g_platform_mutex);
-    const bool has_gamepad = active_input_backend() == InputBackend::SDL3Native
-        ? Sdl3DeviceForInstance(g_sdl3_player_instances[
-              static_cast<std::size_t>(controller)]) != nullptr
-        : g_controllers[static_cast<std::size_t>(controller)] != nullptr;
-    const bool owns_keyboard =
-        dkr::runtime::netplay::keyboard_owns_input_port(
-            online_routing, static_cast<std::size_t>(controller),
-            dkr::runtime::input::keyboard_player());
-    return {has_gamepad || owns_keyboard
-                ? ultramodern::input::Device::Controller
-                : ultramodern::input::Device::None,
-            dkr::runtime::pak::policy::expose_rumble_pak(
-                expose_rumble, has_gamepad)
+    const bool has_gamepad =
+        active_input_backend() == InputBackend::SDL3Native
+            ? Sdl3DeviceForInstance(g_sdl3_player_instances[static_cast<std::size_t>(controller)]) != nullptr
+            : g_controllers[static_cast<std::size_t>(controller)] != nullptr;
+    const bool owns_keyboard = dkr::runtime::netplay::keyboard_owns_input_port(
+        online_routing, static_cast<std::size_t>(controller), dkr::runtime::input::keyboard_player());
+    return {has_gamepad || owns_keyboard ? ultramodern::input::Device::Controller : ultramodern::input::Device::None,
+            dkr::runtime::pak::policy::expose_rumble_pak(expose_rumble, has_gamepad)
                 ? ultramodern::input::Pak::RumblePak
                 : ultramodern::input::Pak::None};
 #else
@@ -2784,8 +2508,7 @@ dkr::runtime::platform::get_connected_device_info(int controller) {
 #endif
 }
 
-std::vector<dkr::runtime::platform::ControllerSummary>
-dkr::runtime::platform::connected_controllers() {
+std::vector<dkr::runtime::platform::ControllerSummary> dkr::runtime::platform::connected_controllers() {
     std::vector<ControllerSummary> summaries;
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
@@ -2799,9 +2522,8 @@ dkr::runtime::platform::connected_controllers() {
                     break;
                 }
             }
-            summaries.push_back({device.instance, device.name, assigned_player,
-                                 device.rumble, device.gyro, device.mapped,
-                                 device.mapping_source});
+            summaries.push_back({device.instance, device.name, assigned_player, device.rumble, device.gyro,
+                                 device.mapped, device.mapping_source});
         }
         return summaries;
     }
@@ -2814,16 +2536,14 @@ dkr::runtime::platform::connected_controllers() {
                 break;
             }
         }
-        summaries.push_back({static_cast<int>(record.instance), record.name,
-                             assigned_player, record.rumble, record.gyro,
-                             record.mapped, record.mapping_source});
+        summaries.push_back({static_cast<int>(record.instance), record.name, assigned_player, record.rumble,
+                             record.gyro, record.mapped, record.mapping_source});
     }
 #endif
     return summaries;
 }
 
-dkr::runtime::platform::PlayerControllerStatus
-dkr::runtime::platform::player_controller_status(std::size_t player) {
+dkr::runtime::platform::PlayerControllerStatus dkr::runtime::platform::player_controller_status(std::size_t player) {
     PlayerControllerStatus status{};
 #if DKR_RUNTIME_HAS_RT64
     if (player >= kControllerCount) {
@@ -2832,23 +2552,18 @@ dkr::runtime::platform::player_controller_status(std::size_t player) {
     std::scoped_lock lock(g_platform_mutex);
     status.assigned = !g_controller_assignments[player].empty();
     if (active_input_backend() == InputBackend::SDL3Native) {
-        const auto* device = Sdl3DeviceForInstance(
-            g_sdl3_player_instances[player]);
+        const auto* device = Sdl3DeviceForInstance(g_sdl3_player_instances[player]);
         if (device != nullptr) {
-            status = {true, true, device->name, device->rumble, device->gyro,
-                      device->mapping_source};
+            status = {true, true, device->name, device->rumble, device->gyro, device->mapping_source};
         }
         return status;
     }
     SDL_GameController* handle = g_controllers[player];
-    const auto record = std::find_if(
-        g_controller_devices.begin(), g_controller_devices.end(),
-        [handle](const ControllerRecord& candidate) {
-            return candidate.controller == handle;
-        });
+    const auto record =
+        std::find_if(g_controller_devices.begin(), g_controller_devices.end(),
+                     [handle](const ControllerRecord& candidate) { return candidate.controller == handle; });
     if (record != g_controller_devices.end()) {
-        status = {true, true, record->name, record->rumble, record->gyro,
-                  record->mapping_source};
+        status = {true, true, record->name, record->rumble, record->gyro, record->mapping_source};
     }
 #else
     (void)player;
@@ -2856,15 +2571,13 @@ dkr::runtime::platform::player_controller_status(std::size_t player) {
     return status;
 }
 
-dkr::runtime::platform::PlayerInputPreview
-dkr::runtime::platform::player_input_preview(std::size_t player) {
+dkr::runtime::platform::PlayerInputPreview dkr::runtime::platform::player_input_preview(std::size_t player) {
     if (player >= kControllerCount) {
         return {};
     }
-    PlayerInputPreview preview{
-        g_buttons[player].load(std::memory_order_acquire),
-        g_stick_x[player].load(std::memory_order_acquire),
-        g_stick_y[player].load(std::memory_order_acquire)};
+    PlayerInputPreview preview{g_buttons[player].load(std::memory_order_acquire),
+                               g_stick_x[player].load(std::memory_order_acquire),
+                               g_stick_y[player].load(std::memory_order_acquire)};
 #if DKR_RUNTIME_HAS_RT64
     // The gameplay input path is deliberately neutral while the overlay owns
     // input, and it may not run at all on the launcher screen. Read the
@@ -2873,32 +2586,27 @@ dkr::runtime::platform::player_input_preview(std::size_t player) {
     std::scoped_lock lock(g_platform_mutex);
     if (active_input_backend() == InputBackend::SDL3Native) {
         RefreshSdl3Controllers();
-        const auto* device = Sdl3DeviceForInstance(
-            g_sdl3_player_instances[player]);
+        const auto* device = Sdl3DeviceForInstance(g_sdl3_player_instances[player]);
         if (device != nullptr) {
             using dkr::runtime::controllers::StandardAxis;
-            preview.stick_x = NormalisePreviewAxis(device->snapshot.axes[
-                static_cast<std::size_t>(StandardAxis::LeftX)]);
-            preview.stick_y = -NormalisePreviewAxis(device->snapshot.axes[
-                static_cast<std::size_t>(StandardAxis::LeftY)]);
+            preview.stick_x =
+                NormalisePreviewAxis(device->snapshot.axes[static_cast<std::size_t>(StandardAxis::LeftX)]);
+            preview.stick_y =
+                -NormalisePreviewAxis(device->snapshot.axes[static_cast<std::size_t>(StandardAxis::LeftY)]);
         }
         return preview;
     }
     SDL_GameControllerUpdate();
     SDL_GameController* controller = g_controllers[player];
-    if (controller != nullptr &&
-        SDL_GameControllerGetAttached(controller) == SDL_TRUE) {
-        preview.stick_x = NormalisePreviewAxis(SDL_GameControllerGetAxis(
-            controller, SDL_CONTROLLER_AXIS_LEFTX));
-        preview.stick_y = -NormalisePreviewAxis(SDL_GameControllerGetAxis(
-            controller, SDL_CONTROLLER_AXIS_LEFTY));
+    if (controller != nullptr && SDL_GameControllerGetAttached(controller) == SDL_TRUE) {
+        preview.stick_x = NormalisePreviewAxis(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX));
+        preview.stick_y = -NormalisePreviewAxis(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY));
     }
 #endif
     return preview;
 }
 
-dkr::runtime::controllers::AssignmentMode
-dkr::runtime::platform::controller_assignment_mode() {
+dkr::runtime::controllers::AssignmentMode dkr::runtime::platform::controller_assignment_mode() {
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
     return g_controller_assignment_mode;
@@ -2907,15 +2615,12 @@ dkr::runtime::platform::controller_assignment_mode() {
 #endif
 }
 
-void dkr::runtime::platform::set_controller_assignment_mode(
-    controllers::AssignmentMode mode) {
+void dkr::runtime::platform::set_controller_assignment_mode(controllers::AssignmentMode mode) {
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
-    const auto next = mode == controllers::AssignmentMode::Manual
-        ? controllers::AssignmentMode::Manual
-        : controllers::AssignmentMode::Automatic;
-    if (next == controllers::AssignmentMode::Automatic &&
-        g_controller_assignment_mode != next) {
+    const auto next = mode == controllers::AssignmentMode::Manual ? controllers::AssignmentMode::Manual
+                                                                  : controllers::AssignmentMode::Automatic;
+    if (next == controllers::AssignmentMode::Automatic && g_controller_assignment_mode != next) {
         g_controller_assignments = {};
     }
     g_controller_assignment_mode = next;
@@ -2929,8 +2634,7 @@ void dkr::runtime::platform::set_controller_assignment_mode(
 #endif
 }
 
-bool dkr::runtime::platform::assign_controller(std::size_t player,
-                                               int instance) {
+bool dkr::runtime::platform::assign_controller(std::size_t player, int instance) {
 #if DKR_RUNTIME_HAS_RT64
     if (player >= kControllerCount) {
         return false;
@@ -2940,8 +2644,7 @@ bool dkr::runtime::platform::assign_controller(std::size_t player,
         RefreshSdl3Controllers();
         const auto* device = Sdl3DeviceForInstance(instance);
         if (device == nullptr || !device->mapped ||
-            !controllers::claim(g_controller_assignments, player,
-                canonical_controller_key(device->persistent_key))) {
+            !controllers::claim(g_controller_assignments, player, canonical_controller_key(device->persistent_key))) {
             return false;
         }
         g_controller_assignment_mode = controllers::AssignmentMode::Manual;
@@ -2949,15 +2652,11 @@ bool dkr::runtime::platform::assign_controller(std::size_t player,
         return true;
     }
     RefreshControllers();
-    const auto record = std::find_if(
-        g_controller_devices.begin(), g_controller_devices.end(),
-        [instance](const ControllerRecord& candidate) {
-            return candidate.instance == instance;
-        });
-    if (record == g_controller_devices.end() || !record->mapped ||
-        record->controller == nullptr ||
-        !controllers::claim(g_controller_assignments, player,
-                            record->persistent_key)) {
+    const auto record =
+        std::find_if(g_controller_devices.begin(), g_controller_devices.end(),
+                     [instance](const ControllerRecord& candidate) { return candidate.instance == instance; });
+    if (record == g_controller_devices.end() || !record->mapped || record->controller == nullptr ||
+        !controllers::claim(g_controller_assignments, player, record->persistent_key)) {
         return false;
     }
     g_controller_assignment_mode = controllers::AssignmentMode::Manual;
@@ -2999,10 +2698,7 @@ int dkr::runtime::platform::controller_instance_for_player(std::size_t player) {
         return g_sdl3_player_instances[player];
     }
     SDL_GameController* handle = g_controllers[player];
-    return handle != nullptr
-        ? static_cast<int>(SDL_JoystickInstanceID(
-              SDL_GameControllerGetJoystick(handle)))
-        : -1;
+    return handle != nullptr ? static_cast<int>(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(handle))) : -1;
 #else
     (void)player;
     return -1;
@@ -3022,8 +2718,7 @@ int dkr::runtime::platform::controller_player_for_instance(int instance) {
     }
     for (std::size_t player = 0; player < kControllerCount; ++player) {
         SDL_GameController* handle = g_controllers[player];
-        if (handle != nullptr && SDL_JoystickInstanceID(
-                SDL_GameControllerGetJoystick(handle)) == instance) {
+        if (handle != nullptr && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(handle)) == instance) {
             return static_cast<int>(player);
         }
     }
@@ -3044,8 +2739,7 @@ bool dkr::runtime::platform::identify_controller(std::size_t player) {
             std::scoped_lock lock(g_platform_mutex);
             instance = g_sdl3_player_instances[player];
         }
-        return instance >= 0 &&
-            g_sdl3_input_client.rumble(instance, 32767U, 32767U, 450U);
+        return instance >= 0 && g_sdl3_input_client.rumble(instance, 32767U, 32767U, 450U);
     }
     std::scoped_lock lock(g_platform_mutex);
     SDL_GameController* handle = g_controllers[player];
@@ -3059,8 +2753,7 @@ bool dkr::runtime::platform::identify_controller(std::size_t player) {
 #endif
 }
 
-bool dkr::runtime::platform::begin_controller_mapping(int instance,
-                                                      std::size_t player) {
+bool dkr::runtime::platform::begin_controller_mapping(int instance, std::size_t player) {
 #if DKR_RUNTIME_HAS_RT64
     if (player >= kControllerCount) {
         return false;
@@ -3071,11 +2764,9 @@ bool dkr::runtime::platform::begin_controller_mapping(int instance,
     }
     std::scoped_lock lock(g_platform_mutex);
     RefreshControllers();
-    const auto record = std::find_if(
-        g_controller_devices.begin(), g_controller_devices.end(),
-        [instance](const ControllerRecord& candidate) {
-            return candidate.instance == instance;
-        });
+    const auto record =
+        std::find_if(g_controller_devices.begin(), g_controller_devices.end(),
+                     [instance](const ControllerRecord& candidate) { return candidate.instance == instance; });
     if (record == g_controller_devices.end() || record->joystick == nullptr) {
         return false;
     }
@@ -3084,14 +2775,12 @@ bool dkr::runtime::platform::begin_controller_mapping(int instance,
     g_mapping_session.instance = record->instance;
     g_mapping_session.player = player;
     g_mapping_session.controller_name = record->name;
-    g_mapping_session.message =
-        "Use the physical controls requested below. Escape cancels.";
+    g_mapping_session.message = "Use the physical controls requested below. Escape cancels.";
     SDL_JoystickUpdate();
     const int axis_count = std::max(SDL_JoystickNumAxes(record->joystick), 0);
     g_mapping_session.axis_neutral.resize(static_cast<std::size_t>(axis_count));
     for (int axis = 0; axis < axis_count; ++axis) {
-        g_mapping_session.axis_neutral[static_cast<std::size_t>(axis)] =
-            SDL_JoystickGetAxis(record->joystick, axis);
+        g_mapping_session.axis_neutral[static_cast<std::size_t>(axis)] = SDL_JoystickGetAxis(record->joystick, axis);
     }
     return true;
 #else
@@ -3101,27 +2790,23 @@ bool dkr::runtime::platform::begin_controller_mapping(int instance,
 #endif
 }
 
-bool dkr::runtime::platform::handle_controller_mapping_event(
-    const void* raw_event) {
+bool dkr::runtime::platform::handle_controller_mapping_event(const void* raw_event) {
 #if DKR_RUNTIME_HAS_RT64
     const auto* event = static_cast<const SDL_Event*>(raw_event);
     if (event == nullptr) {
         return false;
     }
     std::scoped_lock lock(g_platform_mutex);
-    if (g_mapping_session.state !=
-        ControllerMappingSession::State::Capturing) {
+    if (g_mapping_session.state != ControllerMappingSession::State::Capturing) {
         return false;
     }
 
     using controllers::PhysicalInput;
     using controllers::PhysicalInputKind;
     const auto axis_delta = [&](int axis, Sint16 value) {
-        const Sint16 neutral = axis >= 0 &&
-                static_cast<std::size_t>(axis) <
-                    g_mapping_session.axis_neutral.size()
-            ? g_mapping_session.axis_neutral[static_cast<std::size_t>(axis)]
-            : 0;
+        const Sint16 neutral = axis >= 0 && static_cast<std::size_t>(axis) < g_mapping_session.axis_neutral.size()
+                                   ? g_mapping_session.axis_neutral[static_cast<std::size_t>(axis)]
+                                   : 0;
         return static_cast<int>(value) - static_cast<int>(neutral);
     };
     const auto event_instance = [&]() -> SDL_JoystickID {
@@ -3144,62 +2829,47 @@ bool dkr::runtime::platform::handle_controller_mapping_event(
     if (g_mapping_session.waiting_for_release) {
         const PhysicalInput& held = g_mapping_session.release_input;
         bool released = false;
-        if (held.kind == PhysicalInputKind::Button &&
-            event->type == SDL_JOYBUTTONUP &&
+        if (held.kind == PhysicalInputKind::Button && event->type == SDL_JOYBUTTONUP &&
             static_cast<int>(event->jbutton.button) == held.index) {
             released = true;
-        } else if (held.kind == PhysicalInputKind::Axis &&
-                   event->type == SDL_JOYAXISMOTION &&
+        } else if (held.kind == PhysicalInputKind::Axis && event->type == SDL_JOYAXISMOTION &&
                    static_cast<int>(event->jaxis.axis) == held.index &&
                    std::abs(axis_delta(held.index, event->jaxis.value)) < 8000) {
             released = true;
-        } else if (held.kind == PhysicalInputKind::Hat &&
-                   event->type == SDL_JOYHATMOTION &&
-                   static_cast<int>(event->jhat.hat) == held.index &&
-                   event->jhat.value == SDL_HAT_CENTERED) {
+        } else if (held.kind == PhysicalInputKind::Hat && event->type == SDL_JOYHATMOTION &&
+                   static_cast<int>(event->jhat.hat) == held.index && event->jhat.value == SDL_HAT_CENTERED) {
             released = true;
         }
         if (released) {
             g_mapping_session.waiting_for_release = false;
             g_mapping_session.release_input = {};
-            g_mapping_session.message =
-                "Ready for the next control.";
+            g_mapping_session.message = "Ready for the next control.";
         }
         return true;
     }
 
     PhysicalInput input{};
     if (event->type == SDL_JOYBUTTONDOWN) {
-        input = {PhysicalInputKind::Button,
-                 static_cast<int>(event->jbutton.button), 1, 0};
+        input = {PhysicalInputKind::Button, static_cast<int>(event->jbutton.button), 1, 0};
     } else if (event->type == SDL_JOYAXISMOTION &&
-               std::abs(axis_delta(static_cast<int>(event->jaxis.axis),
-                                   event->jaxis.value)) >= 20000) {
-        const int delta = axis_delta(static_cast<int>(event->jaxis.axis),
-                                     event->jaxis.value);
-        input = {PhysicalInputKind::Axis,
-                  static_cast<int>(event->jaxis.axis),
-                  delta > 0 ? 1 : -1, 0};
-    } else if (event->type == SDL_JOYHATMOTION &&
-               event->jhat.value != SDL_HAT_CENTERED) {
+               std::abs(axis_delta(static_cast<int>(event->jaxis.axis), event->jaxis.value)) >= 20000) {
+        const int delta = axis_delta(static_cast<int>(event->jaxis.axis), event->jaxis.value);
+        input = {PhysicalInputKind::Axis, static_cast<int>(event->jaxis.axis), delta > 0 ? 1 : -1, 0};
+    } else if (event->type == SDL_JOYHATMOTION && event->jhat.value != SDL_HAT_CENTERED) {
         const std::uint8_t value = event->jhat.value;
-        const bool cardinal = value == SDL_HAT_UP || value == SDL_HAT_DOWN ||
-                              value == SDL_HAT_LEFT || value == SDL_HAT_RIGHT;
+        const bool cardinal =
+            value == SDL_HAT_UP || value == SDL_HAT_DOWN || value == SDL_HAT_LEFT || value == SDL_HAT_RIGHT;
         if (!cardinal) {
-            g_mapping_session.message =
-                "Press one D-pad direction at a time.";
+            g_mapping_session.message = "Press one D-pad direction at a time.";
             return true;
         }
-        input = {PhysicalInputKind::Hat,
-                 static_cast<int>(event->jhat.hat), 1, value};
+        input = {PhysicalInputKind::Hat, static_cast<int>(event->jhat.hat), 1, value};
     } else {
         return true;
     }
 
-    if (!controllers::mapping_input_available(g_mapping_session.definition,
-                                               g_mapping_session.step, input)) {
-        g_mapping_session.message =
-            "That physical input is already assigned. Use a different control.";
+    if (!controllers::mapping_input_available(g_mapping_session.definition, g_mapping_session.step, input)) {
+        g_mapping_session.message = "That physical input is already assigned. Use a different control.";
         return true;
     }
     g_mapping_session.definition.inputs[g_mapping_session.step] = input;
@@ -3210,9 +2880,8 @@ bool dkr::runtime::platform::handle_controller_mapping_event(
     }
     g_mapping_session.release_input = input;
     g_mapping_session.waiting_for_release = true;
-    g_mapping_session.message = input.kind == PhysicalInputKind::Axis
-        ? "Return the stick or trigger to centre."
-        : "Release the control to continue.";
+    g_mapping_session.message = input.kind == PhysicalInputKind::Axis ? "Return the stick or trigger to centre."
+                                                                      : "Release the control to continue.";
     return true;
 #else
     (void)raw_event;
@@ -3231,32 +2900,26 @@ void dkr::runtime::platform::dismiss_controller_mapping() {
     cancel_controller_mapping();
 }
 
-dkr::runtime::platform::ControllerMappingProgress
-dkr::runtime::platform::controller_mapping_progress() {
+dkr::runtime::platform::ControllerMappingProgress dkr::runtime::platform::controller_mapping_progress() {
     ControllerMappingProgress progress{};
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
-    progress.visible = g_mapping_session.state !=
-        ControllerMappingSession::State::Idle;
-    progress.capturing = g_mapping_session.state ==
-        ControllerMappingSession::State::Capturing;
-    progress.complete = g_mapping_session.state ==
-        ControllerMappingSession::State::Complete;
+    progress.visible = g_mapping_session.state != ControllerMappingSession::State::Idle;
+    progress.capturing = g_mapping_session.state == ControllerMappingSession::State::Capturing;
+    progress.complete = g_mapping_session.state == ControllerMappingSession::State::Complete;
     progress.success = g_mapping_session.success;
     progress.controller_name = g_mapping_session.controller_name;
     progress.step = g_mapping_session.step;
     progress.total = controllers::kMappingControlCount;
     progress.message = g_mapping_session.message;
     if (progress.capturing && progress.step < progress.total) {
-        progress.prompt = controllers::mapping_prompt(
-            static_cast<controllers::MappingControl>(progress.step));
+        progress.prompt = controllers::mapping_prompt(static_cast<controllers::MappingControl>(progress.step));
     }
 #endif
     return progress;
 }
 
-bool dkr::runtime::platform::import_controller_mappings(
-    const std::filesystem::path& source, std::string& status) {
+bool dkr::runtime::platform::import_controller_mappings(const std::filesystem::path& source, std::string& status) {
 #if DKR_RUNTIME_HAS_RT64
     if (active_input_backend() == InputBackend::SDL3Native) {
         (void)source;
@@ -3269,8 +2932,7 @@ bool dkr::runtime::platform::import_controller_mappings(
     std::vector<std::string> valid;
     valid.reserve(lines.size());
     for (const std::string& line : lines) {
-        if (!MappingLineKey(line).empty() &&
-            SDL_GameControllerAddMapping(line.c_str()) >= 0) {
+        if (!MappingLineKey(line).empty() && SDL_GameControllerAddMapping(line.c_str()) >= 0) {
             valid.push_back(line);
         }
     }
@@ -3288,8 +2950,7 @@ bool dkr::runtime::platform::import_controller_mappings(
     g_controllers.fill(nullptr);
     g_gyro_controllers.fill(nullptr);
     RefreshControllers();
-    status = "Imported " + std::to_string(valid.size()) +
-             " controller mapping" + (valid.size() == 1U ? "." : "s.");
+    status = "Imported " + std::to_string(valid.size()) + " controller mapping" + (valid.size() == 1U ? "." : "s.");
     return true;
 #else
     (void)source;
@@ -3298,8 +2959,7 @@ bool dkr::runtime::platform::import_controller_mappings(
 #endif
 }
 
-bool dkr::runtime::platform::export_controller_mappings(
-    const std::filesystem::path& destination, std::string& status) {
+bool dkr::runtime::platform::export_controller_mappings(const std::filesystem::path& destination, std::string& status) {
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
     std::error_code error;
@@ -3307,9 +2967,8 @@ bool dkr::runtime::platform::export_controller_mappings(
         status = "No custom controller mappings have been created yet.";
         return false;
     }
-    std::filesystem::copy_file(
-        g_user_mapping_path, destination,
-        std::filesystem::copy_options::overwrite_existing, error);
+    std::filesystem::copy_file(g_user_mapping_path, destination, std::filesystem::copy_options::overwrite_existing,
+                               error);
     if (error) {
         status = "Could not export the controller mapping file.";
         return false;
@@ -3323,8 +2982,7 @@ bool dkr::runtime::platform::export_controller_mappings(
 #endif
 }
 
-dkr::runtime::controllers::DesiredAssignments
-dkr::runtime::platform::controller_assignment_keys() {
+dkr::runtime::controllers::DesiredAssignments dkr::runtime::platform::controller_assignment_keys() {
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
     return g_controller_assignments;
@@ -3333,14 +2991,12 @@ dkr::runtime::platform::controller_assignment_keys() {
 #endif
 }
 
-void dkr::runtime::platform::restore_controller_assignments(
-    controllers::AssignmentMode mode,
-    const controllers::DesiredAssignments& assignments) {
+void dkr::runtime::platform::restore_controller_assignments(controllers::AssignmentMode mode,
+                                                            const controllers::DesiredAssignments& assignments) {
 #if DKR_RUNTIME_HAS_RT64
     std::scoped_lock lock(g_platform_mutex);
-    g_controller_assignment_mode = mode == controllers::AssignmentMode::Manual
-        ? controllers::AssignmentMode::Manual
-        : controllers::AssignmentMode::Automatic;
+    g_controller_assignment_mode = mode == controllers::AssignmentMode::Manual ? controllers::AssignmentMode::Manual
+                                                                               : controllers::AssignmentMode::Automatic;
     g_controller_assignments = assignments;
     for (std::string& assignment : g_controller_assignments) {
         assignment = canonical_controller_key(assignment);

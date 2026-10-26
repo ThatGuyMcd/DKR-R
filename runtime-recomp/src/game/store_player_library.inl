@@ -114,10 +114,10 @@ void StoreInstalledPage(float width, const dkr::store::Snapshot& store, bool loc
         width >= 800.F && ImGui::BeginTable("installed-filters", 3, ImGuiTableFlags_NoSavedSettings, {width, 0});
     if (filters)
         ImGui::TableNextColumn();
-    g_mod_store.installed_category = StoreCombo(
-        "Category", g_mod_store.installed_category,
-        {"All categories", "Tracks", "Characters", "Vehicles", "Custom Magic Codes", "Texture packs"},
-        std::min(width, 340.F));
+    g_mod_store.installed_category =
+        StoreCombo("Category", g_mod_store.installed_category,
+                   {"All categories", "Tracks", "Characters", "Vehicles", "Custom Magic Codes", "Texture packs"},
+                   std::min(width, 340.F));
     if (filters)
         ImGui::TableNextColumn();
     g_mod_store.installed_state =

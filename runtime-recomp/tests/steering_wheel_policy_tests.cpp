@@ -34,10 +34,8 @@ int main() {
     constexpr std::uint32_t fog = 1U << 3U;
     const std::uint32_t effective = kAuthoredBatchFlags | fog;
     assert(is_cockpit_steering_wheel(wheel));
-    assert(corrected_material_flags(wheel, effective) ==
-           (effective & ~kDecal));
-    assert((corrected_material_flags(wheel, effective) &
-            (kAntiAliasing | kDepthCompare | kSemiTransparent | fog)) ==
+    assert(corrected_material_flags(wheel, effective) == (effective & ~kDecal));
+    assert((corrected_material_flags(wheel, effective) & (kAntiAliasing | kDepthCompare | kSemiTransparent | fog)) ==
            (kAntiAliasing | kDepthCompare | kSemiTransparent | fog));
 
     // The title demo uses BHV_VEHICLE_ANIMATION and stores animated-object
@@ -48,8 +46,7 @@ int main() {
     title_wheel.behaviour = kTitleVehicleAnimationBehaviour;
     title_wheel.vehicle = kNoVehicle;
     assert(is_cockpit_steering_wheel(title_wheel));
-    assert(corrected_material_flags(title_wheel, effective) ==
-           (effective & ~kDecal));
+    assert(corrected_material_flags(title_wheel, effective) == (effective & ~kDecal));
 
     // Every gate is intentional: do not rewrite another car batch, a lower
     // LOD batch, another vehicle, or a coincidentally similar decal texture.

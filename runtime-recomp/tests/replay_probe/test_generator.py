@@ -565,9 +565,9 @@ class InstrumentationTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[3]
         pins={
             "runtime-recomp/src/game/runtime_stubs.cpp":"3bd058b1674d9fa12d282f99cfdf0771406dd5da7ba816d81b32225485ff9e51",
-            "runtime-recomp/src/game/track_select_draw_guest.h":"6bc51e7168679d32c9602988793cc47e983b116343981db00f3feac6fbc13912",
-            "runtime-recomp/src/game/audio_event_queue.h":"efb6c0cdadbc5a1fbab30ee7ff524f558ea54523a43a3424727bba4a997535c2",
-            "runtime-recomp/src/game/audio_event_queue_state.h":"ca400d843e9018f5d69c2aa75ec40889a303574c7789a7297185369dcde79b18",
+            "runtime-recomp/src/game/track_select_draw_guest.h":"053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
+            "runtime-recomp/src/game/audio_event_queue.h":"7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
+            "runtime-recomp/src/game/audio_event_queue_state.h":"7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
             "runtime-recomp/src/game/runtime_enhancements.cpp":"fe0d3653eb692b20708de52c2aa916aff5b30394a5e016dfa6e8794040e3a56a",
             "runtime-recomp/src/game/runtime_hud_layout.cpp":"9ec1d648e835dfb6b61495f888a6685d10ce75daf3137c7308e368709ab4d7ad",
             # Audited camera-clearance metadata: read-only guest observations
@@ -577,7 +577,7 @@ class InstrumentationTests(unittest.TestCase):
             # The local Modern camera's look-back adds a one-shot camera epoch
             # cut here; it is never set in owned or replayed frames.
             "runtime-recomp/src/game/presentation_identity.cpp":"bcfa277012ccca66123351a50a97ca77c3123f3011a97cd4d02b483bcd77e29a",
-            "runtime-recomp/src/game/widescreen_policy.hpp":"0d6080326b9794cf468e5c54f2b93bfbb01f43f39b6c6eaf04cbd9f1e53df0dd",
+            "runtime-recomp/src/game/widescreen_policy.hpp":"3c3ff51000c969d6c7a9628364345fe1293e1c26de057197120728e79f975f36",
             "extern/dkr-decomp/src/save_data.c":"898df1a185c17e1d6ba11302fc5c140a1d7bd10ff3d8b86ff937c834bb13a607",
             "extern/dkr-decomp/src/thread3_main.c":"437434837706ee88e91578ce9e1aa2cd960e65e1e3a6f1aa47ae3b6289892d8e",
             "extern/dkr-decomp/src/audiomgr.c":"ba7b39838f59ede6eceb7406ce6f92518175458398bddd52cdef55b62a2d8055",

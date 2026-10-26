@@ -37,14 +37,11 @@ int main() {
     assert(magic_code_enabled(mask, 19));
     assert(magic_code_enabled(mask, 20));
 
-    const auto normalised = normalise_magic_code_mask(
-        0xFFFFFFFFU);
+    const auto normalised = normalise_magic_code_mask(0xFFFFFFFFU);
     assert((normalised & ~kSelectableMagicCodeMask) == 0U);
-    assert(!(magic_code_enabled(normalised, 4) &&
-             magic_code_enabled(normalised, 5)));
+    assert(!(magic_code_enabled(normalised, 4) && magic_code_enabled(normalised, 5)));
     assert(!(magic_code_enabled(normalised, 11) &&
-             (normalised & (magic_code_bit(15) | magic_code_bit(16) |
-                            magic_code_bit(17) | magic_code_bit(18) |
+             (normalised & (magic_code_bit(15) | magic_code_bit(16) | magic_code_bit(17) | magic_code_bit(18) |
                             magic_code_bit(19) | magic_code_bit(20))) != 0U));
 
     const auto queued = magic_code_bit(10) | magic_code_bit(26);

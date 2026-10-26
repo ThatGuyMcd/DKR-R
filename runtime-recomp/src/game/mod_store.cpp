@@ -148,7 +148,7 @@ void save_device(const std::filesystem::path& root, const std::string& token) {
     dkr::updates::durable_write(root / "device.bin",
                                 std::string_view(reinterpret_cast<const char*>(output.pbData), output.cbData));
 #else
-    if(!dkr::online::keyring::store(root.generic_string(),token))
+    if (!dkr::online::keyring::store(root.generic_string(), token))
         throw Error("The desktop keyring could not remember sign-in. You are signed in for this session only.");
 #endif
 }
@@ -166,8 +166,8 @@ std::string load_device(const std::filesystem::path& root) {
         return {};
     }
 #else
-    auto token=dkr::online::keyring::load(root.generic_string());
-    return token.size()==43&&identifier(token)?token:std::string{};
+    auto token = dkr::online::keyring::load(root.generic_string());
+    return token.size() == 43 && identifier(token) ? token : std::string{};
 #endif
 }
 struct Response {
@@ -259,7 +259,8 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     std::string headers = "Accept: */*\r\n";
     if (prefix(r.url, Api)) {
         headers += "Origin: https://positron-portal.com\r\n";
-        if(!r.online_instance.empty())headers+="X-DKRR-Instance: "+r.online_instance+"\r\n";
+        if (!r.online_instance.empty())
+            headers += "X-DKRR-Instance: " + r.online_instance + "\r\n";
         if (!r.token.empty()) {
             if (r.token.size() != 43 || !identifier(r.token))
                 throw Error("Sign in again to continue.");
@@ -362,7 +363,8 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     auto add = [&](std::string value) { cleanup.headers = curl_slist_append(cleanup.headers, value.c_str()); };
     if (prefix(r.url, Api)) {
         add("Origin: https://positron-portal.com");
-        if(!r.online_instance.empty())add("X-DKRR-Instance: "+r.online_instance);
+        if (!r.online_instance.empty())
+            add("X-DKRR-Instance: " + r.online_instance);
         if (!r.token.empty() && r.token.size() == 43 && identifier(r.token))
             add("Authorization: Bearer " + r.token);
     } else {
@@ -1031,7 +1033,7 @@ struct Service::Impl {
                 std::unique_lock lock(mutex);
                 cv.wait(lock, stop, [&] {
                     return !gameplay && std::any_of(state.downloads.begin(), state.downloads.end(),
-                                       [](const Download& d) { return d.state == "Queued"; });
+                                                    [](const Download& d) { return d.state == "Queued"; });
                 });
                 if (stop.stop_requested())
                     return;
@@ -1070,8 +1072,8 @@ struct Service::Impl {
                     name.find_first_of("\\/:*?\"<>|") != name.npos || name == "." || name == "..")
                     throw Error("The release has invalid file details.");
                 const auto extension = lower(std::filesystem::path(name).extension().string());
-                const std::set<std::string> formats = {".zip",     ".rtz", ".dkrmap", ".xdelta", ".nrm",
-                                                       ".dkrcode", ".bps", ".ips",    ".7z", ".dkrkart", ".dkrhover", ".dkrplane"};
+                const std::set<std::string> formats = {".zip", ".rtz", ".dkrmap", ".xdelta",  ".nrm",      ".dkrcode",
+                                                       ".bps", ".ips", ".7z",     ".dkrkart", ".dkrhover", ".dkrplane"};
                 if (!formats.contains(extension))
                     throw Error("This package format is not supported.");
                 const auto folder = root / "downloads" / job.digest;
@@ -1193,7 +1195,9 @@ struct Service::Impl {
                     download_report(job.release, job.title, error, source_url);
                 change([&](Download& d) {
                     d.state = cancelled.stop_requested() ? (gameplay ? "Paused for gameplay" : "Paused") : "Failed";
-                    d.error = cancelled.stop_requested() && gameplay ? "Downloads resume when you return to the launcher." : error.what();
+                    d.error = cancelled.stop_requested() && gameplay
+                                  ? "Downloads resume when you return to the launcher."
+                                  : error.what();
                 });
             }
         }
@@ -1223,11 +1227,18 @@ std::string download_key(const std::string& item, const std::string& release, co
     return item + "_" + release + (instance.empty() ? "" : "_" + instance);
 }
 void Service::gameplay(bool active) {
-    auto& p=*impl_;
+    auto& p = *impl_;
     {
-        std::lock_guard lock(p.mutex);p.gameplay=active;
-        if(active)p.download_stop.request_stop();
-        else for(auto& d:p.state.downloads)if(d.state=="Paused for gameplay") {d.state="Queued";d.error.clear();}
+        std::lock_guard lock(p.mutex);
+        p.gameplay = active;
+        if (active)
+            p.download_stop.request_stop();
+        else
+            for (auto& d : p.state.downloads)
+                if (d.state == "Paused for gameplay") {
+                    d.state = "Queued";
+                    d.error.clear();
+                }
         p.publish();
     }
     p.cv.notify_all();
@@ -1250,7 +1261,8 @@ void Service::configure(const std::filesystem::path& config, std::string version
                 s.layout = 1;
             s.remember = preferences.contains("remember") && preferences["remember"] == true;
 #ifndef _WIN32
-            if(!dkr::online::keyring::available())s.remember = false;
+            if (!dkr::online::keyring::available())
+                s.remember = false;
 #endif
             if (cached.contains("items") && cached["items"].is_array()) {
                 s.items = std::make_shared<const Json>(cached["items"]);
@@ -1298,7 +1310,8 @@ void Service::layout(int value) {
 }
 void Service::remember(bool remember) {
 #ifndef _WIN32
-    if(!dkr::online::keyring::available())remember = false;
+    if (!dkr::online::keyring::available())
+        remember = false;
 #endif
     auto& p = *impl_;
     p.update([&](Snapshot& s) { s.remember = remember; });
@@ -1546,11 +1559,17 @@ void Service::login() {
                         remember_warning = error.what();
                     }
                 // Account cancellation remains authoritative across keyring prompts.
-                if(stop.stop_requested()){
-                    try{Request revoke{std::string(Api)+"/auth/launcher/logout","POST",Json{{"device",device}}.dump(),token};
-                        revoke.timeout=5000;document(revoke,std::stop_token{});}catch(...){}
+                if (stop.stop_requested()) {
+                    try {
+                        Request revoke{std::string(Api) + "/auth/launcher/logout", "POST",
+                                       Json{{"device", device}}.dump(), token};
+                        revoke.timeout = 5000;
+                        document(revoke, std::stop_token{});
+                    } catch (...) {
+                    }
 #ifdef _WIN32
-                    std::error_code cleanup;std::filesystem::remove(p.root/"device.bin",cleanup);
+                    std::error_code cleanup;
+                    std::filesystem::remove(p.root / "device.bin", cleanup);
 #else
                     dkr::online::keyring::clear(p.root.generic_string());
 #endif
@@ -1573,7 +1592,8 @@ void Service::login() {
                     p.state.signing_in = false;
                     p.state.status = "Signed in with Discord.";
                     p.state.error = remember_warning;
-                    if(!remember_warning.empty())p.state.remember=false;
+                    if (!remember_warning.empty())
+                        p.state.remember = false;
                     p.publish();
                 }
                 p.queue([&p](std::stop_token s) { p.private_refresh(s); });
@@ -1656,7 +1676,8 @@ void Service::download(const Json& item, const Json& release, std::string intent
         auto found =
             std::find_if(s.downloads.begin(), s.downloads.end(), [&](const auto& v) { return v.key == d.key; });
         if (found == s.downloads.end()) {
-            if(s.downloads.size()>=64)std::erase_if(s.downloads,[](const Download& old){return old.state=="Installed";});
+            if (s.downloads.size() >= 64)
+                std::erase_if(s.downloads, [](const Download& old) { return old.state == "Installed"; });
             if (s.downloads.size() >= 64) {
                 s.error = "The download queue is full.";
                 return;
@@ -1762,8 +1783,8 @@ void Service::verify_release(const Json& item, const Json& release, bool downloa
             const auto directory = p.root / "verification" / id;
             std::filesystem::create_directories(directory);
             const auto extension = lower(std::filesystem::path(name).extension().string());
-            const std::set<std::string> allowed = {".zip",     ".rtz", ".dkrmap", ".xdelta", ".nrm",
-                                                   ".dkrcode", ".bps", ".ips",    ".7z", ".dkrkart", ".dkrhover", ".dkrplane"};
+            const std::set<std::string> allowed = {".zip", ".rtz", ".dkrmap", ".xdelta",  ".nrm",      ".dkrcode",
+                                                   ".bps", ".ips", ".7z",     ".dkrkart", ".dkrhover", ".dkrplane"};
             if (!allowed.contains(extension))
                 throw Error("This package format cannot be verified.");
             const auto target = directory / std::filesystem::u8path(package_filename(title, name));
@@ -1908,7 +1929,10 @@ void Service::clear_completed_history() {
     });
 }
 void Service::clear_messages() {
-    impl_->update([](Snapshot& s) { s.status.clear(); s.error.clear(); });
+    impl_->update([](Snapshot& s) {
+        s.status.clear();
+        s.error.clear();
+    });
 }
 bool Service::begin_install(std::string key) {
     auto& p = *impl_;
@@ -1926,7 +1950,7 @@ void Service::installed(std::string key, bool success, std::string message) {
     impl_->update([&](Snapshot& s) {
         for (auto& d : s.downloads)
             if (d.key == key) {
-                const bool cancelled=message.starts_with("Installation cancelled.");
+                const bool cancelled = message.starts_with("Installation cancelled.");
                 d.state = success ? "Installed" : cancelled ? "Ready to install" : "Install failed";
                 d.error = success || cancelled ? "" : message;
             }
@@ -2039,9 +2063,10 @@ void Service::upload(std::filesystem::path source, std::string kind, std::string
             current();
             return result;
         };
-        if(kind=="download" && vehicle_store_extension(lower(source.extension().string()))) {
-            if(!vehicle_store_category(category)) throw Error("Choose Vehicles before uploading a vehicle export.");
-            source=prepare_vehicle_store_upload(source,p.root/"vehicle-uploads",stop);
+        if (kind == "download" && vehicle_store_extension(lower(source.extension().string()))) {
+            if (!vehicle_store_category(category))
+                throw Error("Choose Vehicles before uploading a vehicle export.");
+            source = prepare_vehicle_store_upload(source, p.root / "vehicle-uploads", stop);
         }
         const auto size = std::filesystem::file_size(source);
         if (!size || size > (kind == "image" ? 20ULL * 1024 * 1024 : MaxFile))

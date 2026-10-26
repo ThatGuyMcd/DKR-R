@@ -28,7 +28,7 @@ struct SerializableContext {
 };
 
 class RuntimeState final {
-public:
+  public:
     explicit RuntimeState(std::size_t memory_bytes = kRollbackMemoryBytes);
 
     bool register_context(recomp_context* context);
@@ -36,15 +36,15 @@ public:
     void reset();
 
     std::size_t snapshot_size() const;
-    std::size_t memory_bytes() const { return memory_bytes_; }
+    std::size_t memory_bytes() const {
+        return memory_bytes_;
+    }
     std::size_t active_context_count() const;
 
-    bool capture(std::uint8_t* rdram, std::uint32_t frame,
-                 std::span<std::uint8_t> destination) const;
-    bool restore(std::uint8_t* rdram, std::span<const std::uint8_t> source,
-                 std::uint32_t& frame);
+    bool capture(std::uint8_t* rdram, std::uint32_t frame, std::span<std::uint8_t> destination) const;
+    bool restore(std::uint8_t* rdram, std::span<const std::uint8_t> source, std::uint32_t& frame);
 
-private:
+  private:
     std::size_t memory_bytes_;
     mutable std::mutex mutex_;
     std::array<recomp_context*, kMaximumTrackedContexts> contexts_{};

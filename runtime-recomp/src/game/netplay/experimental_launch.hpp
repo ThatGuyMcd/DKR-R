@@ -16,8 +16,17 @@ struct LaunchContract {
     secure::Key build{}, rom{}, rules{}, abi{};
     bool operator==(const LaunchContract&) const = default;
 };
-enum class LaunchPhase { Idle, AwaitingPeer, Authenticating, ReceivingBaseline,
-                         PreparingWorld, Ready, Releasing, Running, Failed };
+enum class LaunchPhase {
+    Idle,
+    AwaitingPeer,
+    Authenticating,
+    ReceivingBaseline,
+    PreparingWorld,
+    Ready,
+    Releasing,
+    Running,
+    Failed
+};
 struct LaunchView {
     LaunchPhase phase = LaunchPhase::Idle;
     std::uint32_t baseline_received = 0, baseline_bytes = 0;
@@ -31,7 +40,7 @@ struct LaunchView {
 // so losing a release ACK cannot strand one peer or discard its first inputs.
 // This class is a dependency of live integration, NOT runtime admission itself.
 class Launch final : public SessionTransport {
-public:
+  public:
     using Clock = Network::Clock;
     using Prepare = std::function<PreparationStep(std::span<const std::uint8_t>, std::string&)>;
     static constexpr std::size_t kMaximumBaseline = 32U * 1024U * 1024U;
@@ -48,25 +57,41 @@ public:
     // Host-only: no ticking before matching client world is prepared. This
     // starts a new launch; it is never a mid-game stable -> experimental switch.
     bool release(std::string& error);
-    const LaunchView& view() const { return view_; }
-    const std::string& error() const { return error_; }
-    const LaunchContract& contract() const { return contract_; }
+    const LaunchView& view() const {
+        return view_;
+    }
+    const std::string& error() const {
+        return error_;
+    }
+    const LaunchContract& contract() const {
+        return contract_;
+    }
     std::optional<NetworkConfiguration> network_configuration() const;
 
     bool open(std::uint16_t, std::string& error) override;
     void close() override;
     bool is_open() const override;
-    std::uint16_t local_port() const override { return transport_.local_port(); }
-    bool quick_join() const override { return true; }
-    std::string quick_join_code() const override { return transport_.quick_join_code(); }
-    std::size_t maximum_plaintext_datagram_bytes() const override { return transport_.maximum_plaintext_datagram_bytes(); }
+    std::uint16_t local_port() const override {
+        return transport_.local_port();
+    }
+    bool quick_join() const override {
+        return true;
+    }
+    std::string quick_join_code() const override {
+        return transport_.quick_join_code();
+    }
+    std::size_t maximum_plaintext_datagram_bytes() const override {
+        return transport_.maximum_plaintext_datagram_bytes();
+    }
     bool traffic_ready(const PeerAddress&, TransportTrafficClass) const override;
-    std::size_t buffered_bytes(TransportTrafficClass traffic) const override { return transport_.buffered_bytes(traffic); }
-    DatagramSendStatus send_status(const PeerAddress&, std::span<const std::uint8_t>,
-                                   TransportTrafficClass, std::string&) override;
+    std::size_t buffered_bytes(TransportTrafficClass traffic) const override {
+        return transport_.buffered_bytes(traffic);
+    }
+    DatagramSendStatus send_status(const PeerAddress&, std::span<const std::uint8_t>, TransportTrafficClass,
+                                   std::string&) override;
     bool receive(PeerAddress&, std::vector<std::uint8_t>&, std::string&) override;
     void service() override; // Called by Network; does not call a simulation tick.
-private:
+  private:
     struct Pending {
         std::vector<std::uint8_t> bytes;
         TransportTrafficClass traffic = TransportTrafficClass::Control;
@@ -93,10 +118,10 @@ private:
     Pending control_{};
     std::vector<std::uint8_t> join_packet_, baseline_;
     std::vector<std::uint8_t> received_chunks_;
-    std::array<Pending,4> chunks_{};
+    std::array<Pending, 4> chunks_{};
     std::uint32_t acknowledged_ = 0;
     Prepare prepare_;
     std::deque<std::vector<std::uint8_t>> gameplay_;
     std::string error_;
 };
-}
+} // namespace dkr::runtime::netplay::experimental

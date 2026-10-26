@@ -15,8 +15,11 @@ foreach(_file IN LISTS _dkr_renderer_files)
 endforeach()
 # A private, untracked build-stage repository makes git apply independent of
 # whether the build directory is inside or outside the project's worktree.
-execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${_dkr_renderer_stage}"
-    RESULT_VARIABLE _result ERROR_VARIABLE _error)
+execute_process(
+    COMMAND "${GIT_EXECUTABLE}" init --quiet "${_dkr_renderer_stage}"
+    RESULT_VARIABLE _result
+    ERROR_VARIABLE _error
+)
 if(NOT _result EQUAL 0)
     message(FATAL_ERROR "Cannot prepare Android renderer patch stage: ${_error}")
 endif()
@@ -25,9 +28,12 @@ foreach(_mode IN ITEMS check apply)
     if(_mode STREQUAL "check")
         set(_flags --check)
     endif()
-    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${_dkr_renderer_stage}"
-        apply ${_flags} --whitespace=error "${_dkr_renderer_patch}"
-        RESULT_VARIABLE _result ERROR_VARIABLE _error)
+    execute_process(
+        COMMAND
+            "${GIT_EXECUTABLE}" -C "${_dkr_renderer_stage}" apply ${_flags} --whitespace=error "${_dkr_renderer_patch}"
+        RESULT_VARIABLE _result
+        ERROR_VARIABLE _error
+    )
     if(NOT _result EQUAL 0)
         message(FATAL_ERROR "Android renderer patch ${_mode} failed; dependency context changed: ${_error}")
     endif()
@@ -44,7 +50,10 @@ foreach(_file IN LISTS _dkr_renderer_files)
     list(REMOVE_ITEM _sources ${_matches})
     list(APPEND _sources "${_dkr_renderer_stage}/${_file}")
     get_filename_component(_parent "${_file}" DIRECTORY)
-    set_source_files_properties("${_dkr_renderer_stage}/${_file}" TARGET_DIRECTORY rt64
-        PROPERTIES INCLUDE_DIRECTORIES "${DKR_RT64_SOURCE}/${_parent}")
+    set_source_files_properties(
+        "${_dkr_renderer_stage}/${_file}"
+        TARGET_DIRECTORY rt64
+        PROPERTIES INCLUDE_DIRECTORIES "${DKR_RT64_SOURCE}/${_parent}"
+    )
 endforeach()
 set_property(TARGET rt64 PROPERTY SOURCES "${_sources}")

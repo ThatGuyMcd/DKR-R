@@ -16,7 +16,7 @@ struct LatencySummary {
 // error below one second; the overflow bucket reports the observed maximum.
 // No allocation, disk I/O, cross-machine timestamps or raw player data.
 class LatencyHistogram {
-public:
+  public:
     void observe(std::uint32_t milliseconds) {
         ++buckets_[(std::min<std::uint32_t>)(milliseconds / 4U, 256U)];
         ++samples_;
@@ -25,11 +25,12 @@ public:
     LatencySummary summary() const {
         return {samples_, percentile(50), percentile(95), percentile(99), maximum_};
     }
-private:
+
+  private:
     std::uint32_t percentile(std::uint32_t percent) const {
-        if (!samples_) return 0;
-        const auto rank = (samples_ / 100U) * percent +
-            ((samples_ % 100U) * percent + 99U) / 100U;
+        if (!samples_)
+            return 0;
+        const auto rank = (samples_ / 100U) * percent + ((samples_ % 100U) * percent + 99U) / 100U;
         std::uint64_t cumulative = 0;
         for (std::uint32_t i = 0; i < buckets_.size(); ++i) {
             cumulative += buckets_[i];

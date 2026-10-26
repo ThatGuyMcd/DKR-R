@@ -23,8 +23,7 @@ struct Device {
 using DesiredAssignments = std::array<std::string, kPlayerCount>;
 using ResolvedAssignments = std::array<int, kPlayerCount>;
 
-inline ResolvedAssignments resolve(const DesiredAssignments& desired,
-                                   const std::vector<Device>& devices) {
+inline ResolvedAssignments resolve(const DesiredAssignments& desired, const std::vector<Device>& devices) {
     ResolvedAssignments result{};
     result.fill(-1);
     std::vector<bool> used(devices.size(), false);
@@ -33,8 +32,7 @@ inline ResolvedAssignments resolve(const DesiredAssignments& desired,
             continue;
         }
         for (std::size_t device = 0; device < devices.size(); ++device) {
-            if (!used[device] &&
-                devices[device].persistent_key == desired[player]) {
+            if (!used[device] && devices[device].persistent_key == desired[player]) {
                 result[player] = devices[device].instance;
                 used[device] = true;
                 break;
@@ -44,15 +42,13 @@ inline ResolvedAssignments resolve(const DesiredAssignments& desired,
     return result;
 }
 
-inline bool claim(DesiredAssignments& desired, std::size_t player,
-                  const std::string& key) {
+inline bool claim(DesiredAssignments& desired, std::size_t player, const std::string& key) {
     if (player >= kPlayerCount || key.empty()) {
         return false;
     }
     const std::string previous = desired[player];
     const auto owner = std::find(desired.begin(), desired.end(), key);
-    if (owner != desired.end() &&
-        static_cast<std::size_t>(owner - desired.begin()) != player) {
+    if (owner != desired.end() && static_cast<std::size_t>(owner - desired.begin()) != player) {
         *owner = previous;
     }
     desired[player] = key;
@@ -67,12 +63,10 @@ inline bool clear(DesiredAssignments& desired, std::size_t player) {
     return true;
 }
 
-inline void populate_automatic_claims(DesiredAssignments& desired,
-                                      const std::vector<Device>& devices) {
+inline void populate_automatic_claims(DesiredAssignments& desired, const std::vector<Device>& devices) {
     for (const Device& device : devices) {
         if (device.persistent_key.empty() ||
-            std::find(desired.begin(), desired.end(), device.persistent_key) !=
-                desired.end()) {
+            std::find(desired.begin(), desired.end(), device.persistent_key) != desired.end()) {
             continue;
         }
         const auto empty = std::find(desired.begin(), desired.end(), std::string{});

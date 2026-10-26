@@ -28,15 +28,14 @@ inline PaddockType OlSignType(float px, float line = 1.5F, float tracking = 0.01
     return PaddockSign(px, line, tracking);
 }
 
-inline float OlText(std::string_view text, float px, unsigned colour, float width,
-                    bool semibold = false, float line = 1.5F) {
+inline float OlText(std::string_view text, float px, unsigned colour, float width, bool semibold = false,
+                    float line = 1.5F) {
     return PaddockText(OlRead(px, semibold, line), PaddockRgb(colour), text, width);
 }
 
-inline float OlHeading(std::string_view text, float px, unsigned colour, float width,
-                       float line = 1.5F, bool shadow = false) {
-    return PaddockText(OlSignType(px, line), PaddockRgb(colour), text, width, true,
-                       shadow ? PaddockRgb(0x031623) : 0U);
+inline float OlHeading(std::string_view text, float px, unsigned colour, float width, float line = 1.5F,
+                       bool shadow = false) {
+    return PaddockText(OlSignType(px, line), PaddockRgb(colour), text, width, true, shadow ? PaddockRgb(0x031623) : 0U);
 }
 
 // Rotates what was drawn since `first_vertex` about `centre`.
@@ -54,7 +53,8 @@ inline void OlRotate(ImDrawList* draw, int first_vertex, ImVec2 centre, float de
 
 // Multiplies the alpha of what was drawn since `first_vertex`.
 inline void OlFade(ImDrawList* draw, int first_vertex, float alpha) {
-    if (alpha >= 1.0F) return;
+    if (alpha >= 1.0F)
+        return;
     for (int index = first_vertex; index < draw->VtxBuffer.Size; ++index) {
         ImDrawVert& v = draw->VtxBuffer[index];
         const ImU32 a = (v.col >> IM_COL32_A_SHIFT) & 0xFFU;
@@ -65,21 +65,23 @@ inline void OlFade(ImDrawList* draw, int first_vertex, float alpha) {
 
 // .ol-btn:disabled and friends dim to .45.
 class OlDisabled {
-public:
+  public:
     explicit OlDisabled(bool disabled, float alpha = 0.45F) : disabled_(disabled) {
-        if (!disabled_) return;
+        if (!disabled_)
+            return;
         ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, alpha);
         ImGui::BeginDisabled();
     }
     ~OlDisabled() {
-        if (!disabled_) return;
+        if (!disabled_)
+            return;
         ImGui::EndDisabled();
         ImGui::PopStyleVar();
     }
     OlDisabled(const OlDisabled&) = delete;
     OlDisabled& operator=(const OlDisabled&) = delete;
 
-private:
+  private:
     bool disabled_;
 };
 
@@ -99,7 +101,8 @@ OlToast g_ol_toast;
 std::string g_online_notice_details;
 
 void OlNotify(std::string text, float seconds = 0.0F) {
-    if (text.empty()) return;
+    if (text.empty())
+        return;
     if (dkr::runtime::copy::looks_like_error(text)) {
         g_online_notice_details = text;
         std::fprintf(stderr, "[ui][online-notice] %s\n", text.c_str());
@@ -112,7 +115,8 @@ void OlNotify(std::string text, float seconds = 0.0F) {
 }
 
 void DrawOlToast() {
-    if (g_ol_toast.text.empty()) return;
+    if (g_ol_toast.text.empty())
+        return;
     if (PaddockClock() - g_ol_toast.at > g_ol_toast.seconds) {
         g_ol_toast.text.clear();
         return;
@@ -122,7 +126,8 @@ void DrawOlToast() {
     const float maximum = std::min(700.0F, display.x * 0.9F) - 48.0F - 4.0F;
     const auto lines = PaddockWrap(type, g_ol_toast.text, maximum);
     float text_width = 0.0F;
-    for (const auto& line : lines) text_width = std::max(text_width, line.width);
+    for (const auto& line : lines)
+        text_width = std::max(text_width, line.width);
     const ImVec2 size{std::ceil(text_width) + 48.0F + 4.0F,
                       type.line * static_cast<float>(lines.size()) + 36.0F + 4.0F};
     const ImVec2 a{std::round((display.x - size.x) * 0.5F), display.y - 24.0F - size.y};
@@ -153,12 +158,16 @@ struct OlToneLook {
 
 inline OlToneLook OlLook(OlTone tone) {
     switch (tone) {
-    case OlTone::Strong: return {kOlAmber, 0xFFD683, 0x2A1D05, 0x2A1D05};
-    case OlTone::Go: return {0x1AC2A3, 0x3DDBBD, 0x03261F, 0x03261F};
+    case OlTone::Strong:
+        return {kOlAmber, 0xFFD683, 0x2A1D05, 0x2A1D05};
+    case OlTone::Go:
+        return {0x1AC2A3, 0x3DDBBD, 0x03261F, 0x03261F};
     case OlTone::Danger:
         return {0x3A1812, 0x3A1812, kOlError, 0xFFD2C6, 0U, 255U, 0x8A3A2C, true};
-    case OlTone::PlateStrong: return {0xC8361F, 0xE04A30, 0xFFFFFF, 0xFFFFFF};
-    case OlTone::PlatePlain: return {0x10222C, 0x22404F, kOlCream, kOlCream};
+    case OlTone::PlateStrong:
+        return {0xC8361F, 0xE04A30, 0xFFFFFF, 0xFFFFFF};
+    case OlTone::PlatePlain:
+        return {0x10222C, 0x22404F, kOlCream, kOlCream};
     case OlTone::Plain:
     case OlTone::Icon:
     default:
@@ -167,14 +176,16 @@ inline OlToneLook OlLook(OlTone tone) {
 }
 
 inline float OlButtonWidth(const char* label, OlTone tone = OlTone::Plain) {
-    if (tone == OlTone::Icon) return 40.0F;
+    if (tone == OlTone::Icon)
+        return 40.0F;
     return std::ceil(PaddockMeasure(OlRead(14.0F, true, 1.2F), label, PaddockLabelEnd(label)) + 28.0F);
 }
 
 // .ol-btn: quiet buttons for everything but the one main action.
-bool OlButton(const char* label, OlTone tone = OlTone::Plain, float width = 0.0F,
-              const char* tooltip = nullptr, float height = 40.0F) {
-    if (width <= 0.0F) width = OlButtonWidth(label, tone);
+bool OlButton(const char* label, OlTone tone = OlTone::Plain, float width = 0.0F, const char* tooltip = nullptr,
+              float height = 40.0F) {
+    if (width <= 0.0F)
+        width = OlButtonWidth(label, tone);
     const PaddockPress press = PaddockBeginPress(label, {width, height});
     if (tooltip != nullptr && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("%s", tooltip);
@@ -184,11 +195,10 @@ bool OlButton(const char* label, OlTone tone = OlTone::Plain, float width = 0.0F
     const PaddockRadii radii = PaddockRound(8.0F);
     PaddockFill(draw, press.min, press.max, radii,
                 PaddockApply(PaddockMix(PaddockRgb(look.fill, look.fill_alpha),
-                                        PaddockRgb(look.fill_hover, look.fill_hover_alpha),
-                                        press.hover)));
-    if (look.has_ring) PaddockStroke(draw, press.min, press.max, radii, PaddockCol(look.ring), 1.0F);
-    const ImU32 text = PaddockApply(PaddockMix(PaddockRgb(look.text), PaddockRgb(look.text_hover),
-                                               press.hover));
+                                        PaddockRgb(look.fill_hover, look.fill_hover_alpha), press.hover)));
+    if (look.has_ring)
+        PaddockStroke(draw, press.min, press.max, radii, PaddockCol(look.ring), 1.0F);
+    const ImU32 text = PaddockApply(PaddockMix(PaddockRgb(look.text), PaddockRgb(look.text_hover), press.hover));
     const char* end = PaddockLabelEnd(label);
     if (tone == OlTone::Icon) {
         // Segoe's x sits low in its line; lift it back optically.
@@ -201,10 +211,10 @@ bool OlButton(const char* label, OlTone tone = OlTone::Plain, float width = 0.0F
     } else {
         const PaddockType type = OlRead(14.0F, true, 1.2F);
         const float glyph = PaddockMeasure(type, label, end);
-        PaddockDrawRun(draw, type,
-                       {std::round(press.min.x + (width - glyph) * 0.5F),
-                        std::round(press.min.y + (height - type.line) * 0.5F)},
-                       text, label, end);
+        PaddockDrawRun(
+            draw, type,
+            {std::round(press.min.x + (width - glyph) * 0.5F), std::round(press.min.y + (height - type.line) * 0.5F)},
+            text, label, end);
     }
     PaddockEndPress(press, 8.0F);
     return press.pressed;
@@ -215,8 +225,7 @@ enum class OlCtaColour { Blue, Green, Red };
 
 bool OlCta(const char* label, OlCtaColour colour, float width, bool disabled = false) {
     RaceButtonLook look;
-    look.fill = colour == OlCtaColour::Green ? 0x1AC2A3U
-              : colour == OlCtaColour::Red ? 0xE82E21U : 0x0A6EA1U;
+    look.fill = colour == OlCtaColour::Green ? 0x1AC2A3U : colour == OlCtaColour::Red ? 0xE82E21U : 0x0A6EA1U;
     look.font_px = 22.0F;
     look.drop = 3.0F;
     look.drop_colour = 0x031623;
@@ -238,8 +247,7 @@ bool OlSectionTab(const char* label, bool current, float width, float px) {
     const PaddockPress press = PaddockBeginPress(label, {width, height});
     const float on = PaddockEase(PaddockTween(PaddockKey("current", press.id), current, 0.15F, 0.15F));
     const auto state = [&](unsigned rest, unsigned hover, unsigned chosen) {
-        return PaddockMix(PaddockMix(PaddockRgb(rest), PaddockRgb(hover), press.hover),
-                          PaddockRgb(chosen), on);
+        return PaddockMix(PaddockMix(PaddockRgb(rest), PaddockRgb(hover), press.hover), PaddockRgb(chosen), on);
     };
     PaddockPanelStyle panel;
     panel.radii = {8.0F, 16.0F, 8.0F, 8.0F};
@@ -272,8 +280,7 @@ bool OlLink(const char* label) {
     const float top = std::round(press.min.y + (40.0F - type.line) * 0.5F);
     PaddockDrawRun(draw, type, {press.min.x, top}, colour, label, end);
     const float baseline = top + (type.line - type.content) * 0.5F + type.ascent;
-    draw->AddRectFilled({press.min.x, std::round(baseline + 3.0F)},
-                        {press.max.x, std::round(baseline + 4.0F)}, colour);
+    draw->AddRectFilled({press.min.x, std::round(baseline + 3.0F)}, {press.max.x, std::round(baseline + 4.0F)}, colour);
     PaddockEndPress(press, 3.0F, 1.0F);
     return press.pressed;
 }
@@ -281,7 +288,8 @@ bool OlLink(const char* label) {
 // ------------------------------------------------------------ fields
 
 inline float OlFieldLabel(const char* label, float width) {
-    if (label == nullptr || *label == '\0') return 0.0F;
+    if (label == nullptr || *label == '\0')
+        return 0.0F;
     const float height = OlText(label, 14.0F, kOlSoft, width, true, 1.4F);
     PaddockGap(6.0F);
     return height + 6.0F;
@@ -289,13 +297,13 @@ inline float OlFieldLabel(const char* label, float width) {
 
 // A described setting (.ol-switch): the launcher's checkbox, its title and
 // its explanation.
-bool OlSwitchRow(const char* id, const char* title, const char* description, bool* value,
-                 float width, bool rule_above, bool disabled = false) {
+bool OlSwitchRow(const char* id, const char* title, const char* description, bool* value, float width, bool rule_above,
+                 bool disabled = false) {
     const PaddockType strong = OlRead(15.0F, true, 1.5F);
     const PaddockType caption = OlRead(13.0F, false, 1.4F);
     const float text_width = std::max(width - 24.0F - 12.0F, 1.0F);
-    const float text_height = PaddockTextHeight(strong, title, text_width) +
-                              PaddockTextHeight(caption, description, text_width);
+    const float text_height =
+        PaddockTextHeight(strong, title, text_width) + PaddockTextHeight(caption, description, text_width);
     const float content = std::max(44.0F, text_height);
     const float height = 12.0F + content + 12.0F;
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -303,9 +311,11 @@ bool OlSwitchRow(const char* id, const char* title, const char* description, boo
     if (rule_above) {
         draw->AddRectFilled(origin, {origin.x + width, origin.y + 1.0F}, PaddockCol(0xFFFFFF, 18U));
     }
-    if (disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+    if (disabled)
+        ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
     const PaddockPress press = PaddockBeginPress(id, {width, height});
-    if (disabled) ImGui::PopItemFlag();
+    if (disabled)
+        ImGui::PopItemFlag();
     bool changed = false;
     if (press.pressed && !disabled) {
         *value = !*value;
@@ -318,30 +328,32 @@ bool OlSwitchRow(const char* id, const char* title, const char* description, boo
     const float text_top = std::round(origin.y + 12.0F + (content - text_height) * 0.5F);
     PaddockTextStyle title_style;
     title_style.colour = PaddockCol(0xFFFFFF);
-    const float title_height = PaddockTextAt(draw, strong, {box.x + 36.0F, text_top},
-                                             text_width, title, title_style);
+    const float title_height = PaddockTextAt(draw, strong, {box.x + 36.0F, text_top}, text_width, title, title_style);
     PaddockTextStyle small_style;
     small_style.colour = PaddockCol(kOlSoft);
-    PaddockTextAt(draw, caption, {box.x + 36.0F, text_top + title_height},
-                  text_width, description, small_style);
+    PaddockTextAt(draw, caption, {box.x + 36.0F, text_top + title_height}, text_width, description, small_style);
     OlFade(draw, first, disabled ? 0.6F : 1.0F);
-    if (press.focused) PaddockCheckFocus(draw, box);
+    if (press.focused)
+        PaddockCheckFocus(draw, box);
     return changed;
 }
 
 // A labelled drop-down (.ol-field select).
-bool OlSelect(const char* id, const char* label, int* value, const std::vector<std::string>& items,
-              float width, bool disabled = false) {
+bool OlSelect(const char* id, const char* label, int* value, const std::vector<std::string>& items, float width,
+              bool disabled = false) {
     OlFieldLabel(label, width);
     *value = std::clamp(*value, 0, std::max(static_cast<int>(items.size()) - 1, 0));
     const PaddockType type = OlRead(16.0F, true, 1.3F);
     ImDrawList* draw = ImGui::GetWindowDrawList();
     ImGui::PushID(id);
-    if (disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+    if (disabled)
+        ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
     const PaddockPress press = PaddockBeginPress("##select", {width, 44.0F});
-    if (disabled) ImGui::PopItemFlag();
+    if (disabled)
+        ImGui::PopItemFlag();
     const char* popup = "##select-popup";
-    if (press.pressed && !disabled) ImGui::OpenPopup(popup);
+    if (press.pressed && !disabled)
+        ImGui::OpenPopup(popup);
     const bool open = ImGui::IsPopupOpen(popup);
     const int first = draw->VtxBuffer.Size;
     const PaddockRadii radii = PaddockRound(8.0F);
@@ -353,16 +365,14 @@ bool OlSelect(const char* id, const char* label, int* value, const std::vector<s
     const std::string shown = PaddockEllipsize(type, items.empty() ? "" : items[*value], width - 12.0F - 36.0F);
     PaddockDrawRun(draw, type, {press.min.x + 13.0F, std::round(press.min.y + (44.0F - type.line) * 0.5F)},
                    PaddockCol(0xFFFFFF), shown.data(), shown.data() + shown.size());
-    PaddockChevron(draw, {press.max.x - 17.0F, press.min.y + 20.0F}, 45.0F, 7.0F,
-                   PaddockCol(0xFFFFFF), 1.6F);
+    PaddockChevron(draw, {press.max.x - 17.0F, press.min.y + 20.0F}, 45.0F, 7.0F, PaddockCol(0xFFFFFF), 1.6F);
     OlFade(draw, first, disabled ? 0.5F : 1.0F);
     PaddockEndPress(press, 8.0F, 1.0F);
     bool changed = false;
     constexpr float row = 34.0F;
     ImGui::SetNextWindowPos({press.min.x, press.max.y + 4.0F});
     ImGui::SetNextWindowSizeConstraints(
-        {width, 0.0F}, {std::max(width, 1.0F),
-                        std::min(row * static_cast<float>(items.size()) + 10.0F, 360.0F)});
+        {width, 0.0F}, {std::max(width, 1.0F), std::min(row * static_cast<float>(items.size()) + 10.0F, 360.0F)});
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {5.0F, 5.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 8.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
@@ -384,7 +394,8 @@ bool OlSelect(const char* id, const char* label, int* value, const std::vector<s
                 changed = *value != index;
                 *value = index;
             }
-            if (selected && ImGui::IsWindowAppearing()) ImGui::SetItemDefaultFocus();
+            if (selected && ImGui::IsWindowAppearing())
+                ImGui::SetItemDefaultFocus();
             ImGui::PopID();
         }
         ImGui::PopFont();
@@ -410,12 +421,13 @@ struct OlInputOptions {
 
 // A text field (.online-page input[type=text]). A controller cannot type into
 // it, so a gamepad activation is handed back for an on-screen keyboard.
-OlInputResult OlInput(const char* id, const char* label, char* buffer, std::size_t capacity,
-                      float width, const OlInputOptions& options = {}) {
+OlInputResult OlInput(const char* id, const char* label, char* buffer, std::size_t capacity, float width,
+                      const OlInputOptions& options = {}) {
     OlFieldLabel(label, width);
-    width=std::max(1.0F,std::min(width,ImGui::GetContentRegionAvail().x));
-    ImGui::PushID(id);ImGui::BeginGroup();
-    const float keyboard_width=44.0F;
+    width = std::max(1.0F, std::min(width, ImGui::GetContentRegionAvail().x));
+    ImGui::PushID(id);
+    ImGui::BeginGroup();
+    const float keyboard_width = 44.0F;
     const PaddockType type = options.mono ? PaddockMono(16.0F, true, 1.3F) : OlRead(16.0F, true, 1.3F);
     const float font_size = type.font->FontSize;
     ImGui::PushFont(type.font);
@@ -430,16 +442,18 @@ OlInputResult OlInput(const char* id, const char* label, char* buffer, std::size
     ImGui::PushStyleColor(ImGuiCol_TextDisabled, PaddockRgb(0x6F8E9C));
     ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0, 0U));
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    ImGui::SetNextItemWidth(std::max(1.0F,width-keyboard_width-8.0F));
-    if (options.disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+    ImGui::SetNextItemWidth(std::max(1.0F, width - keyboard_width - 8.0F));
+    if (options.disabled)
+        ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const int first = draw->VtxBuffer.Size;
-    const bool entered = ImGui::InputTextWithHint(
-        id, options.hint, buffer, capacity,
-        options.flags | ImGuiInputTextFlags_EnterReturnsTrue |
-            (options.callback != nullptr ? ImGuiInputTextFlags_CallbackCharFilter : 0),
-        options.callback);
-    if (options.disabled) ImGui::PopItemFlag();
+    const bool entered =
+        ImGui::InputTextWithHint(id, options.hint, buffer, capacity,
+                                 options.flags | ImGuiInputTextFlags_EnterReturnsTrue |
+                                     (options.callback != nullptr ? ImGuiInputTextFlags_CallbackCharFilter : 0),
+                                 options.callback);
+    if (options.disabled)
+        ImGui::PopItemFlag();
     const bool edited = ImGui::IsItemEdited();
     const bool committed = ImGui::IsItemDeactivatedAfterEdit();
     const bool activated = ImGui::IsItemActivated();
@@ -454,24 +468,31 @@ OlInputResult OlInput(const char* id, const char* label, char* buffer, std::size
     if (hovered && !active && !options.disabled) {
         PaddockStroke(draw, origin, max, PaddockRound(8.0F), PaddockCol(0x5A97B1), 1.0F);
     }
-    const bool gamepad=activated&&GImGui->ActiveIdSource==ImGuiInputSource_Gamepad;
-    if(gamepad)ImGui::ClearActiveID();
+    const bool gamepad = activated && GImGui->ActiveIdSource == ImGuiInputSource_Gamepad;
+    if (gamepad)
+        ImGui::ClearActiveID();
     if (active || focused) {
-        draw->AddRect({origin.x - 4.5F, origin.y - 4.5F}, {max.x + 4.5F, max.y + 4.5F},
-                      PaddockCol(0xFFD11F), 12.5F, 0, 3.0F);
+        draw->AddRect({origin.x - 4.5F, origin.y - 4.5F}, {max.x + 4.5F, max.y + 4.5F}, PaddockCol(0xFFD11F), 12.5F, 0,
+                      3.0F);
     }
-    ImGui::SameLine(0,8);ImGui::BeginDisabled(options.disabled);
-    const bool keyboard=PaddockKeyboardButton();
-    ImGui::EndDisabled();ImGui::EndGroup();ImGui::PopID();
-    if(keyboard||gamepad)return OlInputResult::Gamepad;
-    if (entered) return OlInputResult::Entered;
-    if (committed) return OlInputResult::Committed;
+    ImGui::SameLine(0, 8);
+    ImGui::BeginDisabled(options.disabled);
+    const bool keyboard = PaddockKeyboardButton();
+    ImGui::EndDisabled();
+    ImGui::EndGroup();
+    ImGui::PopID();
+    if (keyboard || gamepad)
+        return OlInputResult::Gamepad;
+    if (entered)
+        return OlInputResult::Entered;
+    if (committed)
+        return OlInputResult::Committed;
     return edited ? OlInputResult::Edited : OlInputResult::None;
 }
 
 // A labelled range with its value on the right (.ol-field input[type=range]).
-bool OlRange(const char* id, const char* label, int* value, int minimum, int maximum,
-             float width, bool disabled = false) {
+bool OlRange(const char* id, const char* label, int* value, int minimum, int maximum, float width,
+             bool disabled = false) {
     const PaddockType type = OlRead(14.0F, true, 1.4F);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -480,14 +501,16 @@ bool OlRange(const char* id, const char* label, int* value, int minimum, int max
     label_style.colour = PaddockCol(kOlSoft);
     const float number_width = PaddockMeasure(type, number);
     PaddockTextAt(draw, type, origin, width - number_width - 8.0F, label, label_style);
-    PaddockDrawRun(draw, type, {origin.x + width - number_width, origin.y}, PaddockCol(kOlAmber),
-                   number.data(), number.data() + number.size());
+    PaddockDrawRun(draw, type, {origin.x + width - number_width, origin.y}, PaddockCol(kOlAmber), number.data(),
+                   number.data() + number.size());
     ImGui::Dummy({width, type.line + 6.0F});
     ImGui::SetCursorScreenPos({origin.x, origin.y + type.line + 6.0F});
     ImGui::PushID(id);
-    if (disabled) ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+    if (disabled)
+        ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
     const PaddockPress press = PaddockBeginPress("##range", {width, 40.0F});
-    if (disabled) ImGui::PopItemFlag();
+    if (disabled)
+        ImGui::PopItemFlag();
     bool changed = false;
     const float left = press.min.x + 8.0F;
     const float span = std::max(width - 16.0F, 1.0F);
@@ -515,8 +538,8 @@ bool OlRange(const char* id, const char* label, int* value, int minimum, int max
             ImGui::NavMoveRequestCancel();
         }
     }
-    const float t = maximum > minimum
-        ? static_cast<float>(*value - minimum) / static_cast<float>(maximum - minimum) : 0.0F;
+    const float t =
+        maximum > minimum ? static_cast<float>(*value - minimum) / static_cast<float>(maximum - minimum) : 0.0F;
     const float y = press.min.y + 20.0F;
     const float thumb = left + span * t;
     const int first = draw->VtxBuffer.Size;
@@ -526,7 +549,8 @@ bool OlRange(const char* id, const char* label, int* value, int minimum, int max
     PaddockFill(draw, {left - 6.0F, y - 2.5F}, {thumb, y + 2.5F}, PaddockRound(2.5F), PaddockCol(filled));
     draw->AddCircleFilled({thumb, y}, 8.0F, PaddockCol(filled), 24);
     OlFade(draw, first, disabled ? 0.5F : 1.0F);
-    if (press.focused) PaddockFocusRing(draw, {thumb - 8.0F, y - 8.0F}, {thumb + 8.0F, y + 8.0F}, 8.0F);
+    if (press.focused)
+        PaddockFocusRing(draw, {thumb - 8.0F, y - 8.0F}, {thumb + 8.0F, y + 8.0F}, 8.0F);
     ImGui::PopID();
     return changed;
 }
@@ -534,15 +558,18 @@ bool OlRange(const char* id, const char* label, int* value, int minimum, int max
 // ------------------------------------------------------------ caption pieces
 
 inline ImU32 OlHsl(float hue, float saturation, float lightness) {
-    const float q = lightness < 0.5F ? lightness * (1.0F + saturation)
-                                     : lightness + saturation - lightness * saturation;
+    const float q =
+        lightness < 0.5F ? lightness * (1.0F + saturation) : lightness + saturation - lightness * saturation;
     const float p = 2.0F * lightness - q;
     const auto channel = [&](float t) {
         t = t - std::floor(t);
         float v = p;
-        if (t < 1.0F / 6.0F) v = p + (q - p) * 6.0F * t;
-        else if (t < 0.5F) v = q;
-        else if (t < 2.0F / 3.0F) v = p + (q - p) * (2.0F / 3.0F - t) * 6.0F;
+        if (t < 1.0F / 6.0F)
+            v = p + (q - p) * 6.0F * t;
+        else if (t < 0.5F)
+            v = q;
+        else if (t < 2.0F / 3.0F)
+            v = p + (q - p) * (2.0F / 3.0F - t) * 6.0F;
         return static_cast<int>(std::lround(v * 255.0F));
     };
     const float h = hue / 360.0F;
@@ -552,7 +579,8 @@ inline ImU32 OlHsl(float hue, float saturation, float lightness) {
 // A racer's initial on a colour picked from their name (.ol-avatar).
 void DrawOlAvatar(ImDrawList* draw, ImVec2 at, float size, std::string_view name, bool dimmed = false) {
     int hue = 0;
-    for (const unsigned char character : name) hue = (hue * 31 + character) % 360;
+    for (const unsigned char character : name)
+        hue = (hue * 31 + character) % 360;
     ImU32 fill = OlHsl(static_cast<float>(hue), 0.5F, 0.36F);
     if (dimmed) {
         // filter: saturate(.25); opacity: .7
@@ -560,8 +588,7 @@ void DrawOlAvatar(ImDrawList* draw, ImVec2 at, float size, std::string_view name
         const float g = static_cast<float>((fill >> IM_COL32_G_SHIFT) & 0xFFU);
         const float b = static_cast<float>((fill >> IM_COL32_B_SHIFT) & 0xFFU);
         const float grey = 0.2126F * r + 0.7152F * g + 0.0722F * b;
-        fill = IM_COL32(static_cast<int>(grey + (r - grey) * 0.25F),
-                        static_cast<int>(grey + (g - grey) * 0.25F),
+        fill = IM_COL32(static_cast<int>(grey + (r - grey) * 0.25F), static_cast<int>(grey + (g - grey) * 0.25F),
                         static_cast<int>(grey + (b - grey) * 0.25F), 255);
     }
     const int first = draw->VtxBuffer.Size;
@@ -580,13 +607,12 @@ void DrawOlAvatar(ImDrawList* draw, ImVec2 at, float size, std::string_view name
     }
     const PaddockType type = PaddockSign(size >= 50.0F ? 28.0F : 19.0F, 1.0F, 0.0F);
     const float width = PaddockMeasure(type, initial);
-    const ImVec2 text{std::round(centre.x - width * 0.5F),
-                      std::round(centre.y - type.line * 0.5F)};
-    PaddockDrawRun(draw, type, {text.x, text.y + 1.0F}, PaddockCol(0x000000, 77U),
-                   initial.data(), initial.data() + initial.size());
-    PaddockDrawRun(draw, type, text, PaddockCol(0xFFFFFF), initial.data(),
+    const ImVec2 text{std::round(centre.x - width * 0.5F), std::round(centre.y - type.line * 0.5F)};
+    PaddockDrawRun(draw, type, {text.x, text.y + 1.0F}, PaddockCol(0x000000, 77U), initial.data(),
                    initial.data() + initial.size());
-    if (dimmed) OlFade(draw, first, 0.7F);
+    PaddockDrawRun(draw, type, text, PaddockCol(0xFFFFFF), initial.data(), initial.data() + initial.size());
+    if (dimmed)
+        OlFade(draw, first, 0.7F);
 }
 
 // A status pill (.ol-soft-tag). Returns its size.
@@ -594,8 +620,7 @@ ImVec2 DrawOlSoftTag(ImDrawList* draw, ImVec2 at, std::string_view text) {
     const PaddockType type = OlRead(12.0F, true, 1.5F);
     const ImVec2 size{std::ceil(PaddockMeasure(type, text) + 16.0F), type.line + 8.0F};
     PaddockFill(draw, at, {at.x + size.x, at.y + size.y}, PaddockRound(4.0F), PaddockCol(0xFFFFFF, 15U));
-    PaddockDrawRun(draw, type, {at.x + 8.0F, at.y + 4.0F}, PaddockCol(kOlSoft), text.data(),
-                   text.data() + text.size());
+    PaddockDrawRun(draw, type, {at.x + 8.0F, at.y + 4.0F}, PaddockCol(kOlSoft), text.data(), text.data() + text.size());
     return size;
 }
 
@@ -608,20 +633,18 @@ ImVec2 DrawOlTag(ImDrawList* draw, ImVec2 at, std::string_view text, bool you) {
         width += PaddockMeasure(type, std::string_view(&character, 1U)) + tracking;
     }
     const ImVec2 size{std::ceil(width - tracking + 12.0F), std::ceil(type.line + 6.0F)};
-    PaddockFill(draw, at, {at.x + size.x, at.y + size.y}, PaddockRound(4.0F),
-                PaddockCol(you ? 0x8FD3EAU : kOlAmber));
+    PaddockFill(draw, at, {at.x + size.x, at.y + size.y}, PaddockRound(4.0F), PaddockCol(you ? 0x8FD3EAU : kOlAmber));
     float x = at.x + 6.0F;
     for (const char character : text) {
-        PaddockDrawRun(draw, type, {x, at.y + 3.0F}, PaddockCol(you ? 0x06283AU : 0x2A1D05U),
-                       &character, &character + 1);
+        PaddockDrawRun(draw, type, {x, at.y + 3.0F}, PaddockCol(you ? 0x06283AU : 0x2A1D05U), &character,
+                       &character + 1);
         x += PaddockMeasure(type, std::string_view(&character, 1U)) + tracking;
     }
     return size;
 }
 
 // Starting lights in their housing (.ol-lights). 0 off, 1 waiting, 2 go, 3 lit red.
-float DrawOlLights(ImDrawList* draw, ImVec2 at, const std::vector<int>& lights, float size = 18.0F,
-                   float gap = 8.0F) {
+float DrawOlLights(ImDrawList* draw, ImVec2 at, const std::vector<int>& lights, float size = 18.0F, float gap = 8.0F) {
     const float pad = gap;
     const float width = pad * 2.0F + size * lights.size() + gap * (lights.size() - 1U);
     const float height = size + pad * 2.0F;
@@ -646,8 +669,8 @@ float DrawOlLights(ImDrawList* draw, ImVec2 at, const std::vector<int>& lights, 
         }
         draw->AddCircleFilled(centre, size * 0.5F, PaddockCol(colour), 24);
         if (glow == 0U) {
-            draw->PushClipRect({centre.x - size, centre.y + size * 0.5F - 2.0F},
-                               {centre.x + size, centre.y + size}, true);
+            draw->PushClipRect({centre.x - size, centre.y + size * 0.5F - 2.0F}, {centre.x + size, centre.y + size},
+                               true);
             draw->AddCircleFilled(centre, size * 0.5F, PaddockCol(0x000000, 77U), 24);
             draw->PopClipRect();
         }
@@ -663,12 +686,15 @@ float DrawOlPing(ImDrawList* draw, ImVec2 at, float line, unsigned ping) {
     const std::array<float, 3> heights{{5.0F, 8.0F, 12.0F}};
     for (int bar = 0; bar < 3; ++bar) {
         unsigned colour = 0x3C5F70;
-        if (level == 3) colour = kOlGo;
-        else if (level == 2 && bar < 2) colour = kOlAmber;
-        else if (level == 1 && bar == 0) colour = 0xFF7A5C;
+        if (level == 3)
+            colour = kOlGo;
+        else if (level == 2 && bar < 2)
+            colour = kOlAmber;
+        else if (level == 1 && bar == 0)
+            colour = 0xFF7A5C;
         const float x = at.x + bar * 5.0F;
-        PaddockFill(draw, {x, base - heights[static_cast<std::size_t>(bar)]}, {x + 3.0F, base},
-                    PaddockRound(1.0F), PaddockCol(colour));
+        PaddockFill(draw, {x, base - heights[static_cast<std::size_t>(bar)]}, {x + 3.0F, base}, PaddockRound(1.0F),
+                    PaddockCol(colour));
     }
     const std::string text = std::to_string(ping) + " ms";
     const PaddockType type = OlRead(13.0F, false, 1.5F);
@@ -680,20 +706,18 @@ float DrawOlPing(ImDrawList* draw, ImVec2 at, float line, unsigned ping) {
 struct OlTileLook {
     float height = 64.0F;
     float gap = 8.0F;
-    float tile_width = 0.0F;     // 0 shares the width
+    float tile_width = 0.0F; // 0 shares the width
     float font_px = 32.0F;
-    bool plate = false;          // dark on white, inside the cream code plate
+    bool plate = false; // dark on white, inside the cream code plate
     bool hovered = false;
     bool error = false;
-    int caret = -1;              // the tile with the caret, while typing
+    int caret = -1; // the tile with the caret, while typing
 };
 
 // Five characters on readable tiles (.ol-code-tiles).
-float DrawOlCodeTiles(ImDrawList* draw, ImVec2 at, float width, std::string_view code,
-                      const OlTileLook& look) {
+float DrawOlCodeTiles(ImDrawList* draw, ImVec2 at, float width, std::string_view code, const OlTileLook& look) {
     constexpr int kTiles = 5;
-    const float tile = look.tile_width > 0.0F ? look.tile_width
-                                              : (width - look.gap * (kTiles - 1)) / kTiles;
+    const float tile = look.tile_width > 0.0F ? look.tile_width : (width - look.gap * (kTiles - 1)) / kTiles;
     const PaddockType type = PaddockMono(look.font_px, true, 1.0F);
     const bool blink = std::fmod(PaddockClock(), 1.0) < 0.5;
     for (int index = 0; index < kTiles; ++index) {
@@ -704,10 +728,14 @@ float DrawOlCodeTiles(ImDrawList* draw, ImVec2 at, float width, std::string_view
         const PaddockRadii radii = PaddockRound(10.0F);
         unsigned border = look.plate ? 0x10222CU : 0x2F6A86U;
         if (!look.plate) {
-            if (filled) border = 0x6FB3CC;
-            if (look.hovered) border = 0x5A97B1;
-            if (look.error) border = 0xFF7A5C;
-            if (caret) border = kOlAmber;
+            if (filled)
+                border = 0x6FB3CC;
+            if (look.hovered)
+                border = 0x5A97B1;
+            if (look.error)
+                border = 0xFF7A5C;
+            if (caret)
+                border = kOlAmber;
         }
         PaddockFill(draw, a, b, radii, PaddockCol(look.plate ? 0xFFFFFFU : 0x04192AU));
         // Inset shade: along the top of a field tile, the bottom of a plate tile.
@@ -724,15 +752,15 @@ float DrawOlCodeTiles(ImDrawList* draw, ImVec2 at, float width, std::string_view
         if (filled) {
             const char* glyph = g_online_hide_lobby_code ? "*" : code.data() + index;
             const float glyph_width = PaddockMeasure(type, std::string_view(glyph, 1U));
-            PaddockDrawRun(draw, type,
-                           {std::round(a.x + (tile - glyph_width) * 0.5F),
-                            std::round(a.y + (look.height - type.line) * 0.5F)},
-                           PaddockCol(look.plate ? 0x10222CU : 0xFFF4D0U), glyph, glyph + 1);
+            PaddockDrawRun(
+                draw, type,
+                {std::round(a.x + (tile - glyph_width) * 0.5F), std::round(a.y + (look.height - type.line) * 0.5F)},
+                PaddockCol(look.plate ? 0x10222CU : 0xFFF4D0U), glyph, glyph + 1);
         } else if (caret && blink) {
             const float centre = (a.x + b.x) * 0.5F;
             const float middle = (a.y + b.y) * 0.5F;
-            PaddockFill(draw, {centre - 1.5F, middle - 15.0F}, {centre + 1.5F, middle + 15.0F},
-                        PaddockRound(2.0F), PaddockCol(kOlAmber));
+            PaddockFill(draw, {centre - 1.5F, middle - 15.0F}, {centre + 1.5F, middle + 15.0F}, PaddockRound(2.0F),
+                        PaddockCol(kOlAmber));
         }
     }
     return tile * kTiles + look.gap * (kTiles - 1);
@@ -774,13 +802,15 @@ void PaintOlPanel(ImDrawList* draw, ImVec2 a, ImVec2 b, const OlPanelLook& look)
         const ImVec2 centre{(a.x + b.x) * 0.5F, (a.y + b.y) * 0.5F};
         for (int index = first; index < draw->VtxBuffer.Size; ++index) {
             ImDrawVert& vertex = draw->VtxBuffer[index];
-            const float t = ((vertex.pos.x - centre.x) * direction.x +
-                             (vertex.pos.y - centre.y) * direction.y) / std::max(length, 1.0F) + 0.5F;
+            const float t = ((vertex.pos.x - centre.x) * direction.x + (vertex.pos.y - centre.y) * direction.y) /
+                                std::max(length, 1.0F) +
+                            0.5F;
             ImU32 colour = PaddockRgb(look.gradient.front().rgb);
             for (std::size_t stop = 1U; stop < look.gradient.size(); ++stop) {
                 const OlStop& from = look.gradient[stop - 1U];
                 const OlStop& to = look.gradient[stop];
-                if (t <= from.at) break;
+                if (t <= from.at)
+                    break;
                 colour = t >= to.at ? PaddockRgb(to.rgb)
                                     : PaddockMix(PaddockRgb(from.rgb), PaddockRgb(to.rgb),
                                                  (t - from.at) / std::max(to.at - from.at, 0.0001F));
@@ -790,9 +820,8 @@ void PaintOlPanel(ImDrawList* draw, ImVec2 a, ImVec2 b, const OlPanelLook& look)
     }
     if (look.ring_width > 0.0F) {
         const float edge = look.border_width;
-        PaddockStroke(draw, {a.x + edge, a.y + edge}, {b.x - edge, b.y - edge},
-                      PaddockInset(look.radii, edge), PaddockCol(look.ring, look.ring_alpha),
-                      look.ring_width);
+        PaddockStroke(draw, {a.x + edge, a.y + edge}, {b.x - edge, b.y - edge}, PaddockInset(look.radii, edge),
+                      PaddockCol(look.ring, look.ring_alpha), look.ring_width);
     }
     if (look.border_width > 0.0F) {
         PaddockStroke(draw, a, b, look.radii, PaddockCol(look.border), look.border_width);
@@ -805,20 +834,28 @@ void PaintOlPanel(ImDrawList* draw, ImVec2 a, ImVec2 b, const OlPanelLook& look)
 // previous line can give it company.
 std::vector<PaddockLine> OlWrap(const PaddockType& type, std::string_view text, float width) {
     std::vector<PaddockLine> lines = PaddockWrap(type, text, width);
-    if (lines.size() < 2U) return lines;
+    if (lines.size() < 2U)
+        return lines;
     PaddockLine& last = lines.back();
     PaddockLine& previous = lines[lines.size() - 2U];
-    if (std::find(last.begin, last.end, ' ') != last.end) return lines;
-    if (previous.end == nullptr || previous.end > last.begin) return lines;
+    if (std::find(last.begin, last.end, ' ') != last.end)
+        return lines;
+    if (previous.end == nullptr || previous.end > last.begin)
+        return lines;
     const char* space = previous.end;
-    while (space > previous.begin && *(space - 1) != ' ') --space;
-    if (space <= previous.begin) return lines;
+    while (space > previous.begin && *(space - 1) != ' ')
+        --space;
+    if (space <= previous.begin)
+        return lines;
     const char* moved = space;
     const char* kept_end = space - 1;
-    while (kept_end > previous.begin && *(kept_end - 1) == ' ') --kept_end;
-    if (kept_end <= previous.begin) return lines;
+    while (kept_end > previous.begin && *(kept_end - 1) == ' ')
+        --kept_end;
+    if (kept_end <= previous.begin)
+        return lines;
     const float grown = PaddockMeasure(type, moved, last.end);
-    if (grown > width) return lines;
+    if (grown > width)
+        return lines;
     previous.end = kept_end;
     previous.width = PaddockMeasure(type, previous.begin, previous.end);
     last.begin = moved;
@@ -826,16 +863,17 @@ std::vector<PaddockLine> OlWrap(const PaddockType& type, std::string_view text, 
     return lines;
 }
 
-float OlParagraphHeight(std::string_view text, float px, float width, bool semibold = false,
-                        float line = 1.5F) {
-    if (text.empty()) return 0.0F;
+float OlParagraphHeight(std::string_view text, float px, float width, bool semibold = false, float line = 1.5F) {
+    if (text.empty())
+        return 0.0F;
     const PaddockType type = OlRead(px, semibold, line);
     return type.line * static_cast<float>(OlWrap(type, text, width).size());
 }
 
-float OlParagraphAt(ImDrawList* draw, ImVec2 at, std::string_view text, float px, unsigned colour,
-                    float width, bool semibold = false, float line = 1.5F, bool centre = false) {
-    if (text.empty()) return 0.0F;
+float OlParagraphAt(ImDrawList* draw, ImVec2 at, std::string_view text, float px, unsigned colour, float width,
+                    bool semibold = false, float line = 1.5F, bool centre = false) {
+    if (text.empty())
+        return 0.0F;
     const PaddockType type = OlRead(px, semibold, line);
     const auto lines = OlWrap(type, text, width);
     PaddockTextStyle style;
@@ -846,10 +884,10 @@ float OlParagraphAt(ImDrawList* draw, ImVec2 at, std::string_view text, float px
 }
 
 // A paragraph as one layout item at the cursor.
-float OlParagraph(std::string_view text, float px, unsigned colour, float width,
-                  bool semibold = false, float line = 1.5F, bool centre = false) {
-    const float height = OlParagraphAt(ImGui::GetWindowDrawList(), ImGui::GetCursorScreenPos(), text,
-                                       px, colour, width, semibold, line, centre);
+float OlParagraph(std::string_view text, float px, unsigned colour, float width, bool semibold = false,
+                  float line = 1.5F, bool centre = false) {
+    const float height = OlParagraphAt(ImGui::GetWindowDrawList(), ImGui::GetCursorScreenPos(), text, px, colour, width,
+                                       semibold, line, centre);
     ImGui::Dummy({width, height});
     return height;
 }
@@ -862,10 +900,10 @@ struct OnlinePageState {
     OlSection section = OlSection::Lobbies;
     bool was_active = false;
     bool was_joining = false;
-    bool join_attempted = false;       // a failed session shows under the code tiles
+    bool join_attempted = false; // a failed session shows under the code tiles
     std::string join_error;
     std::string phase_key;
-    double entered_at = -10.0;         // a new section or phase slides in
+    double entered_at = -10.0; // a new section or phase slides in
     ImGuiContext* context = nullptr;
     int last_frame = -100;
     bool open_close = false;
@@ -879,7 +917,7 @@ struct OnlinePageState {
     std::uint32_t observed_test_generation = 0U;
     std::uint32_t countdown_second = 0U;
     double countdown_changed_at = -10.0;
-    float sign_lean = 0.0F;            // the OR sign leans toward the card you're on
+    float sign_lean = 0.0F; // the OR sign leans toward the card you're on
 };
 OnlinePageState g_online_page;
 
@@ -887,23 +925,22 @@ struct OnlineFrame {
     const dkr::runtime::netplay::SessionView& view;
     bool launcher = true;
     bool rom_ready = false;
-    bool active = false;       // hosting, joining or in a lobby
-    bool joining = false;      // knocking on a host's door
-    bool in_lobby = false;     // hosting or admitted
-    bool busy = false;         // a test, countdown or race is running
-    bool has_space = false;    // the host can admit one more racer
+    bool active = false;    // hosting, joining or in a lobby
+    bool joining = false;   // knocking on a host's door
+    bool in_lobby = false;  // hosting or admitted
+    bool busy = false;      // a test, countdown or race is running
+    bool has_space = false; // the host can admit one more racer
 };
 
 #include "lobby_context.inl"
 
 // Content that slides in after a section or phase change (.is-entering).
 class OlEnter {
-public:
+  public:
     explicit OlEnter(int index)
-        : fade_(g_online_page.entered_at, 0.07F * static_cast<float>(std::min(index, 6)), 0.32F,
-                10.0F) {}
+        : fade_(g_online_page.entered_at, 0.07F * static_cast<float>(std::min(index, 6)), 0.32F, 10.0F) {}
 
-private:
+  private:
     PaddockFadeUp fade_;
 };
 
@@ -927,12 +964,15 @@ bool OlPreviousOnlineSaveAvailable() {
     static auto next_read = std::chrono::steady_clock::time_point{};
     const auto now = std::chrono::steady_clock::now();
     if (read.valid() && read.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-        try { info = read.get(); } catch (...) { info = {}; }
+        try {
+            info = read.get();
+        } catch (...) {
+            info = {};
+        }
         next_read = now + std::chrono::seconds(2);
     }
     if (!read.valid() && now >= next_read) {
-        read = std::async(std::launch::async,
-                          [] { return dkr::runtime::saves::previous_online_adventure_info(); });
+        read = std::async(std::launch::async, [] { return dkr::runtime::saves::previous_online_adventure_info(); });
     }
     return info.valid;
 }
@@ -940,10 +980,13 @@ bool OlPreviousOnlineSaveAvailable() {
 const char* OlMenuOwnershipLabel(dkr::runtime::netplay::HostControlPolicy policy) {
     using dkr::runtime::netplay::HostControlPolicy;
     switch (policy) {
-    case HostControlPolicy::HostSharedMenus: return "Host for shared menus";
-    case HostControlPolicy::EveryAssignedPort: return "All players";
+    case HostControlPolicy::HostSharedMenus:
+        return "Host for shared menus";
+    case HostControlPolicy::EveryAssignedPort:
+        return "All players";
     case HostControlPolicy::GuidedUntilCharacterSelect:
-    default: return "Host until character select";
+    default:
+        return "Host until character select";
     }
 }
 
@@ -961,14 +1004,15 @@ std::string OlRulesLine(const dkr::runtime::netplay::Rules& rules) {
 std::string OlTrimmed(const char* text) {
     std::string value(text);
     const auto first = value.find_first_not_of(' ');
-    if (first == std::string::npos) return {};
+    if (first == std::string::npos)
+        return {};
     return value.substr(first, value.find_last_not_of(' ') - first + 1U);
 }
 
-template <std::size_t Size>
-void OlCommitName(char (&buffer)[Size], const char* fallback) {
+template <std::size_t Size> void OlCommitName(char (&buffer)[Size], const char* fallback) {
     std::string name = OlTrimmed(buffer);
-    if (name.empty()) name = fallback;
+    if (name.empty())
+        name = fallback;
     const std::size_t length = std::min(name.size(), Size - 1U);
     std::memcpy(buffer, name.data(), length);
     buffer[length] = '\0';
@@ -976,12 +1020,14 @@ void OlCommitName(char (&buffer)[Size], const char* fallback) {
 }
 
 // The newest permanent Friend Code: the one the profile card shows.
-std::optional<dkr::runtime::netplay::FriendInviteView> OlPermanentFriendCode(
-        const dkr::runtime::netplay::FriendServiceSnapshot& snapshot) {
+std::optional<dkr::runtime::netplay::FriendInviteView>
+OlPermanentFriendCode(const dkr::runtime::netplay::FriendServiceSnapshot& snapshot) {
     std::optional<dkr::runtime::netplay::FriendInviteView> newest;
     for (const auto& invite : snapshot.invitations) {
-        if (invite.lifetime != dkr::runtime::netplay::FriendInviteLifetime::Permanent) continue;
-        if (!newest || invite.invite_id > newest->invite_id) newest = invite;
+        if (invite.lifetime != dkr::runtime::netplay::FriendInviteLifetime::Permanent)
+            continue;
+        if (!newest || invite.invite_id > newest->invite_id)
+            newest = invite;
     }
     return newest;
 }
@@ -1009,11 +1055,14 @@ struct OlTab {
 void DrawOlTabs(const std::vector<OlTab>& tabs, float width) {
 #if defined(__ANDROID__)
     const char* selected = tabs.front().label;
-    for (const auto& tab : tabs) if (tab.id == g_online_page.section) selected = tab.label;
+    for (const auto& tab : tabs)
+        if (tab.id == g_online_page.section)
+            selected = tab.label;
     ImGui::SetNextItemWidth(width);
     if (ImGui::BeginCombo("##mobile-online-section", selected)) {
-        for (const auto& tab : tabs) if (ImGui::Selectable(tab.label, tab.id == g_online_page.section))
-            g_online_page.section = tab.id;
+        for (const auto& tab : tabs)
+            if (ImGui::Selectable(tab.label, tab.id == g_online_page.section))
+                g_online_page.section = tab.id;
         ImGui::EndCombo();
     }
     return;
@@ -1045,7 +1094,8 @@ void DrawOlTabs(const std::vector<OlTab>& tabs, float width) {
     float y = origin.y;
     for (const auto& [first, last] : rows) {
         float total = 0.0F;
-        for (std::size_t index = first; index < last; ++index) total += widths[index];
+        for (std::size_t index = first; index < last; ++index)
+            total += widths[index];
         total += 10.0F * static_cast<float>(last - first - 1U);
         const float spare = compact ? (width - total) / static_cast<float>(last - first) : 0.0F;
         float x = origin.x;
@@ -1094,25 +1144,30 @@ extern float g_ol_page_width;
 void DrawOlLobbyFilters(float);
 void DrawOlSidebarReadiness(float, const OnlineFrame&);
 void DrawOlGuideCard(float width, const OnlineFrame& frame) {
-    DrawOlFeature(width,"Your online view","Changes your screen only.",[&](float inner) {
-        namespace ov=dkr::runtime::online_view;
+    DrawOlFeature(width, "Your online view", "Changes your screen only.", [&](float inner) {
+        namespace ov = dkr::runtime::online_view;
         PaddockGap(12.F);
-        int layout=int(ov::requested_layout.load());
-        if(PaddockSelect("online-local-view","Race view",&layout,{"Original split-screen","My racer fullscreen"},inner)) {
-            ov::requested_layout=ov::Layout(layout);SaveSettings();
+        int layout = int(ov::requested_layout.load());
+        if (PaddockSelect("online-local-view", "Race view", &layout, {"Original split-screen", "My racer fullscreen"},
+                          inner)) {
+            ov::requested_layout = ov::Layout(layout);
+            SaveSettings();
         }
         PaddockGap(12.F);
-        int labels=int(ov::requested_labels.load());
-        if(PaddockSelect("online-racer-labels","Racer labels",&labels,{"Name + race position","Race position","Off"},inner)) {
-            ov::requested_labels=ov::Labels(labels);SaveSettings();
+        int labels = int(ov::requested_labels.load());
+        if (PaddockSelect("online-racer-labels", "Racer labels", &labels,
+                          {"Name + race position", "Race position", "Off"}, inner)) {
+            ov::requested_labels = ov::Labels(labels);
+            SaveSettings();
         }
         PaddockGap(12.F);
-        int size=int((ov::requested_label_size.load()-75U)/25U);
-        if(PaddockSelect("online-label-size","Label size",&size,{"75%","100%","125%","150%"},inner)) {
-            ov::requested_label_size=75U+unsigned(size)*25U;SaveSettings();
+        int size = int((ov::requested_label_size.load() - 75U) / 25U);
+        if (PaddockSelect("online-label-size", "Label size", &size, {"75%", "100%", "125%", "150%"}, inner)) {
+            ov::requested_label_size = 75U + unsigned(size) * 25U;
+            SaveSettings();
         }
         PaddockGap(12.F);
-        OlParagraph("For Rollback races. Menus and shared scenes keep their usual view.",13.F,kOlSoft,inner);
+        OlParagraph("For Rollback races. Menus and shared scenes keep their usual view.", 13.F, kOlSoft, inner);
     });
     PaddockGap(20.F);
     if (!frame.active && g_online_page.section == OlSection::Lobbies) {
@@ -1121,9 +1176,7 @@ void DrawOlGuideCard(float width, const OnlineFrame& frame) {
     }
     DrawOlFeature(width, "Online guide", "", [&](float inner) {
         PaddockGap(16.0F);
-        OlParagraph(frame.active ? "Game settings stay fixed in this lobby."
-                                 : "",
-                    15.0F, kOlSoft, inner);
+        OlParagraph(frame.active ? "Game settings stay fixed in this lobby." : "", 15.0F, kOlSoft, inner);
         PaddockGap(16.0F);
         if (OlButton("Read the online guide", OlTone::Plain, inner)) {
             g_online_guide_reopen_requested = true;
@@ -1156,7 +1209,8 @@ void DrawOlProfileCard(float width, const OnlineFrame& frame, bool profile_secti
             options.disabled = frame.active;
             const OlInputResult result = OlInput("##online-racer-name", nullptr, g_online_player_name,
                                                  sizeof(g_online_player_name), name_width, options);
-            if (result == OlInputResult::Gamepad) RequestTextEntryKeyboard(TextEntryTarget::RacerName);
+            if (result == OlInputResult::Gamepad)
+                RequestTextEntryKeyboard(TextEntryTarget::RacerName);
             if (result == OlInputResult::Committed || result == OlInputResult::Entered) {
                 OlCommitName(g_online_player_name, "Racer");
             }
@@ -1169,9 +1223,10 @@ void DrawOlProfileCard(float width, const OnlineFrame& frame, bool profile_secti
         {
             const bool hidden = service.appear_offline();
             const bool available = service.presence_available();
-            const char* text = hidden ? "Friends see you as offline"
-                             : !available ? "Connecting to friends\xE2\x80\xA6"
-                             : frame.in_lobby ? "Online \xC2\xB7 in a lobby" : "Online";
+            const char* text = hidden           ? "Friends see you as offline"
+                               : !available     ? "Connecting to friends\xE2\x80\xA6"
+                               : frame.in_lobby ? "Online \xC2\xB7 in a lobby"
+                                                : "Online";
             const PaddockType type = OlRead(13.0F, true, 1.5F);
             const ImVec2 at = ImGui::GetCursorScreenPos();
             const float pill = std::ceil(10.0F + 9.0F + 8.0F + PaddockMeasure(type, text) + 12.0F);
@@ -1181,10 +1236,11 @@ void DrawOlProfileCard(float width, const OnlineFrame& frame, bool profile_secti
                         PaddockCol(grey ? 0x26333BU : 0x104E43U));
             draw->AddCircleFilled({at.x + 10.0F + 4.5F, at.y + height * 0.5F}, 4.5F,
                                   PaddockCol(grey ? 0x7D8D95U : kOlGo), 16);
-            PaddockDrawRun(draw, type, {at.x + 27.0F, at.y + 5.0F}, PaddockCol(grey ? 0xB3C3CBU : 0xB4F4DDU),
-                           text, text + std::strlen(text));
+            PaddockDrawRun(draw, type, {at.x + 27.0F, at.y + 5.0F}, PaddockCol(grey ? 0xB3C3CBU : 0xB4F4DDU), text,
+                           text + std::strlen(text));
             ImGui::Dummy({pill, height});
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", service.status().c_str());
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", service.status().c_str());
         }
         PaddockGap(12.0F);
         // Your friend code.
@@ -1198,18 +1254,18 @@ void DrawOlProfileCard(float width, const OnlineFrame& frame, bool profile_secti
             const float text_width = inner - button - 30.0F;
             PaddockTextStyle caption;
             caption.colour = PaddockCol(kOlSoft);
-            PaddockTextAt(draw, OlRead(12.0F, false, 1.5F), {at.x + 12.0F, at.y + 6.0F}, text_width,
-                          "Your friend code", caption);
+            PaddockTextAt(draw, OlRead(12.0F, false, 1.5F), {at.x + 12.0F, at.y + 6.0F}, text_width, "Your friend code",
+                          caption);
             if (code) {
                 const PaddockType mono = PaddockMono(16.0F, true, 1.5F);
                 const std::string shown = PaddockEllipsize(mono, code->code, text_width);
-                PaddockDrawRun(draw, mono, {at.x + 12.0F, at.y + 24.0F}, PaddockCol(kOlAmber),
-                               shown.data(), shown.data() + shown.size());
+                PaddockDrawRun(draw, mono, {at.x + 12.0F, at.y + 24.0F}, PaddockCol(kOlAmber), shown.data(),
+                               shown.data() + shown.size());
             } else {
                 PaddockTextStyle none;
                 none.colour = PaddockCol(kOlInk);
-                PaddockTextAt(draw, OlRead(15.0F, true, 1.5F), {at.x + 12.0F, at.y + 24.0F}, text_width,
-                              "No code yet", none);
+                PaddockTextAt(draw, OlRead(15.0F, true, 1.5F), {at.x + 12.0F, at.y + 24.0F}, text_width, "No code yet",
+                              none);
             }
             ImGui::SetCursorScreenPos({at.x + inner - 6.0F - button, at.y + 7.0F});
             if (OlButton(action)) {
@@ -1220,8 +1276,8 @@ void DrawOlProfileCard(float width, const OnlineFrame& frame, bool profile_secti
                 } else {
                     FriendInviteView invite{};
                     std::string error;
-                    if (service.create_invite(FriendInviteLifetime::Permanent, std::chrono::minutes(60),
-                                              invite, error)) {
+                    if (service.create_invite(FriendInviteLifetime::Permanent, std::chrono::minutes(60), invite,
+                                              error)) {
                         CopyFriendCodeToClipboard(invite.code);
                         g_online_action_status.clear();
                         OlNotify("Friend code created and copied.");
@@ -1267,7 +1323,7 @@ struct OlRoom {
     std::string tag;
     std::string title;
     std::string summary;
-    std::string note;          // a soft line, e.g. an invitation's status
+    std::string note; // a soft line, e.g. an invitation's status
     std::string error;
     const char* action = nullptr;
     bool action_disabled = false;
@@ -1306,12 +1362,15 @@ OlRoomPress DrawOlRoom(const OlRoom& room, float width) {
             const ImVec2 row = ImGui::GetCursorScreenPos();
             {
                 const OlDisabled disabled(room.action_disabled);
-                if (OlButton(room.action, OlTone::Go)) pressed = OlRoomPress::Action;
+                if (OlButton(room.action, OlTone::Go))
+                    pressed = OlRoomPress::Action;
             }
             if (room.secondary != nullptr) {
-                const bool wrap=OlButtonWidth(room.action)+8.F+OlButtonWidth(room.secondary)>inner;
-                ImGui::SetCursorScreenPos(wrap?ImVec2{row.x,row.y+48.F}:ImVec2{row.x+OlButtonWidth(room.action)+8.F,row.y});
-                if (OlButton(room.secondary)) pressed = OlRoomPress::Secondary;
+                const bool wrap = OlButtonWidth(room.action) + 8.F + OlButtonWidth(room.secondary) > inner;
+                ImGui::SetCursorScreenPos(wrap ? ImVec2{row.x, row.y + 48.F}
+                                               : ImVec2{row.x + OlButtonWidth(room.action) + 8.F, row.y});
+                if (OlButton(room.secondary))
+                    pressed = OlRoomPress::Secondary;
             }
         }
     });
@@ -1321,16 +1380,19 @@ OlRoomPress DrawOlRoom(const OlRoom& room, float width) {
 
 #include "directory_ui.inl"
 void DrawOlOpenLobbies(float width, const OnlineFrame& frame) {
-    if(!g_directory_friends_view){DrawOlPublicLobbies(width,frame);return;}
+    if (!g_directory_friends_view) {
+        DrawOlPublicLobbies(width, frame);
+        return;
+    }
     using namespace dkr::runtime::netplay;
     const auto snapshot = friend_service().snapshot();
     const bool can_join = frame.launcher && frame.rom_ready && !frame.active;
-    DrawOlFeature(width, "Open lobbies", "Find lobbies hosted by friends.",
-                  [&](float inner) {
+    DrawOlFeature(width, "Open lobbies", "Find lobbies hosted by friends.", [&](float inner) {
         std::size_t shown = 0U;
         for (const FriendLobbyInviteView& invite : snapshot->incoming_lobby_invites) {
             if (invite.status == FriendLobbyInviteStatus::Expired ||
-                invite.status == FriendLobbyInviteStatus::Cancelled) continue;
+                invite.status == FriendLobbyInviteStatus::Cancelled)
+                continue;
             ++shown;
             const bool compatible = invite.compatibility == DKR_NETWORK_RELEASE_VERSION;
             const bool delivered = invite.status == FriendLobbyInviteStatus::Delivered;
@@ -1342,10 +1404,10 @@ void DrawOlOpenLobbies(float width, const OnlineFrame& frame) {
             room.summary = std::to_string(invite.players) + " / " + std::to_string(invite.maximum_players) +
                            " racers \xC2\xB7 " + invite.synchronization;
             if (!delivered) {
-                room.note = std::string("Invitation ") +
-                            LowerAscii(FriendLobbyInviteStatusLabel(invite.status)) + ".";
+                room.note = std::string("Invitation ") + LowerAscii(FriendLobbyInviteStatusLabel(invite.status)) + ".";
             }
-            if (!compatible) room.error = "This invitation was created by a different DKR-R network build.";
+            if (!compatible)
+                room.error = "This invitation was created by a different DKR-R network build.";
             if (delivered) {
                 room.action = "Accept and join";
                 room.action_disabled = !compatible;
@@ -1355,21 +1417,22 @@ void DrawOlOpenLobbies(float width, const OnlineFrame& frame) {
             const OlRoomPress pressed = DrawOlRoom(room, inner);
             std::string error;
             if (pressed == OlRoomPress::Action) {
-                RequestLobbyInvitation(invite.invite_id,invite.friend_identity);
+                RequestLobbyInvitation(invite.invite_id, invite.friend_identity);
             } else if (pressed == OlRoomPress::Secondary) {
-                DeclineLobbyInvitation(invite.invite_id,invite.friend_identity);
+                DeclineLobbyInvitation(invite.invite_id, invite.friend_identity);
             }
         }
         for (const FriendView& racer : snapshot->friends) {
-            if (racer.blocked || !racer.online || !racer.hosting || racer.lobby_code.empty()) continue;
+            if (racer.blocked || !racer.online || !racer.hosting || racer.lobby_code.empty())
+                continue;
             ++shown;
             OlRoom room;
             room.id = "lobby-" + racer.identity;
             room.tag = "Friend lobby";
             room.title = FriendDisplayLabel(racer);
-            room.summary = std::to_string(racer.players) + " / " + std::to_string(racer.maximum_players) +
-                           " racers";
-            if (racer.ping_ms > 0U) room.summary += " \xC2\xB7 " + std::to_string(racer.ping_ms) + " ms";
+            room.summary = std::to_string(racer.players) + " / " + std::to_string(racer.maximum_players) + " racers";
+            if (racer.ping_ms > 0U)
+                room.summary += " \xC2\xB7 " + std::to_string(racer.ping_ms) + " ms";
             room.action = "Request to join";
             room.action_disabled = !can_join;
             PaddockGap(16.0F);
@@ -1377,7 +1440,9 @@ void DrawOlOpenLobbies(float width, const OnlineFrame& frame) {
                 std::string error;
                 g_online_page.join_attempted = true;
                 g_online_page.join_error.clear();
-                ConfigurePartyJoin();if (!session().join(racer.lobby_code, g_online_player_name, error)) OlNotify(error);
+                ConfigurePartyJoin();
+                if (!session().join(racer.lobby_code, g_online_player_name, error))
+                    OlNotify(error);
             }
         }
         if (shown == 0U) {
@@ -1389,7 +1454,8 @@ void DrawOlOpenLobbies(float width, const OnlineFrame& frame) {
             OlParagraph("Return to the launcher before joining another lobby.", 15.0F, kOlSoft, inner);
         } else if (!frame.rom_ready) {
             PaddockGap(16.0F);
-            if (OlLink("Choose a ROM before joining")) g_page_navigation_request = kPagePlay;
+            if (OlLink("Choose a ROM before joining"))
+                g_page_navigation_request = kPagePlay;
         }
     });
 }
@@ -1400,7 +1466,9 @@ void DrawOlOpenLobbies(float width, const OnlineFrame& frame) {
 // queries on that panel, not on the column a card sits in.
 float g_ol_page_width = 1400.0F;
 
-inline bool OlNarrow(float at_most) { return g_ol_page_width <= at_most; }
+inline bool OlNarrow(float at_most) {
+    return g_ol_page_width <= at_most;
+}
 
 // Choice cards, the lobby and the checklist tighten on narrow panels.
 struct OlSignboard {
@@ -1424,10 +1492,10 @@ inline OlSignboard OlSignboardMetrics() {
 // Whether keyboard or controller focus sits inside a rectangle (:focus-within).
 bool OlFocusWithin(ImVec2 a, ImVec2 b) {
     ImGuiContext& g = *GImGui;
-    if (g.NavWindow == nullptr || g.NavId == 0 || g.NavWindow != ImGui::GetCurrentWindow()) return false;
+    if (g.NavWindow == nullptr || g.NavId == 0 || g.NavWindow != ImGui::GetCurrentWindow())
+        return false;
     const ImRect rect = ImGui::WindowRectRelToAbs(g.NavWindow, g.NavWindow->NavRectRel[0]);
-    return rect.Min.x >= a.x - 1.0F && rect.Max.x <= b.x + 1.0F && rect.Min.y >= a.y - 1.0F &&
-           rect.Max.y <= b.y + 1.0F;
+    return rect.Min.x >= a.x - 1.0F && rect.Max.x <= b.x + 1.0F && rect.Min.y >= a.y - 1.0F && rect.Max.y <= b.y + 1.0F;
 }
 
 struct OlChoiceLook {
@@ -1488,8 +1556,7 @@ float OlChoiceTextWidth(float inner) {
 
 std::string OlHostInvitation() {
     const int friends = std::max(g_online_maximum_players - 1, 1);
-    return "Share a 5-character code with up to " + std::to_string(friends) +
-           (friends == 1 ? " friend." : " friends.");
+    return "Share a 5-character code with up to " + std::to_string(friends) + (friends == 1 ? " friend." : " friends.");
 }
 
 float OlHostNaturalHeight(float inner, bool previous_save) {
@@ -1499,15 +1566,15 @@ float OlHostNaturalHeight(float inner, bool previous_save) {
     const float select = OlParagraphHeight("Online Adventure save", 14.0F, inner, true, 1.4F) + 6.0F + 44.0F;
     return 2.0F + board.pad_top + OlSignType(15.0F).line + 6.0F + 10.0F +
            PaddockTextHeight(OlSignType(board.title_px, 1.1F), "Start a lobby", inner, true) + 10.0F +
-           OlParagraphHeight(OlHostInvitation(), 15.0F, text) + 14.0F + 10.0F + field + 10.0F + select +
-           10.0F + OlParagraphHeight(OlSaveSeedDescription(previous_save), 15.0F, text) + 14.0F + 10.0F +
+           OlParagraphHeight(OlHostInvitation(), 15.0F, text) + 14.0F + 10.0F + field + 10.0F + select + 10.0F +
+           OlParagraphHeight(OlSaveSeedDescription(previous_save), 15.0F, text) + 14.0F + 10.0F +
            DirectoryVisibilityHeight(inner) + 40.0F + 10.0F + 52.0F + board.pad_bottom + 2.0F;
 }
 
 std::string OlJoinError(const OnlineFrame& frame) {
-    if (!g_online_page.join_error.empty()) return g_online_page.join_error;
-    if (g_online_page.join_attempted &&
-        frame.view.state == dkr::runtime::netplay::ConnectionState::Failed) {
+    if (!g_online_page.join_error.empty())
+        return g_online_page.join_error;
+    if (g_online_page.join_attempted && frame.view.state == dkr::runtime::netplay::ConnectionState::Failed) {
         return frame.view.status;
     }
     return {};
@@ -1525,13 +1592,14 @@ float OlJoinNaturalHeight(float inner, const std::string& error) {
     const float tile = OlNarrow(440.0F) ? 54.0F : 64.0F;
     return 2.0F + board.pad_top + OlSignType(15.0F).line + 6.0F + 10.0F +
            PaddockTextHeight(OlSignType(board.title_px, 1.1F), "Join a friend", inner, true) + 10.0F +
-           OlParagraphHeight("Type the code your host sent you.", 15.0F, text) + 10.0F + 4.0F + tile +
-           10.0F + (error.empty() ? 0.0F : OlParagraphHeight(error, 14.0F, text, true) + 10.0F) +
-           OlJoinActionsHeight(inner) + 82.0F + 10.0F + 52.0F + board.pad_bottom + 2.0F;
+           OlParagraphHeight("Type the code your host sent you.", 15.0F, text) + 10.0F + 4.0F + tile + 10.0F +
+           (error.empty() ? 0.0F : OlParagraphHeight(error, 14.0F, text, true) + 10.0F) + OlJoinActionsHeight(inner) +
+           82.0F + 10.0F + 52.0F + board.pad_bottom + 2.0F;
 }
 
 void OlRequestJoin(const OnlineFrame& frame) {
-    if (!frame.launcher || !frame.rom_ready || frame.active || OnlineModSelectionLocked()) return;
+    if (!frame.launcher || !frame.rom_ready || frame.active || OnlineModSelectionLocked())
+        return;
     const std::string code = NormalizeOnlineInvite(g_online_invite);
     if (code.size() < 5U) {
         g_online_page.join_error = "Enter all 5 characters of the code.";
@@ -1564,29 +1632,31 @@ void DrawOlHostCard(ImVec2 at, float width, float height, const OnlineFrame& fra
     PaddockGap(10.0F);
     OlParagraph(OlHostInvitation(), 15.0F, 0xD3E5EC, text);
     PaddockGap(14.0F + 10.0F);
-    const OlInputResult name = OlInput("##lobby-name", "Lobby name", g_online_room_name,
-                                       sizeof(g_online_room_name), inner);
-    if (name == OlInputResult::Gamepad) RequestTextEntryKeyboard(TextEntryTarget::LobbyName);
+    const OlInputResult name =
+        OlInput("##lobby-name", "Lobby name", g_online_room_name, sizeof(g_online_room_name), inner);
+    if (name == OlInputResult::Gamepad)
+        RequestTextEntryKeyboard(TextEntryTarget::LobbyName);
     if (name == OlInputResult::Committed || name == OlInputResult::Entered) {
         OlCommitName(g_online_room_name, "DKR-R Grand Prix");
     }
     PaddockGap(10.0F);
-    static const std::vector<std::string> seeds{
-        "Copy my single-player save", "Start with a fresh save", "Continue with previous session"};
+    static const std::vector<std::string> seeds{"Copy my single-player save", "Start with a fresh save",
+                                                "Continue with previous session"};
     if (OlSelect("save-seed", "Online Adventure save", &g_online_save_seed_mode, seeds, inner)) {
         SaveSettings();
     }
     PaddockGap(10.0F);
     OlParagraph(OlSaveSeedDescription(previous_save), 15.0F, 0xD3E5EC, text);
     PaddockGap(14.0F + 10.0F);
-    DrawOlDirectoryVisibility(inner,false);
-    if (OlButton("Host settings")) g_online_page.section = OlSection::Settings;
+    DrawOlDirectoryVisibility(inner, false);
+    if (OlButton("Host settings"))
+        g_online_page.section = OlSection::Settings;
     ImGui::EndGroup();
     ImGui::SetCursorScreenPos({x, at.y + height - 2.0F - board.pad_bottom - 52.0F});
     if (OlCta("CREATE LOBBY", OlCtaColour::Green, inner,
               !frame.launcher || !frame.rom_ready || frame.active || OnlineModSelectionLocked() ||
-               (dkr::online::view()->feature_enabled&&!dkr::online::view()->connected) ||
-               (dkr::online::view()->public_desired&&!dkr::online::view()->connected))) {
+                  (dkr::online::view()->feature_enabled && !dkr::online::view()->connected) ||
+                  (dkr::online::view()->public_desired && !dkr::online::view()->connected))) {
         g_online_page.join_attempted = false;
         g_online_page.join_error.clear();
         CreateOnlineLobby();
@@ -1594,8 +1664,7 @@ void DrawOlHostCard(ImVec2 at, float width, float height, const OnlineFrame& fra
     ImGui::PopID();
 }
 
-void DrawOlJoinCard(ImVec2 at, float width, float height, const OnlineFrame& frame,
-                    const std::string& error) {
+void DrawOlJoinCard(ImVec2 at, float width, float height, const OnlineFrame& frame, const std::string& error) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     PaintOlChoice(draw, at, {at.x + width, at.y + height}, {0xFFD98A, 0x3A8FB5, 0x0B4D78, 0x082F4C});
     const OlSignboard board = OlSignboardMetrics();
@@ -1612,29 +1681,30 @@ void DrawOlJoinCard(ImVec2 at, float width, float height, const OnlineFrame& fra
     PaddockGap(10.0F);
     OlParagraph("Type the code your host sent you.", 15.0F, 0xD3E5EC, text);
     PaddockGap(8.F);
-    static const std::vector<std::string> join_modes{"Racer","Watch Race"};
-    int join_mode=g_online_join_watching?1:0;
-    if(OlSelect("party-join-role","Join as",&join_mode,join_modes,inner))g_online_join_watching=join_mode!=0;
+    static const std::vector<std::string> join_modes{"Racer", "Watch Race"};
+    int join_mode = g_online_join_watching ? 1 : 0;
+    if (OlSelect("party-join-role", "Join as", &join_mode, join_modes, inner))
+        g_online_join_watching = join_mode != 0;
 
     PaddockGap(10.0F + 4.0F);
     // One real input laid over five readable tiles.
     {
         const float tile_height = OlNarrow(440.0F) ? 54.0F : 64.0F;
         const ImVec2 tiles = ImGui::GetCursorScreenPos();
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0F, std::max((tile_height - ImGui::GetFontSize()) * 0.5F, 0.0F)});
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                            {0.0F, std::max((tile_height - ImGui::GetFontSize()) * 0.5F, 0.0F)});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0F);
-        for (const ImGuiCol colour : {ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgActive,
-                                      ImGuiCol_Text, ImGuiCol_TextSelectedBg, ImGuiCol_NavHighlight,
-                                      ImGuiCol_TextDisabled}) {
+        for (const ImGuiCol colour : {ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgActive, ImGuiCol_Text,
+                                      ImGuiCol_TextSelectedBg, ImGuiCol_NavHighlight, ImGuiCol_TextDisabled}) {
             ImGui::PushStyleColor(colour, PaddockRgb(0, 0U));
         }
         ImGui::SetNextItemWidth(inner);
         const OlDisabled locked(!frame.launcher || frame.active, 1.0F);
-        const bool entered = ImGui::InputText(
-            "##join-code", g_online_invite, 6U,
-            ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CallbackCharFilter |
-                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll,
-            FilterOnlineCodeCharacter);
+        const bool entered =
+            ImGui::InputText("##join-code", g_online_invite, 6U,
+                             ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CallbackCharFilter |
+                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll,
+                             FilterOnlineCodeCharacter);
         const bool edited = ImGui::IsItemEdited();
         const bool gamepad = ImGui::IsItemActivated() && GImGui->ActiveIdSource == ImGuiInputSource_Gamepad;
         const bool typing = ImGui::IsItemActive() || (ImGui::IsItemFocused() && ImGui::GetIO().NavVisible);
@@ -1649,7 +1719,8 @@ void DrawOlJoinCard(ImVec2 at, float width, float height, const OnlineFrame& fra
             g_online_page.join_error.clear();
             g_online_page.join_attempted = false;
         }
-        if (entered) OlRequestJoin(frame);
+        if (entered)
+            OlRequestJoin(frame);
         const std::string code = NormalizeOnlineInvite(g_online_invite).substr(0U, 5U);
         OlTileLook look;
         look.height = tile_height;
@@ -1678,7 +1749,8 @@ void DrawOlJoinCard(ImVec2 at, float width, float height, const OnlineFrame& fra
         const bool wrap = OlJoinActionsHeight(inner) > 40.0F;
         ImGui::SetCursorScreenPos(wrap ? ImVec2{row.x, row.y + 48.0F}
                                        : ImVec2{row.x + OlButtonWidth("Paste code") + 8.0F, row.y});
-        if (OlButton("On-screen keyboard")) RequestOnlineCodeKeyboard();
+        if (OlButton("On-screen keyboard"))
+            RequestOnlineCodeKeyboard();
     }
     ImGui::EndGroup();
     ImGui::SetCursorScreenPos({x, at.y + height - 2.0F - board.pad_bottom - 52.0F});
@@ -1696,11 +1768,12 @@ void DrawOlOrSign(ImDrawList* draw, ImVec2 centre, float lean) {
     const int shadow = draw->VtxBuffer.Size;
     PaddockFill(draw, a, b, PaddockRound(7.0F), PaddockCol(0x041822));
     OlRotate(draw, shadow, centre, 45.0F + lean);
-    for (int index = shadow; index < draw->VtxBuffer.Size; ++index) draw->VtxBuffer[index].pos.y += 3.0F;
+    for (int index = shadow; index < draw->VtxBuffer.Size; ++index)
+        draw->VtxBuffer[index].pos.y += 3.0F;
     const int diamond = draw->VtxBuffer.Size;
     PaddockFill(draw, a, b, PaddockRound(7.0F), PaddockCol(kOlAmber));
-    PaddockStroke(draw, {a.x + 3.0F, a.y + 3.0F}, {b.x - 3.0F, b.y - 3.0F}, PaddockRound(4.0F),
-                  PaddockCol(0x2A1D05), 2.0F);
+    PaddockStroke(draw, {a.x + 3.0F, a.y + 3.0F}, {b.x - 3.0F, b.y - 3.0F}, PaddockRound(4.0F), PaddockCol(0x2A1D05),
+                  2.0F);
     OlRotate(draw, diamond, centre, 45.0F + lean);
     // Jumpman capitals sit low in their line box.
     const int text = draw->VtxBuffer.Size;
@@ -1747,22 +1820,26 @@ void DrawOlChoices(float width, const OnlineFrame& frame) {
         const OlEnter enter(0);
         DrawOlHostCard(host_at, card, host_height, frame, previous_save);
     }
-    const bool host_hover = ImGui::IsMouseHoveringRect(host_at, {host_at.x + card, host_at.y + host_height}) &&
-                            ImGui::IsWindowHovered();
+    const bool host_hover =
+        ImGui::IsMouseHoveringRect(host_at, {host_at.x + card, host_at.y + host_height}) && ImGui::IsWindowHovered();
     const bool host_focus = OlFocusWithin(host_at, {host_at.x + card, host_at.y + host_height});
     {
         const OlEnter enter(2);
         DrawOlJoinCard(join_at, card, join_height, frame, error);
     }
-    const bool join_hover = ImGui::IsMouseHoveringRect(join_at, {join_at.x + card, join_at.y + join_height}) &&
-                            ImGui::IsWindowHovered();
+    const bool join_hover =
+        ImGui::IsMouseHoveringRect(join_at, {join_at.x + card, join_at.y + join_height}) && ImGui::IsWindowHovered();
     const bool join_focus = OlFocusWithin(join_at, {join_at.x + card, join_at.y + join_height});
     // Focus says where you are; hover wins while the pointer is exploring.
     float target = 0.0F;
-    if (host_focus) target = -10.0F;
-    if (join_focus) target = 10.0F;
-    if (host_hover) target = -10.0F;
-    if (join_hover) target = 10.0F;
+    if (host_focus)
+        target = -10.0F;
+    if (join_focus)
+        target = 10.0F;
+    if (host_hover)
+        target = -10.0F;
+    if (join_hover)
+        target = 10.0F;
     const float step = ImGui::GetIO().DeltaTime * 80.0F;
     g_online_page.sign_lean += std::clamp(target - g_online_page.sign_lean, -step, step);
     {
@@ -1821,16 +1898,16 @@ void DrawOlSteps(float width) {
             const std::string number = std::to_string(index + 1U);
             const PaddockType digit = OlRead(14.0F, true, 1.0F);
             const float digit_width = PaddockMeasure(digit, number);
-            PaddockDrawRun(draw, digit, {std::round(a.x + 26.0F - digit_width * 0.5F),
-                                         std::round(a.y + 26.0F - digit.line * 0.5F)},
+            PaddockDrawRun(draw, digit,
+                           {std::round(a.x + 26.0F - digit_width * 0.5F), std::round(a.y + 26.0F - digit.line * 0.5F)},
                            PaddockCol(0x2A1D05), number.data(), number.data() + number.size());
             const float text_x = a.x + 12.0F + 28.0F + 10.0F;
             PaddockTextStyle title_style;
             title_style.colour = PaddockCol(kOlCream);
-            const float title_height = PaddockTextAt(draw, title, {text_x, a.y + 12.0F}, text_width,
-                                                     steps[index][0], title_style);
-            OlParagraphAt(draw, {text_x, a.y + 12.0F + title_height}, steps[index][1], 13.0F, kOlSoft,
-                          text_width, false, 1.4F);
+            const float title_height =
+                PaddockTextAt(draw, title, {text_x, a.y + 12.0F}, text_width, steps[index][0], title_style);
+            OlParagraphAt(draw, {text_x, a.y + 12.0F + title_height}, steps[index][1], 13.0F, kOlSoft, text_width,
+                          false, 1.4F);
         }
         y += row_height + 10.0F;
     }
@@ -1861,7 +1938,8 @@ void DrawOlCheckIcon(ImDrawList* draw, ImVec2 centre, int kind) {
 void DrawOlChecklist(float width, const OnlineFrame& frame) {
     const std::uint32_t mask = dkr::runtime::magic_codes::selected_mask();
     unsigned codes = 0U;
-    for (std::uint32_t bits = mask; bits != 0U; bits &= bits - 1U) ++codes;
+    for (std::uint32_t bits = mask; bits != 0U; bits &= bits - 1U)
+        ++codes;
     struct Item {
         int kind;
         const char* title;
@@ -1873,12 +1951,9 @@ void DrawOlChecklist(float width, const OnlineFrame& frame) {
     const std::array<Item, 3> items{{
         {frame.rom_ready ? 0 : 1, "Game ROM", frame.rom_ready ? "Loaded and ready" : "Not loaded yet",
          frame.rom_ready ? nullptr : "Choose ROM", nullptr, kPagePlay},
-        {2, "Magic Codes",
-         codes > 0U ? std::to_string(codes) + " enabled."
-                    : std::string("None enabled."),
+        {2, "Magic Codes", codes > 0U ? std::to_string(codes) + " enabled." : std::string("None enabled."),
          frame.active ? nullptr : "Change", frame.active ? "Locked in lobby" : nullptr, kPageModsHacks},
-        {2, "Adventure save", "Uses the host's online save. Offline progress stays separate.",
-         nullptr, nullptr, -1},
+        {2, "Adventure save", "Uses the host's online save. Offline progress stays separate.", nullptr, nullptr, -1},
     }};
     OlPanelLook look;
     PaddockBox box(width, OlNarrow(440.0F) ? ImVec2{16.0F, 20.0F} : ImVec2{24.0F, 22.0F});
@@ -1886,16 +1961,18 @@ void DrawOlChecklist(float width, const OnlineFrame& frame) {
     ImDrawList* draw = ImGui::GetWindowDrawList();
     PaddockText(OlSignType(26.0F, 1.5F), PaddockRgb(kOlCream), "Before you race", inner, true);
     PaddockGap(2.0F);
-    OlParagraph("", 15.0F,
-                kOlSoft, inner);
+    OlParagraph("", 15.0F, kOlSoft, inner);
     PaddockGap(14.0F);
     for (std::size_t index = 0U; index < items.size(); ++index) {
         const Item& item = items[index];
-        if (index > 0U) PaddockGap(8.0F);
+        if (index > 0U)
+            PaddockGap(8.0F);
         const ImVec2 at = ImGui::GetCursorScreenPos();
         float trailing = 0.0F;
-        if (item.link != nullptr) trailing = PaddockMeasure(OlRead(15.0F, true), item.link);
-        if (item.tag != nullptr) trailing = PaddockMeasure(OlRead(12.0F, true), item.tag) + 16.0F;
+        if (item.link != nullptr)
+            trailing = PaddockMeasure(OlRead(15.0F, true), item.link);
+        if (item.tag != nullptr)
+            trailing = PaddockMeasure(OlRead(12.0F, true), item.tag) + 16.0F;
         const float text_width = inner - 24.0F - 28.0F - 12.0F - (trailing > 0.0F ? trailing + 12.0F : 0.0F);
         const PaddockType strong = OlRead(15.0F, true, 1.4F);
         const float text_height = PaddockTextHeight(strong, item.title, text_width) +
@@ -1910,20 +1987,20 @@ void DrawOlChecklist(float width, const OnlineFrame& frame) {
         PaddockTextStyle title_style;
         title_style.colour = PaddockCol(0xFFFFFF);
         const float title_height = PaddockTextAt(draw, strong, {text_x, text_y}, text_width, item.title, title_style);
-        OlParagraphAt(draw, {text_x, text_y + title_height}, item.text, 14.0F, bad ? kOlError : kOlSoft,
-                      text_width, false, 1.4F);
+        OlParagraphAt(draw, {text_x, text_y + title_height}, item.text, 14.0F, bad ? kOlError : kOlSoft, text_width,
+                      false, 1.4F);
         if (item.link != nullptr) {
             ImGui::SetCursorScreenPos({at.x + inner - 12.0F - trailing, at.y + (height - 40.0F) * 0.5F});
             ImGui::PushID(static_cast<int>(index));
             if (OlLink(item.link)) {
-                if (item.target == kPageModsHacks) g_mods_page.entry_section = kModsSectionMagic;
+                if (item.target == kPageModsHacks)
+                    g_mods_page.entry_section = kModsSectionMagic;
                 g_page_navigation_request = item.target;
             }
             ImGui::PopID();
         } else if (item.tag != nullptr) {
             const PaddockType tag = OlRead(12.0F, true, 1.5F);
-            DrawOlSoftTag(draw, {at.x + inner - 12.0F - trailing, at.y + (height - tag.line - 8.0F) * 0.5F},
-                          item.tag);
+            DrawOlSoftTag(draw, {at.x + inner - 12.0F - trailing, at.y + (height - tag.line - 8.0F) * 0.5F}, item.tag);
         }
         ImGui::SetCursorScreenPos(at);
         ImGui::Dummy({inner, height});
@@ -1937,13 +2014,14 @@ void DrawOlChecklist(float width, const OnlineFrame& frame) {
         const float text_width = one_row ? inner - 16.0F - 220.0F : inner;
         const PaddockType strong = OlRead(15.0F, true, 1.5F);
         const std::string_view explanation = "Choose your local control profile.";
-        const float text_height = PaddockTextHeight(strong, "Your controls", text_width) +
-                                  OlParagraphHeight(explanation, 14.0F, text_width);
+        const float text_height =
+            PaddockTextHeight(strong, "Your controls", text_width) + OlParagraphHeight(explanation, 14.0F, text_width);
         const float row = one_row ? std::max(text_height, 44.0F) : text_height + 10.0F + 44.0F;
         const float text_y = at.y + 17.0F + (one_row ? std::round((row - text_height) * 0.5F) : 0.0F);
         PaddockTextStyle title_style;
         title_style.colour = PaddockCol(0xFFFFFF);
-        const float title_height = PaddockTextAt(draw, strong, {at.x, text_y}, text_width, "Your controls", title_style);
+        const float title_height =
+            PaddockTextAt(draw, strong, {at.x, text_y}, text_width, "Your controls", title_style);
         OlParagraphAt(draw, {at.x, text_y + title_height}, explanation, 14.0F, kOlSoft, text_width);
         ImGui::SetCursorScreenPos(one_row ? ImVec2{at.x + inner - 220.0F, at.y + 17.0F + (row - 44.0F) * 0.5F}
                                           : ImVec2{at.x, at.y + 17.0F + text_height + 10.0F});
@@ -1967,10 +2045,10 @@ void DrawOlChecklist(float width, const OnlineFrame& frame) {
 void DrawOlHostSettings(float width) {
     DrawOlFeature(width, "Host settings", "Applies to the next lobby you create.", [&](float inner) {
         bool changed = false;
-        changed |= OlSwitchRow("##spectators", "Spectator-capable lobby",
-            "Allow up to eight spectators.", &g_online_allow_spectators, inner, false);
-        static const std::vector<std::string> ownership{
-            "Host until character select", "Host for shared menus", "All players"};
+        changed |= OlSwitchRow("##spectators", "Spectator-capable lobby", "Allow up to eight spectators.",
+                               &g_online_allow_spectators, inner, false);
+        static const std::vector<std::string> ownership{"Host until character select", "Host for shared menus",
+                                                        "All players"};
         static const std::vector<std::string> racers{"2", "3", "4"};
         PaddockGap(16.F);
         changed |= OlSelect("menu-ownership", "Who controls the menus?", &g_online_host_control, ownership, inner);
@@ -1985,24 +2063,29 @@ void DrawOlHostSettings(float width) {
         PaddockGap(16.F);
         OlParagraph("Online mode: Rollback", 15.F, kOlCream, inner);
         PaddockGap(16.F);
-        changed |= OlRange("experimental-window", "Prediction window (frames)", &g_online_rollback_window, 2, 20, inner);
+        changed |=
+            OlRange("experimental-window", "Prediction window (frames)", &g_online_rollback_window, 2, 20, inner);
         OlParagraph("How many frames Rollback can predict while waiting for late inputs.", 14.F, kOlSoft, inner, true);
         PaddockGap(16.F);
-        changed |= OlSwitchRow("##automatic-delay", "Automatic input delay",
-            "Adjusts input delay for the lobby's connection.", &g_online_automatic_delay, inner, false);
+        changed |=
+            OlSwitchRow("##automatic-delay", "Automatic input delay", "Adjusts input delay for the lobby's connection.",
+                        &g_online_automatic_delay, inner, false);
         PaddockGap(16.F);
-        changed |= OlRange("input-delay", "Input delay (frames)", &g_online_manual_delay, 0, 9, inner, g_online_automatic_delay);
+        changed |= OlRange("input-delay", "Input delay (frames)", &g_online_manual_delay, 0, 9, inner,
+                           g_online_automatic_delay);
         PaddockGap(16.F);
-        changed |= OlSwitchRow("##record-replay", "Record game replay",
-            "Records game inputs for replay tools, not a video.", &g_online_record_replay, inner, false);
+        changed |=
+            OlSwitchRow("##record-replay", "Record game replay", "Records game inputs for replay tools, not a video.",
+                        &g_online_record_replay, inner, false);
         PaddockGap(16.F);
-        changed |= OlSwitchRow("##development-lobby", "Development lobby",
+        changed |= OlSwitchRow(
+            "##development-lobby", "Development lobby",
             "Allows host tool commands. All racers must agree. Progress is temporary; achievements are paused.",
             &g_online_development, inner, false);
-        if (changed) SaveSettings();
+        if (changed)
+            SaveSettings();
     });
 }
-
 
 // ------------------------------------------------------------ online profile
 
@@ -2013,20 +2096,21 @@ void DrawOlPrivacy(float width) {
         OlHeading("Privacy", 24.0F, kOlCream, inner);
         PaddockGap(8.0F);
         bool appear_offline = service.appear_offline();
-        if (OlSwitchRow("##appear-offline", "Appear offline",
-                        "Friends see you as offline. You still count toward players online. Public hosting is disabled.", &appear_offline, inner,
-                        false)) {
+        if (OlSwitchRow(
+                "##appear-offline", "Appear offline",
+                "Friends see you as offline. You still count toward players online. Public hosting is disabled.",
+                &appear_offline, inner, false)) {
             std::string error;
-            if (!service.set_appear_offline(appear_offline, error)) OlNotify(error);
+            if (!service.set_appear_offline(appear_offline, error))
+                OlNotify(error);
         }
         bool allow_invites = service.allow_lobby_invites();
-        if (OlSwitchRow("##allow-invites", "Allow lobby invites",
-                        "", &allow_invites, inner, true)) {
+        if (OlSwitchRow("##allow-invites", "Allow lobby invites", "", &allow_invites, inner, true)) {
             std::string error;
-            if (!service.set_allow_lobby_invites(allow_invites, error)) OlNotify(error);
+            if (!service.set_allow_lobby_invites(allow_invites, error))
+                OlNotify(error);
         }
-        if (OlSwitchRow("##friend-alerts", "Friend online alerts", "",
-                        &g_friend_online_notifications, inner, true)) {
+        if (OlSwitchRow("##friend-alerts", "Friend online alerts", "", &g_friend_online_notifications, inner, true)) {
             SaveSettings();
         }
         static const std::vector<std::string> corners{"Top left", "Top right", "Bottom left", "Bottom right"};
@@ -2052,8 +2136,7 @@ void DrawOlFriendCodes(float width) {
     using namespace dkr::runtime::netplay;
     FriendService& service = friend_service();
     const auto snapshot = service.snapshot();
-    DrawOlFeature(width, "Share a Friend Code", "Friend Codes add friends. Lobby codes join games.",
-                  [&](float inner) {
+    DrawOlFeature(width, "Share a Friend Code", "Friend Codes add friends. Lobby codes join games.", [&](float inner) {
         static const std::vector<std::string> lifetimes{"Permanent", "One use", "Timed"};
         PaddockGap(16.0F);
         OlSelect("code-lifetime", "Code lifetime", &g_friend_invite_lifetime, lifetimes, inner);
@@ -2079,8 +2162,9 @@ void DrawOlFriendCodes(float width) {
             PaddockGap(16.0F);
             ImGui::PushID(static_cast<int>(invite.invite_id & 0x7FFFFFFFU));
             const bool expired = invite.expires_unix != 0U && invite.expires_unix <= now;
-            std::string lifetime = invite.lifetime == FriendInviteLifetime::Permanent ? "Permanent"
-                                 : invite.lifetime == FriendInviteLifetime::SingleUse ? "One use" : "Timed";
+            std::string lifetime = invite.lifetime == FriendInviteLifetime::Permanent   ? "Permanent"
+                                   : invite.lifetime == FriendInviteLifetime::SingleUse ? "One use"
+                                                                                        : "Timed";
             if (invite.expires_unix != 0U) {
                 lifetime += expired ? " \xC2\xB7 Expired"
                                     : " \xC2\xB7 " + OlFormatRemaining(invite.expires_unix - now) + " remaining";
@@ -2094,7 +2178,8 @@ void DrawOlFriendCodes(float width) {
                 PaddockText(PaddockMono(15.0F, true, 1.5F, 0.06F), PaddockRgb(kOlInk), invite.code, card);
                 PaddockGap(12.0F);
                 OlParagraph(lifetime, 15.0F, kOlSoft, card);
-                if (!invite.connection_status.empty()) OlParagraph(invite.connection_status, 13.0F, kOlSoft, card);
+                if (!invite.connection_status.empty())
+                    OlParagraph(invite.connection_status, 13.0F, kOlSoft, card);
                 PaddockGap(12.0F);
                 const ImVec2 row = ImGui::GetCursorScreenPos();
                 {
@@ -2108,7 +2193,8 @@ void DrawOlFriendCodes(float width) {
                 ImGui::SetCursorScreenPos({row.x + OlButtonWidth("Copy code") + 8.0F, row.y});
                 if (OlButton("Revoke", OlTone::Danger)) {
                     std::string error;
-                    if (!service.revoke_invite(invite.invite_id, error)) OlNotify(error);
+                    if (!service.revoke_invite(invite.invite_id, error))
+                        OlNotify(error);
                 }
             });
             ImGui::PopID();
@@ -2126,12 +2212,18 @@ void DrawOlFriendCodes(float width) {
 const char* OlInviteStateLabel(dkr::runtime::netplay::FriendLobbyInviteStatus status) {
     using dkr::runtime::netplay::FriendLobbyInviteStatus;
     switch (status) {
-    case FriendLobbyInviteStatus::Sent: return "Invitation sent";
-    case FriendLobbyInviteStatus::Delivered: return "Invitation delivered";
-    case FriendLobbyInviteStatus::Accepted: return "In your lobby";
-    case FriendLobbyInviteStatus::Declined: return "Invitation declined";
-    case FriendLobbyInviteStatus::Expired: return "Invitation expired";
-    case FriendLobbyInviteStatus::Cancelled: return "Invitation cancelled";
+    case FriendLobbyInviteStatus::Sent:
+        return "Invitation sent";
+    case FriendLobbyInviteStatus::Delivered:
+        return "Invitation delivered";
+    case FriendLobbyInviteStatus::Accepted:
+        return "In your lobby";
+    case FriendLobbyInviteStatus::Declined:
+        return "Invitation declined";
+    case FriendLobbyInviteStatus::Expired:
+        return "Invitation expired";
+    case FriendLobbyInviteStatus::Cancelled:
+        return "Invitation cancelled";
     }
     return "Online";
 }
@@ -2146,7 +2238,7 @@ struct OlFriendAction {
 
 struct OlFriendRow {
     std::string key;
-    std::string name;          // for the avatar
+    std::string name; // for the avatar
     std::string label;
     std::string status;
     unsigned status_colour = kOlSoft;
@@ -2168,15 +2260,15 @@ void DrawOlFriendRow(const OlFriendRow& row, float width) {
     }
     const float fixed = 6.0F + 38.0F + 10.0F;
     const bool wrap = !row.actions.empty() && row_width - 12.0F - 48.0F - 140.0F - 10.0F - actions_width < 0.0F;
-    const float text_width = std::max(
-        wrap ? row_width - fixed - 6.0F : row_width - fixed - 6.0F - (row.actions.empty() ? 0.0F : actions_width + 10.0F),
-        1.0F);
+    const float text_width =
+        std::max(wrap ? row_width - fixed - 6.0F
+                      : row_width - fixed - 6.0F - (row.actions.empty() ? 0.0F : actions_width + 10.0F),
+                 1.0F);
     const float text_height = PaddockTextHeight(strong, row.label, text_width) + caption.line;
     const float line = std::max({38.0F, text_height, row.actions.empty() ? 0.0F : 40.0F});
     const float height = 6.0F + line + (wrap ? 10.0F + 40.0F : 0.0F) + 6.0F;
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const bool hovered = ImGui::IsWindowHovered() &&
-                         ImGui::IsMouseHoveringRect(at, {at.x + row_width, at.y + height});
+    const bool hovered = ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(at, {at.x + row_width, at.y + height});
     const float hover = PaddockEase(PaddockTween(ImGui::GetID(("row-" + row.key).c_str()), hovered, 0.15F, 0.15F));
     PaddockFill(draw, at, {at.x + row_width, at.y + height}, PaddockRound(14.0F),
                 PaddockCol(0xFFFFFF, static_cast<unsigned>(10.0F * hover)));
@@ -2199,7 +2291,8 @@ void DrawOlFriendRow(const OlFriendRow& row, float width) {
     for (const OlFriendAction& action : row.actions) {
         ImGui::SetCursorScreenPos({x, y});
         const OlDisabled disabled(action.disabled);
-        if (OlButton(action.label.c_str(), action.tone, 0.0F, action.tooltip) && action.run) action.run();
+        if (OlButton(action.label.c_str(), action.tone, 0.0F, action.tooltip) && action.run)
+            action.run();
         x += OlButtonWidth(action.label.c_str(), action.tone) + 10.0F;
     }
     ImGui::PopID();
@@ -2232,23 +2325,28 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
     const auto snapshot = service.snapshot();
     const bool can_invite = frame.in_lobby && frame.view.host;
     const FriendLobbyAdvertisement lobby = FriendLobbyFromSession(frame.view);
-    const bool invite_space = can_invite && (OlPartyActive()?frame.has_space:(lobby.hosting && lobby.players < lobby.maximum_players && !frame.busy));
+    const bool invite_space =
+        can_invite &&
+        (OlPartyActive() ? frame.has_space : (lobby.hosting && lobby.players < lobby.maximum_players && !frame.busy));
     std::map<std::string, FriendLobbyInviteView> latest;
     for (const FriendLobbyInviteView& invite : snapshot->outgoing_lobby_invites) {
-        if (!latest.contains(invite.friend_identity)) latest[invite.friend_identity] = invite;
+        if (!latest.contains(invite.friend_identity))
+            latest[invite.friend_identity] = invite;
     }
     std::size_t online_count = 0U;
     for (const FriendView& racer : snapshot->friends) {
-        if (racer.online && !racer.blocked) ++online_count;
+        if (racer.online && !racer.blocked)
+            ++online_count;
     }
     // Search, filter and sort.
     const std::string query = LowerAscii(OlTrimmed(g_friend_search));
     std::vector<FriendView> racers;
     for (const FriendView& racer : snapshot->friends) {
-        const bool filter = g_friend_filter == 0 || (g_friend_filter == 3 && racer.blocked) ||
-                            (!racer.blocked && ((g_friend_filter == 1 && racer.online) ||
-                                                (g_friend_filter == 2 && !racer.online)));
-        if (!filter) continue;
+        const bool filter =
+            g_friend_filter == 0 || (g_friend_filter == 3 && racer.blocked) ||
+            (!racer.blocked && ((g_friend_filter == 1 && racer.online) || (g_friend_filter == 2 && !racer.online)));
+        if (!filter)
+            continue;
         if (!query.empty() &&
             LowerAscii(FriendDisplayLabel(racer) + " " + racer.display_name + " " + racer.identity).find(query) ==
                 std::string::npos) {
@@ -2272,7 +2370,8 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
         std::stable_sort(racers.begin(), racers.end(), [&](const FriendView& left, const FriendView& right) {
             const int left_rank = left.blocked ? 2 : left.online ? 0 : 1;
             const int right_rank = right.blocked ? 2 : right.online ? 0 : 1;
-            if (left_rank != right_rank) return left_rank < right_rank;
+            if (left_rank != right_rank)
+                return left_rank < right_rank;
             return name_less(left, right);
         });
     }
@@ -2290,29 +2389,34 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
             row.status_colour = kOlAmber;
             row.dot = kOlAmber;
             row.actions.push_back({"Accept", OlTone::Go, false, nullptr, [&service, id] {
-                std::string error;
-                if (!service.accept_request(id, error)) OlNotify(error);
-            }});
+                                       std::string error;
+                                       if (!service.accept_request(id, error))
+                                           OlNotify(error);
+                                   }});
             row.actions.push_back({"\xC3\x97", OlTone::Icon, false, "Decline", [&service, id] {
-                std::string error;
-                if (!service.reject_request(id, false, error)) OlNotify(error);
-            }});
+                                       std::string error;
+                                       if (!service.reject_request(id, false, error))
+                                           OlNotify(error);
+                                   }});
             row.actions.push_back({"Block", OlTone::Plain, false, nullptr, [&service, id] {
-                std::string error;
-                if (!service.reject_request(id, true, error)) OlNotify(error);
-            }});
+                                       std::string error;
+                                       if (!service.reject_request(id, true, error))
+                                           OlNotify(error);
+                                   }});
             incoming.push_back(std::move(row));
         } else {
             row.status = request.delivery_status.empty() ? "Request sent" : request.delivery_status;
             row.dimmed = true;
             row.actions.push_back({"Retry now", OlTone::Plain, !request.can_retry, nullptr, [&service, id] {
-                std::string error;
-                if (!service.retry_request(id, error)) OlNotify(error);
-            }});
+                                       std::string error;
+                                       if (!service.retry_request(id, error))
+                                           OlNotify(error);
+                                   }});
             row.actions.push_back({"Cancel request", OlTone::Plain, false, nullptr, [&service, id] {
-                std::string error;
-                if (!service.reject_request(id, false, error)) OlNotify(error);
-            }});
+                                       std::string error;
+                                       if (!service.reject_request(id, false, error))
+                                           OlNotify(error);
+                                   }});
             outgoing.push_back(std::move(row));
         }
     }
@@ -2327,54 +2431,58 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
             row.status = "Blocked";
             row.dimmed = true;
             row.actions.push_back({"Unblock", OlTone::Plain, false, nullptr, [&service, identity] {
-                std::string error;
-                if (!service.unblock_friend(identity, error)) OlNotify(error);
-            }});
+                                       std::string error;
+                                       if (!service.unblock_friend(identity, error))
+                                           OlNotify(error);
+                                   }});
         } else if (racer.online) {
             row.dot = kOlGo;
             row.status_colour = kOlGoText;
             const auto invite = can_invite ? latest.find(racer.identity) : latest.end();
             row.status = invite != latest.end() ? OlInviteStateLabel(invite->second.status) : "Online";
-            const bool pending = invite != latest.end() &&
-                                 (invite->second.status == FriendLobbyInviteStatus::Sent ||
-                                  invite->second.status == FriendLobbyInviteStatus::Delivered);
-            const bool invitable = can_invite && (invite == latest.end() ||
-                                                  invite->second.status == FriendLobbyInviteStatus::Declined ||
-                                                  invite->second.status == FriendLobbyInviteStatus::Expired ||
-                                                  invite->second.status == FriendLobbyInviteStatus::Cancelled);
+            const bool pending =
+                invite != latest.end() && (invite->second.status == FriendLobbyInviteStatus::Sent ||
+                                           invite->second.status == FriendLobbyInviteStatus::Delivered);
+            const bool invitable =
+                can_invite && (invite == latest.end() || invite->second.status == FriendLobbyInviteStatus::Declined ||
+                               invite->second.status == FriendLobbyInviteStatus::Expired ||
+                               invite->second.status == FriendLobbyInviteStatus::Cancelled);
             if (invitable) {
-                row.actions.push_back({"Invite", OlTone::Strong, !invite_space, nullptr, [&, identity] {
-                    secure::Key admission{};
-                    std::string error;
-                    if (!online.create_friend_admission(admission, std::chrono::minutes(5), error)) {
-                        OlNotify(error);
-                        return;
-                    }
-                    FriendLobbyInviteView sent{};
-                    if (!service.send_lobby_invite(identity, lobby, admission, sent, error)) {
-                        online.revoke_friend_admission(admission);
-                        OlNotify(error);
-                    }
-                }});
+                row.actions.push_back(
+                    {"Invite", OlTone::Strong, !invite_space, nullptr, [&, identity] {
+                         secure::Key admission{};
+                         std::string error;
+                         if (!online.create_friend_admission(admission, std::chrono::minutes(5), error)) {
+                             OlNotify(error);
+                             return;
+                         }
+                         FriendLobbyInviteView sent{};
+                         if (!service.send_lobby_invite(identity, lobby, admission, sent, error)) {
+                             online.revoke_friend_admission(admission);
+                             OlNotify(error);
+                         }
+                     }});
             } else if (pending) {
                 const FriendLobbyInviteView sent = invite->second;
                 row.actions.push_back({"Cancel invite", OlTone::Plain, frame.busy, nullptr, [&, sent] {
-                    online.revoke_friend_admission(sent.admission);
-                    std::string error;
-                    if (!service.cancel_lobby_invite(sent.invite_id, error)) OlNotify(error);
-                }});
+                                           online.revoke_friend_admission(sent.admission);
+                                           std::string error;
+                                           if (!service.cancel_lobby_invite(sent.invite_id, error))
+                                               OlNotify(error);
+                                       }});
             }
         } else {
             row.status = "Offline";
             row.dimmed = true;
         }
         row.actions.push_back({"Manage", OlTone::Plain, false, nullptr, [identity, racer] {
-            g_friend_action_identity = identity;
-            const std::size_t length = std::min(racer.nickname.size(), sizeof(g_friend_nickname) - 1U);
-            std::memcpy(g_friend_nickname, racer.nickname.data(), length);
-            g_friend_nickname[length] = '\0';
-            g_online_page.open_manage = true;
-        }});
+                                   g_friend_action_identity = identity;
+                                   const std::size_t length =
+                                       std::min(racer.nickname.size(), sizeof(g_friend_nickname) - 1U);
+                                   std::memcpy(g_friend_nickname, racer.nickname.data(), length);
+                                   g_friend_nickname[length] = '\0';
+                                   g_online_page.open_manage = true;
+                               }});
         friends.push_back(std::move(row));
     }
 
@@ -2422,17 +2530,20 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
         }
         PaddockGap(18.0F);
         // Groups.
-        const std::array<std::pair<const char*, const std::vector<OlFriendRow>*>, 3> groups{{
-            {"FRIEND REQUESTS", &incoming}, {"OUTGOING REQUESTS", &outgoing}, {"YOUR FRIENDS", &friends}}};
+        const std::array<std::pair<const char*, const std::vector<OlFriendRow>*>, 3> groups{
+            {{"FRIEND REQUESTS", &incoming}, {"OUTGOING REQUESTS", &outgoing}, {"YOUR FRIENDS", &friends}}};
         bool first_group = true;
         for (const auto& [title, rows] : groups) {
-            if (rows->empty()) continue;
-            if (!first_group) PaddockGap(14.0F);
+            if (rows->empty())
+                continue;
+            if (!first_group)
+                PaddockGap(14.0F);
             first_group = false;
             PaddockText(OlRead(11.5F, true, 1.0F), PaddockRgb(0x8FB0BF), title, inner);
             PaddockGap(4.0F);
             for (std::size_t index = 0U; index < rows->size(); ++index) {
-                if (index > 0U) PaddockGap(2.0F);
+                if (index > 0U)
+                    PaddockGap(2.0F);
                 DrawOlFriendRow((*rows)[index], inner);
             }
         }
@@ -2455,12 +2566,15 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
             code.hint = "DKR-XXXX-XXXX";
             code.mono = true;
             code.flags = ImGuiInputTextFlags_CharsUppercase;
-            const OlInputResult result =
-                OlInput("##add-friend", nullptr, g_friend_code_entry, sizeof(g_friend_code_entry), inner - add - 8.0F, code);
-            if (result == OlInputResult::Gamepad) g_friend_code_keyboard_pending = true;
-            if (result == OlInputResult::Entered) OlAddFriend();
+            const OlInputResult result = OlInput("##add-friend", nullptr, g_friend_code_entry,
+                                                 sizeof(g_friend_code_entry), inner - add - 8.0F, code);
+            if (result == OlInputResult::Gamepad)
+                g_friend_code_keyboard_pending = true;
+            if (result == OlInputResult::Entered)
+                OlAddFriend();
             ImGui::SetCursorScreenPos({row.x + inner - add, row.y});
-            if (OlButton("Add", OlTone::Strong, add, nullptr, 44.0F)) OlAddFriend();
+            if (OlButton("Add", OlTone::Strong, add, nullptr, 44.0F))
+                OlAddFriend();
         }
     });
 }
@@ -2511,7 +2625,8 @@ void DrawOlOverlayPreview(float width) {
         for (std::size_t index = 0U; index < lines.size(); ++index) {
             PaddockTextStyle style;
             style.colour = PaddockCol(colour);
-            PaddockDrawLines(draw, lines[index].bold ? strong : plain, {a.x + 10.0F, y}, text_width, wrapped[index], style);
+            PaddockDrawLines(draw, lines[index].bold ? strong : plain, {a.x + 10.0F, y}, text_width, wrapped[index],
+                             style);
             y += plain.line * static_cast<float>(wrapped[index].size());
         }
     };
@@ -2520,12 +2635,16 @@ void DrawOlOverlayPreview(float width) {
         const int detail = std::clamp(g_network_overlay_detail, 0, 2);
         if (g_network_overlay_single_row) {
             std::string row = lines.front().text;
-            if (detail >= 1) row += " Jitter 3 ms \xC2\xB7 Delay 2f";
-            if (detail >= 2) row += " Loss 0% \xC2\xB7 Rollback 0 \xC2\xB7 Lead 1.2f";
+            if (detail >= 1)
+                row += " Jitter 3 ms \xC2\xB7 Delay 2f";
+            if (detail >= 2)
+                row += " Loss 0% \xC2\xB7 Rollback 0 \xC2\xB7 Lead 1.2f";
             lines = {{row, detail == 0}};
         } else {
-            if (detail >= 1) lines.push_back({"Jitter 3 ms \xC2\xB7 Delay 2f", false});
-            if (detail >= 2) lines.push_back({"Loss 0% \xC2\xB7 Rollback 0 \xC2\xB7 Lead 1.2f", false});
+            if (detail >= 1)
+                lines.push_back({"Jitter 3 ms \xC2\xB7 Delay 2f", false});
+            if (detail >= 2)
+                lines.push_back({"Loss 0% \xC2\xB7 Rollback 0 \xC2\xB7 Lead 1.2f", false});
         }
         sample(lines, std::clamp(g_network_overlay_position, 0, 3), 0x91E7D1, 0.0F);
     }
@@ -2539,8 +2658,7 @@ void DrawOlOverlayPreview(float width) {
 }
 
 void DrawOlOverlays(float width) {
-    DrawOlFeature(width, "Online overlays", "",
-                  [&](float inner) {
+    DrawOlFeature(width, "Online overlays", "", [&](float inner) {
         static const std::vector<std::string> corners{"Top left", "Top right", "Bottom left", "Bottom right"};
         static const std::vector<std::string> details{"Compact", "Standard", "Detailed"};
         bool changed = false;
@@ -2550,8 +2668,8 @@ void DrawOlOverlays(float width) {
         bool after_switch = true;
         if (g_network_overlay_enabled) {
             PaddockGap(16.0F);
-            changed |= OlSelect("network-position", "Network overlay position", &g_network_overlay_position, corners,
-                                inner);
+            changed |=
+                OlSelect("network-position", "Network overlay position", &g_network_overlay_position, corners, inner);
             PaddockGap(16.0F);
             changed |= OlSelect("network-detail", "Network overlay detail", &g_network_overlay_detail, details, inner);
             PaddockGap(16.0F);
@@ -2560,8 +2678,8 @@ void DrawOlOverlays(float width) {
         }
         PaddockGap(16.0F);
         changed |= OlSwitchRow("##controller-overlay", "Show controller input overlay",
-                               "Show local and received controller input.",
-                               &g_controller_input_overlay_enabled, inner, after_switch);
+                               "Show local and received controller input.", &g_controller_input_overlay_enabled, inner,
+                               after_switch);
         if (g_controller_input_overlay_enabled) {
             PaddockGap(16.0F);
             changed |= OlSelect("controller-position", "Controller overlay position",
@@ -2569,7 +2687,8 @@ void DrawOlOverlays(float width) {
         }
         PaddockGap(16.0F);
         DrawOlOverlayPreview(inner);
-        if (changed) SaveSettings();
+        if (changed)
+            SaveSettings();
     });
 }
 
@@ -2588,9 +2707,11 @@ float DrawOlLive(ImDrawList* draw, ImVec2 at, std::string_view text) {
     const ImVec2 dot{at.x + 10.0F + 4.0F, at.y + height * 0.5F};
     const float pulse = static_cast<float>(std::fmod(PaddockClock(), 1.6) / 1.6);
     const float ease_out = 1.0F - (1.0F - pulse) * (1.0F - pulse);
-    draw->AddCircleFilled(dot, 4.0F + 8.0F * ease_out, PaddockCol(kOlGo, static_cast<unsigned>(178.0F * (1.0F - ease_out))), 20);
+    draw->AddCircleFilled(dot, 4.0F + 8.0F * ease_out,
+                          PaddockCol(kOlGo, static_cast<unsigned>(178.0F * (1.0F - ease_out))), 20);
     draw->AddCircleFilled(dot, 4.0F, PaddockCol(kOlGo), 16);
-    PaddockDrawRun(draw, type, {at.x + 26.0F, at.y + 4.0F}, PaddockCol(0xB4F4DD), text.data(), text.data() + text.size());
+    PaddockDrawRun(draw, type, {at.x + 26.0F, at.y + 4.0F}, PaddockCol(0xB4F4DD), text.data(),
+                   text.data() + text.size());
     return height;
 }
 
@@ -2611,11 +2732,12 @@ void DrawOlPlate(ImVec2 at, float width, const OnlineFrame& frame) {
     PaddockStroke(draw, at, end, PaddockRound(12.0F), PaddockCol(0xFFFFFF, 128U), 2.0F);
     const PaddockType label = OlSignType(15.0F, 1.5F, 0.08F);
     PaddockDrawRun(draw, label, {at.x + 16.0F, at.y + 14.0F}, PaddockCol(0xA3341F), "LOBBY CODE", "LOBBY CODE" + 10);
-    const char* privacy_action=g_online_hide_lobby_code ? "Show" : "Hide";
-    ImGui::SetCursorScreenPos({at.x+width-16.0F-OlButtonWidth(privacy_action),at.y+4.0F});
-    if(OlButton(privacy_action,OlTone::PlatePlain)) {
-        g_online_hide_lobby_code=!g_online_hide_lobby_code;SaveSettings();
-        g_ol_toast.text=OnlineTextForDisplay(g_ol_toast.text);
+    const char* privacy_action = g_online_hide_lobby_code ? "Show" : "Hide";
+    ImGui::SetCursorScreenPos({at.x + width - 16.0F - OlButtonWidth(privacy_action), at.y + 4.0F});
+    if (OlButton(privacy_action, OlTone::PlatePlain)) {
+        g_online_hide_lobby_code = !g_online_hide_lobby_code;
+        SaveSettings();
+        g_ol_toast.text = OnlineTextForDisplay(g_ol_toast.text);
     }
     const std::string code = NormalizeOnlineInvite(frame.view.invite).substr(0U, 5U);
     OlTileLook look;
@@ -2688,37 +2810,46 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
         const bool you = slot == view.local_slot;
         std::vector<OlMetaItem> items;
         const bool loaded = player.loaded;
-        const char* ready_text = OlPartyActive()&&OlPartyLive()?"Racing":loaded ? "Loaded" : player.ready ? "Ready" : "Not ready yet";
+        const char* ready_text = OlPartyActive() && OlPartyLive() ? "Racing"
+                                 : loaded                         ? "Loaded"
+                                 : player.ready                   ? "Ready"
+                                                                  : "Not ready yet";
         const PaddockType& ready_type = player.ready ? meta_bold : meta;
         items.push_back({13.0F + PaddockMeasure(ready_type, ready_text), [&, ready_text, player](ImVec2 at) {
-            draw->AddCircleFilled({at.x + 3.5F, at.y + meta.line * 0.5F}, 3.5F,
-                                  PaddockCol(player.ready ? kOlGo : kOlStop), 12);
-            PaddockDrawRun(draw, player.ready ? meta_bold : meta, {at.x + 13.0F, at.y},
-                           PaddockCol(player.ready ? kOlGoText : kOlSoft), ready_text,
-                           ready_text + std::strlen(ready_text));
-        }});
-        const char* save_text = OlPartyActive()?(g_ol_party.save_ready?"Session ready":"Syncing session..."):view.online_save_ready[slot] ? "Save ready"
-                                                             : "Syncing save...";
+                             draw->AddCircleFilled({at.x + 3.5F, at.y + meta.line * 0.5F}, 3.5F,
+                                                   PaddockCol(player.ready ? kOlGo : kOlStop), 12);
+                             PaddockDrawRun(draw, player.ready ? meta_bold : meta, {at.x + 13.0F, at.y},
+                                            PaddockCol(player.ready ? kOlGoText : kOlSoft), ready_text,
+                                            ready_text + std::strlen(ready_text));
+                         }});
+        const char* save_text = OlPartyActive() ? (g_ol_party.save_ready ? "Session ready" : "Syncing session...")
+                                : view.online_save_ready[slot] ? "Save ready"
+                                                               : "Syncing save...";
         items.push_back({PaddockMeasure(meta, save_text), [&, save_text](ImVec2 at) {
-            PaddockDrawRun(draw, meta, at, PaddockCol(kOlSoft), save_text, save_text + std::strlen(save_text));
-        }});
+                             PaddockDrawRun(draw, meta, at, PaddockCol(kOlSoft), save_text,
+                                            save_text + std::strlen(save_text));
+                         }});
         if (you) {
             items.push_back({PaddockMeasure(meta, "This PC"), [&](ImVec2 at) {
-                PaddockDrawRun(draw, meta, at, PaddockCol(kOlSoft), "This PC", "This PC" + 7);
-            }});
+                                 PaddockDrawRun(draw, meta, at, PaddockCol(kOlSoft), "This PC", "This PC" + 7);
+                             }});
         } else {
-            const std::string ping = OlPartyActive()&&!player.ping_ms?"Measuring...":std::to_string(player.ping_ms) + " ms";
-            items.push_back({19.0F + PaddockMeasure(meta, ping), [&, player](ImVec2 at) {
-                if(!OlPartyActive()||player.ping_ms)DrawOlPing(draw, at, meta.line, player.ping_ms);
-                else PaddockDrawRun(draw,meta,at,PaddockCol(kOlSoft),"Measuring...","Measuring..."+12);
-                if (ImGui::IsWindowHovered() &&
-                    ImGui::IsMouseHoveringRect(at, {at.x + 19.0F + 60.0F, at.y + meta.line}) && !OlPartyActive()) {
-                    ImGui::SetTooltip("%s \xC2\xB7 %u ms round trip \xC2\xB7 jitter %u ms \xC2\xB7 %.1f%% expired probes",
-                                      OnlineRouteName(player.route), static_cast<unsigned>(player.ping_ms),
-                                      static_cast<unsigned>(player.jitter_ms),
-                                      static_cast<double>(player.packet_loss_percent));
-                }
-            }});
+            const std::string ping =
+                OlPartyActive() && !player.ping_ms ? "Measuring..." : std::to_string(player.ping_ms) + " ms";
+            items.push_back(
+                {19.0F + PaddockMeasure(meta, ping), [&, player](ImVec2 at) {
+                     if (!OlPartyActive() || player.ping_ms)
+                         DrawOlPing(draw, at, meta.line, player.ping_ms);
+                     else
+                         PaddockDrawRun(draw, meta, at, PaddockCol(kOlSoft), "Measuring...", "Measuring..." + 12);
+                     if (ImGui::IsWindowHovered() &&
+                         ImGui::IsMouseHoveringRect(at, {at.x + 19.0F + 60.0F, at.y + meta.line}) && !OlPartyActive()) {
+                         ImGui::SetTooltip(
+                             "%s \xC2\xB7 %u ms round trip \xC2\xB7 jitter %u ms \xC2\xB7 %.1f%% expired probes",
+                             OnlineRouteName(player.route), static_cast<unsigned>(player.ping_ms),
+                             static_cast<unsigned>(player.jitter_ms), static_cast<double>(player.packet_loss_percent));
+                     }
+                 }});
         }
         return items;
     };
@@ -2736,7 +2867,8 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
     };
     for (int slot = 0; slot < maximum; ++slot) {
         const Player& player = view.room.players[static_cast<std::size_t>(slot)];
-        if (!player.occupied) continue;
+        if (!player.occupied)
+            continue;
         const bool removable = OlPartyActive() || view.host && static_cast<std::size_t>(slot) != view.local_slot;
         const float body = body_width(player, removable);
         const float body_height = strong.line + 3.0F + measure_meta(meta_items(static_cast<std::size_t>(slot)), body);
@@ -2755,11 +2887,13 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
             const ImVec2 a{origin.x + column * (cell + 14.0F), y};
             const ImVec2 b{a.x + cell, a.y + row_height};
             ImGui::PushID(static_cast<int>(slot));
-            const float ready = PaddockEase(PaddockTween(ImGui::GetID("ready"), player.occupied && player.ready, 0.2F, 0.2F));
+            const float ready =
+                PaddockEase(PaddockTween(ImGui::GetID("ready"), player.occupied && player.ready, 0.2F, 0.2F));
             // Slot, its ring, then the number block over the ring's left side.
             if (player.occupied) {
                 PaddockFill(draw, a, b, PaddockRound(10.0F), PaddockCol(you ? 0x0D3550U : kOlPanel));
-                PaddockStroke(draw, a, b, PaddockRound(10.0F), PaddockMix(PaddockRgb(kOlRing), PaddockRgb(kOlGo), ready), 2.0F);
+                PaddockStroke(draw, a, b, PaddockRound(10.0F),
+                              PaddockMix(PaddockRgb(kOlRing), PaddockRgb(kOlGo), ready), 2.0F);
             } else {
                 PaddockStroke(draw, a, b, PaddockRound(10.0F), PaddockCol(0x1A3B4D), 2.0F);
             }
@@ -2774,11 +2908,12 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
             if (player.occupied) {
                 draw->AddText(jumpman, 26.0F, {number_at.x, number_at.y + 2.0F}, PaddockCol(0x031623), number.c_str());
             }
-            draw->AddText(jumpman, 26.0F, number_at, PaddockCol(player.occupied ? kOlCream : 0x4F7D92U), number.c_str());
+            draw->AddText(jumpman, 26.0F, number_at, PaddockCol(player.occupied ? kOlCream : 0x4F7D92U),
+                          number.c_str());
             float x = a.x + 54.0F + 12.0F;
             if (!player.occupied) {
-                const char* empty = view.host ? (view.lobby_locked ? "Lobby locked" : "Waiting for a friend")
-                                              : "Waiting for racers";
+                const char* empty =
+                    view.host ? (view.lobby_locked ? "Lobby locked" : "Waiting for a friend") : "Waiting for racers";
                 const float body = strong.line + 3.0F + OlRead(13.0F).line;
                 const float top = a.y + std::round((row_height - body) * 0.5F);
                 PaddockDrawRun(draw, strong, {x, top}, PaddockCol(0x8FB0BF), "Open slot", "Open slot" + 9);
@@ -2799,16 +2934,20 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
             PaddockDrawRun(draw, strong, {x, top}, PaddockCol(0xFFFFFF), name.data(), name.data() + name.size());
             float tag_x = x + PaddockMeasure(strong, name) + 6.0F;
             const float tag_y = top + std::round((strong.line - 17.0F) * 0.5F);
-            if (player.host) tag_x += DrawOlTag(draw, {tag_x, tag_y}, "HOST", false).x + 6.0F;
-            if (you) DrawOlTag(draw, {tag_x, tag_y}, "YOU", true);
+            if (player.host)
+                tag_x += DrawOlTag(draw, {tag_x, tag_y}, "HOST", false).x + 6.0F;
+            if (you)
+                DrawOlTag(draw, {tag_x, tag_y}, "YOU", true);
             DrawOlMetaRow({x, top + strong.line + 3.0F}, body, meta.line, items);
             if (removable) {
                 ImGui::SetCursorScreenPos({b.x - 10.0F - 40.0F, a.y + std::round((row_height - 40.0F) * 0.5F)});
                 const std::string tooltip = "Remove " + player.display_name;
-                const OlDisabled disabled(OlPartyActive()?OlPartyChanging(frame):frame.busy);
-                if (OlButton(OlPartyActive()?"...##player-options":"\xC3\x97##remove", OlTone::Icon, 40.0F, OlPartyActive()?"Player options":tooltip.c_str())) {
+                const OlDisabled disabled(OlPartyActive() ? OlPartyChanging(frame) : frame.busy);
+                if (OlButton(OlPartyActive() ? "...##player-options" : "\xC3\x97##remove", OlTone::Icon, 40.0F,
+                             OlPartyActive() ? "Player options" : tooltip.c_str())) {
                     std::string error;
-                    if(OlPartyActive())OlPartyOpenMember(g_ol_party.link.party.controls[slot].member);
+                    if (OlPartyActive())
+                        OlPartyOpenMember(g_ol_party.link.party.controls[slot].member);
                     else if (!dkr::runtime::netplay::session().kick_player(static_cast<std::uint8_t>(slot), error)) {
                         OlNotify(error);
                     }
@@ -2839,25 +2978,32 @@ void DrawOlGate(float width, const OnlineFrame& frame) {
     for (const PendingJoinView& pending : view.pending_joins) {
         ImGui::PushID(static_cast<int>(pending.request_id & 0x7FFFFFFFU));
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        const bool pending_space=OlPartyJoinSpace(frame,pending);
-        const auto watch=g_ol_party.pending_watch.find(pending.request_id);
-        const std::string reason = OlPartyActive()&&!pending.preparing_mods&&pending.compatible ?
-            (pending_space?(watch!=g_ol_party.pending_watch.end()&&watch->second?"Wants to watch - no controller port":"Wants a racing place"):
-             OlPartyLive()?"A running race accepts spectators only":"No space for this requested role") : pending.preparing_mods ? "Preparing required session mods"
-                                 : !pending.compatible ? pending.compatibility
-                                 : pending_space ? "Used your lobby code" : "Lobby is full";
+        const bool pending_space = OlPartyJoinSpace(frame, pending);
+        const auto watch = g_ol_party.pending_watch.find(pending.request_id);
+        const std::string reason = OlPartyActive() && !pending.preparing_mods && pending.compatible
+                                       ? (pending_space   ? (watch != g_ol_party.pending_watch.end() && watch->second
+                                                                 ? "Wants to watch - no controller port"
+                                                                 : "Wants a racing place")
+                                          : OlPartyLive() ? "A running race accepts spectators only"
+                                                          : "No space for this requested role")
+                                   : pending.preparing_mods ? "Preparing required session mods"
+                                   : !pending.compatible    ? pending.compatibility
+                                   : pending_space          ? "Used your lobby code"
+                                                            : "Lobby is full";
         struct Button {
             const char* label;
             OlTone tone;
             bool disabled;
         };
         const std::array<Button, 3> buttons{{
-            {"Let in", OlTone::Go, pending.preparing_mods || !pending_space || !pending.compatible || view.lobby_locked},
-            {"Decline", OlTone::Plain, OlPartyActive()?OlPartyChanging(frame):frame.busy},
-            {"Block for session", OlTone::Plain, OlPartyActive()?OlPartyChanging(frame):frame.busy},
+            {"Let in", OlTone::Go,
+             pending.preparing_mods || !pending_space || !pending.compatible || view.lobby_locked},
+            {"Decline", OlTone::Plain, OlPartyActive() ? OlPartyChanging(frame) : frame.busy},
+            {"Block for session", OlTone::Plain, OlPartyActive() ? OlPartyChanging(frame) : frame.busy},
         }};
         float buttons_width = 0.0F;
-        for (const Button& button : buttons) buttons_width += OlButtonWidth(button.label) + 10.0F;
+        for (const Button& button : buttons)
+            buttons_width += OlButtonWidth(button.label) + 10.0F;
         const bool wrap = inner - 38.0F - 10.0F - 140.0F - 10.0F - buttons_width < 0.0F;
         const float name_width = wrap ? inner - 48.0F : inner - 48.0F - buttons_width;
         const PaddockType strong = OlRead(16.0F, true, 1.5F);
@@ -2881,26 +3027,33 @@ void DrawOlGate(float width, const OnlineFrame& frame) {
                 std::string error;
                 const bool done = index == 0U ? online.approve_join(pending.request_id, error)
                                               : online.reject_join(pending.request_id, index == 2U, error);
-                if (!done) OlNotify(error);
-                else if (index == 0U) OlNotify(pending.display_name + " joined your lobby.");
+                if (!done)
+                    OlNotify(error);
+                else if (index == 0U)
+                    OlNotify(pending.display_name + " joined your lobby.");
             }
             x += (stretched > 0.0F ? stretched : OlButtonWidth(buttons[index].label)) + 10.0F;
         }
         ImGui::SetCursorScreenPos(at);
         ImGui::Dummy({inner, 6.0F + line + (wrap ? 50.0F : 0.0F) + 6.0F});
-        if(pending.preparing_mods && g_online_mod_sync) {
-            const auto mods=g_online_mod_sync->snapshot();
-            const auto progress=std::find_if(mods.peers.begin(),mods.peers.end(),[&](const auto& peer){return peer.request==pending.request_id;});
-            if(progress!=mods.peers.end()) {
-                ImGui::TextWrapped("%s",progress->stage.c_str());
-                if(progress->total) {
+        if (pending.preparing_mods && g_online_mod_sync) {
+            const auto mods = g_online_mod_sync->snapshot();
+            const auto progress = std::find_if(mods.peers.begin(), mods.peers.end(),
+                                               [&](const auto& peer) { return peer.request == pending.request_id; });
+            if (progress != mods.peers.end()) {
+                ImGui::TextWrapped("%s", progress->stage.c_str());
+                if (progress->total) {
                     char label[96]{};
-                    std::snprintf(label,sizeof(label),"%.1f / %.1f MiB%s",double(progress->received)/(1024*1024),
-                        double(progress->total)/(1024*1024),progress->phase>=dkr::mods::online::ProgressPhase::Preparing?" - verifying/preparing":"");
-                    ImGui::ProgressBar(std::clamp(float(progress->received)/float(progress->total),0.0F,1.0F),{inner,24},label);
+                    std::snprintf(
+                        label, sizeof(label), "%.1f / %.1f MiB%s", double(progress->received) / (1024 * 1024),
+                        double(progress->total) / (1024 * 1024),
+                        progress->phase >= dkr::mods::online::ProgressPhase::Preparing ? " - verifying/preparing" : "");
+                    ImGui::ProgressBar(std::clamp(float(progress->received) / float(progress->total), 0.0F, 1.0F),
+                                       {inner, 24}, label);
                 }
-            } else ImGui::TextWrapped("Waiting for the racer to review the mod download.");
-            ImGui::Dummy({0,8});
+            } else
+                ImGui::TextWrapped("Waiting for the racer to review the mod download.");
+            ImGui::Dummy({0, 8});
         }
         ImGui::PopID();
     }
@@ -2911,11 +3064,15 @@ void DrawOlStartBar(float width, const OnlineFrame& frame) {
     using namespace dkr::runtime::netplay;
     const SessionView& view = frame.view;
     DirectSession& online = session();
-    const auto room_key=stable_hash(view.room.room_id);
-    if(g_online_development_room!=room_key){g_online_development_room=room_key;g_online_development_consent=false;}
-    if(view.room.rules.development) {
-        OlParagraph("DEVELOPMENT LOBBY - The host can change gameplay with development tools. Progress is temporary.",14.0F,kOlError,width,true);
-        ImGui::Checkbox("I agree to development commands for this lobby",&g_online_development_consent);
+    const auto room_key = stable_hash(view.room.room_id);
+    if (g_online_development_room != room_key) {
+        g_online_development_room = room_key;
+        g_online_development_consent = false;
+    }
+    if (view.room.rules.development) {
+        OlParagraph("DEVELOPMENT LOBBY - The host can change gameplay with development tools. Progress is temporary.",
+                    14.0F, kOlError, width, true);
+        ImGui::Checkbox("I agree to development commands for this lobby", &g_online_development_consent);
     }
     const int maximum = std::clamp<int>(view.room.rules.maximum_players, 2, static_cast<int>(view.room.players.size()));
     std::size_t total = 0U;
@@ -2925,14 +3082,16 @@ void DrawOlStartBar(float width, const OnlineFrame& frame) {
     for (int slot = 0; slot < maximum; ++slot) {
         const Player& player = view.room.players[static_cast<std::size_t>(slot)];
         lights.push_back(!player.occupied ? 0 : player.ready ? 2 : 1);
-        if (!player.occupied) continue;
+        if (!player.occupied)
+            continue;
         ++total;
-        if (player.ready) ++ready;
+        if (player.ready)
+            ++ready;
         saves_ready = saves_ready && view.online_save_ready[static_cast<std::size_t>(slot)];
     }
-    const Player* local = view.local_slot < view.room.players.size() &&
-                                  view.room.players[view.local_slot].occupied
-                              ? &view.room.players[view.local_slot] : nullptr;
+    const Player* local = view.local_slot < view.room.players.size() && view.room.players[view.local_slot].occupied
+                              ? &view.room.players[view.local_slot]
+                              : nullptr;
     const bool local_ready = local != nullptr && local->ready;
     const std::size_t profile = dkr::runtime::platform::online_input_profile();
     const bool input_available = dkr::runtime::platform::player_controller_status(profile).connected ||
@@ -2948,7 +3107,8 @@ void DrawOlStartBar(float width, const OnlineFrame& frame) {
     } else if (ready < total) {
         hint = std::to_string(ready) + " of " + std::to_string(total) + " racers ready";
     } else {
-        hint = view.host ? "Everyone is ready. Start when you like!" : "Everyone is ready. The host is starting\xE2\x80\xA6";
+        hint = view.host ? "Everyone is ready. Start when you like!"
+                         : "Everyone is ready. The host is starting\xE2\x80\xA6";
     }
     OlPanelLook look;
     look.radii = PaddockRound(10.0F);
@@ -2976,18 +3136,20 @@ void DrawOlStartBar(float width, const OnlineFrame& frame) {
         const bool pair = view.host && inner >= 190.0F * 2.0F + 10.0F;
         const float button = view.host && pair ? (inner - 10.0F) * 0.5F : inner;
         const bool can_ready = !frame.busy && view.local_online_save_ready && (local_ready || input_available) &&
-                               local != nullptr && (!view.room.rules.development||g_online_development_consent);
+                               local != nullptr && (!view.room.rules.development || g_online_development_consent);
         if (OlCta(local_ready ? "NOT READY" : "READY TO RACE", local_ready ? OlCtaColour::Blue : OlCtaColour::Green,
                   button, !can_ready)) {
             std::string error;
-            if (!online.set_ready(!local_ready, error)) OlNotify(error);
+            if (!online.set_ready(!local_ready, error))
+                OlNotify(error);
         }
         if (view.host) {
             ImGui::SetCursorScreenPos(pair ? ImVec2{at.x + button + 10.0F, at.y} : ImVec2{at.x, at.y + 52.0F + 10.0F});
             const bool can_start = !frame.busy && total >= 2U && ready == total && saves_ready;
             if (OlCta("START RACE", OlCtaColour::Red, button, !can_start)) {
                 std::string error;
-                if (!online.request_start(error)) OlNotify(error);
+                if (!online.request_start(error))
+                    OlNotify(error);
             }
         }
     }
@@ -2996,7 +3158,8 @@ void DrawOlStartBar(float width, const OnlineFrame& frame) {
 
 void DrawOlCountdown(ImVec2 a, ImVec2 b, const OnlineFrame& frame) {
     const auto& view = frame.view;
-    if (!view.launch_countdown_active || view.launch_countdown_remaining_ms == 0U) return;
+    if (!view.launch_countdown_active || view.launch_countdown_remaining_ms == 0U)
+        return;
     const std::uint32_t second = std::clamp((view.launch_countdown_remaining_ms + 999U) / 1000U, 1U, 5U);
     if (second != g_online_page.countdown_second) {
         g_online_page.countdown_second = second;
@@ -3040,7 +3203,8 @@ void DrawOlCountdown(ImVec2 a, ImVec2 b, const OnlineFrame& frame) {
     }
     y += extent.y + 12.0F;
     std::vector<int> lights;
-    for (std::uint32_t light = 0U; light < 5U; ++light) lights.push_back(light < 5U - second ? 3 : 0);
+    for (std::uint32_t light = 0U; light < 5U; ++light)
+        lights.push_back(light < 5U - second ? 3 : 0);
     const float lights_width = 12.0F * 2.0F + 28.0F * 5.0F + 12.0F * 4.0F;
     DrawOlLights(draw, {std::round((a.x + b.x - lights_width) * 0.5F), y}, lights, 28.0F, 12.0F);
     // A partially clipped lobby countdown still owns this frame. Requiring
@@ -3048,50 +3212,60 @@ void DrawOlCountdown(ImVec2 a, ImVec2 b, const OnlineFrame& frame) {
     // on shorter/scrolled windows, leaving two countdowns on screen.
     // Keep the fallback when the lobby countdown is completely off screen.
     const ImRect clip(draw->GetClipRectMin(), draw->GetClipRectMax());
-    if (clip.Overlaps(ImRect(a, b))) g_online_countdown_panel_frame = ImGui::GetFrameCount();
+    if (clip.Overlaps(ImRect(a, b)))
+        g_online_countdown_panel_frame = ImGui::GetFrameCount();
 }
 
 void DrawOlLobby(float width, const OnlineFrame& frame) {
     using namespace dkr::runtime::netplay;
     const SessionView& view = frame.view;
     const bool host = view.host;
-    const auto directory=dkr::online::view();
-    const auto hosting=dkr::online::hosting_mode(&session());
-    const char* visibility=!host?(view.room.visibility==Visibility::Public?"PUBLIC lobby":"PRIVATE lobby"):
-        hosting==1?"PRIVATE - recreate this lobby to enable public discovery.":
-        !directory->connected&&directory->feature_enabled?"Lobby listing unavailable - peer session continues.":
-        directory->updating?"Updating lobby visibility...":directory->public_listed?"PUBLIC - listed worldwide":
-        directory->public_desired?"PUBLIC - not currently listed":"PRIVATE - friends or lobby code";
-    OlParagraph(visibility,14.F,kOlSoft,width);
-    if(host)DrawOlDirectoryVisibility(width,frame.busy||!directory->connected||hosting!=2);
+    const auto directory = dkr::online::view();
+    const auto hosting = dkr::online::hosting_mode(&session());
+    const char* visibility = !host ? (view.room.visibility == Visibility::Public ? "PUBLIC lobby" : "PRIVATE lobby")
+                             : hosting == 1 ? "PRIVATE - recreate this lobby to enable public discovery."
+                             : !directory->connected && directory->feature_enabled
+                                 ? "Lobby listing unavailable - peer session continues."
+                             : directory->updating       ? "Updating lobby visibility..."
+                             : directory->public_listed  ? "PUBLIC - listed worldwide"
+                             : directory->public_desired ? "PUBLIC - not currently listed"
+                                                         : "PRIVATE - friends or lobby code";
+    OlParagraph(visibility, 14.F, kOlSoft, width);
+    if (host)
+        DrawOlDirectoryVisibility(width, frame.busy || !directory->connected || hosting != 2);
     const bool launched = view.state == ConnectionState::Loading || view.state == ConnectionState::Running;
     const int maximum = std::clamp<int>(view.room.rules.maximum_players, 2, static_cast<int>(view.room.players.size()));
     std::size_t total = 0U;
     std::string host_name = "Host";
     for (int slot = 0; slot < maximum; ++slot) {
         const Player& player = view.room.players[static_cast<std::size_t>(slot)];
-        if (!player.occupied) continue;
+        if (!player.occupied)
+            continue;
         ++total;
-        if (player.host) host_name = player.display_name;
+        if (player.host)
+            host_name = player.display_name;
     }
-    if(OlPartyActive())host_name=OlPartyHostName();
+    if (OlPartyActive())
+        host_name = OlPartyHostName();
     OlParagraph("ONLINE SESSION SAVE - supplied by " + host_name, 16.0F, kOlCream, width);
-    OlParagraph("Offline progress stays separate.",
-        15.0F, kOlSoft, width);
+    OlParagraph("Offline progress stays separate.", 15.0F, kOlSoft, width);
     if (!view.room.manifest.mod_manifest_hash.empty() && g_online_mod_sync) {
         const auto mods = g_online_mod_sync->snapshot();
         const auto count = [&](dkr::mods::online::Kind kind) {
             return mods.manifest ? std::count_if(mods.manifest->content.begin(), mods.manifest->content.end(),
-                [&](const auto& entry) { return entry.kind == kind; }) : 0;
+                                                 [&](const auto& entry) { return entry.kind == kind; })
+                                 : 0;
         };
         PaddockGap(8.0F);
-        OlParagraph("LOBBY MODS: " +
-            std::to_string(count(dkr::mods::online::Kind::Track) + count(dkr::mods::online::Kind::TrackLab)) +
-            " tracks, " + std::to_string(count(dkr::mods::online::Kind::Character)) + " characters, " + std::to_string(count(static_cast<dkr::mods::online::Kind>(3))) + " vehicles, " +
-            std::to_string(mods.manifest?mods.manifest->code.size():0) + " Magic Codes.",
+        OlParagraph(
+            "LOBBY MODS: " +
+                std::to_string(count(dkr::mods::online::Kind::Track) + count(dkr::mods::online::Kind::TrackLab)) +
+                " tracks, " + std::to_string(count(dkr::mods::online::Kind::Character)) + " characters, " +
+                std::to_string(count(static_cast<dkr::mods::online::Kind>(3))) + " vehicles, " +
+                std::to_string(mods.manifest ? mods.manifest->code.size() : 0) + " Magic Codes.",
             16.0F, kOlGoText, width);
         OlParagraph("Your offline mod selection returns when you leave. Modded online progress uses a separate save.",
-            15.0F, kOlSoft, width);
+                    15.0F, kOlSoft, width);
     }
     PaddockGap(14.0F);
     OlPanelLook look;
@@ -3116,22 +3290,31 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
         const bool side = !narrow && inner - plate_width - 20.0F >= 260.0F;
         const float title_width = side ? inner - plate_width - 20.0F : inner;
         ImGui::BeginGroup();
-        ImGui::Dummy({title_width, DrawOlLive(draw, at, OlPartyActive()?(OlPartyWatching()?"WATCHING":OlPartyLive()?"RACE IN PROGRESS":host?"HOSTING":"JOINED"):host?"HOSTING":"JOINED")});
+        ImGui::Dummy({title_width, DrawOlLive(draw, at,
+                                              OlPartyActive() ? (OlPartyWatching() ? "WATCHING"
+                                                                 : OlPartyLive()   ? "RACE IN PROGRESS"
+                                                                 : host            ? "HOSTING"
+                                                                                   : "JOINED")
+                                              : host          ? "HOSTING"
+                                                              : "JOINED")});
         PaddockGap(10.0F);
         const std::string title = host ? view.room.name : host_name + "\xE2\x80\x99s lobby";
         PaddockText(OlSignType(narrow ? 30.0F : 38.0F, 1.1F), PaddockRgb(kOlCream), title, title_width, true,
                     PaddockRgb(0x031623));
         PaddockGap(4.0F);
-        std::string line = host
-            ? std::to_string(total) + " of " + std::to_string(maximum) + " racers. " +
-                  (view.lobby_locked ? "Locked: nobody new can ask to join." : "Friends can join with the code.")
-            : std::string("The host starts the race when everyone is ready.");
-        if(OlPartyActive())line=std::to_string(total)+" of "+std::to_string(maximum)+" racers. "+
-            std::to_string(OlPartySpectators())+" of 8 spectators. "+(view.lobby_locked?"Lobby locked.":"Friends can join with the code.");
+        std::string line =
+            host ? std::to_string(total) + " of " + std::to_string(maximum) + " racers. " +
+                       (view.lobby_locked ? "Locked: nobody new can ask to join." : "Friends can join with the code.")
+                 : std::string("The host starts the race when everyone is ready.");
+        if (OlPartyActive())
+            line = std::to_string(total) + " of " + std::to_string(maximum) + " racers. " +
+                   std::to_string(OlPartySpectators()) + " of 8 spectators. " +
+                   (view.lobby_locked ? "Lobby locked." : "Friends can join with the code.");
         OlParagraph(line, 15.0F, kOlSoft, title_width);
         ImGui::EndGroup();
         const float title_height = ImGui::GetItemRectSize().y;
-        const ImVec2 plate_at = side ? ImVec2{at.x + inner - plate_width, at.y} : ImVec2{at.x, at.y + title_height + 20.0F};
+        const ImVec2 plate_at =
+            side ? ImVec2{at.x + inner - plate_width, at.y} : ImVec2{at.x, at.y + title_height + 20.0F};
         DrawOlPlate(plate_at, plate_width, frame);
         const float height = side ? std::max(title_height, OlPlateHeight(host) + 4.0F)
                                   : title_height + 20.0F + OlPlateHeight(host) + 4.0F;
@@ -3157,14 +3340,14 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
     if (host) {
         PaddockGap(20.0F);
         const OlEnter enter(chunk++);
-        DrawOlLobbyToolbar(inner,frame);
+        DrawOlLobbyToolbar(inner, frame);
     }
-    DrawOlPartySpectators(inner,frame);
+    DrawOlPartySpectators(inner, frame);
     if (view.connection_test_active) {
         PaddockGap(20.0F);
         const OlEnter enter(chunk++);
-        const std::string text = "Testing connection... " + OlTestCountdown(frame) +
-                                 ". Ready, Start and lobby changes are paused.";
+        const std::string text =
+            "Testing connection... " + OlTestCountdown(frame) + ". Ready, Start and lobby changes are paused.";
         const ImVec2 at = ImGui::GetCursorScreenPos();
         const float height = OlParagraphHeight(text, 15.0F, inner - 28.0F) + 28.0F;
         PaddockFill(draw, at, {at.x + inner, at.y + height}, PaddockRound(8.0F), PaddockCol(0x3A2C14));
@@ -3175,11 +3358,13 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
     if (OlHasTestResults(frame)) {
         PaddockGap(20.0F);
         const OlEnter enter(chunk++);
-        if (OlButton("View test results")) g_online_page.open_results = true;
+        if (OlButton("View test results"))
+            g_online_page.open_results = true;
     }
     PaddockGap(20.0F);
-    if(OlPartyActive()&&(launched||OlPartyWatching()||g_ol_party.link.stopping)){DrawOlPartyStart(inner,frame);}
-    else if (launched) {
+    if (OlPartyActive() && (launched || OlPartyWatching() || g_ol_party.link.stopping)) {
+        DrawOlPartyStart(inner, frame);
+    } else if (launched) {
         const OlEnter enter(chunk++);
         const bool running = view.state == ConnectionState::Running;
         OlPanelLook room;
@@ -3188,8 +3373,8 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
         room.ring_alpha = 26U;
         room.ring_width = 1.0F;
         DrawOlCard(inner, room, [&](float card) {
-            PaddockText(PaddockSign(24.0F, 1.2F, 0.0F), PaddockRgb(kOlCream), running ? "Race running" : "Loading the race",
-                        card, true);
+            PaddockText(PaddockSign(24.0F, 1.2F, 0.0F), PaddockRgb(kOlCream),
+                        running ? "Race running" : "Loading the race", card, true);
             PaddockGap(12.0F);
             OlParagraph(running ? "All racers loaded." : "Waiting for every racer to load.", 15.0F, kOlInk, card);
         });
@@ -3212,16 +3397,18 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
             ImGui::SetCursorScreenPos({at.x, at.y + 2.0F + 14.0F - 12.0F});
             bool locked = view.lobby_locked;
             ImGui::BeginGroup();
-            if (OlSwitchRow("##lock-lobby", "Lock lobby", "Prevents new players joining.",
-                            &locked, lock_width, false, OlPartyActive()?OlPartyChanging(frame):frame.busy)) {
+            if (OlSwitchRow("##lock-lobby", "Lock lobby", "Prevents new players joining.", &locked, lock_width, false,
+                            OlPartyActive() ? OlPartyChanging(frame) : frame.busy)) {
                 std::string error;
-                if (!dkr::runtime::netplay::session().set_lobby_locked(locked, error)) OlNotify(error);
+                if (!dkr::runtime::netplay::session().set_lobby_locked(locked, error))
+                    OlNotify(error);
             }
             ImGui::EndGroup();
             const float lock_height = ImGui::GetItemRectSize().y - 24.0F;
             height = wrap ? lock_height + 12.0F + 40.0F : std::max(lock_height, 40.0F);
-            ImGui::SetCursorScreenPos(wrap ? ImVec2{at.x + inner - leave_width, at.y + 16.0F + lock_height + 12.0F}
-                                           : ImVec2{at.x + inner - leave_width, at.y + 16.0F + std::round((height - 40.0F) * 0.5F)});
+            ImGui::SetCursorScreenPos(
+                wrap ? ImVec2{at.x + inner - leave_width, at.y + 16.0F + lock_height + 12.0F}
+                     : ImVec2{at.x + inner - leave_width, at.y + 16.0F + std::round((height - 40.0F) * 0.5F)});
         } else {
             ImGui::SetCursorScreenPos({at.x + inner - leave_width, at.y + 16.0F});
         }
@@ -3271,8 +3458,10 @@ void DrawOlWaiting(float width, const OnlineFrame& frame) {
             float glow = 0.0F;
             if (now >= delay) {
                 const float phase = static_cast<float>(std::fmod(now - delay, 1.5) / 1.5);
-                if (phase < 0.2F) glow = PaddockEase(phase / 0.2F);
-                else if (phase < 0.6F) glow = 1.0F - PaddockEase((phase - 0.2F) / 0.4F);
+                if (phase < 0.2F)
+                    glow = PaddockEase(phase / 0.2F);
+                else if (phase < 0.6F)
+                    glow = 1.0F - PaddockEase((phase - 0.2F) / 0.4F);
             }
             const ImVec2 centre{a.x + 10.0F + 10.0F + light * 30.0F, a.y + 20.0F};
             if (glow > 0.0F) {
@@ -3300,7 +3489,8 @@ void DrawOlWaiting(float width, const OnlineFrame& frame) {
     const float text_x = std::round((inner - text_width) * 0.5F);
     {
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        const std::string code = g_online_hide_lobby_code ? "*****" : NormalizeOnlineInvite(frame.view.invite).substr(0U, 5U);
+        const std::string code =
+            g_online_hide_lobby_code ? "*****" : NormalizeOnlineInvite(frame.view.invite).substr(0U, 5U);
         const PaddockType plain = OlRead(15.0F, false, 1.5F);
         const PaddockType mono = PaddockMono(15.0F, true, 1.5F, 0.06F);
         const std::string lead = "Waiting for the host to let you in with code ";
@@ -3318,8 +3508,8 @@ void DrawOlWaiting(float width, const OnlineFrame& frame) {
                                    kOlInk, text_width, false, 1.5F, true);
             const std::string tail = code + ".";
             const float tail_width = PaddockMeasure(mono, tail);
-            PaddockDrawRun(draw, mono, {std::round(at.x + (inner - tail_width) * 0.5F), at.y + height}, PaddockCol(kOlAmber),
-                           tail.data(), tail.data() + tail.size());
+            PaddockDrawRun(draw, mono, {std::round(at.x + (inner - tail_width) * 0.5F), at.y + height},
+                           PaddockCol(kOlAmber), tail.data(), tail.data() + tail.size());
             height += plain.line;
         }
         ImGui::Dummy({inner, height});
@@ -3358,7 +3548,8 @@ int DrawOlDialogActions(std::initializer_list<OlDialogButton> buttons) {
         return std::ceil(ImGui::CalcTextSize(label, nullptr, true).x + 32.0F + 2.0F);
     };
     float total = 0.0F;
-    for (const OlDialogButton& button : buttons) total += width(button.label);
+    for (const OlDialogButton& button : buttons)
+        total += width(button.label);
     total += 12.0F * static_cast<float>(buttons.size() - 1U);
     ImGui::Dummy({0.0F, 24.0F - ImGui::GetStyle().ItemSpacing.y});
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(ImGui::GetContentRegionAvail().x - total, 0.0F));
@@ -3367,9 +3558,11 @@ int DrawOlDialogActions(std::initializer_list<OlDialogButton> buttons) {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {12.0F, 12.0F});
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0F);
     for (const OlDialogButton& button : buttons) {
-        if (index > 0) ImGui::SameLine();
+        if (index > 0)
+            ImGui::SameLine();
         ImGui::PushStyleColor(ImGuiCol_Button, button.red ? kRaceRed : kRaceBlue);
-        if (ImGui::Button(button.label, {width(button.label), 43.0F})) pressed = index;
+        if (ImGui::Button(button.label, {width(button.label), 43.0F}))
+            pressed = index;
         ImGui::PopStyleColor();
         ++index;
     }
@@ -3388,12 +3581,13 @@ bool BeginOlDialog(const char* name) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2.0F);
     ImGui::PushStyleColor(ImGuiCol_PopupBg, PaddockRgb(0x06336E));
     ImGui::PushStyleColor(ImGuiCol_Border, PaddockRgb(0x296B70));
-    const bool visible = ImGui::BeginPopupModal(
-        name, nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings |
-                           ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    const bool visible = ImGui::BeginPopupModal(name, nullptr,
+                                                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoSavedSettings |
+                                                    ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(3);
-    if (!visible) return false;
+    if (!visible)
+        return false;
     g_paddock_modal_frame = ImGui::GetFrameCount();
     ImGui::PushTextWrapPos(0.0F);
     const char* end = ImGui::FindRenderedTextEnd(name);
@@ -3401,8 +3595,7 @@ bool BeginOlDialog(const char* name) {
     const float width = ImGui::GetContentRegionAvail().x;
     ImGui::TextUnformatted(name, end);
     const float rule = ImGui::GetItemRectMax().y + 13.0F;
-    ImGui::GetWindowDrawList()->AddRectFilled({at.x, rule}, {at.x + width, rule + 1.0F},
-                                              ImGui::GetColorU32(kWarm));
+    ImGui::GetWindowDrawList()->AddRectFilled({at.x, rule}, {at.x + width, rule + 1.0F}, ImGui::GetColorU32(kWarm));
     ImGui::SetCursorScreenPos({at.x, rule + 1.0F + 22.0F - ImGui::GetStyle().ItemSpacing.y});
     ImGui::Dummy({0.0F, 0.0F});
     ImGui::PopTextWrapPos();
@@ -3421,19 +3614,26 @@ void DrawOlModals(const OnlineFrame& frame) {
     constexpr const char* kResults = "Rollback connection report";
     constexpr const char* kManage = "###online-manage-friend";
     constexpr const char* kMatchEnd = "Online match ended";
-    if (std::exchange(state.open_match_end, false)) ImGui::OpenPopup(kMatchEnd);
-    if (std::exchange(state.open_close, false)) ImGui::OpenPopup(kClose);
-    if (std::exchange(state.open_block, false)) ImGui::OpenPopup(kBlock);
-    if (std::exchange(state.open_remove, false)) ImGui::OpenPopup(kRemove);
-    if (std::exchange(state.open_results, false)) ImGui::OpenPopup(kResults);
-    if (std::exchange(state.open_manage, false)) ImGui::OpenPopup(kManage);
+    if (std::exchange(state.open_match_end, false))
+        ImGui::OpenPopup(kMatchEnd);
+    if (std::exchange(state.open_close, false))
+        ImGui::OpenPopup(kClose);
+    if (std::exchange(state.open_block, false))
+        ImGui::OpenPopup(kBlock);
+    if (std::exchange(state.open_remove, false))
+        ImGui::OpenPopup(kRemove);
+    if (std::exchange(state.open_results, false))
+        ImGui::OpenPopup(kResults);
+    if (std::exchange(state.open_manage, false))
+        ImGui::OpenPopup(kManage);
 
     if (BeginOlDialog(kMatchEnd)) {
         ImGui::TextWrapped("%s", state.match_end_notice.c_str());
         ImGui::Dummy({0.0F, 12.0F});
-        ImGui::TextWrapped("%s", state.match_end_lobby_retained
-            ? "You can start another match once the online save is ready. Offline progress stays separate."
-            : "The host left or closed the lobby. Create or join another lobby to play again.");
+        ImGui::TextWrapped(
+            "%s", state.match_end_lobby_retained
+                      ? "You can start another match once the online save is ready. Offline progress stays separate."
+                      : "The host left or closed the lobby. Create or join another lobby to play again.");
         if (DrawOlDialogActions({{state.match_end_lobby_retained ? "BACK TO LOBBY" : "BACK TO ONLINE"}}) >= 0)
             ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -3442,15 +3642,16 @@ void DrawOlModals(const OnlineFrame& frame) {
     if (BeginOlDialog(kClose)) {
         ImGui::TextWrapped("Everyone in the lobby will be disconnected and the code will stop working.");
         const int pressed = DrawOlDialogActions({{"KEEP LOBBY"}, {"CLOSE LOBBY", true}});
-        if (pressed == 1) session().disconnect("You closed the lobby.");
-        if (pressed >= 0) ImGui::CloseCurrentPopup();
+        if (pressed == 1)
+            session().disconnect("You closed the lobby.");
+        if (pressed >= 0)
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 
     const auto snapshot = service.snapshot();
-    const auto racer = std::find_if(snapshot->friends.begin(), snapshot->friends.end(), [](const FriendView& view) {
-        return view.identity == g_friend_action_identity;
-    });
+    const auto racer = std::find_if(snapshot->friends.begin(), snapshot->friends.end(),
+                                    [](const FriendView& view) { return view.identity == g_friend_action_identity; });
     const std::string label = racer != snapshot->friends.end() ? FriendDisplayLabel(*racer) : std::string("Racer");
     const std::string manage_title = label + kManage;
     if (BeginOlDialog(manage_title.c_str())) {
@@ -3460,8 +3661,8 @@ void DrawOlModals(const OnlineFrame& frame) {
             ImGui::TextWrapped("Racer: %s", racer->display_name.c_str());
             ImGui::Dummy({0.0F, 8.0F});
             OlText("Nickname (only visible to you)", 14.0F, kOlSoft, ImGui::GetContentRegionAvail().x, true, 1.4F);
-            const bool keyboard=OlInput("##friend-nickname",nullptr,g_friend_nickname,sizeof(g_friend_nickname),
-                ImGui::GetContentRegionAvail().x)==OlInputResult::Gamepad;
+            const bool keyboard = OlInput("##friend-nickname", nullptr, g_friend_nickname, sizeof(g_friend_nickname),
+                                          ImGui::GetContentRegionAvail().x) == OlInputResult::Gamepad;
             const int pressed = DrawOlDialogActions(
                 {{"SAVE NICKNAME"}, {racer->blocked ? "UNBLOCK" : "BLOCK"}, {"REMOVE", true}, {"CLOSE"}});
             std::string error;
@@ -3476,16 +3677,19 @@ void DrawOlModals(const OnlineFrame& frame) {
                 }
             } else if (pressed == 1) {
                 if (racer->blocked) {
-                    if (!service.unblock_friend(g_friend_action_identity, error)) OlNotify(error);
+                    if (!service.unblock_friend(g_friend_action_identity, error))
+                        OlNotify(error);
                 } else {
                     state.open_block = true;
                 }
             } else if (pressed == 2) {
                 state.open_remove = true;
             }
-            if (pressed >= 0) ImGui::CloseCurrentPopup();
+            if (pressed >= 0)
+                ImGui::CloseCurrentPopup();
         }
-        DrawTextEntryKeyboard();ImGui::EndPopup();
+        DrawTextEntryKeyboard();
+        ImGui::EndPopup();
     }
 
     if (BeginOlDialog(kBlock)) {
@@ -3493,9 +3697,11 @@ void DrawOlModals(const OnlineFrame& frame) {
         const int pressed = DrawOlDialogActions({{"CANCEL"}, {"BLOCK", true}});
         if (pressed == 1) {
             std::string error;
-            if (!service.block_friend(g_friend_action_identity, error)) OlNotify(error);
+            if (!service.block_friend(g_friend_action_identity, error))
+                OlNotify(error);
         }
-        if (pressed >= 0) ImGui::CloseCurrentPopup();
+        if (pressed >= 0)
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
     if (BeginOlDialog(kRemove)) {
@@ -3503,9 +3709,11 @@ void DrawOlModals(const OnlineFrame& frame) {
         const int pressed = DrawOlDialogActions({{"CANCEL"}, {"REMOVE", true}});
         if (pressed == 1) {
             std::string error;
-            if (!service.remove_friend(g_friend_action_identity, error)) OlNotify(error);
+            if (!service.remove_friend(g_friend_action_identity, error))
+                OlNotify(error);
         }
-        if (pressed >= 0) ImGui::CloseCurrentPopup();
+        if (pressed >= 0)
+            ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
 
@@ -3533,7 +3741,8 @@ void DrawOnlineGuideModal() {
         "Offline saves stay separate. Troubleshooting tools are available in About DKR-R.",
     }};
     const ImVec2 display = ImGui::GetIO().DisplaySize;
-    if (!BeginOlDialog(kPopupName)) return;
+    if (!BeginOlDialog(kPopupName))
+        return;
     // Only the explanation may scroll; the acknowledgement stays pinned and
     // reachable so opening Online can never softlock the launcher.
     const float wrap = std::max(ImGui::GetContentRegionAvail().x, 1.0F);
@@ -3548,7 +3757,8 @@ void DrawOnlineGuideModal() {
     ImGui::PushStyleColor(ImGuiCol_ChildBg, PaddockRgb(0, 0U));
     ImGui::BeginChild("##online-guide-scroll", {0.0F, std::min(content, limit)}, false, ImGuiWindowFlags_None);
     ImGui::PushTextWrapPos(0.0F);
-    for (const char* paragraph : paragraphs) ImGui::TextWrapped("%s", paragraph);
+    for (const char* paragraph : paragraphs)
+        ImGui::TextWrapped("%s", paragraph);
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
     ImGui::PopStyleColor();
@@ -3603,11 +3813,10 @@ void DrawOlMain(float width, const OnlineFrame& frame) {
         DrawOlHostSettings(width);
         break;
     }
-    case OlSection::Profile:
-        {
-            const OlEnter enter(0);
-            DrawOlProfileCard(width, frame, true);
-        }
+    case OlSection::Profile: {
+        const OlEnter enter(0);
+        DrawOlProfileCard(width, frame, true);
+    }
         PaddockGap(20.0F);
         {
             const OlEnter enter(1);
@@ -3647,8 +3856,7 @@ void DrawOlMain(float width, const OnlineFrame& frame) {
         }
         break;
     }
-    if (!frame.active &&
-        g_online_page.section == OlSection::Play) {
+    if (!frame.active && g_online_page.section == OlSection::Play) {
         PaddockGap(20.0F);
         DrawOlChecklist(width, frame);
     }
@@ -3672,36 +3880,44 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     const bool joining = active && !view.host &&
                          (view.state == ConnectionState::Connecting || view.state == ConnectionState::AwaitingApproval);
     const bool in_lobby = active && !joining;
-    const bool busy = (OlPartyActive()&&g_ol_party.link.stopping) || view.owned_match_ending || view.connection_test_active || view.launch_countdown_active ||
+    const bool busy = (OlPartyActive() && g_ol_party.link.stopping) || view.owned_match_ending ||
+                      view.connection_test_active || view.launch_countdown_active ||
                       view.launch_stage != LaunchStage::Idle || view.state == ConnectionState::Loading ||
                       view.state == ConnectionState::Running;
     const int maximum = std::clamp<int>(view.room.rules.maximum_players, 2, static_cast<int>(view.room.players.size()));
     int occupied = 0;
     for (const Player& player : view.room.players) {
-        if (player.occupied) ++occupied;
+        if (player.occupied)
+            ++occupied;
     }
     bool has_space = in_lobby && view.host && !view.lobby_locked && !busy && occupied < maximum &&
-                           (view.state == ConnectionState::Hosting || view.state == ConnectionState::Lobby);
-    if(OlPartyActive())has_space=in_lobby&&view.host&&!view.lobby_locked&&!g_ol_party.link.stopping&&
-        !g_ol_rollback_check.active&&g_ol_party.link.party.members.size()<lobby_party::MaximumMembers;
+                     (view.state == ConnectionState::Hosting || view.state == ConnectionState::Lobby);
+    if (OlPartyActive())
+        has_space = in_lobby && view.host && !view.lobby_locked && !g_ol_party.link.stopping &&
+                    !g_ol_rollback_check.active && g_ol_party.link.party.members.size() < lobby_party::MaximumMembers;
     const OnlineFrame frame{view, launcher, rom_ready, active, joining, in_lobby, busy, has_space};
-    if(!launcher||active)DrawInviteInbox(std::max(available_width,1.F));
+    if (!launcher || active)
+        DrawInviteInbox(std::max(available_width, 1.F));
     // A new session opens its lobby; leaving goes back to where you were.
-    if (active && !state.was_active) state.section = OlSection::Lobby;
-    if (!active && state.was_active) state.section = state.was_joining ? OlSection::Play : OlSection::Lobbies;
-    if (in_lobby && view.host && std::exchange(g_open_host_friend_invites, false)) state.section = OlSection::Friends;
+    if (active && !state.was_active)
+        state.section = OlSection::Lobby;
+    if (!active && state.was_active)
+        state.section = state.was_joining ? OlSection::Play : OlSection::Lobbies;
+    if (in_lobby && view.host && std::exchange(g_open_host_friend_invites, false))
+        state.section = OlSection::Friends;
     state.was_active = active;
     state.was_joining = joining;
 
     std::vector<OlTab> tabs;
     if (!active) {
-        tabs = {{OlSection::Lobbies, "Open lobbies"}, {OlSection::Play, "Host / Quick Join"},
+        tabs = {{OlSection::Lobbies, "Open lobbies"},   {OlSection::Play, "Host / Quick Join"},
                 {OlSection::Settings, "Host settings"}, {OlSection::Profile, "Online profile"},
-                {OlSection::Friends, "Friends"}, {OlSection::Overlays, "Overlays"}};
+                {OlSection::Friends, "Friends"},        {OlSection::Overlays, "Overlays"}};
     } else {
         tabs.push_back({OlSection::Lobby, "Lobby"});
         if (in_lobby) {
-            if (view.host) tabs.push_back({OlSection::Friends, "Invite friends"});
+            if (view.host)
+                tabs.push_back({OlSection::Friends, "Invite friends"});
             tabs.push_back({OlSection::Connection, "Connection"});
             tabs.push_back({OlSection::Overlays, "Overlays"});
         }
@@ -3709,10 +3925,12 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     const auto valid_section = [&] {
         return std::any_of(tabs.begin(), tabs.end(), [&](const OlTab& tab) { return tab.id == state.section; });
     };
-    if (!valid_section()) state.section = tabs.front().id;
+    if (!valid_section())
+        state.section = tabs.front().id;
 
     // Messages from shared helpers become the study's notification.
-    if (!g_online_action_status.empty()) OlNotify(std::exchange(g_online_action_status, {}));
+    if (!g_online_action_status.empty())
+        OlNotify(std::exchange(g_online_action_status, {}));
     if (view.connection_test_result_generation != 0U &&
         view.connection_test_result_generation != state.observed_test_generation) {
         state.observed_test_generation = view.connection_test_result_generation;
@@ -3722,7 +3940,8 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     const float page = std::max(available_width, 1.0F);
     g_ol_page_width = available_width;
     const float indent = std::floor((available_width - page) * 0.5F);
-    if (indent > 0.0F) ImGui::Indent(indent);
+    if (indent > 0.0F)
+        ImGui::Indent(indent);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
 
     // The header (.ol-header): the title and lede, and in the launcher the
@@ -3732,18 +3951,21 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
         const bool rom_slot = launcher && g_launcher_rom != nullptr;
         const bool side = rom_slot && page >= 340.0F + 28.0F + 280.0F;
         const float slot_width = !rom_slot ? 0.0F
-                               : side ? std::clamp(page - 340.0F - 28.0F, 280.0F, 360.0F)
-                                      : std::min(page, 360.0F);
+                                 : side    ? std::clamp(page - 340.0F - 28.0F, 280.0F, 360.0F)
+                                           : std::min(page, 360.0F);
         const float text_width = side ? page - slot_width - 28.0F : page;
         const ImVec2 head = ImGui::GetCursorScreenPos();
         ImGui::BeginGroup();
         DrawPageHeading("ONLINE");
         PaddockGap(6.0F);
-        OlParagraph("Find a public lobby, host, or join with a code.", 16.0F,
-                    kOlSoft, text_width);
-        const auto directory=dkr::online::view();
+        OlParagraph("Find a public lobby, host, or join with a code.", 16.0F, kOlSoft, text_width);
+        const auto directory = dkr::online::view();
         PaddockGap(6.F);
-        OlParagraph(directory->connected&&directory->count_available?std::to_string(directory->online)+" players online":directory->signed_in?"Players online: unavailable":"Sign in with Discord to connect",14.F,kOlGoText,text_width);
+        OlParagraph(directory->connected && directory->count_available
+                        ? std::to_string(directory->online) + " players online"
+                    : directory->signed_in ? "Players online: unavailable"
+                                           : "Sign in with Discord to connect",
+                    14.F, kOlGoText, text_width);
         ImGui::EndGroup();
         float bottom = ImGui::GetItemRectMax().y;
         if (rom_slot) {
@@ -3764,9 +3986,9 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
             } else if (PaddockImportButton("Choose a ROM...##online-rom")) {
                 OpenRomBrowser(rom.selected_rom);
             }
-            const std::string_view hint = active ? "Locked while you are in a lobby."
-                                        : known ? "Use the same ROM version as the host."
-                                                : "You need a ROM to host or join.";
+            const std::string_view hint = active  ? "Locked while you are in a lobby."
+                                          : known ? "Use the same ROM version as the host."
+                                                  : "You need a ROM to host or join.";
             PaddockTextStyle hint_style;
             hint_style.colour = PaddockCol(kOlSoft);
             PaddockTextAt(draw, note, {x, top + label.line + 6.0F + field + 6.0F}, slot_width, hint, hint_style);
@@ -3777,12 +3999,16 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     }
     PaddockGap(22.0F);
     DrawOlTabs(tabs, page);
-    if (!valid_section()) state.section = tabs.front().id;
+    if (!valid_section())
+        state.section = tabs.front().id;
     // Content slides in when the section or the session phase changes.
-    const std::string phase = std::string(!active ? "idle" : joining ? "joining" : "lobby") +
+    const std::string phase = std::string(!active   ? "idle"
+                                          : joining ? "joining"
+                                                    : "lobby") +
                               (active && view.host ? "-host" : "") + "-" +
                               std::to_string(static_cast<int>(state.section));
-    if (!entered && !state.phase_key.empty() && phase != state.phase_key) state.entered_at = PaddockClock();
+    if (!entered && !state.phase_key.empty() && phase != state.phase_key)
+        state.entered_at = PaddockClock();
     state.phase_key = phase;
     PaddockGap(24.0F);
 
@@ -3836,7 +4062,8 @@ void DrawOnlinePage(float available_width, bool launcher, bool rom_ready) {
     if (!g_online_notice_details.empty())
         DrawTechnicalDetails(OnlineTextForDisplay(g_online_notice_details), "Last online message - details");
     ImGui::PopStyleVar();
-    if (indent > 0.0F) ImGui::Unindent(indent);
+    if (indent > 0.0F)
+        ImGui::Unindent(indent);
 
     DrawOlModals(frame);
     DrawOlPartyDialogs(frame);

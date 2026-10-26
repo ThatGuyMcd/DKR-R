@@ -20,7 +20,8 @@ constexpr std::uint32_t kWarmup = 4U;
 constexpr std::uint32_t kSamples = 32U;
 
 void require(bool condition, const char* message) {
-    if (!condition) throw std::runtime_error(message);
+    if (!condition)
+        throw std::runtime_error(message);
 }
 
 std::vector<std::uint8_t> initial_state() {
@@ -48,7 +49,8 @@ double elapsed_ms(Clock::time_point start) {
 
 double percentile(std::vector<double> samples, double fraction) {
     require(!samples.empty(), "No timing samples recorded");
-    for (double sample : samples) require(std::isfinite(sample) && sample >= 0, "Invalid timing sample");
+    for (double sample : samples)
+        require(std::isfinite(sample) && sample >= 0, "Invalid timing sample");
     std::sort(samples.begin(), samples.end());
     return samples[static_cast<std::size_t>(std::ceil(fraction * samples.size())) - 1U];
 }
@@ -97,7 +99,8 @@ int main() {
         std::size_t retained = 0;
         for (std::uint32_t frame = 0; frame < kWarmup + kSamples; ++frame) {
             advance_state(expected, frame);
-            if (!store.contains(frame)) continue;
+            if (!store.contains(frame))
+                continue;
             ++retained;
             std::uint64_t fingerprint = 0;
             require(store.load(frame, restored, &fingerprint), "Retained checkpoint unavailable");
@@ -117,8 +120,7 @@ int main() {
 
         std::cout << "Synthetic checkpoint workload: 8388608 bytes, 4 warmup iterations, 32 measured iterations\n"
                   << "Checkpoint fingerprint: " << std::hex << fingerprints.back() << std::dec << '\n'
-                  << std::fixed << std::setprecision(6)
-                  << "DKR_HARNESS {\"metrics\":{"
+                  << std::fixed << std::setprecision(6) << "DKR_HARNESS {\"metrics\":{"
                   << "\"checkpoint.hash_median_ms\":" << percentile(hash_times, 0.5)
                   << ",\"checkpoint.hash_p95_ms\":" << percentile(hash_times, 0.95)
                   << ",\"checkpoint.store_median_ms\":" << percentile(store_times, 0.5)

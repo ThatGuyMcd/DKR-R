@@ -20,9 +20,7 @@ constexpr CountdownTone online_launch_tone(std::uint32_t displayed_second) {
     if (displayed_second < 1U || displayed_second > 5U) {
         return {};
     }
-    return displayed_second == 1U
-        ? CountdownTone{739.99F, 180U}
-        : CountdownTone{659.25F, 125U};
+    return displayed_second == 1U ? CountdownTone{739.99F, 180U} : CountdownTone{659.25F, 125U};
 }
 
 } // namespace dkr::runtime::ui_cues

@@ -21,15 +21,12 @@ struct GameplayStateDigest {
 // buffers, OS queues, stacks, camera-distance values and host pointers are
 // deliberately outside this contract because they may differ without changing
 // the simulation.
-std::uint64_t canonical_gameplay_state_hash(const std::uint8_t* rdram,
-                                            std::size_t rdram_size);
-GameplayStateDigest canonical_gameplay_state_digest(
-    const std::uint8_t* rdram, std::size_t rdram_size);
+std::uint64_t canonical_gameplay_state_hash(const std::uint8_t* rdram, std::size_t rdram_size);
+GameplayStateDigest canonical_gameplay_state_digest(const std::uint8_t* rdram, std::size_t rdram_size);
 
 // Frontend checkpoint used at authored menu transitions.  It includes only
 // menu/roster state that can influence the next simulation; music players,
 // animation cursors, cameras and renderer state remain local presentation.
-std::uint64_t canonical_frontend_state_hash(const std::uint8_t* rdram,
-                                            std::size_t rdram_size);
+std::uint64_t canonical_frontend_state_hash(const std::uint8_t* rdram, std::size_t rdram_size);
 
 } // namespace dkr::runtime::netplay

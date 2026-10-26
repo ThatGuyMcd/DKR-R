@@ -45,7 +45,8 @@ StoreJson StoreNativeInventory() {
                                            (characters ? "prepared-characters/" : "prepared/") + item.group},
                               {"bytes", item.managed_bytes}});
     }
-    for (const auto& car : StoreVehicleInventory()) result.push_back(car);
+    for (const auto& car : StoreVehicleInventory())
+        result.push_back(car);
     for (const auto& item : g_code_library.view()->items)
         result.push_back({{"kind", "code"},
                           {"key", "code:" + item.digest},
@@ -82,8 +83,8 @@ StoreJson StoreNativeInventory() {
     return result;
 }
 void StoreManagerInstall(const dkr::store::Download& job, bool locked) {
-    if (locked || StoreVehiclesBusy() || g_legacy_imports.snapshot().busy || g_code_library.view()->busy || TexturePackImportRunning() ||
-        DialogJobRunning())
+    if (locked || StoreVehiclesBusy() || g_legacy_imports.snapshot().busy || g_code_library.view()->busy ||
+        TexturePackImportRunning() || DialogJobRunning())
         return;
     if (dkr::store::installations().propose(job, StoreOriginalRoms())) {
         dkr::store::service().begin_install(job.key);
@@ -101,7 +102,8 @@ void StoreManagerPump() {
     const auto view = manager.view();
     const bool safe = !dkr::runtime::netplay::session().active() && !g_online_mod_host_request.has_value() &&
                       !g_mod_launch.snapshot().modal && !g_legacy_imports.snapshot().busy &&
-                      !g_code_library.view()->busy && !StoreVehiclesBusy() && !TexturePackImportRunning() && !DialogJobRunning();
+                      !g_code_library.view()->busy && !StoreVehiclesBusy() && !TexturePackImportRunning() &&
+                      !DialogJobRunning();
     manager.safe_to_write(safe);
     static std::uint64_t completion = 0, last_code = UINT64_MAX, last_texture = UINT64_MAX, last_names = UINT64_MAX;
     static std::shared_ptr<const dkr::mods::TrackCatalogView> last_tracks, last_characters;
@@ -134,8 +136,8 @@ void StoreManagerPump() {
     const auto code = g_code_library.view()->generation, texture = dkr::runtime::texture_packs::generation(),
                names = dkr::store::library_names_generation();
     if (safe && view->ready && !view->busy &&
-        (vehicles != last_vehicles || legacy.tracks != last_tracks || legacy.characters != last_characters || last_code != code ||
-         last_texture != texture || last_names != names || last_items != store->items.get() ||
+        (vehicles != last_vehicles || legacy.tracks != last_tracks || legacy.characters != last_characters ||
+         last_code != code || last_texture != texture || last_names != names || last_items != store->items.get() ||
          now - last_refresh > std::chrono::seconds(30))) {
         last_vehicles = vehicles;
         last_tracks = legacy.tracks;

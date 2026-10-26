@@ -17,15 +17,24 @@ function(dkr_add_experimental_owned_game target generated)
     if(full_scenes)
         string(JSON local_models ERROR_VARIABLE local_models_error GET "${manifest}" local_model_observations)
         if(local_models_error OR NOT local_models EQUAL 1)
-            message(FATAL_ERROR "Owned renderer requires NEW model observation output; regenerate the Patch Pipeline without modifying protected inputs")
+            message(
+                FATAL_ERROR
+                "Owned renderer requires NEW model observation output; regenerate the Patch Pipeline without modifying protected inputs"
+            )
         endif()
         string(JSON online_views ERROR_VARIABLE online_views_error GET "${manifest}" online_view_observations)
         if(online_views_error OR NOT online_views EQUAL 2)
-            message(FATAL_ERROR "Online views require NEW Patch Pipeline output with observation schema 2; protected inputs must not be edited")
+            message(
+                FATAL_ERROR
+                "Online views require NEW Patch Pipeline output with observation schema 2; protected inputs must not be edited"
+            )
         endif()
         string(JSON local_world ERROR_VARIABLE local_world_error GET "${manifest}" local_world_observations)
         if(local_world_error OR NOT local_world)
-            message(FATAL_ERROR "Owned runtime requires checked local-world observations. Regenerate into a NEW Patch Pipeline output directory; do not edit existing generated payloads.")
+            message(
+                FATAL_ERROR
+                "Owned runtime requires checked local-world observations. Regenerate into a NEW Patch Pipeline output directory; do not edit existing generated payloads."
+            )
         endif()
     endif()
     string(JSON prefix GET "${manifest}" symbol_prefix)
@@ -41,7 +50,15 @@ function(dkr_add_experimental_owned_game target generated)
     if(NOT revision MATCHES "^(77|80)$" OR NOT prefix STREQUAL "dkr_experimental_v${revision}_")
         message(FATAL_ERROR "Experimental owned game requires reviewed revision-specific guest/import symbols")
     endif()
-    foreach(field scene_cuts audio_services input_services authored_cpu audio_symbol_isolation runtime_symbol_isolation)
+    foreach(
+        field
+        scene_cuts
+        audio_services
+        input_services
+        authored_cpu
+        audio_symbol_isolation
+        runtime_symbol_isolation
+    )
         string(JSON value GET "${manifest}" ${field})
         if(NOT value)
             message(FATAL_ERROR "Experimental owned game requires ${field}; no stub/unsafe fallback")
@@ -56,16 +73,33 @@ function(dkr_add_experimental_owned_game target generated)
     set(probe "${root}/tests/replay_probe")
     file(GLOB guest CONFIGURE_DEPENDS "${generated}/guest_*.c")
     dkr_apply_guest_hooks(guest "${generated}" "${revision}" owned)
-    add_library(${target} STATIC EXCLUDE_FROM_ALL
-        "${probe}/probe_bridge.c" "${probe}/probe_native.c" "${probe}/probe_eeprom.cpp"
-        "${probe}/probe_policies.cpp" "${probe}/probe_presentation.c" "${probe}/probe_component.c" "${probe}/probe_driver.cpp"
-        "${probe}/probe_audio.c" "${probe}/probe_audio_events.c" "${probe}/probe_audio_rsp.cpp"
-        "${probe}/probe_input.c" "${probe}/probe_input.cpp" "${probe}/probe_pak.c" "${probe}/probe_pak.cpp"
-        "${probe}/probe_magic.c" "${probe}/probe_magic.cpp"
+    add_library(
+        ${target}
+        STATIC
+        EXCLUDE_FROM_ALL
+        "${probe}/probe_bridge.c"
+        "${probe}/probe_native.c"
+        "${probe}/probe_eeprom.cpp"
+        "${probe}/probe_policies.cpp"
+        "${probe}/probe_presentation.c"
+        "${probe}/probe_component.c"
+        "${probe}/probe_driver.cpp"
+        "${probe}/probe_audio.c"
+        "${probe}/probe_audio_events.c"
+        "${probe}/probe_audio_rsp.cpp"
+        "${probe}/probe_input.c"
+        "${probe}/probe_input.cpp"
+        "${probe}/probe_pak.c"
+        "${probe}/probe_pak.cpp"
+        "${probe}/probe_magic.c"
+        "${probe}/probe_magic.cpp"
         "${root}/src/game/netplay/experimental_magic_codes.cpp"
         "${root}/src/game/netplay/experimental_pak.cpp"
         "${root}/src/game/dkr_save_codec.cpp"
-        "${generated}/blocked_imports.c" "${generated}/private_audio_rsp.cpp" ${guest})
+        "${generated}/blocked_imports.c"
+        "${generated}/private_audio_rsp.cpp"
+        ${guest}
+    )
     target_compile_features(${target} PRIVATE c_std_11 PUBLIC cxx_std_20)
     target_include_directories(${target} BEFORE PRIVATE "${generated}" "${probe}")
     # Reuse the pinned runtime's ARM SIMD compatibility headers read-only.
@@ -74,10 +108,18 @@ function(dkr_add_experimental_owned_game target generated)
         target_include_directories(${target} PRIVATE "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty/sse2neon")
     endif()
     target_include_directories(${target} PUBLIC "${probe}")
-    target_compile_definitions(${target} PRIVATE DKR_PROBE_REVISION=${revision}
-        DKR_PROBE_HAS_SCENE_CUTS=1 DKR_PROBE_HAS_AUDIO=1 DKR_PROBE_HAS_INPUT=1
-        DKR_PROBE_HAS_AUTHORED_CPU=1 DKR_PROBE_HAS_FULL_SCENES=${full_scenes}
-        DKR_PROBE_HAS_SYMBOL_ISOLATION=1 DKR_PROBE_HAS_AUDIO_ISOLATION=1)
+    target_compile_definitions(
+        ${target}
+        PRIVATE
+            DKR_PROBE_REVISION=${revision}
+            DKR_PROBE_HAS_SCENE_CUTS=1
+            DKR_PROBE_HAS_AUDIO=1
+            DKR_PROBE_HAS_INPUT=1
+            DKR_PROBE_HAS_AUTHORED_CPU=1
+            DKR_PROBE_HAS_FULL_SCENES=${full_scenes}
+            DKR_PROBE_HAS_SYMBOL_ISOLATION=1
+            DKR_PROBE_HAS_AUDIO_ISOLATION=1
+    )
     target_compile_definitions(${target} PRIVATE DKR_PROBE_HAS_MOD_SERVICES=${mod_services})
     # The bridge, EEPROM/Pak owners and C++ callback namespace must be private
     # too, not merely the emitted guest functions/RSP. Never apply this header
@@ -105,8 +147,10 @@ function(dkr_add_experimental_owned_game target generated)
     if(MSVC)
         target_compile_options(${target} PRIVATE /UNDEBUG /fp:strict)
     else()
-        target_compile_options(${target} PRIVATE -UNDEBUG -fno-strict-aliasing
-            $<$<COMPILE_LANGUAGE:C>:-Werror=implicit-function-declaration>)
+        target_compile_options(
+            ${target}
+            PRIVATE -UNDEBUG -fno-strict-aliasing $<$<COMPILE_LANGUAGE:C>:-Werror=implicit-function-declaration>
+        )
         # All peers use separately rounded multiplies/adds. ARM64 compilers
         # otherwise fuse these where baseline x64 SSE does not.
         target_compile_options(${target} PRIVATE -ffp-contract=off -fno-fast-math)

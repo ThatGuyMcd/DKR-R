@@ -8,7 +8,8 @@
 namespace {
 
 bool require(bool condition, const char* message) {
-    if (!condition) std::cerr << "FAIL: " << message << '\n';
+    if (!condition)
+        std::cerr << "FAIL: " << message << '\n';
     return condition;
 }
 
@@ -17,8 +18,7 @@ bool require(bool condition, const char* message) {
 int main() {
     namespace netplay = dkr::runtime::netplay;
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    const auto root = std::filesystem::temp_directory_path() /
-        ("dkrr-friend-service-" + std::to_string(stamp));
+    const auto root = std::filesystem::temp_directory_path() / ("dkrr-friend-service-" + std::to_string(stamp));
     std::error_code filesystem_error;
     std::filesystem::create_directories(root, filesystem_error);
     if (!require(!filesystem_error, "temporary profile directory could not be created")) {
@@ -30,82 +30,61 @@ int main() {
     const std::string identity = service.identity_label();
     bool passed = true;
     passed &= require(!identity.empty(), "profile identity was not generated");
-    passed &= require(service.display_name() == "Timber Tester",
-                      "display name was not initialized");
-    passed &= require(!service.appear_offline(),
-                      "new profiles did not default to visible presence");
-    passed &= require(service.allow_lobby_invites(),
-                      "new profiles did not default to accepting lobby invites");
+    passed &= require(service.display_name() == "Timber Tester", "display name was not initialized");
+    passed &= require(!service.appear_offline(), "new profiles did not default to visible presence");
+    passed &= require(service.allow_lobby_invites(), "new profiles did not default to accepting lobby invites");
 
     netplay::FriendInviteView permanent{};
     std::string error;
-    passed &= require(service.create_invite(netplay::FriendInviteLifetime::Permanent,
-                                            std::chrono::seconds(0), permanent,
-                                            error),
-                      "permanent Friend Code was not generated");
+    passed &= require(
+        service.create_invite(netplay::FriendInviteLifetime::Permanent, std::chrono::seconds(0), permanent, error),
+        "permanent Friend Code was not generated");
     if (!netplay::valid_friend_code(permanent.code)) {
         std::cerr << "Generated code: " << permanent.code << '\n';
     }
-    passed &= require(netplay::valid_friend_code(permanent.code),
-                      "generated Friend Code failed validation");
-    passed &= require(permanent.code.size() == 12U &&
-                          permanent.code.starts_with("DKR-"),
+    passed &= require(netplay::valid_friend_code(permanent.code), "generated Friend Code failed validation");
+    passed &= require(permanent.code.size() == 12U && permanent.code.starts_with("DKR-"),
                       "Friend Code was not emitted in the 12-character format");
     const std::string payload_only = permanent.code.substr(4U);
-    passed &= require(netplay::valid_friend_code(payload_only),
-                      "eight-character controller entry was not accepted");
+    passed &= require(netplay::valid_friend_code(payload_only), "eight-character controller entry was not accepted");
     passed &= require(netplay::normalize_friend_code(permanent.code) ==
                           netplay::normalize_friend_code(" " + permanent.code + " "),
                       "Friend Code normalization was not whitespace tolerant");
 
     std::string tampered = permanent.code;
     tampered.back() = tampered.back() == 'A' ? 'B' : 'A';
-    passed &= require(!netplay::valid_friend_code(tampered),
-                      "tampered Friend Code passed its checksum");
-    passed &= require(netplay::valid_friend_code(
-        "DKRR-J2AU-DCEU-PUBE-UFSM-MEDR-LYS9-4BPJ-J5TM-U2BT-A9JD-D6AA-AAAA-AAAA-AAAA-EZ5S"),
+    passed &= require(!netplay::valid_friend_code(tampered), "tampered Friend Code passed its checksum");
+    passed &= require(
+        netplay::valid_friend_code("DKRR-J2AU-DCEU-PUBE-UFSM-MEDR-LYS9-4BPJ-J5TM-U2BT-A9JD-D6AA-AAAA-AAAA-AAAA-EZ5S"),
         "legacy Friend Code compatibility regressed");
 
     netplay::FriendLobbyAdvertisement lobby{};
     lobby.hosting = true;
     lobby.quick_join_code = "ABCDE";
     lobby.players = 1U;
-    lobby.maximum_players = static_cast<std::uint32_t>(
-        netplay::kSupportedOnlinePlayers);
+    lobby.maximum_players = static_cast<std::uint32_t>(netplay::kSupportedOnlinePlayers);
     lobby.synchronization = "ROLLBACK";
     lobby.compatibility = "test-manifest";
     netplay::FriendLobbyInviteView lobby_invite{};
     const auto admission = netplay::secure::generate_key();
-    passed &= require(!service.send_lobby_invite(
-                          "not-a-friend", lobby, admission, lobby_invite, error),
+    passed &= require(!service.send_lobby_invite("not-a-friend", lobby, admission, lobby_invite, error),
                       "an unauthenticated identity received a lobby invitation");
-    passed &= require(service.incoming_lobby_invites().empty() &&
-                          service.outgoing_lobby_invites().empty(),
+    passed &= require(service.incoming_lobby_invites().empty() && service.outgoing_lobby_invites().empty(),
                       "a rejected lobby invitation leaked into runtime state");
-    passed &= require(!service.respond_lobby_invite(
-                          1U, true, lobby_invite, error),
+    passed &= require(!service.respond_lobby_invite(1U, true, lobby_invite, error),
                       "a nonexistent lobby invitation was accepted");
-    passed &= require(!service.cancel_lobby_invite(1U, error),
-                      "a nonexistent outgoing invitation was cancelled");
+    passed &= require(!service.cancel_lobby_invite(1U, error), "a nonexistent outgoing invitation was cancelled");
 
-    passed &= require(service.set_display_name("Pipsy Pilot", error),
-                      "display name update failed");
-    passed &= require(service.set_appear_offline(true, error),
-                      "appear-offline preference update failed");
-    passed &= require(service.set_allow_lobby_invites(false, error),
-                      "lobby-invitation preference update failed");
+    passed &= require(service.set_display_name("Pipsy Pilot", error), "display name update failed");
+    passed &= require(service.set_appear_offline(true, error), "appear-offline preference update failed");
+    passed &= require(service.set_allow_lobby_invites(false, error), "lobby-invitation preference update failed");
     service.shutdown();
     service.configure(root, "Ignored Name");
-    passed &= require(service.identity_label() == identity,
-                      "profile identity did not survive restart");
-    passed &= require(service.display_name() == "Pipsy Pilot",
-                      "profile display name did not survive restart");
-    passed &= require(service.appear_offline(),
-                      "appear-offline preference did not survive restart");
-    passed &= require(!service.allow_lobby_invites(),
-                      "lobby-invitation preference did not survive restart");
-    passed &= require(!service.invitations().empty() &&
-                          service.invitations().front().code == permanent.code,
+    passed &= require(service.identity_label() == identity, "profile identity did not survive restart");
+    passed &= require(service.display_name() == "Pipsy Pilot", "profile display name did not survive restart");
+    passed &= require(service.appear_offline(), "appear-offline preference did not survive restart");
+    passed &= require(!service.allow_lobby_invites(), "lobby-invitation preference did not survive restart");
+    passed &= require(!service.invitations().empty() && service.invitations().front().code == permanent.code,
                       "active Friend Code did not survive restart");
     service.shutdown();
 
