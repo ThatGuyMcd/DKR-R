@@ -65,6 +65,17 @@ ALLOWED = ROOT / "scripts/fold/allowed-deltas.json"
 # TUs that include shader headers the build writes later, so they cannot be
 # preprocessed after a configure. Only these may skip level 2.
 SHADER_PENDING = ROOT / "scripts/fold/shader-pending.json"
+# Portability fixes for platforms v1.0.11 never compiled (B6): the files they
+# change, pinned to their reviewed bytes, and the Linux TUs whose tokens they
+# change, which must then compile to identical objects (level 3).
+PORTABILITY = ROOT / "scripts/fold/portability.json"
+
+
+def load_portability() -> tuple[dict[str, str], set[str]]:
+    data = json.loads(PORTABILITY.read_text(encoding="utf-8"))
+    return {path: entry["sha256"] for path, entry in data["files"].items()}, set(data["tus"])
+
+
 # Folded targets that compile what one reference target compiled: the game's
 # TUs moved into an object library so host builds without a generated payload
 # compile them too. Compile units and dependencies are compared under the
@@ -644,6 +655,7 @@ def run_level1(args: argparse.Namespace) -> int:
     allow = variant_tus(ROOT, forwarders=True)
     allowed = load_allowed(ALLOWED)
     problems: list[str] = list(pairing.unmapped)
+    ported, _ = load_portability()
     same_bytes: dict[tuple[Path, Path], bool] = {}
 
     def name(path: Path) -> str:
@@ -667,6 +679,10 @@ def run_level1(args: argparse.Namespace) -> int:
                 continue
             expected.add(folded)
             if dep not in first_party:
+                continue
+            if name(folded) in ported:
+                if closure_digest(folded.read_bytes()) != ported[name(folded)]:
+                    problems.append(f"{label}: {name(folded)} differs from its reviewed portability fix")
                 continue
             if (dep, folded) not in same_bytes:
                 same_bytes[(dep, folded)] = folded.is_file() and comparable(dep.read_bytes()) == comparable(
@@ -761,6 +777,7 @@ def run_level2(args: argparse.Namespace) -> int:
         for side, directory in (("reference", args.reference_pp), ("folded", args.folded_pp))
     }
     expected_pending = set(json.loads(SHADER_PENDING.read_text(encoding="utf-8"))["tus"])
+    _, ported_tus = load_portability()
     skipped: set[str] = set()
     same = 0
     for old_key, new_key in sorted(pairing.pairs.items()):
@@ -791,7 +808,7 @@ def run_level2(args: argparse.Namespace) -> int:
         if old == new:
             same += 1
             continue
-        if apply_closure.tu_name(ROOT, mapping.folder, old_key[1]) in level3_names:
+        if apply_closure.tu_name(ROOT, mapping.folder, old_key[1]) in level3_names or label in ported_tus:
             level3.append(label)
             continue
         first = next((i for i, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
@@ -891,12 +908,13 @@ def run_level3(args: argparse.Namespace) -> int:
     problems: list[str] = []
     checked: list[str] = []
     covered: set[str] = set()
+    _, ported_tus = load_portability()
     for old_key, new_key in sorted(pairing.pairs.items()):
         name = apply_closure.tu_name(ROOT, mapping.folder, old_key[1])
-        if name not in split or new_key not in folded_entries:
-            continue
-        covered.add(name)
         label = f"{new_key[0]}: {portable(mapping, new_key[1])}"
+        if (name not in split and label not in ported_tus) or new_key not in folded_entries:
+            continue
+        covered.add(name if name in split else label)
         old_text = (args.reference_pp / f"{output_name(old_key)}.i").read_text(errors="surrogateescape")
         new_text = (args.folded_pp / f"{output_name(new_key)}.i").read_text(errors="surrogateescape")
         if tokens(old_text, mapping) == tokens(new_text, None):
@@ -933,6 +951,7 @@ def run_level3(args: argparse.Namespace) -> int:
     # Every TU header-variants.json says compiled against another header
     # version must have been compared here (or found token-identical).
     problems += [f"{name}: header-variant TU not compared" for name in sorted(split - covered)]
+    problems += [f"{label}: portability TU not compared" for label in sorted(ported_tus - covered)]
     allowed = load_allowed(ALLOWED)
     unexplained = [problem for problem in problems if explained(problem, allowed) is None]
     for label in checked:
@@ -1038,6 +1057,8 @@ def run_closure(args: argparse.Namespace) -> int:
         print(f"closure: {len(files)} files recorded", file=sys.stderr)
         return 0
     files = json.loads(CLOSURE.read_text(encoding="utf-8"))["files"]
+    ported, _ = load_portability()
+    files.update({dest: digest for dest, digest in ported.items() if dest in files})
     problems: list[str] = []
     for dest, digest in sorted(files.items()):
         path = ROOT / dest
@@ -1056,6 +1077,7 @@ EVIDENCE_INPUTS = (
     "scripts/fold/header-variants.json",
     "scripts/fold/shader-pending.json",
     "scripts/fold/closure.json",
+    "scripts/fold/portability.json",
     "patches/manifest.json",
     "runtime-recomp/guest-hooks/hooks.toml",
     "runtime-recomp/src/game/netplay/legacy_identity.hpp",

@@ -1,4 +1,5 @@
 #include "store_vehicle_adapter.hpp"
+#include "atomic_snapshot.hpp"
 #include "mod_store_install.hpp"
 #include "custom_tracks.hpp"
 #include "mods/legacy_mod_library.hpp"
@@ -283,14 +284,14 @@ std::string name_stamp(const fs::path& input) {
     ordinary(path, fs::is_directory(path));
     if (fs::is_regular_file(path))
         entries["file"] = std::to_string(fs::file_size(path)) + ":" +
-                          std::to_string(fs::last_write_time(path).time_since_epoch().count());
+                          std::to_string(static_cast<std::int64_t>(fs::last_write_time(path).time_since_epoch().count()));
     else
         for (const auto& e : fs::directory_iterator(path)) {
             ordinary(e.path(), false);
             if (entries.size() >= 200005)
                 return {};
             entries[path_text(e.path().filename())] =
-                std::to_string(e.file_size()) + ":" + std::to_string(e.last_write_time().time_since_epoch().count());
+                std::to_string(e.file_size()) + ":" + std::to_string(static_cast<std::int64_t>(e.last_write_time().time_since_epoch().count()));
         }
     const auto bytes = Json(entries).dump();
     return dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()));
@@ -302,7 +303,7 @@ std::string track_stamp(const fs::path& input) {
     for (const auto& e : fs::recursive_directory_iterator(path))
         if (e.is_regular_file())
             entries[path_text(e.path().lexically_relative(path))] =
-                std::to_string(e.file_size()) + ":" + std::to_string(e.last_write_time().time_since_epoch().count());
+                std::to_string(e.file_size()) + ":" + std::to_string(static_cast<std::int64_t>(e.last_write_time().time_since_epoch().count()));
     const auto bytes = Json(entries).dump();
     return dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()));
 }
@@ -482,7 +483,7 @@ bool recover_cached_package(const fs::path& folder, const fs::path& target, cons
 struct InstallManager::Impl {
     mutable std::mutex mutex;
     std::condition_variable_any cv;
-    std::atomic<std::shared_ptr<const InstallView>> published{std::make_shared<const InstallView>()};
+    dkr::runtime::AtomicSnapshot<const InstallView> published{std::make_shared<const InstallView>()};
     InstallView state;
     fs::path config, root, worker_path;
     std::string version;

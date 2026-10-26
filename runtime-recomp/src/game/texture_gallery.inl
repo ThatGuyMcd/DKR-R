@@ -113,7 +113,7 @@ public:
                 }else ++hits;
                 auto& preview=found->second;preview.used=++clock_;
                 item.preview_width=preview.width;item.preview_height=preview.height;item.rgba=preview.rgba;
-                item.preview_key=text_path(root_)+"/"+item.path+":"+std::to_string(index_generation_)+":"+std::to_string(stamp.bytes)+":"+std::to_string(stamp.modified.time_since_epoch().count());
+                item.preview_key=text_path(root_)+"/"+item.path+":"+std::to_string(index_generation_)+":"+std::to_string(stamp.bytes)+":"+std::to_string(static_cast<std::int64_t>(stamp.modified.time_since_epoch().count()));
             }catch(const std::exception& e) {
                 // One damaged PNG must not prevent navigation through the dump.
                 item.preview_error=e.what();

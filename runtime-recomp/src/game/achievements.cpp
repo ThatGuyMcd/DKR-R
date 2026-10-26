@@ -1,4 +1,5 @@
 #include "achievements.hpp"
+#include "atomic_snapshot.hpp"
 #include "achievement_symbols.hpp"
 #include <json/json.hpp>
 #include <algorithm>
@@ -100,7 +101,7 @@ struct Event {Sample sample;bool reset=false,is_online=false,modded=false;unsign
 class Service {
  std::mutex mutex_;std::condition_variable cv_;bool stopping_=false;
  std::deque<std::function<void()>> jobs_;std::deque<Toast> toasts_;
- std::atomic<std::shared_ptr<const View>> published_{std::make_shared<View>()};
+ dkr::runtime::AtomicSnapshot<const View> published_{std::make_shared<View>()};
  std::thread worker_;std::filesystem::path path_;View state_;Sample previous_,latest_;
  bool baseline_=false;Racer adventure_human_;std::array<int,10> driver_{};std::array<std::set<int>,10> earned_balloon_totals_;
  std::uint64_t last_epoch_=~0ULL;std::uint32_t last_frame_=~0U;Json retained_=Json::object();

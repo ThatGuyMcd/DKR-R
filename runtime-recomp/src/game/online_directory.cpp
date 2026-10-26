@@ -1,4 +1,5 @@
 #include "online_directory.hpp"
+#include "atomic_snapshot.hpp"
 #include "directory_tls.hpp"
 #include "monocypher.h"
 #include <algorithm>
@@ -20,7 +21,7 @@ struct State {
     std::condition_variable_any cv;
     AccountView account; AccountRequest request;
     View ui;
-    std::atomic<std::shared_ptr<const View>> published{std::make_shared<const View>()};
+    dkr::runtime::AtomicSnapshot<const View> published{std::make_shared<const View>()};
     std::map<const void*,std::shared_ptr<Bridge>> bridges;
     struct JoinKey {secure::KeyPair pair;secure::Key admission;};
     std::map<const void*,JoinKey> keys;

@@ -1,0 +1,46 @@
+{
+ "about": "Portability fixes for platforms v1.0.11 never compiled (fold step B6). Each file is pinned to its reviewed bytes (whitespace-insensitive sha256, equivalence.py closure_digest); level 1 and the closure check compare against that instead of the shipped bytes. Each listed TU's Linux tokens change, so level 3 must find its objects identical.",
+ "files": {
+  "runtime-recomp/src/game/achievements.cpp": {
+   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
+   "sha256": "f17da14cff56cee42d8d3d6a2e9b6e3fc37c9371747e3cd005238c3c5dab124f"
+  },
+  "runtime-recomp/src/game/f3ddkr_rt64.cpp": {
+   "reason": "Metal builds have no enhanced-water renderer; the water_residency_rt64.hpp include is skipped under __APPLE__ (token-identical elsewhere).",
+   "sha256": "6a669be2a612362d7f67a9e3df3faa1b48166637ca1d0179d5414f4d7e9690d4"
+  },
+  "runtime-recomp/src/game/mod_store.cpp": {
+   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
+   "sha256": "195b07d395a55bc9580abfb13fb7406ebe25cc9394d7d0c7d7eac6fc7e2adfd2"
+  },
+  "runtime-recomp/src/game/mod_store_install.cpp": {
+   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC. libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
+   "sha256": "2a26f704b2e2b8699c1cb1ab98f5491aba6454d8660c13e91e052f56fc697f30"
+  },
+  "runtime-recomp/src/game/mod_store_names.cpp": {
+   "reason": "libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
+   "sha256": "b32f11a1484b0a649d7cc5962e926fdec663f126e7c9363bcc967ca687b7eafe"
+  },
+  "runtime-recomp/src/game/online_directory.cpp": {
+   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
+   "sha256": "74547dc4930c827598f1a6fd62cbd64c3575d455df952581393acec3a04d1d71"
+  },
+  "runtime-recomp/src/game/texture_gallery.inl": {
+   "reason": "libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
+   "sha256": "a4b3f753ac48d5299094fd48cdc31a2a65afa645e50ccc5f548007b77ebc01c7"
+  },
+  "runtime-recomp/src/game/vehicle_binding.cpp": {
+   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
+   "sha256": "823af3eab2ff306d0c112e22bceb39dac0885b4249165aa4935319215934e574"
+  }
+ },
+ "tus": [
+  "DKRCustomVehicles: runtime-recomp/src/game/vehicle_binding.cpp",
+  "DKRNetplayCore: runtime-recomp/src/game/online_directory.cpp",
+  "DKRPortGame: runtime-recomp/src/game/achievements.cpp",
+  "DKRPortGame: runtime-recomp/src/game/mod_store.cpp",
+  "DKRPortGame: runtime-recomp/src/game/mod_store_install.cpp",
+  "DKRPortGame: runtime-recomp/src/game/mod_store_names.cpp",
+  "DKRPortGame: runtime-recomp/src/game/texture_dump.cpp"
+ ]
+}

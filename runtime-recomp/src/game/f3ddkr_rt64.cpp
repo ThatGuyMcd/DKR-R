@@ -26,7 +26,10 @@
 #include "credits_sky_rt64.hpp"
 #include "intro_caption_rt64.hpp"
 #include "intro_sky_rt64.hpp"
+#if !defined(__APPLE__)
+// Metal builds have no enhanced-water renderer (cmake/EnhancedWater.cmake).
 #include "water_residency_rt64.hpp"
+#endif
 #include "presentation_pacer.hpp"
 #include "title_text_rt64.hpp"
 #include "water_performance.hpp"

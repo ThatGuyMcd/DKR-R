@@ -1,4 +1,5 @@
 #include "online_directory.hpp"
+#include "atomic_snapshot.hpp"
 #include "linux_keyring.hpp"
 #include "store_vehicle_adapter.hpp"
 #include "mod_store.hpp"
@@ -616,7 +617,7 @@ struct Service::Impl {
     std::mutex download_persist_mutex;
     std::condition_variable_any cv;
     Snapshot state;
-    std::atomic<std::shared_ptr<const Snapshot>> published{std::make_shared<const Snapshot>()};
+    dkr::runtime::AtomicSnapshot<const Snapshot> published{std::make_shared<const Snapshot>()};
     std::filesystem::path root;
     std::string version, token, device, browser;
     unsigned account = 0;

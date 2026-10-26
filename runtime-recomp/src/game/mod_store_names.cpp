@@ -53,7 +53,7 @@ std::string stamp(const std::filesystem::path& path, std::stop_token stop) {
         return {};
     if (std::filesystem::is_regular_file(path)) {
         entries["file"] = std::to_string(std::filesystem::file_size(path)) + ":" +
-                          std::to_string(std::filesystem::last_write_time(path).time_since_epoch().count());
+                          std::to_string(static_cast<std::int64_t>(std::filesystem::last_write_time(path).time_since_epoch().count()));
     } else {
         for (const auto& entry : std::filesystem::directory_iterator(path)) {
             if (stop.stop_requested() || entries.size() >= 200005 || entry.is_symlink())
@@ -61,7 +61,7 @@ std::string stamp(const std::filesystem::path& path, std::stop_token stop) {
             if (!entry.is_regular_file())
                 return {};
             entries[utf8(entry.path().filename())] = std::to_string(entry.file_size()) + ":" +
-                                                     std::to_string(entry.last_write_time().time_since_epoch().count());
+                                                     std::to_string(static_cast<std::int64_t>(entry.last_write_time().time_since_epoch().count()));
         }
     }
     const auto value = Json(entries).dump();
