@@ -124,13 +124,41 @@ def bodies(text: str, function: str) -> list[tuple[int, int]]:
     return found
 
 
+# Comments and string/char literals, which no anchor may look inside.
+OPAQUE = r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\''
+# What precedes a return statement that is the unbraced body of a statement.
+UNBRACED = re.compile(r"(?:\)|\belse|\bdo)$")
+
+
 def closing_brace(text: str, begin: int, function: str) -> int:
     depth = 1
-    for token in re.finditer(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\{|\}', text[begin:]):
+    for token in re.finditer(OPAQUE + r"|\{|\}", text[begin:]):
         depth += {"{": 1, "}": -1}.get(token.group(), 0)
         if depth == 0:
             return begin + token.start()
     raise HookError(f"{function}: unbalanced braces")
+
+
+def fenced_returns(body: str, hook: Hook) -> str:
+    """Put hook.returns before every return statement of the body.
+
+    The text is inserted, not braced, because that is what v1.0.11 shipped. A
+    return that is the unbraced body of an if/else/loop would make the inserted
+    text conditional and the return not, so it is refused instead."""
+    pieces: list[str] = []
+    cursor = 0
+    count = 0
+    for token in re.finditer(OPAQUE + r"|\breturn;", body):
+        if token.group() != "return;":
+            continue
+        if UNBRACED.search(body[max(0, token.start() - 200) : token.start()].rstrip()):
+            raise HookError(f"{hook.id}: {hook.function} has an unbraced return; brace it in the anchor instead")
+        pieces += [body[cursor : token.start()], hook.returns, "return;"]
+        cursor = token.end()
+        count += 1
+    if count == 0:
+        raise HookError(f"{hook.id}: {hook.function} has no return")
+    return "".join(pieces) + body[cursor:]
 
 
 def hooked_body(body: str, hook: Hook) -> str:
@@ -140,9 +168,7 @@ def hooked_body(body: str, hook: Hook) -> str:
             raise HookError(f"{hook.id}: edit matches {count} times in {hook.function}, not once: {old[:60]!r}")
         body = body.replace(old, new)
     if hook.returns:
-        body, count = re.subn(r"\breturn;", lambda _: hook.returns + "return;", body)
-        if count == 0:
-            raise HookError(f"{hook.id}: {hook.function} has no return")
+        body = fenced_returns(body, hook)
     if hook.entry:
         body = "\n" + hook.entry + body
     return body

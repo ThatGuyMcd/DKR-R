@@ -166,7 +166,7 @@ class GuestHookTests(unittest.TestCase):
                 self.assertTrue(any(message in problem for problem in problems), problems)
 
     def test_edit_must_match_once(self):
-        for match, count in (("not there", 0), ("ctx->r", None)):
+        for match in ("not there", "ctx->r"):
             with self.subTest(match=match):
                 hooks = self.hooks(f"""
                     [[hook]]
@@ -179,6 +179,41 @@ class GuestHookTests(unittest.TestCase):
                     """)
                 _, problems = guest_hooks.apply(write(self.guest, {"funcs_1.c": GUEST}), hooks)
                 self.assertTrue(any("not once" in problem for problem in problems), problems)
+
+    def test_returns_skip_comments_and_literals(self):
+        hooks = self.hooks(
+            """
+            [[hook]]
+            id = "fence"
+            function = "plain"
+            payloads = ["funcs"]
+            returns = 'x(); '
+            """
+        )
+        head, tail = GUEST.split("    ctx->r2 = 0;\n")
+        text = head + "    // return; in a comment\n    log(\"return;\"); log('r');\n    ctx->r2 = 0;\n" + tail
+        out, problems = guest_hooks.apply(write(self.guest, {"funcs_1.c": text}), hooks)
+        self.assertEqual(problems, [])
+        hooked = out["funcs_1.c"]
+        self.assertIn('    // return; in a comment\n    log("return;");', hooked)
+        self.assertEqual(hooked.count("x(); return;"), 1)
+
+    def test_unbraced_return_is_refused(self):
+        hooks = self.hooks(
+            """
+            [[hook]]
+            id = "fence"
+            function = "plain"
+            payloads = ["funcs"]
+            returns = 'x(); '
+            """
+        )
+        head, tail = GUEST.split("    ctx->r2 = 0;\n")
+        for statement in ("if (ctx->r4 == 0) return;", "if (ctx->r4 == 0)\n        return;", "else return;"):
+            with self.subTest(statement=statement):
+                text = head + "    " + statement + "\n    ctx->r2 = 0;\n" + tail
+                _, problems = guest_hooks.apply(write(self.guest, {"funcs_1.c": text}), hooks)
+                self.assertTrue(any("unbraced return" in problem for problem in problems), problems)
 
     def test_returns_needs_a_return(self):
         hooks = self.hooks(
