@@ -1,45 +1,45 @@
 {
- "about": "Reviewed source changes v1.0.11 did not ship: portability fixes for platforms it never compiled (fold step B6), and guard fixes that keep the compiled code identical (B8). files: each pinned to its reviewed bytes (whitespace-insensitive sha256, equivalence.py closure_digest); level 1 and the closure check compare against that instead of the shipped bytes. objects_identical: Linux TUs whose tokens change but whose objects level 3 must find identical. token_deltas: the named TUs whose portable replacement changes Linux code on purpose, allowed at level 2.",
+ "about": "Reviewed source changes v1.0.11 did not ship: portability fixes for platforms it never compiled (fold step B6), and guard fixes that keep the compiled code identical (B8). files: each pinned to its reviewed bytes (layout-insensitive sha256 of the C/C++ tokens, equivalence.py closure_digest); level 1 and the closure check compare against that instead of the shipped bytes. objects_identical: Linux TUs whose tokens change but whose objects level 3 must find identical. token_deltas: the named TUs whose portable replacement changes Linux code on purpose, allowed at level 2.",
  "files": {
   "runtime-recomp/src/game/achievements.cpp": {
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++.",
-   "sha256": "f17da14cff56cee42d8d3d6a2e9b6e3fc37c9371747e3cd005238c3c5dab124f"
+   "sha256": "10c952dc881679507b79f2b5fc5a73ed4105f69725bbe7dc3c998d00f58ffca3"
   },
   "runtime-recomp/src/game/connection_ui.inl": {
    "reason": "The live Rollback panel reads experimental::runtime_view(), which runtime_ui.cpp declares only with DKR_EXPERIMENTAL_RACE_TEST; v1.0.11 always defined it, Apple builds do not. The panel is under the same condition (token-identical where it is defined).",
-   "sha256": "195f54afae6b774d77fdb0b0b4ae5775ab0f9b62dc30c5de9f7a2a56762de975"
+   "sha256": "af0a0f3d15db1d090538681e59534f2e02def244f3aa3759b546f2955a265945"
   },
   "runtime-recomp/src/game/f3ddkr_rt64.cpp": {
    "reason": "Metal builds have no enhanced-water renderer; the water_residency_rt64.hpp include is skipped under __APPLE__ (token-identical elsewhere).",
-   "sha256": "6a669be2a612362d7f67a9e3df3faa1b48166637ca1d0179d5414f4d7e9690d4"
+   "sha256": "ceb003649c421d0bcefbcd0ebb1b31db711d97da2dfedc3f9eec292b820c6dcd"
   },
   "runtime-recomp/src/game/mod_store.cpp": {
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++. Android links no HTTPS backend, so its curl include and backend are skipped there (the store reports itself unavailable).",
-   "sha256": "17eeb41f6343d41a008774585a3f1fccd196c79b9063a0853aac8062d0ef622e"
+   "sha256": "92c1b24f8dd305d4d195d7af01c11bcaea269221f780eae6f6e25ea4ceb7cb32"
   },
   "runtime-recomp/src/game/mod_store_install.cpp": {
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++. libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
-   "sha256": "2a26f704b2e2b8699c1cb1ab98f5491aba6454d8660c13e91e052f56fc697f30"
+   "sha256": "dd84f0fbc2527bca4f77e2e1e7a4abe68514b1001ae0296d1ba436be765f6c9a"
   },
   "runtime-recomp/src/game/mod_store_names.cpp": {
    "reason": "libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
-   "sha256": "b32f11a1484b0a649d7cc5962e926fdec663f126e7c9363bcc967ca687b7eafe"
+   "sha256": "201d8ecc1aabcc5999c52f1f9ac10793ddaa9a6a8f75273fb0a7af52797e1493"
   },
   "runtime-recomp/src/game/netplay/experimental_runtime.cpp": {
    "reason": "The four digests runtime_engine_identity appends to the owned adapter identity are DKR_LEGACY_ENGINE_SALT_1..4 in netplay/legacy_identity.hpp (B8: the guard refuses digests spliced into an identity anywhere else). The TU now also reads that header; its preprocessed tokens are unchanged (level 2).",
-   "sha256": "55d1eb9ff4bcba7691fad06bb42ccaa854c4a6359e7a4ce2809f4f71e50650da"
+   "sha256": "9d621e938a39146c1d5fff38ec4de2d33fbdf1db91d7ab62e6bb194d65f61b9e"
   },
   "runtime-recomp/src/game/online_directory.cpp": {
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++.",
-   "sha256": "74547dc4930c827598f1a6fd62cbd64c3575d455df952581393acec3a04d1d71"
+   "sha256": "cfc554837bf830825f0257b0d33b94388dec9b1966d49a8ecf5ffa7f200c143e"
   },
   "runtime-recomp/src/game/texture_gallery.inl": {
    "reason": "libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
-   "sha256": "a4b3f753ac48d5299094fd48cdc31a2a65afa645e50ccc5f548007b77ebc01c7"
+   "sha256": "98850e8a75a301d7f334b5dab28aa33bd1c8276d669e9bb28fcaf0bc2563adde"
   },
   "runtime-recomp/src/game/vehicle_binding.cpp": {
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++.",
-   "sha256": "823af3eab2ff306d0c112e22bceb39dac0885b4249165aa4935319215934e574"
+   "sha256": "73c99a94241ec9eb7012a5c55c3695efb1a2f701d6d0b6927bd7eb6a98e8a389"
   }
  },
  "objects_identical": [

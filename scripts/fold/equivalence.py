@@ -62,8 +62,12 @@ from typing import cast
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import apply_closure  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import dependency_stages  # noqa: E402
 import prepared  # noqa: E402
+
+import format_tokens  # noqa: E402
 
 ROOT = apply_closure.ROOT
 ALLOWED = ROOT / "scripts/fold/allowed-deltas.json"
@@ -1089,13 +1093,15 @@ def run_options(args: argparse.Namespace) -> int:
 
 
 CLOSURE = ROOT / "scripts/fold/closure.json"
-WHITESPACE = re.compile(rb"\s+")
 
 
 def closure_digest(data: bytes) -> str:
-    """sha256 of a closure file as level 1 compares it, with whitespace
-    dropped as well, so the record survives the format-only commit (B9)."""
-    return hashlib.sha256(WHITESPACE.sub(b"", comparable(data))).hexdigest()
+    """sha256 of a closure file's C/C++ tokens (scripts/format_tokens.py:
+    comments and whitespace dropped), after what level 1 sets aside, so the
+    record survives the format-only commit (B9), comment reflow included."""
+    return hashlib.sha256(
+        "\0".join(format_tokens.tokens(comparable(data))).encode("utf-8", "surrogateescape")
+    ).hexdigest()
 
 
 def run_closure(args: argparse.Namespace) -> int:
@@ -1114,7 +1120,7 @@ def run_closure(args: argparse.Namespace) -> int:
             if folded.is_relative_to(ROOT / "runtime-recomp"):
                 files[folded.relative_to(ROOT).as_posix()] = closure_digest(staged.read_bytes())
         record = {
-            "about": "Whitespace-insensitive sha256 (scripts/fold/equivalence.py closure_digest) of every "
+            "about": "Layout-insensitive sha256 (scripts/fold/equivalence.py closure_digest: C/C++ tokens) of every "
             "first-party file the shipped v1.0.11 binaries compile, as folded. Written from the reference "
             "with `equivalence.py closure --reference DIR --write`; CI runs `closure --check`.",
             "files": dict(sorted(files.items())),
@@ -1131,7 +1137,7 @@ def run_closure(args: argparse.Namespace) -> int:
         if not path.is_file():
             problems.append(f"{dest}: missing")
         elif closure_digest(path.read_bytes()) != digest:
-            problems.append(f"{dest}: differs from the shipped v1.0.11 file (whitespace aside)")
+            problems.append(f"{dest}: differs from the shipped v1.0.11 file (layout aside)")
     for problem in problems:
         print(problem)
     print(f"closure: {len(files)} files checked, {len(problems)} differ", file=sys.stderr)
