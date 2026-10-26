@@ -56,6 +56,12 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("its file name", sources)
         self.assertTrue(any(source.startswith("modding/reference-us-v") for source in sources), sources)
 
+    def test_staged_patches_are_pinned(self):
+        manifest = json.loads((ROOT / "patches/manifest.json").read_text(encoding="utf-8"))
+        staged = {patch["path"] for patch in manifest["stagedPatches"]}
+        self.assertTrue(staged)
+        self.assertLessEqual(staged, set(check_pinned_bytes.pins(ROOT)))
+
     def test_pre_commit_never_hands_a_pinned_file_to_a_fixer(self):
         exclude = top_level_exclude()
         reachable = [path for path in check_pinned_bytes.pins(ROOT) if not exclude.search(path)]

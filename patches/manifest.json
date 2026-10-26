@@ -334,5 +334,279 @@
         }
       ]
     }
+  ],
+  "stagedPatches": [
+    {
+      "path": "patches/android/background-shader-priority.patch",
+      "sha256": "b9488dfc19966959bc2fb83c71e265cbf10acf49d120ea6ae96a3f82a901631e"
+    },
+    {
+      "path": "patches/android/buffer-small-upload.patch",
+      "sha256": "940ddcea6a1260cfbd9aee7a6de84eb68578642bed0ca469c5a7131185d155d3"
+    },
+    {
+      "path": "patches/android/buffer-worker-lifecycle.patch",
+      "sha256": "b91ae701ac83c58a988a4f7dfd650631e4b2c3b64f296a776dae4d3a66110433"
+    },
+    {
+      "path": "patches/android/frame-budget.patch",
+      "sha256": "ac8fcdf8f168e6d825f6ac31fd30477bbb5507b43c0554df53f24db0629d6bbd"
+    },
+    {
+      "path": "patches/android/inspector-prerotation.patch",
+      "sha256": "b5460d5411aec6d2990c7eec431168bdb5d051caeb402cf3a3076bbe557cdba1"
+    },
+    {
+      "path": "patches/android/present-surface-ownership.patch",
+      "sha256": "b704680d869afb14e7975aaa401d097b99b07dfc5bf2432069b052fb2b6399d0"
+    },
+    {
+      "path": "patches/android/render-idle-priority.patch",
+      "sha256": "7e00da02d9c776c111d1dc31a33570e7e46da919a160eb3439326389d0f182d8"
+    },
+    {
+      "path": "patches/android/render-pass-retention.patch",
+      "sha256": "3ed3d03a01f446605a1696fa89c490fd2d7812c1139af3dc403377307debd248"
+    },
+    {
+      "path": "patches/android/render-stage-timing.patch",
+      "sha256": "7b6fa825f6bd4ec47c13b0c82279a4b9e62139a1669754c852c16f7324dc21f1"
+    },
+    {
+      "path": "patches/android/renderer-transfer-qualification.patch",
+      "sha256": "57188fbcd9199fd3897c9930703fa410dc00d4c3b4ccbe2dadfa18e36b6accab"
+    },
+    {
+      "path": "patches/android/rt64-rgba-presentation.patch",
+      "sha256": "13747dda882b50f31c941a4b6e93f528057d1401b8978363d7cd6acc64881b7f"
+    },
+    {
+      "path": "patches/android/sdl2-vulkan-surface-lifecycle.patch",
+      "sha256": "5dfbd27dbcf06506eef46d089818cc05e9a817712ae190afcb4829ed0027e28b"
+    },
+    {
+      "path": "patches/android/texture-memory-pressure.patch",
+      "sha256": "c6f2055f0b96ec95db84277c0e28bc570ca79d3c7408b42c0d2e1e47f3d3008b"
+    },
+    {
+      "path": "patches/android/vi-prerotation.patch",
+      "sha256": "76c9b532e027ae7b879dd117ca6a554ddad98e6097b444dc3924182a48a41187"
+    },
+    {
+      "path": "patches/android/video-library-prerotation.patch",
+      "sha256": "7504d48436720478d5a623a206c7dbd9740f132e8da3e39e36b7c818cdf7eb7f"
+    },
+    {
+      "path": "patches/android/vulkan-capability-preflight.patch",
+      "sha256": "1b5789bcba4db61242b50d393c2ae6df2f571e53733f3792dcb45a15c81d51d1"
+    },
+    {
+      "path": "patches/android/vulkan-copy-contract.patch",
+      "sha256": "ee8ace2f9e9cadda5ed53a412b9d1c64b47e4bf48550e74c9f89c767296a4cb7"
+    },
+    {
+      "path": "patches/android/vulkan-descriptor-safety.patch",
+      "sha256": "88edddb2307215de7a5c4af04482b32e767b9d16e0bb7ce621a2a47f78b1764f"
+    },
+    {
+      "path": "patches/android/vulkan-mapped-memory.patch",
+      "sha256": "50d40e66fcf1d918d7a0a424dfbb44c8344b3dce65df99d9b4243aaef664acab"
+    },
+    {
+      "path": "patches/android/vulkan-pass-retention.patch",
+      "sha256": "adb4fe7276dd12fc1d1aa8dec749d11f40ce575216fb42f0af1f063cecd3f420"
+    },
+    {
+      "path": "patches/android/vulkan-pipeline-cache.patch",
+      "sha256": "b59d22a1cc929aef635ef32e71858895e46f62da78aafab2b01b4e293d17b494"
+    },
+    {
+      "path": "patches/android/vulkan-prerotation.patch",
+      "sha256": "ae950cf5882919214800728f904e566074aee01f388bb171bcf032cf2baa403f"
+    },
+    {
+      "path": "patches/android/vulkan-read-barriers.patch",
+      "sha256": "3d1413df16d70c6ddada26da38f1aa0e798707a3c8597386de3a05addbc4738a"
+    },
+    {
+      "path": "patches/android/vulkan-resource-failures.patch",
+      "sha256": "1d742c35f46fc24d2a14748f3ac383891991e5a24a54a35b8d09053f01fb1896"
+    },
+    {
+      "path": "patches/android/vulkan-surface-capabilities.patch",
+      "sha256": "1f670f9001d18bfd980a4a05ef7ce3c83b3ba2a66ec071ac47e0e8f35c294c3a"
+    },
+    {
+      "path": "patches/android/vulkan-surface-recovery.patch",
+      "sha256": "1374f8d309d8f2636b371890eda0f9bd8a9683bf77172307dfb25f204cfd8005"
+    },
+    {
+      "path": "patches/custom-magic-codes/runtime-code-heap.patch",
+      "sha256": "e8ae00e32a057cb017114117c4d6241f68a26326820ed4ae3153e22d7a7ec827"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-adapter.patch",
+      "sha256": "4642c14a3d04dce9ef214f94c97c414e568e423684e320d61bca50f89bbb5f64"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-budget.patch",
+      "sha256": "f6fb8a7c2ec16b35d48a3a036c3912037d383c0adcd6e385f3bb64b903cfa423"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-field-portability.patch",
+      "sha256": "7cbd337b32d9803d8c513cc57f87382eba686adf479f8ec21dcd5af40c8c620e"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-lava-glow.patch",
+      "sha256": "5c4a7b0fb397a635320e3a235e87acb4f59db4a0c9bcbcc5ef976c3583c84b81"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-lava-lighting.patch",
+      "sha256": "2a7e6f3e8a58c15e2f70b3413cc0940a9ebf9fce71597131fe3090af596c1e0d"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-lava.patch",
+      "sha256": "e382907945305090804beef96c523620c88f8da3ccb032c0fb4739f16c812981"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-performance.patch",
+      "sha256": "015b9ebf09156e17eece641499b245a032e00cbc56a7d509dcce63e3932f588e"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-projection.patch",
+      "sha256": "8b3d334f91e7b9b286c4cc6f1dfdb098c7c7d366e8c222ba535663293befcbed"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-ray-capabilities.patch",
+      "sha256": "9545995da3b0f92b1eb8736aa3b12431efcc5eae8ae6e0cec971016dd07c9a11"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-rays.patch",
+      "sha256": "fd1ddf89af0fa3a60eea3062a40f58da7b704e5b2c567e50297f06bfdddd5393"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-recovery.patch",
+      "sha256": "2b162c46fc5dc79dc327c22f2d9470cdc8ea34a65970330b0cc78d3041b82037"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-reflection-search.patch",
+      "sha256": "3a8ad3a9ba77234e6aa53b90b4e5187874faf07932e39d390f97f88d9d692457"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-safety.patch",
+      "sha256": "b3638a3f68a1afd83f6d45fa15d80a2166f98dcb9f1dc3f1972159ffc6a5c118"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-stability.patch",
+      "sha256": "75f1860b0fcf35b6d89f126ab82878d1466ed6fd645601c4c46d5b8d7a225131"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-views.patch",
+      "sha256": "1bbd2534efc86bf666f53e71db5fc83c4e42c1195fea34ce3c5ef300ec241649"
+    },
+    {
+      "path": "patches/enhanced-water/dkr-waterfall.patch",
+      "sha256": "16958771541b0c783a78e33c5463de2f3e3149ddb59bc6f47fe21902dfe63b47"
+    },
+    {
+      "path": "patches/enhanced-water/renderer.patch",
+      "sha256": "5570a4cfee2853cdb15894d1ee61c892c52ae5edd3d8c1336884e00ba398e3d2"
+    },
+    {
+      "path": "patches/netplay/experimental-present-queue.patch",
+      "sha256": "0eb6f94fad077db2d39553ba6dd764b00c4e1d59e87b7555a0dac668f854d583"
+    },
+    {
+      "path": "patches/netplay/experimental-present-state.patch",
+      "sha256": "aa9006ed30b5c1aa35ae82ae0c72f03055995a0543859f22ce0a140db85d52a7"
+    },
+    {
+      "path": "patches/netplay/experimental-quiesced-bootstrap.patch",
+      "sha256": "08eaed04e74da17ba58d572303b99aeb9bd9447f57003201827b57889f5d7983"
+    },
+    {
+      "path": "patches/netplay/experimental-workload-history.patch",
+      "sha256": "015a91eb28b2f0f045ccc77ab3f1aedd97e430923431188144b2fd1217f7ba90"
+    },
+    {
+      "path": "patches/performance/present-queue-wait.patch",
+      "sha256": "8203d2400a8164e636fb7f3f483fc5fee38c3ed3022df819b614b75fd7242c78"
+    },
+    {
+      "path": "patches/performance/presentation-wait.patch",
+      "sha256": "b340f5b36ada3e7704ee29f3eb0f57e1f9d33d838788ecb49b04394283c01bf6"
+    },
+    {
+      "path": "patches/performance/renderer-measurements.patch",
+      "sha256": "9f08d380bf00f0e101172cac8f7b57b49a55ededd0fe18dd486b0317f0bc4ad0"
+    },
+    {
+      "path": "patches/performance/renderer-workers.patch",
+      "sha256": "379797cb6180e2834ffdce42ed387960f07cde1ddc368b74199dccee5525c6b1"
+    },
+    {
+      "path": "patches/performance/runtime-deferred-events.patch",
+      "sha256": "39f15b90ce7721c91dc21c23923a9f91742ab42eeb9a17954106914a1f64ac24"
+    },
+    {
+      "path": "patches/performance/runtime-guest-cancellation.patch",
+      "sha256": "7105adf224f400815c11fabbcf766ecf3b5c003188ccfa770b3b6724e458cad9"
+    },
+    {
+      "path": "patches/performance/runtime-guest-lifetime.patch",
+      "sha256": "c16029e5d16856667764729d642929446512fef8b7fe70fb4ef6e9cddabdc5e2"
+    },
+    {
+      "path": "patches/performance/runtime-host-task-lifetime.patch",
+      "sha256": "5bbca94badfd302b9ea7a00ab8dbc1aadd6f1874bc12a4ac9c7495edf4f891de"
+    },
+    {
+      "path": "patches/performance/runtime-idle-diagnostics.patch",
+      "sha256": "49905bdbcb6109b6e03a5f85691c172d0d9b241abf306aefe23e5df87aac9328"
+    },
+    {
+      "path": "patches/performance/runtime-session-bootstrap.patch",
+      "sha256": "1079c6b4c5be4957d73f9c96811a38586ca74c3091b2d148d7e31ba15f7d0389"
+    },
+    {
+      "path": "patches/performance/runtime-snapshot-pool.patch",
+      "sha256": "ee2431a615ac0585889cb927710587ddb7619e06f9cc175d7c2d2d0262aabbb9"
+    },
+    {
+      "path": "patches/performance/runtime-vi-bootstrap.patch",
+      "sha256": "9e8a0bf597611f7bd21efd58af81cb9e4cf984269eb0351652fcd0ce2599521b"
+    },
+    {
+      "path": "patches/performance/shader-cache-wait.patch",
+      "sha256": "9dc859d4efce3e830248d55d0c43eb09c813086daa6e29a8aa0cf0517cb2ae1b"
+    },
+    {
+      "path": "patches/performance/vulkan-measurements.patch",
+      "sha256": "e3ec8d53e11d415c090b32a476604230bf14ba26b0bb679898b243d1ed2d59eb"
+    },
+    {
+      "path": "patches/performance/water-renderer-history.patch",
+      "sha256": "fd038ead338a0b2b17f6a3c6de0955cbdbe795a0ecf1f35f46fc260a926946ab"
+    },
+    {
+      "path": "patches/performance/water-scroll-interpolation.patch",
+      "sha256": "fc21772817323efa6e7d4ae5ce960b398110005a0563191a92a4cfcb0256574f"
+    },
+    {
+      "path": "patches/performance/workload-queue-wait.patch",
+      "sha256": "a36a946498f9ccf96781c30025c8baefbf3c78ae37f73d76a1574e8fa1711aa5"
+    },
+    {
+      "path": "patches/rt64/texture-layer-mip-cache.patch",
+      "sha256": "78f925d234f30d66b35e8cf74de2b7f162f58b2ffb4fd4aa7baf7fe3000a0ad5"
+    },
+    {
+      "path": "patches/rt64/texture-layer-priority.patch",
+      "sha256": "55cbaa6031f8b1b89bb272c8a233e1acc68058db9a7a7d6ec9913ea4ff8c57d5"
+    },
+    {
+      "path": "patches/startup-memory/runtime-memory.patch",
+      "sha256": "07c4e61dec8b7388cc9475f31177cb2f584bd90cd108fe3b4f091d25e05a4126"
+    }
   ]
 }

@@ -126,8 +126,9 @@ RULES = {
             "PG007",
             "unregistered-dependency-patch",
             "a dependency *.patch, or a dkr_stage_patch() patch, missing from patches/manifest.json "
-            "or with a stale sha256",
-            "register the patch with its sha256 in patches/manifest.json",
+            "or with a stale sha256; or a stagedPatches entry no runtime-recomp CMake applies",
+            "register the patch with its sha256 in patches/manifest.json (stagedPatches for "
+            "dkr_stage_patch), or drop the entry with the call",
         ),
         Rule(
             "PG008",
@@ -185,6 +186,9 @@ PIPELINE_ALLOWED = {
     # Fold-only (step B1): writes the shipped closure into runtime-recomp/ once,
     # respelling staged #include paths. Deleted with scripts/fold/ after C11.
     "scripts/fold/apply_closure.py": "writes the shipped v1.0.11 closure back into the tree once",
+    # Fold-only (step B3): diffs the stage chain against the shipped dependency
+    # transforms into registered stage patches, respelling the same includes.
+    "scripts/fold/dependency_stages.py": "writes the v1.0.11 dependency transforms as stage patches",
 }
 GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake"}
 IDENTITY_ALLOWED_SUFFIX = "netplay/legacy_identity.hpp"
@@ -415,16 +419,35 @@ class Tree:
 
     @functools.cached_property
     def registered_patches(self) -> dict[str, str]:
-        """patches/manifest.json path -> sha256 for every dependency patch."""
+        """patches/manifest.json path -> sha256 for every dependency patch:
+        the ones applied to a checkout (``dependencies[].patches[]``) and the
+        ones dkr_stage_patch applies to a staged copy (``stagedPatches[]``)."""
         try:
             manifest = json.loads(self.text("patches/manifest.json") or "{}")
         except json.JSONDecodeError:
             return {}
+        entries = [
+            *(patch for dependency in manifest.get("dependencies", []) for patch in dependency.get("patches", [])),
+            *manifest.get("stagedPatches", []),
+        ]
+        return {patch["path"]: patch.get("sha256", "") for patch in entries if "path" in patch}
+
+    @functools.cached_property
+    def staged_patch_entries(self) -> list[str]:
+        try:
+            manifest = json.loads(self.text("patches/manifest.json") or "{}")
+        except json.JSONDecodeError:
+            return []
+        return [patch["path"] for patch in manifest.get("stagedPatches", []) if "path" in patch]
+
+    @functools.cached_property
+    def cmake_patch_references(self) -> set[str]:
+        """patches/....patch paths named anywhere in runtime-recomp's CMake."""
         return {
-            patch["path"]: patch.get("sha256", "")
-            for dependency in manifest.get("dependencies", [])
-            for patch in dependency.get("patches", [])
-            if "path" in patch
+            match.group(1)
+            for path in self.files
+            if path.startswith("runtime-recomp/") and is_cmake(path)
+            for match in re.finditer(r"(?:^|[/}\s\"])(patches/[^\s\")]+\.patch)", self.text(path) or "")
         }
 
     @functools.cached_property
@@ -753,6 +776,10 @@ def first_party_under_patches(tree: Tree, path: str) -> Iterator[Finding]:
 def unregistered_dependency_patch(tree: Tree, path: str) -> Iterator[Finding]:
     """PG007: dependency patches and staged patches go through one registry."""
     registered = tree.registered_patches
+    if path == "patches/manifest.json":
+        for entry in tree.staged_patch_entries:
+            if entry not in tree.cmake_patch_references:
+                yield Finding(path, 1, "PG007", f"staged patch {entry} is not applied by runtime-recomp CMake")
     if path.endswith(".patch") and "/".join(path.split("/")[:2]) in tree.dependency_dirs:
         if path not in registered:
             yield Finding(path, 1, "PG007", "dependency patch is not in patches/manifest.json")

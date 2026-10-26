@@ -5,7 +5,8 @@ Three kinds of file are pinned by sha256 and must keep their exact bytes, even
 where they carry trailing whitespace or CRLF line endings that a formatter
 would "fix":
 
-* every patch listed in patches/manifest.json (``dependencies[].patches[]``);
+* every patch listed in patches/manifest.json (``dependencies[].patches[]``
+  and ``stagedPatches[]``);
 * the address-only SDK kits, modding/reference-us-v*/, against the ``files``
   map in each kit's receipt.json;
 * the content-addressed source capsules, patches/release-prep/*/source-capsule-*/,
@@ -108,6 +109,8 @@ def pins(root: Path) -> dict[str, tuple[str, str]]:
     for dependency in manifest["dependencies"]:
         for patch in dependency.get("patches", []):
             pinned[patch["path"]] = (patch["sha256"], PATCH_MANIFEST)
+    for patch in manifest.get("stagedPatches", []):
+        pinned[patch["path"]] = (patch["sha256"], PATCH_MANIFEST)
     for receipt in sorted(root.glob(RECEIPTS)):
         source = receipt.relative_to(root).as_posix()
         kit = receipt.parent.relative_to(root).as_posix()
