@@ -154,6 +154,12 @@ class Mapping:
             for row in self.reference.rows
             if row.kind == "dependency-transform" and row.original in staged
         }
+        # Guest transforms (B4): each shipped funcs_N.c/guest_N.c pairs with
+        # its guest-hooks copy (cmake/GuestHooks.cmake).
+        for row in self.reference.rows:
+            hooked = self.guest_hooked(row) if row.kind == "guest-transform" else None
+            if hooked is not None:
+                self.dependency[row.staged] = hooked
 
     def build_aliases(self) -> dict[str, str]:
         """Build directories named after a content hash whose inputs include
@@ -167,6 +173,21 @@ class Mapping:
             if len(old) == 1 and len(new) == 1:
                 aliases[old[0].name] = new[0].name
         return aliases
+
+    def guest_hooked(self, row: apply_closure.Row) -> Path | None:
+        match = re.search(r"/DKR(RecompiledFuncs|ExperimentalOwnedGame)V(77|80)/", str(row.staged))
+        if match is None:
+            match = re.search(r"/guest(77|80)/", str(row.staged))
+            payload, revision = ("funcs", match.group(1)) if match else (None, None)
+        else:
+            payload = "funcs" if match.group(1) == "RecompiledFuncs" else "owned"
+            revision = match.group(2)
+        if payload is None:
+            return None
+        dirs = sorted((self.folded_build / "generated").glob(f"guest-hooks-{payload}-v{revision}-*"))
+        if len(dirs) != 1 or not (dirs[0] / row.staged.name).is_file():
+            return None
+        return dirs[0] / row.staged.name
 
     def build_path(self, path: Path) -> Path:
         parts = list(path.relative_to(self.reference.build).parts)
@@ -203,7 +224,7 @@ class Mapping:
         row = rows.get(path)
         if row is not None and row.kind == "dependency-transform" and path not in self.dependency:
             return "dependency transform (fold step B3)"
-        if row is not None and row.kind in ("guest-transform", "guest-derived"):
+        if row is not None and row.kind in ("guest-transform", "guest-derived") and path not in self.dependency:
             return "guest code (fold step B4)"
         if layer is not None:
             return f"staged by layer {layer} (fold step B3 or B4)"
@@ -371,6 +392,9 @@ def run_targets(args: argparse.Namespace) -> int:
     problems: list[str] = []
     for problem in found:
         portable = problem.replace(str(args.folded_build), "<build>").replace(str(ROOT) + "/", "")
+        # Guest-hook copies live in a content-addressed directory; name it by
+        # payload and revision so a recorded delta survives a spec edit.
+        portable = re.sub(r"/generated/(guest-hooks-[a-z]+-v\d+)-[0-9a-f]{64}/", r"/generated/\1/", portable)
         reason = explained(portable, allowed)
         if reason is None:
             problems.append(portable)

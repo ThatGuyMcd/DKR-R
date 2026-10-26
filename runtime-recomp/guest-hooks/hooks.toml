@@ -1,0 +1,209 @@
+# Guest hooks: what the runtime adds to N64Recomp output (scripts/guest_hooks.py
+# documents the format). payloads: funcs = DKRRecompiledFuncsV77/V80, owned =
+# the experimental owned game. Every hook applies exactly once per payload.
+schema = 1
+
+# Achievements: observe the frame after each main loop pass (achievements).
+[[hook]]
+id = "achievements-observe"
+function = "main_game_loop"
+payloads = ["funcs"]
+returns = '''extern void dkr_achievements_observe(uint8_t*,unsigned);
+    dkr_achievements_observe(rdram,{revision});
+    '''
+
+# Identical racer residency on every peer (all-player-detail). Both
+# revisions save the spawn flags at sp+6c; clear their skip bits for racers.
+[[hook]]
+id = "all-player-residency"
+function = "spawn_object"
+payloads = ["funcs", "owned"]
+[[hook.edits]]
+match = '''ctx->r3;
+    after_2:'''
+replace = '''ctx->r3;
+    after_2:
+    // all-player-residency-v1: every racer spawn uses identical residency on
+    // all peers, independent of local quality. Ghost/boss calls with no skip
+    // bits are unchanged, as are intentional NO_LODS previews.
+    if((uint32_t)ctx->r2>=0x80000000U&&(uint32_t)ctx->r2<=0x807FFF88U&&
+        MEM_BU(0x54,ctx->r2)==1U)
+        MEM_W(0X6C,ctx->r29)&=~12U;
+'''
+
+# Detail observer around each mesh draw (all-player-detail).
+[[hook]]
+id = "detail-mesh"
+function = "render_mesh"
+payloads = ["funcs"]
+entry = '''    uint32_t detail_event[19]={0};
+    extern void dkr_detail_mesh_begin(uint8_t*,recomp_context*,uint32_t*);
+    extern void dkr_detail_mesh_end(uint8_t*,recomp_context*,uint32_t*);
+    dkr_detail_mesh_begin(rdram,ctx,detail_event);
+'''
+returns = '''dkr_detail_mesh_end(rdram,ctx,detail_event);
+    '''
+
+# Custom vehicles: character events around model and wheel draws.
+[[hook]]
+id = "vehicle-model-scope"
+function = "render_3d_model"
+payloads = ["funcs", "owned"]
+entry = '''    const uint32_t vehicle_object=(uint32_t)ctx->r4;
+    uint32_t vehicle_scope=0;
+    { recomp_context vc=*ctx; vc.r2=0; extern void dkr_legacy_character_event(uint8_t*,recomp_context*,unsigned,uint32_t);
+      dkr_legacy_character_event(rdram,&vc,200U,vehicle_object); vehicle_scope=(uint32_t)vc.r2; }
+'''
+returns = '{ recomp_context vc=*ctx; vc.r8=vehicle_scope; extern void dkr_legacy_character_event(uint8_t*,recomp_context*,unsigned,uint32_t); dkr_legacy_character_event(rdram,&vc,201U,vehicle_object); } '
+
+[[hook]]
+id = "vehicle-wheel-scope"
+function = "render_sprite_billboard"
+payloads = ["funcs", "owned"]
+entry = '''    const uint32_t vehicle_wheel=(uint32_t)ctx->r7;
+{ recomp_context vc=*ctx; vc.r8=0; extern void dkr_legacy_character_event(uint8_t*,recomp_context*,unsigned,uint32_t); dkr_legacy_character_event(rdram,&vc,202U,vehicle_wheel); }
+'''
+returns = '{ recomp_context vc=*ctx; vc.r8=0; extern void dkr_legacy_character_event(uint8_t*,recomp_context*,unsigned,uint32_t); dkr_legacy_character_event(rdram,&vc,203U,vehicle_wheel); } '
+
+[[hook]]
+id = "vehicle-object-event"
+function = "func_80053750"
+payloads = ["funcs", "owned"]
+entry = '''{ recomp_context vc=*ctx; vc.r8=0; extern void dkr_legacy_character_event(uint8_t*,recomp_context*,unsigned,uint32_t); dkr_legacy_character_event(rdram,&vc,204U,(uint32_t)ctx->r4); }
+'''
+
+# Custom vehicles: the track menu's vehicle picker.
+[[hook]]
+id = "track-select-init"
+function = "menu_track_select_init"
+payloads = ["funcs", "owned"]
+returns = '{ recomp_context vc=*ctx; extern int dkr_legacy_track_menu(uint8_t*,recomp_context*,unsigned,const uint32_t*,unsigned); dkr_legacy_track_menu(rdram,&vc,100U,0,0U); } '
+
+[[hook]]
+id = "track-select-unload"
+function = "menu_track_select_unload"
+payloads = ["funcs", "owned"]
+entry = '''{ recomp_context vc=*ctx; extern int dkr_legacy_track_menu(uint8_t*,recomp_context*,unsigned,const uint32_t*,unsigned); dkr_legacy_track_menu(rdram,&vc,104U,0,0U); }
+'''
+
+[[hook]]
+id = "track-menu-input"
+function = "func_80092188"
+payloads = ["funcs", "owned"]
+entry = '''    { recomp_context vc=*ctx; extern int dkr_legacy_track_menu(uint8_t*,recomp_context*,unsigned,const uint32_t*,unsigned); if(dkr_legacy_track_menu(rdram,&vc,101U,0,0U))return; }
+'''
+returns = '{ recomp_context vc=*ctx; extern int dkr_legacy_track_menu(uint8_t*,recomp_context*,unsigned,const uint32_t*,unsigned); dkr_legacy_track_menu(rdram,&vc,102U,0,0U); } '
+
+[[hook]]
+id = "track-menu-assets"
+function = "trackmenu_assets"
+payloads = ["funcs", "owned"]
+entry = '''    const unsigned vehicle_asset_type=(unsigned)ctx->r4;
+'''
+returns = 'if(vehicle_asset_type==1U){ recomp_context vc=*ctx; extern int dkr_legacy_track_menu(uint8_t*,recomp_context*,unsigned,const uint32_t*,unsigned); dkr_legacy_track_menu(rdram,&vc,105U,0,0U); } '
+
+# The picker replaces only the lower vehicle/TT/CPU widgets; the native
+# camera, title, timestamps, balloons, delay slots and epilogue stay.
+[[hook]]
+id = "track-menu-picker"
+function = "trackmenu_setup_render"
+payloads = ["funcs"]
+entry = '''    int vehicle_picker=0;
+    { recomp_context vc=*ctx; extern int dkr_legacy_track_menu(uint8_t*,recomp_context*,unsigned,const uint32_t*,unsigned);
+      vehicle_picker=dkr_legacy_track_menu(rdram,&vc,103U,0,0U); }
+'''
+[hook.vars.77]
+branch = "// 0x800915AC: beq         $t5, $at, L_80091F08\n    if (ctx->r13 == ctx->r1) {"
+picked = "// 0x800915AC: beq         $t5, $at, L_80091F08\n    if (vehicle_picker || (ctx->r13 == ctx->r1)) {"
+lower = "80092010"
+finish = "80092150"
+[hook.vars.80]
+branch = "// 0x80091AA4: beq         $t7, $at, L_80092400\n    if (ctx->r15 == ctx->r1) {"
+picked = "// 0x80091AA4: beq         $t7, $at, L_80092400\n    if (vehicle_picker || (ctx->r15 == ctx->r1)) {"
+lower = "8009252C"
+finish = "8009266C"
+[[hook.edits]]
+match = "{branch}"
+replace = "{picked}"
+[[hook.edits]]
+match = "L_{lower}:"
+replace = '''L_{lower}:
+    if(vehicle_picker) {
+        recomp_context vc=*ctx;
+        extern void dkr_vehicle_menu_draw(uint8_t*,recomp_context*,void(*)(uint8_t*,recomp_context*),void(*)(uint8_t*,recomp_context*));
+        dkr_vehicle_menu_draw(rdram,&vc,menu_element_render,get_text_width);
+        goto L_{finish};
+    }'''
+
+# The owned game draws the picker through its checked mod dispatch
+# (online-vehicle-menu) and blocks rather than draw nothing.
+[[hook]]
+id = "owned-track-menu-picker"
+function = "trackmenu_setup_render"
+payloads = ["owned"]
+entry = '''    int vehicle_picker=0;
+    { recomp_context vc=*ctx; extern int dkr_legacy_track_menu(uint8_t*,recomp_context*,unsigned,const uint32_t*,unsigned);
+      vehicle_picker=dkr_legacy_track_menu(rdram,&vc,103U,0,0U); }
+'''
+[hook.vars.77]
+branch = "// 0x800915AC: beq         $t5, $at, L_80091F08\n    if (ctx->r13 == ctx->r1) {"
+picked = "// 0x800915AC: beq         $t5, $at, L_80091F08\n    if (vehicle_picker || (ctx->r13 == ctx->r1)) {"
+lower = "80092010"
+finish = "80092150"
+[hook.vars.80]
+branch = "// 0x80091AA4: beq         $t7, $at, L_80092400\n    if (ctx->r15 == ctx->r1) {"
+picked = "// 0x80091AA4: beq         $t7, $at, L_80092400\n    if (vehicle_picker || (ctx->r15 == ctx->r1)) {"
+lower = "8009252C"
+finish = "8009266C"
+[[hook.edits]]
+match = "{branch}"
+replace = "{picked}"
+[[hook.edits]]
+match = "L_{lower}:"
+replace = '''L_{lower}:
+    if(vehicle_picker) {
+        recomp_context vc=*ctx;
+        uint64_t vehicle_draw_result=0;
+        if(dkr_probe_mod_dispatch("dkr_owned_vehicle_menu_draw",rdram,&vc,0,0,0,0,&vehicle_draw_result)!=1 || !vehicle_draw_result)
+            dkr_probe_block("owned-vehicle-menu-draw-unavailable");
+        goto L_{finish};
+    }'''
+
+# Resize the display-list heap before any generated track or renderer
+# borrows a heap cursor (mod-runtime-repair).
+[[hook]]
+id = "init-track-heap-repair"
+function = "init_track"
+payloads = ["funcs", "owned"]
+entry = '''    /* post-mod-init-track=v1: before callbacks have already run, but no
+       generated track or renderer may have borrowed a heap cursor yet. */
+    const int32_t repair_players=(int32_t)ctx->r6;
+    const int32_t repair_previous=MEM_W(0,(int32_t){symbol:gPrevPlayerCount}U);
+    if(repair_players>=0&&repair_players<4&&repair_previous!=repair_players) {
+        recomp_context repair_context=*ctx;
+        if(repair_players>repair_previous) {
+            extern void dkr_render_heap_reserve(uint8_t*,recomp_context*);
+            dkr_render_heap_reserve(rdram,&repair_context);
+        }
+        repair_context.r4=repair_players;
+        alloc_displaylist_heap(rdram,&repair_context);
+        repair_context.r4=repair_previous;repair_context.r5=repair_players;
+        repair_context.r6=MEM_W(0,(int32_t){symbol:gPrevPlayerCount}U);
+        extern void dkr_render_heap_sync_notice(uint8_t*,recomp_context*);
+        dkr_render_heap_sync_notice(rdram,&repair_context);
+    }
+'''
+
+# Primary drivers keep identical resident models on all peers
+# (vehicle-seating); fp is the vehicle, a3 the Settings row.
+[[hook]]
+id = "primary-driver-residency"
+function = "track_setup_racers"
+payloads = ["funcs", "owned"]
+[[hook.edits]]
+match = '''    MEM_W(0X5C, ctx->r29) = ctx->r7;
+    spawn_object(rdram, ctx);'''
+replace = '''    MEM_W(0X5C, ctx->r29) = ctx->r7;
+    // Identical resident models on all peers; graphics stays local.
+    if((uint32_t)ctx->r30<=2U)ctx->r5&=~(gpr)12U; // primary-driver-lod-residency-v2: fp is vehicle, a3 is Settings row
+    spawn_object(rdram, ctx);'''

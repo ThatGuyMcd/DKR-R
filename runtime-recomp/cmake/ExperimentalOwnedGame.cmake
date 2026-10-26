@@ -55,6 +55,7 @@ function(dkr_add_experimental_owned_game target generated)
     get_filename_component(root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
     set(probe "${root}/tests/replay_probe")
     file(GLOB guest CONFIGURE_DEPENDS "${generated}/guest_*.c")
+    dkr_apply_guest_hooks(guest "${generated}" "${revision}" owned)
     add_library(${target} STATIC EXCLUDE_FROM_ALL
         "${probe}/probe_bridge.c" "${probe}/probe_native.c" "${probe}/probe_eeprom.cpp"
         "${probe}/probe_policies.cpp" "${probe}/probe_presentation.c" "${probe}/probe_component.c" "${probe}/probe_driver.cpp"
