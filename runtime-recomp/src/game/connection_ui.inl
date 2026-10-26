@@ -29,12 +29,15 @@ void DrawOlConnection(float width,const OnlineFrame& frame){
                 PaddockGap(8.F);OlParagraph(m.name+(m.role==lobby_party::Role::Spectator?" (spectator)":" (racer)")+" - "+timing,14.F,kOlSoft,inner);
             }
         }else if(frame.view.network_rtt_ms)OlParagraph("Lobby RTT: "+std::to_string(frame.view.network_rtt_ms)+" ms. Run the Rollback check for input-channel timings.",14.F,kOlSoft,inner);
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
         const auto live=experimental::runtime_view();
         if(live.active){
             PaddockGap(12.F);OlParagraph("Live Rollback: frame "+std::to_string(live.frame)+", confirmed "+std::to_string(live.confirmed)+
                 ", corrections "+std::to_string(live.corrections)+", replayed "+std::to_string(live.replayed)+".",14.F,kOlInk,inner);
             if(!live.status.empty())OlParagraph(live.status,14.F,kOlSoft,inner);
-        }else if(frame.view.state==ConnectionState::Running)OlParagraph("The race is running. Preflight checks are disabled until everyone returns to the lobby.",14.F,kOlSoft,inner);
+        }else
+#endif
+        if(frame.view.state==ConnectionState::Running)OlParagraph("The race is running. Preflight checks are disabled until everyone returns to the lobby.",14.F,kOlSoft,inner);
         if(frame.view.host){PaddockGap(14.F);const OlDisabled disabled(!OlCanTestConnection(frame));if(OlButton("Check Rollback connection",OlTone::Plain))OlRequestConnectionTest();}
         else OlParagraph("The host can run a shared Rollback check while everyone is in the lobby. All participants need the updated build.",14.F,kOlSoft,inner);
         if(g_ol_rollback_check.active){PaddockGap(10.F);OlParagraph("Checking... "+OlTestCountdown(frame),15.F,kOlAmber,inner);}

@@ -5,6 +5,10 @@
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++.",
    "sha256": "f17da14cff56cee42d8d3d6a2e9b6e3fc37c9371747e3cd005238c3c5dab124f"
   },
+  "runtime-recomp/src/game/connection_ui.inl": {
+   "reason": "The live Rollback panel reads experimental::runtime_view(), which runtime_ui.cpp declares only with DKR_EXPERIMENTAL_RACE_TEST; v1.0.11 always defined it, Apple builds do not. The panel is under the same condition (token-identical where it is defined).",
+   "sha256": "195f54afae6b774d77fdb0b0b4ae5775ab0f9b62dc30c5de9f7a2a56762de975"
+  },
   "runtime-recomp/src/game/f3ddkr_rt64.cpp": {
    "reason": "Metal builds have no enhanced-water renderer; the water_residency_rt64.hpp include is skipped under __APPLE__ (token-identical elsewhere).",
    "sha256": "6a669be2a612362d7f67a9e3df3faa1b48166637ca1d0179d5414f4d7e9690d4"
