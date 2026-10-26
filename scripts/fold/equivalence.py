@@ -655,7 +655,7 @@ def run_level1(args: argparse.Namespace) -> int:
     allow = variant_tus(ROOT, forwarders=True)
     allowed = load_allowed(ALLOWED)
     problems: list[str] = list(pairing.unmapped)
-    ported, _ = load_portability()
+    ported, ported_tus = load_portability()
     same_bytes: dict[tuple[Path, Path], bool] = {}
 
     def name(path: Path) -> str:
@@ -690,6 +690,8 @@ def run_level1(args: argparse.Namespace) -> int:
                 )
             if not same_bytes[(dep, folded)] and tu_name not in allow.get(name(folded), set()):
                 problems.append(f"{label}: {name(folded)} differs from what the reference TU read")
+        if label in ported_tus:
+            continue  # its header set changed with the fix; level 3 compares its objects
         problems += [f"{label}: no longer reads {name(dep)}" for dep in sorted(expected - new) if dep.exists()]
         problems += [f"{label}: now reads {name(dep)}" for dep in sorted(new - expected)]
     problems += [
@@ -908,13 +910,15 @@ def run_level3(args: argparse.Namespace) -> int:
     problems: list[str] = []
     checked: list[str] = []
     covered: set[str] = set()
+    compared = 0
     _, ported_tus = load_portability()
     for old_key, new_key in sorted(pairing.pairs.items()):
         name = apply_closure.tu_name(ROOT, mapping.folder, old_key[1])
         label = f"{new_key[0]}: {portable(mapping, new_key[1])}"
         if (name not in split and label not in ported_tus) or new_key not in folded_entries:
             continue
-        covered.add(name if name in split else label)
+        covered |= {name, label}
+        compared += 1
         old_text = (args.reference_pp / f"{output_name(old_key)}.i").read_text(errors="surrogateescape")
         new_text = (args.folded_pp / f"{output_name(new_key)}.i").read_text(errors="surrogateescape")
         if tokens(old_text, mapping) == tokens(new_text, None):
@@ -961,7 +965,7 @@ def run_level3(args: argparse.Namespace) -> int:
         reason = explained(problem, allowed)
         print(problem if reason is None else f"allowed: {problem} ({reason})")
     print(
-        f"level3: {len(covered)} header-variant TUs covered, {len(checked)} compiled, "
+        f"level3: {compared} header-variant and portability TUs covered, {len(checked)} compiled, "
         f"{len(problems) - len(unexplained)} allowed, "
         f"{len(unexplained)} unexplained (diffs in {args.out})",
         file=sys.stderr,
@@ -969,7 +973,7 @@ def run_level3(args: argparse.Namespace) -> int:
     write_record(
         args,
         "level3",
-        covered=len(covered),
+        covered=compared,
         compiled=checked,
         allowed=[problem for problem in problems if problem not in unexplained],
         unexplained=unexplained,
