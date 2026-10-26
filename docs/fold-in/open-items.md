@@ -212,6 +212,14 @@ What the deleted release-prep scripts did, for B9b:
 
 ## For Phase C
 
+- Rollback on Apple: the RACE_TEST FATAL on Apple stays. With it lifted, the
+  configure fails applying `patches/rt64/staged/0001-render-stability.patch`
+  to `rt64_framebuffer_renderer.cpp`: the patch was derived from the
+  Linux/Windows chain, and the Apple chain reaches that file in a different
+  state. Rebase it (and `0003-present-queue-pacer.patch`) onto the Apple
+  chain as registered stage patches, run the rollback tests natively, then
+  lift the FATAL.
+
 - `atomic_snapshot.hpp`'s libc++ branch uses the free `std::atomic_load`/
   `std::atomic_store` on `shared_ptr`, deprecated in C++20 and removed in
   C++26. Replace it with a mutex-guarded holder (a `shared_ptr` under a
