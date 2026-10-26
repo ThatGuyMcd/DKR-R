@@ -53,6 +53,10 @@
   {
    "difference": "DKRExperimentalOwnedGameV80: <build>/generated/guest-hooks-owned-v80/guest_26.c: include dirs lost ['build/owned-id/final'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
+  },
+  {
+   "difference": "DKRPortGame: runtime-recomp/src/game/netplay/experimental_runtime.cpp: now reads runtime-recomp/src/game/netplay/legacy_identity.hpp",
+   "reason": "B8: the four engine identity digests runtime_engine_identity appends are DKR_LEGACY_ENGINE_SALT_1..4 in legacy_identity.hpp, which holds only #defines; level 2 finds the TU token-identical, and its bytes are pinned in portability.json."
   }
  ]
 }
