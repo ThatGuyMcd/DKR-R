@@ -25,6 +25,10 @@ the build image):
                 flags of every shipped first-party TU
     level3      objects of the TUs level 2 lets differ for a header variant,
                 compiled from path-normalized preprocessed output
+    prepared    the inputs scripts/prepare_payloads.py prepares from the
+                N64Recomp payload against the ones the reference was
+                configured with (scripts/fold/prepared.py lists the allowed
+                differences)
 
 Differences that are expected are listed with their reason and do not fail:
 the TUs scripts/fold/header-variants.json names (which then need level 3),
@@ -59,6 +63,7 @@ from typing import cast
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import apply_closure  # noqa: E402
 import dependency_stages  # noqa: E402
+import prepared  # noqa: E402
 
 ROOT = apply_closure.ROOT
 ALLOWED = ROOT / "scripts/fold/allowed-deltas.json"
@@ -1018,6 +1023,33 @@ FOLDED_OPTION = re.compile(r"^(CMAKE_BUILD_TYPE|DKR_\w+)$")
 CHAIN_ONLY = re.compile(r"^DKR_(MATERIALIZE_\w+|RELEASE_EVIDENCE|RELEASE_CAPSULE|\w+_STAGE)$")
 
 
+def reference_options(reference: Path) -> dict[str, str]:
+    """Every -D option of the reference configure, name to value."""
+    script = (reference / "configure-linux.sh").read_text(encoding="utf-8")
+    command = next(line for line in script.splitlines() if line.startswith("cmake "))
+    options: dict[str, str] = {}
+    for arg in shlex.split(command):
+        if arg.startswith("-D"):
+            name, _, value = arg[2:].partition("=")
+            options[name.split(":")[0]] = value
+    return options
+
+
+def run_prepared(args: argparse.Namespace) -> int:
+    counts, unexplained, allowed = prepared.compare(reference_options(args.reference), args.prepared)
+    for line in unexplained:
+        print(f"prepared: UNEXPLAINED {line}", file=sys.stderr)
+    if args.verbose:
+        for line in allowed:
+            print(f"prepared: allowed {line}", file=sys.stderr)
+    print(
+        f"prepared: {counts['identical']} identical, {counts['allowed']} allowed, {counts['unexplained']} unexplained",
+        file=sys.stderr,
+    )
+    write_record(args, "prepared", identical=counts["identical"], allowed=counts["allowed"], unexplained=unexplained)
+    return 1 if unexplained else 0
+
+
 def folded_options(reference: Path) -> tuple[list[str], set[Path]]:
     """The reference's -D options for a folded configure, and the paths
     outside the work tree they name (to mount into the build image)."""
@@ -1133,7 +1165,7 @@ def run_evidence(args: argparse.Namespace) -> int:
         "reference": {name: sha for name, sha in DOC_ROW.findall(REFERENCE_DOC.read_text(encoding="utf-8"))},
         "inputs": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in EVIDENCE_INPUTS},
         "levels": {level.pop("level"): level for level in levels},
-        "passed": all(not level["unexplained"] for level in levels) and len(levels) == 4,
+        "passed": all(not level["unexplained"] for level in levels) and len(levels) == 5,
     }
     atomic_write(args.out, json.dumps(evidence, indent=1) + "\n")
     print(f"evidence: {args.out} ({'passed' if evidence['passed'] else 'FAILED'})", file=sys.stderr)
@@ -1216,6 +1248,11 @@ def main(argv: list[str] | None = None) -> int:
     options.add_argument("--reference", type=Path, required=True)
     options.add_argument("--mounts", action="store_true", help="print the paths outside the tree they name instead")
     options.add_argument("--reference-build", action="store_true", help="print the reference build directory instead")
+    prepared_inputs = sub.add_parser("prepared", help="compare prepare_payloads.py output with the reference inputs")
+    prepared_inputs.add_argument("--reference", type=Path, required=True)
+    prepared_inputs.add_argument("--prepared", type=Path, required=True, help="what prepare_payloads.py wrote")
+    prepared_inputs.add_argument("--verbose", action="store_true", help="also list allowed differences")
+    prepared_inputs.add_argument("--record", type=Path, help="write the result for the evidence record")
     level3 = compared("level3", "object equality for the header-variant TUs (in the build image)")
     level3.add_argument("--folded-compdb", type=Path, required=True)
     level3.add_argument("--reference-pp", type=Path, required=True)
@@ -1246,6 +1283,7 @@ def main(argv: list[str] | None = None) -> int:
         "level1": run_level1,
         "level2": run_level2,
         "level3": run_level3,
+        "prepared": run_prepared,
         "shipped": write_shipped,
         "options": run_options,
         "depscan": run_depscan,

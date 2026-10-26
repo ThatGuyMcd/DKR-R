@@ -15,7 +15,10 @@
 # pins (it is mounted read-only; its scan and preprocess caches go to
 # BUILD_DIR/reference-cache), configure this tree with the reference's options
 # minus the release chain's, check the dependency stage patches reproduce the
-# shipped third-party files (dependency_stages.py), then compare per-source
+# shipped third-party files (dependency_stages.py), check
+# scripts/prepare_payloads.py reproduces the ROM-derived inputs the reference
+# was configured with (prepared; it reads this tree's build/generated and
+# build/decomp, so BUILD_DIR must lie under build/), then compare per-source
 # compile settings and link lines (targets), TU sets, header closures and file
 # bytes (level 1), preprocessed tokens plus compile flags (level 2), and
 # objects for the TUs level 2 lets differ because of a header variant
@@ -74,6 +77,14 @@ status=0
 rm -f "$out"/record-*.json "$out/fold-equivalence.json"
 echo "== closure (ROM-free level 1 subset, as CI runs it)"
 python3 "$tool" closure --check || status=1
+echo "== prepared inputs (scripts/prepare_payloads.py from this tree)"
+if python3 -B "$root/scripts/prepare_payloads.py" --output "$build/prepared" >"$out/prepare.log" 2>&1; then
+  python3 "$tool" prepared --reference "$reference" --prepared "$build/prepared" \
+    --record "$out/record-prepared.json" || status=1
+else
+  tail -20 "$out/prepare.log"
+  status=1
+fi
 echo "== dependency stages"
 python3 "$root/scripts/fold/dependency_stages.py" --reference "$reference" --build "$build" --check || status=1
 echo "== targets"
