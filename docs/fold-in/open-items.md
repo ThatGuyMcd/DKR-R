@@ -14,6 +14,16 @@
 2. **Launcher copy.** 71 reviewed strings are superseded by v1.0.11; see
    [launcher-copy-review.md](launcher-copy-review.md).
 
+3. **`DKRQuickJoinLifecycle` is intermittent** on the Linux host presets
+   (amd64 under emulation on the devops Mac). Alone it fails about half its
+   runs, at `quick_join_lifecycle_tests.cpp:126`: after the rejected rekey
+   the client never takes the host's Quick Join bootstrap, and the 20 s wait
+   expires (passing runs take about 3 s). Nothing it compiles changed after
+   the test triage, and it passed then. That points to a race in the shipped
+   Quick Join path or in the test, not the fold. `DKRExperimentalQuickJoin`
+   aborted once under parallel load the same way, and it was the one failure
+   before the fold too. Behaviour fixes belong after B10.
+
 ## For B6 (native macOS)
 
 - `netplay/online_directory.cpp` (online-directory layer) holds a
