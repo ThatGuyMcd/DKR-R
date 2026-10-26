@@ -51,7 +51,7 @@ class Stage:
     name: str  # dkr_stage_patch stage name: generated/<name>/
     source: str  # chain output the patch applies to: generated/<stage> or extern/<dep>
     files: dict[str, str]  # path inside the stage -> reference original_path (sources)
-    headers: dict[str, str] = dataclasses.field(default_factory=dict)  # same, staged headers
+    headers: dict[str, str] = dataclasses.field(default_factory=dict[str, str])  # same, staged headers
 
 
 STAGES = (
@@ -122,7 +122,9 @@ def folded_paths(build: Path) -> dict[str, Path]:
 
 
 def reference_rows(reference: apply_closure.Reference) -> dict[str, apply_closure.Row]:
-    rows = {row.original: row for row in reference.rows if row.kind == "dependency-transform"}
+    rows = {
+        row.original: row for row in reference.rows if row.kind == "dependency-transform" and row.original is not None
+    }
     covered = {original for stage in STAGES for original in entries(stage).values()}
     if set(rows) != covered:
         raise SystemExit(
@@ -168,7 +170,9 @@ def respelled(
     for line, quoted, spelling, (start, end) in apply_closure.directives(data):
         if "/" not in spelling or spelling in kept:
             continue
-        resolved = {resolver(spelling, quoted, row.staged.parent, search) for search in searches} - {None}
+        resolved = {
+            found for search in searches if (found := resolver(spelling, quoted, row.staged.parent, search)) is not None
+        }
         if len(resolved) != 1:
             problems.append(f"{stage.patch}: {relative}:{line}: {spelling} resolves to {sorted(map(str, resolved))}")
             continue

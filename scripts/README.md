@@ -4,7 +4,7 @@
 
 Use patches/release-prep/v1.0.11/release.py and BUILDING.txt for stable composition. Packaging uses explicit runtime/legal allowlists; no offline Player Guide or old playtest handoff notes. Both US revisions, all owned payloads and exact staged inputs are required. Run only the named synthetic fixtures and ROM-free helper/updater checks; gameplay acceptance remains separate.
 
-Run these commands from the repository root with Python 3.10+ (`python` on
+Run these commands from the repository root with Python 3.11+ (`python` on
 Windows). Commands with options describe them with `--help`.
 
 | Task | Command | Inputs |

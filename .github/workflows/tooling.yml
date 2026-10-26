@@ -47,6 +47,10 @@ jobs:
         run: git ls-files -z '*.sh' ':(exclude)patches/' ':(exclude)extern/' ':(exclude)tests/fixtures/' | xargs -0 shfmt -d
       - name: Pattern guard and tooling tests
         run: python3 scripts/check.py --suite guard,tooling
+      # Strict typing for the tooling scripts listed in pyproject.toml
+      # ([tool.pyright]); the version is exact so results don't drift.
+      - name: Pyright (strict tooling scripts)
+        run: npx --yes pyright@1.1.414 --project pyproject.toml
       # The tree check above can't tell new baseline entries from old ones, so
       # PRs also run the guard against their base. Baseline growth is only
       # allowed with the transition-layer label, until fold-in-base is tagged.

@@ -15,7 +15,7 @@ Keep the changes focused and reproducible. Project-owned runtime code lives in
 
 ## First contribution: tests without a ROM
 
-Start with Git and Python 3.10 or newer. From the repository root:
+Start with Git and Python 3.11 or newer. From the repository root:
 
 ```sh
 python3 scripts/check.py

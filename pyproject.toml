@@ -117,4 +117,4 @@ strict = [
 ]
 exclude = ["build", "extern", "patches", "tools/blender"]
 extraPaths = ["scripts"]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
