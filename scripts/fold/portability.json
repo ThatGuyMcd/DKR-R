@@ -26,7 +26,7 @@
    "sha256": "b32f11a1484b0a649d7cc5962e926fdec663f126e7c9363bcc967ca687b7eafe"
   },
   "runtime-recomp/src/game/netplay/experimental_runtime.cpp": {
-   "reason": "The four digests runtime_engine_identity appends to the owned adapter identity are DKR_LEGACY_ENGINE_SALT_1..4 in netplay/legacy_identity.hpp (B8: the guard refuses digests spliced into an identity anywhere else). The TU now also reads that header; its tokens and object are unchanged.",
+   "reason": "The four digests runtime_engine_identity appends to the owned adapter identity are DKR_LEGACY_ENGINE_SALT_1..4 in netplay/legacy_identity.hpp (B8: the guard refuses digests spliced into an identity anywhere else). The TU now also reads that header; its preprocessed tokens are unchanged (level 2).",
    "sha256": "55d1eb9ff4bcba7691fad06bb42ccaa854c4a6359e7a4ce2809f4f71e50650da"
   },
   "runtime-recomp/src/game/online_directory.cpp": {
@@ -49,7 +49,6 @@
   "DKRPortGame: runtime-recomp/src/game/mod_store.cpp",
   "DKRPortGame: runtime-recomp/src/game/mod_store_install.cpp",
   "DKRPortGame: runtime-recomp/src/game/mod_store_names.cpp",
-  "DKRPortGame: runtime-recomp/src/game/netplay/experimental_runtime.cpp",
   "DKRPortGame: runtime-recomp/src/game/texture_dump.cpp"
  ],
  "token_deltas": {}
