@@ -78,26 +78,10 @@ local profiles out of source control.
 
 ## Release packages
 
-`scripts/release/` takes a built tree to a signed handoff. Each script's
-`--help` gives its inputs; the order is:
-
-1. Build each platform (Windows x64, Linux x86_64 and ARM64) from a prepared
-   tree and run its tests with `ctest --output-junit <work>/<platform>/ctest.xml`.
-2. `package_release.py` packages it (allowlisted contents, read back, receipt).
-3. `probe_worker.py` checks the packaged mod worker; `inspect_elf.py` checks
-   each Linux AppDir's libraries and glibc requirements.
-4. `check_docs.py --since <previous tag>` inventories the docs and checks links.
-5. `finalize.py` collects the handoff. It requires every check in
-   `scripts/release/required_checks.toml` to have run and passed on every
-   platform, and refuses while any of them is pending.
-6. `update_assets.py sign` signs the update manifest with the trusted key,
-   `qualify_updates.py` runs the Windows updater checks from the previous
-   release, and `seal.py` writes the upload instructions and checksums.
-
-**Until C5 lands, `finalize.py` refuses every release from this tree**: 15 of
-the checks v1.0.11 required (its layer fixtures and the vehicle audit) are
-pending in `required_checks.toml`. Release notes for a version go in
-`docs/releases/<version>/`.
+[Releasing](RELEASING.md) is the runbook: tag, prepare, `scripts/release/build.py`
+per platform, package, evidence, finalize, sign and seal. **Until C5 lands,
+`finalize.py` refuses every release from this tree**: 15 of the checks v1.0.11
+required are pending in `scripts/release/required_checks.toml`.
 
 Keep evidence and new outputs outside the repository. Linux packaging must
 produce both AppImages; Steam Deck copies the exact x86_64 payload.

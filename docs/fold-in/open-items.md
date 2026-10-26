@@ -223,6 +223,22 @@ What the deleted release-prep scripts did, for B9b:
 - Four tests keep `// clang-format off` around their macro-call lists
   (ef8ef5e); clang-format never settles on them.
 
+## Release path (B9b)
+
+- Releases build locally: CI has no ROM-derived inputs, so
+  `.github/workflows/release.yml` runs only the ROM-free gates on the tag. A
+  dry-run release from a test tag (devops Mac and a second machine) with
+  `evidence.py compare` between them is still to do; it's a B10 criterion,
+  together with comparing against the v1.0.10 evidence.
+- The release presets don't set `DKR_WERROR`: `cmake/Warnings.cmake` isn't
+  wired to any target yet, so the option would do nothing (Phase C).
+- Tag scheme (open question 5): `Version<VERSION>`, as published so far and
+  as the updater expects, unless the owners decide otherwise.
+- `runtime-recomp/build-inputs.lock.json` was written from this machine's
+  `build/prepared` (the inputs the gate's prepared level matched to v1.0.11).
+  A Windows prepare must reproduce the same digests; that's part of the
+  Windows blocker above.
+
 ## For Phase C
 
 - Rollback on Apple: the RACE_TEST FATAL on Apple stays. With it lifted, the
