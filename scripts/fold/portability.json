@@ -1,5 +1,5 @@
 {
- "about": "Portability fixes for platforms v1.0.11 never compiled (fold step B6). files: each pinned to its reviewed bytes (whitespace-insensitive sha256, equivalence.py closure_digest); level 1 and the closure check compare against that instead of the shipped bytes. objects_identical: Linux TUs whose tokens change but whose objects level 3 must find identical. token_deltas: the named TUs whose portable replacement changes Linux code on purpose, allowed at level 2.",
+ "about": "Reviewed source changes v1.0.11 did not ship: portability fixes for platforms it never compiled (fold step B6), and guard fixes that keep the compiled code identical (B8). files: each pinned to its reviewed bytes (whitespace-insensitive sha256, equivalence.py closure_digest); level 1 and the closure check compare against that instead of the shipped bytes. objects_identical: Linux TUs whose tokens change but whose objects level 3 must find identical. token_deltas: the named TUs whose portable replacement changes Linux code on purpose, allowed at level 2.",
  "files": {
   "runtime-recomp/src/game/achievements.cpp": {
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++.",
@@ -21,6 +21,10 @@
    "reason": "libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
    "sha256": "b32f11a1484b0a649d7cc5962e926fdec663f126e7c9363bcc967ca687b7eafe"
   },
+  "runtime-recomp/src/game/netplay/experimental_runtime.cpp": {
+   "reason": "The four digests runtime_engine_identity appends to the owned adapter identity are DKR_LEGACY_ENGINE_SALT_1..4 in netplay/legacy_identity.hpp (B8: the guard refuses digests spliced into an identity anywhere else). The TU now also reads that header; its tokens and object are unchanged.",
+   "sha256": "55d1eb9ff4bcba7691fad06bb42ccaa854c4a6359e7a4ce2809f4f71e50650da"
+  },
   "runtime-recomp/src/game/online_directory.cpp": {
    "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), which is that type wherever the standard library has it (libstdc++, MSVC) and falls back to the shared_ptr atomic free functions on libc++.",
    "sha256": "74547dc4930c827598f1a6fd62cbd64c3575d455df952581393acec3a04d1d71"
@@ -41,6 +45,7 @@
   "DKRPortGame: runtime-recomp/src/game/mod_store.cpp",
   "DKRPortGame: runtime-recomp/src/game/mod_store_install.cpp",
   "DKRPortGame: runtime-recomp/src/game/mod_store_names.cpp",
+  "DKRPortGame: runtime-recomp/src/game/netplay/experimental_runtime.cpp",
   "DKRPortGame: runtime-recomp/src/game/texture_dump.cpp"
  ],
  "token_deltas": {}

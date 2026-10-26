@@ -17,6 +17,11 @@ change. `cmake/OnlineIdentity.cmake` reads them into the compile definitions
 `netplay/experimental_owned_registry.cpp` returns. A build without the Rev A
 engine offers no v80 contract.
 
+The owned engine identity a lobby manifest carries (`owned_engine_hash`,
+`experimental::runtime_engine_identity`) is sha256 of the owned adapter
+identity followed by four frozen digests, `DKR_LEGACY_ENGINE_SALT_1` to `_4`
+in the same header.
+
 The rollback test frontend (`DKR-R-RollbackTest`, not shipped) negotiates
 `sha256("v77:<v77>|v80:<v80>")` of the same two values.
 

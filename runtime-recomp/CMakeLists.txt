@@ -102,7 +102,7 @@ if(BUILD_TESTING AND NOT ANDROID)
     target_include_directories(DKRLavaGlowTests PRIVATE src/game)
     add_test(NAME DKRLavaGlow COMMAND DKRLavaGlowTests)
     add_executable(DKREnhancedWaterPolicyTests tests/enhanced_water_policy_tests.cpp)
-    target_include_directories(DKREnhancedWaterPolicyTests PRIVATE src/game "${DKR_RT64_SOURCE}/src/contrib" "${CMAKE_CURRENT_LIST_DIR}/../patches/enhanced-water/native")
+    target_include_directories(DKREnhancedWaterPolicyTests PRIVATE src/game "${DKR_RT64_SOURCE}/src/contrib" src/water)
     add_test(NAME DKREnhancedWaterPolicy COMMAND DKREnhancedWaterPolicyTests)
 endif()
 

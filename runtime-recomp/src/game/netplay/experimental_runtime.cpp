@@ -4,6 +4,7 @@
 #include "vehicle_binding.hpp"
 #include "../achievements.hpp"
 #include "experimental_runtime.hpp"
+#include "legacy_identity.hpp"
 #include "../mods/sdk2_bridge.hpp"
 #include "experimental_lobby_admission.hpp"
 #include "experimental_checkpoint_hash.hpp"
@@ -246,7 +247,7 @@ PackedInput unpack(std::uint32_t p) {return {std::uint16_t(p),std::int8_t(p>>16)
 bool runtime_available(rom::Revision revision) {return owned_adapter_available(revision);}
 std::string_view runtime_engine_identity(rom::Revision revision) {
     auto identify=[](rom::Revision r){auto base=std::string(owned_adapter_identity(r));if(base.empty())return base;
-        base+="dcb1e8df777d341f2e96d4ee78cdc4337d32a6ddc86b4b60dbcc46fabfd31efc";base+="893bbedb02a3c87771e75befab107a2ce54641073742be69e97b995a9d0a3bbf";base+="2a82142dc00619b29b80f5f0b6485c3ffe8c0a33e89a7a6c48d0a6ac8eeb4a66";base+="c4d77b07ed3b7f9aabcf7ce1430780fc65a1ce086e62b66a0af672aac40eb5ac";const auto h=digest(std::span(reinterpret_cast<const std::uint8_t*>(base.data()),base.size()));
+        base+=DKR_LEGACY_ENGINE_SALT_1;base+=DKR_LEGACY_ENGINE_SALT_2;base+=DKR_LEGACY_ENGINE_SALT_3;base+=DKR_LEGACY_ENGINE_SALT_4;const auto h=digest(std::span(reinterpret_cast<const std::uint8_t*>(base.data()),base.size()));
         std::string hex;constexpr char digits[]="0123456789abcdef";for(auto c:h){hex+=digits[c>>4];hex+=digits[c&15];}return hex;};
     static const auto v77=identify(rom::Revision::UsV77),v80=identify(rom::Revision::UsV80);
     return revision==rom::Revision::UsV77?v77:revision==rom::Revision::UsV80?v80:std::string_view{};

@@ -106,7 +106,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/licenses') -Destinatio
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/UPDATES.md') -Destination $notices
 Copy-Item -LiteralPath (Join-Path $SdlSource 'LICENSE.txt') -Destination (Join-Path $notices 'SDL2-LICENSE.txt')
 foreach ($entry in @(
-    @('patches/enhanced-water/LICENSE-WAVE-RACE.txt','WAVE-RACE-WATER-LICENSE.txt'),
+    @('runtime-recomp/src/water/LICENSE-WAVE-RACE.txt','WAVE-RACE-WATER-LICENSE.txt'),
     @('extern/rt64/LICENSE','RT64-LICENSE.txt'),
     @('extern/rt64/src/contrib/imgui/LICENSE.txt','Dear-ImGui-LICENSE.txt'),
     @('extern/n64-modern-runtime/COPYING','N64ModernRuntime-COPYING.txt'),

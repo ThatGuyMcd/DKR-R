@@ -55,6 +55,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("patches/manifest.json", sources)
         self.assertIn("patches/release-prep/v1.0.7/source-capsule-r2/manifest.json", sources)
         self.assertTrue(any(source.startswith("modding/reference-us-v") for source in sources), sources)
+        self.assertIn("services/library-workflow/baseline/SHA256SUMS", sources)
 
     def test_staged_patches_are_pinned(self):
         manifest = json.loads((ROOT / "patches/manifest.json").read_text(encoding="utf-8"))
@@ -130,6 +131,16 @@ class CheckerTests(unittest.TestCase):
         status, err = run_checker(self.root)
         self.assertEqual(status, 1)
         self.assertIn("pinned by modding/reference-us-v77/receipt.json", err)
+
+    def test_changed_service_baseline_fails(self):
+        page = b"<html>  \n</html>\n"
+        write(self.root / "services/web/baseline/index.html", page)
+        write(self.root / "services/web/baseline/SHA256SUMS", f"{sha(page)}  index.html\n".encode())
+        self.assertEqual(run_checker(self.root), (0, ""))
+        write(self.root / "services/web/baseline/index.html", b"<html>\n</html>\n")
+        status, err = run_checker(self.root)
+        self.assertEqual(status, 1)
+        self.assertIn("pinned by services/web/baseline/SHA256SUMS", err)
 
     def test_changed_capsule_file_fails(self):
         write(self.root / f"patches/release-prep/v1/source-capsule-r1/{CAPSULE_NAME}.txt", CAPSULE_TEXT.strip())

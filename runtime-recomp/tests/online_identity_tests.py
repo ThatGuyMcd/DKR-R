@@ -20,6 +20,14 @@ SHIPPED = {
     "77": "5e22da8e6095b362ede17c69a2341aae2df24cbf8561c3af57fc86566d11784e",
     "80": "32c82fea3111440434926d5782e174c9f2d036d198f039c5424393a835f948b0",
 }
+# The digests v1.0.11 appended to the owned adapter identity, in order
+# (experimental_runtime.cpp runtime_engine_identity).
+ENGINE_SALTS = (
+    "dcb1e8df777d341f2e96d4ee78cdc4337d32a6ddc86b4b60dbcc46fabfd31efc",
+    "893bbedb02a3c87771e75befab107a2ce54641073742be69e97b995a9d0a3bbf",
+    "2a82142dc00619b29b80f5f0b6485c3ffe8c0a33e89a7a6c48d0a6ac8eeb4a66",
+    "c4d77b07ed3b7f9aabcf7ce1430780fc65a1ce086e62b66a0af672aac40eb5ac",
+)
 
 
 class OnlineIdentityTests(unittest.TestCase):
@@ -29,6 +37,25 @@ class OnlineIdentityTests(unittest.TestCase):
             with self.subTest(revision=revision):
                 found = re.findall(rf'^#define DKR_LEGACY_OWNED_BUILD_ID_V{revision} "([0-9a-f]+)"$', text, re.M)
                 self.assertEqual(found, [value])
+
+    def test_header_holds_the_shipped_engine_salts(self):
+        text = HEADER.read_text(encoding="utf-8")
+        found = re.findall(r'^#define DKR_LEGACY_ENGINE_SALT_(\d) "([0-9a-f]+)"$', text, re.M)
+        self.assertEqual(found, [(str(i), salt) for i, salt in enumerate(ENGINE_SALTS, 1)])
+
+    def test_engine_salts_are_defined_only_in_the_header(self):
+        # Each salt value appears in source only in legacy_identity.hpp, and the
+        # engine identity appends all four by name, in order.
+        offenders = []
+        for path in sorted(RUNTIME.rglob("*")):
+            if path == HEADER or not path.is_file() or path.suffix not in (".c", ".cc", ".cpp", ".h", ".hpp", ".inl"):
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            offenders += [f"{path.relative_to(ROOT)}: {salt[:12]}" for salt in ENGINE_SALTS if salt in text]
+        self.assertEqual(offenders, [])
+        runtime = (RUNTIME / "src/game/netplay/experimental_runtime.cpp").read_text(encoding="utf-8")
+        uses = re.findall(r"base\+=(DKR_LEGACY_ENGINE_SALT_\d);", runtime)
+        self.assertEqual(uses, [f"DKR_LEGACY_ENGINE_SALT_{i}" for i in range(1, 5)])
 
     @unittest.skipUnless(shutil.which("cmake"), "needs cmake")
     def test_configure_emits_the_shipped_contracts(self):

@@ -82,6 +82,27 @@ class AllowlistTests(unittest.TestCase):
         )
 
 
+class ServicesScopeTests(unittest.TestCase):
+    def test_pipeline_rules_skip_services_and_nothing_else(self):
+        # A string-replace splice over first-party-named text: PG004 in the
+        # runtime tree, out of scope under services/.
+        source = (
+            "from pathlib import Path\n"
+            "text = Path('runtime-recomp/src/game/x.cpp').read_text()\n"
+            "Path('out.cpp').write_text(text.replace('a', 'b'))\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for path in ("scripts/splice.py", "services/web/build.py"):
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(source)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+            _, out, err = run_guard(root, "--tree", "--baseline", "ignore")
+        self.assertIn("scripts/splice.py:3: PG004", out + err)
+        self.assertNotIn("services/", out + err)
+
+
 class CheckContentTests(unittest.TestCase):
     def test_a_patch_registered_before_it_is_written_is_still_checked(self):
         # Registering first must not hide PG008: PG007 hashes the planned

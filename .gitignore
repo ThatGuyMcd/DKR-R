@@ -154,3 +154,6 @@ runtime-recomp/build/
 /.claude/settings.local.json
 /.claude/session-base
 /.claude/session-base.*.tmp
+
+# Pinned Node tools for the services tests (npm ci in services/test-tools)
+/services/test-tools/node_modules/

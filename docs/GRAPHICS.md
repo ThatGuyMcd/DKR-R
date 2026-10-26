@@ -29,7 +29,7 @@ report reproducible gaps with the track, position, aspect ratio and FOV.
 The optional **ModernCamera++** code mod supplies camera presets, local
 profiles and live F7 tuning. Import/approve it like other Custom Magic Codes.
 Camera presentation and the shadow-interpolation correction are separate from
-shared simulation. See [Camera++](../patches/camera-plus/README.md).
+shared simulation (`runtime-recomp/cmake/Camera.cmake`).
 VR is unfinished and not a supported feature of this release.
 
 ## Vehicles and scenery

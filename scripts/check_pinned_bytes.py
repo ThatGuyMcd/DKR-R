@@ -9,6 +9,8 @@ would "fix":
   and ``stagedPatches[]``);
 * the address-only SDK kits, modding/reference-us-v*/, against the ``files``
   map in each kit's receipt.json;
+* the deployed bases a service splices into, services/*/baseline/, against
+  that directory's SHA256SUMS (``sha256sum`` format);
 * the content-addressed source capsules, patches/release-prep/*/source-capsule-*/,
   whose file names are their own sha256;
 * the capsules' "base" files, first-party sources whose CRLF-normalised bytes
@@ -38,6 +40,7 @@ from typing import NamedTuple
 ROOT = Path(__file__).resolve().parents[1]
 PATCH_MANIFEST = "patches/manifest.json"
 RECEIPTS = "modding/reference-us-v*/receipt.json"
+SERVICE_BASELINES = "services/*/baseline/SHA256SUMS"
 CAPSULE_MANIFESTS = "patches/release-prep/*/source-capsule-*/manifest.json"
 # Bases that main had already changed when the capsule was frozen.
 # patches/upstream-sync/restore_capsule.py reads these from the pinned commit
@@ -126,6 +129,12 @@ def pins(root: Path) -> dict[str, Pin]:
         kit = receipt.parent.relative_to(root).as_posix()
         for name, sha in json.loads(receipt.read_text(encoding="utf-8"))["files"].items():
             pinned[f"{kit}/{name}"] = Pin(sha, source)
+    for sums in sorted(root.glob(SERVICE_BASELINES)):
+        source = sums.relative_to(root).as_posix()
+        baseline = sums.parent.relative_to(root).as_posix()
+        for line in sums.read_text(encoding="utf-8").splitlines():
+            sha, name = line.split(maxsplit=1)
+            pinned[f"{baseline}/{name}"] = Pin(sha, source)
     for path in sorted(root.glob("patches/release-prep/*/source-capsule-*/*")):
         relative = path.relative_to(root).as_posix()
         match = CAPSULE.match(relative)

@@ -48,22 +48,10 @@ force-sort-within-sections = true
 "runtime-recomp/tests/stress_runner_tests.py" = ["E402"]
 "runtime-recomp/tests/test_track_select_draw_pipeline.py" = ["E402"]
 "runtime-recomp/tests/water_profile_policy_tests.py" = ["E402"]
-"scripts/adapt-water-reference.py" = ["E501"]
 "scripts/apply_dependency_patches.py" = ["E501"]
 "scripts/audio_queue_policy.py" = ["E501"]
-"scripts/camera_plus_pipeline.py" = ["E501"]
 "scripts/character_portrait_pipeline.py" = ["E501", "E731"]
 "scripts/ci_summary.py" = ["E501"]
-"scripts/compose-lava-glow.py" = ["E501"]
-"scripts/compose-lava-lighting.py" = ["E501"]
-"scripts/compose-water-performance.py" = ["E501", "F841"]
-"scripts/compose-water-projection.py" = ["E501"]
-"scripts/compose-water-rays.py" = ["E501"]
-"scripts/compose-water-recovery.py" = ["E501"]
-"scripts/compose-water-safety.py" = ["E501"]
-"scripts/compose-water-stability.py" = ["E501"]
-"scripts/compose-water-views.py" = ["E501"]
-"scripts/compose-waterfall.py" = ["E501"]
 "scripts/compose_legacy_mod_policy.py" = ["E501"]
 "scripts/generate_replay_probe.py" = ["E501"]
 "scripts/generate_visual_model_kernel.py" = ["E501", "F841"]
@@ -88,6 +76,13 @@ force-sort-within-sections = true
 "scripts/water_patch_baseline.py" = ["E501"]
 "scripts/water_profile_policy.py" = ["E501"]
 # END GENERATED BASELINE
+# services/ splices quote their anchors verbatim, one string each, matched
+# exactly against the deployed base; wrapping them would hide what they match.
+"services/library-workflow/transforms.py" = ["E501"]
+"services/mod-store/build.py" = ["E501"]
+"services/mod-store/frontend.py" = ["E501"]
+"services/mod-store/backfill_library.py" = ["E501"]
+"services/mod-store/release_manifest.py" = ["E501"]
 
 [tool.pyright]
 # Strict only for new tooling scripts; everything else is ratcheted in per path.

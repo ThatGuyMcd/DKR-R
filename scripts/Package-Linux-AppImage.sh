@@ -328,7 +328,7 @@ fi
 if [[ "${VERSION}" == 1.0.5-beta.15-playtest.16-fix.2 ]]; then
   install -m 0644 "${PROJECT_ROOT}/docs/BETA15-PLAYTEST16-MOD-LIBRARY.txt" "${APPDIR}/usr/share/doc/dkr-port/BETA15-PLAYTEST16-MOD-LIBRARY.txt"
 fi
-install -m 0644 "${PROJECT_ROOT}/patches/enhanced-water/LICENSE-WAVE-RACE.txt" "${APPDIR}/usr/share/doc/dkr-port/WAVE-RACE-WATER-LICENSE.txt"
+install -m 0644 "${PROJECT_ROOT}/runtime-recomp/src/water/LICENSE-WAVE-RACE.txt" "${APPDIR}/usr/share/doc/dkr-port/WAVE-RACE-WATER-LICENSE.txt"
 install -m 0644 "${PROJECT_ROOT}/docs/ONLINE_MULTIPLAYER.md" "${APPDIR}/usr/share/doc/dkr-port/ONLINE_MULTIPLAYER.md"
 install -m 0644 "${PROJECT_ROOT}/docs/UPDATES.md" "${APPDIR}/usr/share/doc/dkr-port/UPDATES.md"
 install -m 0644 "${PROJECT_ROOT}/docs/ONLINE-STABILITY.md" "${APPDIR}/usr/share/doc/dkr-port/ONLINE-STABILITY.md"

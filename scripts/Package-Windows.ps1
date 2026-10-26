@@ -276,7 +276,7 @@ $noticeDirectory = Join-Path $stage 'ThirdPartyLicenses'
 New-Item -ItemType Directory -Path $noticeDirectory | Out-Null
 $noticeFiles = [ordered]@{
     'RT64-LICENSE.txt' = 'extern\rt64\LICENSE'
-    'WAVE-RACE-WATER-LICENSE.txt' = 'patches\enhanced-water\LICENSE-WAVE-RACE.txt'
+    'WAVE-RACE-WATER-LICENSE.txt' = 'runtime-recomp\src\water\LICENSE-WAVE-RACE.txt'
     'Dear-ImGui-LICENSE.txt' = 'extern\rt64\src\contrib\imgui\LICENSE.txt'
     'SDL2-LICENSE.txt' = 'extern\rt64\src\contrib\mupen64plus-win32-deps\SDL2-2.26.3\COPYING.txt'
     'SDL3-LICENSE.txt' = 'extern\sdl3\LICENSE.txt'

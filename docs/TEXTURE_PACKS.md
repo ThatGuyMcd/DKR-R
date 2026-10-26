@@ -221,5 +221,6 @@ Water replacements still need the existing complete-family rules.
 Keep original-art dumps private. The starter omits ROMs and source reports,
 but unedited Working images can still be original game art. Distribute only
 replacement artwork you have permission to share. The detailed original
-[texture-tool implementation/checklist](../patches/texture-dumping/TEXTURE-DUMPING.txt)
-is retained as engineering history, not v1.0.11 hardware qualification.
+texture-tool implementation/checklist (`patches/texture-dumping/TEXTURE-DUMPING.txt`
+before the fold, in git history) is engineering history, not v1.0.11 hardware
+qualification.

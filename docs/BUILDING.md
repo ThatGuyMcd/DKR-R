@@ -277,8 +277,6 @@ outstanding device/gameplay checks in [release validation](../RELEASE-VALIDATION
 
 ## Retained v1.0.8 startup hotfix
 
-The current release includes [the startup hotfix pipeline](../patches/startup-memory/BUILDING.txt).
-That earlier layer used the frozen 1.0.7 inputs and an isolated runtime-memory
-patch for 1.0.8 (Android code 1080001). The current outer release layer supplies
-1.0.11 for Windows/Linux while retaining the startup correction. Android
+The v1.0.8 startup correction (Android code 1080001) is the registered
+dependency patch `patches/startup-memory/runtime-memory.patch`. Android
 release metadata is not changed by this release.

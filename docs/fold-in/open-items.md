@@ -45,6 +45,10 @@ checkout (`prepare-dependencies` `decomp-symbols`) and, on Android, the new
 `android-full` dependency profile. actionlint and zizmor are clean locally.
 **Neither job has run yet**; they first run when PR 2 opens.
 
+Also blocking: a real Windows run of `Prepare-DKR-Runtime.ps1` (both ROMs,
+WSL) followed by `Build-DKR-R-Windows.ps1`, by ThatGuyMcd or Steve. Windows is
+the platform that ships; the scripts only parse-checked here.
+
 Known before they run:
 
 - `android-folded` was red before B6. A local run in the CI image (NDK r29,
@@ -60,6 +64,29 @@ Known before they run:
   `windows-full-nogen` also checks for 3.11 or newer as a backstop.
 - Adding `decomp-symbols` to the source cache key invalidates the existing
   dependency caches once.
+
+## Removed or renamed entrypoints
+
+For the PR-2 description. Each line is what a maintainer ran before and what
+replaces it.
+
+| Before | Now |
+|---|---|
+| `Diagnose-DKR-Recompile.cmd` / `scripts/Diagnose-DKR-Recompile.ps1` | `python scripts/compose_payloads.py payload --revision <rev> ...` reruns N64Recomp for one revision |
+| `scripts/Prepare-SaveLayoutPayload.ps1`, `scripts/Prepare-CharacterPortraitPayload.ps1` | `scripts/prepare_payloads.py`, which `Prepare-DKR-Runtime.cmd` and `Prepare-DKR-Runtime-macOS.sh` run last |
+| `generate_legacy_menu_qualification.py --characters --character-menu` for release payloads | `Prepare-DKR-Runtime.cmd` (`scripts/compose_payloads.py`); the qualification script stays for menu qualification only |
+| `generate_replay_probe.py` / `generate_visual_model_kernel.py` run by hand for the owned engine and model kernels | `scripts/prepare_payloads.py` (writes `build/prepared`; CMake reads it by default) |
+| `patches/camera-plus/scene_kernel_pipeline.py` | `scripts/camera_scene_kernel.py` (run by `prepare_payloads.py`) |
+| `scripts/camera_plus_pipeline.py` | none: Camera++ is source in `runtime-recomp/src/game` and `cmake/Camera.cmake` |
+| `scripts/compose-water-*.py`, `compose-lava*.py`, `compose-waterfall.py`, `adapt-water-reference.py`, `normalize-water-adapter.py` | edit `patches/enhanced-water/*.patch` (registered RT64 patches) and `runtime-recomp/src/water/` directly |
+| `scripts/Refresh-Water-Shaders.cmake` | none: the configure restages and rebuilds the water shaders |
+| `patches/enhanced-water/native/*`, `LICENSE-WAVE-RACE.txt` | `runtime-recomp/src/water/` |
+| `patches/<layer>/pipeline.py`, `configure.py`, `audit.py`, `package*.py`, `package-*.sh/.ps1`, `ReleaseOverlay.cmake` | none: the fold is the source; build and package the tree normally |
+| `patches/library-workflow/pipeline.py` (+ `transforms.py`) | `services/library-workflow/build.py stage` (base defaults to `services/library-workflow/baseline/`) |
+| `patches/online-directory/backend_pipeline.py` | `services/online-directory/build.py --api-worker <worker>` |
+| `patches/online-directory/delivery.py` | none: it finalized the 1.0.9 public-lobbies playtest delivery only |
+| `patches/mod-store/pipeline.py` (backend), `frontend_pipeline.py` | `services/mod-store/build.py --worker <worker> [--frontend <portal>]`; the native half is in `runtime-recomp/src/game` |
+| `-GeneratedSource` required by `Build-Windows.cmd` | optional; defaults to `build\prepared` |
 
 ## Open questions
 
@@ -152,19 +179,12 @@ Known before they run:
   (`src/game/build_contract.hpp`). Moving it into `legacy_identity.hpp`
   would cost a level 1 delta now, so that waits for Phase C.
 
-## `patches/` content the build still reads (before B8)
+## `patches/` after B8
 
-Everything else under `patches/` that the base CMake reads is a dependency
-`*.patch` (fold step B3 registers them).
-
-| Directory | Read by | What it is | Plan |
-|---|---|---|---|
-| `enhanced-water/native/` | `cmake/EnhancedWater.cmake` (copies the HLSL and headers into RT64's staged tree), `DKREnhancedWaterPolicyTests` include path, `scripts/compose-water-*.py` (write it) | first-party RT64 additions: water and lava shaders, `WaterRayScene.cpp`, policy headers | B3 or B8: either first-party source under `runtime-recomp/` staged into RT64 the same way, or new files inside a registered RT64 patch. Not moved yet: the compose scripts still write into this directory |
-| `startup-memory/` | `RuntimeMemory.cmake` was included by `cmake/PerformancePatches.cmake` | one `dkr_stage_patch` call plus `runtime-memory.patch` | call folded into `PerformancePatches.cmake`; the patch is registered in B3, the directory's other files go in B8 |
-| `custom-magic-codes/` | `cmake/PerformancePatches.cmake` | `runtime-code-heap.patch` only | B3 registers it |
-`camera-plus/` is also still read, by `scripts/camera_plus_pipeline.py`
-(the release chain's Camera++ stage, B8 deletes it). The scene kernel's
-generator is `scripts/camera_scene_kernel.py` (B8a).
+`patches/` holds `manifest.json` and the registered dependency `*.patch` files
+only (release-prep aside, see below). The enhanced-water RT64 additions are
+first-party source in `runtime-recomp/src/water/`, staged into RT64 by
+`cmake/EnhancedWater.cmake`; the service backends are in `services/`.
 
 ## Prepared inputs (B8a)
 

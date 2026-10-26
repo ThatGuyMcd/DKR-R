@@ -179,6 +179,11 @@ SOURCE_SWAP_ALLOWED = {
     "runtime-recomp/cmake/StagedPatch.cmake",  # dependency-patch staging
     "runtime-recomp/cmake/GuestHooks.cmake",
 }
+# services/ (server-side code, services/README.md) splices hosted Workers and
+# web pages that live outside this repo; each service's build.py is its
+# supported producer. The pipeline rules (PG004, PG012) guard the runtime tree,
+# so they skip services/ on purpose. Every other rule still applies there.
+SERVICES_PREFIX = "services/"
 # The two owned-engine input stages (AGENTS.md): they write new copies of
 # recompiled guest code that the owned payload is generated from byte for
 # byte, so they can't be hooks.toml entries yet. No other script joins them.
@@ -739,7 +744,7 @@ def string_replace_pipeline(tree: Tree, path: str) -> Iterator[Finding]:
     """PG004: read text, rewrite it, write it, with first-party source or a
     patch layer named as data. File-level on purpose: pipelines spread the
     read, the edits and the write over helpers."""
-    if not path.endswith(".py") or path in PIPELINE_ALLOWED:
+    if not path.endswith(".py") or path in PIPELINE_ALLOWED or path.startswith(SERVICES_PREFIX):
         return
     module = tree.python(path)
     if module is None:
@@ -869,7 +874,11 @@ def guest_rewrite(tree: Tree, path: str) -> Iterator[Finding]:
     """PG012: read-modify-write of recompiled guest code. Naming those paths
     is fine (build scripts and generators do); rewriting a file in place whose
     path derives from one is not."""
-    if path in GUEST_REWRITE_ALLOWED or not GUEST_CODE.search(tree.text(path) or ""):
+    if (
+        path in GUEST_REWRITE_ALLOWED
+        or path.startswith(SERVICES_PREFIX)
+        or not GUEST_CODE.search(tree.text(path) or "")
+    ):
         return
     if path.endswith(".py"):
         module = tree.python(path)

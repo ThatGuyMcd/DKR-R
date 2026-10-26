@@ -80,7 +80,7 @@ Worker first and preserve the live API's existing account/FTP/database bindings.
 The launcher and existing website API are the feature's integration points;
 FTP remains the mod-upload method.
 
-See the [deployment and rollback instructions](../patches/online-directory/DEPLOYMENT.md),
-[local backend QA record](../patches/online-directory/QA.md) and
-[owner acceptance checklist](../patches/online-directory/PLAYTEST.txt).
+See the [deployment and rollback instructions](../services/online-directory/DEPLOYMENT.md),
+[local backend QA record](../services/online-directory/QA.md) and
+[owner acceptance checklist](../services/online-directory/PLAYTEST.txt).
 Do not treat local synthetic load tests as proof of worldwide network behaviour.

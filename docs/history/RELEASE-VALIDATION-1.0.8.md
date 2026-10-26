@@ -21,5 +21,5 @@ existing private release signing key; it was not replaced. No push/tag/publish
 was performed as an implicit part of this build pass.
 
 Private evidence: D:/DiddykongWorkFolder/release-v1.0.8-20261020/evidence.
-The [preceding stable build record](patches/startup-memory/history/RELEASE-VALIDATION-1.0.7.txt)
-is preserved as history, not reclassified as new gameplay acceptance.
+The preceding stable build record (`patches/startup-memory/history/RELEASE-VALIDATION-1.0.7.txt`
+before the fold, in git history) is preserved as history, not reclassified as new gameplay acceptance.
