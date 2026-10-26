@@ -2,8 +2,11 @@ name: Prepare reviewed dependencies
 description: Cache pinned source checkouts and verify them before every build
 inputs:
   profile:
-    description: Dependency set (host, ios, or android)
+    description: Dependency set (host, ios, android, or android-full for the whole runtime)
     default: host
+  decomp-symbols:
+    description: Also check out extern/dkr-decomp/ver/symbols (sparse), which scripts/gen_guest_symbols.py reads
+    default: "false"
 runs:
   using: composite
   steps:
@@ -11,7 +14,7 @@ runs:
       id: sources
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
-        key: sources-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.profile }}-${{ hashFiles('dependencies.lock.json', 'patches/**', 'scripts/bootstrap_dependencies.py', 'scripts/apply_dependency_patches.py', '.github/actions/prepare-dependencies/action.yml') }}
+        key: sources-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.profile }}-symbols-${{ inputs.decomp-symbols }}-${{ hashFiles('dependencies.lock.json', 'patches/**', 'scripts/bootstrap_dependencies.py', 'scripts/apply_dependency_patches.py', '.github/actions/prepare-dependencies/action.yml') }}
         path: |
           extern/n64-modern-runtime
           extern/rt64
@@ -21,6 +24,7 @@ runs:
           extern/mbedtls
           extern/sdl3
           extern/sdl2
+          extern/dkr-decomp
     - name: Verify pinned sources and apply reviewed patches
       shell: bash
       env:
@@ -31,6 +35,7 @@ runs:
         host) dependencies=(n64-modern-runtime rt64 gekkonet monocypher libdatachannel mbedtls sdl3) ;;
         ios) dependencies=(rt64 sdl2) ;;
         android) dependencies=(n64-modern-runtime rt64 sdl2) ;;
+        android-full) dependencies=(n64-modern-runtime rt64 gekkonet monocypher libdatachannel mbedtls sdl2) ;;
         *)
           echo "Unknown dependency profile: $DEPENDENCY_PROFILE" >&2
           exit 1
@@ -42,6 +47,28 @@ runs:
         done
         "$PYTHON_EXECUTABLE" scripts/bootstrap_dependencies.py --shallow "${arguments[@]}"
         "$PYTHON_EXECUTABLE" scripts/apply_dependency_patches.py
+    # The guest symbol headers need the decomp's symbol tables only, not the
+    # 563 MB tree: a sparse, blob-filtered checkout of ver/symbols at the
+    # locked commit. dkr-decomp carries no reviewed patches.
+    - name: Check out the decomp symbol tables
+      if: inputs.decomp-symbols == 'true'
+      shell: bash
+      env:
+        PYTHON_EXECUTABLE: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
+      run: |
+        read -r repository commit < <("$PYTHON_EXECUTABLE" -c "import json; e = next(d for d in json.load(open('dependencies.lock.json'))['dependencies'] if d['name'] == 'dkr-decomp'); print(e['repository'], e['commit'])")
+        if [[ ! -d extern/dkr-decomp/.git ]]; then
+          git init --quiet extern/dkr-decomp
+          git -C extern/dkr-decomp remote add origin "$repository"
+          git -C extern/dkr-decomp sparse-checkout set ver/symbols
+        fi
+        if [[ "$(git -C extern/dkr-decomp rev-parse --verify --quiet HEAD || true)" != "$commit" ]]; then
+          git -C extern/dkr-decomp fetch --quiet --depth 1 --filter=blob:none origin "$commit"
+          git -C extern/dkr-decomp checkout --quiet --detach "$commit"
+        fi
+        test "$(git -C extern/dkr-decomp rev-parse HEAD)" = "$commit"
+        test -f extern/dkr-decomp/ver/symbols/symbol_addrs.us.v77.txt
+        test -f extern/dkr-decomp/ver/symbols/symbol_addrs.us.v80.txt
     # Save before configuration: the cache contains reviewed source checkouts,
     # never build outputs, ROMs, generated retail code, or local game data.
     - name: Save verified dependency sources
@@ -58,3 +85,4 @@ runs:
           extern/mbedtls
           extern/sdl3
           extern/sdl2
+          extern/dkr-decomp

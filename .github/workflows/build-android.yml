@@ -55,3 +55,53 @@ jobs:
             build/android-compile/compile_commands.json
             build/android-compile/device-objects.json
             build/android-compile/CMakeFiles/CMakeConfigureLog.yaml
+  # The folded runtime for Android: RT64 with the Android stage chain and the
+  # stage patches on top, and every first-party game TU (DKRPortGameCore),
+  # without ROM-derived payloads. Fold PR-2 merge blocker
+  # (docs/fold-in/open-items.md).
+  android-folded:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      NDK: ndk/29.0.14206865
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+        with:
+          profile: android-full
+          decomp-symbols: "true"
+      - name: Install exact device toolchain
+        run: |
+          if [[ ! -f "$ANDROID_HOME/$NDK/source.properties" ]]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;29.0.14206865'
+          fi
+      - name: Build the host file_to_c the Android renderer embeds shaders with
+        run: |
+          mkdir -p build/android-host-tools
+          c++ -std=c++17 -O2 -o build/android-host-tools/file_to_c extern/rt64/src/tools/file_to_c/file_to_c.cpp
+      - name: Configure the folded runtime (RT64 on, no generated payload)
+        run: |
+          cmake -S runtime-recomp -B build/android-folded -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DANDROID_STL=c++_shared \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DDKR_RUNTIME_BUILD_GENERATED=OFF -DDKR_RUNTIME_BUILD_RT64=ON \
+            -DDKR_ANDROID_SDL2_SOURCE="$GITHUB_WORKSPACE/extern/sdl2" \
+            -DDKR_HOST_FILE_TO_C="$GITHUB_WORKSPACE/build/android-host-tools/file_to_c"
+      - name: Build RT64, the staged dependency sources and the game TUs
+        run: cmake --build build/android-folded --parallel 4
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-folded
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/android-folded/CMakeFiles/CMakeConfigureLog.yaml
+            build/android-folded/compile_commands.json

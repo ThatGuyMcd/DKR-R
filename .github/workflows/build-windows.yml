@@ -122,3 +122,92 @@ jobs:
             build/host/CMakeFiles/CMakeOutput.log
             build/host/Testing/Temporary/LastTest.log
             build/host/Testing/Temporary/LastTestsFailed.log
+  # The folded tree under MSVC: the host-full-nogen preset builds RT64 with the
+  # stage chain and stage patches, and every first-party game TU
+  # (DKRPortGameCore), without ROM-derived payloads. Fold PR-2 merge blocker
+  # (docs/fold-in/open-items.md).
+  windows-full-nogen:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      SCCACHE_DIR: ${{ github.workspace }}/build/sccache
+      SCCACHE_CACHE_SIZE: 2G
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The configure runs guest_hooks.py, gen_guest_symbols.py and
+      # stage_magic_code_payload.py, which need tomllib.
+      - name: Require Python 3.11 or newer
+        run: python -c "import sys; assert sys.version_info >= (3, 11), sys.version"
+      - name: Prepare pinned runtime dependencies
+        uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
+        with:
+          decomp-symbols: "true"
+      - name: Install pinned compiler cache
+        uses: mozilla-actions/sccache-action@fd02668681acd5f960e1372061bee5e3e987195c # v0.0.11
+        with:
+          version: v0.18.0
+          disable_annotations: true
+      - name: Identify MSVC and SDK
+        id: compiler
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (!$installation) { throw 'Visual Studio C++ tools are missing' }
+          "VS_INSTALLATION=$installation" >> $env:GITHUB_ENV
+          & "$installation\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          if (!$?) { throw 'Could not initialize the x64 MSVC environment' }
+          New-Item -ItemType Directory -Force build | Out-Null
+          $compiler = (Get-Command cl.exe).Source
+          @(
+            "MSVC: $((Get-Item $compiler).VersionInfo.FileVersion)"
+            "Compiler SHA256: $((Get-FileHash $compiler -Algorithm SHA256).Hash)"
+            "Windows SDK: $env:WindowsSDKVersion"
+            "sccache: 0.18.0"
+          ) | Set-Content build/compiler-toolchain.txt
+          $fingerprint = (Get-FileHash build/compiler-toolchain.txt -Algorithm SHA256).Hash.ToLowerInvariant()
+          "fingerprint=$fingerprint" >> $env:GITHUB_OUTPUT
+      - name: Restore compiler cache
+        id: objects
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/sccache
+          key: sccache-v1-windows-2022-full-nogen-${{ steps.compiler.outputs.fingerprint }}-${{ github.sha }}
+          restore-keys: sccache-v1-windows-2022-full-nogen-${{ steps.compiler.outputs.fingerprint }}-
+      - name: Configure (RT64 on, no generated payload)
+        working-directory: runtime-recomp
+        run: |
+          & "$env:VS_INSTALLATION\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          if (!$?) { throw 'Could not initialize the x64 MSVC environment' }
+          sccache --zero-stats
+          cmake --preset host-full-nogen -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+      - name: Build RT64, the staged dependency sources and the game TUs
+        working-directory: runtime-recomp
+        run: |
+          & "$env:VS_INSTALLATION\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          if (!$?) { throw 'Could not initialize the x64 MSVC environment' }
+          cmake --build --preset host-full-nogen --parallel $env:NUMBER_OF_PROCESSORS
+      - name: Report compiler cache statistics
+        if: ${{ always() && steps.compiler.outcome == 'success' }}
+        run: sccache --stop-server
+      - name: Save compiler cache
+        if: ${{ success() && steps.objects.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/sccache
+          key: ${{ steps.objects.outputs.cache-primary-key }}
+      - name: Preserve failure diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-full-nogen
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            build/compiler-toolchain.txt
+            build/host-full-nogen/CMakeFiles/CMakeConfigureLog.yaml
+            build/host-full-nogen/compile_commands.json

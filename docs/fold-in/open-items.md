@@ -36,11 +36,39 @@ The gate is Linux x86_64 only. These close only when the `windows` and
   first) and the `DKRPortGameCore` object library inside the Android
   `SHARED` `DKRPortGame`.
 
-Today neither job does that. `build-windows.yml` configures the `host`
-preset (no RT64, so no stage patches and no game TUs), and
-`build-android.yml` compiles `runtime-recomp/tests/android_compile` only.
-They need a `host-full-nogen`-style Windows configure and an Android
-configure of `runtime-recomp/` before they can close these.
+The jobs that close them are `windows-full-nogen` (`build-windows.yml`: the
+`host-full-nogen` preset under MSVC) and `android-folded` (`build-android.yml`:
+an NDK r29 arm64 configure and build of `runtime-recomp/` with RT64 on). Both
+build RT64 with its stage chain and stage patches and every `DKRPortGameCore`
+TU, without payloads. They need the sparse `extern/dkr-decomp/ver/symbols`
+checkout (`prepare-dependencies` `decomp-symbols`) and, on Android, the new
+`android-full` dependency profile. actionlint and zizmor are clean locally.
+**Neither job has run yet**; they first run when PR 2 opens.
+
+Known before they run:
+
+- `android-folded` will fail until the libc++ gaps are fixed. A local run in
+  the CI image (NDK r29, same flags) configures cleanly and applies every
+  stage patch the Android chain takes. Everything else compiles, but 7
+  first-party TUs don't:
+  - `std::atomic<std::shared_ptr<T>>`, which libc++ lacks (the B6 Apple gap):
+    `online_directory.cpp`, `vehicle_binding.cpp`, `achievements.cpp`,
+    `mod_store_install.cpp`;
+  - ambiguous `std::to_string` calls: `mod_store_names.cpp`,
+    `mod_store_install.cpp`, `texture_dump.cpp` (`texture_gallery.inl`);
+  - `curl/curl.h` in `mod_store.cpp` (the store links CURL only off Android,
+    Apple and Windows, but still compiles there).
+  v1.0.11 never compiled these for Android or Apple, so they fail closed.
+  The fixes are platform-guarded source changes that leave the Linux level 2
+  stream unchanged, which is B6/C12 work.
+- Android doesn't configure `DKR_EXPERIMENTAL_RACE_TEST`, so it doesn't take
+  `0001-render-stability` and `0003-present-queue-pacer` (they sit on the
+  rollback chain). Android releases are discontinued, so that stays open.
+- `windows-full-nogen` assumes the runner's `python` is 3.11 or newer; a
+  first step checks it. If `windows-2022` defaults to an older Python, it
+  needs a pinned `actions/setup-python`.
+- Adding `decomp-symbols` to the source cache key invalidates the existing
+  dependency caches once.
 
 ## Open questions
 
