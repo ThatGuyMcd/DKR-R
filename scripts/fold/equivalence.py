@@ -160,6 +160,17 @@ class Mapping:
             hooked = self.guest_hooked(row) if row.kind == "guest-transform" else None
             if hooked is not None:
                 self.dependency[row.staged] = hooked
+        # Camera++ shadow kernels (B4): camera_shadow_kernel.c is first-party
+        # source; Camera.cmake derives camera_scene_hooks.c per revision.
+        for row in self.reference.rows:
+            shadow = re.search(r"/roles/CAMERA_SHADOW/kernel-v(77|80)/([^/]+)$", str(row.staged))
+            if row.kind != "guest-derived" or shadow is None:
+                continue
+            if shadow.group(2) == "camera_scene_hooks.c":
+                hooks = folded_build / "generated" / f"camera-shadow-v{shadow.group(1)}" / shadow.group(2)
+                self.dependency[row.staged] = hooks
+            else:
+                self.dependency[row.staged] = ROOT / "runtime-recomp/src/game" / shadow.group(2)
 
     def build_aliases(self) -> dict[str, str]:
         """Build directories named after a content hash whose inputs include
@@ -916,10 +927,6 @@ def folded_options(reference: Path) -> tuple[list[str], set[Path]]:
             options.append(arg)
     if capsule is None:
         raise SystemExit("equivalence: the reference configure names no capsule")
-    # Camera++ shadow kernels: the chain read them from the capsule role; the
-    # folded tree takes them as prepared inputs until fold step B4 generates them.
-    for revision in ("77", "80"):
-        options.append(f"-DDKR_CAMERA_SHADOW_KERNEL_V{revision}={capsule}/roles/CAMERA_SHADOW/kernel-v{revision}")
     mounts = {
         Path(arg.partition("=")[2])
         for arg in options

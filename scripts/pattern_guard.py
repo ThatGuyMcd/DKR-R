@@ -189,6 +189,9 @@ PIPELINE_ALLOWED = {
     # Fold-only (step B3): diffs the stage chain against the shipped dependency
     # transforms into registered stage patches, respelling the same includes.
     "scripts/fold/dependency_stages.py": "writes the v1.0.11 dependency transforms as stage patches",
+    # Fold-only: compares the folded build with the reference; it writes
+    # reports and scratch objects, never a source file.
+    "scripts/fold/equivalence.py": "reads the folded tree to compare it, writes only reports",
 }
 GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake"}
 IDENTITY_ALLOWED_SUFFIX = "netplay/legacy_identity.hpp"

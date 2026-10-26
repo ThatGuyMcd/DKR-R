@@ -1,28 +1,52 @@
 # Camera++: the local presentation provider (DKRCameraPresentation) and one
 # draw-only scene kernel per revision. The kernels compile guest-derived code
 # prepared outside the build: DKR_CAMERA_KERNEL_V<rev> holds
-# camera_scene_functions.c from patches/camera-plus/scene_kernel_pipeline.py,
-# and DKR_CAMERA_SHADOW_KERNEL_V<rev> holds the canonical-shadow
-# camera_scene_hooks.c and camera_shadow_kernel.c. Neither input is modified.
+# camera_scene_functions.c and camera_scene_hooks.c from
+# patches/camera-plus/scene_kernel_pipeline.py. Neither input is modified.
 set(DKR_CAMERA_KERNEL_V77 "" CACHE PATH "Prepared Camera++ scene kernel for revision 77")
 set(DKR_CAMERA_KERNEL_V80 "" CACHE PATH "Prepared Camera++ scene kernel for revision 80")
-set(DKR_CAMERA_SHADOW_KERNEL_V77 "" CACHE PATH "Prepared Camera++ shadow kernel for revision 77")
-set(DKR_CAMERA_SHADOW_KERNEL_V80 "" CACHE PATH "Prepared Camera++ shadow kernel for revision 80")
+
+# The prepared hooks file stubs every scene hook. src/game/camera_shadow_kernel.c
+# implements the shadow ones, so the kernel compiles the stubs of all the others.
+function(dkr_camera_hook_stubs out kernel revision)
+    set(shadow "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game/camera_shadow_kernel.c")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${kernel}/camera_scene_hooks.c" "${shadow}")
+    file(READ "${kernel}/camera_scene_hooks.c" stubs)
+    string(REPLACE "\r\n" "\n" stubs "${stubs}")
+    file(STRINGS "${shadow}" defined REGEX "^unsigned dkr_[a-z_]+\\(uint8_t\\* ram,recomp_context\\* ctx,\\.\\.\\.\\) \\{$")
+    if(NOT defined)
+        message(FATAL_ERROR "camera_shadow_kernel.c defines no scene hooks")
+    endif()
+    foreach(line IN LISTS defined)
+        string(REGEX MATCH "^unsigned (dkr_[a-z_]+)" name "${line}")
+        set(stub "unsigned dkr_camera_v${revision}_${CMAKE_MATCH_1}(uint8_t* ram,recomp_context* ctx,...){(void)ram;(void)ctx;return 0;}\n")
+        string(FIND "${stubs}" "${stub}" at)
+        if(at EQUAL -1)
+            message(FATAL_ERROR "The prepared US v${revision} Camera++ kernel has no stub for ${CMAKE_MATCH_1}")
+        endif()
+        string(REPLACE "${stub}" "" stubs "${stubs}")
+    endforeach()
+    set(path "${CMAKE_BINARY_DIR}/generated/camera-shadow-v${revision}/camera_scene_hooks.c")
+    if(EXISTS "${path}")
+        file(READ "${path}" current)
+    endif()
+    if(NOT EXISTS "${path}" OR NOT current STREQUAL stubs)
+        file(WRITE "${path}" "${stubs}")
+    endif()
+    set(${out} "${path}" PARENT_SCOPE)
+endfunction()
 
 function(dkr_camera_scene_kernel target revision)
     set(kernel "${DKR_CAMERA_KERNEL_V${revision}}")
-    set(shadow "${DKR_CAMERA_SHADOW_KERNEL_V${revision}}")
     if(NOT EXISTS "${kernel}/manifest.json")
         message(FATAL_ERROR "Set DKR_CAMERA_KERNEL_V${revision} to a NEW draw-only Camera++ kernel")
     endif()
-    if(NOT EXISTS "${shadow}/camera_scene_hooks.c" OR NOT EXISTS "${shadow}/camera_shadow_kernel.c")
-        message(FATAL_ERROR "Set DKR_CAMERA_SHADOW_KERNEL_V${revision} to the prepared Camera++ shadow kernel")
-    endif()
+    dkr_camera_hook_stubs(hooks "${kernel}" "${revision}")
     add_library(${target} STATIC
         "${kernel}/camera_scene_functions.c"
-        "${shadow}/camera_scene_hooks.c"
+        "${hooks}"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game/camera_kernel.c"
-        "${shadow}/camera_shadow_kernel.c")
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game/camera_shadow_kernel.c")
     target_include_directories(${target} BEFORE PRIVATE "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/game" "${kernel}")
     target_compile_features(${target} PRIVATE c_std_11)
     foreach(helper access step fault)
