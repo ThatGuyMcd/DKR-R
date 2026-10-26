@@ -18,11 +18,29 @@
    (amd64 under emulation on the devops Mac). Alone it fails about half its
    runs, at `quick_join_lifecycle_tests.cpp:126`: after the rejected rekey
    the client never takes the host's Quick Join bootstrap, and the 20 s wait
-   expires (passing runs take about 3 s). Nothing it compiles changed after
-   the test triage, and it passed then. That points to a race in the shipped
-   Quick Join path or in the test, not the fold. `DKRExperimentalQuickJoin`
-   aborted once under parallel load the same way, and it was the one failure
-   before the fold too. Behaviour fixes belong after B10.
+   expires (passing runs take about 3 s). It predates the fold: built from
+   `origin/main` (`1d46835`, no fold) it passed 10 of 20 back-to-back runs,
+   and from the fold branch 8 of 20, in the same image. So it's a race in the
+   Quick Join path or the test. `DKRExperimentalQuickJoin` aborted once under
+   parallel load the same way, and it was the one failure before the fold
+   too. Behaviour fixes belong after B10.
+
+## PR-2 merge blockers (non-Linux coverage)
+
+The gate is Linux x86_64 only. These close only when the `windows` and
+`android` CI jobs build the folded tree and pass on the PR:
+
+- MSVC compile flags of the shipped TUs (`/bigobj`, `/EHs /EHc-`,
+  `/fp:strict`, `/FI` forced includes) and the Windows stage chain.
+- The stage patches on the Android chain (five files take `android-*` stages
+  first) and the `DKRPortGameCore` object library inside the Android
+  `SHARED` `DKRPortGame`.
+
+Today neither job does that. `build-windows.yml` configures the `host`
+preset (no RT64, so no stage patches and no game TUs), and
+`build-android.yml` compiles `runtime-recomp/tests/android_compile` only.
+They need a `host-full-nogen`-style Windows configure and an Android
+configure of `runtime-recomp/` before they can close these.
 
 ## Open questions
 
