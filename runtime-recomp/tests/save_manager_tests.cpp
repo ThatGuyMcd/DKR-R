@@ -130,10 +130,14 @@ int main() {
     auto corrupt_adventure = dkr::runtime::saves::codec::blank_bytes();
     corrupt_adventure[12] ^= 1U;
     write_bytes(bad_checksum, corrupt_adventure);
-    assert(dkr::runtime::saves::import_adventure(bad_checksum, error));
+    // v1.0.11 (shared-saves): import no longer rewrites checksums. A save that
+    // needs repair is refused and the live save is left untouched; repair runs
+    // only through Backups & Recovery (repair_adventure_checksums above).
+    const auto live_before_import = read_bytes(live_save);
+    assert(!dkr::runtime::saves::import_adventure(bad_checksum, error));
+    assert(error.find("needs repair") != std::string::npos);
     assert(dkr::runtime::saves::adventure_info().valid);
-    assert(read_bytes(dkr::runtime::saves::adventure_info().path)[12] ==
-           corrupt_adventure[12]);
+    assert(read_bytes(live_save) == live_before_import);
 
     std::fputs("[test][save-manager] isolated online saves\n", stderr);
     auto host_image = dkr::runtime::saves::codec::blank_image();
@@ -192,24 +196,28 @@ int main() {
     assert(dkr::runtime::saves::adventure_backups().size() ==
            backups_before_online);
 
-    // Modded host progress is keyed by the frozen manifest, never retail or
-    // another mod set; clients still use their authenticated session folder.
+    // Superseded in v1.0.11 (shared-saves): host progress is no longer keyed
+    // by the mod manifest; every mod set continues the one host Adventure
+    // ("mod manifests identify simulation, never durable progress"). The
+    // per-mod folders must stay gone. Clients still use their authenticated
+    // session folder, and malformed profiles are still refused.
     const std::string mod_a(64,'a'),mod_b(64,'b');
     assert(!dkr::runtime::saves::prepare_host_online_adventure(
         dkr::runtime::saves::OnlineSaveSeedMode::Fresh,seeded_online,error,"../escape"));
-    assert(!dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error,mod_a));
+    assert(dkr::runtime::saves::previous_online_adventure_info(mod_a).path==
+           dkr::runtime::saves::previous_online_adventure_info(mod_b).path);
     assert(dkr::runtime::saves::prepare_host_online_adventure(
         dkr::runtime::saves::OnlineSaveSeedMode::CopySinglePlayer,seeded_online,error,mod_a));
     assert(seeded_online==single_player_before_online);
     assert(dkr::runtime::saves::bind_staged_host_online_adventure(20,error));
     assert(dkr::runtime::saves::read_online_adventure(true,20,activated_host,activated_host_path,error));
-    assert(activated_host_path==root/"saves"/"online"/"host"/"mod-profiles"/mod_a/"dkr.us.v77.bin");
+    assert(activated_host_path==root/"saves"/"online"/"host"/"dkr.us.v77.bin");
     assert(dkr::runtime::saves::commit_online_adventure(true,20,host_save,error));
     assert(dkr::runtime::saves::previous_online_adventure_info(mod_a).valid);
-    assert(!dkr::runtime::saves::previous_online_adventure_info(mod_b).exists);
+    assert(dkr::runtime::saves::previous_online_adventure_info(mod_b).valid);
+    assert(!std::filesystem::exists(root/"saves"/"online"/"host"/"mod-profiles"));
     assert(dkr::runtime::saves::prepare_host_online_adventure(
-        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error,mod_a));
+        dkr::runtime::saves::OnlineSaveSeedMode::ContinuePreviousSession,seeded_online,error,mod_b));
     assert(seeded_online==host_save && read_bytes(host_online_info.path)==host_save);
     dkr::runtime::saves::discard_staged_host_online_adventure();
     assert(dkr::runtime::saves::prepare_host_online_adventure(

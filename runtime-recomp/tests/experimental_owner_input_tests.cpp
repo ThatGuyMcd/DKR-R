@@ -16,17 +16,30 @@ void codec_tests() {
     p.epoch = 0x123456789ABCDEF0ULL; p.players = 4; p.owner = 3; p.count = 8; p.first_frame = 41;
     p.received_next = {2,3,5,7};
     for (unsigned i = 0; i < 8; ++i) p.inputs[i] = sample(3, i);
+    // v1.0.11 (sdk2 capsule role): DKRX v3 adds a command mask byte to the
+    // header and 64 bytes of SDK2 command words to each input that has one.
+    // Only Player 1 (owner 0) may author commands.
     const auto bytes = encode_owner_inputs(p);
-    assert(bytes.size() == kOwnerInputMaximumBytes && bytes[8] == 0xF0 && bytes[15] == 0x12);
+    assert(bytes.size() == 53U + 4U * kOwnerInputBatch && bytes[4] == 3U && bytes[8] == 0xF0 && bytes[15] == 0x12);
     const auto decoded = decode_owner_inputs(bytes);
     assert(decoded && decoded->epoch == p.epoch && decoded->inputs == p.inputs && decoded->received_next == p.received_next);
+    {
+        auto commanded = p;
+        for (unsigned i = 0; i < 8; ++i) commanded.commands[i].words = {i + 1U, 2U, 3U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 4U};
+        assert(encode_owner_inputs(commanded).empty());
+        commanded.owner = 0;
+        const auto full = encode_owner_inputs(commanded);
+        assert(full.size() == kOwnerInputMaximumBytes);
+        const auto round_trip = decode_owner_inputs(full);
+        assert(round_trip && round_trip->commands == commanded.commands && round_trip->inputs == p.inputs);
+    }
     for (unsigned length = 0; length < bytes.size(); ++length) assert(!decode_owner_inputs(std::span(bytes).first(length)));
     auto invalid = bytes; invalid.push_back(0); assert(!decode_owner_inputs(invalid));
     for (unsigned at : {0U,4U,5U,6U,7U}) {
         invalid = bytes; invalid[at] = 255; assert(!decode_owner_inputs(invalid));
     }
-    p.players = 2; p.owner = 1; p.received_next = {}; p.count = 0; p.first_frame = 0;
-    assert(encode_owner_inputs(p).size() == 52);
+    p.players = 2; p.owner = 1; p.received_next = {}; p.count = 0; p.first_frame = 0; p.commands = {};
+    assert(encode_owner_inputs(p).size() == 53);
     p.received_next[2] = 1; assert(encode_owner_inputs(p).empty());
     p.received_next = {}; p.count = 8; p.first_frame = UINT32_MAX - 3; assert(encode_owner_inputs(p).empty());
 }
