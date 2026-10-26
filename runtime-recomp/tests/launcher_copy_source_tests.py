@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import unittest
 
+from source_text import Source
+
 ROOT = Path(__file__).resolve().parents[2]
 GAME = ROOT / "runtime-recomp/src/game"
 # Reviewed copy that v1.0.11 no longer ships: the named release layer replaced
@@ -88,7 +90,7 @@ SUPERSEDED = {
 
 
 def source(name):
-    return (GAME / name).read_text(encoding="utf-8")
+    return Source((GAME / name).read_text(encoding="utf-8"))
 
 
 def literals(text):
@@ -113,7 +115,7 @@ class LauncherCopyTests(unittest.TestCase):
         sources = {}
         for entry in inventory["entries"]:
             with self.subTest(entry=entry["id"]):
-                values = sources.setdefault(entry["file"], literals(source(entry["file"])))
+                values = sources.setdefault(entry["file"], literals(source(entry["file"]).raw))
                 if entry["id"] in SUPERSEDED:
                     self.assertEqual(entry["verification"], "literal")
                     self.assertNotIn(entry["approved"], values, f"superseded ({SUPERSEDED[entry['id']]}) but present")

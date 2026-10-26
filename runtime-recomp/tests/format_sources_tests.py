@@ -38,6 +38,18 @@ class TokenTests(unittest.TestCase):
         self.assertEqual(tokens(b"n = 1'000'000ull;"), ["n", "=", "1'000'000ull", ";"])
 
 
+class SourceTextTests(unittest.TestCase):
+    def test_source_checks_ignore_layout(self):
+        from source_text import Source
+
+        text = Source("if (a) {\n    run(x, y);\n}\n")
+        self.assertIn("if(a){run(x,y);}", text)
+        self.assertIn("run( x,y )", text)
+        self.assertNotIn("run(y, x)", text)
+        self.assertLess(text.index("if (a)"), text.index("run(x, y)"))
+        self.assertEqual(text.raw, "if (a) {\n    run(x, y);\n}\n")
+
+
 class ProofTests(unittest.TestCase):
     def test_cmake_words_ignore_layout_and_comments_only(self):
         words = format_sources.cmake_words

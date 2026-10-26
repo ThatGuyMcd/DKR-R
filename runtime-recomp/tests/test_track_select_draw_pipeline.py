@@ -10,6 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 from compose_legacy_mod_policy import compose_track_menu, elf_functions, elf_sections
+from source_text import Source
 from track_select_draw_policy import compose_track_draw
 
 
@@ -87,7 +88,7 @@ class TrackDrawPipeline(unittest.TestCase):
                 )
 
     def test_local_aspect_never_enters_cpu_helper(self):
-        helper = (ROOT / "runtime-recomp/src/game/track_select_draw_guest.h").read_text()
+        helper = Source((ROOT / "runtime-recomp/src/game/track_select_draw_guest.h").read_text())
         for forbidden in ("SDL", "get_graphics_config", "filesystem", "malloc", "new "):
             self.assertNotIn(forbidden, helper)
         self.assertIn("end-24U", helper)

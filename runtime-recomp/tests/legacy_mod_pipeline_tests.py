@@ -10,6 +10,8 @@ import struct
 import unittest
 from unittest.mock import patch
 
+from source_text import Source
+
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("legacy_compose", ROOT / "scripts/compose_legacy_mod_policy.py")
 compose = importlib.util.module_from_spec(spec)
@@ -287,16 +289,16 @@ class PipelineTests(unittest.TestCase):
     def test_custom_stage_reuses_stock_clock_and_revision_camera(self):
         # The custom early-return hook must not bypass the stock beat override.
         source = ROOT / "runtime-recomp/src/game"
-        owner = (source / "runtime_legacy_mods.cpp").read_text()
+        owner = Source((source / "runtime_legacy_mods.cpp").read_text())
         self.assertIn("dkr_character_select_animation_fraction,p->stage_camera", owner)
-        stage = (source / "mods/legacy_character_stage.cpp").read_text()
+        stage = Source((source / "mods/legacy_character_stage.cpp").read_text())
         self.assertLess(
             stage.index("calls.animation_fraction(memory.data(),&music)"),
             stage.index("calls.animation_override(memory.data(),&music)"),
         )
         self.assertNotIn("advance_character_select_phase", stage)  # never tick per actor
         for rev in (77, 80):
-            payload = (source / f"game_payload_v{rev}.cpp").read_text()
+            payload = Source((source / f"game_payload_v{rev}.cpp").read_text())
             self.assertIn(".stage_camera = cam_get_active_camera,", payload)
             policy = json.loads((ROOT / f"runtime-recomp/dkr.us.v{rev}.recomp-policy.json").read_text())
             clocks = [

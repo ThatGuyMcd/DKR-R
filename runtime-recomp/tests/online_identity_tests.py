@@ -54,7 +54,7 @@ class OnlineIdentityTests(unittest.TestCase):
             offenders += [f"{path.relative_to(ROOT)}: {salt[:12]}" for salt in ENGINE_SALTS if salt in text]
         self.assertEqual(offenders, [])
         runtime = (RUNTIME / "src/game/netplay/experimental_runtime.cpp").read_text(encoding="utf-8")
-        uses = re.findall(r"base\+=(DKR_LEGACY_ENGINE_SALT_\d);", runtime)
+        uses = re.findall(r"base\s*\+=\s*(DKR_LEGACY_ENGINE_SALT_\d);", runtime)
         self.assertEqual(uses, [f"DKR_LEGACY_ENGINE_SALT_{i}" for i in range(1, 5)])
 
     @unittest.skipUnless(shutil.which("cmake"), "needs cmake")

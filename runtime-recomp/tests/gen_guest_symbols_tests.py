@@ -10,6 +10,8 @@ import tempfile
 import textwrap
 import unittest
 
+from source_text import Source
+
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("gen_guest_symbols", ROOT / "scripts/gen_guest_symbols.py")
 gen_guest_symbols = importlib.util.module_from_spec(SPEC)
@@ -47,7 +49,7 @@ class RepositoryRequestTests(unittest.TestCase):
             return rows
 
         game = ROOT / "runtime-recomp/src/game"
-        title = (game / "title_text_rt64.hpp").read_text(encoding="utf-8")
+        title = Source((game / "title_text_rt64.hpp").read_text(encoding="utf-8"))
         rows = table(
             "dDialogueBoxBegin",
             "dDialogueBoxDrawModes",
@@ -59,7 +61,7 @@ class RepositoryRequestTests(unittest.TestCase):
         )
         self.assertIn("    {" + rows[0] + "},\n    {" + rows[1] + "}\n", title)
         self.assertIn("credit_rows_{{" + ",".join(table("gCreditsMenuElements")) + "}}", title)
-        credits = (game / "credits_sky_rt64.hpp").read_text(encoding="utf-8")
+        credits = Source((game / "credits_sky_rt64.hpp").read_text(encoding="utf-8"))
         rows = table("gVoidData", "gVoidVerts", "gVoidCurrVerts", "gVoidVertexFlip", "gVoidVertCount")
         self.assertIn("    {" + rows[0] + "},\n    {" + rows[1] + "}\n", credits)
 
