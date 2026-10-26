@@ -49,3 +49,30 @@ run at configure time, like the existing code-mod dispatch staging. The plan
 had build-time `add_custom_command`s; keep them at configure time. The gate's
 header scan and preprocessing read the configured tree without building it,
 so build-time outputs would not exist when it compares them.
+
+## Evidence and signing (B5)
+
+`scripts/fold/run_equivalence.sh` ends by writing
+`build/fold-equivalence/equivalence/fold-equivalence.json`. It records the
+commit, whether the work tree was clean, the image ID, this page's reference
+sha256 table, the sha256 of every input the gate trusts (allowed deltas,
+header variants, shader-pending list, closure record, patch manifest, guest
+hooks, online identity), and each level's counts, allowed entries and
+unexplained differences. The script exits non-zero unless every level passed
+on a clean tree.
+
+Steve signs it on the devops machine and attaches both files to the PR:
+
+    ssh-keygen -Y sign -n fold-equivalence -f ~/.ssh/id_ed25519 fold-equivalence.json
+
+Reviewers verify with the allowed-signers entry for Steve's key:
+
+    ssh-keygen -Y verify -n fold-equivalence -f allowed_signers -I <signer identity> \
+      -s fold-equivalence.json.sig < fold-equivalence.json
+
+CI can't run levels 0-3 (they need ROM-derived payloads). The
+`fold-equivalence` workflow runs the ROM-free part of level 1 instead:
+`equivalence.py closure --check` compares every first-party closure file with
+`scripts/fold/closure.json`, whitespace aside so the format-only commit (B9)
+keeps it green. `closure --reference DIR --write` re-records it, and only a
+gate run on the reference may justify that.

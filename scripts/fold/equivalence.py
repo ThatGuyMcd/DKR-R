@@ -403,6 +403,12 @@ def explained(problem: str, allowed: list[dict[str, str]]) -> str | None:
     return None
 
 
+def write_record(args: argparse.Namespace, level: str, **counts: object) -> None:
+    """One level's result for the evidence record (run_equivalence.sh)."""
+    if getattr(args, "record", None):
+        atomic_write(args.record, json.dumps({"level": level, **counts}, indent=1) + "\n")
+
+
 def run_targets(args: argparse.Namespace) -> int:
     mapping = Mapping(args.reference, args.folded_build)
     reference = load_codemodel(args.reference / "codemodel")
@@ -427,6 +433,7 @@ def run_targets(args: argparse.Namespace) -> int:
         f"{len(problems)} unexplained differences",
         file=sys.stderr,
     )
+    write_record(args, "targets", compared=len(shipped), allowed=len(found) - len(problems), unexplained=problems)
     return 1 if problems else 0
 
 
@@ -680,6 +687,14 @@ def run_level1(args: argparse.Namespace) -> int:
         f"{len(problems) - len(unexplained)} allowed, {len(unexplained)} unexplained",
         file=sys.stderr,
     )
+    write_record(
+        args,
+        "level1",
+        tus=len(pairing.pairs),
+        files=len(same_bytes),
+        allowed=len(problems) - len(unexplained),
+        unexplained=unexplained,
+    )
     return 1 if unexplained else 0
 
 
@@ -796,6 +811,15 @@ def run_level2(args: argparse.Namespace) -> int:
         f"{len(problems) - len(unexplained)} allowed, {len(unexplained)} unexplained",
         file=sys.stderr,
     )
+    write_record(
+        args,
+        "level2",
+        token_identical=same,
+        level3=level3,
+        shader_pending=sorted(skipped),
+        allowed=len(problems) - len(unexplained),
+        unexplained=unexplained,
+    )
     return 1 if unexplained else 0
 
 
@@ -866,9 +890,12 @@ def run_level3(args: argparse.Namespace) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     problems: list[str] = []
     checked: list[str] = []
+    covered: set[str] = set()
     for old_key, new_key in sorted(pairing.pairs.items()):
-        if apply_closure.tu_name(ROOT, mapping.folder, old_key[1]) not in split or new_key not in folded_entries:
+        name = apply_closure.tu_name(ROOT, mapping.folder, old_key[1])
+        if name not in split or new_key not in folded_entries:
             continue
+        covered.add(name)
         label = f"{new_key[0]}: {portable(mapping, new_key[1])}"
         old_text = (args.reference_pp / f"{output_name(old_key)}.i").read_text(errors="surrogateescape")
         new_text = (args.folded_pp / f"{output_name(new_key)}.i").read_text(errors="surrogateescape")
@@ -903,6 +930,9 @@ def run_level3(args: argparse.Namespace) -> int:
                 "".join(difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True))), encoding="utf-8"
             )
             problems.append(f"{label}: object sections differ: {', '.join(differ)}")
+    # Every TU header-variants.json says compiled against another header
+    # version must have been compared here (or found token-identical).
+    problems += [f"{name}: header-variant TU not compared" for name in sorted(split - covered)]
     allowed = load_allowed(ALLOWED)
     unexplained = [problem for problem in problems if explained(problem, allowed) is None]
     for label in checked:
@@ -912,9 +942,18 @@ def run_level3(args: argparse.Namespace) -> int:
         reason = explained(problem, allowed)
         print(problem if reason is None else f"allowed: {problem} ({reason})")
     print(
-        f"level3: {len(checked)} header-variant TUs compiled, {len(problems) - len(unexplained)} allowed, "
+        f"level3: {len(covered)} header-variant TUs covered, {len(checked)} compiled, "
+        f"{len(problems) - len(unexplained)} allowed, "
         f"{len(unexplained)} unexplained (diffs in {args.out})",
         file=sys.stderr,
+    )
+    write_record(
+        args,
+        "level3",
+        covered=len(covered),
+        compiled=checked,
+        allowed=[problem for problem in problems if problem not in unexplained],
+        unexplained=unexplained,
     )
     return 1 if unexplained else 0
 
@@ -962,6 +1001,87 @@ def run_options(args: argparse.Namespace) -> int:
     else:
         print("\n".join(options))
     return 0
+
+
+CLOSURE = ROOT / "scripts/fold/closure.json"
+WHITESPACE = re.compile(rb"\s+")
+
+
+def closure_digest(data: bytes) -> str:
+    """sha256 of a closure file as level 1 compares it, with whitespace
+    dropped as well, so the record survives the format-only commit (B9)."""
+    return hashlib.sha256(WHITESPACE.sub(b"", comparable(data))).hexdigest()
+
+
+def run_closure(args: argparse.Namespace) -> int:
+    """The ROM-free part of level 1: every first-party file of the shipped
+    closure still holds the v1.0.11 bytes. --write records them from the
+    reference (devops machine); --check needs only the work tree (CI)."""
+    if args.write:
+        mapping = Mapping(args.reference, ROOT / "build" / "unused")
+        files = {
+            dest: closure_digest(data)
+            for dest, data in mapping.result.contents.items()
+            if dest not in apply_closure.GENERATED
+        }
+        # Guest-derived but first-party since B4.
+        for staged, folded in mapping.dependency.items():
+            if folded.is_relative_to(ROOT / "runtime-recomp"):
+                files[folded.relative_to(ROOT).as_posix()] = closure_digest(staged.read_bytes())
+        record = {
+            "about": "Whitespace-insensitive sha256 (scripts/fold/equivalence.py closure_digest) of every "
+            "first-party file the shipped v1.0.11 binaries compile, as folded. Written from the reference "
+            "with `equivalence.py closure --reference DIR --write`; CI runs `closure --check`.",
+            "files": dict(sorted(files.items())),
+        }
+        atomic_write(CLOSURE, json.dumps(record, indent=1) + "\n")
+        print(f"closure: {len(files)} files recorded", file=sys.stderr)
+        return 0
+    files = json.loads(CLOSURE.read_text(encoding="utf-8"))["files"]
+    problems: list[str] = []
+    for dest, digest in sorted(files.items()):
+        path = ROOT / dest
+        if not path.is_file():
+            problems.append(f"{dest}: missing")
+        elif closure_digest(path.read_bytes()) != digest:
+            problems.append(f"{dest}: differs from the shipped v1.0.11 file (whitespace aside)")
+    for problem in problems:
+        print(problem)
+    print(f"closure: {len(files)} files checked, {len(problems)} differ", file=sys.stderr)
+    return 1 if problems else 0
+
+
+EVIDENCE_INPUTS = (
+    "scripts/fold/allowed-deltas.json",
+    "scripts/fold/header-variants.json",
+    "scripts/fold/shader-pending.json",
+    "scripts/fold/closure.json",
+    "patches/manifest.json",
+    "runtime-recomp/guest-hooks/hooks.toml",
+    "runtime-recomp/src/game/netplay/legacy_identity.hpp",
+)
+
+
+def run_evidence(args: argparse.Namespace) -> int:
+    """fold-equivalence.json: what was compared, against what, and the result
+    of every level. Steve signs it (docs/fold-in/REFERENCE.md) and attaches it
+    to the PR."""
+    levels = [json.loads(path.read_text(encoding="utf-8")) for path in args.records]
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
+    evidence = {
+        "schema": 1,
+        "commit": commit,
+        "work_tree_clean": not dirty.strip(),
+        "image": args.image,
+        "reference": {name: sha for name, sha in DOC_ROW.findall(REFERENCE_DOC.read_text(encoding="utf-8"))},
+        "inputs": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in EVIDENCE_INPUTS},
+        "levels": {level.pop("level"): level for level in levels},
+        "passed": all(not level["unexplained"] for level in levels) and len(levels) == 4,
+    }
+    atomic_write(args.out, json.dumps(evidence, indent=1) + "\n")
+    print(f"evidence: {args.out} ({'passed' if evidence['passed'] else 'FAILED'})", file=sys.stderr)
+    return 0 if evidence["passed"] and evidence["work_tree_clean"] else 1
 
 
 REFERENCE_DOC = ROOT / "docs/fold-in/REFERENCE.md"
@@ -1012,6 +1132,7 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument("--reference", type=Path, required=True, help="the reference directory")
         command.add_argument("--folded-build", type=Path, required=True, help="the folded build directory")
         command.add_argument("--verbose", action="store_true", help="also list allowed differences and notes")
+        command.add_argument("--record", type=Path, help="write this level's result for the evidence record")
         return command
 
     targets = compared("targets", "compare per-source compile settings and link lines")
@@ -1024,6 +1145,15 @@ def main(argv: list[str] | None = None) -> int:
     level2.add_argument("--folded-compdb", type=Path, required=True)
     level2.add_argument("--reference-pp", type=Path, required=True)
     level2.add_argument("--folded-pp", type=Path, required=True)
+    evidence = sub.add_parser("evidence", help="assemble fold-equivalence.json from the level records")
+    evidence.add_argument("--out", type=Path, required=True)
+    evidence.add_argument("--image", required=True)
+    evidence.add_argument("records", nargs="+", type=Path)
+    closure = sub.add_parser("closure", help="record or check the first-party closure bytes (ROM-free level 1)")
+    closure.add_argument("--reference", type=Path, help="the reference directory (with --write)")
+    closure_mode = closure.add_mutually_exclusive_group(required=True)
+    closure_mode.add_argument("--write", action="store_true")
+    closure_mode.add_argument("--check", action="store_true")
     verify = sub.add_parser("verify-reference", help="check the reference against REFERENCE.md and its own pins")
     verify.add_argument("--reference", type=Path, required=True)
     options = sub.add_parser("options", help="print the folded configure options, one per line")
@@ -1054,6 +1184,8 @@ def main(argv: list[str] | None = None) -> int:
             setattr(args, key, getattr(args, key).resolve())
     handlers = {
         "verify-reference": run_verify_reference,
+        "closure": run_closure,
+        "evidence": run_evidence,
         "targets": run_targets,
         "level1": run_level1,
         "level2": run_level2,

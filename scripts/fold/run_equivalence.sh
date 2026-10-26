@@ -21,7 +21,8 @@
 # objects for the TUs level 2 lets differ because of a header variant
 # (level 3, always run). Exit status is non-zero on any unexplained
 # difference; scripts/fold/allowed-deltas.json, header-variants.json and
-# shader-pending.json list the explained ones.
+# shader-pending.json list the explained ones. BUILD_DIR/equivalence/
+# fold-equivalence.json records the run for signing (docs/fold-in/REFERENCE.md).
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 reference="$(cd "${1:?usage: run_equivalence.sh REFERENCE_DIR [BUILD_DIR]}" && pwd)"
@@ -70,14 +71,17 @@ if [ ! -f "$cache/depscan-by-target.json" ]; then
 fi
 
 status=0
+rm -f "$out"/record-*.json "$out/fold-equivalence.json"
+echo "== closure (ROM-free level 1 subset, as CI runs it)"
+python3 "$tool" closure --check || status=1
 echo "== dependency stages"
 python3 "$root/scripts/fold/dependency_stages.py" --reference "$reference" --build "$build" --check || status=1
 echo "== targets"
-python3 "$tool" targets --reference "$reference" --folded-build "$build" || status=1
+python3 "$tool" targets --reference "$reference" --folded-build "$build" --record "$out/record-targets.json" || status=1
 echo "== level 1"
 python3 "$tool" level1 --reference "$reference" --folded-build "$build" \
   --folded-compdb "$out/shipped-compdb.json" --folded-deps "$out/depscan.json" \
-  --reference-deps "$cache/depscan-by-target.json" || status=1
+  --reference-deps "$cache/depscan-by-target.json" --record "$out/record-level1.json" || status=1
 
 echo "== level 2"
 rm -rf "$out/pp"
@@ -86,11 +90,16 @@ if [ ! -d "$cache/pp" ]; then
   in_image "python3 -B '$tool' preprocess --compdb '$reference/shipped-compdb.json' --build '$ref_build' --out '$cache/pp' --jobs $jobs"
 fi
 python3 "$tool" level2 --reference "$reference" --folded-build "$build" \
-  --folded-compdb "$out/shipped-compdb.json" --reference-pp "$cache/pp" --folded-pp "$out/pp" || status=1
+  --folded-compdb "$out/shipped-compdb.json" --reference-pp "$cache/pp" --folded-pp "$out/pp" \
+  --record "$out/record-level2.json" || status=1
 
 echo "== level 3"
 rm -rf "$out/level3"
 in_image "python3 -B '$tool' level3 --reference '$reference' --folded-build '$build' \
   --folded-compdb '$out/shipped-compdb.json' --reference-pp '$cache/pp' --folded-pp '$out/pp' \
-  --out '$out/level3'" || status=1
+  --out '$out/level3' --record '$out/record-level3.json'" || status=1
+
+echo "== evidence"
+records=("$out"/record-*.json)
+python3 "$tool" evidence --out "$out/fold-equivalence.json" --image "$image" "${records[@]}" || status=1
 exit "$status"

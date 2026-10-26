@@ -1,0 +1,27 @@
+name: Fold equivalence
+# The ROM-free subset of the fold gate's level 1: every first-party file the
+# shipped v1.0.11 binaries compile still holds its folded bytes (whitespace
+# aside). Levels 0-3 need ROM-derived payloads and run on the devops machine
+# (scripts/fold/run_equivalence.sh), whose signed fold-equivalence.json goes
+# on the PR. Required on the fold branch and fold-in-base only; retired with
+# scripts/fold/ after the first release from the folded tree.
+on:
+  push:
+    branches: [refactor/patch-fold-in]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  fold-equivalence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: First-party closure matches v1.0.11
+        run: python3 scripts/fold/equivalence.py closure --check
