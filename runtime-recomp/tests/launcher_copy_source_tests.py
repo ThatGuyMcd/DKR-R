@@ -8,6 +8,83 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 GAME = ROOT / "runtime-recomp/src/game"
+# Reviewed copy that v1.0.11 no longer ships: the named release layer replaced
+# that part of the launcher, and the fold wrote the shipped bytes back. Each
+# string must stay absent; docs/fold-in/launcher-copy-review.md lists them for
+# the Phase C copy review, which re-baselines them against the shipped strings.
+SUPERSEDED = {
+    "COPY-053": "camera-plus, v1.0.11",
+    "COPY-054": "camera-plus, v1.0.11",
+    "COPY-055": "camera-plus, v1.0.11",
+    "COPY-056": "camera-plus, v1.0.11",
+    "COPY-063": "all-player-detail, v1.0.11",
+    "COPY-157": "shared-saves, v1.0.11",
+    "COPY-158": "shared-saves, v1.0.11",
+    "COPY-159": "shared-saves, v1.0.11",
+    "COPY-160": "shared-saves, v1.0.11",
+    "COPY-161": "shared-saves, v1.0.11",
+    "COPY-162": "shared-saves, v1.0.11",
+    "COPY-163": "shared-saves, v1.0.11",
+    "COPY-164": "shared-saves, v1.0.11",
+    "COPY-165": "shared-saves, v1.0.11",
+    "COPY-166": "shared-saves, v1.0.11",
+    "COPY-167": "shared-saves, v1.0.11",
+    "COPY-168": "shared-saves, v1.0.11",
+    "COPY-169": "shared-saves, v1.0.11",
+    "COPY-170": "shared-saves, v1.0.11",
+    "COPY-171": "shared-saves, v1.0.11",
+    "COPY-172": "shared-saves, v1.0.11",
+    "COPY-173": "shared-saves, v1.0.11",
+    "COPY-175": "shared-saves, v1.0.11",
+    "COPY-176": "shared-saves, v1.0.11",
+    "COPY-177": "shared-saves, v1.0.11",
+    "COPY-178": "shared-saves, v1.0.11",
+    "COPY-179": "shared-saves, v1.0.11",
+    "COPY-180": "shared-saves, v1.0.11",
+    "COPY-181": "shared-saves, v1.0.11",
+    "COPY-182": "shared-saves, v1.0.11",
+    "COPY-183": "shared-saves, v1.0.11",
+    "COPY-184": "shared-saves, v1.0.11",
+    "COPY-185": "shared-saves, v1.0.11",
+    "COPY-186": "shared-saves, v1.0.11",
+    "COPY-187": "shared-saves, v1.0.11",
+    "COPY-188": "shared-saves, v1.0.11",
+    "COPY-195": "rollback-connection, v1.0.11",
+    "COPY-196": "rollback-only, v1.0.11",
+    "COPY-197": "rollback-only, v1.0.11",
+    "COPY-198": "rollback-only, v1.0.11",
+    "COPY-199": "rollback-only, v1.0.11",
+    "COPY-200": "rollback-only, v1.0.11",
+    "COPY-202": "rollback-only, v1.0.11",
+    "COPY-203": "rollback-only, v1.0.11",
+    "COPY-205": "rollback-only, v1.0.11",
+    "COPY-206": "rollback-only, v1.0.11",
+    "COPY-229": "rollback-connection, v1.0.11",
+    "COPY-230": "rollback-connection, v1.0.11",
+    "COPY-232": "rollback-connection, v1.0.11",
+    "COPY-242": "rollback-connection, v1.0.11",
+    "COPY-246": "rollback-connection, v1.0.11",
+    "COPY-247": "rollback-connection, v1.0.11",
+    "COPY-248": "online-directory, v1.0.11",
+    "COPY-249": "online-directory, v1.0.11",
+    "COPY-250": "rollback-only, v1.0.11",
+    "COPY-253": "online-directory, v1.0.11",
+    "COPY-268": "lobby-stability, v1.0.11",
+    "COPY-314": "camera-plus, v1.0.11",
+    "COPY-315": "camera-plus, v1.0.11",
+    "COPY-316": "camera-plus, v1.0.11",
+    "COPY-317": "camera-plus, v1.0.11",
+    "COPY-318": "camera-plus, v1.0.11",
+    "COPY-319": "camera-plus, v1.0.11",
+    "COPY-321": "camera-plus, v1.0.11",
+    "COPY-322": "camera-plus, v1.0.11",
+    "COPY-323": "camera-plus, v1.0.11",
+    "COPY-324": "camera-plus, v1.0.11",
+    "COPY-397": "shared-saves, v1.0.11",
+    "COPY-399": "launcher-polish, v1.0.11",
+    "COPY-413": "shared-saves, v1.0.11",
+    "COPY-414": "shared-saves, v1.0.11",
+}
 
 
 def source(name):
@@ -26,6 +103,10 @@ def literals(text):
 
 
 class LauncherCopyTests(unittest.TestCase):
+    def test_superseded_entries_exist(self):
+        inventory = json.loads((Path(__file__).with_name("launcher_copy_inventory.json")).read_text(encoding="utf-8"))
+        self.assertLessEqual(set(SUPERSEDED), {entry["id"] for entry in inventory["entries"]})
+
     def test_reviewed_inventory(self):
         inventory = json.loads((Path(__file__).with_name("launcher_copy_inventory.json")).read_text(encoding="utf-8"))
         self.assertGreaterEqual(len(inventory["entries"]), 400)
@@ -33,7 +114,10 @@ class LauncherCopyTests(unittest.TestCase):
         for entry in inventory["entries"]:
             with self.subTest(entry=entry["id"]):
                 values = sources.setdefault(entry["file"], literals(source(entry["file"])))
-                if entry["verification"] == "literal":
+                if entry["id"] in SUPERSEDED:
+                    self.assertEqual(entry["verification"], "literal")
+                    self.assertNotIn(entry["approved"], values, f"superseded ({SUPERSEDED[entry['id']]}) but present")
+                elif entry["verification"] == "literal":
                     self.assertIn(entry["approved"], values)
                 elif entry["verification"] == "removed":
                     self.assertNotIn(entry["previous"], values)
@@ -127,10 +211,10 @@ class LauncherCopyTests(unittest.TestCase):
         self.assertIn("OnlineTextForDisplay(text)", online)
 
     def test_save_and_mod_safety_stays_visible(self):
-        saves = source("runtime_saves_ui.inl")
-        self.assertIn("Reset all three slots, unlocks and records?", saves)
-        self.assertIn("A backup will be created first.", saves)
-        self.assertIn("Offline Adventure save. Online and modded saves aren't affected.", saves)
+        # The saves page here was replaced by shared-saves in v1.0.11; these
+        # are COPY-166 and COPY-175 and are checked as superseded above.
+        self.assertIn("COPY-166", SUPERSEDED)
+        self.assertIn("COPY-175", SUPERSEDED)
         mods = source("runtime_mod_library_ui.inl")
         self.assertIn("Other mods, original source files and saves are kept.", mods)
         self.assertIn("mod_support(item.details", mods)
