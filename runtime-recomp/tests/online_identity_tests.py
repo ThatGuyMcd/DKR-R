@@ -50,6 +50,26 @@ class OnlineIdentityTests(unittest.TestCase):
             with self.subTest(revision=revision):
                 self.assertRegex(text, rf"\| `DKR_OWNED_BUILD_ID_V{revision}` \| `{value}` \|")
 
+    def test_only_online_identity_cmake_writes_the_contracts(self):
+        # A bare DKR_OWNED_BUILD_ID_V77/V80 word in a CMake command is the
+        # variable being written (set, string(SHA256 ...), file(SHA256 ...),
+        # list, ...); reads are ${...} and compile definitions are NAME=.
+        # Only OnlineIdentity.cmake may write them, so no glob or file hash
+        # can feed them again. Clearing v80 without the Rev A engine is the
+        # one exception.
+        written = re.compile(r"(?<![{\w])DKR_OWNED_BUILD_ID_V(?:77|80|\$\{\w+\})(?![\w}=])")
+        command = re.compile(r"\b(\w+)\s*\(((?:[^()]|\([^()]*\))*)\)")
+        allowed = RUNTIME / "cmake/OnlineIdentity.cmake"
+        offenders = []
+        for path in sorted([*RUNTIME.rglob("*.cmake"), *RUNTIME.rglob("CMakeLists.txt")]):
+            if path == allowed:
+                continue
+            for match in command.finditer(path.read_text(encoding="utf-8", errors="replace")):
+                args = " ".join(match.group(2).split())
+                if written.search(args) and f"{match.group(1)}({args})" != 'set(DKR_OWNED_BUILD_ID_V80 "")':
+                    offenders.append(f"{path.relative_to(ROOT)}: {match.group(1)}({args[:100]})")
+        self.assertEqual(offenders, [])
+
     def test_no_source_hash_feeds_the_contracts(self):
         cmake = (RUNTIME / "CMakeLists.txt").read_text(encoding="utf-8")
         self.assertNotIn("string(SHA256 DKR_OWNED_BUILD_ID_V", cmake)
