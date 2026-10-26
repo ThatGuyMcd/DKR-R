@@ -81,22 +81,29 @@ gate run on the reference may justify that.
 
 The fold is proven in two links, and Steve signs both records.
 
-1. **v1.0.11 ≡ the pre-B9 commit.** The full gate (`run_equivalence.sh`,
-   levels 0-3 plus the prepared inputs) runs once more at the last commit
-   before the format pass. Its `fold-equivalence.json` is saved as
-   `fold-equivalence-pre-B9-signing-point.json`; that is the record the
-   reference comparison ends with. The gate isn't rebaselined against later
+1. **v1.0.11 ≡ 8beac7c, the pre-B9 commit.** The full gate
+   (`run_equivalence.sh`, levels 0-3 plus the prepared inputs) ran there for
+   the last time, on a clean tree, and passed. Its `fold-equivalence.json` is
+   kept as `fold-equivalence-pre-B9-signing-point.json` (sha256
+   `ff9110e8b9cc6d936a2fea80ef93cf2133cdd8a6f97308113e607ef5e3b5cdbc`); that
+   is the record the reference comparison ends with. The gate isn't rebaselined against later
    commits: reformatting moves line numbers, which `__LINE__` (in `assert`)
    carries into preprocessed tokens and objects, so levels 1-3 can't compare
    a formatted tree with v1.0.11.
-2. **The pre-B9 commit → B9 changes layout only.** `scripts/format_sources.py
-   --prove <pre-B9> <B9>` reads both trees from git and accepts each changed
+2. **8beac7c → 52e7ae4 (B9) changes layout only.** `scripts/format_sources.py
+   --prove 8beac7c 52e7ae4` reads both trees from git and accepts each changed
    file only if it lexes to the same C/C++ tokens (no preprocessing, comments
    and whitespace dropped; `scripts/format_tokens.py`), has the same CMake
    words, has the same Python syntax tree, or is a digest-pinning script whose
    only change re-pins files the same commit reformatted. The record
-   (`docs/fold-in/B9-format-proof.json`) lists every re-pin. Rerunning
-   `format_sources.py --write` on the pre-B9 commit gives the B9 tree.
+   (`docs/fold-in/B9-format-proof.json`: 964 files, 925 of them C/C++ with
+   identical tokens, 44 re-pins, nothing unproven) lists every re-pin. The
+   range includes ef8ef5e, which only adds `// clang-format off/on` around
+   four tests' macro-call lists (clang-format never settles on them).
+   Rerunning `format_sources.py --write` on ef8ef5e, then re-pinning (every
+   digest in a `PIN_HOLDERS` script that is the sha256 of a reformatted
+   file's old bytes becomes the sha256 of its new bytes, the mapping `--prove`
+   checks), gives 52e7ae4.
 
 After B9, CI keeps the ROM-free closure check (`closure_digest` is
 whitespace-insensitive, so it survives the format pass) and the online

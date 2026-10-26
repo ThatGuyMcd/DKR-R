@@ -56,16 +56,16 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 scripts/pattern_guard.py --diff "$BASE_SHA"
-      # Report only until their baseline commits land: B9 for C/C++ and CMake,
-      # and shellcheck once the remaining warnings are fixed by hand. Each line
-      # moves into a blocking step, or into check.py --suite format, once green.
+      # C/C++ (clang-format) and CMake (gersemi) since the B9 format pass, with
+      # the lint tools above (the same pins scripts/format_sources.py's image uses).
+      - name: clang-format and gersemi
+        run: python3 scripts/format_sources.py --check --local
+      # Report only until shellcheck's remaining warnings are fixed by hand.
       - name: Format drift report (advisory)
         continue-on-error: true
         run: |
           status=0
           git ls-files -z '*.sh' ':(exclude)patches/' | xargs -0 shellcheck || status=1
-          git ls-files -z 'CMakeLists.txt' '*/CMakeLists.txt' '*.cmake' ':(exclude)extern/' ':(exclude)patches/' |
-            xargs -0 gersemi --check || status=1
           exit "$status"
 
   # Advisory: not a required check for the first 4 weeks. Findings on changed

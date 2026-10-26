@@ -210,6 +210,19 @@ What the deleted release-prep scripts did, for B9b:
   `extern/dkr-decomp/ver/symbols`. That's the sparse "symbols" dependency
   profile the plan describes for the `linux` job.
 
+## Format pass (B9)
+
+- `scripts/fold/header-variants.json` keeps the pre-B9 digests of the
+  headers it records: it describes the v1.0.11 comparison, which ended at the
+  signing point (REFERENCE.md), and nothing reads it after B9.
+- `runtime-recomp/tests/replay_probe/test_generator.py` stays outside ruff
+  (it was excluded; B9 only re-pinned its digests). Format and lint it as an
+  ordinary change.
+- The whitespace fixers (end-of-file, trailing-whitespace) keep their
+  `runtime-recomp/src/` excludes; clang-format and gersemi own those files.
+- Four tests keep `// clang-format off` around their macro-call lists
+  (ef8ef5e); clang-format never settles on them.
+
 ## For Phase C
 
 - Rollback on Apple: the RACE_TEST FATAL on Apple stays. With it lifted, the

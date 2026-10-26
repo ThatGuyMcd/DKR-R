@@ -10,9 +10,8 @@ default_stages: [pre-commit]
 # trailing whitespace on blank context lines), modding/reference-us-v*/* are
 # byte-exact receipts and services/*/baseline/ match their SHA256SUMS. No fixer
 # may touch them; the pinned-bytes hook below proves it on every commit.
-# runtime-recomp/src/ and runtime-recomp/tests/replay_probe/ hold the shipped
-# v1.0.11 bytes the fold gate compares; they stay excluded until the B9
-# format-only commit, so no fixer reformats them piecemeal before that.
+# runtime-recomp/src/ is clang-format's and gersemi's since the B9 format pass;
+# the whitespace fixers still leave it alone (their own excludes below).
 # services/*/baseline/ are deployed bases pinned by their SHA256SUMS,
 # tests/fixtures/ are pattern-guard inputs and packaging/licenses/ are verbatim
 # third-party texts.
@@ -23,8 +22,6 @@ exclude: |
     runtime-recomp/RecompiledPatches/|
     runtime-recomp/RecompiledRSP/|
     runtime-recomp/third_party/|
-    runtime-recomp/src/|
-    runtime-recomp/tests/replay_probe/|
     build/|
     patches/|
     modding/reference-us-v|
@@ -85,16 +82,16 @@ repos:
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v18.1.8
     hooks:
-      # LLVM 18, the same major as clang-tidy in tooling.yml. Blocking after B9.
+      # LLVM 18, the same major as clang-tidy in tooling.yml. It honours
+      # .clang-format-ignore (scripts/format_sources.py NEVER).
       - id: clang-format
         types_or: [c, c++]
-        stages: [manual]
   - repo: https://github.com/BlankSpruce/gersemi-pre-commit
     rev: 0.29.2
     hooks:
-      # Blocking after B9.
+      # scripts/format_sources.py NEVER: the guard's fixtures.
       - id: gersemi
-        stages: [manual]
+        exclude: ^tests/fixtures/
   - repo: local
     hooks:
       - id: pattern-guard

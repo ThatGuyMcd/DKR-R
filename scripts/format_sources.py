@@ -3,6 +3,7 @@
 
     format_sources.py --check     report files that would change (exit 1 if any)
     format_sources.py --write     format them in place
+    format_sources.py --check --local   the same with the tools on PATH (CI)
     format_sources.py --prove BASE HEAD [--record JSON]
                                   prove the commits from BASE to HEAD changed
                                   layout only (the fold's second evidence link)
@@ -94,7 +95,7 @@ def requirements() -> str:
     return "\n".join(b.rstrip() for b in blocks if b.split("==", 1)[0] not in NOT_FORMATTERS) + "\n"
 
 
-def in_image(c_files: list[str], cmake_files: list[str], write: bool) -> subprocess.CompletedProcess[str]:
+def run_tools(c_files: list[str], cmake_files: list[str], write: bool, local: bool) -> subprocess.CompletedProcess[str]:
     lists = ROOT / "build/format-sources"
     lists.mkdir(parents=True, exist_ok=True)
     (lists / "requirements.txt").write_text(requirements())
@@ -103,16 +104,21 @@ def in_image(c_files: list[str], cmake_files: list[str], write: bool) -> subproc
     clang = "clang-format -i" if write else "clang-format --dry-run -Werror --ferror-limit=1"
     gersemi = "gersemi -i" if write else "gersemi --check"
     ruff = "ruff format" if write else "ruff format --check"
-    script = (
+    install = (
         "set -e; python3 -m venv /tmp/tools >/dev/null;"
         " /tmp/tools/bin/pip install --quiet --disable-pip-version-check --require-hashes --only-binary=:all:"
         " -r build/format-sources/requirements.txt;"
-        " export PATH=/tmp/tools/bin:$PATH; status=0;"
-        f" xargs -a build/format-sources/c-files.txt -d '\\n' {clang} || status=1;"
-        f" xargs -a build/format-sources/cmake-files.txt -d '\\n' {gersemi} || status=1;"
+        " export PATH=/tmp/tools/bin:$PATH;"
+    )
+    script = (
+        ("" if local else install) + " status=0;"
+        f" tr '\\n' '\\0' < build/format-sources/c-files.txt | xargs -0 {clang} || status=1;"
+        f" tr '\\n' '\\0' < build/format-sources/cmake-files.txt | xargs -0 {gersemi} || status=1;"
         f" {ruff} --quiet || status=1;"
         " exit $status"
     )
+    if local:
+        return subprocess.run(["bash", "-c", script], cwd=ROOT, text=True, capture_output=True)
     import platform
 
     native = "linux/arm64" if platform.machine().lower() in ("arm64", "aarch64") else "linux/amd64"
@@ -225,6 +231,11 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--prove", nargs=2, metavar=("BASE", "HEAD"))
     p.add_argument("--record", type=Path, help="with --prove: write the proof here")
+    p.add_argument(
+        "--local",
+        action="store_true",
+        help="use the tools on PATH (CI installs them from lint-tools.txt), not the image",
+    )
     a = p.parse_args(argv)
     if a.prove:
         record, problems = prove(*a.prove)
@@ -239,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if problems else 0
     c_files, cmake_files = files()
     before = {name: (ROOT / name).read_bytes() for name in c_files}
-    done = in_image(c_files, cmake_files, a.write)
+    done = run_tools(c_files, cmake_files, a.write, a.local)
     if a.check:
         sys.stderr.write(done.stderr[-4000:])
         return 0 if done.returncode == 0 else 1

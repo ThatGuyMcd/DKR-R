@@ -2,3 +2,5 @@
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 # Apply ruff format, ruff --fix and shfmt to first-party scripts (A2)
 d6690f6da8690bdaf79ab898f10e5cee69f6ef07
+# Format first-party C/C++ and CMake (B9); proof: docs/fold-in/B9-format-proof.json
+52e7ae44835fb70ff4cbdb15145204ec4b73e0cb
