@@ -62,6 +62,14 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "DKR_HOST_SANITIZERS": "ON"
       }
+    },
+    {
+      "name": "host-full-nogen",
+      "displayName": "ROM-free build of every module, RT64 on, no generated payload",
+      "inherits": "host",
+      "cacheVariables": {
+        "DKR_RUNTIME_BUILD_RT64": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -89,6 +97,11 @@
       "name": "host-sanitizers",
       "configurePreset": "host-sanitizers",
       "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "host-full-nogen",
+      "configurePreset": "host-full-nogen",
+      "configuration": "Release"
     }
   ],
   "testPresets": [
@@ -164,6 +177,22 @@
       "environment": {
         "ASAN_OPTIONS": "halt_on_error=1:abort_on_error=1",
         "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1"
+      }
+    },
+    {
+      "name": "host-full-nogen",
+      "configurePreset": "host-full-nogen",
+      "configuration": "Release",
+      "filter": {
+        "include": {
+          "name": "^DKR"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
       }
     }
   ]

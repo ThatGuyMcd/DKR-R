@@ -60,6 +60,11 @@ import apply_closure  # noqa: E402
 
 ROOT = apply_closure.ROOT
 ALLOWED = ROOT / "scripts/fold/allowed-deltas.json"
+# Folded targets that compile what one reference target compiled: the game's
+# TUs moved into an object library so host builds without a generated payload
+# compile them too. Compile units and dependencies are compared under the
+# reference name; the executable's link line is compared as it is.
+COMPILED_BY = {"DKRPortGameCore": "DKRPortGame"}
 BINARIES = (
     "bin/Release/DKR-R",
     "bin/Release/libexec/dkr-r/DKR-R-ModWorker",
@@ -120,6 +125,11 @@ def load_codemodel(reply: Path) -> Model:
                 source["compileGroupIndex"]
             ]
         targets[target["name"]] = sources
+    for folded, original in COMPILED_BY.items():
+        if folded in targets:
+            targets[original] = {**targets.get(original, {}), **targets.pop(folded)}
+            merged = dependencies.get(original, frozenset()) | dependencies.pop(folded, frozenset())
+            dependencies[original] = merged - {folded}
     return Model(source_dir, build_dir, targets, links, dependencies)
 
 
@@ -293,8 +303,15 @@ def shipped_pairs(compdb: Path) -> dict[str, set[Path]]:
     for entry in json.loads(compdb.read_text(encoding="utf-8")):
         match = re.search(r"CMakeFiles/([^/]+)\.dir/", entry["output"])
         if match:
-            pairs[match.group(1)].add(apply_closure.norm(Path(entry["directory"]) / entry["file"]))
+            target = COMPILED_BY.get(match.group(1), match.group(1))
+            pairs[target].add(apply_closure.norm(Path(entry["directory"]) / entry["file"]))
     return pairs
+
+
+def common_order(old: tuple[str, ...], new: tuple[str, ...]) -> list[str]:
+    """The longest subsequence both link lines share, in order."""
+    matcher = difflib.SequenceMatcher(a=old, b=new, autojunk=False)
+    return [item for block in matcher.get_matching_blocks() for item in old[block.a : block.a + block.size]]
 
 
 def compare_links(
@@ -309,8 +326,14 @@ def compare_links(
         if name not in folded.links or name not in shipped_by_target:
             continue
         old = tuple(mapping.text(fragment) for fragment in fragments)
-        if old != folded.links[name]:
-            yield f"{name}: link line {list(old)} -> {list(folded.links[name])}"
+        new = folded.links[name]
+        if old == new:
+            continue
+        moved = sorted({f for f in set(old) | set(new) if old.count(f) == new.count(f)} - set(common_order(old, new)))
+        if sorted(old) == sorted(new) and moved:
+            yield f"{name}: link order moved {moved}, everything else in order"
+        else:
+            yield f"{name}: link line {list(old)} -> {list(new)}"
 
 
 def load_allowed(path: Path) -> list[dict[str, str]]:
@@ -403,7 +426,8 @@ TU = tuple[str, Path]  # (CMake target, source)
 
 def tu_key(entry: dict[str, str]) -> TU:
     match = re.search(r"CMakeFiles/([^/]+)\.dir/", entry["output"])
-    return (match.group(1) if match else entry["output"]), apply_closure.norm(Path(entry["directory"]) / entry["file"])
+    target = match.group(1) if match else entry["output"]
+    return COMPILED_BY.get(target, target), apply_closure.norm(Path(entry["directory"]) / entry["file"])
 
 
 def load_entries(compdb: Path) -> dict[TU, dict[str, str]]:

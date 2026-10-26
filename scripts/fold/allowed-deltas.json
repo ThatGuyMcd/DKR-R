@@ -17,6 +17,10 @@
   {
    "difference": "DKRPortGame: runtime-recomp/src/game/rt64_renderer.cpp: object sections differ: data .eh_frame, data .group",
    "reason": "Header variant mobile_graphics_preset.hpp (PR 68): its new inline helpers instantiate GraphicsConfig's destructor earlier, so that COMDAT is emitted first. All 79 sections exist on both sides and every text section and relocation is identical; only the unwind-table entry order (.eh_frame) and the COMDAT group section indices (.group) follow the new emission order."
+  },
+  {
+   "difference": "DKRPortGame: link order moved ['-lm', 'libDKRCameraSceneV77.a', 'libDKRCameraSceneV80.a'], everything else in order",
+   "reason": "The game's TUs compile in the DKRPortGameCore object library (so host builds without a payload compile them), and DKR-R links the core's libraries LINK_ONLY. CMake now places DKRCameraPresentation's private dependencies (the two camera scene kernels and libm) at their first transitive occurrence instead of the end. They still follow DKRCameraPresentation, their only user, and every other library keeps its position."
   }
  ]
 }

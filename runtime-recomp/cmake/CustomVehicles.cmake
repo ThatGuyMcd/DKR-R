@@ -13,6 +13,12 @@ target_include_directories(DKRCustomVehicles PUBLIC
     "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib"
     "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
 target_link_libraries(DKRCustomVehicles PUBLIC DKRCustomMagicCodes DKRLegacyModCore)
+if(NOT TARGET rt64)
+    # Package images decode with stb_image, which RT64 provides in the game.
+    add_library(DKRStbImage STATIC "${DKRPORT_ROOT}/runtime-recomp/tests/stb_image_provider.c")
+    target_include_directories(DKRStbImage PRIVATE "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
+    target_link_libraries(DKRCustomVehicles PRIVATE DKRStbImage)
+endif()
 target_link_libraries(DKRLegacyImportLibrary PRIVATE DKRCustomVehicles)
 target_link_libraries(DKRLegacyModLaunch PRIVATE DKRCustomVehicles)
 

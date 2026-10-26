@@ -660,17 +660,20 @@ if(DKR_RUNTIME_BUILD_RT64)
     endif()
 endif()
 
+# The mod, magic-code and vehicle libraries need no generated payload, so they
+# exist in every configure: host builds compile and test them too.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/LegacyMods.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomMagicCodes.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomVehicles.cmake")
+foreach(config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
+    string(TOUPPER "${config}" config_upper)
+    set_target_properties(DKRLegacyModWorker PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${config_upper}
+            "${CMAKE_BINARY_DIR}/bin/${config}/libexec/dkr-r")
+endforeach()
+
 if(DKR_RUNTIME_BUILD_GENERATED)
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    include("${CMAKE_CURRENT_LIST_DIR}/cmake/LegacyMods.cmake")
-    include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomMagicCodes.cmake")
-    include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomVehicles.cmake")
-    foreach(config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
-        string(TOUPPER "${config}" config_upper)
-        set_target_properties(DKRLegacyModWorker PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY_${config_upper}
-                "${CMAKE_BINARY_DIR}/bin/${config}/libexec/dkr-r")
-    endforeach()
     set(DKR_V80_SYMBOL_MAP
         "${CMAKE_BINARY_DIR}/generated/dkr_v80_symbol_map.hpp")
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/RevisionSymbolMap.cmake")
@@ -785,12 +788,19 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         "${DKR_V80_SYMBOL_MAP}")
 endif()
 
-if(DKR_RUNTIME_BUILD_GENERATED)
-    file(GLOB DKR_GENERATED_RSP CONFIGURE_DEPENDS "${DKR_GENERATED_RSP_SOURCE}/*.cpp")
-    if(NOT DKR_GENERATED_RSP)
-        message(FATAL_ERROR
-            "No RSPRecomp output was found under ${DKR_GENERATED_RSP_SOURCE}. "
-            "Run Generate-DKR-RSP.cmd first.")
+# DKRPortGameCore holds every game TU and its compile settings. Only the
+# RSPRecomp output needs a generated payload, so RT64 host builds without one
+# (the host-full-nogen preset) compile the core too. DKRPortGame links the core
+# with the recompiled payloads into DKR-R.
+if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
+    set(DKR_GENERATED_RSP "")
+    if(DKR_RUNTIME_BUILD_GENERATED)
+        file(GLOB DKR_GENERATED_RSP CONFIGURE_DEPENDS "${DKR_GENERATED_RSP_SOURCE}/*.cpp")
+        if(NOT DKR_GENERATED_RSP)
+            message(FATAL_ERROR
+                "No RSPRecomp output was found under ${DKR_GENERATED_RSP_SOURCE}. "
+                "Run Generate-DKR-RSP.cmd first.")
+        endif()
     endif()
     set(DKR_GAME_SOURCES
         src/game/runtime_code_mods.cpp
@@ -899,19 +909,36 @@ if(DKR_RUNTIME_BUILD_GENERATED)
             "${DKR_RT64_SOURCE}/src/contrib/imgui/backends/imgui_impl_sdlrenderer2.cpp"
         )
     endif()
-    if(WIN32)
-        list(APPEND DKR_GAME_SOURCES
-            resources/dkr-r.rc
-        )
-        string(REPLACE "." "," DKR_RELEASE_RESOURCE_VERSION "${DKR_RELEASE_VERSION_NUMERIC}")
-        set_property(SOURCE resources/dkr-r.rc APPEND PROPERTY COMPILE_DEFINITIONS
-            "DKR_RELEASE_RESOURCE_VERSION=${DKR_RELEASE_RESOURCE_VERSION},${DKR_RELEASE_BUILD_NUMBER}")
+    if(ANDROID)
+        list(APPEND DKR_GAME_SOURCES src/android/android_platform.cpp src/android/mobile_ui.cpp)
+    endif()
+    add_library(DKRPortGameCore OBJECT ${DKR_GAME_SOURCES})
+    if(NOT DKR_RUNTIME_BUILD_GENERATED)
+        # host-full-nogen compiles the shipped configuration, which always has
+        # rollback (the owned engines) and local model detail. Their payloads
+        # only come with a generated build, so nothing here is linked.
+        target_sources(DKRPortGameCore PRIVATE src/game/netplay/experimental_runtime.cpp src/game/local_model_rt64.cpp)
+        target_compile_definitions(DKRPortGameCore PRIVATE DKR_EXPERIMENTAL_RACE_TEST=1 DKR_LOCAL_MODEL_DETAIL=1)
     endif()
     if(ANDROID)
-        add_library(DKRPortGame SHARED ${DKR_GAME_SOURCES} src/android/android_platform.cpp src/android/mobile_ui.cpp)
-        target_link_libraries(DKRPortGame PRIVATE SDL2::SDL2 SDL2::SDL2main android log)
-    else()
-        add_executable(DKRPortGame ${DKR_GAME_SOURCES})
+        target_link_libraries(DKRPortGameCore PRIVATE SDL2::SDL2 SDL2::SDL2main android log)
+    endif()
+    if(DKR_RUNTIME_BUILD_GENERATED)
+        if(ANDROID)
+            add_library(DKRPortGame SHARED)
+        else()
+            add_executable(DKRPortGame)
+        endif()
+        # The core's objects, then its link libraries in the order it lists
+        # them. LINK_ONLY: the core already compiled their interface sources.
+        target_link_libraries(DKRPortGame PRIVATE DKRPortGameCore
+            "$<LINK_ONLY:$<TARGET_PROPERTY:DKRPortGameCore,LINK_LIBRARIES>>")
+        if(WIN32)
+            target_sources(DKRPortGame PRIVATE resources/dkr-r.rc)
+            string(REPLACE "." "," DKR_RELEASE_RESOURCE_VERSION "${DKR_RELEASE_VERSION_NUMERIC}")
+            set_property(SOURCE resources/dkr-r.rc APPEND PROPERTY COMPILE_DEFINITIONS
+                "DKR_RELEASE_RESOURCE_VERSION=${DKR_RELEASE_RESOURCE_VERSION},${DKR_RELEASE_BUILD_NUMBER}")
+        endif()
     endif()
     if(MSVC)
         # These new bridge callbacks hold leases across guest scheduler calls.
@@ -920,7 +947,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
             src/game/legacy_runtime_qualification.cpp APPEND PROPERTY
             COMPILE_OPTIONS /EHs /EHc-)
     endif()
-    target_include_directories(DKRPortGame PRIVATE
+    target_include_directories(DKRPortGameCore PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
         "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe"
         "${CMAKE_CURRENT_LIST_DIR}/third_party/dr_libs"
@@ -931,7 +958,7 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         "${DKR_GENERATED_RSP_SOURCE}"
         "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty"
     )
-    target_compile_definitions(DKRPortGame PRIVATE
+    target_compile_definitions(DKRPortGameCore PRIVATE
         DKR_RUNTIME_HAS_RT64=$<BOOL:${DKR_RUNTIME_BUILD_RT64}>
         DKR_LEGACY_QUALIFICATION=$<BOOL:${DKR_LEGACY_QUALIFICATION}>
         DKR_RUNTIME_HAS_SDL3_INPUT_HOST=$<BOOL:${DKR_RUNTIME_BUILD_SDL3_INPUT_HOST}>
@@ -942,42 +969,43 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         NOMINMAX
     )
     # Shared saves and the store read their JSON with nlohmann/json.
-    target_include_directories(DKRPortGame PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
-    target_link_libraries(DKRPortGame PRIVATE DKRUpdateClient)
+    target_include_directories(DKRPortGameCore PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
+    target_link_libraries(DKRPortGameCore PRIVATE DKRUpdateClient)
     if(DKR_EXPERIMENTAL_RACE_TEST)
-        target_compile_definitions(DKRPortGame PRIVATE DKR_EXPERIMENTAL_RACE_TEST=1)
+        target_compile_definitions(DKRPortGameCore PRIVATE DKR_EXPERIMENTAL_RACE_TEST=1)
     endif()
     if(NOT MSVC AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
         # librecomp's generated RSP vector implementation uses SSE4.1
         # intrinsics on x86-64. GCC and Clang require the target feature to be
         # enabled explicitly, while MSVC exposes these intrinsics by default.
-        target_compile_options(DKRPortGame PRIVATE -msse4.1)
+        target_compile_options(DKRPortGameCore PRIVATE -msse4.1)
     endif()
     # Keep the generated payload archives before their shared runtime
     # providers. GNU ld scans static archives from left to right, so placing
     # librecomp first leaves the v1.1 payload's imported OS/compiler helpers
     # unresolved on Linux. MSVC is order-independent, and this ordering keeps
     # both platforms on the same single-runtime link graph.
-    target_link_libraries(DKRPortGame PRIVATE
-        DKRRecompiledFuncsV77
-        DKRRecompiledFuncsV80
-        ultramodern
-        librecomp)
-    target_link_libraries(DKRPortGame PRIVATE DKRNetplayCore)
-    target_link_libraries(DKRPortGame PRIVATE DKRLegacyModLaunch DKRLegacyGuestIO)
-    target_link_libraries(DKRPortGame PRIVATE DKRCustomMagicCodes)
-    add_dependencies(DKRPortGame DKRLegacyModWorker)
+    if(DKR_RUNTIME_BUILD_GENERATED)
+        target_link_libraries(DKRPortGameCore PRIVATE DKRRecompiledFuncsV77 DKRRecompiledFuncsV80)
+    endif()
+    target_link_libraries(DKRPortGameCore PRIVATE ultramodern librecomp)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRNetplayCore)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRLegacyModLaunch DKRLegacyGuestIO)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRCustomMagicCodes)
+    if(TARGET DKRPortGame)
+        add_dependencies(DKRPortGame DKRLegacyModWorker)
+    endif()
     if(MSVC)
-        target_compile_options(DKRPortGame PRIVATE /FS)
+        target_compile_options(DKRPortGameCore PRIVATE /FS)
         # The SDK 2 schema and workspace pages add template sections to the
         # single launcher TU; extended COFF keeps it under the section limit.
-        target_compile_options(DKRPortGame PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
+        target_compile_options(DKRPortGameCore PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
     endif()
     if(WIN32)
-        target_link_libraries(DKRPortGame PRIVATE ws2_32)
+        target_link_libraries(DKRPortGameCore PRIVATE ws2_32)
     endif()
     if(DKR_RUNTIME_BUILD_RT64 AND TARGET rt64)
-        target_include_directories(DKRPortGame PRIVATE
+        target_include_directories(DKRPortGameCore PRIVATE
             "$<TARGET_PROPERTY:rt64,INCLUDE_DIRECTORIES>"
             "${DKR_RT64_SOURCE}/src"
             "${DKR_RT64_SOURCE}/src/include"
@@ -989,108 +1017,116 @@ if(DKR_RUNTIME_BUILD_GENERATED)
             "${DKR_RT64_SOURCE}/src/contrib/nativefiledialog-extended/src/include"
             "${CMAKE_BINARY_DIR}/src"
         )
-        target_link_libraries(DKRPortGame PRIVATE rt64)
+        target_link_libraries(DKRPortGameCore PRIVATE rt64)
         if(APPLE)
-            target_include_directories(DKRPortGame PRIVATE
+            target_include_directories(DKRPortGameCore PRIVATE
                 "${DKR_RT64_SOURCE}/src/contrib/metal-cpp"
             )
         endif()
         if(WIN32)
-            target_include_directories(DKRPortGame PRIVATE
+            target_include_directories(DKRPortGameCore PRIVATE
                 "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/include"
             )
-            target_link_directories(DKRPortGame PRIVATE
-                "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64"
-            )
-            target_link_libraries(DKRPortGame PRIVATE SDL2)
-            add_custom_command(TARGET DKRPortGame POST_BUILD
-                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
-                    "$<TARGET_FILE_DIR:DKRPortGame>/SDL2.dll"
-                VERBATIM
-            )
+            target_link_libraries(DKRPortGameCore PRIVATE SDL2)
+            if(TARGET DKRPortGame)
+                target_link_directories(DKRPortGame PRIVATE
+                    "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64"
+                )
+                add_custom_command(TARGET DKRPortGame POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
+                        "$<TARGET_FILE_DIR:DKRPortGame>/SDL2.dll"
+                    VERBATIM
+                )
+            endif()
         elseif(IOS)
-            dkr_ios_finish(DKRPortGame)
+            if(TARGET DKRPortGame)
+                dkr_ios_finish(DKRPortGame)
+            endif()
         else()
             find_package(SDL2 REQUIRED)
-            target_include_directories(DKRPortGame PRIVATE ${SDL2_INCLUDE_DIRS})
-            target_link_libraries(DKRPortGame PRIVATE ${SDL2_LIBRARIES})
+            target_include_directories(DKRPortGameCore PRIVATE ${SDL2_INCLUDE_DIRS})
+            target_link_libraries(DKRPortGameCore PRIVATE ${SDL2_LIBRARIES})
         endif()
-        if(WIN32)
+        if(TARGET DKRPortGame)
+            if(WIN32)
+                add_custom_command(TARGET DKRPortGame POST_BUILD
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "${DKR_RT64_SOURCE}/src/contrib/dxc/bin/x64/dxcompiler.dll"
+                        "$<TARGET_FILE_DIR:DKRPortGame>/dxcompiler.dll"
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "${DKR_RT64_SOURCE}/src/contrib/dxc/bin/x64/dxil.dll"
+                        "$<TARGET_FILE_DIR:DKRPortGame>/dxil.dll"
+                    VERBATIM
+                )
+            endif()
+            set(DKR_GAME_ASSET_DIRECTORY "$<TARGET_FILE_DIR:DKRPortGame>")
+            if(WIN32)
+                set(DKR_GAME_ASSET_DIRECTORY "$<TARGET_FILE_DIR:DKRUpdateLauncher>")
+            endif()
             add_custom_command(TARGET DKRPortGame POST_BUILD
                 COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    "${DKR_RT64_SOURCE}/src/contrib/dxc/bin/x64/dxcompiler.dll"
-                    "$<TARGET_FILE_DIR:DKRPortGame>/dxcompiler.dll"
+                    "${CMAKE_BINARY_DIR}/dkr-release.json"
+                    "${DKR_GAME_ASSET_DIRECTORY}/dkr-release.json"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons"
                 COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                    "${DKR_RT64_SOURCE}/src/contrib/dxc/bin/x64/dxil.dll"
-                    "$<TARGET_FILE_DIR:DKRPortGame>/dxil.dll"
+                    "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Logo.bmp"
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Logo.bmp"
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Spinning-Icon.png"
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Spinning-Icon.png"
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Short-Logo.png"
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Short-Logo.png"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Backgrounds"
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/filters"
+                COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                    "${CMAKE_CURRENT_LIST_DIR}/../assets/filters"
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/filters"
+                COMMAND "${CMAKE_COMMAND}" -E make_directory
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/controllers"
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${CMAKE_CURRENT_LIST_DIR}/../assets/controllers/gamecontrollerdb.txt"
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/controllers/gamecontrollerdb.txt"
+                COMMAND "${CMAKE_COMMAND}" -E copy_directory
+                    "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/CustomTrackBackgrounds"
+                    "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/CustomTrackBackgrounds"
+                COMMENT "Staging the DKR-R launcher, graphics and controller assets"
                 VERBATIM
             )
         endif()
-        set(DKR_GAME_ASSET_DIRECTORY "$<TARGET_FILE_DIR:DKRPortGame>")
-        if(WIN32)
-            set(DKR_GAME_ASSET_DIRECTORY "$<TARGET_FILE_DIR:DKRUpdateLauncher>")
-        endif()
-        add_custom_command(TARGET DKRPortGame POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${CMAKE_BINARY_DIR}/dkr-release.json"
-                "${DKR_GAME_ASSET_DIRECTORY}/dkr-release.json"
-            COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Logo.bmp"
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Logo.bmp"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Spinning-Icon.png"
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Spinning-Icon.png"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Icons/DKR-R-Short-Logo.png"
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Icons/DKR-R-Short-Logo.png"
-            COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Backgrounds"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/Backgrounds/DKR-R-Launcher-Background.png"
-            COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/filters"
-            COMMAND "${CMAKE_COMMAND}" -E copy_directory
-                "${CMAKE_CURRENT_LIST_DIR}/../assets/filters"
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/filters"
-            COMMAND "${CMAKE_COMMAND}" -E make_directory
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/controllers"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${CMAKE_CURRENT_LIST_DIR}/../assets/controllers/gamecontrollerdb.txt"
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/controllers/gamecontrollerdb.txt"
-            COMMAND "${CMAKE_COMMAND}" -E copy_directory
-                "${CMAKE_CURRENT_LIST_DIR}/../assets/ui/CustomTrackBackgrounds"
-                "${DKR_GAME_ASSET_DIRECTORY}/assets/ui/CustomTrackBackgrounds"
-            COMMENT "Staging the DKR-R launcher, graphics and controller assets"
-            VERBATIM
-        )
     endif()
     if(WIN32)
-        target_link_libraries(DKRPortGame PRIVATE user32 shell32 dbghelp bcrypt dxgi)
+        target_link_libraries(DKRPortGameCore PRIVATE user32 shell32 dbghelp bcrypt dxgi)
     endif()
-    set_target_properties(DKRPortGame PROPERTIES
-        OUTPUT_NAME "DKR-R"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-    )
-    if(WIN32)
-        set_target_properties(DKRPortGame PROPERTIES WIN32_EXECUTABLE TRUE)
-        set_target_properties(DKRPortGame PROPERTIES OUTPUT_NAME "DKR-R-Runtime")
-        set_target_properties(DKRPortGame PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/libexec/dkr-r")
-        add_dependencies(DKRPortGame DKRUpdateLauncher DKRUpdateHelper)
-    endif()
-    foreach(config Debug Release RelWithDebInfo MinSizeRel)
-        string(TOUPPER "${config}" config_upper)
-        set(_dkr_game_output "${CMAKE_BINARY_DIR}/bin/${config}")
-        if(WIN32)
-            string(APPEND _dkr_game_output "/libexec/dkr-r")
-        endif()
+    if(TARGET DKRPortGame)
         set_target_properties(DKRPortGame PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY_${config_upper} "${_dkr_game_output}"
+            OUTPUT_NAME "DKR-R"
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
         )
-    endforeach()
+        if(WIN32)
+            set_target_properties(DKRPortGame PROPERTIES WIN32_EXECUTABLE TRUE)
+            set_target_properties(DKRPortGame PROPERTIES OUTPUT_NAME "DKR-R-Runtime")
+            set_target_properties(DKRPortGame PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/libexec/dkr-r")
+            add_dependencies(DKRPortGame DKRUpdateLauncher DKRUpdateHelper)
+        endif()
+        foreach(config Debug Release RelWithDebInfo MinSizeRel)
+            string(TOUPPER "${config}" config_upper)
+            set(_dkr_game_output "${CMAKE_BINARY_DIR}/bin/${config}")
+            if(WIN32)
+                string(APPEND _dkr_game_output "/libexec/dkr-r")
+            endif()
+            set_target_properties(DKRPortGame PROPERTIES
+                RUNTIME_OUTPUT_DIRECTORY_${config_upper} "${_dkr_game_output}"
+            )
+        endforeach()
+    endif()
 endif()
 
 add_executable(DKRRuntimeProbe src/runtime_probe.cpp)
@@ -1103,9 +1139,9 @@ if(DKR_RUNTIME_BUILD_GENERATED AND DKR_RUNTIME_BUILD_RT64 AND DKR_VISUAL_MODEL_G
     include(cmake/LocalModelDetail.cmake)
     dkr_add_local_model_kernel(DKRLocalModelV77 "${DKR_VISUAL_MODEL_GENERATED_V77}" 77)
     dkr_add_local_model_kernel(DKRLocalModelV80 "${DKR_VISUAL_MODEL_GENERATED_V80}" 80)
-    target_sources(DKRPortGame PRIVATE src/game/local_model_rt64.cpp)
-    target_compile_definitions(DKRPortGame PRIVATE DKR_LOCAL_MODEL_DETAIL=1)
-    target_link_libraries(DKRPortGame PRIVATE DKRLocalModelV77 DKRLocalModelV80)
+    target_sources(DKRPortGameCore PRIVATE src/game/local_model_rt64.cpp)
+    target_compile_definitions(DKRPortGameCore PRIVATE DKR_LOCAL_MODEL_DETAIL=1)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRLocalModelV77 DKRLocalModelV80)
 endif()
 if(DKR_EXPERIMENTAL_OWNED_GENERATED)
     include(cmake/ExperimentalOwnedGame.cmake)
@@ -1239,7 +1275,7 @@ endif()
 if(TARGET DKRPortGame AND (DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST))
     # Private RT64 references arrive after the static core on ELF. An explicit
     # object keeps its retirement seam available without changing stable links.
-    target_sources(DKRPortGame PRIVATE src/game/netplay/experimental_present_gate.cpp)
+    target_sources(DKRPortGameCore PRIVATE src/game/netplay/experimental_present_gate.cpp)
     # RT64's staged retirement seam is also used by renderer regression tests.
     # Propagate the narrow implementation, not the whole online core, to every
     # RT64 consumer so static-link order cannot leave unresolved gate symbols.
@@ -1255,19 +1291,19 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
         tests/experimental_gpu_probe.cpp ${DKR_PRESENTATION_PROBE_SOURCES}
         src/game/netplay/experimental_checkpoint_hash.cpp)
     target_include_directories(DKRExperimentalGpuProbe PRIVATE
-        "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>"
+        "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>"
         "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe")
     target_compile_definitions(DKRExperimentalGpuProbe PRIVATE
-        "$<TARGET_PROPERTY:DKRPortGame,COMPILE_DEFINITIONS>" SDL_MAIN_HANDLED=1)
+        "$<TARGET_PROPERTY:DKRPortGameCore,COMPILE_DEFINITIONS>" SDL_MAIN_HANDLED=1)
     if(DKR_EXPERIMENTAL_RENDER_QUALIFICATION)
         target_compile_definitions(DKRExperimentalGpuProbe PRIVATE DKR_EXPERIMENTAL_RENDER_QUALIFICATION=1)
     endif()
     target_compile_options(DKRExperimentalGpuProbe PRIVATE
-        "$<TARGET_PROPERTY:DKRPortGame,COMPILE_OPTIONS>")
+        "$<TARGET_PROPERTY:DKRPortGameCore,COMPILE_OPTIONS>")
     target_link_directories(DKRExperimentalGpuProbe PRIVATE
         "$<TARGET_PROPERTY:DKRPortGame,LINK_DIRECTORIES>")
     target_link_libraries(DKRExperimentalGpuProbe PRIVATE
-        "$<TARGET_PROPERTY:DKRPortGame,LINK_LIBRARIES>")
+        "$<TARGET_PROPERTY:DKRPortGameCore,LINK_LIBRARIES>")
     # PRIVATE interactive owner/renderer handoff qualification, never packaged.
     if(TARGET DKRExperimentalOwnedGame AND DKR_NETPLAY_WEBRTC AND (DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST))
         if(DKR_EXPERIMENTAL_RACE_TEST)
@@ -1291,9 +1327,9 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
             tests/experimental_interactive_probe.cpp ${DKR_PRESENTATION_PROBE_SOURCES})
         endif()
         target_include_directories(${DKR_INTERACTIVE_TARGET} PRIVATE
-            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+            "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_compile_definitions(${DKR_INTERACTIVE_TARGET} PRIVATE
-            "$<TARGET_PROPERTY:DKRPortGame,COMPILE_DEFINITIONS>"
+            "$<TARGET_PROPERTY:DKRPortGameCore,COMPILE_DEFINITIONS>"
             SDL_MAIN_HANDLED=1
             DKR_OWNED_TEST_REVISION=${DKR_OWNED_REVISION}
             DKR_OWNED_FULL_SCENES=${DKR_OWNED_FULL_SCENES})
@@ -1337,7 +1373,7 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
         string(SHA256 DKR_OWNED_BUILD_ID "${DKR_OWNED_ID_PARTS}|v77:${DKR_OWNED_BUILD_ID_V77}|v80:${DKR_OWNED_BUILD_ID_V80}")
         message(STATUS "Owned rollback contract: ${DKR_OWNED_BUILD_ID}")
         if(DKR_EXPERIMENTAL_RACE_TEST)
-            target_link_libraries(DKRPortGame PRIVATE DKRExperimentalOwnedGame)
+            target_link_libraries(DKRPortGameCore PRIVATE DKRExperimentalOwnedGame)
             set_property(SOURCE src/game/netplay/experimental_runtime.cpp APPEND PROPERTY
                 COMPILE_DEFINITIONS DKR_OWNED_BUILD_ID="${DKR_OWNED_BUILD_ID}")
         endif()
@@ -1346,11 +1382,11 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
         set_property(SOURCE ${DKR_INTERACTIVE_SOURCE} APPEND PROPERTY
             COMPILE_DEFINITIONS DKR_OWNED_BUILD_ID="${DKR_OWNED_BUILD_ID}")
         target_compile_options(${DKR_INTERACTIVE_TARGET} PRIVATE
-            "$<TARGET_PROPERTY:DKRPortGame,COMPILE_OPTIONS>")
+            "$<TARGET_PROPERTY:DKRPortGameCore,COMPILE_OPTIONS>")
         target_link_directories(${DKR_INTERACTIVE_TARGET} PRIVATE
             "$<TARGET_PROPERTY:DKRPortGame,LINK_DIRECTORIES>")
         target_link_libraries(${DKR_INTERACTIVE_TARGET} PRIVATE
-            DKRExperimentalOwnedGame "$<TARGET_PROPERTY:DKRPortGame,LINK_LIBRARIES>")
+            DKRExperimentalOwnedGame "$<TARGET_PROPERTY:DKRPortGameCore,LINK_LIBRARIES>")
     endif()
     if(WIN32)
         foreach(DKR_PROBE_DLL
@@ -1373,17 +1409,17 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     # Camera++, the Mod Store HTTP backend and custom vehicles, linked after
     # the owned engines in the order v1.0.11 linked them.
     include(cmake/Camera.cmake)
-    target_link_libraries(DKRPortGame PRIVATE DKRCameraPresentation)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRCameraPresentation)
     if(WIN32)
-        target_link_libraries(DKRPortGame PRIVATE winhttp crypt32 bcrypt)
+        target_link_libraries(DKRPortGameCore PRIVATE winhttp crypt32 bcrypt)
     elseif(NOT ANDROID AND NOT APPLE)
         find_package(CURL REQUIRED)
-        target_link_libraries(DKRPortGame PRIVATE CURL::libcurl)
+        target_link_libraries(DKRPortGameCore PRIVATE CURL::libcurl)
     endif()
-    target_link_libraries(DKRPortGame PRIVATE DKRCustomVehicles)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRCustomVehicles)
     if(UNIX)
         # The online directory's Linux keyring is loaded at run time.
-        target_link_libraries(DKRPortGame PRIVATE ${CMAKE_DL_LIBS})
+        target_link_libraries(DKRPortGameCore PRIVATE ${CMAKE_DL_LIBS})
     endif()
 endif()
 
@@ -1825,7 +1861,9 @@ if(BUILD_TESTING)
     target_link_libraries(DKRExperimentalSessionTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRExperimentalSession COMMAND DKRExperimentalSessionTests)
     add_executable(DKRExperimentalNetworkTests tests/experimental_network_tests.cpp)
-    target_link_libraries(DKRExperimentalNetworkTests PRIVATE DKRNetplayCore)
+    # experimental_network.cpp carries SDK 2 tool packets (sdk2_bridge.cpp in
+    # DKRCustomMagicCodes); the game resolves them at its own link.
+    target_link_libraries(DKRExperimentalNetworkTests PRIVATE DKRNetplayCore DKRCustomMagicCodes)
     add_test(NAME DKRExperimentalNetwork COMMAND DKRExperimentalNetworkTests)
     add_executable(DKRProbeMemoryInlineTests tests/probe_memory_inline_tests.c tests/replay_probe/probe_bridge.c)
     target_include_directories(DKRProbeMemoryInlineTests PRIVATE src/game)
@@ -1883,7 +1921,7 @@ if(BUILD_TESTING)
         add_test(NAME DKRQuickJoinLifecycle COMMAND DKRQuickJoinLifecycleTests)
         set_tests_properties(DKRQuickJoinLifecycle PROPERTIES TIMEOUT 90)
         add_executable(DKRExperimentalQuickJoinTests tests/experimental_network_tests.cpp)
-        target_link_libraries(DKRExperimentalQuickJoinTests PRIVATE DKRNetplayCore)
+        target_link_libraries(DKRExperimentalQuickJoinTests PRIVATE DKRNetplayCore DKRCustomMagicCodes)
         target_include_directories(DKRExperimentalQuickJoinTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
         target_compile_definitions(DKRExperimentalQuickJoinTests PRIVATE DKR_EXPERIMENTAL_QUICKJOIN_TEST=1)
         add_test(NAME DKRExperimentalQuickJoin COMMAND DKRExperimentalQuickJoinTests)
@@ -1955,8 +1993,11 @@ if(BUILD_TESTING)
     if(TARGET DKRLegacyGuestIO)
         add_executable(DKRLegacyCacheCapacityTests tests/legacy_cache_capacity_tests.cpp)
         target_link_libraries(DKRLegacyCacheCapacityTests PRIVATE DKRLegacyModCore)
+        # The mod launch prepares shared saves, so save_manager.cpp comes along.
         add_executable(DKRLegacyDkrmapArtworkTests tests/legacy_dkrmap_artwork_tests.cpp src/game/dkr_save_codec.cpp
-            src/game/rom_revision.cpp src/game/startup_performance.cpp)
+            src/game/rom_revision.cpp src/game/startup_performance.cpp src/game/save_manager.cpp
+            src/game/netplay/experimental_pak.cpp)
+        target_include_directories(DKRLegacyDkrmapArtworkTests PRIVATE "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include")
         target_link_libraries(DKRLegacyDkrmapArtworkTests PRIVATE DKRLegacyModLaunch)
         add_test(NAME DKRLegacyDkrmapArtwork COMMAND DKRLegacyDkrmapArtworkTests)
         add_executable(DKRLegacyTrackMenuAdapterTests tests/legacy_track_menu_adapter_tests.cpp)
@@ -2138,7 +2179,7 @@ if(BUILD_TESTING)
         add_executable(DKRSplitScreenRT64Tests tests/split_screen_rt64_tests.cpp)
         target_include_directories(DKRSplitScreenRT64Tests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
-            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+            "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_link_libraries(DKRSplitScreenRT64Tests PRIVATE rt64)
         target_compile_definitions(DKRSplitScreenRT64Tests PRIVATE NOMINMAX)
         if(WIN32)
@@ -2157,7 +2198,7 @@ if(BUILD_TESTING)
         add_executable(DKRWaterUVTests tests/water_uv_rt64_tests.cpp)
         target_include_directories(DKRWaterUVTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
-            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+            "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_link_libraries(DKRWaterUVTests PRIVATE rt64)
         target_compile_definitions(DKRWaterUVTests PRIVATE NOMINMAX)
         if(WIN32)
@@ -2177,7 +2218,7 @@ if(BUILD_TESTING)
         add_executable(DKRHudGroupsTests tests/hud_group_layout_tests.cpp)
         target_include_directories(DKRHudGroupsTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
-            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+            "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_link_libraries(DKRHudGroupsTests PRIVATE rt64)
         target_compile_definitions(DKRHudGroupsTests PRIVATE NOMINMAX)
         if(WIN32)
@@ -2199,7 +2240,7 @@ if(BUILD_TESTING)
             "${DKR_RT64_SOURCE}/src/contrib/imgui/backends/imgui_impl_sdlrenderer2.cpp")
         target_include_directories(DKRHudEditorTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
-            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+            "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_link_libraries(DKRHudEditorTests PRIVATE rt64)
         target_compile_definitions(DKRHudEditorTests PRIVATE NOMINMAX)
         if(WIN32)
@@ -2219,7 +2260,7 @@ if(BUILD_TESTING)
         add_test(NAME DKRHudBasicSettings COMMAND DKRHudEditorTests)
 
         target_include_directories(DKRLiveLodTests PRIVATE
-            "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+            "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_link_libraries(DKRLiveLodTests PRIVATE rt64)
         target_compile_definitions(DKRLiveLodTests PRIVATE NOMINMAX)
         if(WIN32)
@@ -2236,7 +2277,7 @@ if(BUILD_TESTING)
         add_test(NAME DKRLiveLod COMMAND DKRLiveLodTests)
         add_executable(DKRGeneratedMipsTests tests/generated_mips_tests.cpp)
         target_include_directories(DKRGeneratedMipsTests PRIVATE "${DKR_RT64_SOURCE}/src/render")
-        target_include_directories(DKRGeneratedMipsTests PRIVATE "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+        target_include_directories(DKRGeneratedMipsTests PRIVATE "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_compile_definitions(DKRGeneratedMipsTests PRIVATE NOMINMAX)
         target_link_libraries(DKRGeneratedMipsTests PRIVATE rt64)
         if(WIN32)
@@ -2247,7 +2288,7 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME DKRGeneratedMips COMMAND DKRGeneratedMipsTests)
         add_executable(DKRMipmapLoadingTests tests/mipmap_loading_tests.cpp)
-        target_include_directories(DKRMipmapLoadingTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src" "$<TARGET_PROPERTY:DKRPortGame,INCLUDE_DIRECTORIES>")
+        target_include_directories(DKRMipmapLoadingTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src" "$<TARGET_PROPERTY:DKRPortGameCore,INCLUDE_DIRECTORIES>")
         target_compile_definitions(DKRMipmapLoadingTests PRIVATE NOMINMAX)
         target_link_libraries(DKRMipmapLoadingTests PRIVATE rt64)
         if(WIN32)
@@ -2362,6 +2403,8 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_LIST_DIR}/src/game"
         "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include"
     )
+    # Shared-saves groups identical copies by content hash (dkr::mods::sha256).
+    target_link_libraries(DKRSaveManagerTests PRIVATE DKRLegacyModCore)
     add_test(NAME DKRSaveManager COMMAND DKRSaveManagerTests)
 
     add_executable(DKRSaveStorageTests tests/save_storage_tests.cpp src/game/dkr_save_codec.cpp)

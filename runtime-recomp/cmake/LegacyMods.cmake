@@ -130,6 +130,8 @@ if(TARGET rt64)
     target_link_libraries(DKRLegacyModCore PRIVATE rt64)
 else()
     target_link_libraries(DKRLegacyModCore PRIVATE DKRLegacyModMiniz)
+    # RT64's interface carries src/game (the vehicle protocol headers) otherwise.
+    target_include_directories(DKRLegacyModCore PRIVATE "${_dkr_mod_src}/..")
 endif()
 
 add_library(DKRLegacyGuestIO STATIC "${_dkr_mod_src}/legacy_runtime_io.cpp"
