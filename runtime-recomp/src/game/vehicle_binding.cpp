@@ -1,5 +1,5 @@
 #include "vehicle_binding.hpp"
-#include "shared_snapshot.hpp"
+#include "atomic_snapshot.hpp"
 #include <atomic>
 #include <mutex>
 
@@ -8,7 +8,7 @@ namespace {
 struct Binding { std::weak_ptr<const void> owner;std::shared_ptr<const Resources> resources; };
 std::mutex mutex;
 std::map<const void*,Binding> bindings;
-dkr::runtime::SharedSnapshot<const Resources> renderer;
+dkr::runtime::AtomicSnapshot<const Resources> renderer;
 }
 void bind_resources(std::shared_ptr<const void> owner,std::shared_ptr<const Resources> resources) {
     if(!owner||!resources||resources->library.packages.empty())return;

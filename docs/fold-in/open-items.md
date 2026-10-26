@@ -79,13 +79,11 @@ Known before they run:
   no Linux TU takes (Apple, Windows, Android) by path alone. No configure has
   compiled them, so B6 and the Windows configure are their first check.
 
-- `netplay/online_directory.cpp` (online-directory layer) holds a
-  `std::atomic<std::shared_ptr<const View>>`. libstdc++ supports that C++20
-  specialization; Apple's libc++ does not (`std::atomic<T>` requires a
-  trivially copyable `T`), so the macOS host build stops there. v1.0.11 was
-  Linux and Windows only, so no shipped build hit it. It needs an
-  `__APPLE__`-guarded alternative (a mutex-guarded `shared_ptr`, or
-  `std::atomic_load`/`std::atomic_store` on a plain one).
+- Five TUs held a `std::atomic<std::shared_ptr<const T>>`, which libc++
+  (Apple, Android) doesn't implement. They use main's
+  `dkr::runtime::AtomicSnapshot` (`atomic_snapshot.hpp`): on libstdc++ and
+  MSVC it's an alias for that same type, so their Linux objects must be
+  identical (`portability.json` `objects_identical`, level 3).
 - The Mod Store links CURL only off Windows, Android and Apple, as the
   release did; plan B2 lists CURL on Apple for B6.
 
@@ -133,6 +131,14 @@ Known before they run:
   table has, so a `host-full-nogen` configure needs
   `extern/dkr-decomp/ver/symbols`. That's the sparse "symbols" dependency
   profile the plan describes for the `linux` job.
+
+## For Phase C
+
+- `atomic_snapshot.hpp`'s libc++ branch uses the free `std::atomic_load`/
+  `std::atomic_store` on `shared_ptr`, deprecated in C++20 and removed in
+  C++26. Replace it with a mutex-guarded holder (a `shared_ptr` under a
+  `std::mutex`, releasing the previous value outside the lock), and drop the
+  alias once every target toolchain has libc++'s `atomic<shared_ptr>`.
 
 ## Online identity (B7)
 
