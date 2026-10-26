@@ -66,14 +66,30 @@ ALLOWED = ROOT / "scripts/fold/allowed-deltas.json"
 # preprocessed after a configure. Only these may skip level 2.
 SHADER_PENDING = ROOT / "scripts/fold/shader-pending.json"
 # Portability fixes for platforms v1.0.11 never compiled (B6): the files they
-# change, pinned to their reviewed bytes, and the Linux TUs whose tokens they
-# change, which must then compile to identical objects (level 3).
+# change, pinned to their reviewed bytes; the Linux TUs whose tokens change
+# but whose objects must not (level 3); and the named TUs whose portable
+# replacement changes Linux code on purpose (allowed level 2 deltas).
 PORTABILITY = ROOT / "scripts/fold/portability.json"
 
 
-def load_portability() -> tuple[dict[str, str], set[str]]:
+@dataclasses.dataclass(frozen=True)
+class Portability:
+    files: dict[str, str]  # repo path -> reviewed closure_digest
+    identical: frozenset[str]  # TU labels: tokens differ, objects identical
+    deltas: dict[str, str]  # TU label -> reason its Linux tokens may differ
+
+    @property
+    def tus(self) -> frozenset[str]:
+        return self.identical | frozenset(self.deltas)
+
+
+def load_portability() -> Portability:
     data = json.loads(PORTABILITY.read_text(encoding="utf-8"))
-    return {path: entry["sha256"] for path, entry in data["files"].items()}, set(data["tus"])
+    return Portability(
+        {path: entry["sha256"] for path, entry in data["files"].items()},
+        frozenset(data["objects_identical"]),
+        dict(data["token_deltas"]),
+    )
 
 
 # Folded targets that compile what one reference target compiled: the game's
@@ -655,7 +671,8 @@ def run_level1(args: argparse.Namespace) -> int:
     allow = variant_tus(ROOT, forwarders=True)
     allowed = load_allowed(ALLOWED)
     problems: list[str] = list(pairing.unmapped)
-    ported, ported_tus = load_portability()
+    portability = load_portability()
+    ported, ported_tus = portability.files, portability.tus
     same_bytes: dict[tuple[Path, Path], bool] = {}
 
     def name(path: Path) -> str:
@@ -779,7 +796,8 @@ def run_level2(args: argparse.Namespace) -> int:
         for side, directory in (("reference", args.reference_pp), ("folded", args.folded_pp))
     }
     expected_pending = set(json.loads(SHADER_PENDING.read_text(encoding="utf-8"))["tus"])
-    _, ported_tus = load_portability()
+    portability = load_portability()
+    portable_deltas: list[str] = []
     skipped: set[str] = set()
     same = 0
     for old_key, new_key in sorted(pairing.pairs.items()):
@@ -809,8 +827,13 @@ def run_level2(args: argparse.Namespace) -> int:
         new = tokens(new_file.read_text(errors="surrogateescape"), None)
         if old == new:
             same += 1
+            if label in portability.tus:
+                problems.append(f"{label}: listed in {PORTABILITY.name} but token-identical")
             continue
-        if apply_closure.tu_name(ROOT, mapping.folder, old_key[1]) in level3_names or label in ported_tus:
+        if label in portability.deltas:
+            portable_deltas.append(label)  # portable replacement for a libc++ gap
+            continue
+        if apply_closure.tu_name(ROOT, mapping.folder, old_key[1]) in level3_names or label in portability.identical:
             level3.append(label)
             continue
         first = next((i for i, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
@@ -826,7 +849,7 @@ def run_level2(args: argparse.Namespace) -> int:
         print(f"level 3 required: {label}")
     print(
         f"level2: {same} TUs token-identical, {len(level3)} header-variant TUs left for level 3, "
-        f"{len(skipped)} waiting for build-time shaders, "
+        f"{len(skipped)} waiting for build-time shaders, {len(portable_deltas)} portability deltas, "
         f"{len(problems) - len(unexplained)} allowed, {len(unexplained)} unexplained",
         file=sys.stderr,
     )
@@ -836,6 +859,7 @@ def run_level2(args: argparse.Namespace) -> int:
         token_identical=same,
         level3=level3,
         shader_pending=sorted(skipped),
+        portability_deltas={label: portability.deltas[label] for label in portable_deltas},
         allowed=len(problems) - len(unexplained),
         unexplained=unexplained,
     )
@@ -911,11 +935,17 @@ def run_level3(args: argparse.Namespace) -> int:
     checked: list[str] = []
     covered: set[str] = set()
     compared = 0
-    _, ported_tus = load_portability()
+    portability = load_portability()
     for old_key, new_key in sorted(pairing.pairs.items()):
         name = apply_closure.tu_name(ROOT, mapping.folder, old_key[1])
         label = f"{new_key[0]}: {portable(mapping, new_key[1])}"
-        if (name not in split and label not in ported_tus) or new_key not in folded_entries:
+        if label in portability.deltas and new_key in folded_entries:
+            # A portable replacement changes this TU's code on purpose, which
+            # also hides any header-variant effect; level 2 names the reason.
+            covered |= {name, label}
+            compared += 1
+            continue
+        if (name not in split and label not in portability.identical) or new_key not in folded_entries:
             continue
         covered |= {name, label}
         compared += 1
@@ -955,7 +985,7 @@ def run_level3(args: argparse.Namespace) -> int:
     # Every TU header-variants.json says compiled against another header
     # version must have been compared here (or found token-identical).
     problems += [f"{name}: header-variant TU not compared" for name in sorted(split - covered)]
-    problems += [f"{label}: portability TU not compared" for label in sorted(ported_tus - covered)]
+    problems += [f"{label}: portability TU not compared" for label in sorted(portability.tus - covered)]
     allowed = load_allowed(ALLOWED)
     unexplained = [problem for problem in problems if explained(problem, allowed) is None]
     for label in checked:
@@ -1061,7 +1091,7 @@ def run_closure(args: argparse.Namespace) -> int:
         print(f"closure: {len(files)} files recorded", file=sys.stderr)
         return 0
     files = json.loads(CLOSURE.read_text(encoding="utf-8"))["files"]
-    ported, _ = load_portability()
+    ported = load_portability().files
     files.update({dest: digest for dest, digest in ported.items() if dest in files})
     problems: list[str] = []
     for dest, digest in sorted(files.items()):

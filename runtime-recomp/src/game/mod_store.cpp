@@ -1,5 +1,5 @@
 #include "online_directory.hpp"
-#include "atomic_snapshot.hpp"
+#include "shared_snapshot.hpp"
 #include "linux_keyring.hpp"
 #include "store_vehicle_adapter.hpp"
 #include "mod_store.hpp"
@@ -31,7 +31,10 @@
 #include <wincrypt.h>
 #include <winhttp.h>
 #else
+// Android links no HTTPS backend (the CURL link in CMakeLists.txt).
+#if !defined(__ANDROID__)
 #include <curl/curl.h>
+#endif
 #include <fcntl.h>
 #include <unistd.h>
 #endif
@@ -321,6 +324,10 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
             throw Error("The library response is too large.");
     }
     return response;
+}
+#elif defined(__ANDROID__)
+Response http_once(const Request&, std::stop_token, const Sink&) {
+    throw Error("The Mod Store isn't available in this build.");
 }
 #else
 Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
@@ -617,7 +624,7 @@ struct Service::Impl {
     std::mutex download_persist_mutex;
     std::condition_variable_any cv;
     Snapshot state;
-    dkr::runtime::AtomicSnapshot<const Snapshot> published{std::make_shared<const Snapshot>()};
+    dkr::runtime::SharedSnapshot<const Snapshot> published{std::make_shared<const Snapshot>()};
     std::filesystem::path root;
     std::string version, token, device, browser;
     unsigned account = 0;

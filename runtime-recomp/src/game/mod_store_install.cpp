@@ -1,5 +1,5 @@
 #include "store_vehicle_adapter.hpp"
-#include "atomic_snapshot.hpp"
+#include "shared_snapshot.hpp"
 #include "mod_store_install.hpp"
 #include "custom_tracks.hpp"
 #include "mods/legacy_mod_library.hpp"
@@ -483,7 +483,7 @@ bool recover_cached_package(const fs::path& folder, const fs::path& target, cons
 struct InstallManager::Impl {
     mutable std::mutex mutex;
     std::condition_variable_any cv;
-    dkr::runtime::AtomicSnapshot<const InstallView> published{std::make_shared<const InstallView>()};
+    dkr::runtime::SharedSnapshot<const InstallView> published{std::make_shared<const InstallView>()};
     InstallView state;
     fs::path config, root, worker_path;
     std::string version;

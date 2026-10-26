@@ -47,26 +47,17 @@ checkout (`prepare-dependencies` `decomp-symbols`) and, on Android, the new
 
 Known before they run:
 
-- `android-folded` will fail until the libc++ gaps are fixed. A local run in
-  the CI image (NDK r29, same flags) configures cleanly and applies every
-  stage patch the Android chain takes. Everything else compiles, but 7
-  first-party TUs don't:
-  - `std::atomic<std::shared_ptr<T>>`, which libc++ lacks (the B6 Apple gap):
-    `online_directory.cpp`, `vehicle_binding.cpp`, `achievements.cpp`,
-    `mod_store_install.cpp`;
-  - ambiguous `std::to_string` calls: `mod_store_names.cpp`,
-    `mod_store_install.cpp`, `texture_dump.cpp` (`texture_gallery.inl`);
-  - `curl/curl.h` in `mod_store.cpp` (the store links CURL only off Android,
-    Apple and Windows, but still compiles there).
-  v1.0.11 never compiled these for Android or Apple, so they fail closed.
-  The fixes are platform-guarded source changes that leave the Linux level 2
-  stream unchanged, which is B6/C12 work.
+- `android-folded` was red before B6. A local run in the CI image (NDK r29,
+  same flags) applied every stage patch the Android chain takes. Then 7
+  first-party TUs failed on libc++ gaps v1.0.11 never hit: missing
+  `std::atomic<std::shared_ptr>`, `std::to_string` of a 128-bit file-clock
+  count, and `curl/curl.h`. B6 fixes them portably (`portability.json`), and
+  the same local run now builds.
 - Android doesn't configure `DKR_EXPERIMENTAL_RACE_TEST`, so it doesn't take
   `0001-render-stability` and `0003-present-queue-pacer` (they sit on the
   rollback chain). Android releases are discontinued, so that stays open.
-- `windows-full-nogen` assumes the runner's `python` is 3.11 or newer; a
-  first step checks it. If `windows-2022` defaults to an older Python, it
-  needs a pinned `actions/setup-python`.
+- The new jobs install Python 3.12 with the pinned `actions/setup-python`;
+  `windows-full-nogen` also checks for 3.11 or newer as a backstop.
 - Adding `decomp-symbols` to the source cache key invalidates the existing
   dependency caches once.
 

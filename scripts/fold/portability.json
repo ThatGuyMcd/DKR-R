@@ -1,46 +1,48 @@
 {
- "about": "Portability fixes for platforms v1.0.11 never compiled (fold step B6). Each file is pinned to its reviewed bytes (whitespace-insensitive sha256, equivalence.py closure_digest); level 1 and the closure check compare against that instead of the shipped bytes. Each listed TU's Linux tokens change, so level 3 must find its objects identical.",
+ "about": "Portability fixes for platforms v1.0.11 never compiled (fold step B6). files: each pinned to its reviewed bytes (whitespace-insensitive sha256, equivalence.py closure_digest); level 1 and the closure check compare against that instead of the shipped bytes. objects_identical: Linux TUs whose tokens change but whose objects level 3 must find identical. token_deltas: the named TUs whose portable replacement changes Linux code on purpose, allowed at level 2.",
  "files": {
   "runtime-recomp/src/game/achievements.cpp": {
-   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
-   "sha256": "f17da14cff56cee42d8d3d6a2e9b6e3fc37c9371747e3cd005238c3c5dab124f"
+   "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::SharedSnapshot (shared_snapshot.hpp), one mutex-guarded holder on every platform.",
+   "sha256": "ad83afc0e4a8d4e77f9ceb29dda472330a2cae36c194c1bd4ba64d0bc945657e"
   },
   "runtime-recomp/src/game/f3ddkr_rt64.cpp": {
    "reason": "Metal builds have no enhanced-water renderer; the water_residency_rt64.hpp include is skipped under __APPLE__ (token-identical elsewhere).",
    "sha256": "6a669be2a612362d7f67a9e3df3faa1b48166637ca1d0179d5414f4d7e9690d4"
   },
   "runtime-recomp/src/game/mod_store.cpp": {
-   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
-   "sha256": "195b07d395a55bc9580abfb13fb7406ebe25cc9394d7d0c7d7eac6fc7e2adfd2"
+   "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::SharedSnapshot (shared_snapshot.hpp), one mutex-guarded holder on every platform. Android links no HTTPS backend, so its curl include and backend are skipped there (the store reports itself unavailable).",
+   "sha256": "0cb2aaa38265ad82b9da45ca448b1b12e6fe99b316c942acf73aed653f0aa7e0"
   },
   "runtime-recomp/src/game/mod_store_install.cpp": {
-   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC. libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
-   "sha256": "2a26f704b2e2b8699c1cb1ab98f5491aba6454d8660c13e91e052f56fc697f30"
+   "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::SharedSnapshot (shared_snapshot.hpp), one mutex-guarded holder on every platform. libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
+   "sha256": "921cb38792d1182766e4d0c22408490fbf829429c6db780ec95b319cb6210ecd"
   },
   "runtime-recomp/src/game/mod_store_names.cpp": {
    "reason": "libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
    "sha256": "b32f11a1484b0a649d7cc5962e926fdec663f126e7c9363bcc967ca687b7eafe"
   },
   "runtime-recomp/src/game/online_directory.cpp": {
-   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
-   "sha256": "74547dc4930c827598f1a6fd62cbd64c3575d455df952581393acec3a04d1d71"
+   "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::SharedSnapshot (shared_snapshot.hpp), one mutex-guarded holder on every platform.",
+   "sha256": "bae7c9b705aa9298c3d70676cfab7dd88b34d595770d43b6fcc88d042f470b85"
   },
   "runtime-recomp/src/game/texture_gallery.inl": {
    "reason": "libc++ file_clock counts are __int128, which std::to_string has no overload for; the count goes through std::int64_t, the overload libstdc++ already picked.",
    "sha256": "a4b3f753ac48d5299094fd48cdc31a2a65afa645e50ccc5f548007b77ebc01c7"
   },
   "runtime-recomp/src/game/vehicle_binding.cpp": {
-   "reason": "libc++ (Apple, Android) lacks std::atomic<std::shared_ptr>; uses dkr::runtime::AtomicSnapshot (atomic_snapshot.hpp), the same type on libstdc++ and MSVC.",
-   "sha256": "823af3eab2ff306d0c112e22bceb39dac0885b4249165aa4935319215934e574"
+   "reason": "libc++ (Apple, Android) has no std::atomic<std::shared_ptr>; the published snapshot is a dkr::runtime::SharedSnapshot (shared_snapshot.hpp), one mutex-guarded holder on every platform.",
+   "sha256": "744f24276aaab75d62e368f7730bf5634cc25c734e5b58aece04b00ecd37a7e2"
   }
  },
- "tus": [
-  "DKRCustomVehicles: runtime-recomp/src/game/vehicle_binding.cpp",
-  "DKRNetplayCore: runtime-recomp/src/game/online_directory.cpp",
-  "DKRPortGame: runtime-recomp/src/game/achievements.cpp",
-  "DKRPortGame: runtime-recomp/src/game/mod_store.cpp",
-  "DKRPortGame: runtime-recomp/src/game/mod_store_install.cpp",
+ "objects_identical": [
   "DKRPortGame: runtime-recomp/src/game/mod_store_names.cpp",
   "DKRPortGame: runtime-recomp/src/game/texture_dump.cpp"
- ]
+ ],
+ "token_deltas": {
+  "DKRCustomVehicles: runtime-recomp/src/game/vehicle_binding.cpp": "portable replacement for libc++ gap: std::atomic<std::shared_ptr> becomes the mutex-guarded dkr::runtime::SharedSnapshot on every platform",
+  "DKRNetplayCore: runtime-recomp/src/game/online_directory.cpp": "portable replacement for libc++ gap: std::atomic<std::shared_ptr> becomes the mutex-guarded dkr::runtime::SharedSnapshot on every platform",
+  "DKRPortGame: runtime-recomp/src/game/achievements.cpp": "portable replacement for libc++ gap: std::atomic<std::shared_ptr> becomes the mutex-guarded dkr::runtime::SharedSnapshot on every platform",
+  "DKRPortGame: runtime-recomp/src/game/mod_store.cpp": "portable replacement for libc++ gap: std::atomic<std::shared_ptr> becomes the mutex-guarded dkr::runtime::SharedSnapshot on every platform",
+  "DKRPortGame: runtime-recomp/src/game/mod_store_install.cpp": "portable replacement for libc++ gap: std::atomic<std::shared_ptr> becomes the mutex-guarded dkr::runtime::SharedSnapshot on every platform (plus the file-clock casts)"
+ }
 }
