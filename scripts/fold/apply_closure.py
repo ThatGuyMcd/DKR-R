@@ -655,8 +655,8 @@ def released_bases(root: Path, written: dict[str, bytes]) -> list[str]:
     """Capsule bases whose pin the folded bytes break (scripts/check_pinned_bytes.py)."""
     return sorted(
         base
-        for base, (pin, _) in check_pinned_bytes.base_pins(root).items()
-        if base in written and sha256(written[base].replace(b"\r\n", b"\n")) != pin
+        for base, pin in check_pinned_bytes.base_pins(root).items()
+        if base in written and sha256(written[base].replace(b"\r\n", b"\n")) != pin.sha256
     )
 
 

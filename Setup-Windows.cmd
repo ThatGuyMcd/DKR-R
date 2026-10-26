@@ -25,7 +25,11 @@ where wsl.exe >nul 2>nul || (echo Missing required tool: WSL2 ^(used by the prep
 rem "python" is often the Microsoft Store stub, so prove the interpreter runs.
 set "PYTHON="
 py -3 -c "import sys" >nul 2>nul && set "PYTHON=py -3"
-if not defined PYTHON python -c "import sys" >nul 2>nul && set "PYTHON=python"
+rem Keep the probe and the assignment inside the block: on one line, "&& set"
+rem would bind to the whole "if" and replace a working "py -3".
+if not defined PYTHON (
+    python -c "import sys" >nul 2>nul && set "PYTHON=python"
+)
 if not defined PYTHON (echo Missing required tool: Python 3 & set "MISSING=1")
 
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"

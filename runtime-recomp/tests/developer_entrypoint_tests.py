@@ -94,12 +94,14 @@ class DeveloperEntrypointTests(unittest.TestCase):
             "Build-macOS.sh",
             "Setup-macOS.sh",
             "Run-macOS.sh",
+            ".claude/settings.json",
+            ".codex/hooks.json",
         ):
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("1.0.5\n")
-        for name in ("assets", "patches", "runtime-recomp"):
-            (self.root / name).mkdir()
+        for name in ("assets", "patches", "runtime-recomp", "tests/fixtures/pattern-guard"):
+            (self.root / name).mkdir(parents=True)
         self.executable(self.bin / "rsync", "exit 0")
         self.executable(self.bin / "tar", 'echo partial > "$4"; exit "${DKR_TEST_EXIT:-9}"')
         self.env.update(DKR_RELEASE_VERSION="1.0.5", DKR_MAC_KIT_STAGE_ROOT=str(self.root / "stage"))

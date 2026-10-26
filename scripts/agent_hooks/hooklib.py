@@ -72,10 +72,10 @@ def checkout_of(path: Path) -> Path | None:
     directory = path if path.is_dir() else path.parent
     while not directory.is_dir() and directory != directory.parent:
         directory = directory.parent
-    top = git(directory, "rev-parse", "--show-toplevel")
+    top = git(directory, "rev-parse", "--show-cdup")
     if top is None:
         return None
-    root = Path(top).resolve()
+    root = (directory / top).resolve()
     return root if (root / MARKER).is_file() else None
 
 
@@ -327,9 +327,9 @@ def hooks_status(root: Path) -> str | None:
     )
     if shutil.which("pre-commit") is None:
         return f"pre-commit is not installed, so local git hooks don't run. Bootstrap with `{bootstrap}`."
-    hook = git(root, "rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-commit")
+    hook = git(root, "rev-parse", "--path-format=relative", "--git-path", "hooks/pre-commit")
     try:
-        installed = hook is not None and PRE_COMMIT_MARK in Path(hook).read_text(encoding="utf-8", errors="replace")
+        installed = hook is not None and PRE_COMMIT_MARK in (root / hook).read_text(encoding="utf-8", errors="replace")
     except OSError:
         installed = False
     return None if installed else f"The pre-commit git hook is not installed. Bootstrap with `{bootstrap}`."

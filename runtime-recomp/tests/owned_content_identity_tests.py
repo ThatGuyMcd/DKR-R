@@ -9,6 +9,7 @@ import unittest
 HELPER = pathlib.Path(__file__).resolve().parents[1] / "cmake/OwnedContentIdentity.cmake"
 
 
+@unittest.skipUnless(shutil.which("cmake"), "needs CMake (python3 scripts/check.py --suite host-tools)")
 class OwnedContentIdentityTests(unittest.TestCase):
     def identity(self, root, files, *, outside=False):
         root = pathlib.Path(root)

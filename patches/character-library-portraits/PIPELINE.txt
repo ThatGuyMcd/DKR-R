@@ -1,0 +1,19 @@
+Character portraits use the same 100-pixel preview slot as vehicle entries.
+The surrounding launcher cards, controls and navigation stay as they are.
+
+The preview reads only the character.json manifest and its portrait blob on
+a background worker. Both hashes and the catalogue identity are checked.
+It reuses the established texture dump decoder for native colour, alpha and
+interlacing. Palette portraits use the player's matching imported ROM as data.
+No game, guest callback, mod activation, importer or renderer is run to decode.
+
+The worker queue has 32 entries; its immutable image cache has 64. Each image
+is at most 256 x 256 RGBA8. SDL textures are made and released on the UI thread,
+with 64 cached textures. An eviction never destroys an image referenced by the
+current ImGui draw list. Launcher teardown releases textures before the renderer.
+Bad or missing preview data cannot prevent the mod card or its controls working.
+
+This layer includes online-performance/ReleaseOverlay.cmake. Use configure.py
+here for the combined playtest. The online compatibility IDs are unchanged by
+this presentation-only addition. Build DKRCharacterPortraitChecks alongside
+the online layer's build.py target set, then run the fixture without a ROM.

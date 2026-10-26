@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -19,7 +20,23 @@ TOOLING_TESTS_SKIP = {
     "magic_code_pipeline_tests.py": "needs generated v77/v80 sources (CTest passes them)",
     "water_profile_policy_tests.py": "needs both ELFs and their water policies",
 }
-TOOLING_TESTS = tuple(sorted(path.name for path in TESTS.glob("*_tests.py") if path.name not in TOOLING_TESTS_SKIP))
+# Tests that need build tools beyond Git and Python run in the opt-in
+# host-tools suite instead (CTest runs them too).
+HOST_TOOL_TESTS = {
+    "build_iteration_tests.py": "configures and compiles a scratch CMake/Ninja project",
+    "owned_content_identity_tests.py": "runs cmake -P",
+}
+TOOLING_TESTS = tuple(
+    sorted(
+        path.name
+        for path in TESTS.glob("*_tests.py")
+        if path.name not in TOOLING_TESTS_SKIP and path.name not in HOST_TOOL_TESTS
+    )
+)
+# pinned_bytes_tests.py stays in tooling for its unit tests; its real pre-commit
+# run (which installs hook environments) is gated on this variable, which
+# host-tools sets when it runs the file again.
+PRE_COMMIT_INTEGRATION = "DKR_PRE_COMMIT_INTEGRATION"
 # These read pinned dependency sources. CI jobs that don't fetch extern/ skip
 # them with a notice; CTest and any checkout with extern/ still run them.
 NEEDS_EXTERN = {
@@ -37,7 +54,7 @@ def missing_checkout(test: str) -> str | None:
     return None
 
 
-SUITES = ("guard", "tooling", "metadata", "assets", "track-lab")
+SUITES = ("guard", "tooling", "metadata", "assets", "track-lab", "host-tools")
 DEFAULT_SUITES = ("guard", "tooling", "metadata", "assets")
 
 
@@ -69,6 +86,10 @@ def main(argv=None) -> int:
     commands = {
         "guard": [[sys.executable, "scripts/pattern_guard.py", "--tree", "--baseline", "check"]],
         "tooling": [[sys.executable, f"runtime-recomp/tests/{test}"] for test in TOOLING_TESTS],
+        "host-tools": [
+            [sys.executable, f"runtime-recomp/tests/{test}"]
+            for test in (*sorted(HOST_TOOL_TESTS), "pinned_bytes_tests.py")
+        ],
         "metadata": [[sys.executable, "scripts/validate_release_metadata.py"]],
         "assets": [[sys.executable, "scripts/scan_for_game_assets.py"]],
         "track-lab": [[sys.executable, "tools/blender/run_tests.py", "--skip-blender"]],
@@ -83,7 +104,8 @@ def main(argv=None) -> int:
             if args.list:
                 continue
             try:
-                result = subprocess.run(command, cwd=ROOT)
+                environment = {**os.environ, PRE_COMMIT_INTEGRATION: "1"} if suite == "host-tools" else None
+                result = subprocess.run(command, cwd=ROOT, env=environment)
             except OSError as error:
                 print(f"Could not run {command[1]}: {error}", file=sys.stderr)
                 return 1

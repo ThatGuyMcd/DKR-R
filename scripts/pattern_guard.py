@@ -396,6 +396,12 @@ class Tree:
     def has_file(self, path: str) -> bool:
         return path in self.overlay or (self.root / path).is_file()
 
+    def data(self, path: str) -> bytes:
+        """Raw file bytes, from the overlay (planned content) when present."""
+        if path in self.overlay:
+            return self.overlay[path].encode("utf-8")
+        return (self.root / path).read_bytes()
+
     @functools.cache
     def text(self, path: str) -> str | None:
         """Decoded file text, or None for binary or unreadable files."""
@@ -486,12 +492,14 @@ class Tree:
 
 def _git_toplevel(root: Path) -> Path | None:
     result = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+        ["git", "-C", str(root), "rev-parse", "--show-cdup"],
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True,
     )
-    return Path(result.stdout.strip()).resolve() if result.returncode == 0 else None
+    # Relative output works with native Git and MSYS2 Git alike. An absolute
+    # MSYS path (/c/... or a mounted /home/...) is not a native Windows path.
+    return (root / result.stdout.strip()).resolve() if result.returncode == 0 else None
 
 
 def _git_lines(root: Path, *args: str) -> list[str]:
@@ -786,7 +794,7 @@ def unregistered_dependency_patch(tree: Tree, path: str) -> Iterator[Finding]:
     if path.endswith(".patch") and "/".join(path.split("/")[:2]) in tree.dependency_dirs:
         if path not in registered:
             yield Finding(path, 1, "PG007", "dependency patch is not in patches/manifest.json")
-        elif registered[path] != hashlib.sha256((tree.root / path).read_bytes()).hexdigest():
+        elif registered[path] != hashlib.sha256(tree.data(path)).hexdigest():
             yield Finding(path, 1, "PG007", "sha256 differs from patches/manifest.json")
     if is_cmake(path):
         for command in tree.cmake(path):

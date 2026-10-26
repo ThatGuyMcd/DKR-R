@@ -69,6 +69,20 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(run_guard(ROOT, "--explain", "PG999")[0], 2)
 
 
+class CheckContentTests(unittest.TestCase):
+    def test_a_patch_registered_before_it_is_written_is_still_checked(self):
+        # Registering first must not hide PG008: PG007 hashes the planned
+        # content instead of reading a file that doesn't exist yet.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            shutil.copytree(FIXTURES / "PG008/positive", root)
+            patch = root / "patches/rt64/0001-sidebar.patch"
+            text = patch.read_text(encoding="utf-8")
+            patch.unlink()
+            findings = pattern_guard.check_content(root, "patches/rt64/0001-sidebar.patch", text)
+        self.assertIn("PG008", {finding.rule for finding in findings})
+
+
 class CMakeTokenizerTests(unittest.TestCase):
     def test_comments_quotes_brackets_and_lines(self):
         commands = pattern_guard.parse_cmake(
@@ -152,6 +166,20 @@ class DiffScopeTests(unittest.TestCase):
         status, out, _ = run_guard(self.root, "--staged")
         self.assertEqual(status, 1)
         self.assertIn("patches/new-layer/ReleaseOverlay.cmake:1: PG001", out)
+
+    def test_checkout_root_and_ignored_nested_builds(self):
+        nested = self.root / "source" / "nested"
+        nested.mkdir(parents=True)
+        self.assertEqual(pattern_guard._git_toplevel(self.root), self.root.resolve())
+        self.assertEqual(pattern_guard._git_toplevel(nested), self.root.resolve())
+        (self.root / ".gitignore").write_text(".deps/\npackaging/**/build/\n")
+        for name in (".deps/library/build/cache.lib", "packaging/android/app/build/generated/cache.json"):
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("generated\n")
+        tree = pattern_guard.Tree(self.root)
+        self.assertTrue(tree.is_git)
+        self.assertFalse(any(path.startswith((".deps/", "packaging/")) for path in tree.files))
 
     def test_diff_scope_sees_untracked_files(self):
         (self.root / "patches/feature/NOTES.txt").write_text("notes\n")

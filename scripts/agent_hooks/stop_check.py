@@ -39,7 +39,7 @@ def main() -> int:
         return 0
     session = hooklib.load_sessions(root).get(str(payload.get("session_id")), {})
     base = session.get("head") or hooklib.git(root, "rev-parse", "--verify", "HEAD")
-    if not isinstance(base, str) or hooklib.git(root, "cat-file", "-e", f"{base}^{{commit}}") is None:
+    if not isinstance(base, str) or hooklib.git(root, "cat-file", "-t", base) != "commit":
         return 0
     changed = hooklib.changed_paths(root, base)
     if not changed:
