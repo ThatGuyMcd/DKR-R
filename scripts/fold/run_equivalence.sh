@@ -8,7 +8,8 @@
 # docs/fold-in/REFERENCE.md). It holds ROM-derived payload paths, so it lives
 # on the devops machine, never in git. BUILD_DIR defaults to
 # build/fold-equivalence. Everything that compiles runs in the build image
-# (DKR_EQUIVALENCE_IMAGE, default dkr-ci-linux-full:latest).
+# (DKR_EQUIVALENCE_IMAGE, default: the exact image the v1.0.11 reference was
+# built with, by image ID; docker/ci-linux-full/Dockerfile is its recipe).
 #
 # Steps: configure this tree with the reference's options minus the release
 # chain's, then compare per-source compile settings and link lines (targets),
@@ -22,7 +23,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 reference="$(cd "${1:?usage: run_equivalence.sh REFERENCE_DIR [BUILD_DIR]}" && pwd)"
 build="${2:-$root/build/fold-equivalence}"
-image="${DKR_EQUIVALENCE_IMAGE:-dkr-ci-linux-full:latest}"
+image="${DKR_EQUIVALENCE_IMAGE:-sha256:a40e107015464b92bff4e383545938f206590f73a6d1302516cef012e4f66439}"
 jobs="${DKR_EQUIVALENCE_JOBS:-12}"
 tool="$root/scripts/fold/equivalence.py"
 out="$build/equivalence"
@@ -36,7 +37,7 @@ while IFS= read -r path; do
 done < <(python3 "$tool" options --reference "$reference" --mounts)
 in_image() {
   docker run --rm --platform linux/amd64 "${mounts[@]}" -w "$root" "$image" bash -c \
-    "set -e; (apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libcurl4-openssl-dev) >/dev/null 2>&1; git config --global --add safe.directory '*'; $1"
+    "set -e; dpkg -s libcurl4-openssl-dev >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq libcurl4-openssl-dev) >/dev/null 2>&1; git config --global --add safe.directory '*'; $1"
 }
 
 options=()
