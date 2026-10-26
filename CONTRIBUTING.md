@@ -6,7 +6,9 @@ First-party code lives in `runtime-recomp/`, `modding/` and `scripts/` and is
 edited in place. Third-party code is changed only through `patches/manifest.json`
 patch sets against `extern/`. Nothing stages, copies, string-replaces or swaps
 first-party sources at configure time. Guest hooks go in
-`guest-hooks/hooks.toml`, symbol tables in `symbols/*.toml`, and online
+`guest-hooks/hooks.toml` (the save-layout and portrait stages that feed the
+owned payload are the only scripts that write guest code), symbol tables in
+`symbols/*.toml`, and online
 identity lives in `netplay/legacy_identity.hpp` and changes only by deliberate
 edit.
 

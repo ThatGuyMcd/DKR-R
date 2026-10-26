@@ -69,6 +69,19 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(run_guard(ROOT, "--explain", "PG999")[0], 2)
 
 
+class AllowlistTests(unittest.TestCase):
+    def test_only_the_two_named_stages_may_write_guest_code(self):
+        # AGENTS.md names exactly these; anything else goes in hooks.toml.
+        self.assertEqual(
+            set(pattern_guard.OWNED_INPUT_STAGES),
+            {"scripts/save_layout_pipeline.py", "scripts/character_portrait_pipeline.py"},
+        )
+        self.assertEqual(
+            pattern_guard.GUEST_REWRITE_ALLOWED - set(pattern_guard.OWNED_INPUT_STAGES),
+            {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake"},
+        )
+
+
 class CheckContentTests(unittest.TestCase):
     def test_a_patch_registered_before_it_is_written_is_still_checked(self):
         # Registering first must not hide PG008: PG007 hashes the planned

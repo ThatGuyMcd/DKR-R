@@ -1213,7 +1213,6 @@ patches/viewport-flow/pipeline.py PG004
 runtime-recomp/src/game/netplay/experimental_runtime.cpp PG010
 scripts/adapt-water-reference.py PG004
 scripts/camera_plus_pipeline.py PG004
-scripts/character_portrait_pipeline.py PG004
 scripts/compose-lava-glow.py PG004
 scripts/compose-lava-lighting.py PG004
 scripts/compose-lava.py PG004

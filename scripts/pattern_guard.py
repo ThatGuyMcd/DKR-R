@@ -179,7 +179,15 @@ SOURCE_SWAP_ALLOWED = {
     "runtime-recomp/cmake/StagedPatch.cmake",  # dependency-patch staging
     "runtime-recomp/cmake/GuestHooks.cmake",
 }
+# The two owned-engine input stages (AGENTS.md): they write new copies of
+# recompiled guest code that the owned payload is generated from byte for
+# byte, so they can't be hooks.toml entries yet. No other script joins them.
+OWNED_INPUT_STAGES = {
+    "scripts/save_layout_pipeline.py": "save-layout stage of the owned-engine inputs",
+    "scripts/character_portrait_pipeline.py": "portrait stage of the owned-engine inputs",
+}
 PIPELINE_ALLOWED = {
+    **OWNED_INPUT_STAGES,
     "scripts/gen_guest_symbols.py": "writes new symbol headers",
     "scripts/guest_hooks.py": "applies declared hooks to generated guest code",
     "scripts/generate_replay_probe.py": "reads first-party headers only to collect probe symbol names",
@@ -194,7 +202,7 @@ PIPELINE_ALLOWED = {
     # reports and scratch objects, never a source file.
     "scripts/fold/equivalence.py": "reads the folded tree to compare it, writes only reports",
 }
-GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake"}
+GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake", *OWNED_INPUT_STAGES}
 IDENTITY_ALLOWED_SUFFIX = "netplay/legacy_identity.hpp"
 
 CMAKE_SUFFIXES = (".cmake",)
