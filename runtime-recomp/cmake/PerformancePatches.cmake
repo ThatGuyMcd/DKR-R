@@ -24,7 +24,9 @@ if(DKR_REPLAY_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
 endif()
 dkr_stage_patch(librecomp "${DKR_CODE_RUNTIME_INPUT}" custom-magic-code-heap
     "${DKRPORT_ROOT}/patches/custom-magic-codes/runtime-code-heap.patch" librecomp/src/recomp.cpp)
-include("${DKRPORT_ROOT}/patches/startup-memory/RuntimeMemory.cmake")
+# Startup memory: applied to the custom-magic-code-heap copy above.
+dkr_stage_patch(librecomp "${CMAKE_BINARY_DIR}/generated/custom-magic-code-heap" startup-memory
+    "${DKRPORT_ROOT}/patches/startup-memory/runtime-memory.patch" librecomp/src/recomp.cpp)
 if(BUILD_TESTING AND NOT ANDROID)
     add_executable(DKRNativeGuestLifetimeTests "${DKRPORT_ROOT}/runtime-recomp/tests/native_guest_lifetime_tests.cpp")
     target_compile_definitions(DKRNativeGuestLifetimeTests PRIVATE
