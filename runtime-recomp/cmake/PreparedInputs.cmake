@@ -8,9 +8,17 @@
 # or local model kernels).
 set(DKR_PREPARED_DIR "${DKRPORT_ROOT}/build/prepared" CACHE PATH
     "Inputs scripts/prepare_payloads.py prepares from the N64Recomp payload")
-if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${DKR_PREPARED_DIR}/prepared.json"
-        AND (NOT DEFINED CACHE{DKR_GENERATED_SOURCE_V77}
-            OR DKR_GENERATED_SOURCE_V77 STREQUAL "${DKR_PREPARED_DIR}/generated-v77"))
+# Compared as real paths: Windows callers pass backslashed paths.
+file(TO_CMAKE_PATH "${DKR_PREPARED_DIR}" dkr_prepared_dir)
+get_filename_component(dkr_prepared_dir "${dkr_prepared_dir}" REALPATH)
+set(dkr_named_payload "")
+if(DEFINED CACHE{DKR_GENERATED_SOURCE_V77})
+    file(TO_CMAKE_PATH "${DKR_GENERATED_SOURCE_V77}" dkr_named_payload)
+    get_filename_component(dkr_named_payload "${dkr_named_payload}" REALPATH)
+endif()
+if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json"
+        AND (dkr_named_payload STREQUAL "" OR dkr_named_payload STREQUAL "${dkr_prepared_dir}/generated-v77"))
+    set(DKR_PREPARED_DIR "${dkr_prepared_dir}")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DKR_PREPARED_DIR}/prepared.json")
     set(DKR_GENERATED_SOURCE_V77 "${DKR_PREPARED_DIR}/generated-v77" CACHE PATH
         "N64Recomp-generated CPU source for DKR US v1.0")

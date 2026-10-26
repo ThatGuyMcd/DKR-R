@@ -6,6 +6,7 @@ runtime isolation leaves self-isolated probe names alone. The full chain needs
 ROM-derived payloads; scripts/fold/run_equivalence.sh runs it."""
 
 import contextlib
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -20,9 +21,11 @@ import prepared  # noqa: E402
 
 import camera_scene_kernel  # noqa: E402
 import character_portrait_pipeline  # noqa: E402
+import compose_payloads  # noqa: E402
 import generate_replay_probe  # noqa: E402
 import prepare_payloads  # noqa: E402
 
+ORIGINAL_SHA1 = compose_payloads.RETAIL_SHA1[77]
 TOML = 'elf_path = "{root}/a.elf"\nrom_file_path = "{root}/a.z64"\noutput_func_path = "{root}/funcs"\nentrypoint = 1\n'
 
 
@@ -194,6 +197,43 @@ class PreparePayloadsTests(unittest.TestCase):
             self.assertEqual(options, ["--isolate-symbols", "--full-scenes", "--roots", "a", "b"])
             with self.assertRaises(prepare_payloads.PrepareError):
                 prepare_payloads.options_from(manifest, 80)
+
+
+class ComposeRomTests(unittest.TestCase):
+    """compose_payloads.py rom: byte order is normalised before the SHA-1 check."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.z64 = bytes.fromhex("80371240") + bytes(range(256)) * 4
+        compose_payloads.RETAIL_SHA1[77] = hashlib.sha1(self.z64).hexdigest()
+        self.addCleanup(compose_payloads.RETAIL_SHA1.__setitem__, 77, ORIGINAL_SHA1)
+
+    def test_every_byte_order_normalises_to_z64(self):
+        v64 = bytearray(self.z64)
+        v64[0::2], v64[1::2] = v64[1::2], v64[0::2]
+        n64 = bytearray(self.z64)
+        for i in range(0, len(n64), 4):
+            n64[i : i + 4] = n64[i : i + 4][::-1]
+        for name, data in (("z64", self.z64), ("v64", bytes(v64)), ("n64", bytes(n64))):
+            with self.subTest(order=name):
+                source, target = self.base / f"rom.{name}", self.base / f"out-{name}.z64"
+                source.write_bytes(data)
+                compose_payloads.normalise_rom(source, target, 77)
+                self.assertEqual(target.read_bytes(), self.z64)
+
+    def test_a_different_dump_or_revision_is_refused(self):
+        source = self.base / "rom.z64"
+        source.write_bytes(self.z64[:-1] + b"\x00")
+        with self.assertRaisesRegex(compose_payloads.ComposeError, "SHA-1"):
+            compose_payloads.normalise_rom(source, self.base / "out.z64", 77)
+        source.write_bytes(self.z64)
+        with self.assertRaisesRegex(compose_payloads.ComposeError, "US v80"):
+            compose_payloads.normalise_rom(source, self.base / "out.z64", 80)
+        source.write_bytes(b"\x00" * 16)
+        with self.assertRaisesRegex(compose_payloads.ComposeError, "not an N64 ROM"):
+            compose_payloads.normalise_rom(source, self.base / "out.z64", 77)
 
 
 class StageTests(unittest.TestCase):

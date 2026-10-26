@@ -230,33 +230,15 @@ decomp_ready() {
 stamp_matches() { [[ "$FORCE" -eq 0 && -f "$1" && "$(cat "$1")" == "$2" ]]; }
 
 prepare_revision() {
-  local revision="$1" rom="$2" sha1="$3" entrypoint="$4"
+  local revision="$1" rom="$2" sha1="$3"
   local tree="$PROJECT_ROOT/build/decomp/v$revision"
   local elf="$tree/build/dkr.us.v$revision.elf" built_rom="$tree/build/dkr.us.v$revision.z64"
   local work="$OUTPUT/v$revision"
 
   step "US v$revision: ROM"
   # Normalise byte order and verify the exact retail dump.
-  mkdir -p "$tree/baseroms"
-  python3 - "$rom" "$tree/baseroms/baserom.us.v$revision.z64" "$sha1" <<'PY'
-import hashlib, pathlib, sys
-source, target, expected = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
-data = bytearray(source.read_bytes())
-magic = bytes(data[:4]).hex()
-if magic == "37804012":
-    data[0::2], data[1::2] = data[1::2], data[0::2]
-elif magic == "40123780":
-    for i in range(0, len(data) - 3, 4):
-        data[i:i + 4] = data[i:i + 4][::-1]
-elif magic != "80371240":
-    raise SystemExit(f"{source}: not an N64 ROM (magic {magic})")
-digest = hashlib.sha1(data).hexdigest()
-if digest != expected:
-    raise SystemExit(f"{source}: SHA-1 {digest}, expected {expected}")
-if not target.exists() or target.read_bytes() != data:
-    target.write_bytes(data)
-print(f"[OK] {source.name} verified ({digest})")
-PY
+  python3 "$SCRIPT_DIR/compose_payloads.py" rom --revision "$revision" "$rom" "$tree/baseroms/baserom.us.v$revision.z64" ||
+    fail "The US v$revision ROM was rejected."
 
   step "US v$revision: decomp ELF"
   # Each revision gets its own tree: the decomp extracts every version into
@@ -297,30 +279,15 @@ PY
     mv "$work" "$previous"
     echo "[OK] Previous generated output preserved: $previous"
   fi
-  mkdir -p "$work/RecompiledFuncs"
-  python3 "$SCRIPT_DIR/compose_legacy_mod_policy.py" \
-    --policy "$PROJECT_ROOT/runtime-recomp/dkr.us.v$revision.recomp-policy.json" \
-    --fragment "$PROJECT_ROOT/runtime-recomp/legacy-mods.v$revision.recomp-fragment.json" \
-    --track-menu "$PROJECT_ROOT/runtime-recomp/legacy-track-menu.v$revision.recomp-fragment.json" \
-    --characters "$PROJECT_ROOT/runtime-recomp/legacy-characters.v$revision.recomp-fragment.json" \
-    --character-menu "$PROJECT_ROOT/runtime-recomp/legacy-character-menu.v$revision.recomp-fragment.json" \
-    --scene-runtime --elf "$elf" --output "$work/policy.json"
-  python3 "$SCRIPT_DIR/generate_recomp_config.py" \
-    --policy "$work/policy.json" --elf "$elf" --rom "$built_rom" \
-    --output-functions "$work/RecompiledFuncs" --entrypoint "$entrypoint" \
-    --output "$work/dkr.us.v$revision.toml"
-  (cd "$PROJECT_ROOT/runtime-recomp" && "$RECOMPILER" "$work/dkr.us.v$revision.toml") \
-    >"$work/n64recomp.log" 2>&1 || {
-    tail -20 "$work/n64recomp.log"
-    fail "N64Recomp failed for v$revision."
-  }
+  python3 "$SCRIPT_DIR/compose_payloads.py" payload --revision "$revision" --elf "$elf" --rom "$built_rom" \
+    --recompiler "$RECOMPILER" --output "$work" || fail "The US v$revision payload failed (log: $work/n64recomp.log)."
   echo "$inputs" >"$work/.dkr-payload-stamp"
   echo "[OK] $work/RecompiledFuncs"
 }
 
-# Entrypoints are mainproc in each retail image.
-prepare_revision 77 "$ROM_V77" 0cb115d8716dbbc2922fda38e533b9fe63bb9670 0x80065D40
-prepare_revision 80 "$ROM_V80" 6d96743d46f8c0cd0edb0ec5600b003c89b93755 0x80065F80
+# The retail SHA-1s (compose_payloads.py checks the ROMs against the same).
+prepare_revision 77 "$ROM_V77" 0cb115d8716dbbc2922fda38e533b9fe63bb9670
+prepare_revision 80 "$ROM_V80" 6d96743d46f8c0cd0edb0ec5600b003c89b93755
 
 # The build inputs derived from both payloads (save layout and portrait
 # stages, owned engine, Camera++ and model kernels); CMake reads them by default.

@@ -47,65 +47,42 @@ Supply your own clean US v1.0/v77 and US Rev A/v1.1/v80 ROMs locally.
 A complete release needs both native CPU payloads and the matching Rare RSP
 output. Ordinary players only need the ROM they want to play.
 
-`Build-DKR-Runtime.cmd` invokes `scripts/Prepare-DKR-Runtime.ps1`.
-It prepares the decomp ELF, pinned dependencies and generated/probe inputs.
-It is not, by itself, the complete mod-enabled/owned-rollback Public Build.
-`Diagnose-DKR-Recompile.cmd` is a diagnostic regeneration entry point; it
-does not replace composing both production policies.
+## Prepare (Windows and macOS)
 
-Use fresh build/output directories. Keep ROMs, generated output and local
-profiles out of source control.
-
-## Compose both normal payloads
-
-The versioned policies are only part of the policy. Production legacy scene,
-track/character menu, presentation and behaviour fragments must be composed
-before N64Recomp runs:
+One prepare script per platform does the whole job, the same way on both:
 
 ```text
-python scripts/generate_legacy_menu_qualification.py --characters --character-menu
-    --v77-build <prepared-v77-ELF-and-ROM-folder>
-    --v80-build <prepared-v80-ELF-and-ROM-folder>
-    --recompiler <N64Recomp-executable> --output <fresh-pipeline-output>
+Prepare-DKR-Runtime.cmd -RomV77 "<US 1.0 ROM>" -RomV80 "<US Rev A ROM>"
+bash scripts/Prepare-DKR-Runtime-macOS.sh --rom-v77 "<US 1.0 ROM>" --rom-v80 "<US Rev A ROM>"
 ```
 
-The displayed arguments are one command; join the lines using your shell's
-continuation syntax. Paths in angle brackets are placeholders.
-Use the resulting `generated-v77` and `generated-v80` directories separately.
-CMake checks required hooks and rejects v80 pointed at the protected v77 output.
-
-Revision translation uses named functions and checked offsets, not a global
-address delta. If translating the base v80 policy, retain and validate its
-revision-specific entries; don't overwrite them with a blind translation.
-
-## Prepare the build inputs
-
-The complete Public Build compiles more than the two normal payloads: each
-revision's payload with its save-layout and in-world portrait stages, its
-isolated full-scene owned rollback engine, its Camera++ scene kernel and its
-local model kernel. `scripts/prepare_payloads.py` derives all of them from the
-normal payloads and writes them to `build/prepared`, where CMake looks for them
-by default (`runtime-recomp/cmake/PreparedInputs.cmake`).
-`Prepare-DKR-Runtime-macOS.sh` runs it last. After the Windows composition
-above:
-
-```text
-python scripts/prepare_payloads.py
-    --input 77 <fresh-pipeline-output>/generated-v77 <fresh-pipeline-output>/menu-v77.toml <prepared-v77-ELF-and-ROM-folder>/dkr.us.v77.elf
-    --input 80 <fresh-pipeline-output>/generated-v80 <fresh-pipeline-output>/menu-v80.toml <prepared-v80-ELF-and-ROM-folder>/dkr.us.v80.elf
-```
-
-Then configure without naming any payload: the defaults use
-`build/prepared/generated-v77` and the rest of the set. A configure that names
-its own `DKR_GENERATED_SOURCE_V77` gets none of the prepared set, since the
-owned engine and kernels belong to the payload they were prepared from.
+It checks both ROMs against their retail SHA-1, builds one decomp ELF per
+revision (`build/decomp/v<rev>`; under WSL on Windows), builds N64Recomp, and
+runs `scripts/compose_payloads.py` for each revision. That composes the
+production policy (the versioned base policy plus the legacy mod, track menu,
+character and character menu fragments, with the scene runtime) and runs
+N64Recomp into `build/generated/v<rev>`. Last, `scripts/prepare_payloads.py`
+derives everything else the Public Build compiles into `build/prepared`: each
+payload with its save-layout and in-world portrait stages, the isolated
+full-scene owned rollback engines, the Camera++ scene kernels and the local
+model kernels. `Build-Windows.cmd` and `Build-macOS.sh` build from there, and a
+plain configure finds the whole set by default
+(`runtime-recomp/cmake/PreparedInputs.cmake`). A configure that names its own
+`DKR_GENERATED_SOURCE_V77` gets none of it, since the owned engines and kernels
+belong to the payload they were prepared from.
 
 Each stage checks pinned function hashes, native callback signatures, header
 hashes and service ownership, and writes new output only; it never edits its
 input. Despite the historical "probe/test" names, the owned outputs supply the
 integrated backend. Don't loosen a failed check or edit generated output to
-admit a new closure. Without the model kernels the local model feature is not
-compiled and the live Online maximum-detail control remains unavailable.
+admit a new closure. Revision translation uses named functions and checked
+offsets, not a global address delta.
+
+`scripts/generate_legacy_menu_qualification.py` builds menu qualification
+payloads; it isn't part of a release build. To rerun only N64Recomp for one
+revision, run `scripts/compose_payloads.py payload` (`--help` lists its
+inputs). Keep ROMs, generated output and
+local profiles out of source control.
 
 For an already prepared platform cache, configure through the current overlay:
 
@@ -142,14 +119,14 @@ The Linux release toolchain uses glibc 2.38 or newer. AppImages
 bundle application libraries, not the system glibc or GPU driver. Record the
 ELF architecture and required symbol versions when using a different build host.
 
-The simpler `Build-Windows.cmd`/`Build-Linux.sh` wrappers consume prepared
-normal sources. Supply `-GeneratedSource`/`-Revision80GeneratedSource`
-on the Windows script, or `DKR_LINUX_GENERATED_SOURCE`/
-`DKR_LINUX_V80_GENERATED_SOURCE` on Linux.
+`Build-Windows.cmd` builds from `build\prepared` by default;
+`-GeneratedSource`/`-Revision80GeneratedSource` select other payloads (which
+then build without the prepared owned engines and kernels). `Build-Linux.sh`
+takes `DKR_LINUX_GENERATED_SOURCE`/`DKR_LINUX_V80_GENERATED_SOURCE`.
 `./Build-Linux.sh` builds and tests; add `--package` only when you want an
 AppImage. `./Build-Linux.sh --help` lists the input and output overrides.
-They do not configure the extra owned outputs automatically; don't describe
-that basic build as reproduction of the full experimental Public Build.
+`Build-Linux.sh` doesn't configure the extra owned outputs automatically;
+don't describe that basic build as reproduction of the full Public Build.
 
 ## macOS
 

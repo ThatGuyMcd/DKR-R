@@ -93,6 +93,7 @@ force-sort-within-sections = true
 # Strict only for new tooling scripts; everything else is ratcheted in per path.
 include = [
     "scripts/agent_hooks",
+    "scripts/compose_payloads.py",
     "scripts/kernel_inputs.py",
     "scripts/prepare_payloads.py",
     "scripts/camera_scene_kernel.py",
@@ -111,6 +112,7 @@ include = [
 ]
 strict = [
     "scripts/agent_hooks",
+    "scripts/compose_payloads.py",
     "scripts/kernel_inputs.py",
     "scripts/prepare_payloads.py",
     "scripts/camera_scene_kernel.py",

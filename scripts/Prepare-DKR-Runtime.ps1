@@ -1,12 +1,23 @@
 [CmdletBinding()]
 param(
+    [string]$RomV77 = '',
+    [string]$RomV80 = '',
     [switch]$SkipApt,
     [switch]$Force,
     [switch]$SkipRecompile,
     [switch]$SkipProbe,
     [switch]$BuildRenderer,
+    [string]$Python = '',
     [int]$Jobs = 0
 )
+
+# Prepare everything Build-Windows.cmd compiles, the same way
+# Prepare-DKR-Runtime-macOS.sh does on macOS: pinned dependencies with their
+# patches, N64Recomp, one decomp ELF per supported ROM revision (US v1.0 = v77,
+# US Rev A/v1.1 = v80, each in its own build\decomp\v<rev> tree, built under
+# WSL), the production payloads (scripts\compose_payloads.py, into
+# build\generated\v<rev>), and the build inputs scripts\prepare_payloads.py
+# derives from them (build\prepared, which CMake reads by default).
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -18,11 +29,12 @@ $Timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $LogPath = Join-Path $LogDirectory "prepare-dkr-runtime-$Timestamp.log"
 Start-Transcript -Path $LogPath -Force | Out-Null
 
-$ExpectedSha1 = '0cb115d8716dbbc2922fda38e533b9fe63bb9670'
 $DkrSource = Join-Path $ProjectRoot 'extern\dkr-decomp'
 $RuntimeRoot = Join-Path $ProjectRoot 'runtime-recomp'
-$GeneratedFunctions = Join-Path $RuntimeRoot 'RecompiledFuncs'
+$GeneratedRoot = Join-Path $ProjectRoot 'build\generated'
+$PreparedRoot = Join-Path $ProjectRoot 'build\prepared'
 $ResolvedPath = Join-Path $RuntimeRoot 'resolved-runtime-dependencies.json'
+$Revisions = @(77, 80)
 
 function Fail([string]$Message) {
     throw $Message
@@ -63,99 +75,6 @@ function Convert-ToWslPath([string]$WindowsPath) {
     return $translatedPath
 }
 
-
-function Resolve-DkrRecompEntrypoint([string]$ElfPath, [string]$RomHeaderEntrypointText) {
-    if (-not (Test-Path -LiteralPath $ElfPath -PathType Leaf)) {
-        Fail "Cannot inspect the DKR ELF because it does not exist: $ElfPath"
-    }
-
-    $wslElf = Convert-ToWslPath $ElfPath
-    $symbolsLog = Join-Path $LogDirectory "dkr-elf-symbols-$Timestamp.log"
-    $sectionsLog = Join-Path $LogDirectory "dkr-elf-sections-$Timestamp.log"
-
-    $previousErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        $symbolOutput = @(& wsl.exe --exec mips-linux-gnu-nm -n --defined-only $wslElf 2>&1)
-        $symbolExitCode = $LASTEXITCODE
-        $sectionOutput = @(& wsl.exe --exec mips-linux-gnu-readelf -S -W $wslElf 2>&1)
-        $sectionExitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $previousErrorActionPreference
-    }
-
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($symbolsLog, (($symbolOutput | Out-String).TrimEnd() + "`n"), $utf8NoBom)
-    [System.IO.File]::WriteAllText($sectionsLog, (($sectionOutput | Out-String).TrimEnd() + "`n"), $utf8NoBom)
-
-    if ($symbolExitCode -ne 0) {
-        Fail "Could not inspect DKR ELF symbols with mips-linux-gnu-nm. Full output: $symbolsLog"
-    }
-    if ($sectionExitCode -ne 0) {
-        Fail "Could not inspect DKR ELF sections with mips-linux-gnu-readelf. Full output: $sectionsLog"
-    }
-
-    [uint64]$romHeaderAddress = [Convert]::ToUInt64($RomHeaderEntrypointText.Substring(2), 16)
-    $mainprocAddress = $null
-    $headerSymbolAddress = $null
-    $headerSymbolName = $null
-
-    foreach ($rawLine in $symbolOutput) {
-        $line = [string]$rawLine
-        if ($line -notmatch '^\s*([0-9A-Fa-f]+)\s+([A-Za-z])\s+(\S+)\s*$') {
-            continue
-        }
-
-        [uint64]$address = [Convert]::ToUInt64($Matches[1], 16)
-        $symbolType = $Matches[2]
-        $symbolName = $Matches[3]
-
-        if ($symbolName -eq 'mainproc') {
-            $mainprocAddress = $address
-        }
-        if ($address -eq $romHeaderAddress -and $symbolType -match '^[TtWw]$') {
-            $headerSymbolAddress = $address
-            $headerSymbolName = $symbolName
-        }
-    }
-
-    # DKR's decomp documents mainproc as the function run after IPL3 has
-    # completed. Prefer that real function symbol over the raw ROM header PC,
-    # which may point at bootstrap code that is not represented as an ELF
-    # function and therefore cannot be selected by N64Recomp.
-    $selectedAddress = $null
-    $selectedSymbol = $null
-    if ($null -ne $mainprocAddress) {
-        $selectedAddress = [uint64]$mainprocAddress
-        $selectedSymbol = 'mainproc'
-    } elseif ($null -ne $headerSymbolAddress) {
-        $selectedAddress = [uint64]$headerSymbolAddress
-        $selectedSymbol = [string]$headerSymbolName
-    } else {
-        Fail ("The DKR ELF contains neither the mainproc symbol nor a text symbol at the ROM header entry point " +
-            "$RomHeaderEntrypointText. ELF symbols: $symbolsLog")
-    }
-
-    if (($selectedAddress -band 3) -ne 0) {
-        Fail ("Resolved DKR entrypoint $selectedSymbol at 0x{0:X8}, but it is not word-aligned." -f $selectedAddress)
-    }
-
-    $hasMdebug = (($sectionOutput | Out-String) -match '(?m)\s\.mdebug\s')
-    $addressText = '0x{0:X8}' -f ([uint32]$selectedAddress)
-
-    Write-Host "[OK] Static recompilation entry function: $selectedSymbol at $addressText" -ForegroundColor Green
-    Write-Host "[OK] ELF .mdebug metadata available: $hasMdebug" -ForegroundColor Green
-    Write-Host "[OK] ELF symbol report: $symbolsLog" -ForegroundColor Green
-
-    return [PSCustomObject]@{
-        AddressText = $addressText
-        SymbolName = $selectedSymbol
-        UseMdebug = [bool]$hasMdebug
-        SymbolsLog = $symbolsLog
-        SectionsLog = $sectionsLog
-    }
-}
-
 function Get-NativeCMake {
     $candidates = New-Object System.Collections.Generic.List[string]
 
@@ -190,79 +109,60 @@ function Invoke-Checked([string]$Description, [scriptblock]$Command) {
     }
 }
 
-function Resolve-RomPath {
-    $candidates = @(
-        (Join-Path $ProjectRoot 'runtime\config\rom-source.json'),
-        (Join-Path $ProjectRoot 'dist\DKRPort-Windows-x64\runtime\config\rom-source.json'),
-        (Join-Path $ProjectRoot 'build\windows-x64\bin\Release\runtime\config\rom-source.json'),
-        (Join-Path $ProjectRoot 'build\windows-x64\bin\Debug\runtime\config\rom-source.json')
-    )
-
-    foreach ($candidate in $candidates) {
-        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
-        try {
-            $config = Get-Content -LiteralPath $candidate -Raw | ConvertFrom-Json
-            $path = [string]$config.path
-            if ($path -and (Test-Path -LiteralPath $path -PathType Leaf)) {
-                Write-Host "[OK] Using the ROM already connected by the launcher: $path" -ForegroundColor Green
-                return (Resolve-Path -LiteralPath $path).Path
+function Resolve-RomPath([int]$Revision, [string]$Explicit) {
+    if (-not [string]::IsNullOrWhiteSpace($Explicit)) {
+        if (-not (Test-Path -LiteralPath $Explicit -PathType Leaf)) { Fail "ROM not found: $Explicit" }
+        return (Resolve-Path -LiteralPath $Explicit).Path
+    }
+    if ($Revision -eq 77) {
+        # The launcher remembers the US v1.0 ROM it validated.
+        $candidates = @(
+            (Join-Path $ProjectRoot 'runtime\config\rom-source.json'),
+            (Join-Path $ProjectRoot 'dist\DKRPort-Windows-x64\runtime\config\rom-source.json'),
+            (Join-Path $ProjectRoot 'build\windows-x64\bin\Release\runtime\config\rom-source.json'),
+            (Join-Path $ProjectRoot 'build\windows-x64\bin\Debug\runtime\config\rom-source.json')
+        )
+        foreach ($candidate in $candidates) {
+            if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+            try {
+                $config = Get-Content -LiteralPath $candidate -Raw | ConvertFrom-Json
+                $path = [string]$config.path
+                if ($path -and (Test-Path -LiteralPath $path -PathType Leaf)) {
+                    Write-Host "[OK] Using the ROM already connected by the launcher: $path" -ForegroundColor Green
+                    return (Resolve-Path -LiteralPath $path).Path
+                }
+            } catch {
+                Write-Warning "Could not read ROM source configuration '$candidate': $($_.Exception.Message)"
             }
-        } catch {
-            Write-Warning "Could not read ROM source configuration '$candidate': $($_.Exception.Message)"
         }
     }
 
+    $label = if ($Revision -eq 77) { 'US 1.0' } else { 'US Rev A (1.1)' }
     Add-Type -AssemblyName System.Windows.Forms
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
-    $dialog.Title = 'Select your validated Diddy Kong Racing US 1.0 ROM'
+    $dialog.Title = "Select your Diddy Kong Racing $label ROM"
     $dialog.Filter = 'Nintendo 64 ROM (*.z64;*.v64;*.n64)|*.z64;*.v64;*.n64|All files (*.*)|*.*'
     $dialog.Multiselect = $false
     if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
-        Fail 'No ROM was selected. Validate the ROM in the launcher or rerun this command and choose it.'
+        Fail "No $label ROM was selected. Pass -RomV$Revision <path> or rerun this command and choose it."
     }
     return $dialog.FileName
 }
 
-function Convert-ToCanonicalRom([string]$SourcePath, [string]$DestinationPath) {
-    [byte[]]$bytes = [System.IO.File]::ReadAllBytes($SourcePath)
-    if ($bytes.Length -lt 4) { Fail 'The selected ROM is too small to contain an N64 header.' }
+function Resolve-Python {
+    if (-not [string]::IsNullOrWhiteSpace($Python)) { return @($Python) }
+    if (Get-Command py.exe -ErrorAction SilentlyContinue) { return @('py.exe', '-3') }
+    $command = Get-Command python.exe -ErrorAction SilentlyContinue
+    if ($command) { return @($command.Source) }
+    Fail 'Python 3.11 or newer was not found. Install it from python.org, or pass -Python <python.exe>.'
+}
 
-    $magic = '{0:X2}{1:X2}{2:X2}{3:X2}' -f $bytes[0], $bytes[1], $bytes[2], $bytes[3]
-    switch ($magic) {
-        '80371240' { Write-Host '[OK] ROM byte order: z64 / big-endian' -ForegroundColor Green }
-        '37804012' {
-            Write-Host '[OK] ROM byte order: v64 / byte-swapped; normalising locally' -ForegroundColor Green
-            for ($i = 0; $i + 1 -lt $bytes.Length; $i += 2) {
-                $tmp = $bytes[$i]; $bytes[$i] = $bytes[$i + 1]; $bytes[$i + 1] = $tmp
-            }
-        }
-        '40123780' {
-            Write-Host '[OK] ROM byte order: n64 / little-endian; normalising locally' -ForegroundColor Green
-            for ($i = 0; $i + 3 -lt $bytes.Length; $i += 4) {
-                $a = $bytes[$i]; $b = $bytes[$i + 1]
-                $bytes[$i] = $bytes[$i + 3]
-                $bytes[$i + 1] = $bytes[$i + 2]
-                $bytes[$i + 2] = $b
-                $bytes[$i + 3] = $a
-            }
-        }
-        default { Fail "The selected file does not have a recognised N64 ROM byte order (magic $magic)." }
-    }
-
-    $sha = [System.Security.Cryptography.SHA1]::Create()
-    try {
-        $hash = ($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
-    } finally {
-        $sha.Dispose()
-    }
-    if ($hash -ne $ExpectedSha1) {
-        Fail "The normalised ROM SHA-1 is $hash, but DKR US 1.0 requires $ExpectedSha1."
-    }
-
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $DestinationPath) | Out-Null
-    [System.IO.File]::WriteAllBytes($DestinationPath, $bytes)
-    Write-Host "[OK] Canonical local build ROM written to: $DestinationPath" -ForegroundColor Green
-    return $bytes
+function Invoke-Python([string]$Description, [string[]]$Arguments) {
+    $python = @(Resolve-Python)
+    $rest = @()
+    if ($python.Count -gt 1) { $rest = $python[1..($python.Count - 1)] }
+    & $python[0] @rest @Arguments
+    if ($LASTEXITCODE -ne 0) { Fail "$Description failed with exit code $LASTEXITCODE." }
 }
 
 function Clone-Or-Update([string]$Name, [string]$Repository, [string]$Destination,
@@ -301,11 +201,10 @@ function Clone-Or-Update([string]$Name, [string]$Repository, [string]$Destinatio
 }
 
 try {
-    Write-Host 'DKR-R - decomp ELF and static-recompilation preparation'
+    Write-Host 'DKR-R - runtime preparation (decomp ELFs, payloads, prepared build inputs)'
     Write-Host "Project: $ProjectRoot"
     Write-Host "Log: $LogPath"
     Write-Host ''
-    Write-Host 'This command prepares the first real game-code boundary. It builds the matching DKR ELF and attempts to generate native C output. It does not yet promise a playable executable.' -ForegroundColor Yellow
 
     if (-not (Get-Command git.exe -ErrorAction SilentlyContinue) -and -not (Get-Command git -ErrorAction SilentlyContinue)) {
         Fail 'Git is missing. Run Build-Windows.cmd first.'
@@ -328,76 +227,66 @@ try {
     & powershell.exe @sourcePreparationArgs
     if ($LASTEXITCODE -ne 0) { Fail 'The pinned DKR decomp source could not be prepared.' }
 
-    Write-Step 'Locating and normalising the user-owned ROM'
-    $sourceRom = Resolve-RomPath
-    $canonicalRom = Join-Path $DkrSource 'baseroms\dkr.us.v77.z64'
-    [byte[]]$romBytes = Convert-ToCanonicalRom $sourceRom $canonicalRom
-    [uint32]$romHeaderEntrypoint = ([uint32]$romBytes[8] -shl 24) -bor ([uint32]$romBytes[9] -shl 16) -bor ([uint32]$romBytes[10] -shl 8) -bor [uint32]$romBytes[11]
-    $romHeaderEntrypointText = '0x{0:X8}' -f $romHeaderEntrypoint
-    Write-Host "[OK] ROM header entry point: $romHeaderEntrypointText" -ForegroundColor Green
+    $roms = @{ 77 = (Resolve-RomPath 77 $RomV77); 80 = (Resolve-RomPath 80 $RomV80) }
 
-    Write-Step 'Building the completed DKR decomp ELF under WSL'
-    $wslDkr = Convert-ToWslPath $DkrSource
-    if (-not $wslDkr) { Fail 'WSL could not translate the DKR source path.' }
-    Write-Host "[OK] WSL source path: $wslDkr" -ForegroundColor Green
-
+    Write-Step 'Building the decomp ELFs under WSL'
     if (-not $SkipApt) {
         Write-Host 'Ubuntu may ask for your Linux sudo password while installing the documented decomp dependencies.' -ForegroundColor Yellow
-        & wsl.exe --exec bash -lc "sudo apt-get update && sudo apt-get install -y build-essential pkg-config git python3 python3-pip binutils-mips-linux-gnu python3-venv libpcre2-dev libpcre2-8-0 cmake ninja-build clang lld libcurl4-openssl-dev"
+        & wsl.exe --exec bash -lc "sudo apt-get update && sudo apt-get install -y build-essential pkg-config git python3 python3-pip binutils-mips-linux-gnu python3-venv libpcre2-dev libpcre2-8-0 cmake ninja-build clang lld libcurl4-openssl-dev rsync"
         if ($LASTEXITCODE -ne 0) { Fail 'WSL dependency installation failed. Rerun with -SkipApt only after installing the listed packages manually.' }
     }
 
-    # Do not pass a Windows CRLF here-string directly to `bash -lc`. Bash
+    # Each revision gets its own tree: the decomp extracts every version into
+    # the same asm/, assets/ and build/ directories. The live checkout is only
+    # read. Do not pass a Windows CRLF here-string directly to `bash -lc`: Bash
     # treats the hidden carriage return in `pipefail\r` as part of the option
-    # name and aborts before running the build. Generate an explicit LF-only,
-    # BOM-free script and execute that file directly through WSL instead.
+    # name. Write an explicit LF-only, BOM-free script and run that through WSL.
     $buildScriptPath = Join-Path $LogDirectory "build-dkr-decomp-$Timestamp.sh"
     $buildLines = @(
         'set -euo pipefail',
-        'cd "$1"',
-        'git submodule update --init --recursive',
-        '',
-        'needs_setup=0',
-        'if [ ! -x .venv/bin/python3 ]; then',
-        '    needs_setup=1',
-        "elif ! .venv/bin/python3 -c 'import splat' >/dev/null 2>&1; then",
-        '    needs_setup=1',
-        'fi',
-        '',
-        'if [ "$needs_setup" -eq 1 ]; then',
-        '    echo "[INFO] The DKR Python/tool environment is incomplete; running make setup."',
+        'source="$1" tree="$2" revision="$3" jobs="$4"',
+        '(cd "$source" && git submodule update --init --recursive)',
+        'mkdir -p "$tree"',
+        'rsync -a --delete --exclude /.git --exclude /build --exclude /asm --exclude /assets \',
+        '    --exclude /baseroms --exclude /.venv "$source/" "$tree/"',
+        'cd "$tree"',
+        "if [ ! -x .venv/bin/python3 ] || ! .venv/bin/python3 -c 'import splat' >/dev/null 2>&1; then",
+        '    echo "[INFO] The decomp Python/tool environment is incomplete; running make setup."',
         '    make setup',
         'fi',
-        '',
         "if ! .venv/bin/python3 -c 'import splat' >/dev/null 2>&1; then",
-        '    echo "[ERROR] DKR make setup completed, but the splat module is still unavailable in .venv." >&2',
-        '    echo "[ERROR] Remove .venv and rerun Build-DKR-Runtime.cmd if this persists." >&2',
+        '    echo "[ERROR] make setup completed, but splat is still unavailable in $tree/.venv." >&2',
         '    exit 92',
         'fi',
-        '',
-        'make extract',
-        'make -j"$2"'
+        'make VERSION="v$revision" extract',
+        'make VERSION="v$revision" -j"$jobs"'
     )
-    $buildCommand = [string]::Join("`n", $buildLines) + "`n"
-    $utf8NoBomShell = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($buildScriptPath, $buildCommand, $utf8NoBomShell)
-
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($buildScriptPath, ([string]::Join("`n", $buildLines) + "`n"), $utf8NoBom)
     $wslBuildScript = Convert-ToWslPath $buildScriptPath
-    Write-Host "[OK] WSL build script: $wslBuildScript" -ForegroundColor Green
-    & wsl.exe --exec bash $wslBuildScript $wslDkr ([string]$Jobs)
-    if ($LASTEXITCODE -ne 0) { Fail 'The matching DKR decomp build failed. The log above contains the first real decomp/toolchain error.' }
+    $wslDkr = Convert-ToWslPath $DkrSource
 
-    $elfPath = Join-Path $DkrSource 'build\dkr.us.v77.elf'
-    $builtRomPath = Join-Path $DkrSource 'build\dkr.us.v77.z64'
-    if (-not (Test-Path -LiteralPath $elfPath -PathType Leaf)) { Fail "The DKR build completed without producing the expected ELF: $elfPath" }
-    if (-not (Test-Path -LiteralPath $builtRomPath -PathType Leaf)) { Fail "The DKR build completed without producing the expected ROM image: $builtRomPath" }
-    Write-Host "[OK] Matching DKR ELF: $elfPath" -ForegroundColor Green
+    $elfs = @{}
+    $builtRoms = @{}
+    foreach ($revision in $Revisions) {
+        $tree = Join-Path $ProjectRoot "build\decomp\v$revision"
+        Write-Step "US v${revision}: ROM"
+        Invoke-Python "Checking the US v$revision ROM" @(
+            (Join-Path $PSScriptRoot 'compose_payloads.py'), 'rom', '--revision', "$revision",
+            $roms[$revision], (Join-Path $tree "baseroms\baserom.us.v$revision.z64"))
 
-    Write-Step 'Resolving the DKR static-recompilation entry function'
-    $entrypointInfo = Resolve-DkrRecompEntrypoint $elfPath $romHeaderEntrypointText
-    $entrypointText = [string]$entrypointInfo.AddressText
-    $entrypointSymbol = [string]$entrypointInfo.SymbolName
-    $useMdebugText = ([bool]$entrypointInfo.UseMdebug).ToString().ToLowerInvariant()
+        Write-Step "US v${revision}: decomp ELF"
+        New-Item -ItemType Directory -Force -Path $tree | Out-Null
+        $wslTree = Convert-ToWslPath $tree
+        & wsl.exe --exec bash $wslBuildScript $wslDkr $wslTree ([string]$revision) ([string]$Jobs)
+        if ($LASTEXITCODE -ne 0) { Fail "The US v$revision decomp build failed. The log above contains the first real decomp/toolchain error." }
+        $elfs[$revision] = Join-Path $tree "build\dkr.us.v$revision.elf"
+        $builtRoms[$revision] = Join-Path $tree "build\dkr.us.v$revision.z64"
+        foreach ($output in @($elfs[$revision], $builtRoms[$revision])) {
+            if (-not (Test-Path -LiteralPath $output -PathType Leaf)) { Fail "The US v$revision decomp build did not produce $output" }
+        }
+        Write-Host "[OK] US v$revision ELF: $($elfs[$revision])" -ForegroundColor Green
+    }
 
     Write-Step 'Preparing the static recompilation tool and runtime sources'
     $modernRuntimePath = Join-Path $ProjectRoot 'extern\n64-modern-runtime'
@@ -482,152 +371,29 @@ try {
     Write-Host "[OK] N64Recomp executable: $($recompiler.FullName)" -ForegroundColor Green
     Write-Host "[OK] RSPRecomp executable: $($rspRecompiler.FullName)" -ForegroundColor Green
 
-    New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
-    if ($Force -and (Test-Path -LiteralPath $GeneratedFunctions)) {
-        Remove-Item -LiteralPath $GeneratedFunctions -Recurse -Force
-    }
-    New-Item -ItemType Directory -Force -Path $GeneratedFunctions | Out-Null
-
-    $tomlPath = Join-Path $RuntimeRoot 'dkr.us.v77.generated.toml'
-    $recompPolicyPath = Join-Path $RuntimeRoot 'dkr.us.v77.recomp-policy.json'
-    if (-not (Test-Path -LiteralPath $recompPolicyPath -PathType Leaf)) {
-        Fail "DKR recompilation policy is missing: $recompPolicyPath"
-    }
-    $recompPolicy = Get-Content -LiteralPath $recompPolicyPath -Raw | ConvertFrom-Json
-    if ([int]$recompPolicy.schemaVersion -ne 1) { Fail 'Unsupported DKR recompilation policy schema.' }
-    $stubToml = (@($recompPolicy.stubs | ForEach-Object { '"' + ([string]$_.name).Replace('"', '\"') + '"' }) -join ', ')
-    $renamedToml = (@($recompPolicy.renamed | ForEach-Object { '"' + ([string]$_.name).Replace('"', '\"') + '"' }) -join ', ')
-    $ignoredToml = (@($recompPolicy.ignored | ForEach-Object { '"' + ([string]$_.name).Replace('"', '\"') + '"' }) -join ', ')
-    $functionSizesToml = (@($recompPolicy.functionSizes | ForEach-Object {
-        "{ name = `"$([string]$_.name)`", size = $([string]$_.size) }"
-    }) -join ', ')
-    $instructionPatchToml = (@($recompPolicy.instructionPatches | ForEach-Object {
-        "[[patches.instruction]]`nfunc = `"$([string]$_.function)`"`nvram = $([string]$_.vram)`nvalue = $([string]$_.value)"
-    }) -join "`n`n")
-    $manualFunctionsToml = (@($recompPolicy.manualFunctions | ForEach-Object {
-        "{ name = `"$([string]$_.name)`", section = `"$([string]$_.section)`", vram = $([string]$_.vram), size = $([string]$_.size) }"
-    }) -join ', ')
-    $functionHookToml = (@($recompPolicy.functionHooks | ForEach-Object {
-        $hookText = ([string]$_.text).Replace('\', '\\').Replace('"', '\"')
-        "[[patches.hook]]`nfunc = `"$([string]$_.function)`"`nbefore_vram = $([string]$_.beforeVram)`ntext = `"$hookText`""
-    }) -join "`n`n")
-    $elfToml = $elfPath.Replace('\', '/')
-    $romToml = $builtRomPath.Replace('\', '/')
-    $outputToml = $GeneratedFunctions.Replace('\', '/')
-    $tomlContent = @"
-# Generated by Prepare-DKR-Runtime.ps1.
-# This is the first-pass DKR CPU recompilation configuration. DKR-specific
-# stubs, manual boundaries and instruction patches will be added from the
-# emitted diagnostics.
-[input]
-entrypoint = $entrypointText
-use_mdebug = $useMdebugText
-elf_path = "$elfToml"
-rom_file_path = "$romToml"
-output_func_path = "$outputToml"
-manual_funcs = [$manualFunctionsToml]
-function_sizes = [$functionSizesToml]
-
-[patches]
-stubs = [$stubToml]
-renamed = [$renamedToml]
-ignored = [$ignoredToml]
-
-# BEGIN DKR_INSTRUCTION_PATCHES
-$instructionPatchToml
-# END DKR_INSTRUCTION_PATCHES
-
-# BEGIN DKR_FUNCTION_HOOKS
-$functionHookToml
-# END DKR_FUNCTION_HOOKS
-"@
-    # Windows PowerShell 5.1 writes a UTF-8 BOM when Set-Content -Encoding UTF8
-    # is used. Keep the TOML BOM-free because command-line parsers do not all
-    # accept a BOM before the first key.
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($tomlPath, $tomlContent, $utf8NoBom)
-
+    $payloads = @{}
     if (-not $SkipRecompile) {
-        Write-Step 'Generating the first native C translation of DKR'
-
-        # PowerShell transcripts do not reliably capture stdout/stderr from
-        # native console programs. Run N64Recomp through ProcessStartInfo and
-        # capture both streams explicitly so the first real game-specific
-        # blocker always includes its actual diagnostic.
-        $recompStdoutLog = Join-Path $LogDirectory "n64recomp-$Timestamp.stdout.log"
-        $recompStderrLog = Join-Path $LogDirectory "n64recomp-$Timestamp.stderr.log"
-        Remove-Item -LiteralPath $recompStdoutLog, $recompStderrLog -Force -ErrorAction SilentlyContinue
-
-        $recompStartInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $recompStartInfo.FileName = $recompiler.FullName
-        $recompStartInfo.Arguments = '"' + $tomlPath + '"'
-        $recompStartInfo.WorkingDirectory = $RuntimeRoot
-        $recompStartInfo.UseShellExecute = $false
-        $recompStartInfo.CreateNoWindow = $true
-        $recompStartInfo.RedirectStandardOutput = $true
-        $recompStartInfo.RedirectStandardError = $true
-
-        $recompProcess = New-Object System.Diagnostics.Process
-        $recompProcess.StartInfo = $recompStartInfo
-        if (-not $recompProcess.Start()) {
-            Fail "N64Recomp could not be started: $($recompiler.FullName)"
+        foreach ($revision in $Revisions) {
+            Write-Step "US v${revision}: recompiled payload"
+            $work = Join-Path $GeneratedRoot "v$revision"
+            # Generated output only: never reuse a previous run's files.
+            if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
+            Invoke-Python "The US v$revision payload (log: $work\n64recomp.log)" @(
+                (Join-Path $PSScriptRoot 'compose_payloads.py'), 'payload', '--revision', "$revision",
+                '--elf', $elfs[$revision], '--rom', $builtRoms[$revision],
+                '--recompiler', $recompiler.FullName, '--output', $work)
         }
 
-        # Read both streams asynchronously before waiting. This avoids a
-        # deadlock when a tool writes enough data to fill either pipe.
-        $recompStdoutTask = $recompProcess.StandardOutput.ReadToEndAsync()
-        $recompStderrTask = $recompProcess.StandardError.ReadToEndAsync()
-        $recompProcess.WaitForExit()
-        $recompExitCode = $recompProcess.ExitCode
-        $recompStdout = $recompStdoutTask.Result
-        $recompStderr = $recompStderrTask.Result
-        $recompProcess.Dispose()
-
-        [System.IO.File]::WriteAllText($recompStdoutLog, $recompStdout, $utf8NoBom)
-        [System.IO.File]::WriteAllText($recompStderrLog, $recompStderr, $utf8NoBom)
-
-        if (-not [string]::IsNullOrWhiteSpace($recompStdout)) {
-            Write-Host ''
-            Write-Host '==> N64Recomp standard output'
-            Write-Host $recompStdout.TrimEnd()
-        }
-        if (-not [string]::IsNullOrWhiteSpace($recompStderr)) {
-            Write-Host ''
-            Write-Host '==> N64Recomp diagnostic output' -ForegroundColor Yellow
-            Write-Host $recompStderr.TrimEnd() -ForegroundColor Yellow
-        }
-
-        if ($recompExitCode -ne 0) {
-            $diagnosticLines = New-Object System.Collections.Generic.List[string]
-            foreach ($line in ($recompStderr -split "[`r`n]+")) {
-                if (-not [string]::IsNullOrWhiteSpace($line)) {
-                    $diagnosticLines.Add($line.Trim())
-                }
-            }
-            foreach ($line in ($recompStdout -split "[`r`n]+")) {
-                if (-not [string]::IsNullOrWhiteSpace($line)) {
-                    $diagnosticLines.Add($line.Trim())
-                }
-            }
-
-            $firstDiagnostic = 'N64Recomp returned no diagnostic text.'
-            if ($diagnosticLines.Count -gt 0) {
-                $firstDiagnostic = $diagnosticLines[0]
-            }
-
-            Fail (("N64Recomp failed with exit code {0}. First diagnostic: {1} " +
-                "Full stdout: {2} Full stderr: {3}") -f `
-                $recompExitCode, `
-                $firstDiagnostic, `
-                $recompStdoutLog, `
-                $recompStderrLog)
-        }
-
-        Write-Host "[OK] N64Recomp completed. stdout: $recompStdoutLog" -ForegroundColor Green
-        Write-Host "[OK] N64Recomp completed. stderr: $recompStderrLog" -ForegroundColor Green
+        # The build inputs derived from both payloads (save layout and portrait
+        # stages, owned engine, Camera++ and model kernels).
+        Write-Step 'Prepared build inputs'
+        Invoke-Python 'Preparing the build inputs' @((Join-Path $PSScriptRoot 'prepare_payloads.py'))
+    }
+    foreach ($revision in $Revisions) {
+        $payloads[$revision] = Join-Path $PreparedRoot "generated-v$revision"
     }
 
-    $functionFiles = @(Get-ChildItem -LiteralPath $GeneratedFunctions -File -Recurse -Include '*.c','*.cpp' -ErrorAction SilentlyContinue)
+    $functionFiles = @(Get-ChildItem -LiteralPath $payloads[77] -File -Include '*.c' -Recurse -ErrorAction SilentlyContinue)
     $probeExecutable = $null
     $probeBuilt = $false
 
@@ -682,12 +448,8 @@ $functionHookToml
     $state = [ordered]@{
         schemaVersion = 2
         preparedUtc = [DateTime]::UtcNow.ToString('o')
-        sourceRomSha1 = $ExpectedSha1
-        romHeaderEntrypoint = $romHeaderEntrypointText
-        recompEntrypoint = $entrypointText
-        recompEntrypointSymbol = $entrypointSymbol
-        useMdebug = [bool]$entrypointInfo.UseMdebug
-        dkrElf = $elfPath
+        dkrElf = [ordered]@{ v77 = $elfs[77]; v80 = $elfs[80] }
+        preparedPayloads = [ordered]@{ v77 = $payloads[77]; v80 = $payloads[80] }
         generatedFunctionFiles = $functionFiles.Count
         n64RecompExecutable = $recompiler.FullName
         rspRecompExecutable = $rspRecompiler.FullName
@@ -695,16 +457,15 @@ $functionHookToml
         runtimeProbeExecutable = $probeExecutablePath
         rt64BuildRequested = [bool]$BuildRenderer
         dependencies = $resolved
-        nextBoundary = 'Register DKR with librecomp, implement SDL audio/input callbacks, recompile F3DDKR and audio RSP microcode, then bind the RT64 render context.'
     }
     $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ResolvedPath -Encoding UTF8
 
     Write-Host ''
-    Write-Host '[OK] DKR runtime preparation reached the generated-code and N64ModernRuntime compilation boundary.' -ForegroundColor Green
-    Write-Host "Generated function files: $($functionFiles.Count)"
+    Write-Host "[OK] Payloads ready in $GeneratedRoot, build inputs in $PreparedRoot" -ForegroundColor Green
+    Write-Host "Generated function files (US v1.0): $($functionFiles.Count)"
     Write-Host "State report: $ResolvedPath"
     Write-Host 'No ROM or extracted game asset is added to source control or the distributable ZIP.'
-    Write-Host 'The remaining boot work is DKR game registration, callbacks, F3DDKR/audio RSP recompilation and RT64 rendering.'
+    Write-Host 'Next: Build-Windows.cmd builds from build\prepared.'
     Stop-Transcript | Out-Null
     exit 0
 } catch {

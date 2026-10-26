@@ -14,8 +14,11 @@ Set-StrictMode -Version Latest
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $buildDirectory = Join-Path $projectRoot 'build\dkr-runtime-rt64'
+# Prepare-DKR-Runtime.cmd ends with scripts\prepare_payloads.py; CMake defaults
+# the owned engines, kernels and code policies to the same build\prepared.
+$prepared = Join-Path $projectRoot 'build\prepared'
 $generatedSource = if ([string]::IsNullOrWhiteSpace($GeneratedSource)) {
-    Join-Path $projectRoot 'runtime-recomp\RecompiledFuncs'
+    Join-Path $prepared 'generated-v77'
 } else {
     [IO.Path]::GetFullPath($GeneratedSource)
 }
@@ -24,7 +27,7 @@ $revision80Generated = if (-not [string]::IsNullOrWhiteSpace($Revision80Generate
 } elseif (-not [string]::IsNullOrWhiteSpace($env:DKR_WINDOWS_V80_GENERATED_SOURCE)) {
     [IO.Path]::GetFullPath($env:DKR_WINDOWS_V80_GENERATED_SOURCE)
 } else {
-    throw 'Set -Revision80GeneratedSource or DKR_WINDOWS_V80_GENERATED_SOURCE to the US Rev A/v1.1 Patch Pipeline output.'
+    Join-Path $prepared 'generated-v80'
 }
 $version = (Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim()
 $cmakeCandidates = @(
@@ -56,10 +59,10 @@ foreach ($required in @(
     }
 }
 if (-not (Test-Path -LiteralPath $generatedSource -PathType Container)) {
-    throw "US v1.0/v77 Patch Pipeline output is missing: $generatedSource"
+    throw "US v1.0/v77 payload is missing: $generatedSource. Run Prepare-DKR-Runtime.cmd first."
 }
 if (-not (Test-Path -LiteralPath $revision80Generated -PathType Container)) {
-    throw "US Rev A/v1.1 Patch Pipeline output is missing: $revision80Generated"
+    throw "US Rev A/v1.1 payload is missing: $revision80Generated. Run Prepare-DKR-Runtime.cmd first."
 }
 
 if ($Clean -and (Test-Path -LiteralPath $buildDirectory)) {

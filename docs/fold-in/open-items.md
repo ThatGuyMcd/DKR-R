@@ -176,6 +176,13 @@ Their authored guest inputs moved from `patches/save-layout/` and
 `prepared` level checks them against the reference
 (`scripts/fold/prepared.py` names the allowed differences).
 
+- One prepare path per platform: `Prepare-DKR-Runtime.ps1` and
+  `Prepare-DKR-Runtime-macOS.sh` both check the ROMs and compose the payloads
+  through `scripts/compose_payloads.py`, then run `prepare_payloads.py`; the
+  Windows build defaults to `build\prepared`. **The PS1 is unverified**: no
+  Windows host here, and no CI job runs it (it needs ROMs and WSL). It parses
+  under pwsh 7.4; `windows-full-nogen` covers the CMake side only. The macOS
+  script's payloads came out byte-identical to the previous ones.
 - The save-layout and portrait stages still rewrite copies of
   `funcs_*.c`, which AGENTS.md reserves for `guest-hooks/hooks.toml`. They
   stay stages because the owned engine is generated from their output and
