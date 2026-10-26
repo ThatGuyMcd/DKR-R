@@ -15,7 +15,7 @@ extend-exclude = [
     "extern",
     "patches",
     "tools/blender",
-    # Shipped v1.0.11 bytes the fold gate compares; the B9 format pass takes it.
+    # Pins first-party digests (a format_sources.py PIN_HOLDER); formatted after B9.
     "runtime-recomp/tests/replay_probe/test_generator.py",
 ]
 src = [".", "scripts", "runtime-recomp/tests", "modding"]
@@ -87,6 +87,8 @@ force-sort-within-sections = true
 # Strict only for new tooling scripts; everything else is ratcheted in per path.
 include = [
     "scripts/agent_hooks",
+    "scripts/format_sources.py",
+    "scripts/format_tokens.py",
     "scripts/compose_payloads.py",
     "scripts/kernel_inputs.py",
     "scripts/prepare_payloads.py",
@@ -106,6 +108,8 @@ include = [
 ]
 strict = [
     "scripts/agent_hooks",
+    "scripts/format_sources.py",
+    "scripts/format_tokens.py",
     "scripts/compose_payloads.py",
     "scripts/kernel_inputs.py",
     "scripts/prepare_payloads.py",

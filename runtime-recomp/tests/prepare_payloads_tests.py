@@ -26,6 +26,8 @@ import generate_replay_probe  # noqa: E402
 import prepare_payloads  # noqa: E402
 
 ORIGINAL_SHA1 = compose_payloads.RETAIL_SHA1[77]
+# The Camera++ bridge sources a kernel manifest records.
+BRIDGE_FILES = tuple(sorted(p.name for p in prepared.BRIDGE.glob("camera_kernel*") if p.suffix in (".c", ".h")))
 TOML = 'elf_path = "{root}/a.elf"\nrom_file_path = "{root}/a.z64"\noutput_func_path = "{root}/funcs"\nentrypoint = 1\n'
 
 
@@ -81,11 +83,18 @@ class PreparedComparisonTests(unittest.TestCase):
             }
 
     @staticmethod
-    def kernel_manifest(kernel: Path, recipe: str) -> None:
+    def kernel_manifest(kernel: Path, recipe: str, bridge: dict[str, str] | None = None) -> None:
         files = {
             p.name: prepared.sha(p.read_bytes()) for p in kernel.iterdir() if p.is_file() and p.name != "manifest.json"
         }
-        (kernel / "manifest.json").write_text(json.dumps({"schema": 1, "recipe": recipe, "files": files}))
+        if bridge is None:
+            # The committed bridge sources; the reference side's are whatever
+            # it was built from, and aren't compared.
+            names = BRIDGE_FILES
+            ours = recipe == "/ours"
+            bridge = {n: prepared.sha((prepared.BRIDGE / n).read_bytes()) if ours else "0" * 64 for n in names}
+        manifest = {"schema": 1, "recipe": recipe, "files": files, "bridge": bridge}
+        (kernel / "manifest.json").write_text(json.dumps(manifest))
 
     def compare(self):
         return prepared.compare(self.options, self.ours)
@@ -112,6 +121,13 @@ class PreparedComparisonTests(unittest.TestCase):
         self.assertTrue(any(line.startswith("camera-kernel-v77/manifest.json: ") for line in unexplained))
         with self.assertRaises(ValueError):
             prepared.kernel_manifest(self.ours / "camera-kernel-v77")
+
+    def test_our_bridge_digests_must_match_the_committed_bridge(self):
+        kernel = self.ours / "camera-kernel-v80"
+        self.kernel_manifest(kernel, "/ours", {BRIDGE_FILES[0]: "0" * 64})
+        unexplained = self.compare()[1]
+        self.assertEqual(len(unexplained), 1)
+        self.assertIn("bridge does not match", unexplained[0])
 
     def test_policy_paths_only(self):
         write(self.ours / "v77.toml", TOML.format(root="/ours").replace("entrypoint = 1", "entrypoint = 2"))

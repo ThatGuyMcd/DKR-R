@@ -1,0 +1,17 @@
+# Never formatted (scripts/format_sources.py NEVER, which this mirrors; a
+# tooling test keeps the two in step). clang-format 18 matches * within one
+# path segment, so each directory that holds C/C++ files is listed.
+runtime-recomp/RecompiledRSP/*
+runtime-recomp/guest/*
+runtime-recomp/third_party/dr_libs/*
+tests/fixtures/pattern-guard/PG006/negative/runtime-recomp/src/game/*
+tests/fixtures/pattern-guard/PG006/positive/patches/feature/native/*
+tests/fixtures/pattern-guard/PG009/negative/runtime-recomp/src/game/*
+tests/fixtures/pattern-guard/PG009/positive/runtime-recomp/src/game/*
+tests/fixtures/pattern-guard/PG010/negative/runtime-recomp/src/game/mods/*
+tests/fixtures/pattern-guard/PG010/negative/runtime-recomp/src/game/netplay/*
+tests/fixtures/pattern-guard/PG010/positive/runtime-recomp/src/game/netplay/*
+tests/fixtures/pattern-guard/PG011/negative/runtime-recomp/src/game/*
+tests/fixtures/pattern-guard/PG011/negative/runtime-recomp/src/game/generated/*
+tests/fixtures/pattern-guard/PG011/positive/runtime-recomp/build/generated/*
+tests/fixtures/pattern-guard/PG011/positive/runtime-recomp/src/game/*

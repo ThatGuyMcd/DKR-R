@@ -76,3 +76,32 @@ CI can't run levels 0-3 (they need ROM-derived payloads). The
 `scripts/fold/closure.json`, whitespace aside so the format-only commit (B9)
 keeps it green. `closure --reference DIR --write` re-records it, and only a
 gate run on the reference may justify that.
+
+## The evidence chain (B9)
+
+The fold is proven in two links, and Steve signs both records.
+
+1. **v1.0.11 ≡ the pre-B9 commit.** The full gate (`run_equivalence.sh`,
+   levels 0-3 plus the prepared inputs) runs once more at the last commit
+   before the format pass. Its `fold-equivalence.json` is saved as
+   `fold-equivalence-pre-B9-signing-point.json`; that is the record the
+   reference comparison ends with. The gate isn't rebaselined against later
+   commits: reformatting moves line numbers, which `__LINE__` (in `assert`)
+   carries into preprocessed tokens and objects, so levels 1-3 can't compare
+   a formatted tree with v1.0.11.
+2. **The pre-B9 commit → B9 changes layout only.** `scripts/format_sources.py
+   --prove <pre-B9> <B9>` reads both trees from git and accepts each changed
+   file only if it lexes to the same C/C++ tokens (no preprocessing, comments
+   and whitespace dropped; `scripts/format_tokens.py`), has the same CMake
+   words, has the same Python syntax tree, or is a digest-pinning script whose
+   only change re-pins files the same commit reformatted. The record
+   (`docs/fold-in/B9-format-proof.json`) lists every re-pin. Rerunning
+   `format_sources.py --write` on the pre-B9 commit gives the B9 tree.
+
+After B9, CI keeps the ROM-free closure check (`closure_digest` is
+whitespace-insensitive, so it survives the format pass) and the online
+identity test. Later runtime changes are ordinary reviewed code.
+
+No `__LINE__` or `__FILE__` expansion reaches netplay serialisation, hashing,
+identity or replay data: first-party sources use neither macro, and the only
+`assert` outside tests is in the renderer (`f3ddkr_rt64.cpp`).

@@ -74,7 +74,8 @@ option(DKR_REPLAY_QUALIFICATION "Private real-game replay fixtures; never packag
 option(DKR_EXPERIMENTAL_RENDER_QUALIFICATION "PRIVATE generation-retirement GPU probe; never package" OFF)
 option(DKR_EXPERIMENTAL_RACE_TEST "Owned rollback backend in the existing launcher (x64/ARM64)" OFF)
 if(DKR_EXPERIMENTAL_RACE_TEST AND (APPLE OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|aarch64|arm64|ARM64)$"))
-    message(FATAL_ERROR "Integrated rollback requires a supported 64-bit Windows/Linux/Android target")
+    message(FATAL_ERROR "Integrated rollback requires a supported 64-bit Windows/Linux/Android target. "
+        "Apple is not one yet: see 'Rollback on Apple' in docs/fold-in/open-items.md.")
 endif()
 set(DKR_PATCH_POLICY_V77
     "${CMAKE_CURRENT_LIST_DIR}/dkr.us.v77.recomp-policy.json")

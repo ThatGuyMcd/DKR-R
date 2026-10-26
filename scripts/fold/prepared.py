@@ -14,8 +14,9 @@ compare byte for byte. The exceptions are named here, one per kind:
 * provenance in the JSON records that names a pre-fold source rather than
   the folded tree: the portrait receipt's native stage digest, the owned
   manifest's digests of the native sources it audits (same files, folded
-  bytes), and the kernel manifest's recipe and file digests (recomputed
-  instead: each must match its own directory).
+  bytes), and the kernel manifest's recipe, file and bridge digests
+  (recomputed instead: files must match its own directory, and our bridge
+  digests the bridge sources committed in runtime-recomp/src/game).
 
 Everything CMake reads from a manifest (revision, full_scenes, the
 observation schemas) is outside these exceptions and compares exactly.
@@ -30,6 +31,8 @@ from pathlib import Path
 import re
 from typing import cast
 
+# The Camera++ kernel's native bridge, whose digests a kernel manifest records.
+BRIDGE = Path(__file__).resolve().parents[2] / "runtime-recomp/src/game"
 # Reference configure option -> prepared path, per revision.
 INPUTS = {
     "DKR_GENERATED_SOURCE_V{rev}": "generated-v{rev}",
@@ -105,14 +108,20 @@ def masked_receipt(receipt: Json) -> Json:
     return {k: v for k, v in receipt.items() if k not in ("native_sha256", "native_files")}
 
 
-def kernel_manifest(directory: Path) -> Json:
-    """A kernel manifest without recipe and files, once files is checked
-    against the directory it describes."""
+def kernel_manifest(directory: Path, bridge: Path | None = None) -> Json:
+    """A kernel manifest without recipe, files and bridge, once files is
+    checked against the directory it describes and, given the bridge
+    directory, bridge against the bridge sources committed there."""
     manifest = load(directory / "manifest.json")
     files = {p.name: sha(p.read_bytes()) for p in directory.iterdir() if p.is_file() and p.name != "manifest.json"}
     if manifest.get("files") != files:
         raise ValueError(f"{directory}/manifest.json: files do not describe the directory")
-    return {k: v for k, v in manifest.items() if k not in ("recipe", "files")}
+    if bridge is not None:
+        recorded = cast(dict[str, str], manifest.get("bridge") or {})
+        current = {name: sha((bridge / name).read_bytes()) for name in recorded}
+        if not recorded or recorded != current:
+            raise ValueError(f"{directory}/manifest.json: bridge does not match the committed {bridge}")
+    return {k: v for k, v in manifest.items() if k not in ("recipe", "files", "bridge")}
 
 
 def compare_file(ours: Path, theirs: Path, label: str) -> str | None:
@@ -137,7 +146,7 @@ def compare_file(ours: Path, theirs: Path, label: str) -> str | None:
         return "provenance" if a_json == b_json else "fields " + ", ".join(list(json_diff(a_json, b_json))[:8])
     if name == "manifest.json" and label.startswith("camera-kernel"):
         try:
-            a_json, b_json = kernel_manifest(ours.parent), kernel_manifest(theirs.parent)
+            a_json, b_json = kernel_manifest(ours.parent, BRIDGE), kernel_manifest(theirs.parent)
         except ValueError as error:
             return str(error)
         return "provenance" if a_json == b_json else "fields " + ", ".join(json_diff(a_json, b_json))
