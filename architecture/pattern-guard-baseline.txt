@@ -1180,10 +1180,7 @@ patches/viewport-flow/flow_vertex_scope_rt64.hpp PG006
 patches/viewport-flow/intro_viewport_rt64.hpp PG006
 patches/viewport-flow/package.py PG013
 patches/viewport-flow/pipeline.py PG004
-runtime-recomp/src/game/achievement_symbols.hpp PG011
 runtime-recomp/src/game/netplay/experimental_runtime.cpp PG010
-runtime-recomp/src/game/polish_symbols.hpp PG011
-runtime-recomp/src/game/vehicle_symbols.hpp PG011
 scripts/adapt-water-reference.py PG004
 scripts/camera_plus_pipeline.py PG004
 scripts/character_portrait_pipeline.py PG004

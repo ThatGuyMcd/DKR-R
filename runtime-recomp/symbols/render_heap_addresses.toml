@@ -1,0 +1,15 @@
+# The guest memory pool table the render-heap repair resizes (render_heap_support.cpp).
+schema = 1
+header = "render_heap_addresses.hpp"
+table = "sdk"
+hex = "upper"
+symbols = [
+  "gMemoryPools",
+]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::render_heap_addresses {
+inline constexpr std::uint32_t Pool77=@gMemoryPools:77@;
+inline constexpr std::uint32_t Pool80=@gMemoryPools:80@;
+}
+'''

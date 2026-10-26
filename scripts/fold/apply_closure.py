@@ -55,6 +55,8 @@ import re
 import shlex
 import sys
 
+import tomllib
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 import check_pinned_bytes  # noqa: E402
@@ -91,6 +93,14 @@ OVERRIDES = {
 # (destination, absolute path inside the work tree, portable spelling)
 ABSOLUTE_DEFINES = (
     ("runtime-recomp/src/game/sdk_task_source.hpp", "extern/n64-modern-runtime/librecomp/src/sp.cpp", "sp.cpp"),
+)
+
+# Headers scripts/gen_guest_symbols.py generates into the build tree (fold
+# step B4). They keep their shipped destination for include resolution, but
+# the closure never writes them: runtime-recomp/symbols/*.toml is the source.
+GENERATED = frozenset(
+    "runtime-recomp/src/game/" + tomllib.loads(path.read_text(encoding="utf-8"))["header"]
+    for path in (ROOT / "runtime-recomp" / "symbols").glob("*.toml")
 )
 
 INCLUDE = re.compile(rb'^[ \t]*#[ \t]*include(?:_next)?[ \t]*([<"])([^>"\r\n]+)[>"]', re.M)
@@ -737,6 +747,8 @@ def main(argv: list[str] | None = None) -> int:
     released = released_bases(root, result.contents)
     written = 0
     for dest, data in sorted(result.contents.items()):
+        if dest in GENERATED:
+            continue
         target = root / dest
         if target.exists() and target.read_bytes() == data:
             continue

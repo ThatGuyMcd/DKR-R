@@ -1,0 +1,30 @@
+# Guest addresses the achievement observer reads (achievements.cpp).
+schema = 1
+header = "achievement_symbols.hpp"
+table = "sdk"
+hex = "lower"
+symbols = [
+  "gSettingsPtr",
+  "gGameMode",
+  "gCurrentMenuId",
+  "gIsInTracksMode",
+  "gIsInAdventureTwo",
+  "gIsPaused",
+  "gSaveFileIndex",
+  "gMapId",
+  "gIsTimeTrial",
+  "gCurrentLevelHeader2",
+  "gRacersByPort",
+  "gTTGhostTimeToBeat",
+  "gTimeTrialStaffGhost",
+  "gTimeTrialVehicle",
+  "gTrophyRaceWorldId",
+  "gTrophyRaceRound",
+]
+template = '''#pragma once
+namespace dkr::runtime::achievements {
+struct Symbols {std::uint32_t settings;std::uint32_t mode;std::uint32_t menu;std::uint32_t tracks;std::uint32_t adventure_two;std::uint32_t paused;std::uint32_t slot;std::uint32_t map;std::uint32_t trial;std::uint32_t header;std::uint32_t racers;std::uint32_t tt_time;std::uint32_t staff_ghost;std::uint32_t tt_vehicle;std::uint32_t trophy_world;std::uint32_t trophy_round;};
+inline constexpr Symbols symbols77{@ALL:77@};
+inline constexpr Symbols symbols80{@ALL:80@};
+}
+'''

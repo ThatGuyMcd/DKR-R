@@ -160,6 +160,10 @@ class Mapping:
             hooked = self.guest_hooked(row) if row.kind == "guest-transform" else None
             if hooked is not None:
                 self.dependency[row.staged] = hooked
+        # Guest symbol headers (B4) are generated into the build tree.
+        for staged, dest in result.destinations.items():
+            if dest in apply_closure.GENERATED:
+                self.dependency[staged] = folded_build / "generated" / "symbols" / Path(dest).name
         # Camera++ shadow kernels (B4): camera_shadow_kernel.c is first-party
         # source; Camera.cmake derives camera_scene_hooks.c per revision.
         for row in self.reference.rows:
@@ -314,9 +318,13 @@ def compare_targets(
             # directory as an include; folded, the TU is back in it and quote
             # lookup searches it first anyway, so it is left out of both sides
             # (level 1 still sees any header it would resolve differently).
+            # The guest symbol headers (B4) are generated into their own
+            # directory; it holds nothing else, and level 1 checks every
+            # includer still reads the shipped bytes from it.
             own = str(target.parent)
+            symbols = str(mapping.folded_build / "generated" / "symbols")
             ref_includes = tuple(i for i in normalized_includes(mapping, ref.includes) if i != own)
-            new_includes = tuple(i for i in dict.fromkeys(new.includes) if i != own)
+            new_includes = tuple(i for i in dict.fromkeys(new.includes) if i not in (own, symbols))
             if ref_includes != new_includes:
                 lost = [i for i in ref_includes if i not in new_includes]
                 extra = [i for i in new_includes if i not in ref_includes]

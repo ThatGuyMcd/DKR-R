@@ -48,6 +48,28 @@
   stage calls pass `KEEP_INCLUDE_DIRECTORIES` to do the same. The other 54
   calls are unchanged.
 
+## Guest hooks and symbols (B4)
+
+- `runtime-recomp/guest-hooks/hooks.toml` replaces the guest-code rewrites of
+  six layers. `scripts/guest_hooks.py` runs at configure time from
+  `cmake/GuestHooks.cmake`, like the code-mod dispatch staging. The plan had an
+  `add_custom_command`, but at configure time the gate's header scan and
+  preprocessing see the hooked files without a build step.
+- The Camera++ shadow kernel is first-party (`src/game/camera_shadow_kernel.c`),
+  and `Camera.cmake` derives its hook stubs from the prepared kernel, so
+  `DKR_CAMERA_SHADOW_KERNEL_V*` is gone. `DKR_CAMERA_KERNEL_V*` is still a
+  prepared input from `patches/camera-plus/scene_kernel_pipeline.py`, so moving
+  that pipeline out of `patches/` is B8's call.
+- `scripts/gen_guest_symbols.py` generates the four pure symbol headers
+  (achievement, polish, vehicle, render heap) into `<build>/generated/symbols`.
+  `title_text_rt64.hpp` and `credits_sky_rt64.hpp` keep their tables inline,
+  among hand-written code; `gen_guest_symbols_tests.py` checks the tables
+  against the pinned decomp table.
+- The polish header reads `gRareCopyrightString`, which only the decomp symbol
+  table has, so a `host-full-nogen` configure needs
+  `extern/dkr-decomp/ver/symbols`. That's the sparse "symbols" dependency
+  profile the plan describes for the `linux` job.
+
 ## `patches/` content the build still reads (before B8)
 
 Everything else under `patches/` that the base CMake reads is a dependency

@@ -1,0 +1,39 @@
+# Track menu, scene and racer state the custom vehicles read (vehicle_world.cpp).
+schema = 1
+header = "vehicle_symbols.hpp"
+table = "sdk"
+hex = "lower"
+symbols = [
+  "gMenuStage",
+  "gPlayerSelectVehicle",
+  "gPlayerSelectConfirm",
+  "gNumberOfReadyPlayers",
+  "gNumberOfActivePlayers",
+  "gMenuDelay",
+  "gMenuButtons",
+  "gMenuStickX",
+  "gMenuStickY",
+  "sMenuCurrDisplayList",
+  "dDialogueBoxBegin",
+  "dDialogueBoxDrawModes",
+  "gIsInTracksMode",
+  "gCurrentMenuId",
+  "gObjectCurrDisplayList",
+  "gObjectCurrMatrix",
+  "gSceneCurrentPlayerID",
+  "gMenuImages",
+  "gTrackSelectWoodFrameHeightScale",
+  "gTrackSelectPlayerImage",
+  "gMenuSelectionArrows",
+  "gRaceSelectionImages",
+  "gCurrentRNGSeed",
+  "gCurrentPlayerIndex",
+  "gRacersByPort",
+]
+template = '''#pragma once
+// Generated from the admitted, revision-specific SDK symbol tables.
+namespace dkr::runtime::vehicles {
+inline constexpr Symbols VehicleSymbols77{@ALL:77@};
+inline constexpr Symbols VehicleSymbols80{@ALL:80@};
+}
+'''

@@ -1,0 +1,26 @@
+# Presentation polish: dialogue box, fonts, copyright, skydome and wave texture
+# (intro_caption_rt64.hpp, intro_sky_rt64.hpp, water_residency_rt64.hpp).
+schema = 1
+header = "polish_symbols.hpp"
+table = "decomp"
+hex = "upper"
+symbols = [
+  "dDialogueBoxBegin",
+  "dDialogueBoxDrawModes",
+  "gFonts",
+  "gNumberOfFonts",
+  "gCompactKerning",
+  "gRareCopyrightString",
+  "gSkydomeSegment",
+  "gWaveTextureHeader",
+]
+template = '''#pragma once
+#include <array>
+#include <cstdint>
+namespace dkr::runtime::presentation {
+inline constexpr std::array<std::array<std::uint32_t,8>,2> polish_symbols{{
+    {@ALL:77@},
+    {@ALL:80@}
+}};
+}
+'''
