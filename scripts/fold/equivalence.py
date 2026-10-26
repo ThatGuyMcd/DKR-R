@@ -28,9 +28,9 @@ the build image):
 
 Differences that are expected are listed with their reason and do not fail:
 the TUs scripts/fold/header-variants.json names (which then need level 3),
-the online identity values fold step B7 freezes, the TUs that belong to later
-fold steps (dependency patches B3, guest hooks B4), and the entries of
-scripts/fold/allowed-deltas.json. Anything else fails.
+the TUs scripts/fold/shader-pending.json names, and the entries of
+scripts/fold/allowed-deltas.json. Anything else fails, including any change
+to the online identity (fold step B7 froze it at the shipped values).
 
 Exit status: 0 no unexplained differences, 1 unexplained differences,
 2 usage errors.
@@ -76,10 +76,6 @@ BINARIES = (
     "bin/Release/libexec/dkr-r/DKR-R-Updater",
     "bin/Release/libexec/dkr-r/DKR-R-InputHost",
 )
-# Online identity: fold step B7 replaces these computed values with the
-# v1.0.11 constants, so until then they differ by design.
-IDENTITY_DEFINES = re.compile(r"^(DKR_OWNED_BUILD_ID(_V\d+)?|DKR_ENGINE_IDENTITY|DKR_LOBBY_STABILITY_CONTRACT)=")
-IDENTITY_DEFINE_FLAG = re.compile(r"^-D(DKR_OWNED_BUILD_ID(_V\d+)?|DKR_ENGINE_IDENTITY|DKR_LOBBY_STABILITY_CONTRACT)=")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -315,8 +311,8 @@ def compare_targets(
                 continue
             if ref.language != new.language:
                 yield f"{label}: language {ref.language} -> {new.language}"
-            ref_defines = {mapping.text(d) for d in ref.defines if not IDENTITY_DEFINES.match(d)}
-            new_defines = {d for d in new.defines if not IDENTITY_DEFINES.match(d)}
+            ref_defines = {mapping.text(d) for d in ref.defines}
+            new_defines = set(new.defines)
             for define in sorted(ref_defines - new_defines):
                 yield f"{label}: lost define {define}"
             for define in sorted(new_defines - ref_defines):
@@ -688,7 +684,6 @@ def run_level1(args: argparse.Namespace) -> int:
 
 
 QUOTED_PATH = re.compile(r'"(/[^"\n]+)"')
-DIGEST = re.compile(r"[0-9a-f]{64}")
 # Preprocessed tokens for level 2: string and character literals whole (their
 # spaces are content), everything else split at whitespace.
 TOKEN = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|[^\s"\']+|["\']')
@@ -746,7 +741,6 @@ def run_level2(args: argparse.Namespace) -> int:
     allowed = load_allowed(ALLOWED)
     problems: list[str] = []
     level3: list[str] = []
-    identity_only: list[str] = []
     pending = {
         side: set(json.loads((directory / "pending.json").read_text(encoding="utf-8")))
         for side, directory in (("reference", args.reference_pp), ("folded", args.folded_pp))
@@ -760,11 +754,8 @@ def run_level2(args: argparse.Namespace) -> int:
         label = f"{new_key[0]}: {portable(mapping, new_key[1])}"
         old_cmd = normalized_command(mapping, reference_entries[old_key])
         new_cmd = normalized_command(None, folded_entries[new_key])
-        old_flags = [a for a in old_cmd if not IDENTITY_DEFINE_FLAG.match(a)]
-        new_flags = [a for a in new_cmd if not IDENTITY_DEFINE_FLAG.match(a)]
-        if old_flags != new_flags:
+        if old_cmd != new_cmd:
             problems.append(f"{label}: compile flags {old_cmd} -> {new_cmd}")
-        identity_changed = old_cmd != new_cmd
         old_file = args.reference_pp / f"{output_name(old_key)}.i"
         new_file = args.folded_pp / f"{output_name(new_key)}.i"
         waiting = [
@@ -788,18 +779,6 @@ def run_level2(args: argparse.Namespace) -> int:
         if apply_closure.tu_name(ROOT, mapping.folder, old_key[1]) in level3_names:
             level3.append(label)
             continue
-        # Fold step B7 freezes the online identity; until then a TU whose
-        # identity defines changed may differ in those defines' own digests
-        # only. Any other 64-hex literal is still compared.
-        if identity_changed:
-            ids = {d for a in old_cmd + new_cmd if IDENTITY_DEFINE_FLAG.match(a) for d in DIGEST.findall(a)}
-
-            def masked(stream: list[str]) -> list[str]:
-                return [DIGEST.sub(lambda m: "<id>" if m.group() in ids else m.group(), t) for t in stream]
-
-            if ids and masked(old) == masked(new):
-                identity_only.append(label)
-                continue
         first = next((i for i, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
         was, now = " ".join(old[first : first + 8]), " ".join(new[first : first + 8])
         problems.append(f"{label}: tokens differ at {first}: {was!r} vs {now!r}")
@@ -811,11 +790,9 @@ def run_level2(args: argparse.Namespace) -> int:
         print(problem)
     for label in level3:
         print(f"level 3 required: {label}")
-    for label in identity_only:
-        print(f"identity only (B7): {label}")
     print(
         f"level2: {same} TUs token-identical, {len(level3)} header-variant TUs left for level 3, "
-        f"{len(identity_only)} identity-only (B7), {len(skipped)} waiting for build-time shaders, "
+        f"{len(skipped)} waiting for build-time shaders, "
         f"{len(problems) - len(unexplained)} allowed, {len(unexplained)} unexplained",
         file=sys.stderr,
     )

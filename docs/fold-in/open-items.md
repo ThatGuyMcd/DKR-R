@@ -116,6 +116,18 @@ configure of `runtime-recomp/` before they can close these.
   `extern/dkr-decomp/ver/symbols`. That's the sparse "symbols" dependency
   profile the plan describes for the `linux` job.
 
+## Online identity (B7)
+
+- The owned rollback contracts are frozen in
+  `runtime-recomp/src/game/netplay/legacy_identity.hpp`
+  (`docs/contracts/ONLINE_IDENTITY.md`). The gate compares identity defines
+  exactly, and `online_identity_tests.py` pins the values.
+- `cmake/OwnedContentIdentity.cmake` no longer feeds any identity; only
+  `owned_content_identity_tests.py` still runs it. B8 deletes both.
+- `DKR_LOBBY_STABILITY_CONTRACT` was already a committed literal
+  (`src/game/build_contract.hpp`). Moving it into `legacy_identity.hpp`
+  would cost a level 1 delta now, so that waits for Phase C.
+
 ## `patches/` content the build still reads (before B8)
 
 Everything else under `patches/` that the base CMake reads is a dependency

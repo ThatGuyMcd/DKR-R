@@ -1174,7 +1174,7 @@ if(DKR_RUNTIME_BUILD_GENERATED AND DKR_RUNTIME_BUILD_RT64 AND DKR_VISUAL_MODEL_G
 endif()
 if(DKR_EXPERIMENTAL_OWNED_GENERATED)
     include(cmake/ExperimentalOwnedGame.cmake)
-    include(cmake/OwnedContentIdentity.cmake)
+    include(cmake/OnlineIdentity.cmake)
     file(READ "${DKR_EXPERIMENTAL_OWNED_GENERATED}/manifest.json" primary_manifest)
     string(JSON primary_revision GET "${primary_manifest}" revision)
     if(NOT primary_revision EQUAL 77)
@@ -1204,35 +1204,12 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
     endif()
     add_library(DKRExperimentalOwnedGame INTERFACE)
     target_link_libraries(DKRExperimentalOwnedGame INTERFACE DKRExperimentalOwnedRegistry)
-    # Revision IDs include both private generated and authored closures. Hash
-    # contents only so identical Windows/Linux engines negotiate identically.
-    foreach(owned_revision 77 80)
-        if(owned_revision EQUAL 77)
-            set(owned_directory "${DKR_EXPERIMENTAL_OWNED_GENERATED}")
-        elseif(DKR_OWNED_HAS_V80)
-            set(owned_directory "${DKR_EXPERIMENTAL_OWNED_GENERATED_V80}")
-        else()
-            set(DKR_OWNED_BUILD_ID_V80 "")
-            continue()
-        endif()
-        file(GLOB owned_identity_files CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/audio_event_queue*.h"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/runtime_legacy_mods.cpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/runtime_legacy_mods.hpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/runtime_code_mods.cpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/runtime_code_mods.hpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/replay_probe_capture.cpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/replay_probe_capture.hpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/mods/*.cpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/mods/*.hpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/mods/*.h"
-            "${owned_directory}/*.c" "${owned_directory}/*.cpp" "${owned_directory}/*.h" "${owned_directory}/*.hpp"
-            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.c" "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.cpp"
-            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.h" "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.hpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.c" "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.cpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.h" "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.hpp")
-        dkr_owned_content_identity(owned_content_parts "${CMAKE_CURRENT_LIST_DIR}" "${owned_directory}"
-            "${owned_directory}/manifest.json" "${CMAKE_CURRENT_LIST_DIR}/src/game/track_select_draw_guest.h"
-            "${DKRPORT_ROOT}/modding/reference-us-v77/game_symbols.inc" "${DKRPORT_ROOT}/modding/reference-us-v80/game_symbols.inc" ${owned_identity_files})
-        set(owned_identity_parts "owned-revision:${owned_revision}|identity-policy:text-lf-v1|numeric-policy:separate-fp-rounding-v1|${owned_content_parts}")
-        string(SHA256 DKR_OWNED_BUILD_ID_V${owned_revision} "${owned_identity_parts}")
-        message(STATUS "Owned v${owned_revision} rollback contract: ${DKR_OWNED_BUILD_ID_V${owned_revision}}")
-    endforeach()
+    # The revision contracts are frozen (cmake/OnlineIdentity.cmake); a build
+    # without the Rev A engine offers v80 to nobody.
+    if(NOT DKR_OWNED_HAS_V80)
+        set(DKR_OWNED_BUILD_ID_V80 "")
+    endif()
+    message(STATUS "Owned rollback contracts: v77 ${DKR_OWNED_BUILD_ID_V77} v80 ${DKR_OWNED_BUILD_ID_V80}")
     target_compile_definitions(DKRExperimentalOwnedRegistry PRIVATE
         DKR_OWNED_BUILD_ID_V77="${DKR_OWNED_BUILD_ID_V77}" DKR_OWNED_BUILD_ID_V80="${DKR_OWNED_BUILD_ID_V80}")
     add_executable(DKROwnedRevisionRegistryTests EXCLUDE_FROM_ALL tests/owned_revision_registry_tests.cpp
@@ -1362,49 +1339,11 @@ if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
             SDL_MAIN_HANDLED=1
             DKR_OWNED_TEST_REVISION=${DKR_OWNED_REVISION}
             DKR_OWNED_FULL_SCENES=${DKR_OWNED_FULL_SCENES})
-        set(DKR_OWNED_ID_PARTS "")
-        # Bind the negotiated identity to the COMPLETE linked owned closure,
-        # not just the driver. Audio/input/Pak/policy changes must reject mixed
-        # packages too. Content hashes (not absolute paths) remain cross-OS.
-        file(GLOB DKR_OWNED_CLOSURE_ID_FILES CONFIGURE_DEPENDS
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/runtime_legacy_mods.cpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/runtime_legacy_mods.hpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/mods/*.cpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/mods/*.hpp" "${CMAKE_CURRENT_LIST_DIR}/src/game/mods/*.h"
-            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.c"
-            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.cpp"
-            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.h"
-            "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe/*.hpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.cpp"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.h"
-            "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/*.hpp"
-            "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.c"
-            "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.cpp"
-            "${DKR_EXPERIMENTAL_OWNED_GENERATED}/*.h")
-        set(DKR_OWNED_CONTRACT_FILES
-                "${DKRPORT_ROOT}/modding/reference-us-v77/game_symbols.inc" "${DKRPORT_ROOT}/modding/reference-us-v80/game_symbols.inc"
-                "${DKR_EXPERIMENTAL_OWNED_GENERATED}/manifest.json"
-                ${DKR_INTERACTIVE_SOURCE} tests/replay_probe/probe_driver.cpp
-                tests/replay_probe/probe_bridge.h tests/replay_probe/probe_native.c
-                tests/replay_probe/probe_presentation.c tests/replay_probe/probe_presentation.h
-                tests/replay_probe/probe_policies.cpp
-                src/game/camera_clearance_metadata.h src/game/camera_clearance_policy.hpp
-                src/game/camera_obstruction_guest.h src/game/camera_obstruction_math.h
-                src/game/track_select_draw_guest.h
-                tests/replay_probe/probe_audio_rsp.cpp src/game/netplay/runtime_state.hpp
-                src/game/netplay/experimental_rollback.cpp src/game/netplay/experimental_launch.cpp
-                src/game/netplay/experimental_timeline.cpp src/game/netplay/experimental_network.cpp
-                src/game/netplay/experimental_session.cpp src/game/netplay/experimental_pump.cpp
-                src/game/netplay/experimental_pcm.hpp
-                src/game/save_manager.cpp src/game/save_manager.hpp
-                src/game/save_storage.hpp src/game/runtime_save_routing.cpp src/game/runtime_save_routing.hpp
-                ${DKR_OWNED_CLOSURE_ID_FILES})
-        dkr_owned_content_identity(DKR_OWNED_ID_PARTS "${CMAKE_CURRENT_LIST_DIR}"
-            "${DKR_EXPERIMENTAL_OWNED_GENERATED}" ${DKR_OWNED_CONTRACT_FILES})
-        string(SHA256 DKR_OWNED_BUILD_ID "${DKR_OWNED_ID_PARTS}|v77:${DKR_OWNED_BUILD_ID_V77}|v80:${DKR_OWNED_BUILD_ID_V80}")
-        message(STATUS "Owned rollback contract: ${DKR_OWNED_BUILD_ID}")
+        # The rollback test frontend negotiates the pair of frozen revision
+        # contracts, not a hash of the sources that built it.
+        string(SHA256 DKR_OWNED_BUILD_ID "v77:${DKR_OWNED_BUILD_ID_V77}|v80:${DKR_OWNED_BUILD_ID_V80}")
         if(DKR_EXPERIMENTAL_RACE_TEST)
             target_link_libraries(DKRPortGameCore PRIVATE DKRExperimentalOwnedGame)
-            set_property(SOURCE src/game/netplay/experimental_runtime.cpp APPEND PROPERTY
-                COMPILE_DEFINITIONS DKR_OWNED_BUILD_ID="${DKR_OWNED_BUILD_ID}")
         endif()
         # Only the frontend consumes this manifest. A protocol-identity change
         # must not recompile every unrelated launcher/renderer translation unit.
