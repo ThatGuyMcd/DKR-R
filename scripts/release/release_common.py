@@ -59,3 +59,11 @@ def contracts() -> dict[str, str]:
 
 # The Wave Race water licence the Linux package carries beside the shaders.
 WATER_LICENSE = ROOT / "runtime-recomp/src/water/LICENSE-WAVE-RACE.txt"
+
+
+def identity() -> dict[str, str]:
+    """Every frozen online identity constant (netplay/legacy_identity.hpp):
+    the rollback contracts and the engine identity salts."""
+    header = ROOT / "runtime-recomp/src/game/netplay/legacy_identity.hpp"
+    text = header.read_text(encoding="utf-8")
+    return dict(re.findall(r'^#define (DKR_LEGACY_\w+) "([0-9a-f]+)"$', text, re.M))

@@ -206,6 +206,9 @@ PIPELINE_ALLOWED = {
     # Fold-only: compares the folded build with the reference; it writes
     # reports and scratch objects, never a source file.
     "scripts/fold/equivalence.py": "reads the folded tree to compare it, writes only reports",
+    # Fold-only (B9b): writes docs/fold-in/MIGRATION.md from the reference's
+    # source map; it names first-party paths but reads no source file.
+    "scripts/fold/migration.py": "writes the layer-to-source map document",
 }
 GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake", *OWNED_INPUT_STAGES}
 IDENTITY_ALLOWED_SUFFIX = "netplay/legacy_identity.hpp"

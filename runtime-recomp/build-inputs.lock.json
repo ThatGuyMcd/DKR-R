@@ -1,0 +1,18 @@
+{
+ "schema": 1,
+ "about": "Digests of the prepared build inputs (scripts/release/lock_inputs.py); cmake/BuildInputs.cmake verifies them when DKR_VERIFY_BUILD_INPUTS is on.",
+ "pins": {
+  "n64recomp": "81213c1831fab2521a6a5459c67b63437d67e253",
+  "dkr-decomp": "06cf09bab2e0a5f210d2a14a25cdf22c3c5b18c6"
+ },
+ "inputs": {
+  "generated-v77": "537de8f101346f4368646a863d3e19b295d81054b0ecca79fa00fd789318023b",
+  "generated-v80": "fdab1720eabd454e425642e4aa50a169fe5d52071ecc78e875a4623d74e7cd5a",
+  "owned-v77": "6cfb0f575a1eaf574eb226396dd2acd5fc6fe0e9ab072be441dcbef723d6a460",
+  "owned-v80": "a18dee18feb863f4d5f77519d50096ebebfcb35d7791a14a62b508b61bbc4fa7",
+  "model-v77": "4728eb4f4f6614eae3dfb18e421a0b77a492ff27a9acd392b8c9bf0aa7c93d09",
+  "model-v80": "3a48616e0dd5e5bd86f25345c3f3caa9e26f4dda9c19cb3de294a3efc63d0926",
+  "camera-kernel-v77": "01ba52bef4c2c17e2afda6a8144cc6067325bea1214b0e9a7255c50ac7c8babb",
+  "camera-kernel-v80": "d75f0e6843e7cb7bec0d532988d7780df638585df05bd4fe192a603fd17ebdb4"
+ }
+}

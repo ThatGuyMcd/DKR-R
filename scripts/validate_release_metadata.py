@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import pathlib
@@ -16,8 +17,13 @@ def fail(message: str) -> None:
     raise RuntimeError(message)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--tag", help="the release tag being built; it must be Version<VERSION>")
+    args = parser.parse_args(argv)
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    if args.tag is not None and args.tag != f"Version{version}":
+        fail(f"Tag {args.tag!r} doesn't match VERSION {version!r} (expected Version{version})")
     if not re.fullmatch(
         r"\d+\.\d+\.\d+(?:-beta\.[1-9]\d*(?:-playtest\.[1-9]\d*(?:-fix\.[1-9]\d*)?)?|\+beta\.[1-9]\d*)?",
         version,

@@ -2,6 +2,7 @@
 """Collect the verified desktop packages into the handoff folder for signing.
 
     finalize.py --work DIR --output DIR
+    finalize.py --check-registry     exit 1 while any required check is pending
 
 WORK holds, per platform (windows, linux, arm64):
 
@@ -212,8 +213,19 @@ def main(argv: list[str] | None = None) -> int:
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     for name in ("work", "output"):
-        p.add_argument("--" + name, type=Path, required=True)
+        p.add_argument("--" + name, type=Path)
+    p.add_argument(
+        "--check-registry", action="store_true", help="only report whether required_checks.toml has pending checks"
+    )
     a = p.parse_args(argv)
+    if a.check_registry:
+        pending = [c for c in registry() if c.pending]
+        for check in pending:
+            print(f"finalize: pending ({check.pending}): {check.id}: {check.why}", file=sys.stderr)
+        print(f"finalize: {len(pending)} required checks pending")
+        return 1 if pending else 0
+    if a.work is None or a.output is None:
+        p.error("--work and --output are required")
     try:
         finalize(a.work.resolve(), a.output.resolve())
     except (FinalizeError, OSError, KeyError, ElementTree.ParseError) as error:

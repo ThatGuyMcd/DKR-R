@@ -70,6 +70,58 @@
       "cacheVariables": {
         "DKR_RUNTIME_BUILD_RT64": "ON"
       }
+    },
+    {
+      "name": "release-base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/../build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "DKR_RUNTIME_BUILD_GENERATED": "ON",
+        "DKR_RUNTIME_BUILD_RT64": "ON",
+        "DKR_RUNTIME_BUILD_SDL3_INPUT_HOST": "ON",
+        "DKR_NETPLAY_WEBRTC": "ON",
+        "DKR_EXPERIMENTAL_RACE_TEST": "ON",
+        "DKR_VERIFY_BUILD_INPUTS": "ON"
+      }
+    },
+    {
+      "name": "release-windows",
+      "displayName": "Release build, Windows x64 (scripts/release/build.py)",
+      "inherits": "release-base",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "release-linux",
+      "displayName": "Release build, Linux x86_64 or ARM64 (scripts/release/build.py)",
+      "inherits": "release-base",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "release-macos",
+      "displayName": "Release build, macOS (no integrated rollback yet)",
+      "inherits": "release-base",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "DKR_EXPERIMENTAL_RACE_TEST": "OFF"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
     }
   ],
   "buildPresets": [
@@ -101,6 +153,21 @@
     {
       "name": "host-full-nogen",
       "configurePreset": "host-full-nogen",
+      "configuration": "Release"
+    },
+    {
+      "name": "release-windows",
+      "configurePreset": "release-windows",
+      "configuration": "Release"
+    },
+    {
+      "name": "release-linux",
+      "configurePreset": "release-linux",
+      "configuration": "Release"
+    },
+    {
+      "name": "release-macos",
+      "configurePreset": "release-macos",
       "configuration": "Release"
     }
   ],
@@ -182,6 +249,54 @@
     {
       "name": "host-full-nogen",
       "configurePreset": "host-full-nogen",
+      "configuration": "Release",
+      "filter": {
+        "include": {
+          "name": "^DKR"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "release-windows",
+      "configurePreset": "release-windows",
+      "configuration": "Release",
+      "filter": {
+        "include": {
+          "name": "^DKR"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "release-linux",
+      "configurePreset": "release-linux",
+      "configuration": "Release",
+      "filter": {
+        "include": {
+          "name": "^DKR"
+        }
+      },
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "release-macos",
+      "configurePreset": "release-macos",
       "configuration": "Release",
       "filter": {
         "include": {

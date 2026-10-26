@@ -8,6 +8,8 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -16,7 +18,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/release"))
 import check_docs  # noqa: E402
+import evidence  # noqa: E402
 import finalize  # noqa: E402
+import lock_inputs  # noqa: E402
 import package_release  # noqa: E402
 import qualify_updates  # noqa: E402
 import release_common  # noqa: E402
@@ -163,6 +167,82 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertEqual(check_docs.disposition(f"docs/releases/{v}/RELEASE-NOTES.txt", set()), "release-notes")
         self.assertEqual(check_docs.disposition("docs/BUILDING.md", {"docs/BUILDING.md"}), "updated-current-document")
         self.assertEqual(check_docs.disposition("docs/releases/1.0.0/X.md", set()), "historical-record-preserved")
+
+
+class InputLockTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def tree(self, name, files):
+        base = self.root / name
+        for relative, data in files.items():
+            (base / relative).parent.mkdir(parents=True, exist_ok=True)
+            (base / relative).write_bytes(data)
+        return base
+
+    def test_line_endings_and_provenance_do_not_count(self):
+        lf = self.tree("lf", {"funcs_0.c": b"int a;\nint b;\n", "sub/x.h": b"#pragma once\n", "manifest.json": b"{}"})
+        crlf = self.tree(
+            "crlf", {"funcs_0.c": b"int a;\r\nint b;\r\n", "sub/x.h": b"#pragma once\r\n", "manifest.json": b"[1]"}
+        )
+        self.assertEqual(lock_inputs.digest(lf), lock_inputs.digest(crlf))
+        changed = self.tree("changed", {"funcs_0.c": b"int a;\nint c;\n", "sub/x.h": b"#pragma once\n"})
+        self.assertNotEqual(lock_inputs.digest(lf), lock_inputs.digest(changed))
+        renamed = self.tree("renamed", {"funcs_1.c": b"int a;\nint b;\n", "sub/x.h": b"#pragma once\n"})
+        self.assertNotEqual(lock_inputs.digest(lf), lock_inputs.digest(renamed))
+
+    @unittest.skipUnless(shutil.which("cmake"), "needs cmake")
+    def test_cmake_computes_the_same_digest(self):
+        base = self.tree("in", {"b.c": b"int b;\r\n", "a/z.h": b"x\n", "a/y.toml": b"path"})
+        script = self.root / "digest.cmake"
+        script.write_text(
+            f'include("{(ROOT / "runtime-recomp/cmake/BuildInputs.cmake").as_posix()}")\n'
+            f'dkr_input_digest(d "{base.as_posix()}")\nmessage("DIGEST=${{d}}")\n'
+        )
+        done = subprocess.run(["cmake", "-P", str(script)], capture_output=True, text=True, check=True)
+        self.assertIn(f"DIGEST={lock_inputs.digest(base)}", done.stderr)
+
+    def test_the_lock_names_every_prepared_input(self):
+        lock = json.loads(lock_inputs.LOCK.read_text())
+        self.assertEqual(sorted(lock["inputs"]), sorted(lock_inputs.INPUTS))
+        self.assertEqual(set(lock["pins"]), {"n64recomp", "dkr-decomp"})
+
+
+class EvidenceTests(unittest.TestCase):
+    def test_machine_paths_become_placeholders(self):
+        norm = evidence.Paths(Path("/work/tree/build/release-linux"), Path("/work/tree/build/prepared"))
+        self.assertEqual(norm("/work/tree/build/prepared/owned-v77/x.c"), "$PREPARED/owned-v77/x.c")
+        self.assertEqual(norm("/work/tree/build/release-linux/gen.c"), "$BUILD/gen.c")
+
+    def test_compare_finds_source_identity_and_commit_differences(self):
+        base = {
+            "version": "1", "tag": "Version1", "commit": "c", "identity": {"A": "1"}, "inputs": {"locked": {}},
+            "targets": {"T": {"sources": {"$ROOT/a.cpp": ["CXX", "X=1"]}}},
+        }  # fmt: skip
+        same = json.loads(json.dumps(base))
+        self.assertEqual(evidence.compare(base, same, False), [])
+        other = json.loads(json.dumps(base))
+        other["targets"]["T"]["sources"]["$ROOT/a.cpp"] = ["CXX", "X=2"]
+        other["identity"] = {"A": "2"}
+        other["commit"] = "d"
+        problems = evidence.compare(base, other, False)
+        self.assertIn("identity differs", problems)
+        self.assertIn("commit differs", problems)
+        self.assertIn("T: $ROOT/a.cpp: language or definitions differ", problems)
+        self.assertNotIn("commit differs", evidence.compare(base, other, True))
+
+
+class TagTests(unittest.TestCase):
+    def test_the_tag_must_be_version_of_version(self):
+        script = ROOT / "scripts/validate_release_metadata.py"
+        v = release_common.version()
+        ok = subprocess.run([sys.executable, str(script), "--tag", f"Version{v}"], capture_output=True, text=True)
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        bad = subprocess.run([sys.executable, str(script), "--tag", f"v{v}"], capture_output=True, text=True)
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertIn("doesn't match VERSION", bad.stderr)
 
 
 if __name__ == "__main__":

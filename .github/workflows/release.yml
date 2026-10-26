@@ -1,0 +1,50 @@
+name: Release gates
+# A release is an annotated tag Version<VERSION> on main (docs/RELEASING.md).
+# The builds need the maintainer's ROM-derived inputs, so they run locally
+# (scripts/release/build.py); this job runs every release gate that doesn't,
+# on the tagged commit, and fails the tag if one doesn't hold.
+on:
+  push:
+    tags: ["Version*"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  release-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install verified lint tools
+        run: |
+          tool_dir="$RUNNER_TEMP/lint-tools"
+          python3 -m venv "$tool_dir"
+          "$tool_dir/bin/python" -m pip install --quiet \
+            --require-hashes --only-binary=:all: -r .github/lint-tools.txt
+          echo "$tool_dir/bin" >>"$GITHUB_PATH"
+      - name: The tag is Version<VERSION>
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 scripts/validate_release_metadata.py --tag "$TAG"
+      - name: Guard and tooling suites
+        run: python3 scripts/check.py --suite guard,tooling
+      - name: First-party closure (ROM-free fold check)
+        run: python3 scripts/fold/equivalence.py closure --check
+      - name: Formatting
+        run: python3 scripts/format_sources.py --check --local
+      # Fails while any check in scripts/release/required_checks.toml is
+      # pending (C5): no release is finalized from a tree that lacks a gate.
+      - name: Required release checks registry
+        run: python3 scripts/release/finalize.py --check-registry
