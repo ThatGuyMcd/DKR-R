@@ -2,7 +2,9 @@
 # guest code by scripts/guest_hooks.py, at configure time like the code-mod
 # dispatch staging. Protected generated input is never edited: hooked copies
 # go to a content-addressed build directory and replace their originals in the
-# payload's source list.
+# payload's source list. generated/guest-hooks-<payload>-v<revision>.dir names
+# the current directory (the equivalence gate reads it); older directories for
+# the same payload are removed.
 #
 #   dkr_apply_guest_hooks(<sources-var> <source-dir> <revision> <funcs|owned>)
 include_guard(GLOBAL)
@@ -23,6 +25,7 @@ function(dkr_apply_guest_hooks sources_var source revision payload)
         file(SHA256 "${input}" digest)
         get_filename_component(name "${input}" NAME)
         string(APPEND parts "${name}:${digest}|")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${input}")
     endforeach()
     string(SHA256 identity "${payload}|${revision}|${parts}")
     set(out "${CMAKE_BINARY_DIR}/generated/guest-hooks-${payload}-v${revision}-${identity}")
@@ -34,6 +37,18 @@ function(dkr_apply_guest_hooks sources_var source revision payload)
             file(REMOVE_RECURSE "${out}")
             message(FATAL_ERROR "Guest hooks for US v${revision} ${payload} did not apply; see above")
         endif()
+    endif()
+    file(GLOB previous LIST_DIRECTORIES true "${CMAKE_BINARY_DIR}/generated/guest-hooks-${payload}-v${revision}-*")
+    list(REMOVE_ITEM previous "${out}")
+    if(previous)
+        file(REMOVE_RECURSE ${previous})
+    endif()
+    set(pointer "${CMAKE_BINARY_DIR}/generated/guest-hooks-${payload}-v${revision}.dir")
+    if(EXISTS "${pointer}")
+        file(READ "${pointer}" current)
+    endif()
+    if(NOT EXISTS "${pointer}" OR NOT current STREQUAL "${out}\n")
+        file(WRITE "${pointer}" "${out}\n")
     endif()
     file(STRINGS "${out}/hooked.txt" hooked)
     set(sources ${${sources_var}})
