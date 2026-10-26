@@ -1,0 +1,6 @@
+{
+ "about": "Shipped TUs that include shader headers the build writes later (rt64's water renderer), so neither side can be preprocessed after a configure. Level 2 skips exactly these; any other TU that waits on a shader header fails.",
+ "tus": [
+  "rt64: <build>/generated/hle-command-guard/src/render/rt64_water_renderer.cpp"
+ ]
+}

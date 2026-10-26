@@ -23,35 +23,35 @@
    "reason": "The game's TUs compile in the DKRPortGameCore object library (so host builds without a payload compile them), and DKR-R links the core's libraries LINK_ONLY. CMake now places DKRCameraPresentation's private dependencies (the two camera scene kernels and libm) at their first transitive occurrence instead of the end. They still follow DKRCameraPresentation, their only user, and every other library keeps its position."
   },
   {
-   "difference": "DKRRecompiledFuncsV77: build/fold-equivalence/generated/guest-hooks-funcs-v77/funcs_12.c: include dirs lost ['<build>/generated'] extra []",
+   "difference": "DKRRecompiledFuncsV77: <build>/generated/guest-hooks-funcs-v77/funcs_12.c: include dirs lost ['<build>/generated'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   },
   {
-   "difference": "DKRRecompiledFuncsV77: build/fold-equivalence/generated/guest-hooks-funcs-v77/funcs_14.c: include dirs lost ['<build>/generated'] extra []",
+   "difference": "DKRRecompiledFuncsV77: <build>/generated/guest-hooks-funcs-v77/funcs_14.c: include dirs lost ['<build>/generated'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   },
   {
-   "difference": "DKRRecompiledFuncsV77: build/fold-equivalence/generated/guest-hooks-funcs-v77/funcs_31.c: include dirs lost ['<build>/generated'] extra []",
+   "difference": "DKRRecompiledFuncsV77: <build>/generated/guest-hooks-funcs-v77/funcs_31.c: include dirs lost ['<build>/generated'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   },
   {
-   "difference": "DKRRecompiledFuncsV80: build/fold-equivalence/generated/guest-hooks-funcs-v80/funcs_12.c: include dirs lost ['<build>/generated'] extra []",
+   "difference": "DKRRecompiledFuncsV80: <build>/generated/guest-hooks-funcs-v80/funcs_12.c: include dirs lost ['<build>/generated'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   },
   {
-   "difference": "DKRRecompiledFuncsV80: build/fold-equivalence/generated/guest-hooks-funcs-v80/funcs_14.c: include dirs lost ['<build>/generated'] extra []",
+   "difference": "DKRRecompiledFuncsV80: <build>/generated/guest-hooks-funcs-v80/funcs_14.c: include dirs lost ['<build>/generated'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   },
   {
-   "difference": "DKRRecompiledFuncsV80: build/fold-equivalence/generated/guest-hooks-funcs-v80/funcs_31.c: include dirs lost ['<build>/generated'] extra []",
+   "difference": "DKRRecompiledFuncsV80: <build>/generated/guest-hooks-funcs-v80/funcs_31.c: include dirs lost ['<build>/generated'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   },
   {
-   "difference": "DKRExperimentalOwnedGameV77: build/fold-equivalence/generated/guest-hooks-owned-v77/guest_26.c: include dirs lost ['build/owned-id/final'] extra []",
+   "difference": "DKRExperimentalOwnedGameV77: <build>/generated/guest-hooks-owned-v77/guest_26.c: include dirs lost ['build/owned-id/final'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   },
   {
-   "difference": "DKRExperimentalOwnedGameV80: build/fold-equivalence/generated/guest-hooks-owned-v80/guest_26.c: include dirs lost ['build/owned-id/final'] extra []",
+   "difference": "DKRExperimentalOwnedGameV80: <build>/generated/guest-hooks-owned-v80/guest_26.c: include dirs lost ['build/owned-id/final'] extra []",
    "reason": "The achievements and all-player-detail layers gave their hooked copy the payload directory and its parent (prior/..) as per-source include directories, which only let their absolute funcs.h/imports.h includes resolve. The guest-hooks copy reaches the same headers through the payload target's own include path; level 2 finds the preprocessed TU token-identical."
   }
  ]

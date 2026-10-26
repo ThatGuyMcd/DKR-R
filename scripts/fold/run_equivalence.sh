@@ -11,16 +11,17 @@
 # (DKR_EQUIVALENCE_IMAGE, default: the exact image the v1.0.11 reference was
 # built with, by image ID; docker/ci-linux-full/Dockerfile is its recipe).
 #
-# Steps: configure this tree with the reference's options minus the release
-# chain's, check the dependency stage patches reproduce the shipped
-# third-party files (dependency_stages.py), then compare per-source compile
-# settings and link lines (targets),
-# TU sets, header closures and file bytes (level 1), preprocessed tokens plus
-# compile flags (level 2), and objects for the TUs level 2 lets differ because
-# of a header variant (level 3; DKR_EQUIVALENCE_LEVEL3=0 skips it, it compiles
-# them twice). Exit status is non-zero on any unexplained
-# difference; scripts/fold/allowed-deltas.json and header-variants.json list
-# the explained ones.
+# Steps: check the reference against docs/fold-in/REFERENCE.md and its own
+# pins (it is mounted read-only; its scan and preprocess caches go to
+# BUILD_DIR/reference-cache), configure this tree with the reference's options
+# minus the release chain's, check the dependency stage patches reproduce the
+# shipped third-party files (dependency_stages.py), then compare per-source
+# compile settings and link lines (targets), TU sets, header closures and file
+# bytes (level 1), preprocessed tokens plus compile flags (level 2), and
+# objects for the TUs level 2 lets differ because of a header variant
+# (level 3, always run). Exit status is non-zero on any unexplained
+# difference; scripts/fold/allowed-deltas.json, header-variants.json and
+# shader-pending.json list the explained ones.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 reference="$(cd "${1:?usage: run_equivalence.sh REFERENCE_DIR [BUILD_DIR]}" && pwd)"
@@ -29,14 +30,18 @@ image="${DKR_EQUIVALENCE_IMAGE:-sha256:a40e107015464b92bff4e383545938f206590f73a
 jobs="${DKR_EQUIVALENCE_JOBS:-12}"
 tool="$root/scripts/fold/equivalence.py"
 out="$build/equivalence"
-mkdir -p "$out"
+# The reference is mounted read-only; its scan and preprocess caches live here.
+cache="$build/reference-cache"
+mkdir -p "$out" "$cache"
 
 # A worktree's .git points into the main checkout; the configure reads it.
 git_common="$(cd "$root" && cd "$(git rev-parse --git-common-dir)" && pwd)"
-mounts=(-v "$root:$root" -v "$reference:$reference" -v "$git_common:$git_common:ro")
+mounts=(-v "$root:$root" -v "$reference:$reference:ro" -v "$git_common:$git_common:ro")
 while IFS= read -r path; do
   [ -n "$path" ] && mounts+=(-v "$path:$path:ro")
 done < <(python3 "$tool" options --reference "$reference" --mounts)
+# The pinned image lacks libcurl's headers; the reference configure installed
+# them the same way.
 in_image() {
   docker run --rm --platform linux/amd64 "${mounts[@]}" -w "$root" "$image" bash -c \
     "set -e; dpkg -s libcurl4-openssl-dev >/dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq libcurl4-openssl-dev) >/dev/null 2>&1; git config --global --add safe.directory '*'; $1"
@@ -48,6 +53,9 @@ while IFS= read -r option; do
 done < <(python3 "$tool" options --reference "$reference")
 printf -v configure '%q ' cmake -S "$root/runtime-recomp" -B "$build" -G Ninja "${options[@]}"
 
+echo "== reference"
+python3 "$tool" verify-reference --reference "$reference"
+
 echo "== configure (no overlay, no project include)"
 mkdir -p "$build/.cmake/api/v1/query"
 touch "$build/.cmake/api/v1/query/codemodel-v2"
@@ -57,8 +65,8 @@ echo "== shipped compile commands and header scan"
 in_image "python3 -B '$tool' shipped --build '$build' --out '$out/shipped-compdb.json' \
   && python3 -B '$tool' depscan --compdb '$out/shipped-compdb.json' --build '$build' --out '$out/depscan.json' --jobs $jobs"
 ref_build="$(python3 "$tool" options --reference "$reference" --reference-build)"
-if [ ! -f "$reference/depscan-by-target.json" ]; then
-  in_image "python3 -B '$tool' depscan --compdb '$reference/shipped-compdb.json' --build '$ref_build' --out '$reference/depscan-by-target.json' --jobs $jobs"
+if [ ! -f "$cache/depscan-by-target.json" ]; then
+  in_image "python3 -B '$tool' depscan --compdb '$reference/shipped-compdb.json' --build '$ref_build' --out '$cache/depscan-by-target.json' --jobs $jobs"
 fi
 
 status=0
@@ -68,22 +76,21 @@ echo "== targets"
 python3 "$tool" targets --reference "$reference" --folded-build "$build" || status=1
 echo "== level 1"
 python3 "$tool" level1 --reference "$reference" --folded-build "$build" \
-  --folded-compdb "$out/shipped-compdb.json" --folded-deps "$out/depscan.json" || status=1
+  --folded-compdb "$out/shipped-compdb.json" --folded-deps "$out/depscan.json" \
+  --reference-deps "$cache/depscan-by-target.json" || status=1
 
 echo "== level 2"
 rm -rf "$out/pp"
 in_image "python3 -B '$tool' preprocess --compdb '$out/shipped-compdb.json' --build '$build' --out '$out/pp' --jobs $jobs"
-if [ ! -d "$reference/pp" ]; then
-  in_image "python3 -B '$tool' preprocess --compdb '$reference/shipped-compdb.json' --build '$ref_build' --out '$reference/pp' --jobs $jobs"
+if [ ! -d "$cache/pp" ]; then
+  in_image "python3 -B '$tool' preprocess --compdb '$reference/shipped-compdb.json' --build '$ref_build' --out '$cache/pp' --jobs $jobs"
 fi
 python3 "$tool" level2 --reference "$reference" --folded-build "$build" \
-  --folded-compdb "$out/shipped-compdb.json" --reference-pp "$reference/pp" --folded-pp "$out/pp" || status=1
+  --folded-compdb "$out/shipped-compdb.json" --reference-pp "$cache/pp" --folded-pp "$out/pp" || status=1
 
-if [ "${DKR_EQUIVALENCE_LEVEL3:-1}" != 0 ]; then
-  echo "== level 3"
-  rm -rf "$out/level3"
-  in_image "python3 -B '$tool' level3 --reference '$reference' --folded-build '$build' \
-    --folded-compdb '$out/shipped-compdb.json' --reference-pp '$reference/pp' --folded-pp '$out/pp' \
-    --out '$out/level3'" || status=1
-fi
+echo "== level 3"
+rm -rf "$out/level3"
+in_image "python3 -B '$tool' level3 --reference '$reference' --folded-build '$build' \
+  --folded-compdb '$out/shipped-compdb.json' --reference-pp '$cache/pp' --folded-pp '$out/pp' \
+  --out '$out/level3'" || status=1
 exit "$status"

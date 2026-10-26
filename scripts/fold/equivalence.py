@@ -51,6 +51,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from typing import cast
@@ -61,6 +62,9 @@ import dependency_stages  # noqa: E402
 
 ROOT = apply_closure.ROOT
 ALLOWED = ROOT / "scripts/fold/allowed-deltas.json"
+# TUs that include shader headers the build writes later, so they cannot be
+# preprocessed after a configure. Only these may skip level 2.
+SHADER_PENDING = ROOT / "scripts/fold/shader-pending.json"
 # Folded targets that compile what one reference target compiled: the game's
 # TUs moved into an object library so host builds without a generated payload
 # compile them too. Compile units and dependencies are compared under the
@@ -199,10 +203,16 @@ class Mapping:
             revision = match.group(2)
         if payload is None:
             return None
-        dirs = sorted((self.folded_build / "generated").glob(f"guest-hooks-{payload}-v{revision}-*"))
-        if len(dirs) != 1 or not (dirs[0] / row.staged.name).is_file():
+        # GuestHooks.cmake names the current directory; hooked.txt lists what
+        # it hooked. A shipped file the spec no longer hooks has no pair.
+        pointer = self.folded_build / "generated" / f"guest-hooks-{payload}-v{revision}.dir"
+        if not pointer.is_file():
             return None
-        return dirs[0] / row.staged.name
+        directory = Path(pointer.read_text(encoding="utf-8").strip())
+        listed = directory / "hooked.txt"
+        if not listed.is_file() or row.staged.name not in listed.read_text(encoding="utf-8").split():
+            return None
+        return directory / row.staged.name
 
     def build_path(self, path: Path) -> Path:
         parts = list(path.relative_to(self.reference.build).parts)
@@ -232,18 +242,18 @@ class Mapping:
         out = out.replace(str(self.reference.build) + "/", str(self.folded_build) + "/")
         return out.replace(str(self.reference.probe / "repo") + "/", str(ROOT) + "/")
 
-    def deferred(self, path: Path) -> str | None:
-        """Why a reference TU has no folded counterpart yet, or None."""
-        layer = self.folder.layer_of(path)
-        rows = {row.staged: row for row in self.reference.rows}
-        row = rows.get(path)
-        if row is not None and row.kind == "dependency-transform" and path not in self.dependency:
-            return "dependency transform (fold step B3)"
-        if row is not None and row.kind in ("guest-transform", "guest-derived") and path not in self.dependency:
-            return "guest code (fold step B4)"
-        if layer is not None:
-            return f"staged by layer {layer} (fold step B3 or B4)"
-        return None
+
+def portable(mapping: Mapping, path: Path) -> str:
+    """A folded path as reports and allowed-deltas.json spell it: the build
+    directory as <build>/, the work tree relative, content-addressed guest-hook
+    directories by payload and revision (so a recorded delta survives a spec
+    edit)."""
+    text = str(path)
+    if path.is_relative_to(mapping.folded_build):
+        text = "<build>/" + str(path.relative_to(mapping.folded_build))
+    elif path.is_relative_to(ROOT):
+        text = str(path.relative_to(ROOT))
+    return re.sub(r"/generated/(guest-hooks-[a-z]+-v\d+)-[0-9a-f]{64}/", r"/generated/\1/", text)
 
 
 def normalized_includes(mapping: Mapping, includes: Iterable[str]) -> tuple[str, ...]:
@@ -294,17 +304,15 @@ def compare_targets(
                 continue
             target = mapping.file(path)
             if target is None:
-                reason = mapping.deferred(path)
-                if reason is None:
-                    yield f"{name}: {path}: no folded counterpart"
+                yield f"{name}: {path}: no folded counterpart"
                 continue
             mapped[target] = (path, group)
         for target, (path, ref) in sorted(mapped.items()):
             new = new_sources.get(target)
+            label = f"{name}: {portable(mapping, target)}"
             if new is None:
-                yield f"{name}: {target.relative_to(ROOT) if target.is_relative_to(ROOT) else target}: not built"
+                yield f"{label}: not built"
                 continue
-            label = f"{name}: {target.relative_to(ROOT) if target.is_relative_to(ROOT) else target}"
             if ref.language != new.language:
                 yield f"{label}: language {ref.language} -> {new.language}"
             ref_defines = {mapping.text(d) for d in ref.defines if not IDENTITY_DEFINES.match(d)}
@@ -337,15 +345,16 @@ def compare_targets(
             ref_fragments = tuple(mapping.text(f) for f in ref.fragments)
             if ref_fragments != new.fragments:
                 yield f"{label}: flags {list(ref_fragments)} -> {list(new.fragments)}"
+        # A folded source the reference target doesn't have (shipped or not,
+        # such as a precompiled-header stub) has no reference counterpart.
+        known = {mapping.file(path) for path in ref_sources}
         extra_sources = {
             path
             for path in new_sources
-            if path not in mapped
-            and path.is_relative_to(ROOT / "runtime-recomp")
-            and new_sources[path].language in ("C", "CXX")
+            if path not in mapped and path not in known and new_sources[path].language in ("C", "CXX")
         }
         for path in sorted(extra_sources):
-            yield f"{name}: {path.relative_to(ROOT)}: built, but not in the reference"
+            yield f"{name}: {portable(mapping, path)}: built, but not in the reference"
 
 
 def shipped_pairs(compdb: Path) -> dict[str, set[Path]]:
@@ -410,16 +419,13 @@ def run_targets(args: argparse.Namespace) -> int:
     found += compare_links(mapping, reference, folded, shipped)
     problems: list[str] = []
     for problem in found:
-        portable = problem.replace(str(args.folded_build), "<build>").replace(str(ROOT) + "/", "")
-        # Guest-hook copies live in a content-addressed directory; name it by
-        # payload and revision so a recorded delta survives a spec edit.
-        portable = re.sub(r"/generated/(guest-hooks-[a-z]+-v\d+)-[0-9a-f]{64}/", r"/generated/\1/", portable)
-        reason = explained(portable, allowed)
+        text = problem.replace(str(args.folded_build), "<build>").replace(str(ROOT) + "/", "")
+        reason = explained(text, allowed)
         if reason is None:
-            problems.append(portable)
-            print(portable)
+            problems.append(text)
+            print(text)
         elif args.verbose:
-            print(f"allowed: {portable} ({reason})")
+            print(f"allowed: {text} ({reason})")
     print(
         f"targets: {len(shipped)} compared, {len(found) - len(problems)} allowed, "
         f"{len(problems)} unexplained differences",
@@ -508,8 +514,9 @@ def run_depscan(args: argparse.Namespace) -> int:
 
     with ThreadPoolExecutor(args.jobs) as pool:
         results = list(pool.map(scan, entries))
-    args.out.write_text(json.dumps(results) + "\n", encoding="utf-8")
     errors = [result for result in results if result["error"]]
+    if not errors:
+        atomic_write(args.out, json.dumps(results) + "\n")
     for result in errors:
         print(f"{result['source']}: {result['error']}", file=sys.stderr)
     print(f"depscan: {len(results)} TUs, {len(errors)} errors", file=sys.stderr)
@@ -523,7 +530,12 @@ def run_preprocess(args: argparse.Namespace) -> int:
     candidates = [e for e in load_entries(args.compdb).values() if first_party_or_prepared(e, args.build)]
     entries = [e for e in candidates if tu_key(e)[1].is_file()]
     print(f"preprocess: skipping {len(candidates) - len(entries)} build-time generated TUs", file=sys.stderr)
-    args.out.mkdir(parents=True, exist_ok=True)
+    # Output appears under --out only when every TU preprocessed, so an
+    # interrupted run never leaves a cache a later run would accept.
+    final = args.out
+    args.out = final.with_name(final.name + ".partial")
+    shutil.rmtree(args.out, ignore_errors=True)
+    args.out.mkdir(parents=True)
 
     def preprocess(entry: dict[str, str]) -> tuple[TU, str | None]:
         key = tu_key(entry)
@@ -547,7 +559,11 @@ def run_preprocess(args: argparse.Namespace) -> int:
         f"preprocess: {len(results)} TUs, {len(pending)} need build-time shader headers, {len(errors)} errors",
         file=sys.stderr,
     )
-    return 1 if errors else 0
+    if errors:
+        return 1
+    shutil.rmtree(final, ignore_errors=True)
+    os.replace(args.out, final)
+    return 0
 
 
 INCLUDE_SPELLING = re.compile(rb'^([ \t]*#[ \t]*include(?:_next)?[ \t]*)[<"][^>"\r\n]*[>"]', re.M)
@@ -590,26 +606,28 @@ class Pairing:
     """Reference TUs and their folded counterparts, keyed by (target, source)."""
 
     pairs: dict[TU, TU]  # reference -> folded
-    notes: list[str]
+    unmapped: list[str]  # reference TUs with no folded counterpart
     unpaired_folded: set[TU]
 
 
 def pair_tus(mapping: Mapping, reference: dict[TU, dict[str, str]], folded: dict[TU, dict[str, str]]) -> Pairing:
     first_party = {row.staged for row in mapping.reference.rows if row.kind == "first-party"}
     pairs: dict[TU, TU] = {}
-    notes: list[str] = []
+    unmapped: list[str] = []
     for target, source in sorted(reference):
         deps = mapping.reference.deps.get(source, frozenset())
         if source not in first_party and not deps & first_party:
             continue
         folded_source = mapping.file(source)
         if folded_source is None:
-            notes.append(f"{target}: {source}: {mapping.deferred(source) or 'no folded counterpart'}")
+            unmapped.append(f"{target}: {source}: no folded counterpart")
             continue
         pairs[(target, source)] = (target, folded_source)
+    # Every folded TU must have a reference counterpart, wherever it lives
+    # (runtime-recomp/, extern/ or a build-tree stage).
     every = {(target, mapping.file(source)) for target, source in reference}
-    unpaired = {key for key in folded if key[1].is_relative_to(ROOT / "runtime-recomp")} - every
-    return Pairing(pairs, notes, unpaired)
+    unpaired = set(folded) - every
+    return Pairing(pairs, unmapped, unpaired)
 
 
 def run_level1(args: argparse.Namespace) -> int:
@@ -617,17 +635,16 @@ def run_level1(args: argparse.Namespace) -> int:
     first_party = {row.staged for row in mapping.reference.rows if row.kind == "first-party"}
     reference_entries = load_entries(args.reference / "shipped-compdb.json")
     folded_entries = load_entries(args.folded_compdb)
-    reference_deps = load_deps(args.reference / "depscan-by-target.json")
+    reference_deps = load_deps(args.reference_deps)
     folded_deps = load_deps(args.folded_deps)
     pairing = pair_tus(mapping, reference_entries, folded_entries)
     allow = variant_tus(ROOT, forwarders=True)
     allowed = load_allowed(ALLOWED)
-    problems: list[str] = []
-    notes = list(pairing.notes)
+    problems: list[str] = list(pairing.unmapped)
     same_bytes: dict[tuple[Path, Path], bool] = {}
 
     def name(path: Path) -> str:
-        return str(path).replace(str(args.folded_build), "<build>").replace(str(ROOT) + "/", "")
+        return portable(mapping, path)
 
     for old_key, new_key in sorted(pairing.pairs.items()):
         label = f"{new_key[0]}: {name(new_key[1])}"
@@ -643,11 +660,7 @@ def run_level1(args: argparse.Namespace) -> int:
         for dep in old:
             folded = mapping.file(dep)
             if folded is None:
-                reason = mapping.deferred(dep)
-                if reason is None:
-                    problems.append(f"{label}: read {name(dep)}, which the fold drops")
-                else:
-                    notes.append(f"{label}: read {name(dep)}: {reason}")
+                problems.append(f"{label}: read {name(dep)}, which the fold drops")
                 continue
             expected.add(folded)
             if dep not in first_party:
@@ -666,12 +679,9 @@ def run_level1(args: argparse.Namespace) -> int:
     unexplained = [problem for problem in problems if explained(problem, allowed) is None]
     for problem in unexplained:
         print(problem)
-    if args.verbose:
-        for note in notes:
-            print(f"note: {note}")
     print(
-        f"level1: {len(pairing.pairs)} TUs, {len(same_bytes)} files byte-checked, {len(notes)} notes "
-        f"(fold steps B3/B4), {len(problems) - len(unexplained)} allowed, {len(unexplained)} unexplained",
+        f"level1: {len(pairing.pairs)} TUs, {len(same_bytes)} files byte-checked, "
+        f"{len(problems) - len(unexplained)} allowed, {len(unexplained)} unexplained",
         file=sys.stderr,
     )
     return 1 if unexplained else 0
@@ -679,6 +689,9 @@ def run_level1(args: argparse.Namespace) -> int:
 
 QUOTED_PATH = re.compile(r'"(/[^"\n]+)"')
 DIGEST = re.compile(r"[0-9a-f]{64}")
+# Preprocessed tokens for level 2: string and character literals whole (their
+# spaces are content), everything else split at whitespace.
+TOKEN = re.compile(r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|[^\s"\']+|["\']')
 
 
 def path_string(match: re.Match[str], mapping: Mapping | None) -> str:
@@ -689,12 +702,12 @@ def path_string(match: re.Match[str], mapping: Mapping | None) -> str:
 
 
 def tokens(text: str, mapping: Mapping | None) -> list[str]:
-    """Whitespace-separated tokens. File path strings (__FILE__, assert
+    """Tokens (literals kept whole, see TOKEN). File path strings (__FILE__, assert
     messages) are normalized, and with a mapping, reference paths are
     rewritten to their folded paths: a respelled include changes the spelling
     __FILE__ reports, not the file."""
 
-    return QUOTED_PATH.sub(lambda match: path_string(match, mapping), text).split()
+    return TOKEN.findall(QUOTED_PATH.sub(lambda match: path_string(match, mapping), text))
 
 
 def normalized_command(mapping: Mapping | None, entry: dict[str, str]) -> list[str]:
@@ -734,15 +747,17 @@ def run_level2(args: argparse.Namespace) -> int:
     problems: list[str] = []
     level3: list[str] = []
     identity_only: list[str] = []
-    pending: set[str] = set()
-    for directory in (args.reference_pp, args.folded_pp):
-        if (directory / "pending.json").exists():
-            pending |= set(json.loads((directory / "pending.json").read_text(encoding="utf-8")))
+    pending = {
+        side: set(json.loads((directory / "pending.json").read_text(encoding="utf-8")))
+        for side, directory in (("reference", args.reference_pp), ("folded", args.folded_pp))
+    }
+    expected_pending = set(json.loads(SHADER_PENDING.read_text(encoding="utf-8"))["tus"])
+    skipped: set[str] = set()
     same = 0
     for old_key, new_key in sorted(pairing.pairs.items()):
         if new_key not in folded_entries:
             continue
-        label = f"{new_key[0]}: {str(new_key[1]).replace(str(ROOT) + '/', '')}"
+        label = f"{new_key[0]}: {portable(mapping, new_key[1])}"
         old_cmd = normalized_command(mapping, reference_entries[old_key])
         new_cmd = normalized_command(None, folded_entries[new_key])
         old_flags = [a for a in old_cmd if not IDENTITY_DEFINE_FLAG.match(a)]
@@ -752,8 +767,15 @@ def run_level2(args: argparse.Namespace) -> int:
         identity_changed = old_cmd != new_cmd
         old_file = args.reference_pp / f"{output_name(old_key)}.i"
         new_file = args.folded_pp / f"{output_name(new_key)}.i"
-        if old_file.name in pending or new_file.name in pending:
-            continue  # third-party TU waiting for build-time shader headers
+        waiting = [
+            side for side, name in (("reference", old_file.name), ("folded", new_file.name)) if name in pending[side]
+        ]
+        if waiting:
+            if label in expected_pending:
+                skipped.add(label)
+            else:
+                problems.append(f"{label}: needs build-time shader headers ({' and '.join(waiting)}), not listed")
+            continue
         if not old_file.is_file() or not new_file.is_file():
             missing = "reference" if not old_file.is_file() else "folded"
             problems.append(f"{label}: no {missing} preprocessed output")
@@ -767,13 +789,23 @@ def run_level2(args: argparse.Namespace) -> int:
             level3.append(label)
             continue
         # Fold step B7 freezes the online identity; until then a TU whose
-        # identity defines changed may differ in those 64-hex digests only.
-        if identity_changed and [DIGEST.sub("<id>", t) for t in old] == [DIGEST.sub("<id>", t) for t in new]:
-            identity_only.append(label)
-            continue
+        # identity defines changed may differ in those defines' own digests
+        # only. Any other 64-hex literal is still compared.
+        if identity_changed:
+            ids = {d for a in old_cmd + new_cmd if IDENTITY_DEFINE_FLAG.match(a) for d in DIGEST.findall(a)}
+
+            def masked(stream: list[str]) -> list[str]:
+                return [DIGEST.sub(lambda m: "<id>" if m.group() in ids else m.group(), t) for t in stream]
+
+            if ids and masked(old) == masked(new):
+                identity_only.append(label)
+                continue
         first = next((i for i, (a, b) in enumerate(zip(old, new)) if a != b), min(len(old), len(new)))
         was, now = " ".join(old[first : first + 8]), " ".join(new[first : first + 8])
         problems.append(f"{label}: tokens differ at {first}: {was!r} vs {now!r}")
+    problems += [
+        f"{label}: listed in {SHADER_PENDING.name} but preprocessed" for label in sorted(expected_pending - skipped)
+    ]
     unexplained = [problem for problem in problems if explained(problem, allowed) is None]
     for problem in unexplained:
         print(problem)
@@ -783,7 +815,7 @@ def run_level2(args: argparse.Namespace) -> int:
         print(f"identity only (B7): {label}")
     print(
         f"level2: {same} TUs token-identical, {len(level3)} header-variant TUs left for level 3, "
-        f"{len(identity_only)} identity-only (B7), {len(pending)} waiting for build-time shaders, "
+        f"{len(identity_only)} identity-only (B7), {len(skipped)} waiting for build-time shaders, "
         f"{len(problems) - len(unexplained)} allowed, {len(unexplained)} unexplained",
         file=sys.stderr,
     )
@@ -860,7 +892,7 @@ def run_level3(args: argparse.Namespace) -> int:
     for old_key, new_key in sorted(pairing.pairs.items()):
         if apply_closure.tu_name(ROOT, mapping.folder, old_key[1]) not in split or new_key not in folded_entries:
             continue
-        label = f"{new_key[0]}: {str(new_key[1]).replace(str(ROOT) + '/', '')}"
+        label = f"{new_key[0]}: {portable(mapping, new_key[1])}"
         old_text = (args.reference_pp / f"{output_name(old_key)}.i").read_text(errors="surrogateescape")
         new_text = (args.folded_pp / f"{output_name(new_key)}.i").read_text(errors="surrogateescape")
         if tokens(old_text, mapping) == tokens(new_text, None):
@@ -955,6 +987,45 @@ def run_options(args: argparse.Namespace) -> int:
     return 0
 
 
+REFERENCE_DOC = ROOT / "docs/fold-in/REFERENCE.md"
+DOC_ROW = re.compile(r"^\| `([^`]+)`[^|]*\| `([0-9a-f]{64})` \|$", re.M)
+
+
+def run_verify_reference(args: argparse.Namespace) -> int:
+    """The reference is what REFERENCE.md records, and every staged file the
+    gate compares against still has the bytes final-sources.json pinned."""
+    problems: list[str] = []
+    recorded = DOC_ROW.findall(REFERENCE_DOC.read_text(encoding="utf-8"))
+    if not recorded:
+        problems.append(f"{REFERENCE_DOC.name}: no sha256 table")
+    for name, sha in recorded:
+        path = args.reference / name
+        if not path.is_file():
+            problems.append(f"{name}: missing from the reference")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != sha:
+            problems.append(f"{name}: sha256 differs from {REFERENCE_DOC.name}")
+    reference = apply_closure.load_reference(args.reference, ROOT)
+    for row in reference.rows:
+        if not row.staged.is_file():
+            problems.append(f"{row.staged}: staged file missing")
+        elif hashlib.sha256(row.staged.read_bytes()).hexdigest() != row.sha256:
+            problems.append(f"{row.staged}: bytes differ from final-sources.json")
+    for problem in problems:
+        print(problem)
+    print(
+        f"reference: {len(recorded)} recorded files, {len(reference.rows)} staged files, {len(problems)} problems",
+        file=sys.stderr,
+    )
+    return 1 if problems else 0
+
+
+def atomic_write(path: Path, text: str) -> None:
+    """Write via a temporary file so an interrupted run leaves no partial file."""
+    scratch = path.with_name(path.name + ".partial")
+    scratch.write_text(text, encoding="utf-8")
+    os.replace(scratch, path)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -971,10 +1042,13 @@ def main(argv: list[str] | None = None) -> int:
     level1 = compared("level1", "compare TU sets, header closures and file bytes")
     level1.add_argument("--folded-compdb", type=Path, required=True)
     level1.add_argument("--folded-deps", type=Path, required=True)
+    level1.add_argument("--reference-deps", type=Path, required=True)
     level2 = compared("level2", "compare preprocessed token streams and compile flags")
     level2.add_argument("--folded-compdb", type=Path, required=True)
     level2.add_argument("--reference-pp", type=Path, required=True)
     level2.add_argument("--folded-pp", type=Path, required=True)
+    verify = sub.add_parser("verify-reference", help="check the reference against REFERENCE.md and its own pins")
+    verify.add_argument("--reference", type=Path, required=True)
     options = sub.add_parser("options", help="print the folded configure options, one per line")
     options.add_argument("--reference", type=Path, required=True)
     options.add_argument("--mounts", action="store_true", help="print the paths outside the tree they name instead")
@@ -1002,6 +1076,7 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, key, None) is not None:
             setattr(args, key, getattr(args, key).resolve())
     handlers = {
+        "verify-reference": run_verify_reference,
         "targets": run_targets,
         "level1": run_level1,
         "level2": run_level2,
