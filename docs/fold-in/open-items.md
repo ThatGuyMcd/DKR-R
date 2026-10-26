@@ -155,6 +155,10 @@ What the deleted release-prep scripts did, for B9b:
 
 - The layers' remaining check targets and the "Before" negative controls
   move to C5 with the other promoted fixtures; the fold doesn't port them.
+- A post-build level 2 for `rt64_water_renderer.cpp`. The gate preprocesses
+  after configure, before the shader headers it includes exist, so level 2
+  skips it (`scripts/fold/shader-pending.json`); level 1 and its compile flags
+  still cover it.
 
 ## For B6 (native macOS)
 
@@ -258,9 +262,9 @@ What the deleted release-prep scripts did, for B9b:
 
 - `atomic_snapshot.hpp`'s libc++ branch uses the free `std::atomic_load`/
   `std::atomic_store` on `shared_ptr`, deprecated in C++20 and removed in
-  C++26. Replace it with a mutex-guarded holder (a `shared_ptr` under a
-  `std::mutex`, releasing the previous value outside the lock), and drop the
-  alias once every target toolchain has libc++'s `atomic<shared_ptr>`.
+  C++26. Modernise that branch inside `AtomicSnapshot` itself (no second
+  snapshot type), and drop the branch once every target toolchain has
+  libc++'s `atomic<shared_ptr>`.
 
 ## Online identity (B7)
 
