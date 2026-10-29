@@ -4,13 +4,27 @@ source "${BASH_SOURCE[0]%/*}/lib/apple-build.sh"
 dkr_macos_host_tools() {
   local skip_deps="$1" make_version probe
   dkr_require_macos || return 1
-  dkr_require_xcode || return 1
+  # Command Line Tools are enough: RT64's Metal shaders compile at runtime.
+  xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1 || {
+    echo 'Install the Command Line Tools: xcode-select --install' >&2
+    return 1
+  }
   if [[ "$skip_deps" -eq 0 ]]; then
     command -v brew >/dev/null || {
       echo 'Install Homebrew: https://brew.sh/' >&2
       return 1
     }
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 brew install --quiet cmake ninja make pcre2 python sdl2 coreutils || return 1
+    # Install only what is missing: on macOS releases Homebrew no longer
+    # bottles, reinstalling a present tool (python) means a failing source build.
+    local pair missing=()
+    for pair in cmake:cmake ninja:ninja make:gmake pcre2:pcre2-config sdl2:sdl2-config coreutils:sha1sum; do
+      command -v "${pair#*:}" >/dev/null || missing+=("${pair%%:*}")
+    done
+    # tomllib needs 3.11; the Command Line Tools ship 3.9.
+    python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null || missing+=(python)
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+      HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 brew install --quiet "${missing[@]}" || return 1
+    fi
   fi
   dkr_require_tools git python3 cmake ninja c++ shasum sha1sum pcre2-config sdl2-config || {
     echo 'Run ./Setup-macOS.sh (sha1sum is supplied by brew install coreutils).' >&2
@@ -39,11 +53,4 @@ dkr_macos_host_tools() {
     return 1
   fi
   rm -rf -- "$probe"
-  if ! xcrun metal -v >/dev/null 2>&1; then
-    if [[ "$skip_deps" -eq 1 ]]; then
-      echo 'Install Metal: xcodebuild -downloadComponent MetalToolchain' >&2
-      return 1
-    fi
-    xcodebuild -downloadComponent MetalToolchain || return 1
-  fi
 }

@@ -1,0 +1,28 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 17563c1..d86dfec 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -163,17 +163,15 @@ function(build_shader_msl_impl TARGETOBJ FILENAME TARGET_NAME OUTNAME)
+         add_custom_command(OUTPUT ${OUTNAME}.metallib
+                 COMMAND xcrun -sdk ${_dkr_ios_metal_sdk} metallib ${OUTNAME}.ir -o ${OUTNAME}.metallib
+                 DEPENDS ${OUTNAME}.ir)
++        set(_dkr_msl_blob ${OUTNAME}.metallib)
+     else()
+-        add_custom_command(OUTPUT ${OUTNAME}.ir
+-                COMMAND xcrun -sdk macosx metal -o ${OUTNAME}.ir -c ${OUTNAME}.metal $<$<CONFIG:Debug>:-frecord-sources>
+-                DEPENDS ${OUTNAME}.metal)
+-        add_custom_command(OUTPUT ${OUTNAME}.metallib
+-                COMMAND xcrun -sdk macosx metallib ${OUTNAME}.ir -o ${OUTNAME}.metallib
+-                DEPENDS ${OUTNAME}.ir)
++        # macOS embeds the MSL source; plume compiles it at runtime, so the
++        # build needs no Xcode Metal toolchain.
++        set(_dkr_msl_blob ${OUTNAME}.metal)
+     endif()
+     add_custom_command(OUTPUT ${OUTNAME}.metal.c
+-            COMMAND file_to_c ${OUTNAME}.metallib ${TARGET_NAME}BlobMSL ${OUTNAME}.metal.c ${OUTNAME}.metal.h
+-            DEPENDS ${OUTNAME}.metallib file_to_c
++            COMMAND file_to_c ${_dkr_msl_blob} ${TARGET_NAME}BlobMSL ${OUTNAME}.metal.c ${OUTNAME}.metal.h
++            DEPENDS ${_dkr_msl_blob} file_to_c
+             BYPRODUCTS ${OUTNAME}.metal.h)
+     target_sources(${TARGETOBJ} PRIVATE ${OUTNAME}.metal.c)
+ endfunction()

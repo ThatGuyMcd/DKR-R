@@ -3,7 +3,7 @@
 
 dkr_require_macos() {
   [[ "$(uname -s)" == Darwin ]] || {
-    echo 'Apple builds require macOS with the full Xcode application installed.' >&2
+    echo 'Apple builds require macOS.' >&2
     return 1
   }
 }

@@ -1,0 +1,16 @@
+diff --git a/src/recompilation.cpp b/src/recompilation.cpp
+index c228433..afdfe63 100644
+--- a/src/recompilation.cpp
++++ b/src/recompilation.cpp
+@@ -128,7 +128,10 @@ bool process_instruction(GeneratorType& generator, const N64Recomp::Context& con
+ 
+     auto hook_find = func.function_hooks.find(instr_index);
+     if (hook_find != func.function_hooks.end()) {
+-        fmt::print(output_file, "    {}\n", hook_find->second);
++        // The leading null statement lets a hook that declares something follow a
++        // branch label under C17 (Clang before 18 rejects it). It is not braced:
++        // hooks declare locals that later hooks in the function read.
++        fmt::print(output_file, "    ; {}\n", hook_find->second);
+         if (indent) {
+             print_indent();
+         }
