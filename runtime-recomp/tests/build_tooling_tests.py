@@ -915,7 +915,7 @@ dkr_require_xcode
                 p.chmod(0o755)
 
             for name in (
-                "xcodebuild",
+                "xcrun",
                 "git",
                 "python3",
                 "cmake",

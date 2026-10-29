@@ -1,0 +1,23 @@
+diff --git a/plume_metal.cpp b/plume_metal.cpp
+index b670ed3..f0ca614 100644
+--- a/plume_metal.cpp
++++ b/plume_metal.cpp
+@@ -1342,8 +1342,16 @@ namespace plume {
+         functionName->retain();
+ 
+         NS::Error *error = nullptr;
+-        const dispatch_data_t dispatchData = dispatch_data_create(data, size, dispatch_get_main_queue(), ^{});
+-        library = device->mtl->newLibrary(dispatchData, &error);
++        // Precompiled libraries start with the "MTLB" magic. Anything else is MSL source,
++        // compiled by the OS so macOS builds don't need Xcode's offline Metal compiler.
++        if ((size >= 4) && (memcmp(data, "MTLB", 4) == 0)) {
++            const dispatch_data_t dispatchData = dispatch_data_create(data, size, dispatch_get_main_queue(), ^{});
++            library = device->mtl->newLibrary(dispatchData, &error);
++        }
++        else {
++            const std::string source(static_cast<const char *>(data), size);
++            library = device->mtl->newLibrary(NS::String::string(source.c_str(), NS::UTF8StringEncoding), nullptr, &error);
++        }
+ 
+         if (error != nullptr) {
+             fprintf(stderr, "MTLDevice newLibraryWithSource: failed with error %s.\n", error->localizedDescription()->utf8String());

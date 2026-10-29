@@ -132,6 +132,10 @@
         {
           "path": "patches/n64recomp/0002-name-recomp-context-struct.patch",
           "sha256": "6cf31eebf6a5f0a9a31c2912f562f8ef977c0a43dfffd76531f3ceb94ae2bee7"
+        },
+        {
+          "path": "patches/n64recomp/0003-null-statement-before-instruction-hooks.patch",
+          "sha256": "f864ffd285ff4b09f2a3f4e453e5f0e5b2c39e345bc05dd88f47a46b01d3dac7"
         }
       ]
     },
@@ -226,6 +230,10 @@
         {
           "path": "patches/rt64/0020-ios-imgui-pixel-size.patch",
           "sha256": "d346ecb854a422b3c9b0349a72b8217a08e4b0b5dc86e22f5b1ab995d25a7ca5"
+        },
+        {
+          "path": "patches/rt64/0021-macos-runtime-msl-shaders.patch",
+          "sha256": "441fe5f1dc8edf646d8f4ea3a76d25a65e86fc836aa8ae9cea637c9bde22128b"
         }
       ]
     },
@@ -309,6 +317,10 @@
         {
           "path": "patches/plume/0002-ios-metal-device-os27-upstream.patch",
           "sha256": "a1c559877eaa59a5cf8878c4e0879f15aa5ffbd0455b8e5a5d593289348709ce"
+        },
+        {
+          "path": "patches/plume/0003-compile-msl-source-shaders.patch",
+          "sha256": "80947b240d7a3bd5e3f9434df7501fc54d130d4e06942e36705f2238d8fb3565"
         }
       ]
     },
