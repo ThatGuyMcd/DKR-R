@@ -41,3 +41,22 @@ and native menu behavior against the shipped values.
 
 The underlying v1.0.11 signing/equivalence checkpoint and recorded closure hashes
 remain historical evidence. They must not be re-recorded to hide these ports.
+
+## Published Linux artifacts checked directly
+
+GitHub reports Version1.0.12 as the latest published release (27 October 2026).
+The official x86_64 and ARM64 AppImages were downloaded and their SquashFS
+`usr/bin/DKR-R` entries inspected without executing either binary. Both contain
+the same v77 and v80 values in the table above.
+
+| Artifact | AppImage SHA-256 | Runtime ELF SHA-256 |
+|---|---|---|
+| Linux x86_64 | `61a44fce7b43fe46c63b20651e613c8f602adc75d805981f9fa53074f46300f2` | `a099a8fa98d3e5063f4d3c8edfb2776c4b170386126b420665f4f1769b9d28fb` |
+| Linux ARM64 | `734494dc22674aee25117e836d59cee51ff3af8c137d873066b8d80b95bcfb22` | `72a7b32c3da2e07b5ec89e1143d7793b2a5625f44756182d4351b97d0618b97c` |
+
+The downloaded AppImage hashes match GitHub's release-asset digests. GitHub
+reports the Steam Deck asset has the same digest as Linux x86_64, so it has
+the same packaged runtime. Together with the Windows inspection, these are
+the identities of all published v1.0.12 desktop downloads. The release has
+no Apple asset. This evidence does not itself substitute for the required
+both-owner confirmation of the fold's explicit identity edit.
