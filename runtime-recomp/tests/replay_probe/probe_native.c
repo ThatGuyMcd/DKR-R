@@ -1,4 +1,3 @@
-#include "../../src/game/primary_heap.h"
 #include "recomp.h"
 #include "funcs.h"
 #include "probe_bridge.h"
@@ -6,6 +5,7 @@
 #include "probe_input.h"
 #include "probe_pak.h"
 #include "probe_magic.h"
+#include "probe_native_entry.h"
 #include "../../src/game/camera_obstruction_guest.h"
 #include "../../src/game/mods/legacy_memory_safety.h"
 #include "../../src/game/track_select_draw_guest.h"
@@ -1364,18 +1364,10 @@ void dkr_probe_native_restore(dkr_probe_native_state value) {
     memset(&track_draw, 0, sizeof(track_draw));
 }
 int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* context) {
-    (void)ram;
-    (void)context;
-    dkr_probe_checkpoint();
-    uint64_t mod_result = 0;
-    if (dkr_probe_mod_dispatch(name, ram, context, 0, 0, 0, 0, &mod_result))
-        return (int)mod_result;
-    // No asset world (vanilla/code-only): same known-pool policy.
-    // A handled custom admission above always keeps precedence.
-    if (strcmp(name, "dkr_legacy_heap_capacity") == 0) {
-        context->r15 = (int32_t)dkr_primary_heap_end((uint32_t)context->r15, 0x800000U);
-        return 0;
-    }
+    int entry_handled;
+    const int entry_result = dkr_probe_native_entry(name, ram, context, &entry_handled);
+    if (entry_handled)
+        return entry_result;
     /* modern_camera.cpp: the local Modern camera never moves an owned or
        replayed frame, so there is no pose to hand back here. */
     if (strcmp(name, "dkr_modern_camera_restore") == 0)

@@ -58,7 +58,16 @@ class RequiredChecksTests(unittest.TestCase):
     def test_the_real_registry_refuses_with_its_pending_checks_named(self):
         checks = finalize.registry()
         pending = [c for c in checks if c.pending]
-        self.assertEqual(len(pending), 7)
+        self.assertEqual(
+            {check.id for check in pending},
+            {
+                "memory-stability-v77",
+                "memory-stability-v80",
+                "spectator-admission-before",
+                "race-release-before",
+                "vehicle-original-textures",
+            },
+        )
         self.assertTrue(all(c.pending == "C5" for c in pending))
         everything = [(c.test or f"{c.label}-test", [c.label] if c.label else [], "passed") for c in checks]
         with self.assertRaises(finalize.FinalizeError) as caught:

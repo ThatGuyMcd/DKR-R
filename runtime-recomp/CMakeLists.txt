@@ -3303,6 +3303,19 @@ if(BUILD_TESTING)
     add_test(NAME DKRSpectatorAdmissionChecks COMMAND DKRSpectatorAdmissionTests)
     set_tests_properties(DKRSpectatorAdmissionChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
 
+    foreach(revision IN ITEMS 77 80)
+        set(entry_test DKRMemoryOwned${revision}Tests)
+        add_executable(${entry_test} tests/memory_owned_entry_tests.cpp tests/memory_owned_entry_driver.c)
+        target_compile_features(${entry_test} PRIVATE cxx_std_20)
+        target_compile_definitions(${entry_test} PRIVATE DKR_MEMORY_TEST_REVISION=${revision})
+        target_include_directories(
+            ${entry_test}
+            PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
+        )
+        add_test(NAME DKRMemoryOwned${revision}Checks COMMAND ${entry_test})
+        set_tests_properties(DKRMemoryOwned${revision}Checks PROPERTIES LABELS "host;runtime" TIMEOUT 30)
+    endforeach()
+
     add_executable(DKRLiveFovTests tests/live_fov_tests.cpp)
     target_compile_features(DKRLiveFovTests PRIVATE cxx_std_20)
     target_include_directories(

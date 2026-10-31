@@ -318,3 +318,27 @@ against this checkout's prepared N64Recomp, RT64 and plume sources. This was
 read-only: no dependency patch was applied, imported or executed. Patch
 applicability does not establish runtime shader correctness or CLT-only build
 acceptance.
+
+## Owned heap entry C5 fixtures
+
+The real checkpoint/mod-dispatch/stock-heap prefix of dkr_probe_native now
+lives in probe_native_entry.h. The native entry calls it before its existing
+non-heap branches; an explicit handled result keeps unknown operations on the
+existing fallthrough path. Owner dispatch retains precedence, and the stock
+heap bound and register casts are unchanged. No menu policy, identity pin,
+generated guest source or configure-time transform changed.
+
+The two owned heap fixtures compile that production prefix as C through a
+thin call wrapper and link the synthetic C++ callbacks against the real recomp
+register ABI. Both revisions pass the original 13 checks: stock expansion,
+unknown pools, custom-owner precedence, unknown-operation fallthrough and
+exact checkpoint/dispatch counts. Both production owned native translation
+units also compile with their prepared revision headers and full-scene flags.
+The ordinary prepared macOS application still links; this is separate from
+compiling the owned native objects. All 158 host tests pass, as do both Linux x86_64 fixtures. Guard/tooling and
+explicit pre-commit checks pass. The release tooling test now names the five
+remaining pending gates and still proves finalization rejects them.
+
+These restore the two owned-heap release gates, leaving five C5 gates pending:
+memory-stability-v77/v80, spectator-admission-before, race-release-before and
+vehicle-original-textures. Finalization still rejects an incomplete release.

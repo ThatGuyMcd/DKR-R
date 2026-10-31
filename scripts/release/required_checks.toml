@@ -65,13 +65,11 @@ pending = "C5"
 id = "owned-heap-v77"
 ctest_test = "DKRMemoryOwned77Checks"
 why = "13 owned heap entry checks, US v1.0."
-pending = "C5"
 
 [[check]]
 id = "owned-heap-v80"
 ctest_test = "DKRMemoryOwned80Checks"
 why = "13 owned heap entry checks, US v1.1."
-pending = "C5"
 
 [[check]]
 id = "spectator-admission-before"
