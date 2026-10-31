@@ -3237,6 +3237,19 @@ if(BUILD_TESTING)
     )
     add_test(NAME DKRModStoreHistory COMMAND DKRModStoreHistoryTests)
 
+    add_executable(DKROnlineProfileTests tests/online_profile_tests.cpp)
+    target_compile_features(DKROnlineProfileTests PRIVATE cxx_std_20)
+    target_include_directories(DKROnlineProfileTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    add_test(NAME DKROnlineProfile COMMAND DKROnlineProfileTests)
+    set_tests_properties(DKROnlineProfile PROPERTIES TIMEOUT 30)
+
+    add_executable(DKRProfileBridgeTests tests/profile_bridge_tests.cpp)
+    target_compile_features(DKRProfileBridgeTests PRIVATE cxx_std_20)
+    target_include_directories(DKRProfileBridgeTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    target_link_libraries(DKRProfileBridgeTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRProfileBridge COMMAND DKRProfileBridgeTests)
+    set_tests_properties(DKRProfileBridge PROPERTIES TIMEOUT 30)
+
     # Compile the production residency algorithm with synthetic cache interfaces.
     add_executable(DKRLiquidResidencyTests tests/liquid_residency_tests.cpp)
     target_compile_features(DKRLiquidResidencyTests PRIVATE cxx_std_20)

@@ -1,6 +1,8 @@
 #include "online_directory.hpp"
 #include "atomic_snapshot.hpp"
 #include "linux_keyring.hpp"
+#define DKR_PROFILE_WITH_KEYRING 1
+#include "online_profile/linux_device_store.hpp"
 #include "store_vehicle_adapter.hpp"
 #include "mod_store.hpp"
 #include "mod_store/download_history.hpp"
@@ -149,8 +151,8 @@ void save_device(const std::filesystem::path& root, const std::string& token) {
     dkr::updates::durable_write(root / "device.bin",
                                 std::string_view(reinterpret_cast<const char*>(output.pbData), output.cbData));
 #else
-    if (!dkr::online::keyring::store(root.generic_string(), token))
-        throw Error("The desktop keyring could not remember sign-in. You are signed in for this session only.");
+    if (!dkr::profile::devices::store(root.generic_string(), token))
+        throw Error("Sign-in could not be saved on this device. You are signed in for this session only.");
 #endif
 }
 std::string load_device(const std::filesystem::path& root) {
@@ -167,7 +169,7 @@ std::string load_device(const std::filesystem::path& root) {
         return {};
     }
 #else
-    auto token = dkr::online::keyring::load(root.generic_string());
+    auto token = dkr::profile::devices::load(root.generic_string());
     return token.size() == 43 && identifier(token) ? token : std::string{};
 #endif
 }
@@ -1255,10 +1257,6 @@ void Service::configure(const std::filesystem::path& config, std::string version
             if (preferences.value("layout", 0) == 1)
                 s.layout = 1;
             s.remember = preferences.contains("remember") && preferences["remember"] == true;
-#ifndef _WIN32
-            if (!dkr::online::keyring::available())
-                s.remember = false;
-#endif
             if (cached.contains("items") && cached["items"].is_array()) {
                 s.items = std::make_shared<const Json>(cached["items"]);
                 s.cached = true;
@@ -1296,13 +1294,19 @@ void Service::layout(int value) {
     p.queue([&p, value](std::stop_token) { p.preferences(); });
 }
 void Service::remember(bool remember) {
-#ifndef _WIN32
-    if (!dkr::online::keyring::available())
-        remember = false;
-#endif
     auto& p = *impl_;
     p.update([&](Snapshot& s) { s.remember = remember; });
-    p.queue([&p](std::stop_token) { p.preferences(); });
+    p.queue([&p](std::stop_token) {
+        p.preferences();
+        if (!p.published.load()->remember) {
+#ifdef _WIN32
+            std::error_code error;
+            std::filesystem::remove(p.root / "device.bin", error);
+#else
+            dkr::profile::devices::clear(p.root.generic_string());
+#endif
+        }
+    });
 }
 void Service::refresh() {
     auto& p = *impl_;
@@ -1558,7 +1562,7 @@ void Service::login() {
                     std::error_code cleanup;
                     std::filesystem::remove(p.root / "device.bin", cleanup);
 #else
-                    dkr::online::keyring::clear(p.root.generic_string());
+                    dkr::profile::devices::clear(p.root.generic_string());
 #endif
                     throw Error("Sign-in was cancelled.");
                 }
@@ -1632,7 +1636,7 @@ void Service::logout() {
         std::error_code error;
         std::filesystem::remove(p.root / "device.bin", error);
 #ifndef _WIN32
-        dkr::online::keyring::clear(p.root.generic_string());
+        dkr::profile::devices::clear(p.root.generic_string());
 #endif
         try {
             if (!token.empty() || !device.empty())

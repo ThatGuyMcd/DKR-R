@@ -28,18 +28,12 @@ void DrawOlDirectoryAccount(float inner) {
             dkr::store::service().login();
         }
         bool remember = account->remember;
-#ifdef _WIN32
-        const bool secure_remember = true;
-#else
-        const bool secure_remember = dkr::online::keyring::available();
-#endif
-        if (secure_remember) {
-            PaddockGap(8.F);
-            if (OlSwitchRow("##directory-remember", "Keep me signed in",
-                            "Protected by this computer's credential store.", &remember, inner, false))
-                dkr::store::service().remember(remember);
-        } else
-            OlParagraph("Session-only sign-in. A desktop keyring is unavailable.", 12.5F, kOlSoft, inner);
+        PaddockGap(8.F);
+        if (OlSwitchRow(
+                "##directory-remember", "Keep me signed in",
+                "Uses the system credential store when available. Linux without a keyring saves a file readable only by your Linux user.",
+                &remember, inner, false))
+            dkr::store::service().remember(remember);
         if (account->signing_in) {
             PaddockGap(8.F);
             OlParagraph(account->status, 12.5F, kOlSoft, inner);

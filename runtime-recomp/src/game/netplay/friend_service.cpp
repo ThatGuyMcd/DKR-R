@@ -4,6 +4,7 @@
 
 #include "session_transport.hpp"
 #include "social_executor.hpp"
+#include "../online_profile/profile_bridge.hpp"
 
 #include "monocypher.h"
 
@@ -700,6 +701,8 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
         ++save_revision;
     }
 
+#include "../online_profile/friend_profile.inl"
+
     void flush_save() {
         std::unique_lock lock(mutex);
         if (store_path.empty() || saved_revision == save_revision)
@@ -717,6 +720,9 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
         output << "appear_offline=" << (appear_offline ? 1 : 0) << '\n';
         output << "allow_lobby_invites=" << (allow_lobby_invites ? 1 : 0) << '\n';
         output << "next_id=" << next_id << '\n';
+        output << "lobby_invite=" << hex_encode(profile_capability) << ',' << profile_capability_expires << '\n';
+        for (const auto& [who, avatar] : profile_avatars)
+            output << "friend_avatar=" << who << ',' << hex_encode_text(avatar) << '\n';
         for (const auto& [key, value] : friends) {
             output << "friend=" << secure::encode_key(value.public_key) << ',' << hex_encode_text(value.name) << ','
                    << hex_encode_text(value.nickname) << ',' << (value.blocked ? 1 : 0) << ',' << value.last_seen
@@ -810,6 +816,9 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
         std::map<std::uint64_t, Request> loaded_requests;
         std::map<std::uint64_t, Decision> loaded_decisions;
         std::string loaded_name = "Racer";
+        Capability loaded_profile_capability{};
+        std::uint64_t loaded_profile_expires = 0;
+        std::map<std::string, std::string> loaded_profile_avatars;
         bool loaded_appear_offline = false;
         bool loaded_allow_lobby_invites = true;
         std::uint64_t loaded_next_id = 1U;
@@ -847,6 +856,21 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
                 } catch (...) {
                     return false;
                 }
+            } else if (key == "lobby_invite") {
+                const auto fields = split(value, ',');
+                if (fields.size() != 2 || !hex_decode(fields[0], loaded_profile_capability))
+                    return false;
+                try {
+                    loaded_profile_expires = std::stoull(fields[1]);
+                } catch (...) {
+                    return false;
+                }
+            } else if (key == "friend_avatar") {
+                const auto fields = split(value, ',');
+                std::string avatar;
+                if (fields.size() == 2 && fields[0].size() == 13 && loaded_profile_avatars.size() < 512 &&
+                    hex_decode_text(fields[1], avatar) && dkr::profile::shared_avatar(avatar))
+                    loaded_profile_avatars[fields[0]] = std::move(avatar);
             } else if (key == "friend") {
                 const auto fields = split(value, ',');
                 if (fields.size() != 4U && fields.size() != 5U)
@@ -995,6 +1019,9 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
         appear_offline = loaded_appear_offline;
         allow_lobby_invites = loaded_allow_lobby_invites;
         friends = std::move(loaded_friends);
+        profile_capability = loaded_profile_capability;
+        profile_capability_expires = loaded_profile_expires;
+        profile_avatars = std::move(loaded_profile_avatars);
         invites = std::move(loaded_invites);
         requests = std::move(loaded_requests);
         decisions = std::move(loaded_decisions);
@@ -1015,6 +1042,8 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
 
     std::optional<std::uint64_t> valid_invite_id(const Capability& capability) {
         const std::uint64_t now = unix_seconds();
+        if (capability != Capability{} && capability == profile_capability && profile_capability_expires > now)
+            return 0U; // Dedicated timed lobby capability; ordinary invite limits stay unchanged.
         for (auto& [id, invite] : invites) {
             const bool short_match = invite.token.has_value() && derive_capability(*invite.token) == capability;
             if (invite.revoked || (invite.capability != capability && !short_match))
@@ -1280,6 +1309,7 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
     Json state_message_locked() const {
         return Json{{"kind", "state"},
                     {"name", display_name},
+                    {"avatar", dkr::profile::bridge::own_avatar()},
                     {"online", !appear_offline},
                     { "lobby",
                       visible_lobby_locked() }};
@@ -1645,6 +1675,14 @@ struct FriendService::Impl : std::enable_shared_from_this<FriendService::Impl> {
                     peer->remote_online = message.value("online", true);
                     apply_presence_locked(found->second, message.value("name", found->second.name), peer->remote_online,
                                           lobby);
+                    const auto avatar = message.contains("avatar") && message["avatar"].is_string()
+                                            ? message["avatar"].get<std::string>()
+                                            : std::string{};
+                    if (dkr::profile::shared_avatar(avatar) && profile_avatars[remote_identity] != avatar) {
+                        profile_avatars[remote_identity] = avatar;
+                        dkr::profile::bridge::peer_avatar(remote_identity, avatar);
+                        save_locked();
+                    }
                 }
             }
             if (kind == "state-request" && accepted_peer_locked(peer))
@@ -2459,6 +2497,7 @@ void FriendService::configure(const std::filesystem::path& config_directory, std
         impl_->status = "Friend presence is unavailable in this build.";
     }
 #endif
+    impl_->bind_profile();
     impl_->executor.start([owner = impl_.get()] { owner->tick(); },
                           [owner = impl_.get()] {
                               std::scoped_lock lock(owner->mutex);

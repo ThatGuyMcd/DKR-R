@@ -1,4 +1,5 @@
 #include "netplay/friend_service.hpp"
+#include "online_profile/profile_bridge.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -43,6 +44,25 @@ int main() {
         std::cerr << "Generated code: " << permanent.code << '\n';
     }
     passed &= require(netplay::valid_friend_code(permanent.code), "generated Friend Code failed validation");
+    const auto card = dkr::profile::bridge::card();
+    passed &=
+        require(!card.public_key.empty() && card.identity.size() == 13 && netplay::valid_friend_code(card.friend_code),
+                "lobby profile did not bind a valid native identity");
+    passed &= require(dkr::profile::bridge::verify(card.public_key, card.identity, card.friend_code),
+                      "lobby profile failed its identity/code binding");
+    passed &= require(!dkr::profile::bridge::verify(card.public_key, "OTHERIDENTITY", card.friend_code),
+                      "lobby code accepted a substituted identity");
+    const auto server = netplay::secure::generate_key_pair();
+    const auto proof = dkr::profile::bridge::proof(netplay::secure::encode_key(server.public_key));
+    passed &= require(proof.size() == 64 &&
+                          proof == dkr::profile::bridge::proof(netplay::secure::encode_key(server.public_key)),
+                      "profile key ownership proof was not stable for one challenge");
+    passed &= require(dkr::profile::bridge::proof(std::string(64, '0')).empty(), "zero challenge key was accepted");
+    passed &= require(
+        !dkr::profile::bridge::verify(netplay::secure::encode_key(server.public_key), card.identity, card.friend_code),
+        "profile card accepted a different public key");
+    dkr::profile::bridge::own_avatar("https://example.invalid/picture.png");
+    passed &= require(dkr::profile::bridge::own_avatar().empty(), "unapproved avatar host was advertised");
     passed &= require(permanent.code.size() == 12U && permanent.code.starts_with("DKR-"),
                       "Friend Code was not emitted in the 12-character format");
     const std::string payload_only = permanent.code.substr(4U);

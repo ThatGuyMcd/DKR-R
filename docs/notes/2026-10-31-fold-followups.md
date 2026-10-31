@@ -7,8 +7,8 @@ on `refactor/fold-followups-20261031` in the fold worktree. Nothing has been
 pushed. Main is `d457741` after fetching origin. Its untracked
 `docs/start-menu-redesign/` was left alone.
 
-The v1.0.11 equivalence record is historical evidence. The upstream fixes below
-intentionally make `closure --check` report three changed files out of 710:
+The v1.0.11 equivalence record is historical evidence. At checkpoint
+`ca96ecc`, the initial upstream fixes intentionally make `closure --check` report three changed files out of 710:
 `mod_store.cpp`, `netplay/direct_session.cpp` and `presentation_identity.cpp`.
 Do not re-record
 that closure to conceal the behavior change. These follow-ups must stay
@@ -126,7 +126,7 @@ the production policy. The fixture uses dkr_guest_symbols for the real
 polish-symbol header; no fake generated symbol header is committed. The closure comparator normalizes include spellings; production builds on
 each platform must still validate that the real dependencies resolve.
 
-## Validation checkpoint
+## Validation checkpoint ca96ecc
 
 - Guard/tooling and explicit pre-commit checks pass with the empty fold baseline.
 - The macOS host run grew from 141 to 152 tests as fixtures were promoted.
@@ -143,3 +143,37 @@ each platform must still validate that the real dependencies resolve.
 Still pending in C5: memory-stability-v77/v80, owned-heap-v77/v80,
 spectator-admission-before, race-release-before and vehicle-original-textures.
 Finalization still rejects the tree while those seven checks are pending.
+
+## Native profile and remembered-sign-in follow-up
+
+The profile bridge is folded into the existing netplay/friend_service.cpp.
+There is no second friend-service source selected by generated-payload build
+flags. It binds the launcher profile to the native public key, supplies
+challenge proofs, retains timed lobby capabilities and validated peer avatars,
+and retires callbacks by the service generation. The existing friend tests
+exercise substituted identities and keys, stable challenge responses and
+unapproved avatar URLs; the separate bridge fixture checks retirement.
+
+The existing Mod Store account worker now uses the upstream private device
+storage fallback when a system keyring is unavailable. Its directory/file
+permissions are 0700/0600, and the helper rejects links and invalid tokens.
+Turning remembered sign-in off removes its saved credential. Existing Online
+and Store sign-in controls expose the preference without dead constant branches.
+The imported policy fixture passes 79 checks over retries, name acceptance and
+private storage; it only creates synthetic temporary files.
+
+The profile UI, profile-picture account endpoints and directory/social backend
+changes still need reconciliation. Backend modules belong in services, not in
+the native online_profile directory. No backend was deployed or copied there.
+
+With these native ports, the historical closure reports six intentional
+changes: directory_ui.inl, mod_store.cpp, netplay/direct_session.cpp,
+netplay/friend_service.cpp, presentation_identity.cpp and store_account_page.inl.
+Its recorded hashes are unchanged. C5 still has the same seven pending gates.
+
+Validation for this follow-up: all 154 host tests pass; guard/tooling,
+explicit pre-commit and the staged pattern guard pass. The macOS and Linux
+x86_64 full-nogen game-core builds pass. Linux also passes FriendService,
+OnlineProfile and ProfileBridge tests. The original B9b branch remains at
+6ac4288, and main's untracked menu-redesign work is untouched. No pushes,
+GitHub review comments or deployments were made.
