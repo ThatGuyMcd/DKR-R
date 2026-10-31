@@ -99,6 +99,40 @@ int main() {
     static_assert(quick_join_admit(TransportTrafficClass::Control, 0, 32000, 1024));
     static_assert(!quick_join_admit(TransportTrafficClass::Checkpoint, 16000, 16000, 1024));
     static_assert(!quick_join_admit(TransportTrafficClass::Control, 0, SIZE_MAX, 1024));
+    assert(!quick_join_setup_bulk);
+    {
+        QuickJoinSetupBulk setup(true);
+        assert(quick_join_setup_bulk);
+        std::thread other([] { assert(!quick_join_setup_bulk); });
+        other.join();
+        {
+            QuickJoinSetupBulk restricted(false);
+            assert(!quick_join_setup_admit(TransportTrafficClass::Checkpoint, 16000, 16000, 1024));
+        }
+        assert(quick_join_setup_bulk);
+        for (std::size_t frame : {1U, 8193U, 11300U}) {
+            std::size_t used = 0;
+            unsigned packets = 0;
+            while (quick_join_setup_admit(TransportTrafficClass::Checkpoint, used, used, frame)) {
+                used += frame;
+                ++packets;
+            }
+            assert(used <= (256U << 10U) && packets > 16);
+            assert(quick_join_setup_admit(TransportTrafficClass::Control, 0, used, 1000));
+            assert(quick_join_setup_admit(TransportTrafficClass::Authoritative, 0, used, 1000));
+        }
+        assert(!quick_join_setup_admit(TransportTrafficClass::Replica, 16000, 16000, 1024));
+        assert(!quick_join_setup_admit(TransportTrafficClass::Realtime, 16000, 16000, 1024));
+        assert(!quick_join_setup_admit(TransportTrafficClass::Checkpoint, 0, 0, SIZE_MAX));
+        assert(!quick_join_setup_admit(TransportTrafficClass::Control, 32U << 10U, 0, 1));
+    }
+    try {
+        QuickJoinSetupBulk setup(true);
+        throw std::runtime_error("synthetic send failure");
+    } catch (const std::runtime_error&) {
+    }
+    assert(!quick_join_setup_bulk);
+    assert(!quick_join_setup_admit(TransportTrafficClass::Checkpoint, 16000, 16000, 1024));
     LatencyHistogram histogram;
     assert(histogram.summary().samples == 0);
     for (unsigned i = 0; i < 100; ++i)

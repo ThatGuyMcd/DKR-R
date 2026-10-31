@@ -309,6 +309,19 @@ int main() {
         check(std::filesystem::create_directory(cache));
         std::filesystem::create_directory(cache / "partials");
         std::filesystem::create_directory(cache / "payloads");
+        // Cross multiple durable batches, then verify the actual published bytes.
+        const Bytes large_payload(2U * 1024U * 1024U + 73U, 0x6d);
+        Payload large_descriptor{};
+        large_descriptor.digest = sha256(large_payload);
+        large_descriptor.size = large_payload.size();
+        {
+            PayloadFile large(cache / "partials" / large_descriptor.digest, large_descriptor);
+            for (std::size_t at = 0; at < large_payload.size(); at += 8192)
+                large.append(View(large_payload).subspan(at, std::min<std::size_t>(8192, large_payload.size() - at)));
+            check(large.size() == large_payload.size());
+            large.publish(cache / "payloads" / large_descriptor.digest);
+        }
+        check(cached_payload(cache / "payloads", large_descriptor));
         const auto descriptor = manifest.payloads.front();
         check(!cached_payload(cache / "payloads", descriptor));
         {

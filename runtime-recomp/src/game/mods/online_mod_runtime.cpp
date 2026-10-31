@@ -36,6 +36,7 @@ std::mutex resource_cache_mutex;
 std::string resource_cache_key;
 std::shared_ptr<const RuntimeResources> resource_cache;
 std::weak_ptr<const RuntimeResources> live_resource_cache;
+std::uint64_t retained_bytes = 0;
 std::uint64_t retention_budget() {
 #ifdef _WIN32
     MEMORYSTATUSEX memory{};
@@ -53,7 +54,13 @@ std::uint64_t retention_budget() {
         return 0;
     const std::uint64_t available =
         (std::uint64_t(vm.free_count) + vm.inactive_count + vm.speculative_count) * vm_page_size;
-    return resource_cache_budget(physical, available, false);
+    return resource_cache_budget(physical, available,
+#ifdef DKR_IOS
+                                 true
+#else
+                                 false
+#endif
+    );
 #else
     struct sysinfo memory {};
     if (sysinfo(&memory) != 0)
@@ -85,6 +92,8 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
     const auto key = out->profile_->digest + ":" + sha256(bytes) + ":selected-music-v1";
     {
         std::lock_guard lock(resource_cache_mutex);
+        if (resource_cache && retained_bytes > retention_budget())
+            resource_cache.reset();
         if (auto reusable = live_resource_cache.lock(); reusable && resource_cache_key == key) {
             cancelled(stop);
             std::fprintf(stderr, "[online-mods][runtime] immutable-cache-hit=1 elapsed-ms=%lld\n",
@@ -323,6 +332,7 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
         std::lock_guard lock(resource_cache_mutex);
         resource_cache_key = key;
         live_resource_cache = out;
+        retained_bytes = cache_bytes;
         if (cache_bytes <= budget)
             resource_cache = out;
     }

@@ -259,3 +259,27 @@ process fixture passes on macOS. The Linux x86_64 full-nogen game core and
 ProfileBridge, ProfilePictures, CharacterPortraits and DirectoryLifecycle
 fixtures pass for the profile/portrait checkpoint. The gameplay/menu and
 transport-performance reconciliation remains separate and pending.
+
+## Bounded setup and immutable resource reuse
+
+The existing transport_send_policy.hpp now owns call-scoped setup permission.
+Authenticated ModData sends and pre-Go loading checkpoints can use up to
+256 KiB of checkpoint queue; control/authority retain bounded headroom. Race
+and replica admission keep their existing limits. No packet format, peer
+identity or guest operation changed. Nested scopes, thread isolation, exception
+cleanup, overflow rejection and race limits are covered by the production
+transport-policy fixture.
+
+The mod cache flushes at 1 MiB batches and still flushes before publication.
+The transfer fixture writes a synthetic payload across two full batches and
+checks the published hash, while retaining its cancellation/resume/error cases.
+The existing resource policy allows 768 MiB on capable desktops, retains the
+256 MiB mobile cap and rechecks memory pressure before strong-reference reuse.
+iOS now passes its mobile flag explicitly, as Android already did.
+
+Validation: all 156 host tests pass, along with refreshed focused setup, transfer
+and cache-policy tests. The macOS application links. Linux x86_64 builds the game
+core and passes QuickJoinTransport, StabilityTransferChecks, RuntimeLogArchive
+and UpdateProcess. Guard/tooling and explicit pre-commit checks pass. Remaining
+online-performance work includes party input/checkpoint scheduling, phase timing
+and the held menu/identity reconciliation.

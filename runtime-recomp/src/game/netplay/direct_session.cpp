@@ -12,6 +12,7 @@
 #include "experimental_runtime_admission.hpp"
 #include "experimental_latency.hpp"
 #include "online_lobby_policy.hpp"
+#include "transport_send_policy.hpp"
 
 #include "authoritative_state_codec.hpp"
 
@@ -5547,6 +5548,7 @@ void DirectSession::flush_outbound_locked() {
                 continue;
             }
             std::string error;
+            QuickJoinSetupBulk setup(packet.type == protocol::MessageType::ModData);
             const DatagramSendStatus result = transport_->send_status(packet.destination, packet.bytes, traffic, error);
             if (result == DatagramSendStatus::WouldBlock) {
                 blocked_routes.push_back({packet.destination, traffic});
@@ -6685,6 +6687,8 @@ void DirectSession::pump_locked() {
                         }
                         auto encrypted = secure::seal(plain, key, sender_id_, record.header.sequence, match_id_);
                         std::string ignored;
+                        QuickJoinSetupBulk setup(item.traffic == TransportTrafficClass::Checkpoint && !party->running &&
+                                                 !party->stopping && state_ == ConnectionState::Loading);
                         const auto sent = transport_->send_status(destination, encrypted, item.traffic, ignored);
                         if (sent != DatagramSendStatus::Sent)
                             blocked = true;

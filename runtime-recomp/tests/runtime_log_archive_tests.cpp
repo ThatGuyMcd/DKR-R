@@ -29,11 +29,15 @@ int main() {
               fs::file_size(root / "snapshot.log") < 2 * 1024 * 1024 + 100);
         constexpr std::uint64_t gib = 1024ULL * 1024 * 1024;
         using dkr::mods::online::resource_cache_budget;
-        check(resource_cache_budget(32 * gib, 16 * gib, false) == gib / 2);
+        check(resource_cache_budget(32 * gib, 16 * gib, false) == 3 * gib / 4);
         check(resource_cache_budget(4 * gib, gib, false) == gib / 4);
         check(resource_cache_budget(32 * gib, 16 * gib, true) == gib / 4);
         check(resource_cache_budget(32 * gib, gib / 4, false) == gib / 16);
         check(resource_cache_budget(0, gib, false) == 0);
+        check(resource_cache_budget(16 * gib, 8 * gib, false) == 3 * gib / 4);
+        check(resource_cache_budget(16 * gib, gib, false) == gib / 4);
+        check(resource_cache_budget(16 * gib, 8 * gib, true) == gib / 4);
+        check(resource_cache_budget(gib, 0, false) == 0);
     } catch (...) {
         fs::remove_all(root);
         throw;

@@ -374,7 +374,7 @@ class QuickJoinTransport final : public SessionTransport {
         for (const auto& lane : peer_channels)
             if (lane)
                 aggregate += lane->bufferedAmount();
-        if (!quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U)) {
+        if (!quick_join_setup_admit(traffic, buffered, aggregate, bytes.size() + 1U)) {
             error.clear();
             return DatagramSendStatus::WouldBlock;
         }

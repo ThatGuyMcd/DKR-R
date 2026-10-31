@@ -1,4 +1,5 @@
 #include "online_mod_cache.hpp"
+#include "online_mod_cache_policy.hpp"
 #include <cerrno>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -123,7 +124,7 @@ void PayloadFile::append(View bytes) {
     }
 #endif
     size_ += bytes.size();
-    if (size_ - flushed_ >= 64 * 1024)
+    if (size_ - flushed_ >= DurablePayloadBatch)
         flush();
 }
 void PayloadFile::flush() {
