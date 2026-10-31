@@ -22,6 +22,9 @@
                 throw Error("Sign in with Discord to continue.", 401);
             Request request{std::string(Api) + path, method, method == "POST" ? input.dump() : std::string{},
                             credential};
+            const auto profile_key = dkr::profile::bridge::card().public_key;
+            if (!profile_key.empty())
+                request.url += (path.find('?') == std::string::npos ? "?profile=" : "&profile=") + profile_key;
             request.online_instance = std::move(instance);
             request.timeout = 5000;
             try {

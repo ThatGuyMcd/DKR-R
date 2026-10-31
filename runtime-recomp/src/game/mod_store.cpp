@@ -1,4 +1,8 @@
 #include "online_directory.hpp"
+#include "online_profile/profile_bridge.hpp"
+#include "online_profile/display_name_save.hpp"
+#include "online_profile/picture_codec.hpp"
+#include "online_profile/profile_retry.hpp"
 #include "atomic_snapshot.hpp"
 #include "linux_keyring.hpp"
 #define DKR_PROFILE_WITH_KEYRING 1
@@ -621,7 +625,7 @@ bool trusted_url(const std::string& url, bool api) {
     return api ? prefix(url, std::string(Api) + "/")
                : prefix(url, std::string(Site) + "/dkr-r/images/") ||
                      prefix(url, std::string(Site) + "/dkr-r/downloads/") ||
-                     prefix(url, std::string(Site) + "/dkr-r/assets/");
+                     prefix(url, std::string(Site) + "/dkr-r/assets/") || dkr::profile::avatar_url(url);
 }
 
 struct Service::Impl {
@@ -878,6 +882,22 @@ struct Service::Impl {
         }
         auto me = private_pages("/v1/me", {"requests", "reviews"}, credential, epoch, stop);
         auto user = me.value("user", Json{});
+        // Profile metadata is optional on older service deployments.
+        try {
+            const auto public_key = dkr::profile::bridge::card().public_key;
+            auto profile = get("/v1/launcher/profile?key=" + public_key, stop, true);
+            if (profile.is_object() && text(profile, "accountId", 80) == text(user, "id", 80))
+                user["launcherProfile"] = std::move(profile);
+        } catch (...) {
+        }
+        try {
+            auto profile = get("/v1/launcher/discord-profile", stop, true);
+            if (profile.is_object() && text(profile, "accountId", 80) == text(user, "id", 80) &&
+                !dkr::profile::display_name(text(profile, "displayName", 200)).empty())
+                user["discordProfile"] = std::move(profile);
+        } catch (...) {
+        }
+
         if (text(user, "status", 16) != "active")
             throw Error("This account is unavailable.", 401);
         Json staff_data = Json::object(), admin_data = Json::object();
@@ -950,6 +970,8 @@ struct Service::Impl {
             }
         }
     }
+#include "online_profile/profile_service.inl"
+
     void load_image(const std::string& url, std::stop_token stop) {
         const auto key = dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(url.data()), url.size()));
         const auto path = root / "images" / key;
@@ -961,7 +983,14 @@ struct Service::Impl {
                 bytes = dkr::updates::read_text(path, MaxImage);
         }
         if (bytes.empty()) {
-            auto r = http({url, "GET", {}, {}, "application/json", {}, 0, MaxImage}, stop);
+            std::string profile_credential;
+            if (dkr::profile::custom_avatar_url(url)) {
+                std::lock_guard lock(mutex);
+                const auto profile = state.user.is_object() ? state.user.value("launcherProfile", Json{}) : Json{};
+                if (text(profile, "avatarUrl", 180) == url)
+                    profile_credential = token;
+            }
+            auto r = http({url, "GET", {}, profile_credential, "application/json", {}, 0, MaxImage}, stop);
             if (r.status != 200 ||
                 (!prefix(r.type, "image/png") && !prefix(r.type, "image/jpeg") && !prefix(r.type, "image/webp")))
                 throw Error("Cover image unavailable.");
@@ -1349,10 +1378,10 @@ void Service::reviews(std::string item) {
 }
 void Service::action(std::string name, Json input) {
     static const std::set<std::string> allowed = {
-        "review.save",      "review.report",  "report.resolve",    "request.submit",
-        "request.resubmit", "request.start",  "request.note",      "request.decide",
-        "request.publish",  "catalogue.save", "catalogue.publish", "catalogue.archive",
-        "catalogue.update", "admin.role",     "account.profile",   "account.delete"};
+        "review.save",       "review.report",     "report.resolve",          "request.submit",  "request.resubmit",
+        "request.start",     "request.note",      "request.decide",          "request.publish", "catalogue.save",
+        "catalogue.publish", "catalogue.archive", "catalogue.update",        "admin.role",      "account.profile",
+        "account.delete",    "launcher.profile",  "launcher.profile.preview"};
     if (!allowed.contains(name))
         return;
     auto& p = *impl_;
@@ -1393,6 +1422,10 @@ void Service::action(std::string name, Json input) {
         }
         if (credential.empty())
             throw Error("Sign in with Discord to continue.");
+        if (name == "launcher.profile" || name == "launcher.profile.preview") {
+            p.profile_action(name, input, epoch, credential, stop);
+            return;
+        }
         Json response;
         try {
             response = document(
@@ -1407,13 +1440,27 @@ void Service::action(std::string name, Json input) {
             if (epoch != p.account)
                 return;
         }
+        if (name == "account.profile") {
+            const auto accepted = response.value("result", Json{});
+            if (text(accepted, "id", 80) != text(p.published.load()->user, "id", 80) ||
+                !dkr::profile::complete_display_name(text(accepted, "displayName", 200)))
+                throw Error("The account service returned an invalid display name. Refresh and try again.");
+        }
         p.update([&](Snapshot& s) {
+            if (p.account != epoch)
+                return;
+            if (name == "account.profile")
+                s.user["displayName"] = response["result"]["displayName"];
             s.status = "Your change was saved.";
             s.error.clear();
             s.last_action = name;
             s.last_result = response.value("result", Json{});
             ++s.mutation;
         });
+        if (name == "account.profile") {
+            dkr::online::refresh_profile();
+            return;
+        }
         if (name == "account.delete") {
             p.expire(credential);
             std::error_code ignored;

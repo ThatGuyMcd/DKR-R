@@ -11,19 +11,36 @@ const instanceID = /^[A-Za-z0-9_-]{32,80}$/;
 const opaque = () => crypto.randomUUID().replaceAll('-', '');
 const digest = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), b => b.toString(16).padStart(2, '0')).join('');
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
-class Fault extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
+class Fault extends Error {
+  close = false;
+  /** @type {{ id: string, epoch: string, revision: number, visibility: string } | undefined} */
+  current;
+  constructor(status, code, message) { super(message); this.status = status; this.code = code; }
+}
 const need = (condition, status, code, message) => { if (!condition) throw new Fault(status, code, message); };
 function text(value, max, label) {
   need(typeof value === 'string' && value.length <= max && !/[\x00-\x1f\x7f]/.test(value), 400, 'invalid', `Invalid ${label}.`);
   return value.trim();
 }
 function integer(value, max) { need(Number.isSafeInteger(value) && value >= 0 && value <= max, 400, 'invalid', 'Invalid occupancy.'); return value; }
+const socialSender = value => typeof value === 'string' && /^[1-9][0-9]{0,19}$/.test(value) && BigInt(value) <= 18446744073709551615n;
+function socialProfile(value) {
+  if(!value || typeof value !== 'object' || !/^[a-f0-9]{64}$/.test(value.publicKey || '') ||
+     !/^[A-Z2-9]{13}$/.test(value.identity || '') || typeof value.friendCode !== 'string' || value.friendCode.length>100 ||
+     value.friendCode.length<60 || !/^DKRR-[A-Z2-9-]+$/.test(value.friendCode)) return null;
+  const avatar = typeof value.avatar === 'string' && value.avatar.length<=180 &&
+    (/^https:\/\/cdn\.discordapp\.com\/(?:avatars\/\d{17,22}\/(?:a_)?[a-f0-9]{32}|embed\/avatars\/[0-5])\.png\?size=128$/.test(value.avatar) ||
+     /^https:\/\/dkr-mod-library-api\.ross-macgregorbars\.workers\.dev\/v1\/launcher\/profile-picture\/[a-f0-9]{64}\.png$/.test(value.avatar)) ? value.avatar : '';
+  return {publicKey:value.publicKey,identity:value.identity,friendCode:value.friendCode,avatar};
+}
 function actor(request) {
   const account = request.headers.get('X-DKRR-Account') || '';
   const session = request.headers.get('X-DKRR-Session') || '';
   const instance = request.headers.get('X-DKRR-Instance') || '';
   need(identifier.test(account) && /^[a-f0-9]{64}$/.test(session) && instanceID.test(instance), 401, 'sign_in', 'Sign in with Discord to connect.');
-  return { account, session, instance, name: text(decodeURIComponent(request.headers.get('X-DKRR-Name') || 'Player'), 100, 'display name') };
+  let social=null;
+  try { const raw=request.headers.get('X-DKRR-Social') || ''; if(raw.length<=4096)social=socialProfile(JSON.parse(decodeURIComponent(raw))); } catch {}
+  return { account, session, instance, social, name: text(decodeURIComponent(request.headers.get('X-DKRR-Name') || 'Player'), 100, 'display name') };
 }
 function roomState(input, runningSpectators) {
   need(input && typeof input === 'object' && !Array.isArray(input), 400, 'invalid', 'Invalid lobby state.');
@@ -39,7 +56,10 @@ function roomState(input, runningSpectators) {
     locked: input.locked === true, hidden: input.hidden === true,
     canSpectateRunning: runningSpectators && input.canSpectateRunning === true,
     roster: text(input.roster, 32, 'roster generation'),
-    code: text(input.code || '', 5, 'lobby code'), bootstrap: text(input.bootstrap || '', 4096, 'bootstrap')
+    code: text(input.code || '', 5, 'lobby code'), bootstrap: text(input.bootstrap || '', 4096, 'bootstrap'),
+    socialHost: socialSender(input.socialHost) ? input.socialHost : '',
+    socialRoster: Array.isArray(input.socialRoster) && input.socialRoster.length<=12 && input.socialRoster.every(socialSender)
+      ? [...new Set(input.socialRoster)] : []
   };
   need(state.epoch && state.compatibility && state.maxRacers >= 1 && state.racers <= state.maxRacers &&
        state.spectators <= state.maxSpectators && phases.has(state.phase) &&
@@ -63,6 +83,7 @@ export class WorldwideDirectory extends DurableObject {
       CREATE UNIQUE INDEX IF NOT EXISTS room_owner_instance ON rooms(owner,instance);
       CREATE TABLE IF NOT EXISTS joins(id TEXT PRIMARY KEY, account TEXT NOT NULL, instance TEXT NOT NULL, room TEXT NOT NULL, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS join_room ON joins(room,expires);
+      CREATE TABLE IF NOT EXISTS social_members(room TEXT NOT NULL,instance TEXT NOT NULL,account TEXT NOT NULL,sender TEXT NOT NULL,PRIMARY KEY(room,instance),UNIQUE(room,sender));
       CREATE TABLE IF NOT EXISTS replies(key TEXT PRIMARY KEY, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS tickets(hash TEXT PRIMARY KEY, expires INTEGER NOT NULL, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS limits(key TEXT PRIMARY KEY, window INTEGER NOT NULL, count INTEGER NOT NULL);
@@ -138,6 +159,7 @@ export class WorldwideDirectory extends DurableObject {
   closeRoom(room, reason) {
     for (const row of this.rows('SELECT data FROM joins WHERE room=?', room.id)) this.cancelJoin(JSON.parse(row.data), reason);
     this.sql.exec('DELETE FROM rooms WHERE id=?', room.id);
+    this.sql.exec('DELETE FROM social_members WHERE room=?', room.id);
     this.record(room.owner, 'room_closed', room.id);
     if (room.visibility === 'public') this.sql.exec('INSERT OR REPLACE INTO changes VALUES(?,?)', room.id, 'null');
   }
@@ -207,7 +229,7 @@ export class WorldwideDirectory extends DurableObject {
       const current = this.sessions.get(who.instance);
       need(current && current.data.account === who.account && current.data.session === who.session, 409, 'connect', 'Connect the launcher to DKR-R Online first.');
       if (url.pathname === '/v1/online/session' && request.method === 'POST') {
-        current.data.authorized = Date.now() + AUTH_LEASE; current.socket.serializeAttachment(current.data);
+        current.data.authorized = Date.now() + AUTH_LEASE; current.data.social=who.social; current.socket.serializeAttachment(current.data);
         return json({ ok: true, protocol: PROTOCOL, authorizedFor: AUTH_LEASE });
       }
       if (url.pathname === '/v1/online/disconnect' && request.method === 'POST') {
@@ -231,13 +253,14 @@ export class WorldwideDirectory extends DurableObject {
       need(identifier.test(request), 400, 'request', 'Invalid request identifier.');
       if (input.type === 'resolve') this.accountLimit(data.account, 'codes', 8);
       const key = data.account + ':' + data.instance + ':' + request;
-      const prior = this.rows('SELECT data FROM replies WHERE key=? AND expires>?', key, Date.now())[0];
+      const transient = ['heartbeat', 'list', 'social'].includes(input.type);
+      const prior = transient ? null : this.rows('SELECT data FROM replies WHERE key=? AND expires>?', key, Date.now())[0];
       if (prior) { this.send(current, JSON.parse(prior.data)); return; }
-      if (!['heartbeat', 'list'].includes(input.type))
+      if (!transient)
         need(this.rows('SELECT COUNT(*) AS n FROM replies WHERE key>=? AND key<?', data.account + ':', data.account + ';')[0].n < 512, 429, 'busy', 'Wait for earlier requests to finish.');
       const result = this.operation(current, input);
       const reply = { type: 'result', request, ok: true, data: result };
-      if (!['heartbeat', 'list'].includes(input.type)) {
+      if (!transient) {
         this.sql.exec('INSERT OR REPLACE INTO replies VALUES(?,?,?)', key, Date.now() + 120000, JSON.stringify(reply));
       }
       this.send(current, reply);
@@ -256,6 +279,25 @@ export class WorldwideDirectory extends DurableObject {
       return { online: this.count(), revision: this.revision(), serverTime: Date.now() };
     }
     if (input.type === 'list') return this.list(input.cursor || '');
+    if (input.type === 'social') {
+      const member=this.rows('SELECT room,sender FROM social_members WHERE instance=? AND account=?',who.instance,who.account)
+        .map(row=>({row,room:this.room(row.room)})).find(entry=>entry.room?.code===input.code && entry.room.socialRoster?.includes(entry.row.sender));
+      const owned=this.room(who.room);
+      const host=owned?.owner===who.account && owned?.instance===who.instance && owned?.code===input.code &&
+        owned.socialHost===input.sender && owned.socialRoster?.includes(input.sender);
+      const room=host?owned:member?.room;
+      need(room && this.roomLive(room) && (host || member.row.sender===input.sender),403,'social_membership','Join this lobby before viewing its player profiles.');
+      const rows=this.rows('SELECT account,instance,sender FROM social_members WHERE room=?',room.id);
+      rows.push({account:room.owner,instance:room.instance,sender:room.socialHost});
+      const members=[];
+      for(const row of rows){
+        const peer=this.sessions.get(row.instance);
+        if(!room.socialRoster.includes(row.sender) || !peer || !this.live(peer.data) || peer.data.account!==row.account)continue;
+        const profile=socialProfile(peer.data.social);
+        if(profile && !members.some(value=>value.sender===row.sender))members.push({sender:row.sender,...profile});
+      }
+      return {code:room.code,sender:input.sender,members};
+    }
     if (input.type === 'room') {
       const state = roomState(input.state, this.env.RUNNING_SPECTATORS_ENABLED === 'true'), existing = this.rows('SELECT data FROM rooms WHERE owner=? AND instance=?', who.account, who.instance)[0];
       let room = existing && JSON.parse(existing.data);
@@ -336,6 +378,9 @@ export class WorldwideDirectory extends DurableObject {
       const host = room?.owner === who.account && room.instance === who.instance;
       need(host || input.type === 'cancel' && join.account === who.account && join.instance === who.instance, 403, 'owner', 'This request belongs to another player.');
       if (input.type === 'consume') {
+        need(join.granted,409,'social_admission','The native join has not been authorized.');
+        if(socialSender(input.sender) && this.rows('SELECT COUNT(*) AS n FROM social_members WHERE room=?',room.id)[0].n<64)
+          this.sql.exec('INSERT OR REPLACE INTO social_members VALUES(?,?,?,?)',room.id,join.instance,join.account,input.sender);
         this.sql.exec('DELETE FROM joins WHERE id=?', join.id);
         const client = this.sessions.get(join.instance);
         if (client?.data.account === join.account) this.send(client, { type: 'join_consumed', id: join.id });

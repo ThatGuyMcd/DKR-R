@@ -57,12 +57,7 @@ void StoreAccount(float width, const dkr::store::Snapshot& store) {
     {
         StorePanel profile(std::min(width, 700.F));
         ImGui::BeginDisabled(StoreBusyAction(store));
-        StoreField("profile-name", "Display name", profile.inner(), 60);
-        ImGui::BeginDisabled(g_mod_store.fields["profile-name"].empty() ||
-                             g_mod_store.fields["profile-name"] == StoreText(store.user, "displayName", 60));
-        if (StoreButton("Save name", 0, true))
-            StoreAction("account.profile", {{"displayName", g_mod_store.fields["profile-name"]}});
-        ImGui::EndDisabled();
+        DrawOlStoreProfileName(profile.inner(), StoreBusyAction(store));
         ImGui::EndDisabled();
         StoreActionLine(
             {{"My requests",

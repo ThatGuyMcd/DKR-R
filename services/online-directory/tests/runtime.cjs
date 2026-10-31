@@ -12,22 +12,44 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const key=()=>randomBytes(32).toString('hex');
 async function main(){
  const options={workers:[
-  {name:'api',modules:true,scriptPath:path.join(root,'PRIVATE-API/worker-single-file.mjs'),d1Databases:['DB'],
+  {name:'api',modules:true,modulesRoot:root,scriptPath:path.join(root,'PRIVATE-API/worker-single-file.mjs'),d1Databases:['DB'],
    serviceBindings:{ONLINE_DIRECTORY:'online'},bindings:{ONLINE_ENABLED:'true',RUNNING_SPECTATORS_ENABLED:runningSpectators?'true':'false',FRONTEND_URL:'https://positron-portal.com/dkr-r/index.html',DOWNLOAD_ORIGINS:'["https://positron-portal.com/dkr-r/downloads/"]',IMAGE_ORIGINS:'["https://positron-portal.com/dkr-r/images/"]'}},
-  {name:'online',modules:true,scriptPath:path.join(root,'ONLINE-WORKER/directory.mjs'),compatibilityDate:'2026-07-30',
+  {name:'online',modules:true,modulesRoot:root,scriptPath:path.join(root,'ONLINE-WORKER/directory.mjs'),compatibilityDate:'2026-07-30',
    durableObjects:{DIRECTORY:{className:'WorldwideDirectory',useSQLite:true}},bindings:{ONLINE_ENABLED:'true',RUNNING_SPECTATORS_ENABLED:runningSpectators?'true':'false'}}
  ]};
  const mf=new Miniflare(options);
  const sockets=[];
  try{
   const db=await mf.getD1Database('DB','api');await db.exec(schema);
+  if(process.argv.includes('--profile'))await db.exec(fs.readFileSync(path.join(root,'PRIVATE-API/001-launcher-discord-profiles.sql'),'utf8').replace(/\s+/g,' '));
   const now=Math.floor(Date.now()/1000),tokens={};
-  for(const name of ['host','guest','other','intruder']){
+  for(const name of ['host','guest','other','intruder','closer']){
    const token=randomBytes(32).toString('base64url');tokens[name]=token;
    await db.prepare('INSERT INTO accounts VALUES(?,?,?,?,?,?,?)').bind(name,name,'Player '+name,'player','active',now,now).run();
    await db.prepare('INSERT INTO sessions VALUES(?,?,?,?,?,?,NULL)').bind(createHash('sha256').update(token).digest('base64url'),name,now,now,now+3600,now+86400).run();
   }
   const api={fetch:(...args)=>mf.dispatchFetch(...args)};
+  if(process.argv.includes('--profile')){
+   const worker=fs.readFileSync(path.join(root,'PRIVATE-API/worker-single-file.mjs'),'utf8');
+   const source=worker.slice(worker.indexOf('function discordProfileAvatar('),worker.indexOf('async function handleLauncherDiscordProfile('));
+   const functions=require('node:vm').runInNewContext(source+';({captureDiscordProfile,discordProfileAvatar})',{URL,Response});
+   const identity={id:'123456789012345678',avatar:'0123456789abcdef0123456789abcdef',discriminator:'0'};
+   await functions.captureDiscordProfile({DB:db},{id:'host'},identity,'Discord Racer');
+   const get=token=>api.fetch('https://test.invalid/v1/launcher/discord-profile',{headers:{Origin:'https://positron-portal.com',...(token?{Authorization:'Bearer '+token}:{})}});
+   equal((await get()).status,401,'profile metadata requires sign-in');
+   let response=await get(tokens.host);equal(response.status,200,'own profile available');
+   let data=await response.json();equal(data.displayName,'Discord Racer','Discord display name retained independently');
+   equal(data.avatarUrl,'https://cdn.discordapp.com/avatars/'+identity.id+'/'+identity.avatar+'.png?size=128','bounded avatar URL');
+   equal(data.accountId,'host','profile is scoped to authenticated account');
+   equal(response.headers.get('Cache-Control'),'no-store','private metadata is not cached');
+   data=await (await get(tokens.guest)).json();equal(data.displayName,'','another account cannot read the host profile');
+   check(!JSON.stringify(data).includes(identity.id),'another account cannot read Discord identity');
+   await functions.captureDiscordProfile({DB:db},{id:'host'},{...identity,avatar:'https://evil.invalid/x'},'Updated');
+   data=await (await get(tokens.host)).json();equal(data.displayName,'Updated','repeated sign-in updates own metadata');
+   check(/^https:\/\/cdn\.discordapp\.com\/embed\/avatars\/[0-5]\.png\?size=128$/.test(data.avatarUrl),'invalid provider image uses a safe default');
+   equal(functions.discordProfileAvatar({...identity,id:'bad'}),'','malformed provider identity refused');
+   equal((await api.fetch('https://test.invalid/v1/launcher/discord-profile',{method:'POST'})).status,405,'profile metadata is read-only');
+  }
   async function http(route,account,instance,method='GET'){
    const headers={Origin:'https://positron-portal.com'};
    if(account)headers.Authorization='Bearer '+tokens[account];
@@ -149,8 +171,32 @@ async function main(){
   });
   for(let index=0;index<185;index++)try{flood.socket.send('{');}catch{break;}
   equal(await floodClosed,1008,'malformed messages cannot bypass the socket rate limit');
+  const closingPeer=await open('closer');
+  const closingJoin=await closingPeer.call({type:'join',room:room.id,role:'spectator',key:key(),compatibility:'test-network'});
+  check(closingJoin.ok,'close fixture has a pending admission');
+  await host.event('intent',message=>message.join.id===closingJoin.data.id);
+  const closedRoom=room.id,closedCode=state.code;
+  const countBeforeClose=(await other.call({type:'heartbeat'})).data.online;
   await host.call({type:'close'});
   equal((await other.call({type:'list'})).data.rooms.length,0,'explicit host close removes room');
+  await other.event('delta',message=>message.remove?.includes(closedRoom));
+  equal((await closingPeer.event('join_cancelled')).id,closingJoin.data.id,'close cancels pending admissions');
+  equal((await closingPeer.call({type:'resolve',code:closedCode,role:'racer',key:key(),compatibility:'test-network'})).error.code,'unavailable','closed code is invalid while the host remains online');
+  equal((await other.call({type:'heartbeat'})).data.online,countBeforeClose,'closing a room preserves online presence');
+  state.epoch='epoch-after-close';state.code=state.bootstrap='EFGH2';
+  room=(await host.call({type:'room',revision:0,state})).data;
+  check(room.id!==closedRoom,'same connected launcher can create a fresh room immediately');
+  equal((await other.call({type:'list'})).data.rooms[0].id,room.id,'replacement public room is listed');
+  await host.call({type:'close'});
+  state.visibility='private';state.epoch='private-after-close';state.code=state.bootstrap='JKLM3';
+  room=(await host.call({type:'room',revision:0,state})).data;
+  const privateAfterClose=await closingPeer.call({type:'resolve',code:state.code,role:'spectator',key:key(),compatibility:'test-network'});
+  check(privateAfterClose.ok,'same launcher can recreate a private code lobby');
+  await host.call({type:'close'});
+  equal((await closingPeer.event('join_cancelled',message=>message.id===privateAfterClose.data.id)).id,privateAfterClose.data.id,'private lobby close also cancels pending admissions');
+  equal((await closingPeer.call({type:'resolve',code:state.code,role:'racer',key:key(),compatibility:'test-network'})).error.code,'unavailable','private code stops resolving without restarting the launcher');
+  closingPeer.socket.close(1000,'close lifecycle checks complete');await pause(50);
+  state.visibility='public';
   duplicate.socket.close(1000,'test done');await pause(50);
   equal((await other.call({type:'heartbeat'})).data.online,3,'closing one duplicate leaves the account counted while another remains');
   if(process.argv.includes('--lease')){

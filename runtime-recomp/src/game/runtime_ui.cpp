@@ -1,3 +1,6 @@
+#include "character_portraits/character_portraits.hpp"
+#include "online_profile/display_name_save.hpp"
+#include "online_profile/profile_bridge.hpp"
 #include "diagnostics.hpp"
 #include "online_directory.hpp"
 #include "linux_keyring.hpp"
@@ -575,6 +578,13 @@ char g_online_room_name[49] = "DKR-R Grand Prix";
 char g_online_invite[1024]{};
 char g_online_code_entry[6]{};
 char g_online_profile_name[25] = "Racer";
+std::string g_discord_choice_account, g_discord_avatar_url;
+bool g_profile_share_picture = true;
+void DrawOlDisplayName(float, bool);
+void DrawOlDisplayNameStatus(float);
+void DrawOlStoreProfileName(float, bool);
+bool SaveOlDisplayName(std::string_view);
+
 bool g_online_hide_lobby_code = false;
 char g_friend_code_entry[128]{};
 char g_friend_search[64]{};
@@ -1764,6 +1774,9 @@ void SaveSettings() {
             output << prefix << "y_inverted=" << (dkr::runtime::input::gyro_y_inverted(player) ? 1 : 0) << '\n';
             output << prefix << "axis=" << static_cast<int>(dkr::runtime::input::gyro_axis(player)) << '\n';
         }
+        output << "discord_choice_account=" << g_discord_choice_account << '\n';
+        output << "discord_avatar_url=" << g_discord_avatar_url << '\n';
+        output << "profile_share_picture=" << (g_profile_share_picture ? 1 : 0) << '\n';
         output << "online_player_name=" << g_online_player_name << '\n';
         output << "online_hide_lobby_code=" << (g_online_hide_lobby_code ? 1 : 0) << '\n';
         output << "online_local_view=" << unsigned(dkr::runtime::online_view::requested_layout.load()) << '\n';
@@ -2023,6 +2036,22 @@ void LoadSettings() {
             std::memcpy(destination, text.data(), length);
             destination[length] = '\0';
         };
+        if (key == "discord_choice_account") {
+            if (value.size() <= 80 &&
+                value.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") ==
+                    value.npos)
+                g_discord_choice_account = value;
+            continue;
+        }
+        if (key == "discord_avatar_url") {
+            if (dkr::profile::avatar_url(value))
+                g_discord_avatar_url = value;
+            continue;
+        }
+        if (key == "profile_share_picture") {
+            g_profile_share_picture = value != "0";
+            continue;
+        }
         if (key == "online_player_name") {
             copy_online_text(g_online_player_name, sizeof(g_online_player_name), value);
             continue;
@@ -8333,6 +8362,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
     ImGui_ImplSDLRenderer2_Init(renderer);
     dkr::store::service().gameplay(false);
     g_mod_store_renderer = renderer;
+    g_character_portrait_renderer = renderer;
     int launcher_display_refresh_rate = 60;
     const int launcher_display = SDL_GetWindowDisplayIndex(window);
     SDL_DisplayMode launcher_display_mode{};
@@ -9024,6 +9054,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
         DrawPaddockLegacyModImportModal();
         DrawModLaunchModal();
         DrawOnlineModModal();
+        DrawDiscordProfilePrompt();
         DrawTextEntryKeyboard();
         DrawOnlineNotification();
         DrawOlToast();
@@ -9144,6 +9175,8 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(SDL_Window*
     ReleaseAchievementAudio();
     ReleaseTextureDumpTextures();
     ReleaseModStoreTextures();
+    ReleaseCharacterPortraits();
+    ReleaseDiscordProfileTexture();
     SDL_DestroyRenderer(renderer);
     const auto launcher_elapsed_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
                                                    std::chrono::steady_clock::now() - launcher_animation_epoch)
@@ -9475,6 +9508,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         PumpSharedSaveJob();
         DrawTexturePackImportModal();
         DrawPaddockLegacyModImportModal();
+        DrawDiscordProfilePrompt();
         DrawTextEntryKeyboard();
     }
     // Over the race, not the menu: the panel is for tuning while driving.

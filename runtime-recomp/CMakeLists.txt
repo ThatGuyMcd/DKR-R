@@ -1012,6 +1012,7 @@ endif()
 # exist in every configure: host builds compile and test them too.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/LegacyMods.cmake")
+include(cmake/CharacterPortraits.cmake)
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomMagicCodes.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/GuestHooks.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/GuestSymbols.cmake")
@@ -1365,6 +1366,7 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
     target_link_libraries(DKRPortGameCore PRIVATE DKRNetplayCore)
     target_link_libraries(DKRPortGameCore PRIVATE DKRLegacyModLaunch DKRLegacyGuestIO)
     target_link_libraries(DKRPortGameCore PRIVATE DKRCustomMagicCodes)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRCharacterPortraits)
     if(TARGET DKRPortGame)
         add_dependencies(DKRPortGame DKRLegacyModWorker)
     endif()
@@ -3236,6 +3238,21 @@ if(BUILD_TESTING)
         PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKRPORT_ROOT}/extern/rt64/src/contrib"
     )
     add_test(NAME DKRModStoreHistory COMMAND DKRModStoreHistoryTests)
+
+    add_executable(DKRCharacterPortraitTests tests/character_portrait_tests.cpp)
+    target_compile_features(DKRCharacterPortraitTests PRIVATE cxx_std_20)
+    target_compile_definitions(DKRCharacterPortraitTests PRIVATE NOMINMAX)
+    target_link_libraries(DKRCharacterPortraitTests PRIVATE DKRCharacterPortraits)
+    add_test(NAME DKRCharacterPortraits COMMAND DKRCharacterPortraitTests)
+    set_tests_properties(DKRCharacterPortraits PROPERTIES TIMEOUT 30)
+
+    add_executable(DKRProfilePictureTests tests/profile_picture_tests.cpp)
+    target_compile_features(DKRProfilePictureTests PRIVATE cxx_std_20)
+    target_include_directories(
+        DKRProfilePictureTests
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKRPORT_ROOT}/extern/rt64/src/contrib"
+    )
+    add_test(NAME DKRProfilePictures COMMAND DKRProfilePictureTests)
 
     add_executable(DKROnlineProfileTests tests/online_profile_tests.cpp)
     target_compile_features(DKROnlineProfileTests PRIVATE cxx_std_20)

@@ -24,8 +24,8 @@ strict version.
 - Third-party fixes: a `*.patch` under `patches/<dep>/` plus a `manifest.json` entry with its sha256. Never vendor a
   modified translation unit.
 
-- Server-side code lives in `services/<name>/` (`services/README.md`); each service's `build.py` splices its deployed
-  base, which is outside the repo. The guard's pipeline rules don't apply there; everything else here does.
+- Server-side code lives in `services/<name>/` (`services/README.md`). Service builds bundle maintained modules or
+  adapt reviewed deployed bases. The guard's pipeline rules don't apply there; everything else here does.
 
 > Through v1.0.11 the release was built from a chain of first-party layers under `patches/`. The fold replaced them
 > with source; `architecture/pattern-guard-baseline.txt` is empty and stays empty.

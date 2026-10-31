@@ -91,7 +91,7 @@ replaces it.
 | `patches/enhanced-water/native/*`, `LICENSE-WAVE-RACE.txt` | `runtime-recomp/src/water/` |
 | `patches/<layer>/pipeline.py`, `configure.py`, `audit.py`, `package*.py`, `package-*.sh/.ps1`, `ReleaseOverlay.cmake` | none: the fold is the source; build and package the tree normally |
 | `patches/library-workflow/pipeline.py` (+ `transforms.py`) | `services/library-workflow/build.py stage` (base defaults to `services/library-workflow/baseline/`) |
-| `patches/online-directory/backend_pipeline.py` | `services/online-directory/build.py --api-worker <worker>` |
+| `patches/online-directory/backend_pipeline.py` | `services/online-directory/build.py --output <new bundle>` (bundles maintained API modules; `--esbuild` selects the pinned tool) |
 | `patches/online-directory/delivery.py` | none: it finalized the 1.0.9 public-lobbies playtest delivery only |
 | `patches/mod-store/pipeline.py` (backend), `frontend_pipeline.py` | `services/mod-store/build.py --worker <worker> [--frontend <portal>]`; the native half is in `runtime-recomp/src/game` |
 | `-GeneratedSource` required by `Build-Windows.cmd` | optional; defaults to `build\prepared` |

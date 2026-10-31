@@ -177,3 +177,37 @@ x86_64 full-nogen game-core builds pass. Linux also passes FriendService,
 OnlineProfile and ProfileBridge tests. The original B9b branch remains at
 6ac4288, and main's untracked menu-redesign work is untouched. No pushes,
 GitHub review comments or deployments were made.
+
+## Profile UI, portraits and maintained online service modules
+
+The native profile follow-up now includes picture preparation, account controls,
+verified friend cards and lobby social metadata. Malformed or unverified optional
+metadata is rejected locally without retiring the directory connection. Character
+portraits are an authored module and CMake library, with a synthetic decoder and
+private-storage fixture; no source staging is involved.
+
+The online service owns its API modules under services/online-directory/api.
+Its builder uses pinned esbuild, produces a fresh reviewable bundle and records
+input/output hashes. Optional owner rollback inputs are preserved byte for byte.
+The local Miniflare harness supplies an explicit modulesRoot so bundles outside
+the checkout work. Profile proof tests exercise the real native X25519 helper
+against Worker Web Crypto and synthetic D1 data. Before applying profile
+migrations, tickets still succeed with authentication and reject anonymous
+requests. No live service or real credentials are used.
+
+Validation: all 156 host tests pass. The macOS full-nogen game core builds and
+the prepared macOS DKRPortGame executable links. Directory harnesses pass 95
+checks normally and 101 with running spectators; the expanded profile harness
+passes 94 checks. Bundle tests cover fresh outputs, exact rollback bytes,
+compiler rejection, receipt tampering and invocation from another directory.
+Host CI now fetches sparse guest symbol tables automatically; service CI builds
+the native profile proof fixture before running the local Worker tests.
+
+These ports do not establish compatibility with current main. A separate
+ancestor audit found the online-performance layer absent from the v1.0.11
+materialized closure. The shipped v1.0.12 identities were reconstructed and
+confirmed in the official Windows runtime. See
+[the identity proposal](2026-10-31-v1012-identity-proposal.md). Identity pins and
+compatibility-changing performance ports remain pending both owners' approval.
+The seven C5 gates and outstanding Windows/Android acceptance remain open.
+No pushes, PR publication or deployments have occurred.

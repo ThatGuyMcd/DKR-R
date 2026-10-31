@@ -104,6 +104,8 @@ std::vector<std::filesystem::path> ModReviewRoms() {
     return roms;
 }
 
+#include "character_portraits/character_portraits_ui.inl"
+
 // ------------------------------------------------------------ library data
 
 // One card: a legacy catalogue entry or a native track.
@@ -169,6 +171,9 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters, 
     view.gold = item.enabled && ready;
     if (characters) {
         view.info = "Custom racer";
+        view.preview_height = 100;
+        view.preview = [item](float w, float h) { DrawCharacterPortrait(item, w, h); };
+
     } else {
         for (const auto& [bit, name] : {std::pair{1U, "Car"}, std::pair{2U, "Hovercraft"}, std::pair{4U, "Plane"}}) {
             if ((item.vehicles & bit) == 0U)

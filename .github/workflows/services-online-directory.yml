@@ -4,14 +4,26 @@ on:
     branches: [main]
     paths:
       - "services/online-directory/**"
-      - "services/library-workflow/**" # the API Worker the gateway slots into
+      - "services/library-workflow/tests/**"
       - "services/test-tools/**"
+      - "runtime-recomp/src/game/online_profile/**"
+      - "runtime-recomp/src/game/netplay/friend_service.*"
+      - "runtime-recomp/tests/profile_bridge_tests.cpp"
+      - "runtime-recomp/CMakeLists.txt"
+      - ".github/actions/prepare-dependencies/action.yml"
+      - "dependencies.lock.json"
       - ".github/workflows/services-online-directory.yml"
   pull_request:
     paths:
       - "services/online-directory/**"
-      - "services/library-workflow/**"
+      - "services/library-workflow/tests/**"
       - "services/test-tools/**"
+      - "runtime-recomp/src/game/online_profile/**"
+      - "runtime-recomp/src/game/netplay/friend_service.*"
+      - "runtime-recomp/tests/profile_bridge_tests.cpp"
+      - "runtime-recomp/CMakeLists.txt"
+      - ".github/actions/prepare-dependencies/action.yml"
+      - "dependencies.lock.json"
       - ".github/workflows/services-online-directory.yml"
   workflow_dispatch:
 permissions:
@@ -20,11 +32,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  # Composes the directory bundle over the library workflow's staged API
-  # Worker and runs it in Miniflare (services/online-directory/README.md).
+  # Tests the authored API modules against SQLite and the native profile proof.
   online-directory:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -35,16 +46,27 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - name: Compose tests
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install native build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build libcurl4-openssl-dev
+      - name: Prepare native proof dependencies
+        uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- checked-out action matches this workflow revision.
+      - name: Build native profile proof fixture
+        run: |
+          cmake --preset host -S runtime-recomp
+          cmake --build build/host --target DKRProfileBridgeTests --parallel 4
+      - name: Install pinned service tools
+        run: npm ci --prefix services/test-tools --ignore-scripts
+      - name: Bundle tests
         run: python3 -B services/online-directory/tests/build_tests.py
-      - name: Compose the bundle
+      - name: Build owner bundle
+        run: python3 -B services/online-directory/build.py --output "$RUNNER_TEMP/bundle"
+      - name: Directory and profile runtime checks (Miniflare)
         run: |
-          python3 -B services/library-workflow/build.py stage --output "$RUNNER_TEMP/library"
-          python3 -B services/online-directory/build.py \
-            --api-worker "$RUNNER_TEMP/library/PRIVATE-API/worker-single-file.mjs" --output "$RUNNER_TEMP/bundle"
-      - name: Directory runtime checks (Miniflare)
-        run: |
-          npm ci --prefix services/test-tools --ignore-scripts
           miniflare=services/test-tools/node_modules/miniflare
           node services/online-directory/tests/runtime.cjs "$RUNNER_TEMP/bundle" "$miniflare"
           node services/online-directory/tests/runtime.cjs "$RUNNER_TEMP/bundle" "$miniflare" --running
+          node services/online-directory/tests/profile_api.cjs "$RUNNER_TEMP/bundle" \
+            "$RUNNER_TEMP/profile-fixtures" "$miniflare" build/host/DKRProfileBridgeTests

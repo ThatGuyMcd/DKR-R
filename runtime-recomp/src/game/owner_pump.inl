@@ -11,7 +11,12 @@
     if (!hosting) {
         if (!owner->epoch.empty())
             directory::native::reset(this);
-        directory::publish(this, directory::Json::object());
+        const bool member = state_ == ConnectionState::Lobby || state_ == ConnectionState::Loading ||
+                            state_ == ConnectionState::Running;
+        directory::publish(
+            this,
+            member ? directory::Json{{"socialMember", true}, {"code", invite_}, {"sender", std::to_string(sender_id_)}}
+                   : directory::Json::object());
     } else {
         auto party = watch::party_link(this);
         std::scoped_lock party_lock(party->mutex);
@@ -173,9 +178,21 @@
         }
         if (owner->guarded && now - owner->published >= std::chrono::milliseconds(250)) {
             owner->published = now;
+            directory::Json social_roster = directory::Json::array();
+            if (party->enabled) {
+                for (const auto& m : party->party.snapshot().members)
+                    if (m.connected)
+                        social_roster.push_back(std::to_string(m.id));
+            } else {
+                for (const auto& player : room_view_.players)
+                    if (player.occupied)
+                        social_roster.push_back(player.peer_id);
+            }
             directory::publish(this, {{"host", true},
                                       {"title", room_view_.name},
                                       {"epoch", epoch},
+                                      {"socialHost", std::to_string(sender_id_)},
+                                      {"socialRoster", std::move(social_roster)},
                                       {"compatibility", manifest_.release_version},
                                       {"visibility", make_public ? "public" : "private"},
                                       {"phase", phase},

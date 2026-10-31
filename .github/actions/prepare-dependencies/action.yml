@@ -5,7 +5,7 @@ inputs:
     description: Dependency set (host, ios, android, or android-full for the whole runtime)
     default: host
   decomp-symbols:
-    description: Also check out extern/dkr-decomp/ver/symbols (sparse), which scripts/gen_guest_symbols.py reads
+    description: Check out decomp symbol tables; required automatically for host profiles
     default: "false"
 runs:
   using: composite
@@ -14,7 +14,7 @@ runs:
       id: sources
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
-        key: sources-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.profile }}-symbols-${{ inputs.decomp-symbols }}-${{ hashFiles('dependencies.lock.json', 'patches/**', 'scripts/bootstrap_dependencies.py', 'scripts/apply_dependency_patches.py', '.github/actions/prepare-dependencies/action.yml') }}
+        key: sources-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.profile }}-symbols-${{ inputs.decomp-symbols == 'true' || inputs.profile == 'host' }}-${{ hashFiles('dependencies.lock.json', 'patches/**', 'scripts/bootstrap_dependencies.py', 'scripts/apply_dependency_patches.py', '.github/actions/prepare-dependencies/action.yml') }}
         path: |
           extern/n64-modern-runtime
           extern/rt64
@@ -51,7 +51,7 @@ runs:
     # 563 MB tree: a sparse, blob-filtered checkout of ver/symbols at the
     # locked commit. dkr-decomp carries no reviewed patches.
     - name: Check out the decomp symbol tables
-      if: inputs.decomp-symbols == 'true'
+      if: inputs.decomp-symbols == 'true' || inputs.profile == 'host'
       shell: bash
       env:
         PYTHON_EXECUTABLE: ${{ runner.os == 'Windows' && 'python' || 'python3' }}

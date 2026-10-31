@@ -1119,12 +1119,21 @@ void DrawOlTabs(const std::vector<OlTab>& tabs, float width) {
 
 // ------------------------------------------------------------ cards
 
+#include "online_profile/profile_panels.inl"
+
 // .ol-card: a padded panel around content measured as it is drawn.
 template <typename Content>
 void DrawOlCard(float width, const OlPanelLook& look, Content&& content, float padding = 18.0F) {
+    auto* equal = g_equal_profile_row;
+    const bool capture = equal && std::exchange(equal->capture_next, false);
     PaddockBox box(width, {padding, padding});
     content(box.Inner());
-    box.End([&](ImDrawList* draw, ImVec2 a, ImVec2 b) { PaintOlPanel(draw, a, b, look); });
+    box.End([&](ImDrawList* draw, ImVec2 a, ImVec2 b) {
+        if (capture && equal->count < equal->panels.size())
+            equal->panels[equal->count++] = {a, b, look, equal->section};
+        else
+            PaintOlPanel(draw, a, b, look);
+    });
 }
 
 // A feature card (.ol-feature): its heading, an explanation, then content.
@@ -1184,135 +1193,18 @@ void DrawOlGuideCard(float width, const OnlineFrame& frame) {
     });
 }
 
+extern bool g_open_discord_profile;
+void DrawOlSelfAvatar(ImDrawList*, ImVec2, float, std::string_view);
+void DrawOlProfileAvatar(ImDrawList*, ImVec2, float, std::string_view, const std::string&, bool = false);
+void DrawOlPictureControls(float, bool);
+void SaveOlProfilePicture(bool = false);
+void DrawOlRememberSignIn(float, const OnlineFrame&);
+void DrawOlSignOut(float, const OnlineFrame&);
+void DrawOlPrivacy(float);
+void DrawOlFriendCodes(float);
+void DrawOlAccountSettings(float, const OnlineFrame&);
 void DrawOlDirectoryAccount(float);
-void DrawOlProfileCard(float width, const OnlineFrame& frame, bool profile_section) {
-    using namespace dkr::runtime::netplay;
-    FriendService& service = friend_service();
-    const auto snapshot = service.snapshot();
-    OlPanelLook look;
-    look.gradient_degrees = 160.0F;
-    look.gradient = {{0.0F, 0x0F3D5C}, {0.75F, kOlPanel}};
-    DrawOlCard(width, look, [&](float inner) {
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        // Your racer: avatar and name.
-        {
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            constexpr float head = 66.0F;
-            DrawOlAvatar(draw, {at.x, at.y + 5.0F}, 56.0F, g_online_player_name);
-            const float name_x = at.x + 56.0F + 14.0F;
-            const float name_width = inner - 70.0F;
-            PaddockTextStyle label;
-            label.colour = PaddockCol(kOlSoft);
-            PaddockTextAt(draw, OlRead(12.0F, true, 1.5F), {name_x, at.y}, name_width, "Racer name", label);
-            ImGui::SetCursorScreenPos({name_x, at.y + 18.0F + 4.0F});
-            OlInputOptions options;
-            options.disabled = frame.active;
-            const OlInputResult result = OlInput("##online-racer-name", nullptr, g_online_player_name,
-                                                 sizeof(g_online_player_name), name_width, options);
-            if (result == OlInputResult::Gamepad)
-                RequestTextEntryKeyboard(TextEntryTarget::RacerName);
-            if (result == OlInputResult::Committed || result == OlInputResult::Entered) {
-                OlCommitName(g_online_player_name, "Racer");
-            }
-            ImGui::SetCursorScreenPos(at);
-            ImGui::Dummy({inner, head});
-        }
-        DrawOlDirectoryAccount(inner);
-        // Presence.
-        PaddockGap(14.0F);
-        {
-            const bool hidden = service.appear_offline();
-            const bool available = service.presence_available();
-            const char* text = hidden           ? "Friends see you as offline"
-                               : !available     ? "Connecting to friends\xE2\x80\xA6"
-                               : frame.in_lobby ? "Online \xC2\xB7 in a lobby"
-                                                : "Online";
-            const PaddockType type = OlRead(13.0F, true, 1.5F);
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            const float pill = std::ceil(10.0F + 9.0F + 8.0F + PaddockMeasure(type, text) + 12.0F);
-            const float height = type.line + 10.0F;
-            const bool grey = hidden || !available;
-            PaddockFill(draw, at, {at.x + pill, at.y + height}, PaddockRound(height * 0.5F),
-                        PaddockCol(grey ? 0x26333BU : 0x104E43U));
-            draw->AddCircleFilled({at.x + 10.0F + 4.5F, at.y + height * 0.5F}, 4.5F,
-                                  PaddockCol(grey ? 0x7D8D95U : kOlGo), 16);
-            PaddockDrawRun(draw, type, {at.x + 27.0F, at.y + 5.0F}, PaddockCol(grey ? 0xB3C3CBU : 0xB4F4DDU), text,
-                           text + std::strlen(text));
-            ImGui::Dummy({pill, height});
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", service.status().c_str());
-        }
-        PaddockGap(12.0F);
-        // Your friend code.
-        {
-            const auto code = OlPermanentFriendCode(*snapshot);
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            constexpr float height = 54.0F;
-            PaddockFill(draw, at, {at.x + inner, at.y + height}, PaddockRound(14.0F), PaddockCol(0x061D2C));
-            const char* action = code ? "Copy##friend-code" : "Create##friend-code";
-            const float button = OlButtonWidth(action);
-            const float text_width = inner - button - 30.0F;
-            PaddockTextStyle caption;
-            caption.colour = PaddockCol(kOlSoft);
-            PaddockTextAt(draw, OlRead(12.0F, false, 1.5F), {at.x + 12.0F, at.y + 6.0F}, text_width, "Your friend code",
-                          caption);
-            if (code) {
-                const PaddockType mono = PaddockMono(16.0F, true, 1.5F);
-                const std::string shown = PaddockEllipsize(mono, code->code, text_width);
-                PaddockDrawRun(draw, mono, {at.x + 12.0F, at.y + 24.0F}, PaddockCol(kOlAmber), shown.data(),
-                               shown.data() + shown.size());
-            } else {
-                PaddockTextStyle none;
-                none.colour = PaddockCol(kOlInk);
-                PaddockTextAt(draw, OlRead(15.0F, true, 1.5F), {at.x + 12.0F, at.y + 24.0F}, text_width, "No code yet",
-                              none);
-            }
-            ImGui::SetCursorScreenPos({at.x + inner - 6.0F - button, at.y + 7.0F});
-            if (OlButton(action)) {
-                if (code) {
-                    CopyFriendCodeToClipboard(code->code);
-                    g_online_action_status.clear();
-                    OlNotify("Friend code copied.");
-                } else {
-                    FriendInviteView invite{};
-                    std::string error;
-                    if (service.create_invite(FriendInviteLifetime::Permanent, std::chrono::minutes(60), invite,
-                                              error)) {
-                        CopyFriendCodeToClipboard(invite.code);
-                        g_online_action_status.clear();
-                        OlNotify("Friend code created and copied.");
-                    } else {
-                        OlNotify(error);
-                    }
-                }
-            }
-            ImGui::SetCursorScreenPos(at);
-            ImGui::Dummy({inner, height});
-        }
-        PaddockGap(13.0F);
-        if (!profile_section && g_online_page.section == OlSection::Lobbies && g_ol_page_width > 1000.F) {
-            DrawOlLobbyFilters(inner);
-        }
-        if (profile_section) {
-            const OlInputResult result = OlInput("##online-display-name", "Display name", g_online_profile_name,
-                                                 sizeof(g_online_profile_name), inner);
-            if (result == OlInputResult::Gamepad) {
-                RequestTextEntryKeyboard(TextEntryTarget::OnlineProfileName);
-            }
-            if (OlButton("Save online profile")) {
-                std::string error;
-                if (service.set_display_name(g_online_profile_name, error)) {
-                    std::memcpy(g_online_player_name, g_online_profile_name, sizeof(g_online_player_name));
-                    g_online_player_name[sizeof(g_online_player_name) - 1U] = '\0';
-                    SaveSettings();
-                    OlNotify("Online profile saved.");
-                } else {
-                    OlNotify(error);
-                }
-            }
-        }
-    });
-}
+#include "online_profile/profile_header.inl"
 
 // ------------------------------------------------------------ open lobbies
 
@@ -2238,6 +2130,7 @@ struct OlFriendAction {
 
 struct OlFriendRow {
     std::string key;
+    std::string avatar_url;
     std::string name; // for the avatar
     std::string label;
     std::string status;
@@ -2317,6 +2210,8 @@ void OlAddFriend() {
         OlNotify(error);
     }
 }
+
+#include "online_profile/friends_cards.inl"
 
 void DrawOlFriends(float width, const OnlineFrame& frame) {
     using namespace dkr::runtime::netplay;
@@ -2424,6 +2319,7 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
     for (const FriendView& racer : racers) {
         OlFriendRow row;
         row.key = "friend-" + racer.identity;
+        row.avatar_url = racer.blocked ? std::string{} : dkr::profile::bridge::peer_avatar(racer.identity);
         row.name = racer.display_name;
         row.label = FriendDisplayLabel(racer);
         const std::string identity = racer.identity;
@@ -2475,6 +2371,20 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
             row.status = "Offline";
             row.dimmed = true;
         }
+        if (racer.online && racer.hosting && !racer.blocked && !racer.lobby_code.empty() && !frame.in_lobby &&
+            !frame.active) {
+            row.status =
+                "Hosting - " + std::to_string(racer.players) + "/" + std::to_string(racer.maximum_players) + " racers";
+            row.actions.push_back(
+                {"Join", OlTone::Go, !frame.rom_ready || frame.busy, nullptr, [racer] {
+                     std::string error;
+                     g_online_page.join_attempted = true;
+                     g_online_page.join_error.clear();
+                     ConfigurePartyJoin();
+                     if (!dkr::runtime::netplay::session().join(racer.lobby_code, g_online_player_name, error))
+                         OlNotify(error);
+                 }});
+        }
         row.actions.push_back({"Manage", OlTone::Plain, false, nullptr, [identity, racer] {
                                    g_friend_action_identity = identity;
                                    const std::size_t length =
@@ -2503,6 +2413,26 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
             OlParagraph("Create a lobby to invite friends.", 13.0F, kOlSoft, inner);
         }
         PaddockGap(18.0F);
+        OlParagraph("Add a friend", 12.0F, kOlSoft, inner, true);
+        PaddockGap(6.0F);
+        {
+            const ImVec2 row = ImGui::GetCursorScreenPos();
+            const float add = OlButtonWidth("Add Friend", OlTone::Strong);
+            OlInputOptions code;
+            code.hint = "DKR-XXXX-XXXX";
+            code.mono = true;
+            code.flags = ImGuiInputTextFlags_CharsUppercase;
+            const OlInputResult result = OlInput("##add-friend", nullptr, g_friend_code_entry,
+                                                 sizeof(g_friend_code_entry), inner - add - 8.0F, code);
+            if (result == OlInputResult::Gamepad)
+                g_friend_code_keyboard_pending = true;
+            if (result == OlInputResult::Entered)
+                OlAddFriend();
+            ImGui::SetCursorScreenPos({row.x + inner - add, row.y});
+            if (OlButton("Add Friend", OlTone::Strong, add, nullptr, 44.0F))
+                OlAddFriend();
+        }
+        PaddockGap(16.F);
         // Toolbar.
         OlInputOptions search;
         search.hint = "Search names or nicknames";
@@ -2529,52 +2459,22 @@ void DrawOlFriends(float width, const OnlineFrame& frame) {
             ImGui::EndGroup();
         }
         PaddockGap(18.0F);
-        // Groups.
-        const std::array<std::pair<const char*, const std::vector<OlFriendRow>*>, 3> groups{
-            {{"FRIEND REQUESTS", &incoming}, {"OUTGOING REQUESTS", &outgoing}, {"YOUR FRIENDS", &friends}}};
-        bool first_group = true;
-        for (const auto& [title, rows] : groups) {
-            if (rows->empty())
-                continue;
-            if (!first_group)
-                PaddockGap(14.0F);
-            first_group = false;
-            PaddockText(OlRead(11.5F, true, 1.0F), PaddockRgb(0x8FB0BF), title, inner);
-            PaddockGap(4.0F);
-            for (std::size_t index = 0U; index < rows->size(); ++index) {
-                if (index > 0U)
-                    PaddockGap(2.0F);
-                DrawOlFriendRow((*rows)[index], inner);
-            }
+        static bool requests_open = false;
+        const auto requests = incoming.size() + outgoing.size();
+        const std::string title = "Friend requests (" + std::to_string(requests) + ")";
+        if (OlButton(title.c_str(), OlTone::Plain, inner))
+            requests_open = !requests_open;
+        if (requests_open) {
+            for (const auto* rows : {&incoming, &outgoing})
+                for (const auto& row : *rows) {
+                    PaddockGap(8.F);
+                    DrawOlFriendRow(row, inner);
+                }
         }
+        PaddockGap(14.F);
+        DrawOlFriendCards(friends, inner);
         if (racers.empty()) {
             OlParagraph("No friends match this search or filter.", 15.0F, kOlSoft, inner);
-        }
-        // Add a friend.
-        PaddockGap(14.0F);
-        {
-            const ImVec2 at = ImGui::GetCursorScreenPos();
-            draw->AddRectFilled(at, {at.x + inner, at.y + 1.0F}, PaddockCol(0xFFFFFF, 20U));
-            ImGui::Dummy({inner, 15.0F});
-        }
-        OlParagraph("Add a friend", 12.0F, kOlSoft, inner, true);
-        PaddockGap(6.0F);
-        {
-            const ImVec2 row = ImGui::GetCursorScreenPos();
-            const float add = OlButtonWidth("Add", OlTone::Strong);
-            OlInputOptions code;
-            code.hint = "DKR-XXXX-XXXX";
-            code.mono = true;
-            code.flags = ImGuiInputTextFlags_CharsUppercase;
-            const OlInputResult result = OlInput("##add-friend", nullptr, g_friend_code_entry,
-                                                 sizeof(g_friend_code_entry), inner - add - 8.0F, code);
-            if (result == OlInputResult::Gamepad)
-                g_friend_code_keyboard_pending = true;
-            if (result == OlInputResult::Entered)
-                OlAddFriend();
-            ImGui::SetCursorScreenPos({row.x + inner - add, row.y});
-            if (OlButton("Add", OlTone::Strong, add, nullptr, 44.0F))
-                OlAddFriend();
         }
     });
 }
@@ -2695,6 +2595,8 @@ void DrawOlOverlays(float width) {
 // ------------------------------------------------------------ connection
 
 #include "connection_ui.inl"
+
+#include "online_profile/lobby_friends_ui.inl"
 
 // ------------------------------------------------------------ lobby
 
@@ -2872,7 +2774,9 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
         const bool removable = OlPartyActive() || view.host && static_cast<std::size_t>(slot) != view.local_slot;
         const float body = body_width(player, removable);
         const float body_height = strong.line + 3.0F + measure_meta(meta_items(static_cast<std::size_t>(slot)), body);
-        heights[static_cast<std::size_t>(slot)] = std::max(76.0F, body_height + 20.0F);
+        heights[static_cast<std::size_t>(slot)] =
+            std::max(76.0F, body_height + 20.0F) +
+            (OlLobbyFriendAction(player.peer_id, static_cast<std::size_t>(slot) == view.local_slot) ? 48.F : 0.F);
     }
     float y = origin.y;
     for (int row = 0; row * columns < maximum; ++row) {
@@ -2922,13 +2826,16 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
                 ImGui::PopID();
                 continue;
             }
-            DrawOlAvatar(draw, {x, a.y + std::round((row_height - 38.0F) * 0.5F)}, 38.0F, player.display_name);
+            const float friend_footer = OlLobbyFriendAction(player.peer_id, you) ? 48.F : 0.F;
+            const float content_height = row_height - friend_footer;
+            DrawOlProfileAvatar(draw, {x, a.y + std::round((content_height - 38.0F) * 0.5F)}, 38.0F,
+                                player.display_name, OlLobbyAvatar(player.peer_id, you));
             x += 38.0F + 12.0F;
             const bool removable = OlPartyActive() || view.host && !you;
             const float body = body_width(player, removable);
             const auto items = meta_items(slot);
             const float body_height = strong.line + 3.0F + measure_meta(items, body);
-            const float top = a.y + std::round((row_height - body_height) * 0.5F);
+            const float top = a.y + std::round((content_height - body_height) * 0.5F);
             // Name and its tags.
             const std::string name = PaddockEllipsize(strong, player.display_name, std::max(body - 90.0F, 40.0F));
             PaddockDrawRun(draw, strong, {x, top}, PaddockCol(0xFFFFFF), name.data(), name.data() + name.size());
@@ -2940,7 +2847,7 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
                 DrawOlTag(draw, {tag_x, tag_y}, "YOU", true);
             DrawOlMetaRow({x, top + strong.line + 3.0F}, body, meta.line, items);
             if (removable) {
-                ImGui::SetCursorScreenPos({b.x - 10.0F - 40.0F, a.y + std::round((row_height - 40.0F) * 0.5F)});
+                ImGui::SetCursorScreenPos({b.x - 10.0F - 40.0F, a.y + std::round((content_height - 40.0F) * 0.5F)});
                 const std::string tooltip = "Remove " + player.display_name;
                 const OlDisabled disabled(OlPartyActive() ? OlPartyChanging(frame) : frame.busy);
                 if (OlButton(OlPartyActive() ? "...##player-options" : "\xC3\x97##remove", OlTone::Icon, 40.0F,
@@ -2952,6 +2859,10 @@ void DrawOlGrid(float width, const OnlineFrame& frame) {
                         OlNotify(error);
                     }
                 }
+            }
+            if (friend_footer > 0.F) {
+                ImGui::SetCursorScreenPos({a.x + 66.F, b.y - 48.F});
+                DrawOlLobbyFriendAction(player.peer_id, cell - 78.F);
             }
             ImGui::PopID();
         }
@@ -3230,9 +3141,6 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
                              : directory->public_listed  ? "PUBLIC - listed worldwide"
                              : directory->public_desired ? "PUBLIC - not currently listed"
                                                          : "PRIVATE - friends or lobby code";
-    OlParagraph(visibility, 14.F, kOlSoft, width);
-    if (host)
-        DrawOlDirectoryVisibility(width, frame.busy || !directory->connected || hosting != 2);
     const bool launched = view.state == ConnectionState::Loading || view.state == ConnectionState::Running;
     const int maximum = std::clamp<int>(view.room.rules.maximum_players, 2, static_cast<int>(view.room.players.size()));
     std::size_t total = 0U;
@@ -3247,27 +3155,6 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
     }
     if (OlPartyActive())
         host_name = OlPartyHostName();
-    OlParagraph("ONLINE SESSION SAVE - supplied by " + host_name, 16.0F, kOlCream, width);
-    OlParagraph("Offline progress stays separate.", 15.0F, kOlSoft, width);
-    if (!view.room.manifest.mod_manifest_hash.empty() && g_online_mod_sync) {
-        const auto mods = g_online_mod_sync->snapshot();
-        const auto count = [&](dkr::mods::online::Kind kind) {
-            return mods.manifest ? std::count_if(mods.manifest->content.begin(), mods.manifest->content.end(),
-                                                 [&](const auto& entry) { return entry.kind == kind; })
-                                 : 0;
-        };
-        PaddockGap(8.0F);
-        OlParagraph(
-            "LOBBY MODS: " +
-                std::to_string(count(dkr::mods::online::Kind::Track) + count(dkr::mods::online::Kind::TrackLab)) +
-                " tracks, " + std::to_string(count(dkr::mods::online::Kind::Character)) + " characters, " +
-                std::to_string(count(static_cast<dkr::mods::online::Kind>(3))) + " vehicles, " +
-                std::to_string(mods.manifest ? mods.manifest->code.size() : 0) + " Magic Codes.",
-            16.0F, kOlGoText, width);
-        OlParagraph("Your offline mod selection returns when you leave. Modded online progress uses a separate save.",
-                    15.0F, kOlSoft, width);
-    }
-    PaddockGap(14.0F);
     OlPanelLook look;
     look.radii = {12.0F, 28.0F, 12.0F, 12.0F};
     look.fill = 0x0B304B;
@@ -3286,9 +3173,11 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
         const OlEnter enter(chunk++);
         const ImVec2 at = ImGui::GetCursorScreenPos();
         const bool narrow = OlNarrow(440.0F);
-        const float plate_width = narrow ? inner : kOlPlateWidth;
-        const bool side = !narrow && inner - plate_width - 20.0F >= 260.0F;
-        const float title_width = side ? inner - plate_width - 20.0F : inner;
+        const float aside_target = std::clamp(inner * 0.32F, kOlPlateWidth, 440.0F);
+        const bool side = !narrow && inner - aside_target - 20.0F >= 360.0F;
+        const float aside_width = side ? aside_target : inner;
+        const float plate_width = std::min(inner, narrow ? inner : kOlPlateWidth);
+        const float title_width = side ? inner - aside_width - 20.0F : inner;
         ImGui::BeginGroup();
         ImGui::Dummy({title_width, DrawOlLive(draw, at,
                                               OlPartyActive() ? (OlPartyWatching() ? "WATCHING"
@@ -3311,13 +3200,44 @@ void DrawOlLobby(float width, const OnlineFrame& frame) {
                    std::to_string(OlPartySpectators()) + " of 8 spectators. " +
                    (view.lobby_locked ? "Lobby locked." : "Friends can join with the code.");
         OlParagraph(line, 15.0F, kOlSoft, title_width);
+        PaddockGap(16.0F);
+        OlParagraph("ONLINE SESSION SAVE - supplied by " + host_name, 16.0F, kOlCream, title_width);
+        OlParagraph("Offline progress stays separate.", 15.0F, kOlSoft, title_width);
+        if (!view.room.manifest.mod_manifest_hash.empty() && g_online_mod_sync) {
+            const auto mods = g_online_mod_sync->snapshot();
+            const auto count = [&](dkr::mods::online::Kind kind) {
+                return mods.manifest ? std::count_if(mods.manifest->content.begin(), mods.manifest->content.end(),
+                                                     [&](const auto& entry) { return entry.kind == kind; })
+                                     : 0;
+            };
+            PaddockGap(8.0F);
+            OlParagraph(
+                "LOBBY MODS: " +
+                    std::to_string(count(dkr::mods::online::Kind::Track) + count(dkr::mods::online::Kind::TrackLab)) +
+                    " tracks, " + std::to_string(count(dkr::mods::online::Kind::Character)) + " characters, " +
+                    std::to_string(count(static_cast<dkr::mods::online::Kind>(3))) + " vehicles, " +
+                    std::to_string(mods.manifest ? mods.manifest->code.size() : 0) + " Magic Codes.",
+                16.0F, kOlGoText, title_width);
+            OlParagraph(
+                "Your offline mod selection returns when you leave. Modded online progress uses a separate save.",
+                15.0F, kOlSoft, title_width);
+        }
         ImGui::EndGroup();
         const float title_height = ImGui::GetItemRectSize().y;
-        const ImVec2 plate_at =
-            side ? ImVec2{at.x + inner - plate_width, at.y} : ImVec2{at.x, at.y + title_height + 20.0F};
-        DrawOlPlate(plate_at, plate_width, frame);
-        const float height = side ? std::max(title_height, OlPlateHeight(host) + 4.0F)
-                                  : title_height + 20.0F + OlPlateHeight(host) + 4.0F;
+        const ImVec2 aside_at =
+            side ? ImVec2{at.x + inner - aside_width, at.y} : ImVec2{at.x, at.y + title_height + 20.0F};
+        ImGui::SetCursorScreenPos(aside_at);
+        ImGui::BeginGroup();
+        DrawOlPlate({aside_at.x + aside_width - plate_width, aside_at.y}, plate_width, frame);
+        ImGui::SetCursorScreenPos(aside_at);
+        ImGui::Dummy({aside_width, OlPlateHeight(host) + 4.0F});
+        PaddockGap(12.0F);
+        OlParagraph(visibility, 14.F, kOlSoft, aside_width);
+        if (host)
+            DrawOlDirectoryVisibility(aside_width, frame.busy || !directory->connected || hosting != 2);
+        ImGui::EndGroup();
+        const float aside_height = ImGui::GetItemRectSize().y;
+        const float height = side ? std::max(title_height, aside_height) : title_height + 20.0F + aside_height;
         ImGui::SetCursorScreenPos(at);
         ImGui::Dummy({inner, height});
     }
@@ -3604,6 +3524,8 @@ bool BeginOlDialog(const char* name) {
 
 #include "report_ui.inl"
 
+#include "online_profile/profile_ui.inl"
+
 void DrawOlModals(const OnlineFrame& frame) {
     using namespace dkr::runtime::netplay;
     OnlinePageState& state = g_online_page;
@@ -3813,20 +3735,8 @@ void DrawOlMain(float width, const OnlineFrame& frame) {
         DrawOlHostSettings(width);
         break;
     }
-    case OlSection::Profile: {
-        const OlEnter enter(0);
-        DrawOlProfileCard(width, frame, true);
-    }
-        PaddockGap(20.0F);
-        {
-            const OlEnter enter(1);
-            DrawOlPrivacy(width);
-        }
-        PaddockGap(20.0F);
-        {
-            const OlEnter enter(2);
-            DrawOlFriendCodes(width);
-        }
+    case OlSection::Profile:
+        DrawOlProfileSections(width, frame);
         PaddockGap(20.0F);
         {
             const OlEnter enter(3);

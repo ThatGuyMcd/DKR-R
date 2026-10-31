@@ -271,6 +271,11 @@ void DrawOlPartyDialogs(const OnlineFrame& frame) {
         else {
             OlParagraph(m->name, 20.F, kOlCream, width, true);
             PaddockGap(12.F);
+            if (OlLobbyFriendAction(std::to_string(m->id), m->id == g_ol_party.link.local)) {
+                DrawOlLobbyFriendAction(std::to_string(m->id), width);
+                PaddockGap(12.F);
+            }
+
             OlParagraph(m->role == lobby_party::Role::Spectator
                             ? "Spectator - no racing controller port."
                             : "Racer - controller ownership follows the confirmed lobby roster.",

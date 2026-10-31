@@ -4,10 +4,20 @@ This bundle adds the Online directory to the existing Cloudflare library API.
 You deploy it. No FTP upload paths or website frontend files change. Keep your
 current API variables, secrets, D1 database bindings, routes and scheduled cleanup.
 
-The bundled main API is based on the local library-workflow r8 Worker reviewed
-for the approved plan. Before deployment, compare it with any newer API changes
-you have made. Do not replace a newer Worker without rebasing those changes.
-`BUNDLE-RECEIPT.json` pins the input and every supplied output.
+The main API is built from the maintained modules in `api/`. Compare any newer
+owner changes with those modules before deployment. `BUNDLE-RECEIPT.json`
+records the bundler, authored modules and every supplied output. Optional
+`--rollback-api` and `--rollback-directory` files are copied byte for byte;
+otherwise the bundle does not claim to contain backups of your live services.
+
+## Profile database migrations
+
+Before deploying this API, apply `PRIVATE-API/001-launcher-discord-profiles.sql`
+and then `PRIVATE-API/002-launcher-profiles.sql` to the existing private API D1
+database. Both are idempotent. Back up that database and the current API and
+directory Worker code/configuration first. Exercise the migrations and bundle
+with isolated staging storage before production. Existing account sign-in and
+native gameplay remain independent of optional profile-picture metadata.
 
 ## Install with the feature disabled
 
@@ -19,9 +29,9 @@ you have made. Do not replace a newer Worker without rebasing those changes.
 3. Deploy `ONLINE-WORKER/directory.mjs` using the supplied
    `wrangler-online.jsonc`. Its migration creates a SQLite-backed Durable Object
    namespace. The worker has no public route and `workers_dev` is disabled.
-4. Merge `PRIVATE-API/BINDINGS-TO-MERGE.jsonc` into the existing API configuration.
-   Add the service binding and `ONLINE_ENABLED=false`; preserve every existing
-   configuration field. Upload `PRIVATE-API/worker-single-file.mjs` as the main
+4. Add the `ONLINE_DIRECTORY` service binding to the private directory Worker
+   and `ONLINE_ENABLED=false` in the existing API configuration; preserve every
+   other configuration field. Upload `PRIVATE-API/worker-single-file.mjs` as the main
    API source. Do not upload Worker files to FTP.
 5. Confirm the existing library, Discord pairing, image/mod uploading, existing
    FTP picker, categories and batch entry workflows still operate.
@@ -74,8 +84,9 @@ account and room identifiers, not credentials, codes, titles or packet contents.
 
 The directory uses the fixed global object name `dkrr-worldwide-v1`. Do not derive
 it from country or Cloudflare location, which would split the worldwide list.
-Room and reservation records live in its own namespace; no library D1 migration
-is required. Treat namespace contents as private operational data.
+Room and reservation records live in its own namespace. The profile tables
+added to library D1 are separate from that namespace. Treat both as private
+operational data.
 
 This bundle retains existing PeerJS signalling and STUN. TURN is not included;
 test different networks and restrictive NAT separately. Directory connectivity
@@ -89,10 +100,11 @@ already admitted peer sessions retain gameplay and local return/leave controls.
 Let active matches end before deliberately restarting clients.
 
 Restore your saved pre-deployment API source/configuration if needed. The supplied
-`ROLLBACK/worker-single-file.mjs` is the pinned local r8 baseline, not a substitute
-for backing up a newer live Worker. Retain the DO namespace for diagnosis; do not
+`ROLLBACK/` files exist only when you passed explicit backups to the build;
+verify they match your intended rollback point. Retain the DO namespace for diagnosis; do not
 delete production storage as part of an ordinary rollback. The library database
-and existing FTP files need no rollback migration.
+and existing FTP files are unchanged; the added profile tables may remain
+when rolling back Worker code.
 
 Distribute a previously accepted Windows/Linux client if client rollback is
 needed. Public discovery requires the new authenticated protocol; old clients

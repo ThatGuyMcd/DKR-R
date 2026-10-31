@@ -127,7 +127,43 @@ void bootstrap_keys_survive_room_retirement() {
     check(online::hosting_mode(&guest) == 0, "bootstrap preservation does not leave a hosted room");
 }
 
+void optional_social_metadata_is_bounded_and_verified() {
+    using Json = online::Json;
+    dkr::profile::bridge::bind({{}, {}, [](std::string_view key, std::string_view identity, std::string_view code) {
+                                    return key == "fixture-key" && identity == "FIXTUREPLAYER" &&
+                                           code == "fixture-code";
+                                }});
+    const Json row{{"sender", "1"},
+                   {"publicKey", "fixture-key"},
+                   {"identity", "FIXTUREPLAYER"},
+                   {"friendCode", "fixture-code"},
+                   {"avatar", ""}};
+    const auto result = [&](Json rows) { return Json{{"ok", true}, {"data", {{"members", std::move(rows)}}}}; };
+    const auto valid = result(Json::array({row}));
+    const auto members = online::social_members(valid);
+    check(members.size() == 1 && members[0].sender == "1", "verified social member was discarded");
+    for (const auto& malformed : {Json(), Json::array(), Json{{"ok", "yes"}}, Json{{"ok", false}},
+                                  Json{{"ok", true}, {"data", nullptr}}, result(Json::object())})
+        check(online::social_members(malformed).empty(), "malformed optional metadata was accepted");
+    auto too_many = Json::array();
+    for (unsigned n = 0; n < 13; ++n)
+        too_many.push_back(row);
+    check(online::social_members(result(too_many)).empty(), "oversized social roster was accepted");
+    for (const auto* field : {"sender", "publicKey", "identity", "friendCode"}) {
+        auto forged = row;
+        forged[field] = field == std::string_view("sender") ? Json(7) : Json("forged");
+        check(online::social_members(result(Json::array({forged}))).empty(), "unverified social identity was accepted");
+    }
+    auto unapproved = row;
+    unapproved["avatar"] = "https://example.invalid/avatar.png";
+    check(online::social_members(result(Json::array({unapproved}))).empty(), "unapproved social avatar was accepted");
+    check(online::social_members(result(Json::array({nullptr, row}))).size() == 1,
+          "malformed member prevented a valid member from being retained");
+    dkr::profile::bridge::bind({});
+}
+
 int main() try {
+    optional_social_metadata_is_bounded_and_verified();
     bootstrap_keys_survive_room_retirement();
     close_and_rehost();
     leave_is_scoped_to_the_session();

@@ -34,6 +34,9 @@ struct Room {
     unsigned racers = 0, max_racers = 0, spectators = 0, max_spectators = 0;
     bool locked = false, can_join = false, can_spectate = false;
 };
+struct SocialMember {
+    std::string sender, public_key, identity, friend_code, avatar;
+};
 struct View {
     bool signed_in = false, connected = false, feature_enabled = false, enabled = true, joining = false;
     bool public_desired = false, public_listed = false, updating = false, hidden = false;
@@ -44,9 +47,12 @@ struct View {
     unsigned account_generation = 0;
     std::string account_name, status = "Sign in with Discord to find public lobbies.", error;
     std::vector<Room> rooms;
+    std::vector<SocialMember> members;
+    bool social_profiles = false;
 };
 std::shared_ptr<const View> view();
 void connect(bool enabled);
+void refresh_profile();
 void visibility(bool make_public);
 void hidden(bool value);
 void request_join(std::string room, std::string code, bool watch, std::string friend_admission = {});

@@ -40,7 +40,7 @@ C++ host tests also need CMake 3.24+, a C++20 compiler and Ninja (or Visual
 Studio 2022 on Windows). Prepare the pinned source dependencies once:
 
 ```sh
-python3 scripts/bootstrap_dependencies.py --only n64-modern-runtime --only rt64 --only gekkonet --only monocypher --only libdatachannel --only mbedtls --only sdl3
+python3 scripts/bootstrap_dependencies.py --only n64-modern-runtime --only rt64 --only gekkonet --only monocypher --only libdatachannel --only mbedtls --only sdl3 --only dkr-decomp
 python3 scripts/apply_dependency_patches.py
 cd runtime-recomp
 cmake --preset host
