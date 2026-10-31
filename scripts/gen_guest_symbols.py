@@ -17,6 +17,9 @@ than once in its table is an error; nothing is guessed.
     gen_guest_symbols.py --out DIR [SPEC...]          write the headers
     gen_guest_symbols.py --out DIR --check [SPEC...]  fail unless DIR holds them
 
+``--dependencies DIR`` selects the prepared dependency directory for decomp
+tables. Requests and first-party SDK tables stay in this worktree.
+
 With no SPEC every runtime-recomp/symbols/*.toml is generated. Headers are
 written only when their bytes change, and a *.hpp in DIR that no SPEC names
 is removed (reported, with --check): DIR holds the requested headers only.
@@ -66,7 +69,7 @@ def load(path: Path) -> Request:
     return request
 
 
-def table(kind: str, revision: str, root: Path) -> dict[str, list[int]]:
+def table(kind: str, revision: str, root: Path, dependencies: Path | None = None) -> dict[str, list[int]]:
     """Every address each symbol has in one revision's table."""
     found: dict[str, list[int]] = {}
     if kind == "sdk":
@@ -75,13 +78,15 @@ def table(kind: str, revision: str, root: Path) -> dict[str, list[int]]:
             for symbol in section.get("symbols", []):
                 found.setdefault(symbol["name"], []).append(symbol["vram"])
     else:
-        text = (root / f"extern/dkr-decomp/ver/symbols/symbol_addrs.us.v{revision}.txt").read_text(encoding="utf-8")
+        text = (
+            (dependencies or root / "extern") / f"dkr-decomp/ver/symbols/symbol_addrs.us.v{revision}.txt"
+        ).read_text(encoding="utf-8")
         for name, value in DECOMP_LINE.findall(text):
             found.setdefault(name, []).append(int(value, 16))
     return found
 
 
-def render(request: Request, root: Path) -> str:
+def render(request: Request, root: Path, dependencies: Path | None = None) -> str:
     def address(name: str, revision: str, addresses: dict[str, list[int]]) -> str:
         values = addresses.get(name, [])
         if len(values) != 1:
@@ -90,7 +95,7 @@ def render(request: Request, root: Path) -> str:
             )
         return (f"0x{values[0]:08X}" if request.hex == "upper" else f"0x{values[0]:08x}") + "U"
 
-    tables = {revision: table(request.table, revision, root) for revision in REVISIONS}
+    tables = {revision: table(request.table, revision, root, dependencies) for revision in REVISIONS}
 
     def substitute(match: re.Match[str]) -> str:
         name, revision = match.group(1), match.group(2)
@@ -103,25 +108,26 @@ def render(request: Request, root: Path) -> str:
     return re.sub(r"@([A-Za-z_][A-Za-z0-9_]*):(77|80)@", substitute, request.template)
 
 
-def generate(specs: list[Path], root: Path | None = None) -> dict[str, str]:
+def generate(specs: list[Path], root: Path | None = None, dependencies: Path | None = None) -> dict[str, str]:
     headers: dict[str, str] = {}
     for spec in specs:
         request = load(spec)
         if request.header in headers:
             raise SymbolError(f"{request.header} is requested twice")
-        headers[request.header] = render(request, root or ROOT)
+        headers[request.header] = render(request, root or ROOT, dependencies)
     return headers
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--dependencies", type=Path, default=ROOT / "extern", help="prepared dependency directory")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("spec", nargs="*", type=Path)
     args = parser.parse_args(argv)
     specs = args.spec or sorted(SPECS.glob("*.toml"))
     try:
-        headers = generate(specs)
+        headers = generate(specs, dependencies=args.dependencies)
     except SymbolError as error:
         print(f"gen_guest_symbols: {error}", file=sys.stderr)
         return 1

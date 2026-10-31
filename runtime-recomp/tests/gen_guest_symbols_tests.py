@@ -120,6 +120,29 @@ class GeneratorTests(unittest.TestCase):
             with self.subTest(symbols=symbols, template=template), self.assertRaises(gen_guest_symbols.SymbolError):
                 gen_guest_symbols.render(self.request(symbols, template), self.root)
 
+    def test_shared_dependencies_keep_the_sdk_in_the_configuring_worktree(self):
+        dependencies = self.root / "shared-dependencies"
+        (self.root / "extern").rename(dependencies)
+        decomp = self.request(["gOne"], "@gOne:77@ @gOne:80@", table="decomp")
+        self.assertEqual(gen_guest_symbols.render(decomp, self.root, dependencies), "0x801000ABU 0x802000ABU")
+        with self.assertRaises(FileNotFoundError):
+            gen_guest_symbols.render(decomp, self.root)
+        sdk = self.request(["gOne"], "@gOne:77@ @gOne:80@")
+        self.assertEqual(gen_guest_symbols.render(sdk, self.root, dependencies), "0x801000ABU 0x802000ABU")
+
+    def test_cli_uses_the_explicit_dependency_directory(self):
+        dependencies = self.root / "shared-dependencies"
+        (self.root / "extern").rename(dependencies)
+        self.request(["gOne"], "@gOne:77@ @gOne:80@", table="decomp")
+        out = self.root / "out"
+        self.assertEqual(
+            gen_guest_symbols.main(
+                ["--dependencies", str(dependencies), "--out", str(out), str(self.root / "request.toml")]
+            ),
+            0,
+        )
+        self.assertEqual((out / "x.hpp").read_text(), "0x801000ABU 0x802000ABU")
+
     def test_check_mode_reports_a_stale_header(self):
         out = self.root / "out"
         spec = gen_guest_symbols.SPECS / "render_heap_addresses.toml"

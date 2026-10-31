@@ -78,6 +78,17 @@ counts, reference limitations and source checkpoint. Its read-only checker
 has no regeneration option. Windows/Android CI and actual gameplay remain
 separate qualifications.
 
+The first isolated follow-up configure exposed a dependency-root integration
+bug: guest symbol generation still looked under the new worktree's empty
+`extern/` even with `DKR_DEPENDENCIES_DIR` set. The generator now accepts
+that dependency directory explicitly for decomp tables; SDK tables and
+requests remain owned by the configuring worktree. The isolated configure
+now succeeds, the generated headers retain their exact bytes, and the
+736-file runtime checkpoint remains unchanged. Four host-fixture include
+paths now use the same prepared dependency roots. Regression tests exercise
+the external decomp directory and the first-party SDK boundary; the isolated
+host build exercises the include paths.
+
 ## Checkpoint and scope
 
 The original fold branch remains at `6ac4288` (B9b). Local follow-ups are

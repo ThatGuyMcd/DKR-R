@@ -2000,7 +2000,7 @@ if(BUILD_TESTING)
     target_compile_features(DKRTrackSelectDrawTests PRIVATE cxx_std_20)
     target_include_directories(
         DKRTrackSelectDrawTests
-        PRIVATE src/game "${CMAKE_CURRENT_LIST_DIR}/../extern/n64-modern-runtime/N64Recomp/include"
+        PRIVATE src/game "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
     )
     add_test(NAME DKRTrackSelectDraw COMMAND DKRTrackSelectDrawTests)
     add_executable(DKRRenderPassPolicyTests tests/render_pass_policy_tests.cpp)
@@ -2567,7 +2567,7 @@ if(BUILD_TESTING)
                 PRIVATE
                     src/game
                     "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}"
-                    "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include"
+                    "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
             )
             if(NOT MSVC)
                 target_link_libraries(DKRTrackSelectNative${revision}Tests PRIVATE m)
@@ -3235,7 +3235,7 @@ if(BUILD_TESTING)
     target_compile_features(DKRModStoreHistoryTests PRIVATE cxx_std_20)
     target_include_directories(
         DKRModStoreHistoryTests
-        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKRPORT_ROOT}/extern/rt64/src/contrib"
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_RT64_SOURCE}/src/contrib"
     )
     add_test(NAME DKRModStoreHistory COMMAND DKRModStoreHistoryTests)
 
@@ -3250,7 +3250,7 @@ if(BUILD_TESTING)
     target_compile_features(DKRProfilePictureTests PRIVATE cxx_std_20)
     target_include_directories(
         DKRProfilePictureTests
-        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKRPORT_ROOT}/extern/rt64/src/contrib"
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_RT64_SOURCE}/src/contrib"
     )
     add_test(NAME DKRProfilePictures COMMAND DKRProfilePictureTests)
 
