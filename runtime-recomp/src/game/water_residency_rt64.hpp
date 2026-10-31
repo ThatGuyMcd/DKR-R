@@ -1,9 +1,9 @@
 #pragma once
-#include "enhanced_water_rt64.hpp"
-#include "polish_symbols.hpp"
-#include "rice_texture_pack_policy.hpp"
+#include <enhanced_water_rt64.hpp>
+#include <polish_symbols.hpp>
+#include <rice_texture_pack_policy.hpp>
 #include "liquid_replacement_gate.hpp"
-#include "performance_observation.hpp"
+#include <performance_observation.hpp>
 #include "render/rt64_texture_cache.h"
 #include <array>
 #include <chrono>

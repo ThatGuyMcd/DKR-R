@@ -15,7 +15,7 @@ For contributor checks that need no ROM or game build, start with
 `python3 scripts/check.py` and the [host presets](DEVELOPMENT.md#first-contribution-tests-without-a-rom).
 The instructions below cover runtime and package builds.
 
-Build from the pinned sources and authored Patch Pipeline. Don't patch RT64,
+Build from the folded first-party source and registered dependency patches. Don't patch RT64,
 N64Recomp, N64ModernRuntime or generated functions by hand to make a build pass.
 
 Windows and Linux releases go together, and Linux must include an AppImage.

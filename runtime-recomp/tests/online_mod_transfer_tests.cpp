@@ -1,3 +1,4 @@
+#include "../src/game/cache_repair.hpp"
 #include "online_mod_transfer.hpp"
 #include "online_mod_cache.hpp"
 #include "legacy_character_artifact.hpp"
@@ -352,6 +353,34 @@ int main() {
             rejects([&] { bad.publish(cache / "payloads" / corrupt_name); });
         }
         check(!std::filesystem::exists(cache / "payloads" / corrupt_name));
+        using dkr::lobby_stability::verify_or_repair_download;
+        check(verify_or_repair_download(cache, "payloads", descriptor, {}));
+        check(!verify_or_repair_download(cache, "partials", invalid, {}));
+        check(!std::filesystem::exists(cache / "partials" / invalid.digest));
+        check(cached_payload(cache / "payloads", descriptor));
+        write_new_file(cache / "payloads" / invalid.digest, Bytes{1, 2, 3});
+        check(!verify_or_repair_download(cache, "payloads", invalid, {}));
+        check(!std::filesystem::exists(cache / "payloads" / invalid.digest));
+        check(cached_payload(cache / "payloads", descriptor));
+        const auto incomplete = cache / "partials" / invalid.digest;
+        write_new_file(incomplete, Bytes{1, 2, 3});
+        check(!verify_or_repair_download(cache, "partials", invalid, {}));
+        check(read_file(incomplete, 16) == Bytes({1, 2, 3}));
+        std::stop_source cancelled;
+        cancelled.request_stop();
+        rejects([&] { verify_or_repair_download(cache, "partials", invalid, cancelled.get_token()); });
+        check(read_file(incomplete, 16) == Bytes({1, 2, 3}));
+        auto traversal = invalid;
+        traversal.digest = "../outside";
+        rejects([&] { verify_or_repair_download(cache, "partials", traversal, {}); });
+#ifndef _WIN32
+        const auto link_target = cache / "partials" / sha256(bytes("symlink-target"));
+        std::filesystem::create_symlink(cache / "payloads" / hash, link_target);
+        auto linked = descriptor;
+        linked.digest = sha256(bytes("symlink-target"));
+        rejects([&] { verify_or_repair_download(cache, "partials", linked, {}); });
+        check(cached_payload(cache / "payloads", descriptor));
+#endif
         std::filesystem::remove_all(cache); // exclusively created test fixture
         std::cout << checks << " bounded consent/range/retry/cache/resume/independent-recipient checks passed.\n";
         return 0;

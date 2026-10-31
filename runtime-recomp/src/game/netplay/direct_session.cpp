@@ -193,6 +193,16 @@ std::size_t receive_sequence_lane(protocol::MessageType type) {
 
 } // namespace
 
+namespace {
+void retire_directory_room(const void* session) {
+    dkr::online::native::reset(session);
+    auto bridge = dkr::online::bridge(session);
+    std::lock_guard lock(bridge->mutex);
+    bridge->commands.clear();
+    bridge->responses.clear();
+}
+} // namespace
+
 DirectSession::DirectSession()
     : transport_(make_udp_session_transport()), network_worker_(&DirectSession::network_loop, this) {}
 
@@ -973,6 +983,8 @@ void DirectSession::disconnect(std::string_view reason) {
     last_authoritative_request_frame_ = 0U;
     state_ = ConnectionState::Offline;
     is_host_ = false;
+    // A retired transport will not pump the directory owner again.
+    retire_directory_room(this);
     lobby_locked_ = false;
     launch_requested_ = false;
     reset_launch_transaction_locked();
@@ -9703,6 +9715,7 @@ void DirectSession::fail_locked(std::string message) {
     // itself caused this failure, enqueue_outbound must not recurse back into
     // a second failure transition.
     state_ = ConnectionState::Failed;
+    retire_directory_room(this);
     status_ = message;
     {
         auto party = dkr::runtime::spectators::party_link(this);

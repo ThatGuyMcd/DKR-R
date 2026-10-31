@@ -38,19 +38,16 @@ why = "The renderer and shader policy tests."
 id = "graphics-handoff"
 ctest_test = "DKRGraphicsHandoffChecks"
 why = "37 graphics handoff checks; 8000 concurrent transfers."
-pending = "C5"
 
 [[check]]
 id = "render-stability"
 ctest_test = "DKRRenderStabilityChecks"
 why = "30 render stability checks."
-pending = "C5"
 
 [[check]]
 id = "liquid-residency"
 ctest_test = "DKRLiquidResidencyChecks"
 why = "23 water residency checks."
-pending = "C5"
 
 [[check]]
 id = "memory-stability-v77"
@@ -86,19 +83,16 @@ pending = "C5"
 id = "spectator-admission"
 ctest_test = "DKRSpectatorAdmissionChecks"
 why = "345 spectator admission checks."
-pending = "C5"
 
 [[check]]
 id = "spectator-handler"
 ctest_test = "DKRSpectatorHandlerChecks"
 why = "45 spectator handler checks."
-pending = "C5"
 
 [[check]]
 id = "offline-retention"
 ctest_test = "DKROfflineRetentionChecks"
 why = "68-69 offline retention checks."
-pending = "C5"
 
 [[check]]
 id = "race-release-before"
@@ -110,13 +104,11 @@ pending = "C5"
 id = "race-release"
 ctest_test = "DKRRaceReleaseChecks"
 why = "96 party runtime regression checks."
-pending = "C5"
 
 [[check]]
 id = "stability-transfer"
 ctest_test = "DKRStabilityTransferChecks"
 why = "Stability transfer checks."
-pending = "C5"
 
 [[check]]
 id = "vehicle-original-textures"

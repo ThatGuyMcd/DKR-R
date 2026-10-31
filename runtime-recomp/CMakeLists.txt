@@ -3229,6 +3229,104 @@ if(BUILD_TESTING)
     target_compile_definitions(DKRInputProfileTests PRIVATE DKR_RUNTIME_HAS_RT64=0)
     add_test(NAME DKRInputProfile COMMAND DKRInputProfileTests)
 
+    add_executable(DKRModStoreHistoryTests tests/mod_store_history_tests.cpp)
+    target_compile_features(DKRModStoreHistoryTests PRIVATE cxx_std_20)
+    target_include_directories(
+        DKRModStoreHistoryTests
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKRPORT_ROOT}/extern/rt64/src/contrib"
+    )
+    add_test(NAME DKRModStoreHistory COMMAND DKRModStoreHistoryTests)
+
+    # Compile the production residency algorithm with synthetic cache interfaces.
+    add_executable(DKRLiquidResidencyTests tests/liquid_residency_tests.cpp)
+    target_compile_features(DKRLiquidResidencyTests PRIVATE cxx_std_20)
+    dkr_guest_symbols(DKRLiquidResidencyTests)
+    target_include_directories(
+        DKRLiquidResidencyTests
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests/water_residency_stubs" "${CMAKE_CURRENT_LIST_DIR}/src/game"
+    )
+    add_test(NAME DKRLiquidResidencyChecks COMMAND DKRLiquidResidencyTests)
+    set_tests_properties(DKRLiquidResidencyChecks PROPERTIES LABELS "host;runtime;graphics" TIMEOUT 60)
+
+    add_executable(DKRRaceReleaseTests tests/race_release_tests.cpp)
+    add_executable(DKRSpectatorHandlerTests tests/spectator_handler_tests.cpp)
+    foreach(party_test DKRRaceReleaseTests DKRSpectatorHandlerTests)
+        target_compile_features(${party_test} PRIVATE cxx_std_20)
+        target_include_directories(
+            ${party_test}
+            PRIVATE
+                "${CMAKE_CURRENT_LIST_DIR}/src/game"
+                "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe"
+                "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty"
+                "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include"
+        )
+        target_link_libraries(${party_test} PRIVATE DKRNetplayCore)
+    endforeach()
+    add_test(NAME DKRRaceReleaseChecks COMMAND DKRRaceReleaseTests)
+    add_test(NAME DKRSpectatorHandlerChecks COMMAND DKRSpectatorHandlerTests)
+    set_tests_properties(DKRRaceReleaseChecks DKRSpectatorHandlerChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
+
+    add_executable(DKRSpectatorAdmissionTests tests/spectator_admission_tests.cpp)
+    target_compile_features(DKRSpectatorAdmissionTests PRIVATE cxx_std_20)
+    target_include_directories(DKRSpectatorAdmissionTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    target_link_libraries(DKRSpectatorAdmissionTests PRIVATE DKRLegacyModLaunch)
+    add_test(NAME DKRSpectatorAdmissionChecks COMMAND DKRSpectatorAdmissionTests)
+    set_tests_properties(DKRSpectatorAdmissionChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
+
+    add_executable(DKRLiveFovTests tests/live_fov_tests.cpp)
+    target_compile_features(DKRLiveFovTests PRIVATE cxx_std_20)
+    target_include_directories(
+        DKRLiveFovTests
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
+    )
+    add_test(NAME DKRLiveFov COMMAND DKRLiveFovTests)
+
+    add_executable(DKRDirectoryLifecycleTests tests/directory_lifecycle_tests.cpp)
+    target_compile_features(DKRDirectoryLifecycleTests PRIVATE cxx_std_20)
+    target_include_directories(
+        DKRDirectoryLifecycleTests
+        PRIVATE
+            "${CMAKE_CURRENT_LIST_DIR}/src/game"
+            "${DKR_LIBDATACHANNEL_SOURCE}/deps/json/include"
+            "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty"
+    )
+    target_link_libraries(DKRDirectoryLifecycleTests PRIVATE DKRNetplayCore)
+    add_test(NAME DKRDirectoryLifecycle COMMAND DKRDirectoryLifecycleTests)
+    set_tests_properties(DKRDirectoryLifecycle PROPERTIES TIMEOUT 30)
+
+    add_executable(DKRStabilityTransferTests tests/online_mod_transfer_tests.cpp)
+    target_compile_features(DKRStabilityTransferTests PRIVATE cxx_std_20)
+    target_link_libraries(DKRStabilityTransferTests PRIVATE DKRLegacyModCore)
+    add_test(NAME DKRStabilityTransferChecks COMMAND DKRStabilityTransferTests)
+    set_tests_properties(DKRStabilityTransferChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
+
+    add_executable(DKROfflineRetentionTests tests/offline_retention_tests.cpp)
+    target_compile_features(DKROfflineRetentionTests PRIVATE cxx_std_20)
+    target_include_directories(DKROfflineRetentionTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    target_link_libraries(DKROfflineRetentionTests PRIVATE DKRLegacyImportLibrary Threads::Threads)
+    add_test(
+        NAME DKROfflineRetentionChecks
+        COMMAND
+            "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/run_private_fixture.py"
+            "$<TARGET_FILE:DKROfflineRetentionTests>"
+    )
+    set_tests_properties(DKROfflineRetentionChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
+
+    # Former release-layer fixtures now exercise the production headers directly.
+    add_executable(DKRGraphicsHandoffTests tests/graphics_handoff_tests.cpp)
+    target_compile_features(DKRGraphicsHandoffTests PRIVATE cxx_std_20)
+    target_include_directories(DKRGraphicsHandoffTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    target_link_libraries(DKRGraphicsHandoffTests PRIVATE Threads::Threads)
+    add_test(NAME DKRGraphicsHandoffChecks COMMAND DKRGraphicsHandoffTests)
+    set_tests_properties(DKRGraphicsHandoffChecks PROPERTIES LABELS "host;runtime;graphics" TIMEOUT 60)
+
+    add_executable(DKRRenderStabilityTests tests/render_stability_tests.cpp)
+    target_compile_features(DKRRenderStabilityTests PRIVATE cxx_std_20)
+    target_include_directories(DKRRenderStabilityTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    target_link_libraries(DKRRenderStabilityTests PRIVATE Threads::Threads)
+    add_test(NAME DKRRenderStabilityChecks COMMAND DKRRenderStabilityTests)
+    set_tests_properties(DKRRenderStabilityChecks PROPERTIES LABELS "host;runtime;graphics" TIMEOUT 60)
+
     add_test(
         NAME DKRTestAssertionContract
         COMMAND

@@ -1,3 +1,4 @@
+#include "live_fov/runtime.hpp"
 #include "producer_snapshot.hpp"
 #include "presentation_identity.hpp"
 #include "detail_contract.hpp"
@@ -1253,7 +1254,8 @@ extern "C" void dkr_presentation_scene_begin(std::uint8_t*, recomp_context*) {
     }
 }
 
-extern "C" void dkr_presentation_frame_begin(std::uint8_t* rdram, recomp_context*) {
+extern "C" void dkr_presentation_frame_begin(std::uint8_t* rdram, recomp_context* context) {
+    dkr::runtime::live_fov::refresh(rdram, context);
     dkr::runtime::hud::begin_authored_frame(rdram);
     dkr::runtime::presentation::postrace_presentation_begin_frame();
     dkr::runtime::custom_music::tick(rdram);

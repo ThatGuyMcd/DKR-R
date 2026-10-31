@@ -50,7 +50,7 @@ on a fork, built on the devops Mac and a second machine, with
 `scripts/release/evidence.py compare` between the two builds and against the
 v1.0.10 evidence (sources, definitions, identity values).
 
-Also blocking the next release (not PR 2): C5 restores the 15 pending release
+Also blocking the next release (not PR 2): C5 restores the remaining 7 pending release
 checks (see Release tooling); until then `finalize.py` refuses every release.
 
 Also blocking: a real Windows run of `Prepare-DKR-Runtime.ps1` (both ROMs,
@@ -110,14 +110,14 @@ replaces it.
 
 **C5 must land before the next release.** `scripts/release/finalize.py`
 refuses every release from this tree while `required_checks.toml` has pending
-entries, and it has 15: the 14 v1.0.11 release fixtures (graphics handoff,
-render stability, liquid residency, memory stability and owned heap per
-revision, spectator admission with its Before control, spectator handler,
-offline retention, race release with its Before control, stability transfer)
-and the vehicle-original-textures audit (7449 checks, legacy packages,
-negative admissions, Before/After, Linux ASan/UBSan, identical prepared
-vehicle data across platforms). They were release-layer targets the fold
-didn't carry. C5 restores each as a CTest test and drops its `pending`.
+entries. Of the original 15 gates, graphics handoff, render selection,
+offline retention, stability transfer, spectator admission, spectator handler,
+race release and liquid residency have been promoted; 7 remain pending. The
+remaining fixtures cover memory stability and owned heap per revision, the
+spectator admission and race release Before controls, and the
+vehicle-original-textures audit (7449 checks, legacy packages, negative
+admissions, Before/After, Linux ASan/UBSan, identical prepared vehicle data
+across platforms). C5 restores each as a CTest test and drops its `pending`.
 
 What the deleted release-prep scripts did, for B9b:
 
@@ -152,6 +152,13 @@ What the deleted release-prep scripts did, for B9b:
   Android releases are discontinued, so this stays open rather than blocking.
 
 ## For C5 (tests)
+
+- Follow-ups on `refactor/fold-followups-20261031` promote graphics handoff,
+  render selection/provenance, offline retention, stability transfer,
+  spectator admission, spectator handler, race release and liquid residency into CTest
+  targets against production source. Those eight checks no longer have
+  `pending` entries. The other 7 release gates remain pending; finalization
+  still refuses a release. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
 
 - The layers' remaining check targets and the "Before" negative controls
   move to C5 with the other promoted fixtures; the fold doesn't port them.

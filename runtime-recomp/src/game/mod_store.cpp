@@ -3,6 +3,7 @@
 #include "linux_keyring.hpp"
 #include "store_vehicle_adapter.hpp"
 #include "mod_store.hpp"
+#include "mod_store/download_history.hpp"
 #include "mod_store_install.hpp"
 #include "stb/stb_image.h"
 #include "updates/update_core.hpp"
@@ -754,22 +755,12 @@ struct Service::Impl {
     }
     void persist_downloads() {
         std::lock_guard persist_lock(download_persist_mutex);
-        Json rows = Json::array();
+        Json saved;
         {
             std::lock_guard lock(mutex);
-            for (const auto& d : state.downloads)
-                rows.push_back({{"item", d.item},
-                                {"release", d.release},
-                                {"title", d.title},
-                                {"category", d.category},
-                                {"version", d.version},
-                                {"state", d.state},
-                                {"sha256", d.digest},
-                                {"bytes", d.total},
-                                {"intent", d.intent},
-                                {"instance", d.instance}});
+            saved = history::save<Json>(state.downloads);
         }
-        write_json(root / "downloads.json", {{"schema", 1}, {"jobs", rows}});
+        write_json(root / "downloads.json", saved);
     }
     Json paged(std::string path, const char* field, std::stop_token stop, bool private_request = false) {
         Json all = Json::array();
@@ -1256,6 +1247,10 @@ void Service::configure(const std::filesystem::path& config, std::string version
     p.queue([&p](std::stop_token stop) {
         const auto preferences = read_json(p.root / "preferences.json"), cached = read_json(p.root / "catalogue.json");
         const auto saved = read_json(p.root / "downloads.json");
+        const auto receipts = read_json(p.root / "installations.json");
+        auto restored = history::restore<Download>(saved, receipts, [&](const std::string& path) {
+            return history::member_present(p.root.parent_path(), path);
+        });
         p.update([&](Snapshot& s) {
             if (preferences.value("layout", 0) == 1)
                 s.layout = 1;
@@ -1268,24 +1263,16 @@ void Service::configure(const std::filesystem::path& config, std::string version
                 s.items = std::make_shared<const Json>(cached["items"]);
                 s.cached = true;
             }
-            if (saved.contains("jobs") && saved["jobs"].is_array() && saved["jobs"].size() <= 64)
-                for (const auto& row : saved["jobs"]) {
-                    Download job;
-                    job.item = text(row, "item", 160);
-                    job.release = text(row, "release", 160);
-                    job.title = text(row, "title", 200);
-                    job.category = text(row, "category", 32);
-                    job.version = text(row, "version", 80);
-                    job.intent = text(row, "intent", 32);
-                    job.instance = text(row, "instance", 512);
-                    if (!identifier(job.item) || !identifier(job.release))
-                        continue;
-                    job.key = download_key(job.item, job.release, job.instance);
-                    job.state = "Paused";
-                    job.error = "Resume to check or reuse the saved download.";
-                    s.downloads.push_back(std::move(job));
-                }
+            s.downloads = std::move(restored);
         });
+        if (saved.is_object() && saved.contains("jobs") && saved["jobs"].is_array() && saved["jobs"].size() <= 64 &&
+            (!saved.contains("schema") || saved["schema"] == 1 || saved["schema"] == 2)) {
+            try {
+                p.persist_downloads();
+            } catch (const std::exception& error) {
+                p.fail(error);
+            }
+        }
         refresh_library_names(p.root.parent_path(), *p.published.load()->items, stop);
         if (p.published.load()->remember) {
             const auto device = load_device(p.root);

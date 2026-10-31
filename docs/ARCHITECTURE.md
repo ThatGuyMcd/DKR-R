@@ -2,12 +2,19 @@
 
 ## v1.0.11 release contract
 
-The release composes guarded game-heap headroom, immutable scheduler handoff, private decode isolation, water residency and updated vehicle preparation above the Online directory, Scoreboard, party/spectator repairs, vehicles, achievements and texture tools over Camera++, SDK 2, Store, shared saves and presentation fixes through the Patch Pipeline. API 2 is additive. Personal, confirmed-online and development save ownership are separate. Isolated dependency source patches never edit the checked-out submodules.
+The folded source includes guarded game-heap headroom, immutable scheduler
+handoff, private decode isolation, water residency, vehicle preparation,
+Online directory, Scoreboard, party/spectator repairs, achievements, texture
+tools, Camera++, SDK 2, Store, shared saves and presentation fixes. API 2 is
+additive. Personal, confirmed-online and development save ownership are
+separate. Dependency fixes are checksum-pinned patches registered in
+`patches/manifest.json`.
 
 DKR-R is a static recompilation, with the matching DKR decomp as the readable
-reference for symbols, structures and algorithms. We keep enhancements in the
-authored integration layer and Patch Pipeline rather than hand-editing the
-generated game or dependencies.
+reference for symbols, structures and algorithms. Enhancements live in first-party
+source under `runtime-recomp/`. The fold replaced the first-party patch layers
+with the source they compiled; [the migration map](fold-in/MIGRATION.md)
+identifies the current owners. Edit those files directly.
 
 ## Runtime and patch ownership
 
@@ -21,10 +28,12 @@ Supported desktop builds use a separate headless SDL3 input worker; Android
 uses in-process SDL2. SDL3 never replaces the frontend's window ABI.
 
 Protected inputs include `RecompiledFuncs`, `RecompiledPatches`,
-RT64, N64Recomp and N64ModernRuntime. Instruction/function changes belong in
-the versioned policies and composed fragments; dependency changes belong in
-checksum-pinned patches. Both ordinary and owned payloads are generated into
-new directories. See [Building](BUILDING.md) and [Development](DEVELOPMENT.md).
+RT64, N64Recomp and N64ModernRuntime. Generated guest hooks are declared in
+`runtime-recomp/guest-hooks/hooks.toml`; symbol tables live in
+`runtime-recomp/symbols/`. The two retained owned-engine input stages are
+documented in `AGENTS.md` and [the open items](fold-in/open-items.md#prepared-inputs-b8a).
+Dependency changes belong in checksum-pinned patches. Prepared ordinary and
+owned payloads are generated into separate directories. See [Building](BUILDING.md) and [Development](DEVELOPMENT.md).
 
 The project layer owns ROM selection, controller routing/profiles/gyro,
 save leases and atomic persistence, settings UI, presentation/HUD identities,
