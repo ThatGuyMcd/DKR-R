@@ -1,3 +1,4 @@
+#include "mods/legacy_memory_safety.h"
 #include "runtime_hud_layout.hpp"
 #include "atomic_snapshot.hpp"
 
@@ -322,13 +323,24 @@ void EndHudPass(std::uint8_t* rdram, recomp_context* context,
 
 } // namespace
 
-extern "C" void dkr_hud_asset_load_failed(std::uint8_t*, recomp_context* context) {
+extern "C" void dkr_hud_asset_load_failed(std::uint8_t* rdram, recomp_context* context) {
     // One message per asset per guest thread: no retry loop or per-frame I/O.
     // Registers are observed at the hash-pinned native failed-load branch.
     static thread_local std::array<bool, 256> reported{};
     const auto sprite = static_cast<std::uint32_t>(context->r8);
     if (sprite >= reported.size() || reported[sprite]) return;
     reported[sprite] = true;
+    const bool v80=dkr::runtime::revision_addresses::CurrentHud==dkr::runtime::revision_addresses::kUsV80.CurrentHud;
+    const auto read=[&](std::uint32_t address){return static_cast<std::uint32_t>(MEM_W(0,RdramAddress(address)));};
+    std::fprintf(stderr,"[hud][resource-context] sprite=%u layout=%u allocated-layout=%u dl=0x%08X tri=0x%08X; guest cursors and resource retries preserved\n",
+        sprite,read(v80?0x80121260U:0x80120CE0U),read(v80?0x80123A8CU:0x8012350CU),
+        read(v80?0x80121778U:0x801211F8U),read(v80?0x801217A8U:0x80121228U));
+
+    const dkr_memory_view view{rdram,0x800000U,v80?80U:77U};
+    const auto heap=dkr_memory_measure(view);
+    std::fprintf(stderr,"[hud][heap] sprite=%u free=%u largest=%u slots=%u/%u queue=%u peak=%u valid=%d\n",
+        sprite,heap.free_bytes,heap.largest_free,heap.used_slots,heap.max_slots,heap.queue,heap.high_water,heap.valid);
+
     std::fprintf(stderr, "[hud][asset-load-failed] sprite=%u element=0x%08X; native draw skipped, asset will retry on next draw\n",
         sprite, static_cast<std::uint32_t>(context->r16));
 }
@@ -854,4 +866,11 @@ extern "C" void dkr_refresh_combined_accessories(std::uint8_t* rdram,
         dkr::runtime::pak::policy::combined_rumble_mask(
             dkr::runtime::platform::rumble_enabled(), retail,
             assigned, connected, rumble_capable);
+}
+
+extern "C" void dkr_render_heap_sync_notice(std::uint8_t*,recomp_context* context) {
+    static std::atomic<unsigned> reports{0};
+    if(reports.fetch_add(1)>=16)return;
+    std::fprintf(stderr,"[render][heap-layout] before=%d requested=%d allocated=%d; post-mod-init-track=v1; before track generation\n",
+        int(context->r4),int(context->r5),int(context->r6));
 }

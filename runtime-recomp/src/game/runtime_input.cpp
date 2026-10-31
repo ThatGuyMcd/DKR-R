@@ -63,6 +63,16 @@ constexpr std::array<BindingPair, static_cast<std::size_t>(Action::Count)> kDefa
     {SDL_SCANCODE_L, kAxisSourceBase + SDL_CONTROLLER_AXIS_RIGHTX * 2 + 1},
     {SDL_SCANCODE_O, SDL_CONTROLLER_BUTTON_RIGHTSTICK},
     {dkr::runtime::input::kUnbound, kAxisSourceBase + SDL_CONTROLLER_AXIS_TRIGGERRIGHT * 2 + 1},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_RIGHTY*2},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_RIGHTY*2+1},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_RIGHTX*2},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_RIGHTX*2+1},
+    {SDL_SCANCODE_R,SDL_CONTROLLER_BUTTON_LEFTSTICK},
+    {SDL_SCANCODE_C,SDL_CONTROLLER_BUTTON_Y},
+    {SDL_SCANCODE_PAGEUP,dkr::runtime::input::kUnbound},
+    {SDL_SCANCODE_PAGEDOWN,dkr::runtime::input::kUnbound},
+    {SDL_SCANCODE_F6,dkr::runtime::input::kUnbound},
+    {SDL_SCANCODE_HOME,dkr::runtime::input::kUnbound},
 }};
 #else
 constexpr std::array<BindingPair, static_cast<std::size_t>(Action::Count)> kDefaults{};
@@ -147,6 +157,8 @@ constexpr std::array<const char*, static_cast<std::size_t>(Action::Count)> kIden
     "stick_up", "stick_down", "stick_left", "stick_right", "a", "b", "z",
     "start", "dpad_up", "dpad_down", "dpad_left", "dpad_right", "l", "r",
     "c_up", "c_down", "c_left", "c_right", "look_back", "accelerate",
+    "camera_up","camera_down","camera_left","camera_right","camera_recenter","camera_cycle",
+    "camera_zoom_in","camera_zoom_out","camera_first_person","camera_xr_recenter",
 }};
 
 constexpr std::array<const char*, static_cast<std::size_t>(Action::Count)> kLabels{{
@@ -154,6 +166,8 @@ constexpr std::array<const char*, static_cast<std::size_t>(Action::Count)> kLabe
     "B button", "Z trigger", "Start", "D-pad up", "D-pad down", "D-pad left",
     "D-pad right", "L shoulder", "R shoulder", "C-up", "C-down", "C-left", "C-right",
     "Look back", "Accelerate",
+    "Camera up","Camera down","Camera left","Camera right","Centre camera","Cycle camera",
+    "Camera zoom in","Camera zoom out","First-person camera","Centre headset",
 }};
 
 std::size_t Index(Action action) {
@@ -1036,6 +1050,11 @@ dkr::runtime::input::State dkr::runtime::input::poll(
     state.camera_x = std::clamp(value(Action::CRight) - value(Action::CLeft), -1.0F, 1.0F);
     state.camera_y = std::clamp(value(Action::CUp) - value(Action::CDown), -1.0F, 1.0F);
     state.look_back = value(Action::LookBack) > 0.5F;
+    state.orbit_x=std::clamp(value(Action::OrbitLeft)-value(Action::OrbitRight),-1.F,1.F);
+    state.orbit_y=std::clamp(value(Action::OrbitDown)-value(Action::OrbitUp),-1.F,1.F);
+    const Action camera_keys[]={Action::LookBack,Action::CameraRecenter,Action::CameraCycle,
+        Action::CameraZoomIn,Action::CameraZoomOut,Action::CameraFirstPerson,Action::CameraXrRecenter};
+    for(unsigned i=0;i<7;++i)if(value(camera_keys[i])>0.5F)state.camera_actions|=1U<<i;
     state.accelerate = value(Action::Accelerate) >
         (dkr::runtime::enhancements::modern_presentation_enabled() ? trigger_threshold() : 0.5F);
     state.stick_x = std::clamp(value(Action::StickRight) - value(Action::StickLeft), -1.0F, 1.0F);
@@ -1178,6 +1197,11 @@ dkr::runtime::input::State dkr::runtime::input::poll_snapshot(
     state.camera_y = std::clamp(value(Action::CUp) - value(Action::CDown),
                                 -1.0F, 1.0F);
     state.look_back = value(Action::LookBack) > 0.5F;
+    state.orbit_x=std::clamp(value(Action::OrbitLeft)-value(Action::OrbitRight),-1.F,1.F);
+    state.orbit_y=std::clamp(value(Action::OrbitDown)-value(Action::OrbitUp),-1.F,1.F);
+    const Action camera_keys[]={Action::LookBack,Action::CameraRecenter,Action::CameraCycle,
+        Action::CameraZoomIn,Action::CameraZoomOut,Action::CameraFirstPerson,Action::CameraXrRecenter};
+    for(unsigned i=0;i<7;++i)if(value(camera_keys[i])>0.5F)state.camera_actions|=1U<<i;
     state.accelerate = value(Action::Accelerate) >
         (dkr::runtime::enhancements::modern_presentation_enabled() ? trigger_threshold() : 0.5F);
     state.stick_x = std::clamp(value(Action::StickRight) -

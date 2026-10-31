@@ -33,22 +33,22 @@ bool Timeline::needs_local_input(bool live_lead) const {
     const auto limit=std::uint64_t(frontier_)+configuration_.input_delay+(live_lead ? 2 : 1);
     return inputs_.received_next(configuration_.local_owner)<limit && limit<UINT32_MAX;
 }
-OwnerInputResult Timeline::sample_local(PackedInput input,bool live_lead) {
+OwnerInputResult Timeline::sample_local(PackedInput input,bool live_lead,dkr::sdk2::Command command) {
     if (!needs_local_input(live_lead)) return OwnerInputResult::Rejected;
     const auto frame=inputs_.received_next(configuration_.local_owner);
-    const auto result=inputs_.publish(frame,input);
-    if (result==OwnerInputResult::Accepted && !stage(configuration_.local_owner,frame,input))
+    const auto result=inputs_.publish(frame,input,command);
+    if (result==OwnerInputResult::Accepted && !stage(configuration_.local_owner,frame,input,command))
         return OwnerInputResult::Rejected;
     return result;
 }
-bool Timeline::stage(std::uint8_t owner,std::uint32_t frame,PackedInput input) {
+bool Timeline::stage(std::uint8_t owner,std::uint32_t frame,PackedInput input,dkr::sdk2::Command command) {
     if (frame < driver_.statistics().confirmed_frames) return true;
     auto& pending=pending_[owner][frame%128];
-    if (pending.valid && (pending.frame!=frame || pending.input!=input)) {
+    if (pending.valid && (pending.frame!=frame || pending.input!=input||pending.command!=command)) {
         error_="Experimental pending input history conflicted or exceeded its bound."; return false;
     }
     if(!pending.valid)++pending_counts_[owner];
-    pending={frame,input,true}; return true;
+    pending={frame,input,true,command}; return true;
 }
 OwnerInputResult Timeline::receive_authenticated(std::uint8_t peer,std::span<const std::uint8_t> bytes) {
     if (!started_ || !error().empty()) return OwnerInputResult::Rejected;
@@ -57,7 +57,7 @@ OwnerInputResult Timeline::receive_authenticated(std::uint8_t peer,std::span<con
     std::vector<FinalOwnerInput> delivered;
     const auto result=inputs_.receive_authenticated(peer,*packet,delivered);
     if (result==OwnerInputResult::Conflict) error_="Conflicting immutable experimental owner input.";
-    for (const auto& actual:delivered) if (!stage(actual.owner,actual.frame,actual.input)) return OwnerInputResult::Rejected;
+    for (const auto& actual:delivered) if (!stage(actual.owner,actual.frame,actual.input,actual.command)) return OwnerInputResult::Rejected;
     return result;
 }
 std::optional<OwnerInputPacket> Timeline::packet_for(std::uint8_t owner,std::uint8_t peer,OwnerInputSend lane) {
@@ -73,7 +73,7 @@ bool Timeline::feed() {
         for (auto& pending:pending_[owner]) if (pending.valid) {
             if (pending.frame<state.confirmed_frames) { pending.valid=false;--pending_counts_[owner]; continue; }
             if (std::uint64_t(pending.frame)>std::uint64_t(state.next_frame)+48) continue;
-            const auto result=driver_.receive(configuration_.simulation.epoch,owner,pending.frame,pending.input);
+            const auto result=driver_.receive(configuration_.simulation.epoch,owner,pending.frame,pending.input,pending.command);
             if (result!=InputResult::Accepted && result!=InputResult::Duplicate) {
                 error_="Experimental driver rejected admitted owner input."; return false;
             }

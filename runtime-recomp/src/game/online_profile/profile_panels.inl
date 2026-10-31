@@ -5,7 +5,11 @@ OlEqualProfileRow* g_equal_profile_row = nullptr;
 // their own backgrounds. Paint the outer backgrounds once the real
 // content height is known, without drawing interactive controls twice.
 struct OlEqualProfileRow {
-    struct Panel { ImVec2 a{}, b{}; OlPanelLook look; int section = 0; };
+    struct Panel {
+        ImVec2 a{}, b{};
+        OlPanelLook look;
+        int section = 0;
+    };
     std::array<Panel, 3> panels;
     std::size_t count = 0;
     bool capture_next = false;
@@ -22,7 +26,8 @@ struct OlEqualProfileRow {
     ~OlEqualProfileRow() {
         g_equal_profile_row = previous;
         float bottom = 0;
-        for (std::size_t n = 0; n < count; ++n) bottom = std::max(bottom, panels[n].b.y);
+        for (std::size_t n = 0; n < count; ++n)
+            bottom = std::max(bottom, panels[n].b.y);
         layers.SetCurrentChannel(draw, 0);
         for (std::size_t n = 0; n < count; ++n) {
             const auto& panel = panels[n];

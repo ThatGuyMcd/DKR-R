@@ -1,5 +1,6 @@
 #include "experimental_network.hpp"
 #include "monocypher.h"
+#include "../mods/sdk2_bridge.hpp"
 #include <algorithm>
 #include <exception>
 
@@ -93,13 +94,15 @@ void Network::receive(const PeerAddress& source,std::span<const std::uint8_t> by
     std::uint64_t sender=0,sequence=0; std::vector<std::uint8_t> plain;
     if(!secure::open(bytes,keys_[peer],configuration_.match_id,sender,sequence,plain) ||
        sender!=configuration_.peers[peer].sender_id || plain.size()<6 ||
-       !std::equal(kPrefix.begin(),kPrefix.end(),plain.begin()) || plain[5]>1) { ++statistics_.rejected; return; }
+       !std::equal(kPrefix.begin(),kPrefix.end(),plain.begin()) || plain[5]>2) { ++statistics_.rejected; return; }
     if(!replay_[peer].accept(sequence)) { ++statistics_.duplicate; return; }
     const auto payload=std::span(plain).subspan(6);
     if(plain[5]==0) {
         const auto result=session_.receive_input(std::uint8_t(peer),payload);
         if(result==SessionInputResult::Rejected) ++statistics_.rejected;
         if(result==SessionInputResult::Conflict) fail("Conflicting authenticated experimental owner input.");
+    } else if(plain[5]==2) {
+        if(!dkr::sdk2::network_receive(peer,payload))++statistics_.rejected;
     } else {
         const auto result=session_.receive_control(std::uint8_t(peer),payload);
         if(result==EpochResult::Rejected) ++statistics_.rejected;
@@ -127,8 +130,11 @@ bool Network::service(Clock::time_point now) {
         // Release/ACK repair is reconstructed through previous_control_for().
         if(epoch_!=session_.epoch()) { pending_={}; epoch_=session_.epoch(); }
         const unsigned players=session_.player_count(),local=session_.local_owner();
+        dkr::sdk2::network_epoch(session_.epoch(),local,players);
         for(unsigned peer=0;peer<players;++peer) {
             if(peer==local || (local && peer)) continue;
+            const auto tools=dkr::sdk2::network_packet(peer);
+            if(!tools.empty()&&!queue(peer,kLanes-1,2,tools,TransportTrafficClass::Control,now))return false;
             const auto current=session_.control_for(std::uint8_t(peer));
             const auto previous=session_.previous_control_for(std::uint8_t(peer));
             if(current && !queue(peer,0,1,encode_epoch_message(*current),TransportTrafficClass::Control,now)) return false;

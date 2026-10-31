@@ -37,11 +37,11 @@ profile-header layout needs no extra deployment. A fresh server needs both the
 existing directory setup and the profile migrations. The website's FTP files
 and mod-upload method stay as they are.
 
-Build the owner bundle with the existing Patch Pipeline and its pinned esbuild:
+Build the owner bundle from the maintained service modules with the pinned esbuild:
 
 ```text
-python -B patches/online-directory/backend_pipeline.py --output <fresh-bundle-folder> --esbuild <esbuild-executable>
-python -B patches/online-directory/backend_pipeline.py --output <bundle-folder> --verify
+python -B services/online-directory/build.py --output <fresh-bundle-folder> --esbuild <esbuild-executable>
+python -B services/online-directory/build.py --output <bundle-folder> --verify
 ```
 
 1. Back up the live private API Worker, directory Worker and private API D1
@@ -65,5 +65,5 @@ gameplay transport and Rollback path are unchanged.
 
 For rollback, restore your saved Worker code and configuration. The added
 tables can remain. Prefer your live backups over an older bundled rollback
-copy if you have made other API changes. See the [original directory setup](../patches/online-directory/DEPLOYMENT.md)
+copy if you have made other API changes. See the [original directory setup](../services/online-directory/DEPLOYMENT.md)
 for a new installation and the generated bundle's instructions for its exact files.

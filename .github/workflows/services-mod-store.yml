@@ -1,0 +1,28 @@
+name: Service - Mod Store backend
+on:
+  push:
+    branches: [main]
+    paths: ["services/mod-store/**", ".github/workflows/services-mod-store.yml"]
+  pull_request:
+    paths: ["services/mod-store/**", ".github/workflows/services-mod-store.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  # Stages the backend over tests/fixture, a minimal base holding each splice
+  # anchor once (services/mod-store/README.md).
+  mod-store:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Stage tests
+        run: python3 -B services/mod-store/tests/build_tests.py

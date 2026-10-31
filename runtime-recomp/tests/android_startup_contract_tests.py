@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import unittest
 
+from source_text import Source
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -22,14 +24,14 @@ class AndroidStartupContractTests(unittest.TestCase):
             body = (stage / relative).read_text().split("void recomp::start(", 1)[1]
             self.assertLess(body.index("game_status.store(GameStatus::None)"), body.index("exited.store(false)"))
             self.assertLess(body.index("current_game.reset()"), body.index("std::thread game_thread"))
-            cmake = (ROOT / "runtime-recomp/cmake/PerformancePatches.cmake").read_text()
+            cmake = Source((ROOT / "runtime-recomp/cmake/PerformancePatches.cmake").read_text())
             self.assertIn('dkr_stage_patch(librecomp "${DKR_MODERN_RUNTIME_SOURCE}" session-bootstrap', cmake)
             self.assertIn(
                 'dkr_stage_patch(ultramodern "${CMAKE_BINARY_DIR}/generated/host-task-lifetime" vi-bootstrap', cmake
             )
 
     def test_no_colour_readback_probe_in_startup(self):
-        helper = (ROOT / "runtime-recomp/src/game/android_transfer_qualification.hpp").read_text()
+        helper = Source((ROOT / "runtime-recomp/src/game/android_transfer_qualification.hpp").read_text())
         patch = (ROOT / "patches/android/renderer-transfer-qualification.patch").read_text()
         self.assertTrue("qualify_color_target" not in helper + patch, "Unsafe colour probe must not ship")
         self.assertNotRegex(helper, r"copyTextureRegion\s*\(")
@@ -57,7 +59,7 @@ class AndroidStartupContractTests(unittest.TestCase):
             self.assertIn("Stage::TextureCopy", body)
 
     def test_android_pipeline_selects_guarded_source(self):
-        cmake = (ROOT / "runtime-recomp/CMakeLists.txt").read_text()
+        cmake = Source((ROOT / "runtime-recomp/CMakeLists.txt").read_text())
         self.assertTrue(
             'dkr_stage_patch(plume "${CMAKE_BINARY_DIR}/generated/android-surface-recovery" android-copy-contract'
             in cmake,

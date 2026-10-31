@@ -1,3 +1,4 @@
+#include "../rollback_policy.hpp"
 #include "experimental_session.hpp"
 #include <exception>
 #include <limits>
@@ -28,8 +29,8 @@ bool Session::service_inputs() {
     if(phase_==Phase::Running && !timeline_.service_inputs())return fail(timeline_.error());
     return true;
 }
-OwnerInputResult Session::sample_local(PackedInput input,bool live_lead) {
-    return needs_local_input(live_lead) ? timeline_.sample_local(input,live_lead) : OwnerInputResult::Rejected;
+OwnerInputResult Session::sample_local(PackedInput input,bool live_lead,dkr::sdk2::Command command) {
+    return needs_local_input(live_lead) ? timeline_.sample_local(input,live_lead,command) : OwnerInputResult::Rejected;
 }
 SessionInputResult Session::receive_input(std::uint8_t peer, std::span<const std::uint8_t> bytes) {
     if (phase_==Phase::Inactive || phase_==Phase::Failed || peer>=configuration_.simulation.players ||
@@ -117,7 +118,7 @@ SessionStep Session::step(bool allow_advance) try {
         switch (world_.prepare_scene(intent_.scene_hash,baseline,detail)) {
         case PreparationStep::Pending:return SessionStep::PreparingScene;
         case PreparationStep::Failed:
-            fail("Experimental scene preparation failed: "+detail); return SessionStep::Failed;
+            fail("Online scene preparation failed: "+detail); return SessionStep::Failed;
         case PreparationStep::Ready:
             if (world_.contract().schema!=schema_) {
                 fail("Experimental checkpoint schema changed during preparation."); return SessionStep::Failed;

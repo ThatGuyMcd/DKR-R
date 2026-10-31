@@ -28,9 +28,8 @@ inline bool identifier(std::string_view value) {
 }
 
 inline bool digest(std::string_view value) {
-    return value.size() == 64 && std::all_of(value.begin(), value.end(), [](char c) {
-        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
-    });
+    return value.size() == 64 && std::all_of(value.begin(), value.end(),
+                                             [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
 }
 
 template <class Json> std::uint64_t bytes(const Json& value) {
@@ -141,8 +140,9 @@ std::vector<Job> restore(const Json& saved, const Json& registry, Present&& pres
             job.state = previous == "Failed" || previous == "Install failed" ? "Failed" : "Paused";
             job.error = field(row, "error", 2000);
             if (job.error.empty())
-                job.error = previous == "Install failed" ? "Installation did not finish. Resume to verify the saved package."
-                                                        : "Resume to check or reuse the saved download.";
+                job.error = previous == "Install failed"
+                                ? "Installation did not finish. Resume to verify the saved package."
+                                : "Resume to check or reuse the saved download.";
         }
         result.push_back(std::move(job));
     }
@@ -152,10 +152,17 @@ std::vector<Job> restore(const Json& saved, const Json& registry, Present&& pres
 template <class Json, class Jobs> Json save(const Jobs& jobs) {
     Json rows = Json::array();
     for (const auto& job : jobs)
-        rows.push_back({{"item", job.item}, {"release", job.release}, {"title", job.title},
-                        {"category", job.category}, {"version", job.version}, {"state", job.state},
-                        {"sha256", job.digest}, {"bytes", job.total}, {"intent", job.intent},
-                        {"instance", job.instance}, {"error", job.error.size() <= 2000 ? job.error : std::string{}}});
+        rows.push_back({{"item", job.item},
+                        {"release", job.release},
+                        {"title", job.title},
+                        {"category", job.category},
+                        {"version", job.version},
+                        {"state", job.state},
+                        {"sha256", job.digest},
+                        {"bytes", job.total},
+                        {"intent", job.intent},
+                        {"instance", job.instance},
+                        {"error", job.error.size() <= 2000 ? job.error : std::string{}}});
     return {{"schema", 2}, {"jobs", std::move(rows)}};
 }
 } // namespace dkr::store::history

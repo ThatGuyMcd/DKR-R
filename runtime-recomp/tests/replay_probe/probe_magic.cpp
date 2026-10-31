@@ -1,5 +1,5 @@
 #include "probe_magic.h"
-#include "netplay/experimental_magic_codes.hpp"
+#include "../../src/game/netplay/experimental_magic_codes.hpp"
 #include "revision_addresses.hpp"
 namespace {dkr::runtime::netplay::experimental::MagicCodes* owner=nullptr;}
 extern "C" void dkr_probe_bind_magic(void* value){owner=static_cast<dkr::runtime::netplay::experimental::MagicCodes*>(value);}

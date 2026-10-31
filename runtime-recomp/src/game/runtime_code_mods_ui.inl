@@ -119,7 +119,7 @@ void DrawCustomMagicCodeLibrary(float requested_width,bool locked) {
     std::transform(query.begin(),query.end(),query.begin(),[](unsigned char c){return char(std::tolower(c));});
     std::vector<const dkr::mods::code::LibraryItem*> shown;
     for(const auto& item:snapshot->items){
-        auto text=item.name+" "+item.id+" "+item.version;
+        auto text=dkr::store::library_display_name(item.digest, "magic", item.name)+" "+item.id+" "+item.version;
         std::transform(text.begin(),text.end(),text.begin(),[](unsigned char c){return char(std::tolower(c));});
         if(!query.empty()&&text.find(query)==text.npos)continue;
         if((g_code_state_filter==1&&!item.enabled)||(g_code_state_filter==2&&item.enabled)||
@@ -154,8 +154,8 @@ void DrawCustomMagicCodeLibrary(float requested_width,bool locked) {
         std::vector<LibraryCardView> cards;float height=0;
         for(std::size_t i=first;i<std::min(first+columns,shown.size());++i){
             const auto& item=*shown[i];LibraryCardView card;card.code=true;card.id=item.digest;
-            card.title=item.name;card.byline="Version "+item.version;
-            card.info=item.kept_online?"Kept from online":"Gameplay mod";
+            card.title=dkr::store::library_display_name(item.digest, "magic", item.name);card.byline="Version "+item.version;
+            card.info=item.presentation?"Local camera mod":item.kept_online?"Kept from online":"Gameplay mod";
             card.enabled=item.enabled;card.gold=item.enabled&&item.approved;
             const bool needs_cup=item.id=="dkr_custom_trophies"&&!item.data.contains("trophies");
             card.toggle_allowed=!busy&&(!needs_cup||!item.selected||!item.approved)&&(item.compatibility.empty()||item.enabled);
@@ -209,7 +209,7 @@ void DrawCustomMagicCodeDetails(bool locked) {
     if(found==view->items.end())PaddockModalText("This code mod is no longer installed.");
     else {
         const auto& item=*found;
-        PaddockHeading(item.name,30,0xFFCD67,ImGui::GetContentRegionAvail().x);
+        PaddockHeading(dkr::store::library_display_name(item.digest, "magic", item.name),30,0xFFCD67,ImGui::GetContentRegionAvail().x);
         PaddockModalText("Version "+item.version);
         if(!item.description.empty())PaddockModalText(item.description);
         PaddockGap(10.0F);

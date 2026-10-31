@@ -60,7 +60,7 @@ private:
         Clock::time_point sent_at{}, attempted_at{},queued_at{};
         bool sent = false, attempted = false;
     };
-    static constexpr unsigned kLanes = 2 + 4 * 2;
+    static constexpr unsigned kLanes = 3 + 4 * 2;
     bool fail(std::string message);
     bool queue(unsigned peer, unsigned lane, unsigned kind,
                std::vector<std::uint8_t> payload, TransportTrafficClass traffic,

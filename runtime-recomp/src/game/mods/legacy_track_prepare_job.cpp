@@ -31,7 +31,7 @@ Bytes reconstruct(View source,View patch) {
 }
 static void prepare_imported_content(const std::filesystem::path& review,
     const std::vector<std::filesystem::path>& owned_roms,
-    const std::filesystem::path& destination,const ProgressCallback& progress,bool characters,const ImportPreparation* preparation,bool behaviour_enabled) {
+    const std::filesystem::path& destination,const ProgressCallback& progress,bool characters,const ImportPreparation* preparation,bool behaviour_enabled,bool legacy_portrait_layout=false) {
     using nlohmann::json;
     if(owned_roms.empty() || owned_roms.size()>8)throw Error("Track preparation needs its imported source Game Pak.");
     directory(review);directory(review/"patches");directory(destination.parent_path());
@@ -121,7 +121,7 @@ static void prepare_imported_content(const std::filesystem::path& review,
           try {
             // Complete preparation and validation precede publication. A mixed
             // patch only contributes its explicitly owned character resources.
-            auto prepared=prepare_character(base,target,patch_id,root.base_character,behaviour_enabled);
+            auto prepared=prepare_character(base,target,patch_id,root.base_character,behaviour_enabled,legacy_portrait_layout);
             if(prepared.root.name.starts_with("Custom Racer ") && package.contains("display_name")) {
                 const auto label=package.at("display_name").get<std::string>();
                 if(!label.empty() && label.size()<=120 && std::none_of(label.begin(),label.end(),[](unsigned char c){return c<32;}))
@@ -164,7 +164,7 @@ void prepare_imported_tracks(const std::filesystem::path& review,const std::vect
     prepare_imported_content(review,roms,destination,progress,false,preparation,behaviour_enabled);
 }
 void prepare_imported_characters(const std::filesystem::path& review,const std::vector<std::filesystem::path>& roms,
-    const std::filesystem::path& destination,const ProgressCallback& progress,const ImportPreparation* preparation,bool behaviour_enabled) {
-    prepare_imported_content(review,roms,destination,progress,true,preparation,behaviour_enabled);
+    const std::filesystem::path& destination,const ProgressCallback& progress,const ImportPreparation* preparation,bool behaviour_enabled,bool legacy_portrait_layout) {
+    prepare_imported_content(review,roms,destination,progress,true,preparation,behaviour_enabled,legacy_portrait_layout);
 }
 }

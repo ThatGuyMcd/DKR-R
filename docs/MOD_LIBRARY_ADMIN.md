@@ -42,14 +42,14 @@ must not be advertised as supported imports. See [Vehicles](VEHICLES.md).
 
 ## Deployment and rollback
 
-Build the library workflow bundle through
-[`patches/library-workflow/pipeline.py`](../patches/library-workflow/pipeline.py)
-and follow its [deployment instructions](../patches/library-workflow/DEPLOYMENT.md).
+Build the library workflow bundle with
+[`services/library-workflow/build.py`](../services/library-workflow/README.md)
+and follow its [deployment instructions](../services/library-workflow/DEPLOYMENT.md).
 Preserve the live database, secrets, account bindings and upload configuration.
 Keep a source/configuration backup before replacing the website/API files.
 
 The Online directory composes over that API. Follow the separate
-[directory deployment guide](../patches/online-directory/DEPLOYMENT.md) for its
+[directory deployment guide](../services/online-directory/DEPLOYMENT.md) for its
 private Worker, binding and feature flags. Worker JavaScript is deployed to
 Cloudflare, not copied to the FTP site. Compare newer live API edits with the
 bundle baseline before replacing anything. No deployment is performed by the

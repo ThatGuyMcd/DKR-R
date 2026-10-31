@@ -1,0 +1,40 @@
+DKR-R v1.0.11 Release Build - Patch Pipeline
+
+ARM64 vehicle preparation and its matching fixtures disable fused multiply-add
+contraction. This makes clipped vehicle data match x64 exactly. No gameplay
+floating-point setting, native fix or peer ID is changed. The unchanged old
+importer remains the negative/legacy control.
+
+This release includes vehicle-original-textures and the complete retained
+graphics-handoff, render-stability, memory-stability and playtest 4 online chain.
+Do not use the v1.0.10 overlay: it predates the current memory/render repairs.
+Windows x64 and Linux x86_64/ARM64 are included. Steam Deck uses the exact
+Linux x86_64 AppImage. Android, macOS and iOS are skipped.
+
+Keep the verified frozen source capsule, prepared ROM/RSP inputs and matching
+architecture caches read-only. Never edit submodules, RecompiledFuncs or
+RecompiledPatches. This recipe uses legitimate existing prepared inputs.
+
+python -B patches/release-prep/v1.0.11/release.py snapshot --output <fresh-backup>
+python -B patches/release-prep/v1.0.11/release.py apply --baseline <backup> --evidence <work>/evidence
+python -B patches/release-prep/v1.0.11/release.py configure --build <platform-build> --capsule <verified-capsule> --log <work>/<platform>/configure.log
+cmake --build <platform-build> --config RelWithDebInfo --target DKRPortGame --parallel 3
+
+The snapshot/apply steps prepare release metadata from the original v1.0.10
+baseline. A committed v1.0.11 checkout already contains those documents and
+must skip apply. Start at configure, then build, audit and package. Do not
+rewrite historical release records by treating a v1.0.11 tree as that baseline.
+
+Build the named synthetic targets in run_checks.py and the two vehicle-data
+targets, then run run_checks.py with --bin, --input, --legacy and --output.
+Use --sanitizer for the native Linux vehicle ASan/UBSan target. ARM64 uses
+--emulator and --sysroot for data/CPU fixtures, not physical GPU acceptance.
+Do not execute a game, user ROM, RSP workload or AppImage during preparation.
+ROM-free helper/updater self-tests are recorded separately in isolated profiles.
+
+audit.py verifies exact final production units and compiler bindings through
+the complete retained source chain. Pass the post-metadata source manifest
+and the original accepted directory receipt. package.py keeps the previous
+allowlist, legal files, helpers and native texture limits. Read back every
+archive and inspect both ELF trees before finalizing. Commit the full release
+source before signing. The update manifest must name that exact commit.

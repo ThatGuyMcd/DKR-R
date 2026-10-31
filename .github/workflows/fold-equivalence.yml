@@ -1,0 +1,31 @@
+name: Fold equivalence
+# ROM-free source checkpoint after the current-main preservation comparison.
+# The historical v1.0.11 record stays separate. This migration gate applies
+# to fold branches; ordinary follow-up PRs use the contributor/platform gates.
+on:
+  push:
+    branches: [refactor/patch-fold-in, refactor/fold-current-main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  fold-equivalence:
+    if: >-
+      github.event_name != 'pull_request' ||
+      startsWith(github.head_ref, 'refactor/fold-') ||
+      github.head_ref == 'refactor/patch-fold-in'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Current-main source checkpoint
+        run: python3 scripts/fold/current_main.py

@@ -1,3 +1,4 @@
+#include "../src/game/cache_repair.hpp"
 #include "online_mod_transfer.hpp"
 #include "online_mod_cache.hpp"
 #include "legacy_character_artifact.hpp"
@@ -159,16 +160,45 @@ int main() {
             auto invalid=Message{Operation::PayloadCredit,digest,id,0,static_cast<std::uint32_t>(payload.size())};
             rejects([&]{sender.request(invalid,budget);});
         }
-        const Message request{Operation::PayloadRequest,digest,hash,0,static_cast<std::uint32_t>(payload.size())};
-        auto good=response(request,payload,768);check(inbox.push(good,request));check(!inbox.push(good,request));
-        auto bad=good;bad.bytes[0]^=1;rejects([&]{inbox.push(bad,request);});
-        bad=good;bad.offset=10;rejects([&]{inbox.push(bad,request);});
-        bad=good;bad.offset=TransferWindowBytes;check(!inbox.push(bad,request));
-        bad=good;bad.manifest=id;check(!inbox.push(bad,request));inbox.clear();check(!inbox.bytes());
-        const auto cache=private_storage_path(std::filesystem::current_path()/("online-cache-check-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())));
-        check(std::filesystem::create_directory(cache));std::filesystem::create_directory(cache/"partials");std::filesystem::create_directory(cache/"payloads");
-        const auto descriptor=manifest.payloads.front();
-        check(!cached_payload(cache/"payloads",descriptor));
+        const Message request{Operation::PayloadRequest, digest, hash, 0, static_cast<std::uint32_t>(payload.size())};
+        auto good = response(request, payload, 768);
+        check(inbox.push(good, request));
+        check(!inbox.push(good, request));
+        auto bad = good;
+        bad.bytes[0] ^= 1;
+        rejects([&] { inbox.push(bad, request); });
+        bad = good;
+        bad.offset = 10;
+        rejects([&] { inbox.push(bad, request); });
+        bad = good;
+        bad.offset = TransferWindowBytes;
+        check(!inbox.push(bad, request));
+        bad = good;
+        bad.manifest = id;
+        check(!inbox.push(bad, request));
+        inbox.clear();
+        check(!inbox.bytes());
+        const auto cache = private_storage_path(
+            std::filesystem::current_path() /
+            ("online-cache-check-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())));
+        check(std::filesystem::create_directory(cache));
+        std::filesystem::create_directory(cache / "partials");
+        std::filesystem::create_directory(cache / "payloads");
+        // Cross multiple durable batches, then verify the actual published bytes.
+        const Bytes large_payload(2U * 1024U * 1024U + 73U, 0x6d);
+        Payload large_descriptor{};
+        large_descriptor.digest = sha256(large_payload);
+        large_descriptor.size = large_payload.size();
+        {
+            PayloadFile large(cache / "partials" / large_descriptor.digest, large_descriptor);
+            for (std::size_t at = 0; at < large_payload.size(); at += 8192)
+                large.append(View(large_payload).subspan(at, std::min<std::size_t>(8192, large_payload.size() - at)));
+            check(large.size() == large_payload.size());
+            large.publish(cache / "payloads" / large_descriptor.digest);
+        }
+        check(cached_payload(cache / "payloads", large_descriptor));
+        const auto descriptor = manifest.payloads.front();
+        check(!cached_payload(cache / "payloads", descriptor));
         {
             PayloadFile partial(cache/"partials"/hash,descriptor);
             partial.append(View(payload).first(768));check(partial.size()==768);
@@ -194,7 +224,35 @@ int main() {
             for(std::size_t at=0;at<payload.size();at+=768)bad.append(View(payload).subspan(at,std::min<std::size_t>(768,payload.size()-at)));
             rejects([&]{bad.publish(cache/"payloads"/corrupt_name);});
         }
-        check(!std::filesystem::exists(cache/"payloads"/corrupt_name));
+        check(!std::filesystem::exists(cache / "payloads" / corrupt_name));
+        using dkr::lobby_stability::verify_or_repair_download;
+        check(verify_or_repair_download(cache, "payloads", descriptor, {}));
+        check(!verify_or_repair_download(cache, "partials", invalid, {}));
+        check(!std::filesystem::exists(cache / "partials" / invalid.digest));
+        check(cached_payload(cache / "payloads", descriptor));
+        write_new_file(cache / "payloads" / invalid.digest, Bytes{1, 2, 3});
+        check(!verify_or_repair_download(cache, "payloads", invalid, {}));
+        check(!std::filesystem::exists(cache / "payloads" / invalid.digest));
+        check(cached_payload(cache / "payloads", descriptor));
+        const auto incomplete = cache / "partials" / invalid.digest;
+        write_new_file(incomplete, Bytes{1, 2, 3});
+        check(!verify_or_repair_download(cache, "partials", invalid, {}));
+        check(read_file(incomplete, 16) == Bytes({1, 2, 3}));
+        std::stop_source cancelled;
+        cancelled.request_stop();
+        rejects([&] { verify_or_repair_download(cache, "partials", invalid, cancelled.get_token()); });
+        check(read_file(incomplete, 16) == Bytes({1, 2, 3}));
+        auto traversal = invalid;
+        traversal.digest = "../outside";
+        rejects([&] { verify_or_repair_download(cache, "partials", traversal, {}); });
+#ifndef _WIN32
+        const auto link_target = cache / "partials" / sha256(bytes("symlink-target"));
+        std::filesystem::create_symlink(cache / "payloads" / hash, link_target);
+        auto linked = descriptor;
+        linked.digest = sha256(bytes("symlink-target"));
+        rejects([&] { verify_or_repair_download(cache, "partials", linked, {}); });
+        check(cached_payload(cache / "payloads", descriptor));
+#endif
         std::filesystem::remove_all(cache); // exclusively created test fixture
         std::cout<<checks<<" bounded consent/range/retry/cache/resume/independent-recipient checks passed.\n";return 0;
     } catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}

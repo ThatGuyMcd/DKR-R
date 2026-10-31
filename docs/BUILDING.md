@@ -1,21 +1,11 @@
 # Building DKR-R v1.0.12
 
-Use the [v1.0.12 release Patch Pipeline](../patches/release-prep/v1.0.11/BUILDING.txt)
-and its `ReleaseOverlay.cmake`. The existing recipe now reads the root VERSION
-and includes the final character/profile and online-performance layers. It keeps
-the corrected live FOV call and Steam Deck sign-in storage, plus memory, render, scheduler
-handoff and updated vehicle repairs, above the retained playtest 4 fixes
-for mod joining, offline copies, race starts and spectator music, plus the Online directory,
-Scoreboard, party repairs, spectators, vehicles, achievements and texture tools,
-plus the previous SDK/Store/save/presentation layers. Building the base target
-alone omits those additions. `VERSION` and the compiled release value are `1.0.12`.
-
-The recipe requires the verified frozen 1.0.7 source capsule and existing normal,
-owned, camera, shadow, visual-model and RSP inputs. These are read-only build
-inputs, not files to edit or rebaseline to pass a check. A fresh contributor
-checkout needs legitimate prepared ROM inputs before it can reproduce them.
-Windows/Linux/ARM64 must share the accepted source ledger. Never relabel
-an earlier binary as a new release.
+The tree is the release: the memory, render, scheduler handoff and vehicle
+repairs, the playtest 4 fixes for mod joining, offline copies, race starts and
+spectator music, the Online directory, Scoreboard, party repairs, spectators,
+vehicles, achievements, texture tools and the SDK/Store/save/presentation
+work are all source here. `VERSION` and the compiled release value are
+`1.0.12`. Prepare the ROM-derived inputs (below), then build the tree.
 
 The v1.0.12 build set and exact static checks are in
 [release validation](../RELEASE-VALIDATION.md). Source build commands for Apple
@@ -25,7 +15,7 @@ For contributor checks that need no ROM or game build, start with
 `python3 scripts/check.py` and the [host presets](DEVELOPMENT.md#first-contribution-tests-without-a-rom).
 The instructions below cover runtime and package builds.
 
-Build from the pinned sources and authored Patch Pipeline. Don't patch RT64,
+Build from the folded first-party source and registered dependency patches. Don't patch RT64,
 N64Recomp, N64ModernRuntime or generated functions by hand to make a build pass.
 
 Windows and Linux releases go together, and Linux must include an AppImage.
@@ -49,96 +39,50 @@ Supply your own clean US v1.0/v77 and US Rev A/v1.1/v80 ROMs locally.
 A complete release needs both native CPU payloads and the matching Rare RSP
 output. Ordinary players only need the ROM they want to play.
 
-`Build-DKR-Runtime.cmd` invokes `scripts/Prepare-DKR-Runtime.ps1`.
-It prepares the decomp ELF, pinned dependencies and generated/probe inputs.
-It is not, by itself, the complete mod-enabled/owned-rollback Public Build.
-`Diagnose-DKR-Recompile.cmd` is a diagnostic regeneration entry point; it
-does not replace composing both production policies.
+## Prepare (Windows and macOS)
 
-Use fresh build/output directories. Keep ROMs, generated output and local
-profiles out of source control.
-
-## Compose both normal payloads
-
-The versioned policies are only part of the policy. Production legacy scene,
-track/character menu, presentation and behaviour fragments must be composed
-before N64Recomp runs:
+One prepare script per platform does the whole job, the same way on both:
 
 ```text
-python scripts/generate_legacy_menu_qualification.py --characters --character-menu
-    --v77-build <prepared-v77-ELF-and-ROM-folder>
-    --v80-build <prepared-v80-ELF-and-ROM-folder>
-    --recompiler <N64Recomp-executable> --output <fresh-pipeline-output>
+Prepare-DKR-Runtime.cmd -RomV77 "<US 1.0 ROM>" -RomV80 "<US Rev A ROM>"
+bash scripts/Prepare-DKR-Runtime-macOS.sh --rom-v77 "<US 1.0 ROM>" --rom-v80 "<US Rev A ROM>"
 ```
 
-The displayed arguments are one command; join the lines using your shell's
-continuation syntax. Paths in angle brackets are placeholders.
-Use the resulting `generated-v77` and `generated-v80` directories separately.
-CMake checks required hooks and rejects v80 pointed at the protected v77 output.
+It checks both ROMs against their retail SHA-1, builds one decomp ELF per
+revision (`build/decomp/v<rev>`; under WSL on Windows), builds N64Recomp, and
+runs `scripts/compose_payloads.py` for each revision. That composes the
+production policy (the versioned base policy plus the legacy mod, track menu,
+character and character menu fragments, with the scene runtime) and runs
+N64Recomp into `build/generated/v<rev>`. Last, `scripts/prepare_payloads.py`
+derives everything else the Public Build compiles into `build/prepared`: each
+payload with its save-layout and in-world portrait stages, the isolated
+full-scene owned rollback engines, the Camera++ scene kernels and the local
+model kernels. `Build-Windows.cmd` and `Build-macOS.sh` build from there, and a
+plain configure finds the whole set by default
+(`runtime-recomp/cmake/PreparedInputs.cmake`). A configure that names its own
+`DKR_GENERATED_SOURCE_V77` gets none of it, since the owned engines and kernels
+belong to the payload they were prepared from.
 
-Revision translation uses named functions and checked offsets, not a global
-address delta. If translating the base v80 policy, retain and validate its
-revision-specific entries; don't overwrite them with a blind translation.
+Each stage checks pinned function hashes, native callback signatures, header
+hashes and service ownership, and writes new output only; it never edits its
+input. Despite the historical "probe/test" names, the owned outputs supply the
+integrated backend. Don't loosen a failed check or edit generated output to
+admit a new closure. Revision translation uses named functions and checked
+offsets, not a global address delta.
 
-## Generate the owned rollback payloads
+`scripts/generate_legacy_menu_qualification.py` builds menu qualification
+payloads; it isn't part of a release build. To rerun only N64Recomp for one
+revision, run `scripts/compose_payloads.py payload` (`--help` lists its
+inputs). Keep ROMs, generated output and
+local profiles out of source control.
 
-The complete Windows/Linux Public Build also needs two isolated full-scene owned
-outputs. A normal payload or the old single-track probe is not sufficient.
+## Release packages
 
-Run `scripts/generate_replay_probe.py --help` for the input contract.
-It reads composed generated CPU inputs and the reviewed `recomp.h`, then emits
-new isolated output; it does not edit the input tree. For each revision use:
+[Releasing](RELEASING.md) is the runbook: tag, prepare, `scripts/release/build.py`
+per platform, package, evidence, finalize, sign and seal. **Until C5 lands,
+`finalize.py` refuses every release from this tree**: 15 of the checks v1.0.11
+required are pending in `scripts/release/required_checks.toml`.
 
-```text
-python scripts/generate_replay_probe.py <normal-generated-directory>
-    <pinned-recomp.h> <fresh-owned-output-directory> --revision <77-or-80>
-    --scene-cuts --audio-services --input-services --authored-cpu
-    --isolate-symbols --full-scenes --mod-services --inline-memory
-```
-
-Despite the historical “probe/test” names, these checked full-scene outputs
-supply the integrated backend. Native callback signatures, header hashes,
-service ownership and the manifest are mandatory. Don't loosen a failed check
-or edit generated output to admit a new closure.
-
-## Prepared visual inputs and release configuration
-
-The retained visual-model/vehicle renderer also needs two fresh model-only
-outputs. These are separate from both the normal and owned CPU directories:
-
-```text
-python scripts/generate_visual_model_kernel.py --generated <normal-v77>
-    --header <pinned-recomp.h> --elf <v77.elf> --revision 77
-    --output <fresh-model-v77>
-```
-
-Repeat for revision 80 using its own ELF and normal input. The script checks
-the five leaf routine hashes, scalar symbols and memory ABI. It emits only
-the model closure, with checked reads, shadowed guest stores and an operation
-budget; there is no game-world redraw or gameplay/native-import escape.
-Supply both outputs using `DKR_VISUAL_MODEL_GENERATED_V77` and
-`DKR_VISUAL_MODEL_GENERATED_V80`. Without them the local model feature is not
-compiled and the live Online maximum-detail control remains unavailable.
-
-For an already prepared platform cache, configure through the current overlay:
-
-```text
-python -B patches/release-prep/v1.0.11/release.py configure --build <platform-build> --capsule <verified-capsule> --log <fresh-evidence>/configure.log
-cmake --build <platform-build> --config RelWithDebInfo --target DKRPortGame --parallel
-```
-
-The displayed configuration reuses the cache's reviewed compiler/toolchain,
-normal/owned/RSP inputs and platform dependencies. It is not a universal
-fresh-machine bootstrap command. Select the correct Windows/Linux/ARM64
-cache, never reuse compiled objects across architectures, and retain both visual
-model inputs. Older ARM caches can supply them with
-`--define DKR_VISUAL_MODEL_GENERATED_V77:PATH=<model-v77>` and its V80 equivalent.
-Use the actual platform's build configuration (Ninja uses its configured build
-type); build the required desktop helpers before packaging.
-
-Use `patches/release-prep/v1.0.11/audit.py` and `package.py` for the release source
-graph and allowlisted package composition. Their `--help` describes explicit
-paths. They retain earlier contract audits and read-only frozen inputs.
 Keep evidence and new outputs outside the repository. Linux packaging must
 produce both AppImages; Steam Deck copies the exact x86_64 payload.
 
@@ -155,14 +99,14 @@ The Linux release toolchain uses glibc 2.38 or newer. AppImages
 bundle application libraries, not the system glibc or GPU driver. Record the
 ELF architecture and required symbol versions when using a different build host.
 
-The simpler `Build-Windows.cmd`/`Build-Linux.sh` wrappers consume prepared
-normal sources. Supply `-GeneratedSource`/`-Revision80GeneratedSource`
-on the Windows script, or `DKR_LINUX_GENERATED_SOURCE`/
-`DKR_LINUX_V80_GENERATED_SOURCE` on Linux.
+`Build-Windows.cmd` builds from `build\prepared` by default;
+`-GeneratedSource`/`-Revision80GeneratedSource` select other payloads (which
+then build without the prepared owned engines and kernels). `Build-Linux.sh`
+takes `DKR_LINUX_GENERATED_SOURCE`/`DKR_LINUX_V80_GENERATED_SOURCE`.
 `./Build-Linux.sh` builds and tests; add `--package` only when you want an
 AppImage. `./Build-Linux.sh --help` lists the input and output overrides.
-They do not configure the extra owned outputs automatically; don't describe
-that basic build as reproduction of the full experimental Public Build.
+`Build-Linux.sh` doesn't configure the extra owned outputs automatically;
+don't describe that basic build as reproduction of the full Public Build.
 
 ## macOS
 
@@ -313,8 +257,6 @@ outstanding device/gameplay checks in [release validation](../RELEASE-VALIDATION
 
 ## Retained v1.0.8 startup hotfix
 
-The current release includes [the startup hotfix pipeline](../patches/startup-memory/BUILDING.txt).
-That earlier layer used the frozen 1.0.7 inputs and an isolated runtime-memory
-patch for 1.0.8 (Android code 1080001). The current outer release layer supplies
-1.0.12 for Windows/Linux while retaining the startup correction. Android
+The v1.0.8 startup correction (Android code 1080001) is the registered
+dependency patch `patches/startup-memory/runtime-memory.patch`. Android
 release metadata is not changed by this release.

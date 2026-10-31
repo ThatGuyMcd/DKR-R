@@ -1,3 +1,4 @@
+#include "../rollback_policy.hpp"
 #include "netplay_protocol.hpp"
 #include "mods/online_mod_manifest.hpp"
 
@@ -51,9 +52,8 @@ bool Take64(std::span<const std::uint8_t> bytes, std::size_t& cursor,
 }
 
 bool ValidType(std::uint8_t type) {
-    return type >= static_cast<std::uint8_t>(MessageType::Hello) &&
-           type <=
-               static_cast<std::uint8_t>(MessageType::ModData);
+    return type==250 || (type >= static_cast<std::uint8_t>(MessageType::Hello) &&
+           type <= static_cast<std::uint8_t>(MessageType::ModData));
 }
 
 bool PutString(std::vector<std::uint8_t>& out, std::string_view value,
@@ -1063,6 +1063,7 @@ std::vector<std::uint8_t> encode_lobby_state(const LobbyStatePayload& payload) {
     std::uint8_t rule_flags = payload.rules.automatic_input_delay ? 1U : 0U;
     rule_flags |= payload.rules.relay_only ? 2U : 0U;
     rule_flags |= payload.rules.record_replay ? 4U : 0U;
+    rule_flags |= payload.rules.development ? 8U : 0U;
     out.push_back(rule_flags);
     out.push_back(payload.rules.manual_input_delay);
     out.push_back(payload.rules.rollback_window);
@@ -1122,7 +1123,7 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
     }
     if (visibility > static_cast<std::uint8_t>(Visibility::Lan) ||
         host_control > static_cast<std::uint8_t>(HostControlPolicy::EveryAssignedPort) ||
-        (rule_flags & ~7U) != 0U ||
+        (rule_flags & ~15U) != 0U ||
         !valid_synchronization_mode(static_cast<SynchronizationMode>(synchronization)) ||
         payload.input_delay_frames > 9U || countdown_active > 1U ||
         payload.countdown_remaining_ms > 5000U) {
@@ -1134,9 +1135,14 @@ bool decode_lobby_state(std::span<const std::uint8_t> bytes,
     payload.rules.automatic_input_delay = (rule_flags & 1U) != 0U;
     payload.rules.relay_only = (rule_flags & 2U) != 0U;
     payload.rules.record_replay = (rule_flags & 4U) != 0U;
+    payload.rules.development=(rule_flags&8U)!=0U;
     payload.rules.synchronization =
         static_cast<SynchronizationMode>(synchronization);
     payload.countdown_active = countdown_active != 0U;
+    if (!dkr::runtime::netplay::rollback_policy::supported(payload.rules.synchronization)) {
+        error = dkr::runtime::netplay::rollback_policy::admission_error(payload.rules.synchronization);
+        return false;
+    }
     if (!valid_rules(payload.rules)) {
         error = "Lobby rules are outside the supported limits.";
         return false;
@@ -1291,7 +1297,7 @@ std::vector<std::uint8_t> encode_start(const StartPayload& payload) {
         return {};
     }
     std::vector<std::uint8_t> out;
-    out.reserve(39U);
+    out.reserve(40U);
     out.push_back(payload.stage);
     Put64(out, payload.descriptor.match_id);
     Put64(out, payload.descriptor.lobby_generation);
@@ -1303,6 +1309,7 @@ std::vector<std::uint8_t> encode_start(const StartPayload& payload) {
     out.push_back(static_cast<std::uint8_t>(
         payload.descriptor.synchronization));
     out.push_back(static_cast<std::uint8_t>(payload.descriptor.host_control));
+    out.push_back(payload.descriptor.development?1U:0U);
     Put64(out, payload.descriptor_hash);
     return out;
 }
@@ -1310,7 +1317,7 @@ std::vector<std::uint8_t> encode_start(const StartPayload& payload) {
 bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
                   std::string& error) {
     payload = {};
-    if (bytes.size() != 39U || bytes[0] > 1U) {
+    if (bytes.size() != 40U || bytes[0] > 1U) {
         error = "Start descriptor is truncated.";
         return false;
     }
@@ -1332,6 +1339,10 @@ bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
     }
     payload.descriptor.synchronization =
         static_cast<SynchronizationMode>(bytes[cursor++]);
+    if (!dkr::runtime::netplay::rollback_policy::supported(payload.descriptor.synchronization)) {
+        error = dkr::runtime::netplay::rollback_policy::admission_error(payload.descriptor.synchronization);
+        return false;
+    }
     if (bytes[cursor] > static_cast<std::uint8_t>(
                             HostControlPolicy::EveryAssignedPort)) {
         error = "Start descriptor host policy is invalid.";
@@ -1339,6 +1350,8 @@ bool decode_start(std::span<const std::uint8_t> bytes, StartPayload& payload,
     }
     payload.descriptor.host_control =
         static_cast<HostControlPolicy>(bytes[cursor++]);
+    if(bytes[cursor]>1){error="Invalid development-lobby flag.";return false;}
+    payload.descriptor.development=bytes[cursor++]!=0;
     if (!Take64(bytes, cursor, payload.descriptor_hash) ||
         cursor != bytes.size() ||
         !valid_launch_descriptor(payload.descriptor) ||

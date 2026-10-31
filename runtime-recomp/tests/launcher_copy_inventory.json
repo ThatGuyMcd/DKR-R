@@ -1613,7 +1613,7 @@
     },
     {
       "id": "COPY-231",
-      "file": "runtime_online_ui.inl",
+      "file": "runtime_ui.cpp",
       "previous": "Connection variation detected. DKR-R is preparing a synchronized recovery point; keep racing.",
       "approved": "Restoring game sync...",
       "verification": "literal"
@@ -2236,7 +2236,7 @@
     },
     {
       "id": "COPY-320",
-      "file": "runtime_camera_tuning_ui.inl",
+      "file": "runtime_details_ui.inl",
       "previous": "Needs the Modern presentation profile (Graphics).",
       "approved": "Requires Modern graphics.",
       "verification": "literal"

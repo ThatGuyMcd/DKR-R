@@ -566,7 +566,7 @@ INPUT_NATIVE_HASH = {
     # Pak path continues to use its separate checkpointed in-memory services.
     "runtime-recomp/src/game/virtual_pak.cpp": "0dd5e4b81817f4d50db6e701d0d1ad517b47a94e721bf29d4ee94ae65d121747",
     # Oct 1 reviewed opt-in capture hook; stable drive/input branches unchanged.
-    "runtime-recomp/src/game/runtime_netplay.cpp": "aaeee3894a0087e9512cf426a65f044cfd76f7aee82dac713b2969f12126160c",
+    "runtime-recomp/src/game/runtime_netplay.cpp": "4cb001dd32e158978221f1536ff6c8695b5ab0c330e7fcaa9dc06686c3376709",
     "runtime-recomp/src/game/runtime_magic_codes.cpp": "e7d661472bb041991b3e8cfc6373c1d647b0fa300281d21448ed74efdb01021f",
     # Frozen online course sizing/ID routing bypasses the offline catalogue.
     # The no-session path remains the prior offline/vanilla implementation.
@@ -582,7 +582,7 @@ INPUT_NATIVE_HASH = {
     # Oct 12: reviewed merge with PR56's frozen-course guard BEFORE any live
     # transport read. Retains caller-owned background lists and offline vehicle
     # selection; neither changes owned checkpoint semantics or asset routing.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "f9af686c2f30ce6f875041f74b694640565d6cef783c18bcdeaf752f298d0988",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4ee51ab618aeaaa661b6cd97c73a3b04d9952298f95f761bba065c86ddef095b",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
     "runtime-recomp/src/game/mods/legacy_memory_safety.h": "17b293ec170dd7d8d25377a01a73b9c5cdfca9636b2c959d06930c178d02cd85",
     "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "64520d21f6721b9caf40ee51f88548266ffaf5bc8821a7c17e6bdc72fa244bb7",
@@ -590,11 +590,11 @@ INPUT_NATIVE_HASH = {
     # immutable sample mount are shared by offline and replay-owned sessions.
     "runtime-recomp/src/game/mods/legacy_character_limits.hpp": "d74576f3bcd7aa61283ac4e8e68d3a234e9182dca5f09f6398f285ca9353c55a",
     "runtime-recomp/src/game/mods/legacy_character_audio.cpp": "00fdd1fa4dbae442ee471cd4ef71631db95c4df6055ea092c9b368f1cf12d124",
-    "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "6d9657e9dabb748a13f9733e201411b02cb8f94cb1b33f14bca64fa90f4db203",
+    "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "2270d3efce0dcfcef2f5364e946fe70a5d5401f11b1960917ba5449678423563",
     "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "311f633c84b103a63d5e2538af1caa377c07e311df3aae1cf52a3fb77aa208b7",
     # Preserve the already-shipped stock-preview restore correction: empty
     # custom identity is allowed only for a pending retail preview, not races.
-    "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "4748e2ef4b83b4772373e0cf6719945fb3c420a7e60f716cef00834114cde789",
+    "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "e204c7cc1dfac8205d8078b359f911e799fbdd33c4b94a351c0a37508b562094",
     # Prepared immutable-template instantiation preserves mount/allocation
     # order and owns a separate mutable bus for every replay world.
     # Scene identity diagnostics flush before the existing prepare/commit;
@@ -626,7 +626,7 @@ FULL_SCENE_NATIVE_HASH = {
     # CPU coordinates/visible neighbourhood are canonical on every peer.
     # PR56 additionally moves the same TailGate/RdramAddress definitions outside
     # the RT64 guard for headless audio/input. Rendered/owned hooks are unchanged.
-    "runtime-recomp/src/game/runtime_stubs.cpp": "3bd058b1674d9fa12d282f99cfdf0771406dd5da7ba816d81b32225485ff9e51",
+    "runtime-recomp/src/game/runtime_stubs.cpp": "26671b332bf72c27eeef253a784abc5f438ad84ddd51f7f72e15fc2988e43bd8",
     "runtime-recomp/src/game/track_select_draw_guest.h": "6bc51e7168679d32c9602988793cc47e983b116343981db00f3feac6fbc13912",
     "runtime-recomp/src/game/audio_event_queue.h": "efb6c0cdadbc5a1fbab30ee7ff524f558ea54523a43a3424727bba4a997535c2",
     "runtime-recomp/src/game/audio_event_queue_state.h": "ca400d843e9018f5d69c2aa75ec40889a303574c7789a7297185369dcde79b18",
@@ -644,7 +644,7 @@ FULL_SCENE_NATIVE_HASH = {
     # Beta 5: four-player range compensation and a normal-runtime-only
     # noninteractive sprite retention hook. Both remain explicit identities
     # in the owned CPU; per-player preferences are consumed by the decoder.
-    "runtime-recomp/src/game/runtime_enhancements.cpp": "79d59b06477366169e41d213310385819e9f902441e18fe46d372a7ff789f8a9",
+    "runtime-recomp/src/game/runtime_enhancements.cpp": "14b77607f65e926c3a18c7cee9a9a073f23f83a70726c11f4aef58815cd8edb8",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "ab8a0f4220c00ce1b5726ff75953f0c4944b5b4e24eba942b442e07268ad04da",
     "runtime-recomp/src/game/character_select_music_policy.hpp": "e2e308c4821e2b11cba32ecafd7195cdf7ed9cc4c4166c8b4078ec513441da6c",
 }
@@ -680,7 +680,7 @@ REVIEWED_MAIN_MERGE_HASH = {
     # transient semantic cursor scopes cannot cross a checkpoint. Track Lab
     # requests use their admitted appended IDs, not legacy retail carriers.
     # DMA/save/character dispatch signatures and ownership remain unchanged.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4dce7b77f8b86ca30a8429d14f700e060c08f134456d1a9931df77d2549842ed",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4ee51ab618aeaaa661b6cd97c73a3b04d9952298f95f761bba065c86ddef095b",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "e204c7cc1dfac8205d8078b359f911e799fbdd33c4b94a351c0a37508b562094",
 }
 
@@ -1289,10 +1289,16 @@ def runtime_isolation_header(guest_names, import_names, revision):
     """
     root = Path(__file__).resolve().parents[1] / "runtime-recomp/tests/replay_probe"
     names = {"make_owned_game", "dkr_owned_mod_calls"}
+    # A probe source that #defines a dkr_probe_ name to its own per-revision
+    # symbol (probe_component.h's dkr_probe_sdk2_pulse) isolates it already;
+    # a second mapping here would clash with it.
+    self_isolated = set()
     for path in sorted(root.iterdir()):
         if path.suffix in (".c", ".cpp", ".h", ".hpp"):
-            names.update(re.findall(r"\bdkr_probe_[A-Za-z_0-9]+\b", path.read_text(encoding="utf-8")))
-    names.difference_update(set(guest_names) | set(import_names))
+            text = path.read_text(encoding="utf-8")
+            names.update(re.findall(r"\bdkr_probe_[A-Za-z_0-9]+\b", text))
+            self_isolated.update(re.findall(r"^#define (dkr_probe_[A-Za-z_0-9]+) ", text, re.M))
+    names.difference_update(set(guest_names) | set(import_names) | self_isolated)
     return isolation_header(names, (), revision)
 
 

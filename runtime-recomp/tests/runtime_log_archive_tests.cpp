@@ -1,5 +1,5 @@
 #include "runtime_log_archive.hpp"
-#include "mods/online_mod_cache_policy.hpp"
+#include "netplay/setup_policy.hpp"
 #include <iostream>
 #include <stdexcept>
 namespace fs=std::filesystem;
@@ -22,12 +22,20 @@ int main() {
         dkr::runtime::support::history::snapshot(root/"large.log",root/"snapshot.log");
         check(fs::file_size(root/"large.log")>3*1024*1024 && fs::file_size(root/"snapshot.log")<2*1024*1024+100);
         constexpr std::uint64_t gib=1024ULL*1024*1024;
-        using dkr::mods::online::resource_cache_budget;
-        check(resource_cache_budget(32*gib,16*gib,false)==gib/2);
-        check(resource_cache_budget(4*gib,gib,false)==gib/4);
-        check(resource_cache_budget(32*gib,16*gib,true)==gib/4);
-        check(resource_cache_budget(32*gib,gib/4,false)==gib/16);
-        check(resource_cache_budget(0,gib,false)==0);
-    } catch(...) {fs::remove_all(root);throw;}
-    fs::remove_all(root);std::cout<<"Log retention and memory-aware reuse policy passed\n";
+        using dkr::online_performance::resource_budget;
+        check(resource_budget(32 * gib, 16 * gib, false) == 3 * gib / 4);
+        check(resource_budget(4 * gib, gib, false) == gib / 4);
+        check(resource_budget(32 * gib, 16 * gib, true) == gib / 4);
+        check(resource_budget(32 * gib, gib / 4, false) == gib / 16);
+        check(resource_budget(0, gib, false) == 0);
+        check(resource_budget(16 * gib, 8 * gib, false) == 3 * gib / 4);
+        check(resource_budget(16 * gib, gib, false) == gib / 4);
+        check(resource_budget(16 * gib, 8 * gib, true) == gib / 4);
+        check(resource_budget(gib, 0, false) == 0);
+    } catch (...) {
+        fs::remove_all(root);
+        throw;
+    }
+    fs::remove_all(root);
+    std::cout << "Log retention and memory-aware reuse policy passed\n";
 }

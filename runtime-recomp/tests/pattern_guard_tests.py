@@ -69,6 +69,40 @@ class FixtureTests(unittest.TestCase):
         self.assertEqual(run_guard(ROOT, "--explain", "PG999")[0], 2)
 
 
+class AllowlistTests(unittest.TestCase):
+    def test_only_the_two_named_stages_may_write_guest_code(self):
+        # AGENTS.md names exactly these; anything else goes in hooks.toml.
+        self.assertEqual(
+            set(pattern_guard.OWNED_INPUT_STAGES),
+            {"scripts/save_layout_pipeline.py", "scripts/character_portrait_pipeline.py"},
+        )
+        self.assertEqual(
+            pattern_guard.GUEST_REWRITE_ALLOWED - set(pattern_guard.OWNED_INPUT_STAGES),
+            {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake"},
+        )
+
+
+class ServicesScopeTests(unittest.TestCase):
+    def test_pipeline_rules_skip_services_and_nothing_else(self):
+        # A string-replace splice over first-party-named text: PG004 in the
+        # runtime tree, out of scope under services/.
+        source = (
+            "from pathlib import Path\n"
+            "text = Path('runtime-recomp/src/game/x.cpp').read_text()\n"
+            "Path('out.cpp').write_text(text.replace('a', 'b'))\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for path in ("scripts/splice.py", "services/web/build.py"):
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(source)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
+            _, out, err = run_guard(root, "--tree", "--baseline", "ignore")
+        self.assertIn("scripts/splice.py:3: PG004", out + err)
+        self.assertNotIn("services/", out + err)
+
+
 class CheckContentTests(unittest.TestCase):
     def test_a_patch_registered_before_it_is_written_is_still_checked(self):
         # Registering first must not hide PG008: PG007 hashes the planned
@@ -187,7 +221,7 @@ class DiffScopeTests(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("patches/feature/NOTES.txt:1: PG013", out)
 
-    def test_baseline_growth_needs_the_transition_label(self):
+    def test_baseline_growth_always_fails(self):
         layer = self.root / "patches/new-layer/ReleaseOverlay.cmake"
         layer.parent.mkdir(parents=True)
         layer.write_text('message(STATUS "layer 44")\n')
@@ -195,7 +229,6 @@ class DiffScopeTests(unittest.TestCase):
         status, out, _ = run_guard(self.root, "--diff", "HEAD")
         self.assertEqual(status, 1)
         self.assertIn("PG001 new baseline entry for patches/new-layer/ReleaseOverlay.cmake", out)
-        self.assertEqual(run_guard(self.root, "--diff", "HEAD", "--transition-layer")[0], 0)
 
     def test_shrinking_the_baseline_passes(self):
         (self.root / "patches/feature/CMakeLists.txt").unlink()

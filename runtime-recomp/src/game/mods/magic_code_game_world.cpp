@@ -5,6 +5,10 @@
 #include <array>
 #include <cstring>
 #include <cstddef>
+#include <bit>
+#include <cmath>
+
+#include "magic_code_execution_policy.hpp"
 
 namespace dkr::mods::code {
 namespace {
@@ -37,8 +41,24 @@ void write_call(Memory& bus,std::uint32_t address,const Registers& c) {
     bus.store(address+512,8,c.hi);bus.store(address+520,8,c.lo);bus.store(address+528,4,c.fcsr);
 }
 }
+#include "sdk2_world.inl"
+#include "sdk2_operations.inl"
+#include "sdk2_collision.inl"
+#include "sdk2_track_catalogue.inl"
+#include "sdk2_simulation.inl"
+#include "sdk2_documents.inl"
+#include "sdk2_tuning.inl"
+#include "sdk2_overrides.inl"
+#include "sdk2_reload.inl"
+#include "sdk2_settings.inl"
 LinkPolicy GameWorld::policy(DispatchTable table,bool online) {
     auto p=World::core_policy();p.online=online;
+    p.modules.insert({{"reflection2",2},{"entities2",2},{"transactions2",2},{"inspection2",2},{"tools-ui2",2},{"operations2",2},{"live-settings2",2},{"catalogues2",2},{"collision2",2},{"events2",2}});
+    p.services.insert({"dkr2_capability","dkr2_session","dkr2_property","dkr2_entities","dkr2_read","dkr2_edit","dkr2_symbols","dkr2_memory_read","dkr2_ui_publish","dkr2_action_next","dkr2_operation_available","dkr2_operation","dkr2_setting_set","dkr2_setting_reset","dkr2_catalogue","dkr2_cast","dkr2_events","dkr2_event_next","dkr2_debug"});
+    p.modules.emplace("racer-tuning2",2);p.services.insert({"dkr2_tune","dkr2_freeze_cpus"});
+    p.services.insert("dkr2_setting_apply");p.events.insert("on_live_setting");
+    p.modules.emplace("reload2",2);p.events.insert({"on_cleanup","on_reload"});
+    p.modules.emplace("overrides2",2);p.services.insert("dkr2_override");
     p.modules.emplace("game-hooks",1);
     p.modules.emplace("game-events",1);
     p.modules.emplace("game",1);
@@ -58,7 +78,8 @@ LinkPolicy GameWorld::policy(DispatchTable table,bool online) {
     // An empty table is the library's capability preview. Actual admission
     // still requires all four reviewed handlers in the selected CPU closure.
     if(table.entries.empty()||std::count_if(table.entries.begin(),table.entries.end(),[](const auto& e){return e.curated_call;})==4)p.modules.emplace("audio",1);
-    p.events.insert({"on_frame","on_frame_end"});
+    p.events.insert({"on_frame","on_frame_end","on_tool"});
+    p.modules.emplace("simulation2",2);p.modules.emplace("track-tools2",2);p.modules.emplace("documents2",2);p.modules.emplace("presentation2",2);p.services.insert({"dkr2_control","dkr2_route","dkr2_document_publish","dkr2_document_read","dkr2_document_size","dkr2_document_accept"});
     p.raw_game_access=!table.entries.empty();
     for(const auto& entry:table.entries) {
         p.functions.insert(entry.address);
@@ -81,6 +102,22 @@ GameWorld::GameWorld(const FrozenSet& frozen,std::string_view revision,DispatchT
     world_(link(frozen.ordered,frozen.settings,revision,policy(table,online),frozen.data),seed,
         [this](auto address,auto& registers,auto& budget){native(address,registers,budget);},
         [this](auto name,auto owner,auto& bus,auto& registers,auto& budget){return service(name,owner,bus,registers,budget);}) {
+    sdk2_active_=std::any_of(frozen.ordered.begin(),frozen.ordered.end(),[](const auto& p){return p->api==2;});
+    if(sdk2_active_)sdk2_modules_=policy(table_,online_).modules;
+    if(sdk2_active_)for(const auto& p:frozen.ordered)if(p->api==2){sdk2_budget_.instructions+=p->sdk2_instructions;sdk2_budget_.native_calls+=p->sdk2_native_calls;}
+    sdk2_development_=!online_&&std::any_of(frozen.ordered.begin(),frozen.ordered.end(),[](const auto& p){return p->development;});
+    for(const auto& p:frozen.ordered)if(p->api==2) {
+        const auto data=frozen.data.find(p->id);
+        if(data!=frozen.data.end()&&data->second.contains("_sdk2_catalogue")) {
+            const auto courses=trophy::read_catalogue(data->second.at("_sdk2_catalogue").at("courses"));
+            if(!sdk2_courses_.empty()&&sdk2_courses_!=courses)throw Error("SDK 2 packages disagree on their frozen resource catalogue.");
+            sdk2_courses_=courses;
+            const auto& inventory=data->second.at("_sdk2_catalogue").at("inventory");
+            if(!sdk2_inventory_.empty()&&sdk2_inventory_!=inventory)throw Error("SDK 2 packages disagree on their admitted resource inventory.");
+            sdk2_inventory_=inventory;
+        }
+    }
+    for(const auto& cup:trophy::menu_entries(frozen))sdk2_cups_.push_back({{"id",cup.id},{"name",cup.name}});
     if(world_.linked().identity!=frozen.identity)throw Error("Frozen code configuration changed before game construction.");
     if(!std::is_sorted(table_.entries.begin(),table_.entries.end(),[](const auto& a,const auto& b){return a.address<b.address;}))
         throw Error("Code dispatch table is not canonically ordered.");
@@ -94,11 +131,15 @@ GameWorld::GameWorld(const FrozenSet& frozen,std::string_view revision,DispatchT
     hook_mask_.assign(8*MiB/32,0);
     for(const auto& entry:table_.entries) {
         bool active=linked().hooks.contains(entry.address)||named_events_.contains(entry.address)||entry.after_event==DKR_CODE_EVENT_FRAME_END;
+        if(sdk2_enabled()&&(entry.before_event||entry.after_event||(entry.name&&(std::string_view(entry.name)=="free_object"||std::string_view(entry.name)=="menu_pause_loop"))))active=true;
         for(const auto event:{entry.before_event,entry.after_event})if(event&&linked().events.contains("*:"+std::string(Events[event])))active=true;
+        if(sdk2_active_&&entry.name&&(sdk2::vehicle_update(entry.name)||std::string_view(entry.name)=="update_AI_racer")&&std::any_of(frozen.ordered.begin(),frozen.ordered.end(),[](const auto& p){return p->api==2&&p->modules.contains("racer-tuning2");}))active=true;
+        if(sdk2_active_&&entry.name&&std::string_view(entry.name)=="light_update_shading"&&std::any_of(frozen.ordered.begin(),frozen.ordered.end(),[](const auto& p){return p->api==2&&p->modules.contains("overrides2");}))active=true;
         if(active)hook_mask_[(entry.address&0x7fffffU)>>5]|=std::uint8_t(1U<<((entry.address>>2)&7U));
     }
 }
 bool GameWorld::service(std::string_view name,std::size_t owner,Memory& bus,Registers& c,Budget& budget) {
+    if(sdk2_service(name,owner,bus,c,budget))return true;
     if(game_memory_service(name,bus,c,budget,[this](auto name){return symbol(name);}))return true;
     const auto a=std::uint32_t(c.integer[4]),b=std::uint32_t(c.integer[5]);
     if(name=="dkr_hud_text") {
@@ -307,7 +348,7 @@ void GameWorld::write(recomp_context& context,const Registers& registers) {
     for(unsigned i=0;i<32;i+=2)std::memcpy(bytes+i*sizeof(fpr),&registers.floating[i],sizeof(std::uint64_t));
     context.hi=registers.hi;context.lo=registers.lo;context.mips3_float_mode=0;context.f_odd=&context.f0.u32h;
 }
-void GameWorld::native(std::uint32_t address,Registers& registers,Budget&,bool curated) {
+void GameWorld::native(std::uint32_t address,Registers& registers,Budget& budget,bool curated) {
     const auto found=std::lower_bound(table_.entries.begin(),table_.entries.end(),address,
         [](const auto& entry,auto value){return entry.address<value;});
     if(found==table_.entries.end()||found->address!=address||(found->protected_call&&!(curated&&found->curated_call))||!found->function)
@@ -318,6 +359,7 @@ void GameWorld::native(std::uint32_t address,Registers& registers,Budget&,bool c
     if(!native_bus_)throw Error("Game call has no RDRAM binding.");auto& bus=*native_bus_;
     const auto native_stack=owner->native_stack-native_depth_*8192;
     for(unsigned i=0;i<16;++i)bus.store(native_stack+i*4,4,bus.load(stack+i*4,4));
+    execution::native(budget);
     ++native_depth_;struct Depth{unsigned& value;~Depth(){--value;}}depth{native_depth_};
     recomp_context context{};write(context,registers);context.r29=std::int32_t(native_stack);
     if(invoke_)invoke_(found->function,ram_.data(),&context);
@@ -326,19 +368,32 @@ void GameWorld::native(std::uint32_t address,Registers& registers,Budget&,bool c
 }
 void GameWorld::attach(std::span<std::uint8_t> ram,bool initial) {
     std::lock_guard lock(mutex_);world_.attach(ram,initial);ram_=ram;
+    if(initial&&sdk2_enabled()) {
+        std::vector<std::shared_ptr<const Package>> packages;for(const auto& o:linked().owners)packages.push_back(o.package);
+        dkr::sdk2::begin(packages,online_);
+    }
     auto regions=linked().regions;regions.push_back({0x80000000U,8*unsigned(MiB),true,false});
     native_bus_=std::make_unique<Memory>(ram,std::move(regions));
+    if(initial)for(const auto& o:linked().owners)if(o.package->api==2) {
+        native_bus_->store(o.services+sdk2::Header,4,sdk2::Magic);native_bus_->store(o.services+sdk2::Header+4,4,1);
+    }
 }
-void GameWorld::initialize(){std::lock_guard lock(mutex_);Budget budget;world_.initialize(budget);}
+void GameWorld::initialize(){std::lock_guard lock(mutex_);Budget budget=sdk2_budget_;execution::PhaseScope phase(execution::Phase::Loading);world_.initialize(budget);}
 void GameWorld::event(unsigned event,const Registers& args) {
     std::lock_guard lock(mutex_);
     if(!event||event>=std::size(Events))throw Error("Unknown game lifecycle event.");
+    sdk2_boundary(event);
+    const auto previous_phase=sdk2_phase_;
+    sdk2_phase_=event==DKR_CODE_EVENT_FRAME||event==DKR_CODE_EVENT_FRAME_END?2:1;
+    struct Phase{unsigned& value;unsigned previous;~Phase(){value=previous;}} phase{sdk2_phase_,previous_phase};
     if(event==DKR_CODE_EVENT_FRAME)for(const auto& owner:linked().owners)native_bus_->store(owner.services+1024,4,0);
-    if(nested_==0)budget_=Budget{};
+    if(nested_==0&&!execution::active(&world_))budget_=sdk2_budget_;
     if(nested_>=32)throw Error("Game event recursion exceeds its bound.");
     ++nested_;struct Scope{unsigned& count;~Scope(){--count;}}scope{nested_};
     const auto outgoing=owned_preview_arguments(ram_,online_,args);
+    execution::PhaseScope work_phase(event==DKR_CODE_EVENT_FRAME||event==DKR_CODE_EVENT_FRAME_END?execution::Phase::Simulation:execution::event_phase(Events[event]));
     world_.event("*",Events[event],args,budget_,outgoing?&*outgoing:nullptr);
+    if(event==DKR_CODE_EVENT_FRAME_END)sdk2_inspector();
 }
 int GameWorld::dispatch_event(unsigned event,std::uint8_t* ram,recomp_context* context)noexcept {
     try {
@@ -354,7 +409,7 @@ int GameWorld::indirect(std::uint32_t address,std::uint8_t* ram,recomp_context* 
         std::lock_guard lock(mutex_);
         if(!context||ram!=ram_.data()||!error_.empty()||!linked().function_owners.contains(address))
             throw Error("Indirect game callback does not belong to the admitted code world.");
-        if(nested_==0)budget_=Budget{};
+        if(nested_==0&&!execution::active(&world_))budget_=sdk2_budget_;
         if(nested_>=32)throw Error("Indirect code callback recursion exceeds its bound.");
         ++nested_;struct Scope{unsigned& count;~Scope(){--count;}}scope{nested_};
         auto registers=read(*context);const auto outgoing=owned_preview_arguments(ram_,online_,registers);
@@ -370,13 +425,20 @@ int GameWorld::dispatch(bool leaving,std::uint32_t address,std::uint8_t* ram,rec
         const auto entry=std::lower_bound(table_.entries.begin(),table_.entries.end(),address,
             [](const auto& item,auto value){return item.address<value;});
         if(entry==table_.entries.end()||entry->address!=address)throw Error("Unknown code hook entry.");
+        sdk2_lifetime(entry->name?entry->name:"",leaving,read(*context));
+        const auto previous_phase=sdk2_phase_;
+        const std::string_view function_name=entry->name?entry->name:"";
+        if(function_name.find("render")!=function_name.npos||function_name.starts_with("draw_")||function_name.starts_with("hud_"))sdk2_phase_=4;
+        struct Phase{unsigned& value;unsigned previous;~Phase(){value=previous;}} phase{sdk2_phase_,previous_phase};
+        execution::PhaseScope work_phase(execution::function_phase(function_name));
         const auto lifecycle=leaving?entry->after_event:entry->before_event;
         if(lifecycle)this->event(lifecycle,read(*context));
         const auto named=named_events_.find(address);
-        if(!world_.has_hook(address)&&named==named_events_.end()){result=0;return 1;}
-        if(nested_==0)budget_=Budget{};
+        if(!world_.has_hook(address)&&named==named_events_.end()&&!(sdk2_enabled()&&((leaving&&function_name=="menu_pause_loop")||(!leaving&&function_name=="update_AI_racer")))){result=0;return 1;}
+        if(nested_==0&&!execution::active(&world_))budget_=sdk2_budget_;
         if(nested_>=32)throw Error("Native/code hook recursion exceeds its bound.");
         ++nested_;struct Scope{unsigned& count;~Scope(){--count;}}scope{nested_};
+        execution::Transaction work_transaction(&world_,budget_,"game-hooks");
         auto registers=read(*context);
         const auto outgoing=owned_preview_arguments(ram_,online_,registers);
         const auto* native_arguments=outgoing?&*outgoing:nullptr;
@@ -384,8 +446,8 @@ int GameWorld::dispatch(bool leaving,std::uint32_t address,std::uint8_t* ram,rec
         auto* previous=callback_;callback_=&callback;
         struct RestoreContext{CallbackContext*& slot;CallbackContext* previous;~RestoreContext(){slot=previous;}} restore_context{callback_,previous};
         if(named!=named_events_.end())world_.event("*",leaving?named->second.second:named->second.first,registers,budget_,native_arguments);
-        if(leaving){world_.leave(address,registers,budget_,native_arguments);result=callback.repeat?1:0;}
-        else result=callback.skip||world_.enter(address,registers,budget_,native_arguments)?1:0;
+        if(leaving){world_.leave(address,registers,budget_,native_arguments);sdk2_native_return(function_name,registers);result=callback.repeat?1:0;}
+        else result=callback.skip||world_.enter(address,registers,budget_,native_arguments)||sdk2_freeze(function_name)?1:0;
         write(*context,registers);
         return 1;
     }catch(const std::exception& e){try{error_=e.what();}catch(...){}return -1;}

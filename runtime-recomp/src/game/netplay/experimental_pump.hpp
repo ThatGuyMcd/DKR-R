@@ -31,6 +31,7 @@ public:
     // an automatic mid-match switch back to stable mode.
     bool pulse(Network::Clock::time_point now,const std::function<PackedInput()>& sample,
                bool allow_new_tick = true);
+    void command_source(std::function<dkr::sdk2::Command()> source){commands_=std::move(source);}
     const PumpView& view() const { return view_; }
     const std::string& error() const { return error_; }
 private:
@@ -38,6 +39,7 @@ private:
     Session& session_;
     Network& network_;
     PumpView view_{};
+    std::function<dkr::sdk2::Command()> commands_;
     std::string error_;
     Network::Clock::time_point last_{},next_tick_{},next_sample_{};
     bool started_ = false;

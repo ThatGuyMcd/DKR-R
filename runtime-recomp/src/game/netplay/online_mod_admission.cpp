@@ -1,3 +1,4 @@
+#include "party_link.hpp"
 #include "direct_session.hpp"
 #include "mods/online_mod_manifest.hpp"
 #include <algorithm>
@@ -42,7 +43,7 @@ bool DirectSession::send_mod_packet(std::uint64_t target,std::span<const std::ui
     // A bounded burst per recipient; control stays ahead of bulk, and transport
     // backpressure still prevents growth behind a stalled WebRTC channel.
     PeerAddress address{};const secure::Key* key=nullptr;
-    if(is_host_ && waiting(state_)) {
+    if(is_host_ && (waiting(state_)||dkr::runtime::spectators::party_enabled(this))) {
         auto* pending=pending_by_sender(target);
         if(pending && pending->mods_approved && !pending->mods_verified){address=pending->address;key=&pending->key;}
     } else if(!is_host_ && joining(state_) && mod_offer_ && (target==0 || target==host_sender_id_)) {address=host_address_;key=&key_;}
@@ -54,6 +55,7 @@ bool DirectSession::send_mod_packet(std::uint64_t target,std::span<const std::ui
     if(sent){worker_wake_=true;state_changed_.notify_all();}error.clear();return sent;
 }
 void DirectSession::clear_pending_mod_route_locked(PendingRecord& pending) {
+    {auto party=dkr::runtime::spectators::party_link(this);std::scoped_lock party_lock(party->mutex);party->pending_watch.erase(pending.sender_id);}
     if(pending.mod_route_retained && transport_)transport_->release_peer_route(pending.address);
     if(pending.active) {
         for(auto* queue:{&normal_priority_outbound_,&bulk_outbound_})
@@ -76,7 +78,7 @@ bool DirectSession::complete_local_mod_preparation(std::string_view digest,std::
 }
 bool DirectSession::complete_mod_admission(std::uint64_t request,std::string_view digest,std::string_view resources,std::string& error) {
     std::scoped_lock lock(mutex_);auto* pending=pending_by_request(request);
-    if(!is_host_ || !waiting(state_) || !pending || !pending->mods_approved || manifest_.mod_manifest_hash.empty() ||
+    if(!is_host_ || (!waiting(state_)&&!dkr::runtime::spectators::party_enabled(this)) || !pending || !pending->mods_approved || manifest_.mod_manifest_hash.empty() ||
        digest!=manifest_.mod_manifest_hash) {error="The mod preparation proof does not belong to this approved request.";return false;}
     if(resources.empty() || !valid_mod_manifest_hash(resources) || resources!=manifest_.owned_resources_hash) {
         std::fprintf(stderr,"[online][compatibility] prepared-resources expected=%s received=%.*s\n",
@@ -100,7 +102,7 @@ bool DirectSession::handle_mod_packet_locked(std::uint64_t sender,const protocol
         }
         if(!mod_offer_)return true;
         last_admission_response_=std::chrono::steady_clock::now();
-    } else if(is_host_ && waiting(state_)) {
+    } else if(is_host_ && (waiting(state_)||dkr::runtime::spectators::party_enabled(this))) {
         const auto* pending=pending_by_sender(sender);
         if(type==protocol::MessageType::ModOffer || !pending || !pending->mods_approved || pending->mods_verified)return true;
     } else return true;

@@ -119,12 +119,11 @@ class PreEditGuardTests(unittest.TestCase):
         )
         self.assertEqual((result.returncode, result.stderr), (0, ""))
 
-    def test_allows_editing_a_baselined_file(self):
+    def test_the_repository_baseline_is_empty(self):
+        # The fold emptied it (B8); the baselined-edit path is covered on a
+        # scratch repository below.
         baseline = (ROOT / "architecture/pattern-guard-baseline.txt").read_text(encoding="utf-8")
-        path = next(line.split()[0] for line in baseline.splitlines() if line and not line.startswith("#"))
-        current = (ROOT / path).read_text(encoding="utf-8", errors="replace")
-        result = run_hook("pre_edit_guard.py", edit_payload("Write", ROOT, file_path=str(ROOT / path), content=current))
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([line for line in baseline.splitlines() if line and not line.startswith("#")], [])
 
     def test_ignores_files_outside_the_checkout(self):
         with tempfile.TemporaryDirectory() as temp:

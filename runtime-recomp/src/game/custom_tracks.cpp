@@ -1,3 +1,4 @@
+#include "mod_store_install.hpp"
 #include "custom_tracks.hpp"
 #include "custom_track_files.hpp"
 
@@ -1322,23 +1323,11 @@ std::string lower_extension(const std::filesystem::path& path) {
 
 // One entry out of a zip, into `bytes`. False when the zip or entry is missing.
 // Used for the pack stamp; the payloads a track ships are plain files.
-bool read_zip_entry(const std::filesystem::path& zip_path,
-                    const char* entry_name,
+#include "store_track_zip.inl"
+
+bool read_zip_entry(const std::filesystem::path& path, const char* name,
                     std::vector<std::uint8_t>& bytes) {
-    mz_zip_archive zip{};
-    if (mz_zip_reader_init_file(&zip, zip_path.string().c_str(), 0) == MZ_FALSE) {
-        return false;
-    }
-    std::size_t size = 0;
-    void* data = mz_zip_reader_extract_file_to_heap(&zip, entry_name, &size, 0);
-    mz_zip_reader_end(&zip);
-    if (data == nullptr) {
-        return false;
-    }
-    const auto* first = static_cast<const std::uint8_t*>(data);
-    bytes.assign(first, first + size);
-    mz_free(data);
-    return true;
+    return StoreReadTrackZipEntry(path, name, bytes);
 }
 
 // The textureDigest stamped into a <track>-hd.zip by the Blender export
@@ -1361,81 +1350,12 @@ bool read_hd_pack_digest(const std::filesystem::path& archive,
 
 // Unpacks every entry of `zip_path` under `destination`. Rejects absolute
 // paths and `..` so an archive can never write outside the target directory.
-bool extract_zip(const std::filesystem::path& zip_path,
-                 const std::filesystem::path& destination,
-                 std::string& error) {
-    mz_zip_archive zip{};
-    if (mz_zip_reader_init_file(&zip, zip_path.string().c_str(), 0) == MZ_FALSE) {
-        error = "the .zip could not be opened";
-        return false;
-    }
-    const mz_uint count = mz_zip_reader_get_num_files(&zip);
-    for (mz_uint index = 0; index < count; ++index) {
-        mz_zip_archive_file_stat stat{};
-        if (mz_zip_reader_file_stat(&zip, index, &stat) == MZ_FALSE) {
-            continue;
-        }
-        std::string name = stat.m_filename;
-        if (name.empty() || name.front() == '/' || name.front() == '\\' ||
-            name.find("..") != std::string::npos ||
-            (name.size() > 1U && name[1] == ':')) {
-            mz_zip_reader_end(&zip);
-            error = "the .zip contains an unsafe path";
-            return false;
-        }
-        const std::filesystem::path target =
-            destination / std::filesystem::u8path(name);
-        std::error_code code;
-        if (mz_zip_reader_is_file_a_directory(&zip, index) == MZ_TRUE) {
-            std::filesystem::create_directories(target, code);
-            continue;
-        }
-        std::filesystem::create_directories(target.parent_path(), code);
-        if (mz_zip_reader_extract_to_file(
-                &zip, index, target.string().c_str(), 0) == MZ_FALSE) {
-            mz_zip_reader_end(&zip);
-            error = "the .zip could not be fully extracted";
-            return false;
-        }
-    }
-    mz_zip_reader_end(&zip);
-    return true;
+bool extract_zip(const std::filesystem::path& path, const std::filesystem::path& destination,
+                 std::string& error, std::stop_token stop = {}) {
+    return StoreExtractTrackZip(path, destination, error, stop);
 }
 
-// In an unpacked zip under `root`, finds the .dkrmap. A manifest.json at the
-// root means the zip was a bare .dkrmap (no wrapped pack). Otherwise the track
-// is one folder down and the wrapper's <track>-hd.zip is a *.zip beside it,
-// still under `root`. Returns false when no manifest is found.
-bool locate_unpacked_track(const std::filesystem::path& root,
-                           std::filesystem::path& track_dir,
-                           std::filesystem::path& hd_pack) {
-    std::error_code code;
-    if (std::filesystem::is_regular_file(root / "manifest.json", code)) {
-        track_dir = root;
-        return true;
-    }
-    for (const auto& item :
-         std::filesystem::directory_iterator(root, code)) {
-        if (item.is_directory(code) &&
-            std::filesystem::is_regular_file(
-                item.path() / "manifest.json", code)) {
-            track_dir = item.path();
-            break;
-        }
-    }
-    if (track_dir.empty()) {
-        return false;
-    }
-    for (const auto& item :
-         std::filesystem::directory_iterator(root, code)) {
-        if (item.is_regular_file(code) &&
-            lower_extension(item.path()) == ".zip") {
-            hd_pack = item.path();
-            break;
-        }
-    }
-    return true;
-}
+#include "store_track_locator.inl"
 
 // The level header a track ships, if any (the last LEVEL_HEADERS entry).
 const Entry* level_header_of(const Track& track) {
@@ -2387,9 +2307,9 @@ bool install(const std::filesystem::path& source, std::string& error,
             error = "That .zip is not a track: " + extract_error + ".";
             return false;
         }
-        if (!locate_unpacked_track(temp_root, track_dir, wrapped_hd_pack)) {
+        if (!locate_unpacked_track(temp_root, track_dir, wrapped_hd_pack, &extract_error)) {
             discard_install_temp(temp_root);
-            error = "That .zip does not contain a .dkrmap track.";
+            error = extract_error.empty() ? "That .zip does not contain a .dkrmap track." : extract_error;
             return false;
         }
     } else if (!std::filesystem::is_directory(source, code)) {
@@ -2641,3 +2561,5 @@ void reload() {
 }
 
 } // namespace dkr::runtime::custom_tracks
+
+#include "store_track_adapter.inl"

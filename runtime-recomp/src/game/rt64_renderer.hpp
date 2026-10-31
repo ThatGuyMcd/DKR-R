@@ -12,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <deque>
+#include <vector>
 
 namespace RT64 {
 struct Application;
@@ -20,6 +21,7 @@ namespace dkr::runtime::netplay::experimental {class RenderSnapshot;class Presen
 
 namespace dkr::runtime {
 struct OwnedDecodeScratch;
+namespace camera {class RenderPass;}
 
 class RT64Renderer final : public ultramodern::renderer::RendererContext {
 public:
@@ -58,6 +60,8 @@ private:
     std::mutex presentation_mutex_;
     std::unique_ptr<RT64::Application> application_;
     F3DDKRRT64Bridge f3ddkr_;
+    std::unique_ptr<camera::RenderPass> camera_pass_;
+    std::vector<std::uint8_t> camera_decoder_;
     std::uint64_t present_count_ = 0;
     std::uint64_t interpolated_present_count_ = 0;
     presentation_counter::Snapshot completed_presentations_{};

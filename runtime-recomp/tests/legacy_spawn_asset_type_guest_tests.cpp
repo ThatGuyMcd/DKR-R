@@ -86,12 +86,14 @@ extern "C" void tex_load_sprite(std::uint8_t*, recomp_context* ctx) { asset_call
 extern "C" void get_object_property_size(std::uint8_t*, recomp_context*) { throw BoundaryReached{}; }
 extern "C" void switch_error(const char*, std::uint32_t, std::uint32_t) { throw std::runtime_error("Unexpected guest switch."); }
 #define UNREACHED(name) extern "C" void name(std::uint8_t*, recomp_context*) { throw std::runtime_error("Unreached scene stage: " #name); }
+// clang-format off: clang-format never settles on a list of macro calls without semicolons
 UNREACHED(get_character_id_from_slot) UNREACHED(init_object_interaction_data) UNREACHED(init_object_shading)
 UNREACHED(init_object_shadow) UNREACHED(init_object_water_effect) UNREACHED(is_in_adventure_two)
 UNREACHED(light_setup_light_sources) UNREACHED(mempool_alloc_pool) UNREACHED(mempool_free)
 UNREACHED(model_anim_offset) UNREACHED(obj_init_attachpoint) UNREACHED(obj_init_collision)
 UNREACHED(obj_init_emitter) UNREACHED(objFreeAssets) UNREACHED(run_object_init_func)
 UNREACHED(tex_free) UNREACHED(try_free_object_header)
+// clang-format on
 #undef UNREACHED
 int main(int argc, char** argv) {
     try {

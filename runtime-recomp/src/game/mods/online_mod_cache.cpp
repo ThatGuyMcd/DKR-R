@@ -1,3 +1,4 @@
+#include "../netplay/setup_policy.hpp"
 #include "online_mod_cache.hpp"
 #include <cerrno>
 #ifdef _WIN32
@@ -88,8 +89,9 @@ void PayloadFile::append(View bytes) {
         at+=static_cast<std::size_t>(count);
     }
 #endif
-    size_+=bytes.size();
-    if(size_-flushed_>=64*1024)flush();
+    size_ += bytes.size();
+    if (size_ - flushed_ >= dkr::online_performance::DurableBatch)
+        flush();
 }
 void PayloadFile::flush() {
     if(handle_==-1 || size_==flushed_)return;

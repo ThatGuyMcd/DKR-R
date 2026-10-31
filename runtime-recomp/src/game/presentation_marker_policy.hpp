@@ -20,6 +20,7 @@ enum class PresentationMarkerKind : std::uint8_t {
     HudRect,
     TrackSelectUi,
     TrackSelectPreview,
+    CameraWorldBegin, CameraWorldEnd,
 };
 
 // An overflowed nested begin and its end are one rejected pair. Never let
@@ -60,6 +61,7 @@ constexpr bool valid_presentation_marker(PresentationMarkerKind kind,
                                          std::uint8_t mode,
                                          std::uint8_t variant) {
     if (variant > 31U) return false;
+    if(kind==PresentationMarkerKind::CameraWorldBegin||kind==PresentationMarkerKind::CameraWorldEnd)return mode==0&&variant==0;
     if (kind == PresentationMarkerKind::Geometry) return mode <= 9U;
     if (kind == PresentationMarkerKind::SplitViewport ||
         kind == PresentationMarkerKind::PostraceFullViewport ||

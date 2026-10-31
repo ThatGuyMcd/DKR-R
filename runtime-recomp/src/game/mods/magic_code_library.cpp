@@ -110,7 +110,9 @@ Json catalog(const std::filesystem::path& root) {
     if(doc.size()!=3||doc.value("schema",0)!=2||!doc.contains("items")||!doc["items"].is_object()||doc["items"].size()>LibraryLimit||
        !doc.contains("selected")||!doc["selected"].is_object()||doc["selected"].size()>LibraryLimit)bad("invalid code library catalogue");
     for(const auto& [hash,item]:doc["items"].items()) {
-        if(!digest(hash)||!item.is_object()||item.size()!=7||!item.contains("id")||!item["id"].is_string()||
+        if(!digest(hash)||!item.is_object()||(item.size()!=7&&item.size()!=8)||
+           (item.size()==8&&(!item.contains("presentation")||!item["presentation"].is_boolean()))||
+           (item.size()==7&&item.contains("presentation"))||!item.contains("id")||!item["id"].is_string()||
            !valid_id(item["id"].get<std::string>())||!item.contains("kept_online")||!item["kept_online"].is_boolean()||
            !item.contains("deterministic")||!item["deterministic"].is_boolean())bad("invalid code library entry");
         for(const auto* field:{"name","version","description"})if(!item.contains(field)||!item[field].is_string()||item[field].get_ref<const std::string&>().size()>32768)bad("invalid code library metadata");
@@ -192,6 +194,7 @@ std::vector<LibraryItem> Library::scan(std::stop_token stop)const {
         cancelled(stop);LibraryItem entry;entry.digest=hash;entry.id=item["id"].get<std::string>();
         entry.name=item["name"].get<std::string>();entry.version=item["version"].get<std::string>();entry.description=item["description"].get<std::string>();
         entry.kept_online=item["kept_online"].get<bool>();entry.deterministic=item["deterministic"].get<bool>();
+        entry.presentation=item.value("presentation",false);
         entry.compatibility=compatibility_issue(hash);
         entry.options=item["options"];
         if(doc["selected"].contains(entry.id)) {
@@ -219,7 +222,7 @@ std::string Library::import(View bytes,bool kept_online) {
     }
     const bool was_kept=doc["items"].contains(package->digest)&&doc["items"][package->digest].value("kept_online",false);
     doc["items"][package->digest]={{"id",package->id},{"name",package->name},{"version",package->version},{"description",package->description},
-        {"deterministic",package->deterministic},{"kept_online",kept_online||was_kept},{"options",package->options}};
+        {"deterministic",package->deterministic},{"presentation",package->modules.contains("presentation")},{"kept_online",kept_online||was_kept},{"options",package->options}};
     // Network receipt NEVER selects, approves, enables or reconfigures an
     // offline edition. A manual import only selects an initially disabled one.
     if(!kept_online&&!doc["selected"].contains(package->id))doc["selected"][package->id]={{"digest",package->digest},{"enabled",false},{"approved",false},{"settings",configuration(*package,Json::object())},{"data",Json::object()}};
@@ -266,19 +269,22 @@ void Library::remove(std::string_view hash) {
 std::shared_ptr<const Bytes> Library::payload(std::string_view hash)const {
     Lease lease(root_);return read_payload(root_,hash);
 }
-FrozenSet Library::freeze(std::string_view revision,bool online,const std::map<std::string,unsigned>& modules,std::stop_token stop)const {
+FrozenSet Library::freeze(std::string_view revision,bool online,const std::map<std::string,unsigned>& modules,std::stop_token stop,bool presentation)const {
     Lease lease(root_);const auto doc=catalog(root_);FrozenSet out;std::vector<std::shared_ptr<const Package>> packages;
     std::set<std::string> enabled;std::size_t total=0;
     for(const auto& [id,profile]:doc["selected"].items())if(profile["enabled"].get<bool>()) {
         cancelled(stop);if(!profile["approved"].get<bool>())bad("unapproved code package was selected");
         auto bytes=read_payload(root_,profile["digest"].get<std::string>());auto p=inspect(*bytes,version_);
         if(p->id!=id)bad("package ID differs from its offline profile");
+        // Derive the domain from authenticated package metadata, never the
+        // mutable catalogue hint. Local cameras cannot enter race/save hashes.
+        if(p->modules.contains("presentation")!=presentation)continue;
         std::size_t resource_bytes=bytes->size()+p->binary.size()*2;for(const auto& [name,r]:p->resources)resource_bytes+=r.size();
         if(resource_bytes>ResourceLimit-total)bad("enabled package resources exceed the session budget");
         total+=resource_bytes;
         enabled.insert(id);out.settings.emplace(id,configuration(*p,profile["settings"]));out.data.emplace(id,structured_data(profile["data"]));
         out.payloads.emplace(p->digest,std::move(bytes));packages.push_back(std::move(p));
     }
-    out.ordered=resolve(packages,enabled,revision,online,modules);out.identity=session_identity(out.ordered,out.settings,revision,out.data);return out;
+    out.ordered=resolve(packages,enabled,revision,presentation?false:online,modules);out.identity=session_identity(out.ordered,out.settings,revision,out.data);return out;
 }
 }

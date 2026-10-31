@@ -1,5 +1,5 @@
 #include "probe_pak.h"
-#include "netplay/experimental_pak.hpp"
+#include "../../src/game/netplay/experimental_pak.hpp"
 #include <algorithm>
 namespace { dkr::runtime::netplay::experimental::Paks* owned=nullptr; }
 extern "C" void dkr_probe_bind_paks(void* paks) { owned=static_cast<dkr::runtime::netplay::experimental::Paks*>(paks); }

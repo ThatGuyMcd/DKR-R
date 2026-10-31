@@ -1,4 +1,5 @@
 #include "netplay_lobby.hpp"
+#include "rollback_policy.hpp"
 #include "netplay_build_identity.hpp"
 #include "netplay_pacing_policy.hpp"
 #include "two_player_adventure_policy.hpp"
@@ -581,7 +582,9 @@ int main() {
 
     std::string error;
     Lobby lobby;
-    Rules rules{};
+    // v1.0.11 (rollback-only): lobbies are Rollback lobbies.
+    Rules rules = rollback_policy::default_rules();
+    rules.maximum_players = 2U;
     assert(lobby.create("room-1", "ABC123", "Timber's Test Track",
                         Visibility::Private, "host", "Host", Manifest(),
                         rules, error));
@@ -1039,24 +1042,30 @@ int main() {
     state_payload.phase = RoomPhase::ReadyCheck;
     state_payload.room_name = "Protocol Test";
     state_payload.visibility = Visibility::Public;
-    state_payload.rules.automatic_input_delay = false;
+    // v1.0.11 (rollback-only): lobby state carries Rollback rules.
+    state_payload.rules = rollback_policy::default_rules();
     state_payload.rules.manual_input_delay = 3U;
-    state_payload.rules.synchronization = SynchronizationMode::Lockstep;
-    state_payload.rules.rollback_window = 0U;
     state_payload.input_delay_frames = 3U;
     state_payload.players[0] = {true, true, false, 0U, "Host"};
     state_payload.players[1] = {true, false, false, 1U, "Client"};
     state_payload.players[2].slot = 2U;
     state_payload.players[3].slot = 3U;
-    const auto encoded_state = protocol::encode_lobby_state(state_payload);
     protocol::LobbyStatePayload decoded_state{};
+    {
+        // Superseded: a lockstep lobby state no longer decodes. It must stay gone.
+        auto lockstep_state = state_payload;
+        lockstep_state.rules.synchronization = SynchronizationMode::Lockstep;
+        lockstep_state.rules.rollback_window = 0U;
+        assert(!protocol::decode_lobby_state(protocol::encode_lobby_state(lockstep_state), decoded_state, error));
+    }
+    const auto encoded_state = protocol::encode_lobby_state(state_payload);
     assert(protocol::decode_lobby_state(encoded_state, decoded_state, error));
     assert(decoded_state.generation == 14U);
     assert(decoded_state.room_name == "Protocol Test");
     assert(decoded_state.visibility == Visibility::Public);
     assert(decoded_state.rules.manual_input_delay == 3U);
-    assert(decoded_state.rules.synchronization == SynchronizationMode::Lockstep);
-    assert(decoded_state.rules.rollback_window == 0U);
+    assert(decoded_state.rules.synchronization == rollback_policy::mode);
+    assert(decoded_state.rules.rollback_window == rollback_policy::prediction_window);
     assert(decoded_state.input_delay_frames == 3U);
     assert(decoded_state.players[1].display_name == "Client");
     protocol::StateHashPayload state_hash{
@@ -1103,8 +1112,12 @@ int main() {
     launch.player_count = 2U;
     launch.input_delay_frames = 3U;
     launch.rollback_window = 10U;
+    // v1.0.11 (rollback-only): launches are Rollback launches, and the
+    // retired host-prediction mode must stay refused.
     launch.synchronization = SynchronizationMode::Rollback;
     launch.host_control = HostControlPolicy::GuidedUntilCharacterSelect;
+    assert(!valid_launch_descriptor(launch));
+    launch.synchronization = rollback_policy::mode;
     assert(valid_launch_descriptor(launch));
     protocol::StartPayload start{0U, launch, launch_descriptor_hash(launch)};
     const auto encoded_start = protocol::encode_start(start);
@@ -1119,12 +1132,15 @@ int main() {
     invalid_lockstep.synchronization = SynchronizationMode::Lockstep;
     assert(!valid_launch_descriptor(invalid_lockstep));
     invalid_lockstep.rollback_window = 0U;
-    assert(valid_launch_descriptor(invalid_lockstep));
+    assert(!valid_launch_descriptor(invalid_lockstep)); // superseded: lockstep
+    // Superseded in v1.0.11 (rollback-only): lockstep and host-prediction
+    // lobbies are no longer valid rules. They must stay gone.
     Rules lockstep_rules{};
     lockstep_rules.synchronization = SynchronizationMode::Lockstep;
-    assert(!valid_rules(lockstep_rules));
     lockstep_rules.rollback_window = 0U;
-    assert(valid_rules(lockstep_rules));
+    assert(!valid_rules(lockstep_rules));
+    assert(!valid_rules(Rules{}));
+    assert(valid_rules(rollback_policy::default_rules()));
     Rules unsupported_rules{};
     unsupported_rules.maximum_players = 5U;
     assert(!valid_rules(unsupported_rules));
@@ -1137,7 +1153,7 @@ int main() {
         supported.player_count = players;
         supported.occupied_mask = (1U << players) - 1U;
         assert(valid_launch_descriptor(supported));
-        auto rules = lockstep_rules;
+        auto rules = rollback_policy::default_rules();
         rules.maximum_players = players;
         assert(valid_rules(rules));
     }

@@ -66,8 +66,8 @@ it does not need a separate manifest entry. Linux requires glibc 2.38, with
 GLIBCXX_3.4.32 and a compatible Vulkan driver also needed by these packages.
 
 ```text
-python -B patches/release-prep/v1.0.11/update_assets.py sign --packages <finished-release-folder> --commit <full-source-commit> --private-key <protected-original-key.pem> --output <fresh-signing-folder>
-python -B patches/release-prep/v1.0.11/update_assets.py verify --packages <finished-release-folder> --output <signed-pair-folder>
+python -B scripts/release/update_assets.py sign --packages <finished-release-folder> --commit <full-source-commit> --private-key <protected-original-key.pem> --output <fresh-signing-folder>
+python -B scripts/release/update_assets.py verify --packages <finished-release-folder> --output <signed-pair-folder>
 ```
 
 The wrapper uses the existing scripts/update_release.py signer and the pinned
@@ -96,4 +96,4 @@ corrupt signatures/packages, locked files, multiple instances, read-only folders
 and disk-space failures in the checklist. Automated checks and final device
 acceptance are recorded separately in [release validation](../RELEASE-VALIDATION.md).
 
-See the [release signing instructions](../patches/release-prep/v1.0.11/UPDATER.txt).
+See the [v1.0.11 signing notes](releases/1.0.11/UPDATER.txt).

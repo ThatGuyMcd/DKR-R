@@ -1,3 +1,5 @@
+#include "../rollback_policy.hpp"
+#include "confirmed_observer.hpp"
 #include "experimental_rollback.hpp"
 #include "experimental_checkpoint_hash.hpp"
 #include "experimental_performance.hpp"
@@ -36,7 +38,7 @@ bool Driver::start(Configuration configuration, std::string& error) {
         configuration.checkpoint_budget_bytes > 512U * 1024U * 1024U ||
         (active_ && (configuration.epoch <= configuration_.epoch ||
                      statistics_.next_frame != statistics_.confirmed_frames))) {
-        error = "Experimental rollback requires a complete replay-safe simulation contract and a new scene epoch.";
+        error = "Rollback requires a complete replay-safe simulation contract and a new scene epoch.";
         return false;
     }
     try {
@@ -48,7 +50,7 @@ bool Driver::start(Configuration configuration, std::string& error) {
         if (!simulation_.capture(scratch, error)) return false;
         if (!checkpoints->save(0U, scratch, checkpoint_hash(scratch)) ||
             checkpoints->allocated_bytes() + scratch.capacity() > configuration.checkpoint_budget_bytes) {
-            error = "Experimental rollback checkpoint budget is insufficient.";
+            error = "Rollback checkpoint budget is insufficient.";
             return false;
         }
         configuration_ = configuration;
@@ -69,7 +71,7 @@ bool Driver::start(Configuration configuration, std::string& error) {
         error.clear();
         return true;
     } catch (const std::exception& exception) {
-        error = std::string("Experimental rollback admission failed: ") + exception.what();
+        error = std::string("Rollback admission failed: ") + exception.what();
         return false;
     }
 }
@@ -95,9 +97,10 @@ Driver::Frame& Driver::entry(std::uint32_t frame) {
 }
 
 InputResult Driver::receive(std::uint64_t epoch, std::uint8_t owner,
-                            std::uint32_t frame, PackedInput input) {
+                            std::uint32_t frame, PackedInput input,dkr::sdk2::Command command) {
     if (!active()) return InputResult::Failed;
     if (epoch != configuration_.epoch) return InputResult::StaleEpoch;
+    if (!command.valid()||(owner!=0&&!command.empty()))return InputResult::OutOfRange;
     if (owner >= configuration_.players ||
         static_cast<std::uint64_t>(frame) >
             static_cast<std::uint64_t>(statistics_.next_frame) + kFutureInputs ||
@@ -108,15 +111,16 @@ InputResult Driver::receive(std::uint64_t epoch, std::uint8_t owner,
     auto* existing = find(frame);
     const auto mask = static_cast<std::uint8_t>(1U << owner);
     if (existing && (existing->actual_mask & mask)) {
-        if (existing->actual[owner] == input) return InputResult::Duplicate;
+        if (existing->actual[owner] == input && (owner!=0||existing->actual_command==command)) return InputResult::Duplicate;
         fail("An authenticated owner supplied conflicting final input for the same experimental frame.");
         return InputResult::Conflict;
     }
     if (frame < statistics_.confirmed_frames) return InputResult::OutOfRange;
     auto& value = entry(frame);
     value.actual[owner] = input;
+    if(owner==0)value.actual_command=command;
     value.actual_mask |= mask;
-    if (value.simulated && (value.dependencies&mask) && value.used[owner] != input) {
+    if (value.simulated && (((value.dependencies&mask)&&value.used[owner]!=input)||(owner==0&&value.used_command!=command))) {
         dirty_frame_ = (std::min)(dirty_frame_, frame);
     }
     return InputResult::Accepted;
@@ -151,7 +155,7 @@ bool Driver::save(std::uint32_t frame) {
     checkpoints_->trim_spares(configuration_.checkpoint_budget_bytes-scratch_.capacity());
     statistics_.checkpoint_bytes = checkpoints_->allocated_bytes() + scratch_.capacity();
     if (statistics_.checkpoint_bytes > configuration_.checkpoint_budget_bytes)
-        return fail("Experimental rollback exceeded its bounded checkpoint budget.");
+        return fail("Rollback exceeded its bounded checkpoint budget.");
     return true;
 }
 
@@ -191,12 +195,21 @@ bool Driver::confirm() {
         bool corrected=true;
         for(unsigned owner=0;owner<configuration_.players;++owner)
             if((frame->dependencies&(1U<<owner)) && frame->used[owner]!=frame->actual[owner])corrected=false;
+        if(frame->used_command!=frame->actual_command)corrected=false;
         if(!corrected)break;
         std::string detail;
         if (!simulation_.commit(configuration_.epoch, frame->number,
                                 frame->output.effects, frame->output.scene_boundary, detail)) {
             return fail("Confirmed effect delivery failed (will not retry): " + detail);
         }
+        // An observer sees actual, committed inputs only. Observation is
+        // noexcept and opt-in; spectator failures never abort this commit.
+        dkr::runtime::spectators::observe_confirmed(configuration_.epoch,frame->number,
+            {{{frame->actual[0].buttons,frame->actual[0].stick_x,frame->actual[0].stick_y},
+              {frame->actual[1].buttons,frame->actual[1].stick_x,frame->actual[1].stick_y},
+              {frame->actual[2].buttons,frame->actual[2].stick_x,frame->actual[2].stick_y},
+              {frame->actual[3].buttons,frame->actual[3].stick_x,frame->actual[3].stick_y}}},
+            frame->actual_command.words,frame->output.scene_boundary);
         confirmed_inputs_ = frame->actual;
         ++statistics_.confirmed_frames;
         frame->output.effects.clear();
@@ -276,7 +289,7 @@ Step Driver::step(bool allow_advance) {
         const auto all = static_cast<std::uint8_t>((1U << configuration_.players) - 1U);
         const bool agreed = frame.actual_mask == all &&
                             statistics_.next_frame == statistics_.confirmed_frames;
-        if ((simulation_.requires_confirmed_tick() || resource_frame_==frame.number) && !agreed)
+        if ((simulation_.requires_confirmed_tick() || resource_frame_==frame.number || !frame.actual_command.empty()) && !agreed)
             return Step::WaitingForConfirmedInput;
         std::string detail;
         const auto readiness = simulation_.prepare_tick(configuration_.epoch, frame.number, agreed, detail);
@@ -286,13 +299,15 @@ Step Driver::step(bool allow_advance) {
             return Step::Failed;
         }
         frame.used = predict(frame);
+        frame.used_command=(frame.actual_mask&1)?frame.actual_command:dkr::sdk2::Command{};
         frame.dependencies=simulation_.input_dependencies()&all;
         frame.output.effects.clear();
         frame.output.scene_boundary = false;
         frame.output.confirmation_required = false;
         bool tick_ok;
         {performance::Scope timing(performance::Stage::Tick);
-         tick_ok=simulation_.tick(frame.number, frame.used, frame.output, detail);}
+         tick_ok=simulation_.development_command(configuration_.epoch,frame.number,frame.used_command,detail)&&
+             simulation_.tick(frame.number, frame.used, frame.output, detail);}
         if (!tick_ok) {
             // The adapter may already have modified its reversible world.
             // Recover this tick's starting state, then terminate this mode.
@@ -337,7 +352,7 @@ Step Driver::step(bool allow_advance) {
         if (committed_boundary_) return Step::ConfirmedBoundary;
         return replay ? Step::Replayed : Step::Advanced;
     } catch (const std::exception& exception) {
-        fail(std::string("Experimental rollback stopped: ") + exception.what());
+        fail(std::string("Rollback stopped: ") + exception.what());
         return Step::Failed;
     }
 }

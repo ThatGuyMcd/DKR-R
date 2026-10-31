@@ -1,4 +1,6 @@
 #include "runtime_enhancements.hpp"
+#include "runtime_netplay.hpp"
+#include "detail_contract.hpp"
 
 #include "character_select_animation_policy.hpp"
 #include "character_select_music_policy.hpp"
@@ -404,6 +406,11 @@ extern "C" void dkr_character_select_animation_fraction(std::uint8_t*,
 
 extern "C" void dkr_apply_maximum_racer_detail(std::uint8_t* rdram,
                                                 recomp_context* context) {
+    // Online geometry selection stays canonical, even when peers choose
+    // different quality. Its immutable render copy applies the local policy.
+    // One local machine can safely use the original fast selector for
+    // ALL viewports. Only online peers require independent render-only LODs.
+    if(dkr::runtime::netplay::session().runtime_view().active)return;
     if (!dkr::runtime::enhancements::maximum_detail_enabled()) {
         return;
     }
@@ -414,7 +421,14 @@ extern "C" void dkr_apply_maximum_racer_detail(std::uint8_t* rdram,
     // the Object pointer. Preserve the ghost's deliberately distinct model.
     const std::uint16_t behaviour = MEM_HU(0x48, context->r16);
     if (behaviour != kTimeTrialGhostBehaviour) {
+        const auto authored_lod=static_cast<unsigned>(context->r8);
         context->r8 = context->r4;
+        // Bounded evidence of the native selector's actual first resident LOD.
+        // No extra guest reads, allocation, animation tick or model mutation.
+        const auto view=dkr::runtime::revision_addresses::selected_revision()==dkr::runtime::rom::Revision::UsV80?0x8011B634U:0x8011B0B4U;
+        dkr::runtime::detail::note({dkr::runtime::presentation::recording_scene_generation(),
+            static_cast<unsigned>(context->r16),static_cast<unsigned>(MEM_W(0,RdramAddress(view))),
+            authored_lod,static_cast<unsigned>(context->r8),0,true,"native highest resident; local-all-views-v2"});
     }
 }
 

@@ -110,8 +110,12 @@ struct DirectSessionTestAccess {
         auto& d = *s.launch_descriptor_;
         d.match_id = s.match_id_; d.player_count = static_cast<std::uint8_t>(players);
         d.occupied_mask = static_cast<std::uint8_t>((1U << players) - 1U);
-        d.synchronization = lockstep ? SynchronizationMode::Lockstep : SynchronizationMode::Rollback;
-        d.rollback_window = lockstep ? 0 : 2; d.input_delay_frames = s.input_delay_;
+        // v1.0.11 (rollback-only): every session is a Rollback lobby, whose
+        // native relay commits confirmed frames only (no host prediction), as
+        // lockstep did. The retired host-prediction runs are checked below.
+        (void)lockstep;
+        d.synchronization = SynchronizationMode::ExperimentalRollback;
+        d.rollback_window = 2; d.input_delay_frames = s.input_delay_;
         Rules rules{}; rules.maximum_players = static_cast<std::uint8_t>(players);
         rules.automatic_input_delay = false; rules.manual_input_delay = s.input_delay_;
         rules.rollback_window = d.rollback_window; rules.synchronization = d.synchronization;
@@ -145,6 +149,14 @@ struct DirectSessionTestAccess {
             else s.handle_client_packet(packet);
         }
     }
+    // Superseded in v1.0.11 (rollback-only): host prediction (the prediction
+    // window and its latency matrix above the strict runs) belonged to the
+    // retired host-prediction mode. It must stay gone: such a lobby is refused.
+    static void host_prediction_retired() {
+        Lobby lobby; Rules rules{}; std::string error;
+        rules.synchronization = SynchronizationMode::Rollback;
+        assert(!lobby.create("test", "test-code", "test", Visibility::Private, "host", "host", {}, rules, error));
+    }
     static void revisions_and_bounds() {
         TimedWire wire;
         const auto key = secure::generate_key();
@@ -167,19 +179,22 @@ struct DirectSessionTestAccess {
         batch.inputs[0].buttons = 0x8000; batch.revisions[0] = 2;
         inject(protocol::MessageType::Input);
         assert(host.timeline_.inputs_for(1)[1].buttons == 0);
+        // v1.0.11 (rollback-only): Player 1 commits only confirmed frames (the
+        // input delay and Player 2's sample at frame 1), then waits without
+        // predicting; host prediction used to run two frames further.
         FrameInputs result{};
-        for (unsigned frame = 0; frame < 4; ++frame) {
+        for (unsigned frame = 0; frame < 2; ++frame) {
             assert(host.synchronize_inputs_result(frame, {}, result,
                 std::chrono::milliseconds(0)) == InputSynchronizationResult::Committed);
         }
         const auto immutable = host.frame_commits_.at(1);
         const auto began = std::chrono::steady_clock::now();
         for (unsigned i = 0; i < 100; ++i) {
-            assert(host.synchronize_inputs_result(4, {}, result,
+            assert(host.synchronize_inputs_result(2, {}, result,
                 std::chrono::milliseconds(0)) == InputSynchronizationResult::Pending);
         }
         assert(std::chrono::steady_clock::now() - began < std::chrono::seconds(1));
-        assert(host.next_commit_frame_ == 4 && host.prediction_limit_waits_ > 0);
+        assert(host.next_commit_frame_ == 2 && host.prediction_limit_waits_ == 0);
         batch.revisions[0] = 4;
         const auto late_before = host.late_inputs_discarded_;
         inject(protocol::MessageType::Input);
@@ -524,22 +539,13 @@ int main() {
     using dkr::runtime::netplay::DirectSessionTestAccess;
     DirectSessionTestAccess::revisions_and_bounds();
     DirectSessionTestAccess::failed_connection_retry();
+    DirectSessionTestAccess::host_prediction_retired();
     for (unsigned players : {2U, 3U, 4U}) {
-        for (unsigned rtt : {0U, 20U, 60U, 100U, 150U, 200U})
-            DirectSessionTestAccess::paced(players, rtt, false, false, false, false);
-        DirectSessionTestAccess::paced(players, 100, true, false, true, false);
-        DirectSessionTestAccess::paced(players, 100, true, true, true, false);
         DirectSessionTestAccess::paced(players, 20, false, false, false, true);
     }
     for (unsigned players : {2U, 3U, 4U}) {
         for (bool automatic : {false, true}) {
             for (bool quick_join : {false, true}) {
-                for (unsigned rtt : {0U, 20U, 60U, 100U, 150U, 200U}) {
-                    DirectSessionTestAccess::run(players, rtt / 2, rtt / 2,
-                        0, 0, automatic, false, false, quick_join);
-                }
-                DirectSessionTestAccess::run(players, 30, 70, 35, 7, automatic, false, false, quick_join);
-                DirectSessionTestAccess::run(players, 100, 100, 50, 5, automatic, true, false, quick_join);
                 DirectSessionTestAccess::run(players, 10, 10, 0, 0, automatic, false, true, quick_join);
                 DirectSessionTestAccess::run(players, 30, 70, 35, 7, automatic, false, true, quick_join);
             }

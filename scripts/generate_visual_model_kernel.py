@@ -5,16 +5,20 @@ Protected generated inputs and dependencies are read-only. There is no world
 renderer, behaviour, allocator, code-mod callback, audio or network entry here.
 The five reviewed leaf routines run against a decoder image with copy-on-write
 scalar globals and a separate vertex/command arena; they cannot write guest RAM.
+This is the local model kernel (DKR_VISUAL_MODEL_GENERATED_V77/V80), a
+supported prepare step: scripts/prepare_payloads.py runs it.
 """
+
+from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import re
+from typing import cast
 
-from compose_legacy_mod_policy import elf_functions
-from generate_replay_probe import CALL, DEF, HEADER_HASH, strip
+from kernel_inputs import CALL, DEF, HEADER_HASH, elf_symbols, strip
 
 PINS = {
     77: {
@@ -45,7 +49,7 @@ GLOBALS = (
 )
 
 
-def generate(source, header_path, elf, revision, output):
+def generate(source: Path, header_path: Path, elf: Path, revision: int, output: Path) -> None:
     source, output = source.resolve(), output.resolve()
     if (
         output.exists()
@@ -57,7 +61,7 @@ def generate(source, header_path, elf, revision, output):
     header = header_path.read_bytes()
     if hashlib.sha256(header).hexdigest() != HEADER_HASH:
         raise ValueError("Unreviewed visual kernel register/memory ABI")
-    functions = {}
+    functions: dict[str, str] = {}
     for path in sorted(source.glob("*.c")):
         text = path.read_text(encoding="utf-8")
         matches = list(DEF.finditer(text))
@@ -71,8 +75,8 @@ def generate(source, header_path, elf, revision, output):
                 functions[match[1]] = body
     if set(functions) != set(PINS[revision]):
         raise ValueError("Incomplete model-only closure")
-    symbols = elf_functions(elf, (0, 1, 2))
-    addresses = {}
+    symbols = elf_symbols(elf, (0, 1, 2))
+    addresses: dict[str, int] = {}
     for name in GLOBALS:
         entries = symbols.get(name, set())
         if len(entries) != 1 or next(iter(entries))[1] not in (2, 4):
@@ -102,7 +106,7 @@ def generate(source, header_path, elf, revision, output):
     allowed = set(re.findall(r"^#define\s+(\w+)\s*\(", header.decode(), re.M))
     allowed.update(re.findall(r"static\s+inline\s+\w+\s+(\w+)\s*\(", header.decode()))
     allowed |= {"if", "while", "switch", "for", "return", "sizeof", "void"} | names
-    emitted = []
+    emitted: list[str] = []
     for name, body in sorted(functions.items()):
         extra = set(CALL.findall(strip(body))) - allowed
         if extra or re.search(r"\brdram\s*(?:\[|\+)", strip(body)):
@@ -124,7 +128,6 @@ def generate(source, header_path, elf, revision, output):
         for symbol in sorted(names, key=len, reverse=True):
             body = re.sub(r"\b" + symbol + r"\b", prefix + symbol, body)
         emitted.append(body)
-    root = Path(__file__).resolve().parents[1]
     output.mkdir(parents=True)
     (output / "recomp.h").write_text(h, encoding="utf-8")
     (output / "funcs.h").write_text(
@@ -138,7 +141,7 @@ def generate(source, header_path, elf, revision, output):
         "#pragma once\n"
         + constants
         + "\n"
-        + "\n".join(f"#define {n} {prefix}{n}" for n in names)
+        + "\n".join(f"#define {n} {prefix}{n}" for n in sorted(names))
         + "\n"
         + f"#define DKR_VISUAL_ENTRY {prefix}model\n",
         encoding="utf-8",
@@ -169,4 +172,10 @@ if __name__ == "__main__":
     parser.add_argument("--revision", type=int, choices=(77, 80), required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    generate(args.generated, args.header, args.elf, args.revision, args.output)
+    generate(
+        cast(Path, args.generated),
+        cast(Path, args.header),
+        cast(Path, args.elf),
+        cast(int, args.revision),
+        cast(Path, args.output),
+    )

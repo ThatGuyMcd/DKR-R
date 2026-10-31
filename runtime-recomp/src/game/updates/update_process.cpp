@@ -220,11 +220,10 @@ Child::Child(const std::filesystem::path &exe, const std::vector<std::string> &a
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION process{};
     // No shell, no command interpolation and no visible console for the helper.
-    if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
-                        nullptr, directory.empty() ? nullptr : directory.c_str(), &startup,
-                        &process))
-        throw std::runtime_error("Could not start update process (Windows error " +
-                                 std::to_string(GetLastError()) + ").");
+    if (!CreateProcessW(exe.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
+                        directory.empty() ? nullptr : directory.c_str(), &startup, &process))
+        throw std::runtime_error("Could not start update process (Windows error " + std::to_string(GetLastError()) +
+                                 ").");
     CloseHandle(process.hThread);
     impl->handle = process.hProcess;
 #elif defined(__ANDROID__) || defined(DKR_IOS)
