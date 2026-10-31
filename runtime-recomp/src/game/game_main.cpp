@@ -18,6 +18,7 @@
 #include "runtime_netplay.hpp"
 #include "runtime_support.hpp"
 #include "runtime_log_archive.hpp"
+#include "runtime_log_handles.hpp"
 #include "save_manager.hpp"
 #include "runtime_save_routing.hpp"
 #include "startup_performance.hpp"
@@ -114,8 +115,10 @@ bool ConfigurePersistentRuntimeLog(const std::filesystem::path& config_directory
     if (error) {
         return false;
     }
-    const std::filesystem::path current = log_directory / "runtime.log";
-    if (!dkr::runtime::support::history::rotate(log_directory))
+    const bool rotated = dkr::runtime::support::history::rotate(log_directory);
+    const std::filesystem::path current =
+        rotated ? log_directory / "runtime.log" : dkr::runtime::support::logging::fallback_log(log_directory);
+    if (current.empty())
         return false;
 #ifdef _WIN32
     FILE* stream = nullptr;
@@ -127,7 +130,12 @@ bool ConfigurePersistentRuntimeLog(const std::filesystem::path& config_directory
         return false;
     }
 #endif
+    dkr::runtime::support::logging::protect_log(stderr);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
+    if (!rotated) {
+        dkr::runtime::support::history::prune(log_directory / "history");
+        std::fprintf(stderr, "[boot][logging] current log busy; separate instance log=%s\n", current.string().c_str());
+    }
 #if defined(__ANDROID__) || defined(DKR_IOS)
     // RT64 writes GPU/driver identification to stdout. Keep it in the same
     // private log as startup errors so phone users can export both together.

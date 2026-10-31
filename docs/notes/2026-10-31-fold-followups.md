@@ -211,3 +211,51 @@ confirmed in the official Windows runtime. See
 compatibility-changing performance ports remain pending both owners' approval.
 The seven C5 gates and outstanding Windows/Android acceptance remain open.
 No pushes, PR publication or deployments have occurred.
+
+## Refreshed open-PR audit
+
+At this refresh, the open PRs are #63 and #83. #83 is still at
+`de058c4b5d7b6487d7dee064ac0cb515ea5c6e2f` with no reported check runs. Its
+registered dependency-patch structure is unchanged from the earlier review.
+
+[#63](https://github.com/ThatGuyMcd/DKR-R/pull/63), at
+`619573616f6af3a7f0f7f1bf2d3dda40c93be9ad`, edits first-party sources directly
+and introduces no staging layer or generated guest rewrite. However, its
+accessibility observer embeds retail symbol addresses in 182 revision-paired
+address calls. For example, accessibility_observation.cpp:134 reads
+gMenuCurIndex through literal v77/v80 addresses; lines 149 and 154–158 do the
+same for menu text, level headers/names and EEPROM settings. These symbols
+need TOML ownership and generated headers before the change is fold-compliant.
+Structure offsets can remain in code. Its CMake source additions also need
+the folded DKRPortGameCore layout so full-nogen builds exercise them. The
+PR's own VoiceOver journey and intended-player merge gates remain pending.
+
+The same PR explicitly negotiates Quick Join after route publication,
+serializes replacements and restores the predecessor after stage-7 failure.
+The current fold retains the earlier ordering. This is a targeted candidate
+for the documented bootstrap flake, not proof that the flake is fixed. It has
+not been imported into this branch. No GitHub reviews or comments were posted.
+
+The two later release-tool repairs already have direct equivalents here:
+qualify_updates.py passes explicit preceding-package/version arguments to the
+authored test harness instead of rewriting it, and package_release.py owns
+its accepted feature markers directly. Their legacy-layer adapter changes
+should not be restored.
+
+## Host log ownership follow-up
+
+The non-simulation log pieces of the online-performance layer now live in
+runtime_log_handles.hpp and the existing game_main.cpp/update_process.cpp
+owners. A busy current log selects a unique bounded-history fallback; the
+log descriptor is marked non-inheritable, and Windows CreateProcess disables
+handle inheritance. The process fixture checks actual POSIX descriptor flags,
+valid unique archive names, archive failure and, on Windows, a child given an
+explicitly inheritable synthetic log handle. Its file-identity check tolerates
+handle-number reuse in the child. The Windows branch still requires Windows
+execution; macOS alone cannot establish it.
+
+The prepared macOS application links with these changes and the expanded
+process fixture passes on macOS. The Linux x86_64 full-nogen game core and
+ProfileBridge, ProfilePictures, CharacterPortraits and DirectoryLifecycle
+fixtures pass for the profile/portrait checkpoint. The gameplay/menu and
+transport-performance reconciliation remains separate and pending.
