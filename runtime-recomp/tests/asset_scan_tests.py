@@ -18,7 +18,7 @@ class AssetScanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "source.py").write_text("print('source')\n")
-            for name in ("build", "extern", "dist", "__pycache__"):
+            for name in ("build", "extern", "dist", "__pycache__", "services/test-tools/node_modules"):
                 (root / name / "deep").mkdir(parents=True)
                 (root / name / "deep/game.z64").write_bytes(b"\x80\x37\x12\x40")
             scandir = os.scandir
@@ -34,9 +34,12 @@ class AssetScanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "innocent.dat").write_bytes(b"\x80\x37\x12\x40payload")
+            (root / "services/online-directory").mkdir(parents=True)
+            (root / "services/online-directory/source.dat").write_bytes(b"\x80\x37\x12\x40payload")
             with contextlib.redirect_stderr(io.StringIO()) as error:
                 self.assertEqual(scan.main(root), 1)
             self.assertIn("Nintendo 64 ROM header", error.getvalue())
+            self.assertIn("services/online-directory/source.dat", error.getvalue())
 
     def test_empty_or_missing_roots_do_not_pass(self):
         with tempfile.TemporaryDirectory() as temporary, contextlib.redirect_stderr(io.StringIO()):

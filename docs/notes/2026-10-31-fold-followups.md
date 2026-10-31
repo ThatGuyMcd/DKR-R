@@ -381,3 +381,20 @@ are rejected by the runner. The four menu fixtures and two heap fixtures pass
 on Linux x86_64. The macOS application links and both production owned native
 objects compile. Current release metadata and 322 local documentation links
 validate; archived pages retain their historical links. All 162 host tests, guard/tooling and explicit pre-commit checks pass.
+
+## PR readiness after integrating main
+
+Merge commit 523c199 has parents 33e3904 and d457741. A fresh fetch confirms
+d457741 remains origin/main, and merge-base --is-ancestor succeeds. The fold
+worktree is clean at that checkpoint; the original main worktree still has
+only its pre-existing untracked menu-redesign notes. The PR base is main.
+
+The full contributor runner (--suite all) passes, including metadata, asset,
+Track Lab and host-tools suites. Installing the service toolchain exposed a
+source scanner omission: node_modules was not pruned with dependency trees.
+The scanner now prunes it; its fixture also proves first-party service source
+files still get checked for ROM headers. Explicit pre-commit checks pass.
+All 162 host tests passed for the integrated C/C++ tree; only the scanner and
+its Python regression fixture changed afterward. No backend or release was
+deployed. Five C5 release gates and the documented platform/owner evidence
+remain pending.
