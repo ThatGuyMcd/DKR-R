@@ -218,6 +218,9 @@ struct PartyRuntime::Impl {
     ConfirmedFrameBinding binding;
     dkr::spectator_admission::AdmissionRetry observer_retry;
     std::uint64_t observer_render_epoch = 0;
+    Clock::time_point performance_at{};
+    std::uint64_t step_us = 0, max_step_us = 0;
+    unsigned steps = 0, stalls = 0;
     std::string text = "Preparing party play", callback_error;
     std::optional<Baseline> held;
     struct Encoded {
@@ -564,17 +567,23 @@ struct PartyRuntime::Impl {
                 if (phase == Phase::Admission)
                     std::fprintf(stderr, "[party][checkpoint] offer bytes=%u\n", d.sender.offer().bytes);
             }
-            if (d.accepted && chunks < 4)
-                if (const auto chunk = d.sender.next_chunk()) {
-                    const auto bytes = encode_chunk(*chunk);
-                    Write w;
-                    w.n('D', 1).n('P', 1).n('R', 1).n(2, 1).n(unsigned(Msg::Chunk), 1).n(match).n(++serial).data(bytes);
-                    if (party_send(key, id, w.b, Lane::Checkpoint)) {
-                        d.sender.sent();
-                        d.progress = now;
-                        ++chunks;
-                    }
-                }
+            const unsigned total_budget = phase == Phase::Admission ? 16 : 4;
+            for (unsigned peer_chunks = 0;
+                 d.accepted && chunks < total_budget && peer_chunks < (phase == Phase::Admission ? 4U : 1U);
+                 ++peer_chunks) {
+                const auto chunk = d.sender.next_chunk();
+                if (!chunk)
+                    break;
+                const auto bytes = encode_chunk(*chunk);
+                Write w;
+                w.n('D', 1).n('P', 1).n('R', 1).n(2, 1).n(unsigned(Msg::Chunk), 1).n(match).n(++serial).data(bytes);
+                if (party_send(key, id, w.b, Lane::Checkpoint)) {
+                    d.sender.sent();
+                    d.progress = now;
+                    ++chunks;
+                } else
+                    break;
+            }
             if (d.sender.complete() && d.admitted && !required().contains(id) &&
                 now - d.frames_at >= std::chrono::milliseconds(50) && feed.covers(d.sent)) {
                 auto frames = feed.after(d.sent, 8);
@@ -668,7 +677,7 @@ struct PartyRuntime::Impl {
             inputs[id] = {sample.input, c};
             Write body;
             body.n(controls).n(25, 1).data(wire::controller(sample)).data(command_bytes(c));
-            racers(Msg::Input, body.b, Lane::Control);
+            racers(Msg::Input, body.b, Lane::Authoritative);
         } else if (source != host)
             return;
         const auto result =
@@ -998,7 +1007,7 @@ struct PartyRuntime::Impl {
                                                   value.first};
                     Write body;
                     body.n(controls).n(25, 1).data(wire::controller(sample)).data(command_bytes(value.second));
-                    send(source, Msg::Input, body.b, Lane::Control);
+                    send(source, Msg::Input, body.b, Lane::Authoritative);
                     ++sent;
                 }
             break;
@@ -1021,7 +1030,7 @@ struct PartyRuntime::Impl {
             Read r{body.b};
             receive_input(local, r);
         } else {
-            send(host, Msg::Input, body.b, Lane::Control);
+            send(host, Msg::Input, body.b, Lane::Authoritative);
             if (port() != 0 || !launch.development) {
                 const auto result = driver->receive(cursor.epoch, std::uint8_t(port()), frame - base, input);
                 if (result == ex::InputResult::Failed || result == ex::InputResult::Conflict)
@@ -1387,7 +1396,7 @@ struct PartyRuntime::Impl {
                 if (frame >= confirmed() && frame < freeze && count++ < 32) {
                     Write body;
                     body.n(controls).n(25, 1).data(wire::controller(sample)).data(command_bytes({}));
-                    send(host, Msg::Input, body.b, Lane::Control);
+                    send(host, Msg::Input, body.b, Lane::Authoritative);
                 }
             proof_at = now + std::chrono::milliseconds(250);
         }
@@ -1402,7 +1411,15 @@ struct PartyRuntime::Impl {
             const bool align =
                 server() && !needing.empty() && !encoding.valid() && (!encoded || !feed.covers(encoded->next));
             const bool advance = now >= next_tick && next().frame < freeze && !align;
+            const auto step_began = Clock::now();
             const auto step = driver->step(advance);
+            const auto cost =
+                std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - step_began).count());
+            step_us += cost;
+            max_step_us = std::max(max_step_us, cost);
+            ++steps;
+            if (advance && step != ex::Step::Advanced)
+                ++stalls;
             if (step == ex::Step::Failed)
                 throw std::runtime_error(driver->error());
             if (step == ex::Step::Advanced)
@@ -1451,7 +1468,19 @@ struct PartyRuntime::Impl {
             const auto trim = confirmed() > 96 ? confirmed() - 96 : 0;
             std::erase_if(inputs, [&](const auto& item) { return item.first.first < trim; });
             std::erase_if(local_history, [&](const auto& item) { return item.first < confirmed(); });
-            (void)stats;
+            if (now >= performance_at) {
+                performance_at = now + std::chrono::seconds(5);
+                std::fprintf(
+                    stderr,
+                    "[party][performance] epoch=%llu next=%u confirmed=%u delay=%u window=%u rollbacks=%u replayed=%u largest=%u predictions=%u step-avg-us=%llu step-max-us=%llu blocked-pulses=%u\n",
+                    static_cast<unsigned long long>(cursor.epoch), after.frame, confirmed(),
+                    unsigned(launch.input_delay_frames), unsigned(launch.rollback_window), stats.rollbacks,
+                    stats.replayed_frames, stats.largest_rollback, stats.predicted_frames,
+                    static_cast<unsigned long long>(steps ? step_us / steps : 0),
+                    static_cast<unsigned long long>(max_step_us), stalls);
+                steps = stalls = 0;
+                step_us = max_step_us = 0;
+            }
         }
         if (phase == Phase::Running)
             text = watching() ? "Watching the race" : "Rollback";

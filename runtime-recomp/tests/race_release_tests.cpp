@@ -3,6 +3,8 @@
 int main() {
     using namespace dkr::runtime::spectators;
     try {
+        input_lane_and_reordering();
+        initial_checkpoint_burst();
         racer_transitions();
         watcher_orders();
         driver_advances_after_release();

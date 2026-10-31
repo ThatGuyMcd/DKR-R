@@ -82,9 +82,18 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
     const auto began = std::chrono::steady_clock::now();
     if (!profile)
         throw Error("Online resources require a verified host profile.");
+    auto phase_at = began;
+    const auto phase = [&](const char* name) {
+        const auto now = std::chrono::steady_clock::now();
+        std::fprintf(
+            stderr, "[online-mods][prepare-phase] phase=%s elapsed-ms=%lld\n", name,
+            static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(now - phase_at).count()));
+        phase_at = now;
+    };
     cancelled(stop);
     const auto sources = profile_sources(*profile);
     check_storage(rom, false);
+    phase("profile-verification");
     auto out = std::shared_ptr<RuntimeResources>(new RuntimeResources);
     out->profile_ = std::move(profile);
     auto bytes = read_file(rom, MaxImage);
@@ -107,6 +116,7 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
         live_resource_cache.reset();
         resource_cache_key.clear();
     }
+    phase("rom-verification");
     out->stock_ = AssetBank::stock(std::move(bytes));
     if (out->stock_->revision() != out->profile_->manifest.revision)
         throw Error("The locally imported Game Pak revision does not match this lobby.");
@@ -257,6 +267,7 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
                                     out->authored_->additions[i][j]);
     // Fully prepare every route NOW, before proof/readiness. Scene switches
     // subsequently select immutable banks and never decode/hash/read a file.
+    phase("courses-characters-music");
     std::vector<std::shared_ptr<const vehicles::Package>> cars;
     for (const auto& c : out->profile_->manifest.content)
         if (c.kind == CarContent) {
@@ -327,6 +338,7 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
             cache_bytes += c.audio.samples.size() + c.audio.control.size() + c.race_audio.samples.size() +
                            c.race_audio.control.size();
     }
+    phase("vehicles-and-world");
     const auto budget = retention_budget();
     {
         std::lock_guard lock(resource_cache_mutex);

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <map>
 #include <cstdio>
+#include <thread>
 
 namespace dkr::mods::online {
 namespace {
@@ -400,6 +401,7 @@ void ModSync::client_loop(const SyncSettings& settings, const RuntimePreparation
     std::uint32_t requested_offset = 0;
     bool data_requested = false;
     const auto download_began = Clock::now();
+    Clock::time_point payload_began{};
     std::uint64_t wire_bytes = 0, cached_bytes = 0, retries = 0, credits = 0;
     bool saw_offer = false, consent_sent = false, preparing_sent = false, prepared = false, keep_requested = false,
          kept_offline = false;
@@ -622,6 +624,7 @@ void ModSync::client_loop(const SyncSettings& settings, const RuntimePreparation
                 heartbeat.request_stop();
                 heartbeat.join();
                 download.consent();
+                payload_began = Clock::now();
                 progress("Downloading required host mods into the separate online cache");
                 std::lock_guard lock(mutex_);
                 keep_requested = keep_offline_;
@@ -697,13 +700,19 @@ void ModSync::client_loop(const SyncSettings& settings, const RuntimePreparation
                 pause(stop);
                 continue;
             }
+            const auto payload_end = Clock::now();
+            const auto setup_end = payload_began == Clock::time_point{} ? payload_end : payload_began;
             std::fprintf(
                 stderr,
-                "[online-mods][download] wire-bytes=%llu cached-bytes=%llu gap-retries=%llu refill-credits=%llu elapsed-ms=%lld\n",
+                "[online-mods][download] wire-bytes=%llu cached-bytes=%llu gap-retries=%llu refill-credits=%llu setup-ms=%lld payload-phase-ms=%lld\n",
                 static_cast<unsigned long long>(wire_bytes), static_cast<unsigned long long>(cached_bytes),
                 static_cast<unsigned long long>(retries), static_cast<unsigned long long>(credits),
                 static_cast<long long>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - download_began).count()));
+                    std::chrono::duration_cast<std::chrono::milliseconds>(setup_end - download_began).count()),
+                static_cast<long long>(
+                    payload_began != Clock::time_point{}
+                        ? std::chrono::duration_cast<std::chrono::milliseconds>(payload_end - payload_began).count()
+                        : 0));
             {
                 std::lock_guard lock(mutex_);
                 state_.phase = SyncPhase::Preparing;
@@ -760,7 +769,10 @@ void ModSync::client_loop(const SyncSettings& settings, const RuntimePreparation
             report(ProgressPhase::Downloading, "Downloading required host mods");
         } else if (download.phase() == TransferPhase::Verified)
             report(ProgressPhase::Verified, "Mods verified; entering lobby");
-        pause(stop, std::chrono::milliseconds(2));
+        if (drained > 32)
+            std::this_thread::yield();
+        else
+            pause(stop, std::chrono::milliseconds(2));
     }
     if (saw_offer) {
         std::string error;

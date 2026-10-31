@@ -283,3 +283,38 @@ core and passes QuickJoinTransport, StabilityTransferChecks, RuntimeLogArchive
 and UpdateProcess. Guard/tooling and explicit pre-commit checks pass. Remaining
 online-performance work includes party input/checkpoint scheduling, phase timing
 and the held menu/identity reconciliation.
+
+## Party scheduling and phase diagnostics
+
+Party input now uses the existing reliable/unordered authoritative channel,
+including repairs and host relays. The packet bodies, immutable input admission,
+epoch/lease checks and repair history are unchanged. Initial checkpoint delivery
+allows four chunks per receiver and sixteen total per pass; racing delivery
+retains one per receiver and four total. A blocked queue does not advance the
+checkpoint sender. These are native delivery changes, with no guest menu or
+identity-pin edits.
+
+The production party fixture now passes 151 checks, including reordered and
+duplicate input, setup/racing burst bounds, a full real peer queue and aggregate
+setup limits across five receivers. The existing admission, handler and offline
+retention fixtures also pass in the initial focused macOS run.
+
+Download synchronization yields after draining a full receive batch, while
+retaining bounded batches, active-slot fairness and existing backpressure.
+Diagnostics separate setup and payload time, and report resource-preparation
+phases and bounded party step summaries. Setup time ends at payload consent;
+it no longer incorrectly includes the payload phase. These logs are engineering
+evidence and introduce no player-facing diagnostic controls.
+
+The prepared macOS application links. All 156 host tests pass. Linux x86_64
+builds the game core and passes RaceReleaseChecks, OfflineRetentionChecks,
+SpectatorHandlerChecks and SpectatorAdmissionChecks. Guard/tooling and explicit
+pre-commit checks pass. The remaining online-performance
+source gap is the guest owned-menu notification admission policy, held with
+the explicit identity-pin proposal pending both owners' approval.
+
+PR #83's three registered dependency patches also pass git apply --check
+against this checkout's prepared N64Recomp, RT64 and plume sources. This was
+read-only: no dependency patch was applied, imported or executed. Patch
+applicability does not establish runtime shader correctness or CLT-only build
+acceptance.
