@@ -1,8 +1,8 @@
-# DKR-R v1.0.11 Release Build
+# DKR-R v1.0.12 Release Build
 
-This update focuses on the reported memory issues and missing HUD elements.
-I've also worked on queued graphics data and water textures, and added support
-for Syeo's updated custom cars. The launcher design and Online fixes stay.
+I've worked on modded lobby joining, friends and profile settings. Character
+cards have portraits, profile pictures can be changed, and the offline FOV
+slider works live. The existing memory, HUD and spectator fixes are kept.
 
 Windows: extract the whole ZIP and open DKR-R.exe. Keep assets and libexec
 with it. Linux and Steam Deck: make the AppImage executable and launch it.
@@ -10,12 +10,11 @@ Linux needs glibc 2.38, GLIBCXX_3.4.32 and a compatible Vulkan driver.
 
 Bring your own supported US v1.0 or US Rev A/v1.1 ROM. No ROM is included.
 Your saves, mods and settings can stay. Everyone in an Online lobby should
-use the complete v1.0.11 package. Read RELEASE-NOTES.txt for the changes.
+use the complete v1.0.12 package. Read RELEASE-NOTES.txt for the changes.
 
 Windows x64, Linux x86_64/ARM64 and Steam Deck are included. Android, macOS
-and iOS are skipped. Updated cars keep their original artwork; enabled custom
-boost anchors are not supported yet. Incomplete HD water animations can stay
-vanilla until the pack supplies every frame.
+and iOS are skipped. For remembered Discord sign-in without a Linux keyring,
+enable Keep me signed in, then sign out and back in once to save this device.
 
 Downloads and support:
 https://github.com/ThatGuyMcd/DKR-R

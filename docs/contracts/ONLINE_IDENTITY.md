@@ -2,13 +2,13 @@
 
 Before two players' engines run a rollback match, they compare the owned
 rollback contract of the ROM revision they share. If the contracts differ,
-the lobby refuses the peer. The contracts are frozen at the values v1.0.11
-shipped, so a build from this tree plays with v1.0.11 players.
+the lobby refuses the peer. The contracts are frozen at the values v1.0.12
+shipped, so a build from this tree uses the current release contracts.
 
 | Revision | Define | Contract |
 |---|---|---|
-| US v1.0 (v77) | `DKR_OWNED_BUILD_ID_V77` | `5e22da8e6095b362ede17c69a2341aae2df24cbf8561c3af57fc86566d11784e` |
-| US v1.1 (v80) | `DKR_OWNED_BUILD_ID_V80` | `32c82fea3111440434926d5782e174c9f2d036d198f039c5424393a835f948b0` |
+| US v1.0 (v77) | `DKR_OWNED_BUILD_ID_V77` | `dc883843594ccb02931dbab4071080c0dcf0d7c0a960ee501529dd37230651c7` |
+| US v1.1 (v80) | `DKR_OWNED_BUILD_ID_V80` | `105df80b777b20df308fede4235575dce5881e643130ebabf8cc60d71ff000e0` |
 
 ## Where they live
 
@@ -27,10 +27,19 @@ The rollback test frontend (`DKR-R-RollbackTest`, not shipped) negotiates
 
 ## Provenance
 
+Both owners approved adopting the shipped v1.0.12 values on 31 October 2026.
+They were reconstructed from the retained online-performance ledger and verified
+in the official Windows, Linux x86_64 and ARM64 binaries; Steam Deck has the
+same published hash as Linux x86_64. See the
+[verification and approval record](../notes/2026-10-31-v1012-identity-proposal.md).
+The four engine salts remain unchanged. The historical fold-equivalence record
+still describes its original v1.0.11 checkpoint.
+
+
 v1.0.11 derived each value at configure time from a sha256 chain over the
 owned engine's generated and authored sources (`cmake/OwnedContentIdentity.cmake`,
 with the release layers' ledgers). The fold reference's configure of tag
-`Version1.0.11` produced exactly these values
+`Version1.0.11` produced the historical v1.0.11 values
 (`generated/memory-stability/contracts.json`, docs/fold-in/REFERENCE.md),
 using the owned, generated and code-policy inputs that reproduce the shipped
 binaries. The values were also recomputed from `6bdbcde` and `5cab242` with

@@ -1,6 +1,6 @@
 # DKR-R development guide
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 The release steps and prepared-input contract are in [Building](BUILDING.md#release-packages). The SDK 2 Bible/public headers describe supported tools and API 1 compatibility. Gameplay/hardware acceptance is owner-led; compilation and static inspection are not runtime acceptance.
 

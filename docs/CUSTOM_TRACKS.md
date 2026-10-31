@@ -1,10 +1,10 @@
 # Custom tracks
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 Modern tracks have library enable/disable controls. Store ZIP imports accept one complete course inside wrapper folders, require declared music/HD resources and reject ambiguous multiple courses. Added-course records live outside stock EEPROM. Cup exports are definitions, not bundled course assets.
 
-Custom tracks are playable in DKR-R 1.0.11; the existing `.dkrmap` format is retained. Use **Mods / Hacks → Import mods →
+Custom tracks are playable in DKR-R 1.0.12; the existing `.dkrmap` format is retained. Use **Mods / Hacks → Import mods →
 DKR-R tracks**, or author a working-folder track through Track Lab. Installed
 courses share My mods with legacy tracks and appear below the original worlds
 in Track Select. Original courses remain available.

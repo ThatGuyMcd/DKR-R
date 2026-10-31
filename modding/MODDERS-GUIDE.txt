@@ -1,6 +1,6 @@
 DKR-R Modding Bible - SDK 2.0
 =============================
-v1.0.11 release — SDK 2.0 retained
+v1.0.12 release — SDK 2.0 retained
 
 RIGHT - LET'S GET STARTED
 -------------------------
@@ -16,7 +16,7 @@ ModernCamera++ do not need to be rewritten just because the authoring kit now
 says SDK 2.0. New executable API 2 packages opt into the additional services.
 The exact supported modules and limits are part of the reference below.
 
-This book is for v1.0.11 with the retained SDK 2.0/API 1 compatibility. Compilation and package inspection are
+This book is for v1.0.12 with the retained SDK 2.0/API 1 compatibility. Compilation and package inspection are
 not a promise that every possible combination of mods is bug free. Gameplay,
 visual, performance, multiplayer and headset testing are carried out by the
 players testing the build. Keep backups, work in a development session and
@@ -631,7 +631,7 @@ for reviewed adapters and must validate their own payloads just as carefully.
 ONLINE DEVELOPMENT - HOST AUTHORITY
 -----------------------------------
 
-Use the v1.0.11 Rollback host mode for code mods. Unsupported engines do not acquire
+Use the v1.0.12 Rollback host mode for code mods. Unsupported engines do not acquire
 shared code support just because a tools panel exists. Enable Development
 lobby before hosting a session with development mods. Every racer must consent
 before readying. All peers admit the same package editions, dependencies,
@@ -2071,7 +2071,7 @@ _Static_assert(sizeof(DkrViewHit)==48,"presentation hit ABI");
 #endif
 #endif
 
-V1.0.11 ONLINE AND PROGRESS
+V1.0.12 ONLINE AND PROGRESS
 The public host mode is Rollback; the old backend selector is removed.
 Public discovery reuses Discord sign-in. Native content/code consent, host
 authority, lifecycle/confirmed execution and development isolation still apply.

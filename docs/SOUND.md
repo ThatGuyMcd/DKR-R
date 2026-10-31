@@ -12,7 +12,7 @@ original audio clock.
 
 Master volume remains local and live in Rollback. Individual category mixing
 still uses the authored mix there; saved category preferences remain available
-offline. The old online backend selector is no longer offered in v1.0.11. A separate output
+offline. The old online backend selector is no longer offered in v1.0.12. A separate output
 category mixer is deferred, not silently claimed complete.
 
 Confirmed audio is kept separate from replay. Correcting old inputs must not

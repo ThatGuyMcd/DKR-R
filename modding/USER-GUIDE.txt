@@ -1,5 +1,5 @@
 DKR-R MODDING SDK 2.0
-v1.0.11 release — SDK 2.0 retained
+v1.0.12 release — SDK 2.0 retained
 
 Right - start with the Modding Bible. It explains both executable APIs, the
 authoring workflow, settings, hooks, game behaviour, tools UI, online commands,
@@ -14,7 +14,7 @@ inspect a package or generate a source map. None launches a game or a mod.
   python build.py ../my-code --output ../build-001 --mod-tool /path/to/RecompModTool --source-map
 
 Dev Menu 2.0.1 fixes the original beta 7 package's relocation import failure.
-Use it with the current compatible v1.0.11 app. The first import correction was mod-only;
+Use it with the current compatible v1.0.12 app. The first import correction was mod-only;
 the subsequent development-save startup correction requires the updated app.
 Keep the supplied build flags. The builder now checks the complete symbol
 table and resolves local addresses from the linked ELF before packaging. This
@@ -48,7 +48,7 @@ scene-bound macros do not execute on import or rebind to newly allocated actors.
 Gameplay, multiplayer, graphics, controller and performance testing belongs to
 the players running the build. Compilation alone is not runtime acceptance.
 
-V1.0.11 ONLINE AND PROGRESS
+V1.0.12 ONLINE AND PROGRESS
 The public host mode is Rollback; the old backend selector is removed.
 Public discovery reuses Discord sign-in. Native content/code consent, host
 authority, lifecycle/confirmed execution and development isolation still apply.

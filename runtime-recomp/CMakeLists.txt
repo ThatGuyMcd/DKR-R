@@ -3316,6 +3316,30 @@ if(BUILD_TESTING)
         set_tests_properties(DKRMemoryOwned${revision}Checks PROPERTIES LABELS "host;runtime" TIMEOUT 30)
     endforeach()
 
+    foreach(revision IN ITEMS 77 80)
+        foreach(control IN ITEMS Current Before)
+            set(menu_test DKROnlineMenu${revision}${control}Tests)
+            add_executable(${menu_test} tests/owned_menu_tests.c)
+            target_compile_features(${menu_test} PRIVATE c_std_17)
+            target_compile_definitions(${menu_test} PRIVATE DKR_PROBE_HAS_FULL_SCENES=1 DKR_PROBE_REVISION=${revision})
+            target_include_directories(
+                ${menu_test}
+                PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
+            )
+            if(control STREQUAL "Before")
+                target_compile_definitions(${menu_test} PRIVATE DKR_MENU_OLD_CONTROL=1)
+                add_test(
+                    NAME DKROnlineMenu${revision}BeforeChecks
+                    COMMAND
+                        "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/expect_exit.py" 1
+                        "$<TARGET_FILE:${menu_test}>"
+                )
+            else()
+                add_test(NAME DKROnlineMenu${revision}Checks COMMAND ${menu_test})
+            endif()
+        endforeach()
+    endforeach()
+
     add_executable(DKRLiveFovTests tests/live_fov_tests.cpp)
     target_compile_features(DKRLiveFovTests PRIVATE cxx_std_20)
     target_include_directories(

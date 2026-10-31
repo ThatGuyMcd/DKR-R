@@ -31,7 +31,7 @@ fresh checkpoint rather than holding racers indefinitely.
 
 ## Custom tracks and music
 
-v1.0.11 includes the playtest.4 spectator fix. A spectator now prepares
+v1.0.12 includes the playtest.4 spectator fix. A spectator now prepares
 the selected track's verified music when joining the confirmed race
 state. This fixes the black screen and missing audio that could last
 until the results screen on a fresh spectator machine.

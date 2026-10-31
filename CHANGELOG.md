@@ -1,5 +1,35 @@
 # DKR-R changelog
 
+## v1.0.12 Release Build — 26 October 2026
+
+I've focused on modded lobby joining and made the Online menus easier to use.
+
+- More capacity for session mods and the initial checkpoint, fewer chunk flushes,
+  a bounded prepared-content cache and clearer join timings.
+- Fixed newer character/vehicle menu callbacks being refused online. Reliable
+  racing input has its own lane, with the existing repair and ownership checks.
+- Closing a lobby immediately retires its directory entry while keeping Online
+  connected. Terminal connection failures also retire the hosted entry.
+- Character portraits, compact friend cards, Add a friend above Search and
+  friend requests from eligible lobby player cards.
+- A shared profile header and display name for Online, friends and the Mod Store.
+  Custom PNG/JPG pictures, optional Discord name/image import and picture sharing.
+- Tidier lobby summary/visibility controls and account settings, with readable
+  name fields and no duplicate Discord username or review/request buttons.
+- Linux/Steam Deck remembered sign-in when a desktop keyring is unavailable.
+- Live offline FOV adjustment, including paused races, with the corrected guest
+  register handling. Existing online restrictions stay.
+- Windows updater log handoff and better session diagnostics.
+- Fixed installed Store mods returning to Needs Attention after restarting.
+  Existing completed entries are recovered without downloading them again.
+- Integrated the patch guardrail setup and follow-ups from PRs #76–#78. The full
+  source consolidation remains separate.
+- Updated current guides and prepared Windows x64, both Linux AppImages and the
+  matching Steam Deck download with signed update metadata. No Android/Apple build.
+
+The earlier memory, HUD, water, custom-car and spectator fixes stay. Saves, mods
+and settings can stay too. Everyone in a lobby needs the complete v1.0.12 package.
+
 ## 1.0.11 — 25 October 2026
 
 This update is mainly about the memory issues and missing HUD elements

@@ -1,65 +1,49 @@
-# v1.0.11 Release Build record — 25 October 2026
+# v1.0.12 Release Build record — 26 October 2026
 
-This release uses the complete vehicle playtest 1 repair chain, including the
-guarded game heap, render stability, scheduler handoff and retained v1.0.10
-Online/spectator fixes. Windows x64 and Linux x86_64/ARM64 are included. Steam
-Deck uses the exact Linux x86_64 payload. Android, macOS and iOS are skipped.
+This release promotes the accepted online/profile-header build and corrected
+live FOV slider. It keeps the memory/HUD, water, custom-car, offline mod copy,
+race-start and spectator fixes. Windows x64 and Linux x86_64/ARM64 are included;
+Steam Deck uses the identical x86_64 AppImage. Android, macOS and iOS are skipped.
 
-The maintainer approved preparing this release after reviewing the playtest
-handoff. That approval is not a recorded test on every device, mod or network.
+## Source and checks
 
-## Source and automated checks
+The existing Patch Pipeline release recipe includes character-library-portraits
+and online-performance above the complete earlier chain. The stable version
+comes from VERSION. ARM64 vehicle preparation and its fixtures retain the local
+-ffp-contract=off policy so prepared data matches x64. Shared simulation settings,
+the launcher design and current online fixes are preserved.
 
-The release overlay changes the stable version and packaging, and disables
-fused-operation contraction only for ARM64 vehicle preparation and its fixtures
-so the prepared data matches x64 exactly. It retains the
-native fixes, launcher design and canonical memory-playtest peer identities.
-The memory repair changed those identities from v1.0.10; use matching complete
-v1.0.11 packages. Online architecture/content compatibility checks remain.
+The release work keeps a recoverable source backup and a declared change ledger.
+Audits verify the final compositions, compiler bindings, linked guards and peer
+identities. Submodules, RecompiledFuncs and RecompiledPatches are not edited.
+The pattern guard, pinned-byte checks, tooling and host tests remain mandatory.
 
-Audits recompose final production units, verify compiler bindings and linked
-guards, and traverse the complete retained source chain. Document changes have
-before/after hashes. Submodules, RecompiledFuncs and RecompiledPatches are not
-edited. Existing authored native layers remain unchanged.
+Named CPU/data fixtures cover the retained allocator/render/water/handoff,
+spectator admission, race release, offline retention, transfer and vehicle paths.
+The current online menu, setup/cache/logging, directory lifecycle, portraits and
+profile checks are included too. Negative controls must fail as expected. Native
+Linux vehicle checks include ASan/UBSan. ARM64 fixtures use QEMU.
 
-Named synthetic fixtures cover both ROM revisions' actual allocator bodies,
-fragmentation, upper guard, owned entry, render/cache policy, scheduler handoff,
-spectator admission, race release, offline retention and mod transfer. Negative
-controls reproduce the previous failures. Vehicle data tests cover Brute v2,
-nine unchanged legacy samples, pixel/geometry preparation and rejected formats.
-Native Linux vehicle tests include ASan/UBSan. ARM64 CPU/data checks use QEMU;
-they do not establish physical ARM64 GPU, controller or audio compatibility.
+Archives are read back against their full file receipts. Linux ELF dependency
+and ABI inspection, packaged worker capability probes and isolated Windows
+updater checks are recorded with the exact final artifact hashes. The handoff's
+Evidence and VALIDATION.txt contain the actual results; this source document
+describes the required coverage rather than inventing future test results.
 
-Archive read-back verifies every delivered file. Both Linux ELF trees receive
-architecture and dependency inspection. Packaged worker capability probes load
-no ROM or mod. Exact counts, hashes and build results are in the external
-release folder's Evidence directory and VALIDATION.txt.
+## Gameplay and publication
 
-## Limits of this evidence
+Automated checks do not run a game, user ROM, RSP/GPU workload, live Discord
+flow or multiplayer match. Physical Steam Deck/ARM64, controller, audio and
+network acceptance remain separate. The maintainer has confirmed the corrected
+live FOV behaviour; that does not establish every other device or network.
 
-The exact previously logged malformed triangle task has not been reproduced
-with game assets. The scheduler ownership gap is established and repaired;
-malformed-input guards and provenance logging remain. Do not equate that code
-repair with proof that every reported rendering incident has been eliminated.
+Before rollout, check modded joins with a fresh cache and a reused cache,
+character/vehicle selection, race finish and track changes, spectators, immediate
+lobby closure and profile name/picture changes. Check remembered sign-in in both
+Steam Deck modes and a v1.0.11 update preserving saves, mods and settings.
 
-No game, user ROM, RSP workload, GPU workload or live lobby is executed during
-release preparation. ROM-free updater/helper checks, where recorded, run in
-isolated temporary profiles. Compilation and fixtures are not gameplay results.
+The signed DKR-R-update.json and DKR-R-update.sig must name Version1.0.12 and
+the exact committed release source. Steam Deck uses linux-x86_64. The maintainer
+uploads and publishes the stable GitHub release. Do not alter signed packages.
 
-## Updates and publication
-
-The exact final packages are signed through DKR-R-update.json and
-DKR-R-update.sig using the existing trusted Ed25519 key. The stable tag is
-Version1.0.11 and names the committed release source. Steam Deck uses the
-linux-x86_64 updater entry. No Android or Apple entry is created.
-
-The maintainer uploads and publishes the release. Signing and pushing source
-do not publish a GitHub release. Do not modify signed packages afterwards.
-
-Before public rollout, check HUD digits, track previews, repeated restarts,
-water families, Brute textures/seats/wheels, modded joining, fresh-cache
-spectators, custom music, race finish and track changes. Check both ROM
-revisions and Steam Deck where available. Verify the v1.0.10 update prompt,
-install and restart preserve saves, mods and settings.
-
-The [v1.0.10 record](docs/history/RELEASE-VALIDATION-1.0.10.md) is preserved.
+The [v1.0.11 validation record](docs/history/RELEASE-VALIDATION-1.0.11.md) is preserved.

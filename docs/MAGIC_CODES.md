@@ -37,7 +37,7 @@ The [Modding Bible](../modding/MODDERS-GUIDE.txt) includes the exact headers.
 - **ModernCamera++:** optional local presentation presets and live camera tuning.
   VR is unfinished and is not a supported release feature.
 
-Online Custom Magic Codes require the v1.0.11 Rollback host mode and the host's
+Online Custom Magic Codes require the v1.0.12 Rollback host mode and the host's
 admitted code/settings. Development tools additionally need explicit lobby
 consent and host authority. A local setting cannot secretly turn an ordinary
 match into a developer session. See [Online](ONLINE_MULTIPLAYER.md).

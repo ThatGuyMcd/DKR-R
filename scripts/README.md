@@ -1,6 +1,6 @@
 # Repository scripts
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 The release steps are `scripts/release/` ([Building](../docs/BUILDING.md#release-packages)). Packaging uses explicit runtime/legal allowlists; no offline Player Guide or old playtest handoff notes. Both US revisions, all owned payloads and exact staged inputs are required. Run only the named synthetic fixtures and ROM-free helper/updater checks; gameplay acceptance remains separate.
 
@@ -35,7 +35,7 @@ Linux packaging is opt-in with `./Build-Linux.sh --package`. Windows wrappers
 honour `DKRPORT_NO_PAUSE=1`; `Run-Windows.cmd` then waits for the runtime and
 returns its exit status. Runtime arguments are forwarded in both modes.
 
-For 1.0.11, rebuild every platform from the same source and compare both owned
+For 1.0.12, rebuild every platform from the same source and compare both owned
 engine IDs from the final packages. Publish fresh SHA-256 records only after
 packaging. See [Updates](../docs/UPDATES.md) for signed update metadata; a GitHub
 release without that metadata is not an automatic installation offer.

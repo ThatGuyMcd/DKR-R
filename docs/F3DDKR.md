@@ -1,6 +1,6 @@
 # F3DDKR graphics HLE
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 The accepted liquid gate freezes descriptor/dimension/filter selection per renderer workload. It does not change shader passes, guest state or GPU retirement. Renderer/runtime patches are applied only to isolated build copies; protected dependency checkouts remain untouched.
 

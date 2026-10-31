@@ -1,6 +1,6 @@
 # CRT filters and texture packs
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 Store-installed packs retain friendly names and managed installation receipts. Reinstall/update targets the selected owned copy. Recognised liquid animation families stay original until all matching HD frames are resident; incomplete families remain consistently original. Pack order and normal Stream/Stall/Preload policy are retained.
 
@@ -189,7 +189,7 @@ duplicate variants, unsafe image dimensions, alias collisions, archives over
 4 GB, unreadable ZIPs, and malformed native databases are rejected before
 renderer activation.
 
-## Texture Dumping — v1.0.11
+## Texture Dumping — v1.0.12
 
 Expand **Texture Dumping** beneath pack controls. Its **Export**, **Capture**
 and **My Dumps** tabs share active jobs; switching tabs/closing the section
@@ -222,5 +222,5 @@ Keep original-art dumps private. The starter omits ROMs and source reports,
 but unedited Working images can still be original game art. Distribute only
 replacement artwork you have permission to share. The detailed original
 texture-tool implementation/checklist (`patches/texture-dumping/TEXTURE-DUMPING.txt`
-before the fold, in git history) is engineering history, not v1.0.11 hardware
+before the fold, in git history) is engineering history, not v1.0.12 hardware
 qualification.

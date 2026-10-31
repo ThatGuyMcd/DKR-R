@@ -16,6 +16,7 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.0.12" date="2026-10-26"><description><p>Modded lobby joining, friends and profile pictures, remembered Linux sign-in and live field of view.</p></description></release>
     <release version="1.0.11" date="2026-10-25"><description><p>Memory and HUD safeguards, queued graphics ownership, water texture consistency and updated custom car support.</p></description></release>
     <release version="1.0.10" date="2026-10-25"><description><p>Modded lobby, race start and spectator fixes, offline mod copies and a tidier Open Lobbies screen.</p></description></release>
     <release version="1.0.9" date="2026-10-24"><description><p>Public online lobbies, spectators, vehicles, achievements and online reliability updates.</p></description></release>

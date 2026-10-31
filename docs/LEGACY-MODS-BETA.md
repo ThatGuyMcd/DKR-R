@@ -1,4 +1,4 @@
-# Custom tracks, characters, vehicles and the Mod Store — v1.0.11
+# Custom tracks, characters, vehicles and the Mod Store — v1.0.12
 
 Open **Mods / Hacks** to manage tracks, characters, Vehicles and Custom Magic Codes.
 The **Mod Store** brings the library into the launcher. Choose grid view or
@@ -24,6 +24,11 @@ or recovery folders while diagnosing an installation.
 Discord sign-in provides account features, reviews and requests. Moderators
 and admins see only the library actions their server-side role allows. A
 launcher checkbox cannot grant moderation rights.
+
+Online and the Mod Store now share one display name. You can reach the account
+settings from **DKR-R Online → Online Profile** too. Picture choices, sharing,
+remembered sign-in and friend cards are covered in the [Online guide](ONLINE_MULTIPLAYER.md#profile-pictures-and-friends).
+Character entries show portraits using the same compact preview style as vehicles.
 
 ## Vehicles
 

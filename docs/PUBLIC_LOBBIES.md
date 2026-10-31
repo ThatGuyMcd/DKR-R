@@ -1,6 +1,6 @@
 # Public lobbies and online presence
 
-In v1.0.11, use **DKR-R Online** to connect, browse **Public / Friends** and host
+In v1.0.12, use **DKR-R Online** to connect, browse **Public / Friends** and host
 a **Private / Public** lobby. These are additions to the existing launcher
 layout. No website frontend or new standalone account is required.
 
@@ -10,10 +10,12 @@ Choose **Sign in with Discord** and complete the normal browser pairing flow.
 An existing Mod Store sign-in is shared with Online. Signing out or switching
 accounts updates both uses. Local play and achievements do not need sign-in.
 
-Windows protects remembered credentials with DPAPI. Linux can use the desktop
-Secret Service through optional system libsecret; if unavailable, sign-in is
-session-only. Follow the launcher's status instead of assuming the account
-will persist. Credentials are not stored as plaintext settings.
+Enable **Keep me signed in** before signing in. Windows uses DPAPI. Linux uses
+the desktop keyring where available. Without one, including Steam Deck Gaming
+Mode, the launcher offers device storage in your profile with owner-only file
+permissions. It contains a remembered sign-in credential, so keep that profile
+private. Turning remembering off removes the saved sign-in. After upgrading a
+session-only installation, sign out and sign in once to save this device.
 
 ## Public and private rooms
 
@@ -79,6 +81,10 @@ The service uses a private binding to the single named SQLite Durable Object
 Worker first and preserve the live API's existing account/FTP/database bindings.
 The launcher and existing website API are the feature's integration points;
 FTP remains the mod-upload method.
+
+Profile pictures and Discord metadata also need the private API's profile D1
+migrations and matching Workers. An already deployed friends/pictures bundle
+does not need redeploying for the final header layout. See [profiles and deployment](ONLINE_PROFILES.md#deploying-the-matching-profile-api).
 
 See the [deployment and rollback instructions](../services/online-directory/DEPLOYMENT.md),
 [local backend QA record](../services/online-directory/QA.md) and

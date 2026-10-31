@@ -1,6 +1,6 @@
 # HUD layouts
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 Online My racer fullscreen retains corrected divider/sky and uses the offline-style HUD. Other human racers can show display name and position. Menus/shared scenes retain their layout. This is presentation only, not a change to input ownership or simulation.
 

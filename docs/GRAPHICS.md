@@ -22,7 +22,10 @@ presentation. Whole groups move together; their artwork is not stretched.
 Three/four-player HUD placement remains separate. The custom HUD editor and
 size controls are not enabled. See [HUD layouts](HUD-WORKSHOP.md).
 
-FOV, clipping and scenery controls affect what the camera shows. The near-plane
+The offline FOV slider applies on the next game frame, including while paused,
+so you can see the change without loading another race. The existing online
+restriction remains. Clipping and scenery controls affect what the camera shows.
+The near-plane
 and camera-obstruction improvements reduce seeing through nearby surfaces;
 report reproducible gaps with the track, position, aspect ratio and FOV.
 

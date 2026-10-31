@@ -1,7 +1,7 @@
 # Mod Library administration
 
 The [website library](https://positron-portal.com/dkr-r/) and launcher Mod Store
-use the existing library API and role-controlled Discord account flow. v1.0.11
+use the existing library API and role-controlled Discord account flow. v1.0.12
 does not change the FTP hosting/upload method or add a public lobby website UI.
 
 ## Add one entry or a batch

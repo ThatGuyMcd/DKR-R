@@ -342,3 +342,42 @@ remaining pending gates and still proves finalization rejects them.
 These restore the two owned-heap release gates, leaving five C5 gates pending:
 memory-stability-v77/v80, spectator-admission-before, race-release-before and
 vehicle-original-textures. Finalization still rejects an incomplete release.
+
+## Integration with current main
+
+The fold branch is integrating origin/main at d457741, preserving all eight
+commits added since the common ancestor. Profile, directory, history, live FOV
+and performance work is retained in its folded source owners; duplicate native
+backend files, the build-dependent alternate friend_service.cpp and duplicate
+CTest registrations are removed. Their maintained service/native/test owners
+already contain those ports. Historical release recipes remain historical.
+Current documentation and metadata now follow main's v1.0.12 release.
+
+Release documentation checking now includes staged/working changes and keeps
+renamed historical pages classified as archives. Obsolete links inside an
+archived release page are preserved; broken current links still fail, covered
+by a regression fixture. The release metadata check passes.
+
+The user confirmed both owners approve adopting the shipped v1.0.12 IDs. This
+approval applies to the explicit identity/header and owned-menu reconciliation;
+no additional approval question is needed for those edits. No push or PR has
+been made yet. The PR will target ThatGuyMcd/DKR-R:main, with latest main as
+an ancestor once this integration commit is complete.
+
+## Approved menu/identity integration
+
+Both owners approved the shipped v1.0.12 identities in this session. The only
+pin edits are the two defines in legacy_identity.hpp; all four engine salts
+remain unchanged. The original B9/v1.0.11 evidence is preserved. The live owned
+menu dispatch body is shared through probe_native_fields.h, with the supported
+stock/vehicle notifications in owned_menu_policy.h. The real body receives owner
+dispatch first and still rejects unknown calls or unavailable presentation.
+No generated guest source is rewritten.
+
+For each revision, 514 production dispatch checks cover all byte-sized events,
+owner precedence and offline/canonical gates. Historical controls substitute
+only the prior notification policy and must exit exactly 1; wrong failures
+are rejected by the runner. The four menu fixtures and two heap fixtures pass
+on Linux x86_64. The macOS application links and both production owned native
+objects compile. Current release metadata and 322 local documentation links
+validate; archived pages retain their historical links. All 162 host tests, guard/tooling and explicit pre-commit checks pass.

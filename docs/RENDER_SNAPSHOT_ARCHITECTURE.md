@@ -1,6 +1,6 @@
 # Renderer snapshot ownership
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 SDK 2 local tools/camera and coherent HD-liquid selection preserve copied presentation ownership. No independent online terrain/wave allocation or rolled-back high-LOD experiment is advertised. Checkpoint/save persistence stays confirmed-only.
 

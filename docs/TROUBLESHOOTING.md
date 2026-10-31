@@ -1,6 +1,17 @@
 # Troubleshooting DKR-R
 
-## v1.0.11 release contract
+For slow mod joins, use **Copy Join Diagnostics** and include whether the wait
+is Downloading, Preparing or waiting for the host. Send the joining client log
+as well as the host log. Restarting through the updater now hands logging to
+the new process correctly.
+
+On Steam Deck without a keyring, enable Keep me signed in and sign out/back in
+once to save the device credential. See [sign-in storage](PUBLIC_LOBBIES.md#sign-in-once).
+For missing Discord pictures, check that the profile API migrations and matching
+Workers are deployed, then sign in again. Existing online play can still work
+when picture import is unavailable.
+
+## v1.0.12 release contract
 
 Normal mods share one personal Adventure. Check portable/profile location and Backups & Recovery before restoring. Keep installation receipts/recovery folders. Export logs/support details; report the exact release, ROM revision, course, packs and settings. The accepted HD-water startup fix is included; a hardware-specific problem still needs its own report.
 
@@ -9,7 +20,7 @@ saves or whole profile to troubleshoot a graphics, mod or connection failure.
 
 ## Modded joins, race starts and spectator black screens
 
-Check that everyone has the complete v1.0.11 package first. This release
+Check that everyone has the complete v1.0.12 package first. This release
 includes the accepted playtest.4 fixes. Keep the downloaded offline-mod
 option enabled if you want those copies; matching installed content no
 longer causes the old identity-conflict warning. Genuine conflicts and
@@ -27,7 +38,7 @@ log also records `[spectator][music]`, `[spectator][admission]` and
 
 ## Missing HUD elements, memory reports or rejected graphics
 
-Use the full v1.0.11 package first. Keep `runtime.log` and
+Use the full v1.0.12 package first. Keep `runtime.log` and
 `runtime-previous.log`, with the track, ROM revision, mods, texture packs
 and action immediately before the problem. For Online, include the host
 and affected client or spectator logs from the same attempt.
@@ -44,7 +55,7 @@ Keep any new command/provenance reports; do not disable those checks.
 Water staying vanilla can mean an incomplete HD animation. All frames
 need matching replacements before that family can use HD consistently.
 For `unsupported car texture profile`, use the original updated export
-with v1.0.11. Unknown format revisions or enabled custom boost anchors
+with v1.0.12. Unknown format revisions or enabled custom boost anchors
 still need exporter/runtime support. See [Vehicles](VEHICLES.md).
 
 ## ROM rejected
@@ -92,7 +103,7 @@ Use compatible complete packages and the same original ROM revision.
 The host creates the lobby after choosing mods/rules; changing them requires a
 new lobby. Clients must complete consent, preparation and verification.
 
-v1.0.11 uses Rollback; the old host-backend selector is removed.
+v1.0.12 uses Rollback; the old host-backend selector is removed.
 Try automatic input delay and a suitable prediction window for your route.
 A bounded input wait, renderer slowdown and scene-loading barrier are different
 problems: record the network overlay state and exact scene.
@@ -119,8 +130,9 @@ service was unavailable needs recreation before public publication.
 
 The total counts accounts, not instances/controllers. A sleeping/crashed client
 can linger up to 60 seconds. Appear offline is a friend-presence control;
-Disconnect Online removes this instance from aggregate presence. Linux without
-Secret Service can use session-only sign-in. Do not disable certificate checks
+Disconnect Online removes this instance from aggregate presence. Without a Linux
+keyring, Keep me signed in uses the owner-only device store; session-only sign-in
+is still available with remembering off. Do not disable certificate checks
 to work around TLS errors. See [Public lobbies](PUBLIC_LOBBIES.md).
 
 If mod preparation is already approved, account/roster refresh should not

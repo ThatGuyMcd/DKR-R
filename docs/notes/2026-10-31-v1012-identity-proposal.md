@@ -8,7 +8,7 @@ online acceptance.
 
 ## Verified values
 
-| Revision | Current fold (v1.0.11) | Shipped v1.0.12 |
+| Revision | Historical fold (v1.0.11) | Shipped v1.0.12 |
 |---|---|---|
 | v77 | `5e22da8e6095b362ede17c69a2341aae2df24cbf8561c3af57fc86566d11784e` | `dc883843594ccb02931dbab4071080c0dcf0d7c0a960ee501529dd37230651c7` |
 | v80 | `32c82fea3111440434926d5782e174c9f2d036d198f039c5424393a835f948b0` | `105df80b777b20df308fede4235575dce5881e643130ebabf8cc60d71ff000e0` |
@@ -29,7 +29,7 @@ Source: [Version1.0.12 release](https://github.com/ThatGuyMcd/DKR-R/releases/tag
 ## Required approval and implementation
 
 AGENTS.md requires the deliberate identity edit to be approved by both owners.
-The code pins remain unchanged pending that approval. The proposed target is
+The user confirmed both owners approve these shipped values on 31 October 2026. The proposed target is
 compatibility with shipped v1.0.12, which drops compatibility with v1.0.11.
 
 After approval, edit only legacy_identity.hpp for the two owned IDs and update
@@ -58,5 +58,4 @@ The downloaded AppImage hashes match GitHub's release-asset digests. GitHub
 reports the Steam Deck asset has the same digest as Linux x86_64, so it has
 the same packaged runtime. Together with the Windows inspection, these are
 the identities of all published v1.0.12 desktop downloads. The release has
-no Apple asset. This evidence does not itself substitute for the required
-both-owner confirmation of the fold's explicit identity edit.
+no Apple asset. Both-owner confirmation of the explicit identity edit was received in this session.

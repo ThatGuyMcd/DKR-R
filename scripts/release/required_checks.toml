@@ -113,3 +113,23 @@ id = "vehicle-original-textures"
 ctest_test = "DKRVehicleOriginalAudit"
 why = "7449 vehicle checks over nine legacy packages and eight negative admissions, the Before/After importer control, native Linux ASan/UBSan, and the same prepared vehicle data on every platform."
 pending = "C5"
+
+[[check]]
+id = "online-menu-v77"
+ctest_test = "DKROnlineMenu77Checks"
+why = "514 production native menu dispatch checks."
+
+[[check]]
+id = "online-menu-v77-before"
+ctest_test = "DKROnlineMenu77BeforeChecks"
+why = "Historical notification admission must reject the newer callbacks."
+
+[[check]]
+id = "online-menu-v80"
+ctest_test = "DKROnlineMenu80Checks"
+why = "514 production native menu dispatch checks."
+
+[[check]]
+id = "online-menu-v80-before"
+ctest_test = "DKROnlineMenu80BeforeChecks"
+why = "Historical notification admission must reject the newer callbacks."

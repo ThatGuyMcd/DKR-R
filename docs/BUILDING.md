@@ -1,13 +1,13 @@
-# Building DKR-R v1.0.11
+# Building DKR-R v1.0.12
 
 The tree is the release: the memory, render, scheduler handoff and vehicle
 repairs, the playtest 4 fixes for mod joining, offline copies, race starts and
 spectator music, the Online directory, Scoreboard, party repairs, spectators,
 vehicles, achievements, texture tools and the SDK/Store/save/presentation
 work are all source here. `VERSION` and the compiled release value are
-`1.0.11`. Prepare the ROM-derived inputs (below), then build the tree.
+`1.0.12`. Prepare the ROM-derived inputs (below), then build the tree.
 
-The v1.0.11 build set and exact static checks are in
+The v1.0.12 build set and exact static checks are in
 [release validation](../RELEASE-VALIDATION.md). Source build commands for Apple
 remain below; no new Apple package was built in this pass.
 
@@ -157,9 +157,9 @@ Setup recovery checks staged Python/native tools, and preparation uses isolated
 revision trees. Do not edit live dependencies or delete protected directories
 to recover a stage. See [macOS kit notes](../packaging/MACOS-BUILD-README.md).
 The current integrated Rollback backend remains gated out on Apple. The public
-Rollback-only v1.0.11 layer does not promise a fallback to a removed backend.
+Rollback-only v1.0.12 layer does not promise a fallback to a removed backend.
 Existing v1.0.8 Apple releases have their own feature/build scope; validate
-current Apple integration before producing a v1.0.11 package.
+current Apple integration before producing a v1.0.12 package.
 
 ## iOS sideload build
 
@@ -194,7 +194,7 @@ check those on an iPhone or iPad before distributing a release.
 
 Use the reviewed Linux ARM64 toolchain/sysroot and separate compiled
 outputs. Compose both normal and owned payloads above, with matching
-visual-model inputs, then configure through the v1.0.11 release overlay.
+visual-model inputs, then configure through the v1.0.12 release overlay.
 The older [ARM recipes](ARM-PLATFORM-PREVIEW.md) describe the initial
 cross-build setup; their preview versions and results stay historical.
 
@@ -205,7 +205,7 @@ Linux x86_64. QEMU checks do not replace physical GPU/audio/input tests.
 
 ## Android source work
 
-Android releases are no longer supported and there is no v1.0.11 APK.
+Android releases are no longer supported and there is no v1.0.12 APK.
 The new release overlay rejects Android. Historical source recipes and
 the v1.0.9 Android adapter remain available for development, with their
 original application identity, signing and version-code requirements.

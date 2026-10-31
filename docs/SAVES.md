@@ -60,7 +60,7 @@ Back up your data before updating. To recover, export and inspect the surviving
 copy first, then restore it deliberately. No editor can recreate progress when
 no valid copy survives. See [Troubleshooting](TROUBLESHOOTING.md).
 
-## Spectators and achievements — v1.0.11
+## Spectators and achievements — v1.0.12
 
 Watching uses session-owned state, not your personal Adventure or Paks. The
 host owns communal online progress; confirmed handovers do not transplant a

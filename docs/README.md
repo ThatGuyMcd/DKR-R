@@ -1,6 +1,6 @@
 # DKR-R documentation
 
-Start here for the current v1.0.11 instructions. The older plans and playtest logs
+Start here for the current v1.0.12 instructions. The older plans and playtest logs
 are still useful, but they aren't the current feature list.
 
 ## Playing and settings
@@ -21,12 +21,13 @@ are still useful, but they aren't the current feature list.
 | [Magic Codes](MAGIC_CODES.md) | Launch selection, online rules and one-shot actions. |
 | [DKR-R Online](ONLINE_MULTIPLAYER.md) | Public/private hosting, Rollback, Scoreboard, session mods, saves and connection limits. |
 | [Public lobbies](PUBLIC_LOBBIES.md) | Shared Discord sign-in, Public/Friends, account count and directory privacy. |
+| [Profiles, pictures and sign-in](ONLINE_PROFILES.md) | Shared names, friend cards, Steam Deck persistence and the matching API deployment. |
 | [Spectators](SPECTATORS.md) | Watching, cameras, host-approved swaps and late-join gates. |
 | [Vehicles](VEHICLES.md) | Custom .dkrkart cars, native selection and managed Store installations. |
 | [Achievements](ACHIEVEMENTS.md) | 94 local goals, recognition, notifications and progress protection. |
 | [Library administration](MOD_LIBRARY_ADMIN.md) | FTP uploads, batch entries, image controls, usage filters and deployment. |
 | [Troubleshooting](TROUBLESHOOTING.md) | Failures, support exports and the correct runtime logs. |
-| [Platform support](PLATFORMS.md) | v1.0.11 packages, Linux requirements and excluded platforms. |
+| [Platform support](PLATFORMS.md) | v1.0.12 packages, Linux requirements and excluded platforms. |
 
 ## Track Lab and development
 
@@ -53,8 +54,8 @@ are still useful, but they aren't the current feature list.
 
 ## Releases and credits
 
-- [v1.0.11 release notes](PUBLIC-1.0.11-NOTES.txt), [v1.0.10 notes](PUBLIC-1.0.10-NOTES.txt), [v1.0.9 notes](PUBLIC-1.0.9-NOTES.txt), [v1.0.8 notes](PUBLIC-1.0.8-NOTES.txt) and
-  [documentation audit](DOCUMENTATION-1.0.11.md).
+- [v1.0.12 release notes](PUBLIC-1.0.12-NOTES.txt), [v1.0.11 notes](PUBLIC-1.0.11-NOTES.txt), [v1.0.10 notes](PUBLIC-1.0.10-NOTES.txt), [v1.0.9 notes](PUBLIC-1.0.9-NOTES.txt), [v1.0.8 notes](PUBLIC-1.0.8-NOTES.txt) and
+  [documentation audit](DOCUMENTATION-1.0.12.md).
 - [Changelog](../CHANGELOG.md), [beta 5 notes](BETA5-1.0.7.txt), [beta 4 notes](BETA4-1.0.7.txt), [beta 3 notes](BETA3-1.0.7.txt), [beta 2 notes](BETA2-1.0.7.txt) and
   [1.0.7 public release notes](PUBLIC-1.0.7-NOTES.txt).
 - [Release validation](../RELEASE-VALIDATION.md) separates recorded automated
@@ -63,7 +64,7 @@ are still useful, but they aren't the current feature list.
 - [Third-party credits](../THIRD_PARTY.md), [project licence](../LICENSE.md)
   and [runtime licensing notice](../runtime-recomp/COPYING-NOTICE.md).
 
-v1.0.11 includes Windows x64, Linux x86_64/ARM64 AppImages and Steam Deck.
+v1.0.12 includes Windows x64, Linux x86_64/ARM64 AppImages and Steam Deck.
 Android releases are no longer supported. macOS and iOS are skipped in this
 release; their older downloads keep their own version numbers. See the platform guide and validation
 record for exact coverage. Hardware ray tracing and unqualified online graphics

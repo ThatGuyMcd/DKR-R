@@ -35,19 +35,21 @@ def files() -> list[str]:
 
 
 def changed_since(since: str) -> set[str]:
-    out = subprocess.check_output(["git", "diff", "--name-only", f"{since}..HEAD"], cwd=ROOT, text=True)
-    return set(out.split())
+    # Include staged/working edits when preparing a release, as well as commits.
+    changed = subprocess.check_output(["git", "diff", "--name-only", "-z", since, "--"], cwd=ROOT)
+    added = subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=ROOT)
+    return {name.decode() for name in (changed + added).split(b"\0") if name}
 
 
 def disposition(name: str, changes: set[str]) -> str:
     if name.startswith(f"docs/releases/{version()}/"):
         return "release-notes"
-    if name in changes:
-        return "updated-current-document"
     if re.search("LICENSE|COPYING|NOTICE|THIRD_PARTY", name, re.I):
         return "licence-attribution-preserved"
     if name.startswith("docs/releases/") or "/history/" in name or re.search("/(?:PUBLIC-|BETA|PLAYTEST)", name):
         return "historical-record-preserved"
+    if name in changes:
+        return "updated-current-document"
     return "reviewed-reference-no-release-change"
 
 
@@ -68,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         inventory.append(
             {"path": name, "disposition": disposition(name, changes), "sha256": hashlib.sha256(data).hexdigest()}
         )
-        if name not in changes or path.suffix != ".md":
+        if name not in changes or path.suffix != ".md" or inventory[-1]["disposition"] == "historical-record-preserved":
             continue
         for link in LINK.findall(data.decode("utf-8", errors="replace")):
             if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", link) or link.startswith("#"):

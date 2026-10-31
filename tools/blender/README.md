@@ -6,12 +6,12 @@ it all back out and package it as a `.dkrmap` for DKR-R's `custom-tracks/`
 folder.
 
 The current addon supports retail remixes and new geometry, with custom
-textures, minimaps, music and water workflows described below. DKR-R 1.0.11
+textures, minimaps, music and water workflows described below. DKR-R 1.0.12
 includes the launcher integration under Mods / Hacks → Track Lab and the
 matching import/runtime support. The older addon plan remains historical;
 use this guide and CHANGELOG.md for current instructions.
 
-Existing 1.0.6 `.dkrmap` courses do not need a format conversion for 1.0.11. Public lobby discovery does not change the track format.
+Existing 1.0.6 `.dkrmap` courses do not need a format conversion for 1.0.12. Public lobby discovery does not change the track format.
 For online play, the host chooses the course set and clients verify the same
 prepared resources. Everyone in the lobby needs the same DKR-R release.
 

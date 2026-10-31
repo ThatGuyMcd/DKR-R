@@ -1,4 +1,4 @@
-# Launcher and overlay — v1.0.11
+# Launcher and overlay — v1.0.12
 
 Pick your ROM and start from **Play**. Desktop portable mode selects a separate
 data location on the next launch; it does not move your existing profile.
@@ -17,9 +17,13 @@ Rollback; the old backend selector is removed. Hide the lobby code when streamin
 See [Online](ONLINE_MULTIPLAYER.md), [Public lobbies](PUBLIC_LOBBIES.md) and
 [Spectators](SPECTATORS.md).
 
+Online Profile now has one shared name and picture header, Privacy and friend
+code cards below it, and a compact Account settings footer. Friends use smaller
+cards, with Add a friend above Search. See the [profile and friends guide](ONLINE_MULTIPLAYER.md#profile-pictures-and-friends).
+
 **Mods / Hacks** has tracks, characters, Vehicles, Custom Magic Codes, Mod Store,
 Track Lab and import/help tools. Cars can be imported as `.dkrkart` or ZIPs and
-chosen in the native Track Select picker. Cards stay compact; Details contains
+chosen in the native Track Select picker. Character cards now show portraits like vehicle cards. Cards stay compact; Details contains
 longer help and settings. See [Mods](LEGACY-MODS-BETA.md), [Vehicles](VEHICLES.md)
 and [Magic Codes](MAGIC_CODES.md).
 

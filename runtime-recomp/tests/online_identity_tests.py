@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The owned rollback contracts stay frozen at the v1.0.11 values: the
+"""The owned rollback contracts stay frozen at the approved v1.0.12 values: the
 configure emits exactly those, the contract doc records them, and no source
 hash chain feeds them again."""
 
@@ -14,11 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "runtime-recomp"
 HEADER = RUNTIME / "src/game/netplay/legacy_identity.hpp"
 DOC = ROOT / "docs/contracts/ONLINE_IDENTITY.md"
-# What v1.0.11 shipped (docs/fold-in/REFERENCE.md). Changing these is a
-# protocol break with every v1.0.11 peer, never a refactor.
+# Shipped v1.0.12 values, verified against official Windows/Linux artifacts.
+# Both owners approved their adoption; see docs/notes/2026-10-31-v1012-identity-proposal.md.
 SHIPPED = {
-    "77": "5e22da8e6095b362ede17c69a2341aae2df24cbf8561c3af57fc86566d11784e",
-    "80": "32c82fea3111440434926d5782e174c9f2d036d198f039c5424393a835f948b0",
+    "77": "dc883843594ccb02931dbab4071080c0dcf0d7c0a960ee501529dd37230651c7",
+    "80": "105df80b777b20df308fede4235575dce5881e643130ebabf8cc60d71ff000e0",
 }
 # The digests v1.0.11 appended to the owned adapter identity, in order
 # (experimental_runtime.cpp runtime_engine_identity).

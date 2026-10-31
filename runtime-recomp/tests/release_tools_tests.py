@@ -15,6 +15,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/release"))
@@ -177,6 +178,26 @@ class ReleaseIdentityTests(unittest.TestCase):
         self.assertEqual(check_docs.disposition(f"docs/releases/{v}/RELEASE-NOTES.txt", set()), "release-notes")
         self.assertEqual(check_docs.disposition("docs/BUILDING.md", {"docs/BUILDING.md"}), "updated-current-document")
         self.assertEqual(check_docs.disposition("docs/releases/1.0.0/X.md", set()), "historical-record-preserved")
+
+    def test_changed_archives_preserve_old_links_and_current_links_still_fail(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            archive = "docs/releases/1.0.0/old.md"
+            current = "docs/current.md"
+            for name in (archive, current):
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text("[missing](missing.md)\n")
+            output = root / "evidence"
+            with (
+                patch.object(check_docs, "ROOT", root),
+                patch.object(check_docs, "files", return_value=[archive, current]),
+                patch.object(check_docs, "changed_since", return_value={archive, current}),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(check_docs.main(["--since", "previous", "--evidence", str(output)]), 1)
+            report = json.loads((output / "DOCUMENTATION-CHECKS.json").read_text())
+            self.assertEqual(report["broken_links"], [{"path": current, "link": "missing.md"}])
+            self.assertEqual(report["dispositions"]["historical-record-preserved"], 1)
 
 
 class InputLockTests(unittest.TestCase):

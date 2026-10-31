@@ -1,6 +1,6 @@
 # DKR-R architecture
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 The folded source includes guarded game-heap headroom, immutable scheduler
 handoff, private decode isolation, water residency, vehicle preparation,
@@ -15,6 +15,12 @@ reference for symbols, structures and algorithms. Enhancements live in first-par
 source under `runtime-recomp/`. The fold replaced the first-party patch layers
 with the source they compiled; [the migration map](fold-in/MIGRATION.md)
 identifies the current owners. Edit those files directly.
+
+The final release adds the accepted online-performance and character/profile
+integration layers. Profile and live-FOV logic lives in first-party modules
+under `runtime-recomp/src/game`. Account/profile APIs handle identity and picture
+sharing; gameplay remains on the admitted peer transport and Rollback path.
+The full source fold is still separate from the guardrail setup in PRs #76–#78.
 
 ## Runtime and patch ownership
 
@@ -54,7 +60,7 @@ progress. Old mod-set saves are recovery inputs, not current per-mod-list owners
 
 ## Public Rollback and party ownership
 
-v1.0.11 public hosting admits the owned Rollback engine (the existing internal
+v1.0.12 public hosting admits the owned Rollback engine (the existing internal
 `ExperimentalRollback` value). The old Auto/Host Prediction/Strict Input Sync
 selector is removed. Historical implementations/wire values are not renamed
 or offered as an automatic fallback.

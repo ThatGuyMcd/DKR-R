@@ -1,6 +1,6 @@
 # DKR-R native recompilation runtime
 
-## v1.0.11 release contract
+## v1.0.12 release contract
 
 This is the project-owned native integration layer. The complete release uses
 the [release steps](../docs/BUILDING.md#release-packages), not this base

@@ -1,4 +1,4 @@
-# DKR-R Online — v1.0.11
+# DKR-R Online — v1.0.12
 
 Open **DKR-R Online** in the existing launcher. Public/Friends browsing,
 Private/Public hosting, Discord sign-in and a total online count sit alongside
@@ -6,7 +6,7 @@ the existing lobby controls. There is no separate website page to use.
 
 Races and minigames support up to four racing ports; Adventure supports two
 racers. A spectator-capable lobby can also have eight spectators. Everyone
-needs a compatible complete v1.0.11 package, supported original ROM revision,
+needs a compatible complete v1.0.12 package, supported original ROM revision,
 admitted gameplay rules and verified session mods. Keep `assets` and private
 workers with the installation.
 
@@ -35,6 +35,31 @@ on several launchers counts once; a crash or sleeping device can remain counted
 until its lease expires, normally within 60 seconds. **Disconnect Online**
 removes this instance. See [public lobbies and privacy](PUBLIC_LOBBIES.md).
 
+## Profile, pictures and friends
+
+Open **Online Profile** for your shared display name, picture and account
+settings. There is one name for Online, friends and the Mod Store. Edit it and
+choose **Save profile**. An active lobby keeps its current name until you leave;
+failed saves keep your draft so you can retry. Ordinary text fields use a
+case-readable font. The Discord username is no longer repeated underneath.
+
+**Change profile picture** previews a PNG or JPG before saving. You can also
+choose your Discord image or initials. Picture sharing is optional; friends
+and lobby players receive the selected picture only while sharing is enabled.
+Sign out and back in once after deploying the profile API to import Discord's
+name and image metadata. The launcher offers separate choices for each.
+
+Privacy and Share a friend code sit below the profile header. Account settings
+contains **Keep me signed in**, sign-out, privacy information and the existing
+confirmed library-account deletion. Reviews and requests stay in the Mod Store.
+Deleting the library account does not delete your Discord account or local mods.
+
+The Friends tab uses compact cards with a picture, name, status and actions.
+**Add a friend** is above Search. Existing filters and sorting still work.
+Lobby player cards offer **Add friend** for eligible players who are not already
+friends, including other clients. Requests still need acceptance; sharing a
+lobby does not automatically add anyone.
+
 ## Joining with mods
 
 The Session mods dialog shows what is happening, how long it has taken,
@@ -42,7 +67,11 @@ and how much data was downloaded or reused. A busy host can queue your
 request. Temporary transfers can be repaired up to five times; if a join
 fails, use **Retry Join** or **Copy Join Diagnostics**. Verified completed
 downloads can be reused when you retry. A first join with lots of mods
-can still take longer while they are downloaded and prepared.
+can still take longer while they are downloaded and prepared. Transfers and
+initial checkpoints have more capacity, verified cached content is reused and
+mod writes avoid flushing every chunk. Preparation still verifies complete files.
+Use **Copy Join Diagnostics** to distinguish network transfer from preparation;
+there is no fixed speed guarantee for every host or connection.
 
 You can leave **Keep downloaded mods for offline play** enabled. Matching
 installed copies are reused, and missing selected content is kept as
@@ -76,9 +105,14 @@ without remapping physical controllers to local ports.
 
 The public host mode is **Rollback**. It uses the existing owned replay backend
 internally named `ExperimentalRollback`. The old Auto, Host Prediction and
-Strict Input Sync selector is no longer offered for v1.0.11 public hosting.
+Strict Input Sync selector is no longer offered for v1.0.12 public hosting.
 Old wire enum values and historical investigations have not been reinterpreted.
 Do not change configuration files to bypass the supported-mode gate.
+
+The waiting lobby places the save/mod summary under its title and visibility
+under the lobby code on wide windows. **Close lobby** removes the hosted room
+without restarting the launcher. Your account can stay Online. A crash or lost
+connection still uses the directory lease expiry.
 
 ## Rollback connection Scoreboard
 
