@@ -1,6 +1,7 @@
 #include "admission_retry.hpp"
 #include <cstdio>
 #include <cstdio>
+#include <party_release.hpp>
 #include "rollback_policy.hpp"
 #include "party_runtime.hpp"
 #include "confirmed_observer.hpp"
@@ -819,15 +820,10 @@ struct PartyRuntime::Impl {
             const auto generation = r.n();
             PartySnapshot state;
             std::string e;
-            if (at.epoch < cursor.epoch ||
-                (go && at.epoch == cursor.epoch && at.frame < cursor.frame && generation <= controls)) {
-                std::fprintf(stderr, "[party][release-receive] ignored=stale epoch=%llu frame=%u controls=%llu\n",
-                             static_cast<unsigned long long>(at.epoch), at.frame,
-                             static_cast<unsigned long long>(generation));
-                return;
-            }
-            if (activated_release && at == activated_release->first && generation <= activated_release->second) {
-                std::fprintf(stderr, "[party][release-receive] ignored=duplicate epoch=%llu frame=%u controls=%llu\n",
+            const auto disposition = release_disposition(at, generation, cursor, controls, go, activated_release);
+            if (disposition != ReleaseDisposition::Apply) {
+                std::fprintf(stderr, "[party][release-receive] ignored=%s epoch=%llu frame=%u controls=%llu\n",
+                             disposition == ReleaseDisposition::Stale ? "stale" : "duplicate",
                              static_cast<unsigned long long>(at.epoch), at.frame,
                              static_cast<unsigned long long>(generation));
                 return;

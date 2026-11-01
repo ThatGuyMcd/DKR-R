@@ -64,8 +64,6 @@ class RequiredChecksTests(unittest.TestCase):
             {
                 "memory-stability-v77",
                 "memory-stability-v80",
-                "spectator-admission-before",
-                "race-release-before",
                 "vehicle-original-textures",
             },
         )

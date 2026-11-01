@@ -559,7 +559,7 @@
   "runtime-recomp/src/game/party_codec.hpp": "d17ab07cdd4cee4e9adff52cb5c11136b69a0c51621b3ec4a84457c1c2bf8433",
   "runtime-recomp/src/game/party_link.cpp": "93bdac97dd5dfa5b0f4ac2f36104c4a0afa1f3fff94258b7e755f13ac540f5a7",
   "runtime-recomp/src/game/party_link.hpp": "c9b59fcec4a308a39ce0a7f49b767121d12a68c9cd4aa00109bacabbfcda7da9",
-  "runtime-recomp/src/game/party_runtime.cpp": "67942ee6b6a324d66467298c88652afb8f5adfc76b7d523d2a791f1b4eaa6475",
+  "runtime-recomp/src/game/party_runtime.cpp": "08110495360b1d88d394c486909fcc2e707efde1fe043c9e1f4ab004d67c91ea",
   "runtime-recomp/src/game/party_runtime.hpp": "032e486bd13d48674f512d3602cb01de4fd763716fdf9043b880815948fe575f",
   "runtime-recomp/src/game/performance_capture.hpp": "48f47e4ecb6ab9acd47a9db142278bc02db8fd6836b14258a8fa864dd88332d5",
   "runtime-recomp/src/game/performance_observation.hpp": "c32e9dd6af5e2bae5ad239c5e349bd06069c726d76ddff17c7c3d91b72b78cab",
@@ -591,7 +591,7 @@
   "runtime-recomp/src/game/replay_probe_capture.cpp": "32388ca384df451fff9db243d1afec6544671a2efc69edd2d5eeefc9e496603c",
   "runtime-recomp/src/game/replay_probe_capture.hpp": "6000012fa8ba2ce6aefb4a95292278e69a1608049bdcfed3810d27395c34b277",
   "runtime-recomp/src/game/report_ui.inl": "5f0e865e494abfaf678a75d432a844170386db70b1c7b1d5d949228e3764c211",
-  "runtime-recomp/src/game/resident_music.cpp": "2b95802125c474e507d1a9847532eb5d481b13b066a50b4cff51e04bdcc7bc3b",
+  "runtime-recomp/src/game/resident_music.cpp": "2cee763f5eb5923335c0d6f980e18b316ba4ce5f602622d5e6859e2537c281ea",
   "runtime-recomp/src/game/resident_music.hpp": "e657e75e1224712da86175ee4701b08560ba8d6d9e72d65033d181785a4a7983",
   "runtime-recomp/src/game/retained_metadata_table.hpp": "ab86f697b95c8266593dd021c2e1340f9a83c22465ae4c71c280d4a158d3e3af",
   "runtime-recomp/src/game/reusable_flow_map.hpp": "7d766db8d20b535eb0a97d83d1a0457e4376521fca4254a60994fc16dfd14c05",
@@ -796,6 +796,20 @@
    "current": "263d0f07621004d51fbb26e548997b5a0b38c07c690e2b1837d89c75faf8a13b",
    "commit": "3a69b82",
    "reason": "Owned heap/menu release fixtures: the checkpointed dispatch prefix of dkr_probe_native moved into probe_native_entry.h (same calls, same order, early return when handled) and dkr_probe_native_fields moved unchanged into probe_native_fields.h, included at the end of the file. Reviewed: the moved fields body is textually identical, and -O2 v77 objects differ only in register allocation and stack slots."
+  },
+  {
+   "file": "runtime-recomp/src/game/party_runtime.cpp",
+   "previous": "67942ee6b6a324d66467298c88652afb8f5adfc76b7d523d2a791f1b4eaa6475",
+   "current": "08110495360b1d88d394c486909fcc2e707efde1fe043c9e1f4ab004d67c91ea",
+   "commit": "dfc66b5",
+   "reason": "Race-release Before control: the stale and duplicate Go guards moved unchanged into release_disposition() in party_release.hpp; the two log lines became one fprintf choosing 'stale' or 'duplicate' with identical text. Shipped builds resolve the header from src/game."
+  },
+  {
+   "file": "runtime-recomp/src/game/resident_music.cpp",
+   "previous": "2b95802125c474e507d1a9847532eb5d481b13b066a50b4cff51e04bdcc7bc3b",
+   "current": "2cee763f5eb5923335c0d6f980e18b316ba4ce5f602622d5e6859e2537c281ea",
+   "commit": "dfc66b5",
+   "reason": "Spectator-admission Before control: the three preparing_music() calls go through resident_music_admitted() in resident_music_admission.hpp, which returns preparing_music(). Shipped builds resolve the header from src/game."
   }
  ]
 }

@@ -499,6 +499,26 @@ dkr_probe_native prefix differs only in register and stack allocation. The
 current-main checkpoint now reports probe_native.c as its one difference.
 
 Both revisions pass 13 heap entry checks and 514 menu dispatch checks; both
-Before controls exit exactly 1 at event 18. Five C5 gates remain pending:
-memory-stability-v77/v80, spectator-admission-before, race-release-before and
+Before controls exit exactly 1 at event 18.
+
+## Spectator admission and race release Before controls
+
+Both Before gates are CTest tests again. Main built them by compiling the
+fixtures against the previous layer's staged source; the fold can't stage
+source, so each repair's decision now lives in a small header the production
+TU includes with angle brackets. `resident_music_admission.hpp` answers
+whether a verified observer admission is staging music (it forwards to
+`preparing_music()`), and `party_release.hpp` classifies a received Go as
+apply, stale or duplicate. Both are pure extractions; the shipped objects
+resolve them from src/game.
+
+`runtime-recomp/tests/historical/` holds one header per control with the
+pre-repair rule (no observer arm; cursor-as-receipt with `frame <= cursor`).
+The Before targets put that directory ahead of src/game and compile the same
+fixture and the same production TU. The controls pass only on the historical
+failure marker; a pass, a crash or a different assertion fails them.
+DKRSpectatorAdmissionBeforeChecks fails at the first cold admitted observer
+checkpoint; DKRRaceReleaseBeforeChecks at the first post-load release.
+
+Three C5 gates remain pending: memory-stability-v77/v80 and
 vehicle-original-textures.

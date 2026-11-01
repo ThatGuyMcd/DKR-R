@@ -25,6 +25,7 @@
     "runtime-recomp/src/game/netplay/owned_menu_policy.h",
     "runtime-recomp/src/game/netplay/setup_policy.hpp",
     "runtime-recomp/src/game/party_runtime.*",
+    "runtime-recomp/src/game/party_release.hpp",
     "runtime-recomp/src/game/camera_clearance_*",
     "runtime-recomp/src/game/camera_obstruction_*",
     "runtime-recomp/src/game/track_select_draw_guest.h",
@@ -104,7 +105,8 @@
     "runtime-recomp/src/game/netplay/owned_menu_policy.h": "2f729f2f1c491d1175cb82b22d0321715590f06ee137e6350590eacb442706ca",
     "runtime-recomp/src/game/netplay/runtime_state.hpp": "3cfc93e7479db7fa774a7652e537b1074fd570efa29c104d5b5443950d5ef326",
     "runtime-recomp/src/game/netplay/setup_policy.hpp": "6db6654350199baaabca3178a6a0e8d10af34749de786e9a554a621a6eef64b3",
-    "runtime-recomp/src/game/party_runtime.cpp": "b4d5812c3673a569f274288e2790fa7d74cd564b11b41a15f512d9db0bdf4801",
+    "runtime-recomp/src/game/party_release.hpp": "8a99a4f934511a6ad1aeea60e130f4f99623cc7eb67244702fe5d6ca04fbfcea",
+    "runtime-recomp/src/game/party_runtime.cpp": "4b87983b7156e12cdc383583543da3fb45653d568ed1c19b1ea9f766fb064b5d",
     "runtime-recomp/src/game/party_runtime.hpp": "771942360fee2f0e6f84a2ac511586d4ef171bd3737a20a5f2e909604bbb5c52",
     "runtime-recomp/src/game/runtime_save_routing.cpp": "7986db6c65687eff080fcd67e800c0a8fdfb507fee300b06e6dbcb922150b2e6",
     "runtime-recomp/src/game/runtime_save_routing.hpp": "ea7068b76d435429d32f339293c5817110e640e3ef37ec8513b1f4f987623161",
@@ -185,6 +187,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Pure code move in the owned native entry (3a69b82): the dispatch prefix and dkr_probe_native_fields moved into probe_native_entry.h and probe_native_fields.h with identical logic and order; owned-engine behaviour is unchanged."
+    "reason": "Pure extraction for the race-release Before control (dfc66b5): party_runtime.cpp's stale/duplicate Go guards moved unchanged into party_release.hpp, same log text; release behaviour is unchanged."
   }
 }

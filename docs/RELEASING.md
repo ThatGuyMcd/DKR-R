@@ -8,9 +8,8 @@ contributor checks and platform acceptance before publishing a release.
 
 **Until C5 lands, no release can be finalized from this tree.**
 `scripts/release/finalize.py` requires every check in
-`scripts/release/required_checks.toml`. Five checks remain pending: memory
-stability per revision, the spectator admission and race release Before
-controls, and the vehicle-original-textures audit.
+`scripts/release/required_checks.toml`. Three checks remain pending: memory
+stability per revision and the vehicle-original-textures audit.
 
 ## Before tagging
 
