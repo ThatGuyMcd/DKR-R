@@ -730,7 +730,7 @@
   "runtime-recomp/src/game/vehicle_library.cpp": "d2e320bc323819acafb5f2453155a398c1416bb0ee215e6f75e9fedbbc6c3c27",
   "runtime-recomp/src/game/vehicle_library.hpp": "5f575eeeb5265d438754a2361cead44d28a690d91e9d4a39c363ee7e200a598f",
   "runtime-recomp/src/game/vehicle_online.hpp": "5537e71aa961e981a29f076b1e126ecb50a044de6b5915f856c3e939db6c41fd",
-  "runtime-recomp/src/game/vehicle_package.cpp": "69660f29929c4fb56dc54fca4962f302e8150aaaa656468eaaa914658a2d63de",
+  "runtime-recomp/src/game/vehicle_package.cpp": "1bd5fd6dbf11bcf1e7fa5d3770e3498a9fe28e1dfef3d2eac14d6e212029a3a6",
   "runtime-recomp/src/game/vehicle_package.hpp": "2ecb0668871d8df6048b61303c1c4d5a7549c2350751aea40cb102149b08e481",
   "runtime-recomp/src/game/vehicle_protocol.hpp": "e99201beed3c850f51beeb14cb1347ce3f24c962429e959d0aaa14e4b8120efb",
   "runtime-recomp/src/game/vehicle_resources.cpp": "dfd00d2b88256895dbc97f5774c7b5ef5407e918366da54e39f07aa89862b052",
@@ -810,6 +810,13 @@
    "current": "2cee763f5eb5923335c0d6f980e18b316ba4ce5f602622d5e6859e2537c281ea",
    "commit": "dfc66b5",
    "reason": "Spectator-admission Before control: the three preparing_music() calls go through resident_music_admitted() in resident_music_admission.hpp, which returns preparing_music(). Shipped builds resolve the header from src/game."
+  },
+  {
+   "file": "runtime-recomp/src/game/vehicle_package.cpp",
+   "previous": "69660f29929c4fb56dc54fca4962f302e8150aaaa656468eaaa914658a2d63de",
+   "current": "1bd5fd6dbf11bcf1e7fa5d3770e3498a9fe28e1dfef3d2eac14d6e212029a3a6",
+   "commit": "32e64f8",
+   "reason": "Vehicle original-textures Before control: the texture-profile admission moved into texture_profile_admitted() in vehicle_texture_profile.hpp (the old rejection condition is exactly its negation). Shipped builds resolve the header from src/game."
   }
  ]
 }
