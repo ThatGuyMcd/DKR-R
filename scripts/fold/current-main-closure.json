@@ -779,7 +779,7 @@
   "runtime-recomp/tests/replay_probe/probe_magic.cpp": "72bbdebea52e02eaf076f0f50d441e75650c922f7f07f96cfd6a16dfd2a722ff",
   "runtime-recomp/tests/replay_probe/probe_magic.h": "ed663f55a221a27130f4522d0ce0de0bafaa01cf946a001e3fc8f066e67bf98c",
   "runtime-recomp/tests/replay_probe/probe_memory_inline.h": "52a777363739909c07baa58ef72a928f312dad4e10bd02989536bc1198b1cf27",
-  "runtime-recomp/tests/replay_probe/probe_native.c": "2218aba331b879d5b2bb02a85c5901e3fe377aa17cc63388eb8a67ec65e372f6",
+  "runtime-recomp/tests/replay_probe/probe_native.c": "263d0f07621004d51fbb26e548997b5a0b38c07c690e2b1837d89c75faf8a13b",
   "runtime-recomp/tests/replay_probe/probe_pak.c": "5ee8469ab454af06aef7dc1ba9e0a00d0c7e2d2326066e9cfc577a6f692b7212",
   "runtime-recomp/tests/replay_probe/probe_pak.cpp": "bed2f64ab16bfe4c5e7f32ca2f49e44b0d7cf4c64e62b0a10e2af3a764c2c54b",
   "runtime-recomp/tests/replay_probe/probe_pak.h": "bd7dad1e69c4845622a376143a13d1596df7ed902faeb615458516402fcfd5de",
@@ -788,5 +788,14 @@
   "runtime-recomp/tests/replay_probe/probe_presentation.h": "83fd6d7e84bf6b6347375adc9523f1f6e3938526b00e38e2f28859270a3db07a",
   "runtime-recomp/third_party/dr_libs/dr_mp3.h": "605776dc452491492421c8284fc560e7c9e17c874ef8b0e1718d3f9d3da08db2",
   "runtime-recomp/third_party/dr_libs/dr_wav.h": "fb563d4bd3b8d2848a24a7b68315c725a42370e59b984210f984da0ecc56c88c"
- }
+ },
+ "post_fold_changes": [
+  {
+   "file": "runtime-recomp/tests/replay_probe/probe_native.c",
+   "previous": "2218aba331b879d5b2bb02a85c5901e3fe377aa17cc63388eb8a67ec65e372f6",
+   "current": "263d0f07621004d51fbb26e548997b5a0b38c07c690e2b1837d89c75faf8a13b",
+   "commit": "3a69b82",
+   "reason": "Owned heap/menu release fixtures: the checkpointed dispatch prefix of dkr_probe_native moved into probe_native_entry.h (same calls, same order, early return when handled) and dkr_probe_native_fields moved unchanged into probe_native_fields.h, included at the end of the file. Reviewed: the moved fields body is textually identical, and -O2 v77 objects differ only in register allocation and stack slots."
+  }
+ ]
 }

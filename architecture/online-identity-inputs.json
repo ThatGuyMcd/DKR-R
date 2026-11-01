@@ -140,7 +140,9 @@
     "runtime-recomp/tests/replay_probe/probe_magic_tests.cpp": "93795bb27d1785f98ea805623fc5c3ebbb8082ece571692546cc44b007da107e",
     "runtime-recomp/tests/replay_probe/probe_main.cpp": "f60b0c61c3c8f87dc052fbeb5fdb7621c297db22bd16c7ec1d2673e79d6d9623",
     "runtime-recomp/tests/replay_probe/probe_memory_inline.h": "4ffa443b42554e593c7184be0f376deb63b86c9c43eb78aba92645df35dde606",
-    "runtime-recomp/tests/replay_probe/probe_native.c": "5504582df870b1abe6a9dfec3eea9c74eaa892302cf3553a3d4dabaf356f7b3b",
+    "runtime-recomp/tests/replay_probe/probe_native.c": "a35214d24bcc884535fd6ecc1a9e2a41d476ba20db95d5cf51f360f43c799bc4",
+    "runtime-recomp/tests/replay_probe/probe_native_entry.h": "a568110526ac68de5a9a1056c82c4fab67c92eb1d5a3c954999b2e8b6940749d",
+    "runtime-recomp/tests/replay_probe/probe_native_fields.h": "ce6350b96e53da920f8a11363d91e1e461326888b479581c997993fa5eddcbf0",
     "runtime-recomp/tests/replay_probe/probe_pak.c": "33864e179a6d69fd745fefff59b11d45c24ca70856d5639285da557f19368391",
     "runtime-recomp/tests/replay_probe/probe_pak.cpp": "b3f78f815424d4f69ce47757840e8f51d91d7befaef6a1d4eca4c36a0580a1e7",
     "runtime-recomp/tests/replay_probe/probe_pak.h": "4b92a30a925398e67481d934512ce74e008a8dfa9ace967a027e8387ba04c749",
@@ -183,6 +185,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Initial record at the approved v1.0.12 contracts"
+    "reason": "Pure code move in the owned native entry (3a69b82): the dispatch prefix and dkr_probe_native_fields moved into probe_native_entry.h and probe_native_fields.h with identical logic and order; owned-engine behaviour is unchanged."
   }
 }
