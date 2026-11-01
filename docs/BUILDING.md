@@ -168,10 +168,15 @@ that basic build as reproduction of the full experimental Public Build.
 
 Run `./Setup-macOS.sh` to install and check prerequisites, or
 `./Setup-macOS.sh --skip-deps` to check without installing. Setup and Build's
-preparation share the same checks: the Command Line Tools (`xcode-select --install`;
-full Xcode is not needed, RT64's Metal shaders compile at runtime), GNU Make 4+ (`gmake`),
-CMake, Ninja, Python, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
+preparation share the same checks: the Command Line Tools (`xcode-select --install`),
+GNU Make 4+ (`gmake`), CMake, Ninja, Python, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
 (Homebrew `coreutils`). The verifier is checked before ROM extraction.
+
+Full Xcode is optional. When its Metal toolchain runs (`xcrun metal -v`), RT64's
+shaders are precompiled into metallibs at build time. Without it they're
+embedded as MSL source and compiled at runtime, which adds a compile the first
+time each shader combination is used. Pass `-DDKR_RT64_PRECOMPILE_MSL=ON` or
+`OFF` to override the configure-time probe.
 
 Build and either preparation script hold a checkout lock for their entire run.
 A second invocation in the same checkout fails immediately; nested preparation

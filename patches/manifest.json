@@ -233,7 +233,7 @@
         },
         {
           "path": "patches/rt64/0021-macos-runtime-msl-shaders.patch",
-          "sha256": "441fe5f1dc8edf646d8f4ea3a76d25a65e86fc836aa8ae9cea637c9bde22128b"
+          "sha256": "2916492f9aefa6fccbe9bcf664ef30624f310f11be3f807305ce5ee819adf736"
         }
       ]
     },
