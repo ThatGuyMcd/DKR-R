@@ -1,6 +1,7 @@
 #include "vehicle_package.hpp"
 #include "magic_code_package.hpp"
 #include "package_compatibility.hpp"
+#include <vehicle_texture_profile.hpp>
 #include <miniz/miniz.h>
 #include <stb/stb_image.h>
 #include <algorithm>
@@ -266,7 +267,7 @@ static std::shared_ptr<const Package> inspect_impl(View bytes,std::string source
         bad("the geometry origin does not match the kart transform.");
     const auto profile=manifest.value("texture_profile",std::string{});
     const bool original_resolution=profile=="original-resolution-v1";
-    if(!profile.empty()&&profile!="native-4kib-rgba32-safe-v1"&&!original_resolution)bad("unsupported car texture profile.");
+    if(!texture_profile_admitted(profile))bad("unsupported car texture profile.");
     original_textures::seating_contract(manifest,*p);
     original_textures::effect_contract(manifest);
     const auto& images=original.at("textures");if(!images.is_array()||images.size()>32)bad("too many car textures.");
