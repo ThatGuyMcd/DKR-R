@@ -104,11 +104,19 @@ id = "stability-transfer"
 ctest_test = "DKRStabilityTransferChecks"
 why = "Stability transfer checks."
 
+# v1.0.11 parsed Syeo's brute v2.dkrkart and nine installed legacy packages
+# (7449 checks); neither was redistributable, so the gate now generates its
+# packages. Its pinned fingerprints are the same-data-on-every-platform check;
+# ASan/UBSan runs it in the host-sanitizers preset.
 [[check]]
 id = "vehicle-original-textures"
 ctest_test = "DKRVehicleOriginalAudit"
-why = "7449 vehicle checks over nine legacy packages and eight negative admissions, the Before/After importer control, native Linux ASan/UBSan, and the same prepared vehicle data on every platform."
-pending = "C5"
+why = "10869 vehicle checks: tile preparation, nine generated legacy format variants and one original-resolution export with pinned prepared-data fingerprints, and 17 negative admissions."
+
+[[check]]
+id = "vehicle-original-textures-before"
+ctest_test = "DKRVehicleOriginalBeforeChecks"
+why = "Negative control: the pre-v1.0.10 profile admission reproduces the legacy fingerprints but rejects original-resolution-v1."
 
 [[check]]
 id = "online-menu-v77"

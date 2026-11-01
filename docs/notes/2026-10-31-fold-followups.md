@@ -522,3 +522,65 @@ checkpoint; DKRRaceReleaseBeforeChecks at the first post-load release.
 
 Three C5 gates remain pending: memory-stability-v77/v80 and
 vehicle-original-textures.
+
+## Vehicle original-textures audit
+
+`vehicle-original-textures` is a CTest test again, the last pending gate.
+v1.0.11 ran `DKRVehicleOriginalChecks` on Syeo's `brute v2.dkrkart` and at
+least nine installed legacy packages, none redistributable. The owners chose
+to rebuild it on generated packages: `vehicle_original_textures_tests.cpp`
+writes every archive in memory (stored ZIP entries, stored-deflate PNGs, Studio
+JSON), so the bytes are the same everywhere and nothing third-party is
+committed. The importer is the production `vehicle_package.cpp`.
+
+`DKRVehicleOriginalAudit` reports 10869 checks (v1.0.11: 7449). Old group to
+new:
+
+- Synthetic tile preparation (wrap/clamp sampling, TMEM banks, draw bounds,
+  pivots, all-or-nothing budget, anchor units): unchanged.
+- brute v2 parsed as data (identity, explicit seating, 18 tiles under 4 KiB):
+  a generated original-resolution-v1 export with the revision-1 seating and
+  effect contracts, two materials preparing into 15 + 3 = 18 tiles, plus
+  sampled pixels against its artwork, TMEM rows, wheels, pivots and raw
+  anchors through the full importer.
+- Nine legacy packages, Before/After fingerprints equal: nine generated
+  variants (shared, calibrated and per-driver seating; no profile and
+  RGBA32-safe; clamp, flipped, untextured, LOD material tables, role and id
+  pivots, an empty wheel role). Each checks it wasn't prepared (own pixels,
+  geometry, UVs, seating, anchor units) and matches a pinned fingerprint.
+- Eight negative admissions: the same eight manifest mutations, plus nine
+  more: Studio format v2, a contract on shared seating, the 32-tile budget, a
+  legacy texture over 4 KiB, an LOD material swap, a truncated archive, a
+  `../` entry, a CRC mismatch and a missing LOD.
+- Before/After importer control: `DKRVehicleOriginalBeforeChecks`. The
+  profile admission moved unchanged into `vehicle_texture_profile.hpp`
+  (`texture_profile_admitted()`); `vehicle_package.cpp` includes it with angle
+  brackets. `tests/historical/vehicle_original_textures/` has the pre-v1.0.10
+  answer (no original-resolution-v1). The Before target compiles the same test
+  and production TU with that header first; it must reproduce every legacy
+  fingerprint, then fail with "unsupported car texture profile.".
+- Linux ASan/UBSan: the bespoke `DKRVehicleOriginalSanitizerChecks` target is
+  gone; the host-sanitizers preset (nightly, Linux and macOS) instruments both
+  tests like every other host test.
+- Same prepared vehicle data on every platform (`dump_prepared.py`): the
+  pinned fingerprints. Every platform's CTest run must reproduce them.
+
+The production change is the extraction in `vehicle_package.cpp`:
+`!profile.empty()&&profile!="native-4kib-rgba32-safe-v1"&&!original_resolution`
+became `!texture_profile_admitted(profile)`, the same predicate. The
+current-main checkpoint reports it as one difference; it isn't re-recorded.
+
+Both tests pass on macOS arm64 (AppleClang, plain and ASan/UBSan) and Linux
+x86_64 (GCC 13, plain and ASan/UBSan, emulated); the fingerprints match.
+
+What generated packages can't prove: that Syeo's actual export and the
+installed legacy packages parse as before. The variants follow the importer's
+format branches, not the real files, so an exporter quirk only a real
+package has (field ordering, number spelling, deflated or data-descriptor
+entries, PNG filters and palettes) isn't exercised. The Before control swaps
+only the profile decision, so it doesn't re-prove that the rest of the
+v1.0.10 change left legacy parsing alone; the pinned legacy fingerprints cover
+that directly. Running `DKRVehicleOriginalTests --fingerprint <package>` on
+the real files is still worth doing before a release that touches the importer.
+
+No C5 gate remains pending; `finalize.py --check-registry` exits 0.

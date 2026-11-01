@@ -50,8 +50,8 @@ on a fork, built on the devops Mac and a second machine, with
 `scripts/release/evidence.py compare` between the two builds and against the
 v1.0.10 evidence (sources, definitions, identity values).
 
-Also blocking the next release (not PR 2): C5 restores the remaining 5 pending release
-checks (see Release tooling); until then `finalize.py` refuses every release.
+C5 has restored every pending release check (see Release tooling);
+`required_checks.toml` has no `pending` entry left.
 
 Also blocking: a real Windows run of `Prepare-DKR-Runtime.ps1` (both ROMs,
 WSL) followed by `Build-DKR-R-Windows.ps1`, by ThatGuyMcd or Steve. Windows is
@@ -97,7 +97,7 @@ replaces it.
 | `-GeneratedSource` required by `Build-Windows.cmd` | optional; defaults to `build\prepared` |
 | `patches/release-prep/v1.0.11/release.py` (`snapshot`, `apply`, `verify`, `configure --capsule`) | none: documents are edited in place and the tree configures without a capsule |
 | `patches/release-prep/v1.0.11/build.py`, `run_checks.py` | build normally and run `ctest --output-junit`; `finalize.py` checks the result against `scripts/release/required_checks.toml` |
-| `patches/release-prep/v1.0.11/audit.py` | none until C5 (the vehicle audit is pending in `required_checks.toml`); `package_release.py` checks version, contracts and pre-release labels |
+| `patches/release-prep/v1.0.11/audit.py` | `DKRVehicleOriginalAudit` and `DKRVehicleOriginalBeforeChecks` (CTest); `package_release.py` checks version, contracts and pre-release labels |
 | `patches/release-prep/v1.0.11/package.py` (+ `v1.0.7/package_release.py`) | `scripts/release/package_release.py` |
 | `patches/release-prep/v1.0.11/update_assets.py` (+ `v1.0.9/update_assets.py`) | `scripts/release/update_assets.py` |
 | `patches/release-prep/v1.0.11/{seal,qualify_updates,finalize,check_docs,worker_probe}.py` | `scripts/release/{seal,qualify_updates,finalize,check_docs,probe_worker}.py` |
@@ -108,18 +108,16 @@ replaces it.
 
 ## Release tooling (B8)
 
-**C5 must land before the next release.** `scripts/release/finalize.py`
-refuses every release from this tree while `required_checks.toml` has pending
-entries. Graphics handoff, render stability, liquid residency, offline
+`scripts/release/finalize.py` refuses a release while `required_checks.toml`
+has pending entries; it has none now. Graphics handoff, render stability, liquid residency, offline
 retention, stability transfer, spectator admission, spectator handler and
 race release have been promoted, as have the v1.0.12 online setup, directory
 lifecycle, portrait, profile and Mod Store history gates, the owned heap
 entry and v1.0.12 online menu fixtures (with their Before controls) per
 revision, the spectator admission and race release Before controls, and
-memory stability per revision. 1 remains pending: the vehicle-original-textures
-audit (7449 checks, legacy packages, negative admissions, Before/After, Linux
-ASan/UBSan, identical prepared vehicle data across platforms). C5 restores
-it as a CTest test and drops its `pending`.
+memory stability per revision, and last the vehicle-original-textures audit
+on generated packages (`DKRVehicleOriginalAudit`, 10869 checks, plus its
+Before control; see the follow-up notes for what changed from v1.0.11's 7449).
 
 What the deleted release-prep scripts did, for B9b:
 
@@ -136,11 +134,14 @@ What the deleted release-prep scripts did, for B9b:
   Linux filesystem copy of the checkout for the evidence; `scripts/check.py`
   in CI is that now.
 - `dump_prepared.py`: dumped prepared vehicle numeric data through the
-  production libraries (it injected a diagnostic into a copy of their source);
-  part of the vehicle audit, so pending with it.
-- `run_checks.py` and `build.py`: built and ran the 14 fixtures above (pending).
+  production libraries (it injected a diagnostic into a copy of their source)
+  so platforms could be compared; `DKRVehicleOriginalAudit` pins those
+  fingerprints in the test instead.
+- `run_checks.py` and `build.py`: built and ran the 14 fixtures above (now
+  CTest tests).
 - `audit.py`: the vehicle-original-textures source and compiler-binding audit
-  (pending) plus the version and old-playtest-label checks, which
+  (the staged-source binding has no counterpart; the importer is ordinary
+  source) plus the version and old-playtest-label checks, which
   `package_release.py` now does on the binaries.
 - Producers finalize needed that v1.0.11 ran by hand: `ARCHIVE-REPORT.json`
   (now written by `package_release.py`) and `elf-inspection.json`
@@ -163,22 +164,22 @@ What the deleted release-prep scripts did, for B9b:
   the menu Before controls) followed, per revision, against the shared
   `probe_native_entry.h` and `probe_native_fields.h` bodies, as did the
   spectator admission and race release Before controls and memory stability
-  per revision. One release gate remains pending; finalization still refuses
-  a release. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
+  per revision, and the vehicle-original-textures audit. No release gate
+  remains pending. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
 - `DKRMemoryStability77/80Checks` (184812 checks each) compile the production
   allocator from `fixtures-v<rev>/`: `compose_payloads.py` runs N64Recomp a
   second time on the same policy with one function per file, and
   `prepare_payloads.py` copies that beside the payload. The release payload's
   bytes don't change. They exist only where `build/prepared` has fixtures
   (release presets); CI has no ROM.
-- `vehicle-original-textures` stays pending. Its audit parses Syeo's
-  `brute v2.dkrkart` and nine installed legacy packages, which were never in
-  the repository; and its Before control compiled the pre-v1.0.10 importer,
-  which the fold replaced in place, so restoring it means vendoring an old
-  `vehicle_package.cpp`. A compliant gate needs redistributable sample
-  packages under `runtime-recomp/tests/` (synthetic ones would change 7449)
-  and a Before control expressed as a production option (an admission flag
-  the importer already honours), not an old copy of the source.
+- `vehicle-original-textures` is `DKRVehicleOriginalAudit`. v1.0.11 parsed
+  Syeo's `brute v2.dkrkart` and nine installed legacy packages, which were
+  never in the repository. The owners chose to rebuild it on packages the
+  test writes itself (stored ZIP, stored-deflate PNG, no third-party
+  content), so its count is 10869, not 7449. The Before control follows the
+  decision-header pattern: the profile admission moved unchanged into
+  `vehicle_texture_profile.hpp`, and `tests/historical/vehicle_original_textures/`
+  holds the pre-v1.0.10 answer. Nothing old is vendored.
 
 - The layers' remaining check targets and the "Before" negative controls
   move to C5 with the other promoted fixtures; the fold doesn't port them.
