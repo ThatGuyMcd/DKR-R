@@ -1,4 +1,4 @@
-#include "observer_music.hpp"
+#include <resident_music_admission.hpp>
 #include "resident_music.hpp"
 #include <atomic>
 #include <cstdio>
@@ -82,7 +82,7 @@ std::shared_ptr<const MusicLibrary> State::activate(unsigned level,bool allow_de
     // and no accidental use of a metadata-only descriptor by the mixer.
     const auto at=sources_->find(level);if(at==sources_->end())return next;
     auto song=at->second;
-    if(song.pcm)if(const auto r=recording(song.pcm.get()))song.pcm=acquire(r,allow_decode || dkr::spectator_admission::preparing_music());
+    if(song.pcm)if(const auto r=recording(song.pcm.get()))song.pcm=acquire(r,allow_decode || dkr::spectator_admission::resident_music_admitted());
     if(song.pcm && song.pcm->samples.size()!=song.pcm->frames*2)
         throw Error("Selected custom music has no resident samples.");
     next->emplace(level,std::move(song));return next;
@@ -101,12 +101,12 @@ State State::stage_checkpoint(View bytes)const {
     const auto level=reader.u32();
     // Validate the complete music checkpoint against admitted metadata before
     // spending decoder work. This reads no guest RAM and changes no state.
-    if(dkr::spectator_admission::preparing_music())
+    if(dkr::spectator_admission::resident_music_admitted())
         (void)MusicState(sources_,revision80_).stage_checkpoint(bytes);
     State next=*this;
     next.active_=activate(level,false); // Weak-cache hit only; NEVER decode during rollback.
     next.native_=MusicState(next.active_,revision80_).stage_checkpoint(bytes);
-    if(dkr::spectator_admission::preparing_music())
+    if(dkr::spectator_admission::resident_music_admitted())
         std::fprintf(stderr,"[spectator][music] checkpoint-ready level=%u active=%u\n",level,unsigned(!next.active_->empty()));
     return next;
 }

@@ -113,9 +113,9 @@ refuses every release from this tree while `required_checks.toml` has pending
 entries. Graphics handoff, render stability, liquid residency, offline
 retention, stability transfer, spectator admission, spectator handler and
 race release have been promoted, as have the v1.0.12 online setup, directory
-lifecycle, portrait, profile and Mod Store history gates. 11 remain pending:
-memory stability and owned heap per revision, the spectator admission and
-race release Before controls, the vehicle-original-textures audit (7449
+lifecycle, portrait, profile and Mod Store history gates, and the spectator
+admission and race release Before controls. 9 remain pending: memory
+stability and owned heap per revision, the vehicle-original-textures audit (7449
 checks, legacy packages, negative admissions, Before/After, Linux ASan/UBSan,
 identical prepared vehicle data across platforms) and the v1.0.12 online menu
 fixtures and their Before controls per revision. C5 restores each as a CTest
@@ -160,12 +160,20 @@ What the deleted release-prep scripts did, for B9b:
   spectator admission, spectator handler, race release and liquid residency
   into CTest targets against production source. Those eight checks no longer
   have `pending` entries. The owned heap/menu testability refactors are
-  deferred so this fold retains main's production C dispatch code. Eleven
-  release gates remain pending; finalization
+  deferred so this fold retains main's production C dispatch code. The
+  spectator admission and race release Before controls are restored too (see
+  below). Nine release gates remain pending; finalization
   still refuses a release. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
 
 - The layers' remaining check targets and the "Before" negative controls
   move to C5 with the other promoted fixtures; the fold doesn't port them.
+- `DKRSpectatorAdmissionBeforeChecks` and `DKRRaceReleaseBeforeChecks` compile
+  the same fixtures and the same production TUs (`resident_music.cpp`,
+  `party_runtime.cpp`) with one decision header replaced by its pre-repair
+  rule from `runtime-recomp/tests/historical/`. The production TUs include
+  `<resident_music_admission.hpp>` and `<party_release.hpp>` with angle
+  brackets for that seam; nothing is staged or copied. Each control passes
+  only when the fixture fails with the historical marker.
 - A post-build level 2 for `rt64_water_renderer.cpp`. The gate preprocesses
   after configure, before the shader headers it includes exist, so level 2
   skips it (`scripts/fold/shader-pending.json`); level 1 and its compile flags

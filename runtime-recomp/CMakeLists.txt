@@ -3290,7 +3290,17 @@ if(BUILD_TESTING)
 
     add_executable(DKRRaceReleaseTests tests/race_release_tests.cpp)
     add_executable(DKRSpectatorHandlerTests tests/spectator_handler_tests.cpp)
-    foreach(party_test DKRRaceReleaseTests DKRSpectatorHandlerTests)
+    # Negative control: the same fixture and production party runtime, with the
+    # pre-repair release rule from tests/historical/race_release ahead of
+    # src/game for <party_release.hpp>. It must fail at the first post-load
+    # release, which proves DKRRaceReleaseChecks catches that regression.
+    add_executable(DKRRaceReleaseBeforeTests tests/race_release_tests.cpp)
+    target_include_directories(
+        DKRRaceReleaseBeforeTests
+        BEFORE
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests/historical/race_release"
+    )
+    foreach(party_test DKRRaceReleaseTests DKRSpectatorHandlerTests DKRRaceReleaseBeforeTests)
         target_compile_features(${party_test} PRIVATE cxx_std_20)
         target_include_directories(
             ${party_test}
@@ -3305,13 +3315,51 @@ if(BUILD_TESTING)
     add_test(NAME DKRRaceReleaseChecks COMMAND DKRRaceReleaseTests)
     add_test(NAME DKRSpectatorHandlerChecks COMMAND DKRSpectatorHandlerTests)
     set_tests_properties(DKRRaceReleaseChecks DKRSpectatorHandlerChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
+    # The marker is printed only by the fixture's failure handler (exit 1), so
+    # a pass, a crash or a different assertion all fail this control.
+    add_test(NAME DKRRaceReleaseBeforeChecks COMMAND DKRRaceReleaseBeforeTests)
+    set_tests_properties(
+        DKRRaceReleaseBeforeChecks
+        PROPERTIES
+            LABELS "host;runtime"
+            TIMEOUT 60
+            PASS_REGULAR_EXPRESSION "REGRESSION FAILURE: FIRST POST-LOAD RELEASE WAS DISCARDED"
+            FAIL_REGULAR_EXPRESSION "regression checks passed"
+    )
 
     add_executable(DKRSpectatorAdmissionTests tests/spectator_admission_tests.cpp)
-    target_compile_features(DKRSpectatorAdmissionTests PRIVATE cxx_std_20)
-    target_include_directories(DKRSpectatorAdmissionTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
-    target_link_libraries(DKRSpectatorAdmissionTests PRIVATE DKRLegacyModLaunch)
+    # Negative control: the same fixture compiles the production resident music
+    # TU with tests/historical/spectator_admission ahead of src/game for
+    # <resident_music_admission.hpp> (no observer arm). That definition wins
+    # over DKRLegacyModLaunch's archive member. It must fail at the first cold
+    # observer admission, which proves DKRSpectatorAdmissionChecks catches it.
+    add_executable(DKRSpectatorAdmissionBeforeTests tests/spectator_admission_tests.cpp src/game/resident_music.cpp)
+    target_include_directories(
+        DKRSpectatorAdmissionBeforeTests
+        BEFORE
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests/historical/spectator_admission"
+    )
+    target_include_directories(
+        DKRSpectatorAdmissionBeforeTests
+        PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game/mods" "${CMAKE_CURRENT_LIST_DIR}/tests/replay_probe"
+    )
+    foreach(admission_test DKRSpectatorAdmissionTests DKRSpectatorAdmissionBeforeTests)
+        target_compile_features(${admission_test} PRIVATE cxx_std_20)
+        target_include_directories(${admission_test} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+        target_link_libraries(${admission_test} PRIVATE DKRLegacyModLaunch)
+    endforeach()
     add_test(NAME DKRSpectatorAdmissionChecks COMMAND DKRSpectatorAdmissionTests)
     set_tests_properties(DKRSpectatorAdmissionChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
+    add_test(NAME DKRSpectatorAdmissionBeforeChecks COMMAND DKRSpectatorAdmissionBeforeTests)
+    set_tests_properties(
+        DKRSpectatorAdmissionBeforeChecks
+        PROPERTIES
+            LABELS "host;runtime"
+            TIMEOUT 60
+            PASS_REGULAR_EXPRESSION
+                "SPECTATOR ADMISSION FAILURE: Custom music was not prepared at a confirmed loading boundary[.]"
+            FAIL_REGULAR_EXPRESSION "spectator admission checks passed"
+    )
 
     add_executable(DKRLiveFovTests tests/live_fov_tests.cpp)
     target_compile_features(DKRLiveFovTests PRIVATE cxx_std_20)

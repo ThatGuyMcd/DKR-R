@@ -70,8 +70,6 @@ class RequiredChecksTests(unittest.TestCase):
                 "online-menu-v77-before",
                 "online-menu-v80",
                 "online-menu-v80-before",
-                "spectator-admission-before",
-                "race-release-before",
                 "vehicle-original-textures",
             },
         )

@@ -77,7 +77,6 @@ pending = "C5"
 id = "spectator-admission-before"
 ctest_test = "DKRSpectatorAdmissionBeforeChecks"
 why = "Negative control: the pre-fix admission must fail (custom music not prepared at a loading boundary)."
-pending = "C5"
 
 [[check]]
 id = "spectator-admission"
@@ -98,7 +97,6 @@ why = "68-69 offline retention checks."
 id = "race-release-before"
 ctest_test = "DKRRaceReleaseBeforeChecks"
 why = "Negative control: the pre-fix party runtime discards the first post-load release."
-pending = "C5"
 
 [[check]]
 id = "race-release"
