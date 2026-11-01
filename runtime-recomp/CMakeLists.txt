@@ -104,6 +104,12 @@ set(DKR_TEST_ROM_V80_SWAPPED "" CACHE FILEPATH "Optional local US Rev A byte-swa
 set(DKR_MODERN_RUNTIME_SOURCE "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime")
 set(DKR_RECOMP_SOURCE "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp")
 set(DKR_RT64_SOURCE "${DKR_DEPENDENCIES_DIR}/rt64")
+if(WIN32)
+    # RT64 links SDL2 and SDL2main by name and adds their import-library folder
+    # only inside its own directory, so every target here that links rt64
+    # (directly or through a static library such as DKRLegacyModCore) needs it.
+    link_directories("${DKR_RT64_SOURCE}/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64")
+endif()
 
 if(BUILD_TESTING AND NOT ANDROID)
     add_executable(DKRLavaGlowTests tests/lava_glow_tests.cpp)
@@ -1304,6 +1310,7 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
                 APPEND
                 PROPERTY
                     COMPILE_DEFINITIONS
+                        "DKR_RELEASE_VERSION=\"${DKR_RELEASE_VERSION}\""
                         "DKR_RELEASE_RESOURCE_VERSION=${DKR_RELEASE_RESOURCE_VERSION},${DKR_RELEASE_BUILD_NUMBER}"
             )
         endif()
