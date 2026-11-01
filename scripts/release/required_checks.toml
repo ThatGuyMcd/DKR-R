@@ -65,13 +65,11 @@ pending = "C5"
 id = "owned-heap-v77"
 ctest_test = "DKRMemoryOwned77Checks"
 why = "13 owned heap entry checks, US v1.0."
-pending = "C5"
 
 [[check]]
 id = "owned-heap-v80"
 ctest_test = "DKRMemoryOwned80Checks"
 why = "13 owned heap entry checks, US v1.1."
-pending = "C5"
 
 [[check]]
 id = "spectator-admission-before"
@@ -120,25 +118,21 @@ pending = "C5"
 id = "online-menu-v77"
 ctest_test = "DKROnlineMenu77Checks"
 why = "514 production native menu dispatch checks."
-pending = "C5"
 
 [[check]]
 id = "online-menu-v77-before"
 ctest_test = "DKROnlineMenu77BeforeChecks"
 why = "Historical notification admission must reject the newer callbacks."
-pending = "C5"
 
 [[check]]
 id = "online-menu-v80"
 ctest_test = "DKROnlineMenu80Checks"
 why = "514 production native menu dispatch checks."
-pending = "C5"
 
 [[check]]
 id = "online-menu-v80-before"
 ctest_test = "DKROnlineMenu80BeforeChecks"
 why = "Historical notification admission must reject the newer callbacks."
-pending = "C5"
 
 # The v1.0.12 release fixtures (patches/online-performance and
 # patches/character-library-portraits, ReleaseOverlay.cmake). The fold made

@@ -3313,6 +3313,50 @@ if(BUILD_TESTING)
     add_test(NAME DKRSpectatorAdmissionChecks COMMAND DKRSpectatorAdmissionTests)
     set_tests_properties(DKRSpectatorAdmissionChecks PROPERTIES LABELS "host;runtime" TIMEOUT 60)
 
+    # The owned native entry's checkpointed heap prefix (probe_native_entry.h),
+    # compiled as C against the real recomp register ABI.
+    foreach(revision IN ITEMS 77 80)
+        set(entry_test DKRMemoryOwned${revision}Tests)
+        add_executable(${entry_test} tests/memory_owned_entry_tests.cpp tests/memory_owned_entry_driver.c)
+        target_compile_features(${entry_test} PRIVATE cxx_std_20)
+        target_compile_definitions(${entry_test} PRIVATE DKR_MEMORY_TEST_REVISION=${revision})
+        target_include_directories(
+            ${entry_test}
+            PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
+        )
+        add_test(NAME DKRMemoryOwned${revision}Checks COMMAND ${entry_test})
+        set_tests_properties(DKRMemoryOwned${revision}Checks PROPERTIES LABELS "host;runtime" TIMEOUT 30)
+    endforeach()
+
+    # The owned native menu dispatch body (probe_native_fields.h) per revision.
+    # Before substitutes only the historical notification policy (event <= 17)
+    # and must fail with exactly exit 1, the first newer notification it refuses.
+    foreach(revision IN ITEMS 77 80)
+        foreach(control IN ITEMS Current Before)
+            set(menu_test DKROnlineMenu${revision}${control}Tests)
+            add_executable(${menu_test} tests/owned_menu_tests.c)
+            target_compile_features(${menu_test} PRIVATE c_std_17)
+            target_compile_definitions(${menu_test} PRIVATE DKR_PROBE_HAS_FULL_SCENES=1 DKR_PROBE_REVISION=${revision})
+            target_include_directories(
+                ${menu_test}
+                PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
+            )
+            if(control STREQUAL "Before")
+                target_compile_definitions(${menu_test} PRIVATE DKR_MENU_OLD_CONTROL=1)
+                add_test(
+                    NAME DKROnlineMenu${revision}BeforeChecks
+                    COMMAND
+                        "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/expect_exit.py" 1
+                        "$<TARGET_FILE:${menu_test}>"
+                )
+                set_tests_properties(DKROnlineMenu${revision}BeforeChecks PROPERTIES LABELS "host;runtime" TIMEOUT 30)
+            else()
+                add_test(NAME DKROnlineMenu${revision}Checks COMMAND ${menu_test})
+                set_tests_properties(DKROnlineMenu${revision}Checks PROPERTIES LABELS "host;runtime" TIMEOUT 30)
+            endif()
+        endforeach()
+    endforeach()
+
     add_executable(DKRLiveFovTests tests/live_fov_tests.cpp)
     target_compile_features(DKRLiveFovTests PRIVATE cxx_std_20)
     target_include_directories(

@@ -50,7 +50,7 @@ on a fork, built on the devops Mac and a second machine, with
 `scripts/release/evidence.py compare` between the two builds and against the
 v1.0.10 evidence (sources, definitions, identity values).
 
-Also blocking the next release (not PR 2): C5 restores the remaining 11 pending release
+Also blocking the next release (not PR 2): C5 restores the remaining 5 pending release
 checks (see Release tooling); until then `finalize.py` refuses every release.
 
 Also blocking: a real Windows run of `Prepare-DKR-Runtime.ps1` (both ROMs,
@@ -113,13 +113,13 @@ refuses every release from this tree while `required_checks.toml` has pending
 entries. Graphics handoff, render stability, liquid residency, offline
 retention, stability transfer, spectator admission, spectator handler and
 race release have been promoted, as have the v1.0.12 online setup, directory
-lifecycle, portrait, profile and Mod Store history gates. 11 remain pending:
-memory stability and owned heap per revision, the spectator admission and
-race release Before controls, the vehicle-original-textures audit (7449
-checks, legacy packages, negative admissions, Before/After, Linux ASan/UBSan,
-identical prepared vehicle data across platforms) and the v1.0.12 online menu
-fixtures and their Before controls per revision. C5 restores each as a CTest
-test and drops its `pending`.
+lifecycle, portrait, profile and Mod Store history gates, and the owned heap
+entry and v1.0.12 online menu fixtures (with their Before controls) per
+revision. 5 remain pending: memory stability per revision, the spectator
+admission and race release Before controls, and the vehicle-original-textures
+audit (7449 checks, legacy packages, negative admissions, Before/After, Linux
+ASan/UBSan, identical prepared vehicle data across platforms). C5 restores
+each as a CTest test and drops its `pending`.
 
 What the deleted release-prep scripts did, for B9b:
 
@@ -159,10 +159,10 @@ What the deleted release-prep scripts did, for B9b:
   render selection/provenance, offline retention, stability transfer,
   spectator admission, spectator handler, race release and liquid residency
   into CTest targets against production source. Those eight checks no longer
-  have `pending` entries. The owned heap/menu testability refactors are
-  deferred so this fold retains main's production C dispatch code. Eleven
-  release gates remain pending; finalization
-  still refuses a release. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
+  have `pending` entries. The owned heap entry and online menu fixtures (and
+  the menu Before controls) followed, per revision, against the shared
+  `probe_native_entry.h` and `probe_native_fields.h` bodies. Five release
+  gates remain pending; finalization still refuses a release. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
 
 - The layers' remaining check targets and the "Before" negative controls
   move to C5 with the other promoted fixtures; the fold doesn't port them.
