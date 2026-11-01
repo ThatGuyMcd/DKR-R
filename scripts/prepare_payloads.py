@@ -18,7 +18,11 @@ OUT (default build/prepared):
 * camera-kernel-v<rev>/: the Camera++ draw-only scene kernel
   (scripts/camera_scene_kernel.py);
 * model-v<rev>/: the local model detail kernel
-  (scripts/generate_visual_model_kernel.py).
+  (scripts/generate_visual_model_kernel.py);
+* fixtures-v<rev>/: when the payload has a Fixtures directory beside it
+  (compose_payloads.py writes one), the same policy's N64Recomp output with
+  one function per file, unstaged. Host tests compile a few guest functions
+  from it (the allocator) that no stage here changes.
 
 runtime-recomp's CMake reads these paths by default (cmake/PreparedInputs.cmake).
 Intermediate stages stay in OUT/stages/. OUT is rebuilt from scratch on every
@@ -169,6 +173,10 @@ def prepare_revision(out: Path, revision: int, raw: Path, config: Path, elf: Pat
         revision,
         options_from(save / f"owned-v{revision}/manifest.json", revision),
     )
+
+    fixtures = raw.parent / "Fixtures"
+    if fixtures.is_dir():
+        shutil.copytree(fixtures, out / f"fixtures-v{revision}")
 
     # The kernels read the N64Recomp payload, not the staged one.
     camera_scene_kernel.generate(raw, HEADER, elf, revision, out / f"camera-kernel-v{revision}")

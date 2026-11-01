@@ -13,9 +13,12 @@ scripts/prepare_payloads.py:
         legacy mod, track menu, character and character menu fragments, with
         the scene runtime), write the N64Recomp config and run N64Recomp:
         DIR/policy.json, DIR/dkr.us.v<rev>.toml, DIR/RecompiledFuncs and
-        DIR/n64recomp.log
+        DIR/n64recomp.log; then the same policy again, one function per
+        file, for the host allocator fixtures: DIR/dkr.us.v<rev>.fixtures.toml,
+        DIR/Fixtures and DIR/n64recomp-fixtures.log
 
-prepare_payloads.py reads DIR/RecompiledFuncs and DIR/dkr.us.v<rev>.toml.
+prepare_payloads.py reads DIR/RecompiledFuncs and DIR/dkr.us.v<rev>.toml,
+and DIR/Fixtures beside them.
 Exit status: 0 on success, 1 when a step fails, 2 on usage errors.
 """
 
@@ -77,8 +80,9 @@ def compose(revision: int, elf: Path, rom: Path, recompiler: Path, output: Path)
     for needed in (elf, rom, recompiler):
         if not needed.is_file():
             raise ComposeError(f"missing {needed}")
-    functions = output / "RecompiledFuncs"
+    functions, fixtures = output / "RecompiledFuncs", output / "Fixtures"
     functions.mkdir(parents=True, exist_ok=True)
+    fixtures.mkdir(parents=True, exist_ok=True)
     policy, config = output / "policy.json", output / f"dkr.us.v{revision}.toml"
     fragments = (
         ("--fragment", "legacy-mods"),
@@ -96,26 +100,44 @@ def compose(revision: int, elf: Path, rom: Path, recompiler: Path, output: Path)
         command += [flag, str(RUNTIME / f"{name}.v{revision}.recomp-fragment.json")]
     command += ["--scene-runtime", "--elf", str(elf), "--output", str(policy)]
     run(command, f"v{revision} policy composition")
+    config_command = [
+        sys.executable,
+        str(ROOT / "scripts/generate_recomp_config.py"),
+        "--policy",
+        str(policy),
+        "--elf",
+        str(elf),
+        "--rom",
+        str(rom),
+        "--entrypoint",
+        ENTRYPOINT[revision],
+    ]
     run(
-        [
-            sys.executable,
-            str(ROOT / "scripts/generate_recomp_config.py"),
-            "--policy",
-            str(policy),
-            "--elf",
-            str(elf),
-            "--rom",
-            str(rom),
-            "--output-functions",
-            str(functions),
-            "--entrypoint",
-            ENTRYPOINT[revision],
-            "--output",
-            str(config),
-        ],
+        [*config_command, "--output-functions", str(functions), "--output", str(config)],
         f"v{revision} N64Recomp config",
     )
     run([str(recompiler), str(config)], f"v{revision} N64Recomp", output / "n64recomp.log")
+    # The same policy, one function per file: host tests compile the exact
+    # production bodies of a few guest functions (the allocator) without the
+    # rest of the game. N64Recomp emits each body as it does in the payload.
+    fixture_config = output / f"dkr.us.v{revision}.fixtures.toml"
+    run(
+        [
+            *config_command,
+            "--output-functions",
+            str(fixtures),
+            "--output",
+            str(fixture_config),
+            "--functions-per-output-file",
+            "1",
+        ],
+        f"v{revision} N64Recomp fixture config",
+    )
+    run(
+        [str(recompiler), str(fixture_config)],
+        f"v{revision} N64Recomp fixtures",
+        output / "n64recomp-fixtures.log",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

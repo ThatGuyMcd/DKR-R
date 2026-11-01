@@ -62,8 +62,6 @@ class RequiredChecksTests(unittest.TestCase):
         self.assertEqual(
             {check.id for check in pending},
             {
-                "memory-stability-v77",
-                "memory-stability-v80",
                 "owned-heap-v77",
                 "owned-heap-v80",
                 "online-menu-v77",

@@ -8,7 +8,7 @@ contributor checks and platform acceptance before publishing a release.
 
 **Until C5 lands, no release can be finalized from this tree.**
 `scripts/release/finalize.py` requires every check in
-`scripts/release/required_checks.toml`. Eleven checks remain pending,
+`scripts/release/required_checks.toml`. Nine checks remain pending,
 including the owned heap/menu fixtures deferred to preserve main's
 production dispatch code during the fold.
 

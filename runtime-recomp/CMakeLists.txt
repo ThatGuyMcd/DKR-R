@@ -2496,6 +2496,9 @@ if(BUILD_TESTING)
     add_test(NAME DKRNetplayInputLatency COMMAND DKRNetplayInputLatencyTests)
     add_executable(DKRLegacyMemorySafetyTests tests/legacy_memory_safety_tests.cpp)
     add_test(NAME DKRLegacyMemorySafety COMMAND DKRLegacyMemorySafetyTests)
+    # fixtures-v<rev>/: the production policy's N64Recomp output, one function
+    # per file (scripts/compose_payloads.py). cmake/PreparedInputs.cmake
+    # defaults this to the prepared directory when it has them.
     set(DKR_MEMORY_FIXTURE_ROOT
         ""
         CACHE PATH
@@ -2503,6 +2506,14 @@ if(BUILD_TESTING)
     )
     if(DKR_MEMORY_FIXTURE_ROOT)
         foreach(revision IN ITEMS 77 80)
+            # One-function-per-file output doesn't include the payload's
+            # declarations; force the fixture directory's funcs.h into it.
+            set(guest_fixture_funcs "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/funcs.h")
+            if(MSVC)
+                set(guest_fixture_include "$<$<COMPILE_LANGUAGE:C>:/FI${guest_fixture_funcs}>")
+            else()
+                set(guest_fixture_include "$<$<COMPILE_LANGUAGE:C>:SHELL:-include ${guest_fixture_funcs}>")
+            endif()
             set(memory_guest_sources "tests/legacy_memory_guest_tests.cpp")
             foreach(
                 fn
@@ -2551,6 +2562,51 @@ if(BUILD_TESTING)
                 target_link_libraries(DKRLegacyMemoryGuest${revision}Tests PRIVATE m)
             endif()
             add_test(NAME DKRLegacyMemoryGuest${revision} COMMAND DKRLegacyMemoryGuest${revision}Tests)
+            # The memory stability release gate: the production allocator with
+            # and without the primary heap admission (primary_heap.h).
+            set(memory_stability_sources tests/memory_stability_tests.cpp src/game/netplay/runtime_state.cpp)
+            foreach(
+                fn
+                IN
+                ITEMS
+                    mempool_init_main
+                    mempool_init
+                    mempool_alloc
+                    mempool_alloc_safe
+                    mempool_slot_find
+                    mempool_slot_assign
+                    mempool_slot_clear
+                    mempool_get_pool
+                    mempool_free
+                    mempool_free_addr
+                    mempool_free_queue
+                    mempool_free_queue_clear
+                    mempool_free_timer
+            )
+                list(APPEND memory_stability_sources "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/${fn}.c")
+            endforeach()
+            add_executable(DKRMemoryStability${revision}Tests ${memory_stability_sources})
+            target_compile_features(DKRMemoryStability${revision}Tests PRIVATE cxx_std_20)
+            target_compile_definitions(DKRMemoryStability${revision}Tests PRIVATE DKR_MEMORY_TEST_REVISION=${revision})
+            target_include_directories(
+                DKRMemoryStability${revision}Tests
+                PRIVATE
+                    src/game
+                    "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}"
+                    "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
+            )
+            target_compile_options(DKRMemoryStability${revision}Tests PRIVATE "${guest_fixture_include}")
+            if(MSVC)
+                # The Before phase deliberately throws through the guest C code.
+                target_compile_options(
+                    DKRMemoryStability${revision}Tests
+                    PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/EHsc>" "$<$<COMPILE_LANGUAGE:CXX>:/EHc->"
+                )
+            else()
+                target_link_libraries(DKRMemoryStability${revision}Tests PRIVATE m)
+            endif()
+            add_test(NAME DKRMemoryStability${revision}Checks COMMAND DKRMemoryStability${revision}Tests)
+            set_tests_properties(DKRMemoryStability${revision}Checks PROPERTIES LABELS "host;runtime" TIMEOUT 120)
             add_executable(
                 DKRTrackSelectNative${revision}Tests
                 tests/track_select_native_draw_tests.cpp
@@ -2561,6 +2617,7 @@ if(BUILD_TESTING)
                 "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/texrect_draw.c"
             )
             target_compile_definitions(DKRTrackSelectNative${revision}Tests PRIVATE DKR_TEST_REVISION=${revision})
+            target_compile_options(DKRTrackSelectNative${revision}Tests PRIVATE "${guest_fixture_include}")
             target_compile_features(DKRTrackSelectNative${revision}Tests PRIVATE cxx_std_20)
             target_include_directories(
                 DKRTrackSelectNative${revision}Tests
