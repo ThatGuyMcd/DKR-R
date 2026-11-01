@@ -64,12 +64,6 @@ class RequiredChecksTests(unittest.TestCase):
             {
                 "memory-stability-v77",
                 "memory-stability-v80",
-                "owned-heap-v77",
-                "owned-heap-v80",
-                "online-menu-v77",
-                "online-menu-v77-before",
-                "online-menu-v80",
-                "online-menu-v80-before",
                 "spectator-admission-before",
                 "race-release-before",
                 "vehicle-original-textures",

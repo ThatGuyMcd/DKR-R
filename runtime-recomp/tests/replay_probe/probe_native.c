@@ -1,5 +1,4 @@
 #include "../../src/game/netplay/owned_menu_policy.h"
-#include "../../src/game/primary_heap.h"
 #include "recomp.h"
 #include "funcs.h"
 #include "probe_bridge.h"
@@ -7,6 +6,7 @@
 #include "probe_input.h"
 #include "probe_pak.h"
 #include "probe_magic.h"
+#include "probe_native_entry.h"
 #include "../../src/game/camera_obstruction_guest.h"
 #include "../../src/game/mods/legacy_memory_safety.h"
 #include "../../src/game/track_select_draw_guest.h"
@@ -1110,16 +1110,9 @@ static void void_primitive(uint8_t* rdram,recomp_context* ctx) {
 dkr_probe_native_state dkr_probe_native_capture(void) { return state; }
 void dkr_probe_native_restore(dkr_probe_native_state value) { state = value; scene_authorization=0; confirmed_menu_tick=0; active_menu_tick=0; inline_menu_preview=0; memset(&track_draw,0,sizeof(track_draw)); }
 int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* context) {
-    (void)ram; (void)context;
-    dkr_probe_checkpoint();
-    uint64_t mod_result=0;
-    if(dkr_probe_mod_dispatch(name,ram,context,0,0,0,0,&mod_result))return (int)mod_result;
-    // No asset world (vanilla/code-only): same known-pool policy.
-    // A handled custom admission above always keeps precedence.
-    if(strcmp(name,"dkr_legacy_heap_capacity")==0) {
-        context->r15=(int32_t)dkr_primary_heap_end((uint32_t)context->r15,0x800000U);
-        return 0;
-    }
+    int entry_handled;
+    const int entry_result=dkr_probe_native_entry(name,ram,context,&entry_handled);
+    if(entry_handled)return entry_result;
     /* modern_camera.cpp: the local Modern camera never moves an owned or
        replayed frame, so there is no pose to hand back here. */
     if(strcmp(name,"dkr_modern_camera_restore")==0)return 0;
@@ -1560,27 +1553,4 @@ uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_con
     }
     dkr_probe_block(name);
 }
-int dkr_probe_native_fields(const char* name, uint8_t* ram, struct recomp_context* context,
-                            unsigned event, const uint32_t* fields) {
-    (void)ram; (void)context; (void)event; (void)fields;
-    dkr_probe_checkpoint();
-    uint64_t mod_result=0;
-    if(dkr_probe_mod_dispatch(name,ram,context,0,0,fields,event,&mod_result))return (int)mod_result;
-    /* runtime_legacy_mods.cpp:122-125 returns 0 before inspecting fields/event
-       when the character state/selector is absent. Fresh private profiles have
-       no custom content. A horn reaches event 8 through sound_play even during
-       a race; it does not imply a character-menu transition. */
-    if (offline && strcmp(name, "dkr_legacy_character_menu") == 0) return 0;
-    // runtime_legacy_mods.cpp's no-session/no-selector return precedes field
-    // inspection. The full-scenes payload has the reviewed stock and vehicle-notification
-    // stock menu surface (including menu_init/return-to-stock notifications).
-    // It has no legacy or Track Lab catalogue, so that exact no-state branch
-    // never dereferences a host field table or overwrites a guest return.
-    if(offline && canonical_presentation && strcmp(name,"dkr_legacy_track_menu")==0 &&
-       DKR_PROBE_HAS_FULL_SCENES && dkr_menu_notification(event))return 0;
-    if(offline && canonical_presentation && strcmp(name,"dkr_legacy_track_menu")==0 &&
-       ((state.scene_unload_phase==3 && event==14) ||
-        (state.scene_unload_phase==2 && event==10)))return 0;
-    if(strcmp(name,"dkr_legacy_track_menu")==0)fprintf(stderr,"[rollback][menu-refused] event=%u full-scenes=%u offline=%u canonical=%u\n",event,(unsigned)DKR_PROBE_HAS_FULL_SCENES,offline,canonical_presentation);
-    dkr_probe_block(name);
-}
+#include "probe_native_fields.h"

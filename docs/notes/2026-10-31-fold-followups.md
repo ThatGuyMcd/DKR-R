@@ -487,3 +487,18 @@ All 162 host tests passed for the integrated C/C++ tree; only the scanner and
 its Python regression fixture changed afterward. No backend or release was
 deployed. Eleven C5 release gates and the documented platform/owner evidence
 remain pending.
+
+## Owned heap and menu fixtures on the current-main fold
+
+The current-main fold carries the owned heap entry and online menu fixtures
+described above. probe_native.c's checkpointed heap prefix moved into
+probe_native_entry.h and its dkr_probe_native_fields body into
+probe_native_fields.h (included at the end of probe_native.c, unchanged token
+for token). The optimized dkr_probe_native_fields code is identical; the
+dkr_probe_native prefix differs only in register and stack allocation. The
+current-main checkpoint now reports probe_native.c as its one difference.
+
+Both revisions pass 13 heap entry checks and 514 menu dispatch checks; both
+Before controls exit exactly 1 at event 18. Five C5 gates remain pending:
+memory-stability-v77/v80, spectator-admission-before, race-release-before and
+vehicle-original-textures.
