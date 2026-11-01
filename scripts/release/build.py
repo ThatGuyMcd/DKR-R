@@ -38,12 +38,12 @@ def git(*args: str) -> str:
 
 
 def cmake_tool(name: str) -> str:
-    """name on PATH, else (on Windows) the copy Visual Studio 2022 bundles."""
+    """name on PATH, else (on Windows) the copy Visual Studio 2022 or its Build Tools bundle."""
     found = shutil.which(name)
     if found or os.name != "nt":
         return found or name
     program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-    for edition in ("Community", "Professional", "Enterprise"):
+    for edition in ("Community", "Professional", "Enterprise", "BuildTools"):
         candidate = (
             program_files
             / "Microsoft Visual Studio/2022"
