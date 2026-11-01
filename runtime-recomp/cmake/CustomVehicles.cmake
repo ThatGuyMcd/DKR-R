@@ -22,25 +22,37 @@ endif()
 target_link_libraries(DKRLegacyImportLibrary PRIVATE DKRCustomVehicles)
 target_link_libraries(DKRLegacyModLaunch PRIVATE DKRCustomVehicles)
 
-# Original-texture package checks (synthetic packages, no game data). Built on
-# demand; the sanitizer variant compiles the preparation source directly.
-add_executable(DKRVehicleOriginalChecks EXCLUDE_FROM_ALL
-    "${DKRPORT_ROOT}/runtime-recomp/tests/vehicle_package_checks.cpp")
-target_compile_features(DKRVehicleOriginalChecks PRIVATE cxx_std_20)
-target_include_directories(DKRVehicleOriginalChecks PRIVATE "${DKRPORT_ROOT}/runtime-recomp/src/game")
-target_link_libraries(DKRVehicleOriginalChecks PRIVATE DKRCustomVehicles)
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-    add_executable(DKRVehicleOriginalSanitizerChecks EXCLUDE_FROM_ALL
-        "${DKRPORT_ROOT}/runtime-recomp/tests/vehicle_package_checks.cpp"
+# The vehicle-original-textures release gate (DKRVehicleOriginalAudit). The
+# test generates its own packages; no real mod or game data is read. Before
+# compiles the production importer with the pre-v1.0.10 texture profile
+# admission from tests/historical/vehicle_original_textures, which wins over
+# the <vehicle_texture_profile.hpp> in src/game, and links its object ahead of
+# DKRCustomVehicles' archive member. It must reproduce the legacy fingerprints
+# and then reject the original-resolution package. ASan/UBSan coverage is the
+# host-sanitizers preset, which instruments both like every other host test.
+if(BUILD_TESTING)
+    add_executable(DKRVehicleOriginalTests "${DKRPORT_ROOT}/runtime-recomp/tests/vehicle_original_textures_tests.cpp")
+    add_executable(DKRVehicleOriginalBeforeTests
+        "${DKRPORT_ROOT}/runtime-recomp/tests/vehicle_original_textures_tests.cpp"
         "${DKRPORT_ROOT}/runtime-recomp/src/game/vehicle_package.cpp")
-    target_compile_features(DKRVehicleOriginalSanitizerChecks PRIVATE cxx_std_20)
-    target_compile_definitions(DKRVehicleOriginalSanitizerChecks PRIVATE NOMINMAX)
-    target_compile_options(DKRVehicleOriginalSanitizerChecks PRIVATE
-        -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(DKRVehicleOriginalSanitizerChecks PRIVATE -fsanitize=address,undefined)
-    target_include_directories(DKRVehicleOriginalSanitizerChecks PRIVATE
-        "${DKRPORT_ROOT}/runtime-recomp/src/game" "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
-    target_link_libraries(DKRVehicleOriginalSanitizerChecks PRIVATE DKRCustomMagicCodes DKRLegacyModCore)
+    target_include_directories(DKRVehicleOriginalBeforeTests BEFORE PRIVATE
+        "${DKRPORT_ROOT}/runtime-recomp/tests/historical/vehicle_original_textures")
+    target_compile_definitions(DKRVehicleOriginalBeforeTests PRIVATE NOMINMAX)
+    foreach(target DKRVehicleOriginalTests DKRVehicleOriginalBeforeTests)
+        target_compile_features(${target} PRIVATE cxx_std_20)
+        target_include_directories(${target} PRIVATE "${DKRPORT_ROOT}/runtime-recomp/src/game")
+        target_link_libraries(${target} PRIVATE DKRCustomVehicles)
+    endforeach()
+    add_test(NAME DKRVehicleOriginalAudit COMMAND DKRVehicleOriginalTests)
+    set_tests_properties(DKRVehicleOriginalAudit PROPERTIES LABELS "host;runtime" TIMEOUT 120)
+    add_test(NAME DKRVehicleOriginalBeforeChecks COMMAND DKRVehicleOriginalBeforeTests)
+    set_tests_properties(
+        DKRVehicleOriginalBeforeChecks
+        PROPERTIES
+            LABELS "host;runtime"
+            TIMEOUT 120
+            PASS_REGULAR_EXPRESSION "VEHICLE AUDIT FAILURE: Custom vehicle: unsupported car texture profile[.]"
+            FAIL_REGULAR_EXPRESSION "fingerprint |vehicle compatibility checks passed")
 endif()
 
 # v1.0.11 vehicle numeric alignment: on ARM64, GCC and Clang may fuse the
@@ -49,7 +61,7 @@ endif()
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set_property(SOURCE "${DKRPORT_ROOT}/runtime-recomp/src/game/vehicle_package.cpp"
         APPEND PROPERTY COMPILE_OPTIONS -ffp-contract=off)
-    foreach(target DKRVehicleOriginalChecks DKRVehicleOriginalSanitizerChecks)
+    foreach(target DKRVehicleOriginalTests DKRVehicleOriginalBeforeTests)
         if(TARGET ${target})
             target_compile_options(${target} PRIVATE -ffp-contract=off)
         endif()

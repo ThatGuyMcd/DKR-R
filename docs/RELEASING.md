@@ -6,11 +6,9 @@ package names, update manifest and notes all follow from `VERSION`. The
 builds need your ROM-derived inputs, so they run on your machines. Run the
 contributor checks and platform acceptance before publishing a release.
 
-**Until C5 lands, no release can be finalized from this tree.**
 `scripts/release/finalize.py` requires every check in
-`scripts/release/required_checks.toml`. One check remains pending: the
-vehicle-original-textures audit, which needs legacy sample packages the
-repository doesn't have (see docs/fold-in/open-items.md).
+`scripts/release/required_checks.toml` to have run and passed on every
+platform. None is pending; `finalize.py --check-registry` says so.
 
 ## Before tagging
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """scripts/release/: finalize.py refuses a release unless every required check
-ran and passed and none is pending (and the real registry still has pending
-C5 gates, so it refuses today); the package checks catch pre-release labels;
-the release steps read their version from VERSION."""
+ran and passed and none is pending (the real registry has none pending, so it
+finalizes once every gate passed); the package checks catch pre-release
+labels; the release steps read their version from VERSION."""
 
 import contextlib
 import io
@@ -56,23 +56,20 @@ class RequiredChecksTests(unittest.TestCase):
         results = finalize.ctest_results(path)
         return {platform: results for platform in finalize.PLATFORMS}
 
-    def test_the_real_registry_refuses_with_its_pending_checks_named(self):
+    def test_the_real_registry_has_nothing_pending_and_finalizes_when_every_check_passed(self):
         checks = finalize.registry()
-        pending = [c for c in checks if c.pending]
-        self.assertEqual(
-            {check.id for check in pending},
-            {
-                "vehicle-original-textures",
-            },
-        )
-        self.assertTrue(all(c.pending == "C5" for c in pending))
+        self.assertEqual([c.id for c in checks if c.pending], [])
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(finalize.main(["--check-registry"]), 0)
         everything = [(c.test or f"{c.label}-test", [c.label] if c.label else [], "passed") for c in checks]
-        with self.assertRaises(finalize.FinalizeError) as caught:
-            finalize.verify_checks(checks, self.runs(everything))
-        message = str(caught.exception)
-        self.assertIn("still pending", message)
-        for check in pending:
-            self.assertIn(check.id, message)
+        report = finalize.verify_checks(checks, self.runs(everything))
+        tests = {c.id: c.test for c in checks}
+        self.assertEqual(tests["vehicle-original-textures"], "DKRVehicleOriginalAudit")
+        self.assertEqual(tests["vehicle-original-textures-before"], "DKRVehicleOriginalBeforeChecks")
+        self.assertEqual(set(report), set(finalize.PLATFORMS))
+        missing = [case for case in everything if case[0] != "DKRVehicleOriginalAudit"]
+        with self.assertRaisesRegex(finalize.FinalizeError, "vehicle-original-textures did not run"):
+            finalize.verify_checks(checks, self.runs(missing))
 
     def test_a_missing_or_failed_check_fails(self):
         checks = self.registry(
