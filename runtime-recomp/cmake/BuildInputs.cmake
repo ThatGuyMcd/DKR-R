@@ -113,6 +113,16 @@ if(DKR_VERIFY_BUILD_INPUTS)
                 )
             endif()
         endforeach()
+        # The one-function-per-file fixtures the memory stability gates compile.
+        set(fixtures "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}")
+        if(DKR_MEMORY_FIXTURE_ROOT STREQUAL "" OR NOT IS_DIRECTORY "${fixtures}")
+            message(FATAL_ERROR "A release build needs fixtures-v${revision} (DKR_MEMORY_FIXTURE_ROOT); run the prepare script.")
+        endif()
+        string(JSON locked GET "${lock}" inputs "fixtures-v${revision}")
+        dkr_input_digest(actual "${fixtures}")
+        if(NOT actual STREQUAL locked)
+            message(FATAL_ERROR "fixtures-v${revision} differs from build-inputs.lock.json: ${actual}, locked ${locked}")
+        endif()
         # The config the code-mod protection staging reads (CustomMagicCodes.cmake
         # defaults it to v<rev>.toml beside the payload).
         if(DEFINED CACHE{DKR_CODE_POLICY_V${revision}})

@@ -115,11 +115,11 @@ retention, stability transfer, spectator admission, spectator handler and
 race release have been promoted, as have the v1.0.12 online setup, directory
 lifecycle, portrait, profile and Mod Store history gates, the owned heap
 entry and v1.0.12 online menu fixtures (with their Before controls) per
-revision, and the spectator admission and race release Before controls. 3
-remain pending: memory stability per revision and the vehicle-original-textures
+revision, the spectator admission and race release Before controls, and
+memory stability per revision. 1 remains pending: the vehicle-original-textures
 audit (7449 checks, legacy packages, negative admissions, Before/After, Linux
 ASan/UBSan, identical prepared vehicle data across platforms). C5 restores
-each as a CTest test and drops its `pending`.
+it as a CTest test and drops its `pending`.
 
 What the deleted release-prep scripts did, for B9b:
 
@@ -161,9 +161,24 @@ What the deleted release-prep scripts did, for B9b:
   into CTest targets against production source. Those eight checks no longer
   have `pending` entries. The owned heap entry and online menu fixtures (and
   the menu Before controls) followed, per revision, against the shared
-  `probe_native_entry.h` and `probe_native_fields.h` bodies, and so did the
-  spectator admission and race release Before controls. Three release gates
-  remain pending; finalization still refuses a release. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
+  `probe_native_entry.h` and `probe_native_fields.h` bodies, as did the
+  spectator admission and race release Before controls and memory stability
+  per revision. One release gate remains pending; finalization still refuses
+  a release. See [the follow-up notes](../notes/2026-10-31-fold-followups.md).
+- `DKRMemoryStability77/80Checks` (184812 checks each) compile the production
+  allocator from `fixtures-v<rev>/`: `compose_payloads.py` runs N64Recomp a
+  second time on the same policy with one function per file, and
+  `prepare_payloads.py` copies that beside the payload. The release payload's
+  bytes don't change. They exist only where `build/prepared` has fixtures
+  (release presets); CI has no ROM.
+- `vehicle-original-textures` stays pending. Its audit parses Syeo's
+  `brute v2.dkrkart` and nine installed legacy packages, which were never in
+  the repository; and its Before control compiled the pre-v1.0.10 importer,
+  which the fold replaced in place, so restoring it means vendoring an old
+  `vehicle_package.cpp`. A compliant gate needs redistributable sample
+  packages under `runtime-recomp/tests/` (synthetic ones would change 7449)
+  and a Before control expressed as a production option (an admission flag
+  the importer already honours), not an old copy of the source.
 
 - The layers' remaining check targets and the "Before" negative controls
   move to C5 with the other promoted fixtures; the fold doesn't port them.

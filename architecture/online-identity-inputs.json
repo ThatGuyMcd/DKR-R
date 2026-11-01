@@ -161,7 +161,7 @@
     "scripts/camera_obstruction_policy.py": "f359fa320137e366312f873174763db7fdaa5dbe8bb49b5302359f6b9102c302",
     "scripts/character_portrait_pipeline.py": "b0ce13b94adece3de9106657fc0e20b3a951cf8bf574fa4b0a320ca86e1b23d3",
     "scripts/compose_legacy_mod_policy.py": "07dbea02c2f55fabd65ae89e3159d5327b221ca5eb152751e7a566cb96ad6eb4",
-    "scripts/compose_payloads.py": "258fa0e8e7cf3f1e0da4d468e318027e1ec565019f58ad4a626c1c18ffea3c2c",
+    "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "32a8294e498443044ef91249c67e2c85cbb7a9e0417c5538ee85d8390d058d1b",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
     "scripts/generate_replay_probe.py": "8cf079c5a2abf596ee13e5514baff97e53c0fa52c62aaa31db460c996fc0ba02",
@@ -179,7 +179,7 @@
     "scripts/prepare_legacy_character_fragment.py": "4dadc0868b1fe2f4b78f3ce7d5a3a47b80a8b28171e261f0f0cb9cd090aa222b",
     "scripts/prepare_legacy_character_menu_fragment.py": "e712a8f010881713d94e865b3aedeee80fea382103321866854d2b69e3ad4f63",
     "scripts/prepare_legacy_menu_fragment.py": "5dc03054a6911b4bb3b632f23abc1f4046b1cae8447dec43d557c4b22627c250",
-    "scripts/prepare_payloads.py": "4f5a19389d83c91491882b33fa714b8f7c285de88bb32c4bb1141b00ba10f107",
+    "scripts/prepare_payloads.py": "5a33f602dfa4cd57a8766b785642c449d046122400cfbf04deee2a39ac146bd3",
     "scripts/save_layout_pipeline.py": "7a042379c088b5294058586a5e8debefc7f3d13b5334ee855526530d23a7b65e",
     "scripts/startup_flow_policy.py": "4957a7856663c74ebc5ff31e39334288fa7b46656a59aba23093b8dc449338fb",
     "scripts/track_select_draw_policy.py": "719493dc5af7b5b4381524db755a9bdb7c1c5065b5298cfc29e264d6ca65364e",
@@ -187,6 +187,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Pure extraction for the race-release Before control (dfc66b5): party_runtime.cpp's stale/duplicate Go guards moved unchanged into party_release.hpp, same log text; release behaviour is unchanged."
+    "reason": "compose_payloads.py adds a second one-function-per-file N64Recomp run into a separate Fixtures directory and prepare_payloads.py copies it to fixtures-v<rev>/; every existing prepared input is unchanged (build-inputs.lock.json pins for the ten existing inputs match), so shipped payloads are identical."
   }
 }

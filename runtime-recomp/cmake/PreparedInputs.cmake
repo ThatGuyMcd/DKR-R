@@ -57,4 +57,10 @@ if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json" AN
         dkr_prepared_default(DKR_CAMERA_KERNEL_V80 "${DKR_PREPARED_DIR}/camera-kernel-v80"
         "Prepared Camera++ scene kernel for revision 80")
     endif()
+    # The one-function-per-file guest fixtures the allocator release gates
+    # (DKRMemoryStability77/80Checks) and the guest crash regressions compile.
+    if(EXISTS "${DKR_PREPARED_DIR}/fixtures-v77" AND EXISTS "${DKR_PREPARED_DIR}/fixtures-v80")
+        dkr_prepared_default(DKR_MEMORY_FIXTURE_ROOT "${DKR_PREPARED_DIR}"
+        "Fresh one-function-per-file Patch Pipeline fixtures for headless crash regression")
+    endif()
 endif()

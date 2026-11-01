@@ -33,7 +33,9 @@ sys.dont_write_bytecode = True
 from release_common import ROOT  # noqa: E402
 
 LOCK = ROOT / "runtime-recomp/build-inputs.lock.json"
-INPUTS = tuple(f"{kind}-v{rev}" for kind in ("generated", "owned", "model", "camera-kernel") for rev in (77, 80))
+INPUTS = tuple(
+    f"{kind}-v{rev}" for kind in ("generated", "owned", "model", "camera-kernel", "fixtures") for rev in (77, 80)
+)
 # The N64Recomp configs (v<rev>.toml beside the payloads): the code-mod
 # protection staging reads their hooks. Their three machine paths are masked.
 POLICIES = tuple(f"code-policy-v{rev}" for rev in (77, 80))
@@ -67,6 +69,7 @@ CONFIGURE_FIELDS = {
     "model": ("schema", "revision"),
     "generated": (),
     "camera-kernel": (),
+    "fixtures": (),
 }
 
 

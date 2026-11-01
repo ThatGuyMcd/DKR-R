@@ -53,13 +53,11 @@ why = "23 water residency checks."
 id = "memory-stability-v77"
 ctest_test = "DKRMemoryStability77Checks"
 why = "184812 memory stability checks, US v1.0."
-pending = "C5"
 
 [[check]]
 id = "memory-stability-v80"
 ctest_test = "DKRMemoryStability80Checks"
 why = "184812 memory stability checks, US v1.1."
-pending = "C5"
 
 [[check]]
 id = "owned-heap-v77"
