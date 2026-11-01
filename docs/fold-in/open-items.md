@@ -110,14 +110,16 @@ replaces it.
 
 **C5 must land before the next release.** `scripts/release/finalize.py`
 refuses every release from this tree while `required_checks.toml` has pending
-entries. Of the original 15 gates, graphics handoff, render selection,
-offline retention, stability transfer, spectator admission, spectator handler,
-race release, liquid residency and owned heap entry per revision have been
-promoted; 5 remain pending. The remaining fixtures cover memory stability per
-revision, the spectator admission and race release Before controls, and the
-vehicle-original-textures audit (7449 checks, legacy packages, negative
-admissions, Before/After, Linux ASan/UBSan, identical prepared vehicle data
-across platforms). C5 restores each as a CTest test and drops its `pending`.
+entries. Graphics handoff, render stability, liquid residency, offline
+retention, stability transfer, spectator admission, spectator handler and
+race release have been promoted, as have the v1.0.12 online setup, directory
+lifecycle, portrait, profile and Mod Store history gates. 11 remain pending:
+memory stability and owned heap per revision, the spectator admission and
+race release Before controls, the vehicle-original-textures audit (7449
+checks, legacy packages, negative admissions, Before/After, Linux ASan/UBSan,
+identical prepared vehicle data across platforms) and the v1.0.12 online menu
+fixtures and their Before controls per revision. C5 restores each as a CTest
+test and drops its `pending`.
 
 What the deleted release-prep scripts did, for B9b:
 
@@ -243,8 +245,8 @@ What the deleted release-prep scripts did, for B9b:
 
 ## Release path (B9b)
 
-- Releases build locally: CI has no ROM-derived inputs, so
-  `.github/workflows/release.yml` runs only the ROM-free gates on the tag. A
+- Releases build locally: CI has no ROM-derived inputs and there's no tag
+  workflow, so CI only runs the ROM-free gates on pushes and PRs. A
   dry-run release from a test tag (devops Mac and a second machine) with
   `evidence.py compare` between them is still to do; it's a B10 criterion,
   together with comparing against the v1.0.10 evidence.

@@ -18,7 +18,7 @@ from pathlib import Path
 import re
 from typing import cast
 
-from kernel_inputs import CALL, DEF, HEADER_HASH, elf_symbols, strip
+from kernel_inputs import CALL, DEF, HEADER_HASH, elf_symbols, reviewed_bytes, strip
 
 PINS = {
     77: {
@@ -58,8 +58,8 @@ def generate(source: Path, header_path: Path, elf: Path, revision: int, output: 
         or header_path.resolve().parent in output.parents
     ):
         raise ValueError("Visual kernel output must be a NEW separate directory")
-    header = header_path.read_bytes()
-    if hashlib.sha256(header).hexdigest() != HEADER_HASH:
+    header = reviewed_bytes(header_path.read_bytes(), HEADER_HASH)
+    if header is None:
         raise ValueError("Unreviewed visual kernel register/memory ABI")
     functions: dict[str, str] = {}
     for path in sorted(source.glob("*.c")):

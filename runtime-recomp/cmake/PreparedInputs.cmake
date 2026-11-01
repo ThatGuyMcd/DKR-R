@@ -2,8 +2,8 @@
 # prepared (Prepare-DKR-Runtime-macOS.sh runs it), so a configure after
 # preparing needs no paths. Each is a cache default: anything set on the
 # command line wins. The set is all or nothing: a configure that names its own
-# US v1.0 payload gets none of it, since the owned engine and kernels belong to
-# the payload they were prepared from. Without a prepared directory nothing is
+# payload for either revision gets none of it, since the owned engines and
+# kernels belong to the payloads they were prepared from. Without a prepared directory nothing is
 # set, and the options keep their old defaults (no owned engine, no Camera++
 # or local model kernels).
 set(DKR_PREPARED_DIR "${DKRPORT_ROOT}/build/prepared" CACHE PATH
@@ -19,13 +19,24 @@ endmacro()
 # Compared as real paths: Windows callers pass backslashed paths.
 file(TO_CMAKE_PATH "${DKR_PREPARED_DIR}" dkr_prepared_dir)
 get_filename_component(dkr_prepared_dir "${dkr_prepared_dir}" REALPATH)
-set(dkr_named_payload "")
-if(DEFINED CACHE{DKR_GENERATED_SOURCE_V77})
-    file(TO_CMAKE_PATH "${DKR_GENERATED_SOURCE_V77}" dkr_named_payload)
-    get_filename_component(dkr_named_payload "${dkr_named_payload}" REALPATH)
+set(dkr_foreign_payload OFF)
+foreach(dkr_revision IN ITEMS 77 80)
+    set(dkr_named_payload "$CACHE{DKR_GENERATED_SOURCE_V${dkr_revision}}")
+    if(NOT dkr_named_payload STREQUAL "")
+        file(TO_CMAKE_PATH "${dkr_named_payload}" dkr_named_payload)
+        get_filename_component(dkr_named_payload "${dkr_named_payload}" REALPATH)
+        if(NOT dkr_named_payload STREQUAL "${dkr_prepared_dir}/generated-v${dkr_revision}")
+            set(dkr_foreign_payload ON)
+        endif()
+    endif()
+endforeach()
+if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json" AND dkr_foreign_payload)
+    message(WARNING
+        "DKR_GENERATED_SOURCE_V77/V80 name a payload outside ${dkr_prepared_dir}, so none of the prepared "
+        "inputs apply: this build has no owned engines, Camera++ or local model kernels. Clear both to build "
+        "from the prepared payloads.")
 endif()
-if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json"
-        AND (dkr_named_payload STREQUAL "" OR dkr_named_payload STREQUAL "${dkr_prepared_dir}/generated-v77"))
+if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json" AND NOT dkr_foreign_payload)
     set(DKR_PREPARED_DIR "${dkr_prepared_dir}")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DKR_PREPARED_DIR}/prepared.json")
     dkr_prepared_default(DKR_GENERATED_SOURCE_V77 "${DKR_PREPARED_DIR}/generated-v77"

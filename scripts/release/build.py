@@ -4,7 +4,7 @@
     build.py --platform windows|linux|macos --record DIR [--prepared DIR] [--allow-dirty]
 
 Runs `cmake --preset release-<platform>` (runtime-recomp/CMakePresets.json:
-generated payloads, RT64, rollback where supported, DKR_WERROR and input
+generated payloads, RT64, rollback where supported and input
 verification on), builds everything, and runs the tests with
 `ctest --output-junit`. The prepared inputs (scripts/prepare_payloads.py,
 build/prepared by default) must match build-inputs.lock.json first.
@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -33,6 +35,25 @@ RUNTIME = ROOT / "runtime-recomp"
 
 def git(*args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True)
+
+
+def cmake_tool(name: str) -> str:
+    """name on PATH, else (on Windows) the copy Visual Studio 2022 bundles."""
+    found = shutil.which(name)
+    if found or os.name != "nt":
+        return found or name
+    program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
+    for edition in ("Community", "Professional", "Enterprise"):
+        candidate = (
+            program_files
+            / "Microsoft Visual Studio/2022"
+            / edition
+            / "Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin"
+            / f"{name}.exe"
+        )
+        if candidate.is_file():
+            return str(candidate)
+    return name
 
 
 def run(command: list[str], log: Path) -> int:
@@ -73,10 +94,11 @@ def main(argv: list[str] | None = None) -> int:
     queries.mkdir(parents=True, exist_ok=True)
     for kind in ("codemodel-v2", "cmakeFiles-v1"):
         (queries / kind).touch()
+    cmake = cmake_tool("cmake")
     steps = (
-        ("configure", ["cmake", "--preset", preset, f"-DDKR_PREPARED_DIR={prepared.as_posix()}"]),
-        ("build", ["cmake", "--build", "--preset", preset, "--parallel"]),
-        ("test", ["ctest", "--preset", preset, "--output-junit", str(record / "ctest.xml")]),
+        ("configure", [cmake, "--preset", preset, f"-DDKR_PREPARED_DIR={prepared.as_posix()}"]),
+        ("build", [cmake, "--build", "--preset", preset, "--parallel"]),
+        ("test", [cmake_tool("ctest"), "--preset", preset, "--output-junit", str(record / "ctest.xml")]),
     )
     results: dict[str, int] = {}
     for name, command in steps:

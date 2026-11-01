@@ -30,7 +30,7 @@ def digest(source: bytes) -> str:
 def compare(root: Path, files: dict[str, str]) -> list[str]:
     if not files:
         raise ValueError("the compiler-selected source checkpoint is empty")
-    problems = []
+    problems: list[str] = []
     for name, expected in sorted(files.items()):
         relative = PurePosixPath(name)
         if relative.is_absolute() or ".." in relative.parts or relative.parts[0] != "runtime-recomp":

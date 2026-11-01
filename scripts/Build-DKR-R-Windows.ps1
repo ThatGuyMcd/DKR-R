@@ -22,12 +22,30 @@ $generatedSource = if ([string]::IsNullOrWhiteSpace($GeneratedSource)) {
 } else {
     [IO.Path]::GetFullPath($GeneratedSource)
 }
+$preparedManifest = Join-Path $prepared 'prepared.json'
+# Before build\prepared existed this script required a v80 payload, so the
+# variable is likely still set from the old Patch Pipeline. Pairing it with a
+# prepared tree would quietly drop the owned engines and kernels.
+if ([string]::IsNullOrWhiteSpace($Revision80GeneratedSource) -and
+        -not [string]::IsNullOrWhiteSpace($env:DKR_WINDOWS_V80_GENERATED_SOURCE) -and
+        (Test-Path -LiteralPath $preparedManifest -PathType Leaf)) {
+    throw ("DKR_WINDOWS_V80_GENERATED_SOURCE is set ($env:DKR_WINDOWS_V80_GENERATED_SOURCE), but builds now " +
+        "use build\prepared. Clear it (Remove-Item Env:DKR_WINDOWS_V80_GENERATED_SOURCE, and remove it from " +
+        "your user environment variables), or pass -Revision80GeneratedSource to build that payload without " +
+        "the prepared owned engines and kernels.")
+}
 $revision80Generated = if (-not [string]::IsNullOrWhiteSpace($Revision80GeneratedSource)) {
     [IO.Path]::GetFullPath($Revision80GeneratedSource)
 } elseif (-not [string]::IsNullOrWhiteSpace($env:DKR_WINDOWS_V80_GENERATED_SOURCE)) {
     [IO.Path]::GetFullPath($env:DKR_WINDOWS_V80_GENERATED_SOURCE)
 } else {
     Join-Path $prepared 'generated-v80'
+}
+if ((Test-Path -LiteralPath $preparedManifest -PathType Leaf) -and
+        (($generatedSource -ne [IO.Path]::GetFullPath((Join-Path $prepared 'generated-v77'))) -or
+         ($revision80Generated -ne [IO.Path]::GetFullPath((Join-Path $prepared 'generated-v80'))))) {
+    Write-Warning ('Building payloads from outside build\prepared: this build has no owned engines, ' +
+        'Camera++ or local model kernels for either revision.')
 }
 $version = (Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim()
 $cmakeCandidates = @(

@@ -18,6 +18,21 @@ import re
 import stage_magic_code_payload as magic_code_pipeline
 
 HEADER_HASH = "58977ed0a489f7df8b17c377a87cc6670857a5fba15af78fc7d38132fc59b33f"
+
+
+def reviewed_bytes(data: bytes, expected: str) -> bytes | None:
+    """The pinned bytes when data is them, as checked out with LF or CRLF.
+
+    Pins are taken from LF checkouts. Git for Windows checks dependencies out
+    with CRLF by default, so a CRLF copy of the same content passes and comes
+    back with LF endings. Anything else returns None.
+    """
+    for candidate in (data, data.replace(b"\r\n", b"\n")):
+        if hashlib.sha256(candidate).hexdigest() == expected:
+            return candidate
+    return None
+
+
 DEF = re.compile(r"RECOMP_FUNC\s+void\s+(\w+)\s*\([^{};]*\)\s*\{")
 PROTO = re.compile(
     r"(?:extern\s+)?\b(void|int|unsigned|float|double|gpr|u?int(?:8|16|32|64)_t|recomp_func_t\s*\*)\s+(\w+)\s*\(([^();{}]*)\)\s*;"
@@ -661,7 +676,7 @@ def audited_input_path(name, dependencies_dir=None):
 
 def full_scene_native_audit(dependencies_dir=None):
     for name, expected in FULL_SCENE_NATIVE_HASH.items():
-        if hashlib.sha256(audited_input_path(name, dependencies_dir).read_bytes()).hexdigest() != expected:
+        if reviewed_bytes(audited_input_path(name, dependencies_dir).read_bytes(), expected) is None:
             raise ValueError(f"Unreviewed full-scene native participant: {name}")
 
 
@@ -688,8 +703,9 @@ REVIEWED_MAIN_MERGE_HASH = {
 def input_native_audit(dependencies_dir=None):
     """Guard the reviewed private ownership boundary against native drift."""
     for name, expected in INPUT_NATIVE_HASH.items():
-        actual = hashlib.sha256(audited_input_path(name, dependencies_dir).read_bytes()).hexdigest()
-        if actual not in (expected, REVIEWED_MAIN_MERGE_HASH.get(name)):
+        data = audited_input_path(name, dependencies_dir).read_bytes()
+        merged = REVIEWED_MAIN_MERGE_HASH.get(name)
+        if reviewed_bytes(data, expected) is None and (merged is None or reviewed_bytes(data, merged) is None):
             raise ValueError(f"Unreviewed native input/Pak/rumble boundary: {name}")
 
 
@@ -1334,8 +1350,8 @@ def generate(
         raise ValueError("Boss diagnostics require the isolated full-scene owned adapter")
     if full_scenes:
         full_scene_native_audit(dependencies_dir)
-    header_bytes = header_path.read_bytes()
-    if hashlib.sha256(header_bytes).hexdigest() != HEADER_HASH:
+    header_bytes = reviewed_bytes(header_path.read_bytes(), HEADER_HASH)
+    if header_bytes is None:
         raise ValueError("Unreviewed recomp.h; audit memory macros before updating the probe")
     header = header_bytes.decode("utf-8")
     # An authored leaf staged into NEW CPU output, never a native import or

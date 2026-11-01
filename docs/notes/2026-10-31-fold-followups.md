@@ -485,5 +485,5 @@ The scanner now prunes it; its fixture also proves first-party service source
 files still get checked for ROM headers. Explicit pre-commit checks pass.
 All 162 host tests passed for the integrated C/C++ tree; only the scanner and
 its Python regression fixture changed afterward. No backend or release was
-deployed. Five C5 release gates and the documented platform/owner evidence
+deployed. Eleven C5 release gates and the documented platform/owner evidence
 remain pending.

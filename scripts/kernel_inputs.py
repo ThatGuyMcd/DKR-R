@@ -24,6 +24,8 @@ CALL: re.Pattern[str] = generate_replay_probe.CALL
 strip = cast(Callable[[str], str], generate_replay_probe.strip)  # pyright: ignore[reportUnknownMemberType]
 # The reviewed N64Recomp recomp.h.
 HEADER_HASH = cast(str, generate_replay_probe.HEADER_HASH)
+# The pinned bytes of a checked-out input (LF or CRLF), or None.
+reviewed_bytes = cast(Callable[[bytes, str], "bytes | None"], generate_replay_probe.reviewed_bytes)
 
 
 def elf_symbols(path: Path, symbol_types: tuple[int, ...]) -> dict[str, set[tuple[int, int]]]:

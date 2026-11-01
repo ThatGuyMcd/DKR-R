@@ -16,7 +16,7 @@ from pathlib import Path
 import re
 from typing import cast
 
-from kernel_inputs import CALL, DEF, HEADER_HASH, elf_symbols, strip
+from kernel_inputs import CALL, DEF, HEADER_HASH, elf_symbols, reviewed_bytes, strip
 
 ROOT = Path(__file__).resolve().parents[1]
 # The kernel's native bridge (DKRCameraScene compiles these beside it).
@@ -124,7 +124,7 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
     source = source.resolve(strict=True)
     output = new_output(output, source, header.parent)
     raw = header.read_text()
-    if digest(header) != HEADER_HASH:
+    if reviewed_bytes(header.read_bytes(), HEADER_HASH) is None:
         raise ValueError("Unreviewed scene-kernel register ABI")
     functions: dict[str, str] = {}
     for path in sorted(source.glob("*.c")):

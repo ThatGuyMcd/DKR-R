@@ -103,7 +103,7 @@ pending = "C5"
 [[check]]
 id = "race-release"
 ctest_test = "DKRRaceReleaseChecks"
-why = "96 party runtime regression checks."
+why = "96 party runtime regression checks, including v1.0.12's DKROnlinePartyChecks (input lane, checkpoint burst)."
 
 [[check]]
 id = "stability-transfer"
@@ -139,3 +139,32 @@ id = "online-menu-v80-before"
 ctest_test = "DKROnlineMenu80BeforeChecks"
 why = "Historical notification admission must reject the newer callbacks."
 pending = "C5"
+
+# The v1.0.12 release fixtures (patches/online-performance and
+# patches/character-library-portraits, ReleaseOverlay.cmake). The fold made
+# them ordinary CTest tests; these entries keep finalize.py requiring them.
+
+[[check]]
+id = "online-setup"
+ctest_test = "DKROnlineSetup"
+why = "Setup bulk permission and capacity, retention budget, durable payload cache and non-inheritable logs (was DKROnlineSetupChecks)."
+
+[[check]]
+id = "directory-lifecycle"
+ctest_test = "DKRDirectoryLifecycle"
+why = "Online directory session lifecycle (was DKRDirectoryLifecycleChecks)."
+
+[[check]]
+id = "character-portraits"
+ctest_test = "DKRCharacterPortraits"
+why = "Character library portraits (was DKRCharacterPortraitChecks)."
+
+[[check]]
+id = "online-profile"
+ctest_test = "DKROnlineProfile"
+why = "Online profile and account API client (was DKRProfileChecks)."
+
+[[check]]
+id = "mod-store-history"
+ctest_test = "DKRModStoreHistory"
+why = "Mod Store history survives launcher restarts (was DKRModStoreHistoryChecks)."
