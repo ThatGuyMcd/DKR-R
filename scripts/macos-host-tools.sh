@@ -4,7 +4,8 @@ source "${BASH_SOURCE[0]%/*}/lib/apple-build.sh"
 dkr_macos_host_tools() {
   local skip_deps="$1" make_version probe
   dkr_require_macos || return 1
-  # Command Line Tools are enough: RT64's Metal shaders compile at runtime.
+  # Command Line Tools are enough. Without the Xcode Metal toolchain, RT64
+  # embeds MSL source and compiles its shaders at runtime.
   xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1 || {
     echo 'Install the Command Line Tools: xcode-select --install' >&2
     return 1
@@ -14,8 +15,9 @@ dkr_macos_host_tools() {
       echo 'Install Homebrew: https://brew.sh/' >&2
       return 1
     }
-    # Install only what is missing: on macOS releases Homebrew no longer
-    # bottles, reinstalling a present tool (python) means a failing source build.
+    # Install only what is missing, so a usable tool from elsewhere (e.g. a
+    # 3.11+ python3 not from Homebrew) never triggers a Homebrew install. On a
+    # macOS release Homebrew no longer bottles, that install is a source build.
     local pair missing=()
     for pair in cmake:cmake ninja:ninja make:gmake pcre2:pcre2-config sdl2:sdl2-config coreutils:sha1sum; do
       command -v "${pair#*:}" >/dev/null || missing+=("${pair%%:*}")
