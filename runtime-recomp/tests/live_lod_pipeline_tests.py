@@ -20,6 +20,16 @@ class LiveLodPipelineTests(unittest.TestCase):
         self.assertIn("RT64::setDefaultSamplerMipLODBias(", before_return)
         self.assertIn("dkr::runtime::enhancements::effective_texture_lod_bias()", before_return)
 
+    def test_hud_viewport_publishes_before_overlay_closed_early_return(self):
+        # Fit gutters read published extent; with the menu closed, ui::draw must
+        # still refresh it every present (see Mac resize / Expand+Fit mismatch).
+        draw = read("runtime-recomp/src/game/runtime_ui.cpp").split(
+            "void dkr::runtime::ui::draw(RT64::Application& application) {", 1
+        )[1]
+        before_overlay_return = draw.split("!show_overlay && !show_fps", 1)[0]
+        self.assertIn("dkr::runtime::hud::set_viewport_extent(", before_overlay_return)
+        self.assertEqual(draw.count("dkr::runtime::hud::set_viewport_extent("), 1)
+
     def test_raster_pass_uses_live_value_not_constructor_snapshot(self):
         renderer = read("extern/rt64/src/render/rt64_framebuffer_renderer.cpp")
         self.assertIn("rasterParams.mipLODBias = getDefaultSamplerMipLODBias();", renderer)

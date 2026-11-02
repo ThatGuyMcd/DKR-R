@@ -1,0 +1,96 @@
+--- a/plume_apple.mm
++++ b/plume_apple.mm
+@@ -95,28 +95,20 @@
+     }
+ 
+     void CocoaWindow::getWindowAttributes(CocoaWindowAttributes* attributes) const {
+-        if ([NSThread isMainThread]) {
+-            UIWindow *uiWindow = (__bridge UIWindow *)windowHandle;
+-            CGRect bounds = [uiWindow bounds];
+-            CGFloat scaleFactor = getScaleFactor(uiWindow);
++        // Always read live bounds. The present/resize path calls this off the
++        // main thread; returning a stale cache (and only scheduling async refresh)
++        // leaves the Metal swapchain and overlay target at the pre-resize size.
++        UIWindow *uiWindow = (__bridge UIWindow *)windowHandle;
++        CGRect bounds = [uiWindow bounds];
++        CGFloat scaleFactor = getScaleFactor(uiWindow);
+ 
+-            {
+-                std::lock_guard<std::mutex> lock(attributesMutex);
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.x = 0;
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.y = 0;
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.width = (int)round(bounds.size.width * scaleFactor);
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.height = (int)round(bounds.size.height * scaleFactor);
++        std::lock_guard<std::mutex> lock(attributesMutex);
++        const_cast<CocoaWindow*>(this)->cachedAttributes.x = 0;
++        const_cast<CocoaWindow*>(this)->cachedAttributes.y = 0;
++        const_cast<CocoaWindow*>(this)->cachedAttributes.width = (int)round(bounds.size.width * scaleFactor);
++        const_cast<CocoaWindow*>(this)->cachedAttributes.height = (int)round(bounds.size.height * scaleFactor);
+ 
+-                *attributes = cachedAttributes;
+-            }
+-        } else {
+-            {
+-                std::lock_guard<std::mutex> lock(attributesMutex);
+-                *attributes = cachedAttributes;
+-            }
+-
+-            const_cast<CocoaWindow*>(this)->updateWindowAttributesInternal(false);
+-        }
++        *attributes = cachedAttributes;
+     }
+ 
+     int CocoaWindow::getRefreshRate() const {
+@@ -257,28 +249,20 @@
+     }
+ 
+     void CocoaWindow::getWindowAttributes(CocoaWindowAttributes* attributes) const {
+-        if ([NSThread isMainThread]) {
+-            NSWindow *nsWindow = (__bridge NSWindow *)windowHandle;
+-            NSRect contentFrame = [[nsWindow contentView] frame];
+-            CGFloat scaleFactor = getScaleFactor(nsWindow);
++        // Always read live content size. RT64's present thread calls needsResize
++        // / resize off the main thread; a cached size plus async refresh leaves
++        // the drawable and ImGui target stuck until something else refreshes.
++        NSWindow *nsWindow = (__bridge NSWindow *)windowHandle;
++        NSRect contentFrame = [[nsWindow contentView] frame];
++        CGFloat scaleFactor = getScaleFactor(nsWindow);
+ 
+-            {
+-                std::lock_guard<std::mutex> lock(attributesMutex);
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.x = (int)round(contentFrame.origin.x);
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.y = (int)round(contentFrame.origin.y);
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.width = (int)round(contentFrame.size.width * scaleFactor);
+-                const_cast<CocoaWindow*>(this)->cachedAttributes.height = (int)round(contentFrame.size.height * scaleFactor);
++        std::lock_guard<std::mutex> lock(attributesMutex);
++        const_cast<CocoaWindow*>(this)->cachedAttributes.x = (int)round(contentFrame.origin.x);
++        const_cast<CocoaWindow*>(this)->cachedAttributes.y = (int)round(contentFrame.origin.y);
++        const_cast<CocoaWindow*>(this)->cachedAttributes.width = (int)round(contentFrame.size.width * scaleFactor);
++        const_cast<CocoaWindow*>(this)->cachedAttributes.height = (int)round(contentFrame.size.height * scaleFactor);
+ 
+-                *attributes = cachedAttributes;
+-            }
+-        } else {
+-            {
+-                std::lock_guard<std::mutex> lock(attributesMutex);
+-                *attributes = cachedAttributes;
+-            }
+-
+-            const_cast<CocoaWindow*>(this)->updateWindowAttributesInternal(false);
+-        }
++        *attributes = cachedAttributes;
+     }
+ 
+     int CocoaWindow::getRefreshRate() const {
+
+--- a/plume_apple.h
++++ b/plume_apple.h
+@@ -31,7 +31,7 @@
+         CocoaWindow(void* window);
+         ~CocoaWindow();
+ 
+-        // Get cached window attributes, may trigger async update
++        // Live window attributes (safe to call from the present thread)
+         void getWindowAttributes(CocoaWindowAttributes* attributes) const;
+ 
+         // Get cached refresh rate, may trigger async update
