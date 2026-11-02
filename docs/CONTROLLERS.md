@@ -68,6 +68,12 @@ while DKR-R native gyro is enabled, because that would add a second motion path.
 Raw mapping creation and map import remain on the SDL2 compatibility backend;
 SDL3 native mode consumes SDL3's standardized gamepad mappings directly.
 
+Switch Pro and Joy-Con defaults follow Nintendo face etiquette: the printed
+A/B/X/Y letters match the binding tokens. SDL2 pins
+`SDL_GAMECONTROLLER_USE_BUTTON_LABELS=1`. SDL3's position-mode reports are
+remapped in the SDL3 input host before bindings see them. NSO N64 / GameCube
+pads are left on their existing label-oriented paths.
+
 ## Assignment and remapping
 
 - **Automatic** fills the first available player slots while retaining stable

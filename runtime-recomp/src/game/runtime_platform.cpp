@@ -31,6 +31,10 @@
 #include <SDL_metal.h>
 extern "C" bool dkr_show_metal_layer(void* ns_window_ptr, void* layer_ptr);
 extern "C" bool dkr_handle_fullscreen_event(const SDL_Event* event);
+#if !defined(DKR_IOS)
+extern "C" bool dkr_macos_app_is_active(void);
+extern "C" bool dkr_macos_take_input_recovery(void);
+#endif
 #endif
 #if defined(DKR_IOS)
 #include "../ios/ios_platform.hpp"
@@ -704,6 +708,42 @@ void RefreshControllers(bool force = true) {
         }
     }
     ReconcileControllers();
+}
+
+void RefreshSdl3Controllers();
+
+bool WindowAcceptsGameplayInput() {
+    if (g_window == nullptr) return false;
+    const Uint32 flags = SDL_GetWindowFlags(g_window);
+    if ((flags & SDL_WINDOW_INPUT_FOCUS) != 0U) return true;
+#if defined(__APPLE__) && !defined(DKR_IOS)
+    // After Mac lid sleep SDL's INPUT_FOCUS bit often stays clear even while
+    // the app is frontmost again. Trust NSApp so pads and keys resume.
+    if ((flags & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) != 0U) {
+        return false;
+    }
+    return dkr_macos_app_is_active();
+#else
+    return false;
+#endif
+}
+
+void RecoverControllersAfterHostActivation() {
+    g_controller_inventory_dirty.store(true, std::memory_order_relaxed);
+    if (g_active_input_backend.load(std::memory_order_acquire) ==
+        dkr::runtime::platform::InputBackend::SDL3Native) {
+        RefreshSdl3Controllers();
+        return;
+    }
+    // Close and reopen: after sleep GetAttached can stay true for dead HID
+    // handles, so a dirty-only refresh would keep the zombie pads.
+    for (ControllerRecord& record : g_controller_devices) {
+        CloseControllerRecord(record);
+    }
+    g_controller_devices.clear();
+    g_controllers.fill(nullptr);
+    g_gyro_controllers.fill(nullptr);
+    RefreshControllers(true);
 }
 
 const dkr::runtime::sdl3_input::Device* Sdl3DeviceForInstance(int instance) {
@@ -1431,6 +1471,9 @@ bool dkr::runtime::platform::initialise() {
     // allowing newer Linux/SteamOS SDL builds to expose the built-in Deck pad.
     SDL_SetHint("SDL_JOYSTICK_HIDAPI", "1");
     SDL_SetHint("SDL_JOYSTICK_HIDAPI_STEAMDECK", "1");
+    // Nintendo diamond pads: report by printed letter (A is A). SDL's default
+    // is already "1"; pin it so Switch Pro / Joy-Con defaults match etiquette.
+    SDL_SetHint("SDL_GAMECONTROLLER_USE_BUTTON_LABELS", "1");
     // SDL may continue sampling connected game controllers while the native
     // window is unfocused. DKR-R still gates those samples independently for
     // every N64 port in poll_input, so this hint grants capability rather than
@@ -1802,6 +1845,16 @@ void dkr::runtime::platform::pump_window_events(void*) {
             return;
         }
 
+#if defined(__APPLE__) && !defined(DKR_IOS)
+        // After lid sleep, pads often need a forced re-open even when SDL still
+        // reports the old instance as attached.
+        if (event.type == SDL_WINDOWEVENT &&
+            (event.window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
+             event.window.event == SDL_WINDOWEVENT_RESTORED)) {
+            g_controller_inventory_dirty.store(true, std::memory_order_relaxed);
+        }
+#endif
+
         // Overlay lifecycle commands are host-global. Process them before
         // forwarding the event to ImGui so a focused widget cannot swallow
         // Escape, F1 or Back/View and leave the player trapped in the UI.
@@ -1828,6 +1881,12 @@ void dkr::runtime::platform::pump_window_events(void*) {
 
         dkr::runtime::ui::handle_runtime_event(&event);
     }
+#if defined(__APPLE__) && !defined(DKR_IOS)
+    if (dkr_macos_take_input_recovery()) {
+        std::scoped_lock lock(g_platform_mutex);
+        RecoverControllersAfterHostActivation();
+    }
+#endif
     if (dkr::runtime::input::consume_shortcut_request(
             dkr::runtime::input::ShortcutAction::ToggleOverlay)) {
         dkr::runtime::ui::toggle_overlay();
@@ -2439,8 +2498,7 @@ void dkr::runtime::platform::poll_input() {
         RefreshControllers(false);
     }
     const bool blocked = dkr::runtime::ui::overlay_visible();
-    const bool window_focused = g_window != nullptr &&
-        (SDL_GetWindowFlags(g_window) & SDL_WINDOW_INPUT_FOCUS) != 0U;
+    const bool window_focused = WindowAcceptsGameplayInput();
     const bool online_routing =
         g_online_input_routing.load(std::memory_order_acquire);
     const int configured_keyboard_player =
