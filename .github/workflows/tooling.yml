@@ -152,9 +152,32 @@ jobs:
         env:
           MERGE_BASE: ${{ steps.changes.outputs.merge-base }}
         run: |
-          mapfile -t changed <"$RUNNER_TEMP/changed.txt"
+          # tidy-skip TUs are absent from the host compile database. The gate
+          # above allows them; clang-tidy-diff must not analyze them, or it
+          # invents flags and fails on missing third-party includes (SDL3,
+          # ultramodern, …).
+          python3 - "$RUNNER_TEMP/changed.txt" "$RUNNER_TEMP/tidied.txt" <<'EOF'
+          import sys
+          skipped = {
+              line.strip()
+              for line in open(".github/tidy-skip.txt")
+              if line.strip() and not line.startswith("#")
+          }
+          tidied = [
+              line.strip()
+              for line in open(sys.argv[1])
+              if line.strip() and line.strip() not in skipped
+          ]
+          open(sys.argv[2], "w").write("\n".join(tidied) + ("\n" if tidied else ""))
+          print(f"{len(tidied)} tidiable changed files ({len(skipped)} skip-listed)")
+          EOF
+          mapfile -t tidied <"$RUNNER_TEMP/tidied.txt"
+          if [[ ${#tidied[@]} -eq 0 ]]; then
+            echo 'No tidiable changed files (all listed in tidy-skip.txt).'
+            exit 0
+          fi
           set +e
-          git diff -U0 "$MERGE_BASE" HEAD -- "${changed[@]}" |
+          git diff -U0 "$MERGE_BASE" HEAD -- "${tidied[@]}" |
             python3 /usr/lib/llvm-18/share/clang/clang-tidy-diff.py -p1 -path build/host \
               -clang-tidy-binary clang-tidy-18 -iregex '.*\.(c|cc|cpp|h|hpp)' -j 4 -quiet >"$RUNNER_TEMP/tidy.log" 2>&1
           status=$?
