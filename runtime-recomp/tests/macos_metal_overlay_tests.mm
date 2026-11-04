@@ -42,7 +42,14 @@ int main() {
             ImGui::GetIO().IniFilename = nullptr;
             auto check_frame = [&] {
                 SDL_PumpEvents();
-                swapchain->resize();
+                // RT64 presents off the main thread. needsResize/resize must see
+                // the live Cocoa size there — main-thread-only checks miss the bug.
+                bool present_resized = false;
+                std::thread([&] {
+                    if (swapchain->needsResize()) present_resized = swapchain->resize();
+                    else present_resized = true;
+                }).join();
+                passed &= present_resized;
                 int pixels_w = 0, pixels_h = 0;
                 SDL_GL_GetDrawableSize(window, &pixels_w, &pixels_h);
                 CAMetalLayer* layer = (__bridge CAMetalLayer*)native.view;

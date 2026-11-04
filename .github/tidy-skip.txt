@@ -1,8 +1,10 @@
 # First-party translation units the `host` preset does not compile, so the
 # `tidy` job has no compile command for them. A changed .c/.cpp that is neither
 # in build/host/compile_commands.json nor listed here fails the job, which keeps
-# gaps in tidy coverage visible. Remove a line once its TU builds in `host`
-# (most of these need RT64 or generated code; see host-full-nogen in the plan).
+# gaps in tidy coverage visible. Listed paths are also excluded from
+# clang-tidy-diff (analyzing them without compile flags fails on third-party
+# includes). Remove a line once its TU builds in `host` (most of these need
+# RT64 or generated code; see host-full-nogen in the plan).
 # Paths are repo-relative, one per line, exact match.
 modding/examples/ai-boss-difficulty/main.c
 modding/examples/core-boot/main.c

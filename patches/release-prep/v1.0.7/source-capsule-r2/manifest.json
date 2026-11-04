@@ -2338,9 +2338,9 @@
         "base_sha256": "033bae61b4d30a0f94177182dfa20da43d8d3296ddd68f1ae58c77f66d2a54dd"
       },
       "src/game/runtime_ui.cpp": {
-        "sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
+        "sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
-        "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe"
+        "base_sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3"
       },
       "src/game/runtime_ui.hpp": {
         "sha256": "ad7c87220d85b9c354590931036d6deeee5ca2492066c9becc1f052d91cf4d7d",
@@ -5093,7 +5093,7 @@
       "src/game/runtime_ui.cpp": {
         "sha256": "07f88dd1aa60690c4967bf104427773b9abc808cc5f90a7b968fe3171507d40b",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
-        "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
+        "base_sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3",
         "patch": "2c20ef4f18f9e2e62bdc92143d226e7bf5e851949b7a13d67f898b3c6a35fd19.patch"
       },
       "src/game/runtime_ui.hpp": {
@@ -5653,7 +5653,7 @@
       "src/game/runtime_ui.cpp": {
         "sha256": "dfb596090da7b860f358d7a5fc686e275b2f86557fe741460a3f4868201e04fa",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
-        "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
+        "base_sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3",
         "patch": "9119f8ab41db037f855ba836434393feb85abf5a1995ee83058177f1d38050dd.patch"
       },
       "launcher-ui-receipt.json": {
@@ -8282,7 +8282,7 @@
       "native/src/game/runtime_ui.cpp": {
         "sha256": "1930980ebeec7e07d8619c68b37495ef73e743299da0aa91f698f0b6bbb7bd75",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
-        "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
+        "base_sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3",
         "patch": "cb29ff8fb40932821e7bd5cb665dc8ceaced72d35617c816bf066f333e62fad4.patch"
       },
       "native/src/game/runtime_ui.hpp": {
@@ -8930,7 +8930,7 @@
       "native/src/game/runtime_ui.cpp": {
         "sha256": "64ec197f04746fa22cffd258f3b388198cb6d8857daae8f009d11177a9659c4e",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
-        "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
+        "base_sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3",
         "patch": "516011edbe66c7101c15b9b4744f2d85ec33a6fd2b823a6d3e63d5ea7715e6fa.patch"
       },
       "native/src/game/store_account_page.inl": {
@@ -9048,7 +9048,7 @@
       "native/src/game/runtime_ui.cpp": {
         "sha256": "4363f93073d81fb89ca1c3646fd65f7eea7f82936235a007de1b2a34ef2aa38d",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
-        "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
+        "base_sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3",
         "patch": "1d06998488c2b1ecdef3151d1a21cf7b808ea56c33b5eec034e1e541e55f3c92.patch"
       },
       "native/src/game/save_manager.cpp": {
@@ -12170,7 +12170,7 @@
       "native/src/game/runtime_ui.cpp": {
         "sha256": "1930980ebeec7e07d8619c68b37495ef73e743299da0aa91f698f0b6bbb7bd75",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
-        "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
+        "base_sha256": "0007cb4ab66bb03d65a5b70aa430ccc492ab9f4e0733dc307f1662a559ed90b3",
         "patch": "cb29ff8fb40932821e7bd5cb665dc8ceaced72d35617c816bf066f333e62fad4.patch"
       },
       "native/src/game/runtime_ui.hpp": {

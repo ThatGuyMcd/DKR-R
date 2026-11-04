@@ -321,6 +321,10 @@
         {
           "path": "patches/plume/0003-compile-msl-source-shaders.patch",
           "sha256": "80947b240d7a3bd5e3f9434df7501fc54d130d4e06942e36705f2238d8fb3565"
+        },
+        {
+          "path": "patches/plume/0004-live-cocoa-window-attributes.patch",
+          "sha256": "2cb8a57e9f0d9d344a9a2b4693aa4a8f98b0bf562a4b0d413b345f09c6be144b"
         }
       ]
     },
