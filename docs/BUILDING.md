@@ -168,9 +168,15 @@ that basic build as reproduction of the full experimental Public Build.
 
 Run `./Setup-macOS.sh` to install and check prerequisites, or
 `./Setup-macOS.sh --skip-deps` to check without installing. Setup and Build's
-preparation share the same checks: full Xcode with Metal, GNU Make 4+ (`gmake`),
-CMake, Ninja, Python, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
+preparation share the same checks: the Command Line Tools (`xcode-select --install`),
+GNU Make 4+ (`gmake`), CMake, Ninja, Python, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
 (Homebrew `coreutils`). The verifier is checked before ROM extraction.
+
+Full Xcode is optional. When its Metal toolchain runs (`xcrun metal -v`), RT64's
+shaders are precompiled into metallibs at build time. Without it they're
+embedded as MSL source and compiled at runtime, which adds a compile the first
+time each shader combination is used. Pass `-DDKR_RT64_PRECOMPILE_MSL=ON` or
+`OFF` to override the configure-time probe.
 
 Build and either preparation script hold a checkout lock for their entire run.
 A second invocation in the same checkout fails immediately; nested preparation
@@ -188,7 +194,7 @@ Set `DKR_MAC_BUNDLE_VERSION=N[.N[.N]]` for an explicit release/CI build number
 Packaging checks the version metadata copied beside the executable after linking,
 so a new package label cannot silently rename a build of a different version.
 
-With Xcode setup and Homebrew installed:
+With the Command Line Tools and Homebrew installed:
 
 ```bash
 ./Build-macOS.sh --rom-v77 "/path/to/US 1.0.z64" --rom-v80 "/path/to/US Rev A.z64"

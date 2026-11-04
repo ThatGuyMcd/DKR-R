@@ -49,7 +49,7 @@ Prepare, build and test DKR-R on macOS.
                   and DKR_MAC_NOTARY_PROFILE (an xcrun notarytool keychain profile)
   -h, --help      Show this help
 
-Prerequisites: Xcode and Homebrew. Quote ROM paths with spaces.
+Prerequisites: Command Line Tools and Homebrew. Quote ROM paths with spaces.
 Output: build/dkr-runtime-macos/bin/Release/DKR-R.
 Launch with ./Run-macOS.sh.
 
