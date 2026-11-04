@@ -1,9 +1,9 @@
 # DKR-R native recompilation runtime
 
-## v1.0.12 release contract
+## v1.0.14 release contract
 
 This is the project-owned native integration layer. The complete release uses
-the [v1.0.12 overlay](../patches/release-prep/v1.0.11/BUILDING.txt), not this base
+the [v1.0.14 overlay](../patches/release-prep/v1.0.11/BUILDING.txt), not this base
 target alone: guarded heap, renderer ownership, water residency, updated
 vehicle exports, directory, Scoreboard, party/spectator repairs, vehicles,
 achievements, texture tools and the preceding SDK/Store/save/presentation layers.

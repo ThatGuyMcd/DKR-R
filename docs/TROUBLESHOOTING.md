@@ -11,7 +11,7 @@ For missing Discord pictures, check that the profile API migrations and matching
 Workers are deployed, then sign in again. Existing online play can still work
 when picture import is unavailable.
 
-## v1.0.12 release contract
+## v1.0.14 release contract
 
 Normal mods share one personal Adventure. Check portable/profile location and Backups & Recovery before restoring. Keep installation receipts/recovery folders. Export logs/support details; report the exact release, ROM revision, course, packs and settings. The accepted HD-water startup fix is included; a hardware-specific problem still needs its own report.
 
@@ -20,7 +20,7 @@ saves or whole profile to troubleshoot a graphics, mod or connection failure.
 
 ## Modded joins, race starts and spectator black screens
 
-Check that everyone has the complete v1.0.12 package first. This release
+Check that everyone has the complete v1.0.14 package first. This release
 includes the accepted playtest.4 fixes. Keep the downloaded offline-mod
 option enabled if you want those copies; matching installed content no
 longer causes the old identity-conflict warning. Genuine conflicts and
@@ -38,7 +38,7 @@ log also records `[spectator][music]`, `[spectator][admission]` and
 
 ## Missing HUD elements, memory reports or rejected graphics
 
-Use the full v1.0.12 package first. Keep `runtime.log` and
+Use the full v1.0.14 package first. Keep `runtime.log` and
 `runtime-previous.log`, with the track, ROM revision, mods, texture packs
 and action immediately before the problem. For Online, include the host
 and affected client or spectator logs from the same attempt.
@@ -55,7 +55,7 @@ Keep any new command/provenance reports; do not disable those checks.
 Water staying vanilla can mean an incomplete HD animation. All frames
 need matching replacements before that family can use HD consistently.
 For `unsupported car texture profile`, use the original updated export
-with v1.0.12. Unknown format revisions or enabled custom boost anchors
+with v1.0.14. Unknown format revisions or enabled custom boost anchors
 still need exporter/runtime support. See [Vehicles](VEHICLES.md).
 
 ## ROM rejected
@@ -88,7 +88,7 @@ An xdelta needs its exact original source revision; all clients must own that
 source if reconstruction requires it. A filename or successful emulator run is
 not proof of native compatibility.
 
-Use **Help & imports → Prepare all source imports again** after supplying missing
+Use **Help & imports â†’ Prepare all source imports again** after supplying missing
 sources/revisions. Cancel safely; do not modify receipts/reviews/journals.
 Memory budgets remain real even with the larger character roster.
 Reduce enabled content for a budget failure without deleting the installed set.
@@ -103,7 +103,7 @@ Use compatible complete packages and the same original ROM revision.
 The host creates the lobby after choosing mods/rules; changing them requires a
 new lobby. Clients must complete consent, preparation and verification.
 
-v1.0.12 uses Rollback; the old host-backend selector is removed.
+v1.0.14 uses Rollback; the old host-backend selector is removed.
 Try automatic input delay and a suitable prediction window for your route.
 A bounded input wait, renderer slowdown and scene-loading barrier are different
 problems: record the network overlay state and exact scene.
@@ -123,7 +123,7 @@ same release on Windows and Linux/SteamOS before retrying.
 ## Public list, sign-in or online count
 
 Public discovery needs a Discord account and Online connection. Reuse the
-Mod Store sign-in or finish browser pairing from Online. Confirm the Public
+Mod Library sign-in or finish browser pairing from Online. Confirm the Public
 filter, host visibility and service status. A private/locked/full or starting
 room does not grant a new racing place. An old private lobby made while the
 service was unavailable needs recreation before public publication.
@@ -189,7 +189,7 @@ its source actually contains it.
 ## Android startup and performance
 
 Send device/Android version, build code, graphics settings and scene.
-Use **About DKR-R → Support summary → Export Android Startup Logs** after
+Use **About DKR-R â†’ Support summary â†’ Export Android Startup Logs** after
 reopening the app. If performance recording or export itself crashes, stop
 retrying and report that separately. `adb logcat -d` can capture earlier
 Java/native loader failures when a normal runtime log never starts.
@@ -201,7 +201,7 @@ does not promise every handheld is already qualified.
 
 ## Logs and support reports
 
-Open **About DKR-R → Support summary → EXPORT SUPPORT SUMMARY**.
+Open **About DKR-R â†’ Support summary â†’ EXPORT SUPPORT SUMMARY**.
 The summary omits private paths, save contents, account/device identifiers and
 lobby codes. Raw logs/dumps are different: review them before sharing.
 
@@ -245,3 +245,33 @@ If CMake reports an old `DKRPORT_ROOT` override, migrate to
 A configure failure lists missing dependencies together. The platform setup
 scripts check compiler/SDK prerequisites; the ROM-free checks do not require
 full runtime SDKs.
+
+## Linux and Steam Deck launcher performance
+
+The launcher now requests acceleration automatically. Check the runtime log for
+`[boot][launcher]`, the SDL renderer, accelerated=yes/no and, on OpenGL, the GL
+rasterizer. llvmpipe or softpipe means the graphics driver is rendering in
+software even when SDL labels the API accelerated. A healthy Deck route should
+use its Mesa AMD hardware driver. Physical Deck results are separate from WSLg.
+
+Test the AppImage in Gaming Mode and Desktop Mode, including Mod Library card
+scrolling, entering a game and returning to the launcher. Compare the same display
+settings, FPS/TDP limit and input route. Acceleration is enabled without a launch
+option; `DKR_LINUX_ACCELERATED_LAUNCHER=0` explicitly forces the troubleshooting
+software path. Record the actual renderer instead of assuming a locked 60 FPS.
+
+If a seasonal theme appears in Desktop but not Gaming Mode, check the region
+in KDE regional formats. A generic C locale now allows the regional-format
+fallback. Language selection is separate from country/calendar detection.
+
+## Starting Game and crash reports
+
+Manual Play and Skip launcher use the same starting screen. Mod preparation
+shows its real stage inline; unknown totals animate without a made-up percentage.
+Escape/B or Open Launcher cancels. An error returns to the ordinary launcher
+dialog. Online keeps its sync screen until initial admission is ready.
+
+Automatic crash reporting is optional under About DKR-R > Support. A queued
+report retries while the launcher is open; there is no sender after the app
+closes. Raw dumps have separate consent and may contain personal data. Review
+manual support exports before sharing them. See [Crash reporting](CRASH_REPORTING.md).

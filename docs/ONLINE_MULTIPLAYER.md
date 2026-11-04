@@ -1,4 +1,4 @@
-# DKR-R Online — v1.0.12
+# DKR-R Online â€” v1.0.14
 
 Open **DKR-R Online** in the existing launcher. Public/Friends browsing,
 Private/Public hosting, Discord sign-in and a total online count sit alongside
@@ -6,7 +6,7 @@ the existing lobby controls. There is no separate website page to use.
 
 Races and minigames support up to four racing ports; Adventure supports two
 racers. A spectator-capable lobby can also have eight spectators. Everyone
-needs a compatible complete v1.0.12 package, supported original ROM revision,
+needs a compatible complete v1.0.14 package, supported original ROM revision,
 admitted gameplay rules and verified session mods. Keep `assets` and private
 workers with the installation.
 
@@ -14,7 +14,7 @@ workers with the installation.
 
 1. Select your original ROM and local input profile. Your local controller
    mapping is independent of the online player number.
-2. Reuse your existing Mod Store Discord account or select **Sign in with
+2. Reuse your existing Mod Library Discord account or select **Sign in with
    Discord** in Online. Finish the normal browser pairing flow.
 3. Connect Online. **Public** lists worldwide public lobbies; **Friends** keeps
    the friend/invitation list. Public cards offer **Request to join** or
@@ -38,7 +38,7 @@ removes this instance. See [public lobbies and privacy](PUBLIC_LOBBIES.md).
 ## Profile, pictures and friends
 
 Open **Online Profile** for your shared display name, picture and account
-settings. There is one name for Online, friends and the Mod Store. Edit it and
+settings. There is one name for Online, friends and the Mod Library. Edit it and
 choose **Save profile**. An active lobby keeps its current name until you leave;
 failed saves keep your draft so you can retry. Ordinary text fields use a
 case-readable font. The Discord username is no longer repeated underneath.
@@ -51,7 +51,7 @@ name and image metadata. The launcher offers separate choices for each.
 
 Privacy and Share a friend code sit below the profile header. Account settings
 contains **Keep me signed in**, sign-out, privacy information and the existing
-confirmed library-account deletion. Reviews and requests stay in the Mod Store.
+confirmed library-account deletion. Reviews and requests stay in the Mod Library.
 Deleting the library account does not delete your Discord account or local mods.
 
 The Friends tab uses compact cards with a picture, name, status and actions.
@@ -105,7 +105,7 @@ without remapping physical controllers to local ports.
 
 The public host mode is **Rollback**. It uses the existing owned replay backend
 internally named `ExperimentalRollback`. The old Auto, Host Prediction and
-Strict Input Sync selector is no longer offered for v1.0.12 public hosting.
+Strict Input Sync selector is no longer offered for v1.0.14 public hosting.
 Old wire enum values and historical investigations have not been reinterpreted.
 Do not change configuration files to bypass the supported-mode gate.
 
@@ -123,12 +123,12 @@ closes details before closing the report. The host can rerun the check.
 
 | Score | Estimate |
 |---|---|
-| 9–10 | Excellent |
-| 7–8 | Good |
-| 5–6 | Mixed |
-| 3–4 | Poor |
-| 1–2 | Very poor |
-| — | Not rated; insufficient, incompatible or locally overloaded measurement |
+| 9â€“10 | Excellent |
+| 7â€“8 | Good |
+| 5â€“6 | Mixed |
+| 3â€“4 | Poor |
+| 1â€“2 | Very poor |
+| â€” | Not rated; insufficient, incompatible or locally overloaded measurement |
 
 The racing grade is the weakest measured remote racer route. Any unrated racer
 leaves the racing assessment incomplete. The host's row is a shared estimate,
@@ -137,7 +137,7 @@ racing grade. Role/roster or tested-setting changes make an old report stale.
 
 Grades describe a short network sample, not hardware FPS, checkpoint download
 speed or a guarantee against desync. No settings change automatically. Start
-with automatic input delay; the prediction window is adjustable from 2–20
+with automatic input delay; the prediction window is adjustable from 2â€“20
 frames, with ten frames a useful starting recommendation for distant players.
 More prediction can increase replay work. A small window can run out before
 actual inputs arrive. Changes apply to the next agreed lobby rules.
@@ -246,3 +246,14 @@ ROM revision, racer/spectator count, enabled mods, delay/window and exact scene.
 Distinguish input waits, replay work, loading and rendering. Remove private
 codes, credentials and paths before sharing. [Troubleshooting](TROUBLESHOOTING.md)
 lists the relevant recovery steps and log locations.
+
+## Initial startup presentation
+
+Starting from the lobby fades into **Syncing Game / Getting everyone ready...**,
+using the circular logo, scrolling clouds and grey caption from offline startup.
+The game renderer keeps that screen through initial admission and fades it away
+after a real ready presentation. It does not release peers on a timer or show
+an invented completion percentage. Open Launcher or Escape/B uses the ordinary
+stop/end-match path. Later course transitions keep their existing presentation.
+Renderer creation can still cause a brief native window transition before the
+UI can draw. See [Launcher](LAUNCHER.md).

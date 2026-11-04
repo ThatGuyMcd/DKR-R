@@ -93,7 +93,7 @@ def direct(t):
   '    if(dkr::runtime::party_departure::waiting(this)){flush_outbound_locked();return;}\n    if(dkr::runtime::rollback_check::engaged(this))')
  return t
 def runtime(t):
- t=once(t,'base+="'+PRIOR_IDENTITY+'";','base+="'+PRIOR_IDENTITY+'";base+="'+contract()+'";')
+ t=once(t,';const auto h=digest(', ';base+="'+contract()+'";const auto h=digest(')
  return once(t,'            if(lifecycle==ui::LifecycleRequest::Exit||lifecycle==ui::LifecycleRequest::Restart||requested_stop)lobby.disconnect(initial.host?',
   '            std::fprintf(stderr,"[party][exit] role=%s requested=%u lifecycle=%d\\n",initial.host?"host":"client",unsigned(requested_stop.load()),int(lifecycle));\n            if(lifecycle==ui::LifecycleRequest::Exit||lifecycle==ui::LifecycleRequest::Restart||requested_stop)lobby.disconnect(initial.host?')
 def party_runtime(t):

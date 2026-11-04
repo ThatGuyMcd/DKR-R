@@ -1,4 +1,4 @@
-"""Verify the six final compiler substitutions and the entire retained chain."""
+"""Verify the ten final compiler substitutions and the entire retained chain."""
 from pathlib import Path
 import argparse,hashlib,importlib.util,json,re,sys
 sys.dont_write_bytecode=True
@@ -41,6 +41,20 @@ def inspect(build,binary,baseline,accepted):
             if value is None:sys.modules.pop(name,None)
             else:sys.modules[name]=value
     bridge=outputs['DKRPortGame/f3ddkr_rt64.cpp'].decode()
+    view=outputs['DKRPortGame/online_view_rt64.cpp'].decode()
+    picture=outputs['DKRNetplayCore/experimental_present_gate.cpp'].decode()
+    need('online_presentation/queue_picture.inl' in picture,'Immutable racing-picture classifier is not compiled')
+    need(outputs['DKRNetplayCore/experimental_present_gate.cpp']==outputs['DKRPortGame/experimental_present_gate.cpp'],
+        'Library and direct present-gate implementations differ')
+    present=outputs['rt64/rt64_present_queue.cpp'].decode()
+    for marker in ('requires_gpu_picture(&present,present.presentId,present.workloadId)',
+        'skipInterpolation();notifyPresentId(present);return;',
+        '(ownedImage || !present.colorImageAddresses.empty())',
+        'if (!ownedImage && !present.debuggerFramebuffer.view'):
+        need(marker in present,'Owned-picture recovery or exact-workload selection missing: '+marker)
+    for marker in ('dkr::online_stability::view_eligibility','dkr::online_stability::focus_plan',
+        'e.kind==DKR_OWNED_CAMERA_WORLD_END)continue;','hud::groups::scenario_for(int(p.race_type),false)'):
+        need(marker in view,'Final fullscreen consumer is missing current policy: '+marker)
     for marker in ('kMaxDKRVertices = 32','RejectTask(display_list)','source_end > kRDRAMSize','IsSafeCountedOpcode(opcode)',
         'source,count*16U','address,count*8U','water::residency().publish(&workload,workload.submissionFrame)'):
         need(marker in bridge,'Render guard or publication missing: '+marker)
@@ -55,7 +69,7 @@ def inspect(build,binary,baseline,accepted):
             need(marker.encode() in data,'Linked render repair missing: '+marker)
     return {'schema':1,'version':pipeline.VERSION,'swaps':rows,'rollback_build_ids':retained['rollback_build_ids'],
         'retained':retained,'presentation_only':True,'protected_sources_edited':False,
-        'validation':'Exact recomposition, six actual compiler bindings, retained full memory/online audit chain, GPU/interrupt call preservation and linked markers. Synthetic execution and manual gameplay acceptance are recorded separately.'}
+        'validation':'Exact recomposition, ten actual compiler bindings, identical direct/library present gates, immutable racing-picture recovery, current fullscreen consumer binding, retained full memory/online audit chain, GPU/interrupt call preservation and linked markers. Synthetic execution and manual gameplay acceptance are recorded separately.'}
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
     for name in ('build','binary','baseline','accepted','output'):p.add_argument('--'+name,type=Path,required=name!='binary')

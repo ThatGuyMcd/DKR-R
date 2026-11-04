@@ -3,6 +3,7 @@
 #include "netplay/netplay_types.hpp"
 #include "netplay/session_transport.hpp"
 #include "netplay/secure_channel.hpp"
+#include "online_stability/traffic_meter.hpp"
 #include <deque>
 #include <map>
 #include <memory>
@@ -13,7 +14,7 @@
 namespace dkr::runtime::spectators {
 namespace net=dkr::runtime::netplay;
 inline constexpr unsigned PartyMessageType=250;
-enum class LinkKind:std::uint8_t {Accepted=1,Roster,Room,Launch,Runtime,Heartbeat,Ready,Start,Stop,Returned,Leave};
+enum class LinkKind:std::uint8_t {Accepted=1,Roster,Room,Launch,Runtime,Heartbeat,Ready,Start,Stop,Returned,Leave,Reserved,Extension};
 struct LinkMessage {LinkKind kind=LinkKind::Heartbeat;std::vector<std::uint8_t> body;};
 std::vector<std::uint8_t> link_encode(LinkKind kind,std::span<const std::uint8_t> body={});
 bool link_decode(std::span<const std::uint8_t> bytes,LinkMessage& out);
@@ -30,6 +31,7 @@ struct LinkPeer {
     std::chrono::steady_clock::time_point ping_sent{};
     std::array<std::uint16_t,16> rtts{};
     unsigned rtt_count=0,rtt_index=0;
+    std::chrono::steady_clock::time_point rtt_at{};
 };
 struct LinkIncoming {MemberId source=0;std::vector<std::uint8_t> bytes;};
 struct LinkOutgoing {
@@ -37,6 +39,7 @@ struct LinkOutgoing {
     LinkKind kind=LinkKind::Runtime;
     net::TransportTrafficClass traffic=net::TransportTrafficClass::Control;
     std::vector<std::uint8_t> bytes;
+    std::chrono::steady_clock::time_point queued=std::chrono::steady_clock::now();
 };
 enum class WatchCamera:unsigned {AllSplits,Follow,Director};
 struct LinkView {
@@ -55,6 +58,7 @@ struct LinkView {
 // Public/UI functions below NEVER call DirectSession while holding this lock.
 // No change to DirectSession's class layout or checked-out header is required.
 struct PartyLink {
+    dkr::online_stability::QueueAgeMeter queue_age;
     mutable std::recursive_mutex mutex;
     bool requested=false,join_watch=false,enabled=false,host=false,admitted=false;
     bool running=false,stopping=false,returned=false,start_requested=false,ready_requested=false,ready_value=false;

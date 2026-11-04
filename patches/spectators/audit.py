@@ -26,8 +26,14 @@ def inspect(stage,binary=None,baseline=None):
   require(sha(old)==row['input_sha256'] and sha(new)==row['output_sha256'],'Staged source changed after its receipt: '+new.name)
   before=old.read_text(encoding='utf-8');after=new.read_text(encoding='utf-8')
   if old.name=='experimental_rollback.cpp':
+   arrival='    dkr::online_stability::input_arrival(owner,frame);'
+   work='    dkr::online_stability::WorkScope response_work(statistics_.next_frame,statistics_.replayed_frames);'
+   require(after.splitlines().count(arrival)==1,'Remote-arrival observer is missing or duplicated')
+   require(after.splitlines().count(work)==1,'Owner-step timing observer is missing or duplicated')
+   # Compare policy lines read-only after removing exactly the input observer
+   # and wall-clock scope. Neither observer mutates canonical driver state.
    for a,b in [('InputResult Driver::receive(','FrameInputs Driver::predict('),('Step Driver::step(','} // namespace dkr::runtime::netplay::experimental')]:
-    if a in before and b in before:require(section(before,a,b)==section(after,a,b),'Racing input/prediction/rollback policy changed')
+    if a in before and b in before:require(section(before,a,b).splitlines()==[line for line in section(after,a,b).splitlines() if line not in (arrival,work)],'Racing input/prediction/rollback policy changed')
    require('observe_confirmed(configuration_.epoch,frame->number' in after,'Committed input hook is missing')
   if old.name in ('experimental_eeprom.cpp','experimental_pak.cpp','experimental_magic_codes.cpp'):
    name={'experimental_eeprom.cpp':'Eeprom','experimental_pak.cpp':'Paks','experimental_magic_codes.cpp':'MagicCodes'}[old.name]

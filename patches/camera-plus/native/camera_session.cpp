@@ -1,4 +1,5 @@
 #include "camera_session.hpp"
+#include "look_behind/policy.hpp"
 #include <cmath>
 #include <cstring>
 
@@ -17,11 +18,12 @@ PresentationSession::PresentationSession(const mods::code::FrozenSet& selected,r
 ViewBatch PresentationSession::evaluate(std::span<const std::uint8_t> retained,const FrameStamp& stamp,
         std::span<const ViewOwner> owners) {
     ViewBatch batch;
-    if(!program_||owners.size()>4)return batch;
-    if(program_->quarantined()){batch.diagnostic=program_->error();return batch;}
+    if(owners.size()>4)return batch;
+    const bool provider=program_&&!program_->quarantined();
+    if(program_&&!provider)batch.diagnostic=program_->error();
     try {
         const auto configuration=settings_.current();
-        if(!configuration)throw mods::Error("Camera profiles are not ready.");
+        if(provider&&!configuration)throw mods::Error("Camera profiles are not ready.");
         unsigned seen_views=0,seen_physical=0;
         for(const auto& owner:owners) {
             if(owner.view>=4||owner.physical_profile>=4||owner.settings_profile>=4||
@@ -32,17 +34,18 @@ ViewBatch PresentationSession::evaluate(std::span<const std::uint8_t> retained,c
         }
         FrameStamp frame=stamp;
         std::array<DkrViewInput,4> inputs{};
-        bool driving=false;
+        bool driving=false,rear_requested=false;
         for(const auto& owner:owners) {
             frame.aspect=owner.aspect;
             inputs[owner.view]=actions_.consume(owner.physical_profile,frame.dt);
             auto state=reader_.capture(retained,revision_,owner.view,frame);
             batch.snapshots[owner.view]=state;
             driving|=state&&(state->flags&DKR_VIEW_DRIVING)&&!(state->flags&DKR_VIEW_SCRIPTED);
+            rear_requested|=!inputs[owner.view].blocked&&(inputs[owner.view].held&DKR_VIEW_LOOK_BACK)&&look_behind::enabled.load();
         }
         // No mesh rebuilding or mod execution in Track Select/title menus.
         // Consume their local taps instead of replaying them in the race.
-        if(!driving)return batch;
+        if(!driving||(!provider&&!rear_requested))return batch;
         if(frame.capabilities&DKR_VIEW_STATIC_COLLISION) {
             if(retained.size()<0x800000U)throw mods::Error("Camera presentation requires a complete retained image.");
             const auto address=revision_==rom::Revision::UsV77?0x800DC918U:0x800DCE88U;
@@ -70,14 +73,30 @@ ViewBatch PresentationSession::evaluate(std::span<const std::uint8_t> retained,c
             batch.snapshots[owner.view]=state;
             auto input=inputs[owner.view];
             batch.xr_recenter|=(input.pressed&DKR_VIEW_XR_RECENTER)!=0;
+            if(look_behind::enabled.load()&&!input.blocked&&(input.held&DKR_VIEW_LOOK_BACK)) {
+                DkrViewPose rear{};
+                if(look_behind::pose(*state,rear)) {
+                    if(collision_) {
+                        DkrViewQuery cast{};cast.api=1;cast.size=sizeof(cast);cast.view=owner.view;
+                        cast.exclude_racer=state->racer_id;cast.radius=12;
+                        for(unsigned i=0;i<3;++i){cast.origin[i]=state->position[i];cast.target[i]=rear.position[i];}
+                        cast.origin[1]+=35;
+                        const auto hit=query(cast);
+                        if(hit.status==DKR_VIEW_QUERY_HIT)for(unsigned i=0;i<3;++i)rear.position[i]=hit.position[i]+hit.normal[i]*12;
+                    }
+                    batch.poses[owner.view]=rear;continue;
+                }
+            }
+            if(!provider||program_->quarantined())continue;
+            if(!look_behind::enabled.load())input.held&=~DKR_VIEW_LOOK_BACK;
             if(!program_->settings(configuration->views[owner.settings_profile]))
                 throw mods::Error(program_->error());
             batch.poses[owner.view]=program_->frame(*state,input,query);
             if(program_->quarantined()) {
-                batch.poses={};batch.diagnostic=program_->error();return batch;
+                batch.diagnostic=program_->error();continue;
             }
         }
-        batch.diagnostic=scene_error_;
+        if(batch.diagnostic.empty())batch.diagnostic=scene_error_;
     }catch(const std::exception& e){batch.poses={};batch.diagnostic=e.what();}
     return batch;
 }

@@ -1,6 +1,6 @@
 # Repository scripts
 
-## v1.0.12 release contract
+## v1.0.14 release contract
 
 Use patches/release-prep/v1.0.11/release.py and BUILDING.txt for stable composition. Packaging uses explicit runtime/legal allowlists; no offline Player Guide or old playtest handoff notes. Both US revisions, all owned payloads and exact staged inputs are required. Run only the named synthetic fixtures and ROM-free helper/updater checks; gameplay acceptance remains separate.
 
@@ -16,7 +16,7 @@ Windows). Commands with options describe them with `--help`.
 | Prepare pinned dependencies | `python3 scripts/bootstrap_dependencies.py` | Git; network for missing revisions |
 | Apply reviewed patches | `python3 scripts/apply_dependency_patches.py` | Prepared dependencies |
 | Inspect patch readiness | `python3 scripts/apply_dependency_patches.py --check` | Read-only checkout validation |
-| Prepare/verify/sign v1.0.12 updates | `python patches/release-prep/v1.0.11/update_assets.py --help` | Finished packages, committed source, original Ed25519 private key for signing only |
+| Prepare/verify/sign v1.0.14 updates | `python patches/release-prep/v1.0.11/update_assets.py --help` | Finished packages, committed source, original Ed25519 private key for signing only |
 | Release recipe and documentation checks | [Desktop recipe](../patches/release-prep/v1.0.11/BUILDING.txt) | External source snapshot and document ledger; skip the historical metadata apply step |
 | Validate release metadata | `python3 scripts/validate_release_metadata.py` | Repository files |
 | Stage the source code-mod SDK | `python3 scripts/stage_magic_code_sdk.py --output <fresh-directory>` | Authored SDK, guide and address-only kits; optional sample NRMs |

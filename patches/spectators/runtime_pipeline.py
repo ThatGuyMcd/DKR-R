@@ -12,7 +12,26 @@ def once(t,a,b):
  if t.count(a)!=1:raise ValueError('Party runtime anchor changed: '+a[:140])
  return t.replace(a,b,1)
 def runtime(text):
- text='#include "party_runtime.hpp"\n#include "party_camera.hpp"\n#include "vehicle_binding.hpp"\n'+text
+ text='#include "online_stability/live_delay.hpp"\n#include "party_runtime.hpp"\n#include "party_camera.hpp"\n#include "vehicle_binding.hpp"\n'+text
+ text=once(text,'                Session session(*world);',
+  '                Session session(*world);\n'
+  '                dkr::online_stability::LiveDelay live_delay(dkr::online_stability::control(&lobby),launch->input_delay_frames,launch->rollback_window);\n'
+  '                live_delay.local_owner(local);\n                dkr::online_stability::DelayScope delay_scope(live_delay);')
+ text=once(text,'                    if(!pump.pulse(now,[&]{',
+  '''                    const bool dynamic=lobby.view().room.rules.automatic_input_delay;
+                    const bool delay_paused=pump.view().wait==PumpWait::ScenePeers||pump.view().wait==PumpWait::ScenePreparation;
+                    live_delay.pulse(session.epoch(),1,session.frontier(),delay_paused,pump.view().wait==PumpWait::OwnerInput||pump.view().wait==PumpWait::Confirmation,now,session.missing_input_mask());
+                    if(dynamic&&!scripted_check) {
+                        const auto physical=unpack(shared.input.load());
+                        if(!live_delay.capture({physical.buttons,physical.stick_x,physical.stick_y,physical.accelerator,physical.brake,physical.driving_flags},now))throw std::runtime_error("Dynamic input transition queue exceeded its safe bound.");
+                    }
+                    for(unsigned fill=live_delay.take_fill();fill&&session.needs_local_input(true);--fill) {
+                        const auto held=live_delay.held();
+                        if(session.sample_local({held.buttons,held.x,held.y,held.accelerator,held.brake,held.driving_flags},true)!=OwnerInputResult::Accepted)throw std::runtime_error("Dynamic input lead could not retain immutable owner input.");
+                    }
+                    if(!pump.pulse(now,[&]{''')
+ text=once(text,'                        if(!scripted_check)return unpack(shared.input.load());',
+  '                        if(!scripted_check){if(!dynamic)return unpack(shared.input.load());const auto value=live_delay.take();return PackedInput{value.buttons,value.x,value.y,value.accelerator,value.brake,value.driving_flags};}')
  signature='bool run_runtime(ultramodern::renderer::WindowHandle window,'
  text=once(text,signature,(AUTH/'native/runtime_runner.inl').read_text(encoding='utf-8')+'\n'+signature)
  anchor='std::string_view runtime_engine_identity(rom::Revision revision) {return owned_adapter_identity(revision);}'
@@ -24,8 +43,15 @@ def runtime(text):
     return revision==rom::Revision::UsV77?v77:revision==rom::Revision::UsV80?v80:std::string_view{};
 }''')
  anchor='    const std::optional<LaunchDescriptor> launch{accepted_launch};const auto initial=lobby.runtime_view();'
- return once(text,anchor,'''    if(dkr::runtime::spectators::party_enabled(&lobby))return run_party_runtime(window,canonical_rom,std::move(bootstrap),lobby,accepted_launch,timeout_seconds,error,std::move(mods),std::move(mod_bootstrap),std::move(code_bootstrap));
+ return once(text,anchor,'''    if(dkr::runtime::spectators::party_enabled(&lobby))return run_party_runtime(window,canonical_rom,std::move(bootstrap),lobby,accepted_launch,timeout_seconds,error,scripted_check,std::move(mods),std::move(mod_bootstrap),std::move(code_bootstrap));
 '''+anchor)
+
+def timeline(text):
+ text='#include "online_stability/live_delay.hpp"\n'+text
+ text=once(text,'    const auto result=inputs_.publish(frame,input,command);',
+  '    const auto result=inputs_.publish(frame,input,command);\n    if(result==OwnerInputResult::Accepted)dkr::online_stability::input_authored(frame);')
+ return once(text,'std::uint64_t(frontier_)+configuration_.input_delay+(live_lead ? 2 : 1)',
+  'dkr::online_stability::sample_limit(frontier_,configuration_.input_delay,live_lead)')
 def camera(text):
  text='#include "party_camera.hpp"\n#include "camera_scene.hpp"\n#include "game_payload.hpp"\n'+text
  text=once(text,'    const auto next=activation();','    const auto next=activation();\n    const bool director=stamp.online&&dkr::runtime::spectators::spectator_director.load(std::memory_order_relaxed);')

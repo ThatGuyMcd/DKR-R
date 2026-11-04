@@ -97,7 +97,9 @@ void RenderPass::before_command(std::uint32_t physical) {
     }
     const std::uint32_t branch[2]={0x06010000U,draw_.start&0xFFFFFFU};
     std::memcpy(decoder_.data()+range->begin,branch,8);drawing_=&*range;
-    presented(range->profile,true);
+    // Standalone rear view never claims the optional provider's orbit/input
+    // bindings. In particular it must not turn RT into digital full throttle.
+    presented(range->profile,session_&&session_->active());
 }
 bool RenderPass::replaced_command(std::uint32_t physical)const {
     return (ended_&&ended_==physical) || (drawing_&&physical>=drawing_->begin&&physical<drawing_->end);

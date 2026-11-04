@@ -3727,4 +3727,4 @@ export default {
   }
 };
 
-export { __dkrAuth, HttpError };
+export { __dkrAuth, __dkrCommon, HttpError, finish };

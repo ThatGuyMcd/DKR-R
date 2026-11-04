@@ -1,11 +1,14 @@
 // Presentation only: retain the original lobby panel, code plate and cards.
 // Actions below use authenticated party APIs, never edit controller leases.
 void DrawOlLobbyToolbar(float width,const OnlineFrame& frame) {
-    const auto origin=ImGui::GetCursorScreenPos();float x=0,y=0;
+    const auto origin=ImGui::GetCursorScreenPos();float y=0;
     const std::array<const char*,2> labels{"Test session connection","Invite friends"};
+    const float total=OlButtonWidth(labels[0])+8.F+OlButtonWidth(labels[1]);
+    const bool stacked=total>width;
+    float x=std::max(0.F,width-total);
     for(unsigned i=0;i<labels.size();++i){
         const float w=std::min(width,OlButtonWidth(labels[i]));
-        if(x>0&&x+w>width){x=0;y+=48.F;}
+        if(stacked){x=width-w;y=float(i)*48.F;}
         ImGui::SetCursorScreenPos({origin.x+x,origin.y+y});
         {const OlDisabled disabled(i==0?!OlCanTestConnection(frame):!frame.has_space);
          if(OlButton(labels[i],OlTone::Plain,w)){if(i==0)OlRequestConnectionTest();else g_online_page.section=OlSection::Friends;}}
@@ -48,14 +51,19 @@ void DrawOlPartySpectators(float width,const OnlineFrame& frame){
     {const OlDisabled disabled(OlPartyChanging(frame));if(OlButton(action))g_ol_manage_open=true;}
     ImGui::SetCursorScreenPos(at);ImGui::Dummy({width,pair?std::max(40.F,label_height):label_height+48.F});PaddockGap(10.F);
     const auto chips=ImGui::GetCursorScreenPos();float x=0,y=0;unsigned count=0;
+    const auto routes=dkr::relay::view(&dkr::runtime::netplay::session());
     for(const auto& m:g_ol_party.link.party.members)if(m.role==lobby_party::Role::Spectator){
         ++count;ImGui::PushID(std::to_string(m.id).c_str());
         const std::string name=m.name+(m.id==g_ol_party.link.local?" (you)":"")+(m.host?" (host)":"");
-        const std::string shown=PaddockEllipsize(OlRead(15.F,true),name,std::max(20.F,std::min(width,300.F)-32.F));
+        const auto ping=dkr::relay::lobby_card_ping(routes,std::to_string(m.id),m.host,m.id==g_ol_party.link.local,255,g_ol_party.link.party.generation);
+        const std::string suffix=" - "+ping.text;
+        const auto type=OlRead(15.F,true);
+        const std::string shown=PaddockEllipsize(type,name,std::max(20.F,std::min(width,360.F)-32.F-PaddockMeasure(type,suffix)))+suffix;
         const float w=std::min(width,OlButtonWidth(shown.c_str()));
         if(x>0&&x+w>width){x=0;y+=48.F;}
         ImGui::SetCursorScreenPos({chips.x+x,chips.y+y});
-        if(OlButton(shown.c_str(),OlTone::Plain,w,name.c_str()))OlPartyOpenMember(m.id);
+        const auto tooltip=name+"\n"+ping.detail;
+        if(OlButton(shown.c_str(),OlTone::Plain,w,tooltip.c_str()))OlPartyOpenMember(m.id);
         x+=w+8.F;ImGui::PopID();
     }
     ImGui::SetCursorScreenPos(chips);

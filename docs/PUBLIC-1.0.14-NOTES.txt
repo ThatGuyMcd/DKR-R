@@ -1,0 +1,109 @@
+DKR-R v1.0.14 Release Build
+
+I've worked through the online input delay and frame pacing, tidied up the
+launcher, and made the in-game overlay use the same pages. There is quite a
+lot in this one! These notes cover everything since v1.0.12.
+
+ONLINE
+- Improved input responsiveness, dynamic delay handling, frame pacing and
+  reuse of prepared content when joining modded lobbies.
+- Lobby connection cards show live timing for clients as well as the host.
+  Your own reading is visible too. Route and ping readings are connection
+  information, rather than a guarantee that a machine can render at 60 FPS.
+- Added session chat and tidied up the lobby controls and connection details.
+- Fixed online fullscreen presentation changing shape during scene handling.
+- Starting an online game now uses the logo and clouds with Syncing Game
+  while everyone gets ready. It fades into the game when the first ready
+  presentation is available. Later scene transitions keep their normal flow.
+- Standalone Look behind works for hosts and clients without ModernCamera++.
+  Enable it in Graphics > HUD & effects and map Look back in Controls.
+
+LAUNCHER AND OVERLAY
+- Both modes use the same pages, spacing and available content width.
+- Mod Store is now Mod Library, with its own sidebar button. The mods are free!
+  Mods / Hacks is now Installed Mods. Textures is inside Installed Mods.
+- Community Spotlight appears above Ready to race and above the Library tabs.
+  Its artwork follows the rounded corners and the banner stays in place when
+  changing Library pages. Mod cards are shorter, with up to six across.
+- Removed Browse and Inspect. Search, its keyboard button and Sort share a row.
+  Installed Mods categories now use a consistent Search, Status and Sort layout.
+- Achievements and Save Manager are in Play. Session mods sits between them:
+  turn it OFF for a vanilla session without changing your individual selections.
+- Ready to race is centred. The save indicator describes the actual current
+  owner or next launch; ordinary offline mods still share personal Adventure.
+- The sidebar buttons are centred, with Restart and Exit at the bottom. Choose
+  LB/RB or D-pad using the switch above the divider. The left stick navigates
+  page elements and the right stick scrolls in both sidebar modes.
+- Added page/section fades, consistent orange action buttons and keyboard
+  buttons beside their fields. Texture Packs and Dumping are always expanded.
+- Skip launcher starts your selected game automatically. You can turn it off
+  in the in-game Play overlay. Missing content or an error returns to the launcher.
+- Manual Play now fades into the same Starting Game screen, with the circular
+  logo, scrolling clouds and grey caption. Loading Mods and real progress appear
+  inline instead of a separate preparation modal. Open Launcher/Escape/B cancels.
+- Linux now requests GPU acceleration for the launcher, using a separate window
+  when handing over to the Vulkan game renderer. Software fallback is logged.
+  Physical Steam Deck performance still needs checking; locked 60 FPS is not claimed.
+
+APPEARANCE AND LANGUAGES
+- Added automatic seasonal themes, distinct corner decorations, holiday greetings
+  and themed button patterns. The computer's region and local date choose them.
+- Removed manual Launcher appearance controls. Steam Deck Gaming Mode can use
+  KDE regional formats even when its environment reports a generic C locale.
+- Added a Language dropdown in Play. Eleven initial language packs are available
+  for the launcher/overlay; they are drafts awaiting native-speaker review.
+  ROM text, chat, names and community descriptions keep their original language.
+
+GRAPHICS
+- Added aspect-specific resolution lists, including rendering above your monitor's
+  resolution. Camera, HUD and online fullscreen use the same local aspect choice.
+- Brighter DKR colours for enhanced water, keeping the selected reflection method.
+  Hardware ray-traced reflections remain experimental and GPU dependent.
+- Fixed custom-car lighting and lighting on the four original-car road wheels
+  used by custom characters, including the reported Rayman case.
+- Moved all CRT controls to Graphics > HUD & effects and removed the duplicate
+  Textures section. Existing settings are kept.
+
+ANALOGUE DRIVING AND CONTROLLER FEEDBACK
+- Added the optional Analogue Acceleration & Braking Custom Magic Code for cars,
+  hovercraft and planes. Partial trigger travel gives partial throttle/braking.
+- Import and enable the companion mod, open Details and choose your local player.
+  Apply RT/LT driving, then adjust bindings, deadzone, full travel and response.
+  The settings and live input bars belong to the mod's Details.
+- Online hosts enable the gameplay mod; each player keeps their own controls.
+  Everyone must use matching compatible v1.0.14 packages.
+- Controls > Controller feedback adds Classic/Enhanced effects, per-player
+  profiles, left/right tests and output diagnostics. Enhanced includes impacts,
+  boosts, landings and optional engine/road feel.
+- DualSense has capability-gated trigger resistance, lighting and touch options.
+  Direct Deck patterns and USB waveform haptics are experimental and opt-in.
+  USB, Bluetooth, Steam Input and physical-device testing remain separate.
+  The LCD Deck's actuators are trackpad haptics, not conventional grip motors.
+
+SUPPORT
+- Added one-time consent for automatic crash reports, with an About > Support
+  switch. Redacted logs queue and retry while the launcher is open after an
+  internet failure. Raw dumps require separate consent. These reports cannot
+  honestly be guaranteed 100% anonymous, especially when memory dumps are included.
+- Fixed the Installed Mods opening crash and retained the earlier memory, HUD,
+  spectator, account/profile, download history and save safeguards.
+
+INSTALLING AND UPDATING
+Download the whole package for your platform. Windows users should extract the
+whole ZIP and run DKR-R.exe. Linux/Deck users should make the AppImage executable.
+Keep your existing profile, saves, mods and settings. Portable mode selects a
+different location and does not move your data automatically.
+
+Use a legally obtained US v1.0 or US Rev A/v1.1 ROM. Some legacy .xdelta mods
+still need clean US v1.0 to install, including manual imports. Add it once in
+Play; you can keep v1.1 selected for playing. No conversion ROM data is bundled.
+
+Windows x64, Linux x86_64, Linux ARM64 and Steam Deck are the release targets.
+Android remains unsupported; macOS/iOS downloads stay on their earlier releases.
+See the platform and validation guides for the actual build/test coverage.
+
+Known limits remain: arbitrary executable ROM patches are not automatically
+supported; custom battle courses need valid AI connectivity and mode objects;
+custom hovercraft/plane formats are reserved. The supplied Block Fort investigation
+was not a completed battle-map compatibility repair. Device-specific controller
+extras and draft translations should be assessed using their dedicated guides.

@@ -62,6 +62,12 @@ if(IOS)
 endif()
 include(CTest)
 include(cmake/ProjectTests.cmake)
+include(cmake/Localisation.cmake)
+# Capsule builds register new first-party modules at the retained final UI
+# hook, after the historical source rebinding has completed.
+if(NOT DKR_RELEASE_CAPSULE)
+    dkr_add_localisation()
+endif()
 
 if(BUILD_TESTING AND NOT ANDROID)
     add_executable(DKRLauncherCopyTests tests/launcher_copy_tests.cpp)
@@ -326,6 +332,18 @@ target_include_directories(DKRNetplayCore PUBLIC
 )
 target_include_directories(DKRNetplayCore PRIVATE "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty")
 target_link_libraries(DKRNetplayCore PUBLIC GekkoNet DKRNetplayCrypto)
+if(BUILD_TESTING)
+    include(cmake/AnalogueDriving.cmake)
+    dkr_add_analogue_driving_checks()
+    include(cmake/LauncherThemes.cmake)
+    dkr_add_launcher_theme_checks()
+    include(cmake/LibraryUi.cmake)
+    dkr_add_library_ui_checks()
+    include(cmake/VehicleLighting.cmake)
+    dkr_add_vehicle_lighting_checks()
+    include(cmake/ControllerFeedback.cmake)
+    dkr_add_controller_feedback_checks()
+endif()
 if(DKR_NETPLAY_WEBRTC)
     target_link_libraries(DKRNetplayCore PUBLIC datachannel)
     target_include_directories(DKRNetplayCore PRIVATE
@@ -1641,7 +1659,7 @@ if(BUILD_TESTING)
     if(DKR_RUNTIME_BUILD_RT64 AND DKR_RUNTIME_BUILD_SDL3_INPUT_HOST)
         add_executable(DKRSdl3InputClientTests
             tests/sdl3_input_client_tests.cpp
-            src/game/sdl3_input_client.cpp
+        src/game/sdl3_input_client.cpp
         )
         target_include_directories(DKRSdl3InputClientTests PRIVATE
             "${CMAKE_CURRENT_LIST_DIR}/src/game"
@@ -2621,6 +2639,10 @@ if(BUILD_TESTING)
     target_compile_features(DKROnlineProfileTests PRIVATE cxx_std_20)
     target_include_directories(DKROnlineProfileTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     add_test(NAME DKROnlineProfile COMMAND DKROnlineProfileTests)
+    include(cmake/OnlineStability.cmake)
+    dkr_add_online_stability()
+    include(cmake/ModStoreCommunity.cmake)
+    dkr_add_mod_store_community_tests()
     add_executable(DKRProfilePictureTests tests/profile_picture_tests.cpp)
     target_compile_features(DKRProfilePictureTests PRIVATE cxx_std_20)
     target_include_directories(DKRProfilePictureTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKRPORT_ROOT}/extern/rt64/src/contrib")

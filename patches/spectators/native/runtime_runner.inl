@@ -1,6 +1,6 @@
 bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::filesystem::path& canonical_rom,
     std::vector<std::uint8_t> bootstrap,DirectSession& lobby,const LaunchDescriptor& launch,
-    unsigned timeout_seconds,std::string& error,std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,
+    unsigned timeout_seconds,std::string& error,bool scripted_check,std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,
     std::vector<std::uint8_t> mod_bootstrap,std::vector<std::uint8_t> code_bootstrap) {
     namespace party=dkr::runtime::spectators;
     auto hub=party::party_link(&lobby);const auto initial=party::party_link_view(&lobby);
@@ -78,10 +78,42 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
             party::PartyRuntime runtime(&lobby,*world,shared.mailbox,launch,[](auto b){return digest(b);});
             if(!runtime.begin(message))throw std::runtime_error(message);
             bool prior_watching=true;unsigned prior_port=4;auto next_save=Network::Clock::now()+std::chrono::seconds(5);
+            auto observed=world->scene_view();auto observed_cursor=runtime.next();auto menu_since=observed_cursor.frame;
+            bool car_selection_sent=false;
             while(!shared.stop) {
                 OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::Pump);
                 const auto now=Network::Clock::now();
-                if(!runtime.pulse(now,unpack(shared.input.load()),message)) {
+                auto sampled=unpack(shared.input.load());
+                if(scripted_check) {
+                    const auto scene=world->scene_view();const auto at=runtime.next();
+                    if(scene.menu!=observed.menu||(scene.menu&&scene.menu_id!=observed.menu_id)||observed_cursor.epoch!=at.epoch) {
+                        observed=scene;observed_cursor=at;menu_since=at.frame;car_selection_sent=false;
+                        std::fprintf(stderr,"[party][scene] epoch=%llu menu=%d id=%d level=%d type=%d viewports=%u\n",static_cast<unsigned long long>(at.epoch),scene.menu,scene.menu_id,scene.level,scene.race_type,unsigned(scene.viewports));
+                    }
+                    sampled={};const auto age=at.frame>=menu_since?at.frame-menu_since:0;
+                    if(scene.menu) {
+                        if(scene.menu_id==0&&age>=150&&age%30==0)sampled={0x1000,0,0};
+                        if((scene.menu_id==3||scene.menu_id==15)&&age>=50&&age%30==20)sampled={0x8000,0,0};
+                        // Opt-in disposable-profile lighting check: move the
+                        // host's real cursor down/left to the first custom
+                        // stage actor, then use ordinary A confirmation.
+                        if(scene.menu_id==3&&dkr::runtime::vehicles::lighting::owned_road_wheel_check&&local_port.load()==0) {
+                            sampled={};
+                            if(age==5)sampled={0,0,-75};
+                            if(age>=20&&age<220&&age%30==5)sampled={0,-75,0};
+                            if(age>=220&&age%30==20)sampled={0x8000,0,0};
+                        }
+                        // The opt-in fresh-profile car check exercises the
+                        // ordinary wooden picker with a real direction press.
+                        // This branch is unreachable during normal play.
+                        if(scene.menu_id==15&&dkr::runtime::vehicles::lighting::owned_car_check&&!car_selection_sent&&
+                           dkr::runtime::vehicles::lighting::owned_car_picker.load(std::memory_order_relaxed)==1&&age%30==5) {
+                            sampled={0x0100,0,0};car_selection_sent=true;
+                            std::fprintf(stderr,"[custom-vehicles][isolated-check] local-port=%u picker-input=d-pad-right; ordinary confirmation follows\n",local_port.load());
+                        }
+                    } else sampled={0x8000,std::int8_t((at.frame/15)%2?30:-30),0};
+                }
+                if(!runtime.pulse(now,sampled,message)) {
                     if(!message.empty())throw std::runtime_error(message);shared.stop=true;break;
                 }
                 watching=runtime.watching();local_port=runtime.local_port();
@@ -120,7 +152,7 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
             if(pressed&0x0300)party::party_camera(&lobby,party::WatchCamera::Follow,
                 (camera.target+((pressed&0x0100)?1:unsigned(launch.player_count-1)))%launch.player_count);
         }
-        shared.input=pack(blocked||watching.load()?PackedInput{}:PackedInput{buttons,std::int8_t(std::clamp(x,-1.0F,1.0F)*80),std::int8_t(std::clamp(y,-1.0F,1.0F)*80)});
+        shared.input=pack(blocked||watching.load()?PackedInput{}:online_input_broker().local_sample().input);
         for(unsigned i=0;i<ConfirmedAudioMailbox::kCapacity&&shared.audio.take(block);++i) {
             for(std::size_t j=0;j<block.bytes/2;++j)pcm[j^1]=std::int16_t(std::uint16_t(block.pcm[2*j])|(std::uint16_t(block.pcm[2*j+1])<<8));
             platform::set_audio_frequency(block.rate);platform::queue_audio(pcm.data(),block.bytes/2);

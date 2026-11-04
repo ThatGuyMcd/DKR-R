@@ -13,7 +13,8 @@ function(dkr_camera_scene_kernel target directory revision)
         "${directory}/camera_scene_hooks.c"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/native/camera_kernel.c")
     target_include_directories(${target} BEFORE PRIVATE "${directory}"
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/native")
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/native"
+        "${DKRPORT_ROOT}/runtime-recomp/src/game")
     target_compile_features(${target} PRIVATE c_std_11)
     foreach(helper access step fault)
         target_compile_definitions(${target} PRIVATE

@@ -1,4 +1,5 @@
 #include "camera_runtime.hpp"
+#include "look_behind/policy.hpp"
 #include <cstdio>
 #include <mutex>
 
@@ -23,19 +24,25 @@ void begin(const std::filesystem::path& config,const std::string& version,rom::R
     try {
         mods::code::Library library(config/"mods"/"custom-magic-codes",version);
         auto set=library.freeze(revision==rom::Revision::UsV77?"us.v77":"us.v80",false,Program::policy().modules,{},true);
-        if(set.ordered.empty())return;
-        if(set.ordered.size()!=1)throw mods::Error("Enable only one camera mod.");
+        if(set.ordered.size()>1)throw mods::Error("Enable only one camera mod.");
         auto next=std::make_shared<Activation>();next->frozen=std::move(set);next->revision=revision;next->online=online;
         next->settings=std::make_shared<SettingsChannel>();
+        if(!next->frozen.ordered.empty()) {
         const auto& package=next->frozen.ordered[0];
         next->editor=std::make_shared<SettingsEditor>(package,next->frozen.settings.at(package->id),
             next->frozen.data.at(package->id),*next->settings);
         // Link/validate without executing. Rejection only disables the camera,
         // never the shared race or its save route.
         Program checked(package,next->frozen.settings.at(package->id),revision==rom::Revision::UsV77?"us.v77":"us.v80");
+        }
         current.store(std::move(next));
-        std::fprintf(stderr,"[camera++][ready] provider=%s domain=local-presentation online=%u\n",package->id.c_str(),unsigned(online));
-    }catch(const std::exception& e){report(e.what());}
+        const auto ready=current.load();
+        std::fprintf(stderr,"[camera++][ready] provider=%s domain=local-presentation online=%u\n",
+            ready->frozen.ordered.empty()?"standalone-look-behind":ready->frozen.ordered[0]->id.c_str(),unsigned(online));
+    }catch(const std::exception& e){
+        auto fallback=std::make_shared<Activation>();fallback->revision=revision;fallback->online=online;
+        fallback->settings=std::make_shared<SettingsChannel>();current.store(std::move(fallback));report(e.what());
+    }
 }
 void reset()noexcept {
     current.store(nullptr);editor_open.store(false);input.reset();

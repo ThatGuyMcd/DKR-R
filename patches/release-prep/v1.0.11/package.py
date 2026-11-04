@@ -18,6 +18,8 @@ if __name__=='__main__':
     def notes(root,label):
         base.copy(ROOT/'packaging/RELEASE-README.md',root/'README.txt')
         base.copy(ROOT/('docs/PUBLIC-'+VERSION+'-NOTES.txt'),root/'RELEASE-NOTES.txt')
+        legal=root/('ThirdPartyLicenses' if a.platform=='windows' else 'usr/share/doc/dkr-port')
+        base.copy(ROOT/'runtime-recomp/assets/localisation/OFL-NotoSans.txt',legal/'NotoSans-LICENSE.txt')
     base.notes=notes;a.output.mkdir(parents=True)
     root,artifact,files=getattr(base,a.platform)(a)
     receipt={'schema':1,'version':VERSION,'label':'v'+VERSION+' Release Build','platform':a.platform,'arch':a.arch,

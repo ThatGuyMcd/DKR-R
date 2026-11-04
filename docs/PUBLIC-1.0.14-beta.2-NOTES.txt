@@ -1,0 +1,21 @@
+DKR-R v1.0.14 Beta 2
+
+This build is for checking the online frame rate and My Racer Fullscreen. Everyone in the lobby needs to use this build.
+
+Fixed water asset lookups doing extra work when rollback corrects a frame. They now keep the same track's assets ready, while still checking for track changes, texture pack changes and missing textures.
+
+Fixed an old texture selection being kept when a new renderer reuses the same memory address after leaving a session.
+
+Fixed idle screen refreshes being queued between fresh race frames. The game still refreshes the overlay while it is waiting, but stops adding that extra work while the race is moving.
+
+Fixed the build using an older fullscreen view handler. The current race, battle and minigame rules now reach the renderer. Shared menus and cutscenes keep their normal view.
+
+Online races now keep the last completed picture if the next GPU target is unavailable. They no longer fall back to an unfinished native framebuffer image, which could briefly change the shape of the picture.
+
+Added better frame timings and fullscreen diagnostics to the runtime log. These help separate rendering work from connection problems if anyone still sees a drop or a change in the picture's shape.
+
+All the recent input response, Dynamic Input Delay, proxy routing, chat, lobby ping, HUD and spectator fixes are included. The launcher design is unchanged.
+
+Please test stock and custom tracks, battles and spectators. Use Fit to window with My Racer Fullscreen, and try 60, 120 and 180 FPS where your PC supports it. Compare the same track and graphics settings offline too. Keep the logs from the host and clients if anything looks wrong.
+
+Install this beta manually in a separate folder. It is not a stable auto updater release.

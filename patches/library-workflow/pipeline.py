@@ -5,6 +5,7 @@ import difflib
 import hashlib
 import json
 import shutil
+import subprocess
 import urllib.request
 import zipfile
 
@@ -141,13 +142,80 @@ def package(output, archive):
     print(str(archive), sha(archive.read_bytes()))
 
 
+def compose_community(output, archive, baseline, esbuild):
+    """Package maintained first-party website/API sources through this entry point."""
+    source = ROOT / 'runtime-recomp/src/game/mod_library/website'
+    backend = ROOT / 'runtime-recomp/src/game/online_profile/backend'
+    output = output.resolve()
+    if output.exists() or not output.is_relative_to(ROOT / 'build'):
+        raise ValueError('Choose a NEW community deployment directory inside build/.')
+    if not baseline or not (baseline / 'PRIVATE-API/worker.mjs').is_file():
+        raise ValueError('Supply the accepted website/Worker rollback directory with --baseline.')
+    if not esbuild.is_file():
+        raise ValueError('Install the documented local esbuild tool or pass --esbuild.')
+    if archive and (archive.exists() or not archive.resolve().is_relative_to(ROOT / 'build')):
+        raise ValueError('Choose a NEW deployment archive inside build/.')
+    ftp = output / 'FTP-PATCH'
+    private = output / 'PRIVATE-API'
+    rollback = output / 'ROLLBACK'
+    private.mkdir(parents=True)
+    review = []
+    for path in sorted(source.rglob('*')):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(source)
+        target = ftp / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+        old = baseline / 'FTP-PATCH' / relative
+        if old.is_file():
+            backup = rollback / 'FTP-PATCH' / relative
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(old, backup)
+        review.extend(difflib.unified_diff(
+            old.read_text(encoding='utf-8').splitlines(True) if old.is_file() else [],
+            path.read_text(encoding='utf-8').splitlines(True),
+            fromfile='before/FTP-PATCH/' + relative.as_posix(),
+            tofile='after/FTP-PATCH/' + relative.as_posix()))
+        if path.suffix == '.js':
+            subprocess.run(['node', '--check', str(path)], check=True)
+    for directory, destination in ((backend, private), (baseline / 'PRIVATE-API', rollback / 'PRIVATE-API')):
+        destination.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['node', str(esbuild), str(directory / 'worker.mjs'), '--bundle',
+                        '--format=esm', '--platform=neutral', '--target=es2022', '--external:cloudflare:*',
+                        '--legal-comments=inline',
+                        '--outfile=' + str(destination / 'worker-single-file.mjs')], check=True)
+    shutil.copyfile(backend / 'community_schema.sql', private / 'community_schema.sql')
+    for name in ('worker.mjs', 'library_api.mjs', 'community_api.mjs', 'community_schema.sql'):
+        old = baseline / 'PRIVATE-API' / name
+        review.extend(difflib.unified_diff(
+            old.read_text(encoding='utf-8').splitlines(True) if old.is_file() else [],
+            (backend / name).read_text(encoding='utf-8').splitlines(True),
+            fromfile='before/PRIVATE-API/' + name, tofile='after/PRIVATE-API/' + name))
+    (output / 'REVIEW.patch').write_text(''.join(review), encoding='utf-8', newline='\n')
+    shutil.copyfile(ROOT / 'docs/MOD_LIBRARY_WEBSITE.md', output / 'DEPLOYMENT.md')
+    if archive:
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(archive, 'x', zipfile.ZIP_DEFLATED) as package_zip:
+            for path in sorted(output.rglob('*')):
+                if path.is_file():
+                    package_zip.write(path, path.relative_to(output).as_posix())
+        print(archive)
+    print('Community website/API package created from maintained sources; no game build or deployment.')
+
+
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action', choices=('capture', 'stage', 'verify', 'package'))
+    p.add_argument('action', choices=('capture', 'stage', 'verify', 'package', 'community'))
     p.add_argument('--output', type=Path)
     p.add_argument('--archive', type=Path)
+    p.add_argument('--baseline', type=Path)
+    p.add_argument('--esbuild', type=Path,
+                   default=ROOT / 'build/library-community-tools/node_modules/esbuild/bin/esbuild')
     a = p.parse_args()
-    if a.action == 'capture':
+    if a.action == 'community':
+        compose_community(a.output, a.archive, a.baseline, a.esbuild)
+    elif a.action == 'capture':
         capture()
     elif a.action == 'stage':
         compose(a.output)

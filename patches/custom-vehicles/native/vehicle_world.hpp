@@ -10,7 +10,7 @@ struct Symbols {
     std::uint32_t stage,vehicles,confirmed,ready,players,delay,buttons,stick_x,stick_y,
         display_list,dialogue_begin,dialogue_modes,tracks_mode,current_menu,
         object_display_list,object_matrix,view,menu_images,frame_height,player_images,arrows,race_images,rng_seed,
-        current_player,racers_by_port;
+        current_player,racers_by_port,light_intensity,inverse_view,viewport_layout;
 };
 const Symbols& symbols(bool revision80);
 class World {

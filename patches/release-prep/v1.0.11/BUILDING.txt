@@ -1,4 +1,4 @@
-DKR-R v1.0.12 Release Build - Patch Pipeline
+DKR-R v1.0.14 Release Build - Patch Pipeline
 
 This existing baselined recipe now reads the root VERSION. Its directory keeps
 the historical name; do not create another first-party patch layer. Metadata
@@ -43,6 +43,6 @@ downloads and current notes. Keep private source snapshots outside that folder.
 
 Commit the complete release source before signing. update_assets.py uses that
 commit, final package receipts and the existing trusted key. qualify_updates.py
-uses the actual v1.0.11 Windows package for isolated updater checks. seal.py
+uses the verified v1.0.12 and Beta 3 Windows packages for isolated updater checks. seal.py
 verifies the signed manifest and generates the exact upload list and hashes.
 The maintainer publishes the GitHub release; these scripts do not publish it.

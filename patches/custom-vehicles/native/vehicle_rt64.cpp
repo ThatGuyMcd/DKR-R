@@ -2,6 +2,7 @@
 #include "vehicle_wheel_interpolation.hpp"
 #include "vehicle_seat_alignment.hpp"
 #include "native_draw_scope_rt64.hpp"
+#include "vehicle_lighting/road_wheels.hpp"
 #include "presentation_identity.hpp"
 #include "runtime_enhancements.hpp"
 #include "gbi/rt64_gbi_rdp.h"
@@ -64,18 +65,8 @@ mods::vehicles::Vec3 seat_target(const mods::vehicles::Package& car,unsigned bas
             (car.seat.y+car.driver_offset.y)*KartModelToWorld+KartRideHeight,
             (car.seat.z+car.driver_offset.z)*KartModelToWorld+forward_z*DriverSeatAdvance};
 }
-// RGB uses vertex shade. Opacity MUST use primitive alpha: the RSP fog
-// shader replaces shade alpha with fog density (zero near the camera).
-// Multiplying texture alpha by that value made otherwise valid cars vanish.
-constexpr std::uint32_t Mux0=(1U<<20)|(4U<<15)|(1U<<12)|(3U<<9)|(1U<<5)|4U;
-constexpr std::uint32_t Mux1=(8U<<28)|(8U<<24)|(1U<<21)|(3U<<18)|(7U<<15)|(7U<<12)|(7U<<9)|(7U<<6)|(7U<<3)|7U;
-constexpr std::uint64_t TextureShade=(std::uint64_t(Mux1)<<32)|Mux0;
-// Untextured RGB uses shade; untextured alpha uses the same primitive opacity.
-constexpr std::uint32_t Shade0=(15U<<20)|(31U<<15)|(7U<<12)|(7U<<9)|(15U<<5)|31U;
-constexpr std::uint32_t Shade1=(15U<<28)|(15U<<24)|(7U<<21)|(7U<<18)|(4U<<15)|(3U<<12)|(4U<<9)|(7U<<6)|(4U<<3)|3U;
-constexpr std::uint64_t Shade=(std::uint64_t(Shade1)<<32)|Shade0;
-static_assert(((TextureShade>>9)&7U)==3U && ((TextureShade>>50)&7U)==3U);
-static_assert(((Shade>>44)&7U)==3U && ((Shade>>32)&7U)==3U);
+// Lighting is baked into native vertex RGB by vehicle_lighting. Primitive
+// alpha remains independent of fog, including the environment blend cycle.
 }
 RenderPass::RenderPass(RT64::State& s,std::shared_ptr<const mods::vehicles::Resources> r,Select select):
     state_(s),resources_(std::move(r)),select_(select) {
@@ -88,11 +79,52 @@ RenderPass::RenderPass(RT64::State& s,std::shared_ptr<const mods::vehicles::Reso
         wheel_interpolation::begin(workload,s.workloadId+1,resources_);
     previous_pass_=current_pass;current_pass=this;
 }
-RenderPass::~RenderPass(){current_pass=previous_pass_;}
+RenderPass::~RenderPass(){
+    // Restore even if an invalid later command rejects an unfinished task.
+    if(native_wheel_colour_){state_.rdp->popPrimColor();state_.updateDrawStatusAttribute(RT64::DrawAttribute::PrimColor);}
+    current_pass=previous_pass_;
+}
 const RenderPass* active_render_pass() noexcept{return current_pass;}
 bool RenderPass::marker(unsigned kind,unsigned value) {
-    if(kind>17)return false;
-    if(kind==0){if(object_||scope_||!value)return false;scope_=value;setup_=0;return true;}
+    if(kind>=28&&kind<=37) {
+        if(native_wheel_colour_||native_wheel_passthrough_)return false;
+        if(kind==28){native_wheel_light_={};native_wheel_rotation_seen_=0;}
+        if(kind<=35)return native_wheel_light_.put(kind-28,value);
+        const auto bit=1U<<(kind-36);
+        if(!native_wheel_light_.ready() || (native_wheel_rotation_seen_&bit) || (kind==37&&value>65535))return false;
+        native_wheel_rotation_[kind-36]=value;native_wheel_rotation_seen_|=bit;return true;
+    }
+    if(kind==26) {
+        if(!native_wheel_light_.ready() || native_wheel_rotation_seen_!=3 || value>0x1ffff)return false;
+        const auto& light=native_wheel_light_.sample;
+        auto n=lighting::road_wheels::normal(value&0x10000U?-1.F:1.F,std::int16_t(value));
+        if(!light.fast())n=lighting::road_wheels::rotate(n,std::int16_t(native_wheel_rotation_[0]>>16),
+            std::int16_t(native_wheel_rotation_[0]),std::int16_t(native_wheel_rotation_[1]));
+        const auto factor=lighting::road_wheels::multiplier(light,n);auto& rdp=*state_.rdp;
+        if(native_wheel_colour_ || native_wheel_passthrough_ || !std::isfinite(factor) || factor<0 || factor>1)return false;
+        // A private-camera replay can sit inside a replacement-car scope.
+        // Its hidden native tyres must not tint that car's shaded 3D meshes.
+        if(object_||rdp.primColorStackSize<1||rdp.primColorStackSize>=RDP_EXTENDED_STACK_SIZE){native_wheel_passthrough_=true;return true;}
+        rdp.pushPrimColor();native_wheel_colour_=true;
+        auto& colour=rdp.primColorStack[rdp.primColorStackSize-1];
+        const auto previous=colour;
+        colour=hlslpp::float4(float(colour.x)*factor,float(colour.y)*factor,float(colour.z)*factor,float(colour.w));
+        state_.updateDrawStatusAttribute(RT64::DrawAttribute::PrimColor);
+        static std::atomic<unsigned> reports{0};
+        if(reports.fetch_add(1,std::memory_order_relaxed)<24)
+            std::fprintf(stderr,"[graphics][road-wheels][draw] rgb=%.4f,%.4f,%.4f factor=%.4f alpha=%.4f; captured-task colour, scoped restore\n",
+                float(previous.x),float(previous.y),float(previous.z),factor,float(previous.w));
+        return true;
+    }
+    if(kind==27) {
+        if(native_wheel_passthrough_&&!value){native_wheel_passthrough_=false;return true;}
+        if(!native_wheel_colour_ || value)return false;
+        state_.rdp->popPrimColor();state_.updateDrawStatusAttribute(RT64::DrawAttribute::PrimColor);
+        native_wheel_colour_=false;return true;
+    }
+    if(kind>25)return false;
+    if(kind==0){if(object_||scope_||!value)return false;scope_=value;setup_=0;lighting_={};return true;}
+    if(kind>=18)return !object_&&scope_&&lighting_.put(kind-18,value);
     if(kind>=7) {
         if(object_||!scope_)return false;
         if(kind==7){if(setup_&1U)return false;draw_scale_=std::bit_cast<float>(value);setup_|=1U;}
@@ -113,7 +145,7 @@ bool RenderPass::marker(unsigned kind,unsigned value) {
         }
         return true;
     }
-    if(kind==1){if(object_||!scope_||setup_!=2047)return false;begin(value);object_=value;return true;}
+    if(kind==1){if(object_||!scope_||setup_!=2047||!lighting_.ready())return false;begin(value);object_=value;return true;}
     if(kind==2) {
         if(!object_||value!=object_||wheel_)return false;
         if(active_&&!replacement_submitted_)diagnostic("no replacement submitted; original retained");
@@ -214,6 +246,12 @@ bool RenderPass::draw() {
     auto& s=state_;auto& rsp=*s.rsp;auto& rdp=*s.rdp;
     if(!select_||rdp.colorCombinerStackSize>=RDP_EXTENDED_STACK_SIZE||rdp.primColorStackSize>=RDP_EXTENDED_STACK_SIZE||rdp.envColorStackSize>=RDP_EXTENDED_STACK_SIZE){diagnostic("draw-state stack unavailable; original retained");return false;}
     NativeDrawScope restore(s);
+    const auto& light=lighting_.sample;
+    // DKR submits MVPs rather than world matrices. Remove the matching task's
+    // camera VP before transforming normals; projection/aspect must not shade
+    // a car differently. This is private decoder state, never guest memory.
+    const auto inverse_camera=hlslpp::inverse(rsp.modelMatrixStack[0]);
+    if(!finite(inverse_camera)){diagnostic("lighting camera inverse unavailable; original retained");return false;}
 #if defined(DKR_ENHANCED_WATER)
     struct WaterScope {
         RT64::State& state;decltype(s.waterMaterial) previous;
@@ -242,9 +280,10 @@ bool RenderPass::draw() {
     rsp.modelMatrixPhysicalAddressStack[1]=rsp.modelMatrixSegmentedAddressStack[1]=Scratch;
     rsp.modelViewProjChanged=true;rsp.modelViewProjInserted=false;
     const auto alpha=read(s,object_+0x39,1);
-    rdp.setEnvColor(0);
+    rdp.setEnvColor(light.environment);
     unsigned mesh_index=0;bool in_front=false;float min_w=1e30F,max_w=-1e30F;
     for(const auto& mesh:car.lods[vehicle_lod_].meshes) {
+        if(mesh.normals.size()!=mesh.faces.size())throw mods::Error("Custom car has incomplete prepared normals.");
         int wheel=-1;for(unsigned i=0;i<4;++i)if(car.wheels[i]==mesh.id)wheel=int(i);
         wheel_interpolation::Sample motion;
         if(wheel>=0) {
@@ -256,6 +295,15 @@ bool RenderPass::draw() {
             motion.base=hlslpp::mul(car_root,rsp.extended.viewProjMatrix);
             rsp.modelMatrixStack[1]=hlslpp::mul(wheel_interpolation::local(motion,wheel_interpolation::phase_angle(motion.phase),steer_),car_root);
         }else rsp.modelMatrixStack[1]=car_root;
+        // The fast retail path shades in model space. The full path uses the
+        // object's world orientation. Both include custom wheel spin/steering
+        // and authored yaw, without ever touching the driver's matrix.
+        const auto lighting_model=light.fast() ? (wheel>=0 ?
+            wheel_interpolation::local(motion,wheel_interpolation::phase_angle(motion.phase),steer_) :
+            hlslpp::float4x4::identity()) : hlslpp::mul(rsp.modelMatrixStack[1],inverse_camera);
+        lighting::Matrix basis{};
+        for(unsigned r=0;r<3;++r)for(unsigned c=0;c<3;++c)basis[r][c]=float(lighting_model[r][c]);
+        const auto normal_transform=lighting::normal_matrix(basis);
         const bool textured=mesh.texture>=0;
         const auto opacity=unsigned(mesh.colour[3])*alpha/255;
         rdp.setPrimColor(0,0,0xffffff00U|opacity);
@@ -264,7 +312,7 @@ bool RenderPass::draw() {
         // These pixel-art material images are already small in the export.
         // Point sampling retains their edges instead of adding another blur.
         // NativeDrawScope restores the caller's filter/material state.
-        rdp.setOtherMode(G_TF_POINT|G_TP_PERSP,(alpha<255||mesh.colour[3]<255)?0x005049d8U:textured?0x00553078U:0x00552078U);
+        rdp.setOtherMode(G_CYC_2CYCLE|G_TF_POINT|G_TP_PERSP,(alpha<255||mesh.colour[3]<255)?0x005049d8U:textured?0x00553078U:0x00552078U);
         if(textured) {
             const auto& texture=car.textures.at(unsigned(mesh.texture));const auto width=texture.image.width,height=texture.image.height;
             const auto format=resources_->texture_pixels.at(car_).at(unsigned(mesh.texture)).rgba32?G_IM_SIZ_32b:G_IM_SIZ_16b;
@@ -275,7 +323,7 @@ bool RenderPass::draw() {
             rdp.setTileSize(0,0,0,(width-1)*4,(height-1)*4);rdp.loadTile(0,0,0,(width-1)*4,(height-1)*4);
         }
         // Texture * shade RGB, texture * independent primitive opacity.
-        rdp.setCombine(textured?TextureShade:Shade);
+        rdp.setCombine(lighting::combine(textured));
         rsp.textureState.on=textured?1:0;
         rsp.clearGeometryMode(rsp.cullBothMask);
         if(!mesh.double_sided)rsp.setGeometryMode(float(rsp.viewportStack[rsp.viewportStackSize-1].scale.x)>0.F?
@@ -299,7 +347,10 @@ bool RenderPass::draw() {
                 const float x=v.x*car_cos+v.z*car_sin,z=-v.x*car_sin+v.z*car_cos;
                 const auto coordinate=[&](float value){return std::int16_t(std::lround(std::clamp(value*car.scale*units,-32767.F,32767.F)));};
                 RT64::RSP::Vertex vertex{};vertex.x=coordinate(x);vertex.y=coordinate(v.y);vertex.z=coordinate(z);
-                vertex.color.r=mesh.colour[0];vertex.color.g=mesh.colour[1];vertex.color.b=mesh.colour[2];vertex.color.a=std::uint8_t(unsigned(mesh.colour[3])*alpha/255);
+                const auto normal=lighting::unit(lighting::transform(
+                    lighting::yaw(mesh.normals[first+face][corner],angle),normal_transform));
+                const auto colour=lighting::shade(light,normal,mesh.colour);
+                vertex.color.r=colour[0];vertex.color.g=colour[1];vertex.color.b=colour[2];vertex.color.a=255;
                 std::memcpy(s.RDRAM+Scratch+(face*3+corner)*sizeof(vertex),&vertex,sizeof(vertex));
             }
             rsp.setVertex(Scratch,std::uint8_t(count*3),0);
@@ -325,6 +376,11 @@ bool RenderPass::draw() {
         ++mesh_index;
     }
     const auto indices=draw.faceIndices.size()-first_index;
+    static std::atomic<unsigned> lighting_reports{0};
+    if(lighting_reports.fetch_add(1,std::memory_order_relaxed)<24)
+        std::fprintf(stderr,"[custom-vehicles][lighting] car=%u player=%u view=%u lod=%u sample=draw-stream-v1 enabled=%u fast=%u exposure=%.4f ambient=%.4f diffuse=%.4f direction=%.4f,%.4f,%.4f environment=%08X normals=%zu\n",
+            car_,player_,view_,vehicle_lod_,unsigned(light.enabled()),unsigned(light.fast()),light.exposure,light.ambient,light.diffuse,
+            light.direction.x,light.direction.y,light.direction.z,light.environment,car.lods[vehicle_lod_].meshes.size());
     if(diagnostic_count.fetch_add(1,std::memory_order_relaxed)<24)
         std::fprintf(stderr,"[custom-vehicles][draw] car=%u player=%u view=%u lod=%u triangles=%zu alpha=%u clip-w=%.3f..%.3f original-hidden=%u opacity-source=primitive-not-fog kart-unit-scale=%.3f driver-scale=%.6f native-anchor-scale=%.6f ride-height=%.3f seat-advance=%.3f steering-sign=-1 wheel-motion=arc-phase64 seat-anchor-units=studio-to-world seating=%s base=%u geometry=origin-scale-yaw-translate-v1 vehicle-lod=%u max-detail=%u detail-policy=character-effective-v1 texture-policy=source-colour-point-v1\n",
             car_,player_,view_,original_lod_,indices/3,alpha,min_w,max_w,unsigned(indices!=0&&in_front),KartModelToWorld,scale_,driver_->native_scale,KartRideHeight,car.per_driver()?0.F:DriverSeatAdvance,car.per_driver()?"per-base-driver-v1":"legacy-shared",driver_->base,vehicle_lod_,unsigned(maximum_detail_));

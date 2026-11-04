@@ -72,7 +72,7 @@ gCutsceneCameraActive gModelMatrixStackPos gMtxOriginID gObjectCurrDisplayList g
 gViewProjMatrixF gWaveController gCurrWeatherDisplayList gCurrWeatherMatrix gCurrWeatherVertexList
 gCurrWeatherTriList gWeatherCamera gWeatherCameraMatrix gWeatherType gSnowParticleCount gSnowVerts
 gSnowVertexData gSnowVertexFlip gRainSplashDelay gRainGfx gLightningFrequency D_800DC8AC
-D_8011D4A0 D_8011D4A4 D_8011D4AC D_8011D4B0'''.split()
+D_8011D4A0 D_8011D4A4 D_8011D4AC D_8011D4B0 gCurrentLightIntensity gInverseViewMatrixF'''.split()
 
 def generate(source,header,elf,revision,output):
     source=source.resolve(strict=True);output=new_output(output,source,header.parent)
@@ -108,7 +108,7 @@ def generate(source,header,elf,revision,output):
         '((((idx)&1)==0||(ctx)->mips3_float_mode)?(void)0:dkr_camera_fault("scene floating ABI"))')
     macros=set(re.findall(r'^#define\s+(\w+)\s*\(',raw,re.M))
     macros|=set(re.findall(r'static\s+inline\s+\w+\s+(\w+)\s*\(',raw))
-    allowed=NAMES|HOOKS|MATH|macros|{'if','while','for','switch','return','sizeof','void','sqrtf','do_break','switch_error'}
+    allowed=NAMES|HOOKS|MATH|macros|{'if','while','for','switch','return','sizeof','void','sqrtf','do_break','switch_error','dkr_native_road_wheel_scope'}
     symbols=elf_functions(elf,(0,1,2));addresses={}
     for name in GLOBALS:
         entries=symbols.get(name,set())
@@ -116,6 +116,23 @@ def generate(source,header,elf,revision,output):
         addresses[name]=next(iter(entries))[0]
     emitted=[]
     for name,body in sorted(selected.items()):
+        if name in ('render_3d_model','render_sprite_billboard'):
+            model=name=='render_3d_model'
+            before='''
+    dkr_road_wheel_call road_call={0};
+    road_call.event='''+('200' if model else '202')+''';
+    road_call.object=(uint32_t)ctx->'''+('r4' if model else 'r7')+''';
+'''
+            if model:
+                for field,symbol in (('intensity','gCurrentLightIntensity'),('inverse_view','gInverseViewMatrixF'),('viewport_layout','gViewportLayout')):
+                    before+=f'    road_call.{field}=0x{addresses[symbol]:08X}U;\n'
+            else:
+                before+='    road_call.holder=(uint32_t)ctx->r4;road_call.sprite=MEM_W(16,ctx->r29);road_call.flags=MEM_W(20,ctx->r29);\n'
+            before+='    dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);\n'
+            body=body.replace('{','{'+before,1)
+            finish='road_call.event='+('201' if model else '203')+';dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);return;'
+            body,count=re.subn(r'\breturn;',finish,body)
+            if count<1:raise ValueError('Private road-wheel return boundary changed: '+name)
         extra=set(CALL.findall(strip(body)))-allowed
         if extra or re.search(r'\brdram\s*(?:\[|\+)',strip(body)):
             raise ValueError('Scene escaped its closed boundary: '+name+' '+str(extra))
@@ -133,7 +150,7 @@ def generate(source,header,elf,revision,output):
     prototypes+=''.join(f'unsigned {prefix}{n}(uint8_t*,recomp_context*,...);\n' for n in sorted(HOOKS))
     prototypes+=f'void {prefix}do_break(uint32_t);\nvoid {prefix}switch_error(const char*,uint32_t,uint32_t);\n'
     (output/'funcs.h').write_text('#pragma once\n#include "recomp.h"\n'+prototypes)
-    (output/'camera_scene_functions.c').write_text('#include "funcs.h"\n'+''.join(emitted))
+    (output/'camera_scene_functions.c').write_text('#include "funcs.h"\n#include "vehicle_lighting/road_wheels.h"\n'+''.join(emitted))
     special={'dkr_presentation_world_origin_matrix','dkr_presentation_object_begin',
              'dkr_presentation_object_end','dkr_extend_hub_segment_bitfield','dkr_legacy_texture_animation',
              'dkr_fix_car_steering_wheel_material','dkr_skybox_cover_begin','dkr_skybox_cover_end',

@@ -154,3 +154,6 @@ runtime-recomp/build/
 /.claude/settings.local.json
 /.claude/session-base
 /.claude/session-base.*.tmp
+
+# Ruff writes local lint cache on both operating systems.
+.ruff_cache/

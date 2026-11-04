@@ -62,6 +62,7 @@ if(PROJECT_NAME STREQUAL "DKRRuntimePreparation")
         target_compile_features(DKRCustomVehicles PUBLIC cxx_std_20)
         target_compile_definitions(DKRCustomVehicles PRIVATE NOMINMAX)
         target_include_directories(DKRCustomVehicles PUBLIC "${stage}/native"
+            "${DKRPORT_ROOT}/runtime-recomp/src/game"
             "${DKRPORT_ROOT}/runtime-recomp/src/game/mods"
             "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib"
             "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
@@ -69,6 +70,11 @@ if(PROJECT_NAME STREQUAL "DKRRuntimePreparation")
         target_include_directories(DKRLegacyModCore PRIVATE "${stage}/native")
         target_link_libraries(DKRLegacyImportLibrary PRIVATE DKRCustomVehicles)
         target_link_libraries(DKRPortGame PRIVATE DKRCustomVehicles)
+        foreach(camera_target DKRCameraSceneV77 DKRCameraSceneV80)
+            if(TARGET ${camera_target})
+                target_include_directories(${camera_target} PRIVATE "${DKRPORT_ROOT}/runtime-recomp/src/game")
+            endif()
+        endforeach()
         target_sources(DKRPortGame PRIVATE "${stage}/native/vehicle_world.cpp" "${stage}/native/vehicle_rt64.cpp")
         target_link_libraries(DKRLegacyModLaunch PRIVATE DKRCustomVehicles)
         target_sources(DKRLegacyModLaunch PRIVATE "${stage}/native/resident_music.cpp")
@@ -144,6 +150,14 @@ if(PROJECT_NAME STREQUAL "DKRRuntimePreparation")
         foreach(name pipeline.py online_pipeline.py music_pipeline.py guest_pipeline.py)
             file(SHA256 "${auth}/${name}" hash)
             string(APPEND ledger "${name}:${hash}\n")
+        endforeach()
+        # The existing test-build ledger also owns the new first-party math
+        # and draw-sample code. These are not local settings or asset bytes.
+        foreach(name lighting.hpp capture.hpp check.hpp road_wheels.h road_wheels.hpp)
+            file(SHA256 "${DKRPORT_ROOT}/runtime-recomp/src/game/vehicle_lighting/${name}" hash)
+            string(APPEND ledger "vehicle_lighting/${name}:${hash}\n")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                "${DKRPORT_ROOT}/runtime-recomp/src/game/vehicle_lighting/${name}")
         endforeach()
         get_target_property(definitions DKRExperimentalOwnedRegistry COMPILE_DEFINITIONS)
         set(next_definitions "")

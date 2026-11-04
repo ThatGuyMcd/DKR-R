@@ -22,7 +22,7 @@
                 for(const auto& peer:party->peers)if(const auto* m=party->party.find(peer.id);m&&m->role==watch::Role::Racer&&peer.rtt_count) {
                     auto sorted=peer.rtts;std::sort(sorted.begin(),sorted.begin()+peer.rtt_count);slowest=std::max(slowest,sorted[peer.rtt_count-1]);
                 }
-                input_delay_=experimental::automatic_delay(std::max(100.,double(slowest)),room_view_.rules.rollback_window);
+                input_delay_=experimental::automatic_delay(slowest?double(slowest):100.,room_view_.rules.rollback_window);
             }
             for(auto it=party->peers.begin();it!=party->peers.end();) {
                 if(now-it->heard<std::chrono::seconds(30)){++it;continue;}
@@ -114,18 +114,20 @@
                     auto encrypted=secure::seal(plain,key,sender_id_,record.header.sequence,match_id_);std::string ignored;
                     const auto sent=transport_->send_status(destination,encrypted,item.traffic,ignored);
                     if(sent!=DatagramSendStatus::Sent)blocked=true;
-                    else if(lane==3||lane==4)party->bulk_tokens-=std::min(party->bulk_tokens,payload.size());
+                    else {party->queue_age.accepted(lane,item.target,item.queued,now);
+                        if(lane==3||lane==4)party->bulk_tokens-=std::min(party->bulk_tokens,payload.size());}
                 };
                 if(is_host_) {
                     if(!item.target) {
                         // Expand broadcasts once: a blocked recipient must not
                         // cause repeats or starvation on already sent routes.
-                        for(const auto& peer:party->peers)party->enqueue({peer.id,item.kind,item.traffic,item.bytes});
+                        for(const auto& peer:party->peers)party->enqueue({peer.id,item.kind,item.traffic,item.bytes,item.queued});
                     } else if(auto* peer=party->peer(item.target))send(peer->address,peer->key);
                 } else if(!item.target||item.target==host_sender_id_)send(host_address_,key_);
                 if(blocked)party->enqueue(std::move(item));
             }
         }
+        party->queue_age.pulse(now);
         expire_pending_joins();state_changed_.notify_all();return;
     }
 }

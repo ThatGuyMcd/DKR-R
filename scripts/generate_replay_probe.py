@@ -1216,6 +1216,10 @@ def native_stub(name, signature, full_scenes=False):
     # This pointer is a native constant field table, not a guest address. The
     # private no-mods service never dereferences it. Only this audited ABI may
     # pass it through; unknown pointer signatures remain fenced.
+    if name == "dkr_analogue_driving":
+        if signature != ("uint32_t", ["uint8_t*", "recomp_context*", "unsigned", "uint32_t", "uint32_t"]):
+            raise ValueError("Unreviewed analogue driving ABI")
+        return f'uint32_t {name}({params}) {{ uint64_t args[]={{p2,p3,p4}}, result=p4; if(dkr_probe_mod_dispatch("{name}",p0,p1,args,3,0,0,&result)<0)dkr_probe_block("owned-mod-service-failure"); return (uint32_t)result; }}'
     if name == "dkr_legacy_character_menu":
         if signature != ("int", ["uint8_t*", "recomp_context*", "unsigned", "const uint32_t*"]):
             raise ValueError("Unreviewed character-menu hook ABI")

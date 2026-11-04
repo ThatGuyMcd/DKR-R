@@ -90,7 +90,7 @@ void DrawOlDisplayName(float width, bool disabled) {
         sizeof(g_online_profile_name), width, options);
     if (result == OlInputResult::Gamepad) RequestTextEntryKeyboard(TextEntryTarget::OnlineProfileName);
     PaddockGap(8.F);
-    OlParagraph("Used in lobbies, friends and the Mod Store.", 12.5F, kOlSoft, width);
+    OlParagraph("Used in lobbies, friends and the Mod Library.", 12.5F, kOlSoft, width);
 }
 
 void DrawOlDisplayNameStatus(float width) {

@@ -5,13 +5,28 @@ TRANSFORMS={
  'src/game/game_main.cpp','src/game/camera_obstruction.cpp',
  'src/game/runtime_input.hpp','src/game/runtime_input.cpp','src/game/runtime_platform.cpp',
  'src/game/runtime_ui.cpp','src/game/runtime_graphics_ui.inl','src/game/runtime_camera_tuning_ui.inl',
- 'src/game/runtime_code_mods_ui.inl',
+ 'src/game/runtime_code_mods_ui.inl','src/game/runtime_controls_ui.inl',
  'src/game/presentation_marker_policy.hpp','src/game/presentation_identity.hpp','src/game/presentation_identity.cpp',
  'src/game/runtime_stubs.cpp','src/game/netplay/experimental_draw_events.h',
  'tests/replay_probe/probe_native.c','src/game/online_view_rt64.cpp',
  'src/game/f3ddkr_rt64.hpp','src/game/f3ddkr_rt64.cpp',
  'src/game/rt64_renderer.hpp','src/game/rt64_renderer.cpp',
 }
+
+def online_view_policy(text,replace):
+    def one(old,new):
+        nonlocal text
+        text=replace(text,old,new,1)
+    one('#include "online_view_rt64.hpp"','#include "online_view_rt64.hpp"\n#include "online_stability/battle_view.hpp"')
+    one('    std::uint32_t scene=0,framebuffer=0;','    std::uint32_t scene=0,framebuffer=0,race_type=0;')
+    one('auto& p=*impl_;p.plan=online_view::plan(session,events);p.count=0;p.view=4;',
+        'auto& p=*impl_;const auto eligibility=dkr::online_stability::view_eligibility(session.owner,session.players,events);\n'
+        '    p.race_type=eligibility.race_type;\n'
+        '    p.plan=dkr::online_stability::focus_plan(online_view::plan(session,events),eligibility,session.owner,\n'
+        '        requested_layout.load(std::memory_order_relaxed)==Layout::MyRacer,requested_labels.load(std::memory_order_relaxed),requested_label_size.load(std::memory_order_relaxed));p.count=0;p.view=4;')
+    one('hud::groups::Scenario::Race,false,false);',
+        'hud::groups::scenario_for(int(p.race_type),false),p.plan.layout==1,p.phase==Impl::Phase::Shared);')
+    return text
 
 def transform(name,text,replace,auth):
     def one(old,new,count=1):
@@ -37,9 +52,11 @@ extern "C" void dkr_modern_camera_restore(std::uint8_t*, recomp_context*) {}
     OrbitUp, OrbitDown, OrbitLeft, OrbitRight,
     CameraRecenter, CameraCycle, CameraZoomIn, CameraZoomOut,
     CameraFirstPerson, CameraXrRecenter,
+    AnalogueAccelerator, AnalogueBrake,
     Count,''')
-        one('    bool accelerate = false;','    bool accelerate = false;\n    float orbit_x=0,orbit_y=0;\n    std::uint32_t camera_actions=0;')
+        one('    bool accelerate = false;','    bool accelerate = false;\n    float orbit_x=0,orbit_y=0;\n    std::uint32_t camera_actions=0;\n    std::uint8_t accelerator=0,brake=0,driving_flags=0;')
     elif name=='src/game/runtime_input.cpp':
+        one('#include "runtime_input.hpp"','#include "runtime_input.hpp"\n#include "analog_driving/poll.hpp"\n#if DKR_RUNTIME_HAS_RT64\n#include "analog_driving/raw_axes.hpp"\n#endif\nnamespace driving=dkr::runtime::driving;')
         one('    {dkr::runtime::input::kUnbound, kAxisSourceBase + SDL_CONTROLLER_AXIS_TRIGGERRIGHT * 2 + 1},',
             '''    {dkr::runtime::input::kUnbound, kAxisSourceBase + SDL_CONTROLLER_AXIS_TRIGGERRIGHT * 2 + 1},
     {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_RIGHTY*2},
@@ -51,12 +68,26 @@ extern "C" void dkr_modern_camera_restore(std::uint8_t*, recomp_context*) {}
     {SDL_SCANCODE_PAGEUP,dkr::runtime::input::kUnbound},
     {SDL_SCANCODE_PAGEDOWN,dkr::runtime::input::kUnbound},
     {SDL_SCANCODE_F6,dkr::runtime::input::kUnbound},
-    {SDL_SCANCODE_HOME,dkr::runtime::input::kUnbound},''')
+    {SDL_SCANCODE_HOME,dkr::runtime::input::kUnbound},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_TRIGGERRIGHT*2+1},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_TRIGGERLEFT*2+1},''')
         one('"c_up", "c_down", "c_left", "c_right", "look_back", "accelerate",',
-            '"c_up", "c_down", "c_left", "c_right", "look_back", "accelerate",\n    "camera_up","camera_down","camera_left","camera_right","camera_recenter","camera_cycle",\n    "camera_zoom_in","camera_zoom_out","camera_first_person","camera_xr_recenter",')
+            '"c_up", "c_down", "c_left", "c_right", "look_back", "accelerate",\n    "camera_up","camera_down","camera_left","camera_right","camera_recenter","camera_cycle",\n    "camera_zoom_in","camera_zoom_out","camera_first_person","camera_xr_recenter",\n    "analogue_accelerator","analogue_brake",')
         one('    "Look back", "Accelerate",','''    "Look back", "Accelerate",
     "Camera up","Camera down","Camera left","Camera right","Centre camera","Cycle camera",
-    "Camera zoom in","Camera zoom out","First-person camera","Centre headset",''')
+    "Camera zoom in","Camera zoom out","First-person camera","Centre headset",
+    "Analogue accelerator","Analogue brake",''')
+        for anchor in ('    const auto press = [&](Action action, std::uint16_t mask, float threshold = 0.5F) {',
+                       '    const auto press = [&](Action action, std::uint16_t mask,\n                           float threshold = 0.5F) {'):
+            one(anchor,'#include "analog_driving/poll.inl"\n'+anchor+'\n        if(analogue_enabled&&(action==Action::A||action==Action::B)){if(action==Action::A?pedals.accelerate:pedals.braking)state.buttons|=mask;return;}\n        if(analogue_enabled&&action==Action::Z){if(raw_value(action,true)>threshold)state.buttons|=mask;return;}')
+        one('''    if (blocked) {
+        // Keep sampling Controller 1 while the overlay is open so calibration
+        // and both live preview bars remain truthful. Gameplay receives a
+        // neutral sample until the overlay closes.
+        return state;
+    }
+''','')
+        one('    if (blocked) return state;\n','')
         one('    state.look_back = value(Action::LookBack) > 0.5F;', '''    state.look_back = value(Action::LookBack) > 0.5F;
     state.orbit_x=std::clamp(value(Action::OrbitLeft)-value(Action::OrbitRight),-1.F,1.F);
     state.orbit_y=std::clamp(value(Action::OrbitDown)-value(Action::OrbitUp),-1.F,1.F);
@@ -64,7 +95,7 @@ extern "C" void dkr_modern_camera_restore(std::uint8_t*, recomp_context*) {}
         Action::CameraZoomIn,Action::CameraZoomOut,Action::CameraFirstPerson,Action::CameraXrRecenter};
     for(unsigned i=0;i<7;++i)if(value(camera_keys[i])>0.5F)state.camera_actions|=1U<<i;''',2)
     elif name=='src/game/runtime_platform.cpp':
-        one('#include "modern_camera.hpp"','#include "camera_runtime.hpp"')
+        one('#include "modern_camera.hpp"','#include "camera_runtime.hpp"\n#include "look_behind/policy.hpp"\n#include "analog_driving/input.hpp"')
         one('''    if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
         ClearPublishedControllerInput(false);''','''    if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
         for(unsigned profile=0;profile<4;++profile)dkr::runtime::camera::actions().publish(profile,{});
@@ -74,8 +105,9 @@ extern "C" void dkr_modern_camera_restore(std::uint8_t*, recomp_context*) {}
         one('''        dkr::runtime::modern_camera::publish_input(
             player, state.camera_x, state.camera_y, state.look_back,
             online_routing);''','''        dkr::runtime::camera::actions().publish(unsigned(player),
-            {state.camera_actions,state.orbit_x,state.orbit_y,0,
-                gameplay_blocked||!dkr::runtime::camera::owns_controls(unsigned(player)),true});
+            {dkr::runtime::camera::owns_controls(unsigned(player))?state.camera_actions:(state.camera_actions&1U),state.orbit_x,state.orbit_y,0,
+                gameplay_blocked||(!dkr::runtime::camera::owns_controls(unsigned(player))&&!dkr::runtime::look_behind::enabled.load()),true});
+        dkr::runtime::driving::publish(unsigned(player),{state.accelerator,state.brake,state.driving_flags});
         if(dkr::runtime::camera::owns_controls(unsigned(player))) {
             // Remove only C buttons whose binding is actually shared with a
             // camera direction. Explicit independent C bindings remain usable.
@@ -90,14 +122,18 @@ extern "C" void dkr_modern_camera_restore(std::uint8_t*, recomp_context*) {}
                 const int nk=dkr::runtime::input::keyboard_binding(player,native[n]);
                 if((cb>=0&&cb==nb)||(ck>=0&&ck==nk))state.buttons&=std::uint16_t(~bits[n]);
             }
-            if(state.accelerate)state.buttons|=0x8000U;
+            if(state.accelerate&&!(state.driving_flags&1U))state.buttons|=0x8000U;
         }''')
         start=text.index('            if (dkr::runtime::modern_camera::owns_controls(player))')
         end=text.index('            g_buttons[player].store',start)
         text=text[:start]+text[end:]
         one('    dkr::runtime::modern_camera::set_online_routing(enabled);','')
+        one('                gameplay_blocked);','                gameplay_blocked,state.accelerator,state.brake,state.driving_flags);')
     elif name=='src/game/runtime_ui.cpp':
-        one('#include "modern_camera.hpp"','#include "modern_camera.hpp"\n#include "camera_runtime.hpp"')
+        one('#include "modern_camera.hpp"','#include "modern_camera.hpp"\n#include "camera_runtime.hpp"\n#include "look_behind/policy.hpp"\n#include "analog_driving/settings.hpp"')
+        one('        output << "modern_camera="','        dkr::runtime::driving::save(output);\n        output << "standalone_look_behind=" << dkr::runtime::look_behind::enabled.load() << \'\\n\';\n        output << "modern_camera="')
+        one('            if (key == "modern_camera") {','            if(dkr::runtime::driving::load(key,number))continue;\n            if(key=="standalone_look_behind"){dkr::runtime::look_behind::enabled=number!=0;continue;}\n            if (key == "modern_camera") {')
+        one('#include "runtime_graphics_ui.inl"','void DrawCrtOverlaySection(float);\n#include "runtime_graphics_ui.inl"')
         one('    if (HandleInputCaptureEvent(event)) {','''    if(CameraTuningVisible()&&!g_online_code_keyboard_visible.load()&&event->type==SDL_KEYDOWN&&event->key.repeat==0&&
        event->key.keysym.scancode==SDL_SCANCODE_ESCAPE) {
         dkr::runtime::camera::editor_open.store(false);return true;
@@ -110,6 +146,11 @@ extern "C" void dkr_modern_camera_restore(std::uint8_t*, recomp_context*) {}
     }''')
     elif name=='src/game/runtime_camera_tuning_ui.inl':
         return (auth/'camera_editor_ui.inl').read_text()
+    elif name=='src/game/runtime_controls_ui.inl':
+        one('void DrawControlsPage(float available_width, bool live) {','#include "analog_driving/controls_ui.inl"\nvoid DrawControlsPage(float available_width, bool live) {')
+        one('        {"Modern camera", {18, 19, -1, -1, -1, -1}},','        {"Camera", {18, 19, -1, -1, -1, -1}},')
+        one('            if (index < 0) continue;','            if (index < 0) continue;\n            if(index==18&&!dkr::runtime::look_behind::enabled.load())continue;')
+        one('        DrawControlsBindings(state, width, commit);','        DrawControlsBindings(state, width, commit);\n        DrawAnalogueDrivingControls(width);')
     elif name=='src/game/runtime_code_mods_ui.inl':
         one('card.info=item.kept_online?"Kept from online":"Gameplay mod";',
             'card.info=item.presentation?"Local camera mod":item.kept_online?"Kept from online":"Gameplay mod";')
@@ -120,10 +161,22 @@ extern "C" void dkr_modern_camera_restore(std::uint8_t*, recomp_context*) {}
         text=text[:start]+'''            ImGui::EndDisabled();
             const auto camera_provider=dkr::runtime::camera::activation();
             SettingsHelp("ModernCamera++ is available as an optional mod in Mods/Hacks.",inner);
-            if(live&&camera_provider&&SettingsButton("Camera++ settings (F7)",inner)) {
+            bool rear=dkr::runtime::look_behind::enabled.load();
+            if(SettingsCheck("standalone-look-behind","Look behind",&rear,inner,
+                "Hold your Look back binding while racing. Works without ModernCamera++.")) {
+                dkr::runtime::look_behind::enabled=rear;SaveSettings();
+            }
+            PaddockGap(12.F);
+            if(live&&camera_provider&&camera_provider->editor&&SettingsButton("Camera++ settings (F7)",inner)) {
                 OpenCameraTuning();g_overlay_visible.store(false,std::memory_order_release);
             }
 '''+text[end+len(closing):]
+        one('''            bool crt = g_crt_enabled;
+            if (SettingsCheck("##crt", "Enable CRT filter", &crt, inner,
+                              "Adds a retro screen effect. Choose a filter in Textures.")) {
+                g_crt_enabled = crt;
+                SaveSettings();
+            }''','            DrawCrtOverlaySection(inner);')
     elif name=='src/game/presentation_marker_policy.hpp':
         one('    TrackSelectPreview,','    TrackSelectPreview,\n    CameraWorldBegin, CameraWorldEnd,')
         one('    if (variant > 31U) return false;','    if (variant > 31U) return false;\n    if(kind==PresentationMarkerKind::CameraWorldBegin||kind==PresentationMarkerKind::CameraWorldEnd)return mode==0&&variant==0;')
@@ -171,6 +224,7 @@ dkr::runtime::presentation::camera_world_boundaries() {
         dkr_probe_online_racers''')
     elif name=='src/game/online_view_rt64.cpp':
         one('e.kind==DKR_OWNED_LOCAL_OBJECT)continue;', 'e.kind==DKR_OWNED_LOCAL_OBJECT || e.kind==DKR_OWNED_CAMERA_WORLD_END)continue;')
+        text=online_view_policy(text,replace)
     elif name=='src/game/f3ddkr_rt64.hpp':
         one('namespace online_view {class Pass;}','namespace online_view {class Pass;}\nnamespace camera {class RenderPass;}')
         one('LocalModelRT64Pass* models=nullptr);','LocalModelRT64Pass* models=nullptr,camera::RenderPass* camera=nullptr);')

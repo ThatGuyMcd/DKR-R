@@ -12,7 +12,7 @@ def contract():
  return hashlib.sha256((AUTH/'transforms.py').read_bytes().replace(b'\r\n',b'\n')).hexdigest()
 
 def runtime(text):
- return once(text,'base+="'+PRIOR_IDENTITY+'";','base+="'+PRIOR_IDENTITY+'";base+="'+contract()+'";')
+ return once(text,';const auto h=digest(', ';base+="'+contract()+'";const auto h=digest(')
 
 def party_runtime(text):
  # pulse(now) drains packets before calling transfer(now). Starting a receiver

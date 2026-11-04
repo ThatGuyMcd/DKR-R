@@ -23,9 +23,19 @@ def render(sdk: Path, output: Path) -> dict:
     if output.exists():
         raise ValueError("Choose a new guide output file")
     source = (sdk / "MODDERS-GUIDE.txt").read_text(encoding="utf-8")
-    headers = [(name, (sdk / "include/dkr" / name).read_text(encoding="utf-8")) for name in ("magic_codes.h", "game.h")]
+    names = ("magic_codes.h", "game.h", "driving.h")
+    names += tuple(
+        path.name
+        for path in sorted((sdk / "include/dkr").iterdir())
+        if path.suffix in {".h", ".hpp"} and path.name not in names
+    )
+    headers = [(name, (sdk / "include/dkr" / name).read_text(encoding="utf-8")) for name in names]
     public = sorted(
-        set(re.findall(r"(?:DKR_IMPORT|static inline)[^;{]*?\b(dkr_\w+)\s*\(", "\n".join(text for _, text in headers)))
+        set(
+            re.findall(
+                r"(?:DKR_IMPORT|static inline)[^;{]*?\b(dkr(?:2)?_\w+)\s*\(", "\n".join(text for _, text in headers)
+            )
+        )
     )
     missing = [name for name in public if name not in source]
     if missing:
@@ -42,7 +52,12 @@ def render(sdk: Path, output: Path) -> dict:
             body.append("</ul>")
             list_open = False
 
-    for line in source.splitlines():
+    lines = source.splitlines()
+    skip_underline = False
+    for index, line in enumerate(lines):
+        if skip_underline:
+            skip_underline = False
+            continue
         if line.startswith("```"):
             if code is not None:
                 body.append("<pre><code>" + html.escape("\n".join(code)) + "</code></pre>")
@@ -54,6 +69,9 @@ def render(sdk: Path, output: Path) -> dict:
         if code is not None:
             code.append(line)
             continue
+        if line.strip() and index + 1 < len(lines) and re.fullmatch(r"[=-]{3,}", lines[index + 1]):
+            line = ("# " if lines[index + 1][0] == "=" else "## ") + line
+            skip_underline = True
         heading = re.match(r"^(#{1,3}) (.+)$", line)
         if heading:
             flush()
@@ -116,13 +134,13 @@ nav li{break-inside:avoid}main{margin:0;padding:28px 6vw 70px}}
 pre{background:#f1f3f5;color:#111;white-space:pre-wrap;overflow:visible}pre code{white-space:pre-wrap}
 h2{break-before:page}h1,h2,h3{break-after:avoid}a{color:inherit;text-decoration:none}}
 </style></head><body><nav aria-label="Chapters"><strong>Custom Magic Codes</strong>
-<small>DKR-R v1.0.7 beta 2 · API 1</small><ol>"""
+<small>DKR-R v1.0.14 · SDK 2.0 / API 1 and 2</small><ol>"""
         + toc
         + """<li><a href="#declarations">Full SDK headers</a></li>
 </ol><a href="#section-1">Back to top</a></nav><main>"""
         + "\n".join(body)
         + """
-<footer>DKR-R Custom Magic Codes API 1. Keep this guide with the matching headers and examples.
+<footer>DKR-R Custom Magic Codes SDK 2.0 / API 1 and 2. Keep this guide with the matching headers and examples.
 This document is self-contained and makes no network requests.</footer></main></body></html>"""
     )
     output.parent.mkdir(parents=True, exist_ok=True)

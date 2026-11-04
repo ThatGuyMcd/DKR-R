@@ -41,6 +41,16 @@ def change(path, fn):
 def params(t):
     t = replace(
         t,
+        "#define WATER_SHORE_SEGMENTS_PER_TILE 8",
+        "#define WATER_SHORE_SEGMENTS_PER_TILE 8\n#define WATER_STYLE_DKR (1U << 8U)\n#define WATER_DEBUG_MASK 255U",
+    )
+    t = replace(
+        t,
+        "quality (0 disables), debug view, course, generation",
+        "quality, debug view low 8 bits + style flags, course, generation",
+    )
+    t = replace(
+        t,
         "    float4 effects;",
         "    float4 performance;    // SSR steps, wake resolution, hardware distance, spray tier\n    float4 appearance;     // reflection, refraction, wake and waterfall strengths\n    float4 effects;",
     )
@@ -217,6 +227,10 @@ prepare = r"""uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderT
 
 
 def renderer(t):
+    t = replace(t, "draw.material.identity.y!=0", "(uint32_t(draw.material.identity.y)&WATER_DEBUG_MASK)!=0")
+    t = replace(
+        t, "draws.back().material.identity.y==12", "(uint32_t(draws.back().material.identity.y)&WATER_DEBUG_MASK)==12"
+    )
     t = replace(
         t,
         '#include "rt64_water_renderer.h"',
@@ -357,8 +371,23 @@ change("src/render/rt64_water_renderer.cpp", renderer)
 def framebuffer(t):
     t = replace(
         t,
+        "if (wantsWater && waterRenderer && !waterUnavailable && waterRecovery.ready() && waterSamplesSupported) {",
+        "if (wantsWater && waterRenderer && !waterUnavailable && waterRecovery.ready() && waterSamplesSupported &&\n"
+        "                    dkr::runtime::water::style::projection_ready(proj.transformsIndex,drawData.modViewTransforms.size(),\n"
+        "                        drawData.modViewProjTransforms.size(),drawData.rspViewports.size(),waterMaterial->cameraPosition.w==1.0f)) {",
+    )
+    t = replace(
+        t,
+        "                    const auto inverseView = hlslpp::inverse(drawData.modViewTransforms[proj.transformsIndex]);\n"
+        "                    const auto camera = viewPositionFrom(inverseView);",
+        "                    hlslpp::float3 camera(0.0f);\n"
+        "                    if(wp.material.cameraPosition.w!=1.0f)\n"
+        "                        camera=viewPositionFrom(hlslpp::inverse(drawData.modViewTransforms[proj.transformsIndex]));",
+    )
+    t = replace(
+        t,
         '#include "WaterProjection.h"',
-        '#include "WaterProjection.h"\n#include "WaterBounds.h"\n#include "enhanced_water_settings.hpp"',
+        '#include "WaterProjection.h"\n#include "WaterBounds.h"\n#include "enhanced_water_settings.hpp"\n#include "water_style/projection_policy.hpp"',
     )
     t = replace(
         t,
@@ -465,6 +494,25 @@ def pixel(t):
         "position.xy + ripples * 13 * m.appearance.y * saturate(thickness/80)",
     )
     t = replace(t, "    color += reflected*fresnel;", "    color += reflected*fresnel*m.appearance.x;")
+    t = replace(
+        t,
+        "    float3 color = body * (0.55 + nl * 0.45) * m.sunColor.a * (1-fresnel)\n        + m.sunColor.rgb * m.sunDirection.a * specular;",
+        """    // Style changes the diffuse body and sun glints only. Keep N, Fresnel,
+    // reflection samples and radiance untouched, including the hardware path.
+    const bool dkrStyle = (uint(m.identity.y) & WATER_STYLE_DKR) != 0;
+    float sunGlint = specular;
+    if (dkrStyle) {
+        // Broad accents follow the existing wave geometry rather than an
+        // extra animated normal map. Derivative filtering prevents distant shimmer.
+        float accent = smoothstep(0.49,0.64,waveLight);
+        accent *= 1-smoothstep(0.06,0.22,fwidth(waveLight));
+        body += m.shallowColor.rgb * (0.12 * accent);
+        sunGlint = lerp(specular,min(specular,0.7),0.65);
+    }
+    float3 color = body * (0.55 + nl * 0.45) * m.sunColor.a * (1-fresnel)
+        + m.sunColor.rgb * m.sunDirection.a * sunGlint;""",
+    )
+    t = replace(t, "    uint debug = (uint)m.identity.y;", "    uint debug = (uint)m.identity.y & WATER_DEBUG_MASK;")
     t = replace(t, "    if(reflection.a<0.75) {", "    if(reflection.a<0.75 && m.appearance.x>0) {")
     t = replace(
         t,

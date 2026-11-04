@@ -1,13 +1,13 @@
 # Custom vehicles
 
-v1.0.12 supports custom **cars** from Syeo's `.dkrkart` exports, either directly
+v1.0.14 supports custom **cars** from Syeo's `.dkrkart` exports, either directly
 or inside a ZIP. `.dkrhover` and `.dkrplane` are reserved for future formats;
 custom hovercrafts and planes are not supported by this release.
 
 ## Install and choose a car
 
-1. Use **Mods / Hacks → Import mods → Custom vehicles**, or install a car from
-   the Mod Store's **Vehicles** category.
+1. Use **Installed Mods → Import mods → Custom vehicles**, or install a car from
+   the Mod Library's **Vehicles** category.
 2. Enable the imported entries under **Vehicles**.
 3. Start **Track Select**, choose a character and the native Car vehicle type.
 4. Scroll between **Vanilla** and enabled custom cars. Left/right changes car,
@@ -22,7 +22,20 @@ exports retain Vanilla safely rather than hiding guessed model geometry.
 The native wooden picker, car portraits, steering, wheel rotation, seating and
 LOD ownership are part of the accepted vehicle layer. Reimporting an identical
 inner `.dkrkart` both directly and from ZIP does not create two installations.
-Existing cars do not need reimporting just to use v1.0.12.
+Existing cars do not need reimporting just to use v1.0.14.
+
+The current beta also shades custom cars using the racer's native lighting
+conditions. Normals are prepared from each LOD's geometry, with sharp edges
+preserved. Larger texture tiles carry interpolated normals through their cuts.
+Lighting includes vehicle and wheel orientation, environmental colour, and
+the native per-racer brightness effects. Existing `.dkrkart` files are used
+unchanged; no re-export or reinstallation is needed for this repair.
+
+Diagnostic logs contain `[custom-vehicles][lighting]` with the racer, view,
+LOD and captured light values. Lighting samples travel with that draw's
+commands, so the decoder cannot pick up a later racer's or view's globals.
+These test builds have new compatibility IDs from the existing vehicle
+adapter ledger; use matching builds for online tests.
 
 Enabled cars can be chosen for CPUs in Track Select. A CPU keeps its choice for
 that race and can have another on the next race. This changes appearance, not
@@ -30,7 +43,7 @@ character difficulty or handling. Custom CPU characters are a separate option.
 
 ## Updated vehicle exports
 
-Syeo's `original-resolution-v1` cars are supported in v1.0.12, including
+Syeo's `original-resolution-v1` cars are supported in v1.0.14, including
 Brute v2. Import the original `.dkrkart`; you do not need to rename it or
 shrink its images. Larger PNGs are prepared as small material tiles once
 during import, keeping their original pixels and the native memory limits.

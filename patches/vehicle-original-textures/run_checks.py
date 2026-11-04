@@ -18,7 +18,7 @@ if __name__=='__main__':
     bad=run(before,[a.input]);(a.output/'before.log').write_bytes(bad.stdout+bad.stderr)
     need(bad.returncode==1 and b'unsupported car texture profile' in bad.stderr,'Before control did not reproduce the original rejection')
     good=run(after,[a.input]);(a.output/'after.log').write_bytes(good.stdout+good.stderr)
-    need(good.returncode==0 and b'safe-tiles=18' in good.stdout and b'7449 vehicle compatibility checks passed' in good.stdout,'Updated preparation failed: '+(good.stdout+good.stderr).decode(errors='replace'))
+    need(good.returncode==0 and b'safe-tiles=18' in good.stdout and b'7642 vehicle compatibility checks passed' in good.stdout,'Updated preparation failed: '+(good.stdout+good.stderr).decode(errors='replace'))
     fingerprint=run(after,['--fingerprint',a.input]);need(fingerprint.returncode==0 and re.fullmatch(rb'[a-f0-9]{64}\s*',fingerprint.stdout),'New package fingerprint failed')
     legacy=[]
     for source in sorted(a.legacy.glob('*.dkrkart')):
@@ -50,14 +50,14 @@ if __name__=='__main__':
     sanitizer=None
     if a.sanitizer:
         result=run(a.sanitizer,[a.input]);(a.output/'sanitizers.log').write_bytes(result.stdout+result.stderr)
-        need(result.returncode==0 and b'7449 vehicle compatibility checks passed' in result.stdout,'Vehicle sanitizer check failed')
+        need(result.returncode==0 and b'7642 vehicle compatibility checks passed' in result.stdout,'Vehicle sanitizer check failed')
         sanitizer={'executable_sha256':sha(a.sanitizer),'exit_code':0,'scope':'Synthetic tiling and supplied archive parsing as data; game, ROM, RSP and GPU not executed.'}
     if not a.skip_retained:
         subprocess.run([sys.executable,'-B',str(ROOT/'patches/graphics-handoff/run_checks.py'),'--bin',str(a.bin),'--output',str(a.output/'retained')],check=True)
     report={'schema':1,'game_rom_rsp_gpu_or_live_multiplayer_executed':False,'actual_mod_archive_parsed_as_data':True,
-        'input_sha256':sha(a.input),'prepared_sha256':fingerprint.stdout.decode().strip(),'checks':7449,
+        'input_sha256':sha(a.input),'prepared_sha256':fingerprint.stdout.decode().strip(),'checks':7642,
         'before_exit_code':bad.returncode,'after_exit_code':good.returncode,'legacy':legacy,'negative':negative,'sanitizer':sanitizer,
         'retained':json.loads((a.output/'retained/CHECKS.json').read_text()) if not a.skip_retained else None,
         'binary_sha256':{'before':sha(before),'after':sha(after)}}
     (a.output/'CHECKS.json').write_text(json.dumps(report,indent=2)+'\n')
-    print('Vehicle preparation verified: 7449 checks,',len(legacy),'unchanged legacy packages,',len(negative),'negative admissions; no game execution.')
+    print('Vehicle preparation verified: 7642 checks,',len(legacy),'unchanged legacy packages,',len(negative),'negative admissions; no game execution.')

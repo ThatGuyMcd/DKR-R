@@ -1,3 +1,4 @@
+#include "online_stability/owner_service.inl"
 // Inside DirectSession::pump_locked, before receiving packets. This is the only
 // place directory intents are applied to native host state.
 {

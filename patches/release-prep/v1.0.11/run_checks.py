@@ -6,7 +6,7 @@ AUTH=Path(__file__).resolve().parent;ROOT=AUTH.parents[2]
 TARGETS={
  'handoff':('DKRGraphicsHandoffChecks',0,rb'37 graphics handoff checks; 8000 concurrent transfers'),
  'render':('DKRRenderStabilityChecks',0,rb'30 .*checks'),
- 'water':('DKRLiquidResidencyChecks',0,rb'23 .*checks'),
+ 'water':('DKRLiquidResidencyChecks',0,rb'28 production residency checks passed'),
  'allocator77':('DKRMemoryStability77Checks',0,rb'184812 memory stability checks passed'),
  'allocator80':('DKRMemoryStability80Checks',0,rb'184812 memory stability checks passed'),
  'owned77':('DKRMemoryOwned77Checks',0,rb'13 owned heap entry checks passed'),

@@ -1,5 +1,10 @@
 # Website and API update
 
+For the current community website (companion search, download totals, comments
+and featured rotation), use `docs/MOD_LIBRARY_WEBSITE.md` and this pipeline's
+`community` action. The instructions below describe the earlier workflow-only
+package and do not include the community website features.
+
 This package changes the mod-library website and private Cloudflare Worker only.
 The launcher, its endpoints, existing category IDs and FTP paths are retained.
 The category displayed as Vehicles still uses the existing `legacy` identifier

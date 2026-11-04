@@ -66,8 +66,7 @@ def direct(t):
 def runtime(t):
  # The final identity pins the launch handshake and checkpoint admission code.
  # Mixed playtests fail compatibility admission, not an opaque frame-zero wait.
- t=once(t,'base+="dcb1e8df777d341f2e96d4ee78cdc4337d32a6ddc86b4b60dbcc46fabfd31efc";',
-  'base+="dcb1e8df777d341f2e96d4ee78cdc4337d32a6ddc86b4b60dbcc46fabfd31efc";base+="'+contract()+'";')
+ t=once(t,';const auto h=digest(', ';base+="'+contract()+'";const auto h=digest(')
  t=once(t,'    Shared shared;requested_stop=false;shared.confirmed_save=seed;',
   '    if(initial.stopping){party::party_returned(&lobby,{});ui::report_online_game_end(initial.status,lobby.active());error.clear();return true;}\n    std::fprintf(stderr,"[party][boot] role=%s racers=%u seed=verified\\n",initial.host?"host":initial.party.controls[0].member==initial.local?"racer-p1":"member",unsigned(launch.player_count));\n    Shared shared;requested_stop=false;shared.confirmed_save=seed;')
  t=once(t,'            if(!world)throw std::runtime_error(message);\n            if(initial.host)',

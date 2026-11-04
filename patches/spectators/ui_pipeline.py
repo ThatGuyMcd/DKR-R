@@ -49,7 +49,37 @@ def online(text):
   '    ConfigurePartyJoin();\n    if (!dkr::runtime::netplay::session().join(code, g_online_player_name, error)) {')
  return text
 def ui(text,origin,out):
- text='#include "party_link.hpp"\n'+text
+ text='#include "party_link.hpp"\n#include "online_presentation/test_receive_delay.hpp"\n'+text
+ text=once(text,'    auto& online=netplay::session();\n    if(!identity.supported()',
+  '''    if(const char* missing=std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");missing&&std::string_view(missing)=="1")
+        dkr::online_presentation::test_fixture::missing_gpu_target=true;
+    if(const char* delay=std::getenv("DKR_OWNED_CHECK_RECEIVE_MS")) {
+        const unsigned value=unsigned(std::strtoul(delay,nullptr,10));
+        dkr::online_presentation::test_receive_delay::arm(value,15);
+        std::fprintf(stderr,"[online][isolated-check] receive-delay-ms=%u jitter-ms=15; test profile only\\n",value);
+    }
+    auto& online=netplay::session();
+    if(!identity.supported()''')
+ # This branch is reachable only by the existing new/empty-profile owned
+ # check. Normal launcher preferences and the user's profile are untouched.
+ text=once(text,'        ultramodern::renderer::set_graphics_config(config);\n    }\n    online.configure_manifest',
+  '''        if(const char* focus=std::getenv("DKR_OWNED_CHECK_FULLSCREEN");focus&&std::string_view(focus)=="1") {
+            config.ar_option=ultramodern::renderer::AspectRatio::Expand;
+            dkr::runtime::online_view::requested_layout=dkr::runtime::online_view::Layout::MyRacer;
+        }
+        ultramodern::renderer::set_graphics_config(config);
+    }
+    online.configure_manifest''')
+ # The isolated rendered check must advertise the same Racer capability as
+ # the normal UI. Otherwise its client is rejected before any game executes.
+ text=once(text,'    if(!host)return true;',
+  '    if(!host){dkr::runtime::spectators::request_party_join(&online,false);return true;}')
+ text=once(text,'    g_online_automatic_delay=false;g_online_manual_delay=1;g_online_rollback_window=6;',
+  '''    g_online_automatic_delay=std::getenv("DKR_OWNED_CHECK_DYNAMIC")&&std::string_view(std::getenv("DKR_OWNED_CHECK_DYNAMIC"))=="1";
+    g_online_allow_spectators=!(std::getenv("DKR_OWNED_CHECK_PARTY")&&std::string_view(std::getenv("DKR_OWNED_CHECK_PARTY"))=="0");
+    g_online_manual_delay=1;g_online_rollback_window=6;''')
+ text=once(text,'    request.rules.automatic_input_delay=false;request.rules.manual_input_delay=1;request.rules.rollback_window=6;',
+  '    request.rules.automatic_input_delay=g_online_automatic_delay;request.rules.manual_input_delay=1;request.rules.rollback_window=6;')
  text=once(text,'struct OnlineHostRequest {','''bool g_online_allow_spectators=true,g_online_join_watching=false;
 void ConfigurePartyJoin(){dkr::runtime::spectators::request_party_join(&dkr::runtime::netplay::session(),g_online_join_watching);}
 struct OnlineHostRequest {

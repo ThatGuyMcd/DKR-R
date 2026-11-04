@@ -11,6 +11,7 @@ namespace dkr::runtime::spectators {
 struct PortInput {
     std::uint16_t buttons=0;
     std::int8_t x=0,y=0;
+    std::uint8_t accelerator=0,brake=0,driving_flags=0;
     bool operator==(const PortInput&)const=default;
 };
 struct ConfirmedFrame {

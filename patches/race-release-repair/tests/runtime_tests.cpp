@@ -4,6 +4,8 @@
 #include "party_link.hpp"
 #include "owned_observer.hpp"
 #include "owned_game.hpp"
+#include "netplay/netplay_protocol.hpp"
+#include "netplay/secure_channel.hpp"
 #include <functional>
 #include <memory>
 #define private public
@@ -66,14 +68,14 @@ struct Fixture {
     std::shared_ptr<PartyLink> hub;
     std::unique_ptr<PartyRuntime::Impl> runtime;
     std::string error;
-    explicit Fixture(bool spectator=false,bool host=false,bool watcher=true) {
-        launch.player_count=2;launch.occupied_mask=3;launch.rollback_window=14;
-        launch.input_delay_frames=6;launch.match_id=1234;
+    explicit Fixture(bool spectator=false,bool host=false,bool watcher=true,unsigned delay=6,unsigned window=14,unsigned players=2,unsigned local_id=2) {
+        launch.player_count=std::uint8_t(players);launch.occupied_mask=std::uint8_t((1U<<players)-1);launch.rollback_window=std::uint8_t(window);
+        launch.input_delay_frames=std::uint8_t(delay);launch.match_id=1234;
         hub=party_link(this);hub->enabled=hub->admitted=true;
-        hub->host=host;hub->local=host?1:spectator?3:2;hub->authority=1;hub->launch=launch;
+        hub->host=host;hub->local=host?1:spectator?players+1:local_id;hub->authority=1;hub->launch=launch;
         check(hub->party.create(1,"Host",error),"fixture host");
-        check(hub->party.add(2,"Client",std::uint8_t(1),error),"fixture racer");
-        if(watcher)check(hub->party.add(3,"Watcher",{},error),"fixture spectator");
+        for(unsigned id=2;id<=players;++id)check(hub->party.add(id,"Client "+std::to_string(id),std::uint8_t(id-1),error),"fixture racer");
+        if(watcher)check(hub->party.add(players+1,"Watcher",{},error),"fixture spectator");
         runtime=std::make_unique<PartyRuntime::Impl>(this,world,box,launch,digest);
         check(runtime->begin(error),"runtime begin");
     }

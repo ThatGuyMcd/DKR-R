@@ -20,16 +20,20 @@ def once(text,old,new):
  return text.replace(old,new,1)
 
 def driver(text):
- text='#include "confirmed_observer.hpp"\n'+text
+ text='#include "online_stability/live_delay.hpp"\n#include "confirmed_observer.hpp"\n'+text
+ text=once(text,'Step Driver::step(bool allow_advance) {',
+  'Step Driver::step(bool allow_advance) {\n    dkr::online_stability::WorkScope response_work(statistics_.next_frame,statistics_.replayed_frames);')
+ text=once(text,'    value.actual[owner] = input;',
+  '    dkr::online_stability::input_arrival(owner,frame);\n    value.actual[owner] = input;')
  old='''        confirmed_inputs_ = frame->actual;
         ++statistics_.confirmed_frames;'''
  new='''        // An observer sees actual, committed inputs only. Observation is
         // noexcept and opt-in; spectator failures never abort this commit.
         dkr::runtime::spectators::observe_confirmed(configuration_.epoch,frame->number,
-            {{{frame->actual[0].buttons,frame->actual[0].stick_x,frame->actual[0].stick_y},
-              {frame->actual[1].buttons,frame->actual[1].stick_x,frame->actual[1].stick_y},
-              {frame->actual[2].buttons,frame->actual[2].stick_x,frame->actual[2].stick_y},
-              {frame->actual[3].buttons,frame->actual[3].stick_x,frame->actual[3].stick_y}}},
+            {{{frame->actual[0].buttons,frame->actual[0].stick_x,frame->actual[0].stick_y,frame->actual[0].accelerator,frame->actual[0].brake,frame->actual[0].driving_flags},
+              {frame->actual[1].buttons,frame->actual[1].stick_x,frame->actual[1].stick_y,frame->actual[1].accelerator,frame->actual[1].brake,frame->actual[1].driving_flags},
+              {frame->actual[2].buttons,frame->actual[2].stick_x,frame->actual[2].stick_y,frame->actual[2].accelerator,frame->actual[2].brake,frame->actual[2].driving_flags},
+              {frame->actual[3].buttons,frame->actual[3].stick_x,frame->actual[3].stick_y,frame->actual[3].accelerator,frame->actual[3].brake,frame->actual[3].driving_flags}}},
             frame->actual_command.words,frame->output.scene_boundary);
 '''+old
  return once(text,old,new)
@@ -53,6 +57,7 @@ def main(a):
   if p.is_file():write(out/p.name,p.read_bytes())
  rows=json.loads(a.inputs.read_text(encoding='utf-8'))
  transforms={'experimental_runtime.cpp':runtime_pipeline.runtime,'experimental_rollback.cpp':driver,
+  'experimental_timeline.cpp':runtime_pipeline.timeline,
   'direct_session.cpp':link_pipeline.direct,'netplay_protocol.cpp':link_pipeline.protocol,'online_mod_admission.cpp':link_pipeline.mods,
   'quick_join_transport.cpp':link_pipeline.transport,
   'camera_rt64.cpp':runtime_pipeline.camera,'game_main.cpp':runtime_pipeline.game_main,'replay_probe_capture.cpp':runtime_pipeline.capture,

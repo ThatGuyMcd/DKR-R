@@ -1,8 +1,10 @@
 Presentation repair above 1.0.10-memory-playtest.1
 
-Only this additive Patch Pipeline folder is authored. Six final C++ inputs are
+This existing Patch Pipeline layer composes ten final C++ inputs. They are
 copied to generated/render-stability outside the checkout: the bridge, renderer,
-texture cache, framebuffer renderer, state and workload queue. Existing include
+texture cache, framebuffer renderer, state, workload queue, present queue and
+online fullscreen consumer, plus matching library/direct present gates with the
+immutable picture classifier. RT64 interface consumers use that same gate. Existing include
 paths and compiler properties are retained. Submodules, RecompiledFuncs and
 RecompiledPatches stay read-only. No guest function, heap policy, canonical state,
 save routing, wire protocol, peer identity or launcher design is changed.
@@ -39,13 +41,14 @@ This adds at most one 8 MiB CPU copy per stock frame; optional paths already
 using the arena keep their existing copy count. No full RAM dump is introduced.
 
 configure.py chains the accepted memory overlay. audit.py checks exact counted
-composition, all six actual compiler bindings, the complete retained memory/
+composition, all ten actual compiler bindings, the complete retained memory/
 online source audit chain, linked guards and unchanged peer contracts.
 DKRRenderStabilityChecks exercises scene isolation, transitive overlap, eviction,
 cache eras, descriptor/tile agreement, worker concurrency and bounded provenance.
 DKRLiquidResidencyChecks compiles the production residency body against synthetic
 cache/queue interfaces and a controlled clock; it exercises full/partial packs,
-CRC identities, stream priority, retry limits and optics changes. It contains no
+CRC identities, stream priority, retry limits, optics changes, correction reuse
+and real asset invalidation. It contains no
 ROM/game/renderer/GPU execution. run_checks.py also runs all retained fixtures.
 
 package.py reuses the existing runtime allowlist for Windows ZIP and Linux

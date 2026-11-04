@@ -91,6 +91,13 @@ def source_files() -> list[pathlib.Path]:
         ".yaml",
         ".yml",
         ".cmake",
+        ".mjs",
+        ".cjs",
+        ".sql",
+        ".jsonc",
+        ".js",
+        ".css",
+        ".html",
         ".java",
         ".kt",
         ".xml",
@@ -98,6 +105,7 @@ def source_files() -> list[pathlib.Path]:
     }
     selected = set(tracked)
     allowed_exact_untracked = {
+        pathlib.PurePosixPath("runtime-recomp/assets/localisation/NotoSans-Regular.ttf"),
         pathlib.PurePosixPath("runtime-recomp/tests/live_lod_probe.hlsl"),
         pathlib.PurePosixPath("runtime-recomp/tests/generated_mip_readback.hlsl"),
         pathlib.PurePosixPath("runtime-recomp/tests/generated_mip_sampling.hlsl"),
@@ -113,9 +121,17 @@ def source_files() -> list[pathlib.Path]:
     }
     for path in untracked:
         pure = pathlib.PurePosixPath(path.as_posix())
-        if pure in allowed_exact_untracked or (
-            path.suffix.lower() in allowed_untracked_suffixes
-            and any(pure.is_relative_to(root) for root in allowed_untracked_roots)
+        resource = pure.is_relative_to("runtime-recomp/assets/localisation") and path.suffix.lower() in {
+            ".json",
+            ".txt",
+        }
+        if (
+            resource
+            or pure in allowed_exact_untracked
+            or (
+                path.suffix.lower() in allowed_untracked_suffixes
+                and any(pure.is_relative_to(root) for root in allowed_untracked_roots)
+            )
         ):
             selected.add(path)
         elif path.suffix.lower() in allowed_untracked_suffixes:

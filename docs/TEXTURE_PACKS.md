@@ -1,6 +1,6 @@
 # CRT filters and texture packs
 
-## v1.0.12 release contract
+## v1.0.14 release contract
 
 Store-installed packs retain friendly names and managed installation receipts. Reinstall/update targets the selected owned copy. Recognised liquid animation families stay original until all matching HD frames are resident; incomplete families remain consistently original. Pack order and normal Stream/Stall/Preload policy are retained.
 
@@ -9,7 +9,9 @@ original game textures and presentation so it remains the release reference.
 
 ## CRT display filters
 
-The Textures page includes six optional built-in PNG masks. A mask is drawn after the
+Open **Graphics > HUD & effects** for the six optional built-in PNG masks and
+the custom filter controls. Textures now focuses on texture packs and dumping.
+Your existing filter selection and imported masks are kept. A mask is drawn after the
 game image and before DKR-R's settings and performance overlays, so controls and
 telemetry remain readable. Scaling can stretch one mask over the viewport or
 tile it at native pixel size. Filter Density controls compositing strength and
@@ -95,7 +97,7 @@ also writes a Rice pack beside the track, `<track>-hd.zip`, holding each picture
 at the resolution its author made it. With it enabled, the renderer draws the
 original in place of the reduction.
 
-**You do not import this pack yourself.** **Mods / Hacks → Import mods → DKR-R
+**You do not import this pack yourself.** **Installed Mods → Import mods → DKR-R
 tracks** finds `<track>-hd.zip` beside the track it just installed and imports
 it in the same gesture (`import_archive` with a `TrackPackOwner`). Such a pack
 is *born enabled*, filed against the track (`Origin::TrackPack`), and does
@@ -189,7 +191,7 @@ duplicate variants, unsafe image dimensions, alias collisions, archives over
 4 GB, unreadable ZIPs, and malformed native databases are rejected before
 renderer activation.
 
-## Texture Dumping — v1.0.12
+## Texture Dumping — v1.0.14
 
 Expand **Texture Dumping** beneath pack controls. Its **Export**, **Capture**
 and **My Dumps** tabs share active jobs; switching tabs/closing the section
@@ -222,4 +224,4 @@ Keep original-art dumps private. The starter omits ROMs and source reports,
 but unedited Working images can still be original game art. Distribute only
 replacement artwork you have permission to share. The detailed original
 [texture-tool implementation/checklist](../patches/texture-dumping/TEXTURE-DUMPING.txt)
-is retained as engineering history, not v1.0.12 hardware qualification.
+is retained as engineering history, not v1.0.14 hardware qualification.

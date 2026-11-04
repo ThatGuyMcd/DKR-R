@@ -30,6 +30,7 @@ Package square(bool repeat_s=true,bool repeat_t=true,unsigned width=128,unsigned
     car.textures.push_back(std::move(t));car.wheels[0]="wheel";car.pivots[0]={.5F,.5F,0};
     Mesh m;m.id="wheel";m.name="wheel";m.vertices={{0,0,0},{1,0,0},{1,1,0},{0,1,0}};
     m.uv={{-.25F,-.25F},{1.75F,-.25F},{1.75F,1.75F},{-.25F,1.75F}};m.faces={{0,1,2},{0,2,3}};m.texture=0;m.double_sided=true;
+    m.normals=dkr::runtime::vehicles::lighting::normals(m.vertices,m.faces);
     for(auto& lod:car.lods){lod.meshes.push_back(m);lod.triangles=2;}return car;
 }
 std::array<std::uint8_t,4> sample(const Texture& t,double u,double v){
@@ -57,6 +58,20 @@ void pixels(const Package& car,const Texture& original){
     }
 }
 void synthetic(){
+    // A varying source normal field must survive every tile cut by linear
+    // interpolation. Computing normals after tiling would make it faceted.
+    auto lit=square(false,false);
+    for(auto& lod:lit.lods)for(auto& mesh:lod.meshes)for(unsigned f=0;f<mesh.faces.size();++f)
+        for(unsigned k=0;k<3;++k){const auto p=mesh.vertices[mesh.faces[f][k]];mesh.normals[f][k]={p.x,p.y,1};}
+    ot::prepare(lit);
+    std::map<std::array<float,3>,dkr::runtime::vehicles::lighting::Vec> seams;
+    for(const auto& mesh:lit.lods[0].meshes){check(mesh.normals.size()==mesh.faces.size(),"Tiling lost corner normals");
+        for(unsigned f=0;f<mesh.faces.size();++f)for(unsigned k=0;k<3;++k){
+            const auto p=mesh.vertices[mesh.faces[f][k]];const auto n=mesh.normals[f][k];
+            check(std::abs(n.x-p.x)<1e-5 && std::abs(n.y-p.y)<1e-5 && std::abs(n.z-1)<1e-5,"Tile cut regenerated instead of interpolating a normal");
+            const auto [at,added]=seams.emplace(std::array{p.x,p.y,p.z},n);
+            if(!added)check(std::abs(at->second.x-n.x)<1e-5 && std::abs(at->second.y-n.y)<1e-5,"Adjacent tiles disagree on lighting");
+        }}
     for(const auto repeat_s:{false,true})for(const auto repeat_t:{false,true}){
         auto car=square(repeat_s,repeat_t);const auto original=car.textures[0];ot::prepare(car);
         check(car.textures.size()==15,"Unexpected 128x64 tile count");
@@ -85,6 +100,19 @@ void synthetic(){
 }
 }
 int main(int argc,char** argv){try{
+    if(argc==3 && std::string_view(argv[1])=="--lighting"){
+        const auto data=read(argv[2]);const auto p=inspect(data,"fixture.dkrkart",Type::Car);
+        unsigned corners=0,zero=0;float darkest=1,brightest=0;
+        dkr::runtime::vehicles::lighting::Sample light;light.flags=1;light.ambient=.25F;light.diffuse=.3F;light.direction={0,1,0};
+        for(const auto& lod:p->lods)for(const auto& m:lod.meshes){
+            check(m.normals.size()==m.faces.size(),"Package is missing prepared normals");
+            for(const auto& face:m.normals)for(const auto& n:face){const auto length=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+                check(std::isfinite(length)&&length<=1.0001F,"Invalid prepared normal");++corners;zero+=length<1e-6F;
+                const auto shade=dkr::runtime::vehicles::lighting::brightness(light,dkr::runtime::vehicles::lighting::unit(n));
+                darkest=std::min(darkest,shade);brightest=std::max(brightest,shade);}}
+        check(brightest>darkest+.1F,"Real package does not respond to directional shading");
+        std::cout<<"corners="<<corners<<" degenerate="<<zero<<" shade="<<darkest<<".."<<brightest<<" fingerprint="<<fingerprint(*p)<<'\n';return 0;
+    }
     if(argc==3 && std::string_view(argv[1])=="--fingerprint"){
         const auto data=read(argv[2]);const auto p=inspect(data,"fixture.dkrkart",Type::Car);std::cout<<fingerprint(*p)<<'\n';return 0;
     }

@@ -1,6 +1,6 @@
 # DKR-R architecture
 
-## v1.0.12 release contract
+## v1.0.14 release contract
 
 The release composes guarded game-heap headroom, immutable scheduler handoff, private decode isolation, water residency and updated vehicle preparation above the Online directory, Scoreboard, party/spectator repairs, vehicles, achievements and texture tools over Camera++, SDK 2, Store, shared saves and presentation fixes through the Patch Pipeline. API 2 is additive. Personal, confirmed-online and development save ownership are separate. Isolated dependency source patches never edit the checked-out submodules.
 
@@ -51,7 +51,7 @@ progress. Old mod-set saves are recovery inputs, not current per-mod-list owners
 
 ## Public Rollback and party ownership
 
-v1.0.12 public hosting admits the owned Rollback engine (the existing internal
+v1.0.14 public hosting admits the owned Rollback engine (the existing internal
 `ExperimentalRollback` value). The old Auto/Host Prediction/Strict Input Sync
 selector is removed. Historical implementations/wire values are not renamed
 or offered as an automatic fallback.

@@ -114,4 +114,76 @@ def compose_behaviour(policy, elf, revision):
                 raise ValueError("Racer parameter bridge conflicts with a hook owner")
         else:
             result["functionHooks"].append(hook)
+    return compose_analogue_controls(result, elf)
+
+
+def compose_analogue_controls(policy, elf):
+    """Authorised beta-3 hooks at checked native effort-consumption sites.
+
+    Derive every PC from the selected ELF symbol. The original instructions,
+    timers, buildup, coast and boosts remain in the generated guest body.
+    """
+    functions = elf_functions(elf)
+    words = {
+        base + i: struct.unpack_from(">I", data, i)[0]
+        for base, data in elf_sections(elf)
+        for i in range(0, len(data), 4)
+    }
+    result = copy.deepcopy(policy)
+
+    def bounds(name, expected):
+        entries = functions.get(name, set())
+        if len(entries) != 1 or next(iter(entries))[1] != expected:
+            raise ValueError("Analogue driving function boundary changed: " + name)
+        return next(iter(entries))[0]
+
+    def hook(name, pc, instruction, text):
+        if words.get(pc) != instruction:
+            raise ValueError("Analogue driving consumer instruction changed: " + name)
+        row = dict(
+            function=name,
+            beforeVram=hex(pc),
+            text=text,
+            reason="Apply the admitted recorded analogue request to human vehicle effort; preserve native restrictions, coast and boost ownership.",
+        )
+        owners = [h for h in result.setdefault("functionHooks", []) if int(h["beforeVram"], 0) == pc]
+        if owners and owners != [row] or any(int(p["vram"], 0) == pc for p in result.get("instructionPatches", [])):
+            raise ValueError("Analogue driving hook conflicts with another policy")
+        if not owners:
+            result["functionHooks"].append(row)
+
+    declaration = "extern uint32_t dkr_analogue_driving(uint8_t*, recomp_context*, unsigned, uint32_t, uint32_t); "
+    car = bounds("handle_car_velocity_control", 236)
+    # The callee preserves A0; consume the completed native buildup only after
+    # its JAL + delay slot has returned. The AI call is deliberately a no-op.
+    for name, offset in (("func_8004CC20", 0x1F4), ("func_8004F7F4", 0x370), ("update_onscreen_AI_racer", 0x58)):
+        entries = functions.get(name, set())
+        if len(entries) != 1:
+            raise ValueError("Ambiguous analogue car caller: " + name)
+        begin, actual_size = next(iter(entries))
+        if actual_size <= offset + 8 or words.get(begin + offset) != (0x0C000000 | ((car >> 2) & 0x3FFFFFF)):
+            raise ValueError("Analogue car return site changed: " + name)
+        hook(
+            name,
+            begin + offset + 8,
+            words[begin + offset + 8],
+            declaration + "dkr_analogue_driving(rdram, ctx, 2U, (uint32_t)ctx->r4, 0U);",
+        )
+
+    hover = bounds("func_80046524", 10072)
+    plane = bounds("func_80049794", 10508)
+    for name, begin, offset, word, register, channel in (
+        ("func_80046524", hover, 0x354, 0x3C014040, 0, 0),
+        ("func_80046524", hover, 0x4E8, 0x44814000, 2, 1),
+        ("func_80049794", plane, 0x600, 0x332B4000, 18, 0),
+        ("func_80049794", plane, 0x738, 0x862E0000, 2, 1),
+    ):
+        text = (
+            declaration
+            + f"ctx->f{register}.u32l = dkr_analogue_driving(rdram, ctx, {channel}U, (uint32_t)ctx->r16, ctx->f{register}.u32l);"
+        )
+        if name == "func_80049794" and channel == 1:
+            # Both original control branches have already stored this local.
+            text += " MEM_W(196, ctx->r29) = ctx->f2.u32l;"
+        hook(name, begin + offset, word, text)
     return result

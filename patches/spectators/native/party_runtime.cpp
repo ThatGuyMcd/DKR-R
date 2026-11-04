@@ -1,13 +1,19 @@
 #include "party_runtime.hpp"
 #include "confirmed_observer.hpp"
+#include "online_stability/response_trace.hpp"
 #include "netplay/authoritative_state_codec.hpp"
 #include "netplay/experimental_checkpoint_hash.hpp"
 #include "mods/sdk2_bridge.hpp"
+#include "online_stability/live_delay.hpp"
+#include "online_stability/input_trace.hpp"
+#include "netplay/experimental_performance.hpp"
+#include "online_stability/live_inputs.hpp"
 #include <algorithm>
 #include <future>
 #include <set>
 #include <stdexcept>
 #include <utility>
+#include <tuple>
 
 namespace dkr::runtime::spectators {
 namespace ex=net::experimental;
@@ -15,7 +21,7 @@ namespace {
 using Bytes=std::vector<std::uint8_t>;
 using Lane=net::TransportTrafficClass;
 constexpr auto Tick=std::chrono::nanoseconds(1000000000/30);
-enum class Msg:std::uint8_t {Hello=1,Offer,Chunk,Ready,Go,Input,Frames,Scene,Prepare,Prepared,Freeze,Frozen,Swap,Cancel,Need,OfferAck,FrameAck,Progress};
+enum class Msg:std::uint8_t {Hello=1,Offer,Chunk,Ready,Go,Input,Frames,Scene,Prepare,Prepared,Freeze,Frozen,Swap,Cancel,Need,OfferAck,FrameAck,Progress,LiveInputs,InputReceipt};
 struct Write {
     Bytes b;
     Write& n(std::uint64_t v,unsigned count=8){for(unsigned i=0;i<count;++i)b.push_back(std::uint8_t(v>>(8*i)));return *this;}
@@ -30,14 +36,14 @@ struct Read {
     std::span<const std::uint8_t> rest(){const auto tail=b.subspan(pos);pos=b.size();return tail;}
     void end(){if(pos!=b.size())throw std::runtime_error("Trailing party runtime message data.");}
 };
-net::PackedInput packed(PortInput p){return {p.buttons,p.x,p.y};}
-PortInput portable(net::PackedInput p){return {p.buttons,p.stick_x,p.stick_y};}
+net::PackedInput packed(PortInput p){return {p.buttons,p.x,p.y,p.accelerator,p.brake,p.driving_flags};}
+PortInput portable(net::PackedInput p){return {p.buttons,p.stick_x,p.stick_y,p.accelerator,p.brake,p.driving_flags};}
 dkr::sdk2::Command command(std::span<const std::uint8_t> bytes) {
     dkr::sdk2::Command c;if(bytes.empty())return c;
     if(bytes.size()!=64)throw std::runtime_error("Invalid confirmed development command.");
     Read r{bytes};for(auto& w:c.words)w=std::uint32_t(r.n(4));return c;
 }
-Bytes command_bytes(const dkr::sdk2::Command& c){Write w;for(auto v:c.words)w.n(v,4);return w.b;}
+Bytes command_bytes(const dkr::sdk2::Command& c){if(c.empty())return {};Write w;for(auto v:c.words)w.n(v,4);return w.b;}
 // Rebase only the driver's relative history cursor. Guest clocks, sidecar
 // cursors, SDK commands and irreversible effects keep their actual frame.
 class OffsetWorld final:public ex::Simulation {
@@ -83,6 +89,9 @@ public:
 }
 struct PartyRuntime::Impl {
     const void* key;ex::OwnedGame& world;ex::PresentationMailbox& box;net::LaunchDescriptor launch;HashState hash;
+    dkr::online_stability::LiveDelay live_delay;
+    bool delay_network_wait=false;
+    unsigned delay_fill=0;
     std::shared_ptr<PartyLink> hub;MemberId local=0,host=0;bool authority=false,started=false,go=false;
     std::uint64_t match=0,controls=1,serial=0,transfer_serial=0,active_transfer=0;Party roster;
     Cursor cursor{91,0};std::uint32_t base=0,authored=0;Clock::time_point next_tick{},progress{},hello_at{},phase_at{},proof_at{};
@@ -98,12 +107,20 @@ struct PartyRuntime::Impl {
     std::optional<Cursor> admitted_at;std::map<std::pair<std::uint64_t,std::uint32_t>,ConfirmedFrame> buffered;
     std::map<std::pair<std::uint32_t,unsigned>,std::pair<PortInput,dkr::sdk2::Command>> inputs;
     std::map<std::uint32_t,wire::ControllerSample> local_history;
+    std::array<std::uint32_t,4> received_next{};
+    std::uint32_t host_received=0;
+    std::uint64_t accepted_inputs=0;
+    Clock::time_point observed_now{};
+    dkr::online_stability::InputTrace input_trace;
+    Clock::time_point cpu_report_at{};
+    std::map<std::pair<std::uint32_t,unsigned>,Clock::time_point> input_times;
+    std::map<std::tuple<MemberId,unsigned,std::uint32_t>,Clock::time_point> repair_times;
     enum class Phase {Admission,Running,SceneVote,ScenePrepare,SceneReady,Freeze,SwapReady};
     Phase phase=Phase::Admission;ex::BoundaryIntent boundary{};Digest phase_digest{};
     std::optional<std::pair<unsigned,MemberId>> swap;std::uint32_t freeze=UINT32_MAX;
     std::uint64_t probe_id=0;Cursor probe_cursor{};std::map<MemberId,Digest> proofs;
     Impl(const void* k,ex::OwnedGame& w,ex::PresentationMailbox& b,net::LaunchDescriptor l,HashState h)
-      :key(k),world(w),box(b),launch(l),hash(std::move(h)),hub(party_link(k)),watch_world(w),playback(watch_world,launch_descriptor_hash(l),hash),
+      :key(k),world(w),box(b),launch(l),hash(std::move(h)),live_delay(dkr::online_stability::control(k),l.input_delay_frames,l.rollback_window),hub(party_link(k)),watch_world(w),playback(watch_world,launch_descriptor_hash(l),hash),
        binding([this](ConfirmedFrame f){committed(std::move(f));}),receiver(hash){}
     bool server()const{return authority;}
     const Member* member()const{return roster.find(local);}
@@ -121,6 +138,8 @@ struct PartyRuntime::Impl {
             if(target&&roster.find(target)&&roster.find(target)->role==Role::Spectator&&lane==Lane::Checkpoint)return;
             throw std::runtime_error("Party runtime transport queue is full.");
         }
+        if(type==Msg::LiveInputs){dkr::online_stability::LiveInputs packet;if(dkr::online_stability::decode_live_inputs(body,packet))
+            input_trace.event(packet.owner,target,6,packet.first+packet.count-1,observed_now);}
     }
     void racers(Msg type,std::span<const std::uint8_t> body={},Lane lane=Lane::Authoritative) {
         for(auto id:required())if(id!=local)send(id,type,body,lane);
@@ -161,7 +180,9 @@ struct PartyRuntime::Impl {
         }catch(const std::exception& e){callback_error=e.what();}catch(...){callback_error="Confirmed spectator feed failed.";}
     }
     void reset_driver(Cursor at) {
+        delay_fill=0;delay_network_wait=false;
         driver.reset();offset.reset();cursor=at;base=at.frame;authored=at.frame;inputs.clear();local_history.clear();
+        received_next.fill(base);host_received=base;input_times.clear();repair_times.clear();
         owned_observer_read_only(&world,watching());
         if(simulating()) {
             offset=std::make_unique<OffsetWorld>(world,base);driver=std::make_unique<ex::Driver>(*offset);
@@ -169,7 +190,8 @@ struct PartyRuntime::Impl {
             const auto budget=std::max<std::size_t>(128U*1024U*1024U,bytes*(std::size_t(launch.rollback_window)+2));
             std::string e;if(!driver->start({at.epoch,launch.player_count,launch.rollback_window,budget},e))throw std::runtime_error(e);
         }
-        next_tick=Clock::now();progress=next_tick;proof_at=next_tick+std::chrono::seconds(5);
+        next_tick=Clock::now();observed_now=progress=next_tick;proof_at=next_tick+std::chrono::milliseconds(100);
+        input_trace.reset(cursor.epoch,port(),observed_now,base);
     }
     void ready(Baseline b) {
         if(!server()) {
@@ -251,12 +273,13 @@ struct PartyRuntime::Impl {
         }
         if(receiver.active()&&receiver.expired(now)) {receiver.cancel();receiving.reset();send(host,Msg::Need);}
     }
-    void receive_input(MemberId source,Read& r) {
+    void receive_input(MemberId source,Read& r,bool relay=true) {
         const auto generation=r.n();wire::ControllerSample sample;std::string e;
-        const auto count=r.n(1);if(count!=25||count>r.b.size()-r.pos)throw std::runtime_error("Invalid racing input width.");
+        const auto count=r.n(1);if(count!=wire::ControllerSampleBytes||count>r.b.size()-r.pos)throw std::runtime_error("Invalid racing input width.");
         if(!wire::controller(r.b.subspan(r.pos,std::size_t(count)),sample,e))throw std::runtime_error(e);r.pos+=std::size_t(count);
         auto c=command(r.rest());
-        if(generation!=controls||sample.cursor.epoch!=cursor.epoch||!driver||sample.cursor.frame<base||sample.cursor.frame>=freeze)return;
+        if(generation!=controls||sample.cursor.epoch!=cursor.epoch||!driver||sample.port>=launch.player_count||
+            sample.lease!=roster.snapshot().controls[sample.port].generation||sample.cursor.frame<base||sample.cursor.frame>=freeze)return;
         if(server()) {
             if(!roster.accepts(source,sample.port,sample.lease,sample.cursor)||!c.empty())return;
             if(std::uint64_t(sample.cursor.frame)>std::uint64_t(next().frame)+48)return;
@@ -264,14 +287,22 @@ struct PartyRuntime::Impl {
             const auto existing=inputs.find(id);
             if(existing!=inputs.end()) {
                 if(existing->second.first!=sample.input)throw std::runtime_error("A racing member changed immutable input.");
+                input_trace.event(sample.port,source,3,sample.cursor.frame,observed_now);
                 return;
             }
             if(sample.port==0&&launch.development)c=dkr::sdk2::take(true);
             inputs[id]={sample.input,c};
-            Write body;body.n(controls).n(25,1).data(wire::controller(sample)).data(command_bytes(c));
-            racers(Msg::Input,body.b,Lane::Control);
+            Write body;body.n(controls).n(wire::ControllerSampleBytes,1).data(wire::controller(sample)).data(command_bytes(c));
+            if(relay)racers(Msg::Input,body.b,Lane::Control);
         } else if(source!=host)return;
         const auto result=driver->receive(cursor.epoch,sample.port,sample.cursor.frame-base,packed(sample.input),c);
+        if(result==ex::InputResult::Accepted||result==ex::InputResult::Duplicate) {
+            const auto id=std::pair{sample.cursor.frame,unsigned(sample.port)};
+            inputs.emplace(id,std::make_pair(sample.input,c));input_times.try_emplace(id,observed_now);
+            while(inputs.contains({received_next[sample.port],unsigned(sample.port)}))++received_next[sample.port];
+        }
+        if(result==ex::InputResult::Accepted){++accepted_inputs;live_delay.arrival(sample.port,sample.cursor.frame,!launch.development);}
+        input_trace.event(sample.port,source,result==ex::InputResult::Accepted?2:result==ex::InputResult::Duplicate?3:7,sample.cursor.frame,observed_now);
         if(result==ex::InputResult::Conflict||result==ex::InputResult::Failed)throw std::runtime_error(driver->error());
         if(server()&&result==ex::InputResult::OutOfRange)inputs.erase({sample.cursor.frame,unsigned(sample.port)});
     }
@@ -339,6 +370,25 @@ struct PartyRuntime::Impl {
             controls=generation;update_hub();activate(at);break;
         }
         case Msg::Input:receive_input(source,r);break;
+        case Msg::LiveInputs: {
+            if(launch.development)return; // SDK commands retain ordered authority delivery.
+            dkr::online_stability::LiveInputs packet;
+            if(!dkr::online_stability::decode_live_inputs(r.rest(),packet))throw std::runtime_error("Invalid live racing input batch.");
+            if(packet.controls!=controls||packet.epoch!=cursor.epoch||!driver||packet.owner>=launch.player_count||
+                packet.first<base||std::uint64_t(packet.first)+packet.count>freeze||
+                std::uint64_t(packet.first)+packet.count>std::uint64_t(next().frame)+49)return;
+            if(server())for(unsigned i=0;i<packet.count;++i)
+                if(!roster.accepts(source,packet.owner,packet.lease,{packet.epoch,packet.first+i}))return;
+            const auto accepted_before=accepted_inputs;
+            for(unsigned i=0;i<packet.count;++i) {
+                const auto v=packet.inputs[i];wire::ControllerSample sample{{packet.epoch,packet.first+i},std::uint8_t(packet.owner),packet.lease,{v.buttons,v.x,v.y,v.accelerator,v.brake,v.driving_flags}};
+                Write body;body.n(controls).n(wire::ControllerSampleBytes,1).data(wire::controller(sample));Read one{body.b};receive_input(source,one,false);
+            }
+            if(accepted_inputs!=accepted_before)live_delay.arrival(packet.owner,packet.first+packet.count-1);
+            if(server())for(const auto id:required())if(id!=local&&id!=source)
+                send(id,Msg::LiveInputs,dkr::online_stability::encode_live_inputs(packet),Lane::Realtime);
+            break;
+        }
         case Msg::Frames: {
             if(!from_host||simulating())return;
             const auto transfer=r.n();if(transfer!=active_transfer)return;
@@ -409,15 +459,28 @@ struct PartyRuntime::Impl {
             break;
         }
         case Msg::Progress: {
-            const auto generation=r.n();const auto at=r.at();r.end();
+            const auto generation=r.n();const auto at=r.at();std::array<std::uint32_t,4> have{};
+            for(auto& n:have)n=std::uint32_t(r.n(4));r.end();
             if(!server()||!driver||!required().contains(source)||generation!=controls||at.epoch!=cursor.epoch)return;
-            unsigned sent=0;
-            for(const auto& [id,value]:inputs)if(id.first>=at.frame&&id.first<std::uint64_t(at.frame)+8&&sent<32) {
+            const auto* sender=roster.find(source);if(!sender||!sender->port)return;
+            const auto owner=*sender->port;
+            Write receipt;receipt.n(controls).n(cursor.epoch).n(owner,1).n(roster.snapshot().controls[owner].generation).n(received_next[owner],4);
+            send(source,Msg::InputReceipt,receipt.b);
+            unsigned sent=0;const auto retry=repair_period(source);
+            for(const auto& [id,value]:inputs)if((launch.development||id.second!=owner)&&id.first>=have[id.second]&&id.first<std::uint64_t(have[id.second])+8&&sent<32&&repair_due(source,id.second,id.first,retry)) {
                 wire::ControllerSample sample{{cursor.epoch,id.first},std::uint8_t(id.second),roster.snapshot().controls[id.second].generation,value.first};
-                Write body;body.n(controls).n(25,1).data(wire::controller(sample)).data(command_bytes(value.second));
-                send(source,Msg::Input,body.b,Lane::Control);++sent;
+                Write body;body.n(controls).n(wire::ControllerSampleBytes,1).data(wire::controller(sample)).data(command_bytes(value.second));
+                send(source,Msg::Input,body.b,Lane::Control);input_trace.event(id.second,source,4,id.first,observed_now);++sent;
             }
             break;
+        }
+        case Msg::InputReceipt: {
+            const auto generation=r.n(),epoch=r.n();const auto owner=unsigned(r.n(1));const auto lease=r.n();const auto received=std::uint32_t(r.n(4));r.end();
+            if(server()||!from_host||generation!=controls||epoch!=cursor.epoch||owner!=port()||owner>=launch.player_count||
+                lease!=roster.snapshot().controls[owner].generation||received>authored)return;
+            for(auto frame=host_received;frame<received;++frame)if(const auto at=input_times.find({frame,owner});at!=input_times.end()&&observed_now>=at->second)
+                input_trace.receipt(std::chrono::duration_cast<std::chrono::milliseconds>(observed_now-at->second));
+            host_received=std::max(host_received,received);input_trace.event(owner,host,5,received,observed_now);break;
         }
         default:break;
         }
@@ -426,7 +489,24 @@ struct PartyRuntime::Impl {
         if(port()>=launch.player_count)return;
         wire::ControllerSample sample{{cursor.epoch,frame},std::uint8_t(port()),roster.snapshot().controls[port()].generation,portable(input)};
         local_history[frame]=sample;
-        Write body;body.n(controls).n(25,1).data(wire::controller(sample)).data(command_bytes({}));
+        input_trace.event(port(),local,1,frame,observed_now);
+        input_times.try_emplace(std::pair{frame,port()},observed_now);
+        if(!launch.development) {
+            if(server()){Write one;one.n(controls).n(wire::ControllerSampleBytes,1).data(wire::controller(sample));Read r{one.b};receive_input(local,r,false);}
+            else {
+                const auto result=driver->receive(cursor.epoch,std::uint8_t(port()),frame-base,input);
+                if(result==ex::InputResult::Failed||result==ex::InputResult::Conflict)throw std::runtime_error(driver->error());
+                inputs.emplace(std::pair{frame,port()},std::make_pair(portable(input),dkr::sdk2::Command{}));
+                while(inputs.contains({received_next[port()],port()}))++received_next[port()];
+            }
+            dkr::online_stability::LiveInputs live;live.controls=controls;live.epoch=cursor.epoch;live.lease=sample.lease;live.owner=port();live.first=frame;
+            while(live.first>base&&frame-live.first<7&&local_history.contains(live.first-1)&&local_history.at(live.first-1).lease==sample.lease)--live.first;
+            for(auto at=live.first;at<=frame;++at){const auto v=local_history.at(at).input;live.inputs[live.count++]={v.buttons,v.x,v.y,v.accelerator,v.brake,v.driving_flags};}
+            const auto bytes=dkr::online_stability::encode_live_inputs(live);
+            if(server())racers(Msg::LiveInputs,bytes,Lane::Realtime);else send(host,Msg::LiveInputs,bytes,Lane::Realtime);
+            return; // Exact old holes retain the independent authority repair lane.
+        }
+        Write body;body.n(controls).n(wire::ControllerSampleBytes,1).data(wire::controller(sample)).data(command_bytes({}));
         if(server()){Read r{body.b};receive_input(local,r);}
         else {
             send(host,Msg::Input,body.b,Lane::Control);
@@ -435,6 +515,17 @@ struct PartyRuntime::Impl {
                 if(result==ex::InputResult::Failed||result==ex::InputResult::Conflict)throw std::runtime_error(driver->error());
             }
         }
+    }
+    std::chrono::milliseconds repair_period(MemberId destination)const {
+        unsigned rtt=0;for(const auto& route:dkr::online_stability::control(key)->identity().routes)
+            if(route.id==destination)rtt=std::max(rtt,route.rtt_ms);
+        return std::chrono::milliseconds(std::clamp(2U*rtt+100U,100U,3000U));
+    }
+    bool repair_due(MemberId destination,unsigned owner,std::uint32_t frame,std::chrono::milliseconds period) {
+        const auto first=input_times.find({frame,owner});if(first==input_times.end()||observed_now-first->second<period)return false;
+        const auto id=std::tuple{destination,owner,frame};auto at=repair_times.find(id);
+        if(at!=repair_times.end()&&observed_now-at->second<period)return false;
+        repair_times[id]=observed_now;return true;
     }
     Digest signature(const Baseline& b) {Write w;w.data(b.digest).n(b.magic_actions,4);return hash(w.b);}
     void scene_step(Clock::time_point now) {
@@ -511,6 +602,7 @@ struct PartyRuntime::Impl {
         swap.reset();freeze=UINT32_MAX;frozen.clear();phase=Phase::Running;text="Player swap cancelled";update_hub();
     }
     bool pulse(Clock::time_point now,net::PackedInput input,std::string& error) {
+        observed_now=now;
         if(!started){error="Party runtime is not started.";return false;}
         PartySnapshot latest;std::optional<std::pair<unsigned,MemberId>> request,approval;bool cancel=false;
         {
@@ -576,24 +668,41 @@ struct PartyRuntime::Impl {
         }
         const auto before=next();const auto was_confirmed=confirmed();
         if(!server()&&now>=proof_at) {
-            Write proof;proof.n(controls).at({cursor.epoch,confirmed()});send(host,Msg::Progress,proof.b);
+            Write proof;proof.n(controls).at({cursor.epoch,confirmed()});for(const auto n:received_next)proof.n(n,4);send(host,Msg::Progress,proof.b);
             // Bounded repair of immutable local samples which may have arrived
             // beyond the host's short future window during a temporary hitch.
-            unsigned count=0;
-            for(const auto& [frame,sample]:local_history)if(frame>=confirmed()&&frame<freeze&&count++<32) {
-                Write body;body.n(controls).n(25,1).data(wire::controller(sample)).data(command_bytes({}));send(host,Msg::Input,body.b,Lane::Control);
+            unsigned count=0;const auto retry=repair_period(host);
+            for(const auto& [frame,sample]:local_history)if(frame>=host_received&&frame<freeze&&count<8&&repair_due(host,sample.port,frame,retry)) {
+                Write body;body.n(controls).n(wire::ControllerSampleBytes,1).data(wire::controller(sample)).data(command_bytes({}));send(host,Msg::Input,body.b,Lane::Control);
+                input_trace.event(sample.port,host,4,frame,observed_now);
+                ++count;
             }
-            proof_at=now+std::chrono::milliseconds(250);
+            proof_at=now+std::chrono::milliseconds(100);
         }
         if(phase==Phase::Running||phase==Phase::Freeze) {
-            const auto lead=std::min<unsigned>(launch.input_delay_frames,12);
-            if(port()<launch.player_count)while(authored<freeze&&authored<=next().frame+lead&&authored-next().frame<32)sample(input,authored++);
+            const bool dynamic=dkr::online_stability::control(key)->identity().dynamic;
+            live_delay.local_owner(port());
+            live_delay.pulse(cursor.epoch,controls,next().frame,phase!=Phase::Running||driver->scene_boundary_pending(),delay_network_wait,now,driver->missing_input_mask());
+            if(dynamic&&!live_delay.capture({input.buttons,input.stick_x,input.stick_y,input.accelerator,input.brake,input.driving_flags},now))throw std::runtime_error("Dynamic input transition queue exceeded its safe bound.");
+            delay_fill+=live_delay.take_fill();
+            const auto lead=dynamic?live_delay.lead():std::min<unsigned>(launch.input_delay_frames,12);
+            // Dynamic controls are sampled at their real tick deadline. Do
+            // not publish the next tick early just because a frontier moved.
+            // Protective growth still fills immutable future input immediately.
+            const bool sample_due=!dynamic||now>=next_tick||delay_fill||lead==dkr::online_stability::MaximumDelay;
+            if(sample_due&&port()<launch.player_count)while(authored<freeze&&authored<=next().frame+lead&&authored-next().frame<32) {
+                auto value=input;
+                if(dynamic){const auto held=delay_fill?live_delay.held():live_delay.take();if(delay_fill)--delay_fill;value={held.buttons,held.x,held.y,held.accelerator,held.brake,held.driving_flags};}
+                live_delay.authored(authored);sample(value,authored++);
+            }
             // A new spectator may need a newer immutable baseline. Allow the
             // bounded rollback tail to confirm before capturing; never export
             // speculative RAM or wait on that spectator's download speed.
             const bool align=server()&&!needing.empty()&&!encoding.valid()&&(!encoded||!feed.covers(encoded->next));
             const bool advance=now>=next_tick&&next().frame<freeze&&!align;
             const auto step=driver->step(advance);
+            delay_network_wait=advance&&(step==ex::Step::PredictionLimit||step==ex::Step::WaitingForConfirmedInput||step==ex::Step::WaitingForLocalInput)&&
+                bool(driver->missing_input_mask()&std::uint8_t(~(port()<4?(1U<<port()):0U)));
             if(step==ex::Step::Failed)throw std::runtime_error(driver->error());
             if(step==ex::Step::Advanced)next_tick=std::max(next_tick+Tick,now-Tick*2);
             if(step==ex::Step::ConfirmedBoundary) {
@@ -610,16 +719,24 @@ struct PartyRuntime::Impl {
         if(swap&&now-phase_at>std::chrono::seconds(30))cancel_swap();
         if((phase==Phase::SceneVote||phase==Phase::ScenePrepare||phase==Phase::SceneReady)&&now-phase_at>std::chrono::seconds(120))throw std::runtime_error("Required party scene agreement timed out.");
         if(driver) {
+            input_trace.pulse(next().frame,confirmed(),received_next,driver->missing_input_mask(),now);
+            if(now>=cpu_report_at){cpu_report_at=now+std::chrono::seconds(5);ex::performance::report();}
             const auto after=next();const auto& stats=driver->statistics();
             if(after!=before||confirmed()!=was_confirmed)progress=now;
             if(now-progress>std::chrono::seconds(90))throw std::runtime_error("Racing peers made no confirmed progress for 90 seconds.");
             if(after.frame&&after!=before&&!driver->correcting()&&!driver->scene_boundary_pending()&&
                (phase==Phase::Running||phase==Phase::Freeze)) {
                 if(!world.publish_current(after.epoch,after.frame-1,error))throw std::runtime_error(error);
+                dkr::online_stability::response::reached(after.epoch,after.frame-1,dkr::online_stability::response::Stage::Publish);
             }
             const auto trim=confirmed()>96?confirmed()-96:0;
             std::erase_if(inputs,[&](const auto& item){return item.first.first<trim;});
-            std::erase_if(local_history,[&](const auto& item){return item.first<confirmed();});
+            const auto redundant=authored>8?authored-8:base;
+            const auto local_trim=server()?redundant:std::min({confirmed(),host_received,redundant});
+            std::erase_if(local_history,[&](const auto& item){return item.first<local_trim;});
+            std::erase_if(input_times,[&](const auto& item){return item.first.first<std::min(trim,local_trim);});
+            std::erase_if(repair_times,[&](const auto& item){return std::get<2>(item.first)<std::min(trim,local_trim);});
+            if(local_history.size()>128||inputs.size()>4*160||repair_times.size()>4*4*160)throw std::runtime_error("Racing receipt history exceeded its bounded window.");
             (void)stats;
         }
         if(phase==Phase::Running)text=watching()?"Watching the race":"Experimental rollback";
@@ -631,7 +748,7 @@ PartyRuntime::PartyRuntime(const void* k,ex::OwnedGame& w,ex::PresentationMailbo
     :impl_(std::make_unique<Impl>(k,w,b,l,std::move(h))){}
 PartyRuntime::~PartyRuntime()=default;
 bool PartyRuntime::begin(std::string& error)try{return impl_->begin(error);}catch(const std::exception& e){error=e.what();return false;}
-bool PartyRuntime::pulse(Clock::time_point now,net::PackedInput input,std::string& error)try{return impl_->pulse(now,input,error);}catch(const std::exception& e){error=e.what();return false;}
+bool PartyRuntime::pulse(Clock::time_point now,net::PackedInput input,std::string& error)try{return impl_->pulse(now,input,error);}catch(const std::exception& e){impl_->input_trace.dump();error=e.what();return false;}
 bool PartyRuntime::watching()const{return impl_->watching();}
 unsigned PartyRuntime::local_port()const{return impl_->port();}
 Cursor PartyRuntime::next()const{return impl_->next();}

@@ -53,6 +53,14 @@ directory and are never written into the installed database.
 
 ## Fonts
 
+Noto Sans Regular supplies missing Latin and Cyrillic launcher/overlay glyphs.
+The unmodified unhinted TrueType font is distributed under the SIL Open Font
+License 1.1. Its full licence is in
+`runtime-recomp/assets/localisation/OFL-NotoSans.txt` and packaged as
+`NotoSans-LICENSE.txt`. Source and SHA-256 are recorded beside the font in
+`FONT-SOURCE.txt`. Existing project and system fonts retain their supported
+glyphs; system fonts are not redistributed.
+
 Racing Banana is the launcher body font supplied by the project owner. It is not
 extracted from Diddy Kong Racing. Its supplied source SHA-256 is
 `AEADA6E5FF1388D27CC5D29DE9C67B74C0F6D851D6C772EE35376AF4E288C896`.

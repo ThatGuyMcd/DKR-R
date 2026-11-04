@@ -20,6 +20,86 @@ template<class F>void rejects(F fn){bool rejected=false;try{fn();}catch(const st
 int main(int argc,char** argv) {
     std::filesystem::path root;
     try {
+        if(argc==6 && std::string_view(argv[1])=="--runtime-qualification") {
+            root=private_storage_path(std::filesystem::current_path()/("online-runtime-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())));
+            check(std::filesystem::create_directory(root));
+            const auto rom=utf8_path(argv[2]),library=utf8_path(argv[4]),worker=utf8_path(argv[5]);
+            const auto revision=std::string(asset_revision(dkr::runtime::rom::inspect(rom).revision));
+            const auto bundle=export_host(library,{},revision,true);check(!bundle.manifest.content.empty());
+            std::filesystem::create_directory(root/"payloads");std::filesystem::create_directory(root/"online");
+            for(const auto& [id,data]:bundle.payloads)write_new_file(root/"payloads"/id,*data);
+            unsigned workers=0;
+            const auto profile=prepare_profile(bundle.manifest,root/"payloads",{rom,utf8_path(argv[3])},root/"online",worker,{},[&](auto stage){
+                if(stage.find("Reconstructing locally owned assets")!=stage.npos||stage.find("missing mods with shared verified ROM")!=stage.npos)++workers;
+            },library);
+            check(workers==0);const auto resources=RuntimeResources::prepare(profile,rom,{},"1.0.12");
+            auto a=resources->new_session(),b=resources->new_session();check(a!=b&&a->checkpoint()==b->checkpoint());
+            const auto warm=std::chrono::steady_clock::now();const auto again=RuntimeResources::prepare(profile,rom,{},"1.0.12");check(again==resources);
+            std::cout<<"Installed runtime roots="<<bundle.manifest.content.size()<<" worker=0 immutable-repeat-ms="
+                <<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-warm).count()<<" fingerprint="<<resources->fingerprint()<<'\n';
+            std::filesystem::remove_all(root);std::cout<<checks<<" installed runtime checks passed.\n";return 0;
+        }
+        if(argc==6 && std::string_view(argv[1])=="--rejoin-qualification") {
+            // Read an owned source library; every output and deliberate fault
+            // belongs to this newly reserved private fixture, never that library.
+            root=private_storage_path(std::filesystem::current_path()/("online-rejoin-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())));
+            check(std::filesystem::create_directory(root));
+            const auto rom=utf8_path(argv[2]),library=utf8_path(argv[4]),worker=utf8_path(argv[5]);
+            const std::vector<std::filesystem::path> roms{rom,utf8_path(argv[3])};
+            const auto revision=std::string(asset_revision(dkr::runtime::rom::inspect(rom).revision));
+            const auto before_tracks=sha256(read_file(library/"track-catalog.json",MiB));
+            const auto before_characters=sha256(read_file(library/"character-catalog.json",MiB));
+            auto bundle=export_host(library,{},revision,true);check(bundle.manifest.payloads.size()>=2);
+            std::filesystem::create_directory(root/"payloads");std::filesystem::create_directory(root/"online");
+            for(const auto& [id,data]:bundle.payloads)write_new_file(root/"payloads"/id,*data);
+            auto subset=bundle.manifest;
+            const auto last=std::find_if(subset.payloads.rbegin(),subset.payloads.rend(),[](const auto& p){return p.kind==PayloadKind::Xdelta;});check(last!=subset.payloads.rend());
+            const auto held=last->digest;std::erase_if(subset.payloads,[&](const auto& p){return p.digest==held;});
+            std::erase_if(subset.content,[&](const auto& item){return item.payload==held;});subset=canonical(subset);
+            auto run=[&](const Manifest& manifest,const char* label,const std::filesystem::path& installed={},const char* cache_name="online") {
+                unsigned work=0;const auto started=std::chrono::steady_clock::now();
+                const auto cache=root/cache_name;if(!std::filesystem::exists(cache))std::filesystem::create_directory(cache);
+                auto profile=prepare_profile(manifest,root/"payloads",roms,cache,worker,{},[&](auto stage){
+                    if(stage.find("Reconstructing locally owned assets")!=stage.npos||stage.find("missing mods with shared verified ROM")!=stage.npos)++work;
+                },installed);
+                const auto duration=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
+                validate_profile(*profile);
+                std::cout<<"Rejoin phase="<<label<<" roots="<<manifest.content.size()<<" reconstruction-stages="<<work<<" elapsed-ms="<<duration<<'\n';
+                return std::pair{profile,work};
+            };
+            const auto [cold,cold_work]=run(subset,"cold-preparation");check(cold_work>0);
+            const auto count=[&]{return std::distance(std::filesystem::directory_iterator(root/"online"/"prepared-payloads"),std::filesystem::directory_iterator{});};
+            const auto first_count=count();check(first_count==std::count_if(subset.payloads.begin(),subset.payloads.end(),[](const auto& p){return p.kind==PayloadKind::Xdelta||p.kind==PayloadKind::TrackLab;}));
+            const auto [warm,warm_work]=run(subset,"fully-prepared-repeat");check(warm_work==0&&count()==first_count);
+            const auto [added,added_work]=run(bundle.manifest,"one-new-dependency");check(added_work==1&&count()==first_count+1);
+            const auto [installed,installed_work]=run(bundle.manifest,"installed-repeat",library);check(installed_work==0);
+            const auto [fresh_installed,fresh_installed_work]=run(bundle.manifest,"fresh-installed-index",library,"installed-online");check(fresh_installed_work==0);
+            const auto resources=RuntimeResources::prepare(added,rom);
+            auto a=resources->new_session(),b=resources->new_session();check(a!=b&&a->checkpoint()==b->checkpoint());
+            const auto repeat_start=std::chrono::steady_clock::now();
+            const auto repeated=RuntimeResources::prepare(added,rom);check(resources==repeated);
+            std::cout<<"Rejoin phase=immutable-runtime-repeat elapsed-ms="<<std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-repeat_start).count()<<'\n';
+            auto forged=std::make_shared<Profile>(*added);forged->digest=std::string(64,'a');
+            rejects([&]{RuntimeResources::prepare(forged,rom);});
+            std::stop_source cancelled_runtime;cancelled_runtime.request_stop();
+            rejects([&]{RuntimeResources::prepare(added,rom,cancelled_runtime.get_token());});
+            // Damage one private cache receipt, discard only the tiny aggregate
+            // index and prove exactly one dependency is reconstructed.
+            Manifest single;single.revision=revision;single.payloads.push_back(*std::find_if(bundle.manifest.payloads.begin(),bundle.manifest.payloads.end(),[](const auto& p){return p.kind==PayloadKind::Xdelta;}));
+            for(const auto& item:bundle.manifest.content)if(item.payload==single.payloads.front().digest)single.content.push_back(item);
+            single=canonical(single);
+            const auto damaged=root/"online"/"prepared-payloads"/identity(single)/"verified.json";
+            check(std::filesystem::exists(damaged));std::filesystem::remove(damaged);write(damaged,{{"schema",0},{"manifest","invalid"}});
+            const auto indices=root/"online"/"source-profiles";
+            check(indices.parent_path()==root/"online");std::filesystem::remove_all(indices);std::filesystem::create_directory(indices);
+            const auto [repaired,repaired_work]=run(bundle.manifest,"one-damaged-cache");check(repaired_work==1&&count()==first_count+1);
+            check(std::filesystem::directory_iterator(root/"online"/"quarantined-payloads")!=std::filesystem::directory_iterator{});
+            std::stop_source stop;stop.request_stop();
+            rejects([&]{prepare_profile(bundle.manifest,root/"payloads",roms,root/"online",worker,stop.get_token());});
+            const auto [after,after_work]=run(bundle.manifest,"after-cancellation");check(after_work==0&&count()==first_count+1);
+            check(before_tracks==sha256(read_file(library/"track-catalog.json",MiB))&&before_characters==sha256(read_file(library/"character-catalog.json",MiB)));
+            std::filesystem::remove_all(root);std::cout<<checks<<" real-ROM rejoin checks passed; original library unchanged.\n";return 0;
+        }
         if(argc==6 && std::string_view(argv[1])=="--behaviour-corpus") {
             root=private_storage_path(std::filesystem::current_path()/("online-behaviour-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())));
             check(std::filesystem::create_directory(root));

@@ -73,11 +73,10 @@ void DrawOlConnection(float width,const OnlineFrame& frame){
         OlParagraph("Checks the active Rollback transport at the game's 30 Hz input cadence. It does not run a race or change your settings.",14.F,kOlSoft,inner);
         if(!g_ol_rollback_check.status.empty()){PaddockGap(12.F);OlParagraph(g_ol_rollback_check.status,15.F,kOlAmber,inner);}
         if(OlPartyActive()){
+            const auto routes=dkr::relay::view(&dkr::runtime::netplay::session());
             for(const auto& m:g_ol_party.link.party.members){
-                std::string timing=m.id==g_ol_party.link.local?"This PC":"Measuring lobby RTT...";
-                for(const auto& metric:g_ol_party.metrics)if(metric.member==m.id&&metric.count)timing=std::to_string(metric.rtts[(metric.index-1)%16])+" ms lobby RTT";
-                if(!frame.view.host&&m.host&&g_ol_party.host_rtt)timing=std::to_string(g_ol_party.host_rtt)+" ms to host";
-                if(!frame.view.host&&!m.host&&m.id!=g_ol_party.link.local)timing="Measured by the host";
+                const auto timing=dkr::relay::lobby_card_ping(routes,std::to_string(m.id),m.host,m.id==g_ol_party.link.local,
+                    m.port.value_or(255),g_ol_party.link.party.generation).text;
                 PaddockGap(8.F);OlParagraph(m.name+(m.role==lobby_party::Role::Spectator?" (spectator)":" (racer)")+" - "+timing,14.F,kOlSoft,inner);
             }
         }else if(frame.view.network_rtt_ms)OlParagraph("Lobby RTT: "+std::to_string(frame.view.network_rtt_ms)+" ms. Run the Rollback check for input-channel timings.",14.F,kOlSoft,inner);

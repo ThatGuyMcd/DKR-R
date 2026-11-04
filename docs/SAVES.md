@@ -60,7 +60,7 @@ Back up your data before updating. To recover, export and inspect the surviving
 copy first, then restore it deliberately. No editor can recreate progress when
 no valid copy survives. See [Troubleshooting](TROUBLESHOOTING.md).
 
-## Spectators and achievements — v1.0.12
+## Spectators and achievements â€” v1.0.14
 
 Watching uses session-owned state, not your personal Adventure or Paks. The
 host owns communal online progress; confirmed handovers do not transplant a
@@ -70,3 +70,12 @@ Achievements have separate `achievements/progress-v1.json` storage. Max Out
 does not itself award gameplay goals. Recognising provable existing milestones
 is an explicit achievement setting. Spectating and development do not award
 gameplay progress. See [Achievements](ACHIEVEMENTS.md) and [Spectators](SPECTATORS.md).
+
+## Play indicators and session mods
+
+Open Save Manager from **Play > Save Manager**. The three-light summary in Play
+describes Vanilla, Modded or Online, with Using for a running session and Next
+for the next launch. A modded label does not create a separate offline save: ordinary
+offline mods still share personal Adventure. The accepted route is frozen until
+the running game/lobby releases it. Session mods changes the next content set
+without changing individual selections, copying progress or deleting saves.

@@ -84,6 +84,11 @@ async function main(){
     equal((await request(pictureRoute,'guest')).status,404,'unshared picture is private to its owner');
     response=await request(pictureRoute,'host');equal(response.status,200,'owner can still use an unshared image');
     equal(response.headers.get('cache-control'),'private, no-store','unshared picture is not publicly cached');
+    const unlinkedCard=native('host-unlinked');
+    const unlinkedProfile=await (await request('/v1/launcher/profile?key='+unlinkedCard.publicKey,'host')).json();
+    equal(unlinkedProfile.publicKey,'','an unregistered launcher has no verified social link');
+    equal(unlinkedProfile.avatarUrl,profile.avatarUrl,'account picture metadata is available before launcher linking');
+    equal(unlinkedProfile.sharing,false,'account picture privacy is available before launcher linking');
     await db.prepare('DELETE FROM launcher_profile_limits').run();
     for(const [bad,label] of [[png(256,128),'wrong dimensions'],[png(128,128,1),'excess decompressed data'],[png(128,128,0,true),'metadata chunks'],[Buffer.from('<svg/>'),'active format'],[Buffer.alloc(98305),'oversized file']]){
       response=await publish('host','host-a','custom',{picture:bad.toString('base64url')});equal(response.status,400,'reject '+label);
@@ -130,12 +135,28 @@ async function main(){
     members=(await guest.call({type:'social',code:state.code,sender:'202'})).data.members;
     equal(members.find(member=>member.sender==='303').friendCode,otherCard.friendCode,'client can obtain another admitted client friend capability');
     equal((await host.call({type:'social',code:state.code,sender:'101'})).data.members.length,3,'host has the same friend-request capability');
+    // A background keep refresh must work after native admission. It renews
+    // the social link without altering the selected image or its privacy.
+    response=await publish('host','host-a','keep',{sharing:true});equal(response.status,200,'host refreshes its profile while the lobby is active');
+    equal((await request('/v1/online/session?profile='+cardA.publicKey,'host',{}, {'X-DKRR-Instance':host.instance})).status,200,'host session imports renewed profile metadata');
+    response=await publish('other','other','custom',{picture:image.toString('base64url')});equal(response.status,200,'another admitted client selects its picture');
+    equal((await request('/v1/online/session?profile='+otherCard.publicKey,'other',{}, {'X-DKRR-Instance':other.instance})).status,200,'client session imports renewed profile metadata');
+    members=(await guest.call({type:'social',code:state.code,sender:'202'})).data.members;
+    equal(members.find(member=>member.sender==='101').avatar,profile.avatarUrl,'joined client receives the host picture after refresh');
+    equal(members.find(member=>member.sender==='303').avatar,profile.avatarUrl,'joined client receives another client picture');
+    equal(members.find(member=>member.sender==='101').friendCode,cardA.friendCode,'joined client receives the host friend capability');
+    await publish('host','host-a','keep',{sharing:false});
+    equal((await request('/v1/online/session?profile='+cardA.publicKey,'host',{}, {'X-DKRR-Instance':host.instance})).status,200,'private picture preference is refreshed during the lobby');
+    members=(await guest.call({type:'social',code:state.code,sender:'202'})).data.members;
+    equal(members.find(member=>member.sender==='101').avatar,'','client respects a host picture opt-out after refresh');
+    equal(members.find(member=>member.sender==='101').friendCode,cardA.friendCode,'picture opt-out does not disable Add Friend');
     check((await other.call({type:'social',code:state.code,sender:'303'},'repeat-social')).ok,'member can read current profiles');
     state.racers=2;state.roster='4';state.socialRoster=state.socialRoster.filter(sender=>sender!=='303');room=(await host.call({type:'room',revision:room.revision,state})).data;
     equal((await other.call({type:'social',code:state.code,sender:'303'})).error.code,'social_membership','leaving the native roster retires access immediately');
     equal((await other.call({type:'social',code:state.code,sender:'303'},'repeat-social')).error.code,'social_membership','replaying an earlier request cannot restore access after leaving');
     check((await host.call({type:'close'})).ok,'host closes lobby');
     equal((await guest.call({type:'social',code:state.code,sender:'202'})).error.code,'social_membership','closed lobby does not disclose stale player metadata');
+    await publish('other','other','initials');
     response=await publish('host','host-a','initials');equal(response.status,200,'initials can replace a custom picture');
     equal((await request(pictureRoute)).status,404,'removed picture is no longer served');
     await db.prepare('DELETE FROM launcher_profile_limits').run();

@@ -1,8 +1,8 @@
 # Online profiles, pictures and remembered sign-in
 
-Online and the Mod Store use the same Discord account and display name.
+Online and the Mod Library use the same Discord account and display name.
 Open **DKR-R Online → Online Profile**, edit the name and choose **Save profile**.
-The same name appears to friends and in the Mod Store. An active lobby keeps
+The same name appears to friends and in the Mod Library. An active lobby keeps
 its current name until you leave. A failed save keeps your draft for retrying.
 
 ## Pictures and friends
@@ -55,7 +55,7 @@ python -B patches/online-directory/backend_pipeline.py --output <bundle-folder> 
 4. Update the existing private API Worker with
    `PRIVATE-API/worker-single-file.mjs`. Keep all current variables, secrets and
    bindings. No new service binding is needed.
-5. Use matching v1.0.12 launchers. Sign out and back in once, then check the
+5. Use matching v1.0.14 launchers. Sign out and back in once, then check the
    separate Discord name/image choices, custom picture preview and sharing.
 
 The API stores one small selected avatar per account and verified links to

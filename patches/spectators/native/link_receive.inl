@@ -4,6 +4,16 @@ if (unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType) {
     auto party=watch::party_link(this);std::scoped_lock party_lock(party->mutex);
     watch::LinkMessage message;
     if(!watch::link_decode(packet.payload,message))continue;
+    if(message.kind==watch::LinkKind::Extension) {
+        // Authentication/replay checks already ran. A provisional download
+        // route is not an admitted lobby member and cannot publish metadata.
+        const bool admitted=is_host_?(party->enabled?party->peer(packet_sender)!=nullptr:peer_by_sender(packet_sender)!=nullptr):
+            (packet_sender==host_sender_id_&&source==host_address_);
+        if(admitted&&message.body.size()>=6&&message.body[5]==4)dkr::chat::channel(this)->receive(packet_sender,message.body);
+        else if(admitted&&message.body.size()>=6&&message.body[5]==3)dkr::relay::control(this,packet_sender,message.body);
+        else dkr::online_stability::control(this)->receive(packet_sender,admitted,message.body);
+        continue;
+    }
     if(is_host_) {
         auto* member=party->peer(packet_sender);
         if(!party->enabled||!member||member->address!=source)continue;
@@ -34,7 +44,7 @@ if (unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType) {
             if(!reply)party->enqueue({packet_sender,watch::LinkKind::Heartbeat,TransportTrafficClass::Control,watch::link_heartbeat(token,true)});
             else if(token==member->ping_token&&member->ping_sent.time_since_epoch().count()) {
                 const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(now-member->ping_sent).count();
-                if(ms>=0&&ms<5000){member->rtts[member->rtt_index++%member->rtts.size()]=std::uint16_t(std::max<std::int64_t>(1,ms));member->rtt_count=std::min<unsigned>(member->rtt_count+1,unsigned(member->rtts.size()));}
+                if(ms>=0&&ms<5000){member->rtts[member->rtt_index++%member->rtts.size()]=std::uint16_t(std::max<std::int64_t>(1,ms));member->rtt_count=std::min<unsigned>(member->rtt_count+1,unsigned(member->rtts.size()));member->rtt_at=now;}
                 member->ping_token=0;
             }break;
         }

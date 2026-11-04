@@ -51,6 +51,23 @@ def enhancements(text):
  return text[:start]+part+text[end:]
 
 def renderer(text):
+ text='#include "online_stability/response_trace.hpp"\n#include "online_presentation/frame_policy.hpp"\n#include "online_stability/battle_view.hpp"\n'+text
+ text=once(text,'    std::uint32_t scene=0;\n    {',
+  '    dkr::online_presentation::ResourceScope resource_scope(lease->epoch());\n    std::uint32_t scene=0;\n    {')
+ text=once(text,'        scene=presentation::normalise_identity(event.parameters[0]^',
+  '        resource_scope.scene(event.parameters[0]);\n        scene=presentation::normalise_identity(event.parameters[0]^')
+ text=once(text,'        last_owned_report_=now;',
+  '        dkr::online_presentation::report();\n        last_owned_report_=now;')
+ text=once(text,'    queued=true;\n    const auto now=std::chrono::steady_clock::now();',
+  '    queued=true;\n    const auto now=std::chrono::steady_clock::now();\n    last_wait_presentation_=now;')
+ text=once(text,'    if(now-last_wait_presentation_<std::chrono::milliseconds(33))return;',
+  '    if(!dkr::online_presentation::idle_refresh_due(now-last_wait_presentation_,present_count_!=0))return;\n    dkr::online_presentation::count(dkr::online_presentation::Event::IdleRepeat);')
+ text=once(text,'    // Salt BEFORE constructing any matrix/shadow identities.',
+  '''    const auto view_decision=dkr::online_stability::view_eligibility(online_view_session_.owner,online_view_session_.players,lease->draw_events());
+    dkr::online_presentation::view(owned_decode_scratch_->online.focused(),unsigned(view_decision.reason),unsigned(std::max(0,width)),unsigned(std::max(0,height)),cover);
+    // Salt BEFORE constructing any matrix/shadow identities.''')
+ text=once(text,'     update_screen();}',
+  '     update_screen();}\n    if(lease)dkr::online_stability::response::reached(lease->epoch(),lease->descriptor().frame,dkr::online_stability::response::Stage::Renderer);')
  text=once(text,'#include "presentation_identity.hpp"','#include "presentation_identity.hpp"\n#include "detail_contract.hpp"')
  scope='''    dkr::runtime::presentation::TaskIdentityScope identity_scope(
         rdram_snapshot, task->t.data_ptr);'''
@@ -134,6 +151,14 @@ def car(text):
     return indices!=0&&in_front;''')
 
 def bridge(text):
+ text='#include "online_presentation/frame_policy.hpp"\n'+text
+ text=once(text,'        data_->water_registry=&water::enhanced::task_registry(*state,',
+  '''        const auto resource_scene=dkr::online_presentation::asset_scene(presentation::task_scene_generation(),
+            water::streaming::cache_state(&state->ext.textureCache->textureMap.replacementMap).era);
+        data_->water_registry=&water::enhanced::task_registry(*state,''')
+ for call in ('water::enhanced::task_registry(*state,','water::residency().prepare(*state,*data_->water_registry,'):
+  text=once(text,call+'presentation::task_scene_generation(),',
+   call+'resource_scene,')
  text=once(text,'    if(cars_requested)kRDRAMSize=0x1000000U;','    if(cars_requested||models)kRDRAMSize=0x1000000U;')
  return once(text,'if(auto* models=active_->data_->local_models)',
   'if(auto* models=active_->data_->local_models;models&&(!active_->data_->online_view||!active_->data_->online_view->suppress_rectangle(*state)))')
@@ -198,6 +223,20 @@ def main(a):
    normal=row['target'].startswith('DKRRecompiledFuncs');text,found=guest(text,normal)
    counts.setdefault(row['target'],Counter()).update(found)
    if not found:continue
+  elif name=='f3ddkr_rt64.cpp':
+   # Keep the accepted header and bind the normal appearance module just
+   # before its existing single material comparison/flush.
+   material=Path(row['water_header']).read_text(encoding='utf-8')
+   material='#include "water_style/appearance.hpp"\n'+material
+   material=once(material,'    if(std::memcmp(&material,&state.waterMaterial,sizeof(material))!=0) {',
+    '''    static_assert(dkr::runtime::water::style::kDkrStyleFlag==WATER_STYLE_DKR);
+    if(material.identity.x>0 && surface)
+        dkr::runtime::water::style::apply(material,surface->kind,
+            registry.metadata() && registry.metadata()->profile.has_value());
+    if(std::memcmp(&material,&state.waterMaterial,sizeof(material))!=0) {''')
+   (a.output/'styled_water_rt64.hpp').write_text(material,encoding='utf-8',newline='\n')
+   text=bridge(text)
+   text=once(text,'#include "enhanced_water_rt64.hpp"','#include "styled_water_rt64.hpp"')
   elif name=='runtime_ui.cpp':
    # The final UI TU already pins its adjacent graphics include. Stage only
    # that include; keep every other established launcher section unchanged.
@@ -207,6 +246,10 @@ def main(a):
    if not graphics.is_file():graphics=Path(row['graphics'])
    ui=graphics.read_text(encoding='utf-8')
    ui=once(ui,'Use the most detailed racer models.','Use the highest-detail characters and vehicles in every view, online and offline. Split-screen uses more graphics power.')
+   # Existing transition binding; the shared setting UI lives in normal source.
+   ui=once(ui,'        if(SettingsDropdown("water-reflections",',
+    '        #include "water_style/settings_ui.inl"\n        if(SettingsDropdown("water-reflections",')
+   ui=once(ui,'water::reset_appearance();SaveSettings();','water::reset_appearance();dkr::runtime::water::style::reset();SaveSettings();')
    (a.output/'all_detail_graphics.inl').write_text(ui,encoding='utf-8',newline='\n')
    text=text[:match.start()]+'#include "all_detail_graphics.inl"'+text[match.end():]
   else:text=transforms[name](text)

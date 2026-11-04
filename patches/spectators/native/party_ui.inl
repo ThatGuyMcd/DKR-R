@@ -62,6 +62,8 @@ void DrawPartyPage(float width,const OnlineFrame& frame) {
             PaddockGap(8.F);OlParagraph("D-pad left/right: player. C-up: change camera. F1 / launcher shortcut: lobby controls.",14.F,kOlSoft,inner);
         }
     });PaddockGap(16.F);
+    DrawOlJoiningProgress(width,frame);
+    DrawOlLiveDelay(width);
     if(v.host&&!frame.view.pending_joins.empty()) {
         OnlineFrame gate=frame;gate.busy=false;gate.has_space=v.party.members.size()<party::MaximumMembers;DrawOlGate(width,gate);PaddockGap(16.F);
     }

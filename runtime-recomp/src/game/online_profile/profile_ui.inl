@@ -1,70 +1,13 @@
 #include "display_name_ui.inl"
 #include "account_settings.inl"
-
-struct OlProfileTexture {
-    SDL_Texture* texture = nullptr;
-    std::shared_ptr<const dkr::store::Image> pixels;
-    int last_frame = -1;
-};
-std::map<std::string, OlProfileTexture> g_profile_textures;
-SDL_Renderer* g_profile_texture_renderer = nullptr;
+#include "avatar_draw.inl"
 bool g_open_discord_profile = false;
-std::string g_profile_uid, g_profile_source = "keep", g_profile_preview_key, g_profile_wire, g_profile_attempted;
+std::string g_profile_uid, g_profile_source = "keep", g_profile_preview_key, g_profile_wire;
 bool g_profile_dirty = false, g_profile_silent = false;
 bool g_open_picture_editor=false,g_close_picture_editor=false,g_picture_share_before=true;
 std::uint64_t g_profile_mutation = 0;
 std::string g_profile_picture_after_name;
-auto g_profile_renew_at = std::chrono::steady_clock::time_point{};
-
-void ReleaseDiscordProfileTexture() {
-    for (auto& [key, entry] : g_profile_textures) if (entry.texture) SDL_DestroyTexture(entry.texture);
-    g_profile_textures.clear(); g_profile_texture_renderer = nullptr;
-}
-
-void DrawOlProfileAvatar(ImDrawList* draw, ImVec2 at, float size, std::string_view name,
-                         const std::string& url, bool dimmed) {
-    DrawOlAvatar(draw, at, size, name, dimmed);
-    const bool preview = url.starts_with("profile-preview:") && url.size() <= 160;
-    if ((!dkr::profile::avatar_url(url) && !preview) || !g_mod_store_renderer ||
-        !ImGui::IsRectVisible(at, {at.x+size,at.y+size})) return;
-    auto& store = dkr::store::service();
-    const auto pixels = store.image(url);
-    if (!pixels) { if(!preview)store.request_image(url); return; }
-    if (!pixels->width || !pixels->height || pixels->width>512 || pixels->height>512 ||
-        pixels->rgba.size()!=std::size_t(pixels->width)*pixels->height*4) return;
-    if (g_profile_texture_renderer != g_mod_store_renderer) {
-        ReleaseDiscordProfileTexture(); g_profile_texture_renderer = g_mod_store_renderer;
-    }
-    const int frame = ImGui::GetFrameCount();
-    auto found = g_profile_textures.find(url);
-    if (found == g_profile_textures.end()) {
-        if(g_profile_textures.size()>=48) {
-            const auto victim=std::find_if(g_profile_textures.begin(),g_profile_textures.end(),[&](const auto& row){return row.second.last_frame!=frame;});
-            if(victim==g_profile_textures.end())return;
-            SDL_DestroyTexture(victim->second.texture); g_profile_textures.erase(victim);
-        }
-        found=g_profile_textures.emplace(url,OlProfileTexture{}).first;
-    }
-    auto& entry=found->second;
-    if (entry.pixels != pixels && entry.last_frame != frame) {
-        auto texture=SDL_CreateTexture(g_mod_store_renderer,SDL_PIXELFORMAT_RGBA32,SDL_TEXTUREACCESS_STATIC,int(pixels->width),int(pixels->height));
-        if (!texture) return;
-        if(SDL_UpdateTexture(texture,nullptr,pixels->rgba.data(),int(pixels->width*4))) {SDL_DestroyTexture(texture);return;}
-        SDL_SetTextureBlendMode(texture,SDL_BLENDMODE_BLEND);
-        if(entry.texture)SDL_DestroyTexture(entry.texture);
-        entry.texture=texture;entry.pixels=pixels;
-    }
-    if(entry.texture) {
-        entry.last_frame=frame;
-        draw->AddImageRounded(reinterpret_cast<ImTextureID>(entry.texture),at,{at.x+size,at.y+size},{0,0},{1,1},
-                              PaddockCol(0xFFFFFF,dimmed?170U:255U),size*.5F);
-        draw->AddCircle({at.x+size*.5F,at.y+size*.5F},size*.5F-1.F,PaddockCol(0xFFFFFF,46U),32,2.F);
-    }
-}
-
-void DrawOlSelfAvatar(ImDrawList* draw, ImVec2 at, float size, std::string_view name) {
-    DrawOlProfileAvatar(draw,at,size,name,g_discord_avatar_url);
-}
+dkr::profile::ProfileRefresh g_profile_refresh;
 
 void SaveOlProfilePicture(bool silent) {
     auto& service=dkr::store::service(); const auto account=service.view();
@@ -80,10 +23,14 @@ void SyncOlProfilePicture() {
     const auto uid=dkr::store::text(account->user,"id",80);
     if(uid!=g_profile_uid) {
         g_profile_uid=uid;g_profile_wire.clear();g_profile_source="keep";g_profile_preview_key.clear();g_profile_dirty=false;
-        g_profile_attempted.clear();g_profile_mutation=account->mutation;dkr::profile::bridge::own_avatar({});
+        g_profile_refresh={};g_profile_mutation=account->mutation;dkr::profile::bridge::own_avatar({});
         g_profile_picture_after_name.clear();
     }
     if(uid.empty())return;
+    const auto now=std::chrono::steady_clock::now();
+    g_profile_refresh.settle(uid,account->mutation,account->last_action,
+        dkr::store::text(account->last_result,"accountId",80),dkr::store::text(account->last_result,"publicKey",64),
+        account->writing || account->loading,now);
     if (!g_profile_picture_after_name.empty() && !g_display_name_save.pending && !account->writing && !account->loading) {
         const bool apply = g_profile_picture_after_name == uid && g_display_name_error.empty();
         g_profile_picture_after_name.clear();
@@ -101,21 +48,21 @@ void SyncOlProfilePicture() {
     }
     const auto metadata=account->user.is_object()?account->user.value("launcherProfile",dkr::store::Json{}):dkr::store::Json{};
     const auto serialized=metadata.dump();
-    if(!g_profile_dirty && serialized!=g_profile_wire && !dkr::store::text(metadata,"publicKey",64).empty()) {
+    if(!g_profile_dirty && serialized!=g_profile_wire && metadata.is_object() && metadata.contains("avatarUrl")) {
         const auto avatar=dkr::store::text(metadata,"avatarUrl",180);
         if(dkr::profile::shared_avatar(avatar) && metadata.contains("sharing") && metadata["sharing"].is_boolean()) {
             g_discord_avatar_url=avatar;g_profile_share_picture=metadata.value("sharing",true);g_profile_wire=serialized;
             dkr::profile::bridge::own_avatar(g_profile_share_picture?avatar:std::string{});SaveSettings();
         }
     }
-    const auto now=std::chrono::steady_clock::now();
-    if(metadata.is_object() && !g_profile_dirty && !account->writing && !account->loading &&
-       !dkr::runtime::netplay::session().presentation_active() &&
-       (g_profile_attempted!=uid || now>=g_profile_renew_at)) {
-        g_profile_attempted=uid;g_profile_renew_at=now+std::chrono::hours(12);
-        if(dkr::store::text(metadata,"publicKey",64).empty() && g_discord_choice_account==uid &&
-           dkr::profile::avatar_url(g_discord_avatar_url) && !dkr::profile::custom_avatar_url(g_discord_avatar_url))g_profile_source="discord";
-        SaveOlProfilePicture(true);
+    if(metadata.is_object() && !g_profile_dirty && !account->writing && !account->loading) {
+        const auto card=dkr::profile::bridge::card();
+        if(g_profile_refresh.due(uid,card.public_key,now,card.friend_code)) {
+            g_profile_refresh.begin(account->mutation);
+            if(dkr::store::text(metadata,"publicKey",64).empty() && g_discord_choice_account==uid &&
+               dkr::profile::avatar_url(g_discord_avatar_url) && !dkr::profile::custom_avatar_url(g_discord_avatar_url))g_profile_source="discord";
+            SaveOlProfilePicture(true);
+        }
     }
 }
 

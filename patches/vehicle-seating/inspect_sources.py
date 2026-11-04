@@ -157,7 +157,10 @@ def inspect(stage,repair_stage,cars,binary=None):
         'vehicle_seat_alignment.hpp':['if(car.per_driver())return {};','value.x-car.origin.x','car.driver_seats.at(base)'],
         'vehicle_rt64.cpp':['seat_target(car,driver_->base)','seating::source_point(car,mesh.vertices[vi])','offset.x/scale_','car.per_driver()?0.F:DriverSeatAdvance','geometry=origin-scale-yaw-translate-v1',
             'maximum_detail_=enhancements::maximum_detail_enabled();','vehicle_lod_=maximum_detail_?0U:std::min(original_lod_,5U);','car.lods[vehicle_lod_]','(vehicle_lod_<<19)','detail-policy=character-effective-v1',
-            'rdp.setOtherMode(G_TF_POINT|G_TP_PERSP',
+            'rdp.setOtherMode(G_CYC_2CYCLE|G_TF_POINT|G_TP_PERSP',
+            'lighting::normal_matrix(basis)','lighting::shade(light,normal,mesh.colour)',
+            'rdp.setEnvColor(light.environment)','rdp.setCombine(lighting::combine(textured))',
+            'vertex.color.a=255','!lighting_.ready()',
             '.rgba32?G_IM_SIZ_32b:G_IM_SIZ_16b',
             'rdp.setTile(0,G_IM_FMT_RGBA,format,(width*2+7)/8',
             'texture-policy=source-colour-point-v1','driver_->lods[0]','RenderPass::detail_profile','thread_local const RenderPass* current_pass'],
@@ -177,7 +180,7 @@ def inspect(stage,repair_stage,cars,binary=None):
             '[custom-vehicles][finish-wheels]',
             'wheel_phases_[player][w]+=std::uint64_t(-(speed*time)/(10LL*frames))',
             'CheckpointWriter out;out.u32(5);'],
-        'vehicle_world.hpp':['current_player,racers_by_port;'],
+        'vehicle_world.hpp':['current_player,racers_by_port,light_intensity,inverse_view,viewport_layout;'],
     }
     for filename,markers in invariants.items():
         text=(native/filename).read_text()

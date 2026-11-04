@@ -326,6 +326,14 @@ def framebuffer(t):
         """                        if(classic)waterRenderer->collectWaterfall(drawData,call.meshDesc.faceIndicesStart,call.callDesc.triangleCount*3);
                         else waterRenderer->collectNormals(drawData,""",
     )
+    t = replace(
+        t,
+        "waterRenderer->draws[drawCall.waterIndex].material.identity.y==12",
+        "(uint32_t(waterRenderer->draws[drawCall.waterIndex].material.identity.y)&WATER_DEBUG_MASK)==12",
+    )
+    if t.count("wp.material.identity.y==12") != 2:
+        raise ValueError("Water debug pipeline bindings changed")
+    t = t.replace("wp.material.identity.y==12", "(uint32_t(wp.material.identity.y)&WATER_DEBUG_MASK)==12")
     return t
 
 

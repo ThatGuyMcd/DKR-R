@@ -2,28 +2,23 @@
 
 <img width="1672" height="941" alt="Diddy Kong Racing Recompiled" src="https://github.com/user-attachments/assets/c913bee2-029c-4e29-9921-0f6abe7a3bf1" />
 
-<p align="center">
-  <a href="https://discord.com/invite/AMWfXdBjNP">
-    <img src="https://img.shields.io/badge/JOIN%20OUR%20DISCORD-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join our Discord">
-  </a>
-</p>
+[Join our Discord](https://discord.com/invite/AMWfXdBjNP) · [Open the Mod Library](https://positron-portal.com/dkr-r/) · [Downloads](https://github.com/ThatGuyMcd/DKR-R/releases)
 
-<p align="center">
-  <a href="https://positron-portal.com/dkr-r/">
-    <img src="https://img.shields.io/badge/OPEN%20MOD%20STORE-2EA44F?style=for-the-badge" alt="Open Mod Store">
-  </a>
-</p>
+## DKR-R v1.0.14
 
-## DKR-R v1.0.12 Release Build
+I've worked on the online input delay, joining and frame pacing, and brought the
+launcher and in-game overlay together so the same pages work in both. There are
+new display options, automatic seasonal themes, launcher languages, optional
+analogue driving and controller feedback settings. Custom cars and the road
+wheels on custom characters now respond to lighting properly too.
 
-I've worked on making modded lobbies quicker to join and tidied up the Online
-menus. Friends now have compact cards, profile pictures can be changed, and
-Online and the Mod Store share one display name. Steam Deck can remember your
-Discord sign-in without a desktop keyring. The FOV slider also works live now.
-All the existing memory, HUD and spectator fixes are kept.
+Play fades into the new Starting Game screen, with mod progress underneath the
+logo. Online uses the same design while everyone syncs. Linux now requests GPU
+acceleration for the launcher, with a software fallback when needed.
 
-Your saves, mods and settings can stay. Please use the complete v1.0.12
-package on every machine in an Online lobby.
+Your saves, mods and settings can stay. Use the complete v1.0.14 package on every
+machine in an online lobby. See the [full release notes](docs/PUBLIC-1.0.14-NOTES.txt)
+and [changelog](CHANGELOG.md) for everything since v1.0.12.
 
 DKR-R is a native static recompilation of Diddy Kong Racing. Bring your own
 legally obtained **US v1.0 or US Rev A/v1.1 ROM**. No ROM or extracted game
@@ -31,116 +26,116 @@ assets are supplied.
 
 ## Get started
 
-1. Download your platform's complete package from [GitHub Releases](https://github.com/ThatGuyMcd/DKR-R/releases).
-2. Windows: extract the whole ZIP and start **DKR-R.exe**. Keep `assets` and
-   `libexec` together; the private helpers are part of the installation.
+1. Download the complete package for your platform from [GitHub Releases](https://github.com/ThatGuyMcd/DKR-R/releases).
+2. Windows: extract the whole ZIP and start **DKR-R.exe**. Keep `assets`,
+   `libexec`, helpers and licence notices together.
 3. Linux / Steam Deck: make the **AppImage** executable and launch it.
 4. Add your original ROM in **Play**, choose your controls and start.
 
-v1.0.12 is available for Windows x64, Linux x86_64, Linux ARM64 and Steam
-Deck. Both Linux architectures have AppImages. Linux needs glibc 2.38,
-GLIBCXX_3.4.32 and a compatible Vulkan driver.
+The release targets Windows x64, Linux x86_64, Linux ARM64 and Steam Deck.
+Steam Deck uses the same payload as the Linux x86_64 AppImage. Android is not
+supported for current releases; macOS and iOS downloads remain on their earlier
+versions. See [platform support](docs/PLATFORMS.md) and the
+[validation record](RELEASE-VALIDATION.md) for requirements and actual coverage.
 
-Android releases are no longer supported. I'm leaving Android out until
-performance is good enough. There are no new macOS or iOS downloads in
-this release. See [platform support](docs/PLATFORMS.md) for the details.
+Some legacy `.xdelta` mods require a clean **US v1.0 ROM to install**, including
+manual imports. Add it once in Play; you can keep v1.1 selected for playing.
+There is no bundled revision-conversion data. See [ROM setup](docs/ROM_SETUP.md).
 
-Accurate keeps the original presentation. Modern offers widescreen,
-interpolated presentation rates and optional graphics settings. **Escape**,
-**F1** or controller **Back/View** opens the overlay.
+## Play and the overlay
 
-## Online, public lobbies and spectators
+**Escape**, **F1** or controller **Back/View** opens the overlay. It uses the same
+pages as the launcher. **Play** contains Achievements, Session mods and Save
+Manager. Turn Session mods OFF for your next vanilla session without changing
+any individual mod selections. Ordinary offline mods still share your personal
+Adventure; online and development saves keep separate owners.
 
-- Reuse your Mod Store Discord sign-in, or choose **Sign in with Discord** in
-  DKR-R Online. Offline play and local achievements need no account.
-- **Public** shows worldwide advertised lobbies; **Friends** keeps the existing
-  friend route. The online total counts connected signed-in accounts, with
-  duplicate launcher instances counted once.
-- Hosts choose **Private** or **Public**. Private is the default; private rooms
-  stay out of the public list and use friends or lobby codes.
-- Host approval, available places, compatible builds, ROMs, saves and verified
-  session mods still apply. A listing does not grant a controller port.
-- Up to four racers and eight spectators can share a spectator-capable lobby.
-  Watch all splits, follow a racer or use the T.T.-style director. The host can
-  approve racer/spectator swaps without restarting the application.
-- Run **Check Rollback connection** while waiting to share the same Scoreboard
-  with everyone. Grades estimate connection timing; they are not an FPS guarantee.
+**Skip launcher** boots the selected game automatically and can be turned off
+again in the overlay. **Language** changes the launcher and overlay immediately;
+it does not translate the ROM or community content. The initial eleven language
+packs are drafts awaiting native-speaker review. Seasonal colours, decorations
+and button patterns follow your computer's region and local date.
 
-The website API handles discovery, presence and admission. Gameplay continues
-over the existing peer connection and Rollback path. Restrictive networks can
-still prevent direct connections. Joining a running race through the directory
-is separately gated by the service's spectator setting; it never admits a late
-racer. There is no host migration or bundled gameplay relay.
+The left stick moves between page elements and the right stick scrolls. The
+sidebar switch chooses LB/RB or D-pad navigation. See the [launcher guide](docs/LAUNCHER.md),
+[languages](docs/LOCALISATION.md) and [seasonal themes](docs/LAUNCHER_THEMES.md).
 
-Use matching complete v1.0.12 packages on every peer. Start with the
-[Online guide](docs/ONLINE_MULTIPLAYER.md), [public lobby guide](docs/PUBLIC_LOBBIES.md)
-and [spectator guide](docs/SPECTATORS.md).
+## Graphics and controls
 
-## Mods, cars and authoring
+Accurate keeps the original presentation. Modern offers wider aspect ratios,
+explicit render resolutions, interpolation and optional graphics features.
+You can render above the display's resolution if your GPU can handle it.
+**DKR colours** brightens enhanced water while keeping your reflection method.
+Hardware ray tracing remains experimental. CRT controls and standalone Look
+behind are in **Graphics > HUD & effects**. Look behind works online too.
 
-**Mods / Hacks → Mod Store** browses tracks, characters, Vehicles, Custom Magic
-Codes and texture packs, with screenshots, account features and managed
-Install / Update / Repair actions. Changed executable code needs your approval.
+The optional **Analogue Acceleration & Braking** Custom Magic Code adds proper
+trigger travel for all three standard vehicle types. Its bindings, calibration
+and live bars are in the mod's **Details**. It must be installed and enabled.
 
-Import supported **`.dkrkart` custom cars** directly or from ZIPs. Enable them
-under Vehicles, then choose a car after character selection in Track Select.
-Vanilla stays available. Cars replace visuals, with shared online choices;
-handling, collision and Adventure are unchanged. Custom hovercraft and plane
-exports are reserved formats, not supported vehicle types in this release.
-See [Vehicles](docs/VEHICLES.md) and [mods and installation](docs/LEGACY-MODS-BETA.md).
+**Controls > Controller feedback** offers Classic/Enhanced effects, per-player
+settings and output diagnostics. DualSense extras and direct Deck patterns have
+capability checks and experimental options. Physical feel depends on the device
+and input route; the LCD Deck has trackpad haptics rather than grip rumble motors.
 
-**Track Lab** provides Blender track authoring and `.dkrmap` imports, custom
-music, minimaps and matching HD packs. **Custom Magic Codes / SDK 2.0** add
-supported hooks, game services, tools and live development features. API 1
-remains supported; existing packages do not need a forced conversion.
+See [Graphics](docs/GRAPHICS.md), [analogue driving](docs/ANALOGUE-DRIVING.md)
+and [controller feedback](docs/CONTROLLER_FEEDBACK.md).
 
-Custom Trophy Races, the Dev Menu and ModernCamera++ remain optional code mods.
-The Dev Menu uses separate development progress. SDK tools do not grant
-unrestricted access to native engine memory or other players' local settings.
-Start with the [Modding Bible](modding/MODDERS-GUIDE.txt) and
-[Track Lab guide](tools/blender/README.md).
+## Online
 
-**Textures → Texture Dumping** can export installed content, capture textures
-encountered during play, browse a dump and create a starter replacement pack.
-Working edits survive re-export. Keep dumps of original artwork private;
-distribute only artwork you have permission to share. See [texture packs and authoring](docs/TEXTURE_PACKS.md).
+Sign in with your Mod Library Discord account, browse Public/Friends lobbies,
+or host a Private/Public lobby. Up to four racers and eight spectators can share
+a supported lobby; Adventure supports two racers. Host approval, compatible
+ROM/build/settings, verified mods and save admission still apply.
 
-## Achievements, saves and updates
+Lobby cards show connection timing for hosts and clients. **Check Rollback
+connection** opens the shared Scoreboard. Ping and route readings describe the
+connection; they do not guarantee a frame rate. Initial startup uses the new
+Syncing Game screen until the game is ready.
 
-**Achievements** tracks 94 personal goals locally, with filters, pinned goals,
-notifications and import/export. Existing provable save milestones can be
-recognised explicitly. It has no RetroAchievements login or account sync.
-Watching and development sessions do not award gameplay achievements.
-See [Achievements](docs/ACHIEVEMENTS.md).
+See [Online](docs/ONLINE_MULTIPLAYER.md), [public lobbies](docs/PUBLIC_LOBBIES.md)
+and [spectators](docs/SPECTATORS.md). Gameplay uses the admitted peer transport;
+the website handles discovery and accounts. Host migration is not available.
 
-Ordinary mods share your personal Adventure. Host online progress, client
-session copies and development saves remain separate. Save Manager preserves
-older mod-set saves under **Backups & Recovery**. Updating does not require a
-save reset or a mod reinstall. See [Saves](docs/SAVES.md).
+## Free mods and authoring
 
-The launcher can check GitHub and offer compatible signed updates. Downloads
-and installation need your choice. A release needs both `DKR-R-update.json`
-and `DKR-R-update.sig`, signed with the existing trusted release key, before
-automatic installation is available. See [Updates](docs/UPDATES.md).
+**Mod Library** has its own sidebar page, including in the overlay. Browse free
+tracks, characters, custom cars, Custom Magic Codes and textures; open a card
+for details, download counts, comments and reviews. Downloads requested in-game
+wait for the launcher before installation. **Installed Mods** manages your local
+content, including Textures and Track Lab. Changed executable code needs approval.
 
-## Guides and contributing
+Custom `.dkrkart` cars change visuals, not handling. They are selected after
+character selection in Track Select; custom hovercraft/planes remain reserved
+formats. Track Lab imports `.dkrmap` courses and supports Blender authoring,
+music, minimaps and matching HD packs. A battle map needs valid mode-specific
+objects and connected AI paths; selecting a battle type alone is not enough.
 
-- [Documentation index](docs/README.md), [v1.0.12 release notes](docs/PUBLIC-1.0.12-NOTES.txt)
-  and [changelog](CHANGELOG.md).
-- [Troubleshooting](docs/TROUBLESHOOTING.md) and [release validation](RELEASE-VALIDATION.md).
-- [Building](docs/BUILDING.md) and [development](docs/DEVELOPMENT.md).
-- [Licence](LICENSE.md), [third-party credits](THIRD_PARTY.md) and [asset policy](docs/ASSET_POLICY.md).
+SDK 2.0 remains additive to API 1. See [mods](docs/LEGACY-MODS-BETA.md),
+[vehicles](docs/VEHICLES.md), [Track Lab](tools/blender/README.md) and the
+[Modding Bible](modding/MODDERS-GUIDE.txt). Distribute only assets you have
+permission to share; keep original-game texture dumps private.
 
-Changes go through the Patch Pipeline. Do not edit dependency checkouts,
-`RecompiledFuncs` or `RecompiledPatches`. Builds and static package checks are
-recorded separately from physical-device, controller and multiplayer acceptance.
+## Saves, support and updates
 
-## Contributors and credits
+[Saves and Save Manager](docs/SAVES.md) explains personal, online and development
+progress. Updating does not require a reset or mod reinstall. Portable mode
+selects a different profile location on the next launch; it does not move data.
 
-POOTERMAN created the application icon. `sr.gu` leads the DKR-R HDR Texture
-Pack Project. Golden Balloon informed the HUD work; Wave Race 64 Recomp
-provided the enhanced-water reference. Platform ports, Track Lab, runtime,
-Quick Join and build/CI improvements retain their contributor attribution in
-the source, changelog and third-party notices. Thanks to the mod creators and
-players providing reports. See [third-party credits](THIRD_PARTY.md) and the
-[runtime notice](runtime-recomp/COPYING-NOTICE.md).
+Automatic crash reporting is optional. The first-launch notice saves your choice,
+and **About DKR-R > Support** can change it later. Reports use redacted log
+snapshots and retry while the launcher is open after a connection failure.
+Raw dumps need separate consent and can contain personal information. Complete
+anonymity cannot be guaranteed. See [crash reporting](docs/CRASH_REPORTING.md).
+
+The launcher checks GitHub for compatible signed updates; downloading and
+installing remain your choice. See [Updates](docs/UPDATES.md).
+
+## Documentation and contributing
+
+- [All current guides](docs/README.md), [release notes](docs/PUBLIC-1.0.14-NOTES.txt)
+  and [known limitations/validation](RELEASE-VALIDATION.md).
+- [Troubleshooting](docs/TROUBLESHOOTING.md), [building](docs/BUILDING.md),
+  [development](docs/DEVELOPMENT.md) and [contributing](CONTRIBUTING.md).
+- [Release procedure](docs/RELEASING.md), [third-party credits](THIRD_PARTY.md),
+  [licence](LICENSE.md) and [runtime licensing](runtime-recomp/COPYING-NOTICE.md).

@@ -1,6 +1,10 @@
 #include "vehicle_world.hpp"
 #include "vehicle_symbols.hpp"
 #include "legacy_character_menu.hpp"
+#include "vehicle_lighting/capture.hpp"
+#include "vehicle_lighting/check.hpp"
+#include "vehicle_lighting/road_wheels.h"
+#include "vehicle_lighting/road_wheels.hpp"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -68,6 +72,11 @@ bool World::menu(std::span<std::uint8_t> ram,recomp_context& ctx,unsigned event,
         const std::function<unsigned(unsigned)>& header) {
     Memory g(ram);const auto& s=symbols(rev80_);
     const auto sound=[&](unsigned id){Calls c(ram,ctx);c.call(f.menu_sound_play,{id,0});};
+    if(lighting::owned_car_check) {
+        unsigned state=picker_?2U:0U;
+        if(picker_)for(unsigned p=0;p<players_;++p)if(active_[p]&&!selected_[p])state=1;
+        lighting::owned_car_picker.store(state,std::memory_order_relaxed);
+    }
     if(event==100) {
         in_tracks_=true;picker_=false;option_pending_=false;before_=-2;committed_={};active_={};ready_={};wheel_phases_={};++wheel_epoch_;
         cpu_choices_={};cpu_objects_={};race_humans_=race_racers_=spawn_slot_=0;
@@ -211,6 +220,14 @@ std::uint32_t World::render_begin(std::span<std::uint8_t> ram,std::uint32_t obje
         marker(g,s,13+w,std::uint32_t(wheel_phases_[player][w]>>32));
     }
     marker(g,s,17,wheel_epoch_);
+    // Snapshot the same per-racer shade properties and temporary intensity
+    // used by retail render_3d_model. The later decoder must not read globals
+    // left behind by a different racer, split view or rollback replay.
+    const bool fast=g.get(racer,2)==0xffffU || g.get(s.viewport_layout)!=0;
+    const auto light=lighting::capture([&](unsigned address,unsigned count){return g.get(address,count);},
+        object,s.light_intensity,s.inverse_view,fast);
+    const auto light_words=lighting::words(light);
+    for(unsigned i=0;i<light_words.size();++i)marker(g,s,18+i,light_words[i]);
     const auto points=g.get(object+0x60);
     const auto front=points&&g.get(points)>=4&&g.get(points)<=10?g.get(points+12):0;
     // Vec3s stores named rotations as Y, X, Z in the native ABI.
@@ -434,3 +451,32 @@ void World::draw(std::span<std::uint8_t> ram,recomp_context& ctx,const GamePaylo
         std::fprintf(stderr,"[custom-vehicles][native-menu] native title/records, wooden frames and arrows; portraits=64x32+64x32; outward-arrows=alpha-blended; players=%u\n",players_);
 }
 } // namespace dkr::runtime::vehicles
+
+extern "C" void dkr_native_road_wheel_scope(std::uint8_t* ram,std::size_t bytes,const dkr_road_wheel_call* call) {
+    namespace wheels=dkr::runtime::vehicles::lighting::road_wheels;
+    static thread_local wheels::Scope scope;
+    if(!ram || !call)return;
+    const std::span<std::uint8_t> memory{ram,bytes};
+    try {
+        if(call->event==200) {
+            const wheels::Memory g(memory);
+            const bool custom=wheels::custom_header(g.get(call->object+0x2c,2));
+            scope.begin(memory,call->object,custom,call->custom_car!=0,
+                {call->intensity,call->inverse_view,call->viewport_layout});
+        } else if(call->event==201)scope.end(call->object);
+        else if(call->event==202) {
+            if(const auto sample=scope.wheel_begin(memory,call->object,call->holder,call->sprite,call->flags)) {
+                static std::atomic<unsigned> reports{0};
+                if(reports.fetch_add(1,std::memory_order_relaxed)<24)
+                    std::fprintf(stderr,"[graphics][road-wheels] wheel=%08X ordinal=%u exposure=%.4f ambient=%.4f diffuse=%.4f fast=%u; road-wheels-v1 raw draw sample\n",
+                        sample->wheel,sample->ordinal,sample->sample.exposure,sample->sample.ambient,
+                        sample->sample.diffuse,unsigned(sample->sample.fast()));
+            }
+        } else if(call->event==203)scope.wheel_end(memory,call->object);
+    } catch(const std::exception& error) {
+        scope.reset();
+        static std::atomic<unsigned> failures{0};
+        if(failures.fetch_add(1,std::memory_order_relaxed)<8)
+            std::fprintf(stderr,"[graphics][road-wheels] original retained: %s\n",error.what());
+    }
+}

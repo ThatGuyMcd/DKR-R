@@ -132,7 +132,9 @@ def main_source(t,out):
             dkr::runtime::ui::reset_lifecycle_request();''')
  return head+tail
 def platform(t,out):
- t='#include "invite_handoff.hpp"\n'+t
+ t='#include "netplay/session_chat/input_policy.hpp"\n#include "invite_handoff.hpp"\n'+t
+ t=once(t,'const bool blocked = dkr::runtime::ui::overlay_visible() || dkr::runtime::camera::editor_open.load();',
+  'const bool blocked = dkr::runtime::ui::overlay_visible() || dkr::runtime::camera::editor_open.load() || dkr::chat::captures_game_input();')
  anchor='    const bool blocked = dkr::runtime::ui::overlay_visible()'
  return once(t,anchor,(AUTH/'native/release_inputs.inl').read_text()+'\n'+anchor)
 def main(a):

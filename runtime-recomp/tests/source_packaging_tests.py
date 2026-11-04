@@ -20,6 +20,43 @@ def load(relative):
 
 
 class PackagingTests(unittest.TestCase):
+    def test_new_runtime_resources_and_backend_sources_without_local_residue(self):
+        module = load("scripts/package_source.py")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allowed = [
+                Path(p)
+                for p in (
+                    "runtime-recomp/assets/localisation/en.json",
+                    "runtime-recomp/assets/localisation/OFL-NotoSans.txt",
+                    "runtime-recomp/assets/localisation/NotoSans-Regular.ttf",
+                    "runtime-recomp/src/game/crash_reports/backend/worker.mjs",
+                    "runtime-recomp/src/game/crash_reports/backend/wrangler.jsonc",
+                    "runtime-recomp/src/game/online_profile/backend/community_schema.sql",
+                    "runtime-recomp/src/game/mod_library/website/index.html",
+                    "runtime-recomp/src/game/mod_library/website/assets/community.css",
+                    "runtime-recomp/src/game/mod_library/website/assets/community-ui.js",
+                    "runtime-recomp/tests/mod_library_community_tests.cjs",
+                )
+            ]
+            denied = [
+                Path(p)
+                for p in (
+                    "runtime-recomp/assets/localisation/download.ttf",
+                    "runtime-recomp/assets/localisation/report.zip",
+                    "downloads/worker.mjs",
+                )
+            ]
+            for path in allowed + denied:
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text("synthetic")
+            with (
+                mock.patch.object(module, "ROOT", root),
+                mock.patch.object(module, "git_paths", side_effect=[[], allowed + denied]),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(set(module.source_files()), set(allowed))
+
     def test_new_source_modules_and_excluded_source_diagnostic(self):
         module = load("scripts/package_source.py")
         with tempfile.TemporaryDirectory() as directory:

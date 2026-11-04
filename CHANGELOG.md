@@ -1,5 +1,203 @@
 # DKR-R changelog
 
+## Unreleased
+
+## 1.0.14 — 2026-11-04
+
+- Manual Play now fades into the shared Starting Game screen with inline mod
+  preparation. Initial online verification uses the same logo/clouds/caption
+  presentation in the game renderer, fading away after the first ready frame.
+
+- Linux launchers now request GPU acceleration by default, with separate SDL
+  launcher and Vulkan game windows at renderer handoff. Accelerated launchers
+  bypass CPU panel rasterisation; failures retain a logged software fallback.
+
+- Added one-time, saved consent for automatic crash reports with a shared
+  About/Support switch, redacted log snapshots, separately opted-in raw dumps,
+  bounded offline retries and a private Discord relay. Uploads pause during
+  gameplay; disabling reporting removes unsent reports and retains originals.
+  Privacy copy explains that redaction and memory dumps cannot guarantee anonymity.
+
+- Replaced automatic startup's plain screen with the circular Recompiled logo,
+  scrolling launcher clouds and an intro-style translucent caption. Mod launch
+  preparation appears inline, with measured batch progress and a compact Open
+  Launcher button; cancellation and actionable error recovery are retained.
+
+- Added aspect-specific render resolutions, including rendering above the monitor's
+  resolution, with shared camera/HUD handling and migration of older settings.
+- Added a saved Session mods switch in Play. Vanilla sessions bypass installed
+  content without changing individual selections; running sessions stay frozen.
+- Added bounded KDE/system regional-format fallback for seasonal themes when
+  Steam Deck Gaming Mode supplies a generic C locale.
+
+- Added a saved Skip launcher option below Portable mode, editable in the
+  in-game Play overlay. Automatic startup keeps normal mod/save preparation
+  and returns to the launcher on missing content or preparation failures.
+  Sidebar navigation now has a centred switch with LB/RB and D-pad icons;
+  only the selected icons glow yellow.
+
+- Fixed the native road-wheel lighting path for custom racers using the
+  original car. The four tyre sprites follow the racer's light and physical
+  orientation, with scoped colour restoration and unchanged transparency.
+
+- Fixed custom-car lighting: prepared surface normals and per-racer light
+  samples now drive shading and environmental colour in every view. Texture
+  tiling preserves interpolated normals; fog stays separate from opacity.
+  Existing packages, seating, wheel animation and vehicle physics are kept.
+
+- Added a saved Language dropdown below Portable mode in Play, shared by the
+  launcher and in-game overlay. Automatic follows the system UI language;
+  explicit choices apply immediately without changing ROM language, regional
+  holidays, controller bindings, mods or the online session. Initial Latin and
+  Cyrillic translations are test drafts awaiting native-speaker review.
+
+- Fixed controller navigation in both sidebar modes: the left stick moves
+  between page elements and the right stick scrolls, in the launcher and overlay.
+  Modal dialogs keep their own scrolling and gameplay/capture inputs stay separate.
+- Matched the Search, Status and Sort controls across Tracks, Characters,
+  Custom Magic Codes and Vehicles. Vehicles now has On/Off filtering and name
+  sorting. Duplicate review sits in a padded results row below the search.
+- Moved Mod Library keyboard buttons beside their textboxes, including searches,
+  reviews, comments and submission forms, in the launcher and overlay.
+- Matched the launcher and in-game overlay pages, including Play, About and
+  full-width Installed Mods. Unavailable actions stay locked while playing.
+- Kept the legacy ROM notice above Spotlight in Textures too, and aligned
+  Import Mods with the Library's orange header buttons.
+- Centred Ready to race and added a labelled save indicator for vanilla,
+  modded and online progress. The overlay identifies the running session's save.
+- Added a saved sidebar navigation switch for LB / RB or D-pad. D-pad sidebar
+  mode leaves the stick to navigate the page on the right.
+- Added seasonal hover patterns and brought the corner decorations to the
+  overlay, keeping the existing automatic region and calendar detection.
+
+- Removed Browse and Inspect from Mod Library. The grid is now its only browse
+  view, with search, keyboard and sorting controls aligned in one row.
+- Centred the sidebar's page buttons and anchored Restart and Exit at the bottom.
+  Renamed Mods / Hacks to Installed Mods in the launcher and in-game overlay.
+- Removed the Texture Packs and Texture Dumping disclosures. Both sections now
+  show their controls as soon as Textures is opened.
+- Added a holiday greeting between Play and Check for updates when a calendar
+  event is active. It follows the automatic regional theme.
+- Replaced the seasonal corner icons with the approved rendered artwork.
+  The atlas is loaded once per launcher renderer, with no live 3D rendering.
+- Made launcher themes follow the computer's region and local date. Removed
+  Launcher appearance from About; old manual theme choices no longer override it.
+- Matched Controls' five section tabs to My mods, including the lettering,
+  selected state, controller focus and wrapping on smaller screens.
+- Shortened Mod Library cards, with two-line titles and up to six per row.
+- Moved Achievements and Save Manager from the sidebar into Play, using orange
+  buttons at the bottom of the ROM area. Both remain available in the overlay.
+- Moved Community Spotlight above Ready to Race and rounded the artwork itself.
+- Kept Spotlight above every Mod Library page's tabs, with full-width pages
+  and smaller cards matching My mods. Refresh and Website use orange signs.
+- Moved Textures into Mods / Hacks between Magic Codes and Track Lab.
+- Shortened enabled mod card labels to ON.
+- Tidied up Play so the ROM and offline launch options share one card.
+- Added the website's rotating featured mods to Play and Mods / Hacks.
+- Added page and section fades throughout the launcher, including vehicles.
+- Matched Mod Library's heading and section buttons to the rest of the launcher.
+- Added per-player controller feedback settings, finite left/right tests and
+  output diagnostics. Enhanced feedback adds separate racing effects, optional
+  DualSense resistance/lights and touch shortcuts. Native Deck patterns and
+  USB waveform haptics are opt-in experiments for this test build.
+- Fixed a launcher crash when opening Mods / Hacks after moving Mod Library
+  to the sidebar. The tab drawing loop now uses the actual number of tabs.
+- Mod Library now has its own sidebar button above Mods / Hacks in the launcher
+  and in-game overlay. Renamed Mod Store to Mod Library; the mods are free.
+- Moved the analogue driving bindings, live input bars and calibration into
+  the Custom Magic Code's Details. Pick your local player there. Existing
+  settings are kept, including when using an online session copy.
+- Removed the duplicate CRT filter section from Textures. All its controls
+  are in Graphics > HUD & effects, with your existing settings kept.
+- Added seasonal launcher themes using the original clouds, with larger corner
+  icons and subtle effects. Themes follow your computer's region and local date.
+- Added an optional Analogue Acceleration & Braking mod. RT and LT can now
+  control how much accelerator and brake you use, with separate bindings,
+  calibration and live input bars for each player. Works online too.
+- Added Look behind to Graphics, with a controller binding in Controls.
+  It works offline and online without ModernCamera++.
+- Added the full CRT filter controls to Graphics > HUD & effects.
+- Made DKR colours much brighter. The turquoise water now stands out more,
+  while reflections and the Current HD option keep their existing settings.
+- Added a DKR colours water style with brighter turquoise water and softer
+  highlights. Full HD reflections stay in place. Current HD is still available
+  in the water settings, and reflection quality stays separate from the style.
+- Added a ROM requirement notice to Mods/Hacks and the Mod Library. Some legacy
+  .xdelta mods need US v1.0 to install; v1.1 can stay selected for playing.
+- The Mod Library is now available in the in-game overlay too.
+  Downloads queue for the launcher so installed mods stay fixed while playing.
+- Added the website's download counters and comments to the Mod Library. Players
+  can post, edit, delete and report comments using the same Discord account.
+  Star ratings and reviews stay separate. Launcher download attempts now count
+  towards the same totals, without counting cached files or retrying resumes twice.
+- Fixed water asset lookups rebuilding when rollback corrects a frame. Real
+  track changes, texture pack changes and missing texture recovery still work.
+- Fixed stale water selections surviving a texture cache being recreated at
+  the same address after leaving a session.
+- Fixed idle overlay refreshes being queued between fresh online race frames.
+- Online races retain the last completed GPU picture if the next target is
+  unavailable, instead of flashing an unfinished native framebuffer image.
+  Owned presents use their own captured targets rather than newer shared history.
+- Bound the current fullscreen policy to the compiled renderer, including
+  battles and minigames. Shared menus and cutscenes keep their normal view.
+- Added online frame timings and fullscreen diagnostics without GPU drains.
+- Prepared matching Windows x64 and Linux x86_64 AppImage v1.0.14 Beta 2 builds.
+- Added companion-download search, persistent download badges, player comments,
+  a 30-second featured-mod carousel and launcher-style fades to the mod website.
+- Moved the connection check and invite buttons to the right of the lobby.
+- Everyone can see their own ping and the other players' ping to the host.
+  Readings update live, include selected proxy routes and clear when stale.
+- Prepared matching Windows x64 and Linux x86_64 AppImage v1.0.14 Beta 1 builds.
+- Reworked Dynamic Input Delay to favour more responsive controls. Delay is
+  adjusted per player using actual input delivery and correction cost. Cheap
+  rollback no longer keeps the whole lobby at a higher input delay.
+- Added input response timings to help separate buffering, simulation work
+  and renderer submission when checking online performance.
+- Fixed profile pictures flickering back to initials when the image cache fills.
+  Ready pictures no longer draw the initial underneath, including when dimmed.
+  Classic client cards also resolve the right picture and friend controls.
+- Fixed client lobby cards staying on Checking Route. Route labels now use the
+  host's current player slots when the lobby payload has no peer IDs.
+- Tidied the chat entry so the keyboard button sits beside the message box.
+  In-game chat stays hidden until a message arrives or the chat key is pressed.
+  Recent messages disappear after eight seconds, with a small key hint.
+- Fixed closing the Linux launcher while its update check is still starting.
+  Background update work now finishes before process-wide TLS cleanup.
+- Fixed online startup recovery when a client misses the final start message.
+  Verified clients can receive early input while they wait for the release.
+- Fixed live input getting held behind old queued work. Proxy routes now give
+  gameplay its own bounded turns and fall back when useful delivery stops,
+  even if the connection still answers ping checks.
+- Dynamic Input Delay now measures how long input is blocked, including when
+  the game is waiting at the same frame. Connection recovery stays separate.
+- Session mod downloads use measured progress to adjust their transfer window
+  and retry timing. Larger preparation batches share verified ROM data where
+  there is enough RAM and disk space. Existing cache reuse stays in place.
+- A different version of an installed Track Lab course can be kept as an
+  inactive copy without replacing the user's existing course.
+- Bounded repeated rendering diagnostics and added per-player input progress
+  to the logs to make any remaining connection stalls easier to track down.
+- Added lobby text chat beside the player cards and a compact in-game feed.
+  Racers and spectators share the same conversation. Includes an on-screen
+  keyboard, a changeable chat key, local mute controls and delivery retries.
+- Lobby player cards now show Direct or Via the other player's name, with live
+  updates for the host and clients when a connection route changes.
+- Fixed the proxy test build closing before the launcher opens. Added a startup
+  regression check that also covers closing the application.
+- Added optional one-hop proxy connections. The host can allow them, players
+  can volunteer their device, and the launcher measures each route before using
+  it. Direct connections stay available if the proxy stops helping.
+- Connection diagnostics now show direct and proxy timings. Dynamic Input Delay
+  uses the selected route's full round trip.
+- Fixed vanilla online Track Select stopping when no custom track menu is active.
+- Other lobby members can see players downloading and preparing session mods.
+- Dynamic Input Delay keeps checking racing connections during gameplay. Manual
+  delay is still available when it is switched off.
+- Fullscreen racer view now supports Battle, Treasure and Eggs minigames too.
+- Profile pictures and lobby friend links now finish syncing while you are in
+  a lobby. Failed background saves retry, and renewed friend links are refreshed.
+- Keep the account's saved picture and sharing choice when linking a launcher.
+
 ## v1.0.12 Release Build — 26 October 2026
 
 I've focused on modded lobby joining and made the Online menus easier to use.

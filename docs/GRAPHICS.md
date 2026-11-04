@@ -15,7 +15,34 @@ press Apply. Start at 60 FPS when diagnosing performance, then raise the target
 once your chosen settings are steady. More pixels, MSAA, supersampling, retained
 scenery and high-detail models can all add work.
 
+## Aspect ratio and render resolution
+
+In Modern, choose the aspect ratio first: Match window, 4:3, 5:4, 3:2, 16:9,
+16:10, 2560:1080, 3440:1440 or 32:9. The resolution list follows that shape.
+Borders preserve the image instead of stretching it to another ratio.
+
+Automatic - match window follows the available image area. Automatic - sharp
+integer scaling preserves the previous whole-number 240p scaling option.
+Explicit sizes include 720p, 1080p, 1440p and 2160p families, with additional
+sizes up to the bounded 8192-pixel target dimension, further limited by the
+GPU's reported maximum texture size after renderer startup. Wider formats have fewer
+high-resolution choices to stay inside that bound. These are render sizes,
+not monitor modes: 3840 x 2160 can render on a 1920 x 1080 display. Larger sizes
+need more GPU memory and processing power. The readout separates render size
+from output size. Pixel alignment inside RT64 can round framebuffer dimensions.
+
+Explicit resolution replaces the old Supersampling slider. Existing settings
+migrate with their effective render scale and downsample setting intact; choosing
+a new explicit size retires the old multiplier. Applying a performance preset
+sets its resolution again. Accurate remains original 4:3 and 30 FPS, and keeps
+your Modern choices for when you switch back. Camera, HUD and online fullscreen
+presentation use the same local aspect choice; it does not affect peer state.
+
 ## HUD and camera
+
+**HUD & effects** also contains the full CRT filter controls: enable, filter
+image, scaling, strength and custom PNG import. These are no longer duplicated
+in Textures. Your existing selection and imported masks are kept.
 
 **HUD layout** offers **4:3** or **Fit to window** for Modern one/two-player
 presentation. Whole groups move together; their artwork is not stretched.
@@ -36,6 +63,11 @@ shared simulation. See [Camera++](../patches/camera-plus/README.md).
 VR is unfinished and not a supported feature of this release.
 
 ## Vehicles and scenery
+
+Custom racers using the original car also receive lighting on its four tyre
+sprites. Their brightness follows the racer's light and physical wheel
+orientation instead of the camera-facing sprite plane. Sprite artwork,
+steering, animation, fog and transparency are preserved, online and offline.
 
 Maximum vehicle detail, keep-scenery switches, the ultrawide guard, view
 distances and retention let you choose how much remains visible. Bigger ranges

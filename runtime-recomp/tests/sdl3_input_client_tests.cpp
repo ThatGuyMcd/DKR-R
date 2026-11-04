@@ -1,6 +1,7 @@
-#include "sdl3_input_client.hpp"
+#include "controller_feedback/input_client.hpp"
 
 #include <chrono>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <string>
@@ -45,7 +46,18 @@ int main(int argc, char** argv) {
             return 3;
         }
 
+        // Exercise shutdown while an output producer is active. The unknown
+        // instance is deliberately ignored by the helper: no physical effect.
+        std::atomic<bool> writing{true};
+        std::thread output([&] {
+            while(writing.load()) {
+                client.feedback(-1,{});
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
         client.stop();
+        writing=false;output.join();
         if (client.healthy()) {
             std::fprintf(stderr,
                          "SDL3 client cycle %d remained healthy after shutdown.\n",

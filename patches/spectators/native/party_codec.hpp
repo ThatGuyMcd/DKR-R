@@ -5,8 +5,9 @@
 #include <vector>
 
 namespace dkr::runtime::spectators::wire {
-inline constexpr unsigned Version=2;
+inline constexpr unsigned Version=3;
 inline constexpr std::size_t MaximumPacket=12000,MaximumChunk=11264;
+inline constexpr unsigned ControllerSampleBytes=12+1+8+7;
 enum class Kind:std::uint8_t {
     Roster=1,Frames=2,BaselineOffer=3,BaselineChunk=4,BaselineAck=5,
     NeedBaseline=6,TakeOver=7,HandoverAck=8,Leave=9,Heartbeat=10,Input=11,Reject=12
