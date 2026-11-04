@@ -2,11 +2,39 @@
 #import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
 #include <SDL.h>
+#include <atomic>
 #include <cstdio>
 
 static Uint32 fullscreen_event_type() {
     static const Uint32 type = SDL_RegisterEvents(1);
     return type;
+}
+
+static std::atomic<bool> g_macos_input_recovery{false};
+static id g_macos_wake_observer = nil;
+
+static void ensure_macos_wake_observer() {
+    if (g_macos_wake_observer != nil) return;
+    // Lid sleep leaves SDL_WINDOW_INPUT_FOCUS and HID pads stale. Mark a
+    // recovery request on wake so the game thread can re-enumerate pads and
+    // accept input while NSApp is frontmost again.
+    g_macos_wake_observer = [[[NSWorkspace sharedWorkspace] notificationCenter]
+        addObserverForName:NSWorkspaceDidWakeNotification
+                    object:nil
+                     queue:nil
+                usingBlock:^(NSNotification*) {
+                    g_macos_input_recovery.store(true, std::memory_order_release);
+                }];
+}
+
+extern "C" bool dkr_macos_app_is_active(void) {
+    ensure_macos_wake_observer();
+    return NSApp != nil && [NSApp isActive];
+}
+
+extern "C" bool dkr_macos_take_input_recovery(void) {
+    ensure_macos_wake_observer();
+    return g_macos_input_recovery.exchange(false, std::memory_order_acq_rel);
 }
 
 extern "C" void dkr_set_window_fullscreen(Uint32 window_id, bool fullscreen) {
