@@ -46,4 +46,4 @@ The signed DKR-R-update.json and DKR-R-update.sig must name Version1.0.12 and
 the exact committed release source. Steam Deck uses linux-x86_64. The maintainer
 uploads and publishes the stable GitHub release. Do not alter signed packages.
 
-The [v1.0.11 validation record](docs/history/RELEASE-VALIDATION-1.0.11.md) is preserved.
+The [v1.0.11 validation record](RELEASE-VALIDATION-1.0.11.md) is preserved.
