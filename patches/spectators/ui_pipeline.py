@@ -13,11 +13,11 @@ def online(text):
     if(dkr::runtime::spectators::party_enabled(&online)&&in_lobby) {
         g_ol_page_width=available_width;
         std::vector<OlTab> party_tabs{{OlSection::Lobby,"Lobby"},{OlSection::Connection,"Connection"},{OlSection::Overlays,"Overlays"}};
-        if(view.host)party_tabs.push_back({OlSection::Friends,"Invite friends"});
+        if(view.host){party_tabs.push_back({OlSection::Settings,"Host settings"});party_tabs.push_back({OlSection::Friends,"Invite friends"});}
         if(std::none_of(party_tabs.begin(),party_tabs.end(),[&](const auto& tab){return tab.id==state.section;}))state.section=OlSection::Lobby;
         DrawOlTabs(party_tabs,std::max(available_width,1.F));PaddockGap(16.F);
         if(state.section==OlSection::Lobby)DrawPartyPage(std::max(available_width,1.F),frame);
-        else DrawOlMain(std::max(available_width,1.F),frame);
+        else {if(state.section==OlSection::Settings){DrawPageHeading("ONLINE");PaddockGap(12.F);}DrawOlMain(std::max(available_width,1.F),frame);}
         return;
     }
 ''')
@@ -49,7 +49,7 @@ def online(text):
   '    ConfigurePartyJoin();\n    if (!dkr::runtime::netplay::session().join(code, g_online_player_name, error)) {')
  return text
 def ui(text,origin,out):
- text='#include "party_link.hpp"\n#include "online_presentation/test_receive_delay.hpp"\n'+text
+ text='#include "party_link.hpp"\n#include "online_presentation/test_receive_delay.hpp"\n#include "online_stability/qualification_delivery.hpp"\n'+text
  text=once(text,'    auto& online=netplay::session();\n    if(!identity.supported()',
   '''    if(const char* missing=std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");missing&&std::string_view(missing)=="1")
         dkr::online_presentation::test_fixture::missing_gpu_target=true;
@@ -57,6 +57,14 @@ def ui(text,origin,out):
         const unsigned value=unsigned(std::strtoul(delay,nullptr,10));
         dkr::online_presentation::test_receive_delay::arm(value,15);
         std::fprintf(stderr,"[online][isolated-check] receive-delay-ms=%u jitter-ms=15; test profile only\\n",value);
+    }
+    if(const char* full=std::getenv("DKR_OWNED_CHECK_DELIVERY_MS")) {
+        const unsigned delay=unsigned(std::strtoul(full,nullptr,10));
+        const auto number=[](const char* key){const char* v=std::getenv(key);return v?unsigned(std::strtoul(v,nullptr,10)):0U;};
+        if(!dkr::online_stability::qualification_delivery::arm(delay,number("DKR_OWNED_CHECK_JITTER_MS"),number("DKR_OWNED_CHECK_SPIKE_MS"),number("DKR_OWNED_CHECK_LOSS_EVERY"))) {
+            error="Invalid isolated full-lobby delivery profile";return false;
+        }
+        std::fprintf(stderr,"[online][isolated-check] all-route-delivery-ms=%u; disposable-profile only\\n",delay);
     }
     auto& online=netplay::session();
     if(!identity.supported()''')
@@ -73,13 +81,31 @@ def ui(text,origin,out):
  # The isolated rendered check must advertise the same Racer capability as
  # the normal UI. Otherwise its client is rejected before any game executes.
  text=once(text,'    if(!host)return true;',
-  '    if(!host){dkr::runtime::spectators::request_party_join(&online,false);return true;}')
+  '''    if(!host&&std::getenv("DKR_OWNED_CHECK_WATCH")&&std::string_view(std::getenv("DKR_OWNED_CHECK_WATCH"))=="1") {
+        dkr::runtime::spectators::request_party_join(&online,true);
+        std::fprintf(stderr,"[spectator][qualification] watch=1; fresh-profile=1\\n");return true;
+    }
+    if(!host){dkr::runtime::spectators::request_party_join(&online,false);return true;}''')
  text=once(text,'    g_online_automatic_delay=false;g_online_manual_delay=1;g_online_rollback_window=6;',
   '''    g_online_automatic_delay=std::getenv("DKR_OWNED_CHECK_DYNAMIC")&&std::string_view(std::getenv("DKR_OWNED_CHECK_DYNAMIC"))=="1";
     g_online_allow_spectators=!(std::getenv("DKR_OWNED_CHECK_PARTY")&&std::string_view(std::getenv("DKR_OWNED_CHECK_PARTY"))=="0");
-    g_online_manual_delay=1;g_online_rollback_window=6;''')
+    g_online_manual_delay=1;g_online_rollback_window=6;
+    // This entry point is guarded by the NEW disposable-profile requirement.
+    // Explicit qualification values never replace a player's saved settings.
+    auto qualification_number=[](const char* name,int fallback,int minimum,int maximum) {
+        const char* value=std::getenv(name);if(!value||!*value)return fallback;
+        unsigned number=0;for(const char* at=value;*at;++at) {
+            if(*at<'0'||*at>'9'||number>100)return fallback;
+            number=number*10+unsigned(*at-'0');
+        }
+        return number>=unsigned(minimum)&&number<=unsigned(maximum)?int(number):fallback;
+    };
+    g_online_manual_delay=qualification_number("DKR_OWNED_CHECK_DELAY",1,0,9);
+    g_online_rollback_window=qualification_number("DKR_OWNED_CHECK_WINDOW",6,2,20);
+    std::fprintf(stderr,"[rollback][qualification] auto=%u delay=%u window=%u fresh-profile=1\\n",
+        unsigned(g_online_automatic_delay),unsigned(g_online_manual_delay),unsigned(g_online_rollback_window));''')
  text=once(text,'    request.rules.automatic_input_delay=false;request.rules.manual_input_delay=1;request.rules.rollback_window=6;',
-  '    request.rules.automatic_input_delay=g_online_automatic_delay;request.rules.manual_input_delay=1;request.rules.rollback_window=6;')
+  '    request.rules.automatic_input_delay=g_online_automatic_delay;request.rules.manual_input_delay=std::uint8_t(g_online_manual_delay);request.rules.rollback_window=std::uint8_t(g_online_rollback_window);')
  text=once(text,'struct OnlineHostRequest {','''bool g_online_allow_spectators=true,g_online_join_watching=false;
 void ConfigurePartyJoin(){dkr::runtime::spectators::request_party_join(&dkr::runtime::netplay::session(),g_online_join_watching);}
 struct OnlineHostRequest {

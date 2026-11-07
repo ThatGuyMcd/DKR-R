@@ -1,5 +1,7 @@
 // Inside DirectSession::pump_locked, after AEAD and replay-window validation.
 if (unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType) {
+    // Party envelopes carry their transport class in Header::frame.
+    if(dkr::online_stability::qualification_delivery::drop(packet.header.frame))continue;
     namespace watch=dkr::runtime::spectators;
     auto party=watch::party_link(this);std::scoped_lock party_lock(party->mutex);
     watch::LinkMessage message;
@@ -10,7 +12,7 @@ if (unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType) {
         const bool admitted=is_host_?(party->enabled?party->peer(packet_sender)!=nullptr:peer_by_sender(packet_sender)!=nullptr):
             (packet_sender==host_sender_id_&&source==host_address_);
         if(admitted&&message.body.size()>=6&&message.body[5]==4)dkr::chat::channel(this)->receive(packet_sender,message.body);
-        else if(admitted&&message.body.size()>=6&&message.body[5]==3)dkr::relay::control(this,packet_sender,message.body);
+        else if(admitted&&message.body.size()>=6&&(message.body[5]==3||message.body[5]==6))dkr::relay::control(this,packet_sender,message.body);
         else dkr::online_stability::control(this)->receive(packet_sender,admitted,message.body);
         continue;
     }
@@ -41,11 +43,9 @@ if (unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType) {
         case watch::LinkKind::Heartbeat: {
             std::uint64_t token=0;bool reply=false;
             if(!watch::link_heartbeat(message.body,token,reply))break;
-            if(!reply)party->enqueue({packet_sender,watch::LinkKind::Heartbeat,TransportTrafficClass::Control,watch::link_heartbeat(token,true)});
-            else if(token==member->ping_token&&member->ping_sent.time_since_epoch().count()) {
-                const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(now-member->ping_sent).count();
-                if(ms>=0&&ms<5000){member->rtts[member->rtt_index++%member->rtts.size()]=std::uint16_t(std::max<std::int64_t>(1,ms));member->rtt_count=std::min<unsigned>(member->rtt_count+1,unsigned(member->rtts.size()));member->rtt_at=now;}
-                member->ping_token=0;
+            if(!reply)party->enqueue({packet_sender,watch::LinkKind::Heartbeat,TransportTrafficClass::Realtime,watch::link_heartbeat(token,true)});
+            else if(const auto ms=member->ping_window.receive(token,now)) {
+                member->rtts[member->rtt_index++%member->rtts.size()]=std::uint16_t(*ms);member->rtt_count=std::min<unsigned>(member->rtt_count+1,unsigned(member->rtts.size()));member->rtt_at=now;
             }break;
         }
         case watch::LinkKind::Ready:
@@ -106,11 +106,8 @@ if (unsigned(packet.header.type)==dkr::runtime::spectators::PartyMessageType) {
             else if(message.kind==watch::LinkKind::Heartbeat) {
                 std::uint64_t token=0;bool reply=false;
                 if(watch::link_heartbeat(message.body,token,reply)) {
-                    if(!reply)party->enqueue({host_sender_id_,watch::LinkKind::Heartbeat,TransportTrafficClass::Control,watch::link_heartbeat(token,true)});
-                    else if(token==party->ping_token&&party->ping_sent.time_since_epoch().count()) {
-                        const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-party->ping_sent).count();
-                        if(ms>=0&&ms<5000)party->rtt_ms=std::uint16_t(std::max<std::int64_t>(1,ms));party->ping_token=0;
-                    }
+                    if(!reply)party->enqueue({host_sender_id_,watch::LinkKind::Heartbeat,TransportTrafficClass::Realtime,watch::link_heartbeat(token,true)});
+                    else if(const auto ms=party->ping_window.receive(token,std::chrono::steady_clock::now()))party->rtt_ms=std::uint16_t(*ms);
                 }
             }
             else if(message.kind==watch::LinkKind::Stop) {

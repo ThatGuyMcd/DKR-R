@@ -9,6 +9,7 @@
     stability::Identity identity;
     identity.room=match_id_;identity.local=sender_id_;identity.host=is_host_?sender_id_:host_sender_id_;
     identity.authority=is_host_;identity.dynamic=room_view_.rules.automatic_input_delay;
+    identity.manual_delay=room_view_.rules.manual_input_delay;identity.prediction_window=room_view_.rules.rollback_window;
     identity.local_racer=!party->enabled||!party->local_watching();
     identity.active=match_id_&&sender_id_&&identity.host&&
         (state_==ConnectionState::Hosting||state_==ConnectionState::Lobby||state_==ConnectionState::Loading||state_==ConnectionState::Running);
@@ -31,9 +32,19 @@
             !party->enabled||(host_member&&host_member->role==watch::Role::Racer),host_member?unsigned(host_member->port.value_or(255)):0U});
     }
     for(auto& route:identity.routes)if(const auto measured=dkr::relay::rtt(this,route.id))route.rtt_ms=measured;
+    static thread_local std::chrono::steady_clock::time_point transport_report_at{};
+    if(now>=transport_report_at) {
+        transport_report_at=now+std::chrono::seconds(5);
+        unsigned rtt=0;for(const auto& route:identity.routes)if(route.racer)rtt=std::max(rtt,route.rtt_ms);
+        std::fprintf(stderr,"[online][transport] role=%s maximum-route-rtt-ms=%u realtime-buffered=%zu authority-buffered=%zu control-buffered=%zu checkpoint-buffered=%zu\n",
+            is_host_?"host":"client",rtt,transport_->buffered_bytes(TransportTrafficClass::Realtime),
+            transport_->buffered_bytes(TransportTrafficClass::Authoritative),transport_->buffered_bytes(TransportTrafficClass::Control),
+            transport_->buffered_bytes(TransportTrafficClass::Checkpoint));
+    }
     const auto missing=extension->identity().room==identity.room?extension->delay().stalled_owners:0;
     for(const auto& route:identity.routes)if(route.owner<4&&(missing&(1U<<route.owner)))dkr::relay::recover(this,route.id);
     extension->configure(std::move(identity));
+#include "host_settings_service.inl"
     if(is_host_) {
         std::vector<stability::Join> pending;
         for(const auto& request:pending_joins_)if(request.active) {
@@ -45,6 +56,12 @@
         if(auto publication=extension->publication(now))extension->send(0,std::move(*publication));
     }
     for(auto& packet:extension->outgoing()) {
+        // Delay negotiation/reports already repeat and reject stale serials.
+        // Don't retain old racing timing reports in SCTP's reliable queue.
+        if(party->enabled&&packet.bytes.size()>=6&&packet.bytes[5]==stability::DelayPayloadKind) {
+            (void)party->enqueue({packet.target,watch::LinkKind(stability::ExtensionKind),TransportTrafficClass::Realtime,std::move(packet.bytes)});
+            continue;
+        }
         auto payload=watch::link_encode(watch::LinkKind(stability::ExtensionKind),packet.bytes);
         auto send=[&](const auto& address,const auto& key) {
             send_with_key(address,key,protocol::MessageType(watch::PartyMessageType),payload);

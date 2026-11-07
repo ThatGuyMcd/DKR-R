@@ -1,5 +1,8 @@
 #include "transport.hpp"
+#include "live_datagram.hpp"
 #include "online_stability/traffic_meter.hpp"
+#include "online_stability/live_send_capacity.hpp"
+#include "online_stability/qualification_delivery.hpp"
 #include "netplay/transport_send_policy.hpp"
 #include <algorithm>
 #include <condition_variable>
@@ -54,18 +57,23 @@ public:
         auto& state=registry();std::lock_guard lock(state.mutex);const auto i=state.entries.find(key_);if(i!=state.entries.end()&&i->second.owner==this)state.entries.erase(i);
     }
     bool open(std::uint16_t port,std::string& error)override {return base_->open(port,error);}
-    void close()override {engine_.reset();meter_.reset();deliveries_.clear();addresses_.clear();base_->close();service_at_=snapshot_at_={};snapshot();}
+    void close()override {live_.reset();engine_.reset();meter_.reset();deliveries_.clear();qualification_.clear();addresses_.clear();base_->close();service_at_=snapshot_at_={};snapshot();}
     bool is_open()const override{return base_->is_open();}
     std::uint16_t local_port()const override{return base_->local_port();}
     net::DatagramSendStatus send_status(const net::PeerAddress& to,std::span<const std::uint8_t> bytes,net::TransportTrafficClass traffic,std::string& error)override {
         const auto id=identify(to);if(id&&engine_.send(id,bytes,unsigned(traffic)))return net::DatagramSendStatus::Sent;
+        if(id&&live_.send(id,bytes,unsigned(traffic)))return net::DatagramSendStatus::Sent;
         const auto result=base_->send_status(to,bytes,traffic,error);meter_.sent(unsigned(traffic),bytes.size(),result==net::DatagramSendStatus::Sent);return result;
     }
     net::DatagramSendStatus send_live_status(const net::PeerAddress& to,std::span<const std::uint8_t> b,std::uint8_t owner,std::string& e)override {
         const auto id=identify(to);if(id&&engine_.send(id,b,unsigned(net::TransportTrafficClass::Realtime)))return net::DatagramSendStatus::Sent;
+        if(id&&live_.send(id,b,unsigned(net::TransportTrafficClass::Realtime)))return net::DatagramSendStatus::Sent;
         const auto result=base_->send_live_status(to,b,owner,e);meter_.sent(unsigned(net::TransportTrafficClass::Realtime),b.size(),result==net::DatagramSendStatus::Sent);return result;
     }
     bool receive(net::PeerAddress& source,Bytes& bytes,std::string& error)override {
+        return qualification_.receive(source,bytes,error,[this](auto& s,auto& b,auto& e){return receive_now(s,b,e);});
+    }
+    bool receive_now(net::PeerAddress& source,Bytes& bytes,std::string& error) {
         gather();if(delivery(source,bytes))return true;
         for(unsigned n=0;n<32;++n){if(!base_->receive(source,bytes,error))return false;
             if(bytes.size()<5||!std::equal(bytes.begin(),bytes.begin()+5,std::array<std::uint8_t,5>{'D','K','R','P',1}.begin()))return true;
@@ -82,7 +90,7 @@ public:
         }bytes.clear();return false;
     }
     void service()override{base_->service();gather();tick();snapshot();meter_.pulse();}
-    void set_receive_signal(std::shared_ptr<net::TransportReceiveSignal> signal)override {base_->set_receive_signal(signal);std::lock_guard lock(events_->mutex);events_->signal=signal;}
+    void set_receive_signal(std::shared_ptr<net::TransportReceiveSignal> signal)override {live_.signal(signal);base_->set_receive_signal(signal);std::lock_guard lock(events_->mutex);events_->signal=signal;}
     void retain_peer_route(const net::PeerAddress& a)override{base_->retain_peer_route(a);}
     void release_peer_route(const net::PeerAddress& a)override{base_->release_peer_route(a);}
     bool take_peer_departure(net::PeerAddress& a)override{while(base_->take_peer_departure(a)){if(!engine_.usable(identify(a)))return true;}return false;}
@@ -95,17 +103,17 @@ public:
         return base_->traffic_ready(a,c)||engine_.usable(identify(a));
     }
     std::size_t maximum_plaintext_datagram_bytes()const override{return base_->maximum_plaintext_datagram_bytes();}
-    void discard_received(net::TransportTrafficClass c)override{base_->discard_received(c);std::erase_if(deliveries_,[&](const auto& p){return p.lane==unsigned(c);});}
+    void discard_received(net::TransportTrafficClass c)override{live_.discard(unsigned(c));base_->discard_received(c);std::erase_if(deliveries_,[&](const auto& p){return p.lane==unsigned(c);});}
     bool quick_join()const override{return base_->quick_join();}
     std::string quick_join_code()const override{return base_->quick_join_code();}
     void set_quick_join_bootstrap(std::string s)override{base_->set_quick_join_bootstrap(std::move(s));}
     bool rekey_quick_join(std::string s,std::string& e)override{return base_->rekey_quick_join(std::move(s),e);}
     net::QuickJoinRekeyStatus rekey_status()const override{return base_->rekey_status();}
     bool take_quick_join_bootstrap(std::string& s,net::PeerAddress& a)override{return base_->take_quick_join_bootstrap(s,a);}
-    void configure(Context c,std::vector<Address> addresses){addresses_=std::move(addresses);engine_.configure(std::move(c));gather();tick();snapshot();}
-    bool control(Id source,std::span<const std::uint8_t> bytes){return engine_.control(source,bytes);}
-    std::vector<Control> controls(){return engine_.controls();}
-    void reset(){engine_.reset();meter_.reset();deliveries_.clear();service_at_=snapshot_at_={};snapshot();}
+    void configure(Context c,std::vector<Address> addresses){addresses_=std::move(addresses);live_.configure(c,options_.ice_servers);engine_.configure(std::move(c));gather();tick();snapshot();}
+    bool control(Id source,std::span<const std::uint8_t> bytes){return bytes.size()>=6&&bytes[5]==6?live_.control(source,bytes):engine_.control(source,bytes);}
+    std::vector<Control> controls(){auto out=engine_.controls();for(auto& packet:live_.controls())out.push_back(std::move(packet));return out;}
+    void reset(){live_.reset();engine_.reset();meter_.reset();deliveries_.clear();service_at_=snapshot_at_={};snapshot();}
     void recover(Id peer){engine_.recover(Clock::now(),peer);snapshot();}
 private:
     Id identify(const net::PeerAddress& a)const{for(const auto& p:addresses_)if(p.address==a)return p.id;return 0;}
@@ -129,7 +137,9 @@ private:
 #if defined(DKR_NETPLAY_WEBRTC)
         auto p=extras_.find(g.id);if(p==extras_.end())return false;auto channel=p->second.channels[lane];if(!channel||!channel->isOpen())return false;
         std::size_t aggregate=0;for(auto& c:p->second.channels)if(c)aggregate+=c->bufferedAmount();
-        if(!net::quick_join_admit(net::TransportTrafficClass(lane),channel->bufferedAmount(),aggregate,bytes.size())){meter_.sent(lane,bytes.size(),false);return false;}
+        const auto queued=channel->bufferedAmount();
+        if(!net::quick_join_admit(net::TransportTrafficClass(lane),queued,aggregate,bytes.size())||
+           !dkr::online_stability::fresh_input_capacity(net::TransportTrafficClass(lane),queued,bytes.size())){meter_.sent(lane,bytes.size(),false);return false;}
         try{const auto sent=channel->send(reinterpret_cast<const std::byte*>(bytes.data()),bytes.size());const bool accepted=net::quick_join_send_accepted(sent,channel->isOpen(),p->second.pc->state()==rtc::PeerConnection::State::Connected,true);meter_.sent(lane,bytes.size(),accepted);return accepted;}catch(...){meter_.sent(lane,bytes.size(),false);return false;}
 #else
         return false;
@@ -144,7 +154,10 @@ private:
         for(const auto& [peer,route]:selected_)if(!selected.contains(peer))std::fprintf(stderr,"[online][proxy] endpoint=%llu event=direct-fallback\n",(unsigned long long)peer);
         selected_=std::move(selected);auto& state=registry();std::lock_guard lock(state.mutex);auto i=state.entries.find(key_);if(i!=state.entries.end()&&i->second.owner==this)i->second.snapshot=std::move(v);
     }
-    void gather(){for(auto& e:events_->take()) {
+    void gather(){
+        Id source=0;Bytes sealed;unsigned lane=0;
+        while(deliveries_.size()<128&&live_.receive(source,sealed,lane))deliveries_.push_back({source,std::move(sealed),lane});
+        for(auto& e:events_->take()) {
         if(!engine_.grant(e.route))continue;
         if(e.type==0)engine_.signal(e.route,std::move(e.text));
         else if(e.type==1){const auto* g=engine_.grant(e.route);const auto peer=engine_.context().local==g->endpoint?g->proxy:g->endpoint;engine_.wire(e.route,peer,e.bytes);}
@@ -189,7 +202,7 @@ private:
                 channel->onMessage([events,id](rtc::message_variant value){if(!std::holds_alternative<rtc::binary>(value))return;const auto& b=std::get<rtc::binary>(value);if(b.size()>MaxWire)return;if(auto p=events.lock())p->push({id,1,Bytes(reinterpret_cast<const std::uint8_t*>(b.data()),reinterpret_cast<const std::uint8_t*>(b.data())+b.size()),{}});});
                 if(channel->isOpen())if(auto p=events.lock())p->push({id,2,{std::uint8_t(lane)}, {}});
             });
-            if(initiate)for(unsigned lane=0;lane<5;++lane){rtc::DataChannelInit init;init.reliability.unordered=lane!=0;if(lane==2||lane==3)init.reliability.maxRetransmits=0;bind(id,pc->createDataChannel(label(lane),init));}
+            if(initiate)for(unsigned lane=0;lane<5;++lane){rtc::DataChannelInit init;init.reliability.unordered=lane!=0;if(lane==2)dkr::online_stability::configure_live_reliability(init.reliability);else if(lane==3)init.reliability.maxRetransmits=0;bind(id,pc->createDataChannel(label(lane),init));}
         }catch(...){close_extra(g.id);}
 #else
         (void)g;(void)initiate;
@@ -226,7 +239,9 @@ private:
     }
     struct Resolved {net::PeerAddress endpoint,proxy;};std::map<Id,Resolved> resolved_;
     const void* key_;std::unique_ptr<net::SessionTransport> base_;NetworkOptions options_;std::shared_ptr<Events> events_;Engine engine_;
+    LiveDatagram live_;
     dkr::online_stability::TrafficMeter meter_;
+    dkr::online_stability::qualification_delivery::Queue<net::PeerAddress> qualification_;
     Clock::time_point service_at_{},snapshot_at_{};std::map<Id,Id> selected_;
     struct Delivery {Id source;Bytes bytes;unsigned lane;};
     std::vector<Address> addresses_;std::deque<Delivery> deliveries_;

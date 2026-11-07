@@ -6,7 +6,7 @@ AUTH=Path(__file__).resolve().parent;ROOT=AUTH.parents[1]
 VERSION='1.0.11-online-playtest.2'
 NAMES={('DKRExperimentalOwnedGameV77','probe_native.c'),('DKRExperimentalOwnedGameV80','probe_native.c'),
  ('DKRUpdateInstall','update_process.cpp'),('DKRUpdateClient','update_service.cpp'),('DKRPortGame','game_main.cpp'),('DKRPortGame','party_runtime.cpp'),
- ('DKRNetplayCore','direct_session.cpp'),('DKRNetplayCore','quick_join_transport.cpp'),
+ ('DKRNetplayCore','direct_session.cpp'),('DKRNetplayCore','quick_join_transport.cpp'),('DKRNetplayCore','experimental_rollback.cpp'),
  ('DKRNetplayCore','experimental_lobby_admission.cpp'),('DKRNetplayCore','experimental_network.cpp'),('DKRPortGame','experimental_runtime.cpp'),
  ('DKRNetplayCore','online_mod_admission.cpp'),
  ('DKRLegacyModCore','online_mod_cache.cpp'),('DKRLegacyImportLibrary','online_mod_sync.cpp'),
@@ -118,6 +118,13 @@ def beta3(name,text):
         text=include('display_settings/policy.hpp')+text
         text=once(text,'static_cast<float>(width) / static_cast<float>(height), layout,',
             'dkr::display::view_aspect(width,height), layout,')
+    elif name=='owner_pump.inl':
+        text=once(text,'a.watching?party->enabled&&spectators+pending_spectators<8:',
+            'a.watching?party->enabled&&party->allow_spectators&&spectators+pending_spectators<8:')
+        text=once(text,'{"maxSpectators",party->enabled?8:0}',
+            '{"maxSpectators",party->enabled?(party->allow_spectators?8:spectators):0}')
+        text=once(text,'{"canSpectateRunning",party->enabled&&online->running_spectators}',
+            '{"canSpectateRunning",party->enabled&&party->allow_spectators&&online->running_spectators}')
     elif name=='netplay_types.hpp':
         if 'struct PackedInput {' not in text:return text
         start=text.index('struct PackedInput {');end=text.index('using FrameInputs',start)
@@ -284,6 +291,45 @@ extern "C" std::uint32_t dkr_analogue_driving(std::uint8_t* ram,recomp_context*,
     return dkr::runtime::driving::apply(ram,channel,racer,bits);
 }
 '''
+    elif name=='netplay_lobby.hpp':
+        if 'host_timing_member.inl' not in text:
+            text=once(text,'class Lobby final {\npublic:',
+                'class Lobby final {\npublic:\n'+include('online_stability/host_timing_member.inl'))
+    elif name=='experimental_rollback.hpp':
+        text=include('online_stability/snapshot_history.hpp')+text
+        text=include('online_stability/live_prediction.hpp')+text
+        text=include('netplay/experimental_checkpoint_hash.hpp')+text
+        text=once(text,'std::unique_ptr<RollbackStateStore> checkpoints_;','std::unique_ptr<dkr::online_stability::SnapshotHistory<RollbackStateStore>> checkpoints_;')
+        text=once(text,'    bool correcting() const;', '''    bool correcting() const;
+    unsigned prediction_window()const{return configuration_.prediction_window;}
+    bool set_prediction_window(unsigned value,std::string& error) {
+        return dkr::online_stability::update_prediction_window(active(),value,contract_.state_bytes,
+            configuration_.prediction_window,configuration_.checkpoint_budget_bytes,checkpoints_.get(),statistics_.checkpoint_bytes,
+            std::max(statistics_.next_frame,replay_goal_),error);
+    }
+    // Copy only the verified retained state at the confirmed frontier. Never
+    // rewind the live world or expose a speculative checkpoint to observers.
+    bool copy_confirmed_checkpoint(std::span<std::uint8_t> destination) const {
+        if(!active()||correcting()||statistics_.confirmed_frames>=statistics_.next_frame)return false;
+        std::uint64_t expected=0;
+        return checkpoints_->load(statistics_.confirmed_frames,destination,&expected)&&checkpoint_hash(destination)==expected;
+    }''')
+    elif name=='experimental_rollback.cpp':
+        text=once(text,'Step Driver::step(bool allow_advance) {', '''Step Driver::step(bool allow_advance) {
+    if(const auto requested=dkr::online_stability::requested_prediction_window();requested&&*requested!=prediction_window()) {
+        std::string detail;if(!set_prediction_window(*requested,detail)){fail(detail);return Step::Failed;}
+    }''')
+        text=once(text,'if (statistics_.next_frame - statistics_.confirmed_frames >= configuration_.prediction_window)',
+            'if (statistics_.next_frame >= replay_goal_ && statistics_.next_frame - statistics_.confirmed_frames >= configuration_.prediction_window)')
+        text=once(text,'auto checkpoints = std::make_unique<RollbackStateStore>(\n            contract.state_bytes, configuration.prediction_window + 8U, 4U, 2U, true);',
+            'auto checkpoints = std::make_unique<dkr::online_stability::SnapshotHistory<RollbackStateStore>>(\n            contract.state_bytes, configuration.prediction_window,\n            configuration.checkpoint_budget_bytes-contract.state_bytes);')
+        text=once(text,'    std::string detail;\n    {performance::Scope timing(performance::Stage::Capture);',
+            '    std::string detail;\n    auto target=checkpoints_->staging(frame);\n    if(target.empty())target=scratch_;\n    {performance::Scope timing(performance::Stage::Capture);')
+        text=once(text,'simulation_.capture(scratch_, detail)','simulation_.capture(target, detail)')
+        text=once(text,'hash=checkpoint_hash(scratch_);','hash=checkpoint_hash(target);')
+        text=once(text,'checkpoints_->save(frame, scratch_, hash)','checkpoints_->save(frame, target, hash)')
+        text=once(text,'        configuration_ = configuration;',
+            '        std::fprintf(stderr,"[rollback][checkpoints] direct=%u state-bytes=%zu retained-bytes=%zu budget=%zu\\n",unsigned(checkpoints->direct()),contract.state_bytes,checkpoints->allocated_bytes()+scratch.capacity(),configuration.checkpoint_budget_bytes);\n        configuration_ = configuration;')
     elif name=='probe_driver.cpp':
         text=include('analog_driving/native.hpp')+text
         anchor='    bool tick(std::uint32_t frame, const FrameInputs& inputs, TickOutput& output, std::string& error) override {'
@@ -338,7 +384,7 @@ def compose(rows,out):
     # Quoted capsule headers are transitive compiler inputs. Redirect the
     # complete affected include closure, so no TU retains the four-byte ABI.
     headers={}; seeds={'netplay_types.hpp','online_input_broker.hpp','runtime_input.hpp',
-        'runtime_controls_ui.inl','runtime_graphics_ui.inl','graphics.inl','sdk2_world.inl','experimental_owner_inputs.hpp','camera_session.hpp','legacy_mod_launch.hpp','runtime_online_mods_ui.inl'}
+        'runtime_controls_ui.inl','runtime_graphics_ui.inl','graphics.inl','sdk2_world.inl','experimental_owner_inputs.hpp','experimental_rollback.hpp','netplay_lobby.hpp','owner_pump.inl','camera_session.hpp','legacy_mod_launch.hpp','runtime_online_mods_ui.inl'}
     pattern=re.compile(r'^\s*#include "([^"\n]+)"',re.M)
     receipts=[]
     core_search=[]
@@ -350,12 +396,14 @@ def compose(rows,out):
     core_types=next((p for base in core_search for p in (base/'netplay_types.hpp',base/'netplay/netplay_types.hpp') if p.is_file()),None)
     if core_types is None:raise ValueError('The compiled netplay owner must supply the canonical input types')
     core_types=core_types.resolve()
+    core_lobby=next((p.resolve() for base in core_search for p in (base/'netplay_lobby.hpp',base/'netplay/netplay_lobby.hpp') if p.is_file()),None)
     def dependencies(text,origin,search):
         found={}
         for match in pattern.finditer(text):
             name=Path(match[1]);candidates=[name] if name.is_absolute() else [origin.parent/name,*[p/name for p in search]]
             path=next((p.resolve() for p in candidates if p.is_file()),None)
             if path and path.name=='netplay_types.hpp':path=core_types
+            if path and path.name=='netplay_lobby.hpp' and core_lobby:path=core_lobby
             if path is None or path.suffix not in ('.hpp','.h','.inl'):continue
             if any(p.lower() in ('extern','recompiledfuncs','recompiledpatches','recompiledrsp','thirdparty','contrib') for p in path.parts):continue
             found[match[1]]=path
@@ -447,7 +495,28 @@ Service *service() {''')
                 '    dkr::online_performance::protect_log(stderr);\n    std::setvbuf(stderr, nullptr, _IONBF, 0);\n'
                 '    if(!rotated){dkr::runtime::support::history::prune(log_directory/"history");std::fprintf(stderr,"[boot][logging] current log busy; separate instance log=%s\\n",current.string().c_str());}\n#if defined(__ANDROID__) || defined(DKR_IOS)')
         elif name=='quick_join_transport.cpp':
-            text='#include "online_presentation/test_receive_delay.hpp"\n'+text
+            text='#include <cstdio>\n#include "online_presentation/test_receive_delay.hpp"\n#include "online_stability/live_send_capacity.hpp"\n'+text
+            text=once(text,'        realtime.reliability.maxRetransmits = 0U;',
+                '        dkr::online_stability::configure_live_reliability(realtime.reliability);')
+            text=once(text,'            last_heartbeat_ = now;', '''            last_heartbeat_ = now;
+            struct SdkRow {
+                std::shared_ptr<rtc::PeerConnection> connection;
+                std::array<std::shared_ptr<rtc::DataChannel>,5> channels;
+            };
+            std::vector<SdkRow> sdk_rows;
+            {
+                std::scoped_lock lock(mutex_);
+                for(const auto& [identifier,peer]:peers_)if(peer->current.load())
+                    sdk_rows.push_back({peer->connection,{peer->control_channel,peer->authority_channel,
+                        peer->realtime_channel,peer->checkpoint_channel,peer->replica_channel}});
+            }
+            for(const auto& row:sdk_rows)if(row.connection) {
+                const auto rtt=row.connection->rtt();std::array<std::size_t,5> queued{};
+                for(unsigned n=0;n<queued.size();++n)if(row.channels[n])queued[n]=row.channels[n]->bufferedAmount();
+                std::fprintf(stderr,"[online][sdk] role=%s sctp-rtt-ms=%lld bytes-sent=%zu bytes-received=%zu queued-control=%zu queued-authority=%zu queued-live=%zu queued-checkpoint=%zu queued-replica=%zu\\n",
+                    host_?"host":"client",static_cast<long long>(rtt?rtt->count():-1),row.connection->bytesSent(),row.connection->bytesReceived(),
+                    queued[0],queued[1],queued[2],queued[3],queued[4]);
+            }''')
             text=once(text,'        std::vector<std::uint8_t> bytes;\n    };\n\n    void release_packet_bytes_locked',
                 '        std::vector<std::uint8_t> bytes;\n        std::chrono::steady_clock::time_point test_ready=dkr::online_presentation::test_receive_delay::ready_at();\n    };\n\n    void release_packet_bytes_locked')
             text=once(text,'            if (!candidate->empty()) { queue = candidate; break; }',
@@ -455,9 +524,10 @@ Service *service() {''')
             text=header('setup_policy.hpp')+text
             text=once(text,'if (!quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U))',
                 'if (!(quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U) ||\n'
-                '              dkr::online_performance::additional_capacity(traffic,dkr::online_performance::setup_bulk,buffered,aggregate,bytes.size()+1U)))')
+                '              dkr::online_performance::additional_capacity(traffic,dkr::online_performance::setup_bulk,buffered,aggregate,bytes.size()+1U)) ||\n'
+                '              !dkr::online_stability::fresh_input_capacity(traffic,buffered,bytes.size()+1U))')
         elif name=='direct_session.cpp':
-            text='#include "netplay/session_chat/chat.hpp"\n#include "netplay/session_chat/settings.hpp"\n#include "netplay/peer_relay/transport.hpp"\n'+text
+            text='#include "netplay/session_chat/chat.hpp"\n#include "netplay/session_chat/settings.hpp"\n#include "netplay/peer_relay/transport.hpp"\n#include "online_stability/qualification_delivery.hpp"\n'+text
             text=text.replace('make_udp_session_transport()', 'dkr::relay::wrap(this,make_udp_session_transport())')
             text=text.replace('make_quick_join_session_transport(true, {}, error)', 'dkr::relay::wrap(this,make_quick_join_session_transport(true, {}, error))')
             text=text.replace('make_quick_join_session_transport(false, invite, error)', 'dkr::relay::wrap(this,make_quick_join_session_transport(false, invite, error))')
@@ -675,7 +745,7 @@ Service *service() {''')
                 '            const auto cost=std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(Clock::now()-step_began).count());live_delay.work(cost,step==ex::Step::Replayed,next().frame?next().frame-1:0,step==ex::Step::Replayed||step==ex::Step::Advanced);step_us+=cost;max_step_us=std::max(max_step_us,cost);++steps;if(advance&&step!=ex::Step::Advanced)++stalls;')
             text=once(text,'            (void)stats;',
                 '            if(now>=performance_at){performance_at=now+std::chrono::seconds(5);\n'
-                '                std::fprintf(stderr,"[party][performance] epoch=%llu next=%u confirmed=%u delay=%u window=%u rollbacks=%u replayed=%u largest=%u predictions=%u step-avg-us=%llu step-max-us=%llu blocked-pulses=%u\\n",static_cast<unsigned long long>(cursor.epoch),after.frame,confirmed(),unsigned(live_delay.lead()),unsigned(launch.rollback_window),stats.rollbacks,stats.replayed_frames,stats.largest_rollback,stats.predicted_frames,static_cast<unsigned long long>(steps?step_us/steps:0),static_cast<unsigned long long>(max_step_us),stalls);\n'
+                '                std::fprintf(stderr,"[party][performance] epoch=%llu next=%u confirmed=%u delay=%u window=%u rollbacks=%u replayed=%u largest=%u predictions=%u step-avg-us=%llu step-max-us=%llu blocked-pulses=%u\\n",static_cast<unsigned long long>(cursor.epoch),after.frame,confirmed(),unsigned(live_delay.lead()),unsigned(live_delay.prediction_window()),stats.rollbacks,stats.replayed_frames,stats.largest_rollback,stats.predicted_frames,static_cast<unsigned long long>(steps?step_us/steps:0),static_cast<unsigned long long>(max_step_us),stalls);\n'
                 '                steps=stalls=0;step_us=max_step_us=0;}')
         text=beta3(name,text)
         text=remap(text,sources[str(source)])

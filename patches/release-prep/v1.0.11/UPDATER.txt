@@ -1,4 +1,4 @@
-DKR-R v1.0.14 - signed auto updates
+DKR-R v1.0.15 - signed auto updates
 
 The filenames are DKR-R-update.json and DKR-R-update.sig. Use the original
 trusted Ed25519 private key outside the repository and release folders.
@@ -18,7 +18,7 @@ has three platform entries: windows-x64, linux-x86_64 and linux-aarch64.
 Steam Deck uses linux-x86_64. No Android/Apple entry is created.
 
 Upload the four downloads and both signed files to a draft GitHub release
-tagged Version1.0.14 at the same source commit. Add release notes and hashes.
+tagged Version1.0.15 at the same source commit. Add release notes and hashes.
 Check the uploaded bytes, then publish. Do not change or recompress packages
 after signing. Keep the previous release as its own version for recovery.
 The wrapper itself does not push, create tags, upload or publish anything.

@@ -29,6 +29,24 @@ confirmed checkpoint, then catches up. A late racing-role request stays closed.
 A slow spectator is outside racing input/scene agreements and can request a
 fresh checkpoint rather than holding racers indefinitely.
 
+## Buffered playback and full lobbies
+
+v1.0.15 spectators consume confirmed history with an initial target buffer of
+45 simulation frames (1.5 seconds at 30 Hz). This is game-state playback, not
+encoded video streaming. Network latency, loading and catch-up add viewing
+delay; eight simultaneous joins can take substantially longer than the target.
+Spectators never own racing inputs or join the racing input-wait quorum.
+
+History uses several bounded batches in flight and a shared background transfer
+allowance while racing. A fresh checkpoint copies retained confirmed state
+without rewinding the live race or suppressing its ticks. Existing viewers keep
+their required history. There is still finite CPU and bandwidth cost, so this
+does not promise zero overhead, locked frame rate or a fixed viewing delay.
+
+The host can close/reopen **Allow new spectators** from Host settings, including
+in-game. Current viewers stay connected. A lobby created without spectator
+capability must be recreated before viewers can be enabled.
+
 ## Custom tracks and music
 
 v1.0.14 includes the playtest.4 spectator fix. A spectator now prepares

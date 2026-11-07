@@ -33,7 +33,7 @@ class ObserverPlayback final {
 public:
     using Clock=std::chrono::steady_clock;
     static constexpr std::size_t MaximumQueued=1800;
-    ObserverPlayback(ObserverWorld& world,std::uint64_t match,HashState hash);
+    ObserverPlayback(ObserverWorld& world,std::uint64_t match,HashState hash,unsigned buffer_frames=0);
     bool offer(Baseline baseline,std::string& error);
     FeedResult append(std::span<const ConfirmedFrame> frames,std::string& error);
     Work pulse(Clock::time_point now,std::string& error);
@@ -54,5 +54,7 @@ private:
     std::size_t queued_bytes_=0;
     Clock::time_point next_tick_{},last_poll_{};
     bool clock_started_=false,prepared_=false,scene_prepared_=false;
+    unsigned buffer_frames_=0;
+    bool buffering_=true;
 };
 }

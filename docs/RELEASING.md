@@ -85,7 +85,7 @@ preservation of synthetic saves/settings/mod selections. Verify packages after
 copying them into the final handoff. If documents or source change after the
 commit, update the source identity and regenerate affected packages/signatures.
 
-For v1.0.14 the proposed release tag is **Version1.0.14**. Prepare release notes,
+For v1.0.15 the proposed release tag is **Version1.0.15**. Prepare release notes,
 checksums, the complete document review and validation evidence for the owner.
 Do not push, upload, create a public release or publish until the owner approves.
 Publishing a stable release can make automatic updates available. After approval,

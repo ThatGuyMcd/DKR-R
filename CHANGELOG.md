@@ -1,6 +1,47 @@
 # DKR-R changelog
 
-## Unreleased
+## 1.0.15 — 2026-11-07
+
+- Keep fractional elapsed time in the shared spectator transfer budget. Frequent
+  network-pump calls no longer discard refill credit; bandwidth/burst limits
+  stay unchanged. Added a high-frequency pumping regression check.
+
+- Hosts can edit settings from the open lobby and in-game overlay. Prediction
+  window and automatic/manual input delay update during the current game while
+  retaining existing rollback history and immutable inputs. New spectator joins
+  can be closed without removing existing viewers. Player capacity, menu control
+  and replay changes made during play apply on return to the lobby; development
+  mode keeps its existing new-lobby consent and save requirements.
+- Spectators buffer confirmed playback, pipeline history
+  independently of acknowledgements and share a bounded background allowance.
+  Late spectator checkpoints copy the retained confirmed frontier without
+  suppressing live racing ticks. Qualification is recorded in the playtest notes.
+  Fresh snapshots preserve existing viewers' history; normal shutdown no longer
+  reports a send-queue failure when it races a final simulation pulse.
+- Prevent an idle secure WebSocket ping from re-entering the TLS send lock and
+  hanging connection shutdown. Keep ping/pong and dead-connection detection.
+- Capture rollback checkpoints into reusable full-image
+  slots within the existing memory budget, avoiding repeated delta construction
+  and full-state copies. Large state contracts keep the bounded paged fallback.
+- Auto client pacing uses authenticated host simulation progress independently
+  of changing input lead, including fresh reports that the host is holding still.
+- Negotiate a bounded ICE datagram route for sealed racing
+  inputs and repairs, with the existing WebRTC path retained as fallback. Keep
+  delayed heartbeat probes long enough to measure round trips over one second.
+- Correct client clock drift gradually after a hitch,
+  bound unsent live input, batch historical repairs and replace obsolete
+  progress/receipt reports without changing immutable input history.
+- Fresh profiles use Auto input delay with a one-frame starting lead and a
+  fourteen-frame prediction window. Saved host preferences are preserved.
+- Keep analogue stick/pedal values fresh while retaining
+  queued button edges, reject isolated delivery outliers in Auto delay, and avoid
+  treating confirmed menu/resource waits as race input-delay feedback.
+- Service short rollback replays in bounded slices and record separate executed
+  tick costs, replay work, network, confirmation, presentation and scene waits.
+- The reported missing vanilla online car textures and other racers' road wheels
+  remain under investigation. Network waits are reduced, not eliminated; physical
+  Steam Deck Wi-Fi and separate-machine acceptance remain necessary. See the
+  release validation record for exact final-build coverage.
 
 ## 1.0.14 — 2026-11-04
 

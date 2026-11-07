@@ -6,7 +6,7 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__,add_help=False);p.add_argument('--previous',type=Path,required=True);p.add_argument('--previous-receipt',type=Path,required=True);a,rest=p.parse_known_args()
     receipt=json.loads(a.previous_receipt.read_text());checksum=hashlib.sha256(a.previous.read_bytes()).hexdigest()
     previous=receipt['version']
-    if previous not in {'1.0.12','1.0.14-beta.3'} or receipt['artifact']['sha256']!=checksum or receipt['artifact']['name']!=a.previous.name:raise ValueError('Previous package differs from an approved source receipt')
+    if previous not in {'1.0.12','1.0.14-beta.3','1.0.14'} or receipt['artifact']['sha256']!=checksum or receipt['artifact']['name']!=a.previous.name:raise ValueError('Previous package differs from an approved source receipt')
     path=ROOT/'scripts/test_update_package.py';code=path.read_text(encoding='utf-8')
     def once(old,new):
         global code

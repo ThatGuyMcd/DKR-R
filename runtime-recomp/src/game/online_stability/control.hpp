@@ -1,4 +1,5 @@
 #pragma once
+#include "host_settings.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -41,6 +42,7 @@ struct Identity {
     bool active = false, authority = false, dynamic = false;
     std::vector<Route> routes;
     bool local_racer = true;
+    std::optional<unsigned> manual_delay,prediction_window;
 };
 struct Packet { Member target = 0; Bytes bytes; };
 struct Received { Member source = 0; Bytes bytes; };
@@ -66,6 +68,11 @@ public:
     std::vector<Received> incoming();
     void report(DelayView value);
     DelayView delay() const;
+    void publish_host_settings(HostSettings current,HostSettingsContext context);
+    HostSettingsView host_settings()const;
+    bool request_host_settings(std::uint64_t room,HostSettings desired,std::uint64_t& serial,std::string& error);
+    std::optional<HostSettingsRequest> take_host_settings();
+    void finish_host_settings(const HostSettingsRequest& request,std::optional<HostSettings> queued,std::string status,bool accepted);
 private:
     mutable std::mutex mutex_;
     Identity identity_;
@@ -76,6 +83,9 @@ private:
     Clock::time_point published_{}, received_{}, mod_update_{};
     bool dirty_ = true;
     DelayView delay_;
+    HostSettingsView host_settings_;
+    std::optional<HostSettingsRequest> host_settings_request_;
+    std::uint64_t host_settings_serial_=0;
 };
 std::shared_ptr<Control> control(const void* session);
 void forget(const void* session);

@@ -4,6 +4,8 @@
 #include "netplay/session_transport.hpp"
 #include "netplay/secure_channel.hpp"
 #include "online_stability/traffic_meter.hpp"
+#include "online_stability/ping_window.hpp"
+#include "online_stability/live_send_capacity.hpp"
 #include <deque>
 #include <map>
 #include <memory>
@@ -32,6 +34,7 @@ struct LinkPeer {
     std::array<std::uint16_t,16> rtts{};
     unsigned rtt_count=0,rtt_index=0;
     std::chrono::steady_clock::time_point rtt_at{};
+    dkr::online_stability::PingWindow ping_window;
 };
 struct LinkIncoming {MemberId source=0;std::vector<std::uint8_t> bytes;};
 struct LinkOutgoing {
@@ -58,6 +61,7 @@ struct LinkView {
 // Public/UI functions below NEVER call DirectSession while holding this lock.
 // No change to DirectSession's class layout or checked-out header is required.
 struct PartyLink {
+    dkr::online_stability::PingWindow ping_window;
     dkr::online_stability::QueueAgeMeter queue_age;
     mutable std::recursive_mutex mutex;
     bool requested=false,join_watch=false,enabled=false,host=false,admitted=false;
@@ -82,6 +86,7 @@ struct PartyLink {
     unsigned target=0;
     std::string status;
     unsigned maximum_racers=4;
+    bool allow_spectators=true;
     std::vector<std::pair<unsigned,MemberId>> swap_requests;
     std::optional<std::pair<unsigned,MemberId>> requested_swap,approved_swap;
     bool cancel_swap=false;

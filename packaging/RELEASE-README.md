@@ -1,4 +1,4 @@
-# DKR-R v1.0.14
+# DKR-R v1.0.15
 
 Windows: extract the whole ZIP and run **DKR-R.exe**. Keep assets, libexec,
 helpers and licence notices together. Linux/Steam Deck: make the AppImage
@@ -11,7 +11,14 @@ US v1.0 to install; you can keep v1.1 selected for playing.
 Your existing profile, saves, mods and settings can stay. Ordinary offline mods
 share personal Adventure. Online and development progress have separate owners.
 Portable mode selects another data location; it does not move your profile.
-Use matching complete v1.0.14 packages for online play.
+Use matching complete v1.0.15 packages on every machine for online play.
+Automatic delay and a larger prediction window can help with distant players.
+Host settings can now be changed from the lobby and in-game Online overlay.
+Prediction and input-delay changes apply live; capacity, menu and replay changes
+made while playing wait until the lobby. The default prediction window is 14.
+Spectators use buffered confirmed playback and never supply racing inputs.
+Very slow connections can still exceed the prediction window and cause waits.
+The reported missing vanilla online car textures/road wheels remain unresolved.
 
 Play contains Achievements, Session mods and Save Manager. Session mods OFF
 bypasses selected content for the next session without changing its selections.

@@ -7,8 +7,8 @@ namespace dkr::runtime::netplay::rollback_policy {
 inline constexpr auto mode = SynchronizationMode::ExperimentalRollback;
 inline constexpr int maximum_players = 4;
 inline constexpr int prediction_window = 14;
-inline constexpr int input_delay = 6;
-inline constexpr bool automatic_delay = false;
+inline constexpr int input_delay = 1;
+inline constexpr bool automatic_delay = true;
 inline constexpr bool record_replay = false;
 inline constexpr bool development = false;
 inline constexpr bool spectators = true;
@@ -44,7 +44,7 @@ static_assert(default_rules().synchronization == mode);
 static_assert(default_rules().host_control == HostControlPolicy::GuidedUntilCharacterSelect);
 static_assert(default_rules().maximum_players == 4);
 static_assert(default_rules().rollback_window == 14);
-static_assert(default_rules().manual_input_delay == 6 && kMaximumInputDelayFrames >= 6);
-static_assert(!default_rules().automatic_input_delay && !default_rules().record_replay);
+static_assert(default_rules().manual_input_delay == 1 && kMaximumInputDelayFrames >= 1);
+static_assert(default_rules().automatic_input_delay && !default_rules().record_replay);
 static_assert(!default_rules().development);
 }

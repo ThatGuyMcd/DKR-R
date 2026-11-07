@@ -1,79 +1,135 @@
-# v1.0.14 release preparation — 4 November 2026
+# v1.0.15 release preparation — 7 November 2026
 
-This is the local preparation record for the accepted v1.0.14 integration.
-The release is unpublished and awaiting the owner's document/release review.
-The final handoff records exact package hashes, source identity and test results.
-No pass is inferred merely from a prior beta or a successful compile.
+This records the local v1.0.15 preparation since the public v1.0.14 release.
+Nothing is pushed, tagged, uploaded or published before the owner's review.
+The external release handoff holds package hashes and detailed test evidence.
 
-## Release scope
+## Scope and source
 
-The build retains the accepted online/input/pacing, UI parity, mod-library,
-seasonal/localisation, analogue driving, feedback, lighting, display/session,
-crash-report and startup-handover work since v1.0.12. Windows x64 and Linux
-x86_64/ARM64 are the download targets; Steam Deck uses the exact x86_64 AppImage.
-Apple and Android status remains as documented in [Platforms](docs/PLATFORMS.md).
+The release changes online input timing/recovery, checkpoint CPU work, confirmed
+spectator playback, connection shutdown and live host settings. Launcher,
+graphics, controllers, languages and authoring features from v1.0.14 remain.
+See the [release notes](docs/PUBLIC-1.0.15-NOTES.txt),
+[documentation review](docs/DOCUMENTATION-1.0.15.md) and [changelog](CHANGELOG.md).
 
-Source is reviewed and recoverably backed up. Final source audits bind the
-normal and owned payloads, retained compile policies and both ROM revisions.
-Submodules, RecompiledFuncs, RecompiledPatches and frozen capsules remain unchanged.
+All required source and registered third-party patches must be committed before
+signing. The existing checked release pipeline retains the source capsule and
+both normal/owned ROM payloads. Submodules, generated recompilation inputs and
+the frozen capsule are not edited or repinned. Every platform is rebuilt for
+1.0.15; a renamed private-playtest binary is not a release build.
 
-## Verification record
+## Final-build verification
 
-The external handoff's VALIDATION.txt and Evidence directory hold the completed
-results, failures/limitations, archive readbacks, ELF reports and helper probes.
-Mandatory guard/tooling/metadata/asset and installed hook checks remain required.
-Host checks, native Windows/Linux startup and same-PC online checks, ARM64
-CPU/data emulation and update qualification are recorded separately.
+Windows x64, Linux x86_64 and Linux ARM64 production builds completed. Source
+audits, allowlisted package composition, archive readback and packaged helper
+checks passed on all three. Steam Deck copies the exact Linux x86_64 AppImage.
+Both Linux packages require glibc 2.38 and GLIBCXX_3.4.32, with no missing
+non-system dependencies in the inspected closures. ARM64 CPU/data/helper checks
+use QEMU and its target sysroot; this does not qualify a physical ARM GPU.
 
-The stable production builds completed for Windows x64, Linux x86_64 and Linux
-ARM64. Archive readback, payload membership, helper execution and both ROM
-identities were checked on the finished packages. The Steam Deck download is
-byte-identical to the Linux x86_64 AppImage. Both Linux architectures require
-glibc 2.38 and GLIBCXX_3.4.32; ELF inspection found no missing non-system
-dependencies.
+Windows host CTest passed 169/169 after the final transport repair. Linux passed
+168/169 on the mounted Windows checkout: the regression harness timed out.
+Its identical 25 cases passed on native Linux storage in 7.135 seconds. The
+original timeout remains recorded. Both host suites include the new transfer
+budget regression. The same online-stability checks passed under ARM64 QEMU.
+All three platforms passed the retained and online production fixtures, with
+2,758,829 party checks each, profile/portrait/history checks and vehicle lighting.
+Native Linux vehicle sanitiser checks passed. Guard/tooling, installed hooks,
+metadata and asset checks passed; the initial Windows MSYS Git tooling failure
+is preserved separately from the successful native-Git rerun.
 
-The Windows host suite passed 165/165. Linux passed 164/165 in the mounted
-workspace: DKRRegressionHarness exceeded its storage timeout. Its same 25 cases
-passed when rerun on native Linux storage. This rerun does not change the
-original suite result. Required repository guards, tooling, metadata, assets
-and installed format/lint hooks were run separately.
+Both supported ROM revisions started successfully from the final Windows and
+Linux packages. Earlier v1.0.15 preparation also checked manual mod loading,
+cancellation, automatic launch, failed-mod fallback and startup captures before
+the isolated transport-budget repair; these are not labelled as final-byte
+checks. Updater signing and exact-v1.0.14 upgrade results are in the handoff.
 
-All three architectures passed the retained 14-group fixture checks and seven
-online fixture groups. Coverage includes 7,642 vehicle assertions, nine legacy
-cases and eight expected rejection controls. The Linux x86_64 vehicle sanitizer
-check passed. ARM64 execution uses QEMU with the target sysroot and covers CPU,
-data and helper behaviour, not graphics or controller hardware.
+## Final multiplayer checks and the transfer-budget repair
 
-Native Windows and Linux package checks exercised both ROM revisions, manual
-Play handoff, real custom-vehicle loading, cancellation, automatic launch and
-failed-mod fallback. Native captures also exercised the shared initial-sync
-presentation. The external handoff records same-PC online results and the
-separate companion-mod and signed-updater checks against exact package hashes.
+Release testing found that resetting the background-budget timestamp on every
+network-pump call discarded fractional milliseconds. Frequent pumping could
+therefore starve spectator downloads. The shared production helper now retains
+that time, with unchanged bandwidth and burst limits. The regression checks
+100 ms of pumping at 10 kHz, the bounded idle burst, initialisation and clock
+reversal. No guest clock, frozen source or transfer safety check was replaced.
 
-Two inherited fixture failures were repaired before the final packages: the
-old-race negative control now receives its own header closure, and the directory
-lifecycle test uses the same compiled input layout as its linked core. The
-vehicle assertion total was updated to include the accepted lighting tests.
-Negative controls remain active. The existing conservative peer ledger hashes
-these build policies, so participants must use matching final v1.0.14 packages.
+The repaired Windows full-lobby baseline passed with four racers and eight
+late-started viewers. All 12 exited cleanly, with no party/rollback failures.
+All racers logged 0 ms racing input waits; each viewer replayed 1,241–2,843
+actual race frames.
 
-## Physical and external acceptance
+The final mixed Windows/Linux full-lobby run also passed. The Linux AppImage
+host and three Windows racers used measured 150/450/750 ms wire RTT profiles,
+±25 ms jitter per direction, 1% packet loss and 200 ms spikes. Eight Windows
+spectators joined after racing began; one also received a temporary 4-second
+RTT burst. All 12 exited cleanly without party/rollback failures, and all eight
+viewers replayed 835–3,041 race frames. Cumulative logged racing input waits were
+0 / 0 / 16.677 / 10.114 ms for host and racers 1–3. Spectator-checkpoint waits
+were zero for the racers. Auto delay was ON and the prediction window was 20;
+the fresh-profile default remains 14. These waits are totals for the controlled
+run, not controller-to-screen latency or a universal pause-free guarantee.
 
-Physical Steam Deck LCD (Gaming/Desktop), ARM GPU, DualSense USB/Bluetooth,
-audio, suspend/resume, controller feel and real WAN multiplayer require actual
-device/network checks. WSLg Mesa llvmpipe is a software renderer and does not
-prove a Deck 60 FPS or temperature claim. Same-PC peer tests are not WAN tests.
+Independent Windows/Linux clock probes passed before, twice during and after
+the final wire test, within 5 ppm. Temporary timing calibration was restored,
+the clock daemon was verified running, and scoped network shaping was removed.
+All game processes ran on one PC. This is mixed-platform qualification, not
+separate-device, physical Steam Deck Wi-Fi, WAN or locked-60-FPS acceptance.
 
-New language packs remain draft translations. Direct Deck patterns and USB
-waveform haptics remain experimental/capability gated. Hardware ray tracing is
-experimental. Custom battle courses require valid mode objects and connected
-AI paths; the supplied Block Fort investigation was not a complete compatibility
-repair. The separate supplied-log crash investigation did not establish its
-first corruption point without the matching original dump.
+The earlier pre-repair late-viewer attempts failed their minimum playback
+requirement and remain in the evidence; they are not counted as passes. A
+separate early-viewer variant failed its test auto-start before racing and is
+also excluded. The pre-repair full-lobby live-edit stress verified all requested
+Driver transitions, but two viewers missed the ten-second playback minimum.
+The final four-racer run without spectator capability passed all five live
+prediction changes (14 → 20 → 2 → 20 → 6 → 20), Auto/manual switching, client
+rejection and cancellation of queued settings. All four exited cleanly. It used
+approximately 750 ms application delivery RTT, jitter and spikes; the deliberate
+small windows cause waits. This is live-edit safety coverage, not another wire
+loss test or a zero-wait result. Detailed results are in the handoff.
 
-## Source, updates and publication
+## Earlier private qualification
 
-Current guides and notes are reviewed in [Documentation](docs/DOCUMENTATION-1.0.14.md).
-The [v1.0.12 validation record](docs/history/RELEASE-VALIDATION-1.0.12.md) is preserved.
-Final signatures must bind Version1.0.14 and the exact reviewed source commit.
-No push, upload or publication is performed before the owner's approval.
+The technical records retain their original build numbers:
+
+- [Online playability](docs/notes/2026-11-04-online-playability.md): timing,
+  checkpoint work, transport and measured recovery.
+- [Full lobbies](docs/notes/2026-11-06-full-lobby-playability.md): playtest.6
+  four-racer/eight-spectator tests, including mixed Windows/Linux wire shaping.
+- [Live settings](docs/notes/2026-11-07-live-host-settings.md): playtest.7,
+  four racers and full lobbies, with real Driver window changes during play.
+
+Playtest.6 mixed-platform profiles used 150/450/750 ms RTT, jitter, 1% wire loss
+and spikes with Auto ON/window 20. Logged cumulative racing input waits were
+0 / 35.862 / 58.091 / 0 ms. Those one-PC results do not automatically qualify
+the later live-settings source or a physical Steam Deck/WAN session.
+
+Playtest.7's local full-lobby baseline logged 0 ms racer input waits. Its live
+stress deliberately used two- and six-frame windows under high latency and
+logged roughly 33–36 seconds of waits per racer. That verifies safe live edits,
+not zero-wait performance. The fresh-profile default remains 14, not 20.
+
+## Remaining acceptance and known issues
+
+Physical Steam Deck LCD Wi-Fi (Gaming/Desktop), separate machines/WAN, ARM GPU,
+controller feel, audio and suspend/resume need actual-device checks. QEMU covers
+CPU/data/helper behaviour; software-rendered Linux tests do not prove hardware
+GPU frame rates. Simulation tick rate, rendered FPS and controller-to-screen
+latency are separate measurements.
+
+The reported missing vanilla online car textures and remote road wheels remain
+open. Network waiting is reduced, not eliminated. Spectators target 45 frames of
+initial confirmed buffering; loading/catch-up may add much more viewing delay.
+Neither locked 60 FPS nor pause-free play at arbitrary latency is guaranteed.
+
+Existing draft translations, experimental ray tracing/haptics and custom battle
+map requirements remain. The earlier supplied-log investigation did not prove
+the first corruption point without its matching dump. Open GitHub reports are
+listed in the handoff without being closed automatically.
+
+## Review and publication
+
+The proposed tag is `Version1.0.15`. The signed updater must bind the exact
+reviewed commit and finished package bytes using the existing trusted key.
+The [v1.0.14 validation record](docs/history/RELEASE-VALIDATION-1.0.14.md) and
+earlier release notes remain available. Final owner review precedes pushing,
+tagging, uploading and publication.

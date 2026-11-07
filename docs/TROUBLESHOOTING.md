@@ -11,16 +11,40 @@ For missing Discord pictures, check that the profile API migrations and matching
 Workers are deployed, then sign in again. Existing online play can still work
 when picture import is unavailable.
 
-## v1.0.14 release contract
+## v1.0.15 release contract
 
 Normal mods share one personal Adventure. Check portable/profile location and Backups & Recovery before restoring. Keep installation receipts/recovery folders. Export logs/support details; report the exact release, ROM revision, course, packs and settings. The accepted HD-water startup fix is included; a hardware-specific problem still needs its own report.
 
 Start with the symptom and keep the original data. Please don't delete your
 saves or whole profile to troubleshoot a graphics, mod or connection failure.
 
+## Online pauses, high latency and live host settings
+
+Use matching complete v1.0.15 packages. Start with Automatic input delay and
+check the saved prediction window: existing preferences are not reset by an
+update. New profiles use 14 frames. Hosts can increase the window, up to 20,
+from Host settings in the lobby or in-game overlay and press Apply changes.
+More history needs more memory and can increase correction work. Two- or
+six-frame windows can produce substantial waits on high-latency connections.
+
+Keep all racing logs from the same attempt, including the host. Report racer/
+spectator counts, platforms, Wi-Fi/wired, route, ping, window, Auto/manual delay,
+mods and the exact scene. A low rendered frame rate, a correction taking too
+long and waiting for input need different diagnoses. The logs separate these.
+No window can hide an arbitrary outage indefinitely.
+
+Spectators never supply racing inputs. Their initial 1.5-second buffer target
+does not include all joining/catch-up time. A slow viewer may fall farther
+behind. Closing new spectator joins keeps existing viewers connected.
+
+The missing vanilla online car textures/remote road wheels are still open.
+Include screenshots and host/client logs, view mode, ROM, first/later race,
+Session mods state and Maximum vehicle detail. Do not delete saves or claim
+the older custom-character wheel-lighting repair fixes this online issue.
+
 ## Modded joins, race starts and spectator black screens
 
-Check that everyone has the complete v1.0.14 package first. This release
+Check that everyone has the complete v1.0.15 package first. This release
 includes the accepted playtest.4 fixes. Keep the downloaded offline-mod
 option enabled if you want those copies; matching installed content no
 longer causes the old identity-conflict warning. Genuine conflicts and
@@ -38,7 +62,7 @@ log also records `[spectator][music]`, `[spectator][admission]` and
 
 ## Missing HUD elements, memory reports or rejected graphics
 
-Use the full v1.0.14 package first. Keep `runtime.log` and
+Use the full v1.0.15 package first. Keep `runtime.log` and
 `runtime-previous.log`, with the track, ROM revision, mods, texture packs
 and action immediately before the problem. For Online, include the host
 and affected client or spectator logs from the same attempt.
@@ -55,7 +79,7 @@ Keep any new command/provenance reports; do not disable those checks.
 Water staying vanilla can mean an incomplete HD animation. All frames
 need matching replacements before that family can use HD consistently.
 For `unsupported car texture profile`, use the original updated export
-with v1.0.14. Unknown format revisions or enabled custom boost anchors
+with v1.0.15. Unknown format revisions or enabled custom boost anchors
 still need exporter/runtime support. See [Vehicles](VEHICLES.md).
 
 ## ROM rejected
@@ -103,7 +127,7 @@ Use compatible complete packages and the same original ROM revision.
 The host creates the lobby after choosing mods/rules; changing them requires a
 new lobby. Clients must complete consent, preparation and verification.
 
-v1.0.14 uses Rollback; the old host-backend selector is removed.
+v1.0.15 uses Rollback; the old host-backend selector is removed.
 Try automatic input delay and a suitable prediction window for your route.
 A bounded input wait, renderer slowdown and scene-loading barrier are different
 problems: record the network overlay state and exact scene.

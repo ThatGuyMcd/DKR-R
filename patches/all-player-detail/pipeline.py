@@ -51,7 +51,7 @@ def enhancements(text):
  return text[:start]+part+text[end:]
 
 def renderer(text):
- text='#include "online_stability/response_trace.hpp"\n#include "online_presentation/frame_policy.hpp"\n#include "online_stability/battle_view.hpp"\n'+text
+ text='#include "online_stability/render_probe.hpp"\n#include "online_stability/response_trace.hpp"\n#include "online_presentation/frame_policy.hpp"\n#include "online_stability/battle_view.hpp"\n'+text
  text=once(text,'    std::uint32_t scene=0;\n    {',
   '    dkr::online_presentation::ResourceScope resource_scope(lease->epoch());\n    std::uint32_t scene=0;\n    {')
  text=once(text,'        scene=presentation::normalise_identity(event.parameters[0]^',
@@ -59,7 +59,7 @@ def renderer(text):
  text=once(text,'        last_owned_report_=now;',
   '        dkr::online_presentation::report();\n        last_owned_report_=now;')
  text=once(text,'    queued=true;\n    const auto now=std::chrono::steady_clock::now();',
-  '    queued=true;\n    const auto now=std::chrono::steady_clock::now();\n    last_wait_presentation_=now;')
+  '    queued=true;\n    if(dkr::online_stability::render_probe_due(lease->epoch(),d.frame)){drain();dkr::online_stability::render_probe(*application_,d.framebuffer,lease->bytes());}\n    const auto now=std::chrono::steady_clock::now();\n    last_wait_presentation_=now;')
  text=once(text,'    if(now-last_wait_presentation_<std::chrono::milliseconds(33))return;',
   '    if(!dkr::online_presentation::idle_refresh_due(now-last_wait_presentation_,present_count_!=0))return;\n    dkr::online_presentation::count(dkr::online_presentation::Event::IdleRepeat);')
  text=once(text,'    // Salt BEFORE constructing any matrix/shadow identities.',

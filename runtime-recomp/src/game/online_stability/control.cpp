@@ -85,6 +85,7 @@ void Control::configure(Identity next) {
     if (!next.active) next.room=0;
     if (next.room != identity_.room || next.local != identity_.local || next.host != identity_.host) {
         progress_={};mods_.clear();outgoing_.clear();incoming_.clear();published_={};received_={};mod_update_={};delay_={};dirty_=true;
+        host_settings_={};host_settings_request_.reset();host_settings_serial_=0;
     }
     identity_=std::move(next);
 }
@@ -148,6 +149,33 @@ std::vector<Received> Control::incoming() {
 }
 void Control::report(DelayView value){std::lock_guard lock(mutex_);delay_=std::move(value);}
 DelayView Control::delay()const{std::lock_guard lock(mutex_);return delay_;}
+void Control::publish_host_settings(HostSettings current,HostSettingsContext context) {
+    std::lock_guard lock(mutex_);
+    if(!identity_.active||!identity_.authority){host_settings_={};host_settings_request_.reset();return;}
+    host_settings_.available=true;host_settings_.room=identity_.room;host_settings_.current=current;host_settings_.context=context;
+}
+HostSettingsView Control::host_settings()const{std::lock_guard lock(mutex_);return host_settings_;}
+bool Control::request_host_settings(std::uint64_t room,HostSettings desired,std::uint64_t& serial,std::string& error) {
+    std::lock_guard lock(mutex_);
+    if(!identity_.active||!identity_.authority||!room||room!=identity_.room||!host_settings_.available) {
+        error="Only the current lobby host can change these settings.";return false;
+    }
+    const auto plan=plan_host_settings(host_settings_.current,desired,host_settings_.context);
+    if(!plan){error=plan.error;return false;}
+    if(host_settings_serial_==UINT64_MAX){error="Host settings request limit reached. Reopen the lobby.";return false;}
+    serial=++host_settings_serial_;host_settings_request_=HostSettingsRequest{room,serial,desired};error.clear();return true;
+}
+std::optional<HostSettingsRequest> Control::take_host_settings() {
+    std::lock_guard lock(mutex_);auto value=std::move(host_settings_request_);host_settings_request_.reset();
+    if(!identity_.active||!identity_.authority||!value||value->room!=identity_.room)return {};
+    return value;
+}
+void Control::finish_host_settings(const HostSettingsRequest& request,std::optional<HostSettings> queued,std::string status,bool accepted) {
+    std::lock_guard lock(mutex_);
+    if(!identity_.active||!identity_.authority||request.room!=identity_.room)return;
+    host_settings_.reply=request.serial;host_settings_.accepted=accepted;host_settings_.submitted=request.desired;
+    host_settings_.queued=std::move(queued);host_settings_.status=std::move(status);
+}
 std::shared_ptr<Control> control(const void* key){auto& state=registry();std::lock_guard lock(state.mutex);auto& value=state.sessions[key];if(!value)value=std::make_shared<Control>();return value;}
 void forget(const void* key){auto& state=registry();std::lock_guard lock(state.mutex);state.sessions.erase(key);}
 void bind_mod_sync(const void* link,const void* session){auto owner=control(session);auto& state=registry();std::lock_guard lock(state.mutex);state.mod_links[link]=owner;}

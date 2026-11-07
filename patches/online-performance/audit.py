@@ -115,13 +115,32 @@ def inspect(build,binary,baseline,accepted):
         '++preview_index,tracks.size()' in launch,
         'Native preparation does not publish coherent measured progress')
     need(compiled(build,'DKROnlineStabilityCore')=={(stability/'control.cpp').resolve(),(stability/'live_delay.cpp').resolve(),(stability/'preparation_policy.cpp').resolve(),(stability/'process_services.cpp').resolve()},'Normal online stability sources are not compiled directly')
-    need(compiled(build,'DKRPeerRelay')=={(relay/'core.cpp').resolve(),(relay/'transport.cpp').resolve()},'Normal proxy sources are not compiled directly')
+    need(compiled(build,'DKRPeerRelay')=={(relay/'core.cpp').resolve(),(relay/'transport.cpp').resolve(),(relay/'live_datagram.cpp').resolve()},'Normal proxy/datagram sources are not compiled directly')
     need(compiled(build,'DKRSessionChat')=={(chat/'chat.cpp').resolve()},'Normal session chat source is not compiled directly')
     platform=next(p for p in compiled(build,'DKRPortGame') if p.name=='runtime_platform.cpp').read_text()
     need('dkr::chat::captures_game_input()' in platform,'Compiled input polling bypasses chat capture')
     need('#include "netplay/session_chat/ui.inl"' in online and re.search(r'DrawSessionChatLobby\(inner,\s*frame\)',online),'Lobby chat is not bound beside player cards')
     need('DrawSessionChatOverlay(show_overlay)' in ui and 'HandleSessionChatEvent(event)' in ui,'In-game chat or event capture is not bound')
     direct=next(p for p in compiled(build,'DKRNetplayCore') if p.name=='direct_session.cpp').read_text()
+    live_directory=[(name,data.decode()) for name,data in files.items() if name.endswith('/owner_pump.inl')]
+    need(len(live_directory)==1,'Live spectator admission must have one compiled owner policy')
+    directory_name,directory_owner=live_directory[0]
+    need((stage/directory_name).as_posix() in direct and
+        'party->enabled&&party->allow_spectators&&spectators+pending_spectators<8' in directory_owner and
+        '{"maxSpectators",party->enabled?(party->allow_spectators?8:spectators):0}' in directory_owner and
+        'party->enabled&&party->allow_spectators&&online->running_spectators' in directory_owner,
+        'Live spectator admission is not bound to authenticated grants and public availability')
+    rollback=next(p for p in compiled(build,'DKRNetplayCore') if p.name=='experimental_rollback.cpp').read_text()
+    need('SnapshotHistory<RollbackStateStore>' in rollback and 'checkpoints_->staging(frame)' in rollback and
+        'simulation_.capture(target, detail)' in rollback and 'hash=checkpoint_hash(target)' in rollback and
+        'checkpoints_->save(frame, target, hash)' in rollback,
+        'The production rollback owner bypasses direct bounded checkpoint capture or integrity hashing')
+    quick=next(p for p in compiled(build,'DKRNetplayCore') if p.name=='quick_join_transport.cpp').read_text()
+    need('fresh_input_capacity(traffic,buffered,bytes.size()+1U)' in quick,'Realtime SDK freshness budget is not bound')
+    need('configure_live_reliability(realtime.reliability)' in quick,'Timed realtime input delivery is not bound')
+    need('peer.ping_window.sent(' in direct and 'member->ping_window.receive(' in direct and
+        'party->ping_window.sent(' in direct and 'party->ping_window.receive(' in direct,
+        'Delayed heartbeat replies still depend on the most recent one-second probe')
     main=next(p for p in compiled(build,'DKRPortGame') if p.name=='game_main.cpp').read_text()
     need('ProcessServices process_services([]{dkr::crash_reports::shutdown();dkr::online_stability::retire_store_http();dkr::online::shutdown_account();});' in main,'Process exit can outlive owned HTTP work')
     reports=ROOT/'runtime-recomp/src/game/crash_reports'
@@ -146,6 +165,13 @@ def inspect(build,binary,baseline,accepted):
     need('StartupTransport<SessionTransport,TransportTrafficClass,LobbyAdmission,LobbyRoute>' in runtime and 'auto& network=*prepared_network' in runtime,'Verified startup Network is not reused through release')
     need('session.statistics().next_frame!=session.frontier()||pump.view().wait' not in runtime,'Rollback correction still cancels live delay negotiation')
     party_runtime=next(p for p in compiled(build,'DKRPortGame') if p.name=='party_runtime.cpp').read_text()
+    need('peer_clock.observe(' in party_runtime and 'peer_clock.period(' in party_runtime,'Bounded peer clock recovery is not bound')
+    need('peer_clock.observe_frontier(clock->frame,clock->rtt_ms,clock->received)' in party_runtime and
+        'if(!identity.dynamic)peer_clock.observe(' in party_runtime,'Automatic clock pacing still infers progress from a changing input lead')
+    need('send(host,Msg::Progress,proof.b,repair_lane)' in party_runtime and 'Msg::InputReceipt,receipt.b,launch.development?Lane::Control:Lane::Realtime' in party_runtime,'Input recovery still depends on ordered control delivery')
+    need('encode_live_inputs(batch),Lane::Replica' in party_runtime and
+        party_runtime.index('        service_inputs(now);')<party_runtime.index('        if(phase==Phase::SceneVote||phase==Phase::ScenePrepare||phase==Phase::SceneReady) {'),
+        'Historical input retries are duplicated in SCTP or stop during scene agreement')
     need('phase!=Phase::Running||driver->correcting()' not in party_runtime,'Party correction still cancels live delay negotiation')
     need('Msg::LiveInputs,bytes,Lane::Realtime' in party_runtime and 'host_received=std::max(host_received,received)' in party_runtime,'Compact live delivery or authoritative receipt retention missing')
     need('Msg::Input,body.b,Lane::Authoritative' in party_runtime and 'repair_due(source,id.second,id.first,retry)' in party_runtime,'Exact repair lost its independent lane or retry pacing')

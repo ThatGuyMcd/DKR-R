@@ -1,4 +1,4 @@
-# DKR-R Online â€” v1.0.14
+# DKR-R Online — v1.0.15
 
 Open **DKR-R Online** in the existing launcher. Public/Friends browsing,
 Private/Public hosting, Discord sign-in and a total online count sit alongside
@@ -6,7 +6,7 @@ the existing lobby controls. There is no separate website page to use.
 
 Races and minigames support up to four racing ports; Adventure supports two
 racers. A spectator-capable lobby can also have eight spectators. Everyone
-needs a compatible complete v1.0.14 package, supported original ROM revision,
+needs a compatible complete v1.0.15 package, supported original ROM revision,
 admitted gameplay rules and verified session mods. Keep `assets` and private
 workers with the installation.
 
@@ -98,14 +98,15 @@ narrow windows, the lobby filters remain above the list.
 6. The host can run **Check Rollback connection**, review the Scoreboard, then
    start the synchronised countdown.
 
-Host rules and the enabled mod catalogue are frozen for the session. Changing
-the mod set requires recreating the lobby. The host guides shared menus until
+The admitted mod catalogue and launch content are frozen for the session. Changing
+the mod set requires recreating the lobby. Timing and selected host rules can
+be edited as described below. The host guides shared menus until
 Player Select by default; online slots receive their correct native players
 without remapping physical controllers to local ports.
 
 The public host mode is **Rollback**. It uses the existing owned replay backend
 internally named `ExperimentalRollback`. The old Auto, Host Prediction and
-Strict Input Sync selector is no longer offered for v1.0.14 public hosting.
+Strict Input Sync selector is no longer offered for v1.0.15 public hosting.
 Old wire enum values and historical investigations have not been reinterpreted.
 Do not change configuration files to bypass the supported-mode gate.
 
@@ -123,12 +124,12 @@ closes details before closing the report. The host can rerun the check.
 
 | Score | Estimate |
 |---|---|
-| 9â€“10 | Excellent |
-| 7â€“8 | Good |
-| 5â€“6 | Mixed |
-| 3â€“4 | Poor |
-| 1â€“2 | Very poor |
-| â€” | Not rated; insufficient, incompatible or locally overloaded measurement |
+| 9–10 | Excellent |
+| 7–8 | Good |
+| 5–6 | Mixed |
+| 3–4 | Poor |
+| 1–2 | Very poor |
+| — | Not rated; insufficient, incompatible or locally overloaded measurement |
 
 The racing grade is the weakest measured remote racer route. Any unrated racer
 leaves the racing assessment incomplete. The host's row is a shared estimate,
@@ -137,10 +138,47 @@ racing grade. Role/roster or tested-setting changes make an old report stale.
 
 Grades describe a short network sample, not hardware FPS, checkpoint download
 speed or a guarantee against desync. No settings change automatically. Start
-with automatic input delay; the prediction window is adjustable from 2â€“20
-frames, with ten frames a useful starting recommendation for distant players.
-More prediction can increase replay work. A small window can run out before
-actual inputs arrive. Changes apply to the next agreed lobby rules.
+with automatic input delay; the prediction window is adjustable from 2–20
+frames. Fresh profiles start at 14 frames with Auto delay ON and a one-frame
+initial lead; existing saved preferences are kept. A larger window can help
+with distant players but costs more memory and can increase replay work. A small
+window can run out before actual inputs arrive. Auto delay cannot remove network
+propagation time or hide an arbitrary outage.
+
+## Changing host settings while playing
+
+Open **Host settings** in the waiting lobby or the in-game Online overlay.
+Edit the draft and press **Apply changes**. Only the current host can apply it;
+accepted values are also saved for future lobbies. Loading/return transitions
+must finish first. Unsubmitted edits do not affect the session.
+
+| Setting | When it applies |
+| --- | --- |
+| Prediction window, 2–20 frames | During the current game; existing correction history is retained. |
+| Auto/manual input delay, 0–9 frames | During the current game; published inputs and button edges are retained. |
+| Allow new spectators | Immediately; current viewers remain connected. |
+| Capacity, menu control and replay edits during play | Queued until return to the lobby; the host can cancel them. |
+| Development mode | Requires a new lobby with its usual consent/save rules. |
+
+A room created without spectator capability must be recreated before spectators
+can be enabled. Reducing the prediction window can hold further prediction while
+missing input catches up. It does not reset the race or discard an in-flight
+correction. Applying unchanged values preserves Ready status.
+
+## Input delivery and recovery
+
+Analogue values stay current while queued button edges are retained. Automatic
+delay uses typical delivery lateness and measured waiting rather than one old
+packet; confirmed menu/resource waits are excluded from race-delay feedback.
+Clients follow authenticated host progress and recover gradually after hitches.
+Short corrections service the connection between steps.
+
+Compatible peers can establish a separate encrypted ICE datagram route for
+small racing inputs and repairs. The existing WebRTC path remains the fallback;
+setup and lifecycle messages keep their existing delivery. Input queues are
+bounded, repair history is batched and old unsent progress reports can be
+replaced. Final racing inputs remain immutable. The route is not available on
+every network and does not guarantee a particular frame rate or input delay.
 
 ## Spectators and player swaps
 
@@ -227,7 +265,7 @@ other racers. See [Graphics](GRAPHICS.md) and [Sound](SOUND.md).
 The website API provides worldwide discovery, account presence and bounded
 admission. PeerJS/STUN still establishes the existing direct WebRTC connection;
 Rollback carries the match. The website does not relay gameplay frames. There
-is no bundled TURN service, voice/text chat or universal NAT traversal.
+is no bundled TURN service, voice chat or universal NAT traversal.
 Restrictive firewalls/mobile networks can still block a direct route, and peers
 can see each other's public network addresses.
 

@@ -55,7 +55,7 @@ python -B patches/online-directory/backend_pipeline.py --output <bundle-folder> 
 4. Update the existing private API Worker with
    `PRIVATE-API/worker-single-file.mjs`. Keep all current variables, secrets and
    bindings. No new service binding is needed.
-5. Use matching v1.0.14 launchers. Sign out and back in once, then check the
+5. Use matching v1.0.15 launchers. Sign out and back in once, then check the
    separate Discord name/image choices, custom picture preview and sharing.
 
 The API stores one small selected avatar per account and verified links to

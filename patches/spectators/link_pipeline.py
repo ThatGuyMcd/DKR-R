@@ -42,6 +42,10 @@ def direct(text):
     // The host owns this policy. A racer advertises support for parties, not
     // permission to enable them. A non-spectator lobby uses normal admission.
     if(party_join&&!party->enabled&&!watch_join)party_join=false;
+    if(party_join&&watch_join&&!party->allow_spectators&&!party->peer(packet_sender)) {
+        send_with_key(source,peer_key,protocol::MessageType::HelloAck,
+            protocol::encode_hello_ack({false,0,"The host has closed new spectator joins."}));return;
+    }
     if(party_join!=party->enabled || (party_join&&party->launch&&!watch_join)) {
         send_with_key(source,peer_key,protocol::MessageType::HelloAck,
             protocol::encode_hello_ack({false,0,party->enabled?"Join using Racer or Watch Race. A running race accepts spectators only.":"This host has disabled spectators. Join as a racer."}));return;

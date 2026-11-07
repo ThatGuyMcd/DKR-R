@@ -4,21 +4,21 @@
 
 [Join our Discord](https://discord.com/invite/AMWfXdBjNP) · [Open the Mod Library](https://positron-portal.com/dkr-r/) · [Downloads](https://github.com/ThatGuyMcd/DKR-R/releases)
 
-## DKR-R v1.0.14
+## DKR-R v1.0.15
 
-I've worked on the online input delay, joining and frame pacing, and brought the
-launcher and in-game overlay together so the same pages work in both. There are
-new display options, automatic seasonal themes, launcher languages, optional
-analogue driving and controller feedback settings. Custom cars and the road
-wheels on custom characters now respond to lighting properly too.
+I've spent quite a bit of time working through DKR-R Online since v1.0.14.
+This update improves late-input recovery, reduces some of the rollback CPU work
+and gives spectators buffered confirmed playback. Hosts can now change the
+prediction window and input delay from the lobby or in-game overlay too.
 
-Play fades into the new Starting Game screen, with mod progress underneath the
-logo. Online uses the same design while everyone syncs. Linux now requests GPU
-acceleration for the launcher, with a software fallback when needed.
+Your saves, mods and settings can stay. Use matching complete v1.0.15 packages
+on every machine in an online lobby. See the [full release notes](docs/PUBLIC-1.0.15-NOTES.txt)
+and [changelog](CHANGELOG.md) for everything since v1.0.14.
 
-Your saves, mods and settings can stay. Use the complete v1.0.14 package on every
-machine in an online lobby. See the [full release notes](docs/PUBLIC-1.0.14-NOTES.txt)
-and [changelog](CHANGELOG.md) for everything since v1.0.12.
+Online waits are reduced, not eliminated. Very slow connections can still run
+out of prediction history. The reported missing vanilla online car textures and
+other racers' road wheels remain under investigation. Physical Steam Deck Wi-Fi
+and separate-machine acceptance remain necessary; see [validation](RELEASE-VALIDATION.md).
 
 DKR-R is a native static recompilation of Diddy Kong Racing. Bring your own
 legally obtained **US v1.0 or US Rev A/v1.1 ROM**. No ROM or extracted game
@@ -92,6 +92,14 @@ Lobby cards show connection timing for hosts and clients. **Check Rollback
 connection** opens the shared Scoreboard. Ping and route readings describe the
 connection; they do not guarantee a frame rate. Initial startup uses the new
 Syncing Game screen until the game is ready.
+
+Hosts can open **Host settings** while the room is open or during a race. Press
+**Apply changes** to update prediction/input delay live or close new spectator
+joins. Capacity, menu and replay edits made during play wait until the lobby.
+Fresh profiles use automatic delay and a 14-frame prediction window; saved
+preferences are kept. Larger windows can cover more latency and need more memory
+and correction work. Spectators never supply racing inputs; loading and catching
+up can take longer than the initial 1.5-second playback-buffer target.
 
 See [Online](docs/ONLINE_MULTIPLAYER.md), [public lobbies](docs/PUBLIC_LOBBIES.md)
 and [spectators](docs/SPECTATORS.md). Gameplay uses the admitted peer transport;

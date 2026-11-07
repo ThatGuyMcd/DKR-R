@@ -5,7 +5,8 @@
     if(party->enabled) {
         const auto now=std::chrono::steady_clock::now();
         auto queue=[&](watch::MemberId target,watch::LinkKind kind,std::vector<std::uint8_t> body){
-            return party->enqueue({target,kind,TransportTrafficClass::Control,std::move(body)});
+            const auto traffic=kind==watch::LinkKind::Heartbeat?TransportTrafficClass::Realtime:TransportTrafficClass::Control;
+            return party->enqueue({target,kind,traffic,std::move(body)});
         };
         auto stop=[&](std::string reason){
             party->running=false;party->stopping=true;party->ready.clear();party->status=std::move(reason);
@@ -15,6 +16,7 @@
         if(is_host_) {
             for(auto& peer:party->peers)if(!peer.ping_sent.time_since_epoch().count()||now-peer.ping_sent>=std::chrono::seconds(1)) {
                 peer.ping_token=std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());peer.ping_sent=now;
+                peer.ping_window.sent(peer.ping_token,now);
                 queue(peer.id,watch::LinkKind::Heartbeat,watch::link_heartbeat(peer.ping_token,false));
             }
             if(!party->launch&&room_view_.rules.automatic_input_delay) {
@@ -90,15 +92,18 @@
             if(party->returned){queue(party->authority,watch::LinkKind::Returned,{});party->returned=false;party->launch.reset();party->stopping=false;}
             if(now-party->heartbeat>=std::chrono::seconds(1)){
                 party->ping_token=std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());party->ping_sent=party->heartbeat=now;
+                party->ping_window.sent(party->ping_token,now);
                 queue(party->authority,watch::LinkKind::Heartbeat,watch::link_heartbeat(party->ping_token,false));
             }
         }
         if(party->running&&launch_descriptor_)state_=ConnectionState::Running;
         // Independent per-peer SCTP lanes and bounded round-robin bursts.
         // Bulk never fills a racing input/control queue in DirectSession.
-        const auto elapsed=party->budget_at.time_since_epoch().count()?std::chrono::duration_cast<std::chrono::milliseconds>(now-party->budget_at).count():0;
-        if(elapsed>0)party->bulk_tokens=std::min<std::size_t>(256*1024,party->bulk_tokens+std::size_t(elapsed)*4096);
-        party->budget_at=now;
+        // The active race shares one aggregate background allowance across
+        // all observers. Independent peer budgets alone can saturate Wi-Fi.
+        const std::size_t burst=party->running?16*1024:256*1024;
+        const std::size_t per_ms=party->running?256:4096;
+        dkr::online_stability::refill_background_budget(now,party->budget_at,party->bulk_tokens,burst,per_ms);
         for(unsigned lane: {0U,2U,1U,3U,4U}) {
             auto& pending=party->outgoing[lane];unsigned allowance=lane==4?8:16;
             for(unsigned n=0;n<allowance&&!pending.empty();++n) {

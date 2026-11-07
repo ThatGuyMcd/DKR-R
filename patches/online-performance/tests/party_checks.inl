@@ -1,4 +1,5 @@
 #include "online_stability_party_tests.inl"
+#include "spectator_stream_tests.inl"
 
 void analogue_party_envelopes() {
     Fixture host(false,true,false);host.runtime->activate({91,0});
@@ -26,8 +27,13 @@ void analogue_party_envelopes() {
     check(refused,"old controller envelope widths are refused before decoding");
 }
 void input_lane_and_reordering() {
+    live_host_rules();
+    live_prediction_resizing();
+    buffered_spectator_delivery();buffered_spectator_playback();
     analogue_party_envelopes();
     deadline_local_response();
+    multi_racer_delivery(2,600,97,0,14,0,1); // RTT estimate can lag behind a real latency jump.
+    multi_racer_delivery(2,100,97,0,10,180);
     for(unsigned players=2;players<=4;++players){multi_racer_delivery(players,150,97);multi_racer_delivery(players,300,31);multi_racer_delivery(players,300,31,1000);}
     for(unsigned players=2;players<=4;++players){multi_racer_delivery(players,150,97,0,12);multi_racer_delivery(players,300,31,0,12);}
     for(unsigned players=2;players<=4;++players)multi_racer_delivery(players,300,31,0,20);

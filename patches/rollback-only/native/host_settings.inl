@@ -1,4 +1,8 @@
+#include "online_stability/host_settings_ui.inl"
 void DrawOlHostSettings(float width) {
+    const auto session=dkr::runtime::netplay::session().view();
+    const auto settings=dkr::online_stability::control(&dkr::runtime::netplay::session())->host_settings();
+    if(session.host&&settings.available&&settings.room==session.match_id){DrawOlActiveHostSettings(width,settings);return;}
     DrawOlFeature(width, "Host settings", "Applies to the next lobby you create.", [&](float inner) {
         bool changed = false;
         changed |= OlSwitchRow("##spectators", "Spectator-capable lobby",
