@@ -2,9 +2,11 @@
 #include "updates/update_core.hpp"
 #include "updates/update_process.hpp"
 #include <json/json.hpp>
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <memory>
+#include <map>
 #include <optional>
 #include <thread>
 #ifdef _WIN32
@@ -65,6 +67,7 @@ struct Service {
     std::condition_variable_any changed;
     View snapshot;
     std::optional<Action> pending;
+    std::map<std::string, std::chrono::steady_clock::time_point> installs;
     bool enabled = true, startup_complete = false, preferences_dirty = false;
     std::atomic<bool> playing{false};
     std::uint64_t cleared_bytes = 0, cleared_files = 0;
@@ -110,14 +113,17 @@ struct Service {
         const auto startup_due = Clock::now() + std::chrono::seconds(10);
         while (!stop.stop_requested()) {
             Action action;
+            std::string installed_digest;
             {
                 std::unique_lock lock(mutex);
-                const auto due = pending                        ? ready_at
-                                 : enabled && !startup_complete ? startup_due
-                                                                : Clock::time_point::max();
+                auto due = pending ? ready_at : enabled && !startup_complete ? startup_due : Clock::time_point::max();
+                for (const auto& [digest, ready] : installs)
+                    due = std::min(due, ready);
                 const auto ready = [&] {
                     return preferences_dirty || (pending && Clock::now() >= ready_at) ||
-                           (!pending && enabled && !startup_complete && Clock::now() >= startup_due);
+                           (!pending && enabled && !startup_complete && Clock::now() >= startup_due) ||
+                           std::any_of(installs.begin(), installs.end(),
+                                       [&](const auto& job) { return Clock::now() >= job.second; });
                 };
                 if (due == Clock::time_point::max())
                     changed.wait(lock, stop, ready);
@@ -141,10 +147,20 @@ struct Service {
                     }
                     continue;
                 }
-                if (!pending && (!enabled || startup_complete))
+                const auto install = std::find_if(installs.begin(), installs.end(),
+                                                  [&](const auto& job) { return Clock::now() >= job.second; });
+                if (pending && Clock::now() >= ready_at) {
+                    action = *pending;
+                    pending.reset();
+                } else if (install != installs.end()) {
+                    action = Action::Installed;
+                    installed_digest = install->first;
+                    installs.erase(install);
+                } else if (!pending && enabled && !startup_complete && Clock::now() >= startup_due) {
+                    action = Action::Automatic;
+                } else {
                     continue;
-                action = pending.value_or(Action::Automatic);
-                pending.reset();
+                }
                 if ((action == Action::Automatic || action == Action::Images) && !enabled)
                     continue;
                 cancellation = std::stop_source{};
@@ -175,6 +191,7 @@ struct Service {
                 }
                 Options options;
                 options.action = action;
+                options.installed_digest = installed_digest;
                 {
                     std::lock_guard lock(mutex);
                     options.stop = cancellation.get_token();
@@ -211,7 +228,9 @@ struct Service {
                     snapshot = std::move(result);
                     snapshot.busy = false;
                     if (snapshot.deferred) {
-                        if (!pending) {
+                        if (action == Action::Installed) {
+                            installs.try_emplace(installed_digest, Clock::now() + std::chrono::seconds(5));
+                        } else if (!pending) {
                             pending = action;
                             ready_at = Clock::now() + std::chrono::seconds(5);
                         }
@@ -229,7 +248,9 @@ struct Service {
                 std::unique_lock lock(mutex);
                 snapshot.busy = false;
                 snapshot.status = error.what();
-                if (!pending) {
+                if (action == Action::Installed) {
+                    installs.try_emplace(installed_digest, Clock::now() + std::chrono::seconds(5));
+                } else if (!pending) {
                     pending = action;
                     ready_at = Clock::now() + std::chrono::seconds(5);
                 }
@@ -269,14 +290,23 @@ void gameplay(bool active) {
     }
 }
 void request(Action action) {
-    // Artwork and install notifications are hints, not extra automatic passes.
-    // Files created after startup are maintained on the next application launch.
-    if (action == Action::Automatic || action == Action::Images)
+    // Generic hints never schedule another full pass. Completed installs use
+    // their own package-scoped queue, independent of the startup preference.
+    if (action == Action::Automatic || action == Action::Images || action == Action::Installed)
         return;
     if (auto p = current()) {
         std::lock_guard lock(p->mutex);
         p->pending = action;
         p->ready_at = std::chrono::steady_clock::now();
+        p->changed.notify_all();
+    }
+}
+void installed_package(std::string digest) {
+    if (digest.size() != 64 || digest.find_first_not_of("0123456789abcdef") != digest.npos)
+        return;
+    if (auto p = current()) {
+        std::lock_guard lock(p->mutex);
+        p->installs.try_emplace(std::move(digest), std::chrono::steady_clock::now());
         p->changed.notify_all();
     }
 }

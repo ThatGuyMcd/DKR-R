@@ -2,6 +2,11 @@
 
 ## 1.0.15 — 2026-11-07
 
+- Tidy each successful Mod Library install as soon as it finishes. Verify the
+  installed copy before clearing its download and preparation files; keep saved
+  editions and recovery backups. This only checks the completed package and
+  works independently of the once-per-launch cleanup setting.
+
 - Run automatic cleanup once per application launch. Artwork and install events
   no longer schedule repeated checks. Cleanup continues during gameplay using
   low-priority, paced work and interruptible checksum reads. Active online files

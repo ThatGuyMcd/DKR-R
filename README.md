@@ -141,6 +141,8 @@ installing remain your choice. See [Updates](docs/UPDATES.md).
 
 Startup cleanup clears verified leftover downloads, installation preparation and
 old caches once per launch, continuing at low priority while playing.
+Completed Mod Library installs also clear their own verified disposable files
+without starting another full cleanup pass.
 **About DKR-R > Support > Storage** provides a preview and manual
 controls. Saves, ROMs and installed content are kept. See [Storage](docs/STORAGE.md).
 

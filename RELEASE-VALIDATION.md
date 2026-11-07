@@ -4,6 +4,14 @@ This records the local v1.0.15 preparation since the public v1.0.14 release.
 Nothing is pushed, tagged, uploaded or published before the owner's review.
 The external release handoff holds package hashes and detailed test evidence.
 
+## Targeted post-install cleanup
+
+Successful Mod Library installs queue cleanup for their own committed package
+after download history is saved. The startup pass remains once per launch;
+targeted cleanup does not scan unrelated caches or recovery history. Its tests
+and refreshed package identities are recorded in the post-install-cleanup
+handoff. Earlier sections below retain their original package scope.
+
 ## Startup cleanup scheduling
 
 Automatic cleanup now runs once per application launch, without artwork/install

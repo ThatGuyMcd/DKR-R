@@ -1912,18 +1912,22 @@ bool Service::begin_install(std::string key) {
 }
 void Service::installed(std::string key, bool success, std::string message) {
     dkr::storage::Activity storage_activity;
+    std::string installed_digest;
     impl_->update([&](Snapshot& s) {
         for (auto& d : s.downloads)
             if (d.key == key) {
                 const bool cancelled=message.starts_with("Installation cancelled.");
                 d.state = success ? "Installed" : cancelled ? "Ready to install" : "Install failed";
                 d.error = success || cancelled ? "" : message;
+                if (success)
+                    installed_digest = d.digest;
             }
         s.status = std::move(message);
     });
-    impl_->queue([p = impl_.get()](std::stop_token stop) {
+    impl_->queue([p = impl_.get(), digest = std::move(installed_digest)](std::stop_token stop) {
         p->persist_downloads();
-        dkr::storage::request();
+        if (!digest.empty())
+            dkr::storage::installed_package(digest);
         refresh_library_names(p->root.parent_path(), *p->published.load()->items, stop);
     });
 }

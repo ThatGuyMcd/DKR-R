@@ -29,3 +29,23 @@ Tests cover the real startup timer, repeated artwork/install hints, preference
 toggles, another launch, gameplay continuation, active online leases and streamed
 checksum equivalence. Package and device coverage are recorded separately in the
 release handoff. The previous storage investigation retains its original scope.
+
+## Targeted post-install cleanup
+
+A successful Mod Library completion now queues its package checksum after the
+download history is saved. The worker deduplicates these requests and retries
+after an active publisher or another process releases its lease. They run
+independently of the startup preference and do not satisfy or restart the
+startup cleanup budget.
+
+Only current receipts with a matching committed transaction can release that
+package's preparation and verified download. Previous/stored editions retain
+their archive, while recovery journals and backups remain untouched. Unrelated
+downloads, transaction history, artwork and online caches are not swept. An
+interrupted retirement is tagged with the package checksum so the same request
+can finish deleting its own retired files without processing unrelated ones.
+
+Regression coverage includes post-startup installation, multiple queued installs,
+duplicate notifications, gameplay, disabled startup cleanup, publication deferral,
+uncommitted/rolled-back jobs, edited content, paused downloads, recovery pins and
+scoped retirement recovery.

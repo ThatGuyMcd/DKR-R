@@ -4,7 +4,13 @@ DKR-R runs one automatic cleanup pass per application launch, starting about
 ten seconds after startup. This is enabled by default. It continues while you
 play, including Skip Launcher, using a low-priority worker and shorter work
 slices during gameplay. After the pass finishes the worker sleeps; loading
-artwork, finishing downloads or installing mods does not trigger another pass.
+artwork and finishing downloads do not trigger another full pass.
+
+Each successful Mod Library install also tidies its own download and preparation
+files straight away, after verifying the installed content against its committed
+receipt. This targeted work runs even when startup cleanup is off. It keeps
+stored editions, previous-edition archives and recovery backups, and does not
+scan the other caches or install history. Active work can briefly defer it.
 
 Open **About DKR-R > Support > Storage** in the launcher or overlay to turn
 automatic cleanup off, check storage and preview what can be cleared. Press
@@ -36,7 +42,7 @@ ownership or unfinished work can leave them over budget. Download/install
 history remains visible after a disposable archive has been cleared. Activating
 an older edition uses its retained archive by checksum, or requests the exact
 edition again if its archive is missing.
-New disposable files created after the startup pass wait until the next launch
+Other disposable files created after the startup pass wait until the next launch
 or a manual cleanup. Turning automatic cleanup off and back on does not repeat
 an already completed startup pass.
 

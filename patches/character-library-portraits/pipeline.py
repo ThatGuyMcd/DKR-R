@@ -1316,6 +1316,16 @@ def compose(rows,out):
                 ('            found->instance = d.instance;','            found->instance = d.instance;\n            found->digest = d.digest;'),
                 ('        p->persist_downloads();','        p->persist_downloads();\n        dkr::storage::request();')]:
                 if replacement not in text:text=once(text,anchor,replacement)
+            begin=text.index('void Service::installed(');end=text.index('void Service::request_image(',begin)
+            part=text[begin:end]
+            if 'dkr::storage::installed_package(' not in part:
+                part=once(part,'    impl_->update([&](Snapshot& s) {','    std::string installed_digest;\n    impl_->update([&](Snapshot& s) {')
+                part=once(part,'                d.error = success || cancelled ? "" : message;',
+                    '                d.error = success || cancelled ? "" : message;\n                if(success)installed_digest=d.digest;')
+                part=once(part,'    impl_->queue([p = impl_.get()](std::stop_token stop) {',
+                    '    impl_->queue([p = impl_.get(), digest=std::move(installed_digest)](std::stop_token stop) {')
+                part=once(part,'        dkr::storage::request();','        if(!digest.empty())dkr::storage::installed_package(digest);')
+            text=text[:begin]+part+text[end:]
             begin=text.index('    void load_image(');end=text.index('    void image_run(',begin);part=text[begin:end]
             anchor='        int width = 0, height = 0, channels = 0;'
             if 'dkr::storage::used(path);' not in part:part=once(part,anchor,'        dkr::storage::used(path);\n'+anchor)

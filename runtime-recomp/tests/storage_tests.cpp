@@ -62,6 +62,102 @@ Json record(const std::string& digest, const std::string& path, const std::strin
 void receipts(Fixture& f, const Json& rows) {
     f.json("mod-store/installations.json", {{"schema", 1}, {"records", rows}});
 }
+Json committed_install(Fixture& f, const std::string& id, const std::string& data,
+                       const std::string& extension = ".zip") {
+    const auto h = hash(data), path = "texture-packs/" + id + ".rtz";
+    const auto file = "mod-store/downloads/" + h + "/package" + extension;
+    f.put(file, data);
+    f.put(path, data);
+    const auto source = f.put("mod-store/transactions/" + id + "/payload/pack.rtz", data);
+    f.json("mod-store/transactions/" + id + "/journal.json", {{"id", id}, {"phase", "committed"}});
+    auto r = record(h, path, file, data);
+    r["transaction"] = id;
+    r["prepared"] = {
+        {"outputs",
+         Json::array({{{"source", dkr::updates::path_utf8(source)}, {"target", path}, {"content", hash(data)}}})}};
+    return r;
+}
+void scoped_install_cleanup() {
+    Fixture f;
+    const auto id = std::string(32, 'a'), other = std::string(32, 'b');
+    auto a = committed_install(f, id, "first-install"), b = committed_install(f, other, "other-install");
+    receipts(f, Json::array({a, b}));
+    const auto h = hash("first-install"), folder = "mod-store/downloads/" + h;
+    f.json("mod-store/downloads.json", {{"jobs", Json::array({{{"sha256", h}, {"state", "Installed"}}})}});
+    f.put(folder + "/download.part");
+    f.put(folder + "/verified-alias.tmp");
+    f.put("mod-store/transactions/" + id + "/backup/prior.rtz");
+    f.put("saves/dkr.bin");
+    const auto image = f.put("mod-store/images/" + std::string(64, '1'));
+    age(image);
+    f.json("mod-store/transactions/" + std::string(32, 'c') + "/journal.json",
+           {{"id", std::string(32, 'c')}, {"phase", "publishing"}});
+    Options o;
+    o.action = Action::Installed;
+    o.installed_digest = h;
+    o.dry_run = true;
+    const auto preview = maintain(f.root, o);
+    if (preview.removed_files != 4)
+        std::cerr << "Install preview: " << preview.status << " files=" << preview.removed_files << "\n";
+    assert(preview.removed_files == 4 && fs::exists(f.root / a["file"].get<std::string>()));
+    o.dry_run = false;
+    const auto result = maintain(f.root, o);
+    assert(!result.deferred && result.removed_files == 4 && !fs::exists(f.root / folder));
+    assert(!fs::exists(f.root / "mod-store/transactions" / id / "payload"));
+    assert(fs::exists(f.root / "mod-store/transactions" / id / "journal.json"));
+    assert(fs::exists(f.root / "mod-store/transactions" / id / "backup/prior.rtz"));
+    assert(fs::exists(f.root / b["file"].get<std::string>()) && fs::exists(image));
+    assert(fs::exists(f.root / "mod-store/transactions" / other / "payload/pack.rtz"));
+    assert(fs::exists(f.root / "saves/dkr.bin"));
+    assert(maintain(f.root, o).removed_files == 0);
+}
+void scoped_install_protections() {
+    for (const auto* state : {"publishing", "rolled-back", "stored", "edited", "pending", "previous"}) {
+        Fixture f;
+        const auto id = std::string(32, 'a'), h = hash("archive");
+        auto r = committed_install(f, id, "archive");
+        const auto archive = f.root / r["file"].get<std::string>();
+        const auto source = f.root / "mod-store/transactions" / id / "payload/pack.rtz";
+        if (std::string(state) == "publishing" || std::string(state) == "rolled-back")
+            f.json("mod-store/transactions/" + id + "/journal.json", {{"id", id}, {"phase", state}});
+        if (std::string(state) == "stored")
+            r["stored"] = true;
+        if (std::string(state) == "edited")
+            f.put(r["members"][0]["path"].get<std::string>(), "edited");
+        if (std::string(state) == "pending")
+            f.json("mod-store/downloads.json", {{"jobs", Json::array({{{"sha256", h}, {"state", "Paused"}}})}});
+        if (std::string(state) == "previous")
+            r["previous"] = r;
+        receipts(f, Json::array({r}));
+        Options o;
+        o.action = Action::Installed;
+        o.installed_digest = h;
+        maintain(f.root, o);
+        assert(fs::exists(archive));
+        if (std::string(state) != "pending" && std::string(state) != "previous")
+            assert(fs::exists(source));
+    }
+    Fixture f;
+    Options o;
+    o.action = Action::Installed;
+    o.installed_digest = "../saves";
+    f.put("saves/precious.bin");
+    assert(maintain(f.root, o).removed_files == 0 && fs::exists(f.root / "saves/precious.bin"));
+}
+void scoped_package_formats() {
+    for (const auto* extension : {".zip", ".rtz", ".dkrmap", ".xdelta", ".nrm", ".dkrcode", ".7z", ".ips", ".bps",
+                                  ".dkrkart", ".dkrhover", ".dkrplane", ".txt"}) {
+        Fixture f;
+        const auto r = committed_install(f, std::string(32, 'a'), "download", extension);
+        receipts(f, Json::array({r}));
+        Options o;
+        o.action = Action::Installed;
+        o.installed_digest = hash("download");
+        maintain(f.root, o);
+        assert(fs::exists(f.root / r["file"].get<std::string>()) == (std::string(extension) == ".txt"));
+        assert(fs::exists(f.root / r["members"][0]["path"].get<std::string>()));
+    }
+}
 void installed_download_and_preview() {
     Fixture f;
     const auto h = hash("archive");
@@ -352,11 +448,63 @@ void startup_once_and_gameplay() {
     automatic(true);
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     assert(fs::exists(kept) && view().removed_files == after && !view().busy);
+    const auto installed = committed_install(f, std::string(32, 'a'), "after-startup");
+    receipts(f, Json::array({installed}));
+    const auto marker = fs::last_write_time(f.root / "storage/last-cleanup.json");
+    installed_package(hash("after-startup"));
+    assert(wait_for([&] { return !fs::exists(f.root / installed["file"].get<std::string>()) && !view().busy; }, 5000));
+    assert(fs::exists(kept) && fs::last_write_time(f.root / "storage/last-cleanup.json") == marker);
     shutdown();
     start(f.root);
     gameplay(true);
     assert(wait_for([&] { return !fs::exists(kept) && !view().busy; }, 15000));
     shutdown();
+}
+void queued_install_cleanup() {
+    Fixture f;
+    const auto a = committed_install(f, std::string(32, 'a'), "first"),
+               b = committed_install(f, std::string(32, 'b'), "second");
+    receipts(f, Json::array({a, b}));
+    f.json("storage/preferences.json", {{"schema", 1}, {"automatic", false}});
+    const auto image = f.put("mod-store/images/" + std::string(64, '1'));
+    age(image);
+    start(f.root);
+    gameplay(true);
+    {
+        Activity publishing;
+        installed_package(hash("first"));
+        installed_package(hash("first"));
+        installed_package(hash("second"));
+        installed_package("../../saves");
+        assert(wait_for([&] { return view().deferred; }, 3000));
+        assert(fs::exists(f.root / a["file"].get<std::string>()) && fs::exists(f.root / b["file"].get<std::string>()));
+    }
+    assert(wait_for(
+        [&] {
+            return !fs::exists(f.root / a["file"].get<std::string>()) &&
+                   !fs::exists(f.root / b["file"].get<std::string>()) && !view().busy;
+        },
+        9000));
+    assert(fs::exists(image) && !fs::exists(f.root / "storage/last-cleanup.json") && !automatic());
+    shutdown();
+}
+void scoped_retirement_resume() {
+    Fixture f;
+    const auto h = hash("completed");
+    for (const auto& [id, package] :
+         {std::pair{std::string(32, 'a'), h}, std::pair{std::string(32, 'b'), hash("unrelated")}}) {
+        f.put("storage/retired/" + id + "/payload/leftover.bin");
+        f.json("storage/retired/" + id + "/retirement.json", {{"schema", 1},
+                                                              {"owner", "DKR-R storage"},
+                                                              {"source", "mod-store/downloads/" + h + "/p.zip"},
+                                                              {"package", package}});
+    }
+    Options o;
+    o.action = Action::Installed;
+    o.installed_digest = h;
+    assert(maintain(f.root, o).removed_files == 1);
+    assert(!fs::exists(f.root / "storage/retired" / std::string(32, 'a')));
+    assert(fs::exists(f.root / "storage/retired" / std::string(32, 'b') / "payload/leftover.bin"));
 }
 void online_files_stay_pinned() {
     Fixture f;
@@ -436,6 +584,10 @@ int main(int argc, char** argv) {
         return 0;
     }
     installed_download_and_preview();
+    scoped_install_cleanup();
+    scoped_install_protections();
+    scoped_package_formats();
+    scoped_retirement_resume();
     protected_editions_and_pending();
     transaction_compaction_and_recovery();
     malformed_and_linked_data();
@@ -450,6 +602,7 @@ int main(int argc, char** argv) {
     online_files_stay_pinned();
     chunked_content_verification();
     startup_once_and_gameplay();
+    queued_install_cleanup();
     std::cout << "Storage: committed installs, edition pins, dry run, interrupted recovery, links, budgets, "
                  "dependencies, updates and active writers passed.\n";
 }

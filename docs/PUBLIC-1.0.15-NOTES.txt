@@ -64,6 +64,11 @@ you're playing, at low priority. Browsing the library or installing mods won't
 keep setting it off again. Your saves, ROMs, installed mods and texture packs
 are kept, and files being used by Online are left alone.
 
+When a Mod Library install finishes, it now tidies up its own download and
+leftover install files straight away. It checks the installed copy first and
+keeps the files needed for saved editions and recovery. This works even if
+you've turned startup cleanup off, without checking through everything again.
+
 You'll find the controls in About DKR-R > Support > Storage. You can turn
 automatic cleanup off, check how much space can be cleared, or clear it yourself.
 Current and previous mod recovery files are kept. Original crash dumps are

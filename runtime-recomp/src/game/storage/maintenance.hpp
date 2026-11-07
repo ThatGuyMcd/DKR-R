@@ -54,7 +54,7 @@ struct Activity {
     Activity(const Activity&) = delete;
     Activity& operator=(const Activity&) = delete;
 };
-enum class Action { Automatic, Images, Clean, Scan, Preview, ClearCaches, TrimHistory, OldDumps };
+enum class Action { Automatic, Images, Clean, Scan, Preview, ClearCaches, TrimHistory, OldDumps, Installed };
 struct View;
 struct Options {
     Action action = Action::Automatic;
@@ -66,6 +66,8 @@ struct Options {
     bool background = false;
     const std::atomic<bool>* gameplay = nullptr;
     std::function<void(const View&)> progress;
+    // Installed is restricted to this package's current, committed receipts.
+    std::string installed_digest;
 };
 struct Row {
     std::string name;
@@ -90,6 +92,7 @@ void start(const std::filesystem::path& profile);
 void shutdown();
 void gameplay(bool active);
 void request(Action action = Action::Automatic);
+void installed_package(std::string digest);
 View view();
 bool automatic();
 void automatic(bool enabled);

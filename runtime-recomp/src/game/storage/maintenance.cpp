@@ -106,6 +106,12 @@ bool managed(const std::string& p) {
     return p.starts_with("texture-packs/") || p.starts_with("custom-tracks/") || p.starts_with("mods/legacy/") ||
            p.starts_with("mods/vehicles/") || p.starts_with("mods/custom-magic-codes/");
 }
+bool package_archive(const fs::path& p) {
+    const auto ext = utf8(p.extension());
+    return ext == ".zip" || ext == ".rtz" || ext == ".dkrmap" || ext == ".xdelta" || ext == ".nrm" ||
+           ext == ".dkrcode" || ext == ".7z" || ext == ".ips" || ext == ".bps" || ext == ".dkrkart" ||
+           ext == ".dkrhover" || ext == ".dkrplane";
+}
 struct Engine {
     fs::path root, install;
     Options options;
@@ -255,7 +261,9 @@ struct Engine {
     void retired() {
         const auto base = native(root / "storage/retired");
         for (const auto& p : children(base))
-            if (hex(utf8(p.filename()), 32) && fs::is_directory(p))
+            if (hex(utf8(p.filename()), 32) && fs::is_directory(p) &&
+                (options.action != Action::Installed ||
+                 text(document(p / "retirement.json"), "package") == options.installed_digest))
                 discard_retired(p);
     }
     void erase(fs::path p, fs::path owner) {
@@ -285,9 +293,11 @@ struct Engine {
             }
             const auto job = retired_base / dkr::updates::unique_id();
             fs::create_directory(job);
-            dkr::updates::durable_write(
-                job / "retirement.json",
-                Json{{"schema", 1}, {"owner", "DKR-R storage"}, {"source", utf8(p.lexically_relative(root))}}.dump());
+            dkr::updates::durable_write(job / "retirement.json", Json{{"schema", 1},
+                                                                      {"owner", "DKR-R storage"},
+                                                                      {"source", utf8(p.lexically_relative(root))},
+                                                                      {"package", options.installed_digest}}
+                                                                     .dump());
             stop();
             fs::rename(p, job / "payload");
             discard_retired(job);
@@ -354,6 +364,7 @@ struct Engine {
             registry["records"].size() > 4096)
             throw std::runtime_error("Mod receipts need recovery. Mod storage was kept.");
         for (const auto& r : registry["records"]) {
+            stop();
             for (const auto& row : r.contains("previous") ? Json::array({r, r["previous"]}) : Json::array({r})) {
                 const auto tx = text(row, "transaction"), hash = text(row, "digest");
                 if (!tx.empty()) {
@@ -378,6 +389,16 @@ struct Engine {
                 packages.insert(text(r, "digest"));
             if (r.contains("previous"))
                 packages.insert(text(r["previous"], "digest"));
+            if (options.action == Action::Installed) {
+                if (text(r, "digest") != options.installed_digest || r.value("stored", false))
+                    continue;
+                const auto id = text(r, "transaction");
+                if (!hex(id, 32))
+                    continue;
+                const auto j = document(root / "mod-store/transactions" / id / "journal.json");
+                if (text(j, "phase") != "committed" || text(j, "id") != id)
+                    continue;
+            }
             bool installed_present = !r.value("stored", false) && !r["members"].empty();
             for (const auto& m : r["members"]) {
                 const auto p = member(root, text(m, "path"));
@@ -386,17 +407,20 @@ struct Engine {
             if (installed_present)
                 installed.insert(text(r, "digest"));
         }
-        for (const auto& tx : children(root / "mod-store/transactions")) {
-            const auto id = utf8(tx.filename());
-            if (!hex(id, 32) || !fs::is_directory(tx))
-                continue;
-            const auto j = document(tx / "journal.json");
-            if (missing_registry && text(j, "phase") == "committed")
-                throw std::runtime_error("The installation registry is missing; recovery files were kept.");
-            if (!j.empty() && text(j, "id") == id && text(j, "phase") != "committed" &&
-                text(j, "phase") != "rolled-back")
-                throw std::runtime_error("An unfinished mod installation needs recovery; its files were kept.");
-        }
+        // A post-install request proves only its own committed transactions.
+        // It never walks other jobs or their recovery history.
+        if (options.action != Action::Installed)
+            for (const auto& tx : children(root / "mod-store/transactions")) {
+                const auto id = utf8(tx.filename());
+                if (!hex(id, 32) || !fs::is_directory(tx))
+                    continue;
+                const auto j = document(tx / "journal.json");
+                if (missing_registry && text(j, "phase") == "committed")
+                    throw std::runtime_error("The installation registry is missing; recovery files were kept.");
+                if (!j.empty() && text(j, "id") == id && text(j, "phase") != "committed" &&
+                    text(j, "phase") != "rolled-back")
+                    throw std::runtime_error("An unfinished mod installation needs recovery; its files were kept.");
+            }
         registry_valid = true;
     }
     void store() {
@@ -407,6 +431,9 @@ struct Engine {
         // only after comparing the published content with its recorded hash.
         for (const auto& r : registry["records"]) {
             stop();
+            if (options.action == Action::Installed &&
+                (text(r, "digest") != options.installed_digest || !installed.contains(options.installed_digest)))
+                continue;
             if (r.value("stored", false) || !r.contains("prepared"))
                 continue;
             const auto id = text(r, "transaction");
@@ -447,6 +474,8 @@ struct Engine {
                     if (p.filename() == "payload" || p.filename() == "legacy" || p.filename() == "hd")
                         erase(p, tx);
         }
+        if (options.action == Action::Installed)
+            return;
         std::vector<fs::path> completed;
         std::uint64_t total = 0;
         for (const auto& tx : children(txs)) {
@@ -477,6 +506,8 @@ struct Engine {
     void downloads() {
         if (!registry_valid)
             return;
+        if (options.action == Action::Installed && !installed.contains(options.installed_digest))
+            return;
         const auto base = root / "mod-store/downloads";
         const auto history = document(root / "mod-store/downloads.json");
         if (history.contains("jobs") && !history["jobs"].is_array())
@@ -491,16 +522,15 @@ struct Engine {
             if (state != "Installed" && state != "Failed" && state != "Install failed" && hex(hash))
                 pending.insert(hash);
         }
-        for (const auto& dir : children(base)) {
+        const auto folders = options.action == Action::Installed
+                                 ? std::vector<fs::path>{native(base / options.installed_digest)}
+                                 : children(base);
+        for (const auto& dir : folders) {
             const auto hash = utf8(dir.filename());
-            if (!hex(hash) || !fs::is_directory(dir) || pending.contains(hash))
+            if (!hex(hash) || !present(dir) || !checked(dir, base) || !fs::is_directory(dir) || pending.contains(hash))
                 continue;
             const auto entries = children(dir);
-            const auto archives = std::count_if(entries.begin(), entries.end(), [](const auto& p) {
-                const auto ext = utf8(p.extension());
-                return ext == ".zip" || ext == ".rtz" || ext == ".dkrmap" || ext == ".xdelta" || ext == ".nrm" ||
-                       ext == ".dkrcode" || ext == ".7z" || ext == ".ips" || ext == ".bps";
-            });
+            const auto archives = std::count_if(entries.begin(), entries.end(), package_archive);
             bool disposable =
                 !packages.contains(hash) &&
                 (installed.contains(hash) || (!recorded.contains(hash) && ((completed.contains(hash) && old(dir, 30)) ||
@@ -509,6 +539,14 @@ struct Engine {
                 bool verified = false;
                 for (const auto& r : registry["records"])
                     if (text(r, "digest") == hash && !r.value("stored", false) && !r["members"].empty()) {
+                        if (options.action == Action::Installed) {
+                            const auto id = text(r, "transaction");
+                            if (!hex(id, 32))
+                                continue;
+                            const auto j = document(root / "mod-store/transactions" / id / "journal.json");
+                            if (text(j, "phase") != "committed" || text(j, "id") != id)
+                                continue;
+                        }
                         bool complete = true;
                         for (const auto& m : r["members"]) {
                             const auto p = member(root, text(m, "path"));
@@ -526,13 +564,14 @@ struct Engine {
             std::vector<fs::path> verified;
             for (const auto& p : entries) {
                 const auto ext = utf8(p.extension());
-                if (ext == ".zip" || ext == ".rtz" || ext == ".dkrmap" || ext == ".xdelta" || ext == ".nrm" ||
-                    ext == ".dkrcode" || ext == ".7z" || ext == ".ips" || ext == ".bps") {
+                if (package_archive(p)) {
                     if ((disposable || archives > 1) && digest(p) == hash)
                         verified.push_back(p);
-                } else if (p.filename() == "download.part" && old(p, 7) && !packages.contains(hash))
+                } else if (p.filename() == "download.part" && !packages.contains(hash) &&
+                           (options.action == Action::Installed ? completed.contains(hash) : old(p, 7)))
                     erase(p, dir);
-                else if (utf8(p.filename()).starts_with("verified-") && ext == ".tmp" && old(p, 7))
+                else if (utf8(p.filename()).starts_with("verified-") && ext == ".tmp" &&
+                         (options.action == Action::Installed ? completed.contains(hash) : old(p, 7)))
                     erase(p, dir);
             }
             // Previous editions keep one verified archive. Activation can find
@@ -553,6 +592,8 @@ struct Engine {
                 else
                     kept = true;
             }
+            if (options.action == Action::Installed && !options.dry_run && checked(dir, base) && fs::is_empty(dir))
+                fs::remove(dir);
         }
     }
     void images() {
@@ -914,6 +955,14 @@ View maintain(const fs::path& profile, const Options& options, const fs::path& i
         if (options.action == Action::Scan) {
             e.phase("Measuring storage...");
             e.inventory();
+        } else if (options.action == Action::Installed) {
+            if (!hex(options.installed_digest))
+                throw std::runtime_error("Invalid completed-install cleanup request.");
+            e.phase("Tidying the completed mod installation...");
+            e.retired();
+            e.receipts();
+            e.store();
+            e.downloads();
         } else if (options.action == Action::Images) {
             e.phase("Checking cached artwork...");
             e.images();
@@ -966,6 +1015,8 @@ View maintain(const fs::path& profile, const Options& options, const fs::path& i
                               ? "Storage measured. Saves, installed content and user exports are protected."
                           : options.action == Action::Automatic
                               ? "Startup cleanup finished. Automatic cleanup will run again next launch."
+                          : options.action == Action::Installed
+                              ? "Completed mod installation tidied. Installed content and recovery files were kept."
                               : "Storage cleanup finished. Saves and installed content were kept.";
         if (recovery_kept)
             e.result.status += " Some mod recovery receipts need checking; those files were kept.";
