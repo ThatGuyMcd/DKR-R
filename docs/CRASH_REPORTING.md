@@ -44,7 +44,9 @@ Other client errors stop automatic retries for that entry and show a support
 status. A successful response must confirm the same report ID before deletion.
 
 The private queue holds up to eight reports of at most 8 MiB each, expiring
-after 30 days. Originals are never deleted. Turning reporting off cancels an
+after 30 days. The reporting service never deletes originals. The separate
+[Storage](STORAGE.md) controls can remove recognised original dumps older than
+30 days when the user explicitly selects that action. Turning reporting off cancels an
 in-flight upload and removes unsent reports in the worker; bytes already sent
 cannot be recalled. Turning off dump sharing removes dumps from queued reports
 before any later delivery. Queue operations use a process lock, reject linked

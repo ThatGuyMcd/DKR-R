@@ -1,4 +1,5 @@
 // Included after the shared support-page helpers in both ImGui contexts.
+#include "storage/ui.inl"
 void DrawCrashReportingSettings(float width) {
     using namespace dkr::crash_reports;
     auto state = view(); bool enabled = state.consent.choice == 1;
@@ -18,6 +19,7 @@ void DrawCrashReportingSettings(float width) {
         if (state.queued) DetailText(dkr::localisation::format("support.reporting.count", {{"count", std::to_string(state.queued)}}), width, kSetMuted, 0.F);
     }
     PaddockGap(16.F);
+    DrawStorageSettings(width);
 }
 void DrawCrashReportingConsent() {
     using namespace dkr::crash_reports;

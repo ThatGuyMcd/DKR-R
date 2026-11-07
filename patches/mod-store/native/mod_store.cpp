@@ -1,6 +1,8 @@
 #include "mod_store.hpp"
 #include "mod_store_install.hpp"
 #include "stb/stb_image.h"
+#include "stb/stb_image_write.h"
+#include "storage/maintenance.hpp"
 #include "updates/update_core.hpp"
 #include <algorithm>
 #include <array>
@@ -934,6 +936,7 @@ struct Service::Impl {
                 work.pop_front();
             }
             try {
+                dkr::storage::Activity storage_activity;
                 task(stop);
             } catch (const Error& error) {
                 fail(error);
@@ -943,6 +946,7 @@ struct Service::Impl {
         }
     }
     void load_image(const std::string& url, std::stop_token stop) {
+        dkr::storage::Activity storage_activity;
         const auto key = dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(url.data()), url.size()));
         const auto path = root / "images" / key;
         std::string bytes;
@@ -961,6 +965,7 @@ struct Service::Impl {
             std::filesystem::create_directories(path.parent_path());
             dkr::updates::durable_write(path, bytes);
         }
+        dkr::storage::used(path);
         int width = 0, height = 0, channels = 0;
         if (!stbi_info_from_memory(reinterpret_cast<const stbi_uc*>(bytes.data()), int(bytes.size()), &width, &height,
                                    &channels) ||
@@ -985,6 +990,13 @@ struct Service::Impl {
                                 x * unsigned(width) / image->width) *
                                    4 +
                                c];
+        if(width>512||height>512) {
+            std::string encoded;
+            const auto write=[](void* context,void* data,int length){static_cast<std::string*>(context)->append(static_cast<const char*>(data),std::size_t(length));};
+            if(stbi_write_png_to_func(write,&encoded,int(image->width),int(image->height),4,image->rgba.data(),int(image->width*4))&&encoded.size()<bytes.size())
+                dkr::updates::durable_write(path,encoded);
+        }
+        dkr::storage::request(dkr::storage::Action::Images);
         std::lock_guard lock(mutex);
         if (images.size() >= 32)
             images.erase(images.begin());
@@ -1035,6 +1047,7 @@ struct Service::Impl {
                 fail(error);
             }
             auto cancelled = download_stop.get_token();
+            dkr::storage::Activity storage_activity;
             std::stop_callback retire(stop, [&] { download_stop.request_stop(); });
             auto change = [&](const std::function<void(Download&)>& fn) {
                 update([&](Snapshot& s) {
@@ -1046,7 +1059,10 @@ struct Service::Impl {
             std::string source_url;
             try {
                 auto integrity = get("/v1/launcher/releases/" + job.release, cancelled);
+                const auto expected_digest=job.digest;
                 job.digest = text(integrity, "sha256", 64);
+                if(job.intent=="activate"&&!expected_digest.empty()&&expected_digest!=job.digest)
+                    throw Error("That edition's published checksum changed. The installed mod was kept.");
                 if (!hash_string(job.digest) || !integrity.contains("bytes") ||
                     !integrity["bytes"].is_number_unsigned())
                     throw Error("This release is not ready for verified installation.");
@@ -1207,6 +1223,7 @@ std::string download_key(const std::string& item, const std::string& release, co
     return item + "_" + release + (instance.empty() ? "" : "_" + instance);
 }
 void Service::gameplay(bool active) {
+    dkr::storage::gameplay(active);
     auto& p=*impl_;
     {
         std::lock_guard lock(p.mutex);p.gameplay=active;
@@ -1618,6 +1635,7 @@ void Service::download(const Json& item, const Json& release, std::string intent
     d.version = text(release, "version", 80);
     d.intent = std::move(intent);
     d.instance = std::move(instance);
+    d.digest = text(release,"sha256",64);
     if (!identifier(d.item) || !identifier(d.release))
         return;
     d.key = download_key(d.item, d.release, d.instance);
@@ -1638,6 +1656,7 @@ void Service::download(const Json& item, const Json& release, std::string intent
             found->version = d.version;
             found->intent = d.intent;
             found->instance = d.instance;
+            found->digest = d.digest;
         }
     });
     p.cv.notify_all();
@@ -1892,6 +1911,7 @@ bool Service::begin_install(std::string key) {
     return result;
 }
 void Service::installed(std::string key, bool success, std::string message) {
+    dkr::storage::Activity storage_activity;
     impl_->update([&](Snapshot& s) {
         for (auto& d : s.downloads)
             if (d.key == key) {
@@ -1903,6 +1923,7 @@ void Service::installed(std::string key, bool success, std::string message) {
     });
     impl_->queue([p = impl_.get()](std::stop_token stop) {
         p->persist_downloads();
+        dkr::storage::request();
         refresh_library_names(p->root.parent_path(), *p->published.load()->items, stop);
     });
 }

@@ -16,6 +16,7 @@ are still useful, but they aren't the current feature list.
 | [Controls](CONTROLLERS.md) | Profiles, N64 setup, SDL2/SDL3, gyro and Android touch groups. |
 | [Saves and portable mode](SAVES.md) | Offline/online/modded storage, recovery and profile switching. |
 | [Application updates](UPDATES.md) | GitHub checks, signed packages, installation, backups and publishing. |
+| [Storage cleanup](STORAGE.md) | Idle maintenance, retained recovery, cache limits and manual controls. |
 | [Texture packs](TEXTURE_PACKS.md) | Imports, priorities, track-owned HD packs and texture export/capture. |
 | [Custom tracks and characters](LEGACY-MODS-BETA.md) | Legacy imports, roster browsing, AI, adapters and mod management. |
 | [Magic Codes](MAGIC_CODES.md) | Launch selection, online rules and one-shot actions. |

@@ -4,6 +4,30 @@ This records the local v1.0.15 preparation since the public v1.0.14 release.
 Nothing is pushed, tagged, uploaded or published before the owner's review.
 The external release handoff holds package hashes and detailed test evidence.
 
+## Storage rebuild addendum
+
+The storage-maintenance rebuild supersedes the earlier prepared packages below.
+Its final package hashes and source commit must be recorded in the refreshed
+handoff before signing. Earlier network measurements remain measurements of
+the pre-storage packages; they are not repeated-byte qualification of this rebuild.
+Storage coverage includes verified downloads, edition recovery, interrupted
+retirement, immutable history, cache references, linked files, long Windows
+paths, process leases and gameplay deferral. The final storage fixture passed
+on Windows and Linux. Packaged Windows and Linux idle/gameplay checks verified disposal
+while idle, preservation during an actual game and unchanged synthetic saves.
+Windows host coverage is 170 tests: 169 passed in the full run and the tooling
+case passed after correcting the MSYS Git PATH. Linux passed 169/170 on the
+Windows mount; its timed-out regression harness passed all 25 identical cases
+on native Linux storage in 4.379 seconds. The failures remain in the evidence.
+
+The rebuilt Windows full-lobby baseline completed with four racers and eight
+late spectators. All 12 processes exited cleanly, all four racers recorded
+zero racing input waits, and viewers replayed 1,396–3,289 actual race frames.
+This is a same-PC baseline without added network latency. The earlier mixed
+high-latency results below retain their pre-storage package scope. See
+[storage](docs/STORAGE.md) for retention rules and limitations; the handoff
+records all final platform packages and remaining physical-device checks.
+
 ## Scope and source
 
 The release changes online input timing/recovery, checkpoint CPU work, confirmed

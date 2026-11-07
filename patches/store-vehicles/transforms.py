@@ -22,6 +22,24 @@ def service(text):
 '''+anchor)
 
 def installer(text):
+    root=AUTH.parents[1]
+    text='#include "'+(root/'runtime-recomp/src/game/storage/maintenance.hpp').as_posix()+'"\n'+text
+    anchor='        try {\n            job(stop);'
+    if 'dkr::storage::Activity storage_activity;' not in text:
+        text=once(text,anchor,'        dkr::storage::Activity storage_activity;\n'+anchor+'\n            dkr::storage::request();')
+    anchor='            job.intent = "activate";'
+    if 'dkr::storage::cached_package(' not in text:
+        text=once(text,anchor,anchor+'''
+            if(!path_exists(job.file)) {
+                const auto cached=dkr::storage::cached_package(p.root/"downloads"/job.digest,job.digest,job.total);
+                if(!cached.empty())job.file=cached;
+            }
+            if(!path_exists(job.file)) {
+                service().download(Json{{"id",job.item},{"title",job.title},{"category",job.category}},
+                    Json{{"id",job.release},{"version",job.version},{"sha256",job.digest}},"activate",instance);
+                p.update([](InstallView& s){s.busy=false;s.stage="Downloading the saved mod edition";s.result="The cached download was cleared. The exact edition has been queued again.";});
+                return;
+            }''')
     text=once(text,'    const auto code = leaf_after("mods/custom-magic-codes/packages/");','''    const auto car = leaf_after("mods/vehicles/packages/");
     for(const auto* suffix : {".dkrkart", ".dkrhover", ".dkrplane"})
         if(car.ends_with(suffix) && hash_string(car.substr(0, car.size()-std::char_traits<char>::length(suffix)))) return true;

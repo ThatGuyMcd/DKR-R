@@ -953,6 +953,8 @@ def compose(rows,out):
             '                              g_mods_page.entry_section = 4;\n                              g_mods_page.section = 4;\n                              g_page_navigation_request = kPageModsHacks;\n                              g_mod_store.page = 5;',
             '                              OpenModLibrary(5);')
     def store_ui(text):
+        anchor='if (!g_mod_store.install_after_download.contains(job.key))'
+        if anchor in text:text=once(text,anchor,'if (!g_mod_store.install_after_download.contains(job.key) && job.intent != "activate")')
         text=once(text,'int StoreCombo(const char* id, int current, const std::vector<std::string>& labels, float width) {',
             'int StoreCombo(const char* id, int current, const std::vector<std::string>& raw_labels, float width) {\n    const auto labels=LocalisedUi::enum_items(raw_labels);')
         text=once(text,'    StoreNote(id, width);','    StoreNote(dkr::localisation::source(id), width);')
@@ -1292,6 +1294,41 @@ def compose(rows,out):
             text=once(text,'    const auto next=activation();',
                 '    const auto next=activation();\n    if(next)dkr::feedback::capture(retained,next->revision,stamp,online_owner,physical_profile);')
         elif source.name=='mod_store.cpp':
+            storage=(ROOT/'runtime-recomp/src/game/storage/maintenance.hpp').as_posix()
+            text='#include "'+storage+'"\n#include "stb/stb_image_write.h"\n'+text
+            for anchor in ('    void load_image(const std::string& url, std::stop_token stop) {','void Service::installed(std::string key, bool success, std::string message) {'):
+                replacement=anchor+'\n    dkr::storage::Activity storage_activity;'
+                if not re.search(re.escape(anchor)+r'\s*dkr::storage::Activity storage_activity;',text):text=once(text,anchor,replacement)
+            anchor='                task(stop);'
+            if 'dkr::storage::Activity storage_work;' not in text:text=once(text,anchor,'                dkr::storage::Activity storage_work;\n'+anchor)
+            anchor='            auto cancelled = download_stop.get_token();'
+            replacement=anchor+'\n            dkr::storage::Activity storage_download;'
+            if replacement not in text:text=once(text,anchor,replacement)
+            anchor='void Service::gameplay(bool active) {'
+            if anchor+'\n    dkr::storage::gameplay(active);' not in text:text=once(text,anchor,anchor+'\n    dkr::storage::gameplay(active);')
+            anchor='                job.digest = text(integrity, "sha256", 64);'
+            if 'const auto expected_digest=job.digest;' not in text:text=once(text,anchor,'''                const auto expected_digest=job.digest;
+'''+anchor+'''
+                if(job.intent=="activate"&&!expected_digest.empty()&&expected_digest!=job.digest)
+                    throw Error("That edition's published checksum changed. The installed mod was kept.");''')
+            for anchor,replacement in [
+                ('    d.instance = std::move(instance);','    d.instance = std::move(instance);\n    d.digest = text(release,"sha256",64);'),
+                ('            found->instance = d.instance;','            found->instance = d.instance;\n            found->digest = d.digest;'),
+                ('        p->persist_downloads();','        p->persist_downloads();\n        dkr::storage::request();')]:
+                if replacement not in text:text=once(text,anchor,replacement)
+            begin=text.index('    void load_image(');end=text.index('    void image_run(',begin);part=text[begin:end]
+            anchor='        int width = 0, height = 0, channels = 0;'
+            if 'dkr::storage::used(path);' not in part:part=once(part,anchor,'        dkr::storage::used(path);\n'+anchor)
+            if 'dkr::storage::Action::Images' not in part:
+                part=once(part,'        std::lock_guard lock(mutex);','''        if(width>512||height>512) {
+            std::string encoded;
+            const auto write=[](void* context,void* data,int length){static_cast<std::string*>(context)->append(static_cast<const char*>(data),std::size_t(length));};
+            if(stbi_write_png_to_func(write,&encoded,int(image->width),int(image->height),4,image->rgba.data(),int(image->width*4))&&encoded.size()<bytes.size())
+                dkr::updates::durable_write(path,encoded);
+        }
+        dkr::storage::request(dkr::storage::Action::Images);
+        std::lock_guard lock(mutex);''')
+            text=text[:begin]+part+text[end:]
             text=account_service(text,out)
             text='#include "'+(store_module/'community_policy.hpp').as_posix()+'"\n'+text
             text=once(text,'    // Workers are last: joined before the objects captured by their callbacks.',

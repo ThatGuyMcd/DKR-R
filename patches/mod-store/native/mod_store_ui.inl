@@ -481,7 +481,7 @@ void StoreStartQueuedInstall(bool locked) {
         return;
     const auto store = dkr::store::service().view();
     for (const auto& job : store->downloads) {
-        if (!g_mod_store.install_after_download.contains(job.key))
+        if (!g_mod_store.install_after_download.contains(job.key) && job.intent != "activate")
             continue;
         if (job.state == "Failed" || job.state == "Paused") {
             g_mod_store.install_after_download.erase(job.key);

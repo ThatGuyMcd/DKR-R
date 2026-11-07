@@ -1,6 +1,6 @@
 # v1.0.15 documentation review
 
-This update covers the online work since the public v1.0.14 release. The
+This update covers online improvements and storage cleanup since v1.0.14. The
 launcher, graphics, language, controller and modding additions from v1.0.14
 remain documented in their existing guides. Independent mod, SDK, addon and
 dependency versions keep their own numbers.
@@ -10,6 +10,7 @@ dependency versions keep their own numbers.
 - [Release notes](PUBLIC-1.0.15-NOTES.txt): the complete player-facing changes,
   installation instructions and remaining problems.
 - [Changelog](../CHANGELOG.md): the source changes grouped under v1.0.15.
+- [Storage](STORAGE.md): cleanup controls, retention, protected data and recovery.
 - [Online](ONLINE_MULTIPLAYER.md): current defaults, recovery, optional datagram
   delivery and live versus queued host settings.
 - [Spectators](SPECTATORS.md): confirmed playback, the initial buffer target,

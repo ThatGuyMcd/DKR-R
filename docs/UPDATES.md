@@ -19,6 +19,11 @@ an updater-enabled version. There is no need to disable signature checks.
 
 ## Keeping your data
 
+Idle [storage cleanup](STORAGE.md) can release a verified update download after
+its handoff completes or recovers. It keeps signed metadata and the newest
+verified recovery backup. Unresolved updates retain their recovery files;
+cleanup does not use an age limit alone to discard a failed update.
+
 Updates replace application files. Your ROMs, saves, mods, textures, controller
 settings and logs stay in your profile. Portable mode keeps portable.txt and
 dkr-runtime-data. Restart to apply a pending portable-mode change before updating.

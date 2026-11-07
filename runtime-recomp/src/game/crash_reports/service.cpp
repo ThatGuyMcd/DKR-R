@@ -76,11 +76,12 @@ struct Service {
 std::unique_ptr<Service> owner;
 } // namespace
 void start(const std::filesystem::path& profile, std::string version) {
+    dkr::storage::start(profile);
     if (owner) return;
     try { owner = std::make_unique<Service>(profile, std::move(version)); }
     catch (...) { /* support must never prevent the game from starting */ }
 }
-void shutdown() { owner.reset(); }
+void shutdown() { owner.reset(); dkr::storage::shutdown(); }
 View view() {
     if (!owner) return {{0, false, 0}, 0, false, "support.reporting.local_error"};
     std::lock_guard lock(owner->mutex); return owner->snapshot;
@@ -105,6 +106,7 @@ bool choose(bool enabled, bool dumps) {
     }
 }
 void gameplay(bool active) {
+    dkr::storage::gameplay(active);
     if (!owner) return;
     std::lock_guard lock(owner->mutex);
     owner->playing = active;

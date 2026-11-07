@@ -376,6 +376,37 @@ extern "C" std::uint32_t dkr_analogue_driving(std::uint8_t* ram,recomp_context*,
         text=re.sub(r'(\w+)\.buttons,\1\.stick_x,\1\.stick_y\}',r'\1.buttons,\1.stick_x,\1.stick_y,\1.accelerator,\1.brake,\1.driving_flags}',text)
         text=text.replace('PackedInput{buttons,std::int8_t(std::clamp(x,-1.0F,1.0F)*80),std::int8_t(std::clamp(y,-1.0F,1.0F)*80)}','online_input_broker().local_sample().input')
     return text
+def storage_guards(name,text):
+    anchors={
+        'legacy_import_library.cpp':['        thread_=std::jthread([this,source=std::move(source),roms=std::move(roms),scan](std::stop_token stop) {'],
+        'legacy_track_catalog.cpp':['        thread_=std::jthread([this,action,previous,id=std::move(id),roms=std::move(roms)](std::stop_token stop) {'],
+        'magic_code_library.cpp':['struct Lease {'],
+        'vehicle_library.cpp':['struct Lock {'],
+        'online_mod_sync.cpp':['        revision=std::move(revision),ai,prepare=std::move(prepare)](std::stop_token stop) mutable {','    try {thread_=std::jthread([this,settings=std::move(settings),prepare=std::move(prepare)](std::stop_token stop) mutable {'],
+        'online_mod_cache.cpp':['bool cached_payload(const std::filesystem::path& directory,const Payload& expected) {'],
+        'runtime_texture_packs.cpp':['                    const TrackPackOwner* owner) {'],
+        'custom_tracks.cpp':['             InstallOutcome* outcome) {'],
+        'update_service.cpp':['    worker = std::jthread([this, action = std::move(action)](std::stop_token stop) {'],
+    }
+    if name not in anchors and name!='online_mod_profile.cpp':return text
+    text='#include "'+(ROOT/'runtime-recomp/src/game/storage/maintenance.hpp').as_posix()+'"\n'+text
+    for anchor in anchors.get(name,[]):
+        replacement=anchor+'\n    dkr::storage::Activity storage_activity;'
+        if not re.search(re.escape(anchor)+r'\s*dkr::storage::Activity storage_activity;',text):text=once(text,anchor,replacement)
+    if name=='online_mod_profile.cpp':
+        anchor='try{validate_profile(*out);'
+        replacement=anchor+'dkr::storage::used(out->directory);'
+        if replacement not in text:text=once(text,anchor,replacement)
+        anchor='        } else if(cached) {'
+        replacement=anchor+'\n            dkr::storage::used(source);'
+        if replacement not in text:text=once(text,anchor,replacement)
+    if name=='online_mod_cache.cpp':
+        start=text.index('bool cached_payload(');end=text.index('void cache_bundle(',start)
+        part=text[start:end]
+        if 'dkr::storage::used(file);' not in part:part=once(part,'    return true;','    dkr::storage::used(file);\n    return true;')
+        text=text[:start]+part+text[end:]
+    return text
+
 def compose(rows,out):
     if not NAMES.issubset({(r['target'],Path(r['path']).name) for r in rows}):
         raise ValueError('Online performance source closure differs')
@@ -747,7 +778,7 @@ Service *service() {''')
                 '            if(now>=performance_at){performance_at=now+std::chrono::seconds(5);\n'
                 '                std::fprintf(stderr,"[party][performance] epoch=%llu next=%u confirmed=%u delay=%u window=%u rollbacks=%u replayed=%u largest=%u predictions=%u step-avg-us=%llu step-max-us=%llu blocked-pulses=%u\\n",static_cast<unsigned long long>(cursor.epoch),after.frame,confirmed(),unsigned(live_delay.lead()),unsigned(live_delay.prediction_window()),stats.rollbacks,stats.replayed_frames,stats.largest_rollback,stats.predicted_frames,static_cast<unsigned long long>(steps?step_us/steps:0),static_cast<unsigned long long>(max_step_us),stalls);\n'
                 '                steps=stalls=0;step_us=max_step_us=0;}')
-        text=beta3(name,text)
+        text=storage_guards(name,beta3(name,text))
         text=remap(text,sources[str(source)])
         if row['target'] in test_bodies:
             before=test_bodies[row['target']]

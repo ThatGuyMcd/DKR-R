@@ -2,6 +2,13 @@
 
 ## 1.0.15 — 2026-11-07
 
+- Added idle storage maintenance and shared About/Support storage controls.
+  Verified installed downloads, redundant preparation, stale owned staging and
+  bounded artwork/online caches no longer accumulate indefinitely. Current and
+  previous mod recovery, saves, ROMs and installed content are protected. Manual
+  controls preview cleanup, trim unreferenced history and remove old original
+  crash dumps. See [storage](docs/STORAGE.md) for retention and recovery rules.
+
 - Keep fractional elapsed time in the shared spectator transfer budget. Frequent
   network-pump calls no longer discard refill credit; bandwidth/burst limits
   stay unchanged. Added a high-frequency pumping regression check.

@@ -139,9 +139,13 @@ anonymity cannot be guaranteed. See [crash reporting](docs/CRASH_REPORTING.md).
 The launcher checks GitHub for compatible signed updates; downloading and
 installing remain your choice. See [Updates](docs/UPDATES.md).
 
+Idle cleanup clears verified leftover downloads, installation preparation and
+old caches. **About DKR-R > Support > Storage** provides a preview and manual
+controls. Saves, ROMs and installed content are kept. See [Storage](docs/STORAGE.md).
+
 ## Documentation and contributing
 
-- [All current guides](docs/README.md), [release notes](docs/PUBLIC-1.0.14-NOTES.txt)
+- [All current guides](docs/README.md), [release notes](docs/PUBLIC-1.0.15-NOTES.txt)
   and [known limitations/validation](RELEASE-VALIDATION.md).
 - [Troubleshooting](docs/TROUBLESHOOTING.md), [building](docs/BUILDING.md),
   [development](docs/DEVELOPMENT.md) and [contributing](CONTRIBUTING.md).
