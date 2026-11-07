@@ -104,6 +104,12 @@ def main():
     assert all(row["visible"] == 1 and row["height"] == 48 and row["parent-scroll"] == 0 for row in rows), result
     assert rows[0]["top"] == rows[1]["top"] and rows[0]["bottom"] == rows[1]["bottom"], result
     assert rows[1]["body-scroll"] == rows[1]["body-max"], result
+    for row in rows:
+        for edge in ("left", "right", "bottom"):
+            assert abs(row["bar-" + edge] - row["panel-" + edge]) <= 1, result
+        button_width = row["button-right"] - row["button-left"]
+        assert 0 < button_width < row["available"] * 0.9, result
+        assert abs(row["button-left"] + row["button-right"] - row["bar-left"] - row["bar-right"]) <= 2, result
     assert all(row["enabled"] == bool(args.rom) for row in rows), result
     if args.rom:
         assert rows[0]["focused"] == 1, result
@@ -119,6 +125,22 @@ def main():
         assert data[:2] == b"BM" and struct.unpack_from("<I", data, 2)[0] == len(data)
         width, height = struct.unpack_from("<ii", data, 18)
         assert (width, abs(height)) == dimensions[args.size]
+        offset = struct.unpack_from("<I", data, 10)[0]
+        depth = struct.unpack_from("<H", data, 28)[0]
+        assert depth in (24, 32)
+        stride = ((width * depth + 31) // 32) * 4
+        row = rows[step]
+        # Read actual pixels in the former side/bottom gaps, away from the
+        # border, curved corners, caption and focus ring.
+        probes = (
+            (row["bar-left"] + 3, row["bar-top"] + 4),
+            (row["bar-right"] - 3, row["bar-top"] + 4),
+            ((row["bar-left"] + row["bar-right"]) / 2, row["bar-bottom"] - 3),
+        )
+        for x, y in probes:
+            pixel_row = abs(height) - 1 - int(y) if height > 0 else int(y)
+            pixel = offset + stride * pixel_row + int(x) * (depth // 8)
+            assert tuple(data[pixel : pixel + 3]) == (52, 37, 9), (step, x, y, result)
     assert "[boot][crash]" not in text, result
     print(json.dumps(result, indent=2))
 

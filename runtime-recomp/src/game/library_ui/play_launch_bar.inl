@@ -11,6 +11,9 @@ bool PlayLaunchLayoutCheck() {
 }
 struct PlayLaunchGeometry {
     ImVec2 button_min{}, button_max{}, clip_min{}, clip_max{};
+    ImVec2 footer_min{}, footer_max{};
+    ImVec2 panel_min{}, panel_max{};
+    float available_width = 0.F;
     float body_scroll = 0.F, body_max = 0.F, parent_scroll = 0.F;
     bool focused = false, enabled = false;
 };
@@ -31,6 +34,9 @@ void PlayLaunchButtonCheck(bool enabled) {
     geometry.clip_min = window->ClipRect.Min;
     geometry.clip_max = window->ClipRect.Max;
     geometry.parent_scroll = ImGui::GetScrollY();
+    geometry.panel_min = {window->Pos.x + window->WindowBorderSize, window->Pos.y + window->WindowBorderSize};
+    geometry.panel_max = {window->Pos.x + window->Size.x - window->WindowBorderSize - window->ScrollbarSizes.x,
+                          window->Pos.y + window->Size.y - window->WindowBorderSize - window->ScrollbarSizes.y};
     geometry.focused = ImGui::IsItemFocused();
     geometry.enabled = enabled;
 }
@@ -40,10 +46,18 @@ void PlayLaunchCaptureCheck() {
     const bool visible = g.button_min.x >= g.clip_min.x && g.button_min.y >= g.clip_min.y &&
                          g.button_max.x <= g.clip_max.x && g.button_max.y <= g.clip_max.y;
     std::fprintf(stderr, "[play-launch][isolated-check] step=%d visible=%d focused=%d enabled=%d "
-        "height=%.1f top=%.1f bottom=%.1f body-scroll=%.1f body-max=%.1f parent-scroll=%.1f\n",
+        "height=%.1f top=%.1f bottom=%.1f body-scroll=%.1f body-max=%.1f parent-scroll=%.1f "
+        "button-left=%.1f button-right=%.1f bar-left=%.1f bar-right=%.1f bar-top=%.1f bar-bottom=%.1f available=%.1f "
+        "panel-left=%.1f panel-right=%.1f panel-bottom=%.1f\n",
         g_launcher_layout_step, int(visible), int(g.focused), int(g.enabled),
         g.button_max.y - g.button_min.y, g.button_min.y, g.button_max.y,
-        g.body_scroll, g.body_max, g.parent_scroll);
+        g.body_scroll, g.body_max, g.parent_scroll, g.button_min.x, g.button_max.x,
+        g.footer_min.x, g.footer_max.x, g.footer_min.y, g.footer_max.y, g.available_width,
+        g.panel_min.x, g.panel_max.x, g.panel_max.y);
+}
+
+float PlayLaunchButtonWidth(float width) {
+    return std::max(1.F, std::min(width * .85F, 1280.F));
 }
 
 std::string PlayLaunchSummary(const PlayPageContext& play, bool live) {
@@ -70,11 +84,26 @@ float PlayLaunchBarHeight(float width, const std::string& summary) {
 void DrawPlayLaunchSummary(float width, const std::string& summary) {
     const auto at = ImGui::GetCursorScreenPos();
     auto* draw = ImGui::GetWindowDrawList();
-    // Opaque underlay keeps moving content from showing through the footer.
-    draw->AddRectFilled(at, {at.x + width, at.y + PlayLaunchBarHeight(width, summary)},
-                        PaddockCol(0x092534));
-    draw->AddLine(at, {at.x + width, at.y}, PaddockCol(0x325365));
+    const auto* window = ImGui::GetCurrentWindow();
+    ImRect panel = window->InnerRect;
+    panel.Expand(-window->WindowBorderSize);
+    panel.ClipWithFull(window->OuterRectClipped);
+    const ImVec2 footer_min{panel.Min.x, at.y}, footer_max{panel.Max.x, panel.Max.y};
+    // Paint through the panel padding, retaining its border and rounded bottom
+    // corners. The normal text/item clip would leave a strip down each side.
+    draw->PushClipRect(panel.Min, panel.Max, false);
+    draw->AddRectFilled(footer_min, footer_max, PaddockCol(0x092534),
+        std::max(0.F, window->WindowRounding - window->WindowBorderSize), ImDrawFlags_RoundCornersBottom);
+    draw->AddLine(footer_min, {footer_max.x, footer_min.y}, PaddockCol(0x325365));
+    draw->PopClipRect();
+    if (PlayLaunchLayoutCheck()) {
+        g_play_launch_geometry.footer_min = footer_min;
+        g_play_launch_geometry.footer_max = footer_max;
+        g_play_launch_geometry.available_width = width;
+    }
     PaddockGap(10.F);
     PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), summary, width - 8.F);
     PaddockGap(8.F);
+    ImGui::SetCursorScreenPos({std::floor((panel.Min.x + panel.Max.x - PlayLaunchButtonWidth(width)) * .5F),
+                              ImGui::GetCursorScreenPos().y});
 }

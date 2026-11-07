@@ -4,6 +4,9 @@ Play now keeps its heading and launch bar outside a scrolling content child.
 Community Spotlight remains above Ready to Race. The settings, save preview,
 Achievements, Session mods and Save Manager remain accessible in that child.
 The launch action is 48 logical pixels high, with a separate ROM/session summary.
+The footer background reaches the panel's inner edges and rounded bottom corners.
+The button is centred at 85% of the available content width, capped at 1280 logical
+pixels so it remains compact in wider windows. Text retains the page padding.
 
 A ready ROM selects Start Game when Play opens, including before a controller
 is connected. Import and launch locks still apply. Focus waits while a modal is
@@ -25,7 +28,9 @@ modes and both live/launcher navigation contexts.
 `runtime-recomp/tests/play_launch_layout_tests.py` runs a complete production
 package against a fresh, token-authenticated disposable profile. It captures
 the actual SDL UI, checks focus and clipping, then drives right-stick scrolling
-and checks that the launch action stays in place. Ordinary startup cannot arm
+and checks that the launch action stays in place. Readback also checks the
+narrower button's centring and actual background pixels in the former side/bottom
+gaps. Ordinary startup cannot arm
 the harness. It is excluded from the ROM-free tooling suite because it requires
 a production runtime and a native window.
 

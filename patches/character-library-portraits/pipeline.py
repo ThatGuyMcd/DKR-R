@@ -93,7 +93,7 @@ def parity_play(text):
     text=once(text,'        if (state.focus == PlayPageState::Focus::Start && can_start) {\n            if (nav) ImGui::SetKeyboardFocusHere();',
         '        if (state.focus == PlayPageState::Focus::Start && can_start && ImGui::GetCurrentContext()->OpenPopupStack.empty()) {\n            ImGui::GetCurrentContext()->NavDisableHighlight=false;\n            ImGui::SetKeyboardFocusHere();')
     text=once(text,'"PLAY OFFLINE - Diddy Kong Racing", {width, 68.0F}, look)',
-        'dkr::localisation::text("play.start_game").data(), {width, kPlayStartHeight}, look)')
+        'dkr::localisation::text("play.start_game").data(), {PlayLaunchButtonWidth(width), kPlayStartHeight}, look)')
     text=once(text,'        ImGui::EndDisabled();\n        ImGui::PopStyleVar();\n    }',
         '        ImGui::EndDisabled();\n        PlayLaunchButtonCheck(can_start);\n        ImGui::PopStyleVar();\n    }')
     text=once(text,'''    if (!play.rom_ready) {
