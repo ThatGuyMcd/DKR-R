@@ -7,6 +7,13 @@
 #include <memory>
 #include <optional>
 #include <thread>
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__linux__)
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+#endif
 
 namespace dkr::storage {
 namespace {
@@ -25,6 +32,24 @@ std::int64_t now() {
     return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
         .count();
 }
+struct BackgroundPriority {
+    BackgroundPriority() {
+#ifdef _WIN32
+        SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+#elif defined(__linux__)
+        const auto thread = syscall(SYS_gettid);
+        setpriority(PRIO_PROCESS, static_cast<id_t>(thread), 19);
+#ifdef SYS_ioprio_set
+        syscall(SYS_ioprio_set, 1, thread, (2 << 13) | 7);
+#endif
+#endif
+    }
+    ~BackgroundPriority() {
+#ifdef _WIN32
+        SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
+#endif
+    }
+};
 Json read(const fs::path& p) {
     if (!fs::exists(p))
         return Json::object();
@@ -40,8 +65,10 @@ struct Service {
     std::condition_variable_any changed;
     View snapshot;
     std::optional<Action> pending;
-    bool enabled = true, playing = false, preferences_dirty = false;
-    std::int64_t last = 0;
+    bool enabled = true, startup_complete = false, preferences_dirty = false;
+    std::atomic<bool> playing{false};
+    std::uint64_t cleared_bytes = 0, cleared_files = 0;
+    std::chrono::steady_clock::time_point ready_at{};
     std::stop_source cancellation;
     std::jthread worker;
     explicit Service(fs::path path)
@@ -56,7 +83,6 @@ struct Service {
         life = std::make_unique<dkr::updates::InstallLock>(instance, 0);
         const auto preferences = read(root / "preferences.json");
         enabled = preferences.value("automatic", true);
-        last = read(root / "last-cleanup.json").value("time", std::int64_t(0));
         worker = std::jthread([this](std::stop_token stop) { run(stop); });
     }
     ~Service() {
@@ -79,16 +105,26 @@ struct Service {
         fs::remove(instance, ec);
     }
     void run(std::stop_token stop) noexcept {
-        auto next = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        BackgroundPriority priority;
+        using Clock = std::chrono::steady_clock;
+        const auto startup_due = Clock::now() + std::chrono::seconds(10);
         while (!stop.stop_requested()) {
             Action action;
             {
                 std::unique_lock lock(mutex);
-                changed.wait_until(lock, stop, next,
-                                   [&] { return preferences_dirty || (pending.has_value() && !playing); });
+                const auto due = pending                        ? ready_at
+                                 : enabled && !startup_complete ? startup_due
+                                                                : Clock::time_point::max();
+                const auto ready = [&] {
+                    return preferences_dirty || (pending && Clock::now() >= ready_at) ||
+                           (!pending && enabled && !startup_complete && Clock::now() >= startup_due);
+                };
+                if (due == Clock::time_point::max())
+                    changed.wait(lock, stop, ready);
+                else
+                    changed.wait_until(lock, stop, due, ready);
                 if (stop.stop_requested())
                     return;
-                next = std::chrono::steady_clock::now() + std::chrono::seconds(30);
                 if (preferences_dirty) {
                     const auto value = enabled;
                     preferences_dirty = false;
@@ -105,9 +141,7 @@ struct Service {
                     }
                     continue;
                 }
-                if (playing)
-                    continue;
-                if (!pending && (!enabled || now() - last < 86400))
+                if (!pending && (!enabled || startup_complete))
                     continue;
                 action = pending.value_or(Action::Automatic);
                 pending.reset();
@@ -115,7 +149,7 @@ struct Service {
                     continue;
                 cancellation = std::stop_source{};
                 snapshot.busy = true;
-                snapshot.status = "Checking disposable files...";
+                snapshot.status = "Waiting to start storage cleanup...";
             }
             try {
                 // Publishers never wait for an idle cleanup to acquire their
@@ -145,11 +179,29 @@ struct Service {
                     std::lock_guard lock(mutex);
                     options.stop = cancellation.get_token();
                 }
+                options.background = true;
+                options.gameplay = &playing;
+                options.progress = [this, action](const View& progress) {
+                    std::lock_guard lock(mutex);
+                    auto next = progress;
+                    next.busy = true;
+                    if (!next.preview && action != Action::Scan) {
+                        next.removed_bytes += cleared_bytes;
+                        next.removed_files += cleared_files;
+                    }
+                    if (next.rows.empty())
+                        next.rows = snapshot.rows;
+                    snapshot = std::move(next);
+                };
                 auto result = maintain(profile, options, install);
-                if (result.deferred)
-                    throw std::runtime_error(result.status);
                 {
                     std::lock_guard lock(mutex);
+                    if (!result.preview && action != Action::Scan) {
+                        cleared_bytes += result.removed_bytes;
+                        cleared_files += result.removed_files;
+                        result.removed_bytes = cleared_bytes;
+                        result.removed_files = cleared_files;
+                    }
                     if (action != Action::Scan && action != Action::Preview)
                         result.rows = snapshot.rows;
                     if (action == Action::Scan) {
@@ -158,21 +210,29 @@ struct Service {
                     }
                     snapshot = std::move(result);
                     snapshot.busy = false;
-                    if (action == Action::Clean || action == Action::ClearCaches || action == Action::TrimHistory ||
-                        action == Action::OldDumps)
-                        pending = Action::Scan;
-                    if (action == Action::Automatic && !options.stop.stop_requested()) {
-                        last = now();
-                        dkr::updates::durable_write(root / "last-cleanup.json",
-                                                    Json{{"schema", 1}, {"time", last}}.dump());
+                    if (snapshot.deferred) {
+                        if (!pending) {
+                            pending = action;
+                            ready_at = Clock::now() + std::chrono::seconds(5);
+                        }
+                    } else if (action == Action::Automatic || action == Action::Clean) {
+                        startup_complete = true;
+                        try {
+                            dkr::updates::durable_write(root / "last-cleanup.json",
+                                                        Json{{"schema", 1}, {"time", now()}}.dump());
+                        } catch (...) {
+                            snapshot.status += " The completion timestamp could not be saved.";
+                        }
                     }
                 }
             } catch (const std::exception& error) {
                 std::unique_lock lock(mutex);
                 snapshot.busy = false;
                 snapshot.status = error.what();
-                pending = action;
-                changed.wait_for(lock, stop, std::chrono::seconds(5), [&] { return playing; });
+                if (!pending) {
+                    pending = action;
+                    ready_at = Clock::now() + std::chrono::seconds(5);
+                }
             }
         }
     }
@@ -205,19 +265,18 @@ void gameplay(bool active) {
     if (auto p = current()) {
         std::lock_guard lock(p->mutex);
         p->playing = active;
-        if (active)
-            p->cancellation.request_stop();
         p->changed.notify_all();
     }
 }
 void request(Action action) {
+    // Artwork and install notifications are hints, not extra automatic passes.
+    // Files created after startup are maintained on the next application launch.
+    if (action == Action::Automatic || action == Action::Images)
+        return;
     if (auto p = current()) {
         std::lock_guard lock(p->mutex);
-        if (action == Action::Images && p->pending && p->pending != Action::Images)
-            return;
         p->pending = action;
-        if (p->playing && action != Action::Automatic && action != Action::Images)
-            p->snapshot.status = "Storage work is queued until you leave the game or lobby.";
+        p->ready_at = std::chrono::steady_clock::now();
         p->changed.notify_all();
     }
 }
@@ -238,12 +297,12 @@ bool automatic() {
 void automatic(bool enabled) {
     if (auto p = current()) {
         std::lock_guard lock(p->mutex);
+        if (p->enabled == enabled)
+            return;
         p->enabled = enabled;
         p->preferences_dirty = true;
         if (!enabled)
             p->cancellation.request_stop();
-        else
-            p->pending = Action::Automatic;
         p->changed.notify_all();
     }
 }

@@ -2,7 +2,12 @@
 
 ## 1.0.15 — 2026-11-07
 
-- Added idle storage maintenance and shared About/Support storage controls.
+- Run automatic cleanup once per application launch. Artwork and install events
+  no longer schedule repeated checks. Cleanup continues during gameplay using
+  low-priority, paced work and interruptible checksum reads. Active online files
+  stay pinned while unrelated cleanup continues; progress retains cleared totals.
+
+- Added background storage maintenance and shared About/Support storage controls.
   Verified installed downloads, redundant preparation, stale owned staging and
   bounded artwork/online caches no longer accumulate indefinitely. Current and
   previous mod recovery, saves, ROMs and installed content are protected. Manual

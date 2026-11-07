@@ -19,7 +19,7 @@ an updater-enabled version. There is no need to disable signature checks.
 
 ## Keeping your data
 
-Idle [storage cleanup](STORAGE.md) can release a verified update download after
+Background [storage cleanup](STORAGE.md) can release a verified update download after
 its handoff completes or recovers. It keeps signed metadata and the newest
 verified recovery backup. Unresolved updates retain their recovery files;
 cleanup does not use an age limit alone to discard a failed update.

@@ -2,10 +2,11 @@ void DrawStorageSettings(float width) {
     namespace storage = dkr::storage;
     DetailHeading("Storage", width);
     bool enabled = storage::automatic();
-    if (SettingsCheck("##automatic-storage-cleanup", "Automatically clear files that are no longer needed", &enabled,
+    if (SettingsCheck("##automatic-storage-cleanup", "Automatically clear disposable files once per launch", &enabled,
                       width))
         storage::automatic(enabled);
-    DetailText("Keeps saves, installed mods, ROMs and your exports. Cleanup pauses while playing or changing mods.",
+    DetailText("Runs once after startup and continues at low priority while playing. Active installs and online files "
+               "are protected.",
                width, kSetMuted);
     const auto state = storage::view();
     const auto bytes = [](std::uint64_t n) {

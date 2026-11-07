@@ -4,7 +4,16 @@ This records the local v1.0.15 preparation since the public v1.0.14 release.
 Nothing is pushed, tagged, uploaded or published before the owner's review.
 The external release handoff holds package hashes and detailed test evidence.
 
-## Storage rebuild addendum
+## Startup cleanup scheduling
+
+Automatic cleanup now runs once per application launch, without artwork/install
+re-triggers or periodic polling after completion. It continues at background
+priority during gameplay while live online resources retain their own lease.
+Final scheduling tests, rebuilt package identities and validation are recorded
+in the startup-cleanup handoff. The results below retain their original package
+scope. See the [follow-up](docs/notes/2026-11-07-storage-scheduling.md).
+
+## Initial storage qualification (before the scheduling follow-up)
 
 The storage-maintenance rebuild supersedes the earlier prepared packages below.
 Its final package hashes and source commit must be recorded in the refreshed

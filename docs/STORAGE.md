@@ -1,13 +1,17 @@
 # Storage and cleanup
 
-DKR-R clears recognised temporary files in the background while the launcher is
-idle. This is enabled by default. It pauses during games, lobbies and mod work;
-it does not scan the whole profile every time you start the game.
+DKR-R runs one automatic cleanup pass per application launch, starting about
+ten seconds after startup. This is enabled by default. It continues while you
+play, including Skip Launcher, using a low-priority worker and shorter work
+slices during gameplay. After the pass finishes the worker sleeps; loading
+artwork, finishing downloads or installing mods does not trigger another pass.
 
 Open **About DKR-R > Support > Storage** in the launcher or overlay to turn
 automatic cleanup off, check storage and preview what can be cleared. Press
 **CLEAR DISPOSABLE FILES** after checking the preview to run cleanup yourself.
-An overlay request waits until you leave the game or lobby.
+Manual cleanup also works from the overlay. Active installs and downloads can
+briefly defer it. An active online lobby pins its online files, preparation
+jobs and referenced package storage; unrelated cleanup can continue.
 
 Saves, ROMs, installed mods and texture packs, settings, accounts, recordings,
 texture dumps and your exports are kept. Cleanup does not decide that a ZIP is
@@ -32,6 +36,9 @@ ownership or unfinished work can leave them over budget. Download/install
 history remains visible after a disposable archive has been cleared. Activating
 an older edition uses its retained archive by checksum, or requests the exact
 edition again if its archive is missing.
+New disposable files created after the startup pass wait until the next launch
+or a manual cleanup. Turning automatic cleanup off and back on does not repeat
+an already completed startup pass.
 
 **CLEAR CACHED ARTWORK AND UNUSED ONLINE FILES** only clears those caches.
 **REMOVE OLD MOD HISTORY** explicitly trims unreferenced history; it keeps
@@ -51,10 +58,12 @@ New builds register a process lease and defer maintenance when another instance
 is using the same profile. Older builds do not provide that lease; close other
 copies before manually clearing storage.
 
-The first cleanup of a large existing profile can take time. Verification runs
-on a worker, and a large individual checksum read must finish before that read
-can yield. Check Storage measures the managed categories, not every file in
-AppData. Keep personal working files out of DKR-R's private staging folders.
+The first cleanup of a large existing profile can take time. Verification reads
+files in bounded chunks so it can yield for foreground work or cancellation.
+The status names the current stage and retains the amount already cleared.
+Check Storage measures the managed categories, not every file in AppData. A
+manual cleanup does not schedule another full storage measurement afterwards.
+Keep personal working files out of DKR-R's private staging folders.
 
 The same rules apply to Windows AppData, native Linux profiles and portable
 profiles. Portable mode chooses a location; it does not move existing data.

@@ -278,7 +278,8 @@ void no_cleanup_during_publication() {
     o.stop = stop.get_token();
     const auto q = f.put("mod-store/images/" + std::string(64, '2'));
     age(q);
-    maintain(f.root, o);
+    const auto cancelled = maintain(f.root, o);
+    assert(cancelled.deferred);
     assert(fs::exists(q));
 }
 void interrupted_cleanup_and_long_paths() {
@@ -326,15 +327,69 @@ void service_process_and_gameplay(const fs::path& exe) {
     assert(other.wait(5000) == 0);
     gameplay(true);
     request(Action::Clean);
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    assert(fs::exists(p));
-    gameplay(false);
     assert(wait_for([&] { return !fs::exists(p); }, 8000));
     automatic(false);
     shutdown();
     start(f.root);
     assert(!automatic());
     shutdown();
+}
+void startup_once_and_gameplay() {
+    Fixture f;
+    const auto p = f.put("mod-store/images/" + std::string(64, '7'));
+    age(p);
+    start(f.root);
+    gameplay(true);
+    assert(wait_for([&] { return !fs::exists(p) && !view().busy; }, 15000));
+    const auto kept = f.put("mod-store/images/" + std::string(64, '8'));
+    age(kept);
+    const auto after = view().removed_files;
+    for (unsigned i = 0; i < 128; ++i) {
+        request(Action::Images);
+        request(Action::Automatic);
+    }
+    automatic(false);
+    automatic(true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    assert(fs::exists(kept) && view().removed_files == after && !view().busy);
+    shutdown();
+    start(f.root);
+    gameplay(true);
+    assert(wait_for([&] { return !fs::exists(kept) && !view().busy; }, 15000));
+    shutdown();
+}
+void online_files_stay_pinned() {
+    Fixture f;
+    const auto image = f.put("mod-store/images/" + std::string(64, '1'));
+    const auto payload = f.put("online-mods/payloads/" + std::string(64, '2'));
+    const auto job = f.put("online-mods/jobs/" + std::string(64, '3') + "/request.json", "{}");
+    age(image);
+    age(payload);
+    age(job.parent_path());
+    {
+        OnlineActivity online;
+        const auto result = std::async(std::launch::async, [&] { return maintain(f.root); }).get();
+        assert(!result.deferred && !fs::exists(image) && fs::exists(payload) && fs::exists(job));
+    }
+    maintain(f.root);
+    assert(!fs::exists(payload) && !fs::exists(job));
+}
+void chunked_content_verification() {
+    Fixture f;
+    const std::string data(131173, '\x91');
+    const auto h = hash(data);
+    const auto file = "mod-store/downloads/" + h + "/package.zip";
+    f.put(file, data);
+    f.put("texture-packs/verified.rtz", data);
+    receipts(f, Json::array({record(h, "texture-packs/verified.rtz", file, data)}));
+    Options o;
+    o.background = true;
+    std::atomic<bool> playing = true;
+    o.gameplay = &playing;
+    unsigned phases = 0;
+    o.progress = [&](const View&) { ++phases; };
+    const auto result = maintain(f.root, o);
+    assert(result.removed_bytes == data.size() && !fs::exists(f.root / file) && phases >= 5);
 }
 void immutable_history_ownership() {
     Fixture f;
@@ -392,6 +447,9 @@ int main(int argc, char** argv) {
     interrupted_cleanup_and_long_paths();
     immutable_history_ownership();
     service_process_and_gameplay(fs::absolute(argv[0]));
+    online_files_stay_pinned();
+    chunked_content_verification();
+    startup_once_and_gameplay();
     std::cout << "Storage: committed installs, edition pins, dry run, interrupted recovery, links, budgets, "
                  "dependencies, updates and active writers passed.\n";
 }

@@ -2,7 +2,9 @@
 #include "updates/update_core.hpp"
 #include "updates/update_process.hpp"
 #include <json/json.hpp>
+#include <mbedtls/sha256.h>
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
@@ -108,14 +110,71 @@ struct Engine {
     fs::path root, install;
     Options options;
     View result;
+    bool online_available = true;
+    mutable std::chrono::steady_clock::time_point slice = std::chrono::steady_clock::now(), report = slice;
+    void phase(const char* text) {
+        result.status = text;
+        if (options.progress)
+            options.progress(result);
+        stop();
+    }
     Json document(const fs::path& p, std::size_t max = 16 * MiB) {
         if (present(p) && !checked(p, root) && !(!install.empty() && checked(p, install)))
             throw std::runtime_error("Storage metadata points outside its owner; files were kept.");
         return read(p, max);
     }
     void stop() const {
-        if (options.stop.stop_requested() || publishers_waiting.load())
+        if (options.stop.stop_requested() || publishers_waiting.load() || online_publishers_waiting.load())
             throw std::runtime_error("Storage work paused.");
+        const auto now = std::chrono::steady_clock::now();
+        if (options.progress && now - report >= std::chrono::milliseconds(250)) {
+            options.progress(result);
+            report = now;
+        }
+        if (options.background && now - slice >= std::chrono::milliseconds(4)) {
+            const bool playing = options.gameplay && options.gameplay->load();
+            std::mutex mutex;
+            std::condition_variable_any changed;
+            std::unique_lock lock(mutex);
+            changed.wait_for(lock, options.stop, std::chrono::milliseconds(playing ? 36 : 6), [] { return false; });
+            slice = std::chrono::steady_clock::now();
+            if (options.stop.stop_requested())
+                throw std::runtime_error("Storage work paused.");
+        }
+    }
+    std::string file_digest(const fs::path& path) {
+        ordinary(path);
+        std::ifstream input(path, std::ios::binary);
+        if (!input)
+            throw std::runtime_error("A cleanup source could not be read; it was kept.");
+        mbedtls_sha256_context context;
+        mbedtls_sha256_init(&context);
+        struct Free {
+            mbedtls_sha256_context& context;
+            ~Free() {
+                mbedtls_sha256_free(&context);
+            }
+        } free{context};
+        if (mbedtls_sha256_starts(&context, 0))
+            throw std::runtime_error("Could not start storage verification.");
+        std::array<char, 65536> buffer{};
+        std::uint64_t total = 0;
+        while (input) {
+            stop();
+            input.read(buffer.data(), buffer.size());
+            const auto n = input.gcount();
+            total += std::uint64_t(n);
+            if (total > 16ULL * 1024 * MiB)
+                throw std::runtime_error("Cleanup source exceeds its limit; it was kept.");
+            if (n && mbedtls_sha256_update(&context, reinterpret_cast<unsigned char*>(buffer.data()), std::size_t(n)))
+                throw std::runtime_error("Storage verification failed; the source was kept.");
+        }
+        if (!input.eof())
+            throw std::runtime_error("A cleanup source could not be read completely; it was kept.");
+        std::array<unsigned char, 32> hash{};
+        if (mbedtls_sha256_finish(&context, hash.data()))
+            throw std::runtime_error("Storage verification failed.");
+        return dkr::updates::hex(hash);
     }
     Row size(fs::path p) {
         p = native(p);
@@ -267,7 +326,7 @@ struct Engine {
         ordinary(p);
         stop();
         if (fs::is_regular_file(p))
-            return dkr::updates::hash_file(p, 16ULL * 1024 * MiB);
+            return file_digest(p);
         std::map<std::string, std::string> files;
         for (const auto& e : fs::recursive_directory_iterator(p)) {
             stop();
@@ -275,7 +334,7 @@ struct Engine {
             if (track && e.path().lexically_relative(p) == ".online-keep-state")
                 continue;
             if (e.is_regular_file())
-                files[utf8(e.path().lexically_relative(p))] = dkr::updates::hash_file(e.path(), 16ULL * 1024 * MiB);
+                files[utf8(e.path().lexically_relative(p))] = file_digest(e.path());
         }
         const auto data = Json(files).dump();
         return dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(data.data()), data.size()));
@@ -513,6 +572,8 @@ struct Engine {
             }
     }
     void online() {
+        if (!online_available)
+            return;
         const auto base = root / "online-mods";
         std::vector<fs::path> candidates;
         std::uint64_t total = 0;
@@ -587,10 +648,11 @@ struct Engine {
                 erase(p, p.parent_path());
         for (const auto* name :
              {"online-mods/jobs", "mods/legacy/jobs", "mods/legacy/prepare-jobs", "mods/legacy/online-keeps"})
-            for (const auto& p : children(root / name))
-                if (hex(utf8(p.filename())) && fs::is_directory(p) && old(p, 7) &&
-                    (present(p / "request.json") || present(p / "failure.json") || present(p / "content")))
-                    erase(p, root / name);
+            if (online_available)
+                for (const auto& p : children(root / name))
+                    if (hex(utf8(p.filename())) && fs::is_directory(p) && old(p, 7) &&
+                        (present(p / "request.json") || present(p / "failure.json") || present(p / "content")))
+                        erase(p, root / name);
         for (const auto& p : children(root / "texture-packs"))
             if (utf8(p.filename()).ends_with(".rice.importing") && fs::is_directory(p) && old(p, 7))
                 erase(p, root / "texture-packs");
@@ -653,16 +715,17 @@ struct Engine {
                             keep.insert(from_utf8(p).stem().string());
                     }
             for (const auto* folder : {"packages", "portraits"})
-                for (const auto& p : children(base / folder)) {
-                    const auto ext = utf8(p.extension());
-                    const bool owned =
-                        std::string(folder) == "portraits"
-                            ? ext == ".rgba"
-                            : ext == ".dkrcode" || ext == ".dkrkart" || ext == ".dkrhover" || ext == ".dkrplane";
-                    if (owned && fs::is_regular_file(p) && hex(utf8(p.stem())) && !keep.contains(utf8(p.stem())) &&
-                        old(p, 30) && (std::string(folder) == "portraits" || digest(p) == utf8(p.stem())))
-                        erase(p, base / folder);
-                }
+                if (online_available)
+                    for (const auto& p : children(base / folder)) {
+                        const auto ext = utf8(p.extension());
+                        const bool owned =
+                            std::string(folder) == "portraits"
+                                ? ext == ".rgba"
+                                : ext == ".dkrcode" || ext == ".dkrkart" || ext == ".dkrhover" || ext == ".dkrplane";
+                        if (owned && fs::is_regular_file(p) && hex(utf8(p.stem())) && !keep.contains(utf8(p.stem())) &&
+                            old(p, 30) && (std::string(folder) == "portraits" || digest(p) == utf8(p.stem())))
+                            erase(p, base / folder);
+                    }
         }
     }
     void updates() {
@@ -838,21 +901,28 @@ View maintain(const fs::path& profile, const Options& options, const fs::path& i
         waiting.status = "Storage cleanup is waiting for the current operation.";
         return waiting;
     }
+    std::unique_lock online(online_mutex, std::try_to_lock);
     Engine e{native(profile), installation.empty() ? fs::path{} : native(installation), options, {}};
+    e.online_available = online.owns_lock();
     if (options.action == Action::Preview) {
         e.options.dry_run = true;
         e.result.preview = true;
     }
+    bool recovery_kept = false;
     try {
         ordinary(e.root);
-        if (options.action == Action::Scan)
+        if (options.action == Action::Scan) {
+            e.phase("Measuring storage...");
             e.inventory();
-        else if (options.action == Action::Images)
+        } else if (options.action == Action::Images) {
+            e.phase("Checking cached artwork...");
             e.images();
-        else if (options.action == Action::ClearCaches) {
+        } else if (options.action == Action::ClearCaches) {
+            e.phase("Clearing cached artwork and unused online files...");
             e.images();
             e.online();
         } else if (options.action == Action::OldDumps) {
+            e.phase("Checking old crash dumps...");
             for (const auto& p : e.children(e.root / "crash-dumps")) {
                 const auto n = utf8(p.filename());
                 if (n.size() == 31 && n.starts_with("DKR-R-crash-") && n.ends_with(".dmp") && n[20] == '-' &&
@@ -862,32 +932,49 @@ View maintain(const fs::path& profile, const Options& options, const fs::path& i
                     e.erase(p, e.root / "crash-dumps");
             }
         } else {
-            if (options.action == Action::Preview)
+            if (options.action == Action::Preview) {
+                e.phase("Measuring storage for the cleanup preview...");
                 e.inventory();
+            }
+            e.phase("Finishing previously retired files...");
             e.retired();
             // A malformed owner index protects the whole mod area. Other
             // categories can still be maintained without interpreting it.
             try {
+                e.phase("Checking completed mod installations...");
                 e.receipts();
                 e.store();
+                e.phase("Verifying installed mod downloads...");
                 e.downloads();
+                e.phase("Checking unreferenced mod history...");
                 e.immutable_libraries();
             } catch (const std::exception&) {
-                e.result.status = "Some mod recovery files were kept because their receipts need checking.";
+                e.stop();
+                recovery_kept = true;
             }
+            e.phase("Checking cached artwork...");
             e.images();
+            e.phase("Checking unused online files...");
             e.online();
+            e.phase("Clearing abandoned preparation files...");
             e.abandoned();
+            e.phase("Checking completed update files...");
             e.updates();
         }
-        if (e.result.status == "Storage has not been measured yet.")
-            e.result.status = e.result.preview ? "Safe cleanup preview ready."
-                              : options.action == Action::Scan
-                                  ? "Storage measured. Saves, installed content and user exports are protected."
-                                  : "Storage cleanup finished. Saves and installed content were kept.";
+        e.result.status = e.result.preview ? "Safe cleanup preview ready."
+                          : options.action == Action::Scan
+                              ? "Storage measured. Saves, installed content and user exports are protected."
+                          : options.action == Action::Automatic
+                              ? "Startup cleanup finished. Automatic cleanup will run again next launch."
+                              : "Storage cleanup finished. Saves and installed content were kept.";
+        if (recovery_kept)
+            e.result.status += " Some mod recovery receipts need checking; those files were kept.";
+        if (!e.online_available)
+            e.result.status += " Online files in use were kept.";
     } catch (const std::exception& error) {
         e.result.status = error.what();
-        e.result.deferred = options.stop.stop_requested() || publishers_waiting.load() != 0;
+        e.result.deferred =
+            options.stop.stop_requested() || publishers_waiting.load() != 0 || online_publishers_waiting.load() != 0;
     }
     return e.result;
 }

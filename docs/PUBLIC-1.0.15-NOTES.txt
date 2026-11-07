@@ -59,8 +59,10 @@ increase correction work. A very small window can cause more waiting.
 STORAGE CLEANUP
 I've also added cleanup for files DKR-R no longer needs. Downloaded mod ZIPs,
 leftover install files and old caches were building up far too quickly.
-Cleanup runs while the launcher is idle and pauses while you're playing or
-changing mods. Your saves, ROMs, installed mods and texture packs are kept.
+Automatic cleanup runs once each time you start DKR-R. It can carry on while
+you're playing, at low priority. Browsing the library or installing mods won't
+keep setting it off again. Your saves, ROMs, installed mods and texture packs
+are kept, and files being used by Online are left alone.
 
 You'll find the controls in About DKR-R > Support > Storage. You can turn
 automatic cleanup off, check how much space can be cleared, or clear it yourself.

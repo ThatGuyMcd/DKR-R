@@ -391,8 +391,9 @@ def storage_guards(name,text):
     if name not in anchors and name!='online_mod_profile.cpp':return text
     text='#include "'+(ROOT/'runtime-recomp/src/game/storage/maintenance.hpp').as_posix()+'"\n'+text
     for anchor in anchors.get(name,[]):
-        replacement=anchor+'\n    dkr::storage::Activity storage_activity;'
-        if not re.search(re.escape(anchor)+r'\s*dkr::storage::Activity storage_activity;',text):text=once(text,anchor,replacement)
+        guard='OnlineActivity' if name=='online_mod_sync.cpp' else 'Activity'
+        replacement=anchor+'\n    dkr::storage::'+guard+' storage_activity;'
+        if not re.search(re.escape(anchor)+r'\s*dkr::storage::'+guard+r' storage_activity;',text):text=once(text,anchor,replacement)
     if name=='online_mod_profile.cpp':
         anchor='try{validate_profile(*out);'
         replacement=anchor+'dkr::storage::used(out->directory);'
