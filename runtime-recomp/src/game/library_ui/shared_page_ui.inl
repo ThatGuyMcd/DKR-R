@@ -62,5 +62,5 @@ void DrawSharedUiPage(float width,int page,bool live,const PlayPageContext* laun
     if((!g_launcher_layout_root.empty()||g_surface_probe)&&g_surface_scroll_bottom)ImGui::SetScrollY(ImGui::GetScrollMaxY());
     LibrarySurfaceProbe(live,page,width,ImGui::GetCursorPosY()-top);
     g_launcher_rom=previous;
-    ImGui::Dummy({0.F,54.F});
+    if(page!=kPagePlay)ImGui::Dummy({0.F,54.F});
 }

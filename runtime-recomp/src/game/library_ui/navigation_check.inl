@@ -15,8 +15,11 @@ bool g_surface_scroll_bottom=false;
 #include "control_check.inl"
 #include "startup_check.inl"
 #include "handoff_check.inl"
+bool PlayLaunchLayoutCheck();
+void PlayLaunchCaptureCheck();
 
 void LibrarySelectCheckView(int step,int& page) {
+    if(PlayLaunchLayoutCheck()){page=0;return;}
     if(LibraryManualHandoffCheck()){page=0;return;}
     if(g_localisation_cycle_check) {
         const auto languages=dkr::localisation::languages();
@@ -69,9 +72,9 @@ void LauncherLayoutCheckCapture(SDL_Renderer* renderer) {
     if(g_launcher_layout_root.empty()||g_launcher_layout_step>=int(kLauncherLayoutPages.size()))return;
     if(!g_launcher_layout_sized) {
         const std::string_view size=std::getenv("DKR_OWNED_CHECK_LAYOUT_UI");
-        const bool deck=size=="deck",wide=size=="wide";
+        const bool deck=size=="deck",wide=size=="wide",compact_window=size=="small",short_window=size=="short";
         auto* window=SDL_RenderGetWindow(renderer);
-        SDL_SetWindowFullscreen(window,0);SDL_SetWindowSize(window,deck?1280:wide?2560:1920,deck?800:wide?1440:1080);
+        SDL_SetWindowFullscreen(window,0);SDL_SetWindowSize(window,compact_window?1024:deck||short_window?1280:wide?2560:1920,compact_window?600:short_window?720:deck?800:wide?1440:1080);
         g_launcher_layout_sized=true;g_launcher_layout_at=PaddockClock();return;
     }
     if(PaddockClock()-g_launcher_layout_at<1.0)return;
@@ -90,7 +93,9 @@ void LauncherLayoutCheckCapture(SDL_Renderer* renderer) {
         g_launcher_layout_step,dkr::localisation::active().data(),ImGui::GetIO().Fonts->TexWidth,
         ImGui::GetIO().Fonts->TexHeight,ImGui::GetIO().Fonts->TexID);
     if(g_localisation_cycle_check&&g_launcher_layout_step+1==int(kLauncherLayoutPages.size()))SaveSettings();
+    PlayLaunchCaptureCheck();
     ++g_launcher_layout_step;g_launcher_layout_at=PaddockClock();
+    if(PlayLaunchLayoutCheck()&&g_launcher_layout_step==2){SDL_Event quit{};quit.type=SDL_QUIT;SDL_PushEvent(&quit);}
 }
 
 bool g_surface_probe=false;
@@ -139,7 +144,7 @@ void LibraryNavigationCheckLauncherInit(const std::filesystem::path& root) {
         }
         g_library_navigation_check=true;
         if(const char* layout=std::getenv("DKR_OWNED_CHECK_LAYOUT_UI");layout&&
-           (std::string_view(layout)=="desktop"||std::string_view(layout)=="deck"||std::string_view(layout)=="wide"))g_launcher_layout_root=root;
+           (std::string_view(layout)=="desktop"||std::string_view(layout)=="deck"||std::string_view(layout)=="wide"||std::string_view(layout)=="small"||std::string_view(layout)=="short"))g_launcher_layout_root=root;
         const char* controls=std::getenv("DKR_LIBRARY_CONTROLS_CHECK");
         g_library_controls_check=!g_launcher_layout_root.empty()&&controls&&std::string_view(controls)=="1";
     }

@@ -22,6 +22,9 @@ The reported missing vanilla online car textures/road wheels remain unresolved.
 
 Play contains Achievements, Session mods and Save Manager. Session mods OFF
 bypasses selected content for the next session without changing its selections.
+Start Game stays visible at the bottom of Play while its settings scroll.
+It is selected when Play opens with a ready ROM. The overlay keeps Return to
+the Race in the same position.
 Skip launcher can be turned off again in the in-game Play overlay. Escape, F1
 or controller Back/View opens that overlay.
 

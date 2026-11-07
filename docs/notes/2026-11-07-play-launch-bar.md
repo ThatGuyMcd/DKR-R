@@ -1,0 +1,41 @@
+# Play launch bar
+
+Play now keeps its heading and launch bar outside a scrolling content child.
+Community Spotlight remains above Ready to Race. The settings, save preview,
+Achievements, Session mods and Save Manager remain accessible in that child.
+The launch action is 48 logical pixels high, with a separate ROM/session summary.
+
+A ready ROM selects Start Game when Play opens, including before a controller
+is connected. Import and launch locks still apply. Focus waits while a modal is
+open; the existing ROM-loaded focus request is retained. Without a ROM the
+visible launch action is disabled and the ROM controls remain available.
+
+The launcher and overlay use the same page. The live action remains Return to
+the Race. Offline launches retain lobby-leave confirmation and the existing
+Starting Game fade/preparation flow. This does not change session mod selection,
+save ownership, simulation or online compatibility.
+
+Right-stick scrolling uses the inner content when focus is on the pinned action.
+Other pages restore their normal scrolling target, and popup scrolling keeps
+priority. The host UI interaction checks exercise this with both sidebar input
+modes and both live/launcher navigation contexts.
+
+## Native layout qualification
+
+`runtime-recomp/tests/play_launch_layout_tests.py` runs a complete production
+package against a fresh, token-authenticated disposable profile. It captures
+the actual SDL UI, checks focus and clipping, then drives right-stick scrolling
+and checks that the launch action stays in place. Ordinary startup cannot arm
+the harness. It is excluded from the ROM-free tooling suite because it requires
+a production runtime and a native window.
+
+Windows and Linux checks cover 1024x600, 1280x720, 1280x800 and 1920x1080,
+the paired live page branch, both sidebar modes, English/German/Ukrainian, and
+the no-ROM state. Additional package checks read back the Windows ZIP and
+AppImage contents. The exact x86_64 AppImage is also supplied for Steam Deck.
+
+These are desktop/WSL native UI checks, not a physical Steam Deck performance
+measurement. ARM64 is cross-built and package-audited; physical ARM graphics
+remain untested. The Linux host suite's Windows-mount regression-harness timeout
+is checked separately by running its identical 25 tests from native Linux
+storage. Evidence and disposable profiles stay outside the repository.

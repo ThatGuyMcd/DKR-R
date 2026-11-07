@@ -2,6 +2,8 @@
 // polling. No gamepad event is allowed to navigate two UI surfaces at once.
 bool LibrarySidebarInputBlocked();
 bool LibraryContentInputCaptured();
+bool PlayLaunchLayoutCheck();
+extern int g_launcher_layout_step;
 struct LibraryNavContext {
     ImGuiContext* context=nullptr;
     std::array<bool,6> physical{};
@@ -12,6 +14,7 @@ struct LibraryNavContext {
     bool content_motion=false;
     std::array<bool,4> focus_directions{};
     ImGuiWindow* content=nullptr;
+    ImGuiWindow* scroll_content=nullptr;
 };
 std::array<LibraryNavContext,2> g_library_navigation;
 bool LibraryNavigationActive(const LibraryNavContext& state) {
@@ -20,11 +23,13 @@ bool LibraryNavigationActive(const LibraryNavContext& state) {
 }
 void LibraryNavigationScroll(LibraryNavContext& state) {
     auto* context=state.context;
+    const bool play_check=PlayLaunchLayoutCheck();
+    if(play_check)context->IO.BackendFlags|=ImGuiBackendFlags_HasGamepad;
     if(!LibraryNavigationActive(state)||LibraryContentInputCaptured()||
        !(context->IO.ConfigFlags&ImGuiConfigFlags_NavEnableGamepad)||
        !(context->IO.BackendFlags&ImGuiBackendFlags_HasGamepad)){state.scroll_armed=false;return;}
-    const float right_x=dkr::library_ui::navigation_axes[2].load(std::memory_order_relaxed);
-    const float right_y=dkr::library_ui::navigation_axes[3].load(std::memory_order_relaxed);
+    const float right_x=play_check?0.F:dkr::library_ui::navigation_axes[2].load(std::memory_order_relaxed);
+    const float right_y=play_check?(g_launcher_layout_step==1?1.F:0.F):dkr::library_ui::navigation_axes[3].load(std::memory_order_relaxed);
     if(std::abs(right_x)<.25F&&std::abs(right_y)<.25F)state.scroll_armed=true;
     if(!state.scroll_armed)return;
     auto* target=context->NavWindow;
@@ -33,11 +38,11 @@ void LibraryNavigationScroll(LibraryNavContext& state) {
         content|=ancestor==state.content;popup|=(ancestor->Flags&ImGuiWindowFlags_Popup)!=0;
     }
     if(context->OpenPopupStack.Size&&!popup)return;
-    if(!content&&!popup)target=state.content;
+    if(!popup&&(!content||target==state.content))target=state.scroll_content?state.scroll_content:state.content;
     if(!target||target->Flags&ImGuiWindowFlags_NoNavInputs)return;
     const float speed=target->CalcFontSize()*100.F*std::min(context->IO.DeltaTime,.1F);
     for(unsigned axis=0;axis<2;++axis) {
-        const float value=dkr::library_ui::navigation_axes[axis+2].load(std::memory_order_relaxed);
+        const float value=axis?right_y:right_x;
         if(std::abs(value)<.05F)continue;
         for(auto* window=target;window;window=window->ParentWindow) {
             if((axis?window->ScrollMax.y:window->ScrollMax.x)>0.F) {
@@ -130,7 +135,12 @@ void LibraryInstallNavigationHook(bool live) {
     hook.Type=ImGuiContextHookType_NewFramePost;ImGui::AddContextHook(context,&hook);
 }
 void LibraryNavigationContentWindow() {
-    for(auto& state:g_library_navigation)if(state.context==ImGui::GetCurrentContext())state.content=ImGui::GetCurrentWindow();
+    for(auto& state:g_library_navigation)if(state.context==ImGui::GetCurrentContext()) {
+        state.content=ImGui::GetCurrentWindow();state.scroll_content=nullptr;
+    }
+}
+void LibraryNavigationScrollWindow(ImGuiWindow* window) {
+    for(auto& state:g_library_navigation)if(state.context==ImGui::GetCurrentContext())state.scroll_content=window;
 }
 int LibraryTakeSidebarStep(bool live) {return std::exchange(g_library_navigation[live?1:0].pending,0);}
 bool LibraryTakeContentMotion(bool live) {return std::exchange(g_library_navigation[live?1:0].content_motion,false);}

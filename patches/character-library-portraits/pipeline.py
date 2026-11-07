@@ -62,6 +62,52 @@ def parity_play(text):
         'PaddockRaceButton(live?"RETURN TO THE RACE":lobby ? "LEAVE LOBBY & PLAY OFFLINE" : "PLAY OFFLINE - Diddy Kong Racing",')
     text=once(text,'            if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");',
         '            if(live)g_overlay_visible.store(false,std::memory_order_release);\n            else if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");')
+    text=once(text,'void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=false) {',
+        '#include "'+(ui/'play_launch_bar.inl').as_posix()+'"\n\nvoid DrawPlayPage(float available_width, const PlayPageContext& play,bool live=false) {')
+    text=once(text,'        state.arrived_at = -10.0;\n        state.focus = PlayPageState::Focus::None;',
+        '        state.arrived_at = -10.0;\n        state.focus = play.rom_ready ? PlayPageState::Focus::Start : PlayPageState::Focus::Browse;')
+    text=once(text,'    const float width = std::max(available_width, 1.0F);',
+        '    float width = std::max(available_width, 1.0F);')
+    text=once(text,'    PaddockGap(20.0F);\n\n    DrawLauncherFeatured(width,live);',
+        '''    PaddockGap(12.0F);
+    const auto launch_summary=PlayLaunchSummary(play,live);
+    const float launch_height=PlayLaunchBarHeight(width,launch_summary);
+    const float body_height=std::max(1.F,ImGui::GetContentRegionAvail().y-launch_height);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0.F,0.F});
+    ImGui::BeginChild("play-scroll",{width,body_height},false,
+        ImGuiWindowFlags_NavFlattened|ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    ImGui::PopStyleVar();
+    LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
+    width=std::max(1.F,ImGui::GetContentRegionAvail().x-8.F);
+    DrawLauncherFeatured(width,live);''')
+    text=once(text,'    {\n        const bool can_start = live ||',
+        '''    PaddockGap(16.F);
+    PlayLaunchBodyCheck();
+    ImGui::EndChild();
+    width=std::max(1.F,available_width);
+    DrawPlayLaunchSummary(width,launch_summary);
+    {
+        const bool can_start = live ||''')
+    text=once(text,'        RaceButtonLook look;\n        look.hover_in = 0.12F;\n        if (can_start)',
+        '        RaceButtonLook look;\n        look.font_px=21.F;\n        look.hover_in = 0.12F;\n        if (can_start)')
+    text=once(text,'        if (state.focus == PlayPageState::Focus::Start && can_start) {\n            if (nav) ImGui::SetKeyboardFocusHere();',
+        '        if (state.focus == PlayPageState::Focus::Start && can_start && ImGui::GetCurrentContext()->OpenPopupStack.empty()) {\n            ImGui::GetCurrentContext()->NavDisableHighlight=false;\n            ImGui::SetKeyboardFocusHere();')
+    text=once(text,'"PLAY OFFLINE - Diddy Kong Racing", {width, 68.0F}, look)',
+        'dkr::localisation::text("play.start_game").data(), {width, kPlayStartHeight}, look)')
+    text=once(text,'        ImGui::EndDisabled();\n        ImGui::PopStyleVar();\n    }',
+        '        ImGui::EndDisabled();\n        PlayLaunchButtonCheck(can_start);\n        ImGui::PopStyleVar();\n    }')
+    text=once(text,'''    if (!play.rom_ready) {
+        PaddockGap(8.0F);
+        const PaddockType hint = PaddockReading(14.0F, false, 1.5F);
+        constexpr std::string_view text = "Load a ROM to start.";
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        PaddockTextStyle style;
+        style.colour = PaddockCol(0xB0C9CC);
+        style.centre = true;
+        PaddockTextAt(ImGui::GetWindowDrawList(), hint, at, width, text, style);
+        ImGui::Dummy({width, hint.line});
+    }
+''','')
     return text
 
 def consistent_browser(text):

@@ -3,6 +3,7 @@
   "name": "Русский (Russian)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "НАЧАТЬ ИГРУ",
     "play.skip_launcher": "Пропускать лаунчер",
     "play.skip_launcher_help": "Автоматически запускать выбранную игру. Отключить можно в разделе «Играть» во внутриигровом меню.",
     "play.starting_game": "Запуск игры",

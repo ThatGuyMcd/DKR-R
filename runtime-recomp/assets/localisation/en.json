@@ -3,6 +3,10 @@
   "name": "English",
   "review": "Source English",
   "messages": {
+    "play.start_game": {
+      "text": "START GAME",
+      "context": "Pinned Play action, initially selected when a ROM is ready. Starts the normal offline launch flow."
+    },
     "play.skip_launcher": {
       "text": "Skip launcher",
       "context": "Local startup preference; shared by launcher and in-game Play overlay."

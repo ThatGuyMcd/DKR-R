@@ -56,6 +56,13 @@ and a 14-frame prediction window. Your existing saved preferences are kept.
 A larger window can help with distant racers but needs more memory and can
 increase correction work. A very small window can cause more waiting.
 
+PLAY PAGE
+Start Game now stays at the bottom of the Play page, so you don't need to
+scroll down to find it on smaller screens. The button is shorter, but still
+easy to find, and is selected when you open Play with a ROM ready to go.
+The settings and Community Spotlight scroll above it. The in-game overlay
+uses the same layout, with Return to the Race in that spot.
+
 STORAGE CLEANUP
 I've also added cleanup for files DKR-R no longer needs. Downloaded mod ZIPs,
 leftover install files and old caches were building up far too quickly.

@@ -2,6 +2,10 @@
 
 ## 1.0.15 — 2026-11-07
 
+- Keep Start Game visible in a compact bar at the bottom of Play while the
+  settings and Community Spotlight scroll above it. Select it when Play opens
+  with a ready ROM. The launcher and in-game overlay share the same layout.
+
 - Tidy each successful Mod Library install as soon as it finishes. Verify the
   installed copy before clearing its download and preparation files; keep saved
   editions and recovery backups. This only checks the completed package and

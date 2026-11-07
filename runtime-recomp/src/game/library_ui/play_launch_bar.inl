@@ -1,0 +1,80 @@
+// The header and launch action stay outside the scrolling Play content on
+// both UI surfaces. Heights are in the same logical pixels as other controls.
+constexpr float kPlayStartHeight = 48.F;
+
+// Available only with the existing token-authenticated disposable UI profile.
+extern std::filesystem::path g_launcher_layout_root;
+extern int g_launcher_layout_step;
+bool PlayLaunchLayoutCheck() {
+    const char* value = std::getenv("DKR_OWNED_CHECK_PLAY_LAUNCH");
+    return !g_launcher_layout_root.empty() && value && std::string_view(value) == "1";
+}
+struct PlayLaunchGeometry {
+    ImVec2 button_min{}, button_max{}, clip_min{}, clip_max{};
+    float body_scroll = 0.F, body_max = 0.F, parent_scroll = 0.F;
+    bool focused = false, enabled = false;
+};
+PlayLaunchGeometry g_play_launch_geometry;
+void PlayLaunchBodyCheck() {
+    if (!PlayLaunchLayoutCheck()) return;
+    auto& geometry = g_play_launch_geometry;
+    geometry.body_scroll = ImGui::GetScrollY();
+    geometry.body_max = ImGui::GetScrollMaxY();
+}
+void LibraryNavigationScrollWindow(ImGuiWindow*);
+void PlayLaunchButtonCheck(bool enabled) {
+    if (!PlayLaunchLayoutCheck()) return;
+    auto& geometry = g_play_launch_geometry;
+    const auto* window = ImGui::GetCurrentWindow();
+    geometry.button_min = ImGui::GetItemRectMin();
+    geometry.button_max = ImGui::GetItemRectMax();
+    geometry.clip_min = window->ClipRect.Min;
+    geometry.clip_max = window->ClipRect.Max;
+    geometry.parent_scroll = ImGui::GetScrollY();
+    geometry.focused = ImGui::IsItemFocused();
+    geometry.enabled = enabled;
+}
+void PlayLaunchCaptureCheck() {
+    if (!PlayLaunchLayoutCheck()) return;
+    const auto& g = g_play_launch_geometry;
+    const bool visible = g.button_min.x >= g.clip_min.x && g.button_min.y >= g.clip_min.y &&
+                         g.button_max.x <= g.clip_max.x && g.button_max.y <= g.clip_max.y;
+    std::fprintf(stderr, "[play-launch][isolated-check] step=%d visible=%d focused=%d enabled=%d "
+        "height=%.1f top=%.1f bottom=%.1f body-scroll=%.1f body-max=%.1f parent-scroll=%.1f\n",
+        g_launcher_layout_step, int(visible), int(g.focused), int(g.enabled),
+        g.button_max.y - g.button_min.y, g.button_min.y, g.button_max.y,
+        g.body_scroll, g.body_max, g.parent_scroll);
+}
+
+std::string PlayLaunchSummary(const PlayPageContext& play, bool live) {
+    std::string game;
+    for (const auto& entry : play.rom_catalog) {
+        if (entry.path == play.selected_rom) {
+            game = entry.label;
+            break;
+        }
+    }
+    if (game.empty()) game = std::string(dkr::localisation::source(
+        play.rom_ready ? "Diddy Kong Racing" : "Load a ROM to start."));
+    const bool mods = live ? dkr::session_content::running_modded.load()
+                           : dkr::session_content::next_enabled.load();
+    return game + "  |  " + std::string(dkr::localisation::source(SessionModsCaption(mods)));
+}
+
+float PlayLaunchBarHeight(float width, const std::string& summary) {
+    return 10.F + PaddockTextHeight(PaddockReading(13.F, false, 1.4F), summary,
+                                   std::max(1.F, width - 8.F)) +
+           8.F + kPlayStartHeight + 10.F;
+}
+
+void DrawPlayLaunchSummary(float width, const std::string& summary) {
+    const auto at = ImGui::GetCursorScreenPos();
+    auto* draw = ImGui::GetWindowDrawList();
+    // Opaque underlay keeps moving content from showing through the footer.
+    draw->AddRectFilled(at, {at.x + width, at.y + PlayLaunchBarHeight(width, summary)},
+                        PaddockCol(0x092534));
+    draw->AddLine(at, {at.x + width, at.y}, PaddockCol(0x325365));
+    PaddockGap(10.F);
+    PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), summary, width - 8.F);
+    PaddockGap(8.F);
+}

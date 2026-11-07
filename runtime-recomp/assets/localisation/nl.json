@@ -3,6 +3,7 @@
   "name": "Nederlands (Dutch)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "SPEL STARTEN",
     "play.skip_launcher": "Launcher overslaan",
     "play.skip_launcher_help": "Start het geselecteerde spel automatisch. Schakel dit uit via Spelen in de overlay tijdens het spelen.",
     "play.starting_game": "Spel starten",

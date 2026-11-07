@@ -3,6 +3,7 @@
   "name": "Português — Portugal (Portuguese, Portugal)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "INICIAR JOGO",
     "play.skip_launcher": "Ignorar o iniciador",
     "play.skip_launcher_help": "Inicia automaticamente o jogo selecionado. Desative esta opção em Jogar no menu durante o jogo.",
     "play.starting_game": "A iniciar o jogo",

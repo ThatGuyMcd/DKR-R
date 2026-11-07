@@ -3,6 +3,7 @@
   "name": "Polski (Polish)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "ROZPOCZNIJ GRĘ",
     "play.skip_launcher": "Pomiń launcher",
     "play.skip_launcher_help": "Automatycznie uruchamiaj wybraną grę. Wyłącz tę opcję w sekcji Graj w nakładce gry.",
     "play.starting_game": "Uruchamianie gry",

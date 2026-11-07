@@ -3,6 +3,7 @@
   "name": "Italiano (Italian)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "AVVIA GIOCO",
     "play.skip_launcher": "Salta il launcher",
     "play.skip_launcher_help": "Avvia automaticamente il gioco selezionato. Disattiva questa opzione in Gioca nel menu in gioco.",
     "play.starting_game": "Avvio del gioco",

@@ -14,7 +14,44 @@ bool blocked=false;
 bool captured=false;
 bool LibrarySidebarInputBlocked(){return blocked;}
 bool LibraryContentInputCaptured(){return captured;}
+bool PlayLaunchLayoutCheck(){return false;}
+int g_launcher_layout_step=0;
 #include "library_ui/navigation_input.inl"
+void PinnedContentScrollCase(bool live,dkr::library_ui::SidebarInput mode) {
+    using namespace dkr::library_ui;
+    ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;
+    io.DisplaySize={800,600};io.DeltaTime=1.F/60;
+    io.ConfigFlags|=ImGuiConfigFlags_NavEnableGamepad;
+    unsigned char* pixels;int w,h;io.Fonts->GetTexDataAsRGBA32(&pixels,&w,&h);
+    sidebar_input=mode;navigation_connected=1;navigation_buttons=0;navigation_press_edges=0;
+    for(unsigned axis=0;axis<4;++axis)record_navigation_axis(axis,0);
+    LibraryInstallNavigationHook(live);
+    ImGuiWindow* content=nullptr;ImGuiWindow* body=nullptr;ImGuiID start=0;
+    const auto frame=[&](bool initial=false,bool pinned=true) {
+        ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({480,320});
+        ImGui::Begin("Play",nullptr,ImGuiWindowFlags_NoSavedSettings);
+        LibraryNavigationContentWindow();content=ImGui::GetCurrentWindow();
+        if(pinned) {
+            ImGui::BeginChild("Content",{440,210},false,ImGuiWindowFlags_NavFlattened);
+            body=ImGui::GetCurrentWindow();LibraryNavigationScrollWindow(body);
+        }
+        for(int i=0;i<24;++i)ImGui::Button(("Setting "+std::to_string(i)).c_str(),{240,36});
+        if(pinned) {
+            ImGui::EndChild();if(initial)ImGui::SetKeyboardFocusHere();
+            ImGui::Button("Start Game",{440,48});start=ImGui::GetItemID();
+        }
+        ImGui::End();ImGui::Render();
+    };
+    frame(true);frame();frame();assert(GImGui->NavId==start&&content->Scroll.y==0);
+    record_navigation_axis(3,.9F);for(int i=0;i<8;++i)frame();
+    assert(body->Scroll.y>60&&content->Scroll.y==0&&GImGui->NavId==start);
+    record_navigation_axis(3,0);frame();frame();
+    // Opening another page must discard the inner target and scroll that page.
+    frame(false,false);frame(false,false);
+    record_navigation_axis(3,.9F);for(int i=0;i<8;++i)frame(false,false);
+    assert(content->Scroll.y>60);
+    record_navigation_axis(3,0);navigation_connected=0;ImGui::DestroyContext();
+}
 void NavigationInteractionCase(bool live,dkr::library_ui::SidebarInput mode) {
     using namespace dkr::library_ui;
     ImGui::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;
@@ -224,6 +261,8 @@ int main() {
         ImGui::EndFrame();
     }
     ImGui::DestroyContext();
-    for(bool live:{false,true})for(auto mode:{SidebarInput::Shoulders,SidebarInput::Dpad})NavigationInteractionCase(live,mode);
+    for(bool live:{false,true})for(auto mode:{SidebarInput::Shoulders,SidebarInput::Dpad}) {
+        NavigationInteractionCase(live,mode);PinnedContentScrollCase(live,mode);
+    }
     std::cout<<"Shared sidebar routing: polling deduplication, content isolation, sticks, modal/release gates and all 20 bounded seasonal tiles passed\n";
 }
