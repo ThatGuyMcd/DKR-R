@@ -2,6 +2,11 @@
 
 ## 1.0.15 — 2026-11-07
 
+- Fix getting stuck on Start Game when navigating Play with a controller. Show
+  its scrollbar only when needed, against the panel edge. Keep the left stick
+  out of the sidebar navigation switch, remove the Session Mods tooltip and
+  extend the Save Manager draft bar to the panel edges.
+
 - Keep Start Game visible in a compact bar at the bottom of Play while the
   settings and Community Spotlight scroll above it. The footer fills the panel
   edges, with a narrower, centred button. Select it when Play opens

@@ -15,11 +15,28 @@ struct LibraryNavContext {
     std::array<bool,4> focus_directions{};
     ImGuiWindow* content=nullptr;
     ImGuiWindow* scroll_content=nullptr;
+    ImGuiID pinned_action=0;
 };
 std::array<LibraryNavContext,2> g_library_navigation;
 bool LibraryNavigationActive(const LibraryNavContext& state) {
     return !state.context->IO.AppFocusLost&&
         (&state!=&g_library_navigation[1]||g_overlay_visible.load());
+}
+void LibraryNavigationEnterBody(LibraryNavContext& state) {
+    auto& context=*state.context;
+    // The pinned action sits outside the scrolling child. Flattened ImGui
+    // navigation only scores visible child items, so an empty/clipped slice
+    // can otherwise strand focus on that action. Restore the child's last
+    // selection (or initialise its first control) on an explicit Up request.
+    if(!LibraryNavigationActive(state)||LibraryContentInputCaptured()||context.OpenPopupStack.Size||
+       context.ActiveId||!state.pinned_action||context.NavId!=state.pinned_action||
+       context.NavWindow!=state.content||!state.scroll_content||
+       !context.NavMoveSubmitted||context.NavMoveDir!=ImGuiDir_Up)return;
+    ImGui::NavMoveRequestCancel();
+    ImGui::FocusWindow(state.scroll_content);
+    ImGui::NavInitWindow(state.scroll_content,false);
+    if(context.NavInitRequest)context.NavInitRequestFromMove=true;
+    context.NavDisableHighlight=false;
 }
 void LibraryNavigationScroll(LibraryNavContext& state) {
     auto* context=state.context;
@@ -29,7 +46,7 @@ void LibraryNavigationScroll(LibraryNavContext& state) {
        !(context->IO.ConfigFlags&ImGuiConfigFlags_NavEnableGamepad)||
        !(context->IO.BackendFlags&ImGuiBackendFlags_HasGamepad)){state.scroll_armed=false;return;}
     const float right_x=play_check?0.F:dkr::library_ui::navigation_axes[2].load(std::memory_order_relaxed);
-    const float right_y=play_check?(g_launcher_layout_step==1?1.F:0.F):dkr::library_ui::navigation_axes[3].load(std::memory_order_relaxed);
+    const float right_y=play_check?(g_launcher_layout_step==2?1.F:0.F):dkr::library_ui::navigation_axes[3].load(std::memory_order_relaxed);
     if(std::abs(right_x)<.25F&&std::abs(right_y)<.25F)state.scroll_armed=true;
     if(!state.scroll_armed)return;
     auto* target=context->NavWindow;
@@ -56,8 +73,8 @@ void LibraryNavigationScroll(LibraryNavContext& state) {
 }
 void LibraryNavigationHook(ImGuiContext* context,ImGuiContextHook* hook) {
     auto& state=*static_cast<LibraryNavContext*>(hook->UserData);
-    if(hook->Type==ImGuiContextHookType_NewFramePost){LibraryNavigationScroll(state);return;}
-    const int connected=dkr::library_ui::navigation_connected.load(std::memory_order_relaxed);
+    if(hook->Type==ImGuiContextHookType_NewFramePost){LibraryNavigationEnterBody(state);LibraryNavigationScroll(state);return;}
+    const int connected=PlayLaunchLayoutCheck()?1:dkr::library_ui::navigation_connected.load(std::memory_order_relaxed);
     if(connected>0)context->IO.BackendFlags|=ImGuiBackendFlags_HasGamepad;
     else if(connected==0)context->IO.BackendFlags&=~ImGuiBackendFlags_HasGamepad;
     const auto mode=dkr::library_ui::sidebar_input.load();
@@ -89,8 +106,9 @@ void LibraryNavigationHook(ImGuiContext* context,ImGuiContextHook* hook) {
         constexpr std::array<ImGuiKey,4> directions{ImGuiKey_GamepadDpadLeft,ImGuiKey_GamepadDpadRight,
             ImGuiKey_GamepadDpadUp,ImGuiKey_GamepadDpadDown};
         constexpr std::array<unsigned,4> physical_index{2,3,0,1};
-        const float x=dkr::library_ui::navigation_axes[0].load(std::memory_order_relaxed);
-        const float y=dkr::library_ui::navigation_axes[1].load(std::memory_order_relaxed);
+        const bool play_check=PlayLaunchLayoutCheck();
+        const float x=play_check?(g_launcher_layout_step==3?-.9F:g_launcher_layout_step==5?.9F:0.F):dkr::library_ui::navigation_axes[0].load(std::memory_order_relaxed);
+        const float y=play_check?(g_launcher_layout_step==1?-.9F:g_launcher_layout_step==4?.9F:0.F):dkr::library_ui::navigation_axes[1].load(std::memory_order_relaxed);
         const std::array<float,4> magnitude{std::max(0.F,-x),std::max(0.F,x),std::max(0.F,-y),std::max(0.F,y)};
         if(!LibraryNavigationActive(state))state.stick_armed=false;
         else if(std::abs(x)<.25F&&std::abs(y)<.25F)state.stick_armed=true;
@@ -136,11 +154,14 @@ void LibraryInstallNavigationHook(bool live) {
 }
 void LibraryNavigationContentWindow() {
     for(auto& state:g_library_navigation)if(state.context==ImGui::GetCurrentContext()) {
-        state.content=ImGui::GetCurrentWindow();state.scroll_content=nullptr;
+        state.content=ImGui::GetCurrentWindow();state.scroll_content=nullptr;state.pinned_action=0;
     }
 }
 void LibraryNavigationScrollWindow(ImGuiWindow* window) {
     for(auto& state:g_library_navigation)if(state.context==ImGui::GetCurrentContext())state.scroll_content=window;
+}
+void LibraryNavigationPinnedAction(ImGuiID id) {
+    for(auto& state:g_library_navigation)if(state.context==ImGui::GetCurrentContext())state.pinned_action=id;
 }
 int LibraryTakeSidebarStep(bool live) {return std::exchange(g_library_navigation[live?1:0].pending,0);}
 bool LibraryTakeContentMotion(bool live) {return std::exchange(g_library_navigation[live?1:0].content_motion,false);}

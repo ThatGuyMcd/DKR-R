@@ -74,11 +74,12 @@ def parity_play(text):
     const float launch_height=PlayLaunchBarHeight(width,launch_summary);
     const float body_height=std::max(1.F,ImGui::GetContentRegionAvail().y-launch_height);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0.F,0.F});
-    ImGui::BeginChild("play-scroll",{width,body_height},false,
-        ImGuiWindowFlags_NavFlattened|ImGuiWindowFlags_AlwaysVerticalScrollbar);
+    const float body_width=std::max(1.F,PanelFooterBounds(ImGui::GetCurrentWindow()).Max.x-ImGui::GetCursorScreenPos().x);
+    ImGui::BeginChild("play-scroll",{body_width,body_height},false,
+        ImGuiWindowFlags_NavFlattened);
     ImGui::PopStyleVar();
     LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
-    width=std::max(1.F,ImGui::GetContentRegionAvail().x-8.F);
+    width=std::max(1.F,std::min(available_width,ImGui::GetContentRegionAvail().x-8.F));
     DrawLauncherFeatured(width,live);''')
     text=once(text,'    {\n        const bool can_start = live ||',
         '''    PaddockGap(16.F);
@@ -1633,6 +1634,18 @@ def compose(rows,out):
                     'if(SettingsButton("Camera++ settings (F7)",inner,!live||!camera_provider||!camera_provider->editor,SettingsButtonTone::Plain,false,"Available in-game when a camera mod supplies an editor."))')
             text=stage_include(text,'graphics.inl',parity_graphics)
             def parity_saves(value):
+                value=once(value,'    const float visible_bottom = window->InnerRect.Max.y;\n    const float top = std::min(natural.y, visible_bottom - bar_height);',
+                    '''    const float visible_bottom = PanelFooterBounds(window).Max.y;
+    const float top = std::min(natural.y, visible_bottom - bar_height);
+    DrawPanelFooterBackground(window, top, PaddockCol(0x0A202C), PaddockCol(kSetBorder));
+    if(SaveDraftLayoutCheck())g_save_draft_geometry={PanelFooterBounds(window),
+        {{window->Pos.x+window->WindowBorderSize,window->Pos.y+window->WindowBorderSize},
+         {window->Pos.x+window->Size.x-window->WindowBorderSize-window->ScrollbarSizes.x,
+          window->Pos.y+window->Size.y-window->WindowBorderSize-window->ScrollbarSizes.y}},top,dirty};''')
+                value=once(value,'''    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled({natural.x, top}, {natural.x + width, top + bar_height}, PaddockCol(0x0A202C));
+    draw->AddRectFilled({natural.x, top}, {natural.x + width, top + 1.0F}, PaddockCol(kSetBorder));
+''','')
                 start=value.index('void DrawSaveManagerPage(')
                 body=value[start:]
                 first=body.index('    if(live) {')

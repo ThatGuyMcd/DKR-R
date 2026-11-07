@@ -9,7 +9,7 @@ void LibrarySidebarEvent(const SDL_Event& event) {
 
 void DrawSidebarNavigationToggle(float width,int selected) {
     using namespace dkr::library_ui;
-    ImGui::PushItemFlag(ImGuiItemFlags_NoNav,false);
+    ImGui::PushItemFlag(ImGuiItemFlags_NoNav,true);
     const auto at=ImGui::GetCursorScreenPos();
     const bool dpad=sidebar_input.load()==SidebarInput::Dpad;
     for(auto& state:g_library_navigation)if(state.context==ImGui::GetCurrentContext())state.selection=selected;

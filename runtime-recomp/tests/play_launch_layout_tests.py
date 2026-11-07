@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--surface", choices=("launcher", "overlay"), default="launcher")
     parser.add_argument("--language", default="en")
     parser.add_argument("--sidebar", choices=("shoulders", "dpad"), default="shoulders")
+    parser.add_argument("--save", type=Path, help="Check the Save Manager draft bar using an isolated copy")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -45,11 +46,17 @@ def main():
     if args.rom:
         assert args.rom.is_file(), args.rom
         (profile / "last-rom.txt").write_text(str(args.rom.resolve()) + "\n")
+    if args.save:
+        assert args.surface == "launcher", "Save editing is locked in the running overlay"
+        save_bytes = args.save.read_bytes()
+        assert len(save_bytes) == 512
+        (profile / "saves").mkdir()
+        (profile / "saves/dkr.us.v77.bin").write_bytes(save_bytes)
     env = os.environ.copy()
     env.update(
         DKR_LAUNCHER_UI_CHECK_TOKEN=token,
         DKR_OWNED_CHECK_LAYOUT_UI=args.size,
-        DKR_OWNED_CHECK_PLAY_LAUNCH="1",
+        DKR_OWNED_CHECK_PLAY_LAUNCH="save" if args.save else "1",
         DKR_OWNED_CHECK_LAYOUT_SURFACE=args.surface,
         SDL_AUDIODRIVER="dummy",
         APPDATA=str(output / "appdata"),
@@ -87,7 +94,8 @@ def main():
             raise AssertionError("The isolated layout check did not finish") from None
     text = (profile / "logs/runtime.log").read_text(errors="replace")
     rows = []
-    for match in re.finditer(r"\[play-launch\]\[isolated-check\] ([^\r\n]+)", text):
+    label = "save-draft" if args.save else "play-launch"
+    for match in re.finditer(r"\[" + label + r"\]\[isolated-check\] ([^\r\n]+)", text):
         rows.append({key: float(value) for key, value in re.findall(r"([a-z-]+)=([0-9.-]+)", match[1])})
     result = {
         "exit_code": code,
@@ -96,23 +104,32 @@ def main():
         "language": args.language,
         "sidebar": args.sidebar,
         "rom_ready": bool(args.rom),
+        "page": "saves" if args.save else "play",
         "geometry": rows,
     }
     (output / "RESULT.json").write_text(json.dumps(result, indent=2) + "\n")
-    assert code == 0 and len(rows) == 2, result
-    assert [row["step"] for row in rows] == [0, 1], result
-    assert all(row["visible"] == 1 and row["height"] == 48 and row["parent-scroll"] == 0 for row in rows), result
-    assert rows[0]["top"] == rows[1]["top"] and rows[0]["bottom"] == rows[1]["bottom"], result
-    assert rows[1]["body-scroll"] == rows[1]["body-max"], result
+    assert code == 0 and len(rows) == 6, result
+    assert [row["step"] for row in rows] == list(range(6)), result
+    if args.save:
+        assert (profile / "saves/dkr.us.v77.bin").read_bytes() == save_bytes
+        assert rows[0]["dirty"] == 0, result
+    else:
+        assert all(row["visible"] == 1 and row["height"] == 48 and row["parent-scroll"] == 0 for row in rows), result
+        assert all(row["top"] == rows[0]["top"] and row["bottom"] == rows[0]["bottom"] for row in rows), result
+        assert rows[2]["body-scroll"] == rows[2]["body-max"], result
+        assert all(row["body-scrollbar"] == (row["body-max"] > 0) for row in rows), result
+        assert all(abs(row["body-right"] - row["panel-right"]) <= 1 for row in rows), result
+        assert all(row["enabled"] == bool(args.rom) for row in rows), result
+        if args.rom:
+            assert rows[0]["focused"] == 1 and rows[1]["focused"] == 0, result
+            assert all(row["nav-main"] == 1 for row in rows), result
     for row in rows:
         for edge in ("left", "right", "bottom"):
             assert abs(row["bar-" + edge] - row["panel-" + edge]) <= 1, result
-        button_width = row["button-right"] - row["button-left"]
-        assert 0 < button_width < row["available"] * 0.9, result
-        assert abs(row["button-left"] + row["button-right"] - row["bar-left"] - row["bar-right"]) <= 2, result
-    assert all(row["enabled"] == bool(args.rom) for row in rows), result
-    if args.rom:
-        assert rows[0]["focused"] == 1, result
+        if not args.save:
+            button_width = row["button-right"] - row["button-left"]
+            assert 0 < button_width < row["available"] * 0.9, result
+            assert abs(row["button-left"] + row["button-right"] - row["bar-left"] - row["bar-right"]) <= 2, result
     dimensions = {
         "small": (1024, 600),
         "short": (1280, 720),
@@ -120,7 +137,7 @@ def main():
         "desktop": (1920, 1080),
         "wide": (2560, 1440),
     }
-    for step in range(2):
+    for step in range(6):
         data = (profile / f"layout-{step}.bmp").read_bytes()
         assert data[:2] == b"BM" and struct.unpack_from("<I", data, 2)[0] == len(data)
         width, height = struct.unpack_from("<ii", data, 18)
@@ -140,7 +157,7 @@ def main():
         for x, y in probes:
             pixel_row = abs(height) - 1 - int(y) if height > 0 else int(y)
             pixel = offset + stride * pixel_row + int(x) * (depth // 8)
-            assert tuple(data[pixel : pixel + 3]) == (52, 37, 9), (step, x, y, result)
+            assert tuple(data[pixel : pixel + 3]) == ((44, 32, 10) if args.save else (52, 37, 9)), (step, x, y, result)
     assert "[boot][crash]" not in text, result
     print(json.dumps(result, indent=2))
 

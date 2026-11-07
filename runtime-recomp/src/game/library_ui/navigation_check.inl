@@ -16,9 +16,12 @@ bool g_surface_scroll_bottom=false;
 #include "startup_check.inl"
 #include "handoff_check.inl"
 bool PlayLaunchLayoutCheck();
+bool SaveDraftLayoutCheck();
 void PlayLaunchCaptureCheck();
+void SaveDraftCaptureCheck();
 
 void LibrarySelectCheckView(int step,int& page) {
+    if(SaveDraftLayoutCheck()){page=kPageSaveManager;g_saves_page.scope=0;g_saves_page.section=1;g_surface_scroll_bottom=true;return;}
     if(PlayLaunchLayoutCheck()){page=0;return;}
     if(LibraryManualHandoffCheck()){page=0;return;}
     if(g_localisation_cycle_check) {
@@ -93,9 +96,9 @@ void LauncherLayoutCheckCapture(SDL_Renderer* renderer) {
         g_launcher_layout_step,dkr::localisation::active().data(),ImGui::GetIO().Fonts->TexWidth,
         ImGui::GetIO().Fonts->TexHeight,ImGui::GetIO().Fonts->TexID);
     if(g_localisation_cycle_check&&g_launcher_layout_step+1==int(kLauncherLayoutPages.size()))SaveSettings();
-    PlayLaunchCaptureCheck();
+    if(SaveDraftLayoutCheck())SaveDraftCaptureCheck();else PlayLaunchCaptureCheck();
     ++g_launcher_layout_step;g_launcher_layout_at=PaddockClock();
-    if(PlayLaunchLayoutCheck()&&g_launcher_layout_step==2){SDL_Event quit{};quit.type=SDL_QUIT;SDL_PushEvent(&quit);}
+    if(PlayLaunchLayoutCheck()&&g_launcher_layout_step==6){SDL_Event quit{};quit.type=SDL_QUIT;SDL_PushEvent(&quit);}
 }
 
 bool g_surface_probe=false;

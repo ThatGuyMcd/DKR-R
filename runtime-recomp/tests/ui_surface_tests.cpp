@@ -30,19 +30,27 @@ void PinnedContentScrollCase(bool live,dkr::library_ui::SidebarInput mode) {
     const auto frame=[&](bool initial=false,bool pinned=true) {
         ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({480,320});
         ImGui::Begin("Play",nullptr,ImGuiWindowFlags_NoSavedSettings);
+        ImGui::BeginChild("Panel",{460,300},true,ImGuiWindowFlags_NavFlattened);
+        ImGui::BeginGroup();
         LibraryNavigationContentWindow();content=ImGui::GetCurrentWindow();
         if(pinned) {
-            ImGui::BeginChild("Content",{440,210},false,ImGuiWindowFlags_NavFlattened);
+            ImGui::BeginChild("Content",{420,200},false,ImGuiWindowFlags_NavFlattened);
             body=ImGui::GetCurrentWindow();LibraryNavigationScrollWindow(body);
+            ImGui::Dummy({0,240}); // No focusable item in the initial visible slice.
         }
         for(int i=0;i<24;++i)ImGui::Button(("Setting "+std::to_string(i)).c_str(),{240,36});
         if(pinned) {
             ImGui::EndChild();if(initial)ImGui::SetKeyboardFocusHere();
-            ImGui::Button("Start Game",{440,48});start=ImGui::GetItemID();
+            ImGui::Button("Start Game",{420,48});start=ImGui::GetItemID();LibraryNavigationPinnedAction(start);
         }
+        ImGui::EndGroup();ImGui::EndChild();
         ImGui::End();ImGui::Render();
     };
     frame(true);frame();frame();assert(GImGui->NavId==start&&content->Scroll.y==0);
+    record_navigation_axis(1,-.9F);frame();frame();
+    assert(GImGui->NavId!=start&&GImGui->NavWindow==body);
+    record_navigation_axis(1,0);frame();frame();
+    frame(true);frame();frame();assert(GImGui->NavId==start);
     record_navigation_axis(3,.9F);for(int i=0;i<8;++i)frame();
     assert(body->Scroll.y>60&&content->Scroll.y==0&&GImGui->NavId==start);
     record_navigation_axis(3,0);frame();frame();
