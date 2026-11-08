@@ -209,10 +209,11 @@ std::wstring quote(const std::wstring &value) {
 } // namespace
 #endif
 Child::Child(const std::filesystem::path &exe, const std::vector<std::string> &arguments,
-             const std::filesystem::path &directory, bool inherit)
+             const std::filesystem::path &directory, bool inherit, bool system_desktop)
     : impl(std::make_unique<Impl>()) {
 #ifdef _WIN32
     (void)inherit;
+    (void)system_desktop;
     std::wstring command = quote(exe.native());
     for (auto &argument : arguments)
         command += L" " + quote(utf16(argument));
@@ -232,6 +233,7 @@ Child::Child(const std::filesystem::path &exe, const std::vector<std::string> &a
     (void)arguments;
     (void)directory;
     (void)inherit;
+    (void)system_desktop;
     throw std::runtime_error(
         "This platform uses its system installation route, not a child updater.");
 #else
@@ -244,8 +246,29 @@ Child::Child(const std::filesystem::path &exe, const std::vector<std::string> &a
     // posix_spawn avoids unsafe heap/environment operations after fork in the
     // multithreaded launcher. Filter the old mount before spawning its successor.
     std::vector<std::string> environment;
+    const auto* appdir = std::getenv("APPDIR");
     for (char **e = environ; e && *e; ++e) {
         std::string value = *e;
+        // Only the native-picker child uses the host GTK/GLib family. Keep
+        // outside library paths (including vendor drivers); never alter the
+        // launcher's environment or the updater/mod worker's loader policy.
+        if (system_desktop && appdir && *appdir) {
+            if (value.starts_with("LD_LIBRARY_PATH=")) {
+                std::string kept="LD_LIBRARY_PATH=";
+                for (size_t at=16;at<=value.size();) {
+                    auto end=value.find(':',at); if(end==std::string::npos)end=value.size();
+                    const auto part=value.substr(at,end-at);
+                    const auto normalized=std::filesystem::path(part).lexically_normal().string();
+                    const auto base=std::filesystem::path(appdir).lexically_normal().string();
+                    if (!part.empty() && normalized!=base && !normalized.starts_with(base+"/")) {
+                        if(kept.size()>16)kept+=':'; kept+=part;
+                    }
+                    if(end==value.size())break;at=end+1;
+                }
+                value=std::move(kept);
+            } else if ((value.starts_with("GIO_MODULE_DIR=") || value.starts_with("GIO_EXTRA_MODULES=") ||
+                        value.starts_with("GTK_PATH=")) && value.find(appdir)!=std::string::npos) continue;
+        }
         if (value.starts_with("APPIMAGE=") || value.starts_with("APPDIR=") ||
             value.starts_with("ARGV0="))
             continue;
@@ -314,6 +337,15 @@ int Child::wait(unsigned timeout) {
     } while (std::chrono::steady_clock::now() < end);
     return -1;
 #endif
+}
+void Child::terminate() {
+    if (wait(0)>=0) return;
+#ifdef _WIN32
+    if (!TerminateProcess(impl->handle,1)) throw std::runtime_error("Could not stop the picker process.");
+#else
+    if (impl->pid>0) kill(impl->pid,SIGKILL);
+#endif
+    if (wait(5000)<0) throw std::runtime_error("The picker process did not stop.");
 }
 bool parent_alive(std::uint64_t pid) {
     if (pid == 0 || pid > 0x7fffffff)

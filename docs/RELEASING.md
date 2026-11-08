@@ -44,6 +44,11 @@ pre-commit hooks on the changed files. Keep failures visible. Run timing-heavy
 regression fixtures on native Linux storage when a mounted-volume timeout is
 encountered; record that rerun and its exact coverage.
 
+CI jobs running the tooling or full host suite need a full Git checkout
+(`fetch-depth: 0`). The capsule checker verifies historical base blobs from the
+recorded Git revision, so a depth-one checkout cannot pass that check. Fetch
+the required history; do not skip verification, weaken hashes or repin the capsule.
+
 The retained release fixture tools check original behaviour, render/memory
 ownership, content preparation, vehicles and online policies. ARM64 CPU/data
 fixtures may use QEMU with the matching sysroot. Native graphics, controller
@@ -57,6 +62,11 @@ Use the existing release package allowlist and current source audit. Package
 all helpers, assets and licence notices. Read every ZIP/AppImage back against
 its file list and hashes. Inspect both Linux ELF dependency closures and system
 ABI floors, and probe the packaged workers. Do not rename an old binary.
+Include the new private file-picker helper on Windows, Linux x64 and Linux
+ARM64, with its required notices. Exercise cancellation and failure containment;
+emulated ARM checks do not establish a working physical desktop portal or GPU.
+Keep matching runtime/helper symbols privately by binary identity. They do not
+belong in the public game ZIPs or AppImages.
 
 Keep build directories, source backups, hashes/receipts, screenshots, test
 profiles, extracted packages, credentials and downloaded game data outside the
@@ -85,7 +95,7 @@ preservation of synthetic saves/settings/mod selections. Verify packages after
 copying them into the final handoff. If documents or source change after the
 commit, update the source identity and regenerate affected packages/signatures.
 
-For v1.0.14 the proposed release tag is **Version1.0.14**. Prepare release notes,
+For v1.0.15 the proposed release tag is **Version1.0.15**. Prepare release notes,
 checksums, the complete document review and validation evidence for the owner.
 Do not push, upload, create a public release or publish until the owner approves.
 Publishing a stable release can make automatic updates available. After approval,

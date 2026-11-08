@@ -10,9 +10,9 @@ would "fix":
   map in each kit's receipt.json;
 * the content-addressed source capsules, patches/release-prep/*/source-capsule-*/,
   whose file names are their own sha256;
-* the capsules' "base" files, first-party sources whose CRLF-normalised bytes
-  the capsule manifest pins (``base_sha256``) because capsule.py rebuilds its
-  roles from them.
+* the capsules' "base" files (``base_sha256``). Evolving first-party bases
+  reconstructed by restore_capsule.py are checked against their pinned Git
+  blobs; the remaining bases still require exact working-tree bytes.
 
 With no arguments every pin is checked. With paths (what pre-commit passes),
 only the pins those paths belong to are checked; a manifest or receipt in the
@@ -30,6 +30,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 from typing import NamedTuple
 
@@ -37,9 +38,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH_MANIFEST = "patches/manifest.json"
 RECEIPTS = "modding/reference-us-v*/receipt.json"
 CAPSULE_MANIFESTS = "patches/release-prep/*/source-capsule-*/manifest.json"
-# Bases that main had already changed when the capsule was frozen.
-# patches/upstream-sync/restore_capsule.py reads these from the pinned commit
-# instead, so they are free to change; every other base must keep its bytes.
+# Historical bases are read by restore_capsule.py from the pinned Git commit,
+# never from these evolving first-party implementations. Check that historical
+# blob instead of weakening its hash or adding another source archive/layer.
 DRIFTED_BASES = frozenset(
     {
         "runtime-recomp/src/game/custom_tracks.cpp",
@@ -47,6 +48,20 @@ DRIFTED_BASES = frozenset(
         "runtime-recomp/src/game/mods/magic_code_dispatch.h",
         "runtime-recomp/src/game/runtime_code_mods.cpp",
         "runtime-recomp/src/game/runtime_graphics_ui.inl",
+        "runtime-recomp/src/game/game_main.cpp",
+        "runtime-recomp/src/game/game_payload.hpp",
+        "runtime-recomp/src/game/game_payload_v77.cpp",
+        "runtime-recomp/src/game/game_payload_v80.cpp",
+        "runtime-recomp/src/game/mods/legacy_character_menu.hpp",
+        "runtime-recomp/src/game/mods/legacy_character_menu_render.cpp",
+        "runtime-recomp/src/game/mods/legacy_character_menu_render.hpp",
+        "runtime-recomp/src/game/mods/legacy_character_stage.cpp",
+        "runtime-recomp/src/game/mods/legacy_character_stage.hpp",
+        "runtime-recomp/src/game/rt64_renderer.cpp",
+        "runtime-recomp/src/game/runtime_legacy_mods.cpp",
+        "runtime-recomp/src/game/runtime_ui.cpp",
+        "runtime-recomp/src/game/updates/update_process.cpp",
+        "runtime-recomp/src/game/updates/update_process.hpp",
     }
 )
 CAPSULE = re.compile(r"^patches/release-prep/[^/]+/source-capsule-[^/]+/(?P<sha>[0-9a-f]{64})\.[A-Za-z0-9]+$")
@@ -59,6 +74,7 @@ class Pin(NamedTuple):
     source: str
     # capsule.py hashes its bases after CRLF -> LF (capsule.py canonical()).
     crlf_normalised: bool = False
+    git_revision: str = ""
 
 
 def pins(root: Path) -> dict[str, Pin]:
@@ -93,8 +109,14 @@ def pins(root: Path) -> dict[str, Pin]:
                         if match:
                             pinned[relative] = Pin(match["sha"], source)
                 base = entry.get("base")
-                if base and base not in DRIFTED_BASES:
-                    pinned[base] = Pin(entry["base_sha256"], source, crlf_normalised=True)
+                if base:
+                    revision = ""
+                    if base in DRIFTED_BASES:
+                        history = root / "patches/upstream-sync/pins.json"
+                        revision = json.loads(history.read_text())["base"]
+                        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+                            raise ValueError("Invalid frozen capsule Git revision")
+                    pinned[base] = Pin(entry["base_sha256"], source, crlf_normalised=True, git_revision=revision)
     return pinned
 
 
@@ -113,9 +135,18 @@ def check(root: Path, paths: Iterable[str] | None = None) -> list[str]:
     pinned = pins(root)
     problems: list[str] = []
     for path in sorted(pinned) if paths is None else selected(pinned, paths):
-        expected, source, crlf_normalised = pinned[path]
+        expected, source, crlf_normalised, revision = pinned[path]
         try:
-            raw = (root / path).read_bytes()
+            if revision:
+                result = subprocess.run(
+                    ["git", "-C", str(root), "show", f"{revision}:{path}"], capture_output=True, check=False
+                )
+                if result.returncode:
+                    problems.append(f"{path}: pinned historical Git blob {revision} is unavailable")
+                    continue
+                raw = result.stdout
+            else:
+                raw = (root / path).read_bytes()
         except FileNotFoundError:
             problems.append(f"{path}: missing, but pinned by {source}")
             continue

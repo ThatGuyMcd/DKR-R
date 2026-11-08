@@ -4,8 +4,8 @@
 
 namespace dkr::runtime::spectators {
 namespace {constexpr auto Tick=std::chrono::nanoseconds(1000000000/30);}
-ObserverPlayback::ObserverPlayback(ObserverWorld& world,std::uint64_t match,HashState hash)
-    :world_(world),match_(match),hash_(std::move(hash)){}
+ObserverPlayback::ObserverPlayback(ObserverWorld& world,std::uint64_t match,HashState hash,unsigned buffer_frames)
+    :world_(world),match_(match),hash_(std::move(hash)),buffer_frames_(std::min(buffer_frames,120U)){}
 bool ObserverPlayback::offer(Baseline b,std::string& error){
     if(view_.phase==PlaybackPhase::Stopped||!match_||!hash_||b.match!=match_||b.schema!=world_.schema()||
        !b.state||b.state->size()!=world_.state_bytes()||b.state->empty()||b.state->size()>ConfirmedFeed::MaximumState||
@@ -24,7 +24,7 @@ bool ObserverPlayback::offer(Baseline b,std::string& error){
     // mutation. Retire/admit themselves remain on the guest owner thread.
     pending_=std::move(b);queue_.clear();recent_.clear();queued_bytes_=0;prepared_=scene_prepared_=false;
     view_.received=pending_->next;view_.queued=0;view_.phase=PlaybackPhase::Retiring;view_.status="Loading the confirmed race";
-    error.clear();return true;
+    buffering_=true;error.clear();return true;
 }
 FeedResult ObserverPlayback::append(std::span<const ConfirmedFrame> frames,std::string& error){
     if(frames.empty()||frames.size()>30||view_.phase==PlaybackPhase::WaitingForBaseline||
@@ -75,11 +75,15 @@ Work ObserverPlayback::pulse(Clock::time_point now,std::string& error)try{
         request_resync("Waiting for the next scene checkpoint");return Work::Ready;
     }
     if(queue_.empty()){
-        view_.phase=PlaybackPhase::Watching;view_.status="Watching";next_tick_=now;return Work::Pending;
+        buffering_=true;view_.phase=PlaybackPhase::Watching;view_.status=buffer_frames_?"Buffering the race":"Watching";next_tick_=now;return Work::Pending;
     }
+    if(buffering_&&buffer_frames_&&queue_.size()<buffer_frames_&&!queue_.back().scene_boundary) {
+        view_.status="Buffering the race";next_tick_=now;return Work::Pending;
+    }
+    buffering_=false;
     // Catch up without an unbounded inner loop. UI and incoming traffic get a
     // turn between every tick. Near the head, keep a small confirmed delay.
-    const bool catchup=queue_.size()>8;
+    const bool catchup=queue_.size()>(buffer_frames_?buffer_frames_+30U:8U);
     if(!catchup&&now<next_tick_)return Work::Pending;
     const auto& frame=queue_.front();
     if(frame.cursor!=view_.next)return fail("Spectator playback lost its contiguous confirmed cursor.",error);
@@ -98,7 +102,7 @@ Work ObserverPlayback::pulse(Clock::time_point now,std::string& error)try{
  catch(...){return fail("Spectator playback stopped unexpectedly.",error);}
 void ObserverPlayback::request_resync(std::string reason){
     if(view_.phase==PlaybackPhase::Stopped)return;
-    pending_.reset();queue_.clear();recent_.clear();queued_bytes_=0;prepared_=scene_prepared_=false;
+    pending_.reset();queue_.clear();recent_.clear();queued_bytes_=0;prepared_=scene_prepared_=false;buffering_=true;
     view_.queued=0;view_.phase=PlaybackPhase::WaitingForBaseline;view_.status=std::move(reason);++view_.resyncs;
 }
 void ObserverPlayback::stop(){pending_.reset();queue_.clear();recent_.clear();queued_bytes_=0;view_.queued=0;view_.phase=PlaybackPhase::Stopped;view_.status="Stopped watching";}

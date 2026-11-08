@@ -1,6 +1,6 @@
 # Public lobbies and online presence
 
-In v1.0.14, use **DKR-R Online** to connect, browse **Public / Friends** and host
+Use **DKR-R Online** to connect, browse **Public / Friends** and host
 a **Private / Public** lobby. These are additions to the existing launcher
 layout. No website frontend or new standalone account is required.
 

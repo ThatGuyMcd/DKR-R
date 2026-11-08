@@ -3,6 +3,7 @@
   "name": "Deutsch (German)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "SPIEL STARTEN",
     "play.skip_launcher": "Launcher überspringen",
     "play.skip_launcher_help": "Das ausgewählte Spiel automatisch starten. Diese Option lässt sich unter Spielen im Overlay deaktivieren.",
     "play.starting_game": "Spiel wird gestartet",

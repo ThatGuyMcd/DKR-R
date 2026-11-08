@@ -12,16 +12,18 @@ def once(t,a,b):
  if t.count(a)!=1:raise ValueError('Party runtime anchor changed: '+a[:140])
  return t.replace(a,b,1)
 def runtime(text):
- text='#include "online_stability/live_delay.hpp"\n#include "party_runtime.hpp"\n#include "party_camera.hpp"\n#include "vehicle_binding.hpp"\n'+text
+ text='#include "online_stability/live_delay.hpp"\n#include "online_stability/host_settings_qualification.hpp"\n#include "party_runtime.hpp"\n#include "party_camera.hpp"\n#include "vehicle_binding.hpp"\n'+text
  text=once(text,'                Session session(*world);',
   '                Session session(*world);\n'
   '                dkr::online_stability::LiveDelay live_delay(dkr::online_stability::control(&lobby),launch->input_delay_frames,launch->rollback_window);\n'
-  '                live_delay.local_owner(local);\n                dkr::online_stability::DelayScope delay_scope(live_delay);')
+  '                live_delay.local_owner(local);\n                dkr::online_stability::DelayScope delay_scope(live_delay);\n'
+  '                dkr::online_stability::HostSettingsQualification host_settings_check(scripted_check);')
  text=once(text,'                    if(!pump.pulse(now,[&]{',
-  '''                    const bool dynamic=lobby.view().room.rules.automatic_input_delay;
+  '''                    host_settings_check.pulse(&lobby,initial.host,session.epoch(),now);
+                    const bool dynamic=lobby.view().room.rules.automatic_input_delay;
                     const bool delay_paused=pump.view().wait==PumpWait::ScenePeers||pump.view().wait==PumpWait::ScenePreparation;
                     live_delay.pulse(session.epoch(),1,session.frontier(),delay_paused,pump.view().wait==PumpWait::OwnerInput||pump.view().wait==PumpWait::Confirmation,now,session.missing_input_mask());
-                    if(dynamic&&!scripted_check) {
+                    if(!scripted_check) {
                         const auto physical=unpack(shared.input.load());
                         if(!live_delay.capture({physical.buttons,physical.stick_x,physical.stick_y,physical.accelerator,physical.brake,physical.driving_flags},now))throw std::runtime_error("Dynamic input transition queue exceeded its safe bound.");
                     }
@@ -31,7 +33,7 @@ def runtime(text):
                     }
                     if(!pump.pulse(now,[&]{''')
  text=once(text,'                        if(!scripted_check)return unpack(shared.input.load());',
-  '                        if(!scripted_check){if(!dynamic)return unpack(shared.input.load());const auto value=live_delay.take();return PackedInput{value.buttons,value.x,value.y,value.accelerator,value.brake,value.driving_flags};}')
+  '                        if(!scripted_check){const auto value=live_delay.take();return PackedInput{value.buttons,value.x,value.y,value.accelerator,value.brake,value.driving_flags};}')
  signature='bool run_runtime(ultramodern::renderer::WindowHandle window,'
  text=once(text,signature,(AUTH/'native/runtime_runner.inl').read_text(encoding='utf-8')+'\n'+signature)
  anchor='std::string_view runtime_engine_identity(rom::Revision revision) {return owned_adapter_identity(revision);}'

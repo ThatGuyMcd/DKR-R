@@ -3,6 +3,7 @@
   "name": "Español (Spanish)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "INICIAR JUEGO",
     "play.skip_launcher": "Omitir el lanzador",
     "play.skip_launcher_help": "Inicia automáticamente el juego seleccionado. Desactívalo en Jugar en la interfaz del juego.",
     "play.starting_game": "Iniciando juego",

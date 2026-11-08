@@ -5,17 +5,194 @@
 #include "online_stability/traffic_meter.hpp"
 #include "online_stability/catalogue_cache.hpp"
 #include "online_stability/battle_view.hpp"
+#include "online_stability/party_pacing.hpp"
+#include "online_stability/peer_clock.hpp"
+#include "online_stability/live_send_capacity.hpp"
+#include "online_stability/ping_window.hpp"
+#include "netplay/experimental_rollback.hpp"
+#include "netplay/session_transport.hpp"
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 using namespace dkr::online_stability;
 namespace {
+void background_budget_checks() {
+    using Clock=std::chrono::steady_clock;
+    const auto start=Clock::time_point(std::chrono::seconds(100));
+    auto anchor=start;std::size_t tokens=0,total=0;
+    for(unsigned i=1;i<=1000;++i) {
+        refill_background_budget(start+std::chrono::microseconds(i*100),anchor,tokens,16*1024,256);
+        total+=tokens;tokens=0;
+    }
+    assert(total==25600); // A busy 10 kHz pump must retain the full 100 ms credit.
+    refill_background_budget(start+std::chrono::hours(1),anchor,tokens,16*1024,256);
+    assert(tokens==16*1024); // Long idle time cannot exceed the bounded burst.
+    tokens=0;
+    refill_background_budget(anchor,anchor,tokens,16*1024,256);assert(tokens==0);
+    refill_background_budget(start,anchor,tokens,16*1024,256);assert(tokens==0&&anchor==start);
+    Clock::time_point empty{};tokens=100000;
+    refill_background_budget(start,empty,tokens,16*1024,256);assert(tokens==16*1024&&empty==start);
+}
+void host_settings_checks() {
+    HostSettings current;HostSettingsContext context{true,true,false,4};
+    auto desired=current;desired.prediction_window=20;desired.input_delay=5;desired.automatic_delay=false;
+    desired.menu_control=2;desired.record_replay=false;
+    auto plan=plan_host_settings(current,desired,context);
+    assert(plan&&plan.immediate.prediction_window==20&&plan.immediate.input_delay==5&&!plan.immediate.automatic_delay);
+    assert(plan.immediate.menu_control==current.menu_control&&plan.immediate.record_replay==current.record_replay&&plan.queued==desired);
+    auto bad=desired;bad.maximum_players=2;assert(!plan_host_settings(current,bad,context));
+    bad=desired;bad.development=true;assert(!plan_host_settings(current,bad,context));
+    bad=desired;bad.input_delay=10;assert(!plan_host_settings(current,bad,context));
+    bad=desired;bad.prediction_window=21;assert(!plan_host_settings(current,bad,context));
+    context.transition=true;assert(!plan_host_settings(current,desired,context));context.transition=false;
+    context.playing=false;plan=plan_host_settings(current,desired,context);assert(plan&&plan.immediate==desired&&!plan.queued);
+    context.spectator_capable=false;current.spectators=false;assert(!plan_host_settings(current,desired,context));
+    current.spectators=true;context.spectator_capable=true;
+    auto bridge=std::make_shared<Control>();Identity identity{88,1,1,true,true,false,{{2,50,true,1}}};
+    bridge->configure(identity);bridge->publish_host_settings(current,context);
+    std::uint64_t serial=0;std::string error;
+    assert(!bridge->request_host_settings(87,desired,serial,error));
+    assert(bridge->request_host_settings(88,desired,serial,error)&&serial==1);
+    auto request=bridge->take_host_settings();assert(request&&request->desired==desired&&!bridge->take_host_settings());
+    bridge->finish_host_settings(*request,desired,"Queued",true);
+    assert(bridge->host_settings().queued==desired&&bridge->host_settings().accepted);
+    identity.room=89;bridge->configure(identity);assert(!bridge->host_settings().available&&!bridge->host_settings().queued);
+    identity.authority=false;bridge->configure(identity);bridge->publish_host_settings(current,context);
+    assert(!bridge->request_host_settings(89,desired,serial,error));
+    identity={88,1,1,true,true,false,{{2,50,true,1}}};identity.manual_delay=3;identity.prediction_window=4;
+    bridge->configure(identity);LiveDelay delay(bridge,3,4);delay.local_owner(0);
+    const auto start=Clock::time_point(std::chrono::seconds(100));
+    delay.pulse(91,1,100,false,false,start);assert(delay.lead()==3);
+    {DelayScope scope(delay);assert(requested_prediction_window()==4);assert(sample_limit(100,3,true)==105);
+        identity.manual_delay=7;identity.prediction_window=20;bridge->configure(identity);
+        delay.pulse(91,1,101,false,false,start+std::chrono::milliseconds(34));
+        assert(delay.lead()==7&&delay.take_fill()==4&&requested_prediction_window()==20);
+        assert(sample_limit(101,3,true)==110);}
+    assert(!requested_prediction_window());
+    assert(delay.capture({0x8000,10,0},start+std::chrono::milliseconds(35)));
+    assert(delay.capture({0,20,0},start+std::chrono::milliseconds(36)));
+    identity.manual_delay=1;bridge->configure(identity);delay.pulse(91,1,102,false,false,start+std::chrono::milliseconds(67));
+    assert(delay.lead()==1&&delay.take_fill()==0&&delay.take().buttons==0x8000&&delay.take().buttons==0);
+    identity.dynamic=true;bridge->configure(identity);delay.pulse(91,1,103,false,false,start+std::chrono::milliseconds(100));
+    identity.dynamic=false;identity.manual_delay=2;bridge->configure(identity);
+    delay.pulse(91,1,104,false,false,start+std::chrono::milliseconds(134));assert(!delay.dynamic()&&delay.lead()==2);
+}
+void delayed_ping_checks() {
+    PingWindow window;const auto start=Clock::time_point(std::chrono::seconds(100));
+    window.sent(11,start);window.sent(12,start+std::chrono::seconds(1));
+    assert(window.receive(11,start+std::chrono::milliseconds(1600))==1600);
+    assert(!window.receive(11,start+std::chrono::milliseconds(1700)));
+    assert(!window.receive(999,start+std::chrono::milliseconds(1700)));
+    assert(window.receive(12,start+std::chrono::milliseconds(2500))==1500);
+    window.sent(13,start+std::chrono::seconds(3));window.sent(14,start+std::chrono::seconds(4));
+    assert(window.receive(14,start+std::chrono::milliseconds(4100))==100);
+    assert(!window.receive(13,start+std::chrono::milliseconds(4200)));
+    window.sent(15,start+std::chrono::seconds(5));
+    assert(!window.receive(15,start+std::chrono::seconds(10)));
+    window.sent(16,start+std::chrono::seconds(11));
+    assert(!window.receive(16,start+std::chrono::seconds(10)));
+    for(unsigned n=0;n<100;++n)window.sent(100+n,start+std::chrono::seconds(12));
+    assert(!window.receive(100,start+std::chrono::seconds(13)));
+    assert(window.receive(199,start+std::chrono::seconds(13))==1000);
+    window={};assert(!window.receive(199,start+std::chrono::seconds(13)));
+}
 struct CatalogueFixture {
     enum class Kind { Track,Character };
     inline static unsigned generation=0,scans=0;
     static std::vector<unsigned> installed_items(const std::filesystem::path&,std::string_view,Kind){++scans;return {generation};}
 };
+void peer_clock_checks() {
+    PeerClock clock;const auto start=Clock::time_point(std::chrono::seconds(100));
+    assert(clock.period(1,start)==PeerClock::Tick);
+    clock.observe(101,1,40,start); // Host frontier 100, one tick plus transit later.
+    assert(clock.period(101,start)==PeerClock::Tick);
+    assert(clock.period(90,start)<PeerClock::Tick&&clock.period(90,start)>=PeerClock::Tick*95/100);
+    assert(clock.period(110,start)>PeerClock::Tick&&clock.period(110,start)<=PeerClock::Tick*105/100);
+    const auto prior=clock.error(100,start);
+    clock.observe(100,1,40,start+std::chrono::milliseconds(5)); // Reordered/duplicate input.
+    assert(clock.error(100,start)==prior);
+    clock.observe(1000,0,6000,start);assert(clock.error(100,start)==prior); // Invalid route estimate.
+    assert(clock.period(90,start+std::chrono::seconds(3))==PeerClock::Tick);
+    clock.reset();assert(!clock.error(1,start));
+    // Repeated short delivery jitter cannot buy unbounded simulation speed.
+    for(unsigned frame=0;frame<600;++frame) {
+        const auto now=start+PeerClock::Tick*frame;
+        clock.observe(frame+4,4,40+(frame%3)*10,now);
+        const auto period=clock.period(frame,now);
+        assert(period>=PeerClock::Tick*95/100&&period<=PeerClock::Tick*105/100);
+    }
+    // Explicit host progress is independent of changing future input lead.
+    // Old repair/replay frontiers cannot move that reference backwards.
+    clock.reset();clock.observe_frontier(300,750,start);
+    assert(clock.error(311,start).value()>0&&clock.error(311,start).value()<1);
+    clock.observe_frontier(290,750,start+std::chrono::milliseconds(50));
+    assert(clock.reference_frame()==300&&clock.age_ms(start+std::chrono::milliseconds(50))==50);
+    clock.observe_frontier(300,750,start+std::chrono::milliseconds(100));
+    assert(clock.age_ms(start+std::chrono::milliseconds(100))==0);
+    assert(clock.error(311,start+std::chrono::milliseconds(100)).value()<1);
+    clock.observe_frontier(315,750,start+std::chrono::milliseconds(500));
+    assert(clock.error(326,start+std::chrono::milliseconds(500)).value()>0);
+    // After an outage, normal reports must let the client return to nominal
+    // speed rather than buying more input lead to compensate for clock drift.
+    double local=326.;
+    for(unsigned ms=500;ms<30500;++ms) {
+        const auto now=start+std::chrono::milliseconds(ms);
+        if(ms%500==0)clock.observe_frontier(300+ms*30/1000,ms<5000?750:1,now);
+        local+=1000000./double(clock.period(std::uint32_t(local),now).count());
+    }
+    const auto final=start+std::chrono::milliseconds(30499);
+    assert(std::abs(clock.error(std::uint32_t(local),final).value())<2.1);
+}
+void host_clock_regressions() {
+    const auto start=Clock::time_point(std::chrono::seconds(100));
+    auto host=std::make_shared<Control>(),client=std::make_shared<Control>();
+    host->configure({55,1,1,true,true,true,{{2,40,true,1}}});
+    client->configure({55,2,1,true,false,true,{{1,40,true,0}}});
+    LiveDelay authority(host,1,14),racer(client,1,14);
+    racer.pulse(91,1,100,false,false,start);
+    for(auto& p:client->outgoing())assert(host->receive(2,true,p.bytes));
+    authority.pulse(91,1,100,false,false,start);
+    for(auto& p:host->outgoing())assert(client->receive(1,true,p.bytes));
+    racer.pulse(91,1,100,false,false,start);
+    auto clock=racer.take_host_clock();assert(clock&&clock->frame==100&&clock->rtt_ms==40);
+    assert(!racer.take_host_clock());
+    authority.pulse(91,1,94,false,false,start+std::chrono::milliseconds(500)); // Host is replaying.
+    for(auto& p:host->outgoing())assert(client->receive(1,true,p.bytes));
+    racer.pulse(91,1,108,false,false,start+std::chrono::milliseconds(500));
+    clock=racer.take_host_clock();assert(clock&&clock->frame==100);
+    authority.pulse(91,1,130,false,false,start+std::chrono::milliseconds(1000));
+    for(auto& p:host->outgoing())assert(client->receive(1,true,p.bytes));
+    racer.pulse(91,1,120,false,false,start+std::chrono::milliseconds(1000));
+    clock=racer.take_host_clock();assert(clock&&clock->frame==130);
+    DelayMessage stale;stale.kind=DelayKind::Hello;stale.room=55;stale.controls=1;stale.epoch=91;stale.frame=999;stale.enabled=true;
+    assert(client->receive(1,true,encode(stale)));
+    racer.pulse(92,1,0,false,false,start+std::chrono::milliseconds(1500));
+    assert(!racer.take_host_clock()); // An old scene is never the new clock.
+}
+void live_queue_freshness_checks() {
+    struct Reliability {bool unordered=false;std::optional<unsigned> maxRetransmits=0;std::optional<std::chrono::milliseconds> maxPacketLifeTime;};
+    Reliability policy;configure_live_reliability(policy);
+    assert(policy.unordered&&!policy.maxRetransmits&&policy.maxPacketLifeTime==std::chrono::milliseconds(1000));
+    using Traffic=dkr::runtime::netplay::TransportTrafficClass;
+    static_assert(fresh_input_capacity(Traffic::Realtime,0,1500));
+    static_assert(!fresh_input_capacity(Traffic::Realtime,400,200));
+    static_assert(fresh_input_capacity(Traffic::Authoritative,16000,200));
+    static_assert(!fresh_input_capacity(Traffic::Realtime,SIZE_MAX,1));
+    auto congested=[](bool bounded) {
+        std::deque<unsigned> sdk;std::optional<unsigned> latest;unsigned maximum_age=0;
+        for(unsigned ms=0;ms<6000;++ms) {
+            if(ms%33==0)latest=ms;
+            if(latest&&(!bounded||fresh_input_capacity(Traffic::Realtime,sdk.size()*200,200))) {
+                sdk.push_back(*latest);latest.reset();
+            }
+            if(ms%100==0&&!sdk.empty()) {maximum_age=std::max(maximum_age,ms-sdk.front());sdk.pop_front();}
+        }
+        return maximum_age;
+    };
+    assert(congested(false)>3000&&congested(true)<=300);
+}
 void catalogue_freshness() {
     using Scope=CatalogueScope<CatalogueFixture,unsigned>;
     const auto kind=CatalogueFixture::Kind::Track;
@@ -75,6 +252,50 @@ void input_checks() {
     std::vector<Input> observed;
     for(unsigned i=0;i<18;++i){Input v{std::uint16_t(i%2?0:0x8000),0,0};assert(q.capture(v));observed.push_back(v);}
     for(const auto& v:observed)assert(q.take()==v);
+}
+void jitter_and_analogue_regressions() {
+    const auto start=Clock::time_point(std::chrono::seconds(100));
+    InputQueue q;
+    assert(q.capture({0x8000,10,0,25,0,1},start));
+    assert(q.capture({0,20,0,50,0,1},start+std::chrono::milliseconds(10)));
+    assert(q.capture({0x8000,70,0,220,40,1},start+std::chrono::milliseconds(20)));
+    for(unsigned buttons:{0x8000U,0U,0x8000U}) {
+        const auto value=q.take(start+std::chrono::milliseconds(30));
+        assert(value.buttons==buttons&&value.x==70&&value.accelerator==220&&value.brake==40);
+    }
+    // A single old packet in an otherwise healthy delivery interval must not
+    // ratchet an owner's lead up on every Wi-Fi jitter spike.
+    auto bridge=std::make_shared<Control>();bridge->configure({44,2,1,true,false,true,{{1,50,true,0}}});
+    LiveDelay delay(bridge,1,6);delay.local_owner(1);delay.pulse(91,1,100,false,false,start);bridge->outgoing();
+    for(unsigned n=0;n<19;++n)delay.arrival(0,100);
+    delay.arrival(0,91);
+    delay.pulse(91,1,100,false,false,start+std::chrono::milliseconds(500));
+    bool report=false;
+    for(const auto& packet:bridge->outgoing()) {DelayMessage m;assert(decode(packet.bytes,m));if(m.kind==DelayKind::Report){report=true;assert(m.owner_late[0]==0);}}
+    assert(report);
+    // A confirmed resource transaction must not teach Auto that a race needs
+    // additional lead. Its physical buttons must remain usable meanwhile.
+    delay.pulse(91,1,101,false,true,start+std::chrono::milliseconds(1000),1,true);
+    assert(delay.capture({0x8000,60,0},start+std::chrono::milliseconds(1001)));
+    assert(delay.take().buttons==0x8000);
+    for(const auto& packet:bridge->outgoing()) {DelayMessage m;assert(decode(packet.bytes,m));if(m.kind==DelayKind::Report)assert(m.network_waits==0&&m.samples==0&&m.blocked_ms==0);}
+    DelayPolicy policy;policy.reset(1,start);
+    assert(policy.evaluate(1,6,0,0,1,true,true,start+std::chrono::seconds(2),false,false,2)==0);
+    policy.reset(1,start);
+    assert(policy.evaluate(1,6,0,0,1,true,true,start+std::chrono::seconds(2),false,false,34)==2);
+    using Step=dkr::runtime::netplay::experimental::Step;
+    assert(pause_reason(Step::PredictionLimit,true,2,0)==Pause::Network);
+    assert(pause_reason(Step::WaitingForLocalInput,false,2,0)==Pause::Pacing);
+    assert(pause_reason(Step::WaitingForLocalInput,true,1,0)==Pause::LocalInput);
+    assert(pause_reason(Step::WaitingForPresentation,true,2,0)==Pause::Presentation);
+    assert(pause_reason(Step::WaitingForConfirmedInput,true,2,0)==Pause::Confirmation);
+    ReplaySlice slice(start);for(unsigned n=0;n<3;++n)assert(slice.again(true,start+std::chrono::milliseconds(n)));
+    assert(!slice.again(true,start+std::chrono::milliseconds(3)));
+    ReplaySlice slow(start);assert(!slow.again(true,start+std::chrono::milliseconds(4)));
+    ReplaySlice waiting(start);assert(!waiting.again(false,start));
+    PacingTrace trace;trace.reason(Pause::Network);trace.end(start);
+    trace.begin(start+std::chrono::milliseconds(4));trace.step(Step::WaitingForLocalInput,5000);
+    trace.step(Step::Replayed,7000);assert(trace.ticks()==1&&trace.tick_us()==7000&&trace.idle(Pause::Network)==4000);
 }
 void codec_checks() {
     DelayMessage m; m.room=1;m.epoch=91;m.controls=1;m.enabled=true;
@@ -140,7 +361,7 @@ void deadline_regressions() {
     for(int x=1;x<64;++x)assert(analog.capture({0,std::int8_t(x),0}));
     assert(analog.queued()==1&&analog.take().x==63);
     assert(analog.capture({0x8000,40,0})&&analog.capture({0x8000,50,0})&&analog.capture({0,60,0}));
-    assert(analog.take()==Input({0x8000,50,0})&&analog.take()==Input({0,60,0}));
+    assert(analog.take()==Input({0x8000,60,0})&&analog.take()==Input({0,60,0}));
     std::array<std::shared_ptr<Control>,2> bridges;
     std::array<std::unique_ptr<LiveDelay>,2> delays;
     for(unsigned i=0;i<2;++i) {
@@ -277,7 +498,13 @@ void negotiated_trace(bool dynamic,unsigned window,bool impaired,bool loss=false
 }
 }
 int main() {
-    catalogue_freshness();fullscreen_checks();progress_checks();input_checks();codec_checks();stationary_wait_reports();deadline_regressions();responsiveness_checks();asymmetric_targets();asymmetric_targets(true);
+    background_budget_checks();
+    host_settings_checks();
+    delayed_ping_checks();
+    peer_clock_checks();
+    host_clock_regressions();
+    live_queue_freshness_checks();
+    catalogue_freshness();fullscreen_checks();progress_checks();input_checks();jitter_and_analogue_regressions();codec_checks();stationary_wait_reports();deadline_regressions();responsiveness_checks();asymmetric_targets();asymmetric_targets(true);
     negotiated_trace(false,2,false);negotiated_trace(true,2,false);
     negotiated_trace(true,2,true);negotiated_trace(true,10,true);
     negotiated_trace(true,2,true,true);negotiated_trace(true,2,false,false,true);

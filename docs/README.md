@@ -1,6 +1,6 @@
 # DKR-R documentation
 
-Start here for the current v1.0.14 instructions. The older plans and playtest logs
+Start here for the current v1.0.15 instructions. The older plans and playtest logs
 are still useful, but they aren't the current feature list.
 
 ## Playing and settings
@@ -16,6 +16,8 @@ are still useful, but they aren't the current feature list.
 | [Controls](CONTROLLERS.md) | Profiles, N64 setup, SDL2/SDL3, gyro and Android touch groups. |
 | [Saves and portable mode](SAVES.md) | Offline/online/modded storage, recovery and profile switching. |
 | [Application updates](UPDATES.md) | GitHub checks, signed packages, installation, backups and publishing. |
+| [Storage cleanup](STORAGE.md) | Once-per-launch background maintenance, install cleanup, retained recovery and cache limits. |
+| [Crash reporting](CRASH_REPORTING.md) | Consent, queued reports, native fault context, file dialogs and unresolved crashes. |
 | [Texture packs](TEXTURE_PACKS.md) | Imports, priorities, track-owned HD packs and texture export/capture. |
 | [Custom tracks and characters](LEGACY-MODS-BETA.md) | Legacy imports, roster browsing, AI, adapters and mod management. |
 | [Magic Codes](MAGIC_CODES.md) | Launch selection, online rules and one-shot actions. |
@@ -27,7 +29,7 @@ are still useful, but they aren't the current feature list.
 | [Achievements](ACHIEVEMENTS.md) | 94 local goals, recognition, notifications and progress protection. |
 | [Library administration](MOD_LIBRARY_ADMIN.md) | FTP uploads, batch entries, image controls, usage filters and deployment. |
 | [Troubleshooting](TROUBLESHOOTING.md) | Failures, support exports and the correct runtime logs. |
-| [Platform support](PLATFORMS.md) | v1.0.14 packages, Linux requirements and excluded platforms. |
+| [Platform support](PLATFORMS.md) | v1.0.15 packages, Linux requirements and excluded platforms. |
 
 ## Track Lab and development
 
@@ -52,7 +54,13 @@ are still useful, but they aren't the current feature list.
 - [Asset policy](ASSET_POLICY.md), [controller database provenance](../assets/controllers/README.md)
   and [CRT asset provenance](../assets/filters/README.md).
 
-## v1.0.14 additions
+## v1.0.15 online update
+
+- [Release notes](PUBLIC-1.0.15-NOTES.txt) and [documentation review](DOCUMENTATION-1.0.15.md).
+- [Online](ONLINE_MULTIPLAYER.md): input recovery, current defaults and live host settings.
+- [Spectators](SPECTATORS.md): buffered confirmed playback and full-lobby limits.
+
+## Previous v1.0.14 additions
 
 - [Release notes](PUBLIC-1.0.14-NOTES.txt) and [documentation review](DOCUMENTATION-1.0.14.md).
 - [Analogue driving](ANALOGUE-DRIVING.md) and [controller feedback](CONTROLLER_FEEDBACK.md).
@@ -72,7 +80,7 @@ are still useful, but they aren't the current feature list.
 - [Third-party credits](../THIRD_PARTY.md), [project licence](../LICENSE.md)
   and [runtime licensing notice](../runtime-recomp/COPYING-NOTICE.md).
 
-v1.0.14 includes Windows x64, Linux x86_64/ARM64 AppImages and Steam Deck.
+v1.0.15 includes Windows x64, Linux x86_64/ARM64 AppImages and Steam Deck.
 Android releases are no longer supported. macOS and iOS are skipped in this
 release; their older downloads keep their own version numbers. See the platform guide and validation
 record for exact coverage. Hardware ray tracing and unqualified online graphics

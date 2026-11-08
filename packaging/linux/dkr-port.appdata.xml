@@ -16,6 +16,7 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.0.15" date="2026-11-08"><description><p>Improved online input recovery, lower-cost checkpoints, buffered spectators and live host settings. Added storage cleanup, a pinned Play button, native custom-character names, isolated file dialogs and better crash diagnostics.</p></description></release>
     <release version="1.0.14" date="2026-11-04"><description><p>Online responsiveness and sync presentation, a unified launcher and overlay, analogue driving, controller feedback, automatic seasons, languages, display options and opt-in crash reporting.</p></description></release>
     <release version="1.0.14-beta.3" date="2026-10-31" type="development"><description><p>Analogue acceleration and braking, standalone online Look behind and full CRT controls in Graphics.</p></description></release>
     <release version="1.0.14-beta.2" date="2026-10-29" type="development"><description><p>Online asset cache reuse, idle rendering fixes and fuller frame pacing diagnostics.</p></description></release>

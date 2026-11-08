@@ -142,6 +142,13 @@ std::string redact(std::string text, std::span<const std::string> identities) {
         at = end == std::string::npos ? text.size() : end + 1;
         if (line.size() > 16384 || std::regex_search(line, private_line)) { clean += "[private diagnostic line removed]\n"; continue; }
         for (auto& c : line) if (static_cast<unsigned char>(c) < 32 && c != '\t') c = ' ';
+        // Older Linux backtraces combine a private executable path and the
+        // only useful code offset on one line. Keep the numeric evidence,
+        // never the path or arbitrary symbol text from that line.
+        static const std::regex legacy_frame(R"(^.*\((?:[^()\r\n]*\+)?(0x[0-9a-fA-F]+)\) \[(0x[0-9a-fA-F]+)\]\s*$)");
+        std::smatch frame;
+        if (std::regex_match(line, frame, legacy_frame))
+            line = "[boot][crash] legacy-frame rva=" + frame[1].str() + " pc=" + frame[2].str();
         clean += line + '\n';
     }
     for (const auto* pattern : {
@@ -222,9 +229,16 @@ void Queue::discover(Consent consent, std::int64_t now) {
     std::map<std::string, std::string> files{
         {"runtime-previous.log", redact(crashed, identities_)},
         {"runtime.log", redact(read(profile_ / "logs" / "runtime.log", LogBytes, true), identities_)}};
-    Json manifest{{"schema", 1}, {"reportId", id}, {"version", version_},
+    std::smatch producer;
+    const bool has_producer = std::regex_search(crashed, producer,
+        std::regex(R"(\[boot\] DKR-R ([0-9A-Za-z.+-]{1,64}) persistent runtime log)"));
+    Json manifest{{"schema", 1}, {"reportId", id}, {"version", has_producer ? producer[1].str() : version_},
+        {"collectorVersion", version_},
         {"rawDump", false}, {"dumpStatus", "Not requested or not available"},
         {"privacy", "Redaction is best effort. Raw dumps may contain private process memory."}};
+    std::smatch binary;
+    if (std::regex_search(crashed, binary, std::regex(R"(\[boot\]\[binary\] id=([0-9a-fA-F]{8,64}))")))
+        manifest["producerBinaryId"] = binary[1].str();
     // Only the exact dump referenced by this crashed session is eligible.
     // OS-wide cores and unrelated historical dumps are deliberately excluded.
     std::smatch match;

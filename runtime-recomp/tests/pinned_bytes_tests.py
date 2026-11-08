@@ -111,6 +111,43 @@ class CheckerTests(unittest.TestCase):
     def test_untouched_pins_pass(self):
         self.assertEqual(run_checker(self.root), (0, ""))
 
+    def test_historical_base_remains_pinned_when_current_source_evolves(self):
+        capsule = self.root / "patches/release-prep/v1/source-capsule-r1"
+        name = "runtime-recomp/src/game/game_main.cpp"
+        canonical = b"pinned capsule line \n"
+        write(self.root / name, canonical)
+        subprocess.run(["git", "init", "--quiet", str(self.root)], check=True)
+        subprocess.run(["git", "-C", str(self.root), "add", name], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.root),
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "--quiet",
+                "--no-gpg-sign",
+                "-m",
+                "Frozen base",
+            ],
+            check=True,
+        )
+        revision = subprocess.check_output(["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True).strip()
+        write(self.root / "patches/upstream-sync/pins.json", json.dumps({"base": revision}).encode())
+        manifest = {
+            "roles": {"OLD": {"x.cpp": {"sha256": sha(canonical), "base": name, "base_sha256": sha(canonical)}}}
+        }
+        write(capsule / "manifest.json", json.dumps(manifest).encode())
+        write(self.root / name, b"new first-party feature\n")
+        self.assertEqual(run_checker(self.root)[0], 0)
+        write(self.root / "patches/upstream-sync/pins.json", json.dumps({"base": "0" * 40}).encode())
+        status, message = run_checker(self.root)
+        self.assertEqual(status, 1)
+        self.assertIn("unavailable", message)
+
     def test_stripped_whitespace_on_a_patch_context_line_fails(self):
         # What trailing-whitespace does to a blank context line.
         write(self.root / "patches/dep/0001.patch", b"--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n\n-old\n+new\n\n")

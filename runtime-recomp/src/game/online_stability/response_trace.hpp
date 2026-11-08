@@ -12,7 +12,7 @@
 namespace dkr::online_stability::response {
 using Clock = std::chrono::steady_clock;
 enum class Stage : unsigned { Assign, Execute, Publish, Renderer, Count };
-inline constexpr std::array<unsigned,12> Limits{1,5,10,17,34,50,67,100,150,250,400,UINT32_MAX};
+inline constexpr std::array<unsigned,16> Limits{1,5,10,17,34,50,67,100,150,250,400,700,1000,1500,2000,UINT32_MAX};
 struct Counter {
     std::array<std::uint64_t,Limits.size()> buckets{};
     std::uint64_t count=0,maximum_us=0;

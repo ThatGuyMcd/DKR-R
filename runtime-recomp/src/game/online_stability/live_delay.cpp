@@ -13,21 +13,22 @@ std::uint64_t get(std::span<const std::uint8_t> b,std::size_t& at,unsigned width
 bool InputQueue::capture(Input value,Clock::time_point now) {
     if(value==observed_)return true;
     if(!changes_.empty()&&changes_.back().value.buttons==value.buttons) {
-        changes_.back().value=value;observed_=value;return true;
+        changes_.back().value=value;observed_=value;observed_at_=now;return true;
     }
     if(changes_.size()>=64)return false;
-    changes_.push_back({value,now});observed_=value;return true;
+    changes_.push_back({value,now});observed_=value;observed_at_=now;return true;
 }
 Input InputQueue::take(Clock::time_point now) {
     age_ms_=0;
     if(!changes_.empty()) {
-        const auto change=changes_.front();held_=change.value;held_at_=change.at;++serial_;
-        if(now>=change.at)age_ms_=unsigned(std::min<std::int64_t>(65535,std::chrono::duration_cast<std::chrono::milliseconds>(now-change.at).count()));
+        const auto change=changes_.front();const bool edge=held_.buttons!=change.value.buttons;
+        held_=observed_;held_.buttons=change.value.buttons;held_at_=edge?change.at:observed_at_;++serial_;
+        if(now>=held_at_)age_ms_=unsigned(std::min<std::int64_t>(65535,std::chrono::duration_cast<std::chrono::milliseconds>(now-held_at_).count()));
         changes_.pop_front();
     }
     return held_;
 }
-void InputQueue::reset(){changes_.clear();observed_=held_={};age_ms_=0;held_at_={};serial_=0;}
+void InputQueue::reset(){changes_.clear();observed_=held_={};age_ms_=0;held_at_=observed_at_={};serial_=0;}
 Bytes encode(const DelayMessage& m) {
     if(m.kind<DelayKind::Hello||m.kind>DelayKind::Target||!m.room||!m.epoch||!m.controls||
         m.delay>MaximumDelay||m.rtt_ms>5000||m.late_frames>48||m.network_waits>65535||m.samples>255||m.blocked_ms>65535||m.arrival_age_ms>65535||
@@ -51,7 +52,7 @@ bool decode(std::span<const std::uint8_t> b,DelayMessage& m) {
     if(encode(n)!=Bytes(b.begin(),b.end()))return false;m=n;return true;
 }
 void DelayPolicy::reset(unsigned,Clock::time_point now){changed_=stable_=now;recovery_until_={};}
-std::optional<unsigned> DelayPolicy::evaluate(unsigned current,unsigned window,unsigned,unsigned late,unsigned waits,bool fresh,bool measured,Clock::time_point now,bool pressure,bool busy) {
+std::optional<unsigned> DelayPolicy::evaluate(unsigned current,unsigned window,unsigned,unsigned late,unsigned waits,bool fresh,bool measured,Clock::time_point now,bool pressure,bool busy,unsigned blocked_ms) {
     if(!fresh||!measured){stable_=now;return {};}
     // Reserve one frame for scheduling variation and one for recovery. Lateness
     // which fits in available history is useful prediction, not an input fault.
@@ -59,9 +60,12 @@ std::optional<unsigned> DelayPolicy::evaluate(unsigned current,unsigned window,u
     // A failed low-delay probe needs a recovery interval. Otherwise a narrow
     // window repeatedly drops its protective lead immediately after an outage.
     // Healthy, inexpensive prediction still takes the two-second reduction path.
-    if(waits||late>covered)recovery_until_=now+std::chrono::seconds(10);
+    // Poll counts are not pause durations. A transient missing packet serviced
+    // before half a 30-Hz tick must not buy a full extra tick of input delay.
+    const bool waiting=waits&&(blocked_ms==UINT32_MAX||blocked_ms>=17);
+    if(waiting||late>covered)recovery_until_=now+std::chrono::seconds(10);
     auto target=current;
-    if(waits||late>covered)target=std::min(MaximumDelay,current+std::min(3U,std::max(1U,late>covered?late-covered:1U)));
+    if(waiting||late>covered)target=std::min(MaximumDelay,current+std::min(3U,std::max(1U,late>covered?late-covered:1U)));
     else if(pressure&&late>1)target=std::min(MaximumDelay,current+1);
     if(target>current) {
         stable_=now;
@@ -80,7 +84,7 @@ std::optional<unsigned> DelayPolicy::evaluate(unsigned current,unsigned window,u
 LiveDelay::LiveDelay(std::shared_ptr<Control> control,unsigned fixed,unsigned window)
     :control_(std::move(control)),fixed_(std::min(fixed,MaximumDelay)),current_(fixed_),window_(window){}
 void LiveDelay::send(Member target,DelayMessage m) {
-    m.room=room_;m.epoch=epoch_;m.controls=controls_;m.frame=frame_;(void)control_->send(target,encode(m));
+    m.room=room_;m.epoch=epoch_;m.controls=controls_;m.frame=m.kind==DelayKind::Hello?clock_frontier_:frame_;(void)control_->send(target,encode(m));
 }
 void LiveDelay::apply(unsigned value,Clock::time_point now) {
     if(value==current_)return;
@@ -94,7 +98,14 @@ void LiveDelay::receive(const Identity& id,Member source,const DelayMessage& m,C
     if(m.kind==DelayKind::Hello||m.kind==DelayKind::Report) {
         if(!m.enabled&&m.kind==DelayKind::Report)return;
         capable_[source]=now;
-        if(!id.authority&&source==id.host&&m.kind==DelayKind::Hello)host_ready_=m.enabled;
+        if(!id.authority&&source==id.host)host_lead_=m.delay;
+        if(!id.authority&&source==id.host&&m.kind==DelayKind::Hello) {
+            host_ready_=m.enabled;
+            if(m.enabled&&(!host_clock_||m.frame>host_clock_->frame)) {
+                unsigned rtt=0;for(const auto& route:id.routes)if(route.id==id.host)rtt=route.rtt_ms;
+                host_clock_=HostClock{m.frame,rtt,now};
+            }
+        }
         if(id.authority&&m.kind==DelayKind::Report) {
             const auto route=std::find_if(id.routes.begin(),id.routes.end(),[&](const Route& r){return r.id==source&&r.racer&&r.owner==m.owner;});
             if(route==id.routes.end())return;
@@ -114,18 +125,28 @@ void LiveDelay::receive(const Identity& id,Member source,const DelayMessage& m,C
     if(m.sequence>retired_){apply(m.delay,now);retired_=m.sequence;}
     auto ack=m;ack.kind=DelayKind::Ack;send(id.host,ack);
 }
-void LiveDelay::pulse(std::uint64_t epoch,std::uint64_t controls,std::uint32_t frame,bool paused,bool network_wait,Clock::time_point now,std::uint8_t missing_owners) {
+void LiveDelay::pulse(std::uint64_t epoch,std::uint64_t controls,std::uint32_t frame,bool paused,bool network_wait,Clock::time_point now,std::uint8_t missing_owners,bool confirmed_gate) {
     const auto id=control_->identity();const bool was_dynamic=dynamic_;paused_=paused;dynamic_=id.dynamic;
+    if(id.prediction_window&&*id.prediction_window>=2&&*id.prediction_window<=20&&window_!=*id.prediction_window) {
+        window_=*id.prediction_window;policies_.clear();
+    }
+    if(id.manual_delay&&*id.manual_delay<=MaximumDelay)fixed_=*id.manual_delay;
     if(room_!=id.room||epoch_!=epoch||controls_!=controls) {
         const bool retain=room_==id.room&&controls_==controls&&was_dynamic&&id.dynamic&&pulse_at_.time_since_epoch().count()&&now>=pulse_at_&&now-pulse_at_<=std::chrono::seconds(10);
         const auto learned=retain?current_:fixed_;
         room_=id.room;epoch_=epoch;controls_=controls;frame_=frame;current_=learned;fill_=learned>fixed_?learned-fixed_:0;late_=waits_=samples_=0;
+        clock_frontier_=frame;host_clock_.reset();
         capable_.clear();reports_.clear();targets_.clear();policies_.clear();serial_=retired_=report_serial_=0;report_at_=hello_at_=decision_at_=sample_at_={};
-        waiting_frame_=UINT32_MAX;negotiated_=host_ready_=false;inputs_.reset();traced_serial_=0;moved_at_=now;
+        waiting_frame_=UINT32_MAX;negotiated_=host_ready_=false;host_lead_.reset();inputs_.reset();traced_serial_=0;moved_at_=now;
         pulse_at_=arrival_at_=wait_started_=applied_at_={};owner_arrivals_={};blocked_time_=wait_time_={};was_waiting_=false;
-        owner_late_={};owner_samples_={};owner_waits_={};work_us_=replay_us_=0;measured_at_=now;response::reset(epoch);
+        owner_late_={};owner_samples_={};owner_waits_={};arrival_histogram_={};work_us_=replay_us_=0;measured_at_=now;response::reset(epoch);
     }
-    const bool waiting=network_wait&&!paused;
+    if(was_dynamic!=id.dynamic) {
+        capable_.clear();reports_.clear();targets_.clear();policies_.clear();host_lead_.reset();
+        negotiated_=host_ready_=false;hello_at_=report_at_=decision_at_={};
+    }
+    if(!id.dynamic){apply(fixed_,now);host_lead_.reset();}
+    const bool waiting=network_wait&&!paused&&!confirmed_gate;
     if(waiting&&was_waiting_&&pulse_at_.time_since_epoch().count()&&now>=pulse_at_){
         const auto elapsed=std::min(now-pulse_at_,std::chrono::duration_cast<Clock::duration>(std::chrono::milliseconds(50)));
         blocked_time_+=elapsed;wait_time_+=elapsed;
@@ -134,11 +155,17 @@ void LiveDelay::pulse(std::uint64_t epoch,std::uint64_t controls,std::uint32_t f
     if(!waiting){wait_started_={};wait_time_={};}
     pulse_at_=now;was_waiting_=waiting;
     if(frame_!=frame)moved_at_=now;frame_=frame;
+    // A private correction rewinds execution, never the host's pacing clock.
+    clock_frontier_=std::max(clock_frontier_,frame);
     if(waiting&&waiting_frame_!=frame) {
         waits_=std::min(65535U,waits_+1);waiting_frame_=frame;
         for(unsigned o=0;o<4;++o)if(o!=local_owner_&&(missing_owners&(1U<<o)))owner_waits_[o]=std::min(65535U,owner_waits_[o]+1);
     }
     for(auto& packet:control_->incoming()){DelayMessage m;if(decode(packet.bytes,m))receive(id,packet.source,m,now);}
+    // Menus/resource transactions deliberately require agreed inputs. Their
+    // waits cannot measure the lead needed for speculative racing. Keep input
+    // capture active here so menu buttons continue to work normally.
+    if(confirmed_gate){late_=waits_=samples_=0;owner_late_={};owner_samples_={};owner_waits_={};arrival_histogram_={};blocked_time_={};work_us_=replay_us_=0;measured_at_=now;}
     bool capable=id.dynamic&&id.active;
     if(id.authority) {
         for(const auto& route:id.routes)if(route.racer&&route.id!=id.local){const auto peer=capable_.find(route.id);if(peer==capable_.end()||now-peer->second>std::chrono::seconds(5))capable=false;}
@@ -147,7 +174,7 @@ void LiveDelay::pulse(std::uint64_t epoch,std::uint64_t controls,std::uint32_t f
     if(id.active&&id.dynamic&&room_&&epoch_&&controls_) {
         if(!hello_at_.time_since_epoch().count()||now>=hello_at_) {
             DelayMessage hello;hello.kind=DelayKind::Hello;hello.delay=current_;hello.owner=local_owner_<4?local_owner_:255;hello.enabled=id.authority?negotiated_:true;
-            send(id.authority?0:id.host,hello);hello_at_=now+std::chrono::seconds(1);
+            send(id.authority?0:id.host,hello);hello_at_=now+std::chrono::milliseconds(500);
         }
         if(!paused&&(!report_at_.time_since_epoch().count()||now>=report_at_)) {
             DelayMessage report;report.kind=DelayKind::Report;report.enabled=true;report.delay=current_;report.owner=local_owner_<4?local_owner_:255;report.sequence=++report_serial_;
@@ -156,14 +183,20 @@ void LiveDelay::pulse(std::uint64_t epoch,std::uint64_t controls,std::uint32_t f
             report.blocked_ms=unsigned(std::min<std::int64_t>(65535,std::chrono::duration_cast<std::chrono::milliseconds>(blocked_time_).count()));
             report.arrival_age_ms=arrival_at_.time_since_epoch().count()?unsigned(std::clamp<std::int64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(now-arrival_at_).count(),0,65535)):0;
             report.owner_late=owner_late_;report.owner_samples=owner_samples_;report.owner_waits=owner_waits_;
+            // Deadline p90 rejects an isolated old/reordered packet. Real
+            // exhausted-window pauses still take the measured wait path.
+            for(unsigned o=0;o<4;++o)if(owner_samples_[o]) {
+                const auto rank=(owner_samples_[o]*90+99)/100;unsigned count=0;
+                for(unsigned n=0;n<49;++n){count+=arrival_histogram_[o][n];if(count>=rank){report.owner_late[o]=n;break;}}
+            }
             for(unsigned o=0;o<4;++o)if(waiting&&o!=local_owner_&&(missing_owners&(1U<<o)))report.owner_waits[o]=std::max(report.owner_waits[o],(report.blocked_ms+32)/33);
             report.work_us=unsigned(std::min<std::uint64_t>(10000000,work_us_));report.replay_us=unsigned(std::min<std::uint64_t>(report.work_us,replay_us_));
             report.interval_us=unsigned(std::clamp<std::int64_t>(std::chrono::duration_cast<std::chrono::microseconds>(now-measured_at_).count(),0,10000000));
             if(id.authority){report.room=room_;report.epoch=epoch_;report.controls=controls_;report.frame=frame_;reports_[id.local]={report,now};}else send(id.host,report);
-            late_=waits_=samples_=0;owner_late_={};owner_samples_={};owner_waits_={};blocked_time_={};work_us_=replay_us_=0;measured_at_=now;report_at_=now+std::chrono::milliseconds(500);
+            late_=waits_=samples_=0;owner_late_={};owner_samples_={};owner_waits_={};arrival_histogram_={};blocked_time_={};work_us_=replay_us_=0;measured_at_=now;report_at_=now+std::chrono::milliseconds(500);
         }
     }
-    if(id.authority&&negotiated_&&!paused&&now>=decision_at_) {
+    if(id.authority&&negotiated_&&!paused&&!confirmed_gate&&now>=decision_at_) {
         decision_at_=now+std::chrono::milliseconds(500);
         std::vector<std::pair<Member,unsigned>> racers;
         if(id.local_racer&&local_owner_<4)racers.push_back({id.local,local_owner_});
@@ -171,18 +204,19 @@ void LiveDelay::pulse(std::uint64_t epoch,std::uint64_t controls,std::uint32_t f
         for(const auto& [member,owner]:racers) {
             if(targets_.contains(member))continue;
             const auto origin=reports_.find(member);if(origin==reports_.end()||now-origin->second.at>std::chrono::seconds(2))continue;
-            unsigned late=0,waits=0;bool fresh=true,measured=true,pressure=false,busy=false;
+            unsigned late=0,waits=0,blocked=0;bool fresh=true,measured=true,pressure=false,busy=false;
             for(const auto& [receiver,receiver_owner]:racers)if(receiver!=member) {
                 (void)receiver_owner;const auto found=reports_.find(receiver);
                 if(found==reports_.end()||now-found->second.at>std::chrono::seconds(2)){fresh=false;break;}
                 const auto& m=found->second.message;
                 if(m.blocked_ms&&m.arrival_age_ms>=1200){fresh=false;break;}
                 late=std::max(late,m.owner_late[owner]);waits=std::max(waits,m.owner_waits[owner]);measured&=m.owner_samples[owner]!=0||m.owner_waits[owner]!=0;
+                if(m.owner_waits[owner])blocked=std::max(blocked,m.blocked_ms);
                 if(m.interval_us>=100000&&std::uint64_t(m.work_us)*10>std::uint64_t(m.interval_us)*7&&std::uint64_t(m.replay_us)*5>m.interval_us)pressure=true;
                 if(m.interval_us>=100000&&std::uint64_t(m.work_us)*2>m.interval_us&&std::uint64_t(m.replay_us)*10>m.interval_us)busy=true;
             }
             auto [policy,inserted]=policies_.try_emplace(member);if(inserted)policy->second.reset(origin->second.message.delay,now);
-            const auto target=policy->second.evaluate(origin->second.message.delay,window_,0,late,waits,fresh,measured,now,pressure,busy);
+            const auto target=policy->second.evaluate(origin->second.message.delay,window_,0,late,waits,fresh,measured,now,pressure,busy,blocked);
             if(!target)continue;
             std::fprintf(stderr,"[online][delay-target] epoch=%llu member=%llu owner=%u from=%u to=%u late=%u waits=%u replay-pressure=%u window=%u\n",
                 static_cast<unsigned long long>(epoch_),static_cast<unsigned long long>(member),owner,origin->second.message.delay,*target,late,waits,unsigned(pressure),window_);
@@ -211,7 +245,8 @@ bool LiveDelay::capture(Input input,Clock::time_point now) {
 }
 void LiveDelay::arrival(unsigned owner,std::uint32_t frame,bool repair) {
     if(owner>=4||owner==local_owner_)return;owner_arrivals_[owner]=arrival_at_=pulse_at_;if(repair)return;
-    samples_=std::min(255U,samples_+1);owner_samples_[owner]=std::min(255U,owner_samples_[owner]+1);
+    samples_=std::min(255U,samples_+1);
+    if(owner_samples_[owner]<255){++owner_samples_[owner];++arrival_histogram_[owner][frame<frame_?std::min(48U,frame_-frame):0];}
     if(frame<frame_){const auto late=std::min(48U,frame_-frame);late_=std::max(late_,late);owner_late_[owner]=std::max(owner_late_[owner],late);}
 }
 void LiveDelay::work(std::uint64_t us,bool replay,std::uint32_t frame,bool executed) {
@@ -224,9 +259,9 @@ void LiveDelay::authored(std::uint32_t frame) {
 }
 unsigned sample_lead(unsigned fallback){return bound_delay?bound_delay->lead():fallback;}
 std::uint64_t sample_limit(std::uint32_t frontier,unsigned fallback,bool live_lead) {
-    return std::uint64_t(frontier)+(bound_delay&&bound_delay->dynamic()?bound_delay->lead()+1:fallback+(live_lead?2:1));
+    return std::uint64_t(frontier)+(bound_delay?bound_delay->lead()+(bound_delay->dynamic()?1:live_lead?2:1):fallback+(live_lead?2:1));
 }
-DelayScope::DelayScope(LiveDelay& delay):previous_(bound_delay){bound_delay=&delay;}
+DelayScope::DelayScope(LiveDelay& delay):previous_(bound_delay),prediction_(delay.prediction_window()){bound_delay=&delay;}
 DelayScope::~DelayScope(){bound_delay=previous_;}
 void input_arrival(unsigned owner,std::uint32_t frame){if(bound_delay&&!batched_arrival)bound_delay->arrival(owner,frame);}
 void input_authored(std::uint32_t frame){if(bound_delay)bound_delay->authored(frame);}

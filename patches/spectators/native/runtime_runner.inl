@@ -80,12 +80,14 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
             bool prior_watching=true;unsigned prior_port=4;auto next_save=Network::Clock::now()+std::chrono::seconds(5);
             auto observed=world->scene_view();auto observed_cursor=runtime.next();auto menu_since=observed_cursor.frame;
             bool car_selection_sent=false;
+            dkr::online_stability::HostSettingsQualification host_settings_check(scripted_check);
             while(!shared.stop) {
                 OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::Pump);
                 const auto now=Network::Clock::now();
                 auto sampled=unpack(shared.input.load());
                 if(scripted_check) {
                     const auto scene=world->scene_view();const auto at=runtime.next();
+                    host_settings_check.pulse(&lobby,initial.host,at.epoch,Network::Clock::now());
                     if(scene.menu!=observed.menu||(scene.menu&&scene.menu_id!=observed.menu_id)||observed_cursor.epoch!=at.epoch) {
                         observed=scene;observed_cursor=at;menu_since=at.frame;car_selection_sent=false;
                         std::fprintf(stderr,"[party][scene] epoch=%llu menu=%d id=%d level=%d type=%d viewports=%u\n",static_cast<unsigned long long>(at.epoch),scene.menu,scene.menu_id,scene.level,scene.race_type,unsigned(scene.viewports));
@@ -113,9 +115,14 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
                         }
                     } else sampled={0x8000,std::int8_t((at.frame/15)%2?30:-30),0};
                 }
-                if(!runtime.pulse(now,sampled,message)) {
-                    if(!message.empty())throw std::runtime_error(message);shared.stop=true;break;
-                }
+                dkr::online_stability::ReplaySlice replay_slice(Network::Clock::now());
+                do {
+                    if(!runtime.pulse(Network::Clock::now(),sampled,message)) {
+                        if(!message.empty())throw std::runtime_error(message);shared.stop=true;break;
+                    }
+                    if(!scripted_check)sampled=unpack(shared.input.load());
+                }while(!shared.stop&&replay_slice.again(runtime.replay_ready(),Network::Clock::now()));
+                if(shared.stop)break;
                 watching=runtime.watching();local_port=runtime.local_port();
                 if(prior_watching!=watching.load()||prior_port!=local_port.load()) {
                     // A role transition starts fresh local achievement context;
@@ -125,12 +132,22 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
                 }
                 const auto cursor=runtime.next();
                 const auto stats=runtime.statistics();
-                report({true,PumpWait::None,cursor.epoch,cursor.frame,runtime.confirmed(),stats.rollbacks,stats.replayed_frames,runtime.status(),cursor.epoch==0});
+                const auto cause=runtime.pause_reason();
+                using Pause=dkr::online_stability::Pause;
+                const auto wait=cause==Pause::Network||cause==Pause::LocalInput?PumpWait::OwnerInput:
+                    cause==Pause::Confirmation?PumpWait::Confirmation:cause==Pause::Presentation?PumpWait::PresentationDrain:
+                    cause==Pause::ScenePeers?PumpWait::ScenePeers:cause==Pause::ScenePreparation?PumpWait::ScenePreparation:
+                    cause==Pause::Pacing?PumpWait::FramePacing:PumpWait::None;
+                report({true,wait,cursor.epoch,cursor.frame,runtime.confirmed(),stats.rollbacks,stats.replayed_frames,runtime.status(),cursor.epoch==0});
                 if(now>=next_save) {
                     if(initial.host&&!save_writer.submit(world->confirmed_save(),world->confirmed_paks(),message,world->confirmed_records()))throw std::runtime_error(message);
                     next_save=now+std::chrono::seconds(5);
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                // Correction already has finite admitted work. Yield after a
+                // bounded slice instead of adding a timer sleep to every
+                // replayed frame. Pacing/input/GPU waits still sleep normally.
+                if(runtime.replay_ready())std::this_thread::yield();
+                else std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }catch(const std::exception& e){shared.fail(e.what());if(!initial.host&&party::party_watching(&lobby))lobby.disconnect("Stopped watching: "+std::string(e.what()));else party::party_stop(&lobby,e.what());}
          catch(...){shared.fail("Party simulation worker failed.");if(!initial.host&&party::party_watching(&lobby))lobby.disconnect("Stopped watching.");else party::party_stop(&lobby,"Party simulation stopped.");}
@@ -138,8 +155,19 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
     });
     const auto start=Network::Clock::now();ConfirmedAudioMailbox::Block block;
     std::array<std::int16_t,ConfirmedAudioMailbox::kMaximumBytes/2> pcm{};unsigned routed=99;
-    std::uint16_t prior_buttons=0;
+    std::uint16_t prior_buttons=0;auto qualified_approval_at=start;
     while(!shared.stop&&!shared.simulation_done) {
+        // Continue the isolated CLI host's existing admission automation after
+        // launch, so late spectators exercise the ordinary approval API too.
+        // Normal launcher/overlay sessions still require the host's decision.
+        if(scripted_check&&initial.host&&Network::Clock::now()>=qualified_approval_at) {
+            qualified_approval_at=Network::Clock::now()+std::chrono::milliseconds(100);
+            for(const auto& pending:lobby.view().pending_joins) {
+                std::string admission_error;
+                if(lobby.approve_join(pending.request_id,admission_error))
+                    std::fprintf(stderr,"[spectator][qualification] approved-late-member=%llu\n",static_cast<unsigned long long>(pending.request_id));
+            }
+        }
         const auto port=local_port.load();
         if(port!=routed){for(int p=0;p<4;++p)platform::set_rumble(p,false);platform::set_online_input_routing(true,launch.occupied_mask,port<4?std::uint8_t(port):255);routed=port;}
         const auto motor=shared.confirmed_motor.exchange(-1);if(motor>=0&&port<4&&!watching.load())platform::set_rumble(int(port),motor!=0);

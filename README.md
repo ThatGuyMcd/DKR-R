@@ -4,21 +4,27 @@
 
 [Join our Discord](https://discord.com/invite/AMWfXdBjNP) · [Open the Mod Library](https://positron-portal.com/dkr-r/) · [Downloads](https://github.com/ThatGuyMcd/DKR-R/releases)
 
-## DKR-R v1.0.14
+## DKR-R v1.0.15
 
-I've worked on the online input delay, joining and frame pacing, and brought the
-launcher and in-game overlay together so the same pages work in both. There are
-new display options, automatic seasonal themes, launcher languages, optional
-analogue driving and controller feedback settings. Custom cars and the road
-wheels on custom characters now respond to lighting properly too.
+I've spent quite a bit of time working through DKR-R Online since v1.0.14.
+This update improves late-input recovery, reduces some of the rollback CPU work
+and gives spectators buffered confirmed playback. Hosts can now change the
+prediction window and input delay from the lobby or in-game overlay too.
 
-Play fades into the new Starting Game screen, with mod progress underneath the
-logo. Online uses the same design while everyone syncs. Linux now requests GPU
-acceleration for the launcher, with a software fallback when needed.
+There's also automatic cleanup for old downloads and caches, a tidier Play page
+with Start Game always within reach, and custom character names that fit Player
+Select. File dialogs run in a separate helper, and crash reports keep more useful
+diagnostic information. The unresolved startup/gameplay crashes are recorded in
+the [crash reporting guide](docs/CRASH_REPORTING.md#remaining-crash-investigations).
 
-Your saves, mods and settings can stay. Use the complete v1.0.14 package on every
-machine in an online lobby. See the [full release notes](docs/PUBLIC-1.0.14-NOTES.txt)
-and [changelog](CHANGELOG.md) for everything since v1.0.12.
+Your saves, mods and settings can stay. Use matching complete v1.0.15 packages
+on every machine in an online lobby. See the [full release notes](docs/PUBLIC-1.0.15-NOTES.txt)
+and [changelog](CHANGELOG.md) for everything since v1.0.14.
+
+Online waits are reduced, not eliminated. Very slow connections can still run
+out of prediction history. The reported missing vanilla online car textures and
+other racers' road wheels remain under investigation. Physical Steam Deck Wi-Fi
+and separate-machine acceptance remain necessary; see [validation](RELEASE-VALIDATION.md).
 
 DKR-R is a native static recompilation of Diddy Kong Racing. Bring your own
 legally obtained **US v1.0 or US Rev A/v1.1 ROM**. No ROM or extracted game
@@ -49,6 +55,10 @@ pages as the launcher. **Play** contains Achievements, Session mods and Save
 Manager. Turn Session mods OFF for your next vanilla session without changing
 any individual mod selections. Ordinary offline mods still share your personal
 Adventure; online and development saves keep separate owners.
+
+Start Game stays in a compact bar at the bottom while the page scrolls above it.
+It starts selected when a ROM is ready, and you can move away with the controller
+normally. The overlay uses the same position for Return to the Race.
 
 **Skip launcher** boots the selected game automatically and can be turned off
 again in the overlay. **Language** changes the launcher and overlay immediately;
@@ -93,6 +103,14 @@ connection** opens the shared Scoreboard. Ping and route readings describe the
 connection; they do not guarantee a frame rate. Initial startup uses the new
 Syncing Game screen until the game is ready.
 
+Hosts can open **Host settings** while the room is open or during a race. Press
+**Apply changes** to update prediction/input delay live or close new spectator
+joins. Capacity, menu and replay edits made during play wait until the lobby.
+Fresh profiles use automatic delay and a 14-frame prediction window; saved
+preferences are kept. Larger windows can cover more latency and need more memory
+and correction work. Spectators never supply racing inputs; loading and catching
+up can take longer than the initial 1.5-second playback-buffer target.
+
 See [Online](docs/ONLINE_MULTIPLAYER.md), [public lobbies](docs/PUBLIC_LOBBIES.md)
 and [spectators](docs/SPECTATORS.md). Gameplay uses the admitted peer transport;
 the website handles discovery and accounts. Host migration is not available.
@@ -131,9 +149,16 @@ anonymity cannot be guaranteed. See [crash reporting](docs/CRASH_REPORTING.md).
 The launcher checks GitHub for compatible signed updates; downloading and
 installing remain your choice. See [Updates](docs/UPDATES.md).
 
+Startup cleanup clears verified leftover downloads, installation preparation and
+old caches once per launch, continuing at low priority while playing.
+Completed Mod Library installs also clear their own verified disposable files
+without starting another full cleanup pass.
+**About DKR-R > Support > Storage** provides a preview and manual
+controls. Saves, ROMs and installed content are kept. See [Storage](docs/STORAGE.md).
+
 ## Documentation and contributing
 
-- [All current guides](docs/README.md), [release notes](docs/PUBLIC-1.0.14-NOTES.txt)
+- [All current guides](docs/README.md), [release notes](docs/PUBLIC-1.0.15-NOTES.txt)
   and [known limitations/validation](RELEASE-VALIDATION.md).
 - [Troubleshooting](docs/TROUBLESHOOTING.md), [building](docs/BUILDING.md),
   [development](docs/DEVELOPMENT.md) and [contributing](CONTRIBUTING.md).

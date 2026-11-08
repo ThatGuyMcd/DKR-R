@@ -6,7 +6,7 @@ AUTH=Path(__file__).resolve().parent;ROOT=AUTH.parents[1]
 VERSION='1.0.11-online-playtest.2'
 NAMES={('DKRExperimentalOwnedGameV77','probe_native.c'),('DKRExperimentalOwnedGameV80','probe_native.c'),
  ('DKRUpdateInstall','update_process.cpp'),('DKRUpdateClient','update_service.cpp'),('DKRPortGame','game_main.cpp'),('DKRPortGame','party_runtime.cpp'),
- ('DKRNetplayCore','direct_session.cpp'),('DKRNetplayCore','quick_join_transport.cpp'),
+ ('DKRNetplayCore','direct_session.cpp'),('DKRNetplayCore','quick_join_transport.cpp'),('DKRNetplayCore','experimental_rollback.cpp'),
  ('DKRNetplayCore','experimental_lobby_admission.cpp'),('DKRNetplayCore','experimental_network.cpp'),('DKRPortGame','experimental_runtime.cpp'),
  ('DKRNetplayCore','online_mod_admission.cpp'),
  ('DKRLegacyModCore','online_mod_cache.cpp'),('DKRLegacyImportLibrary','online_mod_sync.cpp'),
@@ -33,7 +33,56 @@ def beta3(name,text):
     """
     game=ROOT/'runtime-recomp/src/game'
     include=lambda n:'#include "'+(game/n).as_posix()+'"\n'
-    if name=='legacy_mod_launch.hpp':
+    # These first-party definitions already contain the repair when their
+    # direct source is compiled. Retained capsule aliases still need the same
+    # declaration/body below, through this existing compatibility boundary.
+    repaired={
+        'game_payload.hpp':game/'game_payload.hpp',
+        'game_payload_v77.cpp':game/'game_payload_v77.cpp',
+        'game_payload_v80.cpp':game/'game_payload_v80.cpp',
+        'legacy_character_menu.hpp':game/'mods/legacy_character_menu.hpp',
+        'legacy_character_menu_render.hpp':game/'mods/legacy_character_menu_render.hpp',
+        'legacy_character_stage.hpp':game/'mods/legacy_character_stage.hpp',
+        'legacy_character_menu_render.cpp':game/'mods/legacy_character_menu_render.cpp',
+        'legacy_character_stage.cpp':game/'mods/legacy_character_stage.cpp',
+        'runtime_legacy_mods.cpp':game/'runtime_legacy_mods.cpp',
+        'update_process.hpp':game/'updates/update_process.hpp',
+    }
+    if name in repaired and text==repaired[name].read_text():return text
+    if name=='game_payload.hpp':
+        text=once(text,'    RecompiledEntrypoint menu_render_reset;',
+            '    RecompiledEntrypoint menu_render_reset;\n    RecompiledEntrypoint menu_text_width;\n    RecompiledEntrypoint menu_view_matrix;\n    RecompiledEntrypoint menu_projection;')
+    elif name in ('game_payload_v77.cpp','game_payload_v80.cpp'):
+        text=once(text,'        .menu_render_reset = rendermode_reset,',
+            '        .menu_render_reset = rendermode_reset,\n        .menu_text_width = get_text_width,\n        .menu_view_matrix = get_camera_matrix,\n        .menu_projection = get_projection_matrix_s16,')
+    elif name=='legacy_character_menu.hpp':
+        text=include('mods/legacy_character_label_layout.hpp')+text
+        text=once(text,'    std::array<unsigned,4> native{};',
+            '    std::array<std::optional<CharacterLabelWorld>,CustomStageSlots> label_anchors{};\n    std::array<unsigned,4> native{};')
+    elif name=='legacy_character_menu_render.hpp':
+        text=once(text,'    OriginalPiHandler texture=nullptr,font=nullptr,colour=nullptr,background=nullptr,text=nullptr,reset=nullptr;',
+            '    OriginalPiHandler texture=nullptr,font=nullptr,colour=nullptr,background=nullptr,text=nullptr,reset=nullptr;\n    OriginalPiHandler text_width=nullptr,view_matrix=nullptr,projection=nullptr;')
+    elif name=='legacy_character_stage.hpp':
+        text=once(text,'    bool redirect_spawn(std::span<std::uint8_t>,recomp_context&);',
+            '    bool redirect_spawn(std::span<std::uint8_t>,recomp_context&);\n    void label_anchors(std::span<std::uint8_t>,CharacterMenuView&)const;')
+    elif name=='legacy_character_menu_render.cpp':
+        marker='void CharacterMenuRenderer::draw_hint('
+        text=once(text,function(text,marker),function((game/'mods'/name).read_text(),marker))
+    elif name=='legacy_character_stage.cpp':
+        marker='bool CharacterStage::redirect_spawn('
+        text=once(text,marker,function((game/'mods'/name).read_text(),'void CharacterStage::label_anchors(')+'\n'+marker)
+    elif name=='runtime_legacy_mods.cpp':
+        text=once(text,'p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset};',
+            'p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset,\n                p->menu_text_width,p->menu_view_matrix,p->menu_projection};\n            state->stage.label_anchors({rdram,legacy::guest_memory_size()},view);')
+    elif name=='update_process.hpp':
+        text=once(text,'bool inherit_update_environment = false);','bool inherit_update_environment = false, bool system_desktop_libraries = false);')
+        text=once(text,'    int wait(unsigned timeout_ms);','    int wait(unsigned timeout_ms);\n    void terminate();')
+    elif name=='update_process.cpp':
+        current=(game/'updates/update_process.cpp').read_text()
+        if 'void Child::terminate(' not in text:
+            text=once(text,function(text,'Child::Child('),function(current,'Child::Child('))
+            text=once(text,'bool parent_alive(',function(current,'void Child::terminate(')+'\n'+'bool parent_alive(')
+    elif name=='legacy_mod_launch.hpp':
         text=include('library_ui/startup_progress.hpp')+text
         text=once(text,'struct PreparedModLaunch {','struct PreparedModLaunch {\n    bool content_enabled=true;')
         text=once(text,'using LaunchProgress=std::function<void(const char*)>;',
@@ -60,6 +109,13 @@ def beta3(name,text):
         text=once(text,'[this,config=std::move(config),rom=std::move(rom),online](std::stop_token stop) {',
             '[this,config=std::move(config),rom=std::move(rom),online,enabled=dkr::session_content::next_enabled.load()](std::stop_token stop) {\n            dkr::session_content::Preparation selection(enabled);')
     elif name=='game_main.cpp':
+        text=include('crash_reports/native_context.hpp')+text
+        current=(game/name).read_text()
+        for marker in ('LONG WINAPI RuntimeCrashFilter(','void RuntimeSignalHandler(','void InstallRuntimeSignalHandlers('):
+            text=once(text,function(text,marker),function(current,marker))
+        if 'dkr::crash_reports::refresh_native_context(true);' not in text:
+            text=once(text,'                 DKR_RELEASE_VERSION);\n    return true;',
+                '                 DKR_RELEASE_VERSION);\n    dkr::crash_reports::refresh_native_context(true);\n    return true;')
         text=include('crash_reports/reporting.hpp')+text
         text=once(text,'    dkr::runtime::startup_performance::mark("persistent-log-ready");',
             '    dkr::runtime::startup_performance::mark("persistent-log-ready");\n    dkr::crash_reports::start(config_directory,DKR_RELEASE_VERSION);')
@@ -90,6 +146,13 @@ def beta3(name,text):
         text=once(text,'    const SectionState& source = g_sections[section_slot(from)];',
             '    if(!dkr::session_content::local_assets_allowed())return -1;\n    const SectionState& source = g_sections[section_slot(from)];')
     elif name=='rt64_renderer.cpp':
+        text=include('crash_reports/native_context.hpp')+text
+        if '[boot][graphics] requested-api=' not in text:
+            text=once(text,'    dkr::runtime::texture_packs::renderer_started();',
+                function((game/name).read_text(),'if(application_->device)')+'\n    dkr::runtime::texture_packs::renderer_started();')
+        if 'dkr::crash_reports::refresh_native_context();' not in text:
+            text=once(text,'    dkr::runtime::startup_performance::report("renderer-ready",',
+                '    dkr::crash_reports::refresh_native_context();\n    dkr::runtime::startup_performance::report("renderer-ready",')
         text='#include <tuple>\n'+include('display_settings/policy.hpp')+text
         text=once(text,'void ApplyConfig(RT64::Application& application,',include('display_settings/renderer.inl')+'\nvoid ApplyConfig(RT64::Application& application,')
         text=once(text,'    application.userConfig.downsampleMultiplier = std::max(config.ds_option, 1);',
@@ -118,6 +181,13 @@ def beta3(name,text):
         text=include('display_settings/policy.hpp')+text
         text=once(text,'static_cast<float>(width) / static_cast<float>(height), layout,',
             'dkr::display::view_aspect(width,height), layout,')
+    elif name=='owner_pump.inl':
+        text=once(text,'a.watching?party->enabled&&spectators+pending_spectators<8:',
+            'a.watching?party->enabled&&party->allow_spectators&&spectators+pending_spectators<8:')
+        text=once(text,'{"maxSpectators",party->enabled?8:0}',
+            '{"maxSpectators",party->enabled?(party->allow_spectators?8:spectators):0}')
+        text=once(text,'{"canSpectateRunning",party->enabled&&online->running_spectators}',
+            '{"canSpectateRunning",party->enabled&&party->allow_spectators&&online->running_spectators}')
     elif name=='netplay_types.hpp':
         if 'struct PackedInput {' not in text:return text
         start=text.index('struct PackedInput {');end=text.index('using FrameInputs',start)
@@ -173,6 +243,7 @@ def beta3(name,text):
             '    SDL_GameController* controller = g_controllers[player];\n    (void)dkr::runtime::input::poll(player,controller,nullptr,\n        dkr::runtime::input::keyboard_player()==int(player),true,false,false);')
         text=once(text,original,preview)
     elif name=='runtime_ui.cpp':
+        text=include('file_picker/client.hpp')+text
         text=include('display_settings/policy.hpp')+include('session_content/policy.hpp')+include('analog_driving/settings.hpp')+include('look_behind/policy.hpp')+text
         text=once(text,'        output << "modern_resolution="', '        dkr::display::save(output);\n        output << "session_mods=" << unsigned(dkr::session_content::next_enabled.load()) << \'\\n\';\n        output << "modern_resolution="')
         text=once(text,'            const int number = std::stoi(value);','            const int number = std::stoi(value);\n            if(dkr::display::load(key,number))continue;\n            if(key=="session_mods"){dkr::session_content::next_enabled=number!=0;continue;}')
@@ -284,6 +355,45 @@ extern "C" std::uint32_t dkr_analogue_driving(std::uint8_t* ram,recomp_context*,
     return dkr::runtime::driving::apply(ram,channel,racer,bits);
 }
 '''
+    elif name=='netplay_lobby.hpp':
+        if 'host_timing_member.inl' not in text:
+            text=once(text,'class Lobby final {\npublic:',
+                'class Lobby final {\npublic:\n'+include('online_stability/host_timing_member.inl'))
+    elif name=='experimental_rollback.hpp':
+        text=include('online_stability/snapshot_history.hpp')+text
+        text=include('online_stability/live_prediction.hpp')+text
+        text=include('netplay/experimental_checkpoint_hash.hpp')+text
+        text=once(text,'std::unique_ptr<RollbackStateStore> checkpoints_;','std::unique_ptr<dkr::online_stability::SnapshotHistory<RollbackStateStore>> checkpoints_;')
+        text=once(text,'    bool correcting() const;', '''    bool correcting() const;
+    unsigned prediction_window()const{return configuration_.prediction_window;}
+    bool set_prediction_window(unsigned value,std::string& error) {
+        return dkr::online_stability::update_prediction_window(active(),value,contract_.state_bytes,
+            configuration_.prediction_window,configuration_.checkpoint_budget_bytes,checkpoints_.get(),statistics_.checkpoint_bytes,
+            std::max(statistics_.next_frame,replay_goal_),error);
+    }
+    // Copy only the verified retained state at the confirmed frontier. Never
+    // rewind the live world or expose a speculative checkpoint to observers.
+    bool copy_confirmed_checkpoint(std::span<std::uint8_t> destination) const {
+        if(!active()||correcting()||statistics_.confirmed_frames>=statistics_.next_frame)return false;
+        std::uint64_t expected=0;
+        return checkpoints_->load(statistics_.confirmed_frames,destination,&expected)&&checkpoint_hash(destination)==expected;
+    }''')
+    elif name=='experimental_rollback.cpp':
+        text=once(text,'Step Driver::step(bool allow_advance) {', '''Step Driver::step(bool allow_advance) {
+    if(const auto requested=dkr::online_stability::requested_prediction_window();requested&&*requested!=prediction_window()) {
+        std::string detail;if(!set_prediction_window(*requested,detail)){fail(detail);return Step::Failed;}
+    }''')
+        text=once(text,'if (statistics_.next_frame - statistics_.confirmed_frames >= configuration_.prediction_window)',
+            'if (statistics_.next_frame >= replay_goal_ && statistics_.next_frame - statistics_.confirmed_frames >= configuration_.prediction_window)')
+        text=once(text,'auto checkpoints = std::make_unique<RollbackStateStore>(\n            contract.state_bytes, configuration.prediction_window + 8U, 4U, 2U, true);',
+            'auto checkpoints = std::make_unique<dkr::online_stability::SnapshotHistory<RollbackStateStore>>(\n            contract.state_bytes, configuration.prediction_window,\n            configuration.checkpoint_budget_bytes-contract.state_bytes);')
+        text=once(text,'    std::string detail;\n    {performance::Scope timing(performance::Stage::Capture);',
+            '    std::string detail;\n    auto target=checkpoints_->staging(frame);\n    if(target.empty())target=scratch_;\n    {performance::Scope timing(performance::Stage::Capture);')
+        text=once(text,'simulation_.capture(scratch_, detail)','simulation_.capture(target, detail)')
+        text=once(text,'hash=checkpoint_hash(scratch_);','hash=checkpoint_hash(target);')
+        text=once(text,'checkpoints_->save(frame, scratch_, hash)','checkpoints_->save(frame, target, hash)')
+        text=once(text,'        configuration_ = configuration;',
+            '        std::fprintf(stderr,"[rollback][checkpoints] direct=%u state-bytes=%zu retained-bytes=%zu budget=%zu\\n",unsigned(checkpoints->direct()),contract.state_bytes,checkpoints->allocated_bytes()+scratch.capacity(),configuration.checkpoint_budget_bytes);\n        configuration_ = configuration;')
     elif name=='probe_driver.cpp':
         text=include('analog_driving/native.hpp')+text
         anchor='    bool tick(std::uint32_t frame, const FrameInputs& inputs, TickOutput& output, std::string& error) override {'
@@ -330,6 +440,38 @@ extern "C" std::uint32_t dkr_analogue_driving(std::uint8_t* ram,recomp_context*,
         text=re.sub(r'(\w+)\.buttons,\1\.stick_x,\1\.stick_y\}',r'\1.buttons,\1.stick_x,\1.stick_y,\1.accelerator,\1.brake,\1.driving_flags}',text)
         text=text.replace('PackedInput{buttons,std::int8_t(std::clamp(x,-1.0F,1.0F)*80),std::int8_t(std::clamp(y,-1.0F,1.0F)*80)}','online_input_broker().local_sample().input')
     return text
+def storage_guards(name,text):
+    anchors={
+        'legacy_import_library.cpp':['        thread_=std::jthread([this,source=std::move(source),roms=std::move(roms),scan](std::stop_token stop) {'],
+        'legacy_track_catalog.cpp':['        thread_=std::jthread([this,action,previous,id=std::move(id),roms=std::move(roms)](std::stop_token stop) {'],
+        'magic_code_library.cpp':['struct Lease {'],
+        'vehicle_library.cpp':['struct Lock {'],
+        'online_mod_sync.cpp':['        revision=std::move(revision),ai,prepare=std::move(prepare)](std::stop_token stop) mutable {','    try {thread_=std::jthread([this,settings=std::move(settings),prepare=std::move(prepare)](std::stop_token stop) mutable {'],
+        'online_mod_cache.cpp':['bool cached_payload(const std::filesystem::path& directory,const Payload& expected) {'],
+        'runtime_texture_packs.cpp':['                    const TrackPackOwner* owner) {'],
+        'custom_tracks.cpp':['             InstallOutcome* outcome) {'],
+        'update_service.cpp':['    worker = std::jthread([this, action = std::move(action)](std::stop_token stop) {'],
+    }
+    if name not in anchors and name!='online_mod_profile.cpp':return text
+    text='#include "'+(ROOT/'runtime-recomp/src/game/storage/maintenance.hpp').as_posix()+'"\n'+text
+    for anchor in anchors.get(name,[]):
+        guard='OnlineActivity' if name=='online_mod_sync.cpp' else 'Activity'
+        replacement=anchor+'\n    dkr::storage::'+guard+' storage_activity;'
+        if not re.search(re.escape(anchor)+r'\s*dkr::storage::'+guard+r' storage_activity;',text):text=once(text,anchor,replacement)
+    if name=='online_mod_profile.cpp':
+        anchor='try{validate_profile(*out);'
+        replacement=anchor+'dkr::storage::used(out->directory);'
+        if replacement not in text:text=once(text,anchor,replacement)
+        anchor='        } else if(cached) {'
+        replacement=anchor+'\n            dkr::storage::used(source);'
+        if replacement not in text:text=once(text,anchor,replacement)
+    if name=='online_mod_cache.cpp':
+        start=text.index('bool cached_payload(');end=text.index('void cache_bundle(',start)
+        part=text[start:end]
+        if 'dkr::storage::used(file);' not in part:part=once(part,'    return true;','    dkr::storage::used(file);\n    return true;')
+        text=text[:start]+part+text[end:]
+    return text
+
 def compose(rows,out):
     if not NAMES.issubset({(r['target'],Path(r['path']).name) for r in rows}):
         raise ValueError('Online performance source closure differs')
@@ -338,7 +480,8 @@ def compose(rows,out):
     # Quoted capsule headers are transitive compiler inputs. Redirect the
     # complete affected include closure, so no TU retains the four-byte ABI.
     headers={}; seeds={'netplay_types.hpp','online_input_broker.hpp','runtime_input.hpp',
-        'runtime_controls_ui.inl','runtime_graphics_ui.inl','graphics.inl','sdk2_world.inl','experimental_owner_inputs.hpp','camera_session.hpp','legacy_mod_launch.hpp','runtime_online_mods_ui.inl'}
+        'runtime_controls_ui.inl','runtime_graphics_ui.inl','graphics.inl','sdk2_world.inl','experimental_owner_inputs.hpp','experimental_rollback.hpp','netplay_lobby.hpp','owner_pump.inl','camera_session.hpp','legacy_mod_launch.hpp','runtime_online_mods_ui.inl',
+        'game_payload.hpp','legacy_character_menu.hpp','legacy_character_menu_render.hpp','legacy_character_stage.hpp','update_process.hpp'}
     pattern=re.compile(r'^\s*#include "([^"\n]+)"',re.M)
     receipts=[]
     core_search=[]
@@ -350,12 +493,14 @@ def compose(rows,out):
     core_types=next((p for base in core_search for p in (base/'netplay_types.hpp',base/'netplay/netplay_types.hpp') if p.is_file()),None)
     if core_types is None:raise ValueError('The compiled netplay owner must supply the canonical input types')
     core_types=core_types.resolve()
+    core_lobby=next((p.resolve() for base in core_search for p in (base/'netplay_lobby.hpp',base/'netplay/netplay_lobby.hpp') if p.is_file()),None)
     def dependencies(text,origin,search):
         found={}
         for match in pattern.finditer(text):
             name=Path(match[1]);candidates=[name] if name.is_absolute() else [origin.parent/name,*[p/name for p in search]]
             path=next((p.resolve() for p in candidates if p.is_file()),None)
             if path and path.name=='netplay_types.hpp':path=core_types
+            if path and path.name=='netplay_lobby.hpp' and core_lobby:path=core_lobby
             if path is None or path.suffix not in ('.hpp','.h','.inl'):continue
             if any(p.lower() in ('extern','recompiledfuncs','recompiledpatches','recompiledrsp','thirdparty','contrib') for p in path.parts):continue
             found[match[1]]=path
@@ -447,7 +592,28 @@ Service *service() {''')
                 '    dkr::online_performance::protect_log(stderr);\n    std::setvbuf(stderr, nullptr, _IONBF, 0);\n'
                 '    if(!rotated){dkr::runtime::support::history::prune(log_directory/"history");std::fprintf(stderr,"[boot][logging] current log busy; separate instance log=%s\\n",current.string().c_str());}\n#if defined(__ANDROID__) || defined(DKR_IOS)')
         elif name=='quick_join_transport.cpp':
-            text='#include "online_presentation/test_receive_delay.hpp"\n'+text
+            text='#include <cstdio>\n#include "online_presentation/test_receive_delay.hpp"\n#include "online_stability/live_send_capacity.hpp"\n'+text
+            text=once(text,'        realtime.reliability.maxRetransmits = 0U;',
+                '        dkr::online_stability::configure_live_reliability(realtime.reliability);')
+            text=once(text,'            last_heartbeat_ = now;', '''            last_heartbeat_ = now;
+            struct SdkRow {
+                std::shared_ptr<rtc::PeerConnection> connection;
+                std::array<std::shared_ptr<rtc::DataChannel>,5> channels;
+            };
+            std::vector<SdkRow> sdk_rows;
+            {
+                std::scoped_lock lock(mutex_);
+                for(const auto& [identifier,peer]:peers_)if(peer->current.load())
+                    sdk_rows.push_back({peer->connection,{peer->control_channel,peer->authority_channel,
+                        peer->realtime_channel,peer->checkpoint_channel,peer->replica_channel}});
+            }
+            for(const auto& row:sdk_rows)if(row.connection) {
+                const auto rtt=row.connection->rtt();std::array<std::size_t,5> queued{};
+                for(unsigned n=0;n<queued.size();++n)if(row.channels[n])queued[n]=row.channels[n]->bufferedAmount();
+                std::fprintf(stderr,"[online][sdk] role=%s sctp-rtt-ms=%lld bytes-sent=%zu bytes-received=%zu queued-control=%zu queued-authority=%zu queued-live=%zu queued-checkpoint=%zu queued-replica=%zu\\n",
+                    host_?"host":"client",static_cast<long long>(rtt?rtt->count():-1),row.connection->bytesSent(),row.connection->bytesReceived(),
+                    queued[0],queued[1],queued[2],queued[3],queued[4]);
+            }''')
             text=once(text,'        std::vector<std::uint8_t> bytes;\n    };\n\n    void release_packet_bytes_locked',
                 '        std::vector<std::uint8_t> bytes;\n        std::chrono::steady_clock::time_point test_ready=dkr::online_presentation::test_receive_delay::ready_at();\n    };\n\n    void release_packet_bytes_locked')
             text=once(text,'            if (!candidate->empty()) { queue = candidate; break; }',
@@ -455,9 +621,10 @@ Service *service() {''')
             text=header('setup_policy.hpp')+text
             text=once(text,'if (!quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U))',
                 'if (!(quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U) ||\n'
-                '              dkr::online_performance::additional_capacity(traffic,dkr::online_performance::setup_bulk,buffered,aggregate,bytes.size()+1U)))')
+                '              dkr::online_performance::additional_capacity(traffic,dkr::online_performance::setup_bulk,buffered,aggregate,bytes.size()+1U)) ||\n'
+                '              !dkr::online_stability::fresh_input_capacity(traffic,buffered,bytes.size()+1U))')
         elif name=='direct_session.cpp':
-            text='#include "netplay/session_chat/chat.hpp"\n#include "netplay/session_chat/settings.hpp"\n#include "netplay/peer_relay/transport.hpp"\n'+text
+            text='#include "netplay/session_chat/chat.hpp"\n#include "netplay/session_chat/settings.hpp"\n#include "netplay/peer_relay/transport.hpp"\n#include "online_stability/qualification_delivery.hpp"\n'+text
             text=text.replace('make_udp_session_transport()', 'dkr::relay::wrap(this,make_udp_session_transport())')
             text=text.replace('make_quick_join_session_transport(true, {}, error)', 'dkr::relay::wrap(this,make_quick_join_session_transport(true, {}, error))')
             text=text.replace('make_quick_join_session_transport(false, invite, error)', 'dkr::relay::wrap(this,make_quick_join_session_transport(false, invite, error))')
@@ -675,9 +842,9 @@ Service *service() {''')
                 '            const auto cost=std::uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(Clock::now()-step_began).count());live_delay.work(cost,step==ex::Step::Replayed,next().frame?next().frame-1:0,step==ex::Step::Replayed||step==ex::Step::Advanced);step_us+=cost;max_step_us=std::max(max_step_us,cost);++steps;if(advance&&step!=ex::Step::Advanced)++stalls;')
             text=once(text,'            (void)stats;',
                 '            if(now>=performance_at){performance_at=now+std::chrono::seconds(5);\n'
-                '                std::fprintf(stderr,"[party][performance] epoch=%llu next=%u confirmed=%u delay=%u window=%u rollbacks=%u replayed=%u largest=%u predictions=%u step-avg-us=%llu step-max-us=%llu blocked-pulses=%u\\n",static_cast<unsigned long long>(cursor.epoch),after.frame,confirmed(),unsigned(live_delay.lead()),unsigned(launch.rollback_window),stats.rollbacks,stats.replayed_frames,stats.largest_rollback,stats.predicted_frames,static_cast<unsigned long long>(steps?step_us/steps:0),static_cast<unsigned long long>(max_step_us),stalls);\n'
+                '                std::fprintf(stderr,"[party][performance] epoch=%llu next=%u confirmed=%u delay=%u window=%u rollbacks=%u replayed=%u largest=%u predictions=%u step-avg-us=%llu step-max-us=%llu blocked-pulses=%u\\n",static_cast<unsigned long long>(cursor.epoch),after.frame,confirmed(),unsigned(live_delay.lead()),unsigned(live_delay.prediction_window()),stats.rollbacks,stats.replayed_frames,stats.largest_rollback,stats.predicted_frames,static_cast<unsigned long long>(steps?step_us/steps:0),static_cast<unsigned long long>(max_step_us),stalls);\n'
                 '                steps=stalls=0;step_us=max_step_us=0;}')
-        text=beta3(name,text)
+        text=storage_guards(name,beta3(name,text))
         text=remap(text,sources[str(source)])
         if row['target'] in test_bodies:
             before=test_bodies[row['target']]

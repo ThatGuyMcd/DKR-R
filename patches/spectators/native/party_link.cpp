@@ -1,6 +1,7 @@
 #include "party_link.hpp"
 #include "monocypher.h"
 #include "online_stability/live_inputs.hpp"
+#include "online_stability/live_reports.hpp"
 #include <algorithm>
 
 namespace dkr::runtime::spectators {
@@ -48,13 +49,19 @@ void PartyLink::reset_connection(){
     local=authority=room_id=0;party={};ready.clear();pending_watch.clear();peers.clear();seed.clear();save_generation=0;save_hash=0;launch.reset();
     incoming.clear();for(auto& q:outgoing)q.clear();incoming_bytes=outgoing_bytes=0;advertised=heartbeat=budget_at={};bulk_tokens=256*1024;status.clear();
     swap_requests.clear();requested_swap.reset();approved_swap.reset();cancel_swap=false;
-    ping_token=0;ping_sent={};rtt_ms=0;
+    maximum_racers=4;allow_spectators=true;
+    ping_window={};ping_token=0;ping_sent={};rtt_ms=0;
 }
 bool PartyLink::enqueue(LinkOutgoing p){
     const auto lane=unsigned(p.traffic);
     if(!enabled)return false;
-    // Only an unsent live batch is disposable. Every final sample remains in
-    // the runtime's exact repair history. Commands/control/repairs never merge.
+    if(lane==2&&p.kind==LinkKind::Runtime)for(auto& old:outgoing[2])
+        if(old.target==p.target&&old.kind==p.kind&&dkr::online_stability::report_supersedes(old.bytes,p.bytes)) {
+            if(p.bytes.size()>QueueBytes-(outgoing_bytes-old.bytes.size()))return false;
+            outgoing_bytes=outgoing_bytes-old.bytes.size()+p.bytes.size();old=std::move(p);return true;
+        }
+    // An unsent live batch is disposable too. Every final sample remains in
+    // the exact repair history. Commands and historical repairs never merge.
     if(lane==2&&p.kind==LinkKind::Runtime&&p.bytes.size()>21&&
         std::equal(p.bytes.begin(),p.bytes.begin()+5,std::array<std::uint8_t,5>{'D','P','R',2,19}.begin())) {
         dkr::online_stability::LiveInputs next;

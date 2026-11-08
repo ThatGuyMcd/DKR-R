@@ -18,6 +18,7 @@ TOOLING_TESTS_SKIP = {
     "hud_pipeline_tests.py": "needs generated v77/v80 sources, both ELFs and the baseline source ZIP",
     "hud_reference_source_tests.py": "needs a read-only Golden Balloon checkout",
     "magic_code_pipeline_tests.py": "needs generated v77/v80 sources (CTest passes them)",
+    "play_launch_layout_tests.py": "needs a complete production package and a native window for SDL readback",
     "water_profile_policy_tests.py": "needs both ELFs and their water policies",
 }
 # Tests that need build tools beyond Git and Python run in the opt-in

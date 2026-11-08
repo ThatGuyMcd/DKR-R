@@ -81,7 +81,7 @@ $experimentalRaceTest = (Test-Path -LiteralPath (Join-Path $resolvedBuild 'CMake
 if ($experimentalRaceTest -and $Version -notin @('1.0.5','1.0.6','1.0.7','1.0.7+beta.2','1.0.7+beta.3','1.0.7+beta.4','1.0.7+beta.5')) {
     if ($Version -notmatch 'experimental|rollback-test|^1\.0\.5-beta\.15(?:-playtest\.(?:[23456789]|10|11|12|14|15(?:-fix\.[12])?|16(?:-fix\.[12])?))?$') { throw 'Experimental backend builds must use a distinctly labelled experimental version or an approved Beta 15 playtest candidate.' }
 }
-$inputHostFiles = @('DKR-R-Runtime.exe', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll', 'DKR-R-InputHost.exe', 'SDL3.dll', 'DKR-R-ModWorker.exe', 'DKR-R-Updater.exe')
+$inputHostFiles = @('DKR-R-Runtime.exe', 'SDL2.dll', 'dxcompiler.dll', 'dxil.dll', 'DKR-R-InputHost.exe', 'SDL3.dll', 'DKR-R-ModWorker.exe', 'DKR-R-Updater.exe', 'DKR-R-FilePicker.exe')
 
 if (Test-Path -LiteralPath $stage) {
     throw "Refusing to overwrite existing release directory: $stage"
@@ -418,7 +418,8 @@ $expectedExecutables = @(
     [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-Runtime.exe')),
     [IO.Path]::GetFullPath($stagedInputHost),
     [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-ModWorker.exe')),
-    [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-Updater.exe'))
+    [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-Updater.exe')),
+    [IO.Path]::GetFullPath((Join-Path $stagedInputHostDirectory 'DKR-R-FilePicker.exe'))
 )
 $unexpectedExecutables = @($executables | Where-Object {
     $expectedExecutables -notcontains [IO.Path]::GetFullPath($_.FullName)

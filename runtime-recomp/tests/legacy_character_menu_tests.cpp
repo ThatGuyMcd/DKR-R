@@ -98,6 +98,8 @@ void spawn(std::uint8_t*,recomp_context* c) {
  g.write(obj+0x538,obj+0x600);g.write(obj+0x528,2,2);g.write(obj+0x548,2,2);
  g.write(obj+0x600,0,1);g.write(obj+0x60c,4,1);g.write(obj+0x544,obj+0x700);
  g.write(obj+0x704,10);g.write(obj+0x70c,20);
+ g.write(obj+0x504,obj+0x800);g.write(obj+0x524,3,2);
+ for(unsigned i=0;i<3;++i)g.write(obj+0x800+i*10+2,i?100+i*10:unsigned(-12),2);
  c->r2=std::int32_t(obj);
 }
 void free_object(std::uint8_t*,recomp_context*){++freed;}
@@ -220,6 +222,17 @@ void stage_browsing() {
  CharacterStageCalls calls{spawn,free_object,fraction,emit,steady_fraction,camera};
  recomp_context c{};c.r29=std::int32_t(0x800f0000);s.initialize(memory,fields,c,calls,a->characters);
  check(spawned==4,"Library loaded every enabled character instead of only four stage actors.");
+ CharacterMenuView labels;
+ for(unsigned i=0;i<4;++i){labels.active[i]=true;labels.custom[i]=i;labels.displayed[i]=i;}
+ s.label_anchors(memory,labels);
+ for(unsigned i=0;i<4;++i) {
+  const auto object=0x80090000+i*0x1000;
+  const float scale=std::bit_cast<float>(g.read(object+8));
+  const float origin=std::bit_cast<float>(g.read(object+0x10));
+  const float expected=origin+(i<2?-12.f*scale:120.f*scale+2);
+  check(labels.label_anchors[i] && std::abs((*labels.label_anchors[i])[1]-expected)<.0001f,
+        "Lower row did not anchor to feet, or upper row head placement changed.");
+ }
  check(std::bit_cast<float>(g.read(0x80092010))==-10 && std::bit_cast<float>(g.read(0x80093010))==-10,"Extra actors are not on the upper shelf.");
  CharacterMenuView v;for(unsigned i=0;i<4;++i)v.displayed[i]=i;v.displayed[0]=4;
  g.write(camera_address,0xff00,2);c.r5=2;
@@ -238,6 +251,9 @@ void stage_browsing() {
  s.release(memory,c,calls);check(freed==5,"Four-slot stage leaked or double-freed a paged actor.");
 }
 unsigned hint_texts=0,hint_resets=0,hint_font=0,hint_alpha=0;
+std::vector<std::string> drawn_labels;
+struct DrawnName {std::string text;unsigned x,y;};
+std::vector<DrawnName> drawn_names;
 void hint_font_call(std::uint8_t*,recomp_context* c){hint_font=unsigned(c->r4);}
 void hint_background(std::uint8_t*,recomp_context* c){hint_alpha=unsigned(c->r7);}
 void hint_colour(std::uint8_t*,recomp_context*){}
@@ -245,24 +261,85 @@ void hint_text(std::uint8_t*,recomp_context* c) {
  CharacterMenuMemory g(memory,fields);
  check(c->f_odd==(c->mips3_float_mode?&c->f1.u32l:&c->f0.u32h),"Hint aliases intercepted float registers.");
  check(std::uint32_t(c->r4)==g.address(F::DisplayList) && c->r5<320 && c->r6<240,"Hint escaped the native menu viewport.");
- check(unsigned(c->r7)>unsigned(c->r29)+32 && g.read(unsigned(c->r29)+16)==0,"Hint scratch aliases native call arguments.");
+ check(unsigned(c->r7)>unsigned(c->r29)+32 && g.read(unsigned(c->r29)+16)==4,"Hint scratch aliases native call arguments.");
  std::string value;for(unsigned n=0;n<256;++n){const auto ch=g.read(unsigned(c->r7)+n,1);if(!ch)break;value+=char(ch);}
- check(!value.empty() && value.size()<256,"Hint text is not bounded and terminated.");++hint_texts;
+ check(!value.empty() && value.size()<256,"Hint text is not bounded and terminated.");
+ check(value.find("P1")==std::string::npos && value.find("CHANGE")==std::string::npos && value.find("CHOOSE")==std::string::npos,"Old player plate/footer returned.");
+ check(hint_alpha==0,"Character labels added an opaque background.");
+ if(hint_font==0)drawn_names.push_back({value,unsigned(c->r5),unsigned(c->r6)});
+ drawn_labels.push_back(value);++hint_texts;
 }
+void hint_width(std::uint8_t*,recomp_context* c) {CharacterMenuMemory g(memory,fields);unsigned n=0;while(n<255 && g.read(unsigned(c->r4)+n,1))++n;c->r2=n*8;}
+void hint_view(std::uint8_t*,recomp_context* c){c->r2=std::int32_t(0x80070000);}
+void hint_projection(std::uint8_t*,recomp_context* c){c->r2=std::int32_t(0x80070100);}
 void hint_reset(std::uint8_t*,recomp_context*){++hint_resets;}
 void hints() {
  CharacterMenuMemory g(memory,fields);initialize(g,4);auto a=library();
  for(unsigned i=2;i<5;++i){auto c=a->characters[i%2];c.name="Long custom character name";a->characters.push_back(c);}
  CharacterMenuRenderer renderer;CharacterMenuDrawCalls calls;
  calls.font=hint_font_call;calls.background=hint_background;calls.colour=hint_colour;calls.text=hint_text;calls.reset=hint_reset;
+ calls.text_width=hint_width;calls.view_matrix=hint_view;calls.projection=hint_projection;
+ g.set(F::DisplayList,0x80060000);
+ for(unsigned i=0;i<16;++i) {g.write(0x80070000+i*4,std::bit_cast<unsigned>(i%5==0?1.f:0.f));g.write(0x80070100+i*2,i%5==0?1:0,2);g.write(0x80070120+i*2,0,2);}
  CharacterMenuView v;v.visible=true;
- for(unsigned p=0;p<4;++p){v.active[p]=true;v.custom[p]=p;v.ready[p]=p%2;}
+ for(unsigned p=0;p<4;++p){v.active[p]=true;v.custom[p]=p;v.ready[p]=p%2;v.displayed[p]=p;v.label_anchors[p]=CharacterLabelWorld{p%2?.65f:-.65f,p<2?-.6f:.2f,0};}
  recomp_context c{};c.r29=std::int32_t(0x800f0000);const auto saved=c;
  renderer.draw_hint(memory,fields,c,calls,a->characters,v);
- check(hint_texts==5 && hint_resets==1,"Four-player names or L/R hint missing.");
+ check(hint_texts==10 && hint_resets==1,"Four selected names and available shoulder prompts missing.");
+ for(const auto& name:drawn_names)check(name.y>=195 || name.y<96,"Name moved to the wrong side of its actor.");
+ check(drawn_names[0].y==195 && drawn_names[1].y==195,"Lower labels are not below the feet.");
+ check(drawn_names[2].y==57 && drawn_names[4].y==57,"Upper labels changed their above-head position.");
  check(hint_font==2 && hint_alpha==0 && !std::memcmp(&saved,&c,sizeof c),"Hint leaked native text state or intercepted registers.");
  v.visible=false;renderer.draw_hint(memory,fields,c,calls,a->characters,v);
- check(hint_texts==5 && hint_resets==1,"Hint rendered through a menu transition.");
+ check(hint_texts==10 && hint_resets==1,"Hint rendered through a menu transition.");
+ v.visible=true;v.custom[1]=0;drawn_labels.clear();renderer.draw_hint(memory,fields,c,calls,a->characters,v);
+ check(std::ranges::find(drawn_labels,"YOOKA")==drawn_labels.end(),"Unselected actor kept its name label.");
+ check(std::ranges::count(drawn_labels,"HAUNTER")==1,"Duplicate selections drew duplicate labels.");
+ for(unsigned count=1;count<=4;++count) {
+  drawn_labels.clear();for(unsigned p=0;p<4;++p){v.active[p]=p<count;v.custom[p]=p;}
+  renderer.draw_hint(memory,fields,c,calls,a->characters,v);
+  check(!drawn_labels.empty(),"One-to-four player label rendering disappeared.");
+ }
+ v={};v.visible=true;v.active[0]=true;v.custom[0]=2;v.displayed[0]=2;
+ v.label_anchors[0]=CharacterLabelWorld{-.65f,-.8f,0};drawn_names.clear();
+ renderer.draw_hint(memory,fields,c,calls,a->characters,v);
+ check(drawn_names.size()==1 && drawn_names[0].y==219 && drawn_names[0].text.ends_with("..."),
+       "Long lower-row name did not shorten below the feet within the screen.");
+ // Model extents vary when L/R replaces an actor. An anchor near a screen
+ // edge must adjust the name's placement, not remove a selected name.
+ for(unsigned slot=0;slot<4;++slot) {
+  v={};v.visible=true;v.active[0]=true;v.custom[0]=0;v.displayed[slot]=0;
+  v.label_anchors[slot]=CharacterLabelWorld{slot%2?.65f:-.65f,slot<2?-1.f:.6f,0};
+  drawn_names.clear();renderer.draw_hint(memory,fields,c,calls,a->characters,v);
+  check(drawn_names.size()==1,"A valid selected name disappeared at a row's screen boundary.");
+ }
+ auto samples=a->characters;samples.resize(20);
+ for(unsigned i=0;i<samples.size();++i)samples[i].name="RACER "+std::to_string(i);
+ for(unsigned session=0;session<12;++session)for(unsigned page=0;page<8;++page) {
+  v={};v.visible=true;
+  constexpr float positions[]{-8.f,-.65f,0.f,.65f,8.f};
+  for(unsigned slot=0;slot<4;++slot) {
+   const unsigned selected=(page*4+slot+session)%samples.size();
+   v.active[slot]=true;v.custom[slot]=selected;v.displayed[slot]=selected;v.ready[slot]=(session+page+slot)%2;
+   v.label_anchors[slot]=CharacterLabelWorld{positions[(session+slot)%5],positions[(page+slot)%5],0};
+  }
+  g.set(F::DisplayList,0x80060000);drawn_names.clear();
+  renderer.draw_hint(memory,fields,c,calls,samples,v);
+  check(drawn_names.size()==4,"Browsing with four players lost a selected name.");
+  for(unsigned slot=0;slot<4;++slot) {
+   const auto& name=drawn_names[slot];
+   check(name.text==samples[*v.displayed[slot]].name,"Browsing rendered a stale character name.");
+   check(slot%2?name.x>=165 && name.x<=315:name.x>=5 && name.x<=155,"A label crossed into another stage column.");
+   check(slot<2?name.y>=195 && name.y+18<=238:name.y>=52 && name.y+18<=180,"A selected label escaped its row's safe area.");
+  }
+ }
+ CharacterLabelMatrix identity{};for(unsigned i=0;i<16;i+=5)identity[i]=1;
+ auto point=project_character_label({.5f,.25f,0},identity,identity);
+ check(point && point->x==240 && point->y==90,"Native camera projection is wrong.");
+ check(project_character_label({0,4,0},identity,identity).has_value(),"An offscreen model edge hid its onscreen actor's label.");
+ check(!project_character_label({0,std::numeric_limits<float>::infinity(),0},identity,identity),"Non-finite label geometry was accepted.");
+ identity[12]=.25f;point=project_character_label({.5f,.25f,0},identity,CharacterLabelMatrix{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1});
+ check(point && point->x==280,"Labels did not follow camera motion.");
 }
 }
 int main(){try{for(unsigned i=0;i<fields.size();++i)fields[i]=0x80001000+i*0x100;selection();stage();browsing();stage_browsing();hints();std::cout<<checks<<" native-stage selection/lifetime checks passed.\n";return 0;}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -3,6 +3,7 @@
 #include "updates/update_process.hpp"
 #include <cassert>
 #include <fstream>
+#include <thread>
 #include <json/json.hpp>
 #include <miniz/miniz.h>
 
@@ -27,12 +28,14 @@ int main() {
         const auto reportRoot = root / "crash-reports";
         Queue queue(root, "1.0.14-beta.3", {"ARealPerson", "PrivateMachine"});
         assert(read_consent(reportRoot).choice == -1);
-        const auto crash = std::string("[boot][crash] exception=0xC0000005 rva=0x1234\n") +
+        const auto crash = std::string("[boot] DKR-R 1.0.14 persistent runtime log\n[boot][binary] id=0123456789abcdef0123456789abcdef01234567\n[boot][crash] exception=0xC0000005 rva=0x1234\n") +
             "[boot][crash] minidump=C:\\Users\\ARealPerson\\DKR-R-crash-20261103-120000.dmp status=written\n" +
             "[debug] /home/ARealPerson/My Games/ROM.z64\n" +
             "[online] token=topSecret12345\n[chat] Private message\n" +
             "[debug] ARealPerson PrivateMachine 192.168.1.8 fe80::1234 alice@example.com\n" +
-            "[debug] https://example.com/?key=secret\n[boot][crash] #1 racer_update+0x20\n";
+            "[debug] https://example.com/?key=secret\n[boot][crash] #1 racer_update+0x20\n" +
+            "/tmp/.mount_DKR-R/ARealPerson/DKR-R(+0x123abc) [0x7fff12345678]\n" +
+            "/home/ARealPerson/My Games/DKR-R(racer_update+0x456def) [0x7fff456789ab]\n";
         write(root / "logs/runtime-previous.log", crash);
         write(root / "logs/runtime.log", "[boot] fresh launch\n");
         write(root / "crash-dumps/DKR-R-crash-20261103-120000.dmp", "MDMP synthetic process memory");
@@ -47,6 +50,11 @@ int main() {
         for (const auto* privateValue : {"ARealPerson", "PrivateMachine", "192.168.1.8", "fe80::1234", "alice@", "topSecret", "Private message", "example.com", "C:\\Users"})
             assert(log.find(privateValue) == std::string::npos);
         assert(log.find("racer_update") != std::string::npos && log.find("0xC0000005") != std::string::npos);
+        assert(log.find("legacy-frame rva=0x123abc pc=0x7fff12345678") != std::string::npos);
+        assert(log.find("legacy-frame rva=0x456def pc=0x7fff456789ab") != std::string::npos);
+        const auto manifest = Json::parse(entry(job, "manifest.json"));
+        assert(manifest["version"] == "1.0.14" && manifest["collectorVersion"] == "1.0.14-beta.3");
+        assert(manifest["producerBinaryId"] == "0123456789abcdef0123456789abcdef01234567");
         assert(entry(job, "crash.dmp").empty());
         assert(!Json::parse(entry(job, "manifest.json"))["rawDump"].get<bool>());
         const auto frozen = job.bytes;
@@ -90,11 +98,19 @@ int main() {
             assert(entry(restarted.due(now), "crash.dmp").empty());
         }
         // Startup/disable state persists through the same service API as UI.
+        restarted.reconcile({0, false, now}, now); // synthetic reports never leave the test
         write(root / "logs/runtime-previous.log", "[boot] clean synthetic session\n");
         start(root, "1.0.14-beta.3");
         assert(view().consent.choice == 0);
         assert(choose(true, false)); assert(view().consent.choice == 1);
         gameplay(true); assert(choose(false, false)); assert(view().consent.choice == 0);
+        gameplay(false);
+        for (unsigned i = 0; i < 25; ++i) {
+            assert(choose(true, false));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            assert(choose(false, false));
+            assert(read_consent(reportRoot).choice == 0);
+        }
         shutdown(); assert(read_consent(reportRoot).choice == 0);
     } catch (...) { shutdown(); fs::remove_all(root); throw; }
     // The absolute root is a fresh, uniquely named test directory above.

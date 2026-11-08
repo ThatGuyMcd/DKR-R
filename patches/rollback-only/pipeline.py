@@ -113,6 +113,8 @@ def online(text):
     begin = text.index('void DrawOlHostSettings(float width) {')
     end = text.index('// ------------------------------------------------------------ online profile', begin)
     text = text[:begin] + (AUTH/'native/host_settings.inl').read_text() + '\n\n' + text[end:]
+    text = once(text, '            if (view.host) tabs.push_back({OlSection::Friends, "Invite friends"});',
+        '            if (view.host) tabs.push_back({OlSection::Settings, "Host settings"});\n            if (view.host) tabs.push_back({OlSection::Friends, "Invite friends"});')
     old = '''    std::string line = rules.synchronization == SynchronizationMode::ExperimentalRollback ? "Experimental Rollback" :
         (rules.synchronization == SynchronizationMode::Rollback ? "Host prediction" : "Strict input sync");'''
     return once(text, old, '    std::string line = '+POLICY+'name(rules.synchronization);')

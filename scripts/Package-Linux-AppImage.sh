@@ -42,6 +42,7 @@ INPUT_HOST_DIRECTORY="${BUILD_DIRECTORY}/bin/Release/libexec/dkr-r"
 INPUT_HOST="${INPUT_HOST_DIRECTORY}/DKR-R-InputHost"
 MOD_WORKER="${INPUT_HOST_DIRECTORY}/DKR-R-ModWorker"
 UPDATE_HELPER="${INPUT_HOST_DIRECTORY}/DKR-R-Updater"
+FILE_PICKER="${INPUT_HOST_DIRECTORY}/DKR-R-FilePicker"
 SDL3_LIBRARY="${INPUT_HOST_DIRECTORY}/libSDL3.so.0"
 VERSION_FILE_VALUE="$(tr -d '\r\n' <"${PROJECT_ROOT}/VERSION")"
 VERSION="${DKR_RELEASE_VERSION:-${VERSION_FILE_VALUE}}"
@@ -130,6 +131,7 @@ collect_linux_dependency_notices() {
   local library_count copyright_count
 
   mkdir -p "${notice_root}/common-licenses"
+  install -m 0644 /usr/share/doc/libstdc++6/copyright "${notice_root}/GCC-RUNTIME-COPYRIGHT.txt"
   : >"${manifest}"
   printf '%s\n' \
     'Debian package notice directories deployed with the Linux dependencies:' \
@@ -409,6 +411,8 @@ install -m 0644 "${PROJECT_ROOT}/assets/controllers/gamecontrollerdb.txt" \
 mkdir -p "${APPDIR}/usr/libexec/dkr-r"
 install -m 0755 "${MOD_WORKER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker"
 install -m 0755 "${UPDATE_HELPER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-Updater"
+install -m 0755 "${FILE_PICKER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-FilePicker"
+patchelf --remove-rpath "${APPDIR}/usr/libexec/dkr-r/DKR-R-FilePicker"
 patchelf --set-rpath '$ORIGIN/../../lib' "${APPDIR}/usr/libexec/dkr-r/DKR-R-Updater"
 patchelf --set-rpath '$ORIGIN/../../lib' "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker"
 install -m 0755 "${INPUT_HOST}" \

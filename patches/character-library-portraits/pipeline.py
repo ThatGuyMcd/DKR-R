@@ -62,6 +62,53 @@ def parity_play(text):
         'PaddockRaceButton(live?"RETURN TO THE RACE":lobby ? "LEAVE LOBBY & PLAY OFFLINE" : "PLAY OFFLINE - Diddy Kong Racing",')
     text=once(text,'            if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");',
         '            if(live)g_overlay_visible.store(false,std::memory_order_release);\n            else if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");')
+    text=once(text,'void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=false) {',
+        '#include "'+(ui/'play_launch_bar.inl').as_posix()+'"\n\nvoid DrawPlayPage(float available_width, const PlayPageContext& play,bool live=false) {')
+    text=once(text,'        state.arrived_at = -10.0;\n        state.focus = PlayPageState::Focus::None;',
+        '        state.arrived_at = -10.0;\n        state.focus = play.rom_ready ? PlayPageState::Focus::Start : PlayPageState::Focus::Browse;')
+    text=once(text,'    const float width = std::max(available_width, 1.0F);',
+        '    float width = std::max(available_width, 1.0F);')
+    text=once(text,'    PaddockGap(20.0F);\n\n    DrawLauncherFeatured(width,live);',
+        '''    PaddockGap(12.0F);
+    const auto launch_summary=PlayLaunchSummary(play,live);
+    const float launch_height=PlayLaunchBarHeight(width,launch_summary);
+    const float body_height=std::max(1.F,ImGui::GetContentRegionAvail().y-launch_height);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0.F,0.F});
+    const float body_width=std::max(1.F,PanelFooterBounds(ImGui::GetCurrentWindow()).Max.x-ImGui::GetCursorScreenPos().x);
+    ImGui::BeginChild("play-scroll",{body_width,body_height},false,
+        ImGuiWindowFlags_NavFlattened|ImGuiWindowFlags_NoBackground);
+    ImGui::PopStyleVar();
+    LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
+    width=std::max(1.F,std::min(available_width,ImGui::GetContentRegionAvail().x-8.F));
+    DrawLauncherFeatured(width,live);''')
+    text=once(text,'    {\n        const bool can_start = live ||',
+        '''    PaddockGap(16.F);
+    PlayLaunchBodyCheck();
+    ImGui::EndChild();
+    width=std::max(1.F,available_width);
+    DrawPlayLaunchSummary(width,launch_summary);
+    {
+        const bool can_start = live ||''')
+    text=once(text,'        RaceButtonLook look;\n        look.hover_in = 0.12F;\n        if (can_start)',
+        '        RaceButtonLook look;\n        look.font_px=21.F;\n        look.hover_in = 0.12F;\n        if (can_start)')
+    text=once(text,'        if (state.focus == PlayPageState::Focus::Start && can_start) {\n            if (nav) ImGui::SetKeyboardFocusHere();',
+        '        if (state.focus == PlayPageState::Focus::Start && can_start && ImGui::GetCurrentContext()->OpenPopupStack.empty()) {\n            ImGui::GetCurrentContext()->NavDisableHighlight=false;\n            ImGui::SetKeyboardFocusHere();')
+    text=once(text,'"PLAY OFFLINE - Diddy Kong Racing", {width, 68.0F}, look)',
+        'dkr::localisation::text("play.start_game").data(), {PlayLaunchButtonWidth(width), kPlayStartHeight}, look)')
+    text=once(text,'        ImGui::EndDisabled();\n        ImGui::PopStyleVar();\n    }',
+        '        ImGui::EndDisabled();\n        PlayLaunchButtonCheck(can_start);\n        ImGui::PopStyleVar();\n    }')
+    text=once(text,'''    if (!play.rom_ready) {
+        PaddockGap(8.0F);
+        const PaddockType hint = PaddockReading(14.0F, false, 1.5F);
+        constexpr std::string_view text = "Load a ROM to start.";
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        PaddockTextStyle style;
+        style.colour = PaddockCol(0xB0C9CC);
+        style.centre = true;
+        PaddockTextAt(ImGui::GetWindowDrawList(), hint, at, width, text, style);
+        ImGui::Dummy({width, hint.line});
+    }
+''','')
     return text
 
 def consistent_browser(text):
@@ -953,6 +1000,8 @@ def compose(rows,out):
             '                              g_mods_page.entry_section = 4;\n                              g_mods_page.section = 4;\n                              g_page_navigation_request = kPageModsHacks;\n                              g_mod_store.page = 5;',
             '                              OpenModLibrary(5);')
     def store_ui(text):
+        anchor='if (!g_mod_store.install_after_download.contains(job.key))'
+        if anchor in text:text=once(text,anchor,'if (!g_mod_store.install_after_download.contains(job.key) && job.intent != "activate")')
         text=once(text,'int StoreCombo(const char* id, int current, const std::vector<std::string>& labels, float width) {',
             'int StoreCombo(const char* id, int current, const std::vector<std::string>& raw_labels, float width) {\n    const auto labels=LocalisedUi::enum_items(raw_labels);')
         text=once(text,'    StoreNote(id, width);','    StoreNote(dkr::localisation::source(id), width);')
@@ -1292,6 +1341,51 @@ def compose(rows,out):
             text=once(text,'    const auto next=activation();',
                 '    const auto next=activation();\n    if(next)dkr::feedback::capture(retained,next->revision,stamp,online_owner,physical_profile);')
         elif source.name=='mod_store.cpp':
+            storage=(ROOT/'runtime-recomp/src/game/storage/maintenance.hpp').as_posix()
+            text='#include "'+storage+'"\n#include "stb/stb_image_write.h"\n'+text
+            for anchor in ('    void load_image(const std::string& url, std::stop_token stop) {','void Service::installed(std::string key, bool success, std::string message) {'):
+                replacement=anchor+'\n    dkr::storage::Activity storage_activity;'
+                if not re.search(re.escape(anchor)+r'\s*dkr::storage::Activity storage_activity;',text):text=once(text,anchor,replacement)
+            anchor='                task(stop);'
+            if 'dkr::storage::Activity storage_work;' not in text:text=once(text,anchor,'                dkr::storage::Activity storage_work;\n'+anchor)
+            anchor='            auto cancelled = download_stop.get_token();'
+            replacement=anchor+'\n            dkr::storage::Activity storage_download;'
+            if replacement not in text:text=once(text,anchor,replacement)
+            anchor='void Service::gameplay(bool active) {'
+            if anchor+'\n    dkr::storage::gameplay(active);' not in text:text=once(text,anchor,anchor+'\n    dkr::storage::gameplay(active);')
+            anchor='                job.digest = text(integrity, "sha256", 64);'
+            if 'const auto expected_digest=job.digest;' not in text:text=once(text,anchor,'''                const auto expected_digest=job.digest;
+'''+anchor+'''
+                if(job.intent=="activate"&&!expected_digest.empty()&&expected_digest!=job.digest)
+                    throw Error("That edition's published checksum changed. The installed mod was kept.");''')
+            for anchor,replacement in [
+                ('    d.instance = std::move(instance);','    d.instance = std::move(instance);\n    d.digest = text(release,"sha256",64);'),
+                ('            found->instance = d.instance;','            found->instance = d.instance;\n            found->digest = d.digest;'),
+                ('        p->persist_downloads();','        p->persist_downloads();\n        dkr::storage::request();')]:
+                if replacement not in text:text=once(text,anchor,replacement)
+            begin=text.index('void Service::installed(');end=text.index('void Service::request_image(',begin)
+            part=text[begin:end]
+            if 'dkr::storage::installed_package(' not in part:
+                part=once(part,'    impl_->update([&](Snapshot& s) {','    std::string installed_digest;\n    impl_->update([&](Snapshot& s) {')
+                part=once(part,'                d.error = success || cancelled ? "" : message;',
+                    '                d.error = success || cancelled ? "" : message;\n                if(success)installed_digest=d.digest;')
+                part=once(part,'    impl_->queue([p = impl_.get()](std::stop_token stop) {',
+                    '    impl_->queue([p = impl_.get(), digest=std::move(installed_digest)](std::stop_token stop) {')
+                part=once(part,'        dkr::storage::request();','        if(!digest.empty())dkr::storage::installed_package(digest);')
+            text=text[:begin]+part+text[end:]
+            begin=text.index('    void load_image(');end=text.index('    void image_run(',begin);part=text[begin:end]
+            anchor='        int width = 0, height = 0, channels = 0;'
+            if 'dkr::storage::used(path);' not in part:part=once(part,anchor,'        dkr::storage::used(path);\n'+anchor)
+            if 'dkr::storage::Action::Images' not in part:
+                part=once(part,'        std::lock_guard lock(mutex);','''        if(width>512||height>512) {
+            std::string encoded;
+            const auto write=[](void* context,void* data,int length){static_cast<std::string*>(context)->append(static_cast<const char*>(data),std::size_t(length));};
+            if(stbi_write_png_to_func(write,&encoded,int(image->width),int(image->height),4,image->rgba.data(),int(image->width*4))&&encoded.size()<bytes.size())
+                dkr::updates::durable_write(path,encoded);
+        }
+        dkr::storage::request(dkr::storage::Action::Images);
+        std::lock_guard lock(mutex);''')
+            text=text[:begin]+part+text[end:]
             text=account_service(text,out)
             text='#include "'+(store_module/'community_policy.hpp').as_posix()+'"\n'+text
             text=once(text,'    // Workers are last: joined before the objects captured by their callbacks.',
@@ -1540,6 +1634,18 @@ def compose(rows,out):
                     'if(SettingsButton("Camera++ settings (F7)",inner,!live||!camera_provider||!camera_provider->editor,SettingsButtonTone::Plain,false,"Available in-game when a camera mod supplies an editor."))')
             text=stage_include(text,'graphics.inl',parity_graphics)
             def parity_saves(value):
+                value=once(value,'    const float visible_bottom = window->InnerRect.Max.y;\n    const float top = std::min(natural.y, visible_bottom - bar_height);',
+                    '''    const float visible_bottom = PanelFooterBounds(window).Max.y;
+    const float top = std::min(natural.y, visible_bottom - bar_height);
+    DrawPanelFooterBackground(window, top, PaddockCol(0x0A202C), PaddockCol(kSetBorder));
+    if(SaveDraftLayoutCheck())g_save_draft_geometry={PanelFooterBounds(window),
+        {{window->Pos.x+window->WindowBorderSize,window->Pos.y+window->WindowBorderSize},
+         {window->Pos.x+window->Size.x-window->WindowBorderSize-window->ScrollbarSizes.x,
+          window->Pos.y+window->Size.y-window->WindowBorderSize-window->ScrollbarSizes.y}},top,dirty};''')
+                value=once(value,'''    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled({natural.x, top}, {natural.x + width, top + bar_height}, PaddockCol(0x0A202C));
+    draw->AddRectFilled({natural.x, top}, {natural.x + width, top + 1.0F}, PaddockCol(kSetBorder));
+''','')
                 start=value.index('void DrawSaveManagerPage(')
                 body=value[start:]
                 first=body.index('    if(live) {')

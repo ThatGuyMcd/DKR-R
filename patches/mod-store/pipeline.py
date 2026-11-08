@@ -66,6 +66,9 @@ def transform_ui(text):
 
 
 def transform_track_archives(text):
+    anchor = '             InstallOutcome* outcome) {'
+    text = once(text, anchor, anchor + '\n    dkr::storage::Activity storage_activity;')
+    text = '#include "' + (ROOT / 'runtime-recomp/src/game/storage/maintenance.hpp').as_posix() + '"\n' + text
     start = text.index('bool read_zip_entry(')
     end = text.index('// The textureDigest stamped', start)
     text = text[:start] + '#include "store_track_zip.inl"\n\nbool read_zip_entry(const std::filesystem::path& path, const char* name,\n                    std::vector<std::uint8_t>& bytes) {\n    return StoreReadTrackZipEntry(path, name, bytes);\n}\n\n' + text[end:]
@@ -140,6 +143,9 @@ def stage(baseline, worker, output, frontend=None, backfill=None):
     ):
         result = transform((baseline / 'native/src/game' / name).read_text(), once)
         if name == 'runtime_texture_packs.cpp':
+            anchor = '                    const TrackPackOwner* owner) {'
+            result = once(result, anchor, anchor + '\n    dkr::storage::Activity storage_activity;')
+            result = '#include "' + (ROOT / 'runtime-recomp/src/game/storage/maintenance.hpp').as_posix() + '"\n' + result
             result = '#include "mod_store_install.hpp"\n' + result + '\n#include "store_texture_adapter.inl"\n'
         (game / name).write_text(result, newline='\n')
     track = transform_track_archives((baseline / 'native/src/game/custom_tracks.cpp').read_text())

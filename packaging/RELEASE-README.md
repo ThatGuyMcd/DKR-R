@@ -1,4 +1,4 @@
-# DKR-R v1.0.14
+# DKR-R v1.0.15
 
 Windows: extract the whole ZIP and run **DKR-R.exe**. Keep assets, libexec,
 helpers and licence notices together. Linux/Steam Deck: make the AppImage
@@ -11,10 +11,22 @@ US v1.0 to install; you can keep v1.1 selected for playing.
 Your existing profile, saves, mods and settings can stay. Ordinary offline mods
 share personal Adventure. Online and development progress have separate owners.
 Portable mode selects another data location; it does not move your profile.
-Use matching complete v1.0.14 packages for online play.
+Use matching complete v1.0.15 packages on every machine for online play.
+Automatic delay and a larger prediction window can help with distant players.
+Host settings can now be changed from the lobby and in-game Online overlay.
+Prediction and input-delay changes apply live; capacity, menu and replay changes
+made while playing wait until the lobby. The default prediction window is 14.
+Spectators use buffered confirmed playback and never supply racing inputs.
+Very slow connections can still exceed the prediction window and cause waits.
+The reported missing vanilla online car textures/road wheels remain unresolved.
 
 Play contains Achievements, Session mods and Save Manager. Session mods OFF
 bypasses selected content for the next session without changing its selections.
+Start Game stays visible at the bottom of Play while its settings scroll.
+It is selected when Play opens with a ready ROM. The overlay keeps Return to
+the Race in the same position.
+The button is narrower and centred, and controller focus can move away normally.
+The page background and Save Manager footer match the surrounding panel.
 Skip launcher can be turned off again in the in-game Play overlay. Escape, F1
 or controller Back/View opens that overlay.
 
@@ -25,6 +37,12 @@ controls are under Graphics > HUD & effects.
 
 Automatic crash reporting is opt-in. About DKR-R > Support changes the choice.
 Raw dumps require separate consent and may contain personal information.
+File dialogs use a private helper on Windows and Linux; keep that helper with
+the installation. Improved fault diagnostics do not claim to fix the unresolved
+Windows graphics-startup or Linux gameplay crashes.
+Selected custom characters now have native colourful names above the upper row
+or below the lower row, supporting up to four players. The new-save initials
+keyboard also draws across widescreen views.
 See RELEASE-NOTES.txt and the repository guides for details and known limits.
 
 Current release targets are Windows x64, Linux x86_64/ARM64 and Steam Deck.

@@ -42,6 +42,9 @@ struct GamePayload {
     RecompiledEntrypoint menu_background;
     RecompiledEntrypoint menu_text;
     RecompiledEntrypoint menu_render_reset;
+    RecompiledEntrypoint menu_text_width;
+    RecompiledEntrypoint menu_view_matrix;
+    RecompiledEntrypoint menu_projection;
     RecompiledEntrypoint menu_material_set;
     RecompiledEntrypoint menu_background_cover;
     RecompiledEntrypoint filtered_cheats;

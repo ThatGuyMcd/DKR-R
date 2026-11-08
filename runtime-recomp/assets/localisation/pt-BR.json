@@ -3,6 +3,7 @@
   "name": "Português — Brasil (Portuguese, Brazil)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "INICIAR JOGO",
     "play.skip_launcher": "Pular o inicializador",
     "play.skip_launcher_help": "Inicia automaticamente o jogo selecionado. Desative esta opção em Jogar na interface durante o jogo.",
     "play.starting_game": "Iniciando jogo",

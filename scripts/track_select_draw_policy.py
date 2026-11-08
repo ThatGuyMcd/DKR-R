@@ -1,4 +1,4 @@
-"""Scoped signed Track Select drawing. Inputs are reviewed retail ELFs only.
+"""Scoped signed Track Select/initials drawing. Reviewed retail ELFs only.
 
 The native unlock, placeholder, row/name, arrow and zoom logic is retained.
 Five columns use a separate 240-byte stack table, NEVER the nine-entry global.
@@ -23,6 +23,7 @@ def compose_track_draw(policy, elf, revision, sections, symbols):
         "texrect_draw": 584,
         "render_text_string": 2044,
         "viewport_main": 3424,
+        "filename_render": 1016,
     }
     starts = {}
     for name, size in sizes.items():
@@ -50,7 +51,7 @@ def compose_track_draw(policy, elf, revision, sections, symbols):
                 "beforeVram": hex(pc),
                 "text": "extern unsigned dkr_track_select_draw(uint8_t*, recomp_context*, unsigned, unsigned); "
                 + (extra.replace("$CALL", call) if extra else call + ";"),
-                "reason": "Bounded Track Select-only signed drawing; local aspect never enters CPU replay.",
+                "reason": "Bounded Track Select/initials signed drawing; local aspect never enters CPU replay.",
             }
         )
 
@@ -63,7 +64,7 @@ def compose_track_draw(policy, elf, revision, sections, symbols):
                 "function": name,
                 "vram": hex(pc),
                 "value": hex(value),
-                "reason": "Use the dedicated 15-cell stack table / scoped rectangle guard; preserve native delay slots.",
+                "reason": "Bounded signed menu drawing and dedicated Track Select stack storage; preserve native delay slots.",
             }
         )
 
@@ -104,4 +105,15 @@ def compose_track_draw(policy, elf, revision, sections, symbols):
     target = next(iter(symbols["viewport_rsp_set"]))[0]
     menu = next(iter(symbols["gCurrentMenuId"]))[0]
     hook(name, 0x1F4, 0x0C000000 | ((target >> 2) & 0x3FFFFFF), 9, hex(menu) + "U")
+    # The initials carousel shares the checked signed-glyph path. Prepare a
+    # fixed, bounded row on every peer; the local renderer clips it to the
+    # current window, including 32:9. Selection, scrolling and save bytes are
+    # untouched. Both loop tests must agree, including fractional scrolls.
+    name = "filename_render"
+    for offset in (0x1A0, 0x2E4):
+        patch(name, offset, 0x2A21FFF1, 0x2A21FEB1)  # x > -336
+    for offset in (0x1A8, 0x2F0):
+        patch(name, offset, 0x2A210150, 0x2A210290)  # x < 656
+    hook(name, 0, 0x444EF800, 0, hex(dl) + "U")
+    hook(name, 0x3F0, 0x03E00008, 1, hex(dl) + "U")
     return result

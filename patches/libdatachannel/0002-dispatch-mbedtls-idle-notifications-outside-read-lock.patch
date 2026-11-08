@@ -1,0 +1,19 @@
+diff --git a/src/impl/tlstransport.cpp b/src/impl/tlstransport.cpp
+--- a/src/impl/tlstransport.cpp
++++ b/src/impl/tlstransport.cpp
+@@ -531,7 +531,14 @@
+ 				if (message->size() > 0)
+ 					break;
+ 
+-				t->recv(message); // Pass zero-sized messages through
++				// The TLS read callback runs under mSslMutex. An idle WebSocket
++				// notification can synchronously send a ping back through TLS,
++				// so deliver it on another worker after leaving this call stack.
++				if (auto self = t->weak_from_this().lock()) {
++					ThreadPool::Instance().enqueue([self = std::move(self), idle = message] {
++						self->recv(idle);
++					});
++				}
+ 				message.reset();
+ 			}
+ 		}

@@ -456,7 +456,9 @@ extern "C" int dkr_legacy_character_menu(std::uint8_t* rdram,recomp_context* ctx
             dkr::mods::CharacterMenuView view;
             {std::lock_guard lock(state->mutex);view=state->selector->view(guest);}
             const dkr::mods::CharacterMenuDrawCalls draw{p->asset_allocate,p->asset_release,p->menu_texture_load,p->menu_texture_free,
-                p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset};
+                p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset,
+                p->menu_text_width,p->menu_view_matrix,p->menu_projection};
+            state->stage.label_anchors({rdram,legacy::guest_memory_size()},view);
             state->hints.draw_hint({rdram,legacy::guest_memory_size()},addresses,*ctx,draw,state->selector->entries(),view);
         }
         else if(event==6) {

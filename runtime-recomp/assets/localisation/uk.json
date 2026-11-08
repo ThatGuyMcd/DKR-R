@@ -3,6 +3,7 @@
   "name": "Українська (Ukrainian)",
   "review": "Draft; native-speaker review pending",
   "messages": {
+    "play.start_game": "ПОЧАТИ ГРУ",
     "play.skip_launcher": "Пропускати лаунчер",
     "play.skip_launcher_help": "Автоматично запускати вибрану гру. Вимкнути можна в розділі «Грати» у внутрішньоігровому меню.",
     "play.starting_game": "Запуск гри",

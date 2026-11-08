@@ -1,4 +1,5 @@
 #include "vehicle_library.hpp"
+#include "storage/maintenance.hpp"
 #include "magic_code_package.hpp"
 #include "online_mod_bundle.hpp"
 #include <algorithm>
@@ -24,6 +25,7 @@ std::string nonce() {
     std::random_device random;Bytes bytes(16);for(auto& b:bytes)b=std::uint8_t(random());return sha256(bytes);
 }
 struct Lock {
+    dkr::storage::Activity storage_activity;
 #ifdef _WIN32
     HANDLE handle=INVALID_HANDLE_VALUE;
 #else

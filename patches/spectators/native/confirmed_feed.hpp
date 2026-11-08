@@ -36,7 +36,7 @@ class ConfirmedFeed final {
 public:
     static constexpr std::size_t MaximumState=128U*1024U*1024U;
     static constexpr std::size_t MaximumCommand=1024,MaximumFrames=3600,MaximumTail=4U*1024U*1024U;
-    FeedResult baseline(Baseline next);
+    FeedResult baseline(Baseline next,bool retain_tail=false);
     FeedResult append(ConfirmedFrame frame);
     std::shared_ptr<const Baseline> current()const{return baseline_;}
     std::vector<ConfirmedFrame> after(Cursor first,std::size_t maximum=30)const;

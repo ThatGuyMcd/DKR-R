@@ -1,14 +1,16 @@
-# Building DKR-R v1.0.14
+# Building DKR-R v1.0.15
 
-Use the [v1.0.14 release Patch Pipeline](../patches/release-prep/v1.0.11/BUILDING.txt)
+Use the [v1.0.15 release Patch Pipeline](../patches/release-prep/v1.0.11/BUILDING.txt)
 and its `ReleaseOverlay.cmake`. The existing recipe reads the root VERSION
 and includes the final character/profile and online-performance layers. It keeps
+the v1.0.15 input recovery, buffered spectators, live host settings and registered
+libdatachannel idle-lock fix. It also retains
 the corrected live FOV call and Steam Deck sign-in storage, plus memory, render, scheduler
 handoff and updated vehicle repairs, above the retained playtest 4 fixes
 for mod joining, offline copies, race starts and spectator music, plus the Online directory,
 Scoreboard, party repairs, spectators, vehicles, achievements and texture tools,
 plus the previous SDK/Store/save/presentation layers. Building the base target
-alone omits those additions. `VERSION` and the compiled release value are `1.0.14`.
+alone omits those additions. `VERSION` and the compiled release value are `1.0.15`.
 
 The recipe requires the verified frozen 1.0.7 source capsule and existing normal,
 owned, camera, shadow, visual-model and RSP inputs. These are read-only build
@@ -17,7 +19,7 @@ checkout needs legitimate prepared ROM inputs before it can reproduce them.
 Windows/Linux/ARM64 must share the accepted source ledger. Never relabel
 an earlier binary as a new release.
 
-The v1.0.14 build set and exact static checks are in
+The v1.0.15 build set and exact static checks are in
 [release validation](../RELEASE-VALIDATION.md). Source build commands for Apple
 remain below; no new Apple package was built in this pass.
 
@@ -35,6 +37,8 @@ The [platform guide](PLATFORMS.md) lists package versions, ABI requirements and 
 
 Windows needs Visual Studio 2022 Desktop development with C++, Git, Python 3,
 PowerShell and WSL2/Ubuntu for the preparation workflow.
+Use native Windows Git and CMake. MSYS executables ahead of them in PATH can
+misinterpret Windows paths and Git revision expressions during the checks.
 Linux needs CMake 3.24+, Ninja, a compatible C++ toolchain, Vulkan/display
 development libraries and the AppImage packaging tools.
 Use the locked dependency revisions, not arbitrary installed substitutes.
@@ -219,9 +223,9 @@ Setup recovery checks staged Python/native tools, and preparation uses isolated
 revision trees. Do not edit live dependencies or delete protected directories
 to recover a stage. See [macOS kit notes](../packaging/MACOS-BUILD-README.md).
 The current integrated Rollback backend remains gated out on Apple. The public
-Rollback-only v1.0.14 layer does not promise a fallback to a removed backend.
+Rollback-only v1.0.15 layer does not promise a fallback to a removed backend.
 Existing v1.0.8 Apple releases have their own feature/build scope; validate
-current Apple integration before producing a v1.0.14 package.
+current Apple integration before producing a v1.0.15 package.
 
 ## iOS sideload build
 
@@ -256,7 +260,7 @@ check those on an iPhone or iPad before distributing a release.
 
 Use the reviewed Linux ARM64 toolchain/sysroot and separate compiled
 outputs. Compose both normal and owned payloads above, with matching
-visual-model inputs, then configure through the v1.0.14 release overlay.
+visual-model inputs, then configure through the v1.0.15 release overlay.
 The older [ARM recipes](ARM-PLATFORM-PREVIEW.md) describe the initial
 cross-build setup; their preview versions and results stay historical.
 
@@ -267,7 +271,7 @@ Linux x86_64. QEMU checks do not replace physical GPU/audio/input tests.
 
 ## Android source work
 
-Android releases are no longer supported and there is no v1.0.14 APK.
+Android releases are no longer supported and there is no v1.0.15 APK.
 The new release overlay rejects Android. Historical source recipes and
 the v1.0.9 Android adapter remain available for development, with their
 original application identity, signing and version-code requirements.
@@ -322,16 +326,23 @@ outstanding device/gameplay checks in [release validation](../RELEASE-VALIDATION
 The current release includes [the startup hotfix pipeline](../patches/startup-memory/BUILDING.txt).
 That earlier layer used the frozen 1.0.7 inputs and an isolated runtime-memory
 patch for 1.0.8 (Android code 1080001). The current outer release layer supplies
-1.0.14 for Windows/Linux while retaining the startup correction. Android
+1.0.15 for Windows/Linux while retaining the startup correction. Android
 release metadata is not changed by this release.
 
-## v1.0.14 integration and reproducibility
+## v1.0.15 integration and reproducibility
 
 The accepted pipeline also binds the first-party analogue driving, controller
 feedback, launcher/overlay layouts, localisation resources, seasonal art, session
 content, display settings, lighting and crash reporting modules. Stable packages
 must be rebuilt from the final source, including their private helpers. Merely
 renaming a beta archive does not update embedded version or source identity.
+
+Windows and Linux builds also include `DKR-R-FilePicker` from the first-party
+file-picker module. Package its executable on x64 and ARM64, not just the game
+binary. The Linux child uses the host desktop dialog stack and a static C++ runtime. Crash-context
+tests exercise native fault capture; retain matching private symbols for support.
+The current guest pipeline also carries the widescreen initials drawing fix and
+read-only native font/camera bindings for Player Select labels in both ROMs.
 
 Use [Releasing](RELEASING.md) for the source freeze, exact package validation,
 update signing and approval boundary. Runtime compilation still needs the

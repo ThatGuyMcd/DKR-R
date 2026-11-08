@@ -4,6 +4,7 @@ if(auto party=dkr::runtime::spectators::party_link(this);party->enabled) {
     std::scoped_lock party_lock(party->mutex);
     const auto kind=party->pending_watch.find(pending->sender_id);
     if(kind==party->pending_watch.end()){error="Use this build's Racer or Watch Race join option.";return false;}
+    if(kind->second&&!party->allow_spectators){error="The host has closed new spectator joins.";return false;}
     if(party->launch&&!kind->second){error="The race is running. Join as a spectator, then request a racing slot.";return false;}
     if(!save_sync_available()||session_save_.size()!=512){error="The host's online save is not ready.";return false;}
     std::optional<std::uint8_t> port;

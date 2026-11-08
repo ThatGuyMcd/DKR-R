@@ -1,6 +1,92 @@
 # DKR-R changelog
 
-## Unreleased
+## 1.0.15 — 2026-11-08
+
+- Replace the added Player Select footer with native colourful names for selected
+  custom characters. Upper-row names sit above their heads and lower-row names
+  below their feet. Support up to four players and shared selections. Bound
+  long names and model projections to their stage slots so labels do not randomly
+  disappear while browsing or between launches.
+- Extend the new-save initials keyboard's drawing area across widescreen views.
+  Selection, initials and save handling keep their existing behaviour.
+- Remove the extra opaque background inside Play so it matches the shared panel.
+- Isolate Windows and Linux open/save/folder dialogs in a private helper. A
+  dialog crash, failed response or timeout now returns an error instead of taking
+  down the game process. Keep Unicode paths, cancellation and owned-file cleanup.
+  The Linux helper uses the host GTK/GIO stack without changing the game's loader.
+- Improve crash diagnostics with fault addresses, instruction offsets and
+  matching binary identities. Preserve useful offsets during log redaction and
+  fix a Windows race when saving crash-report consent. The supplied graphics
+  startup and Linux gameplay crashes remain unresolved; these changes improve
+  diagnosis and dialog containment rather than claiming to fix every crash.
+
+- Fix getting stuck on Start Game when navigating Play with a controller. Show
+  its scrollbar only when needed, against the panel edge. Keep the left stick
+  out of the sidebar navigation switch, remove the Session Mods tooltip and
+  extend the Save Manager draft bar to the panel edges.
+
+- Keep Start Game visible in a compact bar at the bottom of Play while the
+  settings and Community Spotlight scroll above it. The footer fills the panel
+  edges, with a narrower, centred button. Select it when Play opens
+  with a ready ROM. The launcher and in-game overlay share the same layout.
+
+- Tidy each successful Mod Library install as soon as it finishes. Verify the
+  installed copy before clearing its download and preparation files; keep saved
+  editions and recovery backups. This only checks the completed package and
+  works independently of the once-per-launch cleanup setting.
+
+- Run automatic cleanup once per application launch. Artwork and install events
+  no longer schedule repeated checks. Cleanup continues during gameplay using
+  low-priority, paced work and interruptible checksum reads. Active online files
+  stay pinned while unrelated cleanup continues; progress retains cleared totals.
+
+- Added background storage maintenance and shared About/Support storage controls.
+  Verified installed downloads, redundant preparation, stale owned staging and
+  bounded artwork/online caches no longer accumulate indefinitely. Current and
+  previous mod recovery, saves, ROMs and installed content are protected. Manual
+  controls preview cleanup, trim unreferenced history and remove old original
+  crash dumps. See [storage](docs/STORAGE.md) for retention and recovery rules.
+
+- Keep fractional elapsed time in the shared spectator transfer budget. Frequent
+  network-pump calls no longer discard refill credit; bandwidth/burst limits
+  stay unchanged. Added a high-frequency pumping regression check.
+
+- Hosts can edit settings from the open lobby and in-game overlay. Prediction
+  window and automatic/manual input delay update during the current game while
+  retaining existing rollback history and immutable inputs. New spectator joins
+  can be closed without removing existing viewers. Player capacity, menu control
+  and replay changes made during play apply on return to the lobby; development
+  mode keeps its existing new-lobby consent and save requirements.
+- Spectators buffer confirmed playback, pipeline history
+  independently of acknowledgements and share a bounded background allowance.
+  Late spectator checkpoints copy the retained confirmed frontier without
+  suppressing live racing ticks. Qualification is recorded in the playtest notes.
+  Fresh snapshots preserve existing viewers' history; normal shutdown no longer
+  reports a send-queue failure when it races a final simulation pulse.
+- Prevent an idle secure WebSocket ping from re-entering the TLS send lock and
+  hanging connection shutdown. Keep ping/pong and dead-connection detection.
+- Capture rollback checkpoints into reusable full-image
+  slots within the existing memory budget, avoiding repeated delta construction
+  and full-state copies. Large state contracts keep the bounded paged fallback.
+- Auto client pacing uses authenticated host simulation progress independently
+  of changing input lead, including fresh reports that the host is holding still.
+- Negotiate a bounded ICE datagram route for sealed racing
+  inputs and repairs, with the existing WebRTC path retained as fallback. Keep
+  delayed heartbeat probes long enough to measure round trips over one second.
+- Correct client clock drift gradually after a hitch,
+  bound unsent live input, batch historical repairs and replace obsolete
+  progress/receipt reports without changing immutable input history.
+- Fresh profiles use Auto input delay with a one-frame starting lead and a
+  fourteen-frame prediction window. Saved host preferences are preserved.
+- Keep analogue stick/pedal values fresh while retaining
+  queued button edges, reject isolated delivery outliers in Auto delay, and avoid
+  treating confirmed menu/resource waits as race input-delay feedback.
+- Service short rollback replays in bounded slices and record separate executed
+  tick costs, replay work, network, confirmation, presentation and scene waits.
+- The reported missing vanilla online car textures and other racers' road wheels
+  remain under investigation. Network waits are reduced, not eliminated; physical
+  Steam Deck Wi-Fi and separate-machine acceptance remain necessary. See the
+  release validation record for exact final-build coverage.
 
 - Custom tracks can carry up to 127 checkpoints per vehicle set, up from
   retail's 60, for finer AI racing lines. Two recomp-policy instruction patches

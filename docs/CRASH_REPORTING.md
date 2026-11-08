@@ -26,11 +26,44 @@ a persistent installation or player ID.
 Raw memory dumps have a **separate, default-off consent**. Only the exact
 `DKR-R-crash-YYYYMMDD-HHMMSS.dmp` named in the crashed session's log is eligible.
 These dumps can contain personal data, credentials and other process memory;
-they cannot reliably be anonymised. Linux currently writes the crash backtrace
-to its log, so that is included; the reporter does not search system-wide core
+they cannot reliably be anonymised. Linux writes fault context and its crash
+backtrace to the log, so those are included; the reporter does not search system-wide core
 dump folders. A dump over 32 MiB, or an archive over 8 MiB after compression,
 falls back to logs with the reason recorded in the manifest. The original dump
 stays on the player's machine for a separate, reviewed support request.
+
+## Fault context and file dialogs
+
+Windows records the faulting module, module-relative instruction information
+and PE/CodeView binary identities. Linux records the signal, fault address,
+instruction and stack pointers, thread and ELF build identities. Linux's signal
+context capture avoids allocating in the handler. Text redaction keeps useful
+fault offsets while removing recognised private paths. The report distinguishes
+the crashed producer binary from the later collecting binary; updating before
+sending does not make them the same build.
+
+Keep matching Windows EXE/PDB files and Linux unstripped binaries privately for
+each distributed build. A new build's symbols cannot establish a reliable source
+location for an older crash. Do not upload private symbols as public game assets.
+
+Windows and Linux open/save/folder dialogs run in a private helper, so a child
+fault or timeout returns an error instead of closing the game. The Linux helper
+uses the host desktop dialog stack and a statically linked C++ runtime; the parent
+game's environment is unchanged. This contains dialog failures and avoids mixing
+bundled GLib with host GVFS modules when using GTK. Portal builds use the host
+portal service instead. It is not a general gameplay crash repair.
+The Windows reporting preference also synchronises reads and writes so rapid
+changes persist the selected consent rather than leaving an older choice saved.
+
+## Remaining crash investigations
+
+The three supplied November reports contained logs and manifests but no memory
+dumps. One Windows divide-by-zero report pointed towards native shell/dialog
+work; isolation contains that route, but the exact original trigger is unproved.
+A Windows graphics-startup access violation and a later Linux gameplay SIGSEGV
+remain unresolved. Reproduce with the improved diagnostics and retain the exact
+binary, matching symbols, ROM revision, enabled content and steps. Do not describe
+the new diagnostic context as proof that either fault has been repaired.
 
 ## Queue and lifetime
 
@@ -44,7 +77,9 @@ Other client errors stop automatic retries for that entry and show a support
 status. A successful response must confirm the same report ID before deletion.
 
 The private queue holds up to eight reports of at most 8 MiB each, expiring
-after 30 days. Originals are never deleted. Turning reporting off cancels an
+after 30 days. The reporting service never deletes originals. The separate
+[Storage](STORAGE.md) controls can remove recognised original dumps older than
+30 days when the user explicitly selects that action. Turning reporting off cancels an
 in-flight upload and removes unsent reports in the worker; bytes already sent
 cannot be recalled. Turning off dump sharing removes dumps from queued reports
 before any later delivery. Queue operations use a process lock, reject linked

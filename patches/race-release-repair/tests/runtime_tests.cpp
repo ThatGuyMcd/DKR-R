@@ -5,6 +5,7 @@
 #include "owned_observer.hpp"
 #include "owned_game.hpp"
 #include "netplay/netplay_protocol.hpp"
+#include "netplay/netplay_lobby.hpp"
 #include "netplay/secure_channel.hpp"
 #include <functional>
 #include <memory>

@@ -16,7 +16,6 @@ void DrawPlayTools(float width) {
     if(PaddockImportButton(caption.c_str(),row?SessionModsWidth():width,false,false,3)) {
         dkr::session_content::next_enabled=!enabled;SaveSettings();
     }
-    if(ImGui::IsItemHovered()||ImGui::IsItemFocused())ImGui::SetTooltip("%s",dkr::localisation::text("play.session_mods_help").data());
     ImGui::SetCursorScreenPos(row?ImVec2{at.x+width-saves,at.y}:ImVec2{at.x,at.y+136.F});
     if(PaddockImportButton("Save Manager###play-saves",row?saves:width,false,false,2))
         g_page_navigation_request=kPageSaveManager;

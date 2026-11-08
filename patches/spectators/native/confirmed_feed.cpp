@@ -6,7 +6,7 @@ namespace {
 std::size_t size(const ConfirmedFrame& f){return 48+f.command.size();}
 }
 void ConfirmedFeed::clear(){baseline_.reset();tail_.clear();next_={};bytes_=0;}
-FeedResult ConfirmedFeed::baseline(Baseline next) {
+FeedResult ConfirmedFeed::baseline(Baseline next,bool retain_tail) {
     if(!next.match||!next.schema||!next.next.epoch||next.next.frame==UINT32_MAX||!next.control_generation||!next.state||next.state->empty()||next.state->size()>MaximumState||
        std::all_of(next.digest.begin(),next.digest.end(),[](auto v){return !v;}))return FeedResult::Invalid;
     if(baseline_&&(next.match!=baseline_->match||next.schema!=baseline_->schema||next.control_generation<baseline_->control_generation||next.next.epoch<baseline_->next.epoch||
@@ -15,7 +15,11 @@ FeedResult ConfirmedFeed::baseline(Baseline next) {
         if(next.digest!=baseline_->digest||next.magic_actions!=baseline_->magic_actions)return FeedResult::Invalid;
         if(next.control_generation==baseline_->control_generation)return FeedResult::Duplicate;
     }
+    // A fresh late-join snapshot must not discard confirmed inputs still in
+    // flight to existing viewers. Keep the same bounded, contiguous tail.
+    const bool keep=retain_tail&&baseline_&&next.control_generation==baseline_->control_generation&&covers(next.next);
     auto retained=std::make_shared<const Baseline>(std::move(next));
+    if(keep){baseline_=std::move(retained);return FeedResult::Accepted;}
     while(!tail_.empty()&&(tail_.front().cursor.epoch!=retained->next.epoch||tail_.front().cursor.frame<retained->next.frame)) {
         bytes_-=size(tail_.front());tail_.pop_front();
     }
