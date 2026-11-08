@@ -35,7 +35,7 @@ import re
 import shutil
 from typing import Dict, List, Optional
 
-from . import (gltf_io, level_header, level_model_encoder,
+from . import (gltf_io, level_header, level_links, level_model_encoder,
                minimap as minimap_module, music_audio, music_sequence,
                object_map_encoder, rice_pack, textures as texture_module)
 from .gltf_io import ObjectMap
@@ -190,6 +190,9 @@ class TrackPackage:
         #: A native sequence's bytes (set_sequence), written as they are.
         self.sequence: Optional[bytes] = None
         self.enhanced_water: Optional[Dict[str, object]] = None
+        #: slot -> the ``levelLinks`` its compiled map needs: hub exits that
+        #: lead to other custom tracks. See :mod:`.level_links`.
+        self.level_links: Dict[str, List[Dict[str, object]]] = {}
         self.notes: List[str] = []
 
     # -- sources ---------------------------------------------------------
@@ -252,9 +255,16 @@ class TrackPackage:
                 "%r is not an object-map slot; expected %s"
                 % (slot, " or ".join(sorted(OBJECT_MAP_SLOTS)))
             )
-        payload = object_map_encoder.pack(
-            object_map, catalog, translation_table, asset_index
-        )
+        # An exit to another custom track ships a placeholder level and a
+        # link naming the byte to patch, since that track's id is the
+        # runtime's to assign. Both come from the same encoder, so the offset
+        # is the one the bytes were written at.
+        object_map = level_links.with_placeholders(object_map)
+        encoder = object_map_encoder.ObjectMapEncoder(
+            catalog, translation_table, asset_index)
+        payload = encoder.pack(object_map)
+        self.level_links[slot] = level_links.links(
+            object_map, encoder.entry_offsets(object_map), slot, catalog)
         os.makedirs(self.directory, exist_ok=True)
         path = os.path.join(self.directory, OBJECT_MAP_SLOTS[slot])
         with open(path, "wb") as handle:
@@ -605,6 +615,12 @@ class TrackPackage:
             }
         if self.enhanced_water is not None:
             manifest["enhancedWater"] = self.enhanced_water
+        # Only for maps compiled now: a link describes bytes this package
+        # wrote, so a slot whose map was not compiled has none to offer.
+        linked = [link for slot in OBJECT_MAP_SLOTS if slot in self.object_maps
+                  for link in self.level_links.get(slot, [])]
+        if linked:
+            manifest["levelLinks"] = linked
         return manifest
 
     def missing_sections(self) -> List[str]:
