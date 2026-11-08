@@ -76,7 +76,7 @@ def parity_play(text):
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0.F,0.F});
     const float body_width=std::max(1.F,PanelFooterBounds(ImGui::GetCurrentWindow()).Max.x-ImGui::GetCursorScreenPos().x);
     ImGui::BeginChild("play-scroll",{body_width,body_height},false,
-        ImGuiWindowFlags_NavFlattened);
+        ImGuiWindowFlags_NavFlattened|ImGuiWindowFlags_NoBackground);
     ImGui::PopStyleVar();
     LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
     width=std::max(1.F,std::min(available_width,ImGui::GetContentRegionAvail().x-8.F));

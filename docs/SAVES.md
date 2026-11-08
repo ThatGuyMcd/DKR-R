@@ -79,3 +79,9 @@ for the next launch. A modded label does not create a separate offline save: ord
 offline mods still share personal Adventure. The accepted route is frozen until
 the running game/lobby releases it. Session mods changes the next content set
 without changing individual selections, copying progress or deleting saves.
+
+Save Manager keeps its pending-changes bar against the panel edges while the
+editor scrolls. Discard and Apply retain their existing backup and conflict
+checks. When creating an Adventure in the game, the horizontally scrolling
+initials keyboard now draws across the widescreen viewport; its selection and
+saved initials are unchanged.

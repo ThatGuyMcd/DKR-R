@@ -25,6 +25,8 @@ bypasses selected content for the next session without changing its selections.
 Start Game stays visible at the bottom of Play while its settings scroll.
 It is selected when Play opens with a ready ROM. The overlay keeps Return to
 the Race in the same position.
+The button is narrower and centred, and controller focus can move away normally.
+The page background and Save Manager footer match the surrounding panel.
 Skip launcher can be turned off again in the in-game Play overlay. Escape, F1
 or controller Back/View opens that overlay.
 
@@ -35,6 +37,12 @@ controls are under Graphics > HUD & effects.
 
 Automatic crash reporting is opt-in. About DKR-R > Support changes the choice.
 Raw dumps require separate consent and may contain personal information.
+File dialogs use a private helper on Windows and Linux; keep that helper with
+the installation. Improved fault diagnostics do not claim to fix the unresolved
+Windows graphics-startup or Linux gameplay crashes.
+Selected custom characters now have native colourful names above the upper row
+or below the lower row, supporting up to four players. The new-save initials
+keyboard also draws across widescreen views.
 See RELEASE-NOTES.txt and the repository guides for details and known limits.
 
 Current release targets are Windows x64, Linux x86_64/ARM64 and Steam Deck.

@@ -110,7 +110,7 @@ def windows(a):
     tree(a.compiled/'assets',root/'assets')
     tree(a.template/'ThirdPartyLicenses',root/'ThirdPartyLicenses')
     for name,source in [('LICENSE.md',ROOT/'LICENSE.md'),('THIRD_PARTY.md',ROOT/'THIRD_PARTY.md'),('COPYING-NOTICE.md',ROOT/'runtime-recomp/COPYING-NOTICE.md')]:copy(source,root/name)
-    names=['DKR-R.exe']+['libexec/dkr-r/'+n for n in ('DKR-R-Runtime.exe','DKR-R-InputHost.exe','DKR-R-ModWorker.exe','DKR-R-Updater.exe','SDL2.dll','SDL3.dll','dxcompiler.dll','dxil.dll')]
+    names=['DKR-R.exe']+['libexec/dkr-r/'+n for n in ('DKR-R-Runtime.exe','DKR-R-InputHost.exe','DKR-R-ModWorker.exe','DKR-R-Updater.exe','DKR-R-FilePicker.exe','SDL2.dll','SDL3.dll','dxcompiler.dll','dxil.dll')]
     for name in names:
         image(a.compiled/name,'windows',name in ('DKR-R.exe','libexec/dkr-r/DKR-R-Runtime.exe'))
         copy(a.compiled/name,root/name)
@@ -141,6 +141,9 @@ def linux(a):
     for name in ('licenses','third-party'):
         if (a.template/'usr/share/doc/dkr-port'/name).is_dir():tree(a.template/'usr/share/doc/dkr-port'/name,legal/name)
     for name,source in [('LICENSE.md',ROOT/'LICENSE.md'),('THIRD_PARTY.md',ROOT/'THIRD_PARTY.md'),('COPYING-NOTICE.md',ROOT/'runtime-recomp/COPYING-NOTICE.md'),('WAVE-RACE-WATER-LICENSE.txt',ROOT/'patches/enhanced-water/LICENSE-WAVE-RACE.txt')]:copy(source,legal/name)
+    # The isolated Linux picker carries libstdc++/libgcc, with their exception.
+    copy(Path('/usr/share/doc/libstdc++6/copyright'),legal/'licenses/GCC-RUNTIME-COPYRIGHT.txt')
+    copy(Path('/usr/share/common-licenses/GPL-3'),legal/'licenses/GCC-GPL-3.txt')
     for name in ('AppRun','dkr-r.png','.DirIcon'):
         path=a.template/name
         if path.is_symlink(): (root/name).symlink_to(path.readlink())
@@ -150,7 +153,7 @@ def linux(a):
         (root/path.name).write_text(text)
     tree(a.compiled/'assets',root/'usr/bin/assets')
     pairs=[(a.compiled/'DKR-R',root/'usr/bin/DKR-R')]
-    for name in ('DKR-R-ModWorker','DKR-R-Updater','DKR-R-InputHost','libSDL3.so.0'):
+    for name in ('DKR-R-ModWorker','DKR-R-Updater','DKR-R-InputHost','DKR-R-FilePicker','libSDL3.so.0'):
         pairs.append((a.compiled/'libexec/dkr-r'/name,root/'usr/libexec/dkr-r'/name))
     for source,target in pairs:
         image(source,a.arch,target.name=='DKR-R');copy(source,target);target.chmod(0o755)
@@ -158,6 +161,8 @@ def linux(a):
     for name in ('DKR-R-ModWorker','DKR-R-Updater'):
         subprocess.run(['patchelf','--set-rpath','$ORIGIN/../../lib',str(root/'usr/libexec/dkr-r'/name)],check=True)
     subprocess.run(['patchelf','--set-rpath','$ORIGIN',str(root/'usr/libexec/dkr-r/DKR-R-InputHost')],check=True)
+    # The isolated picker uses the host GTK/GLib family, not AppImage copies.
+    subprocess.run(['patchelf','--remove-rpath',str(root/'usr/libexec/dkr-r/DKR-R-FilePicker')],check=True)
     features((root/'usr/bin/DKR-R').read_bytes());notes(root,'Linux '+a.arch)
     trophy(a.trophy,root/'usr/bin')
     platform='linux-aarch64' if a.arch=='aarch64' else 'linux-x86_64'

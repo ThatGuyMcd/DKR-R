@@ -299,3 +299,26 @@ Automatic crash reporting is optional under About DKR-R > Support. A queued
 report retries while the launcher is open; there is no sender after the app
 closes. Raw dumps have separate consent and may contain personal data. Review
 manual support exports before sharing them. See [Crash reporting](CRASH_REPORTING.md).
+
+## File dialogs
+
+Install the complete package, including `libexec/dkr-r/DKR-R-FilePicker` on
+Linux or `DKR-R-FilePicker.exe` in the Windows libexec directory. A missing or
+failed helper returns an error; replacing only the main executable is not a
+complete update. Cancellation should return to the current page.
+
+On Linux, check the host desktop's GTK/GIO or portal setup if the dialog cannot
+open. DKR-R removes its AppImage-owned loader/module paths only in the dialog
+child; do not remove the game's bundled libraries to repair the host desktop.
+Record the dialog action, distribution and current/previous logs if it fails.
+The original Windows graphics-startup and Linux gameplay faults remain under
+investigation. Preserve matching dumps privately when available, with consent.
+
+## Custom character names
+
+Added Player Select names appear only for selected custom actors. Upper names
+sit above heads and lower names below feet. Use the complete updated package
+if names disappear when browsing. If it happens again, include the character
+package, selected slot/player count, ROM revision, aspect ratio and a screenshot.
+The fix covers bounded placement; invalid camera data during transitions still
+does not draw a label.

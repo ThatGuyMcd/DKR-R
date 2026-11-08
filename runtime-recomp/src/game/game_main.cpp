@@ -20,6 +20,7 @@
 #include "mods/online_mod_runtime.hpp"
 #include "host_task_lifetime.hpp"
 #include "launcher_recovery_policy.hpp"
+#include "crash_reports/native_context.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
 #include "runtime_enhancements.hpp"
@@ -128,6 +129,7 @@ bool ConfigurePersistentRuntimeLog(
 #endif
     std::fprintf(stderr, "[boot] DKR-R %s persistent runtime log\n",
                  DKR_RELEASE_VERSION);
+    dkr::crash_reports::refresh_native_context(true);
     return true;
 }
 
@@ -260,7 +262,6 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
     SymInitialize(process, nullptr, TRUE);
 
     const DWORD64 fault_address = reinterpret_cast<DWORD64>(exception->ExceptionRecord->ExceptionAddress);
-    const DWORD64 module_base = reinterpret_cast<DWORD64>(GetModuleHandleW(nullptr));
     std::fprintf(stderr, "[boot][crash] exception=0x%08lX address=0x%016llX\n",
                  exception->ExceptionRecord->ExceptionCode,
                  static_cast<unsigned long long>(fault_address));
@@ -277,9 +278,7 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
                      static_cast<unsigned long long>(
                          exception->ExceptionRecord->ExceptionInformation[1]));
     }
-    std::fprintf(stderr, "[boot][crash] module-base=0x%016llX rva=0x%llX\n",
-                 static_cast<unsigned long long>(module_base),
-                 static_cast<unsigned long long>(fault_address - module_base));
+    dkr::crash_reports::print_native_frame(fault_address, 0);
     std::fprintf(stderr,
                  "[boot][crash] registers rcx=0x%016llX rdx=0x%016llX "
                  "r8=0x%016llX r9=0x%016llX rsp=0x%016llX\n",
@@ -329,6 +328,7 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
             break;
         }
         DWORD64 displacement = 0;
+        dkr::crash_reports::print_native_frame(frame.AddrPC.Offset, index + 1);
         if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol)) {
             std::fprintf(stderr, "[boot][crash] #%u %s+0x%llX\n", index, symbol->Name,
                          static_cast<unsigned long long>(displacement));
@@ -350,22 +350,22 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
 
 #else
 
-void RuntimeSignalHandler(int signal_number) {
-    std::fprintf(stderr, "[boot][crash] signal=%d\n", signal_number);
+void RuntimeSignalHandler(int signal_number, siginfo_t* information, void* context) {
 #if defined(__linux__) && !defined(__ANDROID__)
-    void* frames[48]{};
-    const int count = backtrace(frames, 48);
-    backtrace_symbols_fd(frames, count, STDERR_FILENO);
-#endif
+    dkr::crash_reports::fatal_signal(signal_number, information, context);
+#else
+    (void)information; (void)context;
+    std::fprintf(stderr, "[boot][crash] signal=%d\n", signal_number);
     std::fflush(stderr);
     _exit(128 + signal_number);
+#endif
 }
 
 void InstallRuntimeSignalHandlers() {
     struct sigaction action {};
-    action.sa_handler = RuntimeSignalHandler;
+    action.sa_sigaction = RuntimeSignalHandler;
     sigemptyset(&action.sa_mask);
-    action.sa_flags = SA_RESETHAND;
+    action.sa_flags = SA_RESETHAND | SA_SIGINFO;
     for (const int signal_number : {SIGSEGV, SIGABRT, SIGFPE, SIGILL}) {
         sigaction(signal_number, &action, nullptr);
     }

@@ -61,8 +61,22 @@ The host selects the exact online content/settings and clients consent before
 verified preparation. Existing matching installed data can be reused. See
 [Online](ONLINE_MULTIPLAYER.md), [Magic Codes](MAGIC_CODES.md) and [Saves](SAVES.md).
 
+## Player Select names
+
+Only selected custom characters receive an added name, drawn with the native
+colourful font. The upper two stage slots place names above the models and the
+lower two below their feet. There is no added player-number plate or global
+Choose your Racer footer. Up to four local players are supported; players
+sharing one character share its label.
+
+Names use a bounded two-line area, shortening lower-row text to one line when
+needed. Each physical slot has its own visible area so long names, model sizes
+and paging do not push another selected label off screen. Native L/R hints
+appear only when that selected actor can be browsed. Unselected custom actors
+keep the original stage presentation.
+
 ## Battle maps
 
 Track Lab battle courses require valid mode objects and connected AI paths.
-The v1.0.14 release does not turn an arbitrary course into a supported battle
+The v1.0.15 release does not turn an arbitrary course into a supported battle
 map just by changing its type. See [Track Lab authoring](../tools/blender/README.md#battle-course-authoring-limits).

@@ -105,6 +105,30 @@ bool CharacterStage::synchronize(std::span<std::uint8_t> memory,recomp_context& 
     }
     return true;
 }
+void CharacterStage::label_anchors(std::span<std::uint8_t> memory,CharacterMenuView& view)const {
+    CharacterMenuMemory g(memory,fields_);
+    for(const auto& actor:actors_) {
+        bool selected=false;
+        for(unsigned p=0;p<4;++p)selected|=view.active[p] && view.custom[p]==actor.entry;
+        if(!selected || view.displayed[actor.slot]!=actor.entry)continue;
+        const auto object=actor.object;
+        const auto model=g.read(g.read(g.read(object+0x68)));
+        const auto vertices=g.read(model+4),count=g.read(model+0x24,2);
+        if(!count || count>32767)continue;
+        const bool below=CustomStageAnchors[actor.slot].row!=0;
+        int edge=below?32767:-32768;
+        for(unsigned i=0;i<count;++i) {
+            const int y=static_cast<std::int16_t>(g.read(vertices+i*10+2,2));
+            edge=below?std::min(edge,y):std::max(edge,y);
+        }
+        const auto scale=std::bit_cast<float>(g.read(object+8));
+        CharacterLabelWorld point;
+        for(unsigned axis=0;axis<3;++axis)point[axis]=std::bit_cast<float>(g.read(object+0x0c+axis*4));
+        point[1]+=float(edge)*scale+(below?0:2);
+        if(std::isfinite(scale) && scale>0 && std::ranges::all_of(point,[](float value){return std::isfinite(value);}))
+            view.label_anchors[actor.slot]=point;
+    }
+}
 bool CharacterStage::redirect_spawn(std::span<std::uint8_t> memory,recomp_context& ctx) {
     if(!pending_entry_)return false;
     const auto sp=static_cast<std::uint32_t>(ctx.r29);

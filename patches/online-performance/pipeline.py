@@ -33,7 +33,56 @@ def beta3(name,text):
     """
     game=ROOT/'runtime-recomp/src/game'
     include=lambda n:'#include "'+(game/n).as_posix()+'"\n'
-    if name=='legacy_mod_launch.hpp':
+    # These first-party definitions already contain the repair when their
+    # direct source is compiled. Retained capsule aliases still need the same
+    # declaration/body below, through this existing compatibility boundary.
+    repaired={
+        'game_payload.hpp':game/'game_payload.hpp',
+        'game_payload_v77.cpp':game/'game_payload_v77.cpp',
+        'game_payload_v80.cpp':game/'game_payload_v80.cpp',
+        'legacy_character_menu.hpp':game/'mods/legacy_character_menu.hpp',
+        'legacy_character_menu_render.hpp':game/'mods/legacy_character_menu_render.hpp',
+        'legacy_character_stage.hpp':game/'mods/legacy_character_stage.hpp',
+        'legacy_character_menu_render.cpp':game/'mods/legacy_character_menu_render.cpp',
+        'legacy_character_stage.cpp':game/'mods/legacy_character_stage.cpp',
+        'runtime_legacy_mods.cpp':game/'runtime_legacy_mods.cpp',
+        'update_process.hpp':game/'updates/update_process.hpp',
+    }
+    if name in repaired and text==repaired[name].read_text():return text
+    if name=='game_payload.hpp':
+        text=once(text,'    RecompiledEntrypoint menu_render_reset;',
+            '    RecompiledEntrypoint menu_render_reset;\n    RecompiledEntrypoint menu_text_width;\n    RecompiledEntrypoint menu_view_matrix;\n    RecompiledEntrypoint menu_projection;')
+    elif name in ('game_payload_v77.cpp','game_payload_v80.cpp'):
+        text=once(text,'        .menu_render_reset = rendermode_reset,',
+            '        .menu_render_reset = rendermode_reset,\n        .menu_text_width = get_text_width,\n        .menu_view_matrix = get_camera_matrix,\n        .menu_projection = get_projection_matrix_s16,')
+    elif name=='legacy_character_menu.hpp':
+        text=include('mods/legacy_character_label_layout.hpp')+text
+        text=once(text,'    std::array<unsigned,4> native{};',
+            '    std::array<std::optional<CharacterLabelWorld>,CustomStageSlots> label_anchors{};\n    std::array<unsigned,4> native{};')
+    elif name=='legacy_character_menu_render.hpp':
+        text=once(text,'    OriginalPiHandler texture=nullptr,font=nullptr,colour=nullptr,background=nullptr,text=nullptr,reset=nullptr;',
+            '    OriginalPiHandler texture=nullptr,font=nullptr,colour=nullptr,background=nullptr,text=nullptr,reset=nullptr;\n    OriginalPiHandler text_width=nullptr,view_matrix=nullptr,projection=nullptr;')
+    elif name=='legacy_character_stage.hpp':
+        text=once(text,'    bool redirect_spawn(std::span<std::uint8_t>,recomp_context&);',
+            '    bool redirect_spawn(std::span<std::uint8_t>,recomp_context&);\n    void label_anchors(std::span<std::uint8_t>,CharacterMenuView&)const;')
+    elif name=='legacy_character_menu_render.cpp':
+        marker='void CharacterMenuRenderer::draw_hint('
+        text=once(text,function(text,marker),function((game/'mods'/name).read_text(),marker))
+    elif name=='legacy_character_stage.cpp':
+        marker='bool CharacterStage::redirect_spawn('
+        text=once(text,marker,function((game/'mods'/name).read_text(),'void CharacterStage::label_anchors(')+'\n'+marker)
+    elif name=='runtime_legacy_mods.cpp':
+        text=once(text,'p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset};',
+            'p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset,\n                p->menu_text_width,p->menu_view_matrix,p->menu_projection};\n            state->stage.label_anchors({rdram,legacy::guest_memory_size()},view);')
+    elif name=='update_process.hpp':
+        text=once(text,'bool inherit_update_environment = false);','bool inherit_update_environment = false, bool system_desktop_libraries = false);')
+        text=once(text,'    int wait(unsigned timeout_ms);','    int wait(unsigned timeout_ms);\n    void terminate();')
+    elif name=='update_process.cpp':
+        current=(game/'updates/update_process.cpp').read_text()
+        if 'void Child::terminate(' not in text:
+            text=once(text,function(text,'Child::Child('),function(current,'Child::Child('))
+            text=once(text,'bool parent_alive(',function(current,'void Child::terminate(')+'\n'+'bool parent_alive(')
+    elif name=='legacy_mod_launch.hpp':
         text=include('library_ui/startup_progress.hpp')+text
         text=once(text,'struct PreparedModLaunch {','struct PreparedModLaunch {\n    bool content_enabled=true;')
         text=once(text,'using LaunchProgress=std::function<void(const char*)>;',
@@ -60,6 +109,13 @@ def beta3(name,text):
         text=once(text,'[this,config=std::move(config),rom=std::move(rom),online](std::stop_token stop) {',
             '[this,config=std::move(config),rom=std::move(rom),online,enabled=dkr::session_content::next_enabled.load()](std::stop_token stop) {\n            dkr::session_content::Preparation selection(enabled);')
     elif name=='game_main.cpp':
+        text=include('crash_reports/native_context.hpp')+text
+        current=(game/name).read_text()
+        for marker in ('LONG WINAPI RuntimeCrashFilter(','void RuntimeSignalHandler(','void InstallRuntimeSignalHandlers('):
+            text=once(text,function(text,marker),function(current,marker))
+        if 'dkr::crash_reports::refresh_native_context(true);' not in text:
+            text=once(text,'                 DKR_RELEASE_VERSION);\n    return true;',
+                '                 DKR_RELEASE_VERSION);\n    dkr::crash_reports::refresh_native_context(true);\n    return true;')
         text=include('crash_reports/reporting.hpp')+text
         text=once(text,'    dkr::runtime::startup_performance::mark("persistent-log-ready");',
             '    dkr::runtime::startup_performance::mark("persistent-log-ready");\n    dkr::crash_reports::start(config_directory,DKR_RELEASE_VERSION);')
@@ -90,6 +146,13 @@ def beta3(name,text):
         text=once(text,'    const SectionState& source = g_sections[section_slot(from)];',
             '    if(!dkr::session_content::local_assets_allowed())return -1;\n    const SectionState& source = g_sections[section_slot(from)];')
     elif name=='rt64_renderer.cpp':
+        text=include('crash_reports/native_context.hpp')+text
+        if '[boot][graphics] requested-api=' not in text:
+            text=once(text,'    dkr::runtime::texture_packs::renderer_started();',
+                function((game/name).read_text(),'if(application_->device)')+'\n    dkr::runtime::texture_packs::renderer_started();')
+        if 'dkr::crash_reports::refresh_native_context();' not in text:
+            text=once(text,'    dkr::runtime::startup_performance::report("renderer-ready",',
+                '    dkr::crash_reports::refresh_native_context();\n    dkr::runtime::startup_performance::report("renderer-ready",')
         text='#include <tuple>\n'+include('display_settings/policy.hpp')+text
         text=once(text,'void ApplyConfig(RT64::Application& application,',include('display_settings/renderer.inl')+'\nvoid ApplyConfig(RT64::Application& application,')
         text=once(text,'    application.userConfig.downsampleMultiplier = std::max(config.ds_option, 1);',
@@ -180,6 +243,7 @@ def beta3(name,text):
             '    SDL_GameController* controller = g_controllers[player];\n    (void)dkr::runtime::input::poll(player,controller,nullptr,\n        dkr::runtime::input::keyboard_player()==int(player),true,false,false);')
         text=once(text,original,preview)
     elif name=='runtime_ui.cpp':
+        text=include('file_picker/client.hpp')+text
         text=include('display_settings/policy.hpp')+include('session_content/policy.hpp')+include('analog_driving/settings.hpp')+include('look_behind/policy.hpp')+text
         text=once(text,'        output << "modern_resolution="', '        dkr::display::save(output);\n        output << "session_mods=" << unsigned(dkr::session_content::next_enabled.load()) << \'\\n\';\n        output << "modern_resolution="')
         text=once(text,'            const int number = std::stoi(value);','            const int number = std::stoi(value);\n            if(dkr::display::load(key,number))continue;\n            if(key=="session_mods"){dkr::session_content::next_enabled=number!=0;continue;}')
@@ -416,7 +480,8 @@ def compose(rows,out):
     # Quoted capsule headers are transitive compiler inputs. Redirect the
     # complete affected include closure, so no TU retains the four-byte ABI.
     headers={}; seeds={'netplay_types.hpp','online_input_broker.hpp','runtime_input.hpp',
-        'runtime_controls_ui.inl','runtime_graphics_ui.inl','graphics.inl','sdk2_world.inl','experimental_owner_inputs.hpp','experimental_rollback.hpp','netplay_lobby.hpp','owner_pump.inl','camera_session.hpp','legacy_mod_launch.hpp','runtime_online_mods_ui.inl'}
+        'runtime_controls_ui.inl','runtime_graphics_ui.inl','graphics.inl','sdk2_world.inl','experimental_owner_inputs.hpp','experimental_rollback.hpp','netplay_lobby.hpp','owner_pump.inl','camera_session.hpp','legacy_mod_launch.hpp','runtime_online_mods_ui.inl',
+        'game_payload.hpp','legacy_character_menu.hpp','legacy_character_menu_render.hpp','legacy_character_stage.hpp','update_process.hpp'}
     pattern=re.compile(r'^\s*#include "([^"\n]+)"',re.M)
     receipts=[]
     core_search=[]

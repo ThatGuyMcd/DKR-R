@@ -1,6 +1,24 @@
 # DKR-R changelog
 
-## 1.0.15 — 2026-11-07
+## 1.0.15 — 2026-11-08
+
+- Replace the added Player Select footer with native colourful names for selected
+  custom characters. Upper-row names sit above their heads and lower-row names
+  below their feet. Support up to four players and shared selections. Bound
+  long names and model projections to their stage slots so labels do not randomly
+  disappear while browsing or between launches.
+- Extend the new-save initials keyboard's drawing area across widescreen views.
+  Selection, initials and save handling keep their existing behaviour.
+- Remove the extra opaque background inside Play so it matches the shared panel.
+- Isolate Windows and Linux open/save/folder dialogs in a private helper. A
+  dialog crash, failed response or timeout now returns an error instead of taking
+  down the game process. Keep Unicode paths, cancellation and owned-file cleanup.
+  The Linux helper uses the host GTK/GIO stack without changing the game's loader.
+- Improve crash diagnostics with fault addresses, instruction offsets and
+  matching binary identities. Preserve useful offsets during log redaction and
+  fix a Windows race when saving crash-report consent. The supplied graphics
+  startup and Linux gameplay crashes remain unresolved; these changes improve
+  diagnosis and dialog containment rather than claiming to fix every crash.
 
 - Fix getting stuck on Start Game when navigating Play with a controller. Show
   its scrollbar only when needed, against the panel edge. Keep the left stick

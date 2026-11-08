@@ -20,6 +20,7 @@ public:
     bool update(std::span<std::uint8_t>,const CharacterMenuFields&,recomp_context&,
         const CharacterStageCalls&,const CharacterMenuView&);
     bool redirect_spawn(std::span<std::uint8_t>,recomp_context&);
+    void label_anchors(std::span<std::uint8_t>,CharacterMenuView&)const;
     Bytes checkpoint()const;
     CharacterStage stage_checkpoint(View,std::size_t character_count)const;
 private:

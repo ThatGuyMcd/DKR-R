@@ -28,6 +28,8 @@ stick scrolls that page. The stick mapping stays the same in LB / RB mode,
 which also lets the D-pad navigate the page. The D-pad cannot move both the
 sidebar and page at once. The choice is saved and works in the launcher and
 in-game overlay. Scrolling targets the active dialog when one is open.
+The left stick stays in the main panel; it cannot select the sidebar navigation
+switch. Change that switch with the pointer.
 
 Pick your ROM and start from **Play**. Desktop portable mode selects a separate
 data location on the next launch; it does not move your existing profile.
@@ -128,8 +130,13 @@ have been removed. Detailed instructions live in the repository docs instead.
 ## Page layout and movement
 
 Play keeps the ROM controls on the left and the offline launch options on the
-right of the same card. Smaller windows stack them inside the card. The Play
-button stays underneath. Play shows Community Spotlight above this card.
+right of the same card. Smaller windows stack them inside the card. Start Game
+stays in a compact footer while the settings and Spotlight scroll above it.
+The footer reaches both panel edges and the button is narrower and centred.
+It receives initial focus when a ROM is ready without trapping controller focus.
+The scrollbar appears only when needed, against the right edge. The scroll area
+uses the parent panel's background rather than an extra opaque layer.
+Play shows Community Spotlight above this card.
 Play and Installed Mods also show the Mod Library's
 featured mods, with artwork, creator credits and a link to the mod's details.
 
@@ -163,6 +170,16 @@ Achievements and Save Manager are orange buttons at the bottom of Play's ROM
 area, on the left and right. Narrow windows stack them. They are also in the
 in-game Play overlay. Both pages have a Back to Play link, and their existing
 save and gameplay restrictions stay in place.
+Session mods sits between them and has no hover tooltip. Save Manager's pending
+changes bar also reaches the panel edges while its contents scroll above it.
+
+## File dialogs
+
+Windows and Linux use the private `DKR-R-FilePicker` helper for open, save and
+folder dialogs. Keep it with the full installation. Cancellation returns to the
+page; a failed or unresponsive helper returns an error to the game process.
+On Linux the helper uses the host desktop dialog stack while the game keeps its own
+environment. See [Troubleshooting](TROUBLESHOOTING.md#file-dialogs) if it fails.
 
 ## Session mods
 

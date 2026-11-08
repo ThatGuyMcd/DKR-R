@@ -57,6 +57,11 @@ Use the existing release package allowlist and current source audit. Package
 all helpers, assets and licence notices. Read every ZIP/AppImage back against
 its file list and hashes. Inspect both Linux ELF dependency closures and system
 ABI floors, and probe the packaged workers. Do not rename an old binary.
+Include the new private file-picker helper on Windows, Linux x64 and Linux
+ARM64, with its required notices. Exercise cancellation and failure containment;
+emulated ARM checks do not establish a working physical desktop portal or GPU.
+Keep matching runtime/helper symbols privately by binary identity. They do not
+belong in the public game ZIPs or AppImages.
 
 Keep build directories, source backups, hashes/receipts, screenshots, test
 profiles, extracted packages, credentials and downloaded game data outside the

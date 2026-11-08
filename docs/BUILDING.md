@@ -337,6 +337,13 @@ content, display settings, lighting and crash reporting modules. Stable packages
 must be rebuilt from the final source, including their private helpers. Merely
 renaming a beta archive does not update embedded version or source identity.
 
+Windows and Linux builds also include `DKR-R-FilePicker` from the first-party
+file-picker module. Package its executable on x64 and ARM64, not just the game
+binary. The Linux child uses the host desktop dialog stack and a static C++ runtime. Crash-context
+tests exercise native fault capture; retain matching private symbols for support.
+The current guest pipeline also carries the widescreen initials drawing fix and
+read-only native font/camera bindings for Player Select labels in both ROMs.
+
 Use [Releasing](RELEASING.md) for the source freeze, exact package validation,
 update signing and approval boundary. Runtime compilation still needs the
 legitimate frozen/generated inputs described above. A source ZIP includes

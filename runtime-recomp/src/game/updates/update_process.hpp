@@ -24,9 +24,10 @@ struct Child {
     std::unique_ptr<Impl> impl;
     Child(const std::filesystem::path &exe, const std::vector<std::string> &arguments,
           const std::filesystem::path &working_directory = {},
-          bool inherit_update_environment = false);
+          bool inherit_update_environment = false, bool system_desktop_libraries = false);
     ~Child();
     int wait(unsigned timeout_ms);
+    void terminate();
 };
 bool parent_alive(std::uint64_t pid);
 void wait_for_parent(std::uint64_t pid, const std::filesystem::path &ready);

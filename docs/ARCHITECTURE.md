@@ -1,8 +1,17 @@
 # DKR-R architecture
 
-## v1.0.14 release contract
+## v1.0.15 release contract
 
 The release composes guarded game-heap headroom, immutable scheduler handoff, private decode isolation, water residency and updated vehicle preparation above the Online directory, Scoreboard, party/spectator repairs, vehicles, achievements and texture tools over Camera++, SDK 2, Store, shared saves and presentation fixes through the Patch Pipeline. API 2 is additive. Personal, confirmed-online and development save ownership are separate. Isolated dependency source patches never edit the checked-out submodules.
+
+The `file_picker` module owns a bounded child-process protocol for native
+desktop dialogs. Its private helper contains dialog failures and uses the host
+desktop stack without changing the game process's loader environment.
+`crash_reports` owns native fault context, report consent and queued delivery;
+producer and collector identities remain distinct across updates. Custom racer
+labels use read-only camera/font bindings and derived presentation layout, not
+checkpointed selection state. See [crash reporting](CRASH_REPORTING.md) and
+[custom characters](LEGACY-MODS-BETA.md#player-select-names).
 
 DKR-R is a static recompilation, with the matching DKR decomp as the readable
 reference for symbols, structures and algorithms. We keep enhancements in the

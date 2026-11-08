@@ -76,6 +76,9 @@ OWNED_MOD_CALLS = {
     "menu_background": "set_text_background_colour",
     "menu_text": "draw_text",
     "menu_render_reset": "rendermode_reset",
+    "menu_text_width": "get_text_width",
+    "menu_view_matrix": "get_camera_matrix",
+    "menu_projection": "get_projection_matrix_s16",
     "filtered_cheats": "get_filtered_cheats",
     "stage_spawn": "spawn_object",
     "stage_free": "free_object",
@@ -680,7 +683,10 @@ REVIEWED_MAIN_MERGE_HASH = {
     # transient semantic cursor scopes cannot cross a checkpoint. Track Lab
     # requests use their admitted appended IDs, not legacy retail carriers.
     # DMA/save/character dispatch signatures and ownership remain unchanged.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4dce7b77f8b86ca30a8429d14f700e060c08f134456d1a9931df77d2549842ed",
+    # Nov 8: event 2 derives selected-actor label anchors and calls three
+    # read-only font/camera accessors through the same private payload. The
+    # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "b27c1e6292df09f833703c5ae3ebc1ab2aee76e15127b11f9c8ccfec2ca4ef24",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "e204c7cc1dfac8205d8078b359f911e799fbdd33c4b94a351c0a37508b562094",
 }
 

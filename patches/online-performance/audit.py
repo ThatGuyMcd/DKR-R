@@ -144,7 +144,24 @@ def inspect(build,binary,baseline,accepted):
     main=next(p for p in compiled(build,'DKRPortGame') if p.name=='game_main.cpp').read_text()
     need('ProcessServices process_services([]{dkr::crash_reports::shutdown();dkr::online_stability::retire_store_http();dkr::online::shutdown_account();});' in main,'Process exit can outlive owned HTTP work')
     reports=ROOT/'runtime-recomp/src/game/crash_reports'
-    need(compiled(build,'DKRCrashReports')=={(reports/name).resolve() for name in ('queue.cpp','service.cpp','transport.cpp')},'Crash reporting is not compiled from its owned service sources')
+    need(compiled(build,'DKRCrashReports')=={(reports/name).resolve() for name in ('queue.cpp','service.cpp','transport.cpp','native_context.cpp')},'Crash reporting is not compiled from its owned service sources')
+    picker=ROOT/'runtime-recomp/src/game/file_picker'
+    need(compiled(build,'DKRFilePicker')=={(picker/'helper.cpp').resolve()} and
+        compiled(build,'DKRFilePickerProcess')=={(picker/'process.cpp').resolve()} and
+        compiled(build,'DKRFilePickerClient')=={(picker/'client.cpp').resolve()},
+        'The native picker is not isolated behind its first-party process boundary')
+    need('file_picker/client.hpp' in ui and 'print_native_frame(fault_address, 0)' in main and
+        'action.sa_flags = SA_RESETHAND | SA_SIGINFO;' in main,
+        'The shipped UI/crash handler retained an old in-process picker or fault context')
+    for target in ('DKRRecompiledFuncsV77','DKRRecompiledFuncsV80'):
+        source=next(p for p in compiled(build,target) if p.name.startswith('game_payload_v'))
+        need('.menu_text_width = get_text_width' in source.read_text() and
+            '.menu_projection = get_projection_matrix_s16' in source.read_text(),
+            'A ROM revision lost its native label font/projection bindings')
+    guest=compiled(build,'DKRLegacyGuestIO')
+    labels=next(p for p in guest if p.name=='legacy_character_menu_render.cpp').read_text()
+    need('project_character_label(' in labels and 'L / R: CHANGE CUSTOM RACER' not in labels,
+        'The final native character renderer is still using the old footer')
     need('dkr::crash_reports::start(config_directory,DKR_RELEASE_VERSION);' in main and
         'dkr::crash_reports::Gameplay quiet_reports;' in main and
         ui.count('DrawCrashReportingConsent();')==2,

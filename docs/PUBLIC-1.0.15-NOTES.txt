@@ -4,6 +4,8 @@ I've spent quite a bit of time working through DKR-R Online since v1.0.14.
 This update improves how it handles late inputs and latency spikes, reduces
 some of the CPU work, and makes full lobbies with spectators behave better.
 Hosts can now change their prediction window and input delay during a race too!
+I've also tidied up Play, replaced the custom character labels and added cleanup
+for old downloads and caches that were taking up far too much space.
 
 ONLINE
 - Steering and analogue pedals stay up to date while the game recovers from
@@ -62,6 +64,29 @@ scroll down to find it on smaller screens. The button is shorter, but still
 easy to find, and is selected when you open Play with a ROM ready to go.
 The settings and Community Spotlight scroll above it. The in-game overlay
 uses the same layout, with Return to the Race in that spot.
+The bar reaches the panel edges, with a narrower, centred button. You can move
+away from Start Game normally with the controller. The scrollbar only appears
+when needed and sits against the right edge. I've removed the extra opaque
+background and the Session mods tooltip, and fixed the Save Manager's bottom bar.
+
+PLAYER SELECT AND SAVE NAMES
+Selected custom characters now have names using the game's colourful font.
+The top row keeps its names above their heads, and the bottom row has them below
+their feet. There's no extra player number or Choose your Racer footer.
+This works for up to four players, with one name when players share a character.
+I've also fixed labels disappearing while browsing through characters. Long
+names and unusually sized models stay within their part of the screen.
+The scrolling keyboard for a new save now uses the wider screen properly too.
+
+FILE DIALOGS AND CRASH REPORTS
+Windows and Linux file dialogs now open in a separate helper. If a dialog fails,
+it should return an error instead of closing DKR-R. Keep the whole Windows ZIP
+together when updating; the helper is part of the installation.
+Crash reports now keep better fault information and the matching binary details,
+which should make the next report easier to investigate. I've also fixed a
+Windows issue where changing the reporting setting wasn't always saved.
+Reporting is still optional. Text is cleaned up as best we can, but anonymity
+isn't guaranteed. Raw dumps have their own setting and can contain personal data.
 
 STORAGE CLEANUP
 I've also added cleanup for files DKR-R no longer needs. Downloaded mod ZIPs,
@@ -91,6 +116,9 @@ the exact final-build tests separately from earlier private playtests.
 The reported missing vanilla online car textures and other racers' road wheels
 remain under investigation. This update does not claim to repair that issue.
 Physical Steam Deck LCD Wi-Fi and separate-machine testing remain necessary.
+The supplied Windows graphics-startup crash and Linux gameplay crash still need
+a reproduction with the improved diagnostics. The supplied ZIPs had logs but no
+actual memory dumps, so I'm not claiming those two crashes have been fixed.
 Existing translation, experimental graphics/haptics and custom battle-map
 limitations from v1.0.14 still apply.
 

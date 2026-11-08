@@ -43,8 +43,17 @@ struct Service {
                 try {
                     // Short timeout: another process may already own this queue.
                     dkr::updates::InstallLock claim(queue.directory(), 0);
-                    auto consent = read_consent(root);
-                    { std::lock_guard lock(mutex); if (epoch != generation) continue; snapshot.consent = consent; }
+                    Consent consent;
+                    {
+                        // Windows readers without delete sharing can prevent an
+                        // atomic preference replacement. Serialize with choose,
+                        // and use its cross-process preference lease as well.
+                        std::lock_guard lock(mutex);
+                        if (epoch != generation) continue;
+                        dkr::updates::InstallLock preference_lock(root, 0);
+                        consent = read_consent(root);
+                        snapshot.consent = consent;
+                    }
                     queue.reconcile(consent, now_ms());
                     if (discover) { queue.discover(consent, now_ms()); discover = false; }
                     const auto job = consent.choice == 1 ? queue.due(now_ms()) : Pending{};
@@ -90,7 +99,7 @@ bool choose(bool enabled, bool dumps) {
     if (!owner) return false;
     std::lock_guard lock(owner->mutex);
     try {
-        dkr::updates::InstallLock preference_lock(owner->root, 0);
+        dkr::updates::InstallLock preference_lock(owner->root, 1000);
         const auto old = owner->snapshot.consent;
         const Consent next{enabled ? 1 : 0, enabled && dumps, enabled && old.choice == 1 ? old.since : now_ms()};
         write_consent(owner->root, next);

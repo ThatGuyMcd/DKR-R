@@ -26,6 +26,8 @@ N64ModernRuntime must also satisfy GPL-3.0; see
 | SDL3 | Private headless controller and Steam Deck sensor helper | Zlib |
 | SDL_GameControllerDB | Community controller mappings loaded before user mappings | Zlib |
 | Dear ImGui | Launcher and in-game settings UI | MIT |
+| Native File Dialog Extended | Private desktop open/save/folder dialog helper | Zlib |
+| GCC runtime libraries | Statically linked libstdc++/libgcc in the Linux file-picker helper | GPL-3.0 with the GCC Runtime Library Exception; applicable upstream notices are included |
 | DirectX Shader Compiler | Windows shader compilation | University of Illinois/NCSA and bundled notices |
 | dr_mp3 / dr_wav (mackron/dr_libs) | Decoding a custom track's own MP3/WAV music; vendored in `runtime-recomp/third_party/dr_libs` | Public domain (Unlicense) or MIT-0 |
 
@@ -33,6 +35,11 @@ Exact dependency commits are recorded in `dependencies.lock.json`. Windows
 packages include applicable notices in `ThirdPartyLicenses`. Linux AppImages
 include project notices plus the copyright records and common licences for each
 deployed system library under `usr/share/doc/dkr-port`.
+
+The Linux picker includes `licenses/GCC-RUNTIME-COPYRIGHT.txt` and
+`licenses/GCC-GPL-3.txt` under that directory. The copyright record includes
+the runtime exception and source references. Host desktop dialog/portal services
+are not bundled by the helper; they retain their own system licences.
 
 The optional enhanced-water adapter derives renderer code from Wave Race 64
 Recomp at commit `9041cc8024f6d2015859f88f5a0307b36cd4e50a` (see the

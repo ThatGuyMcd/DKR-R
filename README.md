@@ -11,6 +11,12 @@ This update improves late-input recovery, reduces some of the rollback CPU work
 and gives spectators buffered confirmed playback. Hosts can now change the
 prediction window and input delay from the lobby or in-game overlay too.
 
+There's also automatic cleanup for old downloads and caches, a tidier Play page
+with Start Game always within reach, and custom character names that fit Player
+Select. File dialogs run in a separate helper, and crash reports keep more useful
+diagnostic information. The unresolved startup/gameplay crashes are recorded in
+the [crash reporting guide](docs/CRASH_REPORTING.md#remaining-crash-investigations).
+
 Your saves, mods and settings can stay. Use matching complete v1.0.15 packages
 on every machine in an online lobby. See the [full release notes](docs/PUBLIC-1.0.15-NOTES.txt)
 and [changelog](CHANGELOG.md) for everything since v1.0.14.
@@ -49,6 +55,10 @@ pages as the launcher. **Play** contains Achievements, Session mods and Save
 Manager. Turn Session mods OFF for your next vanilla session without changing
 any individual mod selections. Ordinary offline mods still share your personal
 Adventure; online and development saves keep separate owners.
+
+Start Game stays in a compact bar at the bottom while the page scrolls above it.
+It starts selected when a ROM is ready, and you can move away with the controller
+normally. The overlay uses the same position for Return to the Race.
 
 **Skip launcher** boots the selected game automatically and can be turned off
 again in the overlay. **Language** changes the launcher and overlay immediately;

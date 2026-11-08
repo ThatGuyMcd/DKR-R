@@ -34,6 +34,7 @@
 #include "runtime_telemetry.hpp"
 #include "runtime_texture_packs.hpp"
 #include "startup_performance.hpp"
+#include "crash_reports/native_context.hpp"
 #include "vi_presentation_policy.hpp"
 #include "runtime_platform.hpp"
 #include "runtime_ui.hpp"
@@ -582,6 +583,13 @@ dkr::runtime::RT64Renderer::RT64Renderer(
     // setup/fallback creates a fresh texture cache. Reapply persisted enabled
     // packs on its first presentation, even if the retired renderer had already
     // consumed this library generation. Do not change users' enabled settings.
+    if(application_->device) {
+        const auto& description=application_->device->getDescription();
+        std::fprintf(stderr,"[boot][graphics] requested-api=%u chosen-api=%u vendor=%u device=%.96s driver=%llu\n",
+            static_cast<unsigned>(config.api_option),static_cast<unsigned>(chosen_api),
+            static_cast<unsigned>(description.vendor),description.name.c_str(),
+            static_cast<unsigned long long>(description.driverVersion));
+    }
     dkr::runtime::texture_packs::renderer_started();
 #if defined(DKR_ENHANCED_WATER)
     const bool water_ray_queries=application_->device && application_->device->getCapabilities().rayQuery;
@@ -619,6 +627,7 @@ dkr::runtime::RT64Renderer::RT64Renderer(
         std::scoped_lock lock(g_active_renderer_mutex);
         g_active_renderer = this;
     }
+    dkr::crash_reports::refresh_native_context();
     dkr::runtime::startup_performance::report("renderer-ready",
                                                renderer_started_at);
 }
