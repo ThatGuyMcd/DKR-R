@@ -5,7 +5,7 @@ from __future__ import annotations
 import bpy
 from bpy.props import EnumProperty, StringProperty
 
-from .. import catalog as catalog_module, level_types, prefs, scene
+from .. import ai_graph, catalog as catalog_module, level_types, prefs, scene
 from ..gltf_io import MapObject
 from . import snap
 
@@ -170,9 +170,11 @@ class DKR_OT_place_object(bpy.types.Operator):
             object_type = None
         if object_type is None:
             return cls.__doc__
+        settings = context.scene.dkr
         return "%s %s" % (level_types.place_description(
-            object_type, level_types.current_key(context.scene.dkr),
+            object_type, level_types.current_key(settings),
             level_types.preset(properties.preset) if properties.preset else None,
+            auto_weapon_node=settings.auto_weapon_node,
         ), CLICK_HINT)
 
     @classmethod
@@ -317,11 +319,16 @@ class DKR_OT_place_object(bpy.types.Operator):
             area.tag_redraw()
 
     def _remove_last(self, context):
+        from .ai import weapon_nodes_of  # noqa: PLC0415
+
         while self._placed:
             obj = bpy.data.objects.get(self._placed.pop())
             if obj is None:
                 continue  # already deleted by hand
             name = obj.name
+            # A balloon's weapon node came with the click, so it goes with it.
+            for node in weapon_nodes_of(obj):
+                bpy.data.objects.remove(node, do_unlink=True)
             bpy.data.objects.remove(obj, do_unlink=True)
             bpy.ops.ed.undo_push(message="Remove %s" % name)
             self.report({"INFO"}, "removed %s" % name)
@@ -344,32 +351,13 @@ class DKR_OT_place_object(bpy.types.Operator):
 
     def _place(self, context, object_type, location):
         """One object of this type at a world position; the object."""
-        catalog = _catalog()
         object_id = object_type.object_id
-        fields = object_type.fresh_fields()
         chosen = level_types.preset(self.preset) if self.preset else None
-        if chosen is not None and chosen.object_id == object_id:
-            fields.update(chosen.fields)
-        else:
+        if chosen is None or chosen.object_id != object_id:
             chosen = None
-        _assign_free_index(context, object_id, fields)
-
-        placed = MapObject(
-            object_id=object_id,
-            name=object_type.node_name,
-            translation=scene.to_map(location),
-            fields=fields,
-        )
-
-        root = scene.ensure_root(context)
-        empty = scene.create_empty(context, placed, catalog, root,
-                                   _asset_tree(context),
-                                   context.scene.dkr.slot)
-        empty["dkr_order"] = scene.next_order(context)
-        if chosen is not None:
-            # A label for the outliner only; the node name the export writes
-            # stays the type's own, in dkr_node_name.
-            empty.name = chosen.label.replace(" ", "")
+        empty = add_object(context, object_type, location,
+                           chosen.fields if chosen else None,
+                           label=chosen.label if chosen else "")
 
         for obj in context.selected_objects:
             obj.select_set(False)
@@ -378,7 +366,10 @@ class DKR_OT_place_object(bpy.types.Operator):
 
         shown = chosen.label if chosen else object_type.label
         key = level_types.current_key(context.scene.dkr)
-        if empty.type == "EMPTY" and _asset_tree(context) is None:
+        weapon = self._weapon_node(context, empty, key)
+        if weapon:
+            self.report({"INFO"}, "%s%s" % (shown, weapon))
+        elif empty.type == "EMPTY" and _asset_tree(context) is None:
             self.report(
                 {"WARNING"},
                 "placed %s as a marker; set the decomp asset path in the addon "
@@ -389,11 +380,70 @@ class DKR_OT_place_object(bpy.types.Operator):
                         % (shown, level_types.label(key)))
         else:
             unique = UNIQUE_FIELDS.get(object_id, (None,))[0]
-            index = (" (%s %d)" % (unique, fields[unique])
-                     if unique in fields else "")
+            index = (" (%s %d)" % (unique, empty[unique])
+                     if unique and unique in empty else "")
             self.report({"INFO"}, "placed %s%s in the %s map"
                         % (shown, index, scene.slot_of(empty)))
         return empty
+
+    @staticmethod
+    def _weapon_node(context, balloon, key):
+        """Give a balloon placed in Battle or Bananas its weapon node.
+
+        The report's tail - ``" + weapon node (linked to 2 nodes)"`` - or
+        ``""`` when none was added. Bots there never look at balloons, only
+        at AI nodes of destination class 1 (see :mod:`..ai_graph`).
+        """
+        if (str(balloon.get(scene.PROP_ID)) != level_types.WEAPON_BALLOON
+                or key not in level_types.WEAPON_NODE_KEYS
+                or not context.scene.dkr.auto_weapon_node):
+            return ""
+        from .ai import add_weapon_node, neighbours, node_empties  # noqa: PLC0415
+
+        node, linked = add_weapon_node(context, balloon)
+        if node is None:
+            return " placed, but no weapon node: %s" % linked
+        if linked:
+            return " + weapon node (linked to %d node%s)" % (
+                len(linked), "s" if len(linked) > 1 else "")
+        if not any(neighbours(n) for n in node_empties(context)):
+            return (" + weapon node (not linked yet: AI Line From Curve links it "
+                    "when you draw the graph)")
+        return (" + weapon node (not linked: no graph node with a free slot "
+                "within %d units. Select it and a node, then Link Nodes)"
+                % ai_graph.AUTO_LINK_RANGE)
+
+
+def add_object(context, object_type, location, fields=None, slot=None,
+               label=""):
+    """Add one object of a type at a world position, and return it.
+
+    ``fields`` overrides the type's fresh values - a preset's colour, a
+    chest's racer - and a unique index the type needs is still assigned
+    around them. ``slot`` defaults to the Place tab's; ``label`` renames it
+    in the outliner only, since the node name the export writes stays the
+    type's own, in ``dkr_node_name``. What placing by click, the Mode
+    Checklist's Add buttons and scripts all share.
+    """
+    catalog = _catalog()
+    object_id = object_type.object_id
+    values = object_type.fresh_fields()
+    values.update(fields or {})
+    _assign_free_index(context, object_id, values)
+    placed = MapObject(
+        object_id=object_id,
+        name=object_type.node_name,
+        translation=scene.to_map(location),
+        fields=values,
+    )
+    root = scene.ensure_root(context)
+    empty = scene.create_empty(context, placed, catalog, root,
+                               _asset_tree(context),
+                               slot or context.scene.dkr.slot)
+    empty["dkr_order"] = scene.next_order(context)
+    if label:
+        empty.name = label.replace(" ", "")
+    return empty
 
 
 #: Blender's enum callbacks hand their strings to C without taking a reference,
@@ -547,13 +597,17 @@ class DKR_OT_refresh_artwork(bpy.types.Operator):
         # DKR object is about to be replaced, so only a grid root is kept.
         existing = sorted(scene.iter_dkr_objects(context),
                           key=lambda o: o.get("dkr_order", 1 << 30))
+        position = {obj.name: index for index, obj in enumerate(existing)}
         records = []
         for obj in existing:
             parent = obj.parent
             if parent is not None and scene.is_dkr_object(parent):
-                parent = None
+                # Rebuilt too - a weapon node's balloon - so remembered by
+                # place and re-pointed at its replacement below.
+                parent = position.get(parent.name)
             records.append((scene.read_object(obj, catalog), scene.slot_of(obj),
-                            parent, obj.matrix_world.copy(), obj.get("dkr_order")))
+                            parent, obj.matrix_world.copy(), obj.get("dkr_order"),
+                            obj.name))
 
         # An object's Blender type is fixed at creation, so an Empty cannot grow
         # a mesh. Rebuilding is the only way to give artwork to objects that
@@ -562,14 +616,21 @@ class DKR_OT_refresh_artwork(bpy.types.Operator):
             bpy.data.objects.remove(obj, do_unlink=True)
 
         rebuilt = []
-        for placed, slot, parent, matrix, order in records:
+        for placed, slot, parent, matrix, order, name in records:
             obj = scene.create_empty(context, placed, catalog, root, tree, slot)
-            if parent is not None:
+            if parent is not None and not isinstance(parent, int):
                 obj.parent = parent
             obj.matrix_world = matrix
             if order is not None:
                 obj["dkr_order"] = order
+            obj.name = name
             rebuilt.append(obj)
+        context.view_layer.update()
+        for obj, (_placed, _slot, parent, matrix, _order, _name) in zip(rebuilt, records):
+            if isinstance(parent, int):
+                obj.parent = rebuilt[parent]
+                obj.matrix_parent_inverse = rebuilt[parent].matrix_world.inverted()
+                obj.matrix_world = matrix
 
         drawn = sum(1 for o in rebuilt if preview.PROP_PREVIEW in o)
         self.report(

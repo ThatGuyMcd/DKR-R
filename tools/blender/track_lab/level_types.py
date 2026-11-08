@@ -527,8 +527,9 @@ HELP: Dict[str, str] = {
                 "places a whole set at once.",
     CHECKPOINT: "Counts laps and places respawns. Racers pass them in index "
                 "order.",
-    "ASSET_OBJECT_AINODE": "A point on the AI racing line, linked to up to four "
-                           "neighbours.",
+    "ASSET_OBJECT_AINODE": "A node of the AI node graph the Battle and Bananas "
+                           "bots, and a hub's T.T. and Taj, drive along, "
+                           "linked to up to four neighbours.",
     "ASSET_OBJECT_GROUNDZIPPER": "A speed pad on the ground.",
     "ASSET_OBJECT_AIRZIPPERS": "Boost rings in the air, for planes.",
     "ASSET_OBJECT_WATERZIPPERS": "Boost pads on water, for hovercraft.",
@@ -572,8 +573,26 @@ def auto_help(object_type) -> str:
     return text
 
 
+#: Where the bots fetch weapons at AI nodes rather than at the balloons.
+WEAPON_NODE_KEYS = (BATTLE, BANANAS)
+
+
+def weapon_node_note(key: Optional[str], auto: bool) -> str:
+    """What a weapon balloon's Place button says about its AI node, if anything."""
+    if key not in WEAPON_NODE_KEYS:
+        return ""
+    if auto:
+        return ("Bots never see balloons here: they fetch weapons at AI nodes "
+                "of destination class 1. Auto Weapon Node puts one on this "
+                "balloon, parented to it, and links it to the graph.")
+    return ("Bots never see balloons here, and Auto Weapon Node is off: no bot "
+            "comes for this one unless an AI node of destination class 1 sits "
+            "on it.")
+
+
 def place_description(object_type, key: Optional[str],
-                      chosen: Optional[Preset] = None) -> str:
+                      chosen: Optional[Preset] = None,
+                      auto_weapon_node: bool = False) -> str:
     """The tooltip of one Place button: what it is, and whether it fits here."""
     parts = []
     if chosen is not None:
@@ -583,6 +602,10 @@ def place_description(object_type, key: Optional[str],
     written = HELP.get(object_type.object_id)
     if written:
         parts.append(written)
+    if object_type.object_id == WEAPON_BALLOON:
+        note = weapon_node_note(key, auto_weapon_node)
+        if note:
+            parts.append(note)
     if chosen is None:
         parts.append(auto_help(object_type))
     if not visible(object_type, key):

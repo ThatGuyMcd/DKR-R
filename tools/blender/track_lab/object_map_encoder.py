@@ -125,6 +125,20 @@ class ObjectMapEncoder:
             blob.extend(b"\x00" * (BLOB_ALIGNMENT - remainder))
         return bytes(blob)
 
+    def entry_offsets(self, object_map: ObjectMap) -> List[int]:
+        """Where each object's entry starts in the inflated payload.
+
+        Offsets count from the start of :meth:`encode`'s result, so the
+        16-byte header is included - the same buffer the game inflates the map
+        into. A field's byte is its entry's offset plus the field's own.
+        """
+        offsets = []
+        position = HEADER_SIZE
+        for obj in object_map.objects:
+            offsets.append(position)
+            position += self.entry_size(obj)
+        return offsets
+
     def pack(self, object_map: ObjectMap, level: int = 9) -> bytes:
         """The payload wrapped in the container the asset table stores."""
         blob = self.encode(object_map)
@@ -149,13 +163,17 @@ class ObjectMapEncoder:
             )
         return index
 
+    def entry_size(self, obj) -> int:
+        """The bytes one object's entry takes: its type's struct size."""
+        entry = self.catalog.raw.get("objects", {}).get(obj.object_id, {})
+        return entry.get("entry_size", COMMON_SIZE)
+
     def encode_entry(self, obj) -> bytes:
         object_type = self.catalog.get(obj.object_id)
         if object_type is None:
             raise EncodeError("%s is not in the catalogue" % obj.object_id)
 
-        entry = self.catalog.raw.get("objects", {}).get(obj.object_id, {})
-        size = entry.get("entry_size", COMMON_SIZE)
+        size = self.entry_size(obj)
         if not COMMON_SIZE <= size <= MAX_ENTRY_SIZE:
             raise EncodeError(
                 "%s encodes to %d bytes; the game walks entries with a 6-bit "
