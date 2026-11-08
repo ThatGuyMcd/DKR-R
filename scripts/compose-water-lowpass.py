@@ -1,8 +1,8 @@
 """Author the low-pass spray layer: aircraft/hovercraft skimming over liquid.
 
 Read the composed stage; emit one pipeline patch. Re-runs reverse this layer
-(and the later caustics layer, when present) in memory first, so the
-patch is always authored against the lava-glow baseline.
+in memory first, so the patch is always authored against the lava-glow
+baseline (which also carries the caustic texture).
 """
 from pathlib import Path
 import difflib
@@ -12,9 +12,7 @@ from water_patch_baseline import read_before
 root=Path(__file__).resolve().parents[1]
 stage=Path(sys.argv[1]).resolve()
 output=root/'patches/enhanced-water/dkr-lowpass.patch'
-caustics=root/'patches/enhanced-water/dkr-caustics.patch'
 layers=[]
-if caustics.exists() and 'causticTexture' in (stage/'src/shaders/WaterPS.hlsl').read_text():layers.append(caustics)
 if 'WATER_CRAFT_AIR' in (stage/'src/shared/rt64_water_params.h').read_text():layers.append(output)
 changes=[]
 
