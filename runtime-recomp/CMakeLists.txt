@@ -927,6 +927,12 @@ if(DKR_RUNTIME_BUILD_GENERATED)
         NOMINMAX
     )
     target_link_libraries(DKRPortGame PRIVATE DKRUpdateClient)
+    # game_main.cpp and rt64_renderer.cpp call the native crash context
+    # directly, so a plain configure (without the release overlay) must link
+    # it too. dkr_add_crash_reports() defines the target only once.
+    include(cmake/CrashReports.cmake)
+    dkr_add_crash_reports()
+    target_link_libraries(DKRPortGame PRIVATE DKRCrashReports)
     include(cmake/FilePicker.cmake)
     dkr_add_file_picker()
     if(DKR_EXPERIMENTAL_RACE_TEST)
