@@ -9,9 +9,9 @@ where the bots drive is worse than none.
 
 **The line.** ``checkpoint_update_all`` (``objects.c``) keeps the checkpoints
 whose ``vehicleType`` equals ``header.unk4F[vehicle]``, at most
-:data:`MAX_CHECKPOINTS` of them, numbers an alternate-route gate ``index + 255``,
-bubble-sorts on that, and pairs each alternate with the main gate of the same
-``index``. ``func_80045C48`` (``racer.c``) then takes four consecutive gates,
+:data:`MAX_CHECKPOINTS` of them (60 on retail, 127 on DKR-R), numbers an
+alternate-route gate ``index + 255``, bubble-sorts on that, and pairs each
+alternate with the main gate of the same ``index``. ``func_80045C48`` (``racer.c``) then takes four consecutive gates,
 moves each by the racer's lane -
 
     x += node.scale * cos(yaw) * lateral
@@ -58,8 +58,18 @@ ALTERNATE_OFFSET = 255
 
 #: ``gNumberOfMainCheckpoints < MAX_CHECKPOINTS`` (``objects.c``): gates past
 #: this many in one set are never loaded, alternates included, and nothing says
-#: so in game.
-MAX_CHECKPOINTS = 60
+#: so in game. Retail's ``MAX_CHECKPOINTS`` is 60; DKR-R patches the table's
+#: allocation and that bound in ``allocate_object_pools`` and
+#: ``checkpoint_update_all`` up to 127, because a gate's place in the table
+#: lives in signed bytes - ``Object_Racer.nextCheckpoint``,
+#: ``Object_Weapon.checkpoint``, ``CheckpointNode.altRouteID`` - and 127 is the
+#: most for which ``nextCheckpoint + 1`` still fits one. So this is the runtime's
+#: ceiling, not the format's.
+MAX_CHECKPOINTS = 127
+
+#: What retail, original hardware and older DKR-R builds load per set. A set
+#: past this plays on a current DKR-R and loses its last gates elsewhere.
+RETAIL_MAX_CHECKPOINTS = 60
 
 #: ``obj_init_checkpoint`` clamps a smaller scale byte up to this.
 MIN_SCALE = 5
@@ -136,7 +146,7 @@ class Route:
     """The checkpoints one vehicle's racers load, in the order they use them."""
 
     __slots__ = ("vehicle_set", "main", "alternates", "alternate_of",
-                 "duplicates", "unpaired", "dropped")
+                 "duplicates", "unpaired", "dropped", "past_retail")
 
     def __init__(self, vehicle_set: int):
         self.vehicle_set = vehicle_set
@@ -153,6 +163,9 @@ class Route:
         self.unpaired: List[Node] = []
         #: Gates in this set past :data:`MAX_CHECKPOINTS`, never loaded.
         self.dropped = 0
+        #: Gates loaded here past :data:`RETAIL_MAX_CHECKPOINTS`: the ones an
+        #: older DKR-R build or original hardware would not load.
+        self.past_retail = 0
 
     def node_at(self, position: int, alternate: bool = False) -> Node:
         """``find_next_checkpoint_node``: the gate a racer uses at a position."""
@@ -190,6 +203,7 @@ def build_route(map_objects: Iterable, vehicle_set: int = 0) -> Route:
             route.dropped += 1
             continue
         loaded.append(node_from(obj))
+    route.past_retail = max(0, len(loaded) - RETAIL_MAX_CHECKPOINTS)
 
     # A bubble sort that swaps only on strictly less is stable, and so is
     # Python's sort: gates sharing an id keep the order they were spawned in.

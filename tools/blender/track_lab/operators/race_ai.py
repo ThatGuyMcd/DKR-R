@@ -46,7 +46,7 @@ RETAIL_RACE_TYPE = "RACETYPE_DEFAULT"
 
 def checkpoint_empties(context):
     """The scene's checkpoints in document order, which is spawn order - the
-    order the game counts to its 60-gate ceiling in."""
+    order the game counts to its gate ceiling in (``race_ai.MAX_CHECKPOINTS``)."""
     found = [obj for obj in scene.iter_dkr_objects(context)
              if str(obj.get(scene.PROP_ID)) == race_ai.CHECKPOINT]
     found.sort(key=lambda obj: (int(obj.get("dkr_order", 1 << 30)), obj.name))

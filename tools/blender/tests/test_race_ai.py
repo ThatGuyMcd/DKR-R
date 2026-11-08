@@ -8,7 +8,8 @@ checks here hold the module to the game's arithmetic rather than to taste:
 * **The spline is the game's.** It passes through every lane point, and a
   racer on the alternate route leaves and rejoins the main line at gates.
 * **Loading follows ``checkpoint_update_all``** - vehicle set filter, sort on
-  ``index + 255`` for alternates, pairing by index, the 60-gate ceiling.
+  ``index + 255`` for alternates, pairing by index, the 127-gate ceiling
+  DKR-R patches in and the 60 retail and older builds keep.
 * **Every retail map builds**, every set of it, into finite lines.
 * **The header bytes are the right bytes.** Each pointer lands on the offset
   the game reads, the two mislabelled ``ai-levels`` slots included, and an
@@ -33,6 +34,7 @@ sys.path.insert(0, _HERE)
 
 from track_lab import (  # noqa: E402
     catalog, gltf_io, level_header, level_header_template as template, race_ai,
+    validate,
 )
 
 from test_roundtrip import VANILLA, find_object_maps  # noqa: E402
@@ -133,9 +135,57 @@ def check_loading_rules():
     if doubled.duplicates != [0]:
         return "two gates on index 0 are a duplicate"
 
-    many = race_ai.build_route([_gate(i, 0, index=i) for i in range(65)])
+    if race_ai.MAX_CHECKPOINTS != 127 or race_ai.RETAIL_MAX_CHECKPOINTS != 60:
+        return "DKR-R's table holds 127 gates a set and retail's 60"
+    many = race_ai.build_route([_gate(i, 0, index=i) for i in range(132)])
     if len(many.main) != race_ai.MAX_CHECKPOINTS or many.dropped != 5:
-        return "the game loads 60 gates a set and drops the rest"
+        return "DKR-R loads 127 gates a set and drops the rest"
+    if many.past_retail != race_ai.MAX_CHECKPOINTS - race_ai.RETAIL_MAX_CHECKPOINTS:
+        return "past_retail counts the loaded gates past retail's 60"
+    # Alternates count toward the same table, in spawn order.
+    mixed = [_gate(i, 0, index=i) for i in range(100)]
+    mixed += [_gate(i, 9, index=i, alternate=1) for i in range(30)]
+    mixed_route = race_ai.build_route(mixed)
+    if (len(mixed_route.main), len(mixed_route.alternates), mixed_route.dropped) != (100, 27, 3):
+        return "alternate gates share the main gates' 127 slots"
+    within = race_ai.build_route([_gate(i, 0, index=i) for i in range(60)])
+    if within.dropped or within.past_retail:
+        return "60 gates fit everywhere"
+    return None
+
+
+def check_validate_counts():
+    """Validation says what loading does: a set past DKR-R's 127 is an error
+    that names the gates skipped, past retail's 60 a warning, at 60 nothing."""
+    def count_issues(gates):
+        # The checkpoint rules alone: these gates carry only the line's fields.
+        report = validate._check_checkpoints(gltf_io.ObjectMap(objects=gates), False)
+        return [issue for issue in report if issue.severity != validate.INFO]
+
+    if count_issues([_gate(i, 0, index=i) for i in range(60)]):
+        return "60 checkpoints in a set are fine everywhere"
+
+    issues = count_issues([_gate(i, 0, index=i) for i in range(100)])
+    if [issue.severity for issue in issues] != [validate.WARNING]:
+        return "100 checkpoints warn once: %r" % issues
+    if "older DKR-R builds" not in issues[0].message or issues[0].objects != list(range(60, 100)):
+        return "the warning names older builds and the 40 gates they skip"
+
+    # Alternates share the table, and each vehicle type has its own.
+    gates = [_gate(i, 0, index=i) for i in range(120)]
+    gates += [_gate(i, 9, index=i, alternate=1) for i in range(10)]
+    gates += [_gate(i, 0, index=i, vehicle=1) for i in range(20)]
+    issues = count_issues(gates)
+    if [issue.severity for issue in issues] != [validate.ERROR]:
+        return "130 gates in set 0 and 20 in set 1 is one error: %r" % issues
+    message = issues[0].message
+    if "at most 127" not in message or "130 checkpoints" not in message:
+        return "the error says the count and the ceiling: %s" % message
+    if issues[0].objects != list(range(127, 130)):
+        return "the error selects the three gates past the ceiling"
+
+    if count_issues([_gate(i, 0, index=i) for i in range(127)])[0].severity != validate.WARNING:
+        return "127 checkpoints still load on DKR-R"
     return None
 
 
@@ -166,7 +216,7 @@ def check_retail_routes():
     if not paths:
         print("  skip: no extracted object maps")
         return None
-    maps = sets = largest = dropped = unpaired = duplicated = 0
+    maps = sets = largest = dropped = past_retail = unpaired = duplicated = 0
     for path in paths:
         object_map = gltf_io.load(path)
         counts = race_ai.vehicle_sets(object_map.objects)
@@ -178,6 +228,7 @@ def check_retail_routes():
             sets += 1
             largest = max(largest, len(route.main) + len(route.alternates))
             dropped += route.dropped
+            past_retail += route.past_retail
             unpaired += len(route.unpaired)
             duplicated += len(route.duplicates)
             for lane in range(race_ai.LANES):
@@ -193,7 +244,7 @@ def check_retail_routes():
     print("  %d retail maps with checkpoints, %d sets, largest set %d gates, "
           "%d dropped, %d unpaired alternates, %d duplicate ids"
           % (maps, sets, largest, dropped, unpaired, duplicated))
-    if dropped:
+    if dropped or past_retail or largest > race_ai.RETAIL_MAX_CHECKPOINTS:
         return "a retail set passes the 60-gate ceiling, so the ceiling is wrong"
     return None
 
@@ -299,6 +350,7 @@ CHECKS = [
     ("lane offsets", check_lane_offsets),
     ("spline passes the gates", check_spline_passes_the_gates),
     ("loading rules", check_loading_rules),
+    ("validation counts", check_validate_counts),
     ("alternate line rejoins", check_alternate_line_rejoins),
     ("retail routes", check_retail_routes),
     ("header bytes", check_header_bytes),

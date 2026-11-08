@@ -59,7 +59,10 @@ class DKR_OT_export_dkrmap(bpy.types.Operator, ExportHelper):
             return {"CANCELLED"}
 
         if self.validate_first:
-            report = validate.validate(object_map, catalog, level_key=key)
+            from . import mode_checklist  # noqa: PLC0415
+            boss, surfaces = mode_checklist.validation_facts(context)
+            report = validate.validate(object_map, catalog, level_key=key,
+                                       boss=boss, surfaces=surfaces)
             from . import waterfall
             report = validate.Report(list(report) + waterfall.issues(context))
             if report.errors:
