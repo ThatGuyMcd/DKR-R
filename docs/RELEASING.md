@@ -44,6 +44,11 @@ pre-commit hooks on the changed files. Keep failures visible. Run timing-heavy
 regression fixtures on native Linux storage when a mounted-volume timeout is
 encountered; record that rerun and its exact coverage.
 
+CI jobs running the tooling or full host suite need a full Git checkout
+(`fetch-depth: 0`). The capsule checker verifies historical base blobs from the
+recorded Git revision, so a depth-one checkout cannot pass that check. Fetch
+the required history; do not skip verification, weaken hashes or repin the capsule.
+
 The retained release fixture tools check original behaviour, render/memory
 ownership, content preparation, vehicles and online policies. ARM64 CPU/data
 fixtures may use QEMU with the matching sysroot. Native graphics, controller

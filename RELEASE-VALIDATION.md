@@ -150,6 +150,16 @@ not close reports or claim unrelated fixes.
 
 ## Review and update signing
 
+The first main-branch CI push exposed a shallow-checkout configuration problem:
+the Repository Safety job could not read the historical blobs used by the pinned
+capsule check. Its tooling checkout, the three platform host workflows and the
+nightly full sanitizer suite now fetch history. This changes CI configuration,
+not runtime code or package executable bytes. The original failure and corrected
+CI results are retained separately. The owner published v1.0.15 during this
+follow-up: its tag, source ZIP and signed manifest remain bound to the prepared
+commit `d2925302d961b46a8492cb3da2169f290ea724b6`. The CI-only main-branch follow-up
+does not replace or re-sign those published assets.
+
 The proposed tag is `Version1.0.15`. Commit the complete reviewed source locally
 before signing the finished packages with the existing trusted key. The signed
 manifest binds that exact commit and package bytes. Verify the signature after
