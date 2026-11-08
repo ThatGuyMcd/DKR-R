@@ -38,6 +38,9 @@ for argument in "$@"; do
   esac
 done
 
+# Prints the hook install command if the hooks are missing; never fails Build.
+if [[ -f "${project_root}/scripts/bootstrap_hooks.py" ]]; then python3 "${project_root}/scripts/bootstrap_hooks.py" --check || true; fi
+
 [[ -d "${generated_source}" ]] || {
   echo "US v1.0/v77 Patch Pipeline output is missing: ${generated_source}" >&2
   exit 1

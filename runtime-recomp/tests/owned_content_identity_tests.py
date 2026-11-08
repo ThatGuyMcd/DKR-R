@@ -1,4 +1,5 @@
 """Contract IDs ignore text newline conventions, not semantic or binary changes."""
+
 import pathlib
 import shutil
 import subprocess
@@ -8,6 +9,7 @@ import unittest
 HELPER = pathlib.Path(__file__).resolve().parents[1] / "cmake/OwnedContentIdentity.cmake"
 
 
+@unittest.skipUnless(shutil.which("cmake"), "needs CMake (python3 scripts/check.py --suite host-tools)")
 class OwnedContentIdentityTests(unittest.TestCase):
     def identity(self, root, files, *, outside=False):
         root = pathlib.Path(root)
@@ -26,9 +28,10 @@ class OwnedContentIdentityTests(unittest.TestCase):
             f'include("{HELPER.as_posix()}")\n'
             f'dkr_owned_content_identity(value "{authored.as_posix()}" '
             f'"{generated.as_posix()}" {" ".join(inputs)})\n'
-            f'file(WRITE "{output.as_posix()}" "${{value}}")\n', encoding="utf-8")
-        result = subprocess.run([shutil.which("cmake"), "-P", str(script)],
-                                capture_output=True, text=True)
+            f'file(WRITE "{output.as_posix()}" "${{value}}")\n',
+            encoding="utf-8",
+        )
+        result = subprocess.run([shutil.which("cmake"), "-P", str(script)], capture_output=True, text=True)
         if outside:
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("outside its checked roots", result.stderr)
@@ -41,17 +44,20 @@ class OwnedContentIdentityTests(unittest.TestCase):
             roots = [pathlib.Path(temp) / name for name in ("windows layout", "linux-layout")]
             for root in roots:
                 root.mkdir()
-            files = [(f"generated/sample{ext}", b'int x = 1;\n// checked input\n')
-                     for ext in (".c", ".cpp", ".h", ".hpp")]
-            files += [("generated/manifest.json", b'{"revision":77,\n"full_scenes":true}\n'),
-                      ("authored/src/native.cpp", b'int native_value = 2;\n')]
+            files = [
+                (f"generated/sample{ext}", b"int x = 1;\n// checked input\n") for ext in (".c", ".cpp", ".h", ".hpp")
+            ]
+            files += [
+                ("generated/manifest.json", b'{"revision":77,\n"full_scenes":true}\n'),
+                ("authored/src/native.cpp", b"int native_value = 2;\n"),
+            ]
             other = [(name, data.replace(b"\n", b"\r\n")) for name, data in reversed(files)]
             self.assertEqual(self.identity(roots[0], files), self.identity(roots[1], other))
 
     def test_semantic_change_changes_identity(self):
         with tempfile.TemporaryDirectory() as temp:
-            before = self.identity(temp, [("generated/guest.c", b'int x = 1;\n')])
-            after = self.identity(temp, [("generated/guest.c", b'int x = 2;\n')])
+            before = self.identity(temp, [("generated/guest.c", b"int x = 1;\n")])
+            after = self.identity(temp, [("generated/guest.c", b"int x = 2;\n")])
             self.assertNotEqual(before, after)
 
     def test_manifest_change_changes_identity(self):

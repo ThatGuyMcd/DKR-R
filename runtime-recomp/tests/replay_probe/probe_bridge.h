@@ -81,6 +81,9 @@ void dkr_probe_audio_dma(uint8_t* ram, uint8_t* dmem, uint32_t dmem_address,
 DKR_PROBE_NORETURN void dkr_probe_block(const char* operation);
 void dkr_probe_enter(const char* function);
 void dkr_probe_leave(void);
+/* Observation-only Patch Pipeline boundaries; no local setting or guest write. */
+void dkr_probe_online_function(const char* name,int leaving,uint8_t* ram,struct recomp_context* context);
+void dkr_probe_online_addresses(uint32_t addresses[3]);
 void dkr_probe_checkpoint(void);
 /* Private diagnostic watchpoint; 0 disables it. Reports the preceding checked
    memory site when this word changes. Does not patch or mask guest memory. */
@@ -151,6 +154,8 @@ unsigned dkr_probe_draw_capture(dkr_owned_draw_event* events, unsigned capacity)
 typedef void (*dkr_probe_scenery_observer)(void*,const uint8_t*,uint32_t,uint32_t,uint32_t);
 void dkr_probe_scenery_observe(dkr_probe_scenery_observer observer,void* user);
 void dkr_probe_local_world_draw(uint8_t* ram,struct recomp_context* context,unsigned pass);
+void dkr_probe_mesh_begin(uint8_t* ram,struct recomp_context* context,dkr_owned_draw_event* event);
+void dkr_probe_mesh_end(uint8_t* ram,struct recomp_context* context,dkr_owned_draw_event* event);
 void dkr_probe_scenery_addresses(uint32_t addresses[11]);
 void dkr_probe_presentation_addresses(uint32_t addresses[8]);
 int dkr_probe_postrace_scope(int mode,int postrace,int players,int trophy,int layout);

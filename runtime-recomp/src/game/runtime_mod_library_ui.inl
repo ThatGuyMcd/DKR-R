@@ -116,7 +116,6 @@ struct LibraryEntry {
 struct LibraryCardView {
     bool code = false;
     bool native = false;
-    bool native_toggle = false;
     std::string title;
     std::string byline;
     std::string info;
@@ -145,14 +144,11 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
         view.info = track.hd_textures
             ? "HD textures \xC2\xB7 Modern graphics" : "Modern graphics";
         if (track.bytes != 0U) view.size = FormatModSize(track.bytes);
-        view.status = "Installed";
-        view.tone = PaddockTone::On;
-        if (track.kept_online) {
-            view.native_toggle = true; view.enabled = track.enabled;
-            view.toggle_allowed = !locked; view.gold = track.enabled;
-            view.status = track.enabled ? "On" : "Off";
-            view.tone = track.enabled ? PaddockTone::On : PaddockTone::Neutral;
-        }
+        view.enabled = track.enabled;
+        view.toggle_allowed = !locked;
+        view.gold = track.enabled;
+        view.status = track.enabled ? "On" : "Off";
+        view.tone = track.enabled ? PaddockTone::On : PaddockTone::Neutral;
         return view;
     }
     const browser::Card& card = *entry.legacy;
@@ -313,7 +309,7 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
     PaddockDashes(draw, {left, footer}, inner, PaddockCol(0x39718A), 2.0F);
     const float row = footer + 14.0F;
     bool card_focused = false;
-    if (!view.native || view.native_toggle) {
+    {
         ImGui::SetCursorScreenPos({left, row});
         bool enabled = view.enabled;
         ImGui::BeginDisabled(!view.toggle_allowed);
@@ -321,7 +317,8 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
             if (view.code) {
                 if(code_toggle)code_toggle(enabled);
             } else if (view.native) {
-                dkr::runtime::custom_tracks::set_kept_enabled(view.id, enabled, g_legacy_import_status);
+                if (dkr::runtime::custom_tracks::set_enabled(view.id, enabled, g_legacy_import_status))
+                    g_legacy_import_status = enabled ? "Track on for the next game." : "Track off for the next game.";
             } else {
                 const auto kind = characters ? TrackCatalog::Kind::Character : TrackCatalog::Kind::Track;
                 g_legacy_imports.set_enabled(kind, view.id, enabled);
@@ -1134,8 +1131,16 @@ void DrawDkrTrackDetails(const std::vector<DkrLibraryTrack>& tracks, bool rom_re
         paragraph(found->author.empty() ? std::string("Native .dkrmap track") : "By " + found->author);
         paragraph(found->kept_online ? (found->enabled ? "Kept from an online session. Enabled for offline play."
                                                      : "Kept from an online session. Inactive until you turn it on in My Mods.") : found->installed
-            ? "Installed. This course appears automatically in the in-game track menu."
+            ? "Installed native track."
             : "Read from your working folder. Source files are managed in Track Lab.");
+        PaddockGap(13.0F);
+        bool enabled = found->enabled;
+        ImGui::BeginDisabled(locked);
+        if (PaddockCheckbox("##dkr-track-enabled", "Enabled for next game", &enabled, width)) {
+            if (dkr::runtime::custom_tracks::set_enabled(found->id, enabled, g_legacy_import_status))
+                g_legacy_import_status = enabled ? "Track on for the next game." : "Track off for the next game.";
+        }
+        ImGui::EndDisabled();
         paragraph("Track Lab previews tracks from your working folder. Requires Modern graphics.");
         if (!rom_ready) paragraph("Load your original Diddy Kong Racing ROM in Play before racing.");
         if (!found->hd_pack_id.empty()) {

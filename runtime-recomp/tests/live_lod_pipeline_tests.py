@@ -1,4 +1,5 @@
 """Guard the live LOD wiring; pixel correctness is tested by live_lod_probe.hlsl."""
+
 import hashlib
 from pathlib import Path
 import unittest
@@ -13,7 +14,8 @@ def read(name):
 class LiveLodPipelineTests(unittest.TestCase):
     def test_ui_publishes_before_hidden_overlay_early_return(self):
         draw = read("runtime-recomp/src/game/runtime_ui.cpp").split(
-            "void dkr::runtime::ui::draw(RT64::Application& application) {", 1)[1]
+            "void dkr::runtime::ui::draw(RT64::Application& application) {", 1
+        )[1]
         before_return = draw.split("return;", 1)[0]
         self.assertIn("RT64::setDefaultSamplerMipLODBias(", before_return)
         self.assertIn("dkr::runtime::enhancements::effective_texture_lod_bias()", before_return)
@@ -40,8 +42,11 @@ class LiveLodPipelineTests(unittest.TestCase):
         path = "patches/rt64/0015-configurable-default-mip-lod-bias.patch"
         digest = hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
         self.assertIn(digest.lower(), read("patches/manifest.json").lower())
-        owners = [p.name for p in (ROOT / "patches/rt64").glob("*.patch")
-                  if "gDefaultSamplerMipLODBias" in p.read_text(encoding="utf-8")]
+        owners = [
+            p.name
+            for p in (ROOT / "patches/rt64").glob("*.patch")
+            if "gDefaultSamplerMipLODBias" in p.read_text(encoding="utf-8")
+        ]
         self.assertEqual(owners, [Path(path).name])
 
 
@@ -53,7 +58,9 @@ class GeneratedMipmapPipelineTests(unittest.TestCase):
 
     def test_generation_only_at_session_boundary(self):
         renderer = read("runtime-recomp/src/game/rt64_renderer.cpp")
-        self.assertLess(renderer.index("RT64::beginGeneratedMipSession"), renderer.index("std::make_unique<RT64::Application>"))
+        self.assertLess(
+            renderer.index("RT64::beginGeneratedMipSession"), renderer.index("std::make_unique<RT64::Application>")
+        )
         ui = read("runtime-recomp/src/game/runtime_ui.cpp")
         self.assertNotIn("beginGeneratedMipSession", ui)
         draw = ui.split("void dkr::runtime::ui::draw(RT64::Application& application) {", 1)[1].split("return;", 1)[0]
@@ -76,7 +83,15 @@ class GeneratedMipmapPipelineTests(unittest.TestCase):
 
     def test_draw_scope_and_sampling_exclusions(self):
         sampler = read("extern/rt64/src/shaders/TextureSampler.hlsli")
-        for guard in ("!renderFlagRect", "!otherMode.forceBlend", "!otherMode.cvgXAlpha", "otherMode.alphaCompare() == G_AC_NONE", "!gpuTileFlagRawTMEM", "!gpuTileFlagFromCopy", "wholeS && wholeT"):
+        for guard in (
+            "!renderFlagRect",
+            "!otherMode.forceBlend",
+            "!otherMode.cvgXAlpha",
+            "otherMode.alphaCompare() == G_AC_NONE",
+            "!gpuTileFlagRawTMEM",
+            "!gpuTileFlagFromCopy",
+            "wholeS && wholeT",
+        ):
             self.assertIn(guard, sampler)
         renderer = read("extern/rt64/src/render/rt64_framebuffer_renderer.cpp")
         self.assertIn("generatedMipPerspectiveScope(proj.type == Projection::Type::Perspective", renderer)
@@ -85,7 +100,9 @@ class GeneratedMipmapPipelineTests(unittest.TestCase):
 
     def test_loading_feedback_releases_upload_lock_and_does_not_replay_game(self):
         cache = read("extern/rt64/src/render/rt64_texture_cache.cpp")
-        wait = cache.split("void TextureCache::waitForGPUUploads()", 1)[1].split("void TextureCache::addResolvedPaths", 1)[0]
+        wait = cache.split("void TextureCache::waitForGPUUploads()", 1)[1].split(
+            "void TextureCache::addResolvedPaths", 1
+        )[0]
         self.assertIn("!generateMipmaps || !MipConfiguration::waitFeedback", wait)
         self.assertLess(wait.index("queueLock.unlock()"), wait.index("MipConfiguration::waitFeedback();"))
         self.assertLess(wait.index("MipConfiguration::waitFeedback();"), wait.index("queueLock.lock()"))

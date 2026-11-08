@@ -3,6 +3,8 @@
 #include "f3ddkr_rt64.hpp"
 #include "presentation_counter_policy.hpp"
 #include "track_performance.hpp"
+#include "online_view_policy.hpp"
+#include <utility>
 #include "ultramodern/renderer_context.hpp"
 
 #include <cstdint>
@@ -45,6 +47,7 @@ public:
     void repeat_owned();
     void reap_owned();
     bool owned_capacity_available();
+    void set_online_view_session(online_view::Session value){online_view_session_=std::move(value);}
 #endif
 
 private:
@@ -75,6 +78,7 @@ private:
     };
     std::deque<OwnedSubmission> owned_submissions_; // Hard cap TWO, never a long visual FIFO.
     std::unique_ptr<OwnedDecodeScratch> owned_decode_scratch_;
+    online_view::Session online_view_session_;
 #endif
 };
 

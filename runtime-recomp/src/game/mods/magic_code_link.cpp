@@ -39,8 +39,7 @@ std::shared_ptr<const LinkedSet> link(const std::vector<std::shared_ptr<const Pa
         // This withdrawn sample wrote bytes into retail's s16 Track Select
         // grid. Refuse its exact executable image BEFORE any callback runs;
         // keep it installed so its saved cup document can migrate on upgrade.
-        if(p.digest=="86b5b6a8ff1128d76250706b39c6af80a6ca75796413c92d345a97a439dd164c")
-            bad("Replace Custom Trophy Races 1.0.0 with the supplied 1.0.1 mod in Details before starting.");
+        if(const auto issue=compatibility_issue(p.digest);!issue.empty())bad(issue);
         if(!p.symbols||!p.revisions.contains(std::string(revision)))bad("code package does not match this Game Pak");
         for(const auto& [module,version]:p.modules) {
             const auto found=policy.modules.find(module);

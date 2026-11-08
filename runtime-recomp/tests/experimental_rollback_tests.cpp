@@ -118,7 +118,7 @@ struct Model final : Simulation {
             ++world.collisions;
         }
         output.scene_boundary = transition && (inputs[1].buttons & 0x8000U);
-        if (excessive_effects) output.effects.resize(65537);
+        if (excessive_effects) output.effects.resize(192U * 1024U + 1U);
         world.padding[frame % world.padding.size()] = static_cast<std::uint8_t>(world.random);
         ++world.ticks;
         if (reject_tick) { error = "injected tick failure"; return false; }

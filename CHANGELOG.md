@@ -1,8 +1,534 @@
 # DKR-R changelog
 
+## Unreleased
+
+## 1.0.14 — 2026-11-04
+
+- Manual Play now fades into the shared Starting Game screen with inline mod
+  preparation. Initial online verification uses the same logo/clouds/caption
+  presentation in the game renderer, fading away after the first ready frame.
+
+- Linux launchers now request GPU acceleration by default, with separate SDL
+  launcher and Vulkan game windows at renderer handoff. Accelerated launchers
+  bypass CPU panel rasterisation; failures retain a logged software fallback.
+
+- Added one-time, saved consent for automatic crash reports with a shared
+  About/Support switch, redacted log snapshots, separately opted-in raw dumps,
+  bounded offline retries and a private Discord relay. Uploads pause during
+  gameplay; disabling reporting removes unsent reports and retains originals.
+  Privacy copy explains that redaction and memory dumps cannot guarantee anonymity.
+
+- Replaced automatic startup's plain screen with the circular Recompiled logo,
+  scrolling launcher clouds and an intro-style translucent caption. Mod launch
+  preparation appears inline, with measured batch progress and a compact Open
+  Launcher button; cancellation and actionable error recovery are retained.
+
+- Added aspect-specific render resolutions, including rendering above the monitor's
+  resolution, with shared camera/HUD handling and migration of older settings.
+- Added a saved Session mods switch in Play. Vanilla sessions bypass installed
+  content without changing individual selections; running sessions stay frozen.
+- Added bounded KDE/system regional-format fallback for seasonal themes when
+  Steam Deck Gaming Mode supplies a generic C locale.
+
+- Added a saved Skip launcher option below Portable mode, editable in the
+  in-game Play overlay. Automatic startup keeps normal mod/save preparation
+  and returns to the launcher on missing content or preparation failures.
+  Sidebar navigation now has a centred switch with LB/RB and D-pad icons;
+  only the selected icons glow yellow.
+
+- Fixed the native road-wheel lighting path for custom racers using the
+  original car. The four tyre sprites follow the racer's light and physical
+  orientation, with scoped colour restoration and unchanged transparency.
+
+- Fixed custom-car lighting: prepared surface normals and per-racer light
+  samples now drive shading and environmental colour in every view. Texture
+  tiling preserves interpolated normals; fog stays separate from opacity.
+  Existing packages, seating, wheel animation and vehicle physics are kept.
+
+- Added a saved Language dropdown below Portable mode in Play, shared by the
+  launcher and in-game overlay. Automatic follows the system UI language;
+  explicit choices apply immediately without changing ROM language, regional
+  holidays, controller bindings, mods or the online session. Initial Latin and
+  Cyrillic translations are test drafts awaiting native-speaker review.
+
+- Fixed controller navigation in both sidebar modes: the left stick moves
+  between page elements and the right stick scrolls, in the launcher and overlay.
+  Modal dialogs keep their own scrolling and gameplay/capture inputs stay separate.
+- Matched the Search, Status and Sort controls across Tracks, Characters,
+  Custom Magic Codes and Vehicles. Vehicles now has On/Off filtering and name
+  sorting. Duplicate review sits in a padded results row below the search.
+- Moved Mod Library keyboard buttons beside their textboxes, including searches,
+  reviews, comments and submission forms, in the launcher and overlay.
+- Matched the launcher and in-game overlay pages, including Play, About and
+  full-width Installed Mods. Unavailable actions stay locked while playing.
+- Kept the legacy ROM notice above Spotlight in Textures too, and aligned
+  Import Mods with the Library's orange header buttons.
+- Centred Ready to race and added a labelled save indicator for vanilla,
+  modded and online progress. The overlay identifies the running session's save.
+- Added a saved sidebar navigation switch for LB / RB or D-pad. D-pad sidebar
+  mode leaves the stick to navigate the page on the right.
+- Added seasonal hover patterns and brought the corner decorations to the
+  overlay, keeping the existing automatic region and calendar detection.
+
+- Removed Browse and Inspect from Mod Library. The grid is now its only browse
+  view, with search, keyboard and sorting controls aligned in one row.
+- Centred the sidebar's page buttons and anchored Restart and Exit at the bottom.
+  Renamed Mods / Hacks to Installed Mods in the launcher and in-game overlay.
+- Removed the Texture Packs and Texture Dumping disclosures. Both sections now
+  show their controls as soon as Textures is opened.
+- Added a holiday greeting between Play and Check for updates when a calendar
+  event is active. It follows the automatic regional theme.
+- Replaced the seasonal corner icons with the approved rendered artwork.
+  The atlas is loaded once per launcher renderer, with no live 3D rendering.
+- Made launcher themes follow the computer's region and local date. Removed
+  Launcher appearance from About; old manual theme choices no longer override it.
+- Matched Controls' five section tabs to My mods, including the lettering,
+  selected state, controller focus and wrapping on smaller screens.
+- Shortened Mod Library cards, with two-line titles and up to six per row.
+- Moved Achievements and Save Manager from the sidebar into Play, using orange
+  buttons at the bottom of the ROM area. Both remain available in the overlay.
+- Moved Community Spotlight above Ready to Race and rounded the artwork itself.
+- Kept Spotlight above every Mod Library page's tabs, with full-width pages
+  and smaller cards matching My mods. Refresh and Website use orange signs.
+- Moved Textures into Mods / Hacks between Magic Codes and Track Lab.
+- Shortened enabled mod card labels to ON.
+- Tidied up Play so the ROM and offline launch options share one card.
+- Added the website's rotating featured mods to Play and Mods / Hacks.
+- Added page and section fades throughout the launcher, including vehicles.
+- Matched Mod Library's heading and section buttons to the rest of the launcher.
+- Added per-player controller feedback settings, finite left/right tests and
+  output diagnostics. Enhanced feedback adds separate racing effects, optional
+  DualSense resistance/lights and touch shortcuts. Native Deck patterns and
+  USB waveform haptics are opt-in experiments for this test build.
+- Fixed a launcher crash when opening Mods / Hacks after moving Mod Library
+  to the sidebar. The tab drawing loop now uses the actual number of tabs.
+- Mod Library now has its own sidebar button above Mods / Hacks in the launcher
+  and in-game overlay. Renamed Mod Store to Mod Library; the mods are free.
+- Moved the analogue driving bindings, live input bars and calibration into
+  the Custom Magic Code's Details. Pick your local player there. Existing
+  settings are kept, including when using an online session copy.
+- Removed the duplicate CRT filter section from Textures. All its controls
+  are in Graphics > HUD & effects, with your existing settings kept.
+- Added seasonal launcher themes using the original clouds, with larger corner
+  icons and subtle effects. Themes follow your computer's region and local date.
+- Added an optional Analogue Acceleration & Braking mod. RT and LT can now
+  control how much accelerator and brake you use, with separate bindings,
+  calibration and live input bars for each player. Works online too.
+- Added Look behind to Graphics, with a controller binding in Controls.
+  It works offline and online without ModernCamera++.
+- Added the full CRT filter controls to Graphics > HUD & effects.
+- Made DKR colours much brighter. The turquoise water now stands out more,
+  while reflections and the Current HD option keep their existing settings.
+- Added a DKR colours water style with brighter turquoise water and softer
+  highlights. Full HD reflections stay in place. Current HD is still available
+  in the water settings, and reflection quality stays separate from the style.
+- Added a ROM requirement notice to Mods/Hacks and the Mod Library. Some legacy
+  .xdelta mods need US v1.0 to install; v1.1 can stay selected for playing.
+- The Mod Library is now available in the in-game overlay too.
+  Downloads queue for the launcher so installed mods stay fixed while playing.
+- Added the website's download counters and comments to the Mod Library. Players
+  can post, edit, delete and report comments using the same Discord account.
+  Star ratings and reviews stay separate. Launcher download attempts now count
+  towards the same totals, without counting cached files or retrying resumes twice.
+- Fixed water asset lookups rebuilding when rollback corrects a frame. Real
+  track changes, texture pack changes and missing texture recovery still work.
+- Fixed stale water selections surviving a texture cache being recreated at
+  the same address after leaving a session.
+- Fixed idle overlay refreshes being queued between fresh online race frames.
+- Online races retain the last completed GPU picture if the next target is
+  unavailable, instead of flashing an unfinished native framebuffer image.
+  Owned presents use their own captured targets rather than newer shared history.
+- Bound the current fullscreen policy to the compiled renderer, including
+  battles and minigames. Shared menus and cutscenes keep their normal view.
+- Added online frame timings and fullscreen diagnostics without GPU drains.
+- Prepared matching Windows x64 and Linux x86_64 AppImage v1.0.14 Beta 2 builds.
+- Added companion-download search, persistent download badges, player comments,
+  a 30-second featured-mod carousel and launcher-style fades to the mod website.
+- Moved the connection check and invite buttons to the right of the lobby.
+- Everyone can see their own ping and the other players' ping to the host.
+  Readings update live, include selected proxy routes and clear when stale.
+- Prepared matching Windows x64 and Linux x86_64 AppImage v1.0.14 Beta 1 builds.
+- Reworked Dynamic Input Delay to favour more responsive controls. Delay is
+  adjusted per player using actual input delivery and correction cost. Cheap
+  rollback no longer keeps the whole lobby at a higher input delay.
+- Added input response timings to help separate buffering, simulation work
+  and renderer submission when checking online performance.
+- Fixed profile pictures flickering back to initials when the image cache fills.
+  Ready pictures no longer draw the initial underneath, including when dimmed.
+  Classic client cards also resolve the right picture and friend controls.
+- Fixed client lobby cards staying on Checking Route. Route labels now use the
+  host's current player slots when the lobby payload has no peer IDs.
+- Tidied the chat entry so the keyboard button sits beside the message box.
+  In-game chat stays hidden until a message arrives or the chat key is pressed.
+  Recent messages disappear after eight seconds, with a small key hint.
+- Fixed closing the Linux launcher while its update check is still starting.
+  Background update work now finishes before process-wide TLS cleanup.
+- Fixed online startup recovery when a client misses the final start message.
+  Verified clients can receive early input while they wait for the release.
+- Fixed live input getting held behind old queued work. Proxy routes now give
+  gameplay its own bounded turns and fall back when useful delivery stops,
+  even if the connection still answers ping checks.
+- Dynamic Input Delay now measures how long input is blocked, including when
+  the game is waiting at the same frame. Connection recovery stays separate.
+- Session mod downloads use measured progress to adjust their transfer window
+  and retry timing. Larger preparation batches share verified ROM data where
+  there is enough RAM and disk space. Existing cache reuse stays in place.
+- A different version of an installed Track Lab course can be kept as an
+  inactive copy without replacing the user's existing course.
+- Bounded repeated rendering diagnostics and added per-player input progress
+  to the logs to make any remaining connection stalls easier to track down.
+- Added lobby text chat beside the player cards and a compact in-game feed.
+  Racers and spectators share the same conversation. Includes an on-screen
+  keyboard, a changeable chat key, local mute controls and delivery retries.
+- Lobby player cards now show Direct or Via the other player's name, with live
+  updates for the host and clients when a connection route changes.
+- Fixed the proxy test build closing before the launcher opens. Added a startup
+  regression check that also covers closing the application.
+- Added optional one-hop proxy connections. The host can allow them, players
+  can volunteer their device, and the launcher measures each route before using
+  it. Direct connections stay available if the proxy stops helping.
+- Connection diagnostics now show direct and proxy timings. Dynamic Input Delay
+  uses the selected route's full round trip.
+- Fixed vanilla online Track Select stopping when no custom track menu is active.
+- Other lobby members can see players downloading and preparing session mods.
+- Dynamic Input Delay keeps checking racing connections during gameplay. Manual
+  delay is still available when it is switched off.
+- Fullscreen racer view now supports Battle, Treasure and Eggs minigames too.
+- Profile pictures and lobby friend links now finish syncing while you are in
+  a lobby. Failed background saves retry, and renewed friend links are refreshed.
+- Keep the account's saved picture and sharing choice when linking a launcher.
+
+## v1.0.12 Release Build — 26 October 2026
+
+I've focused on modded lobby joining and made the Online menus easier to use.
+
+- More capacity for session mods and the initial checkpoint, fewer chunk flushes,
+  a bounded prepared-content cache and clearer join timings.
+- Fixed newer character/vehicle menu callbacks being refused online. Reliable
+  racing input has its own lane, with the existing repair and ownership checks.
+- Closing a lobby immediately retires its directory entry while keeping Online
+  connected. Terminal connection failures also retire the hosted entry.
+- Character portraits, compact friend cards, Add a friend above Search and
+  friend requests from eligible lobby player cards.
+- A shared profile header and display name for Online, friends and the Mod Store.
+  Custom PNG/JPG pictures, optional Discord name/image import and picture sharing.
+- Tidier lobby summary/visibility controls and account settings, with readable
+  name fields and no duplicate Discord username or review/request buttons.
+- Linux/Steam Deck remembered sign-in when a desktop keyring is unavailable.
+- Live offline FOV adjustment, including paused races, with the corrected guest
+  register handling. Existing online restrictions stay.
+- Windows updater log handoff and better session diagnostics.
+- Fixed installed Store mods returning to Needs Attention after restarting.
+  Existing completed entries are recovered without downloading them again.
+- Integrated the patch guardrail setup and follow-ups from PRs #76–#78. The full
+  source consolidation remains separate.
+- Updated current guides and prepared Windows x64, both Linux AppImages and the
+  matching Steam Deck download with signed update metadata. No Android/Apple build.
+
+The earlier memory, HUD, water, custom-car and spectator fixes stay. Saves, mods
+and settings can stay too. Everyone in a lobby needs the complete v1.0.12 package.
+
+## 1.0.11 — 25 October 2026
+
+This update is mainly about the memory issues and missing HUD elements
+people have reported. I've kept the launcher design and the v1.0.10
+Online fixes in place.
+
+- Added expansion RAM headroom to the normal game heap, keeping its upper guard.
+- Added safer allocation failure handling and useful HUD memory diagnostics.
+- Protected graphics data before it waits in the game scheduler.
+- Kept queued water animations consistent, with bounded cache recovery.
+- Added the larger textures and explicit driver seating in updated .dkrkart cars.
+- Updated the guides, Windows/Linux builds and signed auto update files.
+
+Windows x64, Linux x86_64/ARM64 and Steam Deck are included. Android,
+macOS and iOS are skipped. Saves and installed mods can stay.
+
+
+## 1.0.10 — 25 October 2026
+
+This update is mainly about Online stability. I've kept the current launcher
+design and brought the accepted playtest.4 fixes into the release.
+
+- Fixed modded lobby preparation getting stuck and improved verified cache reuse.
+- Added clearer join progress, Retry Join and Copy Join Diagnostics.
+- Fixed races failing to start when spectators were in the lobby.
+- Fixed spectators getting a black screen and no audio during custom races.
+- Fixed matching downloaded mods conflicting with existing offline copies.
+- Tidied up Open Lobbies, keeping more space for the lobby list.
+- Kept the earlier Track Select custom-music fix and existing online safeguards.
+- Updated the guides, Windows/Linux packages and signed updater metadata.
+
+Windows x64, Linux x86_64/ARM64 and Steam Deck are included. Android is no
+longer supported; no new macOS/iOS downloads are included. Use matching
+complete v1.0.10 packages for Online. Saves and installed mods can stay.
+
+
+## 1.0.9 — 24 October 2026
+
+- Add worldwide Public/Friends lobby browsing, distinct signed-in account counts,
+  shared Discord sign-in and Private/Public hosting to the existing launcher.
+- Keep private rooms out of public lists; preserve host approval, friend/code
+  admission, role/capacity checks and verified mod/save preparation.
+- Add the private website/API directory for discovery and admission. Existing
+  peer transport/Rollback runs gameplay; FTP mod uploading is unchanged.
+- Retain up to four racers/eight spectators, spectator cameras and confirmed
+  host-approved swaps. Running-spectator directory entry is separately gated.
+- Offer Rollback as the public host mode, removing the old backend selector.
+- Add the shared connection Scoreboard with separate racer/spectator grades.
+- Retain countdown/start, checkpoint-clock, party departure and lobby-return
+  repairs; preserve approved preparation across benign account/roster refreshes.
+- Add custom .dkrkart cars, native Track Select picking, CPU choices, reviewed
+  seating/wheel/LOD handling and Store Vehicles installation/update/repair.
+  Hover/plane exports remain reserved; custom cars do not change handling.
+- Add 94 local achievements, explicit existing-progress recognition, pinned
+  goals and safe progress import/export, without account synchronisation.
+- Add installed-content texture export, live capture, dump browsing and starter
+  replacement packs, preserving edited Working files on re-export.
+- Retain SDK 2/API 1 compatibility, shared personal saves, isolated online/dev
+  progress, Camera++, previous presentation fixes and the Windows memory fix.
+- Retain merged upstream track-ID safety/failure-safe imports, saved graphics
+  preset display and reviewed TLS integration.
+- Preserve website batch entry, image clear/reset, five automatic upload retries,
+  FTP file usage filters and the Vehicles label with stored category ID `legacy`.
+- Rebuild Windows x64, both Linux AppImages, Steam Deck and Android ARM64. APK
+  versionCode is 1090001 with the original signing identity. Linux ABI requirements
+  are GLIBC 2.38 and GLIBCXX_3.4.32. New Apple packages were not built in this pass.
+- Refresh current guides and release/signing instructions; preserve dated records
+  and separate static build verification from physical-device acceptance.
+
+## 1.0.8 — 20 October 2026
+
+- Fix Windows startup committing the 4 GiB guard/address reservation.
+- Commit only the existing 512 MiB usable RDRAM; leave 3.5 GiB guarded.
+- Log the failed allocation phase, Windows error, requested sizes and memory
+  availability instead of the old generic allocation message.
+- Preserve the accepted 1.0.7 water/source composition, saves, SDK and mods.
+- Rebuild Windows, Linux x86_64/ARM64, Steam Deck and Android ARM64.
+- Keep the existing Android signing identity and use version code 1080001.
+
+## 1.0.7 — 20 October 2026
+
+Back up your data and keep the complete package together when updating.
+Everyone in an online lobby needs a matching compatible release.
+
+A. CUSTOM MAGIC CODES AND SDK
+  1. Import executable Custom Magic Codes through Mods / Hacks as .nrm packages.
+  2. Explicit code permission, enabled state and per-package generated settings.
+  3. Supported native hooks/calls, typed game services and execution budgets.
+  4. Deterministic host-owned settings and code-mod admission online.
+  5. API 2 is additive; existing API 1 mods are not forcibly converted.
+  6. SDK 2 module/capability queries, stable handles and stale-scene rejection.
+  7. Entity/racer inspection, typed/batched edits and supported overrides.
+  8. Scene/lap/checkpoint/item/result events and explicit queue overflow.
+  9. Static ray/sphere collision queries and route/checkpoint inspection/editing.
+ 10. Supported scene/weather/audio/race operations with lifecycle/authority gates.
+ 11. Published controller-friendly tools UI, ordered actions and live settings.
+ 12. Opted-in cross-mod setting changes, not unrestricted control over other mods.
+ 13. Read-only symbol/memory inspection within the admitted contract.
+ 14. Debug lines/boxes/labels, bounded documents/workspaces and source maps.
+ 15. Scaffolding, package inspection and relocation-safe authoring tools.
+ 16. Corrected local/split relocation handling and Dev Menu startup/save seeding.
+ 17. Separate SDK ZIP and one current Modding Bible in TXT, HTML and PDF.
+ 18. Clear limits: not arbitrary host code, private engine writes or unrestricted
+     ROM execution. Unsupported operations remain unavailable, not guessed.
+
+B. EXAMPLE MODS AND CUSTOM TROPHY RACES
+ 19. Custom cups below Custom Tracks, without replacing stock trophies.
+ 20. Six-column custom-track rows, custom cup rows and named validation errors.
+ 21. Choice of tracks, per-round laps/vehicle and ordered/shuffled lineups.
+ 22. Cups / full-width Lineup / Share screens, single-line round controls.
+ 23. Controller navigation, on-screen text entry, bounded nested modals/buttons.
+ 24. Automatic track-catalogue refresh when opening the mod's details.
+ 25. Data-only cup import/export/sharing; receiving a cup does not invent or
+     automatically install missing track assets or grant code permission.
+ 26. AI & Boss Difficulty sample, plus the separately scoped live SDK 2 example.
+ 27. Dev Menu: inspect/watch entities and resources, edit supported racer values,
+     teleport, tools pause/step, scene controls, route/geometry inspection,
+     debug overlays, supported documents/workspaces and opted-in live settings.
+ 28. Development saves remain isolated. Normal online lobbies do not silently
+     become developer sessions; host authority and participant consent apply.
+ 29. Package conflicts/permissions, lifecycle limits and unsupported tools are
+     explained in the Bible rather than promising that literally anything works.
+
+C. MOD STORE AND INSTALLATION MANAGEMENT
+ 30. Built-in catalogue with both grid/browse and detailed browse-and-inspect views.
+ 31. Item images/details, categories, searching/filtering and download progress.
+ 32. Discord account flow, reviews and requests, with role-gated catalogue tools.
+     These features use the deployed website backend; its role checks still apply.
+ 33. One Install action performs automatic verification; no redundant verify click.
+ 34. Correct direct-package retrieval instead of installing an HTML error page.
+ 35. Friendly installed mod/texture names instead of the temporary name "package".
+ 36. Persistent installation receipts for tracks, characters, code and textures.
+ 37. Installed/Update/Repair state reflects owned content, not download history.
+ 38. Distinguish exact duplicate evidence from a possible same-name match.
+ 39. Replace/reinstall, separate copies where supported, editions where identity
+     cannot safely be duplicated, and explicit cancel/remove choices.
+ 40. Update selected/all, skip/pin options, preserved compatible settings and
+     reapproval when executable code changes; no silent mod-code activation.
+ 41. Recoverable background installation with durable transaction journals,
+     per-library protection, retained previous editions and startup recovery.
+ 42. Faster protection of retired whole legacy groups without weakening backups.
+ 43. Correct canonical managed paths, Unicode and extended Windows ZIP paths.
+ 44. Complete track extraction including declared music and HD assets.
+ 45. Nested single-course ZIP discovery fixes the Mario Circuit edge case;
+     ambiguous multi-course archives are refused rather than selected randomly.
+ 46. Exact directory ownership/duplicate-ID handling and stable Installed status.
+ 47. Viewport-bounded dialogs, reachable cancel, wider keyboard buttons and
+     tidier installed/update/account/review/request/moderation layouts.
+
+D. SAVES AND SAVE MANAGER
+ 48. One personal offline Adventure with ordinary track/character/gameplay mods;
+     changing a mod list no longer switches personal save ownership.
+ 49. Preserve old mod-set saves and migration copies; explicit recovery selection,
+     not an automatic merge or deletion of competing progress.
+ 50. Fixed stock EEPROM layout when added .dkrmap courses extend asset tables.
+     Initials/balloon data must not be reinterpreted through a larger course count.
+ 51. Added-course records use a versioned companion keyed by course/vehicle,
+     not extra fields jammed into the 512-byte stock EEPROM.
+ 52. Save Manager's current personal/online/recovery/Pak views and real targets.
+ 53. Max Out Entire Save, selected-Adventure completion and shared unlock actions
+     commit after confirmation, preserve initials/records and verify the write.
+ 54. Manual edits use Apply; stale drafts cannot overwrite newer disk progress.
+ 55. Background save jobs, launch/write fencing, checksum-aware imports and
+     recoverable multi-file transfers with old bundle compatibility.
+ 56. One persistent host online Adventure, Continue default, explicit copy/fresh
+     choices and separate client session copies. No personal client overwrite.
+ 57. Confirmed-only rollback record publication, not speculative persistence.
+ 58. Development sandboxes seed missing progress from the saved personal file;
+     existing sandboxes require explicit refresh. Explain why Dev Menu can show
+     different progress, without restoring the old mod-list save-swapping story.
+ 59. Portable mode remains a different data location, not automatic migration.
+
+E. ONLINE, CONTENT AND PRESENTATION
+ 60. OS-line-ending-independent replay identity and earlier linked-engine checks.
+ 61. Prepared playable-resource proofs and component-specific startup failures.
+ 62. .dkrmap audio/deep-path preparation and native-track admission corrections.
+ 63. Custom Magic Code backend/launch-state, argument-memory and state-handoff fixes.
+ 64. Big Donut and Moon Station object-map loading fixes without opening real-ROM DMA.
+ 65. On/off state for modern .dkrmap cards, not only legacy imports.
+ 66. My racer fullscreen and local view choices for eligible experimental races.
+ 67. Native divider removal, full-height sky, offline-style HUD/minimap positioning.
+ 68. Human display names plus race positions, label sizing/fading and the black-box fix.
+ 69. PR #60 Quick Join callback/transport and reviewed libjuice callback corrections.
+ 70. Custom portrait extraction/differences and in-world portraits for Fire Mountain
+     and Smokey Castle, including the subsequent crash correction.
+
+Independent online maximum-LOD/scenery parity is not qualified for this
+release. The accepted rendering paths and fullscreen HUD/nameplates stay.
+
+F. CAMERA, WATER, CREDITS AND PERFORMANCE
+ 71. Optional ModernCamera++ importable package, presets, local profiles, input
+     bindings and live F7 tuning, with native scripted-scene fallbacks.
+ 72. Camera++ private renderer ownership and corrected vehicle-shadow interpolation.
+ 73. Replaces the older camera route with an optional importable package. Camera++ is not automatically enabled or a required gameplay mod.
+ 74. PC OpenXR work is incomplete. VR, standalone Quest and headset compatibility are not release features.
+ 75. Lighter cached nearby lava glow, independently switchable from water effects.
+ 76. Hot yellow-white/orange-red pulses, not black; subtle capped surrounding glow.
+ 77. Original-water river/waterfall interpolation when enhanced optics are off.
+ 78. Correct source-frame flow/wrap history across fullscreen/windowed presentation.
+ 79. Owner-accepted transparent HD water family loading and coherent promotion.
+ 80. Border-free spinning-logo picture, readable rounded translucent copyright
+     plaque, original font and RECOMPILED BY THATGUYMCD! line, higher-FOV sky coverage.
+ 81. Full-width Start menu character-name travel with original proportions.
+ 82. Full-frame credits, moving original-font text, lower sky and edge-covering fades.
+ 83. Credits crash correction: native vertical readback bounds, not negative overscan.
+ 84. Native GPU allocation validation/guarded mip fallback and replacement-cache headroom.
+ 85. First surgical performance pass: reused flow storage, larger-table texture
+     indexing, CPU mip scratch, exact checkpoint reserve and monotonic presentation.
+ 86. Optional diagnostic launch/logging. No measured FPS gain is claimed without
+     comparable owner captures; deeper GPU/scheduler work is not completed.
+ 87. Withdrawn atmosphere preview: no new volumetric/dynamic lighting/shadow system
+     is advertised. Stock effects and the existing water/lava path remain.
+
+G. LAUNCHER, APPLICATION UPDATES AND CONTRIBUTOR WORK
+ 88. Shorter consistent launcher/overlay wording and tidier mod cards/dialogs.
+ 89. Removed unnecessary Save Location/connection/reflection disclosures and
+     reorganised support summary/credits with compact support actions.
+ 90. Hide lobby code for streaming; Copy still provides the invitation code.
+ 91. Startup and Play-tab application update checks, consent, signed verified
+     platform packages, recovery and preserved user data.
+ 92. One public Windows DKR-R.exe; private runtime/helpers remain in libexec/dkr-r.
+ 93. PR #60 nightly/sanitizer/stress/cache tooling is retained, along with earlier
+     merged CI, platform, Track Lab and test-isolation contributions. PR #49-#59
+     work already shipped in 1.0.6 is carried forward, not counted as new here.
+
+
+## Earlier development records
+
 This is the player-facing release history. Current instructions live in the
 [documentation index](docs/README.md); dated investigations retain the findings
 and limitations of the build they describe.
+
+## 1.0.7 beta 5 — 17 October 2026
+
+- Add renderer-owned maximum racer detail for Auto / Experimental Rollback,
+  independent on every device. Keep separate animated vertices and materials,
+  bounded optional work and an original-mesh fallback; do not redraw the world.
+- Extend supported live scenery models and billboards using local distance
+  and coverage settings, alongside the retained retail scenery cache. Share
+  the controls between launcher and overlay. Terrain and procedural wave-grid
+  allocation remain shared; this is not an unrestricted world redraw.
+- Correct Modern four-player object ranges and retain eligible noninteractive
+  local multiplayer scenery when requested, without changing time trials.
+- Carry forward beta 4's online mod, Track Select and startup corrections.
+  Windows x64 and Linux x86_64 AppImage only. Every peer needs beta 5.
+  Gameplay acceptance remains with the maintainer.
+
+## 1.0.7 beta 4 — 16 October 2026
+
+- Fix the Custom Magic Code argument bridge for online Track Select previews.
+  Preserve the loader's separate stack without opening private engine memory
+  to mods. Code errors now identify the package, callback, PC and memory read.
+- 17 October follow-up: fix the online startup crash with Custom Magic Codes
+  by capturing their state before the original game memory is released. Fix
+  modern tracks rejected at valid odd geometry offsets; retain all source and
+  destination bounds and real-ROM DMA rules. Both peers need this correction.
+- 17 October correction: fix downloaded .dkrmap music validation in deep Windows
+  cache paths and prepare native tracks without the legacy ROM importer.
+  Preserve verification, installed-file reuse and recoverable cache refresh.
+- Fix Custom Magic Code admission reading a joining client's default backend
+  before the host's room rules arrive. Keep host and final launch restrictions.
+- Fix Big Donut / Moon Station's valid non-8-byte-aligned compressed object-map
+  loads in offline and owned online asset bridges, without loosening real-ROM
+  DMA, bounds or completion-queue checks. No track re-import is required.
+- Offer a cup-preserving update for the two exact withdrawn Trophy Races sample
+  packages, improve named cup/track errors and retain failure-stage diagnostics.
+  Validate shared-recording metadata per course; hash PCM without copying a
+  whole extra song. Use the same corrected package on every online device.
+- Add missing On/Off switches for normal .dkrmap imports, not just tracks kept
+  from Online. Save local choices across refresh/restart without editing packs.
+  Share the controls between launcher and overlay, including track Details.
+- Withdraw the Online graphics-parity redraw that caused race-rendering
+  corruption. Restore the corrected beta 3 rendering path and decoder bounds.
+- Keep the working fullscreen, sky, divider, offline-style HUD and player-name
+  corrections. The new Online racer LOD and extended mesh/object range work
+  is deferred; offline settings and the existing scenery cache are unchanged.
+- Windows x64 and Linux x86_64 AppImage correction only. Compilation and
+  static inspection are separate from maintainer gameplay acceptance.
+
+## 1.0.7 beta 3 — 16 October 2026
+
+- Correction rebuild: suppress native divider/coverage fills in local
+  fullscreen, repair two-player sky coverage, restore offline-style HUD
+  positioning/sizing and keep the minimap/racer markers together. Correct
+  reversed nameplate combiner words responsible for black label rectangles.
+  Use the corrected package on every online device, not a mixture of beta 3 builds.
+- Add **Your online view** to DKR-R Online in the launcher and overlay. Choose
+  Original split-screen or My racer fullscreen independently on each device.
+  This is built in; no Custom Magic Code package is required.
+- Expand the admitted local owner's race camera using a full viewport, signed
+  clipping and separate HUD placement, without changing player counts, input
+  routing, cameras, AI, audio or authoritative race state. Unknown/shared scenes,
+  menus, results and two-player Adventure hubs retain the original layout.
+- Add depth-tested names and live race positions above other human racers,
+  with position-only/off choices and 75–150% label sizing. AI markers stay native.
+  Text tiles are cached, distance-faded and isolated from the game's textures.
+- Support these presentation options through Auto / Experimental Rollback on
+  both US ROM revisions. Local settings never enter host rules, mod settings or
+  checkpoints. Matching beta 3 replay engines are required across the lobby.
+- Android versionCode is 1070009. Gameplay, controller and online acceptance
+  remain with the maintainer; compilation/package inspection do not replace it.
 
 ## 1.0.7 beta 2 — 16 October 2026
 
@@ -29,7 +555,7 @@ and limitations of the build they describe.
   and Track Lab. Keep the original lighting, fog and shadows, and the existing
   enhanced water/lava effects.
 
-## 1.0.7 — 15 October 2026
+## 1.0.7 initial release candidate — 15 October 2026 (historical)
 
 ### Online
 

@@ -19,6 +19,10 @@ struct recomp_context;
 struct dkr_owned_draw_event;
 typedef void (*dkr_owned_emit)(const struct dkr_owned_draw_event*);
 void dkr_probe_parity_begin(void);
+void dkr_probe_online_view(uint8_t* rdram,uint32_t holder,dkr_owned_emit emit);
+void dkr_probe_online_racers(uint8_t* rdram,uint32_t holder,dkr_owned_emit emit);
+void dkr_probe_online_hud_texture(uint8_t* rdram,struct recomp_context* context,unsigned event,dkr_owned_emit emit);
+void dkr_probe_online_hud_function(const char*,int leaving,uint8_t*,struct recomp_context*,dkr_owned_emit);
 void dkr_probe_parity_scene(dkr_owned_identity_state* state);
 void dkr_probe_parity_lifetime(dkr_owned_identity_state* state,uint32_t object,int spawn);
 int dkr_probe_parity_hook(const char* name,uint8_t* rdram,struct recomp_context* context,

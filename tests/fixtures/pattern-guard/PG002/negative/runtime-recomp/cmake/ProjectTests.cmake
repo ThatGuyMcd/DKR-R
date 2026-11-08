@@ -1,0 +1,1 @@
+cmake_language(DEFER CALL dkr_configure_test_metadata)

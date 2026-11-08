@@ -6,12 +6,12 @@ it all back out and package it as a `.dkrmap` for DKR-R's `custom-tracks/`
 folder.
 
 The current addon supports retail remixes and new geometry, with custom
-textures, minimaps, music and water workflows described below. DKR-R 1.0.7
-includes the launcher integration under Mods / Hacks → Track Lab and the
+textures, minimaps, music and water workflows described below. DKR-R 1.0.12
+includes the launcher integration under Installed Mods → Track Lab and the
 matching import/runtime support. The older addon plan remains historical;
 use this guide and CHANGELOG.md for current instructions.
 
-Existing 1.0.6 `.dkrmap` courses do not need a format conversion for 1.0.7.
+Existing 1.0.6 `.dkrmap` courses do not need a format conversion for 1.0.12. Public lobby discovery does not change the track format.
 For online play, the host chooses the course set and clients verify the same
 prepared resources. Everyone in the lobby needs the same DKR-R release.
 
@@ -384,7 +384,7 @@ alone. The original is kept beside it too, at full size, in
 `my-track-hd.zip`: a texture pack holding each picture at the size it was made,
 named so that DKR-R's renderer draws it in place of the 64x32. You do not import
 it yourself. Keep it next to the `.dkrmap` and import the folder that holds
-both with DKR-R's **Mods / Hacks → Import mods → DKR-R tracks** - DKR-R
+both with DKR-R's **Installed Mods → Import mods → DKR-R tracks** - DKR-R
 installs the pack with the track: enabled, tied to the track, and out of the
 texture-pack browser. It loads the next time the game starts. A track you are
 still editing in Track Lab's working folder gets **Install HD textures** on its
@@ -640,7 +640,7 @@ extensions, ROM magic and size, and cannot see map data inside a 1.3 KB `.bin`.
 `custom-tracks/` is in `.gitignore` for this reason. Share the `.blend` instead -
 anyone with the decomp can rebuild the package from it.
 
-Install a package from **Mods / Hacks → Import mods → DKR-R tracks** - choose
+Install a package from **Installed Mods → Import mods → DKR-R tracks** - choose
 the `.dkrmap` or the folder around it, or a `.zip` of either - or by copying the
 folder into DKR-R's `custom-tracks/` directory. Not `mods/`: librecomp owns that
 for its `.nrm` format and rejects anything else it finds there. Track Lab works
@@ -768,3 +768,14 @@ decoded with. None of it is ROM content. Rebuild it when the decomp moves:
 python tools/blender/generate_rom_tables.py
 python tools/blender/generate_rom_tables.py --check   # fail if stale, for CI
 ```
+
+## Battle-course authoring limits
+
+Battle modes use mode-specific object layouts and AI-node connectivity. A mesh
+and a battle race-type flag alone do not make a complete playable course. The
+Block Fort investigation found disconnected AI nodes with no valid adjacency;
+that can leave a retail AI target absent. The current import path must not be
+assumed to repair arbitrary battle graphs. Validate connectivity, spawn/object
+requirements and the intended mode before testing. Keep a separate test profile
+and retain logs. No general battle-map compatibility repair is claimed for
+v1.0.14. See the [investigation](../../docs/notes/2026-11-03-crash-and-block-fort-investigation.md).

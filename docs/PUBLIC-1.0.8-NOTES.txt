@@ -1,0 +1,31 @@
+DKR-R v1.0.8 - STARTUP HOTFIX
+
+This fixes a Windows startup failure that could stop the game before the
+graphics even started, with mods both on and off.
+
+Windows was being asked to commit 4 GiB of memory when only 512 MiB needed
+to be usable. We now reserve the full address range and only commit that
+usable part. The guard region stays protected. This saves 3.5 GiB of Windows
+commit allowance without shrinking the game's memory or limiting your mods.
+
+If Windows still cannot allocate memory, the log now tells us which step
+failed, the Windows error number and the available memory allowance.
+The old logs did not contain that error number, so they cannot tell us the
+exact RAM/page-file state on the affected PC.
+
+All the 1.0.7 features and the accepted HD-water fix are retained. Linux and
+Android keep their existing memory mapping. No save reset or mod reinstall
+is needed. Back up your saves and keep the complete package together.
+
+Windows x64, Linux x86_64/ARM64 AppImages, Steam Deck and Android ARM64.
+No macOS/iOS package. Android updates retain the existing app/signing identity.
+SDK 2.0 and existing API 1/2 mods remain supported; there is no SDK/API change.
+Use matching complete builds on every machine for Online.
+
+Linux requirements are unchanged: glibc 2.38+, GLIBCXX_3.4.32 and a compatible
+desktop/audio/font/Vulkan stack. Required legal notices are included. No ROM,
+personal saves, installed mod library or offline Player Guide is included.
+
+Compilation and package/source inspection are separate from gameplay checks.
+The owner verifies startup on the affected PC and the physical devices.
+Automatic-update signatures still require the existing private release key.

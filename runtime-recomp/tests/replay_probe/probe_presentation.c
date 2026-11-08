@@ -19,6 +19,21 @@ static unsigned hud_group,hud_layout,hud_owner,hud_element,hud_widget,hud_slide,
 static uint32_t widget_holder,map_holder,rect_holder,pass_holder[2],text_holder,text_box;
 static int widget_active,map_active,rect_active,pass_active[2],colour_changed,text_active,text_bias;
 static uint32_t timer_widget=UINT32_MAX;
+static struct online_hud_delta {uint32_t owner,element;float x,y,scale,scale_y;int valid;} online_widget,online_batch[128];
+static unsigned online_batch_before;
+static int online_player_hud,online_widget_active;
+static struct online_hud_delta online_text;
+static int online_text_active;
+static struct online_hud_delta online_map,online_timer;
+static int online_map_active,online_timer_active;
+static unsigned online_timer_glyph;
+#if DKR_PROBE_REVISION==77
+enum {ONLINE_HUD_BASE=0x800E1E64U,ONLINE_HUD_PRESET2=0x800E25C4U,ONLINE_HUD_PRESET4=0x800E2684U,
+      ONLINE_HUD_ASSETS=0x80126CF0U,ONLINE_HUD_SPRITES=0x80126D80U,ONLINE_HUD_BATCH_COUNT=0x80127180U};
+#else
+enum {ONLINE_HUD_BASE=0x800E23E4U,ONLINE_HUD_PRESET2=0x800E2B44U,ONLINE_HUD_PRESET4=0x800E2C04U,
+      ONLINE_HUD_ASSETS=0x801272B0U,ONLINE_HUD_SPRITES=0x80127340U,ONLINE_HUD_BATCH_COUNT=0x80127740U};
+#endif
 static gpr addr(uint32_t p) {return (gpr)(int32_t)p;}
 static int valid(uint32_t p,unsigned bytes,unsigned alignment) {
     return p>=0x80000000U && p<=0x80800000U-bytes && (p&(alignment-1))==0;
@@ -27,6 +42,119 @@ static uint32_t read32(uint8_t* rdram,uint32_t p) {return (uint32_t)MEM_W(0,addr
 static uint32_t command(uint8_t* rdram,uint32_t holder) {
     if(!valid(holder,4,4))return 0;
     const uint32_t p=read32(rdram,holder);return valid(p,8,8)?p:0;
+}
+static float online_real(uint8_t* ram,uint32_t address) {
+    const uint32_t bits=read32(ram,address);float v;memcpy(&v,&bits,4);return v;
+}
+static struct online_hud_delta online_hud_reference(uint8_t* rdram,unsigned element,unsigned owner,unsigned layout) {
+    struct online_hud_delta d={0};if(element>=59||owner>=4||layout<1||layout>3)return d;
+    const uint32_t base=ONLINE_HUD_BASE+element*32,assets=read32(rdram,ONLINE_HUD_ASSETS);
+    const unsigned sprite=MEM_HU(6,addr(base));
+    if(sprite>127||!valid(assets,256,2))return d;
+    const int texture=(MEM_HU(sprite*2,addr(assets))&0xC000)==0xC000;
+    const float target_x=online_real(rdram,base+12),target_y=online_real(rdram,base+16);
+    float source_x=target_x,source_y=target_y;
+    const unsigned size=layout==1?6:8;
+    for(unsigned i=0;i<64;++i) {
+        const uint32_t row=(layout==1?ONLINE_HUD_PRESET2:ONLINE_HUD_PRESET4)+i*size;
+        const int id=(int16_t)MEM_H(0,addr(row));if(id<0)break;
+        if(id!=(int)element)continue;
+        const int left=(int16_t)MEM_H(2,addr(row)),y=(int16_t)MEM_H(4,addr(row));
+        if(layout==1) {
+            source_x=(float)left;source_y=(float)(y+(texture?(owner?108:0):(owner?-48:60)));
+        } else {
+            const int right=(int16_t)MEM_H(6,addr(row));
+            source_x=(float)(texture?((owner&1)?right+160:left):((owner&1)?right+80:left-80));
+            source_y=(float)(y+(texture?(owner>=2?108:0):(owner>=2?-48:60)));
+        }
+        break;
+    }
+    // Undo only the native multiplayer preset, not the element's live spin,
+    // bounce or collection animation. Scale around its RESTING anchor rather
+    // than the screen origin (which displaced the banana below the digits).
+    float scale=1.F;
+    if(sprite==9||sprite==4||sprite==11||sprite==18)scale=1.25F; // compact counter font
+    else if(sprite==54)scale=1.F/.6F;
+    else if(element!=0&&element!=1&&element!=2&&element!=37&&element!=47&&element!=48&&
+            element!=3&&element!=50&&element!=51&&!(element>=52&&element<=55))scale=1.F/.75F;
+    if(element==2)scale=2.F; // hud_weapon halves the icon at the draw call
+    if(layout>=2&&(element==12||element==13||element==14||element==29||element==30||element==31||element==35||element==36))scale=1.5F;
+    const float sx=texture?source_x:160.F+source_x,sy=texture?source_y:120.F-source_y;
+    const float tx=texture?target_x:160.F+target_x,ty=texture?target_y:120.F-target_y;
+    const float scale_y=(sprite==9||sprite==11)?1.F:scale;
+    d.owner=owner;d.element=element;d.scale=scale;d.scale_y=scale_y;d.x=tx-scale*sx;d.y=ty-scale_y*sy;
+    d.valid=isfinite(d.x)&&isfinite(d.y)&&fabsf(d.x)<=1024&&fabsf(d.y)<=1024;return d;
+}
+static void online_hud_marker(uint32_t p,int begin,const struct online_hud_delta* d,dkr_owned_emit emit) {
+    if(!p||!d->valid)return;
+    dkr_owned_draw_event e={begin?DKR_OWNED_ONLINE_HUD_WIDGET_BEGIN:DKR_OWNED_ONLINE_HUD_WIDGET_END,p,d->owner,{0}};
+    if(begin){memcpy(e.parameters,&d->x,4);memcpy(e.parameters+1,&d->y,4);e.parameters[2]=d->element;memcpy(e.parameters+3,&d->scale,4);memcpy(e.parameters+4,&d->scale_y,4);}
+    emit(&e);
+}
+void dkr_probe_online_hud_function(const char* name,int leaving,uint8_t* rdram,recomp_context* ctx,dkr_owned_emit emit) {
+    if(strcmp(name,"hud_render_general")==0) {
+        if(leaving&&online_map_active)online_hud_marker(command(rdram,a[2]),0,&online_map,emit);
+        online_map_active=0;return;
+    }
+    if(strcmp(name,"hud_timer_render")!=0)return;
+    if(leaving) {online_timer_active=0;return;}
+    online_timer_active=0;if(!online_player_hud||hud_owner>=4||hud_layout<1||hud_layout>3)return;
+    unsigned f[4];dkr_probe_hud_element(10,f);
+    const unsigned element=timer_widget==f[0]?11:23;
+    online_timer=online_hud_reference(rdram,element,hud_owner,hud_layout);
+    if(!online_timer.valid)return;
+    online_timer.x=online_real(rdram,ONLINE_HUD_BASE+element*32+12);
+    online_timer.y=online_real(rdram,ONLINE_HUD_BASE+element*32+16);
+    online_timer_glyph=0;online_timer_active=1;
+}
+void dkr_probe_online_hud_texture(uint8_t* rdram,recomp_context* ctx,unsigned event,dkr_owned_emit emit) {
+    /* The existing checked texrect_draw loop calls events 5/6 for every
+       texture. Its retained t2 is the exact DrawTexture entry, not a guess
+       from texture hashes or on-screen coordinates. Observe only the HUD's
+       own bounded batch; ordinary fonts, menus and world textures stay native. */
+    if(event!=6||!online_player_hud)return;
+    const uint32_t entry=(uint32_t)ctx->r10;
+    if(entry<ONLINE_HUD_SPRITES||entry>=ONLINE_HUD_SPRITES+128*8||(entry-ONLINE_HUD_SPRITES)%8)return;
+    const unsigned slot=(entry-ONLINE_HUD_SPRITES)/8;
+    const uint32_t end=command(rdram,(uint32_t)ctx->r16);
+    if(!online_batch[slot].valid||end<0x80000018U||end>0x807FFFD8U)return;
+    const uint32_t packet=end-24;
+    if((read32(rdram,packet)>>24)!=0xE4U)return;
+    online_hud_marker(packet,1,&online_batch[slot],emit);online_hud_marker(end,0,&online_batch[slot],emit);
+}
+void dkr_probe_online_view(uint8_t* rdram,uint32_t holder,dkr_owned_emit emit) {
+    const uint32_t p=command(rdram,holder),camera=read32(rdram,presentation_addresses[7]);
+    const uint32_t header=read32(rdram,a[8]);
+    if(!p||camera>3||!valid(header,0x50,4))return;
+    dkr_owned_draw_event e={DKR_OWNED_ONLINE_VIEW,p,camera,{0}};
+    e.parameters[0]=read32(rdram,presentation_addresses[5]);
+    e.parameters[1]=read32(rdram,presentation_addresses[1]);
+    e.parameters[2]=MEM_BU(0x4C,addr(header));
+    // One shared-scene veto covers cutscenes, the post-race framed viewport
+    // and track-menu previews. Race type alone cannot distinguish these.
+    e.parameters[3]=MEM_BU(0,addr(a[16]))!=0 || MEM_BU(0,addr(presentation_addresses[2]))!=0 ||
+        read32(rdram,presentation_addresses[6])!=0;
+    e.parameters[4]=read32(rdram,presentation_addresses[3]);
+    /* Shared/menu/cutscene frames still carry their real observations so the
+       decoder rejects the WHOLE focus transaction rather than guessing. */
+    emit(&e);
+}
+void dkr_probe_online_racers(uint8_t* rdram,uint32_t holder,dkr_owned_emit emit) {
+    const uint32_t p=command(rdram,holder),view=read32(rdram,presentation_addresses[7]);
+    if(!p||view>3)return;
+    uint32_t r[3];dkr_probe_online_addresses(r);
+    const uint32_t list=read32(rdram,r[0]),count=read32(rdram,r[1]);
+    if(count>8||!valid(list,count*4,4))return;
+    for(unsigned i=0;i<count;++i) {
+        const uint32_t obj=read32(rdram,list+i*4);if(!valid(obj,0x68,4))continue;
+        const uint32_t racer=read32(rdram,obj+0x64);if(!valid(racer,0x1B0,4))continue;
+        const int owner=(int16_t)MEM_H(0,addr(racer)),rank=(int16_t)MEM_H(0x1AE,addr(racer));
+        if(owner<0||owner>3||rank<1||rank>8||(MEM_H(6,addr(obj))&0x5000))continue;
+        dkr_owned_draw_event e={DKR_OWNED_ONLINE_RACER,p,view,{0}};
+        e.parameters[0]=(uint32_t)owner;e.parameters[1]=(uint32_t)rank;
+        for(unsigned j=0;j<3;++j)e.parameters[2+j]=read32(rdram,obj+12+j*4);
+        e.parameters[5]=read32(rdram,obj+8);emit(&e);
+    }
 }
 static void marker(uint8_t* rdram,uint32_t holder,unsigned mode,unsigned token,unsigned variant,dkr_owned_emit emit) {
     uint32_t p=command(rdram,holder);if(!p)return;
@@ -61,6 +189,8 @@ void dkr_probe_parity_begin(void) {
     segment_active=surface_active=shadow_active=billboard_active=0;
     widget_active=map_active=rect_active=colour_changed=text_active=text_bias=0;
     pass_active[0]=pass_active[1]=0;hud_general=0;timer_widget=UINT32_MAX;hud_group=0;
+    online_player_hud=online_widget_active=online_text_active=0;memset(online_batch,0,sizeof(online_batch));
+    online_map_active=online_timer_active=0;
 }
 void dkr_probe_parity_scene(dkr_owned_identity_state* s) {
     uint32_t scene=s->scene+1;if(!scene)scene=1;
@@ -236,10 +366,17 @@ int dkr_probe_parity_hook(const char* name,uint8_t* rdram,recomp_context* ctx,dk
     if(strcmp(name,"dkr_hud_player_pass_begin")==0||strcmp(name,"dkr_hud_general_pass_begin")==0) {
         hud_frame(rdram);unsigned general=strcmp(name,"dkr_hud_general_pass_begin")==0;
         pass_holder[general]=(uint32_t)MEM_W(general?0x160:0x30,ctx->r29);pass_active[general]=hud_group;
+        if(!general) {
+            online_player_hud=1;memset(online_batch,0,sizeof(online_batch));
+            const uint32_t p=command(rdram,pass_holder[general]),owner=read32(rdram,presentation_addresses[7]);
+            hud_owner=owner;
+            if(p&&owner<4){dkr_owned_draw_event e={DKR_OWNED_ONLINE_HUD,p,owner,{0}};emit(&e);}
+        }
         if(hud_group)hud_pass(rdram,pass_holder[general],1,3,emit);if(general)hud_general=1;return 1;
     }
     if(strcmp(name,"dkr_hud_player_pass_end")==0||strcmp(name,"dkr_hud_general_pass_end")==0) {
         unsigned general=strcmp(name,"dkr_hud_general_pass_end")==0;
+        if(!general)online_player_hud=0;
         if(pass_active[general])hud_pass(rdram,pass_holder[general],0,0,emit);pass_active[general]=0;if(general)hud_general=0;return 1;
     }
     if(strcmp(name,"dkr_hud_element_begin")==0) {
@@ -247,6 +384,22 @@ int dkr_probe_parity_hook(const char* name,uint8_t* rdram,recomp_context* ctx,dk
         hud_element=element_index(rdram,raw,&hud_owner);uint32_t f[4];dkr_probe_hud_element(hud_element,f);hud_widget=f[0];
         if(hud_widget==UINT32_MAX&&timer_widget!=UINT32_MAX){hud_widget=timer_widget;element_index(rdram,read32(rdram,a[1]),&hud_owner);}
         widget_holder=(uint32_t)ctx->r4;
+        online_widget=online_hud_reference(rdram,hud_element,hud_owner,hud_layout);
+        if(online_timer_active&&hud_element==59&&online_timer_glyph<8) {
+            // Retail hud_timer_render: big-font X steps 11/10/10 versus
+            // compact 10/8/7. Both fonts have the SAME height. Restore each
+            // glyph's resting position, not a uniformly stretched timer.
+            static const unsigned offsets[8]={0,11,21,31,42,52,62,73};
+            const unsigned glyph=online_timer_glyph++,sprite=MEM_HU(6,addr(raw));
+            online_widget=online_timer;
+            online_widget.scale=sprite==10?1.25F:sprite==12?10.F/7.F:1.F;
+            online_widget.scale_y=1.F;
+            online_widget.x+=offsets[glyph]-online_real(rdram,raw+12)*online_widget.scale;
+            online_widget.y+=(glyph==2||glyph==5?2.F:0.F)-online_real(rdram,raw+16);
+        }
+        online_widget_active=online_player_hud&&online_widget.valid;
+        online_batch_before=read32(rdram,ONLINE_HUD_BATCH_COUNT);
+        if(online_widget_active)online_hud_marker(command(rdram,widget_holder),1,&online_widget,emit);
         if(hud_group&&hud_widget!=UINT32_MAX)widget_active=widget_begin(rdram,widget_holder,hud_widget,hud_owner,hud_element,read32(rdram,raw+0xC),MEM_H(6,addr(raw))!=40,0,emit);
         else if((hud_layout==2||hud_layout==3)&&hud_owner<4&&(hud_element==0||hud_element==1||hud_element==2||hud_element==49)){
             unsigned side=hud_owner&1?2:1,item=hud_element==2||hud_element==49;
@@ -260,25 +413,45 @@ int dkr_probe_parity_hook(const char* name,uint8_t* rdram,recomp_context* ctx,dk
     if(strcmp(name,"dkr_hud_element_end")==0) {
         widget_end(rdram,widget_holder,&widget_active,emit);
         if((hud_layout==2||hud_layout==3)&&hud_owner<4&&(hud_element==0||hud_element==1||hud_element==2||hud_element==49))hud_pass(rdram,widget_holder,0,0,emit);
+        if(online_widget_active) {
+            online_hud_marker(command(rdram,widget_holder),0,&online_widget,emit);
+            const unsigned after=read32(rdram,ONLINE_HUD_BATCH_COUNT);
+            if(after==online_batch_before+1&&online_batch_before<128)online_batch[online_batch_before]=online_widget;
+        }
+        online_widget_active=0;
         if(colour_changed)MEM_W(0,addr(a[3]))=0xFFFFFFFE;colour_changed=0;return 1;
     }
     if(strcmp(name,"dkr_hud_minimap_begin")==0){hud_frame(rdram);map_holder=a[2];uint32_t f[4];
+        if(hud_layout>=1&&hud_layout<=3) {
+            const uint32_t xy=DKR_PROBE_REVISION==77?0x80126D58U:0x80127318U;
+            const float pal=read32(rdram,0x80000300U)==0?1.2F:1.F;
+            online_map=(struct online_hud_delta){0,59,135.F-(float)(int32_t)read32(rdram,xy),
+                (float)(int32_t)read32(rdram,xy+4)+98.F*pal,1.F,1.F,1};
+            online_map_active=1;online_hud_marker(command(rdram,map_holder),1,&online_map,emit);
+        }
+        // Keep the same map transform through ALL racer dots/arrows. The
+        // native background-only end hook is intentionally not its end.
         dkr_probe_hud_element(15,f);map_active=hud_group&&widget_begin(rdram,map_holder,f[0],0,59,0,1,0,emit);return 1;}
     if(strcmp(name,"dkr_hud_minimap_end")==0){widget_end(rdram,map_holder,&map_active,emit);return 1;}
     if(strcmp(name,"dkr_hud_rect_extent")==0){if(rect_active)ctx->r2=0x04000400;return 1;}
     if(strcmp(name,"dkr_hud_rect_end")==0){if(rect_active)rect_mark(rdram,rect_holder,0,3,emit);rect_active=0;return 1;}
     if(strcmp(name,"dkr_hud_timer_end")==0){timer_widget=UINT32_MAX;return 1;}
     if(strcmp(name,"dkr_hud_text_begin")==0) {
-        text_active=text_bias=0;if(!hud_group)return 1;
+        text_active=text_bias=online_text_active=0;if(!hud_group&&!online_player_hud)return 1;
         uint32_t ra=(uint32_t)ctx->r31,stopwatch[6]={0x800A3550,0x800A358C,0x800A35C8,0x800A3620,0x800A3658,0x800A3690},finish[3]={0x800A608C,0x800A6168,0x800A6244};
         unsigned slot=UINT32_MAX;for(unsigned i=0;i<6;++i)if(ra==stopwatch[i]+(DKR_PROBE_REVISION==80?0x548:0))slot=34;
         for(unsigned i=0;i<3;++i)if(ra==finish[i]+(DKR_PROBE_REVISION==80?0x548:0))slot=56;
         if(slot==UINT32_MAX)return 1;uint32_t f[4];dkr_probe_hud_element(slot,f);element_index(rdram,read32(rdram,a[1]),&hud_owner);text_holder=(uint32_t)ctx->r4;
+        online_text=online_hud_reference(rdram,slot,hud_owner,hud_layout);
+        online_text_active=online_player_hud&&online_text.valid;
+        if(online_text_active)online_hud_marker(command(rdram,text_holder),1,&online_text,emit);
+        if(!hud_group)return 1;
         text_active=widget_begin(rdram,text_holder,f[0],hud_owner,59,0,1,0,emit);
         text_box=read32(rdram,DKR_PROBE_REVISION==77?0x8012A7E8U:0x8012ADA8U);
         int x=(int32_t)ctx->r5;if(text_active&&x>=-200&&x<=700&&valid(text_box,4,2)&&rect_mark(rdram,text_holder,1,1,emit)){ctx->r5=ADD32(ctx->r5,256);text_bias=1;}return 1;
     }
-    if(strcmp(name,"dkr_hud_text_end")==0){if(text_bias){MEM_H(0,addr(text_box))=MEM_H(0,addr(text_box))-256;rect_mark(rdram,text_holder,0,1,emit);}text_bias=0;widget_end(rdram,text_holder,&text_active,emit);return 1;}
+    if(strcmp(name,"dkr_hud_text_end")==0){if(text_bias){MEM_H(0,addr(text_box))=MEM_H(0,addr(text_box))-256;rect_mark(rdram,text_holder,0,1,emit);}text_bias=0;widget_end(rdram,text_holder,&text_active,emit);
+        if(online_text_active)online_hud_marker(command(rdram,text_holder),0,&online_text,emit);online_text_active=0;return 1;}
     return 0;
 }
 int dkr_probe_parity_args(const char* name,uint8_t* rdram,recomp_context* ctx,const uint32_t* arguments,unsigned count,dkr_owned_emit emit) {

@@ -160,6 +160,12 @@ std::set<std::string> ids(const Json& object,const char* key) {
     return out;
 }
 }
+std::string compatibility_issue(std::string_view digest) {
+    if(digest=="86b5b6a8ff1128d76250706b39c6af80a6ca75796413c92d345a97a439dd164c" ||
+       digest=="9d3aa5c35ce02e1dbeac7d7daf9ce12783e71cabd9438eae3db236c21f0d54a8")
+        return "Update Custom Trophy Races to 1.0.2 in Details before playing. Your saved cups can be kept.";
+    return {};
+}
 bool valid_id(std::string_view id) {
     return !id.empty()&&id.size()<=96&&std::all_of(id.begin(),id.end(),[](unsigned char c){
         return (c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='_'||c=='-';});
@@ -355,7 +361,8 @@ std::vector<std::shared_ptr<const Package>> resolve(const std::vector<std::share
         const auto found=by_id.find(id);if(found==by_id.end())bad("enable the required package "+id);
         const auto& p=found->second;marks[id]=1;
         if(!p->revisions.contains(std::string(revision)))bad(p->name+" does not support the selected Game Pak");
-        if(online&&!p->deterministic)bad(p->name+" is offline-only");
+        if(const auto issue=compatibility_issue(p->digest);!issue.empty())bad(issue);
+        if(online&&!p->deterministic)bad(p->name+" is offline-only. Disable it or import an online-compatible edition before hosting.");
         for(const auto& [module,version]:p->modules) {
             const auto found=available_modules.find(module);
             if(found==available_modules.end()||found->second!=version)bad(p->name+" requires an unavailable SDK module: "+module);

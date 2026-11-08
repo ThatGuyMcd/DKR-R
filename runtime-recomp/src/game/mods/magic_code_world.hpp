@@ -9,15 +9,17 @@ class World {
 public:
     using Native=std::function<void(std::uint32_t,Registers&,Budget&)>;
     using Service=std::function<bool(std::string_view,std::size_t,Memory&,Registers&,Budget&)>;
+    using ArgumentStack=std::array<std::uint32_t,16>;
     World(std::shared_ptr<const LinkedSet>,std::uint64_t seed,Native native={},Service service={});
     static LinkPolicy core_policy();
     void attach(std::span<std::uint8_t> ram,bool initial_install);
+    void detach();
     void initialize(Budget&);
-    void event(std::string_view owner,std::string_view name,const Registers& arguments,Budget&);
-    void call(std::uint32_t function,Registers&,Budget&);
+    void event(std::string_view owner,std::string_view name,const Registers& arguments,Budget&,const ArgumentStack* native_arguments=nullptr);
+    void call(std::uint32_t function,Registers&,Budget&,const ArgumentStack* native_arguments=nullptr);
     bool has_hook(std::uint32_t function)const;
-    bool enter(std::uint32_t function,Registers&,Budget&);
-    void leave(std::uint32_t function,const Registers&,Budget&);
+    bool enter(std::uint32_t function,Registers&,Budget&,const ArgumentStack* native_arguments=nullptr);
+    void leave(std::uint32_t function,const Registers&,Budget&,const ArgumentStack* native_arguments=nullptr);
     std::vector<Effect> take_effects();
     Bytes checkpoint()const;
     struct Restore;

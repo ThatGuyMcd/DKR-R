@@ -1,5 +1,9 @@
 # HUD layouts
 
+## v1.0.14 release contract
+
+Online My racer fullscreen retains corrected divider/sky and uses the offline-style HUD. Other human racers can show display name and position. Menus/shared scenes retain their layout. This is presentation only, not a change to input ownership or simulation.
+
 The accepted HUD layout stays in place! **Graphics → HUD layout** offers
 **4:3** and **Fit to window** for Modern one/two-player presentation,
 with the artwork at 100% size. Three/four-player HUDs retain their separate

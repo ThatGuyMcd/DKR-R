@@ -1,0 +1,6 @@
+diff --git a/src/render/rt64_extra.cpp b/src/render/rt64_extra.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/render/rt64_extra.cpp
+@@ -0,0 +1 @@
++#include "rt64_extra.h"

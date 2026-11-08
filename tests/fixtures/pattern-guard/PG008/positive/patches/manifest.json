@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "dependencies": [
+    {
+      "name": "RT64",
+      "repositoryPath": "extern/rt64",
+      "expectedCommit": "0000000000000000000000000000000000000000",
+      "patches": [
+        {
+          "path": "patches/rt64/0001-sidebar.patch",
+          "sha256": "aa4075ae7e27b7495e269c92ad0d1ecc90a8ed939abb36cf98a98930e3120757"
+        }
+      ]
+    }
+  ]
+}

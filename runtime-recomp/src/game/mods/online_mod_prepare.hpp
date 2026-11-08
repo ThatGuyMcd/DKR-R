@@ -1,8 +1,14 @@
 #pragma once
 #include "online_mod_manifest.hpp"
 #include "legacy_mod_stage.hpp"
+#include <stop_token>
 
 namespace dkr::mods::online {
+// Native course packages contain only declared, bounded assets. They need no
+// ROM reconstruction or legacy child process. The caller is a storage worker,
+// never the UI/game thread; publication still requires full profile validation.
+void prepare_track_lab_library(const Manifest&,const std::filesystem::path& payload_directory,
+    const std::filesystem::path& fresh_destination,std::stop_token stop={},const ProgressCallback& progress={});
 // Child-worker entry point. It reconstructs artifacts from patches against
 // locally owned ROMs; it never trusts host-prepared executable/artifact bytes.
 // All writes target a fresh private session tree, never the offline library.

@@ -1400,21 +1400,21 @@ int DkrMain(int argc, char** argv) {
         if(owned_launch) {
             dkr::runtime::netplay::bind_external_session(admitted_lobby);
             local_bootstrap_session.reset();
-            auto bootstrap=dkr_experimental_bootstrap_take_memory();
+            auto bootstrap=dkr_experimental_bootstrap_take_state();
             if(runtime_failure==nullptr) {
                 std::string owned_error;
                 bool owned_ok=false;
                 try {
-                    if (bootstrap.empty()) {
+                    if(!bootstrap.error.empty())throw std::runtime_error("Online bootstrap capture failed: "+bootstrap.error);
+                    if (bootstrap.memory.empty()) {
                         const auto mod_error=dkr::runtime::legacy::failure();
                         throw std::runtime_error(mod_error.empty()
                             ? "Retail startup did not reach its safe handoff. No checkpoint or rollback session was started; retry from the lobby."
                             : "Retail startup stopped before its safe handoff: "+mod_error);
                     }
                     auto mod_bootstrap=online_mods?dkr::runtime::legacy::online_bootstrap_checkpoint():dkr::mods::Bytes{};
-                    auto code_bootstrap=dkr::runtime::code_mods::bootstrap_checkpoint();
-                    owned_ok=dkr::runtime::netplay::experimental::run_runtime(window_handle,rom_path,std::move(bootstrap),*admitted_lobby,*owned_descriptor,timeout_seconds,owned_error,owned_check,
-                        online_mods,std::move(mod_bootstrap),std::move(code_bootstrap));
+                    owned_ok=dkr::runtime::netplay::experimental::run_runtime(window_handle,rom_path,std::move(bootstrap.memory),*admitted_lobby,*owned_descriptor,timeout_seconds,owned_error,owned_check,
+                        online_mods,std::move(mod_bootstrap),std::move(bootstrap.code));
                 } catch(const std::exception& exception) {owned_error=exception.what();}
                 catch(...) {owned_error="The owned runtime could not start safely.";}
                 if(!owned_ok) {

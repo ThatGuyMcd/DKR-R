@@ -1,78 +1,81 @@
-# Saves and portable mode
+# Saves and Save Manager
 
-Your offline Adventure belongs to you. Online play uses a separate save owner;
-joining a host must not replace your personal progress.
+Your normal Adventure now stays with you when you change mods. There is one
+personal save with three slots, not a new playthrough for every mod list.
+Online and development progress still have their own owners.
 
-## Where data lives
+## Your personal Adventure
 
-| Mode | Data root |
-|---|---|
-| Windows normal profile | `%APPDATA%\DKRPort` |
-| Linux normal profile | `$XDG_CONFIG_HOME/dkr-port` or `~/.config/dkr-port` |
-| Portable desktop mode | `dkr-runtime-data` beside the application |
-| Android | The app's private data directory; use the export controls |
+Normal play, character mods, custom tracks and ordinary Custom Magic Codes use
+the same personal 512-byte EEPROM. Installing a .dkrmap must not change the
+stock EEPROM layout. Added-course records are stored in a separate companion
+file, so extra tracks cannot shift your initials or balloon totals.
 
-In **Play**, the portable-mode checkbox creates/removes `portable.txt` beside
-the launched application. It takes effect on the next application launch.
-A command-line config override takes priority. Switching mode does not copy or
-move saves, mods or settings, so a different profile can look empty without
-anything having been deleted. Unwritable or unsafe marker paths report an error
-instead of changing unrelated files.
-
-## Offline, modded and online progress
-
-Ordinary offline Adventure uses `saves/dkr.us.v77.bin`; the two supported
-revisions use the compatible EEPROM format. Ordinary Controller Paks are
-`controller-pak-1.mpk` through `controller-pak-4.mpk`.
-
-An offline legacy mod set uses `saves/mods/<mod-set fingerprint>/`.
-Its first Adventure starts from a copy of offline progress, or a valid blank
-save. Existing progress for that same set is retained. Changing the set can
-select a different modded save; disabling it restores the ordinary route.
-Modded Controller Paks are separate.
-
-The host's online Adventure uses `saves/online/host/`. A client's received
-Adventure uses `saves/online/sessions/<match-id>/`.
-The host chooses to copy single-player, start fresh or continue the previous
-online session. Copying reads offline progress; it does not replace it.
-Clients receive only the separate online save.
-
-Online Paks also stay in online storage. Legacy backends use `paks/` beside
-the session Adventure; Experimental Rollback uses
-`experimental-controller-paks.bin`. Persistence is confirmed-only in rollback.
-
-One launch holds its save route until the runtime and save producers retire.
-A disconnect cannot reroute writes into offline progress, and a route/lock
-failure refuses the launch rather than falling back to another writable save.
+Older saves under `saves/mods/<fingerprint>/` are kept for recovery. They are
+not automatically combined. Open **Save Manager > Backups & Recovery**,
+inspect the copy you want and confirm the restore. The previous personal
+save is backed up first. Do not delete the old folders to tidy your profile.
 
 ## Save Manager
 
-- **Offline:** manage personal Adventure and ordinary Controller Paks, including
-  import/export, backups and checksum-aware Save Builder actions.
-- **Online:** inspect/export separately stored session progress.
-- **Modded:** inspect/export isolated mod-set progress.
-- **Recovery:** inspect surviving saves, backups/history and known older paths.
+- **Personal save:** manage the three Adventure slots, shared unlocks and records.
+- **Edit progress:** choose the intended slot before changing progress. Max Out
+  and unlock actions save after confirmation. Manual edits need Apply Changes.
+- **Transfer & Paks:** import/export saves, Controller Paks and supported bundles.
+- **Online:** inspect the host's separate Adventure and choose progress for hosting.
+- **Backups & Recovery:** find older mod-set saves, history and recovery copies.
+- **Development:** tools such as the Dev Menu use isolated development progress.
 
-Stored-save scans are bounded and read-only. **Refresh Stored Saves** checks
-again after files change. Restoring a valid Adventure to offline storage is an
-explicit confirmed action with a safety backup; it is never automatic.
-Experimental four-port Pak images are export-only in this view, not ordinary
-single-port Pak imports.
+Writes are checked by reading the saved bytes back. A draft opened before
+another change cannot overwrite the newer save. Edits/restores are blocked
+while an active game or lobby owns that save. Leave the game/lobby first.
+Max Out changes stored progress and unlocks; it does not enable every Magic
+Code, install mods or bypass the game's current scene/menu lifecycle.
 
-Offline edits, imports, repair and restoration are locked while a game or lobby
-owns the profile. Leave the lobby before changing personal progress.
-Destructive confirmations identify the target. Keep an external backup before
-updates or recovery work.
+## Online and development saves
 
-## If progress appears missing
+The host owns separate online progress under `saves/online/host/`. A client
+receives a session copy, not a replacement for their personal Adventure.
+Confirmed rollback state is the source of persistent online writes. Speculative
+frames and disconnect cleanup must not write into your personal save.
+Online Controller Paks remain separate too.
 
-1. Check whether portable mode or a config override selected a different root.
-2. Check the Offline, Online and Modded scopes before restoring anything.
-3. Refresh Recovery and export a surviving candidate without altering it.
-4. Validate the candidate, then deliberately restore to the intended offline
-   target if that is what you want.
+A new development sandbox starts from saved personal progress. Existing
+development progress is kept unless you deliberately copy personal progress
+again. The Dev Menu does not overwrite your normal Adventure.
 
-A scan cannot recreate progress when no valid copy survives. Do not delete a
-profile to diagnose a missing save. Automatic `.bak` and bounded content
-history are separate from manual Save Manager backups.
-See [troubleshooting](TROUBLESHOOTING.md) for reports.
+## Data locations and portable mode
+
+Windows normally uses `%APPDATA%/DKRPort`. Linux uses `$XDG_CONFIG_HOME/dkr-port`
+or `~/.config/dkr-port`. Desktop portable mode uses `dkr-runtime-data` beside
+the application. Android uses private app storage; use its export controls.
+
+Portable mode takes effect on the next application launch. It selects another
+location; it does not silently move saves, mods or settings. A config override
+can also select another profile. Check the selected location before assuming
+progress has disappeared. Personal desktop EEPROM is `saves/dkr.us.v77.bin`;
+both supported US revisions use the compatible stock layout.
+
+Back up your data before updating. To recover, export and inspect the surviving
+copy first, then restore it deliberately. No editor can recreate progress when
+no valid copy survives. See [Troubleshooting](TROUBLESHOOTING.md).
+
+## Spectators and achievements â€” v1.0.14
+
+Watching uses session-owned state, not your personal Adventure or Paks. The
+host owns communal online progress; confirmed handovers do not transplant a
+save into another participant's personal profile. Development remains isolated.
+
+Achievements have separate `achievements/progress-v1.json` storage. Max Out
+does not itself award gameplay goals. Recognising provable existing milestones
+is an explicit achievement setting. Spectating and development do not award
+gameplay progress. See [Achievements](ACHIEVEMENTS.md) and [Spectators](SPECTATORS.md).
+
+## Play indicators and session mods
+
+Open Save Manager from **Play > Save Manager**. The three-light summary in Play
+describes Vanilla, Modded or Online, with Using for a running session and Next
+for the next launch. A modded label does not create a separate offline save: ordinary
+offline mods still share personal Adventure. The accepted route is frozen until
+the running game/lobby releases it. Session mods changes the next content set
+without changing individual selections, copying progress or deleting saves.

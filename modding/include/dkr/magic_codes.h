@@ -1,5 +1,8 @@
 #ifndef DKR_CUSTOM_MAGIC_CODES_H
 #define DKR_CUSTOM_MAGIC_CODES_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef __mips__
 #error "Custom Magic Codes use the portable MIPS O32 target, not a host DLL target."
@@ -62,7 +65,12 @@ DKR_IMPORT DkrU32 dkr_course_select(const char* course,DkrU32 carrier) {(void)co
  * Unknown symbols return NULL; unavailable/protected native calls stop safely.
  * Use dkr_game_context_* only within these callbacks, never on_frame/on_boot. */
 static inline DkrU64 dkr_call4(const char* name,DkrU32 a,DkrU32 b,DkrU32 c,DkrU32 d) {
-    DkrGameCall call={0};DkrU32 stack[16] __attribute__((aligned(16)))={0};
+#ifdef __cplusplus
+    DkrGameCall call={};
+#else
+    DkrGameCall call={0};
+#endif
+    DkrU32 stack[16] __attribute__((aligned(16)))={0};
     call.r[4]=(DkrU64)(long long)(DkrS32)a;call.r[5]=(DkrU64)(long long)(DkrS32)b;
     call.r[6]=(DkrU64)(long long)(DkrS32)c;call.r[7]=(DkrU64)(long long)(DkrS32)d;
     call.r[29]=(DkrU64)(long long)(DkrS32)(DkrU32)stack;
@@ -98,4 +106,7 @@ DKR_IMPORT DkrU32 dkr_resource_read(const char* name, DkrU32 offset, void* desti
  * online. A message is at most 512 UTF-8 bytes; the queue holds 128 effects. */
 DKR_IMPORT void dkr_log(const char* message) { (void)message; }
 
+#ifdef __cplusplus
+}
+#endif
 #endif

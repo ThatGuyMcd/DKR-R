@@ -6,13 +6,14 @@ entry points rely on. Needs only git and Python."""
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
+import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,20 +22,26 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import apply_dependency_patches as patches  # noqa: E402
 import bootstrap_dependencies as bootstrap  # noqa: E402
 import legacy_character_presentation_policy as presentation  # noqa: E402
-import validate_release_metadata as release_metadata  # noqa: E402
 import package_source  # noqa: E402
-
+import validate_release_metadata as release_metadata  # noqa: E402
 
 # Hermetic: the developer's global config (signing, hooks, autocrlf) must not
 # reach the fixture repositories.
-GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
-           "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid",
-           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@example.invalid"}
+GIT_ENV = {
+    **os.environ,
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_AUTHOR_NAME": "t",
+    "GIT_AUTHOR_EMAIL": "t@example.invalid",
+    "GIT_COMMITTER_NAME": "t",
+    "GIT_COMMITTER_EMAIL": "t@example.invalid",
+}
 
 
 def git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), *args], check=True, env=GIT_ENV,
-                          capture_output=True, text=True).stdout.strip()
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, env=GIT_ENV, capture_output=True, text=True
+    ).stdout.strip()
 
 
 def write(path, text):
@@ -44,19 +51,26 @@ def write(path, text):
 
 class SourcePackageTests(unittest.TestCase):
     def test_new_custom_backgrounds_and_authored_shaders_are_included(self):
-        selected = [Path("assets/ui/CustomTrackBackgrounds/custom-row-1.png"),
-                    Path("assets/ui/CustomTrackBackgrounds/rt64.json"),
-                    Path("patches/enhanced-water/native/LavaLightingCS.hlsl"),
-                    Path("patches/enhanced-water/native/LavaFlow.hlsli")]
-        excluded = [Path("downloads/example.png"), Path("assets/ui/CustomTrackBackgrounds/game.z64"),
-                    Path("patches/private.dkr-probe")]
+        selected = [
+            Path("assets/ui/CustomTrackBackgrounds/custom-row-1.png"),
+            Path("assets/ui/CustomTrackBackgrounds/rt64.json"),
+            Path("patches/enhanced-water/native/LavaLightingCS.hlsl"),
+            Path("patches/enhanced-water/native/LavaFlow.hlsli"),
+        ]
+        excluded = [
+            Path("downloads/example.png"),
+            Path("assets/ui/CustomTrackBackgrounds/game.z64"),
+            Path("patches/private.dkr-probe"),
+        ]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for path in selected + excluded:
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_bytes(b"fixture")
-            with patch.object(package_source, "ROOT", root), \
-                 patch.object(package_source, "git_paths", side_effect=[[], selected + excluded]):
+            with (
+                patch.object(package_source, "ROOT", root),
+                patch.object(package_source, "git_paths", side_effect=[[], selected + excluded]),
+            ):
                 self.assertEqual(package_source.source_files(), sorted(selected))
 
 
@@ -70,15 +84,20 @@ class ReleaseMetadataTests(unittest.TestCase):
             (root / "packaging/linux").mkdir(parents=True)
             (root / "patches").mkdir()
             (root / "VERSION").write_text("1.0.5")
-            (root / "packaging/linux/dkr-port.appdata.xml").write_text(
-                '<release version="1.0.5"/>')
-            for name in ("README.md", "THIRD_PARTY.md", "docs/README.md", "docs/BUILDING.md",
-                         "docs/PLATFORMS.md", "packaging/RELEASE-README.md", "packaging/MACOS-BUILD-README.md"):
+            (root / "packaging/linux/dkr-port.appdata.xml").write_text('<release version="1.0.5"/>')
+            for name in (
+                "README.md",
+                "THIRD_PARTY.md",
+                "docs/README.md",
+                "docs/BUILDING.md",
+                "docs/PLATFORMS.md",
+                "packaging/RELEASE-README.md",
+                "packaging/MACOS-BUILD-README.md",
+            ):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text("")
-            manifest = {"dependencies": [{"name": "NewDependency",
-                "expectedCommit": "abc123", "patches": []}]}
+            manifest = {"dependencies": [{"name": "NewDependency", "expectedCommit": "abc123", "patches": []}]}
             (root / "patches/manifest.json").write_text(json.dumps(manifest))
             lock_path = root / "dependencies.lock.json"
             with patch.object(release_metadata, "ROOT", root):
@@ -96,8 +115,12 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_invalid_version_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for version in ("1.0.5-beta.0", "1.0.5-beta.15-playtest.0",
-                            "1.0.5-beta.15-playtest.15-fix.0", "1.0.5-garbage"):
+            for version in (
+                "1.0.5-beta.0",
+                "1.0.5-beta.15-playtest.0",
+                "1.0.5-beta.15-playtest.15-fix.0",
+                "1.0.5-garbage",
+            ):
                 with self.subTest(version=version):
                     (root / "VERSION").write_text(version)
                     with patch.object(release_metadata, "ROOT", root):
@@ -107,8 +130,15 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_unknown_dependency_names_and_historical_notes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("README.md", "THIRD_PARTY.md", "docs/README.md", "docs/BUILDING.md",
-                         "docs/PLATFORMS.md", "packaging/RELEASE-README.md", "packaging/MACOS-BUILD-README.md"):
+            for name in (
+                "README.md",
+                "THIRD_PARTY.md",
+                "docs/README.md",
+                "docs/BUILDING.md",
+                "docs/PLATFORMS.md",
+                "packaging/RELEASE-README.md",
+                "packaging/MACOS-BUILD-README.md",
+            ):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text("Current documentation\n")
@@ -116,10 +146,12 @@ class ReleaseMetadataTests(unittest.TestCase):
             (root / "packaging/linux").mkdir()
             (root / "packaging/linux/dkr-port.appdata.xml").write_text('<release version="1.0.5"/>')
             (root / "patches").mkdir()
-            (root / "patches/manifest.json").write_text(json.dumps({"dependencies": [
-                {"name": "new-library", "expectedCommit": "abc", "patches": []}]}))
-            (root / "dependencies.lock.json").write_text(json.dumps({"dependencies": [
-                {"name": "new-library", "commit": "abc"}]}))
+            (root / "patches/manifest.json").write_text(
+                json.dumps({"dependencies": [{"name": "new-library", "expectedCommit": "abc", "patches": []}]})
+            )
+            (root / "dependencies.lock.json").write_text(
+                json.dumps({"dependencies": [{"name": "new-library", "commit": "abc"}]})
+            )
             (root / "docs/historical-notes.md").write_text("Earlier milestone and release candidate\n")
             with patch.object(release_metadata, "ROOT", root):
                 self.assertEqual(release_metadata.main(), 0)
@@ -158,11 +190,16 @@ class PatchFixture:
         first = make_patch("0001", lambda r: write(r / "a.txt", "one\nTWO\nthree\n"))
         # The second patch also creates a binary and an empty file and deletes
         # one: shapes a patch-text parser gets wrong.
-        second = make_patch("0002", lambda r: (write(r / "a.txt", "one\nTWO\nTHREE\n"),
-                                               write(r / "new.txt", "created\n"),
-                                               (r / "new.bin").write_bytes(b"\0\xff" * 8),
-                                               (r / "empty.txt").write_bytes(b""),
-                                               (r / "blob.bin").unlink()))
+        second = make_patch(
+            "0002",
+            lambda r: (
+                write(r / "a.txt", "one\nTWO\nTHREE\n"),
+                write(r / "new.txt", "created\n"),
+                (r / "new.bin").write_bytes(b"\0\xff" * 8),
+                (r / "empty.txt").write_bytes(b""),
+                (r / "blob.bin").unlink(),
+            ),
+        )
         self.final_a = "one\nTWO\nTHREE\n"
         self.patches = [first, second]
         # The dependency is checked out through `git worktree`, giving it a
@@ -170,11 +207,27 @@ class PatchFixture:
         self.repo = self.root / "dep"
         git(upstream, "worktree", "add", "-q", "--detach", str(self.repo), self.commit)
         self.manifest = self.root / "manifest.json"
-        self.manifest.write_text(json.dumps({"schemaVersion": 1, "dependencies": [{
-            "name": "dep", "repositoryPath": "dep", "expectedCommit": self.commit,
-            "patches": [{"path": str(p.relative_to(self.root)),
-                         "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
-                        for p in self.patches]}]}))
+        self.manifest.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "dependencies": [
+                        {
+                            "name": "dep",
+                            "repositoryPath": "dep",
+                            "expectedCommit": self.commit,
+                            "patches": [
+                                {
+                                    "path": str(p.relative_to(self.root)),
+                                    "sha256": hashlib.sha256(p.read_bytes()).hexdigest(),
+                                }
+                                for p in self.patches
+                            ],
+                        }
+                    ],
+                }
+            )
+        )
 
     def tearDown(self):
         self.temp.cleanup()
@@ -235,14 +288,14 @@ class PatchPipelineTests(PatchFixture, unittest.TestCase):
         self.assert_patched()
 
     def test_check_validates_stacked_patches_without_checkout_mutation(self):
-        before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns)
-                  for p in self.repo.iterdir() if p.is_file()}
+        before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in self.repo.iterdir() if p.is_file()}
         index_path = Path(git(self.repo, "rev-parse", "--git-path", "index"))
         index = index_path.read_bytes()
         self.assertEqual(patches.apply_manifest(self.root, self.manifest, check=True), 0)
         self.assertEqual(index_path.read_bytes(), index)
-        self.assertEqual(before, {p.name: (p.read_bytes(), p.stat().st_mtime_ns)
-                                 for p in self.repo.iterdir() if p.is_file()})
+        self.assertEqual(
+            before, {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in self.repo.iterdir() if p.is_file()}
+        )
 
     def test_required_missing_checkout_and_empty_check_are_rejected(self):
         data = json.loads(self.manifest.read_text())
@@ -257,8 +310,15 @@ class PatchPipelineTests(PatchFixture, unittest.TestCase):
             patches.apply_manifest(self.root, self.manifest, check=True)
 
     def test_cli_check_and_failure_exit_codes(self):
-        command = [sys.executable, str(ROOT / "scripts/apply_dependency_patches.py"),
-                   "--root", str(self.root), "--manifest", str(self.manifest), "--check"]
+        command = [
+            sys.executable,
+            str(ROOT / "scripts/apply_dependency_patches.py"),
+            "--root",
+            str(self.root),
+            "--manifest",
+            str(self.manifest),
+            "--check",
+        ]
         result = subprocess.run(command, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("validated", result.stdout)
@@ -326,8 +386,12 @@ class BootstrapPatchTests(PatchFixture, unittest.TestCase):
         self.addCleanup(self.env.stop)
         self.manifest.rename(self.root / "patches" / "manifest.json")
         self.manifest = self.root / "patches" / "manifest.json"
-        self.entry = {"name": "dep", "destination": "dep", "commit": self.commit,
-                      "repository": str(self.root / "upstream")}
+        self.entry = {
+            "name": "dep",
+            "destination": "dep",
+            "commit": self.commit,
+            "repository": str(self.root / "upstream"),
+        }
         git(self.repo, "remote", "add", "origin", self.entry["repository"])
 
     def bootstrap(self):
@@ -341,8 +405,9 @@ class BootstrapPatchTests(PatchFixture, unittest.TestCase):
         index = git(self.repo, "write-tree")
         with patch.object(bootstrap, "run", wraps=bootstrap.run) as commands:
             self.assertEqual(self.bootstrap()["commit"], self.commit)
-        self.assertFalse(any(call.args[0][1] in ("fetch", "checkout", "reset", "clean")
-                             for call in commands.call_args_list))
+        self.assertFalse(
+            any(call.args[0][1] in ("fetch", "checkout", "reset", "clean") for call in commands.call_args_list)
+        )
         self.assert_patched()
         self.assertEqual(git(self.repo, "write-tree"), index)
         self.assertEqual(before, {p.name: p.stat().st_mtime_ns for p in self.repo.iterdir()})
@@ -351,8 +416,15 @@ class BootstrapPatchTests(PatchFixture, unittest.TestCase):
         for kind in ("tracked", "managed", "untracked", "staged"):
             with self.subTest(kind=kind):
                 self.apply()
-                target = self.repo / {"tracked": "unrelated.txt", "managed": "a.txt",
-                                      "untracked": "leftover.txt", "staged": "unrelated.txt"}[kind]
+                target = (
+                    self.repo
+                    / {
+                        "tracked": "unrelated.txt",
+                        "managed": "a.txt",
+                        "untracked": "leftover.txt",
+                        "staged": "unrelated.txt",
+                    }[kind]
+                )
                 original = target.read_bytes() if target.exists() else None
                 target.write_bytes(b"developer work\n")
                 if kind == "staged":
@@ -389,10 +461,14 @@ class BootstrapPatchTests(PatchFixture, unittest.TestCase):
         manifest["dependencies"][0]["repositoryPath"] = "fresh"
         self.manifest.write_text(json.dumps(manifest))
         self.apply()
-        with patch.object(bootstrap, "ROOT", self.root), patch.object(bootstrap, "run", wraps=bootstrap.run) as commands:
+        with (
+            patch.object(bootstrap, "ROOT", self.root),
+            patch.object(bootstrap, "run", wraps=bootstrap.run) as commands,
+        ):
             bootstrap.prepare_dependency(self.entry, False, shallow=True)
-        self.assertFalse(any(call.args[0][1] in ("fetch", "checkout", "reset", "clean")
-                             for call in commands.call_args_list))
+        self.assertFalse(
+            any(call.args[0][1] in ("fetch", "checkout", "reset", "clean") for call in commands.call_args_list)
+        )
         self.assertEqual((checkout / "a.txt").read_text(), self.final_a)
         write(checkout / "a.txt", "developer work\n")
         with patch.object(bootstrap, "ROOT", self.root), self.assertRaisesRegex(RuntimeError, "contains local changes"):
@@ -429,8 +505,7 @@ class BootstrapPatchTests(PatchFixture, unittest.TestCase):
         git(child_origin, "add", ".")
         git(child_origin, "commit", "-qm", "child base")
         child_commit = git(child_origin, "rev-parse", "HEAD")
-        git(self.repo, "-c", "protocol.file.allow=always", "submodule", "add",
-            str(child_origin), "nested child")
+        git(self.repo, "-c", "protocol.file.allow=always", "submodule", "add", str(child_origin), "nested child")
         git(self.repo, "commit", "-qm", "add child")
         self.commit = git(self.repo, "rev-parse", "HEAD")
         self.entry.update(commit=self.commit, recursive=True)
@@ -440,11 +515,16 @@ class BootstrapPatchTests(PatchFixture, unittest.TestCase):
         write(patch_path, git(child, "diff") + "\n")
         manifest = json.loads(self.manifest.read_text())
         manifest["dependencies"][0]["expectedCommit"] = self.commit
-        manifest["dependencies"].append({
-            "name": "child", "repositoryPath": "dep/nested child",
-            "expectedCommit": child_commit, "patches": [{
-                "path": "patches/child.patch",
-                "sha256": hashlib.sha256(patch_path.read_bytes()).hexdigest()}]})
+        manifest["dependencies"].append(
+            {
+                "name": "child",
+                "repositoryPath": "dep/nested child",
+                "expectedCommit": child_commit,
+                "patches": [
+                    {"path": "patches/child.patch", "sha256": hashlib.sha256(patch_path.read_bytes()).hexdigest()}
+                ],
+            }
+        )
         self.manifest.write_text(json.dumps(manifest))
         self.apply()
         before = (child / "child.txt").stat().st_mtime_ns
@@ -481,23 +561,28 @@ class BootstrapPatchTests(PatchFixture, unittest.TestCase):
         git(child_origin, "add", ".")
         git(child_origin, "commit", "-qm", "child base")
         upstream = self.root / "upstream"
-        git(upstream, "-c", "protocol.file.allow=always", "submodule", "add",
-            str(child_origin), "nested child")
+        git(upstream, "-c", "protocol.file.allow=always", "submodule", "add", str(child_origin), "nested child")
         git(upstream, "commit", "-qm", "add child")
         parent = {**self.entry, "destination": "fresh", "commit": git(upstream, "rev-parse", "HEAD")}
-        child = {"name": "child", "destination": "fresh/nested child",
-                 "repository": str(child_origin), "commit": git(child_origin, "rev-parse", "HEAD"),
-                 "managedBy": "dep git submodule"}
-        self.assertEqual([e["name"] for e in bootstrap.select_entries([child, parent], {"child"})],
-                         ["dep", "child"])
+        child = {
+            "name": "child",
+            "destination": "fresh/nested child",
+            "repository": str(child_origin),
+            "commit": git(child_origin, "rev-parse", "HEAD"),
+            "managedBy": "dep git submodule",
+        }
+        self.assertEqual([e["name"] for e in bootstrap.select_entries([child, parent], {"child"})], ["dep", "child"])
         lock = self.root / "lock.json"
         lock.write_text(json.dumps({"dependencies": [child, parent]}))
         resolved = self.root / "resolved.json"
         resolved.write_text(json.dumps({"dependencies": [{"name": "unrelated", "commit": "keep"}]}))
-        with patch.object(bootstrap, "ROOT", self.root), patch.object(bootstrap, "LOCK_FILE", lock), \
-             patch.object(bootstrap, "RESOLVED_FILE", resolved), \
-             patch.object(sys, "argv", ["bootstrap", "--only", "child"]), \
-             patch.dict(os.environ, {"GIT_ALLOW_PROTOCOL": "file"}):
+        with (
+            patch.object(bootstrap, "ROOT", self.root),
+            patch.object(bootstrap, "LOCK_FILE", lock),
+            patch.object(bootstrap, "RESOLVED_FILE", resolved),
+            patch.object(sys, "argv", ["bootstrap", "--only", "child"]),
+            patch.dict(os.environ, {"GIT_ALLOW_PROTOCOL": "file"}),
+        ):
             self.assertEqual(bootstrap.main(), 0)
         checkout = self.root / child["destination"]
         self.assertTrue((checkout / ".git").is_file(), "nested dependency must be a submodule, never a clone")
@@ -529,8 +614,11 @@ def elf32be(sections):
         name_at += len(name) + 1
     headers += struct.pack(">10I", name_at, 3, 0, 0, shstr_offset, len(names), 0, 0, 1, 0)
     count = len(sections) + 2
-    header = b"\x7fELF\x01\x02\x01" + b"\0" * 9 + struct.pack(
-        ">HHIIIIIHHHHHH", 2, 8, 1, 0, 0, cursor, 0, 52, 0, 0, 40, count, count - 1)
+    header = (
+        b"\x7fELF\x01\x02\x01"
+        + b"\0" * 9
+        + struct.pack(">HHIIIIIHHHHHH", 2, 8, 1, 0, 0, cursor, 0, 52, 0, 0, 40, count, count - 1)
+    )
     return header + body + headers
 
 
@@ -544,9 +632,11 @@ class ElfImageDigestTests(unittest.TestCase):
             os.unlink(handle.name)
 
     def base(self, symtab=b"\0" * 16, code=b"\x27\xbd\xff\xe0", bss=8):
-        return [(".main", 1, 6, 0x80000400, code),
-                (".bss", 8, 3, 0x80100000, b"\0" * bss),
-                (".symtab", 2, 0, 0, symtab)]
+        return [
+            (".main", 1, 6, 0x80000400, code),
+            (".bss", 8, 3, 0x80100000, b"\0" * bss),
+            (".symtab", 2, 0, 0, symtab),
+        ]
 
     def test_symbol_table_differences_are_ignored(self):
         self.assertEqual(self.digest(self.base()), self.digest(self.base(symtab=b"\1" * 32)))
@@ -597,14 +687,14 @@ class RepositoryContractTests(unittest.TestCase):
             prepare.write_text('#!/bin/sh\necho "prepare called"\nexit 42\n')
             prepare.chmod(0o755)
             uname = root / "bin" / "uname"
-            uname.write_text('#!/bin/sh\necho Darwin\n')
+            uname.write_text("#!/bin/sh\necho Darwin\n")
             uname.chmod(0o755)
-            env = dict(os.environ, PATH=str(root / "bin") + os.pathsep + os.environ["PATH"],
-                       CMAKE_BUILD_PARALLEL_LEVEL="1")
+            env = dict(
+                os.environ, PATH=str(root / "bin") + os.pathsep + os.environ["PATH"], CMAKE_BUILD_PARALLEL_LEVEL="1"
+            )
             env.pop("DKR_MAC_GENERATED_SOURCE", None)
             env.pop("DKR_MAC_V80_GENERATED_SOURCE", None)
-            result = subprocess.run(["/bin/bash", str(build)], env=env,
-                                    capture_output=True, text=True)
+            result = subprocess.run(["/bin/bash", str(build)], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 42, result.stdout + result.stderr)
             self.assertIn("prepare called", result.stdout)
 
@@ -621,8 +711,7 @@ class RepositoryContractTests(unittest.TestCase):
                 (root / script).write_text((ROOT / script).read_text())
                 for option in ("--rom-v77", "--rom-v80", "--jobs"):
                     with self.subTest(script=script, option=option):
-                        result = subprocess.run(["bash", str(root / script), option],
-                                                capture_output=True, text=True)
+                        result = subprocess.run(["bash", str(root / script), option], capture_output=True, text=True)
                         self.assertNotEqual(result.returncode, 0)
                         self.assertIn("requires", result.stdout + result.stderr)
                         self.assertNotIn("unbound variable", result.stdout + result.stderr)
@@ -635,8 +724,7 @@ class RepositoryContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             tree = Path(temporary) / "isolated revision with spaces"
             python = tree / ".venv/bin/python3"
-            tools = [tree / "tools/dkr_assets_tool", tree / "tools/n64crc",
-                     tree / "tools/ido-recomp/macos/cc"]
+            tools = [tree / "tools/dkr_assets_tool", tree / "tools/n64crc", tree / "tools/ido-recomp/macos/cc"]
 
             def executable(path, status=0):
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -644,10 +732,15 @@ class RepositoryContractTests(unittest.TestCase):
                 path.chmod(0o755)
 
             def ready():
-                return subprocess.run(
-                    ["bash", "-c", helper.group(0) + '\ndecomp_ready "$1"',
-                     "stage-test", str(tree)], capture_output=True, text=True,
-                    timeout=5).returncode == 0
+                return (
+                    subprocess.run(
+                        ["bash", "-c", helper.group(0) + '\ndecomp_ready "$1"', "stage-test", str(tree)],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                    ).returncode
+                    == 0
+                )
 
             self.assertFalse(ready())
             executable(python)
@@ -663,8 +756,9 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertFalse(ready())
 
     def tracked(self):
-        output = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-s"], check=True,
-                                capture_output=True, text=True).stdout
+        output = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-s"], check=True, capture_output=True, text=True
+        ).stdout
         for line in output.splitlines():
             mode, _, _, path = line.split(maxsplit=3)
             yield mode, path
@@ -673,7 +767,9 @@ class RepositoryContractTests(unittest.TestCase):
         if not (ROOT / ".git").exists():
             self.skipTest("not a git checkout")
         entry_points = {
-            "Build-macOS.sh", "Run-macOS.sh", "Setup-macOS.sh",
+            "Build-macOS.sh",
+            "Run-macOS.sh",
+            "Setup-macOS.sh",
             "scripts/Prepare-DKR-Runtime-macOS.sh",
             "scripts/Prepare-Game-Source-macOS.sh",
             "scripts/apply-dependency-patches.sh",
@@ -692,50 +788,83 @@ class RepositoryContractTests(unittest.TestCase):
                     wrong.append(f"{script.name}: {ref} -> {lower[ref.lower()]}")
         self.assertEqual(wrong, [])
 
+
 @unittest.skipIf(os.name == "nt", "macOS packaging and POSIX build lock")
 class MacOSDevexTests(unittest.TestCase):
     def test_package_versions_are_distinct_and_overridable(self):
         import package_macos as package
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             with patch.object(package.time, "time", return_value=1800000000):
                 first = package.bundle_version(root, 1)
                 second = package.bundle_version(root, 1)
-            self.assertLess(tuple(map(int, first.split('.'))), tuple(map(int, second.split('.'))))
-            self.assertEqual(package.bundle_version(root, 1, '42.3.2'), '42.3.2')
-            for invalid in ('0', '10000', '1.100.1', '1.2.100', 'beta', '-1'):
+            self.assertLess(tuple(map(int, first.split("."))), tuple(map(int, second.split("."))))
+            self.assertEqual(package.bundle_version(root, 1, "42.3.2"), "42.3.2")
+            for invalid in ("0", "10000", "1.100.1", "1.2.100", "beta", "-1"):
                 with self.assertRaises(ValueError):
                     package.bundle_version(root, 1, invalid)
-            (root / 'bin/Release').mkdir(parents=True)
-            (root / 'bin/Release/dkr-release.json').write_text('{"version":"1.0.5-old","build_number":1}')
-            with self.assertRaisesRegex(RuntimeError, 'differs from configured'):
-                package.package(root, '1.0.5-new')
+            (root / "bin/Release").mkdir(parents=True)
+            (root / "bin/Release/dkr-release.json").write_text('{"version":"1.0.5-old","build_number":1}')
+            with self.assertRaisesRegex(RuntimeError, "differs from configured"):
+                package.package(root, "1.0.5-new")
+
+    def test_notarize_requires_identity_and_profile(self):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("DKR_MAC_")}
+        for extra in (
+            {},
+            {"DKR_MAC_SIGN_IDENTITY": "-", "DKR_MAC_NOTARY_PROFILE": "p"},
+            {"DKR_MAC_SIGN_IDENTITY": "Developer ID Application: X (T)"},
+        ):
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts/package_macos.py"), "build", "1.0.8", "--notarize"],
+                capture_output=True,
+                text=True,
+                env={**env, **extra},
+            )
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("DKR_MAC_SIGN_IDENTITY and DKR_MAC_NOTARY_PROFILE", result.stderr)
+
+    @unittest.skipUnless(shutil.which("ditto"), "ditto is macOS-only")
+    def test_archive_rejects_appledouble_entries(self):
+        import package_macos as package
+
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp) / "stage"
+            (stage / "DKR-R.app").mkdir(parents=True)
+            (stage / "DKR-R.app/._Info.plist").write_text("x")
+            with self.assertRaisesRegex(RuntimeError, "metadata files"):
+                package.archive(stage, Path(tmp) / "out.zip")
+            (stage / "DKR-R.app/._Info.plist").unlink()
+            (stage / "DKR-R.app/Info.plist").write_text("x")
+            package.archive(stage, Path(tmp) / "out.zip")
 
     def test_lock_rejects_concurrent_builds_and_allows_nested_prepare(self):
         import fcntl
-        helper = ROOT / 'scripts/macos_build_lock.py'
+
+        helper = ROOT / "scripts/macos_build_lock.py"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            child = root / 'child.sh'
-            child.write_text('echo nested-ok\n')
-            parent = root / 'parent.sh'
+            child = root / "child.sh"
+            child.write_text("echo nested-ok\n")
+            parent = root / "parent.sh"
             parent.write_text(f'"{sys.executable}" "{helper}" "{root}" "{child}"\n')
             cmd = [sys.executable, str(helper), str(root), str(parent)]
             result = subprocess.run(cmd, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn('nested-ok', result.stdout)
-            with (root / 'build/.macos-build.lock').open('r+') as held:
+            self.assertIn("nested-ok", result.stdout)
+            with (root / "build/.macos-build.lock").open("r+") as held:
                 fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn('Another macOS build/prepare', result.stderr)
-            parent.write_text('exit 42\n')
+                self.assertIn("Another macOS build/prepare", result.stderr)
+            parent.write_text("exit 42\n")
             self.assertEqual(subprocess.run(cmd).returncode, 42)
-            parent.write_text('exit 0\n')
+            parent.write_text("exit 0\n")
             self.assertEqual(subprocess.run(cmd).returncode, 0)
 
     def test_apple_helpers_validate_jobs_without_source_side_effects(self):
-        helper = ROOT / 'scripts/lib/apple-build.sh'
+        helper = ROOT / "scripts/lib/apple-build.sh"
         script = r"""
 set -euo pipefail
 before_pwd="$PWD"
@@ -770,38 +899,51 @@ if dkr_require_xcode >/dev/null 2>&1; then exit 1; fi
 xcodebuild() { return 0; }
 dkr_require_xcode
 """
-        result = subprocess.run(['/bin/bash', '-c', script, 'apple-helper-test', str(helper)],
-                                capture_output=True, text=True)
+        result = subprocess.run(
+            ["/bin/bash", "-c", script, "apple-helper-test", str(helper)], capture_output=True, text=True
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_host_check_rejects_missing_sha1sum_and_old_gmake(self):
-        helper = ROOT / 'scripts/macos-host-tools.sh'
+        helper = ROOT / "scripts/macos-host-tools.sh"
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            def executable(name, body='exit 0'):
+
+            def executable(name, body="exit 0"):
                 p = root / name
-                p.write_text('#!/bin/sh\n' + body + '\n')
+                p.write_text("#!/bin/sh\n" + body + "\n")
                 p.chmod(0o755)
-            for name in ('xcodebuild', 'git', 'python3', 'cmake', 'ninja', 'c++', 'shasum', 'pcre2-config', 'sdl2-config'):
+
+            for name in (
+                "xcrun",
+                "git",
+                "python3",
+                "cmake",
+                "ninja",
+                "c++",
+                "shasum",
+                "pcre2-config",
+                "sdl2-config",
+            ):
                 executable(name)
-            executable('uname', 'echo Darwin')
-            executable('gmake', 'echo "GNU Make 3.81"')
-            cmd = ['/bin/bash', '-c', f'source "{helper}"; dkr_macos_host_tools 1']
+            executable("uname", "echo Darwin")
+            executable("gmake", 'echo "GNU Make 3.81"')
+            cmd = ["/bin/bash", "-c", f'source "{helper}"; dkr_macos_host_tools 1']
             env = dict(os.environ, PATH=str(root))
             missing = subprocess.run(cmd, env=env, capture_output=True, text=True)
             self.assertNotEqual(missing.returncode, 0)
-            self.assertIn('missing from PATH: sha1sum', missing.stderr)
-            executable('sha1sum')
+            self.assertIn("missing from PATH: sha1sum", missing.stderr)
+            executable("sha1sum")
             old_make = subprocess.run(cmd, env=env, capture_output=True, text=True)
             self.assertNotEqual(old_make.returncode, 0)
-            self.assertIn('GNU Make 4', old_make.stderr)
-            executable('gmake', 'echo "GNU Make 4.4"')
-            executable('sha1sum', 'exit 1')
-            for name in ('mktemp', 'rm'):
-                (root / name).symlink_to('/usr/bin/' + name if Path('/usr/bin/' + name).exists() else '/bin/' + name)
+            self.assertIn("GNU Make 4", old_make.stderr)
+            executable("gmake", 'echo "GNU Make 4.4"')
+            executable("sha1sum", "exit 1")
+            for name in ("mktemp", "rm"):
+                (root / name).symlink_to("/usr/bin/" + name if Path("/usr/bin/" + name).exists() else "/bin/" + name)
             incompatible = subprocess.run(cmd, env=env, capture_output=True, text=True)
             self.assertNotEqual(incompatible.returncode, 0)
-            self.assertIn('sha1sum must support -c --quiet', incompatible.stderr)
+            self.assertIn("sha1sum must support -c --quiet", incompatible.stderr)
 
 
 if __name__ == "__main__":

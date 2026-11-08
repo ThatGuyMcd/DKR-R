@@ -228,6 +228,15 @@ int main(int argc,char** argv) {
         require(sha256({})=="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
         const Bytes abc{'a','b','c'};
         require(sha256(abc)=="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        std::vector<std::int16_t> pcm(9001);
+        Bytes pcm_bytes;
+        for(unsigned i=0;i<pcm.size();++i) {
+            pcm[i]=static_cast<std::int16_t>(i*73);
+            const auto sample=static_cast<std::uint16_t>(pcm[i]);
+            pcm_bytes.push_back(static_cast<std::uint8_t>(sample));pcm_bytes.push_back(static_cast<std::uint8_t>(sample>>8));
+        }
+        require(sha256_pcm_le(pcm)==sha256(pcm_bytes));
+        require(sha256_pcm_le({})==sha256({}));
         rejects([&]{slice(abc,4,0);});
         const std::string unicode_path="author-\xc3\xa9/mod (1).xdelta";
         const auto converted=utf8_path(unicode_path).u8string();

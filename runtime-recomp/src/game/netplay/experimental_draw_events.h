@@ -18,7 +18,11 @@ enum dkr_owned_draw_kind {
     DKR_OWNED_HUD_PASS, DKR_OWNED_HUD_WIDGET, DKR_OWNED_HUD_RECT,
     DKR_OWNED_TRANSITION, DKR_OWNED_SKY_MATRIX, DKR_OWNED_FRAME_METADATA,
     DKR_OWNED_LOCAL_SCENERY,
-    DKR_OWNED_TRACK_UI_BEGIN, DKR_OWNED_TRACK_UI_END, DKR_OWNED_TRACK_PREVIEW
+    DKR_OWNED_TRACK_UI_BEGIN, DKR_OWNED_TRACK_UI_END, DKR_OWNED_TRACK_PREVIEW,
+    DKR_OWNED_ONLINE_VIEW, DKR_OWNED_ONLINE_HUD, DKR_OWNED_ONLINE_SHARED,
+    DKR_OWNED_ONLINE_DIVIDER_BEGIN, DKR_OWNED_ONLINE_DIVIDER_END,
+    DKR_OWNED_ONLINE_RACER,DKR_OWNED_ONLINE_HUD_WIDGET_BEGIN,DKR_OWNED_ONLINE_HUD_WIDGET_END,
+    DKR_OWNED_LOCAL_MODEL,DKR_OWNED_LOCAL_OBJECT
 };
 typedef struct dkr_owned_draw_event {
     uint32_t kind,address,token;
@@ -28,7 +32,7 @@ typedef struct dkr_owned_draw_event {
 } dkr_owned_draw_event;
 
 static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
-    if(e->kind<DKR_OWNED_BACKGROUND_BEGIN || e->kind>DKR_OWNED_TRACK_PREVIEW ||
+    if(e->kind<DKR_OWNED_BACKGROUND_BEGIN || e->kind>DKR_OWNED_LOCAL_OBJECT ||
        e->address<0x80000000U || e->address>0x807FFFD8U)return 0;
     const int quad=e->kind==DKR_OWNED_BACKGROUND_QUAD ||
         e->kind==DKR_OWNED_SPLIT_SKY_QUAD || e->kind==DKR_OWNED_SPLIT_VOID_QUAD;
@@ -77,6 +81,32 @@ static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
             if((int32_t)e->parameters[0]>=(int32_t)e->parameters[2] ||
                (int32_t)e->parameters[1]>=(int32_t)e->parameters[3])return 0;
             used=4;break;
+        case DKR_OWNED_ONLINE_VIEW:
+            if(e->token>3||e->parameters[0]>3||e->parameters[1]>32||
+               e->parameters[2]>255||e->parameters[3]>1||e->parameters[4]>4)return 0;
+            used=5;break;
+        case DKR_OWNED_ONLINE_HUD:
+            if(e->token>3)return 0;break;
+        case DKR_OWNED_ONLINE_SHARED:case DKR_OWNED_ONLINE_DIVIDER_BEGIN:case DKR_OWNED_ONLINE_DIVIDER_END:
+            if(e->token)return 0;break;
+        case DKR_OWNED_ONLINE_RACER:
+            if(e->token>3||e->parameters[0]>3||e->parameters[1]<1||e->parameters[1]>8)return 0;
+            used=6;break;
+        case DKR_OWNED_ONLINE_HUD_WIDGET_BEGIN:
+            if(e->token>3||e->parameters[2]>59)return 0;used=5;break;
+        case DKR_OWNED_ONLINE_HUD_WIDGET_END:
+            if(e->token>3)return 0;break;
+        case DKR_OWNED_LOCAL_MODEL:
+            if(e->token>3 || e->parameters[0]<=e->address || e->parameters[0]>0x807FFFD8U ||
+               (e->parameters[0]&7U) || e->parameters[0]-e->address>65536U ||
+               e->parameters[1]<0x80000000U || e->parameters[1]>0x807FFF80U ||
+               e->parameters[2]<0x80000000U || e->parameters[2]>0x807FFFDCU ||
+               e->parameters[3]>65535U || e->parameters[4]>255U ||
+               e->parameters[6]>1U || e->parameters[7]>1U || e->parameters[8]>65535U)return 0;
+            used=10;break;
+        case DKR_OWNED_LOCAL_OBJECT:
+            if(e->token>3 || e->parameters[0]<0x80000000U || e->parameters[0]>0x807FFF80U)return 0;
+            used=1;break;
         default:return 0;
         }
         for(unsigned i=used;i<16;++i)if(e->parameters[i])return 0;
@@ -84,7 +114,7 @@ static inline int dkr_owned_draw_event_valid(const dkr_owned_draw_event* e) {
     }
     if(e->kind==DKR_OWNED_SPLIT_VIEWPORT) {if(e->token>3)return 0;}
     else if(e->kind==DKR_OWNED_SPLIT_SKY_QUAD || e->kind==DKR_OWNED_SPLIT_VOID_QUAD) {
-        if(e->token!=2 && e->token!=3)return 0;
+        if(e->token<1 || e->token>3)return 0;
     } else if(e->kind==DKR_OWNED_BACKGROUND_BEGIN) {if(e->token>2)return 0;}
     else if(e->token>1)return 0;
     for(unsigned i=0;i<16;++i)

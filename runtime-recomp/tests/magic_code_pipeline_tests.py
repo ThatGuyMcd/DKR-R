@@ -1,4 +1,5 @@
 """Audit both retail-specific Magic Code hook anchors and generated placement."""
+
 import json
 import pathlib
 import sys
@@ -17,8 +18,9 @@ for revision, generated_path in zip(EXPECTED, sys.argv[1:], strict=True):
     generated = "\n".join(p.read_text() for p in pathlib.Path(generated_path).glob("*.c"))
     for function, symbol, address in zip(
         ("menu_magic_codes_loop", "menu_file_select_loop", "main_game_loop"),
-        ("dkr_magic_code_credits_started", "dkr_magic_code_balloon_awarded",
-         "dkr_magic_codes_frame_complete"), EXPECTED[revision], strict=True
+        ("dkr_magic_code_credits_started", "dkr_magic_code_balloon_awarded", "dkr_magic_codes_frame_complete"),
+        EXPECTED[revision],
+        strict=True,
     ):
         matches = [h for h in hooks if symbol in h["text"]]
         assert len(matches) == 1, (revision, symbol)
@@ -29,11 +31,11 @@ for revision, generated_path in zip(EXPECTED, sys.argv[1:], strict=True):
     # Preserve the mode-filter implementation. Do not 'fix' intentional retail
     # Adventure/time-trial/challenge exclusions by bypassing get_filtered_cheats.
     assert all(h["function"] != "get_filtered_cheats" for h in hooks)
-    assert all(p["function"] != "get_filtered_cheats"
-               for p in policy["instructionPatches"])
+    assert all(p["function"] != "get_filtered_cheats" for p in policy["instructionPatches"])
     balloon_anchor = generated.index(
         "extern void dkr_magic_code_balloon_awarded(uint8_t*, recomp_context*); "
-        "dkr_magic_code_balloon_awarded(rdram, ctx);")
-    assert "sh          $t4, 0x0($v0)" in generated[balloon_anchor:balloon_anchor + 280]
-    assert "MEM_H(0X0, ctx->r2) = ctx->r12;" in generated[balloon_anchor:balloon_anchor + 280]
+        "dkr_magic_code_balloon_awarded(rdram, ctx);"
+    )
+    assert "sh          $t4, 0x0($v0)" in generated[balloon_anchor : balloon_anchor + 280]
+    assert "MEM_H(0X0, ctx->r2) = ctx->r12;" in generated[balloon_anchor : balloon_anchor + 280]
     print(f"[test][magic-code-pipeline] {revision}: unique native success and commit anchors PASS")

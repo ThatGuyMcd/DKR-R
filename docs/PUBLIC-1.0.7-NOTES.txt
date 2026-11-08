@@ -1,38 +1,162 @@
-DKR-R v1.0.7
+DKR-R v1.0.7 - RELEASE NOTES
+20 October 2026
+==========================
 
-Keep the whole package together. On Windows, start DKR-R.exe; the runtime and
-helpers belong in libexec/dkr-r. Linux releases include AppImages. Steam Deck
-uses the Linux x86_64 payload. Android's APK version code is 1070001.
+There is a LOT in this update! These are the changes since v1.0.6.
+Back up your data and keep the complete package together when updating.
+Everyone in an online lobby needs a matching compatible release.
 
-WHAT'S NEW SINCE 1.0.6
+A. CUSTOM MAGIC CODES AND SDK
+  1. Import executable Custom Magic Codes through Mods / Hacks as .nrm packages.
+  2. Explicit code permission, enabled state and per-package generated settings.
+  3. Supported native hooks/calls, typed game services and execution budgets.
+  4. Deterministic host-owned settings and code-mod admission online.
+  5. API 2 is additive; existing API 1 mods are not forcibly converted.
+  6. SDK 2 module/capability queries, stable handles and stale-scene rejection.
+  7. Entity/racer inspection, typed/batched edits and supported overrides.
+  8. Scene/lap/checkpoint/item/result events and explicit queue overflow.
+  9. Static ray/sphere collision queries and route/checkpoint inspection/editing.
+ 10. Supported scene/weather/audio/race operations with lifecycle/authority gates.
+ 11. Published controller-friendly tools UI, ordered actions and live settings.
+ 12. Opted-in cross-mod setting changes, not unrestricted control over other mods.
+ 13. Read-only symbol/memory inspection within the admitted contract.
+ 14. Debug lines/boxes/labels, bounded documents/workspaces and source maps.
+ 15. Scaffolding, package inspection and relocation-safe authoring tools.
+ 16. Corrected local/split relocation handling and Dev Menu startup/save seeding.
+ 17. Separate SDK ZIP and one current Modding Bible in TXT, HTML and PDF.
+ 18. Clear limits: not arbitrary host code, private engine writes or unrestricted
+     ROM execution. Unsupported operations remain unavailable, not guessed.
 
-- Fix a Windows/Linux line-ending difference that could make identical replay
-  engines fail the online compatibility check after separate platform builds.
-- Earlier online checks compare the replay engine and actual prepared mods.
-  Startup errors name the mismatched component and log both fingerprints.
-  Every device in a lobby needs 1.0.7 (network protocol 50, mod transfer 3).
-- Background GitHub update checks, a Check for updates button in Play, and
-  update/download/install controls in About DKR-R. Installation needs consent
-  and signed release metadata. Saves, ROMs, mods and settings are not replaced.
-  Older 1.0.6 installations need one manual upgrade to obtain the updater.
-- Shorter launcher/overlay help, warnings and dialogs. Connection Details and
-  Reflection Details collapsibles have been removed.
-- Hide/Show lobby code for streamers. Copy still copies the actual invite.
-- Lava stays hot through its pulse, from yellow-white to orange-red. Nearby
-  glow is subtler and uses cached scenery colours, without an extra lighting
-  pass or per-frame lighting rays. Glow can be disabled independently.
-  Hardware reflections are separate and can still have a sizeable GPU cost.
-- PR #60's Quick Join opening fixes, reviewed libjuice callback patch, nightly
-  sanitizer/stress checks and compact dependency caches are included.
+B. EXAMPLE MODS AND CUSTOM TROPHY RACES
+ 19. Custom cups below Custom Tracks, without replacing stock trophies.
+ 20. Six-column custom-track rows, custom cup rows and named validation errors.
+ 21. Choice of tracks, per-round laps/vehicle and ordered/shuffled lineups.
+ 22. Cups / full-width Lineup / Share screens, single-line round controls.
+ 23. Controller navigation, on-screen text entry, bounded nested modals/buttons.
+ 24. Automatic track-catalogue refresh when opening the mod's details.
+ 25. Data-only cup import/export/sharing; receiving a cup does not invent or
+     automatically install missing track assets or grant code permission.
+ 26. AI & Boss Difficulty sample, plus the separately scoped live SDK 2 example.
+ 27. Dev Menu: inspect/watch entities and resources, edit supported racer values,
+     teleport, tools pause/step, scene controls, route/geometry inspection,
+     debug overlays, supported documents/workspaces and opted-in live settings.
+ 28. Development saves remain isolated. Normal online lobbies do not silently
+     become developer sessions; host authority and participant consent apply.
+ 29. Package conflicts/permissions, lifecycle limits and unsupported tools are
+     explained in the Bible rather than promising that literally anything works.
 
-Experimental Rollback and hardware ray tracing remain experimental. A release
-number does not certify every WAN connection, GPU or mixed-architecture pair.
-See RELEASE-VALIDATION.md in the source for the actual checks and limitations.
-No new Apple binary is built in this Windows/Linux/Android packaging pass.
+C. MOD STORE AND INSTALLATION MANAGEMENT
+ 30. Built-in catalogue with both grid/browse and detailed browse-and-inspect views.
+ 31. Item images/details, categories, searching/filtering and download progress.
+ 32. Discord account flow, reviews and requests, with role-gated catalogue tools.
+     These features use the deployed website backend; its role checks still apply.
+ 33. One Install action performs automatic verification; no redundant verify click.
+ 34. Correct direct-package retrieval instead of installing an HTML error page.
+ 35. Friendly installed mod/texture names instead of the temporary name "package".
+ 36. Persistent installation receipts for tracks, characters, code and textures.
+ 37. Installed/Update/Repair state reflects owned content, not download history.
+ 38. Distinguish exact duplicate evidence from a possible same-name match.
+ 39. Replace/reinstall, separate copies where supported, editions where identity
+     cannot safely be duplicated, and explicit cancel/remove choices.
+ 40. Update selected/all, skip/pin options, preserved compatible settings and
+     reapproval when executable code changes; no silent mod-code activation.
+ 41. Recoverable background installation with durable transaction journals,
+     per-library protection, retained previous editions and startup recovery.
+ 42. Faster protection of retired whole legacy groups without weakening backups.
+ 43. Correct canonical managed paths, Unicode and extended Windows ZIP paths.
+ 44. Complete track extraction including declared music and HD assets.
+ 45. Nested single-course ZIP discovery fixes the Mario Circuit edge case;
+     ambiguous multi-course archives are refused rather than selected randomly.
+ 46. Exact directory ownership/duplicate-ID handling and stable Installed status.
+ 47. Viewport-bounded dialogs, reachable cancel, wider keyboard buttons and
+     tidier installed/update/account/review/request/moderation layouts.
 
-Back up your saves before upgrading. Do not uninstall Android to update unless
-you have exported the saves first. Keep private lobby codes, paths and profile
-keys out of public reports; paired host/client logs are useful for online bugs.
+D. SAVES AND SAVE MANAGER
+ 48. One personal offline Adventure with ordinary track/character/gameplay mods;
+     changing a mod list no longer switches personal save ownership.
+ 49. Preserve old mod-set saves and migration copies; explicit recovery selection,
+     not an automatic merge or deletion of competing progress.
+ 50. Fixed stock EEPROM layout when added .dkrmap courses extend asset tables.
+     Initials/balloon data must not be reinterpreted through a larger course count.
+ 51. Added-course records use a versioned companion keyed by course/vehicle,
+     not extra fields jammed into the 512-byte stock EEPROM.
+ 52. Save Manager's current personal/online/recovery/Pak views and real targets.
+ 53. Max Out Entire Save, selected-Adventure completion and shared unlock actions
+     commit after confirmation, preserve initials/records and verify the write.
+ 54. Manual edits use Apply; stale drafts cannot overwrite newer disk progress.
+ 55. Background save jobs, launch/write fencing, checksum-aware imports and
+     recoverable multi-file transfers with old bundle compatibility.
+ 56. One persistent host online Adventure, Continue default, explicit copy/fresh
+     choices and separate client session copies. No personal client overwrite.
+ 57. Confirmed-only rollback record publication, not speculative persistence.
+ 58. Development sandboxes seed missing progress from the saved personal file;
+     existing sandboxes require explicit refresh. Explain why Dev Menu can show
+     different progress, without restoring the old mod-list save-swapping story.
+ 59. Portable mode remains a different data location, not automatic migration.
 
-No game ROM or extracted Nintendo/Rare assets are included. Bring your own
-legally obtained clean US v1.0 or US Rev A/v1.1 Diddy Kong Racing ROM.
+E. ONLINE, CONTENT AND PRESENTATION
+ 60. OS-line-ending-independent replay identity and earlier linked-engine checks.
+ 61. Prepared playable-resource proofs and component-specific startup failures.
+ 62. .dkrmap audio/deep-path preparation and native-track admission corrections.
+ 63. Custom Magic Code backend/launch-state, argument-memory and state-handoff fixes.
+ 64. Big Donut and Moon Station object-map loading fixes without opening real-ROM DMA.
+ 65. On/off state for modern .dkrmap cards, not only legacy imports.
+ 66. My racer fullscreen and local view choices for eligible experimental races.
+ 67. Native divider removal, full-height sky, offline-style HUD/minimap positioning.
+ 68. Human display names plus race positions, label sizing/fading and the black-box fix.
+ 69. PR #60 Quick Join callback/transport and reviewed libjuice callback corrections.
+ 70. Custom portrait extraction/differences and in-world portraits for Fire Mountain
+     and Smokey Castle, including the subsequent crash correction.
+
+Independent online maximum-LOD/scenery parity is not qualified for this
+release. The accepted rendering paths and fullscreen HUD/nameplates stay.
+
+F. CAMERA, WATER, CREDITS AND PERFORMANCE
+ 71. Optional ModernCamera++ importable package, presets, local profiles, input
+     bindings and live F7 tuning, with native scripted-scene fallbacks.
+ 72. Camera++ private renderer ownership and corrected vehicle-shadow interpolation.
+ 73. Replaces the older camera route with an optional importable package. Camera++ is not automatically enabled or a required gameplay mod.
+ 74. PC OpenXR work is incomplete. VR, standalone Quest and headset compatibility are not release features.
+ 75. Lighter cached nearby lava glow, independently switchable from water effects.
+ 76. Hot yellow-white/orange-red pulses, not black; subtle capped surrounding glow.
+ 77. Original-water river/waterfall interpolation when enhanced optics are off.
+ 78. Correct source-frame flow/wrap history across fullscreen/windowed presentation.
+ 79. Owner-accepted transparent HD water family loading and coherent promotion.
+ 80. Border-free spinning-logo picture, readable rounded translucent copyright
+     plaque, original font and RECOMPILED BY THATGUYMCD! line, higher-FOV sky coverage.
+ 81. Full-width Start menu character-name travel with original proportions.
+ 82. Full-frame credits, moving original-font text, lower sky and edge-covering fades.
+ 83. Credits crash correction: native vertical readback bounds, not negative overscan.
+ 84. Native GPU allocation validation/guarded mip fallback and replacement-cache headroom.
+ 85. First surgical performance pass: reused flow storage, larger-table texture
+     indexing, CPU mip scratch, exact checkpoint reserve and monotonic presentation.
+ 86. Optional diagnostic launch/logging. No measured FPS gain is claimed without
+     comparable owner captures; deeper GPU/scheduler work is not completed.
+ 87. Withdrawn atmosphere preview: no new volumetric/dynamic lighting/shadow system
+     is advertised. Stock effects and the existing water/lava path remain.
+
+G. LAUNCHER, APPLICATION UPDATES AND CONTRIBUTOR WORK
+ 88. Shorter consistent launcher/overlay wording and tidier mod cards/dialogs.
+ 89. Removed unnecessary Save Location/connection/reflection disclosures and
+     reorganised support summary/credits with compact support actions.
+ 90. Hide lobby code for streaming; Copy still provides the invitation code.
+ 91. Startup and Play-tab application update checks, consent, signed verified
+     platform packages, recovery and preserved user data.
+ 92. One public Windows DKR-R.exe; private runtime/helpers remain in libexec/dkr-r.
+ 93. PR #60 nightly/sanitizer/stress/cache tooling is retained, along with earlier
+     merged CI, platform, Track Lab and test-isolation contributions. PR #49-#59
+     work already shipped in 1.0.6 is carried forward, not counted as new here.
+
+UPDATING
+Use a manual upgrade from the old 1.0.7+beta packages: their version
+comparison treats that metadata as the same version as stable 1.0.7.
+Android updates must retain the existing app/signing identity. Do not
+uninstall the app to work around an update without exporting your saves.
+
+NOT INCLUDED
+No macOS/iOS binary, finished VR or new atmosphere system. The rolled-back
+independent online high-LOD experiment is not a supported release feature.
+No ROM, personal save, installed mod library or offline Player Guide is included.
+
+Build and static package checks are separate from owner gameplay, hardware
+and multiplayer acceptance. No unmeasured performance gains are promised.

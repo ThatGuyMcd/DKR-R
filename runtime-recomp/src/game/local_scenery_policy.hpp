@@ -15,12 +15,25 @@ struct Settings {
     enhancements::SceneryRetentionMode retention=enhancements::SceneryRetentionMode::Authored;
     int view_distance=1;
     bool keep_hub=false,keep_track=false,keep_minigame=false;
+    int animated_distance=1,billboard_distance=1,water_distance=1;
+    bool extended=false;
     constexpr bool enabled(int race_type) const {
         return enhancements::scenery_retention_enabled_for_race_type(
             profile,race_type,keep_hub,keep_track,keep_minigame);
     }
     constexpr int distance(int authored) const {
         return enhancements::effective_view_distance(profile,authored,view_distance);
+    }
+    constexpr bool live_enabled(int race_type)const {
+        return profile==enhancements::PresentationProfile::Modern &&
+            enhancements::is_gameplay_scenery_race_type(race_type) &&
+            (enabled(race_type)||view_distance>1||animated_distance>1||billboard_distance>1||water_distance>1||extended);
+    }
+    constexpr int sprite_distance(int authored,bool animated)const {
+        const int multiplier=std::max(view_distance,std::max(
+            enhancements::clamp_billboard_effect_multiplier(billboard_distance),
+            animated?enhancements::clamp_animated_scenery_multiplier(animated_distance):1));
+        return enhancements::effective_view_distance(profile,authored,multiplier);
     }
 };
 // Same regional gate as the existing enhancement hooks, applied only to

@@ -1,6 +1,8 @@
 #include "runtime_ui.hpp"
 #include "launcher_copy_policy.hpp"
 #include "lobby_privacy_policy.hpp"
+#include "online_view_policy.hpp"
+#include <charconv>
 #include "runtime_portable.hpp"
 #include "updates/update_service.hpp"
 #include "render_power_policy.hpp"
@@ -1849,6 +1851,9 @@ void SaveSettings() {
         }
         output << "online_player_name=" << g_online_player_name << '\n';
         output << "online_hide_lobby_code=" << (g_online_hide_lobby_code ? 1 : 0) << '\n';
+        output << "online_local_view=" << unsigned(dkr::runtime::online_view::requested_layout.load()) << '\n';
+        output << "online_racer_labels=" << unsigned(dkr::runtime::online_view::requested_labels.load()) << '\n';
+        output << "online_label_size=" << dkr::runtime::online_view::requested_label_size.load() << '\n';
         output << "online_room_name=" << g_online_room_name << '\n';
         output << "online_host_control=" << g_online_host_control << '\n';
         output << "online_maximum_players=" << g_online_maximum_players << '\n';
@@ -2082,6 +2087,17 @@ void LoadSettings() {
         if (key == "online_hide_lobby_code") {
             g_online_hide_lobby_code = value == "1";
             continue;
+        }
+        if(key=="online_local_view") {
+            dkr::runtime::online_view::requested_layout=value=="1"?dkr::runtime::online_view::Layout::MyRacer:dkr::runtime::online_view::Layout::SplitScreen;continue;
+        }
+        if(key=="online_racer_labels") {
+            dkr::runtime::online_view::requested_labels=value=="2"?dkr::runtime::online_view::Labels::Off:
+                value=="1"?dkr::runtime::online_view::Labels::Position:dkr::runtime::online_view::Labels::NameAndPosition;continue;
+        }
+        if(key=="online_label_size") {
+            unsigned size=100;const auto parsed=std::from_chars(value.data(),value.data()+value.size(),size);
+            if(parsed.ec==std::errc{}&&parsed.ptr==value.data()+value.size())dkr::runtime::online_view::requested_label_size=std::clamp(size,75U,150U);continue;
         }
         bool controller_key = false;
         for (std::size_t player = 0; player < dkr::runtime::input::kPlayerCount;
@@ -7204,7 +7220,7 @@ void DrawTrackLabTrack(const dkr::runtime::custom_tracks::Track& track, float wi
         const float info_height = ImGui::GetItemRectSize().y;
         ImGui::SetCursorScreenPos({row.x + inner - action_width,
                                    row.y + std::max((info_height - 42.0F) * 0.5F, 0.0F)});
-        ImGui::BeginDisabled(locked);
+        ImGui::BeginDisabled(locked || (!track.enabled && !is_armed));
         if (PaddockButton(action, kind)) {
             if (is_armed) {
                 tracks_ns::arm_track_override(std::string{});
@@ -7219,6 +7235,12 @@ void DrawTrackLabTrack(const dkr::runtime::custom_tracks::Track& track, float wi
         ImGui::EndDisabled();
         ImGui::SetCursorScreenPos(row);
         ImGui::Dummy({inner, std::max(info_height, 42.0F)});
+
+        if (!track.enabled) {
+            PaddockGap(10.0F);
+            PaddockText(PaddockReading(13.0F, false, 1.5F), PaddockRgb(0xABC0CC),
+                        "Turn this track on in My mods before testing.", inner);
+        }
 
         // One status line for the track's HD pack.
         if (declares_pack) {
@@ -7279,7 +7301,7 @@ void DrawTrackLabTrack(const dkr::runtime::custom_tracks::Track& track, float wi
 
         // The 3D texture table is published once at boot, so a track added
         // since needs a relaunch. In game that is one click.
-        if (needs_relaunch && in_game) {
+        if (needs_relaunch && in_game && track.enabled) {
             PaddockGap(12.0F);
             if (PaddockButton("RESTART & PLAY IN HD", PaddockButtonKind::Primary, inner)) {
                 tracks_ns::arm_track_override(track.id);
@@ -7471,7 +7493,7 @@ void DrawModHelpSection(float width, const dkr::mods::ModLibraryView& mods, bool
         constexpr std::array<std::string_view, 3> steps{{
             "Import a patch or native track.",
             "Choose the required ROM in Play to prepare legacy patches.",
-            "Enable legacy mods to use them. Installed native tracks appear in Track Select.",
+            "Turn tracks on in My mods to add them to Track Select.",
         }};
         constexpr std::array<std::string_view, 2> safety{{
             "Legacy mod selections keep separate saves.",
@@ -7702,7 +7724,7 @@ void DrawModsLibrarySection(float width, const dkr::mods::ModLibraryView& mods,
     PaddockEnter enter(7);
     PaddockGap(22.0F);
     PaddockText(PaddockReading(12.0F, false, 1.5F), PaddockRgb(0x9CB2BE),
-                "Installed native tracks appear in Track Select. Enable legacy mods to use them.", width);
+                "Turn tracks on or off for your next game.", width);
 }
 
 // Card caches follow the library snapshots; PLAY reads them too.

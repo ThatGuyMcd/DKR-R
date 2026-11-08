@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "api": 2,
+  "activation": "restart",
+  "online": "deterministic",
+  "requires": { "core": 1, "analogue-driving": 1 },
+  "revisions": ["us.v77", "us.v80"]
+}

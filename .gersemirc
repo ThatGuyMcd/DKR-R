@@ -1,0 +1,9 @@
+# gersemi configuration for first-party CMake. Indent matches .editorconfig
+# and the line length matches .clang-format and ruff. favour-inlining is the
+# closer of the two expansion modes to the existing hand-written style
+# (31 of 37 files drift vs 34 with favour-expansion).
+definitions: [runtime-recomp/cmake]
+indent: 4
+line_length: 120
+list_expansion: favour-inlining
+warn_about_unknown_commands: false

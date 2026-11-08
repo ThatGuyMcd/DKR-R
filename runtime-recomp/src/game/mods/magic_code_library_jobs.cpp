@@ -47,6 +47,16 @@ bool LibraryJobs::import_file(std::filesystem::path path) {
     });
 }
 bool LibraryJobs::select(std::string id){return submit("Selecting edition",[id=std::move(id)](Library& l,std::stop_token){l.select(id);});}
+bool LibraryJobs::update_trophies(std::filesystem::path path) {
+    return submit("Updating Custom Trophy Races",[path=std::move(path)](Library& library,std::stop_token stop){
+        if(stop.stop_requested())return;
+        online::check_storage(path,false);const auto bytes=read_file(path,MaxPackage);
+        if(sha256(bytes)!=TrophyUpdateDigest)throw Error("The bundled trophy update differs from this build. Import the correct 1.0.2 package manually.");
+        if(stop.stop_requested())return;
+        const auto digest=library.import(bytes);
+        library.select(digest); // Existing cups migrate; new code remains OFF and unapproved.
+    });
+}
 bool LibraryJobs::approve(std::string id,bool value){return submit("Updating code permission",[id=std::move(id),value](Library& l,std::stop_token){l.approve(id,value);});}
 bool LibraryJobs::enable(std::string id,bool value){return submit("Updating code selection",[id=std::move(id),value](Library& l,std::stop_token){l.enable(id,value);});}
 bool LibraryJobs::settings(std::string id,Json values){return submit("Saving code settings",[id=std::move(id),values=std::move(values)](Library& l,std::stop_token){l.settings(id,values);});}

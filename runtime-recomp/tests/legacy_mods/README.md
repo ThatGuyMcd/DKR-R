@@ -1,5 +1,12 @@
 # Legacy mod import and asset-bank tests
 
+## Current release composition
+
+For v1.0.12 use the [release pipeline](../../../patches/release-prep/v1.0.11/BUILDING.txt). The module notes below
+explain this layer; their dated playtest paths are historical inputs, not the
+current release command. The accepted water/source capsule preserves the
+composed behaviour. Dependencies and generated guest checkouts stay read-only.
+
 This suite checks the importer, reviewed behaviour contracts, private asset
 banks, resident resources, catalogue/preparation and online content boundaries.
 It is part of the current playable mod system, not just an import preview.

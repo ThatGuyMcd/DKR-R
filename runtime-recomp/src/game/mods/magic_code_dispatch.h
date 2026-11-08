@@ -5,7 +5,14 @@
 struct recomp_context;
 #ifdef __cplusplus
 extern "C" {
+#if defined(__APPLE__)
+// Darwin clang gives C++ thread_local storage internal linkage and exports only
+// a TLS wrapper, so the C payloads could not link against it. __thread keeps
+// the plain TLV symbol the C side expects.
+#define DKR_CODE_TLS __thread
+#else
 #define DKR_CODE_TLS thread_local
+#endif
 #elif defined(_MSC_VER)
 #define DKR_CODE_TLS __declspec(thread)
 #else

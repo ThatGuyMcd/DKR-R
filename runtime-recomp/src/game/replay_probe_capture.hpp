@@ -20,4 +20,9 @@ bool dkr_experimental_bootstrap_arm_memory(std::uint8_t players, bool host,
 bool dkr_experimental_bootstrap_activate_save(std::string& error);
 std::uint8_t dkr_experimental_bootstrap_players();
 bool dkr_experimental_bootstrap_active();
-std::vector<std::uint8_t> dkr_experimental_bootstrap_take_memory();
+struct DkrExperimentalBootstrap {
+    std::vector<std::uint8_t> memory,code;
+    std::string error;
+};
+// Single-use transaction: RAM continuation and code state share one boundary.
+DkrExperimentalBootstrap dkr_experimental_bootstrap_take_state();

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <bit>
 #include <cstring>
+#include <cstdio>
 
 namespace dkr::mods::code {
 namespace {
@@ -70,43 +71,55 @@ void World::attach(std::span<std::uint8_t> ram,bool initial) {
     if(initial)install(*linked_,ram);
     ram_=ram;bus_=std::move(bus);
 }
+void World::detach() {
+    if(active_)bad("cannot retire RDRAM during a code callback");
+    bus_.reset();ram_={};
+}
 void World::initialize(Budget& budget) {
     if(initialized_||active_||ram_.empty())bad("code world initialization requires a fresh retired session");
     initialized_=true;
     event("*","on_boot",Registers{},budget);
 }
-void World::call(std::uint32_t function,Registers& c,Budget& budget) {
+void World::call(std::uint32_t function,Registers& c,Budget& budget,const ArgumentStack* native_arguments) {
     const auto found=linked_->function_owners.find(function);
     if(found==linked_->function_owners.end()||ram_.empty())bad("unlinked code callback");
     const auto owner=found->second;auto& depth=calls_.at(owner);
     if(depth>=8)bad("package callback stack exhausted");
-    const auto saved_sp=c.integer[29];const auto saved_fcsr=c.fcsr;
-    // Preserve O32 arguments 5+ across package exports/native callbacks. Each
-    // callback still owns its own frame; do not share the caller's stack.
-    auto& bus=memory();std::uint32_t outgoing[16]{};
-    if(saved_sp)for(unsigned i=0;i<16;++i)outgoing[i]=std::uint32_t(bus.load(std::uint32_t(saved_sp)+i*4,4));
-    c.integer[29]=std::uint64_t(std::int64_t(std::int32_t(linked_->owners[owner].stack-depth*4096)));
-    for(unsigned i=0;i<16;++i)bus.store(std::uint32_t(c.integer[29])+i*4,4,outgoing[i]);
-    c.fcsr=state_[owner].fcsr;++depth;++active_;
-    struct Guard {
-        World& w;unsigned& depth;Registers& c;std::uint64_t sp;std::uint32_t fcsr;std::size_t owner;
-        ~Guard(){w.state_[owner].fcsr=c.fcsr;c.integer[29]=sp;c.fcsr=fcsr;--depth;--w.active_;}
-    }guard{*this,depth,c,saved_sp,saved_fcsr,owner};
-    execute(bus,c,function,budget,[&](auto target,auto& registers,auto& fuel){gateway(target,registers,fuel);});
+    try {
+        const auto saved_sp=c.integer[29];const auto saved_fcsr=c.fcsr;
+        // Preserve O32 arguments 5+ across package exports/native callbacks.
+        // Only the native entry can supply an approved argument snapshot.
+        // Nested VM/import calls still read their own permission-checked stack.
+        auto& bus=memory();ArgumentStack outgoing{};
+        if(native_arguments)outgoing=*native_arguments;
+        else if(saved_sp)for(unsigned i=0;i<outgoing.size();++i)outgoing[i]=std::uint32_t(bus.load(std::uint32_t(saved_sp)+i*4,4));
+        c.integer[29]=std::uint64_t(std::int64_t(std::int32_t(linked_->owners[owner].stack-depth*4096)));
+        for(unsigned i=0;i<outgoing.size();++i)bus.store(std::uint32_t(c.integer[29])+i*4,4,outgoing[i]);
+        c.fcsr=state_[owner].fcsr;++depth;++active_;
+        struct Guard {
+            World& w;unsigned& depth;Registers& c;std::uint64_t sp;std::uint32_t fcsr;std::size_t owner;
+            ~Guard(){w.state_[owner].fcsr=c.fcsr;c.integer[29]=sp;c.fcsr=fcsr;--depth;--w.active_;}
+        }guard{*this,depth,c,saved_sp,saved_fcsr,owner};
+        execute(bus,c,function,budget,[&](auto target,auto& registers,auto& fuel){gateway(target,registers,fuel);});
+    }catch(const Error& e) {
+        char context[160];std::snprintf(context,sizeof(context)," [package=%s callback=0x%08X]",
+            linked_->owners[owner].package->id.c_str(),function);
+        throw Error(std::string(e.what())+context);
+    }
 }
-void World::event(std::string_view owner,std::string_view name,const Registers& arguments,Budget& budget) {
+void World::event(std::string_view owner,std::string_view name,const Registers& arguments,Budget& budget,const ArgumentStack* native_arguments) {
     const auto found=linked_->events.find(std::string(owner)+":"+std::string(name));
-    if(found!=linked_->events.end())for(auto function:found->second){auto c=arguments;call(function,c,budget);}
+    if(found!=linked_->events.end())for(auto function:found->second){auto c=arguments;call(function,c,budget,native_arguments);}
 }
 bool World::has_hook(std::uint32_t function)const{return linked_->hooks.contains(function);}
-bool World::enter(std::uint32_t function,Registers& c,Budget& budget) {
+bool World::enter(std::uint32_t function,Registers& c,Budget& budget,const ArgumentStack* native_arguments) {
     const auto found=linked_->hooks.find(function);if(found==linked_->hooks.end())return false;
-    for(auto hook:found->second.entry){auto context=c;call(hook,context,budget);}
-    if(found->second.replacement){call(*found->second.replacement,c,budget);return true;}return false;
+    for(auto hook:found->second.entry){auto context=c;call(hook,context,budget,native_arguments);}
+    if(found->second.replacement){call(*found->second.replacement,c,budget,native_arguments);return true;}return false;
 }
-void World::leave(std::uint32_t function,const Registers& c,Budget& budget) {
+void World::leave(std::uint32_t function,const Registers& c,Budget& budget,const ArgumentStack* native_arguments) {
     const auto found=linked_->hooks.find(function);if(found==linked_->hooks.end())return;
-    for(auto hook:found->second.exit){auto context=c;call(hook,context,budget);}
+    for(auto hook:found->second.exit){auto context=c;call(hook,context,budget,native_arguments);}
 }
 void World::gateway(std::uint32_t address,Registers& c,Budget& budget) {
     const auto found=linked_->imports.find(address);

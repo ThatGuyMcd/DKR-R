@@ -26,8 +26,10 @@ bool intercept_virtual_pi_dma(const AssetBus& bus,std::span<std::uint8_t> rdram,
     const auto destination=word(rdram,call.stack_pointer+0x10);
     const auto length=word(rdram,call.stack_pointer+0x14);
     const auto queue=word(rdram,call.stack_pointer+0x18);
-    if((call.device_address&1) || (destination&7))
-        throw Error("Virtual PI DMA violates cartridge/RDRAM alignment.");
+    // Only tagged immutable assets use this bridge. Both compressed record
+    // sources and object-map scratch destinations can be byte-aligned.
+    // copy_to_guest maps every byte lane and validates the entire range.
+    // Real cartridge DMA retains its untouched upstream hardware checks.
     // Both actual DKR call sites use KSEG0 queues/buffers. The runtime queue
     // dispatcher consumes these as guest pointers, not normalized physical
     // offsets; accepting arbitrary aliases here would bypass its pointer ABI.

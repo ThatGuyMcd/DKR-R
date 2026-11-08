@@ -39,7 +39,7 @@ generated_v80="${DKR_IOS_V80_GENERATED_SOURCE:-${project_root}/build/generated/v
 host_dir="${project_root}/build/ios-host-tools"
 build_dir="${DKR_IOS_BUILD_DIR:-${project_root}/build/dkr-runtime-ios}"
 
-[[ "$version" =~ ^([1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(-rc[1-9][0-9]*)?$ ]] || {
+[[ "$version" =~ ^([1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(-rc[1-9][0-9]*)?(\+[0-9A-Za-z.-]+)?$ ]] || {
   echo "iOS packaging needs major.minor.patch (optionally -rcN), with major 1–9999 and minor/patch 0–99 (got ${version})." >&2
   exit 1
 }
@@ -101,6 +101,8 @@ cmake -S "${project_root}/runtime-recomp" -B "${build_dir}" -G Ninja \
   -DDKR_RELEASE_VERSION="${version}" \
   -DDKR_GENERATED_SOURCE_V77="${generated_v77}" \
   -DDKR_GENERATED_SOURCE_V80="${generated_v80}" \
+  -DDKR_CODE_POLICY_V77="$(dirname "${generated_v77}")/dkr.us.v77.toml" \
+  -DDKR_CODE_POLICY_V80="$(dirname "${generated_v80}")/dkr.us.v80.toml" \
   -DDKR_HOST_FILE_TO_C="${file_to_c}" \
   -DDKR_HOST_SPIRV_CROSS_MSL="${spirv_cross_msl}"
 cmake --build "${build_dir}" --parallel "${jobs}" --target DKRPortGame

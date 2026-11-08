@@ -74,54 +74,8 @@ void validate_upload(const LocalSceneryTexture& tex) {
         }
     }
 }
-LocalScenerySprite read_sprite(const Reader& r,std::uint32_t object,std::uint32_t material_table) {
-    r.physical(object,0x6C,4);
-    const auto header=r.word(object+0x40);r.physical(header,0x60,4);
-    // BHV_SCENERY, MODEL_TYPE_SPRITE, NO_MULTIPLAYER only. Do not accidentally
-    // cache collected balloons, weapons, cutscene actors or other freed objects.
-    if(r.half(object+0x48)!=0||r.byte(header+0x53)!=1||!(r.half(header+0x30)&0x40U))
-        throw std::runtime_error("not removed retail scenery");
-    const auto model=r.byte(object+0x3A),models=r.byte(header+0x55);
-    if(!models||models>32||model>=models)throw std::runtime_error("local scenery model index");
-    const auto instances=r.word(object+0x68);r.physical(instances,models*4,4);
-    const auto sprite=r.word(instances+model*4);r.physical(sprite,12,4);
-    const auto frames=r.half(sprite),textures=r.half(sprite+2);
-    const auto texture_table=r.word(sprite+8);
-    if(!frames||frames>32||!textures||textures>128)throw std::runtime_error("local scenery asset count");
-    r.physical(sprite+12,frames*4,4);r.physical(texture_table,textures*4,4);
-    LocalScenerySprite out;
-    out.identity=r.half(object+0x4A);
-    for(unsigned i=0;i<3;++i)out.position[i]=r.scalar(object+12+i*4);
-    out.scale=r.scalar(object+8);
-    if(out.scale<=0||out.scale>128)throw std::runtime_error("local scenery scale");
-    out.roll=std::int16_t(r.half(object+4));out.draw_distance=std::int16_t(r.half(header+0x4E));
-    out.segment=std::int16_t(r.half(object+0x2E));
-    if(out.segment<-1||out.segment>=127)throw std::runtime_error("local scenery segment index");
-    out.transform_flags=r.half(object+6);
-    out.animation=r.half(object+0x18);out.flags=r.half(sprite+6);
-    // The common table is 16 groups of four entries, NOT 128 entries.
-    // Clamp/wrap flags are texture state, never material-table indices.
-    if(out.flags&~0x3FU)throw std::runtime_error("local scenery material flags");
-    auto flags=(out.flags|2U|8U|(out.transform_flags&0xCU))&0x3FU;
-    if(flags&4U)flags|=1U; // Retail anti-aliasing for translucent materials.
-    for(unsigned i=0;i<2;++i) {
-        out.material[i]=r.command(material_table+flags*16+i*8);
-        if((out.material[i][0]>>24)!=(i==0?0xFCU:0xEFU))throw std::runtime_error("local scenery material");
-        out.faded_material[i]=r.command(material_table+(flags|5U)*16+i*8);
-        if((out.faded_material[i][0]>>24)!=(i==0?0xFCU:0xEFU))throw std::runtime_error("local scenery fade material");
-    }
-    const auto shading=r.word(object+0x54);
-    if(shading) {
-        r.physical(shading,8,4);
-        const auto intensity=std::uint32_t(std::clamp(r.scalar(shading)*255.0F,0.0F,255.0F));
-        out.primitive=(intensity<<24)|(intensity<<16)|(intensity<<8)|255U;
-        out.environment=0;
-        for(unsigned i=0;i<4;++i)out.environment=(out.environment<<8)|r.byte(shading+4+i);
-    }
-    std::vector<std::uint32_t> upload_addresses;
-    out.textures.reserve(textures);upload_addresses.reserve(textures);
-    for(unsigned i=0;i<textures;++i) {
-        const auto p=r.word(texture_table+i*4);r.physical(p,32,8);
+LocalSceneryTexture read_texture(const Reader& r,std::uint32_t p) {
+        r.physical(p,32,8);
         // textureSize includes the 32-byte header. Require a bounded loaded,
         // uncompressed frame; the texture command count is independently checked.
         const auto bytes=r.half(p+0x16),count=r.half(p+0xA);
@@ -172,7 +126,60 @@ LocalScenerySprite read_sprite(const Reader& r,std::uint32_t object,std::uint32_
             tex.commands.push_back(command);
         }
         validate_upload(tex);
-        upload_addresses.push_back(r.physical(commands,count*8,8));
+        return tex;
+}
+LocalScenerySprite read_sprite(const Reader& r,std::uint32_t object,std::uint32_t material_table,bool removed=true) {
+    r.physical(object,0x6C,4);
+    const auto header=r.word(object+0x40);r.physical(header,0x60,4);
+    // BHV_SCENERY, MODEL_TYPE_SPRITE, NO_MULTIPLAYER only. Do not accidentally
+    // cache collected balloons, weapons, cutscene actors or other freed objects.
+    if(r.byte(header+0x53)!=1 || (removed &&
+       (r.half(object+0x48)!=0 || !(r.half(header+0x30)&0x40U))))
+        throw std::runtime_error("not removed retail scenery");
+    const auto model=r.byte(object+0x3A),models=r.byte(header+0x55);
+    if(!models||models>32||model>=models)throw std::runtime_error("local scenery model index");
+    const auto instances=r.word(object+0x68);r.physical(instances,models*4,4);
+    const auto sprite=r.word(instances+model*4);r.physical(sprite,12,4);
+    const auto frames=r.half(sprite),textures=r.half(sprite+2);
+    const auto texture_table=r.word(sprite+8);
+    if(!frames||frames>32||!textures||textures>128)throw std::runtime_error("local scenery asset count");
+    r.physical(sprite+12,frames*4,4);r.physical(texture_table,textures*4,4);
+    LocalScenerySprite out;
+    out.removed=removed;out.behaviour=r.half(object+0x48);
+    out.identity=r.half(object+0x4A);
+    for(unsigned i=0;i<3;++i)out.position[i]=r.scalar(object+12+i*4);
+    out.scale=r.scalar(object+8);
+    if(out.scale<=0||out.scale>128)throw std::runtime_error("local scenery scale");
+    out.roll=std::int16_t(r.half(object+4));out.draw_distance=std::int16_t(r.half(header+0x4E));
+    out.segment=std::int16_t(r.half(object+0x2E));
+    if(out.segment<-1||out.segment>=127)throw std::runtime_error("local scenery segment index");
+    out.transform_flags=r.half(object+6);
+    out.animation=r.half(object+0x18);out.flags=r.half(sprite+6);
+    // The common table is 16 groups of four entries, NOT 128 entries.
+    // Clamp/wrap flags are texture state, never material-table indices.
+    if(out.flags&~0x3FU)throw std::runtime_error("local scenery material flags");
+    auto flags=(out.flags|2U|8U|(out.transform_flags&0xCU))&0x3FU;
+    if(flags&4U)flags|=1U; // Retail anti-aliasing for translucent materials.
+    for(unsigned i=0;i<2;++i) {
+        out.material[i]=r.command(material_table+flags*16+i*8);
+        if((out.material[i][0]>>24)!=(i==0?0xFCU:0xEFU))throw std::runtime_error("local scenery material");
+        out.faded_material[i]=r.command(material_table+(flags|5U)*16+i*8);
+        if((out.faded_material[i][0]>>24)!=(i==0?0xFCU:0xEFU))throw std::runtime_error("local scenery fade material");
+    }
+    const auto shading=r.word(object+0x54);
+    if(shading) {
+        r.physical(shading,8,4);
+        const auto intensity=std::uint32_t(std::clamp(r.scalar(shading)*255.0F,0.0F,255.0F));
+        out.primitive=(intensity<<24)|(intensity<<16)|(intensity<<8)|255U;
+        out.environment=0;
+        for(unsigned i=0;i<4;++i)out.environment=(out.environment<<8)|r.byte(shading+4+i);
+    }
+    std::vector<std::uint32_t> upload_addresses;
+    out.textures.reserve(textures);upload_addresses.reserve(textures);
+    for(unsigned i=0;i<textures;++i) {
+        const auto p=r.word(texture_table+i*4);
+        auto tex=read_texture(r,p);
+        upload_addresses.push_back(r.physical(r.word(p+0xC),tex.commands.size()*8,8));
         out.textures.push_back(std::make_shared<const LocalSceneryTexture>(std::move(tex)));
     }
     out.frames.resize(frames);
@@ -228,6 +235,14 @@ std::size_t payload_size(const LocalScenerySprite& sprite) {
     for(const auto& f:sprite.frames)bytes+=f.tiles.size()*sizeof(LocalSceneryTile);
     return bytes;
 }
+}
+LocalSceneryTexture capture_local_texture(std::span<const std::uint8_t> ram,std::uint32_t header) {
+    if(ram.size()<kRamBytes)throw std::runtime_error("local texture image too small");
+    return read_texture({ram},header);
+}
+LocalScenerySprite capture_live_local_sprite(std::span<const std::uint8_t> ram,std::uint32_t object,std::uint32_t table) {
+    if(ram.size()<kRamBytes)throw std::runtime_error("local sprite image too small");
+    return read_sprite({ram},object,table,false);
 }
 void LocalSceneryCapture::reset(std::uint32_t scene) noexcept {
     scene_.reset();rejected_=0;last_failure_.fill(0);

@@ -1,0 +1,104 @@
+DKR-R v1.0.7 beta 4
+===================
+
+Track Select code callback fix
+-------------------------------
+Fix Custom Magic Codes stopping online play as Track Select loads a preview.
+The preview loader uses a separate game stack. Its callback arguments now
+reach the mod's own stack without giving mods access to private engine memory.
+This also applies when a trophy mod is enabled but no custom cup is selected.
+Keep the previous startup, Track Lab music and odd-offset asset fixes.
+
+Online startup and Track Lab follow-up
+--------------------------------------
+Fix the full app crash when starting online with Custom Magic Codes enabled.
+Capture their startup state before releasing the original game memory.
+
+Fix modern courses being rejected when their packed geometry starts at an odd
+byte offset. Keep exact source bytes and all memory/section checks. No need
+to edit or re-export your tracks. Use both packages from this correction;
+older beta 4 packages have a different online engine identity.
+
+Online graphics recovery
+------------------------
+Remove the extra world redraw added in the last beta 3 graphics package.
+Restore the rendering path from the fullscreen/nameplate correction build
+that the maintainer confirmed worked, including the original decoder bounds.
+
+Keep My racer fullscreen, the sky and divider fixes, offline-style HUD
+positions, the corrected banana counter and transparent player nameplates.
+Custom tracks, characters, trophies and AI difficulty are unchanged.
+
+The new Online maximum-detail and extended actor/mesh drawing are withdrawn.
+Experimental Rollback again uses canonical racer LOD and core drawing ranges.
+The existing local cache still restores eligible scenery billboards; its
+scenery retention and distance controls remain available. Offline graphics
+preferences are preserved and offline enhancements are unchanged.
+
+This is an urgent rendering recovery, not a completed Online LOD extension.
+The replacement needs independently owned graphics resources before returning.
+
+Packages and compatibility
+--------------------------
+Windows x64 ZIP and Linux x86_64 AppImage only. Technical version:
+1.0.7+beta.4. Use beta 4 on every online device for a consistent application
+version. The replay engine is restored to the known-working corrected beta 3
+identity, not the withdrawn graphics-parity package's identity.
+
+The Custom Trophy Races 1.0.2 and AI & Boss Difficulty 1.0.0 example mods are
+unchanged. Save paths, online save isolation and controller mappings are not
+modified. No ROM, save, private key or extracted game asset is supplied.
+
+Build scope
+-----------
+Compilation and static source/package inspection only. No game, replay,
+online session, CTest, runtime self-test or device test is run by the build
+agent. Gameplay and visual acceptance remain with the maintainer.
+
+Native track switches correction
+--------------------------------
+Normal imported .dkrmap tracks now have the same On/Off switch as legacy
+tracks. The Details modal also has Enabled for next game. Changes survive
+refreshing and restarting, and both launcher and overlay use the same UI.
+Changes are locked during a game or online session. Disabled tracks stay
+installed but are left out of the next game and the host's selected mods.
+Working-folder tracks can be switched off without editing their source.
+Downloaded offline copies keep their existing activation mechanism. Online
+clients still follow the host's admitted track selection, not offline toggles.
+
+Online mod admission and legacy course loading correction - 17 October
+---------------------------------------------------------------------
+Fix the native course validator treating extracted music/main.mp3 as missing
+inside deep Windows online-cache paths. Extraction, payload reads and music
+validation now use long-path-safe, contained UTF-8 paths. Music is still part
+of the host's hashed package; no missing file or hash check is bypassed.
+Prepare native .dkrmap files directly on the storage worker, without legacy
+ROM reconstruction or spawning ModWorker. Keep the same manifest/resource
+proof before joining. Reuse installed assets and verified downloads; rebuild
+incomplete native caches separately, preserving their old trees for recovery.
+
+Fix clients rejecting Custom Magic Codes because their not-yet-admitted room
+still holds a default backend. The host's explicit backend gate, owned code
+linker, consent, exact settings and final launch descriptor remain enforced.
+
+Fix Big Donut and Moon Station stopping on compressed object-map loads whose
+scratch destination is not 8-byte aligned. The asset bridge and owned engine
+now accept valid byte-addressed virtual asset copies. Keep all range, queue,
+source ownership and real-ROM DMA checks. Track files, checkpoint order and
+offline activation choices are unchanged; no re-import is needed for this fix.
+
+Mark the exact withdrawn Custom Trophy Races 1.0.0/1.0.1 packages as Update
+needed, rather than allowing their known unsafe lap hooks to start a game.
+Details offers the bundled 1.0.2 update, preserving saved cup data. The new
+edition still needs code approval and enabling. Third-party package IDs and
+versions are not blanket-blocked. Cups naming disabled or changed tracks get
+a named instruction before hosting. Add package/session and scene diagnostics.
+
+Check every course's recording metadata even when its music is shared with
+another track. Hash decoded PCM in small chunks, avoiding a second full-song
+buffer. Existing per-song and total decoded-memory limits remain in place.
+
+Use this correction package on BOTH host and clients. Its replay contract is
+different from earlier beta 4 packages. Windows x64 and Linux x86_64 AppImage
+are supplied. Compilation/static package inspection only; gameplay, online
+and regression execution are reserved for the maintainer.

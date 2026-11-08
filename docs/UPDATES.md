@@ -1,125 +1,99 @@
 # DKR-R updates
 
-Version 1.0.7 checks GitHub after the launcher has appeared. You'll get
-a notice when a newer release is available. Choose Download update, then Install
-update and restart when you're finished playing. Nothing is downloaded or
-installed without you choosing it.
+## Updating to v1.0.14
 
-Published v1.0.6 does not contain the updater. Install an updater-enabled build
-manually once; future compatible releases can then use it. The release must
-include signed update metadata before an automatic installation can be offered.
+Use **Check for updates** in Play or About DKR-R. Choose **Download update**,
+then **Install update and restart** after playing. Startup checks can be turned
+off, a version can be skipped, and beta/playtest releases are optional. Stable
+releases are the default. A failed check does not stop offline play.
 
-## Launcher options
+v1.0.14 has Windows x64, Linux x86_64 and Linux ARM64 update packages. Steam
+Deck uses the Linux x86_64 package. Android, macOS and iOS are excluded from
+this release. Android releases are no longer supported. Older installations
+on excluded platforms must not be pointed at a different platform's download.
 
-Play has a **Check for updates** button. About DKR-R has an Updates section
-where you can check now, disable startup checks,
-include beta/playtest releases, skip a version, or pause a download. Stable
-releases are the default. A failed check doesn't stop the launcher or offline play.
-
-Finish imports and leave your online session before updating. Download work is
-cancelled when you launch the game; a partial download can be resumed when the
-server supports it. Already verified packages are reused.
+Finish imports and leave Online before installing. Downloads stop when the
+game starts. Partial downloads can resume if the server supports it, and
+verified completed downloads can be reused. v1.0.6 needs a manual upgrade to
+an updater-enabled version. There is no need to disable signature checks.
 
 ## Keeping your data
 
-Updates replace application files, not your saves, ROMs, mods, texture packs,
-controller settings or logs. Portable mode keeps `portable.txt` and
-`dkr-runtime-data` where they are. Restart to apply a pending portable-mode change
-before installing an update.
+Updates replace application files. Your ROMs, saves, mods, textures, controller
+settings and logs stay in your profile. Portable mode keeps portable.txt and
+dkr-runtime-data. Restart to apply a pending portable-mode change before updating.
 
-On Windows, start `DKR-R.exe`. It is the only executable at the top of the
-release folder. The actual launcher/game, `DKR-R-Runtime.exe`, lives inside
-`libexec/dkr-r` with its DLLs and helpers. Leave that folder intact.
-`DKR-R.exe` checks for interrupted updates before loading the runtime.
-`portable.txt`, portable data and assets still belong in the main release folder,
-not inside `libexec/dkr-r`. Extract manual test upgrades into a fresh folder so
-old test-build executables are not left beside the new launcher. If you use
-portable mode, copy both `portable.txt` and your existing `dkr-runtime-data`
-folder into the new main folder before launching. Don't copy just one EXE out
-of a release ZIP.
+On Windows, start DKR-R.exe at the top of the complete extracted folder. Its
+runtime, DLLs and helpers live in libexec/dkr-r. Keep assets and libexec with
+the launcher. Do not copy just one executable out of the ZIP. For a manual
+upgrade into a new portable folder, copy both portable.txt and your existing
+dkr-runtime-data before launching. Normal profile installations reuse the profile.
 
-Linux and Steam Deck replace the complete AppImage at its existing path. The
-shortcut still points to the same file. Package-manager/developer installations
-use manual updates instead. A read-only location can keep playing but cannot
-accept an in-place update.
+Linux and Steam Deck replace the whole AppImage at its existing path. Make it
+executable when installing manually. A read-only folder can keep playing but
+cannot accept an in-place update. Developer/package-manager installs update
+through their existing manual/package route.
 
-Desktop installers keep application backups. Windows transaction backups are
-under `.dkr-update-backups`; AppImage/bundle backups sit beside the original
-application. Download and handoff records are in your profile's `updates` folder.
-If a new launcher cannot start, the installer can restore the old application.
-Never delete the only backup while investigating a failed update. An interrupted
-Windows transaction is checked on the next launch through `DKR-R.exe`.
-The Updates section reports a failed/recovered previous installation on return.
+Windows transaction backups are under .dkr-update-backups; AppImage backups
+sit beside the old application. The profile's updates folder holds download
+and handoff records. Keep these while investigating a failed installation.
+DKR-R.exe checks interrupted Windows updates before loading the runtime.
+The Updates section reports a failed or recovered previous installation.
 
-For an interrupted AppImage/bundle swap, the copied helper in your profile's
-`updates/handoff-…` folder can recover its exact recorded target with
-`DKR-R-Updater --recover <that-folder/request.json>`. Close all copies first.
-Recovery checks the signed manifest and backup identity; it does not search
-other folders or delete user data.
-
-Android opens its system installer. Allow DKR-R to install updates when Android
-asks, then confirm the APK installation. The application ID, signing identity
-and version code must be compatible. A signing-key mismatch is not fixed by
-uninstalling: that would delete private app data. Cancel and contact the release
-maintainer instead. Android controls installation/recovery; desktop-style
-automatic downgrades are not offered.
-
-iOS uses your existing distribution/sideloading route. macOS needs a complete,
-qualified application bundle with the private updater helper. Builds without a
-supported installer show the release page rather than attempting an unsafe swap.
-
-## Publishing trusted updates
-
-Every installable release needs `DKR-R-update.json` and `DKR-R-update.sig` beside
-its qualified platform packages. The manifest names the exact packages, their
-sizes/checksums, version, channel, source commit and OS requirements. Windows ZIPs
-also carry a complete file table and `assets/updates/install.json` ownership receipt.
-
-The app verifies the manifest's Ed25519 signature using the public key in
-`packaging/update-public-key.json`, then verifies the downloaded package. GitHub
-checksums alone aren't a substitute for the publisher signature. Old releases
-without this metadata remain manual downloads.
-
-Use `scripts/update_release.py` with OpenSSL to prepare/sign release assets:
+For interrupted AppImage/bundle swaps, close all instances and use the copied
+helper from the recorded updates/handoff-… folder:
 
 ```text
-python scripts/update_release.py public-key --private-key <protected-key.pem>
-python scripts/update_release.py sign --version <version> --tag <tag> --commit <40-character-commit> --channel stable --private-key <protected-key.pem> --output <fresh-output-folder> --artifact windows-x64=<package.zip> --artifact linux-x86_64=<package.AppImage>
+DKR-R-Updater --recover <that-folder/request.json>
 ```
 
-Add `linux-aarch64`, `android-arm64`, `macos-arm64`, `macos-x86_64` or `ios-arm64`
-only when their packages are qualified. Steam Deck uses the Linux x86_64 entry.
-macOS declares its minimum OS in Info.plist, or with `--minimum-os`. Linux
-packages currently require glibc 2.38; update the manifest requirements when the
-toolchain changes.
+Recovery checks the signed manifest and the exact recorded backup. It does
+not search other folders or delete user data. Do not remove the only backup.
+Older Android/Apple builds retain their own installer and distribution rules;
+there is no new APK, app bundle or IPA in the v1.0.14 set.
 
-Keep the private signing key outside the repository and package folders. Back it
-up securely. Never send it in chat, commit it, or distribute it with a build.
-The signing tool checks that it matches the pinned public key. A deliberate key
-rotation needs an old-key-signed bridge release; `--verification-key` can select
-that previous public key for the bridge. Don't simply replace the public key
-and publish a release old clients cannot verify.
+## Preparing the release update files
 
-For Android, retain the actual distributed APK signing key or an authorised
-Android signing lineage, and increment `versionCode` for every published APK.
-A fresh CI runner's newly generated debug key is not upgrade-compatible just
-because the application ID matches.
+The exact filenames are **DKR-R-update.json** and **DKR-R-update.sig**. Upload
+both beside the final downloads. The stable tag is **Version1.0.14**, and must
+match the manifest. The source commit must contain all accepted Patch Pipeline
+layers and the final release metadata.
 
-Prepare the GitHub release as a draft. Upload all qualified packages and both
-signed metadata files, verify names/checksums/signature, then publish. Don't
-replace published assets under the same version. Use a new version for fixes.
+The manifest records each package's version, size, SHA256, platform and minimum
+OS requirements. Windows also has a complete file table and the package's
+assets/updates/install.json ownership receipt. Steam Deck uses linux-x86_64;
+it does not need a separate manifest entry. Linux requires glibc 2.38, with
+GLIBCXX_3.4.32 and a compatible Vulkan driver also needed by these packages.
 
-## Qualification
+```text
+python -B patches/release-prep/v1.0.11/update_assets.py sign --packages <finished-release-folder> --commit <full-source-commit> --private-key <protected-original-key.pem> --output <fresh-signing-folder>
+python -B patches/release-prep/v1.0.11/update_assets.py verify --packages <finished-release-folder> --output <signed-pair-folder>
+```
 
-Run `DKRUpdateCore` and `DKRUpdateService` on Windows/Linux, and
-`python -m unittest discover -s scripts/tests -p test_update_release.py`.
-`scripts/test_update_package.py` exercises a complete signed Windows package in
-an isolated temporary install with the real runtime's ROM-free save tests.
-Pass `--extractor <built-DKRUpdateCoreTests.exe>` to exercise the production
-signed ZIP extractor as well, including Unicode Windows staging paths.
+The wrapper uses the existing scripts/update_release.py signer and the pinned
+launcher public key. It verifies package receipts, Windows ownership and the
+exact Steam Deck copy. Its signature is 128 hexadecimal characters encoding
+the 64-byte Ed25519 signature over the exact JSON bytes, including the newline.
+The verification receipt records the signed files and package hashes.
 
-Before publishing, check the launcher notice and install/restart on actual
-hardware. Include interrupted transfers, a corrupt signature/package, locked
-files, read-only folders, disk-space failures, multiple instances, portable
-data, Unicode paths and interrupted-install recovery. Compile success does
-not qualify the Android system installer or an Apple package.
+An old signature cannot sign a changed manifest. Keep the original private key
+outside the repository and release folders, with a secure backup. Never send
+it in chat or upload it. A deliberate key rotation needs a bridge release
+signed by the old key; replacing the pinned public key would strand old clients.
+
+All package changes happen before signing. Do not edit JSON, rename packages
+or recompress archives afterwards. Verify the downloaded GitHub assets too.
+Prepare the release as a draft, upload the four downloads and both signed files,
+check everything, then publish. Use a new version for later fixes instead of
+replacing already published assets. Publishing makes the update discoverable.
+
+## Checks before rollout
+
+Run the updater signing/tooling and native updater tests. Check a v1.0.12 or Beta 3 notice,
+download, install and restart on actual Windows/Linux installations, including
+portable data and Unicode paths. Keep interrupted-download/install recovery,
+corrupt signatures/packages, locked files, multiple instances, read-only folders
+and disk-space failures in the checklist. Automated checks and final device
+acceptance are recorded separately in [release validation](../RELEASE-VALIDATION.md).
+
+See the [release signing instructions](../patches/release-prep/v1.0.11/UPDATER.txt).

@@ -31,7 +31,7 @@ set(DKR_IOS_NFD_SOURCE "${CMAKE_CURRENT_LIST_DIR}/../src/ios/ios_file_dialog.mm"
     CACHE FILEPATH "UIDocumentPicker NFD backend" FORCE)
 
 function(dkr_ios_finish target)
-    if(NOT DKR_RELEASE_VERSION MATCHES "^([1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?$")
+    if(NOT DKR_RELEASE_VERSION MATCHES "^([1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-rc[1-9][0-9]*)?(\\+[0-9A-Za-z.-]+)?$")
         message(FATAL_ERROR "iOS packaging needs major.minor.patch or major.minor.patch-rcN.")
     endif()
     if(CMAKE_MATCH_1 GREATER 9999 OR CMAKE_MATCH_2 GREATER 99 OR CMAKE_MATCH_3 GREATER 99)

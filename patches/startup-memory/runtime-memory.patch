@@ -1,0 +1,45 @@
+diff --git a/librecomp/src/recomp.cpp b/librecomp/src/recomp.cpp
+--- a/librecomp/src/recomp.cpp
++++ b/librecomp/src/recomp.cpp
+@@ -805,12 +805,39 @@
+ #ifdef _WIN32
+-    rdram = reinterpret_cast<uint8_t*>(VirtualAlloc(nullptr, allocation_size, MEM_COMMIT | MEM_RESERVE, PAGE_NOACCESS));
+-    DWORD old_protect = 0;
++    // Keep the complete guest address guard, but charge only usable RDRAM.
++    // PAGE_NOACCESS does not exempt committed pages from Windows commit limits.
++    const char* memory_phase = "reserve-address-space";
++    DWORD memory_error = ERROR_SUCCESS;
++    rdram = reinterpret_cast<uint8_t*>(VirtualAlloc(nullptr, allocation_size, MEM_RESERVE, PAGE_NOACCESS));
+     alloc_failed = (rdram == nullptr);
++    if (alloc_failed) memory_error = GetLastError();
+     if (!alloc_failed) {
+-        // VirtualProtect returns 0 on failure.
+-        alloc_failed = (VirtualProtect(rdram, mem_size, PAGE_READWRITE, &old_protect) == 0);
++        memory_phase = "commit-rdram";
++        alloc_failed = (VirtualAlloc(rdram, mem_size, MEM_COMMIT, PAGE_READWRITE) == nullptr);
+         if (alloc_failed) {
++            memory_error = GetLastError();
+             VirtualFree(rdram, 0, MEM_RELEASE);
++            rdram = nullptr;
+         }
+     }
++    if (alloc_failed) {
++        MEMORYSTATUSEX memory_status{};
++        memory_status.dwLength = sizeof(memory_status);
++        const bool have_memory_status = GlobalMemoryStatusEx(&memory_status) != FALSE;
++        std::fprintf(stderr,
++            "[boot][memory] failed phase=%s win32-error=%lu reserved-bytes=%llu commit-bytes=%llu memory-status=%u available-commit-bytes=%llu available-physical-bytes=%llu\n",
++            memory_phase, static_cast<unsigned long>(memory_error),
++            static_cast<unsigned long long>(allocation_size), static_cast<unsigned long long>(mem_size),
++            unsigned(have_memory_status), static_cast<unsigned long long>(memory_status.ullAvailPageFile),
++            static_cast<unsigned long long>(memory_status.ullAvailPhys));
++        char message[256];
++        std::snprintf(message, sizeof(message),
++            "Windows couldn't allocate the game memory (error %lu). Close other apps and check your Windows virtual-memory settings.",
++            static_cast<unsigned long>(memory_error));
++        ultramodern::error_handling::message_box(message);
++        return;
++    }
++    std::fprintf(stderr, "[boot][memory] reserved-bytes=%llu committed-bytes=%llu guard=reserved-noaccess\n",
++        static_cast<unsigned long long>(allocation_size), static_cast<unsigned long long>(mem_size));
+ #else

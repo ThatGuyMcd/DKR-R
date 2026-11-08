@@ -1,0 +1,71 @@
+# clang-tidy configuration for first-party C/C++ (runtime-recomp/src,
+# runtime-recomp/tests, modding). LLVM major is pinned to 18 everywhere
+# (clang-format, clang-tidy, the sanitizer job); bump them together.
+#
+# CI runs this diff-gated on changed lines (`tidy` job, advisory first, see
+# CONTRIBUTING.md). Whole-tree runs are a report, not a gate.
+#
+# The set is deliberately conservative: bug finders and the static analyzer,
+# with the checks that are mostly noise on recompiled N64 code turned off.
+# Turning one of the disabled checks on is its own PR with its own baseline.
+#
+# Disabled, and why:
+#   bugprone-easily-swappable-parameters      style opinion, fires on most (int, int) APIs
+#   bugprone-implicit-widening-of-multiplication-result
+#                                             address math on guest RDRAM is intentional
+#   bugprone-narrowing-conversions            alias of cppcoreguidelines-narrowing-conversions;
+#                                             guest u32/s16 conversions are everywhere
+#   bugprone-reserved-identifier              N64 SDK and libultra names (__osXxx, _gXxx)
+#   bugprone-macro-parentheses                decomp-style macros, mostly in extern/
+#   bugprone-assignment-in-if-condition       style
+#   bugprone-switch-missing-default-case      style; -Wswitch covers enums
+#   bugprone-branch-clone                     per-version tables (v77/v80) repeat on purpose
+#   performance-no-int-to-ptr                 guest-to-host pointer translation by design
+#   performance-enum-size                     enum layout is part of save and wire formats
+#   clang-analyzer-optin.performance.Padding  layout matches guest structs on purpose
+#   clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+#                                             flags every memcpy/snprintf (C11 Annex K)
+#   misc-include-cleaner                      wrong on spliced .inl translation units
+#                                             (runtime_ui.cpp); enable per module once the
+#                                             include order is explicit (plan C2/C4)
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -bugprone-macro-parentheses,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-switch-missing-default-case,
+  -bugprone-branch-clone,
+  clang-analyzer-*,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  performance-*,
+  -performance-no-int-to-ptr,
+  -performance-enum-size,
+  misc-definitions-in-headers,
+  concurrency-mt-unsafe,
+  cert-err33-c
+
+# Promoted to errors even while the job is advisory: these are almost never
+# false positives and each one is a crash or memory corruption.
+WarningsAsErrors: >
+  bugprone-use-after-move,
+  bugprone-dangling-handle,
+  bugprone-sizeof-expression,
+  clang-analyzer-core.*
+
+# First-party headers only. extern/, third_party/ and the build tree are not
+# reported even when a first-party TU includes them.
+HeaderFilterRegex: '/(runtime-recomp/(src|tests)|modding)/'
+FormatStyle: none
+SystemHeaders: false
+
+CheckOptions:
+  # printf-family results are ignored on purpose for logging.
+  - key: cert-err33-c.CheckedFunctions
+    value: '::aligned_alloc;::calloc;::fclose;::fflush;::fgetc;::fgetpos;::fgets;::fopen;::fread;::freopen;::fseek;::fsetpos;::ftell;::fwrite;::malloc;::realloc;::remove;::rename;::setvbuf;::tmpfile'
+  - key: bugprone-unused-return-value.AllowCastToVoid
+    value: true

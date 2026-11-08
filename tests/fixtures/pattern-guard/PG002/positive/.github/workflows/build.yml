@@ -1,0 +1,4 @@
+jobs:
+  build:
+    steps:
+      - run: cmake -DCMAKE_PROJECT_INCLUDE=x.cmake .

@@ -1,15 +1,23 @@
 # Repository scripts
 
+## v1.0.14 release contract
+
+Use patches/release-prep/v1.0.11/release.py and BUILDING.txt for stable composition. Packaging uses explicit runtime/legal allowlists; no offline Player Guide or old playtest handoff notes. Both US revisions, all owned payloads and exact staged inputs are required. Run only the named synthetic fixtures and ROM-free helper/updater checks; gameplay acceptance remains separate.
+
 Run these commands from the repository root with Python 3.10+ (`python` on
 Windows). Commands with options describe them with `--help`.
 
 | Task | Command | Inputs |
 |---|---|---|
 | Fast contributor checks | `python3 scripts/check.py` | Git and Python; no ROM or downloads |
-| List checks or choose a suite | `python3 scripts/check.py --list` / `--suite tooling` | No C++ build |
+| Build-tool checks | `python3 scripts/check.py --suite host-tools` | Also CMake, Ninja and pre-commit; may download hook environments |
+| List checks or choose suites | `python3 scripts/check.py --list` / `--suite guard,tooling` | No C++ build |
+| Refuse new patch layers | `python3 scripts/pattern_guard.py --tree` (`--explain all` lists rules) | Git; checks `architecture/pattern-guard-baseline.txt` |
 | Prepare pinned dependencies | `python3 scripts/bootstrap_dependencies.py` | Git; network for missing revisions |
 | Apply reviewed patches | `python3 scripts/apply_dependency_patches.py` | Prepared dependencies |
 | Inspect patch readiness | `python3 scripts/apply_dependency_patches.py --check` | Read-only checkout validation |
+| Prepare/verify/sign v1.0.14 updates | `python patches/release-prep/v1.0.11/update_assets.py --help` | Finished packages, committed source, original Ed25519 private key for signing only |
+| Release recipe and documentation checks | [Desktop recipe](../patches/release-prep/v1.0.11/BUILDING.txt) | External source snapshot and document ledger; skip the historical metadata apply step |
 | Validate release metadata | `python3 scripts/validate_release_metadata.py` | Repository files |
 | Stage the source code-mod SDK | `python3 scripts/stage_magic_code_sdk.py --output <fresh-directory>` | Authored SDK, guide and address-only kits; optional sample NRMs |
 | Render the modder's book | `python3 scripts/render_magic_code_guide.py --output <fresh-guide.html>` | `modding/MODDERS-GUIDE.txt` and exact public headers; no game execution |
@@ -27,7 +35,7 @@ Linux packaging is opt-in with `./Build-Linux.sh --package`. Windows wrappers
 honour `DKRPORT_NO_PAUSE=1`; `Run-Windows.cmd` then waits for the runtime and
 returns its exit status. Runtime arguments are forwarded in both modes.
 
-For 1.0.7, rebuild every platform from the same source and compare both owned
+For 1.0.12, rebuild every platform from the same source and compare both owned
 engine IDs from the final packages. Publish fresh SHA-256 records only after
 packaging. See [Updates](../docs/UPDATES.md) for signed update metadata; a GitHub
 release without that metadata is not an automatic installation offer.

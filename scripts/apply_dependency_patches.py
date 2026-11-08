@@ -12,11 +12,11 @@ import argparse
 import hashlib
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 
 
 def git(repo: Path, *args: str, index: Path | None = None) -> str:
@@ -25,8 +25,9 @@ def git(repo: Path, *args: str, index: Path | None = None) -> str:
     env = dict(os.environ)
     if index is not None:
         env["GIT_INDEX_FILE"] = str(index)
-    return subprocess.run(["git", "-C", str(repo), *args], env=env, check=True,
-                          stdout=subprocess.PIPE, text=True).stdout.strip()
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], env=env, check=True, stdout=subprocess.PIPE, text=True
+    ).stdout.strip()
 
 
 def index_tree(repo: Path, scratch_index: Path) -> str:
@@ -41,8 +42,9 @@ def index_tree(repo: Path, scratch_index: Path) -> str:
     return git(repo, "write-tree", index=scratch_index)
 
 
-def patch_trees(repo: Path, patches: list[Path], expected_index: Path,
-                current_index: Path, states: list[str] | None = None) -> tuple[str, str]:
+def patch_trees(
+    repo: Path, patches: list[Path], expected_index: Path, current_index: Path, states: list[str] | None = None
+) -> tuple[str, str]:
     """Compute reviewed and working trees without touching the real index."""
     git(repo, "read-tree", "HEAD", index=expected_index)
     trees = [git(repo, "write-tree", index=expected_index)]
@@ -58,8 +60,9 @@ def patch_trees(repo: Path, patches: list[Path], expected_index: Path,
 
     # Files the patches create are untracked in the checkout; stage the ones
     # present so they take part in the comparison (lexists: symlinks too).
-    added = "\0".join(git(repo, "diff", "--name-only", "-z", "--no-renames",
-                           "--diff-filter=A", "HEAD", tree) for tree in trees)
+    added = "\0".join(
+        git(repo, "diff", "--name-only", "-z", "--no-renames", "--diff-filter=A", "HEAD", tree) for tree in trees
+    )
     git(repo, "read-tree", "HEAD", index=current_index)
     git(repo, "add", "-u", index=current_index)
     present = [p for p in added.split("\0") if p and os.path.lexists(repo / p)]
@@ -92,21 +95,20 @@ def is_reviewed_checkout(root: Path, repo: Path, commit: str) -> bool:
     data = json.loads(manifest.read_text(encoding="utf-8"))
     if data.get("schemaVersion") != 1:
         raise SystemExit("Unsupported patch manifest schema")
-    matches = [d for d in data["dependencies"]
-               if (root / d["repositoryPath"]).resolve() == repo.resolve()]
+    matches = [d for d in data["dependencies"] if (root / d["repositoryPath"]).resolve() == repo.resolve()]
     if len(matches) != 1 or matches[0]["expectedCommit"].lower() != commit.lower():
         return False
     reviewed = checked_patches(root, matches[0])
     with tempfile.TemporaryDirectory() as scratch:
-        expected, current = patch_trees(repo, reviewed, Path(scratch) / "expected",
-                                        Path(scratch) / "current")
+        expected, current = patch_trees(repo, reviewed, Path(scratch) / "expected", Path(scratch) / "current")
         if current != expected:
             return False
         base = git(repo, "rev-parse", "HEAD^{tree}")
         if index_tree(repo, Path(scratch) / "staged") not in (base, expected):
             return False
-        added = set(git(repo, "diff", "--name-only", "-z", "--no-renames",
-                        "--diff-filter=A", "HEAD", expected).split("\0"))
+        added = set(
+            git(repo, "diff", "--name-only", "-z", "--no-renames", "--diff-filter=A", "HEAD", expected).split("\0")
+        )
         untracked = set(git(repo, "ls-files", "--others", "--exclude-standard", "-z").split("\0"))
         if untracked - added - {""}:
             return False
@@ -121,34 +123,35 @@ def is_reviewed_checkout(root: Path, repo: Path, commit: str) -> bool:
             child = repo / path
             if mode != "160000" or not (child / ".git").exists():
                 continue
-            if git(child, "status", "--porcelain", "--untracked-files=all",
-                   "--ignore-submodules=none") and not is_reviewed_checkout(root, child, child_commit):
+            if git(
+                child, "status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"
+            ) and not is_reviewed_checkout(root, child, child_commit):
                 return False
         return True
 
 
-def plan_dependency(repo: Path, patches: list[Path], expected_index: Path,
-                    current_index: Path, repair: bool = False) -> tuple[list[str], list[str]]:
+def plan_dependency(
+    repo: Path, patches: list[Path], expected_index: Path, current_index: Path, repair: bool = False
+) -> tuple[list[str], list[str]]:
     states: list[str] = []
     expected, current = patch_trees(repo, patches, expected_index, current_index, states)
     managed = set()
     for tree in states:
-        managed.update(git(repo, "diff", "--name-only", "--no-renames", "-z",
-                           "HEAD", tree).split("\0"))
+        managed.update(git(repo, "diff", "--name-only", "--no-renames", "-z", "HEAD", tree).split("\0"))
     for tree in (current, index_tree(repo, current_index.with_name(current_index.name + "-staged"))):
-        changed = set(git(repo, "diff", "--name-only", "--no-renames", "-z",
-                          "HEAD", tree).split("\0"))
+        changed = set(git(repo, "diff", "--name-only", "--no-renames", "-z", "HEAD", tree).split("\0"))
         unrelated = sorted(changed - managed - {""})
         if unrelated:
-            raise SystemExit(f"{repo}: local edits outside the patch set; commit or stash: "
-                             + ", ".join(unrelated))
+            raise SystemExit(f"{repo}: local edits outside the patch set; commit or stash: " + ", ".join(unrelated))
         if tree not in states and not repair:
-            raise SystemExit(f"{repo}: unrecognized local edits in managed patch paths; "
-                             "commit/stash them, or use --repair to discard them")
-    paths = [p for p in git(repo, "diff", "--name-only", "--no-renames", "-z",
-                           current, expected).split("\0") if p]
-    present = set(git(repo, "ls-tree", "-r", "-z", "--name-only", expected,
-                      "--", *paths).split("\0")) if paths else set()
+            raise SystemExit(
+                f"{repo}: unrecognized local edits in managed patch paths; "
+                "commit/stash them, or use --repair to discard them"
+            )
+    paths = [p for p in git(repo, "diff", "--name-only", "--no-renames", "-z", current, expected).split("\0") if p]
+    present = (
+        set(git(repo, "ls-tree", "-r", "-z", "--name-only", expected, "--", *paths).split("\0")) if paths else set()
+    )
     return [p for p in paths if p not in present], [p for p in paths if p in present]
 
 
@@ -168,8 +171,9 @@ def sync_dependency(repo: Path, patches: list[Path], repair: bool = False) -> st
         return execute_plan(repo, expected_index, plan)
 
 
-def apply_manifest(root: Path, manifest_path: Path, check: bool = False,
-                   repair: bool = False, require_all: bool = False) -> int:
+def apply_manifest(
+    root: Path, manifest_path: Path, check: bool = False, repair: bool = False, require_all: bool = False
+) -> int:
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     if data.get("schemaVersion") != 1:
         raise SystemExit("Unsupported patch manifest schema")
@@ -205,13 +209,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", type=Path, default=root)
     parser.add_argument("--manifest", type=Path)
-    parser.add_argument("--require-all", action="store_true", help="Fail if any manifest checkout is absent (used by Windows preparation).")
+    parser.add_argument(
+        "--require-all",
+        action="store_true",
+        help="Fail if any manifest checkout is absent (used by Windows preparation).",
+    )
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--check", action="store_true", help="Validate the full ordered patch stack without changing checkout files or the real index.")
-    mode.add_argument("--repair", action="store_true", help="Discard unknown working-tree edits on managed patch paths; unrelated tracked edits remain protected. The real index is preserved.")
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate the full ordered patch stack without changing checkout files or the real index.",
+    )
+    mode.add_argument(
+        "--repair",
+        action="store_true",
+        help="Discard unknown working-tree edits on managed patch paths; unrelated tracked edits remain protected. The real index is preserved.",
+    )
     args = parser.parse_args()
     root = args.root.resolve()  # patch paths are passed to `git -C <repo>`
-    return apply_manifest(root, args.manifest or root / "patches" / "manifest.json", args.check, args.repair, args.require_all)
+    return apply_manifest(
+        root, args.manifest or root / "patches" / "manifest.json", args.check, args.repair, args.require_all
+    )
 
 
 if __name__ == "__main__":

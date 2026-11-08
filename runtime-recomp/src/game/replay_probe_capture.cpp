@@ -3,6 +3,7 @@
 #include "revision_addresses.hpp"
 #include "runtime_netplay.hpp"
 #include "runtime_save_routing.hpp"
+#include "runtime_code_mods.hpp"
 #include "netplay/runtime_state.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include <cstdio>
@@ -11,6 +12,7 @@
 #include <vector>
 #include <atomic>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 extern "C" void dkr_set_quiesced_bootstrap_callback(void (*)(std::uint8_t*, std::size_t));
@@ -23,38 +25,49 @@ unsigned capture_ticks = 0;
 std::uint8_t requested_players = 2;
 bool requested_host = false;
 std::uint64_t requested_match = 0, requested_save_hash = 0;
-std::vector<std::uint8_t> memory_fixture;
+DkrExperimentalBootstrap memory_fixture;
 std::atomic<bool> bootstrap_complete{false};
 void after_quiescence(std::uint8_t* rdram, std::size_t memory_bytes) {
     using namespace dkr::runtime::netplay;
     // The constructor receives a locally booted CPU continuation; this image
     // is not itself a rollback checkpoint. Its other owners are now gone.
     if (!rdram || memory_bytes < kRollbackMemoryBytes || (!requested_memory && parked_path.empty())) return;
-    RuntimeState diagnostic;
-    repair_float_register_pointer(parked_cpu);
-    diagnostic.register_context(&parked_cpu);
-    std::vector<std::uint8_t> fixture(diagnostic.snapshot_size());
-    if (!diagnostic.capture(rdram, parked_revision, fixture)) {
-        std::fprintf(stderr, "[replay-probe][quiesced] capture refused\n"); return;
-    }
-    if (requested_memory) {
-        memory_fixture=std::move(fixture);
-        bootstrap_complete.store(true,std::memory_order_release);
-        std::fprintf(stderr,"[rollback][handoff] all native workers retired; revision=%u bytes=%zu\n",parked_revision,memory_fixture.size());
-        return;
-    }
-    FILE* file = nullptr;
+    try {
+        // Both state participants read only while the retired native RAM is
+        // still committed. Nothing exported by take_state borrows its address.
+        auto code=requested_memory?dkr::runtime::code_mods::retire_bootstrap_checkpoint({rdram,memory_bytes}):
+            std::vector<std::uint8_t>{};
+        RuntimeState diagnostic;
+        repair_float_register_pointer(parked_cpu);
+        diagnostic.register_context(&parked_cpu);
+        std::vector<std::uint8_t> fixture(diagnostic.snapshot_size());
+        if (!diagnostic.capture(rdram, parked_revision, fixture)) {
+            throw std::runtime_error("The quiesced retail continuation could not be captured.");
+        }
+        if (requested_memory) {
+            memory_fixture.memory=std::move(fixture);memory_fixture.code=std::move(code);
+            bootstrap_complete.store(true,std::memory_order_release);
+            std::fprintf(stderr,"[rollback][handoff] all native workers retired; revision=%u bytes=%zu code-bytes=%zu code-captured-before-ram-release=1\n",
+                parked_revision,memory_fixture.memory.size(),memory_fixture.code.size());
+            return;
+        }
+        FILE* file = nullptr;
 #ifdef _WIN32
-    _wfopen_s(&file, std::filesystem::u8path(parked_path).c_str(), L"wbx");
+        _wfopen_s(&file, std::filesystem::u8path(parked_path).c_str(), L"wbx");
 #else
-    file = std::fopen(parked_path.c_str(), "wbx");
+        file = std::fopen(parked_path.c_str(), "wbx");
 #endif
-    if (!file) { std::fprintf(stderr, "[replay-probe][quiesced] exclusive creation failed\n"); return; }
-    const auto written = std::fwrite(fixture.data(), 1, fixture.size(), file);
-    const auto closed = std::fclose(file);
-    bootstrap_complete.store(written == fixture.size() && closed == 0);
-    std::fprintf(stderr, "[replay-probe][quiesced] revision=%u bytes=%zu success=%d\n",
-        parked_revision, written, written == fixture.size() && closed == 0);
+        if (!file) { std::fprintf(stderr, "[replay-probe][quiesced] exclusive creation failed\n"); return; }
+        const auto written = std::fwrite(fixture.data(), 1, fixture.size(), file);
+        const auto closed = std::fclose(file);
+        bootstrap_complete.store(written == fixture.size() && closed == 0);
+        std::fprintf(stderr, "[replay-probe][quiesced] revision=%u bytes=%zu success=%d\n",
+            parked_revision, written, written == fixture.size() && closed == 0);
+    }catch(const std::exception& e) {
+        memory_fixture.memory.clear();memory_fixture.code.clear();memory_fixture.error=e.what();
+        bootstrap_complete.store(false,std::memory_order_release);
+        std::fprintf(stderr,"[rollback][handoff-failure] %s\n",e.what());std::fflush(stderr);
+    }
 }
 gpr address(std::uint32_t value) { return static_cast<gpr>(static_cast<std::int32_t>(value)); }
 int private_map() {
@@ -104,7 +117,7 @@ bool dkr_experimental_bootstrap_arm_memory(std::uint8_t players, bool host,
     }
     requested_players=players;requested_memory=true;consumed=completed=false;capture_ticks=0;
     requested_host=host;requested_match=match_id;requested_save_hash=save_hash;
-    memory_fixture.clear();parked_path.clear();bootstrap_complete.store(false,std::memory_order_release);
+    memory_fixture={};parked_path.clear();bootstrap_complete.store(false,std::memory_order_release);
     error.clear();return true;
 }
 bool dkr_experimental_bootstrap_activate_save(std::string& error) {
@@ -114,14 +127,16 @@ bool dkr_experimental_bootstrap_activate_save(std::string& error) {
 std::uint8_t dkr_experimental_bootstrap_players() {
     return requested_memory ? requested_players : 0;
 }
-std::vector<std::uint8_t> dkr_experimental_bootstrap_take_memory() {
+DkrExperimentalBootstrap dkr_experimental_bootstrap_take_state() {
     // Caller must first join recomp::start, including the quiescence callback.
     dkr_set_quiesced_bootstrap_callback(nullptr);
     requested_memory=false;consumed=completed=false;capture_ticks=0;
     requested_match=requested_save_hash=0;requested_host=false;
-    if(!bootstrap_complete.load(std::memory_order_acquire))return {};
-    bootstrap_complete.store(false,std::memory_order_release);
-    return std::move(memory_fixture);
+    if(!bootstrap_complete.exchange(false,std::memory_order_acq_rel)) {
+        auto error=std::move(memory_fixture.error);memory_fixture={};
+        return {{},{},std::move(error)};
+    }
+    return std::exchange(memory_fixture,{});
 }
 
 bool dkr_private_replay_boot(std::uint8_t* rdram, recomp_context* context) {

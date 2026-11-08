@@ -1,0 +1,26 @@
+#!/bin/sh
+# Run one agent hook script (scripts/agent_hooks/<name>.py) with the first
+# Python 3.10+ found, passing the hook payload through on stdin.
+#
+# Order: py -3 first, because on Windows a bare `python` can be the Microsoft
+# Store stub; then python, then python3. Each candidate is probed with stdin
+# closed so the probe can't consume the payload.
+#
+# Usage: run <script.py> [args...]
+
+dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd) || exit 1
+script=$1
+shift
+case $script in
+*/* | '') echo "agent hooks: expected a script name in $dir, got '$script'" >&2 && exit 1 ;;
+esac
+
+for candidate in "py -3" python python3; do
+	# shellcheck disable=SC2086 # "py -3" is a command plus argument
+	if $candidate -c 'import sys; sys.exit(sys.version_info < (3, 10))' </dev/null >/dev/null 2>&1; then
+		exec $candidate "$dir/$script" "$@"
+	fi
+done
+# Not exit 2: a missing interpreter must not block the agent's tool calls.
+echo "agent hooks: no Python 3.10+ found (tried py -3, python, python3)" >&2
+exit 1

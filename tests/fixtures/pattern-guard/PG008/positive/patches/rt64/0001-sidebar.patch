@@ -1,0 +1,6 @@
+diff --git a/runtime-recomp/src/game/runtime_ui.cpp b/runtime-recomp/src/game/runtime_ui.cpp
+--- a/runtime-recomp/src/game/runtime_ui.cpp
++++ b/runtime-recomp/src/game/runtime_ui.cpp
+@@ -1 +1 @@
+-int sidebar = 1;
++int sidebar = 2;

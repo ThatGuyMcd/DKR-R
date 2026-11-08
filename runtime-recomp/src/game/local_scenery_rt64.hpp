@@ -15,7 +15,7 @@ namespace dkr::runtime {
 class LocalSceneryRT64Pass final {
 public:
     using IdentitySelector=void (*)(RT64::RSP&,std::uint32_t);
-    void prepare(const netplay::experimental::LocalSceneryScene* scene,
+    void prepare(std::shared_ptr<const netplay::experimental::LocalSceneryScene> scene,
                  std::span<const dkr_owned_draw_event> observations,
                  std::span<std::uint8_t> decoder,std::uint32_t identity) noexcept;
     void draw_at(RT64::State& state,std::uint32_t command,IdentitySelector select);
@@ -28,5 +28,12 @@ private:
     std::size_t observation_count_=0;
     std::vector<local_scenery::TextureBinding> textures_;
     local_scenery::Settings settings_;
+    netplay::experimental::LocalSceneryScene merged_;
+    struct LiveAsset {std::uint32_t object,header,sprite;std::size_t index;};
+    std::vector<LiveAsset> live_assets_;
+    std::uint32_t cached_scene_=UINT32_MAX;
+    std::shared_ptr<const netplay::experimental::LocalSceneryScene> cached_source_;
+    std::size_t base_count_=0;
+    void prepare_live(std::span<const dkr_owned_draw_event> observations,std::span<std::uint8_t> decoder);
 };
 }

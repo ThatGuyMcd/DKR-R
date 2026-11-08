@@ -1,186 +1,259 @@
-# DKR-R Online
+# DKR-R Online â€” v1.0.14
 
-Race with friends through Quick Join or friend invites. No separate launcher,
-account or manual port forwarding is needed. Player 1 is the host; approved
-clients become Players 2–4. Races and minigames support 2–4 racers, and Adventure
-supports two.
+Open **DKR-R Online** in the existing launcher. Public/Friends browsing,
+Private/Public hosting, Discord sign-in and a total online count sit alongside
+the existing lobby controls. There is no separate website page to use.
 
-Use the same complete DKR-R package on every machine, including its private
-workers. The same original ROM revision, compatible build, gameplay rules and
-session mod identity must be admitted before the game starts.
+Races and minigames support up to four racing ports; Adventure supports two
+racers. A spectator-capable lobby can also have eight spectators. Everyone
+needs a compatible complete v1.0.14 package, supported original ROM revision,
+admitted gameplay rules and verified session mods. Keep `assets` and private
+workers with the installation.
 
-Version 1.0.7 uses protocol 50. Use 1.0.7 on every device, not a mixture with
-1.0.5/1.0.6. Windows and Linux/SteamOS are not separate online versions.
-Replay-engine IDs normalise text line endings, so separately generated Windows
-and Linux builds of the same source agree. Actual code changes are still checked.
-The lobby checks the replay engine, then compares the actual prepared mod
-resources before admitting a modded client. A cached download is still checked;
-there is no need to delete your offline library or download everything again.
+## Connect and find a lobby
 
-## Starting a lobby
+1. Select your original ROM and local input profile. Your local controller
+   mapping is independent of the online player number.
+2. Reuse your existing Mod Library Discord account or select **Sign in with
+   Discord** in Online. Finish the normal browser pairing flow.
+3. Connect Online. **Public** lists worldwide public lobbies; **Friends** keeps
+   the friend/invitation list. Public cards offer **Request to join** or
+   **Spectate**; friend/code joining also has **Racer / Watch Race** selection.
+4. Request a place. The host approves ordinary requests. Required mod/code
+   consent, preparation and save/compatibility checks finish before admission.
 
-1. Select your original ROM and local input profile. The profile supplies your
-   controls; it is independent of the online player number.
-2. Enable the mods you want before hosting. Open **DKR-R Online → Host settings**
-   and choose the backend, menu ownership, maximum racers and input settings.
-   These rules are frozen when the lobby is created.
-3. In **Host / Quick Join**, name the lobby, choose the Online Adventure save
-   source and select **CREATE LOBBY**.
-4. Share the five-character code, or invite authenticated online friends.
-   Guests use **REQUEST TO JOIN** or accept the invitation.
-5. Review/approve pending guests. If mods are required, the client must consent
-   and finish verified preparation before admission completes.
-6. Everyone selects **READY TO RACE**. The host starts the synchronised countdown.
-7. DKR-R boots through the normal game flow. Initial-state and scene barriers
-   release only when the connected racers are ready.
+Public discovery and aggregate presence need Discord sign-in. Offline play
+does not. Existing private code/friend workflows remain available where their
+normal transport/account rules permit. An already running legacy private
+lobby is not silently published when the service reconnects: connect first,
+then recreate it if you want public hosting.
 
-By default, the host guides shared menus until Player Select. Every occupied
-online slot then receives the right native player, without asking clients to
-remap their physical controller to another local port.
+The count represents distinct connected signed-in accounts across launcher
+instances, including players in private rooms anonymously. It is not the
+number of racing controller ports or every person playing offline. One account
+on several launchers counts once; a crash or sleeping device can remain counted
+until its lease expires, normally within 60 seconds. **Disconnect Online**
+removes this instance. See [public lobbies and privacy](PUBLIC_LOBBIES.md).
 
-There is no joining a match after loading starts. If a racer leaves or an
-unrecoverable connection/state error occurs, the match ends and surviving
-copies return to the launcher/lobby with a reason. This deliberately avoids
-continuing with a missing input owner.
+## Profile, pictures and friends
 
-## Choosing a backend
+Open **Online Profile** for your shared display name, picture and account
+settings. There is one name for Online, friends and the Mod Library. Edit it and
+choose **Save profile**. An active lobby keeps its current name until you leave;
+failed saves keep your draft so you can retry. Ordinary text fields use a
+case-readable font. The Discord username is no longer repeated underneath.
 
-| Host setting | Behaviour |
+**Change profile picture** previews a PNG or JPG before saving. You can also
+choose your Discord image or initials. Picture sharing is optional; friends
+and lobby players receive the selected picture only while sharing is enabled.
+Sign out and back in once after deploying the profile API to import Discord's
+name and image metadata. The launcher offers separate choices for each.
+
+Privacy and Share a friend code sit below the profile header. Account settings
+contains **Keep me signed in**, sign-out, privacy information and the existing
+confirmed library-account deletion. Reviews and requests stay in the Mod Library.
+Deleting the library account does not delete your Discord account or local mods.
+
+The Friends tab uses compact cards with a picture, name, status and actions.
+**Add a friend** is above Search. Existing filters and sorting still work.
+Lobby player cards offer **Add friend** for eligible players who are not already
+friends, including other clients. Requests still need acceptance; sharing a
+lobby does not automatically add anyone.
+
+## Joining with mods
+
+The Session mods dialog shows what is happening, how long it has taken,
+and how much data was downloaded or reused. A busy host can queue your
+request. Temporary transfers can be repaired up to five times; if a join
+fails, use **Retry Join** or **Copy Join Diagnostics**. Verified completed
+downloads can be reused when you retry. A first join with lots of mods
+can still take longer while they are downloaded and prepared. Transfers and
+initial checkpoints have more capacity, verified cached content is reused and
+mod writes avoid flushing every chunk. Preparation still verifies complete files.
+Use **Copy Join Diagnostics** to distinguish network transfer from preparation;
+there is no fixed speed guarantee for every host or connection.
+
+You can leave **Keep downloaded mods for offline play** enabled. Matching
+installed copies are reused, and missing selected content is kept as
+inactive entries after lobby admission. Your existing names, enabled
+mods and saves stay as they are. A real content conflict is reported
+without replacing the existing files or stopping lobby entry.
+
+In Open Lobbies, **Join as** and **Browse lobbies** sit under your account
+on wide windows. **Before you race** sits below **Your online view**. On
+narrow windows, the lobby filters remain above the list.
+
+## Host a lobby
+
+1. Enable the mods you want before hosting. In **Host settings**, choose racer
+   capacity, menu ownership, input delay/prediction and spectator support.
+2. In **Host / Quick Join**, name the lobby, choose the Online Adventure save
+   source and select **Private** or **Public**. Private is the default.
+3. Create the lobby. Public rooms appear to other connected launchers. Private
+   rooms use the existing friend list/invitations or lobby code.
+4. Review pending guests. Friends' valid authenticated invitations retain their
+   existing admission behaviour; a public row or ordinary code is not approval.
+5. Racers complete preparation and choose **READY TO RACE**. Spectators do not
+   take a racing port and do not need to ready as racers.
+6. The host can run **Check Rollback connection**, review the Scoreboard, then
+   start the synchronised countdown.
+
+Host rules and the enabled mod catalogue are frozen for the session. Changing
+the mod set requires recreating the lobby. The host guides shared menus until
+Player Select by default; online slots receive their correct native players
+without remapping physical controllers to local ports.
+
+The public host mode is **Rollback**. It uses the existing owned replay backend
+internally named `ExperimentalRollback`. The old Auto, Host Prediction and
+Strict Input Sync selector is no longer offered for v1.0.14 public hosting.
+Old wire enum values and historical investigations have not been reinterpreted.
+Do not change configuration files to bypass the supported-mode gate.
+
+The waiting lobby places the save/mod summary under its title and visibility
+under the lobby code on wide windows. **Close lobby** removes the hosted room
+without restarting the launcher. Your account can stay Online. A crash or lost
+connection still uses the directory lease expiry.
+
+## Rollback connection Scoreboard
+
+**Check Rollback connection** takes about ten seconds while the lobby is
+waiting. Everyone receives the same completed host-measured report, with their
+own YOU marker. Select a row for details; controller A opens details and B
+closes details before closing the report. The host can rerun the check.
+
+| Score | Estimate |
 |---|---|
-| Auto | Default for fresh settings; selects Experimental Rollback. It is a preference, not a fourth network protocol or automatic mid-match fallback. |
-| Experimental rollback | Predicts missing remote inputs within a bounded window, restores owned game checkpoints and replays when late actual input differs. |
-| Host prediction (legacy Rollback) | The older host-authoritative prediction path. Published commits are not rewound; portable host state repairs replicas. |
-| Strict input sync (Lockstep) | Waits for the required input set before advancing. No gameplay prediction/replay; latency and jitter can cause waits. |
+| 9â€“10 | Excellent |
+| 7â€“8 | Good |
+| 5â€“6 | Mixed |
+| 3â€“4 | Poor |
+| 1â€“2 | Very poor |
+| â€” | Not rated; insufficient, incompatible or locally overloaded measurement |
 
-Existing explicit saved backend selections remain respected. Change the backend
-before creating the lobby; switching does not happen underneath a running match.
+The racing grade is the weakest measured remote racer route. Any unrated racer
+leaves the racing assessment incomplete. The host's row is a shared estimate,
+not a fabricated self-ping score. Spectator playback grades never lower the
+racing grade. Role/roster or tested-setting changes make an old report stale.
 
-Experimental Rollback is genuine gameplay rollback, not the older mode renamed.
-It owns replay-safe guest/native state and keeps renderer output, confirmed
-audio and persistence outside speculative replay. It supports admitted US
-v1.0/v1.1 payloads and synchronised session mods in the integrated builds.
-Its platform gates and real-world qualification still matter:
-[platform support](PLATFORMS.md). It remains experimental.
+Grades describe a short network sample, not hardware FPS, checkpoint download
+speed or a guarantee against desync. No settings change automatically. Start
+with automatic input delay; the prediction window is adjustable from 2â€“20
+frames, with ten frames a useful starting recommendation for distant players.
+More prediction can increase replay work. A small window can run out before
+actual inputs arrive. Changes apply to the next agreed lobby rules.
 
-## Delay, prediction and stutters
+## Spectators and player swaps
 
-Use **Automatic input delay** as a starting point, particularly across longer
-distances. For Experimental Rollback the UI recommends a 10-frame prediction
-window for distant players; the selectable window is 2–20 frames.
-A two-frame window may be shorter than the connection can deliver.
+Turn on **Spectator-capable lobby** before creating the room. Guests choose
+**Watch Race**. The host can use **Make spectator / Make racer** while waiting;
+making a racer requires a free racing place and clears Ready.
 
-A bigger window allows more prediction, but also increases correction/replay
-work. It does not remove latency or make a struggling machine fast. Manual
-delay is a next-lobby rule, not a live fix for an already frozen session.
+Spectators can view **All splits**, **Follow player** or the **T.T.-style
+director**. Original vehicles can use its cinematic view; custom GPU-rendered
+cars use safe racer cameras. D-pad left/right changes racer and C-up changes
+camera mode. Spectator controls never become racing input.
 
-“Waiting for Player Inputs” can mean the bounded prediction window is exhausted.
-Loading/scene/finish barriers can also wait for peer readiness or confirmation.
-Neither mode is allowed to advance indefinitely on guessed input or discard
-actual controls just to keep a frame counter moving.
+Racers can offer a place and spectators can request one. The host approves
+under **Player swaps**. The handover uses an agreed confirmed checkpoint;
+there can be a short pause. The replacement inherits that racer and race
+progress, with character/vehicle changes waiting for ordinary selection screens.
+The outgoing racer becomes a spectator and is not an input relay.
 
-Compare offline performance with the same scene and graphics settings first.
-Use the detailed network overlay to distinguish input waits, replay work,
-loading and presentation drops. When reporting a problem, send host and client
-logs from the same attempt, the backend, player count, settings and scene.
-See [troubleshooting](TROUBLESHOOTING.md).
+Joining a running race as a spectator through the directory requires the
+separate service flag to be enabled. It still needs a committed match
+descriptor, compatible content and checkpoint catch-up. It never enables
+late racer entry. A slow spectator is outside racing input/scene agreements
+and can request a fresh viewing checkpoint. See [Spectators](SPECTATORS.md).
 
-## The host is the Mod Master
+## Returning, leaving and interruptions
 
-The host's enabled legacy tracks, characters and Track Lab courses form an
-immutable lobby manifest. Clients see the required set and consent before any
-missing content is downloaded or activated for that session.
+The host can return everyone to the lobby without closing it. The retained
+party is advertised again only when the native runtime is genuinely waiting.
+Checkpoints use one monotonic pulse time through receive/expiry processing;
+the previous repeated zero-byte catch-up/start loop is repaired.
 
-Matching installed offline mods are reused even when locally hidden or disabled,
-provided their source hashes, prepared assets, behaviour contracts and required
-revision match. Verified caches are also reusable. Only missing payloads need
-transfer, and completed preparation can survive retries.
+A spectator leaving does not end the race. Loss of a required racer returns
+the match safely to the lobby rather than continuing with a missing input
+owner. Closing the host closes the room. There is no host migration.
 
-The host and client can see download/preparation progress. Downloading is only
-one stage: source decoding, reconstruction against the client's own ROM and
-verification must finish before readying. Declining or failing preparation does
-not partially admit a racer or fall back to different behaviour.
+If the directory is unavailable, already admitted native peers can still
+ready, check the connection, start, race, return or leave. Discovery and new
+admissions recover separately. Reconnecting must not reset an approved long
+mod transfer. Changes to privacy, lock, phase, invitation/key or capacity can
+revoke admission; an ordinary roster/account refresh does not revoke approved
+preparation by itself.
 
-Verified received content is retained as inactive offline library entries where
-applicable. It does not copy the host's activation/visibility over your choices.
-No ROM, save collection or user-supplied executable is distributed.
-Only share patches/artwork you have permission to distribute.
+## Mods, saves and achievements
 
-After changing a mod set, close and recreate the lobby. For import formats,
-reviewed adapters and limits, see [custom tracks and characters](LEGACY-MODS-BETA.md).
+The host is the Mod Master. Its enabled tracks, characters, cars and code
+settings form the frozen session identity. Clients review the required set,
+approve executable code and consent to preparation. Matching installed data
+or verified caches are reused, including locally disabled copies; only missing
+payloads need transfer. Downloading, reconstruction against your own ROM and
+verification must all finish. Cached names alone do not prove compatibility.
 
-## Saves and Adventure
+Verified received content can remain as inactive library entries. It does not
+replace your offline activation choices. Custom cars are visual replacements
+but their catalogue and per-racer choices are part of admitted online state.
+No ROM or personal save collection is shared as a mod download.
 
-The host chooses to copy offline Adventure, start fresh or continue previous
-online progress. Copying reads the host's save; it does not replace it.
-Clients install the checksum-validated session EEPROM in separate online
-storage, never into their personal offline Adventure.
+The host owns persistent online Adventure progress. Continue, copy personal
+progress and start fresh remain explicit choices. Clients and spectators use
+session-owned copies; they do not overwrite personal Adventure or Controller
+Paks. Only confirmed rollback progress can persist. Watching and development
+sessions do not award gameplay achievements. See [Saves](SAVES.md),
+[Vehicles](VEHICLES.md) and [Magic Codes](MAGIC_CODES.md).
 
-The route remains held until all runtime/save owners retire. Confirmed rollback
-progress is the only progress persisted; a disconnect cannot turn an online
-save worker into an offline one. Online Controller Paks are also separate.
-See [saves and recovery](SAVES.md).
+Two-player Adventure retains its original shared hub and scene-specific
+controller topology. A one-viewport hub does not mean a player left. Three- or
+four-racer Adventure is not offered. Development tools need explicit consent
+and host authority and cannot silently turn an ordinary lobby into a debug session.
 
-Two-player Adventure keeps the original shared-hub arrangement: a single
-viewport/visible racer in the hub, and shared ownership chosen by the game's
-controller-ID table. Boss/fly-in topology can differ from an ordinary race.
-Online identities remain stable across those transitions; a one-racer scene
-does not mean the second authenticated player has disappeared.
-Three/four-player Adventure is not offered.
+## Local view and presentation
 
-## Local settings and presentation
+**Your online view** offers **Original split-screen** or **My racer fullscreen**
+for eligible races, with local name/position labels, sizes and fading. Shared
+menus, results, cutscenes and Adventure hubs keep their normal layout. When
+ownership is incomplete, presentation falls back to the original view.
 
-Your input profile, renderer settings, texture packs and master volume are local.
-Texture packs need not match the host's cosmetic selection.
+Input profiles, texture packs, renderer settings and master volume stay local.
+Simulation-affecting camera/detail values and admitted code settings cannot
+be changed privately. General independent high-LOD/scenery parity is not
+qualified by this release. Fullscreen does not remove the work of simulating
+other racers. See [Graphics](GRAPHICS.md) and [Sound](SOUND.md).
 
-In Experimental Rollback, local scenery retention/view distance currently apply
-to restored eligible billboards, not every actor/mesh. FOV, vehicle LOD and
-other simulation-affecting camera/detail values remain canonical.
-The offline Modern camera is disabled online.
-Individual sound-category mixing is deferred; master volume stays local.
-Saved preferences remain available offline and in the legacy modes.
-See [Graphics](GRAPHICS.md) and [Sound](SOUND.md).
+## Transport, compatibility and support
 
-## Friends and privacy
+The website API provides worldwide discovery, account presence and bounded
+admission. PeerJS/STUN still establishes the existing direct WebRTC connection;
+Rollback carries the match. The website does not relay gameplay frames. There
+is no bundled TURN service, voice/text chat or universal NAT traversal.
+Restrictive firewalls/mobile networks can still block a direct route, and peers
+can see each other's public network addresses.
 
-**INVITE FRIENDS** offers authenticated online, unblocked friends. The receiver
-gets a notification and an invitation under **OPEN LOBBIES**.
-Invitations expire after five minutes and use a single-use authenticated
-capability; normal code entry still requires host approval.
+Native X25519 key agreement, XChaCha20-Poly1305 authentication and WebRTC DTLS
+protect admitted traffic. Public rows contain no reusable lobby code or
+credentials. The native host remains authoritative for controller ports,
+roles, lock, mod/save consent, Ready and start.
 
-**APPEAR OFFLINE** hides advertised presence while preserving the secure route
-and manual Quick Join. **ALLOW FRIEND LOBBY INVITES** can be disabled separately.
-Neither deletes the friend list or profile.
+Admission checks build/protocol, linked replay engine, ROM, Patch Pipeline,
+gameplay/Magic Codes, prepared resources, save/checkpoint proof, architecture
+and floating-point policy. Matching engine IDs alone do not prove that a mixed
+x64/ARM64 session is admitted or hardware-qualified. Do not bypass a mismatch.
 
-Treat lobby codes as private invitations. They expire when the lobby closes
-and no later than six hours after creation. Rekey/revoke controls invalidate
-admission capabilities without giving strangers a player slot.
+For a failure, keep host and client logs from the same attempt, package names,
+ROM revision, racer/spectator count, enabled mods, delay/window and exact scene.
+Distinguish input waits, replay work, loading and rendering. Remove private
+codes, credentials and paths before sharing. [Troubleshooting](TROUBLESHOOTING.md)
+lists the relevant recovery steps and log locations.
 
-Use **Hide code** beside the lobby code when streaming. **Show code** reveals it
-again; Copy still copies the real invite. Hiding it is not an access-control
-change, so keep normal host approval enabled for people you don't know.
+## Initial startup presentation
 
-## Connection and compatibility
-
-Quick Join uses the public PeerJS rendezvous for signalling, then authenticated
-WebRTC peer channels for gameplay. It has no bundled gameplay relay. Restrictive
-NATs, firewalls or mobile networks can prevent direct routing, and peers' public
-addresses may be visible to one another.
-
-Ephemeral X25519 agreement and per-peer XChaCha20-Poly1305 protect the native
-session protocol; WebRTC adds DTLS transport protection. Invalid, replayed and
-unapproved traffic is rejected. Reliable lifecycle/content traffic is separated
-from latency-sensitive input scheduling.
-
-Admission checks build/protocol, ROM, Patch Pipeline identity, gameplay/Magic
-Codes, mod contracts, save proof, architecture and floating-point policy.
-An ARM64 port does not automatically permit x64/ARM64 mixed sessions.
-Use compatible peers; don't bypass a failed compatibility check.
-
-Startup failures name the mismatched part: replay engine, Game Pak, prepared
-mods, checkpoint schema/size, launch rules, online save or startup epoch.
-The runtime log records local and remote fingerprints, not save contents.
-For a report, send both logs from the same attempt plus the package names,
-ROM revision and enabled mod set. Keep personal paths/invite details private.
-
-There is no voice/text chat, spectator mode or general public matchmaking
-directory. “Open Lobbies” is not a promise of an unrestricted public browser.
+Starting from the lobby fades into **Syncing Game / Getting everyone ready...**,
+using the circular logo, scrolling clouds and grey caption from offline startup.
+The game renderer keeps that screen through initial admission and fades it away
+after a real ready presentation. It does not release peers on a timer or show
+an invented completion percentage. Open Launcher or Escape/B uses the ordinary
+stop/end-match path. Later course transitions keep their existing presentation.
+Renderer creation can still cause a brief native window transition before the
+UI can draw. See [Launcher](LAUNCHER.md).

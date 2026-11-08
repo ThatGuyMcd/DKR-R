@@ -6,10 +6,16 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <cstdio>
 
 namespace dkr::mods::code {
 namespace {
 [[noreturn]] void fault(const char* message){throw Error(std::string("Custom Magic Code: ")+message);}
+[[noreturn]] void memory_fault(const char* message,std::uint32_t address,std::size_t bytes,bool write,bool instruction) {
+    char details[112];std::snprintf(details,sizeof(details)," [%s address=0x%08X bytes=%zu]",
+        instruction?"execute":write?"write":"read",address,bytes);
+    throw Error(std::string("Custom Magic Code: ")+message+details);
+}
 std::uint32_t physical(std::uint32_t a) {
     if((a&0xe0000000U)!=0x80000000U)fault("address is outside guest RDRAM");
     return a&0x1fffffffU;
@@ -88,22 +94,22 @@ Memory::Memory(std::span<std::uint8_t> ram,std::vector<Region> regions):ram_(ram
 }
 std::size_t Memory::checked(std::uint32_t a,unsigned size,bool write,bool instruction)const {
     if(size!=1&&size!=2&&size!=4&&size!=8)fault("invalid memory access width");
-    if(a&(size-1))fault("unaligned guest memory access");
+    if(a&(size-1))memory_fault("unaligned guest memory access",a,size,write,instruction);
     return range(a,size,write,instruction);
 }
 std::size_t Memory::range(std::uint32_t a,std::size_t size,bool write,bool instruction)const {
     const auto off=physical(a);
-    if(off>ram_.size()||size>ram_.size()-off)fault("guest memory access exceeds RDRAM");
+    if(off>ram_.size()||size>ram_.size()-off)memory_fault("guest memory access exceeds RDRAM",a,size,write,instruction);
     auto& cached=instruction?last_code_:last_data_;
     const auto contains=[&](const Region& r){return off>=r.address&&off-r.address<=r.size&&size<=r.size-(off-r.address);};
     if(cached>=regions_.size()||!contains(regions_[cached])) {
         auto it=std::upper_bound(regions_.begin(),regions_.end(),off,[](auto a,const Region& r){return a<r.address;});
-        if(it==regions_.begin())fault("access before the first permitted memory range");
+        if(it==regions_.begin())memory_fault("access before the first permitted memory range",a,size,write,instruction);
         --it;cached=std::size_t(it-regions_.begin());
     }
     const auto& r=regions_[cached];
     if(contains(r)&&(!write||r.writable)&&(!instruction||r.executable))return off;
-    fault(write?"write to an unowned or read-only memory range":"read or execution outside permitted memory");
+    memory_fault(write?"write to an unowned or read-only memory range":"read or execution outside permitted memory",a,size,write,instruction);
 }
 std::uint64_t Memory::load(std::uint32_t a,unsigned size,bool instruction)const {
     const auto off=checked(a,size,false,instruction);std::uint64_t result=0;
@@ -192,7 +198,7 @@ void execute(Memory& memory,Registers& c,std::uint32_t entry,Budget& budget,cons
     const auto caller_ra=c.integer[31];c.integer[31]=signed32(Done);
     struct Link {Registers& c;std::uint64_t ra;~Link(){c.integer[31]=ra;c.integer[0]=0;}}link{c,caller_ra};
     c.integer[0]=0;std::uint32_t pc=entry;std::optional<std::uint32_t> pending;
-    while(pc!=Done) {
+    try {while(pc!=Done) {
         if(!budget.instructions)fault("instruction budget exceeded");
         --budget.instructions;
         const auto instruction=std::uint32_t(memory.load(pc,4,true));
@@ -331,6 +337,9 @@ void execute(Memory& memory,Registers& c,std::uint32_t entry,Budget& budget,cons
                 if(!memory.executable(pc))fault("native call returned outside mod code");
             }
         }
+    }}catch(const Error& e) {
+        char context[32];std::snprintf(context,sizeof(context)," [pc=0x%08X]",pc);
+        throw Error(std::string(e.what())+context);
     }
 }
 }

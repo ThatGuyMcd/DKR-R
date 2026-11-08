@@ -1090,6 +1090,27 @@ void DrawOlFeature(float width, const char* title, const char* description, Cont
 }
 
 void DrawOlGuideCard(float width, const OnlineFrame& frame) {
+    DrawOlFeature(width,"Your online view","Changes your screen only.",[&](float inner) {
+        namespace ov=dkr::runtime::online_view;
+        PaddockGap(12.F);
+        int layout=int(ov::requested_layout.load());
+        if(PaddockSelect("online-local-view","Race view",&layout,{"Original split-screen","My racer fullscreen"},inner)) {
+            ov::requested_layout=ov::Layout(layout);SaveSettings();
+        }
+        PaddockGap(12.F);
+        int labels=int(ov::requested_labels.load());
+        if(PaddockSelect("online-racer-labels","Racer labels",&labels,{"Name + race position","Race position","Off"},inner)) {
+            ov::requested_labels=ov::Labels(labels);SaveSettings();
+        }
+        PaddockGap(12.F);
+        int size=int((ov::requested_label_size.load()-75U)/25U);
+        if(PaddockSelect("online-label-size","Label size",&size,{"75%","100%","125%","150%"},inner)) {
+            ov::requested_label_size=75U+unsigned(size)*25U;SaveSettings();
+        }
+        PaddockGap(12.F);
+        OlParagraph("For Auto / Experimental Rollback races. Menus and shared scenes keep their usual view.",13.F,kOlSoft,inner);
+    });
+    PaddockGap(20.F);
     DrawOlFeature(width, "Online guide", "", [&](float inner) {
         PaddockGap(16.0F);
         OlParagraph(frame.active ? "Game settings stay fixed in this lobby."

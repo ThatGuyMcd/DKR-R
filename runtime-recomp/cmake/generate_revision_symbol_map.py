@@ -18,9 +18,7 @@ import sys
 
 def main() -> int:
     if len(sys.argv) != 4:
-        raise SystemExit(
-            "usage: generate_revision_symbol_map.py <source-dir> <prefix> <output>"
-        )
+        raise SystemExit("usage: generate_revision_symbol_map.py <source-dir> <prefix> <output>")
 
     source_dir = pathlib.Path(sys.argv[1])
     prefix = sys.argv[2]

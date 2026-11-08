@@ -1,0 +1,4 @@
+Unmodified Noto Sans Regular, unhinted TrueType.
+Source: https://raw.githubusercontent.com/notofonts/noto-fonts/main/unhinted/ttf/NotoSans/NotoSans-Regular.ttf
+SHA-256: 2118e60a3c88075064261fd7ba82c973a01673d3eb44d58a8a983ae0b9a465ed
+Licence: SIL Open Font License 1.1; see OFL-NotoSans.txt.

@@ -285,11 +285,19 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
     RuntimeWorkers workers{shared,save_writer};
     report({true,PumpWait::ScenePreparation,0,0,0,0,0,"Preparing experimental rollback in the existing game window"});
     platform::set_online_input_routing(true,launch->occupied_mask,initial.local_slot);
-    workers.render=std::thread([&] {
+    const auto admitted_players=lobby.view().room.players;
+    workers.render=std::thread([&,admitted_players] {
         WorkerCompletion completed{shared.renderer_done};
         try {
             std::vector<std::uint8_t> parked(PresentationMailbox::kImageBytes);
             RT64Renderer renderer(parked.data(),window,false,true);
+            online_view::Session online_view;
+            online_view.owner=local;online_view.players=launch->player_count;
+            for(unsigned slot=0;slot<4;++slot)if(launch->occupied(slot)) {
+                const auto owner=route.owner(std::uint8_t(slot));
+                if(owner<online_view.names.size())online_view.names[owner]=admitted_players[slot].display_name;
+            }
+            renderer.set_online_view_session(std::move(online_view));
             if(!renderer.valid())throw std::runtime_error("The normal renderer could not start for owned play.");
             auto config=ultramodern::renderer::get_graphics_config();shared.renderer_ready=true;
             while(!shared.stop) {

@@ -1,4 +1,5 @@
 #include "custom_tracks.hpp"
+#include "custom_track_files.hpp"
 
 #include "custom_music_sequence.hpp"
 #include "enhanced_water_metadata.hpp"
@@ -7,6 +8,7 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -83,6 +85,9 @@ std::array<SectionState, kSectionCount> g_sections{};
 std::unordered_map<std::string, std::int32_t> g_resolved_level_ids;
 std::filesystem::path g_directory;
 std::filesystem::path g_working_directory;
+// Offline library preference, outside the packages and online payload hashes.
+std::set<std::string> g_disabled_tracks;
+std::string g_selection_error;
 
 // Rescanning replaces the track list, and the section blobs a live level is
 // reading are built from it. A rescan requested while a level is loaded is
@@ -1452,30 +1457,12 @@ bool resolve_music_file(const std::string& file, const char* extension,
                         const std::filesystem::path& root,
                         std::filesystem::path& resolved, std::uint64_t& bytes,
                         std::string& error) {
-    if (file.empty() || file.find("..") != std::string::npos ||
-        std::filesystem::path(file).is_absolute() ||
-        file.find(':') != std::string::npos || file.front() == '/' ||
-        file.front() == '\\') {
-        error = "unsafe file path";
-        return false;
-    }
-    if (lower_extension(file) != extension) {
+    if(!dkr::runtime::custom_tracks::files::resolve(root,file,resolved,error))return false;
+    if (lower_extension(std::filesystem::u8path(file)) != extension) {
         error = "file \"" + file + "\" does not end in " + extension;
         return false;
     }
     std::error_code code;
-    const std::filesystem::path base = std::filesystem::weakly_canonical(root, code);
-    resolved = std::filesystem::weakly_canonical(root / std::filesystem::u8path(file), code);
-    const auto mismatch =
-        std::mismatch(base.begin(), base.end(), resolved.begin(), resolved.end());
-    if (code || mismatch.first != base.end() || resolved == base) {
-        error = "file \"" + file + "\" resolves outside the track";
-        return false;
-    }
-    if (!std::filesystem::is_regular_file(resolved, code)) {
-        error = "could not find " + file;
-        return false;
-    }
     bytes = std::filesystem::file_size(resolved, code);
     if (code || bytes == 0 || bytes > limit) {
         error = file + " is empty, unreadable or over " +
@@ -1754,8 +1741,9 @@ bool parse_music(const nlohmann::json& music, const std::filesystem::path& root,
 // Parses one unpacked track. `.dkrmap` archives are unpacked into this form by
 // the importer; the directory form is also what an author edits in place, so
 // reload() can pick up an editor's save without a repack.
-bool parse_track(const std::filesystem::path& root, Track& track,
+bool parse_track(const std::filesystem::path& input_root, Track& track,
                  std::string& error) {
+    const auto root=dkr::runtime::custom_tracks::files::storage(input_root);
     std::vector<std::uint8_t> manifest_bytes;
     if (!read_file(root / "manifest.json", manifest_bytes)) {
         error = "manifest.json is missing or unreadable";
@@ -1842,12 +1830,9 @@ bool parse_track(const std::filesystem::path& root, Track& track,
         const std::string file = item.value("file", std::string{});
         // Keep payloads inside the track directory: a manifest must not be
         // able to name an arbitrary path on the user's machine.
-        if (file.empty() || file.find("..") != std::string::npos ||
-            std::filesystem::path(file).is_absolute()) {
-            error = "adds entry has an unsafe file path";
-            return false;
-        }
-        if (!read_file(root / file, entry.bytes)) {
+        std::filesystem::path payload;
+        if(!dkr::runtime::custom_tracks::files::resolve(root,file,payload,error))return false;
+        if (!read_file(payload, entry.bytes)) {
             error = "could not read " + file;
             return false;
         }
@@ -2017,6 +2002,101 @@ std::filesystem::path state_setting_file() {
         : g_directory.parent_path() / "custom-tracks-state.txt";
 }
 
+std::filesystem::path selection_setting_file() {
+    return g_directory.empty() ? std::filesystem::path{}
+        : g_directory.parent_path() / "custom-tracks-enabled.json";
+}
+
+void load_selection_locked() {
+    g_disabled_tracks.clear();
+    g_selection_error.clear();
+    const auto file = selection_setting_file();
+    if (file.empty()) return;
+    std::error_code code;
+    const auto status = std::filesystem::symlink_status(file, code);
+    if (status.type() == std::filesystem::file_type::not_found) return;
+    if (code || !std::filesystem::is_regular_file(status)) {
+        g_selection_error = "The saved track selection could not be read.";
+        return;
+    }
+    std::vector<std::uint8_t> bytes;
+    const auto size = std::filesystem::file_size(file, code);
+    if (code || size > 1024U * 1024U || !read_file(file, bytes)) {
+        g_selection_error = "The saved track selection could not be read.";
+        return;
+    }
+    const auto settings = nlohmann::json::parse(bytes.begin(), bytes.end(), nullptr, false);
+    if (!settings.is_object() || !settings.contains("schemaVersion") ||
+        settings["schemaVersion"] != 1 || !settings.contains("disabled") ||
+        !settings["disabled"].is_array()) {
+        g_selection_error = "The saved track selection needs repair. Its file was kept.";
+        return;
+    }
+    for (const auto& id : settings["disabled"]) {
+        if (!id.is_string() || id.get_ref<const std::string&>().empty()) {
+            g_disabled_tracks.clear();
+            g_selection_error = "The saved track selection needs repair. Its file was kept.";
+            return;
+        }
+        g_disabled_tracks.insert(id.get<std::string>());
+    }
+}
+
+bool save_selection_locked(const std::set<std::string>& disabled, std::string& error) {
+    if (!g_selection_error.empty()) { error = g_selection_error; return false; }
+    const auto file = selection_setting_file();
+    if (file.empty()) { error = "The track library is not ready yet."; return false; }
+    const auto text = nlohmann::json{{"schemaVersion", 1}, {"disabled", disabled}}.dump(2) + '\n';
+    if (text.size() > 1024U * 1024U) {
+        error = "The saved track selection is too large."; return false;
+    }
+    std::error_code code;
+    const auto status = std::filesystem::symlink_status(file, code);
+    if (status.type() != std::filesystem::file_type::not_found &&
+        (code || !std::filesystem::is_regular_file(status))) {
+        error = "The track selection must be an ordinary local file."; return false;
+    }
+    const auto temp = file.parent_path() / (".custom-tracks-selection-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".tmp");
+    bool written = false;
+#if defined(_WIN32)
+    const auto attributes = GetFileAttributesW(file.c_str());
+    if (attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        error = "The track selection must be an ordinary local file."; return false;
+    }
+    HANDLE output = CreateFileW(temp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+                                FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (output != INVALID_HANDLE_VALUE) {
+        DWORD count = 0;
+        written = WriteFile(output, text.data(), static_cast<DWORD>(text.size()), &count, nullptr) &&
+                  count == text.size() && FlushFileBuffers(output);
+        CloseHandle(output);
+        if (written) written = MoveFileExW(temp.c_str(), file.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    }
+#else
+    const int output = open(temp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (output >= 0) {
+        std::size_t count = 0;
+        while (count < text.size()) {
+            const auto n = write(output, text.data() + count, text.size() - count);
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0) break;
+            count += static_cast<std::size_t>(n);
+        }
+        written = count == text.size() && fsync(output) == 0;
+        close(output);
+        if (written) { std::filesystem::rename(temp, file, code); written = !code; }
+    }
+#endif
+    if (!written) {
+        std::filesystem::remove(temp, code);
+        error = "Could not save the track selection. Its existing state was kept.";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 // The armed track and the auto-boot setting outlive the process: the relaunch
@@ -2098,7 +2178,7 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
                          error.c_str());
             continue;
         }
-        // Only installed library scanning reads local activation. Online pure
+        // Only library scanning reads local activation. Online pure
         // inspection must not let an offline sidecar alter the host manifest.
         const auto marker = item.path() / ".online-keep-state";
         if (std::filesystem::exists(marker, code)) {
@@ -2110,6 +2190,8 @@ void scan_one(const std::filesystem::path& directory, const char* label) {
                 if (state.get(value) && !state.get(extra)) track.enabled = value == '1';
             }
         }
+        if (!track.kept_online)
+            track.enabled = g_selection_error.empty() && !g_disabled_tracks.contains(track.id);
         if (!track.textures.empty()) {
             std::size_t translucent = 0;
             std::size_t animated = 0;
@@ -2203,6 +2285,9 @@ void scan_locked(const std::filesystem::path& directory) {
     // Restore the armed track and auto-boot setting for the same reason: a
     // relaunch is how a just-installed track's textures get published.
     load_state_locked();
+    load_selection_locked();
+    if (!g_selection_error.empty())
+        std::fprintf(stderr, "[custom-tracks] %s\n", g_selection_error.c_str());
 
     scan_one(directory, "installed");
     if (g_working_directory != directory) {
@@ -2250,6 +2335,18 @@ void discard_install_temp(const std::filesystem::path& temp_root) {
     }
     std::error_code code;
     std::filesystem::remove_all(temp_root, code);
+}
+
+// A zip without a *.dkrmap folder installs under its manifest id, so the id
+// must be one plain folder name: no separators, drive colon, dot names or
+// characters Windows refuses. Ids already installed are not re-checked.
+static bool valid_folder_id(const std::string& id) {
+    if (id.empty() || id == "." || id == ".." || id.back() == '.' || id.back() == ' ') {
+        return false;
+    }
+    return std::none_of(id.begin(), id.end(), [](unsigned char c) {
+        return c < 0x20 || std::strchr("/\\:<>\"|?*", c) != nullptr;
+    });
 }
 
 bool install(const std::filesystem::path& source, std::string& error,
@@ -2318,22 +2415,47 @@ bool install(const std::filesystem::path& source, std::string& error,
     }
 
     // A zip's inner folder can be named anything; fall back to the manifest id.
+    if (track_dir.extension() != ".dkrmap" && !valid_folder_id(probe.id)) {
+        discard_install_temp(temp_root);
+        error = "That track's manifest id can't be used as a folder name.";
+        return false;
+    }
     const std::string folder_name =
         track_dir.extension() == ".dkrmap"
             ? track_dir.filename().string()
             : probe.id + ".dkrmap";
     const std::filesystem::path destination = destination_root / folder_name;
     std::filesystem::create_directories(destination_root, code);
-    if (std::filesystem::exists(destination, code)) {
-        std::filesystem::remove_all(destination, code);
-    }
-    std::filesystem::copy(track_dir, destination,
+    // Copy beside the installed track and swap it in, so a failed copy keeps
+    // the old one. Neither side name ends in .dkrmap, so scans skip leftovers.
+    const std::filesystem::path staged = destination_root / (folder_name + ".partial");
+    const std::filesystem::path previous = destination_root / (folder_name + ".previous");
+    std::error_code ignored;
+    std::filesystem::remove_all(staged, ignored);
+    std::filesystem::copy(track_dir, staged,
                           std::filesystem::copy_options::recursive, code);
     if (code) {
+        std::filesystem::remove_all(staged, ignored);
         discard_install_temp(temp_root);
         error = "Could not copy the track: " + code.message();
         return false;
     }
+    const bool replacing = std::filesystem::exists(destination, ignored);
+    if (replacing) {
+        std::filesystem::remove_all(previous, ignored);
+        std::filesystem::rename(destination, previous, code);
+    }
+    if (!code) std::filesystem::rename(staged, destination, code);
+    if (code) {
+        if (replacing && !std::filesystem::exists(destination, ignored)) {
+            std::filesystem::rename(previous, destination, ignored);
+        }
+        std::filesystem::remove_all(staged, ignored);
+        discard_install_temp(temp_root);
+        error = "Could not replace the installed track: " + code.message();
+        return false;
+    }
+    if (replacing) std::filesystem::remove_all(previous, ignored);
 
     if (outcome != nullptr) {
         *outcome = InstallOutcome{};
@@ -2389,8 +2511,7 @@ bool is_installed(const Track& track) {
     return installed_path_locked(track.source);
 }
 
-bool set_kept_enabled(const std::string& id, bool enabled, std::string& error) {
-    std::scoped_lock lock(g_mutex);
+static bool set_kept_enabled_locked(const std::string& id, bool enabled, std::string& error) {
     const auto found = std::find_if(g_tracks.begin(), g_tracks.end(),
         [&](const Track& track) { return track.id == id; });
     if (found == g_tracks.end() || !found->kept_online || !installed_path_locked(found->source)) {
@@ -2430,6 +2551,35 @@ bool set_kept_enabled(const std::string& id, bool enabled, std::string& error) {
         error = "Could not save the course's activation. Its existing state was kept."; return false;
     }
     found->enabled = enabled; error.clear(); return true;
+}
+
+bool set_kept_enabled(const std::string& id, bool enabled, std::string& error) {
+    std::scoped_lock lock(g_mutex);
+    return set_kept_enabled_locked(id, enabled, error);
+}
+
+bool set_enabled(const std::string& id, bool enabled, std::string& error) {
+    std::scoped_lock lock(g_mutex);
+    const auto found = std::find_if(g_tracks.begin(), g_tracks.end(),
+        [&](const Track& track) { return track.id == id; });
+    if (found == g_tracks.end()) { error = "This track is no longer in the library."; return false; }
+    if (found->kept_online) {
+        if (!set_kept_enabled_locked(id, enabled, error)) return false;
+    } else {
+        auto disabled = g_disabled_tracks;
+        if (enabled) disabled.erase(id); else disabled.insert(id);
+        if (!save_selection_locked(disabled, error)) return false;
+        g_disabled_tracks = std::move(disabled);
+        found->enabled = enabled;
+    }
+    if (!enabled && g_armed_track == id) {
+        g_armed_track.clear();
+        g_auto_boot = false;
+        g_auto_boot_consumed = false;
+        save_state_locked();
+    }
+    error.clear();
+    return true;
 }
 
 bool uninstall(const std::string& id, std::string& error) {

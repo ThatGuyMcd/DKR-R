@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
+project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+skip_hooks=0
+for argument in "$@"; do
+  case "$argument" in
+  --skip-hooks) skip_hooks=1 ;;
+  -h | --help)
+    echo 'Usage: ./Setup-Linux.sh [--skip-hooks] (check prerequisites, then install git hooks unless --skip-hooks)'
+    exit 0
+    ;;
+  *)
+    echo "Unknown option: $argument" >&2
+    exit 1
+    ;;
+  esac
+done
 
 missing=0
 for tool in cmake ninja c++ git pkg-config python3; do
@@ -31,4 +46,8 @@ fi
 cmake --version | sed -n '1p'
 c++ --version | sed -n '1p'
 pkg-config --modversion sdl2 gtk+-3.0 vulkan
+# Never fails Setup: bootstrap_hooks.py reports problems and exits 0.
+if [[ "${skip_hooks}" -eq 0 && -f "${project_root}/scripts/bootstrap_hooks.py" ]]; then
+  python3 "${project_root}/scripts/bootstrap_hooks.py" || true
+fi
 echo 'Linux runtime prerequisites passed. Prepare generated code, then run ./Build-Linux.sh.'

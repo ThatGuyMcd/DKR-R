@@ -365,7 +365,11 @@ void discard_install_temp(const std::filesystem::path& temp_root);
 // Does not change the installed library, activation, auto-boot or working path.
 bool inspect_package(const std::filesystem::path& directory,Track& track,std::string& error);
 [[nodiscard]] std::size_t enabled_count();
+// Transient selection; library UI uses the persistent, error-reporting overload.
 void set_enabled(const std::string& id, bool enabled);
+// Persists local selection without editing a native track's manifest/payloads.
+// The UI must lock this while a game or online session owns the current list.
+bool set_enabled(const std::string& id, bool enabled, std::string& error);
 bool set_kept_enabled(const std::string& id, bool enabled, std::string& error);
 
 // Re-reads every archive from disk. Paired with the retail restart path this

@@ -4,12 +4,13 @@
 Uses OpenSSL's standard Ed25519, compatible with the unmodified Monocypher
 optional verifier. Package creation and signing are distinct from publishing.
 """
+
 import argparse
 import hashlib
 import json
 import os
-import plistlib
 from pathlib import Path, PurePosixPath
+import plistlib
 import re
 import shutil
 import stat
@@ -19,12 +20,19 @@ import zipfile
 
 MAX_PACKAGE = 512 * 1024 * 1024
 MAX_EXTRACTED = 1024 * 1024 * 1024
-PROTECTED = {"portable.txt", "dkr-runtime-data", "mods", "online-mods", "texture-packs",
-             "saves", "logs", "crash-dumps"}
+PROTECTED = {"portable.txt", "dkr-runtime-data", "mods", "online-mods", "texture-packs", "saves", "logs", "crash-dumps"}
 GAME_EXTENSIONS = {".z64", ".v64", ".n64", ".eep", ".mpk", ".sra", ".fla"}
-PLATFORMS = {"windows-x64": "zip", "windows-arm64": "zip", "linux-x86_64": "appimage",
-             "linux-aarch64": "appimage", "macos-arm64": "zip", "macos-x86_64": "zip",
-             "android-arm64": "apk", "ios-arm64": "ipa"}
+PLATFORMS = {
+    "windows-x64": "zip",
+    "windows-arm64": "zip",
+    "linux-x86_64": "appimage",
+    "linux-aarch64": "appimage",
+    "macos-arm64": "zip",
+    "macos-x86_64": "zip",
+    "android-arm64": "apk",
+    "ios-arm64": "ipa",
+}
+
 
 def safe_path(name):
     if not name or len(name) > 1024 or name.startswith("/") or name.endswith("/"):
@@ -39,16 +47,20 @@ def safe_path(name):
             return False
     return True
 
+
 def protected(name):
     top = name.split("/", 1)[0].lower()
     return top in PROTECTED or top.startswith(".dkr-update") or PurePosixPath(name).suffix.lower() in GAME_EXTENSIONS
 
+
 def canonical(value):
     return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode()
+
 
 def digest(path):
     with open(path, "rb") as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
+
 
 def run_ssl(*args):
     openssl = shutil.which("openssl")
@@ -56,12 +68,14 @@ def run_ssl(*args):
         raise ValueError("OpenSSL with Ed25519 support is required for release signing.")
     return subprocess.check_output([openssl, *map(str, args)], stderr=subprocess.PIPE)
 
+
 def public_key(private):
     der = run_ssl("pkey", "-in", private, "-pubout", "-outform", "DER")
     prefix = bytes.fromhex("302a300506032b6570032100")
     if len(der) != len(prefix) + 32 or not der.startswith(prefix):
         raise ValueError("Release key is not Ed25519.")
-    return der[len(prefix):].hex()
+    return der[len(prefix) :].hex()
+
 
 def generate_key(path):
     path = Path(path).absolute()
@@ -71,11 +85,13 @@ def generate_key(path):
     run_ssl("genpkey", "-algorithm", "ED25519", "-out", path)
     if os.name == "nt":
         owner = subprocess.check_output(["whoami"], text=True).strip()
-        subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", f"{owner}:(F)"],
-                       check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{owner}:(F)"], check=True, stdout=subprocess.DEVNULL
+        )
     else:
         path.chmod(0o600)
     return public_key(path)
+
 
 def prepare_tree(directory, version, platform):
     """Call after staging all program files, before building the archive."""
@@ -99,8 +115,8 @@ def prepare_tree(directory, version, platform):
     if "assets/updates/install.json" not in owned:
         owned.append("assets/updates/install.json")
     receipt.parent.mkdir(parents=True, exist_ok=True)
-    receipt.write_bytes(canonical({"schema": 1, "version": version, "platform": platform,
-                                  "files": sorted(owned)}))
+    receipt.write_bytes(canonical({"schema": 1, "version": version, "platform": platform, "files": sorted(owned)}))
+
 
 def zip_table(path, platform):
     table = []
@@ -133,8 +149,7 @@ def zip_table(path, platform):
                 raise ValueError("Windows update archives may not contain links.")
             with archive.open(entry) as source:
                 sha = hashlib.file_digest(source, "sha256").hexdigest()
-            item = {"path": parts[1], "bytes": entry.file_size, "sha256": sha,
-                    "mode": (mode & 0o777) or 0o644}
+            item = {"path": parts[1], "bytes": entry.file_size, "sha256": sha, "mode": (mode & 0o777) or 0o644}
             if linked:
                 link = archive.read(entry).decode("utf-8")
                 if len(link) > 1024 or link.startswith("/") or "\\" in link:
@@ -153,9 +168,13 @@ def zip_table(path, platform):
     if not table:
         raise ValueError("Empty update archive.")
     if platform.startswith("windows"):
-        required = {"DKR-R.exe", "libexec/dkr-r/DKR-R-Updater.exe",
-                    "libexec/dkr-r/DKR-R-ModWorker.exe", "libexec/dkr-r/DKR-R-InputHost.exe",
-                    "assets/updates/install.json"}
+        required = {
+            "DKR-R.exe",
+            "libexec/dkr-r/DKR-R-Updater.exe",
+            "libexec/dkr-r/DKR-R-ModWorker.exe",
+            "libexec/dkr-r/DKR-R-InputHost.exe",
+            "assets/updates/install.json",
+        }
         paths = {f["path"] for f in table}
         prefix = "libexec/dkr-r/" if "libexec/dkr-r/DKR-R-Runtime.exe" in paths else ""
         required |= {prefix + name for name in ("DKR-R-Runtime.exe", "SDL2.dll", "dxcompiler.dll", "dxil.dll")}
@@ -163,10 +182,13 @@ def zip_table(path, platform):
             raise ValueError("Windows package lacks updater bootstrap/runtime/helper or ownership receipt.")
     return root, table
 
+
 def create_manifest(args):
     expected = json.loads(Path(args.verification_key).read_text(encoding="utf-8"))["public_key"]
     if public_key(args.private_key) != expected:
-        raise ValueError("Signing key does not match the selected trusted public key. Use an explicit previous verification key only for a deliberate, old-key-signed bridge release.")
+        raise ValueError(
+            "Signing key does not match the selected trusted public key. Use an explicit previous verification key only for a deliberate, old-key-signed bridge release."
+        )
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?", args.version):
         raise ValueError("Invalid release version.")
     if args.channel == "stable" and "-" in args.version:
@@ -187,8 +209,14 @@ def create_manifest(args):
         kind = PLATFORMS[platform]
         if path.suffix.lower() != {"zip": ".zip", "appimage": ".appimage", "apk": ".apk", "ipa": ".ipa"}[kind]:
             raise ValueError("Package kind and platform disagree.")
-        item = {"platform": platform, "name": path.name, "kind": kind, "bytes": size,
-                "sha256": digest(path), "files": []}
+        item = {
+            "platform": platform,
+            "name": path.name,
+            "kind": kind,
+            "bytes": size,
+            "sha256": digest(path),
+            "files": [],
+        }
         minimums = {"windows-x64": "10.0", "windows-arm64": "10.0", "android-arm64": "28", "ios-arm64": "18.0"}
         if platform in minimums:
             item["minimum_os"] = minimums[platform]
@@ -218,10 +246,16 @@ def create_manifest(args):
     signature = output / "DKR-R-update.sig"
     if manifest.exists() or signature.exists():
         raise ValueError("Refusing to overwrite already signed update assets.")
-    value = {"schema": 1, "minimum_updater": 1, "version": args.version, "tag": args.tag,
-             "channel": args.channel, "commit": args.commit,
-             "notes": f"https://github.com/ThatGuyMcd/DKR-R/releases/tag/{args.tag}",
-             "artifacts": artifacts}
+    value = {
+        "schema": 1,
+        "minimum_updater": 1,
+        "version": args.version,
+        "tag": args.tag,
+        "channel": args.channel,
+        "commit": args.commit,
+        "notes": f"https://github.com/ThatGuyMcd/DKR-R/releases/tag/{args.tag}",
+        "artifacts": artifacts,
+    }
     encoded = canonical(value)
     if len(encoded) > 2 * 1024 * 1024:
         raise ValueError("Update manifest is too large.")
@@ -229,8 +263,7 @@ def create_manifest(args):
     with tempfile.TemporaryDirectory(prefix="dkrr-release-sign-") as scratch:
         input_file, sig_file = Path(scratch) / "manifest.json", Path(scratch) / "signature.bin"
         input_file.write_bytes(encoded)
-        run_ssl("pkeyutl", "-sign", "-rawin", "-inkey", args.private_key,
-                "-in", input_file, "-out", sig_file)
+        run_ssl("pkeyutl", "-sign", "-rawin", "-inkey", args.private_key, "-in", input_file, "-out", sig_file)
         sig = sig_file.read_bytes()
         if len(sig) != 64:
             raise ValueError("Invalid Ed25519 signature length.")
@@ -238,29 +271,40 @@ def create_manifest(args):
         signature.write_text(sig.hex(), encoding="ascii")
     return public_key(args.private_key)
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
-    key = sub.add_parser("keygen"); key.add_argument("--private-key", required=True)
-    pub = sub.add_parser("public-key"); pub.add_argument("--private-key", required=True)
+    key = sub.add_parser("keygen")
+    key.add_argument("--private-key", required=True)
+    pub = sub.add_parser("public-key")
+    pub.add_argument("--private-key", required=True)
     stage = sub.add_parser("prepare-tree")
-    stage.add_argument("--directory", required=True); stage.add_argument("--version", required=True)
+    stage.add_argument("--directory", required=True)
+    stage.add_argument("--version", required=True)
     stage.add_argument("--platform", choices=PLATFORMS, required=True)
     sign = sub.add_parser("sign")
     for name in ("version", "tag", "commit", "private-key", "output"):
         sign.add_argument("--" + name, required=True)
     sign.add_argument("--channel", choices=("stable", "beta"), default="stable")
-    sign.add_argument("--verification-key", default=str(Path(__file__).resolve().parent.parent / "packaging/update-public-key.json"))
+    sign.add_argument(
+        "--verification-key", default=str(Path(__file__).resolve().parent.parent / "packaging/update-public-key.json")
+    )
     sign.add_argument("--artifact", action="append", required=True, metavar="PLATFORM=FILE")
     sign.add_argument("--minimum-os", action="append", default=[], metavar="PLATFORM=VERSION")
     args = parser.parse_args()
     try:
-        if args.action == "keygen": print("Public Ed25519 key:", generate_key(args.private_key))
-        elif args.action == "public-key": print("Public Ed25519 key:", public_key(args.private_key))
-        elif args.action == "prepare-tree": prepare_tree(args.directory, args.version, args.platform)
-        else: print("Signed update assets; public Ed25519 key:", create_manifest(args))
+        if args.action == "keygen":
+            print("Public Ed25519 key:", generate_key(args.private_key))
+        elif args.action == "public-key":
+            print("Public Ed25519 key:", public_key(args.private_key))
+        elif args.action == "prepare-tree":
+            prepare_tree(args.directory, args.version, args.platform)
+        else:
+            print("Signed update assets; public Ed25519 key:", create_manifest(args))
     except (ValueError, OSError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
         parser.exit(1, f"Update release preparation failed: {error}\n")
+
 
 if __name__ == "__main__":
     main()

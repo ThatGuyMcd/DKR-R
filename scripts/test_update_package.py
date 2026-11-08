@@ -4,6 +4,7 @@
 The parent process exits after acknowledgement, just like the real launcher.
 The successor runs the actual runtime's ROM-free EEPROM tests, not a fake game.
 """
+
 import argparse
 import hashlib
 import json
@@ -16,6 +17,7 @@ import time
 import uuid
 import zipfile
 
+
 def parent(request):
     value = json.loads(Path(request).read_text())
     job = Path(request).parent
@@ -27,9 +29,11 @@ def parent(request):
     subprocess.Popen([str(copied), "--apply", str(request)], cwd=job)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
-        if (job / "ready").is_file(): return 0
+        if (job / "ready").is_file():
+            return 0
         time.sleep(0.05)
     raise RuntimeError("Helper did not acknowledge the isolated parent")
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -38,19 +42,27 @@ def main():
     parser.add_argument("--signature")
     parser.add_argument("--parent")
     parser.add_argument("--extractor", help="Built DKRUpdateCoreTests.exe; uses the production signed ZIP staging path")
-    parser.add_argument("--case", choices=("normal", "corrupt-stage", "interrupted", "migrate-layout"), default="normal")
+    parser.add_argument(
+        "--case", choices=("normal", "corrupt-stage", "interrupted", "migrate-layout"), default="normal"
+    )
     args = parser.parse_args()
-    if args.parent: return parent(args.parent)
+    if args.parent:
+        return parent(args.parent)
     manifest = json.loads(Path(args.manifest).read_text())
     artifact = next(a for a in manifest["artifacts"] if a["platform"] == "windows-x64")
-    runtime_relative = "libexec/dkr-r/DKR-R-Runtime.exe" if any(f["path"] == "libexec/dkr-r/DKR-R-Runtime.exe" for f in artifact["files"]) else "DKR-R-Runtime.exe"
+    runtime_relative = (
+        "libexec/dkr-r/DKR-R-Runtime.exe"
+        if any(f["path"] == "libexec/dkr-r/DKR-R-Runtime.exe" for f in artifact["files"])
+        else "DKR-R-Runtime.exe"
+    )
     with tempfile.TemporaryDirectory(prefix="dkrr-package-update-") as folder:
         root = Path(folder) / "Install with spaces café"
         root.mkdir()
         with zipfile.ZipFile(args.package) as z:
             prefix = artifact["root"] + "/"
             for entry in z.infolist():
-                if entry.is_dir(): continue
+                if entry.is_dir():
+                    continue
                 name = entry.filename.removeprefix(prefix)
                 output = root / name
                 output.parent.mkdir(parents=True, exist_ok=True)
@@ -74,7 +86,9 @@ def main():
             for executable in (root / "DKR-R.exe", root / runtime_relative):
                 subprocess.run([str(executable), "--self-test-install-layout", str(root), "on"], cwd=folder, check=True)
             (root / "portable.txt").unlink()
-            subprocess.run([str(root / "DKR-R.exe"), "--self-test-install-layout", str(root), "off"], cwd=folder, check=True)
+            subprocess.run(
+                [str(root / "DKR-R.exe"), "--self-test-install-layout", str(root), "off"], cwd=folder, check=True
+            )
             (root / "portable.txt").write_text("portable\n")
         if args.case == "migrate-layout":
             for name in ("DKR-R-Runtime.exe", "SDL2.dll", "dxcompiler.dll", "dxil.dll"):
@@ -92,15 +106,32 @@ def main():
             backup = transaction / "backup" / runtime_relative
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_bytes(old)
-            (transaction / "journal.json").write_text(json.dumps({"schema": 1, "state": "prepared", "files": [{
-                "path": runtime_relative, "old": True, "new": True,
-                "old_hash": hashlib.sha256(old).hexdigest(), "new_hash": hashlib.sha256(broken).hexdigest()}]}), encoding="utf-8")
+            (transaction / "journal.json").write_text(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "state": "prepared",
+                        "files": [
+                            {
+                                "path": runtime_relative,
+                                "old": True,
+                                "new": True,
+                                "old_hash": hashlib.sha256(old).hexdigest(),
+                                "new_hash": hashlib.sha256(broken).hexdigest(),
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
             runtime.write_bytes(broken)
             subprocess.run([str(root / "DKR-R.exe"), "--self-test-pak", str(Path(folder) / "recovery-pak")], check=True)
             assert runtime.read_bytes() == old
             assert hashlib.sha256(saved.read_bytes()).hexdigest() == before
             assert not transaction.exists()
-            print("PASS: bootstrap repaired an interrupted runtime replacement before DLL/runtime loading; offline save unchanged")
+            print(
+                "PASS: bootstrap repaired an interrupted runtime replacement before DLL/runtime loading; offline save unchanged"
+            )
             return 0
         identifier = uuid.uuid4().hex
         job = data / "updates" / ("handoff-" + identifier)
@@ -109,36 +140,53 @@ def main():
         (job / "manifest.sig").write_bytes(Path(args.signature).read_bytes())
         stage = root / (".dkr-update-stage-" + identifier)
         if args.extractor:
-            subprocess.run([args.extractor, "--stage-signed", args.package, args.manifest, args.signature, str(stage)], check=True)
+            subprocess.run(
+                [args.extractor, "--stage-signed", args.package, args.manifest, args.signature, str(stage)], check=True
+            )
         else:
             stage.mkdir()
             with zipfile.ZipFile(args.package) as z:
                 for entry in z.infolist():
-                    if entry.is_dir(): continue
+                    if entry.is_dir():
+                        continue
                     output = stage / entry.filename.removeprefix(artifact["root"] + "/")
                     output.parent.mkdir(parents=True, exist_ok=True)
                     output.write_bytes(z.read(entry))
         if args.case == "corrupt-stage":
             (stage / runtime_relative).write_bytes(b"corrupt stage")
-        request = {"schema": 1, "id": identifier, "kind": "zip", "platform": "windows-x64",
-                   "parent": 0, "target": str(root), "stage": str(stage), "data": str(data),
-                   "executable": str(root / "DKR-R.exe"),
-                   "arguments": ["--self-test-pak", str(Path(folder) / "pak-tests")]}
+        request = {
+            "schema": 1,
+            "id": identifier,
+            "kind": "zip",
+            "platform": "windows-x64",
+            "parent": 0,
+            "target": str(root),
+            "stage": str(stage),
+            "data": str(data),
+            "executable": str(root / "DKR-R.exe"),
+            "arguments": ["--self-test-pak", str(Path(folder) / "pak-tests")],
+        }
         request_file = job / "request.json"
         request_file.write_text(json.dumps(request), encoding="utf-8")
         subprocess.run([sys.executable, __file__, "--parent", str(request_file)], check=True)
         deadline = time.monotonic() + 90
-        while time.monotonic() < deadline and not (job / "result.json").is_file(): time.sleep(0.1)
+        while time.monotonic() < deadline and not (job / "result.json").is_file():
+            time.sleep(0.1)
         result = json.loads((job / "result.json").read_text())
         expected = "failed" if args.case == "corrupt-stage" else "complete"
-        if result["state"] != expected: raise RuntimeError(result)
+        if result["state"] != expected:
+            raise RuntimeError(result)
         assert hashlib.sha256(saved.read_bytes()).hexdigest() == before
         assert (root / "portable.txt").read_text() == "portable\n"
         assert (root / "personal.txt").read_text() == "user-owned\n"
-        assert json.loads(receipt.read_text())["version"] == ("1.0.6" if args.case == "corrupt-stage" else manifest["version"])
+        assert json.loads(receipt.read_text())["version"] == (
+            "1.0.6" if args.case == "corrupt-stage" else manifest["version"]
+        )
         assert not (root / ".dkr-update-transaction").exists()
         if args.case == "corrupt-stage":
-            print("PASS: corrupt staged runtime rejected; complete prior installation, offline save and unowned files retained")
+            print(
+                "PASS: corrupt staged runtime rejected; complete prior installation, offline save and unowned files retained"
+            )
             # Failure recovery relaunches the preceding runtime asynchronously.
             # Let its bounded ROM-free test retire before deleting test files.
             time.sleep(3)
@@ -148,8 +196,14 @@ def main():
             assert (root / runtime_relative).is_file()
             for name in ("DKR-R-Runtime.exe", "SDL2.dll", "dxcompiler.dll", "dxil.dll"):
                 assert not (root / name).exists()
-            print("PASS: flat-to-private layout migration retired only previously owned root binaries; portable/offline saves retained")
-        print("PASS: complete signed package, parent retirement, Unicode/space paths, actual runtime self-test, portable/offline-save preservation and committed backup")
+            print(
+                "PASS: flat-to-private layout migration retired only previously owned root binaries; portable/offline saves retained"
+            )
+        print(
+            "PASS: complete signed package, parent retirement, Unicode/space paths, actual runtime self-test, portable/offline-save preservation and committed backup"
+        )
     return 0
 
-if __name__ == "__main__": sys.exit(main())
+
+if __name__ == "__main__":
+    sys.exit(main())

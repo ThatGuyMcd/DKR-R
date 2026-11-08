@@ -131,6 +131,42 @@ void asset_api_test(const std::shared_ptr<const AssetBank>& stock,AssetBus& bus)
             require(!mutex_depth && pending.empty(),"Asset API left a held mutex or unconsumed DMA");
         }
     }
+    // Compressed-map scratch destinations from the reported legacy failures.
+    // The mounted bridge must preserve exact bytes without rounding the
+    // address, consuming adjacent canaries, or bypassing the retail DMA loop.
+    active_mount=mount;
+    for(const auto [destination,offset,length]:{std::array<std::uint32_t,3>{2150333300U,48768U,708U},
+            std::array<std::uint32_t,3>{2150437172U,6960U,156U}}) {
+        put_bytes(destination-4,Bytes(length+8,0xcc));
+        auto transfer=context();transfer.r4=21;transfer.r5=ptr(destination);transfer.r6=offset;transfer.r7=length;
+        asset_load(memory.data(),&transfer);
+        require(bytes(destination,length)==directory->read(21,offset,length),"Word-aligned compressed object-map load changed bytes");
+        require(bytes(destination-4,4)==Bytes(4,0xcc) && bytes(destination+length,4)==Bytes(4,0xcc),"Object-map load wrote outside its exact range");
+        require(pending.empty() && !mutex_depth,"Object-map load lost its completion/mutex");
+    }
+    // Modern packed models are not padded to an even source offset. Mirror
+    // the installed Moo Moo Farm (46405 bytes) followed by Koopa Troopa Beach:
+    // the second record begins odd and crosses multiple retail DMA chunks.
+    const auto model_count=stock->record_count(27);
+    const auto courses=AssetBank::append_courses(stock,{{{27,static_cast<unsigned>(model_count)},Bytes(46405,0x31)},
+        {{27,static_cast<unsigned>(model_count+1)},Bytes(86051,0x72)}});
+    const auto course_directory=AssetDirectory::build(courses);
+    active_mount=bus.mount(course_directory);
+    const auto model_table=course_directory->read(26,0,course_directory->section_size(26));
+    const auto odd_source=be32(model_table,(model_count+1)*4);
+    require((odd_source&1)!=0,"Synthetic appended model did not exercise odd source alignment");
+    for(unsigned lane=0;lane<4;++lane) {
+        constexpr unsigned length=0x5003;
+        const auto destination=0x80380000U+lane;
+        put_bytes(destination-4,Bytes(length+8,0xcc));
+        auto transfer=context();transfer.r4=27;transfer.r5=ptr(destination);transfer.r6=odd_source;transfer.r7=length;
+        const auto completions=completed,stock_calls=original_calls;
+        asset_load(memory.data(),&transfer);
+        require(bytes(destination,length)==Bytes(length,0x72),"Odd-source chunked asset load changed model bytes");
+        require(bytes(destination-4,4)==Bytes(4,0xcc) && bytes(destination+length,4)==Bytes(4,0xcc),"Odd-source load changed adjacent bytes");
+        require(completed==completions+2 && original_calls==stock_calls && pending.empty() && !mutex_depth,
+            "Odd-source load lost a chunk completion or entered real ROM DMA");
+    }
     const auto override=AssetBank::derive(stock,std::string(64,'f'),{{{27,5},Bytes(0x6020,0x71)}});
     const auto other=bus.mount(AssetDirectory::build(override));
     active_mount=other;switch_on_allocate=mount;

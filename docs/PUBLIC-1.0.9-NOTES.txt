@@ -1,0 +1,52 @@
+DKR-R v1.0.9 Release Build — 24 October 2026
+
+PUBLIC LOBBIES
+Sign in with Discord from DKR-R Online, or reuse the Mod Store sign-in.
+Browse Public/Friends, see the connected-account total and choose Private or
+Public when hosting. Private is the default and stays off the public list.
+Host approval, capacity, compatible content and code consent still apply.
+The owner-deployed website API handles discovery/presence/admission; existing
+peer transport and Rollback run the match. FTP mod uploads remain unchanged.
+
+ONLINE AND SPECTATORS
+The public host mode is Rollback; the old backend selector is removed.
+Spectator-capable rooms have up to four racers and eight spectators, cameras
+and host-approved player swaps. Adventure still has two racing places.
+Running-spectator discovery is separately gated by the API service setting.
+The shared Rollback connection Scoreboard estimates timing and reliability
+without automatically changing settings. Not rated does not mean zero.
+Retains party start, checkpoint-clock, departure, return and lobby-layout fixes.
+Approved long mod transfers survive benign roster/account refreshes.
+
+CARS, ACHIEVEMENTS AND TEXTURES
+Import .dkrkart cars directly, from ZIPs or the Mod Store Vehicles category.
+Choose enabled cars in Track Select; Vanilla stays available. These change
+visuals, not physics/handling. Adventure, custom hovercrafts and planes are
+outside custom-car support. Vehicles retains backend category ID legacy.
+94 local achievements need no account; watching/development do not award
+gameplay goals. Recognition of provable existing progress is explicit.
+Texture Dumping exports installed content, captures encountered textures,
+browses workspaces and creates replacement starter packs. Keep original-art
+dumps private and distribute only artwork you have permission to share.
+
+RETAINED FEATURES AND FIXES
+SDK 2.0 remains additive to API 1. Mod Store installation/update/repair,
+Custom Trophy Races, optional Camera++, personal/online/development save
+isolation, presentation fixes and the 1.0.8 Windows startup memory fix remain.
+Upstream track-ID/path safety, failure-safe track import, saved graphics preset
+display and reviewed TLS support are retained in the merged source.
+No save reset, forced API conversion or mod reinstall is required.
+
+PACKAGES AND UPDATES
+Windows x64 ZIP; Linux x86_64 and ARM64 AppImages; Steam Deck (the same x86_64
+payload); Android ARM64 APK, versionCode 1090001 and the existing signer/app ID.
+Linux requires GLIBC 2.38, GLIBCXX_3.4.32 and a compatible Vulkan driver.
+Published 1.0.8 macOS/iOS assets exist; no new Apple package is in this build set.
+Use matching complete 1.0.9 packages on all peers. Keep assets/libexec together.
+Automatic installation requires a fresh DKR-R-update.json and DKR-R-update.sig
+signed with the existing trusted release key. An old signature cannot be reused.
+
+Compilation/linking and static source/binary/package checks are recorded in
+RELEASE-VALIDATION.md. Owner acceptance of the preceding Windows lobby pilot
+is not blanket hardware/network qualification. No ROM, saves, credentials,
+installed mod library or private diagnostics are supplied with the game.

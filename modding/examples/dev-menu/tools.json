@@ -1,0 +1,1196 @@
+{
+  "schema": 2,
+  "title": "DKR-R Dev Menu",
+  "pages": [
+    {
+      "id": "session",
+      "label": "Session",
+      "fields": [
+        {
+          "id": "message",
+          "type": "text",
+          "label": "Last operation"
+        },
+        {
+          "id": "authority",
+          "type": "text",
+          "label": "Session authority"
+        },
+        {
+          "id": "scene",
+          "type": "text",
+          "label": "Scene generation"
+        },
+        {
+          "id": "tick",
+          "type": "text",
+          "label": "Simulation tick"
+        },
+        {
+          "id": "save_status",
+          "type": "text",
+          "label": "Save protection"
+        },
+        {
+          "id": "pause",
+          "type": "button",
+          "label": "Pause shared gameplay",
+          "action": 20
+        },
+        {
+          "id": "resume",
+          "type": "button",
+          "label": "Resume / reset normal speed",
+          "action": 21
+        },
+        {
+          "id": "step",
+          "type": "button",
+          "label": "Advance one update while paused",
+          "action": 22
+        },
+        {
+          "id": "speed",
+          "type": "enum",
+          "label": "Gameplay speed (retail logic units, not audio pitch)",
+          "argument": 2,
+          "default": 1,
+          "choices": [
+            "0.5x",
+            "1x",
+            "1.5x",
+            "2x"
+          ]
+        },
+        {
+          "id": "set-speed",
+          "type": "button",
+          "label": "Apply gameplay speed",
+          "action": 23
+        },
+        {
+          "id": "restart",
+          "type": "button",
+          "label": "Restart this scene",
+          "action": 150,
+          "visible": "op_30",
+          "confirm": true
+        },
+        {
+          "id": "restart-entrance",
+          "type": "integer",
+          "label": "Existing entrance for this scene",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 15
+        },
+        {
+          "id": "restart-at",
+          "type": "button",
+          "label": "Restart at this entrance (all racer anchors required)",
+          "action": 153,
+          "visible": "op_30",
+          "confirm": true
+        },
+        {
+          "id": "race-laps",
+          "type": "integer",
+          "label": "Ordinary race laps: 1..3 (0 resets)",
+          "argument": 2,
+          "default": 3,
+          "min": 0,
+          "max": 3
+        },
+        {
+          "id": "apply-laps",
+          "type": "button",
+          "label": "Set laps before anyone completes the first lap",
+          "action": 154,
+          "visible": "op_40",
+          "confirm": true
+        },
+        {
+          "id": "course",
+          "type": "integer",
+          "label": "Course catalogue index",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 1023
+        },
+        {
+          "id": "vehicle",
+          "type": "integer",
+          "label": "Vehicle: 0 Car / 1 Hovercraft / 2 Plane",
+          "argument": 3,
+          "default": 0,
+          "min": 0,
+          "max": 2
+        },
+        {
+          "id": "entrance",
+          "type": "integer",
+          "label": "Entrance (other courses use their default spawn)",
+          "argument": 4,
+          "default": 0,
+          "min": 0,
+          "max": 15
+        },
+        {
+          "id": "warp",
+          "type": "button",
+          "label": "Load this admitted course",
+          "action": 151,
+          "visible": "op_31",
+          "confirm": true
+        },
+        {
+          "id": "return-target",
+          "type": "enum",
+          "label": "Return using the normal game transition",
+          "argument": 2,
+          "choices": [
+            "Track Select",
+            "Character Select",
+            "Start menu"
+          ]
+        },
+        {
+          "id": "return-menu",
+          "type": "button",
+          "label": "Return to selected menu",
+          "action": 152,
+          "visible": "op_32",
+          "confirm": true
+        },
+        {
+          "id": "reset",
+          "type": "button",
+          "label": "Reset Dev Menu racer overrides",
+          "action": 2,
+          "confirm": true
+        }
+      ]
+    },
+    {
+      "id": "racers",
+      "label": "Racers / AI",
+      "fields": [
+        {
+          "id": "live-inspector",
+          "type": "inspector",
+          "label": "Live entity inspector",
+          "edit_action": 101
+        },
+        {
+          "id": "bananas",
+          "type": "integer",
+          "label": "Bananas",
+          "argument": 2,
+          "default": 10,
+          "min": 0,
+          "max": 99
+        },
+        {
+          "id": "set-bananas",
+          "type": "button",
+          "label": "Set selected racer bananas",
+          "action": 105
+        },
+        {
+          "id": "skill",
+          "type": "integer",
+          "label": "AI skill",
+          "argument": 2,
+          "default": 50,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "id": "set-skill",
+          "type": "button",
+          "label": "Set selected racer AI skill",
+          "action": 106
+        },
+        {
+          "id": "ammo",
+          "type": "integer",
+          "label": "Item ammunition",
+          "argument": 2,
+          "default": 3,
+          "min": 0,
+          "max": 10
+        },
+        {
+          "id": "set-ammo",
+          "type": "button",
+          "label": "Set selected racer ammunition",
+          "action": 107
+        },
+        {
+          "id": "stop",
+          "type": "button",
+          "label": "Stop selected racer",
+          "action": 104
+        },
+        {
+          "id": "freeze",
+          "type": "button",
+          "label": "Toggle CPU freeze",
+          "action": 160
+        },
+        {
+          "id": "boost",
+          "type": "button",
+          "label": "Toggle selected racer continuous boost",
+          "action": 161
+        },
+        {
+          "id": "shield",
+          "type": "button",
+          "label": "Toggle selected racer shield timer",
+          "action": 162
+        },
+        {
+          "id": "keep-bananas",
+          "type": "button",
+          "label": "Toggle selected racer 10 bananas",
+          "action": 163
+        },
+        {
+          "id": "overrides",
+          "type": "text",
+          "label": "Active overrides"
+        },
+        {
+          "id": "weight",
+          "type": "number",
+          "label": "Selected racer weight / gravity factor",
+          "argument": 2,
+          "default": 1,
+          "min": 0.1,
+          "max": 4
+        },
+        {
+          "id": "handling",
+          "type": "number",
+          "label": "Handling factor",
+          "argument": 3,
+          "default": 1,
+          "min": 0.1,
+          "max": 4
+        },
+        {
+          "id": "acceleration",
+          "type": "number",
+          "label": "Acceleration curve factor (standard vehicles)",
+          "argument": 4,
+          "default": 1,
+          "min": 0.1,
+          "max": 4
+        },
+        {
+          "id": "speed-cap",
+          "type": "number",
+          "label": "Forward speed cap (0 = off)",
+          "argument": 5,
+          "default": 0,
+          "min": 0,
+          "max": 100
+        },
+        {
+          "id": "apply-tune",
+          "type": "button",
+          "label": "Apply selected racer tuning",
+          "action": 182
+        },
+        {
+          "id": "reset-tune",
+          "type": "button",
+          "label": "Reset this tool's racer tuning",
+          "action": 181,
+          "confirm": true
+        }
+      ]
+    },
+    {
+      "id": "objects",
+      "label": "Objects",
+      "fields": [
+        {
+          "id": "live-inspector",
+          "type": "inspector",
+          "label": "Live entity inspector",
+          "edit_action": 101
+        },
+        {
+          "id": "property",
+          "type": "integer",
+          "label": "Property ID (see SDK reference)",
+          "argument": 2,
+          "default": 102,
+          "min": 1,
+          "max": 301
+        },
+        {
+          "id": "inspect",
+          "type": "button",
+          "label": "Inspect selected property",
+          "action": 100
+        },
+        {
+          "id": "value",
+          "type": "integer",
+          "label": "Integer property value",
+          "argument": 3,
+          "default": 10,
+          "min": -32768,
+          "max": 65535
+        },
+        {
+          "id": "edit",
+          "type": "button",
+          "label": "Apply selected integer property",
+          "action": 101
+        },
+        {
+          "id": "float-value",
+          "type": "number",
+          "label": "Float property value",
+          "argument": 3,
+          "default": 1.0,
+          "min": -1000.0,
+          "max": 1000.0
+        },
+        {
+          "id": "edit-float",
+          "type": "button",
+          "label": "Apply selected float property",
+          "action": 101
+        },
+        {
+          "id": "undo",
+          "type": "button",
+          "label": "Undo last property edit",
+          "action": 102
+        },
+        {
+          "id": "redo",
+          "type": "button",
+          "label": "Redo property edit",
+          "action": 103
+        },
+        {
+          "id": "position",
+          "type": "vector",
+          "label": "Destination / clone position: X Y Z",
+          "argument": 2
+        },
+        {
+          "id": "teleport",
+          "type": "button",
+          "label": "Teleport selected entity",
+          "action": 110,
+          "visible": "op_1"
+        },
+        {
+          "id": "clone",
+          "type": "button",
+          "label": "Clone selected scenery template",
+          "action": 111,
+          "visible": "op_2"
+        },
+        {
+          "id": "delete",
+          "type": "button",
+          "label": "Delete selected tool-owned spawn",
+          "action": 112,
+          "visible": "op_3",
+          "confirm": true
+        }
+      ]
+    },
+    {
+      "id": "track",
+      "label": "Track / Routes",
+      "fields": [
+        {
+          "id": "catalogue-page",
+          "type": "integer",
+          "label": "First course catalogue index (8 entries per page)",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 1016
+        },
+        {
+          "id": "read-catalogue",
+          "type": "button",
+          "label": "Read this course page",
+          "action": 12
+        },
+        {
+          "id": "courses",
+          "type": "table",
+          "label": "Admitted stock, legacy and Track Lab courses",
+          "select": false
+        },
+        {
+          "id": "debug-display",
+          "type": "debug",
+          "label": "Show local route, selected entity and probe overlays"
+        },
+        {
+          "id": "scene-catalogue",
+          "type": "enum",
+          "label": "Loaded-scene inspector",
+          "argument": 2,
+          "choices": [
+            "Scene / rules",
+            "Segment bounds",
+            "AI node links",
+            "Spawn points / entrances",
+            "Trigger volumes",
+            "Triangle geometry"
+          ]
+        },
+        {
+          "id": "scene-entry",
+          "type": "integer",
+          "label": "First scene entry (4 per page)",
+          "argument": 3,
+          "default": 0,
+          "min": 0,
+          "max": 8191
+        },
+        {
+          "id": "scene-segment",
+          "type": "integer",
+          "label": "Segment for triangle inspection",
+          "argument": 4,
+          "default": 0,
+          "min": 0,
+          "max": 1023
+        },
+        {
+          "id": "inspect-scene",
+          "type": "button",
+          "label": "Read current-scene metadata",
+          "action": 17
+        },
+        {
+          "id": "geometry",
+          "type": "table",
+          "label": "Loaded scene, geometry and navigation",
+          "select": false
+        },
+        {
+          "id": "draw-segment",
+          "type": "integer",
+          "label": "Segment to highlight",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 1023
+        },
+        {
+          "id": "draw-triangle",
+          "type": "integer",
+          "label": "Triangle to highlight",
+          "argument": 3,
+          "default": 0,
+          "min": 0,
+          "max": 8191
+        },
+        {
+          "id": "geometry-mode",
+          "type": "enum",
+          "label": "Overlay highlight",
+          "argument": 4,
+          "default": 0,
+          "choices": [
+            "Racing route",
+            "Segment bounds",
+            "Triangle wireframe / normal"
+          ]
+        },
+        {
+          "id": "draw-geometry",
+          "type": "button",
+          "label": "Update geometry highlight",
+          "action": 18
+        },
+        {
+          "id": "route-page",
+          "type": "integer",
+          "label": "Checkpoint index / first route on this page",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 126
+        },
+        {
+          "id": "read-route",
+          "type": "button",
+          "label": "Inspect native checkpoint / AI racing line",
+          "action": 14
+        },
+        {
+          "id": "routes",
+          "type": "table",
+          "label": "Native main and alternate racing routes",
+          "select": true
+        },
+        {
+          "id": "checkpoint-index",
+          "type": "integer",
+          "label": "Checkpoint to move",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 126
+        },
+        {
+          "id": "checkpoint-position",
+          "type": "vector",
+          "label": "Checkpoint position: X Y Z",
+          "argument": 3
+        },
+        {
+          "id": "checkpoint-yaw",
+          "type": "integer",
+          "label": "Yaw (native angle16)",
+          "argument": 6,
+          "default": 0,
+          "min": -32768,
+          "max": 32767
+        },
+        {
+          "id": "checkpoint-pitch",
+          "type": "integer",
+          "label": "Pitch (native angle16)",
+          "argument": 7,
+          "default": 0,
+          "min": -32768,
+          "max": 32767
+        },
+        {
+          "id": "checkpoint-roll",
+          "type": "integer",
+          "label": "Roll (native angle16)",
+          "argument": 8,
+          "default": 0,
+          "min": -32768,
+          "max": 32767
+        },
+        {
+          "id": "checkpoint-scale",
+          "type": "number",
+          "label": "Checkpoint scale",
+          "argument": 9,
+          "default": 1.0,
+          "min": 0.01,
+          "max": 16.0
+        },
+        {
+          "id": "move-checkpoint",
+          "type": "button",
+          "label": "Move checkpoint and rebuild native route planes",
+          "action": 171,
+          "visible": "op_4",
+          "confirm": true
+        },
+        {
+          "id": "prepare-checkpoint",
+          "type": "button",
+          "label": "Prepare the inspected checkpoint as a patch",
+          "action": 183
+        },
+        {
+          "id": "checkpoint-document",
+          "type": "document",
+          "label": "Export or review a checkpoint adjustment",
+          "document": "checkpoint-patch",
+          "import_action": 184
+        },
+        {
+          "id": "probe-from",
+          "type": "vector",
+          "label": "Probe from: X Y Z",
+          "argument": 2
+        },
+        {
+          "id": "probe-to",
+          "type": "vector",
+          "label": "Probe to: X Y Z",
+          "argument": 5
+        },
+        {
+          "id": "probe-radius",
+          "type": "number",
+          "label": "Probe radius (0 = ray)",
+          "argument": 8,
+          "default": 0,
+          "min": 0,
+          "max": 512
+        },
+        {
+          "id": "probe-flags",
+          "type": "integer",
+          "label": "0 Static / 1 Static + interaction spheres / 3 Spheres only",
+          "argument": 9,
+          "default": 0,
+          "min": 0,
+          "max": 3
+        },
+        {
+          "id": "cast",
+          "type": "button",
+          "label": "Run bounded collision probe",
+          "action": 170
+        },
+        {
+          "id": "probe",
+          "type": "text",
+          "label": "Probe result"
+        },
+        {
+          "id": "prepare-document",
+          "type": "button",
+          "label": "Prepare property-edit / bookmark document",
+          "action": 179
+        },
+        {
+          "id": "scene-document",
+          "type": "document",
+          "label": "Export or review a scene adjustment document",
+          "document": "scene-patch",
+          "import_action": 180
+        },
+        {
+          "id": "entity_count",
+          "type": "text",
+          "label": "Live entity count"
+        },
+        {
+          "id": "racer_count",
+          "type": "text",
+          "label": "Current racer count"
+        },
+        {
+          "id": "message",
+          "type": "text",
+          "label": "Last operation"
+        }
+      ]
+    },
+    {
+      "id": "camera",
+      "label": "Camera / Bookmarks",
+      "fields": [
+        {
+          "id": "live-inspector",
+          "type": "inspector",
+          "label": "Live entity inspector",
+          "edit_action": 101
+        },
+        {
+          "id": "bookmark",
+          "type": "button",
+          "label": "Mark selected entity position",
+          "action": 120
+        },
+        {
+          "id": "return",
+          "type": "button",
+          "label": "Return selected entity to marked position",
+          "action": 121,
+          "visible": "op_1"
+        },
+        {
+          "id": "local-camera",
+          "type": "camera",
+          "label": "Local free, follow and spectator camera"
+        }
+      ]
+    },
+    {
+      "id": "environment",
+      "label": "Environment / Audio",
+      "fields": [
+        {
+          "id": "fog-player",
+          "type": "integer",
+          "label": "Fog viewport (0..3)",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 3
+        },
+        {
+          "id": "near",
+          "type": "integer",
+          "label": "Fog near",
+          "argument": 3,
+          "default": 900,
+          "min": 0,
+          "max": 1018
+        },
+        {
+          "id": "far",
+          "type": "integer",
+          "label": "Fog far",
+          "argument": 4,
+          "default": 1000,
+          "min": 5,
+          "max": 1023
+        },
+        {
+          "id": "red",
+          "type": "integer",
+          "label": "Fog red",
+          "argument": 5,
+          "default": 128,
+          "min": 0,
+          "max": 255
+        },
+        {
+          "id": "green",
+          "type": "integer",
+          "label": "Fog green",
+          "argument": 6,
+          "default": 128,
+          "min": 0,
+          "max": 255
+        },
+        {
+          "id": "blue",
+          "type": "integer",
+          "label": "Fog blue",
+          "argument": 7,
+          "default": 128,
+          "min": 0,
+          "max": 255
+        },
+        {
+          "id": "fog",
+          "type": "button",
+          "label": "Apply original game fog",
+          "action": 130,
+          "visible": "op_10"
+        },
+        {
+          "id": "live-inspector",
+          "type": "inspector",
+          "label": "Live entity inspector",
+          "edit_action": 101
+        },
+        {
+          "id": "ambient",
+          "type": "number",
+          "label": "Selected object ambient light",
+          "argument": 2,
+          "default": 1.0,
+          "min": 0,
+          "max": 2
+        },
+        {
+          "id": "ambient-apply",
+          "type": "button",
+          "label": "Apply selected object ambient light",
+          "action": 190
+        },
+        {
+          "id": "diffuse",
+          "type": "number",
+          "label": "Selected object diffuse light",
+          "argument": 2,
+          "default": 1.0,
+          "min": 0,
+          "max": 2
+        },
+        {
+          "id": "diffuse-apply",
+          "type": "button",
+          "label": "Apply selected object diffuse light",
+          "action": 191
+        },
+        {
+          "id": "weather-x",
+          "type": "integer",
+          "label": "Existing weather X velocity",
+          "argument": 2,
+          "default": 0,
+          "min": -1048576,
+          "max": 1048576
+        },
+        {
+          "id": "weather-y",
+          "type": "integer",
+          "label": "Existing weather Y velocity",
+          "argument": 3,
+          "default": -256,
+          "min": -1048576,
+          "max": 1048576
+        },
+        {
+          "id": "weather-z",
+          "type": "integer",
+          "label": "Existing weather Z velocity",
+          "argument": 4,
+          "default": 0,
+          "min": -1048576,
+          "max": 1048576
+        },
+        {
+          "id": "weather-intensity",
+          "type": "integer",
+          "label": "Weather intensity",
+          "argument": 5,
+          "default": 16384,
+          "min": 0,
+          "max": 65536
+        },
+        {
+          "id": "weather-opacity",
+          "type": "integer",
+          "label": "Weather opacity",
+          "argument": 6,
+          "default": 32768,
+          "min": 0,
+          "max": 65536
+        },
+        {
+          "id": "weather-transition",
+          "type": "integer",
+          "label": "Weather transition ticks",
+          "argument": 7,
+          "default": 120,
+          "min": 1,
+          "max": 3600
+        },
+        {
+          "id": "weather",
+          "type": "button",
+          "label": "Adjust initialized scene weather",
+          "action": 131,
+          "visible": "op_11"
+        },
+        {
+          "id": "sound",
+          "type": "integer",
+          "label": "Sound / sequence ID",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 65535
+        },
+        {
+          "id": "sound-play",
+          "type": "button",
+          "label": "Play sound",
+          "action": 140,
+          "visible": "op_20"
+        },
+        {
+          "id": "music-play",
+          "type": "button",
+          "label": "Play music sequence",
+          "action": 141,
+          "visible": "op_21"
+        },
+        {
+          "id": "music-stop",
+          "type": "button",
+          "label": "Stop music",
+          "action": 142,
+          "visible": "op_22"
+        },
+        {
+          "id": "fade-value",
+          "type": "integer",
+          "label": "Music fade (-4096..4096)",
+          "argument": 2,
+          "default": -60,
+          "min": -4096,
+          "max": 4096
+        },
+        {
+          "id": "fade",
+          "type": "button",
+          "label": "Fade music",
+          "action": 143,
+          "visible": "op_23"
+        }
+      ]
+    },
+    {
+      "id": "mods",
+      "label": "Mods / Values",
+      "fields": [
+        {
+          "id": "package-page",
+          "type": "integer",
+          "label": "First code package index (8 per page)",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 120
+        },
+        {
+          "id": "read-packages",
+          "type": "button",
+          "label": "Read this package page",
+          "action": 13
+        },
+        {
+          "id": "packages",
+          "type": "table",
+          "label": "Active portable code packages and capabilities",
+          "select": false
+        },
+        {
+          "id": "reload-code",
+          "type": "reload",
+          "label": "Offline compatible code reload"
+        },
+        {
+          "id": "instructions",
+          "type": "text",
+          "label": "Remaining callback instruction budget"
+        },
+        {
+          "id": "resource-kind",
+          "type": "enum",
+          "label": "Resource catalogue",
+          "argument": 2,
+          "choices": [
+            "Characters",
+            "Character models / headers",
+            "Object models",
+            "3D textures",
+            "2D textures",
+            "Sprites",
+            "Object templates",
+            "Level models",
+            "Custom cups",
+            "Sounds",
+            "Music sequences",
+            "All mod settings",
+            "Hooks",
+            "Callbacks",
+            "This mod resources"
+          ]
+        },
+        {
+          "id": "resource-page",
+          "type": "integer",
+          "label": "First resource index (8 per page)",
+          "argument": 3,
+          "default": 0,
+          "min": 0,
+          "max": 16376
+        },
+        {
+          "id": "read-resources",
+          "type": "button",
+          "label": "Browse this resource page",
+          "action": 16
+        },
+        {
+          "id": "resources",
+          "type": "table",
+          "label": "Verified resource identities and live-setting policy",
+          "select": false
+        },
+        {
+          "id": "setting-package",
+          "type": "integer",
+          "label": "Setting owner package index",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 127
+        },
+        {
+          "id": "setting-option",
+          "type": "integer",
+          "label": "Option index in that package",
+          "argument": 3,
+          "default": 0,
+          "min": 0,
+          "max": 127
+        },
+        {
+          "id": "setting-number",
+          "type": "number",
+          "label": "Numeric setting value",
+          "argument": 4,
+          "default": 1,
+          "min": -1000000.0,
+          "max": 1000000.0
+        },
+        {
+          "id": "apply-setting-number",
+          "type": "button",
+          "label": "Apply opted-in numeric setting",
+          "action": 200
+        },
+        {
+          "id": "setting-choice",
+          "type": "integer",
+          "label": "Enum choice index",
+          "argument": 4,
+          "default": 0,
+          "min": 0,
+          "max": 255
+        },
+        {
+          "id": "apply-setting-enum",
+          "type": "button",
+          "label": "Apply opted-in enum setting",
+          "action": 201
+        },
+        {
+          "id": "reset-setting",
+          "type": "button",
+          "label": "Reset selected live setting",
+          "action": 202
+        },
+        {
+          "id": "settings-policy",
+          "type": "text",
+          "label": "Live setting policy"
+        },
+        {
+          "id": "watch",
+          "type": "text",
+          "label": "Selected property watch"
+        },
+        {
+          "id": "native_calls",
+          "type": "text",
+          "label": "Remaining native-call budget"
+        },
+        {
+          "id": "last_action",
+          "type": "text",
+          "label": "Last deterministic command ID"
+        },
+        {
+          "id": "costs",
+          "type": "diagnostics",
+          "label": "Per-package work and memory"
+        },
+        {
+          "id": "symbol-page",
+          "type": "integer",
+          "label": "First decomp symbol index (12 entries per page)",
+          "argument": 2,
+          "default": 0,
+          "min": 0,
+          "max": 8192
+        },
+        {
+          "id": "read-symbols",
+          "type": "button",
+          "label": "Read reviewed symbol / hook capabilities",
+          "action": 15
+        },
+        {
+          "id": "symbols",
+          "type": "table",
+          "label": "Decomp symbols: callable, hookable or protected",
+          "select": false
+        },
+        {
+          "id": "trace",
+          "type": "table",
+          "label": "Recent deterministic lifecycle/racer events",
+          "select": false
+        }
+      ]
+    },
+    {
+      "id": "commands",
+      "label": "Commands / History",
+      "fields": [
+        {
+          "id": "message",
+          "type": "text",
+          "label": "Last command result"
+        },
+        {
+          "id": "last_action",
+          "type": "text",
+          "label": "Last deterministic command ID"
+        },
+        {
+          "id": "command-console",
+          "type": "console",
+          "label": "Registered SDK commands and recorded macros"
+        },
+        {
+          "id": "refresh",
+          "type": "button",
+          "label": "Refresh tools snapshot",
+          "action": 1
+        },
+        {
+          "id": "undo",
+          "type": "button",
+          "label": "Undo last typed property edit",
+          "action": 102
+        },
+        {
+          "id": "redo",
+          "type": "button",
+          "label": "Redo typed property edit",
+          "action": 103
+        }
+      ]
+    },
+    {
+      "id": "online",
+      "label": "Online Development",
+      "fields": [
+        {
+          "id": "authority",
+          "type": "text",
+          "label": "Command authority"
+        },
+        {
+          "id": "save_status",
+          "type": "text",
+          "label": "Development save scope"
+        },
+        {
+          "id": "online-authority",
+          "type": "authority",
+          "label": "Host permissions, pending requests and shared action audit"
+        },
+        {
+          "id": "scene",
+          "type": "text",
+          "label": "Scene generation"
+        },
+        {
+          "id": "tick",
+          "type": "text",
+          "label": "Current simulated tick"
+        },
+        {
+          "id": "last_action",
+          "type": "text",
+          "label": "Last ordered action"
+        },
+        {
+          "id": "message",
+          "type": "text",
+          "label": "Last operation"
+        }
+      ]
+    }
+  ]
+}

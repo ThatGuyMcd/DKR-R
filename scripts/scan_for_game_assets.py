@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fail when repository files look like ROMs or generated game-resource archives."""
+
 from __future__ import annotations
 
 import argparse
@@ -10,8 +11,17 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKIP_PARTS = {
-    ".git", ".deps", "build", "build-logs", "dist", "runtime", "extern",
-    "run-data", "--portable", "squashfs-root", "__pycache__",
+    ".git",
+    ".deps",
+    "build",
+    "build-logs",
+    "dist",
+    "runtime",
+    "extern",
+    "run-data",
+    "--portable",
+    "squashfs-root",
+    "__pycache__",
 }
 DENIED_SUFFIXES = {".z64", ".v64", ".n64", ".o2r", ".otr", ".eep", ".mpk"}
 N64_HEADERS = {

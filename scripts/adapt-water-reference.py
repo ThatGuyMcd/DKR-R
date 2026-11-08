@@ -3,6 +3,7 @@
 This is a mechanical patch transformation, not a dependency checkout edit.
 Usage: python scripts/adapt-water-reference.py path/to/rt64-water.patch
 """
+
 import hashlib
 from pathlib import Path
 import re
@@ -15,21 +16,33 @@ if hashlib.sha256(source).hexdigest() != SOURCE_SHA256:
 sections = re.split(r"(?=^diff --git )", source.decode().replace("\r\n", "\n"), flags=re.M)
 selected = []
 existing = {
-    "src/hle/rt64_draw_call.h", "src/hle/rt64_state.cpp", "src/hle/rt64_state.h",
-    "src/hle/rt64_workload.cpp", "src/hle/rt64_workload.h",
-    "src/render/rt64_descriptor_sets.h", "src/render/rt64_framebuffer_renderer.cpp",
-    "src/render/rt64_framebuffer_renderer.h", "src/render/rt64_framebuffer_renderer_call.h",
-    "src/render/rt64_rsp_processor.cpp", "src/shaders/RSPProcessCS.hlsl",
+    "src/hle/rt64_draw_call.h",
+    "src/hle/rt64_state.cpp",
+    "src/hle/rt64_state.h",
+    "src/hle/rt64_workload.cpp",
+    "src/hle/rt64_workload.h",
+    "src/render/rt64_descriptor_sets.h",
+    "src/render/rt64_framebuffer_renderer.cpp",
+    "src/render/rt64_framebuffer_renderer.h",
+    "src/render/rt64_framebuffer_renderer_call.h",
+    "src/render/rt64_rsp_processor.cpp",
+    "src/shaders/RSPProcessCS.hlsl",
 }
 for section in sections:
     match = re.match(r"diff --git a/(\S+) b/\S+", section)
     if not match:
         continue
     path = match[1]
-    if path in existing or path.startswith("src/shaders/Water") or path in {
-        "src/shared/rt64_water_params.h", "src/render/rt64_water_renderer.cpp",
-        "src/render/rt64_water_renderer.h",
-    }:
+    if (
+        path in existing
+        or path.startswith("src/shaders/Water")
+        or path
+        in {
+            "src/shared/rt64_water_params.h",
+            "src/render/rt64_water_renderer.cpp",
+            "src/render/rt64_water_renderer.h",
+        }
+    ):
         # The reference's diagnostics are not part of the product renderer.
         if path == "src/render/rt64_framebuffer_renderer.cpp":
             begin = section.index("+                    static const bool waterDiagnostics=")
@@ -40,8 +53,14 @@ for section in sections:
             # on both sides of the insertion, preserving those statements.
             marker = "+        uint32_t waterProfileToken = UINT32_MAX, waterProfileScene = UINT32_MAX, activeWaterDraw = UINT32_MAX;\n"
             trailing = "         InstanceDrawCall::Type previousCallType = InstanceDrawCall::Type::Unknown;\n         bool previousVertexTestZ = false;\n         const RenderPipeline *previousPipeline = nullptr;\n"
-            original = "@@ -466,6 +471,7 @@\n     }\n     \n     void FramebufferRenderer::submitRasterScene(RenderWorker *worker, const Framebuffer &framebuffer, RenderFramebufferStorage *fbStorage, const RasterScene &rasterScene, bool &depthState) {\n" + marker + trailing
-            replacement = "@@ -469,3 +474,4 @@\n" + trailing.splitlines(True)[0] + marker + "".join(trailing.splitlines(True)[1:])
+            original = (
+                "@@ -466,6 +471,7 @@\n     }\n     \n     void FramebufferRenderer::submitRasterScene(RenderWorker *worker, const Framebuffer &framebuffer, RenderFramebufferStorage *fbStorage, const RasterScene &rasterScene, bool &depthState) {\n"
+                + marker
+                + trailing
+            )
+            replacement = (
+                "@@ -469,3 +474,4 @@\n" + trailing.splitlines(True)[0] + marker + "".join(trailing.splitlines(True)[1:])
+            )
             if section.count(original) != 1:
                 raise SystemExit("Reference function-entry context changed")
             section = section.replace(original, replacement, 1)

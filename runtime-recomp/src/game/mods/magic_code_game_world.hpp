@@ -31,6 +31,9 @@ public:
     int dispatch(bool leaving,std::uint32_t address,std::uint8_t*,recomp_context*,std::uint64_t& result)noexcept;
     const std::string& error()const{return error_;}
     Bytes checkpoint()const;
+    // Quiesced native-to-owned handoff only, while the supplied RAM is alive.
+    // Retires the old binding even if checkpoint validation fails.
+    Bytes retire_checkpoint(std::span<std::uint8_t> live_ram);
     std::shared_ptr<World::Restore> stage(View)const;
     void commit(std::shared_ptr<World::Restore>);
     std::vector<Effect> effects();
@@ -44,6 +47,7 @@ private:
     static void write(recomp_context&,const Registers&);
     DispatchTable table_;
     Invoke invoke_;
+    bool online_=false;
     std::span<std::uint8_t> ram_;
     std::unique_ptr<Memory> native_bus_;
     mutable std::recursive_mutex mutex_;

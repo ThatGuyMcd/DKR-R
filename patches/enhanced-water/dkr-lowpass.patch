@@ -13,10 +13,10 @@ diff --git a/src/shared/rt64_water_params.h b/src/shared/rt64_water_params.h
 +#define WATER_LOWPASS_HOVER_FULL 20.0f
 +#define WATER_LOWPASS_HOVER_SCALE 0.55f
 +#define WATER_LOWPASS_FULL_SPEED 900.0f
+ #define WATER_STYLE_DKR (1U << 8U)
+ #define WATER_DEBUG_MASK 255U
  
- #ifdef HLSL_CPU
- namespace interop {
-@@ -20,6 +28,7 @@
+@@ -22,6 +30,7 @@
      float4 craftPrevious[WATER_CRAFT_COUNT]; // world XYZ, wet contact fraction (-1 means inactive)
      float4 craftCurrent[WATER_CRAFT_COUNT];
      float4 shoreCounts[2];     // bounded static shoreline segments in each craft's world tile
@@ -24,7 +24,7 @@ diff --git a/src/shared/rt64_water_params.h b/src/shared/rt64_water_params.h
      float4 shoreSegments[WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE]; // immutable mean-water intersections, XZ endpoints
      float4 performance;    // SSR steps, wake resolution, hardware distance, spray tier
      float4 appearance;     // reflection, refraction, wake and waterfall strengths
-@@ -29,6 +38,17 @@
+@@ -31,6 +40,17 @@
      float4x4 cameraViewProjection;
      float4 cameraPosition;  // XYZ, W=1 marks the reviewed DKR adapter
  };
@@ -42,7 +42,7 @@ diff --git a/src/shared/rt64_water_params.h b/src/shared/rt64_water_params.h
  
  struct WaterDrawParams {
      WaterMaterial material;
-@@ -66,7 +86,17 @@
+@@ -68,7 +88,17 @@
  static_assert(sizeof(WaterMaterial) == 1584, "DKR water task ABI");
  static_assert(sizeof(WaterDrawParams) == 2048, "DKR water shader ABI");
  static_assert(sizeof(WaterDrawParams) <= 2048, "D3D structured-buffer stride limit");
@@ -364,7 +364,7 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
      float a2 = pow(roughness, 4);
      float d = a2 / max(PI * pow(nh*nh*(a2-1)+1, 2), 0.00001);
      float k = pow(roughness + 1, 2) * 0.125;
-@@ -392,7 +424,15 @@
+@@ -404,7 +436,15 @@
      float breakup=foamBreakup(worldPosition.xz,p.camera.w,m.surface.yz);
      float shore=wake.z*(1-smoothstep(30,100,abs(worldPosition.y-m.surface.x)));
      float foam=saturate((wake.y*1.8+shore*1.3+crest+contact)*m.animation.w*breakup);

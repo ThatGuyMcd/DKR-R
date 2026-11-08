@@ -393,7 +393,7 @@ void run() {
         rejects([&]{draw.event(16,0xffffffff);});rejects([&]{draw.event(17);});
     }
     Fixture bad;auto fields=bad.fields;fields[0]=0xffffffff;
-    rejects([&]{bad.adapter.apply(2,bad.memory,fields);});rejects([&]{bad.event(18);});
+    rejects([&]{bad.adapter.apply(2,bad.memory,fields);});rejects([&]{bad.event(26);});
     rejects([&]{bad.adapter.install_names(bad.memory,0x80010000);});
     bad.select(4,0);bad.event(6,5);bad.event(7,0,1);rejects([&]{bad.event(8,6);});
 

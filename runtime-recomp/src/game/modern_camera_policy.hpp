@@ -85,6 +85,17 @@ constexpr int effective_view_distance(PresentationProfile profile,
     return std::min(scaled, 32767);
 }
 
+// check_if_in_draw_range halves its register-local distance for layout 3.
+// Compensate at that existing hook, without changing an object's authored
+// header or its fade behaviour, so Modern's multiplier means the same in all
+// four local viewports. Accurate retains the retail reduction.
+constexpr int object_distance_before_multiplayer_reduction(
+    PresentationProfile profile,int authored,int multiplier,int layout) {
+    const int distance=effective_view_distance(profile,authored,multiplier);
+    return profile==PresentationProfile::Modern && authored>0 && layout==3
+        ? distance*2:distance;
+}
+
 constexpr bool is_gameplay_scenery_race_type(int race_type) {
     return race_type >= 0 &&
         (race_type == kRaceTypeDefault ||

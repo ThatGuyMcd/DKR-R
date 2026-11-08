@@ -1,0 +1,78 @@
+DKR-R v1.0.7 beta 3
+===================
+
+Fullscreen / nameplate correction rebuild
+-----------------------------------------
+This replaces the first beta 3 package. Use this rebuild on every online
+device; the version name stays the same but its replay engine is newer.
+
+Remove the native split-screen border and its coverage-clearing pass from
+My racer fullscreen. Correct two-player sky/void coverage on the renderer
+copy, including widescreen. Use offline HUD resting positions and edge
+anchoring, undo multiplayer shrink around each element's own anchor, and
+keep banana spin/sparkles aligned with the counter. Timer digits have their
+own scope; the minimap background and all racer markers move together.
+
+Fix the reversed colour-combiner words that could turn a nameplate into an
+opaque black rectangle. Nameplates remain cached transparent text with an
+outline, depth comparison and no depth writes. No ray tracing is involved.
+
+Compilation and static package/source checks only. Gameplay acceptance,
+including visual alignment and all camera slots, remains with the maintainer.
+
+Your own online view
+--------------------
+Open DKR-R Online and look for Your online view. You can keep Original
+split-screen or choose My racer fullscreen. Each player makes their own choice:
+one person can keep split-screen while another uses their own fullscreen camera.
+Fullscreen means the game area, not the app's window/fullscreen setting.
+
+Other human racers can show their admitted display name and current race
+position. Choose Name + race position, Race position or Off, and set label size
+between 75% and 150%. Labels use the race depth buffer so they are not intended
+to show through walls. Original CPU position markers stay as they were.
+
+No extra mod is needed. These controls live in the Online tab and overlay and
+are saved locally. The host doesn't overwrite anyone else's view preference.
+
+Scope
+-----
+This first version targets ordinary two-, three- and four-player races through
+Auto / Experimental Rollback, including cars, hovercrafts and planes, on both
+supported US ROM revisions. Menus, Player Select, Track Select, results,
+cutscenes and the shared two-player Adventure hub keep their normal layout.
+Unknown/incomplete camera observations fall back to the original whole frame.
+Other backends and offline/local games are unchanged.
+
+All racers, inputs, cameras, physics and AI still update in the shared race.
+This does not turn multiplayer into single-player, change the audio listener
+or promise single-player CPU costs. Hidden views are clipped on the renderer
+copy, without skipping native game updates, display-list state or texture loads.
+Names use bounded cached text textures, not ray tracing or a fullscreen pass.
+
+Use matching beta 3 application packages on every online device. The technical
+version is 1.0.7+beta.3; supplied Trophy Races 1.0.2 and AI Difficulty 1.0.0
+packages remain unchanged. Android versionCode is 1070009, with the existing
+application and signing identity. No new automatic-update signing key is made.
+
+For the maintainer to test
+--------------------------
+No gameplay, replay, online, controller or physical-device tests were run by
+the build agent. Compilation and package inspection are not gameplay acceptance.
+
+Please check two-, three- and four-player sessions, including clients whose
+network slots differ from their dense native player number. Mix fullscreen
+and split-screen devices; compare the correct local HUD and all opponents.
+Try both ROM revisions, all three vehicles, original/custom tracks and racers,
+4:3/16:10/16:9/ultrawide, mirrored tracks, resizes and live layout changes.
+Check countdowns, lap/item/position counters, finish messages, the final racer,
+results, next race, disconnect/rejoin and offline play after leaving online.
+Check names/ranks, scenery occlusion, distance fading and overlapping racers.
+Compare authoritative state with identical recorded inputs under different
+local layouts when doing determinism qualification; presentation should differ,
+gameplay must not. New visibility coverage and every transition need this
+real-device acceptance before calling the feature qualified.
+
+Custom Magic Codes, the controller-first trophy editor, cup sharing and the
+full SDK/Modders Guide from beta 2 are retained. See the main changelog for
+earlier changes. Keep the complete package together and bring your own ROM.

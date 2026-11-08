@@ -1,9 +1,10 @@
 """Read-only regression contracts for player-facing launcher copy."""
+
 import ast
 import json
+from pathlib import Path
 import re
 import unittest
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GAME = ROOT / "runtime-recomp/src/game"
@@ -18,8 +19,7 @@ def literals(text):
     result = []
     for chunk in chunks:
         try:
-            result.append("".join(ast.literal_eval(token) for token in
-                re.findall(r'"(?:\\.|[^"\\])*"', chunk)))
+            result.append("".join(ast.literal_eval(token) for token in re.findall(r'"(?:\\.|[^"\\])*"', chunk)))
         except (SyntaxError, ValueError):
             pass
     return result
@@ -65,8 +65,14 @@ class LauncherCopyTests(unittest.TestCase):
     def test_release_language(self):
         files = [p for p in GAME.glob("runtime_*ui.inl")] + [GAME / "runtime_ui.cpp"]
         displayed = "\n".join(value for p in files for value in literals(p.read_text(encoding="utf-8")))
-        for forbidden in ("playtest qualification", "Online is in beta", "in development",
-                          "not finished cooking", "WHATâ\x80\x99S NEW SINCE 1.0.0", "developer build"):
+        for forbidden in (
+            "playtest qualification",
+            "Online is in beta",
+            "in development",
+            "not finished cooking",
+            "WHATâ\x80\x99S NEW SINCE 1.0.0",
+            "developer build",
+        ):
             self.assertNotIn(forbidden, displayed)
 
     def test_raw_network_classification_stays_before_display(self):
@@ -118,7 +124,7 @@ class LauncherCopyTests(unittest.TestCase):
         self.assertIn('g_online_hide_lobby_code ? "Show" : "Hide"', online)
         self.assertIn('OlNotify("Lobby code copied.")', online)
         self.assertIn('g_online_hide_lobby_code ? "*****"', online)
-        self.assertIn('OnlineTextForDisplay(text)', online)
+        self.assertIn("OnlineTextForDisplay(text)", online)
 
     def test_save_and_mod_safety_stays_visible(self):
         saves = source("runtime_saves_ui.inl")

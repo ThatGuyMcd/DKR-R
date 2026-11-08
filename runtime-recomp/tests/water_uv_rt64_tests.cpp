@@ -230,6 +230,7 @@ int main() {
             assert(rsp.extended.modelMatrixIdStack[rsp.extended.modelMatrixIdStackSize-1].texcoordInterpolation==tag);
         }
 
+#ifdef DKR_ENHANCED_WATER
     // Exercise the actual presentation matcher, not just the wrap helper.
     // A qualified waterfall may interpolate inside a group whose other UVs
     // explicitly remain skipped; texture changes must not reuse that period.
@@ -248,6 +249,8 @@ int main() {
         interpolate(candidate,previous_candidate,G_EX_COMPONENT_SKIP);
         assert(after.tcVelFloats[0]==4.F && after.tcVelFloats[1]==5.F);
     }
+
+#endif
 
     for(unsigned s:{2U,3U,4U,6U}) {
         run(baseline,s,0,false,false,false);run(candidate,s,0,true,false,false);

@@ -1,5 +1,6 @@
 #include "magic_code_game_world.hpp"
 #include "magic_code_game_services.hpp"
+#include "magic_code_native_arguments.hpp"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -76,7 +77,7 @@ LinkPolicy GameWorld::policy(DispatchTable table,bool online) {
     return p;
 }
 GameWorld::GameWorld(const FrozenSet& frozen,std::string_view revision,DispatchTable table,
-    std::uint64_t seed,bool online,Invoke invoke):table_(table),invoke_(std::move(invoke)),
+    std::uint64_t seed,bool online,Invoke invoke):table_(table),invoke_(std::move(invoke)),online_(online),
     world_(link(frozen.ordered,frozen.settings,revision,policy(table,online),frozen.data),seed,
         [this](auto address,auto& registers,auto& budget){native(address,registers,budget);},
         [this](auto name,auto owner,auto& bus,auto& registers,auto& budget){return service(name,owner,bus,registers,budget);}) {
@@ -336,7 +337,8 @@ void GameWorld::event(unsigned event,const Registers& args) {
     if(nested_==0)budget_=Budget{};
     if(nested_>=32)throw Error("Game event recursion exceeds its bound.");
     ++nested_;struct Scope{unsigned& count;~Scope(){--count;}}scope{nested_};
-    world_.event("*",Events[event],args,budget_);
+    const auto outgoing=owned_preview_arguments(ram_,online_,args);
+    world_.event("*",Events[event],args,budget_,outgoing?&*outgoing:nullptr);
 }
 int GameWorld::dispatch_event(unsigned event,std::uint8_t* ram,recomp_context* context)noexcept {
     try {
@@ -355,7 +357,8 @@ int GameWorld::indirect(std::uint32_t address,std::uint8_t* ram,recomp_context* 
         if(nested_==0)budget_=Budget{};
         if(nested_>=32)throw Error("Indirect code callback recursion exceeds its bound.");
         ++nested_;struct Scope{unsigned& count;~Scope(){--count;}}scope{nested_};
-        auto registers=read(*context);world_.call(address,registers,budget_);write(*context,registers);
+        auto registers=read(*context);const auto outgoing=owned_preview_arguments(ram_,online_,registers);
+        world_.call(address,registers,budget_,outgoing?&*outgoing:nullptr);write(*context,registers);
         result=1;return 1;
     }catch(const std::exception& e){try{error_=e.what();}catch(...){}return -1;}
      catch(...){try{error_="Custom Magic Code failed during an indirect game callback.";}catch(...){}return -1;}
@@ -375,18 +378,33 @@ int GameWorld::dispatch(bool leaving,std::uint32_t address,std::uint8_t* ram,rec
         if(nested_>=32)throw Error("Native/code hook recursion exceeds its bound.");
         ++nested_;struct Scope{unsigned& count;~Scope(){--count;}}scope{nested_};
         auto registers=read(*context);
+        const auto outgoing=owned_preview_arguments(ram_,online_,registers);
+        const auto* native_arguments=outgoing?&*outgoing:nullptr;
         CallbackContext callback{&registers,!leaving,false,address};
         auto* previous=callback_;callback_=&callback;
         struct RestoreContext{CallbackContext*& slot;CallbackContext* previous;~RestoreContext(){slot=previous;}} restore_context{callback_,previous};
-        if(named!=named_events_.end())world_.event("*",leaving?named->second.second:named->second.first,registers,budget_);
-        if(leaving){world_.leave(address,registers,budget_);result=callback.repeat?1:0;}
-        else result=callback.skip||world_.enter(address,registers,budget_)?1:0;
+        if(named!=named_events_.end())world_.event("*",leaving?named->second.second:named->second.first,registers,budget_,native_arguments);
+        if(leaving){world_.leave(address,registers,budget_,native_arguments);result=callback.repeat?1:0;}
+        else result=callback.skip||world_.enter(address,registers,budget_,native_arguments)?1:0;
         write(*context,registers);
         return 1;
     }catch(const std::exception& e){try{error_=e.what();}catch(...){}return -1;}
      catch(...){try{error_="Custom Magic Code stopped after an unexpected callback failure.";}catch(...){}return -1;}
 }
 Bytes GameWorld::checkpoint()const{std::lock_guard lock(mutex_);return world_.checkpoint();}
+Bytes GameWorld::retire_checkpoint(std::span<std::uint8_t> live_ram) {
+    std::lock_guard lock(mutex_);
+    if(nested_ || native_depth_ || !world_.idle())throw Error("Code handoff requires every guest callback to retire.");
+    // Never retain a pointer into recomp::start's allocation after its
+    // quiescence callback returns: that allocation is immediately released.
+    const auto retire=[&]{world_.detach();native_bus_.reset();ram_={};};
+    try {
+        if(live_ram.empty() || live_ram.data()!=ram_.data() || live_ram.size()!=ram_.size())
+            throw Error("Code handoff does not own the live bootstrap memory.");
+        if(!error_.empty())throw Error(error_);
+        auto bytes=world_.checkpoint();retire();return bytes;
+    }catch(...){retire();throw;}
+}
 std::shared_ptr<World::Restore> GameWorld::stage(View bytes)const{std::lock_guard lock(mutex_);return world_.stage(bytes);}
 void GameWorld::commit(std::shared_ptr<World::Restore> restore){std::lock_guard lock(mutex_);world_.commit(std::move(restore));}
 std::vector<Effect> GameWorld::effects(){std::lock_guard lock(mutex_);return world_.take_effects();}

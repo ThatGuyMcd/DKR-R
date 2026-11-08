@@ -192,6 +192,7 @@ std::vector<LibraryItem> Library::scan(std::stop_token stop)const {
         cancelled(stop);LibraryItem entry;entry.digest=hash;entry.id=item["id"].get<std::string>();
         entry.name=item["name"].get<std::string>();entry.version=item["version"].get<std::string>();entry.description=item["description"].get<std::string>();
         entry.kept_online=item["kept_online"].get<bool>();entry.deterministic=item["deterministic"].get<bool>();
+        entry.compatibility=compatibility_issue(hash);
         entry.options=item["options"];
         if(doc["selected"].contains(entry.id)) {
             const auto& p=doc["selected"][entry.id];entry.selected=p["digest"]==hash;
@@ -242,6 +243,7 @@ void Library::approve(std::string_view hash,bool approved) {
     Lease lease(root_);auto doc=catalog(root_);auto& p=selection(doc,hash);p["approved"]=approved;if(!approved)p["enabled"]=false;publish(root_,doc);
 }
 void Library::enable(std::string_view hash,bool enabled) {
+    if(enabled)if(const auto issue=compatibility_issue(hash);!issue.empty())bad(issue);
     Lease lease(root_);auto doc=catalog(root_);auto& p=selection(doc,hash);
     if(enabled&&!p["approved"].get<bool>())bad("approve executable code before enabling this package");
     p["enabled"]=enabled;publish(root_,doc);

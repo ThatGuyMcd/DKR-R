@@ -4,7 +4,7 @@
 
 namespace dkr::mods::code {
 struct LibraryItem {
-    std::string digest,id,name,version,description;
+    std::string digest,id,name,version,description,compatibility;
     bool kept_online=false,selected=false,enabled=false,approved=false,deterministic=false;
     Json settings=Json::object();
     Json options=Json::array();

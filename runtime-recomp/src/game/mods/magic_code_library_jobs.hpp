@@ -28,6 +28,7 @@ public:
     std::shared_ptr<const LibraryView> view()const;
     bool refresh();
     bool import_file(std::filesystem::path);
+    bool update_trophies(std::filesystem::path);
     bool select(std::string digest);
     bool approve(std::string digest,bool);
     bool enable(std::string digest,bool);

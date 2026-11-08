@@ -1,0 +1,112 @@
+# Local hooks for fast feedback. CI (tooling.yml `lint`) runs the same checks
+# and is the gate; hooks are a convenience. Install: python3 scripts/bootstrap_hooks.py
+#
+# Every rev below was checked against that repo's .pre-commit-hooks.yaml at the
+# tag, and matches the versions in .github/lint-tools.txt, tooling.yml (shfmt)
+# and workflow-lint.yml (actionlint, zizmor). Bump them together.
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+# Pinned-byte files: *.patch sha256s live in patches/manifest.json (141 of 226
+# have trailing whitespace on blank context lines), release-prep source capsules
+# are content-addressed, modding/reference-us-v*/* are byte-exact receipts, and
+# the 14 CRLF-pinned files all live under patches/. No fixer may touch them;
+# the pinned-bytes hook below proves it on every commit.
+# The 1.0.7 capsule also pins its first-party "base" files (all of them under
+# runtime-recomp/src/ and runtime-recomp/tests/replay_probe/); those two
+# entries go when the fold deletes the capsule, before C/C++ formatting starts.
+# tests/fixtures/ are pattern-guard inputs and packaging/licenses/ are verbatim
+# third-party texts.
+exclude: |
+  (?x)^(
+    extern/|
+    runtime-recomp/RecompiledFuncs/|
+    runtime-recomp/RecompiledPatches/|
+    runtime-recomp/RecompiledRSP/|
+    runtime-recomp/third_party/|
+    runtime-recomp/src/|
+    runtime-recomp/tests/replay_probe/|
+    build/|
+    patches/|
+    modding/reference-us-v|
+    tests/fixtures/|
+    packaging/licenses/|
+    .*\.patch$
+  )
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-merge-conflict
+      - id: check-symlinks
+      # CRLF .cmd/.bat/.ps1 per .gitattributes. C/C++/CMake and
+      # runtime-recomp/src wait for the B9 format commit.
+      - id: end-of-file-fixer
+        exclude: ^runtime-recomp/src/
+        exclude_types: [batch, c, c++, cmake]
+      - id: trailing-whitespace
+        exclude: ^runtime-recomp/src/|\.(md|ps1)$
+        exclude_types: [batch, c, c++, cmake]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.2
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      # pyproject.toml excludes *.md from formatting.
+      - id: ruff-format
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.14.1-1
+    hooks:
+      # No flags, so shfmt reads the [*.sh] section of .editorconfig. Limited to
+      # *.sh to match CI; extensionless scripts keep their own style.
+      - id: shfmt
+        files: \.sh$
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.30.1
+    hooks:
+      - id: zizmor
+        args: [--offline, --no-progress]
+  # Advisory until their baseline commits land: run with
+  # `pre-commit run --hook-stage manual <id> --all-files`.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      # Two SC2155 warnings remain; fixing them changes exit-status behaviour.
+      - id: shellcheck
+        args: [-x, --severity=warning]
+        files: \.sh$
+        stages: [manual]
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.8
+    hooks:
+      # LLVM 18, the same major as clang-tidy in tooling.yml. Blocking after B9.
+      - id: clang-format
+        types_or: [c, c++]
+        stages: [manual]
+  - repo: https://github.com/BlankSpruce/gersemi-pre-commit
+    rev: 0.29.2
+    hooks:
+      # Blocking after B9.
+      - id: gersemi
+        stages: [manual]
+  - repo: local
+    hooks:
+      - id: pattern-guard
+        name: pattern guard (no overlay layers against first-party code)
+        entry: python scripts/pattern_guard.py --staged
+        language: python
+        pass_filenames: false
+        always_run: true
+      # Runs on every commit, not just ones touching pinned files: the files are
+      # excluded above, so pre-commit would never pass them to the hook.
+      - id: pinned-bytes
+        name: checksum-pinned files untouched by fixers
+        entry: python scripts/check_pinned_bytes.py
+        language: python
+        pass_filenames: false
+        always_run: true

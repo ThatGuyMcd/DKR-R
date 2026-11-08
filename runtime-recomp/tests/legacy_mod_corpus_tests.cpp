@@ -110,19 +110,20 @@ void ownership_test(const std::filesystem::path& rom) {
     };
     set_word(0x110,0x80000800);set_word(0x114,3);set_word(0x118,0x80000200);
     set_word(0x210,1);set_word(0x214,0x80000300);
-    struct CompletionState {const AssetBus* bus;std::uint32_t source,queue=0;unsigned count=0;};
+    struct CompletionState {const AssetBus* bus;std::uint32_t source,queue=0;unsigned count=0;Bytes expected{1,2,3};};
     CompletionState completed{&bus,virtual_a};
     const PiCompletion complete{&completed,[](void* opaque,std::uint32_t queue) {
         auto& state=*static_cast<CompletionState*>(opaque);
         state.queue=queue;++state.count;
-        require(state.bus->resolve(state.source,3)->bytes()==Bytes({1,2,3}),"PI completion lost its bank or retained the bus lock.");
+        require(state.bus->resolve(state.source,3)->bytes()==state.expected,"PI completion lost its bank or retained the bus lock.");
     }};
     require(intercept_virtual_pi_dma(bus,guest_io,{0,virtual_a,0x80000100},complete),"Guest PI call did not route to its bank.");
     require(completed.count==1 && completed.queue==0x80000200 && guest_io[0x800^3]==1 && guest_io[0x802^3]==3,
             "Guest PI call did not preserve bytes and exactly-one completion semantics.");
     require(!intercept_virtual_pi_dma(bus,{}, {0,0x100000,0xffffffff},{}),"Original PI path touched guest stack or required mod state.");
     const auto before_invalid=guest_io;
-    for(const PiDmaCall call : {PiDmaCall{1,virtual_a,0x80000100},PiDmaCall{0,virtual_a,0x80000ff0},PiDmaCall{0,virtual_a+1,0x80000100}}) {
+    for(const PiDmaCall call : {PiDmaCall{1,virtual_a,0x80000100},PiDmaCall{0,virtual_a,0x80000ff0},
+            PiDmaCall{0,remounted->address(27,address.owner->section_size(27)-1),0x80000100}}) {
         bool invalid=false;try{intercept_virtual_pi_dma(bus,guest_io,call,complete);}catch(const Error&){invalid=true;}
         require(invalid && completed.count==1 && guest_io==before_invalid,"Invalid PI call changed bytes or emitted a completion.");
     }
@@ -142,6 +143,21 @@ void ownership_test(const std::filesystem::path& rom) {
         const auto original_io=guest_io;
         bool rejected=false;try{intercept_virtual_pi_dma(bus,guest_io,{0,virtual_a,0x80000100},complete);}catch(const Error&){rejected=true;}
         require(rejected && completed.count==1 && original_io==guest_io,"PI completion accepted an incompatible message-pointer ABI.");
+    }
+    set_word(0x214,0x80000300);
+    for(unsigned source_lane=0;source_lane<4;++source_lane)for(unsigned lane=0;lane<8;++lane) {
+        completed.source=virtual_a+source_lane;
+        const auto expected_bytes=bus.resolve(completed.source,3)->bytes();
+        completed.expected=expected_bytes;
+        set_word(0x110,0x80000800+lane);
+        const auto before=guest_io;const auto completions=completed.count;
+        require(intercept_virtual_pi_dma(bus,guest_io,{0,completed.source,0x80000100},complete),"Byte-aligned virtual asset was rejected");
+        for(unsigned i=0;i<guest_io.size();++i) {
+            const auto logical=i^3U;
+            const auto expected=logical>=0x800+lane && logical<0x803+lane?expected_bytes[logical-(0x800+lane)]:before[i];
+            require(guest_io[i]==expected,"Unaligned asset copy changed a neighbouring byte lane");
+        }
+        require(completed.count==completions+1,"Unaligned asset copy lost its single completion");
     }
     const auto stock_mount=bus.mount(stock_directory);
     for(unsigned section=0;section<50;++section) {

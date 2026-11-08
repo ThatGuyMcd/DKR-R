@@ -1,46 +1,90 @@
 """Author the final water stability/tuning layer; never edit staged/dependency sources."""
-from pathlib import Path
+
 import difflib
+from pathlib import Path
 import sys
+
 from water_patch_baseline import read_before
 
-root=Path(__file__).resolve().parents[1]
-stage=Path(sys.argv[1]).resolve()
-output=root/'patches/enhanced-water/dkr-stability.patch'
-layers=[]
-if 'lavaSurface' in (stage/'src/shaders/WaterPS.hlsl').read_text():
-    layers.append(root/'patches/enhanced-water/dkr-lava.patch')
-if 'waterfallPipeline' in (stage/'src/render/rt64_water_renderer.h').read_text():
-    layers.append(root/'patches/enhanced-water/dkr-waterfall.patch')
-if 'captureOwner' in (stage/'src/render/rt64_water_renderer.h').read_text():
+root = Path(__file__).resolve().parents[1]
+stage = Path(sys.argv[1]).resolve()
+output = root / "patches/enhanced-water/dkr-stability.patch"
+layers = []
+if "lavaSurface" in (stage / "src/shaders/WaterPS.hlsl").read_text():
+    layers.append(root / "patches/enhanced-water/dkr-lava.patch")
+if "waterfallPipeline" in (stage / "src/render/rt64_water_renderer.h").read_text():
+    layers.append(root / "patches/enhanced-water/dkr-waterfall.patch")
+if "captureOwner" in (stage / "src/render/rt64_water_renderer.h").read_text():
     layers.append(output)
-changes=[]
-def replace(t,a,b):
-    if t.count(a)!=1:raise SystemExit(f'Non-unique stability context: {a[:150]}')
-    return t.replace(a,b,1)
-def change(path,fn):
-    before=read_before(stage,path,layers);after=fn(before)
-    if before==after:raise SystemExit(f'No stability change: {path}')
-    changes.append(f'diff --git a/{path} b/{path}\n')
-    changes.extend(difflib.unified_diff(before.splitlines(True),after.splitlines(True),fromfile=f'a/{path}',tofile=f'b/{path}',n=3))
+changes = []
+
+
+def replace(t, a, b):
+    if t.count(a) != 1:
+        raise SystemExit(f"Non-unique stability context: {a[:150]}")
+    return t.replace(a, b, 1)
+
+
+def change(path, fn):
+    before = read_before(stage, path, layers)
+    after = fn(before)
+    if before == after:
+        raise SystemExit(f"No stability change: {path}")
+    changes.append(f"diff --git a/{path} b/{path}\n")
+    changes.extend(
+        difflib.unified_diff(
+            before.splitlines(True), after.splitlines(True), fromfile=f"a/{path}", tofile=f"b/{path}", n=3
+        )
+    )
+
 
 def params(t):
-    t=replace(t,'    float4 effects;', '    float4 performance;    // SSR steps, wake resolution, hardware distance, spray tier\n    float4 appearance;     // reflection, refraction, wake and waterfall strengths\n    float4 effects;')
-    t=replace(t,'    float4 viewBounds;', '    float4 originalRegion; // compact original capture origin XY, atlas cell size ZW\n    float4 viewBounds;')
-    t=t.replace('sizeof(WaterMaterial) == 1552','sizeof(WaterMaterial) == 1584').replace('sizeof(WaterDrawParams) == 2000','sizeof(WaterDrawParams) == 2048')
+    t = replace(
+        t,
+        "#define WATER_SHORE_SEGMENTS_PER_TILE 8",
+        "#define WATER_SHORE_SEGMENTS_PER_TILE 8\n#define WATER_STYLE_DKR (1U << 8U)\n#define WATER_DEBUG_MASK 255U",
+    )
+    t = replace(
+        t,
+        "quality (0 disables), debug view, course, generation",
+        "quality, debug view low 8 bits + style flags, course, generation",
+    )
+    t = replace(
+        t,
+        "    float4 effects;",
+        "    float4 performance;    // SSR steps, wake resolution, hardware distance, spray tier\n    float4 appearance;     // reflection, refraction, wake and waterfall strengths\n    float4 effects;",
+    )
+    t = replace(
+        t,
+        "    float4 viewBounds;",
+        "    float4 originalRegion; // compact original capture origin XY, atlas cell size ZW\n    float4 viewBounds;",
+    )
+    t = t.replace("sizeof(WaterMaterial) == 1552", "sizeof(WaterMaterial) == 1584").replace(
+        "sizeof(WaterDrawParams) == 2000", "sizeof(WaterDrawParams) == 2048"
+    )
     return t
-change('src/shared/rt64_water_params.h',params)
+
+
+change("src/shared/rt64_water_params.h", params)
+
 
 def header(t):
-    t=replace(t,'        std::unique_ptr<RenderTexture> color, depth, originalColor;',
-        '        std::shared_ptr<RenderTexture> color,depth;\n        std::unique_ptr<RenderTexture> originalColor;\n        uint32_t originalWidth=0,originalHeight=0,captureOwner=UINT32_MAX;\n        bool classic=false,opticalCaptured=false;\n        uint32_t opticalCamera=UINT32_MAX;\n        interop::float4 opticalView{};')
-    t=replace(t,'        std::unique_ptr<RenderTexture> surface;', '        std::shared_ptr<RenderTexture> surface;')
-    t=replace(t,'bool classic, bool selfDepth);','bool classic, bool selfDepth,water_work::Region originalRegion={});')
-    t=replace(t,'    bool rayUnavailable=false;','    bool rayUnavailable=false;\n    uint32_t rayRetry=0;')
+    t = replace(
+        t,
+        "        std::unique_ptr<RenderTexture> color, depth, originalColor;",
+        "        std::shared_ptr<RenderTexture> color,depth;\n        std::unique_ptr<RenderTexture> originalColor;\n        uint32_t originalWidth=0,originalHeight=0,captureOwner=UINT32_MAX;\n        bool classic=false,opticalCaptured=false;\n        uint32_t opticalCamera=UINT32_MAX;\n        interop::float4 opticalView{};",
+    )
+    t = replace(t, "        std::unique_ptr<RenderTexture> surface;", "        std::shared_ptr<RenderTexture> surface;")
+    t = replace(
+        t, "bool classic, bool selfDepth);", "bool classic, bool selfDepth,water_work::Region originalRegion={});"
+    )
+    t = replace(t, "    bool rayUnavailable=false;", "    bool rayUnavailable=false;\n    uint32_t rayRetry=0;")
     return t
-change('src/render/rt64_water_renderer.h',header)
 
-prepare=r'''uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTarget *color, RenderTarget *depth, uint64_t key, bool classic, bool selfDepth,water_work::Region originalRegion) {
+
+change("src/render/rt64_water_renderer.h", header)
+
+prepare = r"""uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTarget *color, RenderTarget *depth, uint64_t key, bool classic, bool selfDepth,water_work::Region originalRegion) {
     const auto sceneKey=std::make_tuple(key,classic,selfDepth);
     if(rejectedScenes.count(sceneKey))return water_policy::invalidScene;
     const auto found=sceneKeys.find(sceneKey);
@@ -179,132 +223,310 @@ prepare=r'''uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTar
         throw;
     }
 }
-'''
+"""
+
 
 def renderer(t):
-    t=replace(t,'#include "rt64_water_renderer.h"','#include "rt64_water_renderer.h"\n#include "enhanced_water_settings.hpp"')
-    t=replace(t,'    if (std::getenv("WR64_TEST_WATER_SHADER_FAILURE"))',
-        '    dkr::runtime::water::enhanced::active_reflection=-1;\n    dkr::runtime::water::enhanced::scratch_fallbacks=0;\n    std::fprintf(stderr,"[water] shared-optics/compact-vertical scratch policy active; budget=256 MiB; quality defaults preserved\\n");\n    if (std::getenv("WR64_TEST_WATER_SHADER_FAILURE"))')
-    t=replace(t,'if (std::getenv("DKRR_WATER_PROFILE") && device->getCapabilities().queryPools)',
-        'if ((std::getenv("DKRR_WATER_PROFILE") || dkr::runtime::water::enhanced::timing_enabled.load()) && device->getCapabilities().queryPools)')
-    start=t.index('uint32_t WaterRenderer::prepareScene(');end=t.index('\nbool WaterRenderer::captureScene(',start)
-    t=t[:start]+prepare+t[end:]
-    t=replace(t,'        spray->setBuffer(spray->draws,drawBuffer.get(),RenderBufferStructuredView(sizeof(interop::WaterDrawParams)));',
-        '        if(spray)spray->setBuffer(spray->draws,drawBuffer.get(),RenderBufferStructuredView(sizeof(interop::WaterDrawParams)));')
-    t=replace(t,'        if (particleBuffer.get()) spray->setBuffer(', '        if (spray && particleBuffer.get()) spray->setBuffer(')
-    t=replace(t,'    rays.resetFrame();','    rays.resetFrame();\n    if(rayRetry && !--rayRetry)rayUnavailable=false;')
-    t=replace(t,'scene.captured=false; scene.surfaceCleared=false;', 'scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false;')
-    t=replace(t,'        rayUnavailable=true;', '        rayUnavailable=true;rayRetry=120;')
-    t=replace(t,'    pipelines.emplace(key, std::move(result));',
-        '    if(!result && hardware)return nullptr; // Transient failure must not poison the cache forever.\n    pipelines.emplace(key, std::move(result));')
-    t=replace(t,'    if(scene.captured && scene.capturedCamera==camera &&',
-        '    if(scene.classic) {\n        if(scene.captured)return false;scene.captured=true;\n        worker->commandList->setFramebuffer(nullptr);\n        worker->commandList->barriers(RenderBarrierStage::GRAPHICS,{\n            RenderTextureBarrier(scene.color.get(),RenderTextureLayout::SHADER_READ),\n            RenderTextureBarrier(scene.depth.get(),RenderTextureLayout::SHADER_READ)});\n        return true;\n    }\n    auto& optical=scenes[scene.captureOwner];\n    const bool same=optical.opticalCaptured && optical.opticalCamera==camera &&\n        optical.opticalView.x==view.x && optical.opticalView.y==view.y &&\n        optical.opticalView.z==view.z && optical.opticalView.w==view.w;\n    if(same && scene.captured && scene.capturedCamera==camera &&')
+    t = replace(t, "draw.material.identity.y!=0", "(uint32_t(draw.material.identity.y)&WATER_DEBUG_MASK)!=0")
+    t = replace(
+        t, "draws.back().material.identity.y==12", "(uint32_t(draws.back().material.identity.y)&WATER_DEBUG_MASK)==12"
+    )
+    t = replace(
+        t,
+        '#include "rt64_water_renderer.h"',
+        '#include "rt64_water_renderer.h"\n#include "enhanced_water_settings.hpp"',
+    )
+    t = replace(
+        t,
+        '    if (std::getenv("WR64_TEST_WATER_SHADER_FAILURE"))',
+        '    dkr::runtime::water::enhanced::active_reflection=-1;\n    dkr::runtime::water::enhanced::scratch_fallbacks=0;\n    std::fprintf(stderr,"[water] shared-optics/compact-vertical scratch policy active; budget=256 MiB; quality defaults preserved\\n");\n    if (std::getenv("WR64_TEST_WATER_SHADER_FAILURE"))',
+    )
+    t = replace(
+        t,
+        'if (std::getenv("DKRR_WATER_PROFILE") && device->getCapabilities().queryPools)',
+        'if ((std::getenv("DKRR_WATER_PROFILE") || dkr::runtime::water::enhanced::timing_enabled.load()) && device->getCapabilities().queryPools)',
+    )
+    start = t.index("uint32_t WaterRenderer::prepareScene(")
+    end = t.index("\nbool WaterRenderer::captureScene(", start)
+    t = t[:start] + prepare + t[end:]
+    t = replace(
+        t,
+        "        spray->setBuffer(spray->draws,drawBuffer.get(),RenderBufferStructuredView(sizeof(interop::WaterDrawParams)));",
+        "        if(spray)spray->setBuffer(spray->draws,drawBuffer.get(),RenderBufferStructuredView(sizeof(interop::WaterDrawParams)));",
+    )
+    t = replace(
+        t,
+        "        if (particleBuffer.get()) spray->setBuffer(",
+        "        if (spray && particleBuffer.get()) spray->setBuffer(",
+    )
+    t = replace(
+        t, "    rays.resetFrame();", "    rays.resetFrame();\n    if(rayRetry && !--rayRetry)rayUnavailable=false;"
+    )
+    t = replace(
+        t,
+        "scene.captured=false; scene.surfaceCleared=false;",
+        "scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false;",
+    )
+    t = replace(t, "        rayUnavailable=true;", "        rayUnavailable=true;rayRetry=120;")
+    t = replace(
+        t,
+        "    pipelines.emplace(key, std::move(result));",
+        "    if(!result && hardware)return nullptr; // Transient failure must not poison the cache forever.\n    pipelines.emplace(key, std::move(result));",
+    )
+    t = replace(
+        t,
+        "    if(scene.captured && scene.capturedCamera==camera &&",
+        "    if(scene.classic) {\n        if(scene.captured)return false;scene.captured=true;\n        worker->commandList->setFramebuffer(nullptr);\n        worker->commandList->barriers(RenderBarrierStage::GRAPHICS,{\n            RenderTextureBarrier(scene.color.get(),RenderTextureLayout::SHADER_READ),\n            RenderTextureBarrier(scene.depth.get(),RenderTextureLayout::SHADER_READ)});\n        return true;\n    }\n    auto& optical=scenes[scene.captureOwner];\n    const bool same=optical.opticalCaptured && optical.opticalCamera==camera &&\n        optical.opticalView.x==view.x && optical.opticalView.y==view.y &&\n        optical.opticalView.z==view.z && optical.opticalView.w==view.w;\n    if(same && scene.captured && scene.capturedCamera==camera &&",
+    )
     # A second legacy depth mode shares the immutable pre-water optical image,
     # but still initializes its own isolated depth attachment when needed.
-    t=replace(t,'    worker->commandList->barriers(RenderBarrierStage::COMPUTE, {\n        RenderTextureBarrier(scene.sourceColor->texture.get()',
-        '    if(!same) {\n    optical.opticalCaptured=true;optical.opticalCamera=camera;optical.opticalView=view;\n    worker->commandList->barriers(RenderBarrierStage::COMPUTE, {\n        RenderTextureBarrier(scene.sourceColor->texture.get()')
-    t=replace(t,'    endProfile(worker,profileToken);\n    return true;',
-        '''    } else if(scene.selfDepth) {
+    t = replace(
+        t,
+        "    worker->commandList->barriers(RenderBarrierStage::COMPUTE, {\n        RenderTextureBarrier(scene.sourceColor->texture.get()",
+        "    if(!same) {\n    optical.opticalCaptured=true;optical.opticalCamera=camera;optical.opticalView=view;\n    worker->commandList->barriers(RenderBarrierStage::COMPUTE, {\n        RenderTextureBarrier(scene.sourceColor->texture.get()",
+    )
+    t = replace(
+        t,
+        "    endProfile(worker,profileToken);\n    return true;",
+        """    } else if(scene.selfDepth) {
         // A reused optical image can still require this mode's private depth
         // copy. Restore the source attachment even without another capture.
         worker->commandList->barriers(RenderBarrierStage::GRAPHICS,
             RenderTextureBarrier(scene.sourceDepth->texture.get(),depthReadOnly ? RenderTextureLayout::DEPTH_READ : RenderTextureLayout::DEPTH_WRITE));
     }
     endProfile(worker,profileToken);
-    return true;''')
-    t=replace(t,'    const auto& view=draws[drawIndex].viewBounds;\n    const auto region=water_work::captureRegion(scene.width,scene.height,view.x,view.y,view.z,view.w);\n    const uint32_t params[]={scene.width,scene.height,samples,0,region.x,region.y,region.width,region.height};',
-        '''    const auto& region=draws[drawIndex].originalRegion;
+    return true;""",
+    )
+    t = replace(
+        t,
+        "    const auto& view=draws[drawIndex].viewBounds;\n    const auto region=water_work::captureRegion(scene.width,scene.height,view.x,view.y,view.z,view.w);\n    const uint32_t params[]={scene.width,scene.height,samples,0,region.x,region.y,region.width,region.height};",
+        """    const auto& region=draws[drawIndex].originalRegion;
     const uint32_t x=uint32_t(region.x),y=uint32_t(region.y);
     const uint32_t width=std::min(scene.originalWidth,scene.sourceColor->width-x);
     const uint32_t height=std::min(scene.originalHeight,scene.sourceColor->height-y);
-    const uint32_t params[]={scene.originalWidth,scene.originalHeight,samples,0,x,y,width,height};''')
-    t=replace(t,'    worker->commandList->dispatch((region.width+7)/8,(region.height+7)/8,1);\n    worker->commandList->barriers(RenderBarrierStage::GRAPHICS,{',
-        '    worker->commandList->dispatch((width+7)/8,(height+7)/8,1);\n    worker->commandList->barriers(RenderBarrierStage::GRAPHICS,{')
-    t=replace(t,'    if (!scene.surfaceCleared) {\n        worker->commandList->clearColor(0,RenderColor(0,0,0,0));\n        scene.surfaceCleared=true;',
-        '    auto& maskOwner=scenes[scene.captureOwner];\n    if (!maskOwner.surfaceCleared) {\n        worker->commandList->clearColor(0,RenderColor(0,0,0,0));\n        maskOwner.surfaceCleared=true;')
-    t=replace(t,'    const uint32_t budget=m.identity.x>=3 ? 4096 : 2048;',
-        '    const uint32_t budget=m.performance.w>=2 ? 4096 : m.performance.w>=1 ? 2048 : 512;')
-    t=replace(t,'distance*(b-a)*std::clamp(speed/250.0f', 'distance*(b-a)*(m.performance.w<1 ? 0.5f : 1.0f)*std::clamp(speed/250.0f')
-    t=replace(t,'    const uint32_t resolution=water_work::fieldResolution(active,bool(fieldTextures[0]),fieldResolution,uint32_t(m.identity.x));',
-        '    const uint32_t resolution=active && m.performance.y>=128 ? uint32_t(m.performance.y) : water_work::fieldResolution(active,bool(fieldTextures[0]),fieldResolution,uint32_t(m.identity.x));')
-    t=replace(t,'    wireStarts.push_back(uint32_t(wireIndices.size()));',
-        '    wireStarts.push_back(uint32_t(wireIndices.size()));\n    if(draws.back().material.effects.z>=3)return;')
-    t=replace(t,'    normalVertices.clear(); normalFaces.clear();',
-        '''    for(uint32_t i=0;i<drawScenes.size();i++) {
+    const uint32_t params[]={scene.originalWidth,scene.originalHeight,samples,0,x,y,width,height};""",
+    )
+    t = replace(
+        t,
+        "    worker->commandList->dispatch((region.width+7)/8,(region.height+7)/8,1);\n    worker->commandList->barriers(RenderBarrierStage::GRAPHICS,{",
+        "    worker->commandList->dispatch((width+7)/8,(height+7)/8,1);\n    worker->commandList->barriers(RenderBarrierStage::GRAPHICS,{",
+    )
+    t = replace(
+        t,
+        "    if (!scene.surfaceCleared) {\n        worker->commandList->clearColor(0,RenderColor(0,0,0,0));\n        scene.surfaceCleared=true;",
+        "    auto& maskOwner=scenes[scene.captureOwner];\n    if (!maskOwner.surfaceCleared) {\n        worker->commandList->clearColor(0,RenderColor(0,0,0,0));\n        maskOwner.surfaceCleared=true;",
+    )
+    t = replace(
+        t,
+        "    const uint32_t budget=m.identity.x>=3 ? 4096 : 2048;",
+        "    const uint32_t budget=m.performance.w>=2 ? 4096 : m.performance.w>=1 ? 2048 : 512;",
+    )
+    t = replace(
+        t,
+        "distance*(b-a)*std::clamp(speed/250.0f",
+        "distance*(b-a)*(m.performance.w<1 ? 0.5f : 1.0f)*std::clamp(speed/250.0f",
+    )
+    t = replace(
+        t,
+        "    const uint32_t resolution=water_work::fieldResolution(active,bool(fieldTextures[0]),fieldResolution,uint32_t(m.identity.x));",
+        "    const uint32_t resolution=active && m.performance.y>=128 ? uint32_t(m.performance.y) : water_work::fieldResolution(active,bool(fieldTextures[0]),fieldResolution,uint32_t(m.identity.x));",
+    )
+    t = replace(
+        t,
+        "    wireStarts.push_back(uint32_t(wireIndices.size()));",
+        "    wireStarts.push_back(uint32_t(wireIndices.size()));\n    if(draws.back().material.effects.z>=3)return;",
+    )
+    t = replace(
+        t,
+        "    normalVertices.clear(); normalFaces.clear();",
+        """    for(uint32_t i=0;i<drawScenes.size();i++) {
         auto& d=draws[i];const auto& s=scenes[drawScenes[i]];
         if(s.classic) {d.originalRegion.z=float(s.originalWidth);d.originalRegion.w=float(s.originalHeight);}
     }
-    normalVertices.clear(); normalFaces.clear();''')
-    a=t.index('    for (const auto &scene:scenes) {',t.index('uint64_t WaterRenderer::allocationBytes()'))
-    b=t.index('    return bytes;',a)
-    t=t[:a]+'''    for(uint32_t i=0;i<scenes.size();i++) {
+    normalVertices.clear(); normalFaces.clear();""",
+    )
+    a = t.index("    for (const auto &scene:scenes) {", t.index("uint64_t WaterRenderer::allocationBytes()"))
+    b = t.index("    return bytes;", a)
+    t = (
+        t[:a]
+        + """    for(uint32_t i=0;i<scenes.size();i++) {
         const auto& s=scenes[i];if(!s.color)continue;
         bytes+=water_policy::scratchBytes(s.width,s.height,s.surfaceSamples,s.classic,s.captureOwner!=i,
             bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight);
     }
-'''+t[b:]
+"""
+        + t[b:]
+    )
     # Plume separates Vulkan STORAGE usage from D3D12 UNORDERED_ACCESS.
     # Water's compute-written textures need both, not just the D3D12 bit.
-    t=t.replace('RenderTextureFlag::UNORDERED_ACCESS',
-        'RenderTextureFlag::STORAGE | RenderTextureFlag::UNORDERED_ACCESS')
+    t = t.replace(
+        "RenderTextureFlag::UNORDERED_ACCESS", "RenderTextureFlag::STORAGE | RenderTextureFlag::UNORDERED_ACCESS"
+    )
     return t
-change('src/render/rt64_water_renderer.cpp',renderer)
+
+
+change("src/render/rt64_water_renderer.cpp", renderer)
+
 
 def framebuffer(t):
-    t=replace(t,'#include "WaterProjection.h"','#include "WaterProjection.h"\n#include "WaterBounds.h"\n#include "enhanced_water_settings.hpp"')
-    t=replace(t,'                    bool hardware=!classic && wp.material.effects.w>0.5f &&',
-        '                    bool hardware=!classic && wp.material.appearance.x>0 && wp.material.effects.w>0.5f &&')
-    t=t.replace('waterRenderer->rayUnavailable=true;','waterRenderer->rayUnavailable=true;waterRenderer->rayRetry=120;')
-    t=replace(t,'            worker->commandList->setFramebuffer(nullptr);\n            worker->commandList->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(scene.surface.get()',
-        '            if(scene.classic) {activeWaterDraw=UINT32_MAX;switchToGraphicsPipeline();return;}\n            worker->commandList->setFramebuffer(nullptr);\n            worker->commandList->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(scene.surface.get()')
-    t=replace(t,'                    const bool needsSurface=selfDepth || (!waterRenderer->particles.empty() &&\n                        waterRenderer->draws[drawCall.waterIndex].material.effects.x>0.5f);',
-        '                    const bool needsSurface=!classic && (selfDepth || (!waterRenderer->particles.empty() &&\n                        waterRenderer->draws[drawCall.waterIndex].material.effects.x>0.5f));')
-    t=replace(t,'                        const auto waterScene=waterRenderer->prepareScene(p.worker,p.fbStorage->colorTarget,p.fbStorage->depthTarget,\n                            uint64_t(framebufferCount),classic,selfDepth);',
-        '''                        const auto originalRegion=classic ? waterOriginalRegion(drawData,call.meshDesc.faceIndicesStart,
+    t = replace(
+        t,
+        "if (wantsWater && waterRenderer && !waterUnavailable && waterRecovery.ready() && waterSamplesSupported) {",
+        "if (wantsWater && waterRenderer && !waterUnavailable && waterRecovery.ready() && waterSamplesSupported &&\n"
+        "                    dkr::runtime::water::style::projection_ready(proj.transformsIndex,drawData.modViewTransforms.size(),\n"
+        "                        drawData.modViewProjTransforms.size(),drawData.rspViewports.size(),waterMaterial->cameraPosition.w==1.0f)) {",
+    )
+    t = replace(
+        t,
+        "                    const auto inverseView = hlslpp::inverse(drawData.modViewTransforms[proj.transformsIndex]);\n"
+        "                    const auto camera = viewPositionFrom(inverseView);",
+        "                    hlslpp::float3 camera(0.0f);\n"
+        "                    if(wp.material.cameraPosition.w!=1.0f)\n"
+        "                        camera=viewPositionFrom(hlslpp::inverse(drawData.modViewTransforms[proj.transformsIndex]));",
+    )
+    t = replace(
+        t,
+        '#include "WaterProjection.h"',
+        '#include "WaterProjection.h"\n#include "WaterBounds.h"\n#include "enhanced_water_settings.hpp"\n#include "water_style/projection_policy.hpp"',
+    )
+    t = replace(
+        t,
+        "                    bool hardware=!classic && wp.material.effects.w>0.5f &&",
+        "                    bool hardware=!classic && wp.material.appearance.x>0 && wp.material.effects.w>0.5f &&",
+    )
+    t = t.replace(
+        "waterRenderer->rayUnavailable=true;", "waterRenderer->rayUnavailable=true;waterRenderer->rayRetry=120;"
+    )
+    t = replace(
+        t,
+        "            worker->commandList->setFramebuffer(nullptr);\n            worker->commandList->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(scene.surface.get()",
+        "            if(scene.classic) {activeWaterDraw=UINT32_MAX;switchToGraphicsPipeline();return;}\n            worker->commandList->setFramebuffer(nullptr);\n            worker->commandList->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(scene.surface.get()",
+    )
+    t = replace(
+        t,
+        "                    const bool needsSurface=selfDepth || (!waterRenderer->particles.empty() &&\n                        waterRenderer->draws[drawCall.waterIndex].material.effects.x>0.5f);",
+        "                    const bool needsSurface=!classic && (selfDepth || (!waterRenderer->particles.empty() &&\n                        waterRenderer->draws[drawCall.waterIndex].material.effects.x>0.5f));",
+    )
+    t = replace(
+        t,
+        "                        const auto waterScene=waterRenderer->prepareScene(p.worker,p.fbStorage->colorTarget,p.fbStorage->depthTarget,\n                            uint64_t(framebufferCount),classic,selfDepth);",
+        """                        const auto originalRegion=classic ? waterOriginalRegion(drawData,call.meshDesc.faceIndicesStart,
                             call.callDesc.triangleCount*3,wp,p.interpolationWeight) : water_work::Region{};
                         wp.originalRegion={float(originalRegion.x),float(originalRegion.y),0,0};
                         const auto waterScene=waterRenderer->prepareScene(p.worker,p.fbStorage->colorTarget,p.fbStorage->depthTarget,
-                            uint64_t(framebufferCount),classic,selfDepth,originalRegion);''')
-    t=replace(t,'                        if(waterScene!=water_policy::invalidScene) {',
-        '''                        if(waterScene!=water_policy::invalidScene) {
-                        if(!classic)dkr::runtime::water::enhanced::active_reflection.store(hardware ? 2 : wp.material.identity.x>=2 ? 1 : 0);''')
+                            uint64_t(framebufferCount),classic,selfDepth,originalRegion);""",
+    )
+    t = replace(
+        t,
+        "                        if(waterScene!=water_policy::invalidScene) {",
+        """                        if(waterScene!=water_policy::invalidScene) {
+                        if(!classic)dkr::runtime::water::enhanced::active_reflection.store(hardware ? 2 : wp.material.identity.x>=2 ? 1 : 0);""",
+    )
     return t
-change('src/render/rt64_framebuffer_renderer.cpp',framebuffer)
+
+
+change("src/render/rt64_framebuffer_renderer.cpp", framebuffer)
+
 
 def original(t):
-    t=replace(t,'RWTexture2D<float4> originalColor',
-        '[[vk::image_format("rgba16f")]] RWTexture2D<float4> originalColor')
-    t=replace(t,'    pixel+=params.origin;\n    if (pixel.x >= params.width || pixel.y >= params.height) return;',
-        '    const uint2 sourcePixel=pixel+params.origin;')
-    return t.replace('sourceColor.Load(pixel,i)','sourceColor.Load(sourcePixel,i)').replace('sourceColor.Load(uint3(pixel,0))','sourceColor.Load(uint3(sourcePixel,0))')
-change('src/shaders/WaterOriginalCS.hlsl',original)
+    t = replace(
+        t, "RWTexture2D<float4> originalColor", '[[vk::image_format("rgba16f")]] RWTexture2D<float4> originalColor'
+    )
+    t = replace(
+        t,
+        "    pixel+=params.origin;\n    if (pixel.x >= params.width || pixel.y >= params.height) return;",
+        "    const uint2 sourcePixel=pixel+params.origin;",
+    )
+    return t.replace("sourceColor.Load(pixel,i)", "sourceColor.Load(sourcePixel,i)").replace(
+        "sourceColor.Load(uint3(pixel,0))", "sourceColor.Load(uint3(sourcePixel,0))"
+    )
+
+
+change("src/shaders/WaterOriginalCS.hlsl", original)
+
 
 def capture_format(t):
-    return replace(t,'RWTexture2D<float4> capturedColor',
-        '[[vk::image_format("rgba16f")]] RWTexture2D<float4> capturedColor')
-change('src/shaders/WaterCaptureCS.hlsl',capture_format)
+    return replace(
+        t, "RWTexture2D<float4> capturedColor", '[[vk::image_format("rgba16f")]] RWTexture2D<float4> capturedColor'
+    )
+
+
+change("src/shaders/WaterCaptureCS.hlsl", capture_format)
+
+
 def field_format(t):
-    return replace(t,'RWTexture2D<float4> nextField',
-        '[[vk::image_format("rgba16f")]] RWTexture2D<float4> nextField')
-change('src/shaders/WaterFieldCS.hlsl',field_format)
+    return replace(t, "RWTexture2D<float4> nextField", '[[vk::image_format("rgba16f")]] RWTexture2D<float4> nextField')
+
+
+change("src/shaders/WaterFieldCS.hlsl", field_format)
+
 
 def pixel(t):
-    t=replace(t,'    uint depthWidth,depthHeight,depthLevels; sceneDepth.GetDimensions(0,depthWidth,depthHeight,depthLevels);',
-        '    if(p.material.appearance.x<=0)return 0;\n    uint depthWidth,depthHeight,depthLevels; sceneDepth.GetDimensions(0,depthWidth,depthHeight,depthLevels);')
-    t=replace(t,'step<(p.material.identity.x>=3 ? 36u : 24u)', 'step<uint(p.material.performance.x>0 ? p.material.performance.x : (p.material.identity.x>=3 ? 36 : 24))')
-    t=replace(t,'        uint2 at=uint2(position.xy);','        uint2 at=uint2(position.xy-p.originalRegion.xy);')
-    t=replace(t,'        uint w,h; sceneColor.GetDimensions(w,h);\n        at+=uint2((sampleIndex&1)*w,(sampleIndex>>1)*h);',
-        '        at+=uint2((sampleIndex&1)*uint(p.originalRegion.z),(sampleIndex>>1)*uint(p.originalRegion.w));')
-    t=replace(t,'float streak=smoothstep(0.67,0.91,foamNoise(flow))*filter*m.animation.w;',
-        'float streak=m.appearance.w<=0 ? 0 : smoothstep(0.67,0.91,foamNoise(flow))*filter*m.animation.w*m.appearance.w;')
-    t=replace(t,'    float3 wake=interaction(worldPosition.xz,p);','    float3 wake=interaction(worldPosition.xz,p)*m.appearance.z;')
-    t=replace(t,'position.xy + ripples * 13 * saturate(thickness/80)', 'position.xy + ripples * 13 * m.appearance.y * saturate(thickness/80)')
-    t=replace(t,'    color += reflected*fresnel;', '    color += reflected*fresnel*m.appearance.x;')
-    t=replace(t,'    if(reflection.a<0.75) {','    if(reflection.a<0.75 && m.appearance.x>0) {')
-    t=replace(t,'        uint2 originalPixel=uint2(position.xy);','        uint2 originalPixel=uint2(position.xy-p.originalRegion.xy);')
-    t=replace(t,'        uint originalWidth,originalHeight;\n        sceneColor.GetDimensions(originalWidth,originalHeight);\n        originalPixel+=uint2((sampleIndex&1)*originalWidth,(sampleIndex>>1)*originalHeight);',
-        '        originalPixel+=uint2((sampleIndex&1)*uint(p.originalRegion.z),(sampleIndex>>1)*uint(p.originalRegion.w));')
+    t = replace(
+        t,
+        "    uint depthWidth,depthHeight,depthLevels; sceneDepth.GetDimensions(0,depthWidth,depthHeight,depthLevels);",
+        "    if(p.material.appearance.x<=0)return 0;\n    uint depthWidth,depthHeight,depthLevels; sceneDepth.GetDimensions(0,depthWidth,depthHeight,depthLevels);",
+    )
+    t = replace(
+        t,
+        "step<(p.material.identity.x>=3 ? 36u : 24u)",
+        "step<uint(p.material.performance.x>0 ? p.material.performance.x : (p.material.identity.x>=3 ? 36 : 24))",
+    )
+    t = replace(t, "        uint2 at=uint2(position.xy);", "        uint2 at=uint2(position.xy-p.originalRegion.xy);")
+    t = replace(
+        t,
+        "        uint w,h; sceneColor.GetDimensions(w,h);\n        at+=uint2((sampleIndex&1)*w,(sampleIndex>>1)*h);",
+        "        at+=uint2((sampleIndex&1)*uint(p.originalRegion.z),(sampleIndex>>1)*uint(p.originalRegion.w));",
+    )
+    t = replace(
+        t,
+        "float streak=smoothstep(0.67,0.91,foamNoise(flow))*filter*m.animation.w;",
+        "float streak=m.appearance.w<=0 ? 0 : smoothstep(0.67,0.91,foamNoise(flow))*filter*m.animation.w*m.appearance.w;",
+    )
+    t = replace(
+        t,
+        "    float3 wake=interaction(worldPosition.xz,p);",
+        "    float3 wake=interaction(worldPosition.xz,p)*m.appearance.z;",
+    )
+    t = replace(
+        t,
+        "position.xy + ripples * 13 * saturate(thickness/80)",
+        "position.xy + ripples * 13 * m.appearance.y * saturate(thickness/80)",
+    )
+    t = replace(t, "    color += reflected*fresnel;", "    color += reflected*fresnel*m.appearance.x;")
+    t = replace(
+        t,
+        "    float3 color = body * (0.55 + nl * 0.45) * m.sunColor.a * (1-fresnel)\n        + m.sunColor.rgb * m.sunDirection.a * specular;",
+        """    // Style changes the diffuse body and sun glints only. Keep N, Fresnel,
+    // reflection samples and radiance untouched, including the hardware path.
+    const bool dkrStyle = (uint(m.identity.y) & WATER_STYLE_DKR) != 0;
+    float sunGlint = specular;
+    if (dkrStyle) {
+        // Broad accents follow the existing wave geometry rather than an
+        // extra animated normal map. Derivative filtering prevents distant shimmer.
+        float accent = smoothstep(0.49,0.64,waveLight);
+        accent *= 1-smoothstep(0.06,0.22,fwidth(waveLight));
+        body += m.shallowColor.rgb * (0.12 * accent);
+        sunGlint = lerp(specular,min(specular,0.7),0.65);
+    }
+    float3 color = body * (0.55 + nl * 0.45) * m.sunColor.a * (1-fresnel)
+        + m.sunColor.rgb * m.sunDirection.a * sunGlint;""",
+    )
+    t = replace(t, "    uint debug = (uint)m.identity.y;", "    uint debug = (uint)m.identity.y & WATER_DEBUG_MASK;")
+    t = replace(t, "    if(reflection.a<0.75) {", "    if(reflection.a<0.75 && m.appearance.x>0) {")
+    t = replace(
+        t,
+        "        uint2 originalPixel=uint2(position.xy);",
+        "        uint2 originalPixel=uint2(position.xy-p.originalRegion.xy);",
+    )
+    t = replace(
+        t,
+        "        uint originalWidth,originalHeight;\n        sceneColor.GetDimensions(originalWidth,originalHeight);\n        originalPixel+=uint2((sampleIndex&1)*originalWidth,(sampleIndex>>1)*originalHeight);",
+        "        originalPixel+=uint2((sampleIndex&1)*uint(p.originalRegion.z),(sampleIndex>>1)*uint(p.originalRegion.w));",
+    )
     return t
-change('src/shaders/WaterPS.hlsl',pixel)
-output.write_text(''.join(changes),newline='\n')
-print(f'Authored {output}; no dependency/stage files changed.')
+
+
+change("src/shaders/WaterPS.hlsl", pixel)
+output.write_text("".join(changes), newline="\n")
+print(f"Authored {output}; no dependency/stage files changed.")

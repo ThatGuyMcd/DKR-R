@@ -1,4 +1,5 @@
 """Exercise shell command failures with fake compilers and no private inputs."""
+
 import os
 from pathlib import Path
 import shutil
@@ -18,8 +19,11 @@ class DeveloperEntrypointTests(unittest.TestCase):
         self.bin = self.root / "tools"
         self.bin.mkdir()
         self.trace = self.root / "trace"
-        self.env = {**os.environ, "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
-                    "DKR_TEST_TRACE": str(self.trace)}
+        self.env = {
+            **os.environ,
+            "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
+            "DKR_TEST_TRACE": str(self.trace),
+        }
 
     def executable(self, path, body):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,17 +31,18 @@ class DeveloperEntrypointTests(unittest.TestCase):
         path.chmod(0o755)
 
     def invoke(self, script, *args):
-        return subprocess.run([str(self.root / script), *args], env=self.env,
-                              capture_output=True, text=True)
+        return subprocess.run([str(self.root / script), *args], env=self.env, capture_output=True, text=True)
 
     def linux_fixture(self):
         shutil.copy2(ROOT / "Build-Linux.sh", self.root / "Build-Linux.sh")
         (self.root / "VERSION").write_text("1.0.5\n")
         for name in ("v77", "v80", "extern/rt64", "extern/n64-modern-runtime"):
             (self.root / name).mkdir(parents=True)
-        self.env.update(DKR_LINUX_GENERATED_SOURCE=str(self.root / "v77"),
-                        DKR_LINUX_V80_GENERATED_SOURCE=str(self.root / "v80"),
-                        DKR_LINUX_BUILD_DIR=str(self.root / "build"))
+        self.env.update(
+            DKR_LINUX_GENERATED_SOURCE=str(self.root / "v77"),
+            DKR_LINUX_V80_GENERATED_SOURCE=str(self.root / "v80"),
+            DKR_LINUX_BUILD_DIR=str(self.root / "build"),
+        )
         self.executable(self.bin / "cmake", 'echo cmake >> "$DKR_TEST_TRACE"')
         self.executable(self.bin / "ctest", 'echo ctest >> "$DKR_TEST_TRACE"; exit "${DKR_TEST_EXIT:-0}"')
         self.executable(self.root / "build/bin/Release/DKR-R", 'echo runtime >> "$DKR_TEST_TRACE"')
@@ -79,14 +84,24 @@ class DeveloperEntrypointTests(unittest.TestCase):
     def test_failed_build_kit_does_not_poison_retry(self):
         (self.root / "scripts").mkdir()
         shutil.copy2(ROOT / "scripts/Package-macOS-Build-Kit.sh", self.root / "scripts/Package-macOS-Build-Kit.sh")
-        for name in ("VERSION", "dependencies.lock.json", "docs/BUILDING.md", "LICENSE.md",
-                     "THIRD_PARTY.md", "packaging/MACOS-BUILD-README.md", "Build-macOS.sh",
-                     "Setup-macOS.sh", "Run-macOS.sh"):
+        for name in (
+            "VERSION",
+            "dependencies.lock.json",
+            "docs/BUILDING.md",
+            "LICENSE.md",
+            "THIRD_PARTY.md",
+            "packaging/MACOS-BUILD-README.md",
+            "Build-macOS.sh",
+            "Setup-macOS.sh",
+            "Run-macOS.sh",
+            ".claude/settings.json",
+            ".codex/hooks.json",
+        ):
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("1.0.5\n")
-        for name in ("assets", "patches", "runtime-recomp"):
-            (self.root / name).mkdir()
+        for name in ("assets", "patches", "runtime-recomp", "tests/fixtures/pattern-guard"):
+            (self.root / name).mkdir(parents=True)
         self.executable(self.bin / "rsync", "exit 0")
         self.executable(self.bin / "tar", 'echo partial > "$4"; exit "${DKR_TEST_EXIT:-9}"')
         self.env.update(DKR_RELEASE_VERSION="1.0.5", DKR_MAC_KIT_STAGE_ROOT=str(self.root / "stage"))

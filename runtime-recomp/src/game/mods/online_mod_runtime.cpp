@@ -148,24 +148,31 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
         if(!track->music)continue;
         MusicSong song;song.info=*track->music;
         if(song.info.kind==dkr::runtime::custom_tracks::MusicKind::Recording) {
+            // Sharing decoded samples must not let a second course claim the
+            // first recording's digest without verifying its own file bytes.
+            cancelled(stop);const auto input=read_file(song.info.file,dkr::runtime::custom_tracks::kMaxMusicBytes);
+            if(input.size()!=song.info.bytes || sha256(input)!=song.info.sha256)
+                throw Error("Music for \""+track->name+"\" changed after package verification. Re-import that track.");
             auto found=decoded.find(song.info.sha256);
             if(found!=decoded.end())song.pcm=found->second;
             else {
-                cancelled(stop);const auto input=read_file(song.info.file,dkr::runtime::custom_tracks::kMaxMusicBytes);
-                if(sha256(input)!=song.info.sha256)throw Error("Online music changed after package verification.");
                 auto pcm=std::make_shared<dkr::runtime::custom_music::DecodedMusic>();std::string error;
                 if(!dkr::runtime::custom_music::decode_bytes(input.data(),input.size(),song.info.codec,*pcm,error,&cancel_decode,std::min<std::size_t>(64*MiB,music_budget)))
-                    throw Error("Online track music cannot be prepared: "+error);
-                if(pcm->frames!=song.info.frames || pcm->sample_rate!=song.info.sample_rate ||
-                   song.info.loop_start>=pcm->frames || (song.info.loop_end && (song.info.loop_end>pcm->frames || song.info.loop_end<=song.info.loop_start)))
-                    throw Error("Online music does not match its measured loop and sample contract.");
+                    throw Error("Music for \""+track->name+"\" cannot be prepared: "+error);
                 music_budget-=pcm->samples.size()*2;song.pcm=pcm;decoded.emplace(song.info.sha256,pcm);
                 // Verify the decoded representation too: a platform whose
                 // decoder differs must not enter deterministic replay.
-                Bytes canonical;canonical.reserve(pcm->samples.size()*2);
-                for(auto sample:pcm->samples){canonical.push_back(std::uint8_t(sample));canonical.push_back(std::uint8_t(unsigned(sample)>>8));}
-                music_identity+="\n"+song.info.sha256+":"+sha256(canonical);
+                music_identity+="\n"+song.info.sha256+":"+sha256_pcm_le(pcm->samples);
             }
+            // A shared recording does not imply shared loop metadata. Check
+            // EVERY course, including deduplicated recordings, before mixing.
+            const auto& pcm=*song.pcm;
+            if(!pcm.frames || pcm.frames!=song.info.frames || pcm.sample_rate!=song.info.sample_rate ||
+               pcm.samples.size()!=pcm.frames*2 || song.info.loop_start>=pcm.frames ||
+               (song.info.loop_end && (song.info.loop_end>pcm.frames || song.info.loop_end<=song.info.loop_start)))
+                throw Error("Music for \""+track->name+"\" has invalid frame, sample-rate or loop settings. Re-export that track.");
+            std::fprintf(stderr,"[online-mods][music] course=%s frames=%llu rate=%u unique-recordings=%zu resident-bytes=%zu\n",
+                track->id.c_str(),static_cast<unsigned long long>(pcm.frames),pcm.sample_rate,decoded.size(),128*MiB-music_budget);
         }
         music->emplace(course.level_id,std::move(song));
     }

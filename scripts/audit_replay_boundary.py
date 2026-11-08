@@ -11,7 +11,6 @@ import json
 from pathlib import Path
 import re
 
-
 FUNCTION = re.compile(r"RECOMP_FUNC\s+void\s+(\w+)\s*\(")
 CALL = re.compile(r"\b(\w+)\s*\(\s*rdram\s*[,)]")
 
@@ -23,7 +22,7 @@ def audit(directory, root):
         source = file.read_text(encoding="utf-8")
         matches = list(FUNCTION.finditer(source))
         for index, match in enumerate(matches):
-            body = source[match.end(): matches[index + 1].start() if index + 1 < len(matches) else len(source)]
+            body = source[match.end() : matches[index + 1].start() if index + 1 < len(matches) else len(source)]
             body = re.sub(r"/\*.*?\*/|//[^\n]*", "", body, flags=re.S)
             # Function declarations inside hooks are not invocations because
             # their first parameter is a type, not the rdram variable.
@@ -52,10 +51,12 @@ def audit(directory, root):
         "directly_reachable_guest_functions": sum(name in functions for name in seen),
         "native_boundaries": dict(sorted(native.items())),
         "indirect_dispatch": dict(sorted(indirect.items())),
-        "limitations": ["Only direct calls whose first argument is rdram are followed.",
-                        "Indirect calls are reported, not assumed safe or fully enumerated.",
-                        "Native helper calls without rdram and shared-memory ownership need a separate audit.",
-                        "Reachability includes branches, not a claim that every call runs on every frame."]
+        "limitations": [
+            "Only direct calls whose first argument is rdram are followed.",
+            "Indirect calls are reported, not assumed safe or fully enumerated.",
+            "Native helper calls without rdram and shared-memory ownership need a separate audit.",
+            "Reachability includes branches, not a claim that every call runs on every frame.",
+        ],
     }
 
 
@@ -70,9 +71,11 @@ def main():
     if args.output:
         # This is a derived audit artifact, never a generated-code rewrite.
         args.output.write_text(encoded + "\n", encoding="utf-8")
-        print(f"{args.root}: {result['directly_reachable_guest_functions']} directly reachable guest functions; "
-              f"{len(result['native_boundaries'])} native boundaries; "
-              f"{len(result['indirect_dispatch'])} indirect-dispatch functions")
+        print(
+            f"{args.root}: {result['directly_reachable_guest_functions']} directly reachable guest functions; "
+            f"{len(result['native_boundaries'])} native boundaries; "
+            f"{len(result['indirect_dispatch'])} indirect-dispatch functions"
+        )
     else:
         print(encoded)
 

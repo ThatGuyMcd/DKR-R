@@ -17,6 +17,7 @@ unset DKR_MACOS_LOCK_ENTRY
 prepare_args=()
 jobs="${CMAKE_BUILD_PARALLEL_LEVEL:-}"
 package=0
+notarize=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --rom-v77 | --rom-v80 | --jobs)
@@ -30,6 +31,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   --skip-deps | --force) prepare_args+=("$1") ;;
   --package) package=1 ;;
+  --notarize) package=1 notarize=1 ;;
   -h | --help)
     cat <<'EOF'
 Usage: ./Build-macOS.sh --rom-v77 PATH --rom-v80 PATH [options]
@@ -42,9 +44,12 @@ Prepare, build and test DKR-R on macOS.
   --force         Regenerate payloads even when inputs are unchanged
   --package       Also create a self-contained, ad-hoc-signed app ZIP in dist/
                   (runs on this Mac's macOS version or newer: Homebrew SDL sets the floor)
+  --notarize      Package with a Developer ID signature, notarize and staple.
+                  Needs DKR_MAC_SIGN_IDENTITY (a "Developer ID Application" identity)
+                  and DKR_MAC_NOTARY_PROFILE (an xcrun notarytool keychain profile)
   -h, --help      Show this help
 
-Prerequisites: Xcode and Homebrew. Quote ROM paths with spaces.
+Prerequisites: Command Line Tools and Homebrew. Quote ROM paths with spaces.
 Output: build/dkr-runtime-macos/bin/Release/DKR-R.
 Launch with ./Run-macOS.sh.
 
@@ -61,6 +66,8 @@ EOF
   esac
   shift
 done
+# Prints the hook install command if the hooks are missing; never fails Build.
+if [[ -f "${project_root}/scripts/bootstrap_hooks.py" ]]; then python3 "${project_root}/scripts/bootstrap_hooks.py" --check || true; fi
 jobs="$(dkr_apple_build_jobs "$jobs")"
 export CMAKE_BUILD_PARALLEL_LEVEL="$jobs"
 dkr_require_macos
@@ -93,7 +100,7 @@ generated_source="${DKR_MAC_GENERATED_SOURCE}"
 }
 
 version="${DKR_RELEASE_VERSION:-$(tr -d '\r\n' <"${project_root}/VERSION")}"
-[[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+[[ "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || {
   echo 'Invalid release version.' >&2
   exit 1
 }
@@ -110,6 +117,13 @@ if [[ "$package" -eq 1 ]]; then
   }
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || {
     echo '--package needs a release version starting with major.minor.patch (e.g. 1.0.5).' >&2
+    exit 1
+  }
+fi
+if [[ "$notarize" -eq 1 ]]; then
+  # Fail before the build rather than after it.
+  [[ -n "${DKR_MAC_SIGN_IDENTITY:-}" && -n "${DKR_MAC_NOTARY_PROFILE:-}" ]] || {
+    echo '--notarize needs DKR_MAC_SIGN_IDENTITY and DKR_MAC_NOTARY_PROFILE.' >&2
     exit 1
   }
 fi
@@ -131,7 +145,9 @@ cmake -S "${project_root}/runtime-recomp" -B "${build_dir}" -G Ninja \
   -DDKR_RUNTIME_BUILD_GENERATED=ON \
   -DDKR_RUNTIME_BUILD_RT64=ON \
   -DDKR_GENERATED_SOURCE_V77="${generated_source}" \
-  -DDKR_GENERATED_SOURCE_V80="${revision_80_generated}"
+  -DDKR_GENERATED_SOURCE_V80="${revision_80_generated}" \
+  -DDKR_CODE_POLICY_V77="$(dirname "${generated_source}")/dkr.us.v77.toml" \
+  -DDKR_CODE_POLICY_V80="$(dirname "${revision_80_generated}")/dkr.us.v80.toml"
 cmake --build "${build_dir}" --parallel "${jobs}"
 ctest --test-dir "${build_dir}" --output-on-failure --no-tests=error -R '^DKR'
 
@@ -147,5 +163,7 @@ trap cleanup EXIT
 "${executable}" --self-test-pak "${pak_test}"
 printf '\nBuild and tests passed. Launch with ./Run-macOS.sh.\n'
 if [[ "$package" -eq 1 ]]; then
-  python3 "${project_root}/scripts/package_macos.py" "${build_dir}" "${version}"
+  package_args=("${build_dir}" "${version}")
+  [[ "$notarize" -eq 0 ]] || package_args+=(--notarize)
+  python3 "${project_root}/scripts/package_macos.py" "${package_args[@]}"
 fi

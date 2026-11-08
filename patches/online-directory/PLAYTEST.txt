@@ -1,0 +1,44 @@
+DKR-R public lobby playtest 1
+
+Install the matching new Windows package or Linux AppImage. The website/API
+bundle must be deployed and enabled by the owner before public discovery works.
+No service was deployed by the implementation tools.
+
+Required owner acceptance:
+1. Existing Mod Library sign-in appears in Online. New Discord sign-in opens
+   the normal browser pairing flow. Cancel, logout and account switching work.
+   Windows remembers credentials through DPAPI. Linux uses the desktop Secret
+   Service when available; otherwise session-only sign-in is clearly shown.
+2. Two launchers on different networks/countries see the same Public list and
+   online count. Two instances of one account count once. Private lobbies are
+   absent from public lists; friends/code entry retains host approval.
+3. Create Private first. Switch to Public, then back to Private while another
+   player tries to join. Lock/full/decline/block and cancelled requests work.
+   Raw direct code joins cannot bypass the authenticated directory-room gate.
+4. Race for the last slot. Start while a join is pending. Starting/testing/
+   returning rooms refuse new admissions. Roster, save and start receipts remain
+   authoritative. Re-run connection checks and review the retained Scoreboard.
+5. Host as a spectator, fill four racing ports and join waiting spectators.
+   A spectator leaving does not stop the race. A racing member leaving safely
+   returns peers to the lobby. Returning to the launcher retains lobby membership
+   and restores the same room listing only when the native runtime is waiting.
+   In isolated staging only, enable RUNNING_SPECTATORS_ENABLED in both Workers
+   and reconnect the pilot clients. Check late spectator admission/catch-up and
+   race continuity, while racing-role entry stays unavailable. Leave this flag
+   false in production until that owner acceptance passes.
+6. Exercise mod preparation, compatibility sync, checkpoint transfer and retries.
+   The new directory must not reset or bypass the repaired native transactions.
+   Include an approved mod transfer lasting more than three minutes, a benign
+   roster/account-session refresh during preparation, and a host privacy/lock
+   change. Only changes that revoke authorization should cancel preparation.
+7. Disconnect the directory during a lobby and during a race. Already admitted
+   peers can Ready/start, run the Scoreboard, play and return/leave. Discovery
+   recovers without duplicate rooms or memberships. Crash/sleep expires presence.
+8. Check keyboard, controller, high DPI, 1280x720 and Steam Deck-size windows.
+   Keep the existing layout and Scoreboard; there are no public host ratings.
+
+This is an owner-deployed pilot. Native builds and source/binary/archive checks
+do not establish live multiplayer or controller acceptance. The implementation
+does not run game/test executables or AppImages. Do not claim those checks passed
+until the owner has completed them. Existing PeerJS/STUN behaviour remains; TURN
+and universal restrictive-NAT connectivity are not supplied by this feature.

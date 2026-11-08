@@ -1,0 +1,51 @@
+{
+  "name": "main and release branches",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    }
+  ],
+  "conditions": {
+    "ref_name": {
+      "include": ["~DEFAULT_BRANCH", "refs/heads/release/*"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "require_code_owner_review": true,
+        "dismiss_stale_reviews_on_push": true,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "allowed_merge_methods": ["merge", "squash", "rebase"]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "lint", "integration_id": 15368 },
+          { "context": "linux", "integration_id": 15368 },
+          { "context": "macos (macos-15)", "integration_id": 15368 },
+          { "context": "macos (macos-15-intel)", "integration_id": 15368 },
+          { "context": "windows", "integration_id": 15368 },
+          { "context": "asset-scan", "integration_id": 15368 },
+          { "context": "dependency-lock", "integration_id": 15368 },
+          { "context": "tooling", "integration_id": 15368 },
+          { "context": "workflow-lint", "integration_id": 15368 }
+        ]
+      }
+    }
+  ]
+}

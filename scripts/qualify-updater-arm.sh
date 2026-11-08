@@ -5,7 +5,7 @@ task="${DKR_UPDATER_TASK_ROOT:?Set the qualification log directory}"
 build="${DKR_LINUX_BUILD_DIR:?Set the configured ARM64 build directory}"
 pipeline="${DKR_UPDATER_PIPELINE:?Set the reviewed patch-pipeline directory}"
 sysroot="${DKR_ARM64_SYSROOT:?Set the ARM64 sysroot}"
-version="${DKR_RELEASE_VERSION:-$(tr -d '\r\n' < "$project_root/VERSION")}"
+version="${DKR_RELEASE_VERSION:-$(tr -d '\r\n' <"$project_root/VERSION")}"
 mkdir -p "$task"
 export QEMU_LD_PREFIX="$sysroot" PKG_CONFIG_SYSROOT_DIR="$sysroot"
 export PKG_CONFIG_LIBDIR="$sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:$sysroot/usr/share/pkgconfig"
@@ -22,7 +22,7 @@ cmake -S "$project_root/runtime-recomp" -B "$build" -G Ninja \
   -DDKR_EXPERIMENTAL_OWNED_GENERATED="$pipeline/owned-v77" -DDKR_EXPERIMENTAL_OWNED_GENERATED_V80="$pipeline/owned-v80" \
   -DDKR_EXPERIMENTAL_RACE_TEST=ON -DDKR_LEGACY_QUALIFICATION=OFF -DDKR_REPLAY_QUALIFICATION=OFF \
   -DDKR_ANDROID_RENDER_QUALIFICATION=OFF -DDKR_EXPERIMENTAL_RENDER_QUALIFICATION=OFF \
-  -DDKR_WATER_QUALIFICATION=OFF -DDKR_TASK_QUALIFICATION=OFF > "$task/ARM-configure.log" 2>&1
+  -DDKR_WATER_QUALIFICATION=OFF -DDKR_TASK_QUALIFICATION=OFF >"$task/ARM-configure.log" 2>&1
 cmake --build "$build" --target DKRPortGame DKRUpdateHelper DKRUpdateCoreTests DKRUpdateServiceTests DKRUpdateProcessTests \
-  --parallel 2 > "$task/ARM-build.log" 2>&1
-ctest --test-dir "$build" -R DKRUpdate --output-on-failure > "$task/ARM-update-tests.log" 2>&1
+  --parallel 2 >"$task/ARM-build.log" 2>&1
+ctest --test-dir "$build" -R DKRUpdate --output-on-failure >"$task/ARM-update-tests.log" 2>&1

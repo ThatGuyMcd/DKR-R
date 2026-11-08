@@ -1,5 +1,8 @@
 #ifndef DKR_GAME_SDK_H
 #define DKR_GAME_SDK_H
+#ifdef __cplusplus
+extern "C" {
+#endif
 #include "magic_codes.h"
 
 /* Values are copied, not borrowed host pointers. Guest object/racer/camera
@@ -62,4 +65,7 @@ _Static_assert(sizeof(DkrInput)==20,"Input SDK ABI");
 _Static_assert(sizeof(DkrCameraState)==40,"Camera SDK ABI");
 _Static_assert(sizeof(DkrFloorQuery)==16&&sizeof(DkrFloorHit)==24,"Collision SDK ABI");
 _Static_assert(sizeof(DkrHudText)==28,"HUD SDK ABI");
+#ifdef __cplusplus
+}
+#endif
 #endif

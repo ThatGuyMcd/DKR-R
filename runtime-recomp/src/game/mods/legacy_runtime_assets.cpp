@@ -6,9 +6,13 @@ gpr guest_pointer(std::uint32_t address) {return static_cast<gpr>(static_cast<st
 void validate_destination(std::span<std::uint8_t> memory,std::uint32_t address,std::size_t length,unsigned section,std::size_t source_offset) {
     const auto segment=address&0xe0000000U;
     const auto offset=std::size_t(address&0x1fffffffU);
-    if((segment!=0x80000000U && segment!=0xa0000000U) || (address&7) || memory.size()%4 ||
+    // Retail track_spawn_objects places its compressed input at
+    // allocation + decoded_size - packed_size + 0x20. That BYTE address need
+    // not be 8-byte aligned (e.g. Big Donut / Moon Station). This mounted
+    // route is a checked software copy, not a hardware PI transfer.
+    if((segment!=0x80000000U && segment!=0xa0000000U) || memory.size()%4 ||
        offset>memory.size() || length>memory.size()-offset)
-        throw Error("Custom asset destination violates the guest DMA bounds/alignment (section="+
+        throw Error("Custom asset destination is outside guest memory (section="+
             std::to_string(section)+", source_offset="+std::to_string(source_offset)+", destination="+
             std::to_string(address)+", length="+std::to_string(length)+", RDRAM="+std::to_string(memory.size())+").");
 }
@@ -29,7 +33,14 @@ bool dispatch_asset_api(AssetOperation operation,std::shared_ptr<const AssetBus:
         throw Error("Unknown custom asset operation.");
     const auto offset=operation==AssetOperation::PartialLoad?static_cast<std::uint32_t>(ctx.r6):0U;
     const auto length=operation==AssetOperation::PartialLoad?static_cast<std::uint32_t>(ctx.r7):size;
-    if(offset>size || length>size-offset || (offset&1)) throw Error("Custom asset read is outside its immutable section.");
+    // Track Lab compressed records can have odd lengths. Concatenating them
+    // deliberately preserves their exact bytes, so the next record's offset
+    // need not satisfy hardware PI alignment. Tagged assets use a bounded
+    // software copy; do not round the source or alter its lookup table.
+    if(offset>size || length>size-offset)
+        throw Error("Custom asset read is outside its immutable section (section="+
+            std::to_string(section)+", source_offset="+std::to_string(offset)+", length="+
+            std::to_string(length)+", section_size="+std::to_string(size)+").");
     if(!length) {ctx.r2=0;return true;}
     if(!calls.copy) throw Error("The revision's serialized guest DMA entry is unavailable.");
     const auto address=mount->address(section,offset);

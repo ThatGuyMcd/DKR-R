@@ -1,0 +1,4 @@
+# Formatting-only commits. GitHub's blame view reads this file; locally run
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# Apply ruff format, ruff --fix and shfmt to first-party scripts (A2)
+d6690f6da8690bdaf79ab898f10e5cee69f6ef07

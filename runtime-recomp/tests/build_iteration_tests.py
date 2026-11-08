@@ -1,6 +1,7 @@
 """Exercise CMake reconfiguration using isolated synthetic sources and patches."""
-from pathlib import Path
+
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import tempfile
@@ -23,12 +24,21 @@ class BuildIterationTests(unittest.TestCase):
             (self.source / f"{name}.patch").write_text(
                 "diff --git a/fixture.c b/fixture.c\n--- a/fixture.c\n+++ b/fixture.c\n"
                 "@@ -1 +1 @@\n"
-                f"-int answer(void) {{ return {old}; }}\n+int answer(void) {{ return {new}; }}\n")
+                f"-int answer(void) {{ return {old}; }}\n+int answer(void) {{ return {new}; }}\n"
+            )
         (self.source / "payload").mkdir()
         (self.source / "payload/functions.c").write_text("void recomp_entrypoint(void) {}\n")
-        self.configure = ["cmake", "-S", str(self.source), "-B", str(self.build),
-                          "-G", "Ninja", f"-DDKR_CMAKE_DIR={CMAKE}",
-                          f"-DDKR_DEPENDENCIES_DIR={self.source / 'shared-extern'}"]
+        self.configure = [
+            "cmake",
+            "-S",
+            str(self.source),
+            "-B",
+            str(self.build),
+            "-G",
+            "Ninja",
+            f"-DDKR_CMAKE_DIR={CMAKE}",
+            f"-DDKR_DEPENDENCIES_DIR={self.source / 'shared-extern'}",
+        ]
 
     def run_ok(self, *args):
         result = subprocess.run(args, capture_output=True, text=True, timeout=60)
@@ -80,24 +90,33 @@ class BuildIterationTests(unittest.TestCase):
 
     def test_preflight_checks_only_consumed_headers_and_requires_test_python(self):
         dependencies = self.source / "minimal-extern"
-        for relative in ("n64-modern-runtime/CMakeLists.txt",
-                         "n64-modern-runtime/N64Recomp/include/recomp.h",
-                         "n64-modern-runtime/N64Recomp/lib/fmt/CMakeLists.txt",
-                         "gekkonet/GekkoLib/CMakeLists.txt", "monocypher/src/monocypher.c"):
+        for relative in (
+            "n64-modern-runtime/CMakeLists.txt",
+            "n64-modern-runtime/N64Recomp/include/recomp.h",
+            "n64-modern-runtime/N64Recomp/lib/fmt/CMakeLists.txt",
+            "gekkonet/GekkoLib/CMakeLists.txt",
+            "monocypher/src/monocypher.c",
+        ):
             path = dependencies / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.touch()
-        command = ["cmake", f"-DDKR_DEPENDENCIES_DIR={dependencies}",
-                   "-DDKR_NETPLAY_WEBRTC=OFF", "-DDKR_RUNTIME_BUILD_RT64=OFF"]
+        command = [
+            "cmake",
+            f"-DDKR_DEPENDENCIES_DIR={dependencies}",
+            "-DDKR_NETPLAY_WEBRTC=OFF",
+            "-DDKR_RUNTIME_BUILD_RT64=OFF",
+        ]
         script = ["-P", str(CMAKE / "DependencyPreflight.cmake")]
         self.run_ok(*command, "-DBUILD_TESTING=OFF", *script)
-        host = subprocess.run([*command, "-DBUILD_TESTING=ON", *script],
-                              capture_output=True, text=True, timeout=60)
+        host = subprocess.run([*command, "-DBUILD_TESTING=ON", *script], capture_output=True, text=True, timeout=60)
         self.assertNotEqual(host.returncode, 0)
         self.assertIn("hlsl++.h", host.stderr)
-        android = subprocess.run([*command, "-DBUILD_TESTING=ON", "-DANDROID=ON",
-                                  "-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE", *script],
-                                 capture_output=True, text=True, timeout=60)
+        android = subprocess.run(
+            [*command, "-DBUILD_TESTING=ON", "-DANDROID=ON", "-DCMAKE_DISABLE_FIND_PACKAGE_Python3=TRUE", *script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
         self.assertNotEqual(android.returncode, 0)
         self.assertIn("Python3", android.stderr)
         self.assertIn("REQUIRED", android.stderr)
@@ -109,8 +128,9 @@ class BuildIterationTests(unittest.TestCase):
         # CMake canonicalizes Windows short-name aliases and macOS symlinks.
         self.assertEqual(Path(source_root).resolve(), ROOT.resolve())
         self.assertEqual(Path(dependencies).resolve(), (self.source / "shared-extern").resolve())
-        result = subprocess.run([*self.configure, f"-DDKRPORT_ROOT={self.source}"],
-                                capture_output=True, text=True, timeout=60)
+        result = subprocess.run(
+            [*self.configure, f"-DDKRPORT_ROOT={self.source}"], capture_output=True, text=True, timeout=60
+        )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DKRPORT_ROOT can no longer redirect", result.stderr)
         self.assertIn("DKR_DEPENDENCIES_DIR", result.stderr)

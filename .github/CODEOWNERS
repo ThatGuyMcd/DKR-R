@@ -1,0 +1,35 @@
+# Only the files that define the project's rules have owners. Ordinary code
+# needs no owner review. Both maintainers own every entry, so either one can
+# approve the other's change (GitHub does not let you approve your own PR).
+# The ruleset in .github/ruleset-main.json turns these into required reviews.
+
+# Pattern guard, architecture contracts and the check entry point
+/architecture/                                        @ThatGuyMcd @swhitt
+/scripts/check.py                                     @ThatGuyMcd @swhitt
+/scripts/pattern_guard.py                             @ThatGuyMcd @swhitt
+/scripts/check_includes.py                            @ThatGuyMcd @swhitt
+/scripts/check_registries.py                          @ThatGuyMcd @swhitt
+/scripts/agent_hooks/                                 @ThatGuyMcd @swhitt
+/scripts/check_pinned_bytes.py                        @ThatGuyMcd @swhitt
+/scripts/bootstrap_hooks.py                           @ThatGuyMcd @swhitt
+
+# Lint, format and hook configuration (a new ignore or baseline entry is a rule change)
+/.pre-commit-config.yaml                              @ThatGuyMcd @swhitt
+/pyproject.toml                                       @ThatGuyMcd @swhitt
+/.clang-format                                        @ThatGuyMcd @swhitt
+/.clang-tidy                                          @ThatGuyMcd @swhitt
+/.gersemirc                                           @ThatGuyMcd @swhitt
+/runtime-recomp/cmake/Warnings.cmake                  @ThatGuyMcd @swhitt
+/.git-blame-ignore-revs                               @ThatGuyMcd @swhitt
+
+# CI, ownership and repository policy
+/.github/                                             @ThatGuyMcd @swhitt
+
+# Agent instructions
+/.claude/                                             @ThatGuyMcd @swhitt
+/.codex/                                              @ThatGuyMcd @swhitt
+/AGENTS.md                                            @ThatGuyMcd @swhitt
+/CLAUDE.md                                            @ThatGuyMcd @swhitt
+
+# Online compatibility identity
+/runtime-recomp/src/game/netplay/legacy_identity.hpp  @ThatGuyMcd @swhitt

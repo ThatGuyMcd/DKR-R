@@ -1,4 +1,5 @@
 """Run the renderer's separately built host file_to_c tool when cross-compiling."""
+
 import argparse
 import pathlib
 import subprocess
@@ -17,8 +18,11 @@ def main(argv=None):
         host = args.host.resolve(strict=True)
         return subprocess.call([str(host), *args.arguments])
     except OSError as error:
-        print(f"Cannot run host shader tool {args.host}: {error}. "
-              "Build the host file_to_c target before cross-compiling.", file=sys.stderr)
+        print(
+            f"Cannot run host shader tool {args.host}: {error}. "
+            "Build the host file_to_c target before cross-compiling.",
+            file=sys.stderr,
+        )
         return 127
 
 

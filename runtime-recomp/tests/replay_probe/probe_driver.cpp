@@ -10,6 +10,7 @@
 #include "netplay/experimental_eeprom.hpp"
 #include "netplay/experimental_pak.hpp"
 #include "netplay/experimental_magic_codes.hpp"
+#include "netplay/experimental_guest_memory.h"
 #include "netplay/experimental_checkpoint_hash.hpp"
 #include "netplay/experimental_performance.hpp"
 #include "netplay/experimental_effect_envelope.hpp"
@@ -192,6 +193,8 @@ public:
             });
             code_->trophy_selector([this]{return mods_?mods_->selected_trophy():std::string{};});
             code_->attach(ram_,true);code_->commit(code_->stage(boot.code_bootstrap));
+            std::fprintf(stderr,"[rollback][code] packages=%zu identity=%s bootstrap-restored=1\n",
+                boot.code->ordered.size(),boot.code->identity.c_str());
             if(code_bytes()>14U*1024U*1024U)throw std::runtime_error("Code checkpoint exceeds the online state budget.");
 #else
             throw std::runtime_error("This owned CPU payload has no code-mod service boundary.");
@@ -905,7 +908,7 @@ public:
         // overwrite the suspended/main registers when servicing its request.
         recomp_context background_context=context_;
         repair_float_register_pointer(background_context);
-        background_context.r29=std::int32_t(0x80FE0000U);
+        background_context.r29=std::int32_t(DKR_OWNED_PREVIEW_STACK_TOP);
         const auto loaded_site=confirmed_scene_;
         const auto loader_started=std::chrono::steady_clock::now();
         const auto result=run_private(background ? dkr_probe_menu_background_resume : dkr_probe_authored_scene_resume,

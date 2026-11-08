@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import json
 import hashlib
+import json
 from pathlib import Path
 
 
@@ -27,55 +27,81 @@ def main() -> int:
     parser.add_argument("--output-functions", required=True, type=Path)
     parser.add_argument("--entrypoint", required=True)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--composed-policy", type=Path,
-                        help="Write the complete checked policy for code-mod hook protection")
+    parser.add_argument(
+        "--composed-policy", type=Path, help="Write the complete checked policy for code-mod hook protection"
+    )
     parser.add_argument("--use-mdebug", action="store_true")
     parser.add_argument("--water-profile", action="store_true", help="Compose checked water timing hooks")
-    parser.add_argument("--functions-per-output-file", type=int,
-                        help="Optional source granularity for isolated Patch Pipeline qualification")
+    parser.add_argument(
+        "--functions-per-output-file",
+        type=int,
+        help="Optional source granularity for isolated Patch Pipeline qualification",
+    )
     arguments = parser.parse_args()
     if arguments.functions_per_output_file is not None and arguments.functions_per_output_file < 1:
         parser.error("--functions-per-output-file must be positive")
-    source_granularity = (f"functions_per_output_file = {arguments.functions_per_output_file}\n"
-                          if arguments.functions_per_output_file is not None else "")
+    source_granularity = (
+        f"functions_per_output_file = {arguments.functions_per_output_file}\n"
+        if arguments.functions_per_output_file is not None
+        else ""
+    )
 
     policy = json.loads(arguments.policy.read_text(encoding="utf-8"))
     if policy.get("schemaVersion") != 1:
         raise ValueError("unsupported Patch Pipeline policy schema")
     from host_task_policy import verify_host_task_policy
+
     verify_host_task_policy(policy, arguments.elf)
     from camera_obstruction_policy import verify_camera_obstruction_policy
+
     verify_camera_obstruction_policy(policy, arguments.elf)
     from legacy_character_ai_policy import verify_character_ai_policy
+
     verify_character_ai_policy(policy, arguments.elf)
     from legacy_asset_capacity_policy import compose_asset_capacity
-    revision = 'us.v77' if arguments.entrypoint.lower() == '0x80065d40' else 'us.v80'
+
+    revision = "us.v77" if arguments.entrypoint.lower() == "0x80065d40" else "us.v80"
     policy = compose_asset_capacity(policy, arguments.elf, revision)
     from legacy_model_reference_policy import compose_model_references
+
     policy = compose_model_references(policy, arguments.elf, revision)
     from legacy_spawn_asset_type_policy import compose_spawn_asset_type
+
     policy = compose_spawn_asset_type(policy, arguments.elf, revision)
     from legacy_memory_safety_policy import compose_memory_safety
+
     policy = compose_memory_safety(policy, arguments.elf, revision)
     from legacy_behaviour_policy import compose_behaviour
+
     policy = compose_behaviour(policy, arguments.elf, revision)
     from audio_queue_policy import compose_audio_queue
+
     policy = compose_audio_queue(policy, arguments.elf, revision)
     from startup_flow_policy import compose_startup_flow
+
     policy = compose_startup_flow(policy, arguments.elf, revision)
     if arguments.water_profile:
         from water_profile_policy import compose_water_profile
+
         policy = compose_water_profile(policy, arguments.elf)
     if arguments.composed_policy:
         # Baseline-only inventories miss project hooks added by composition.
         # This receipt is emitted only after every selected policy has run.
-        receipt = dict(schema=1, revision=revision,
-                       elf_sha256=hashlib.sha256(arguments.elf.read_bytes()).hexdigest(),
-                       complete=True, policy=policy)
-        if arguments.composed_policy.resolve() in (arguments.policy.resolve(), arguments.elf.resolve(), arguments.output.resolve()):
-            raise ValueError('Composed policy must not overwrite an input or the generated TOML')
+        receipt = dict(
+            schema=1,
+            revision=revision,
+            elf_sha256=hashlib.sha256(arguments.elf.read_bytes()).hexdigest(),
+            complete=True,
+            policy=policy,
+        )
+        if arguments.composed_policy.resolve() in (
+            arguments.policy.resolve(),
+            arguments.elf.resolve(),
+            arguments.output.resolve(),
+        ):
+            raise ValueError("Composed policy must not overwrite an input or the generated TOML")
         arguments.composed_policy.parent.mkdir(parents=True, exist_ok=True)
-        arguments.composed_policy.write_text(json.dumps(receipt, indent=2) + '\n', encoding='utf-8')
+        arguments.composed_policy.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
 
     manual = ", ".join(
         "{ name = %s, section = %s, vram = %s, size = %s }"
@@ -88,8 +114,7 @@ def main() -> int:
         for entry in policy.get("manualFunctions", [])
     )
     sizes = ", ".join(
-        "{ name = %s, size = %s }"
-        % (toml_string(str(entry["name"])), entry["size"])
+        "{ name = %s, size = %s }" % (toml_string(str(entry["name"])), entry["size"])
         for entry in policy.get("functionSizes", [])
     )
     patches = "\n\n".join(
@@ -120,9 +145,9 @@ output_func_path = {toml_string(arguments.output_functions.resolve().as_posix())
 function_sizes = [{sizes}]
 
 [patches]
-stubs = [{string_list(policy.get('stubs', []))}]
-renamed = [{string_list(policy.get('renamed', []))}]
-ignored = [{string_list(policy.get('ignored', []))}]
+stubs = [{string_list(policy.get("stubs", []))}]
+renamed = [{string_list(policy.get("renamed", []))}]
+ignored = [{string_list(policy.get("ignored", []))}]
 
 # BEGIN DKR_INSTRUCTION_PATCHES
 {patches}

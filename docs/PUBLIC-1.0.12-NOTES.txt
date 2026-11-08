@@ -1,0 +1,29 @@
+DKR-R v1.0.12 Release Build
+
+I've worked on making Online less clunky, especially when joining with lots
+of mods. I've also tidied up the profile and friends screens and fixed the
+FOV slider so you can see it changing while you play.
+
+- Improved mod transfers, preparation caching and the first lobby checkpoint.
+- Fixed the online menu failure when moving through character selection.
+- Closing a lobby now removes it without restarting the launcher.
+- Added character portraits and smaller friend cards. Add a friend is at the top,
+  and you can send friend requests from other players' lobby cards.
+- Added custom profile pictures, optional Discord name/image import and one
+  shared display name for Online, friends and the Mod Store.
+- Tidied up Online Profile, account settings and the waiting lobby layout.
+- Added remembered Discord sign-in on Linux and Steam Deck without a keyring.
+- Made the offline FOV slider work live, including while paused.
+- Fixed logging after an updater restart and improved join diagnostics.
+- Fixed installed Store mods showing up in Needs Attention after a restart.
+  You won't need to download those installed mods again.
+
+All the existing memory, HUD, modded lobby and spectator fixes are kept.
+Your saves, mods and settings can stay. Please use the complete v1.0.12
+package on every machine in an Online lobby.
+
+Windows x64, Linux x86_64/ARM64 and Steam Deck are included. Android, macOS
+and iOS are skipped. Linux needs glibc 2.38, GLIBCXX_3.4.32 and Vulkan.
+
+If you still hit a problem, send the host and client runtime logs with the
+track, mods and what happened. Copy Join Diagnostics helps with slow joins.

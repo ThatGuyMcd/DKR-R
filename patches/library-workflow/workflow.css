@@ -1,0 +1,21 @@
+.dkr-workflow-filters{display:flex;gap:.5rem;flex-wrap:wrap;margin:.75rem 0}
+.dkr-workflow-filters button[aria-pressed=true]{background:#f3cb67;color:#172434;border-color:#f3cb67}
+.dkr-workflow-drop{border:2px dashed #718da8;border-radius:14px;padding:1.5rem;text-align:center;background:#12263a}
+.dkr-workflow-drop:focus-within{outline:3px solid #f3cb67;outline-offset:3px}
+.dkr-workflow-drop label.dkr-button,.dkr-workflow-files label.dkr-button{position:relative;overflow:hidden}
+.dkr-workflow-file-input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;margin:0}
+.dkr-workflow-files label.dkr-button:focus-within{outline:3px solid #f3cb67;outline-offset:3px}
+.dkr-workflow-entry{min-width:0;overflow-wrap:anywhere}
+.dkr-workflow-entry details>summary{cursor:pointer;margin-top:1rem;font-weight:600}
+.dkr-workflow-files{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin-top:1rem}
+.dkr-workflow-files section{min-width:0;padding:1rem;background:#12263a;border-radius:12px}
+.dkr-workflow-cover{width:160px;height:100px;object-fit:contain;border-radius:8px;background:#0d1b2a}
+.dkr-workflow-entry progress{width:min(100%,400px);margin-top:.75rem;accent-color:#f3cb67}
+.dkr-workflow-toolbar{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between}
+.dkr-workflow-inventory{max-height:440px;overflow:auto;display:grid;gap:.65rem;padding:.25rem}
+.dkr-workflow-inventory .dkr-file-option{display:flex;align-items:center;gap:.75rem;min-width:0}
+.dkr-workflow-inventory .dkr-file-option span{overflow-wrap:anywhere;flex:1;min-width:0}
+.dkr-workflow-review{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem;margin:1rem 0}
+.dkr-workflow-review article{min-width:0;padding:1rem;background:#12263a;border-radius:12px}
+.dkr-workflow-entry [data-batch-progress]:empty{display:none}
+@media(max-width:700px){.dkr-workflow-files{grid-template-columns:1fr}.dkr-workflow-toolbar .dkr-row{width:100%}.dkr-workflow-entry{padding:1rem}.dkr-workflow-toolbar .dkr-button{flex:1 1 180px}}

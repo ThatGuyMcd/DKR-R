@@ -1,11 +1,12 @@
 """Qualify the project-owned retail watchdog hook against the input MIPS ELF."""
+
 import struct
+
 from compose_legacy_mod_policy import elf_sections
 
 
 def verify_host_task_policy(policy, elf):
-    hooks = [h for h in policy.get("functionHooks", [])
-             if "dkr_scheduler_keep_host_tasks" in h.get("text", "")]
+    hooks = [h for h in policy.get("functionHooks", []) if "dkr_scheduler_keep_host_tasks" in h.get("text", "")]
     if not hooks:
         return  # Older policies and unrelated pipeline fixtures remain valid.
     if len(hooks) != 1 or hooks[0]["function"] != "__scMain":
@@ -19,9 +20,11 @@ def verify_host_task_policy(policy, elf):
     if pc not in revisions:
         raise ValueError("Unreviewed scheduler revision")
     target, sp_low, dp_low = revisions[pc]
-    expected = ("extern void dkr_scheduler_keep_host_tasks(uint8_t*, uint32_t, uint32_t, uint32_t); "
-                f"dkr_scheduler_keep_host_tasks(rdram, (uint32_t)ctx->r18, 0x{0x800D0000 + sp_low:08X}U, "
-                f"0x{0x800D0000 + dp_low:08X}U);")
+    expected = (
+        "extern void dkr_scheduler_keep_host_tasks(uint8_t*, uint32_t, uint32_t, uint32_t); "
+        f"dkr_scheduler_keep_host_tasks(rdram, (uint32_t)ctx->r18, 0x{0x800D0000 + sp_low:08X}U, "
+        f"0x{0x800D0000 + dp_low:08X}U);"
+    )
     if hook["text"] != expected:
         raise ValueError("Scheduler register/counter ownership changed")
     sections = elf_sections(elf)
@@ -36,7 +39,10 @@ def verify_host_task_policy(policy, elf):
         target + 0xBC: 0x2981000B,  # slti at,t4,11
     }
     for address, opcode in signatures.items():
-        matches = [struct.unpack_from(">I", data, address - base)[0]
-                   for base, data in sections if base <= address <= base + len(data) - 4]
+        matches = [
+            struct.unpack_from(">I", data, address - base)[0]
+            for base, data in sections
+            if base <= address <= base + len(data) - 4
+        ]
         if matches != [opcode]:
             raise ValueError(f"Scheduler hook signature mismatch at {address:08X}")

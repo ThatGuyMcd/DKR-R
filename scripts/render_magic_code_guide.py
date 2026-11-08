@@ -4,7 +4,9 @@
 Document rendering/coverage only: never loads a mod or launches the game.
 The source remains the SDK's plain-text book; no online assets are required.
 """
+
 from __future__ import annotations
+
 import argparse
 import html
 import json
@@ -14,36 +16,51 @@ import re
 
 def inline(value: str) -> str:
     escaped = html.escape(value)
-    return re.sub(r'`([^`]+)`', r'<code>\1</code>', escaped)
+    return re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
 
 
 def render(sdk: Path, output: Path) -> dict:
     if output.exists():
-        raise ValueError('Choose a new guide output file')
-    source = (sdk / 'MODDERS-GUIDE.txt').read_text(encoding='utf-8')
-    headers = [(name, (sdk / 'include/dkr' / name).read_text(encoding='utf-8'))
-               for name in ('magic_codes.h', 'game.h')]
-    public = sorted(set(re.findall(r'(?:DKR_IMPORT|static inline)[^;{]*?\b(dkr_\w+)\s*\(',
-                                   '\n'.join(text for _, text in headers))))
+        raise ValueError("Choose a new guide output file")
+    source = (sdk / "MODDERS-GUIDE.txt").read_text(encoding="utf-8")
+    names = ("magic_codes.h", "game.h", "driving.h")
+    names += tuple(
+        path.name
+        for path in sorted((sdk / "include/dkr").iterdir())
+        if path.suffix in {".h", ".hpp"} and path.name not in names
+    )
+    headers = [(name, (sdk / "include/dkr" / name).read_text(encoding="utf-8")) for name in names]
+    public = sorted(
+        set(
+            re.findall(
+                r"(?:DKR_IMPORT|static inline)[^;{]*?\b(dkr(?:2)?_\w+)\s*\(", "\n".join(text for _, text in headers)
+            )
+        )
+    )
     missing = [name for name in public if name not in source]
     if missing:
-        raise ValueError('Undocumented public functions: ' + ', '.join(missing))
+        raise ValueError("Undocumented public functions: " + ", ".join(missing))
     sections, body, paragraph, code = [], [], [], None
     list_open = False
 
     def flush():
         nonlocal paragraph, list_open
         if paragraph:
-            body.append('<p>' + inline(' '.join(paragraph)) + '</p>')
+            body.append("<p>" + inline(" ".join(paragraph)) + "</p>")
             paragraph = []
         if list_open:
-            body.append('</ul>')
+            body.append("</ul>")
             list_open = False
 
-    for line in source.splitlines():
-        if line.startswith('```'):
+    lines = source.splitlines()
+    skip_underline = False
+    for index, line in enumerate(lines):
+        if skip_underline:
+            skip_underline = False
+            continue
+        if line.startswith("```"):
             if code is not None:
-                body.append('<pre><code>' + html.escape('\n'.join(code)) + '</code></pre>')
+                body.append("<pre><code>" + html.escape("\n".join(code)) + "</code></pre>")
                 code = None
             else:
                 flush()
@@ -52,40 +69,49 @@ def render(sdk: Path, output: Path) -> dict:
         if code is not None:
             code.append(line)
             continue
-        heading = re.match(r'^(#{1,3}) (.+)$', line)
+        if line.strip() and index + 1 < len(lines) and re.fullmatch(r"[=-]{3,}", lines[index + 1]):
+            line = ("# " if lines[index + 1][0] == "=" else "## ") + line
+            skip_underline = True
+        heading = re.match(r"^(#{1,3}) (.+)$", line)
         if heading:
             flush()
             level, title = len(heading[1]), heading[2]
-            anchor = 'section-' + str(len(sections) + 1)
+            anchor = "section-" + str(len(sections) + 1)
             sections.append((level, title, anchor))
             body.append(f'<h{level} id="{anchor}">{inline(title)}</h{level}>')
         elif not line.strip():
             flush()
-        elif line.startswith('- '):
+        elif line.startswith("- "):
             if paragraph:
                 flush()
             if not list_open:
-                body.append('<ul>')
+                body.append("<ul>")
                 list_open = True
-            body.append('<li>' + inline(line[2:]) + '</li>')
-        elif list_open and line.startswith('  '):
+            body.append("<li>" + inline(line[2:]) + "</li>")
+        elif list_open and line.startswith("  "):
             # Continuations belong to the preceding list item.
-            body[-1] = body[-1][:-5] + ' ' + inline(line.strip()) + '</li>'
+            body[-1] = body[-1][:-5] + " " + inline(line.strip()) + "</li>"
         else:
             if list_open:
                 flush()
             paragraph.append(line.strip())
     flush()
     if code is not None:
-        raise ValueError('Unclosed code fence in guide')
-    body.append('<h2 id="declarations">Appendix Full SDK headers</h2>'
-                '<p>These are the exact shipped declarations, comments, fields and constants. '
-                'Weak import bodies are metadata, not runtime fallbacks.</p>')
+        raise ValueError("Unclosed code fence in guide")
+    body.append(
+        '<h2 id="declarations">Appendix Full SDK headers</h2>'
+        "<p>These are the exact shipped declarations, comments, fields and constants. "
+        "Weak import bodies are metadata, not runtime fallbacks.</p>"
+    )
     for name, text in headers:
-        body.append('<h3>' + html.escape(name) + '</h3><pre><code>' + html.escape(text) + '</code></pre>')
-    toc = ''.join('<li><a href="#' + anchor + '">' + html.escape(title) + '</a></li>'
-                  for level, title, anchor in sections if level == 2)
-    page = '''<!doctype html>
+        body.append("<h3>" + html.escape(name) + "</h3><pre><code>" + html.escape(text) + "</code></pre>")
+    toc = "".join(
+        '<li><a href="#' + anchor + '">' + html.escape(title) + "</a></li>"
+        for level, title, anchor in sections
+        if level == 2
+    )
+    page = (
+        """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Modders Guide to Custom Magic Code Creation</title><style>
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#f5f6f8;color:#172b3a;
@@ -108,25 +134,34 @@ nav li{break-inside:avoid}main{margin:0;padding:28px 6vw 70px}}
 pre{background:#f1f3f5;color:#111;white-space:pre-wrap;overflow:visible}pre code{white-space:pre-wrap}
 h2{break-before:page}h1,h2,h3{break-after:avoid}a{color:inherit;text-decoration:none}}
 </style></head><body><nav aria-label="Chapters"><strong>Custom Magic Codes</strong>
-<small>DKR-R v1.0.7 beta 2 · API 1</small><ol>''' + toc + '''<li><a href="#declarations">Full SDK headers</a></li>
-</ol><a href="#section-1">Back to top</a></nav><main>''' + '\n'.join(body) + '''
-<footer>DKR-R Custom Magic Codes API 1. Keep this guide with the matching headers and examples.
-This document is self-contained and makes no network requests.</footer></main></body></html>'''
+<small>DKR-R v1.0.14 · SDK 2.0 / API 1 and 2</small><ol>"""
+        + toc
+        + """<li><a href="#declarations">Full SDK headers</a></li>
+</ol><a href="#section-1">Back to top</a></nav><main>"""
+        + "\n".join(body)
+        + """
+<footer>DKR-R Custom Magic Codes SDK 2.0 / API 1 and 2. Keep this guide with the matching headers and examples.
+This document is self-contained and makes no network requests.</footer></main></body></html>"""
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(page, encoding='utf-8')
-    return {'chapters': sum(level == 2 for level, _, _ in sections),
-            'public_functions': len(public), 'documented_functions': public,
-            'source_words': len(source.split()), 'output': str(output),
-            'executed_mod_code': False}
+    output.write_text(page, encoding="utf-8")
+    return {
+        "chapters": sum(level == 2 for level, _, _ in sections),
+        "public_functions": len(public),
+        "documented_functions": public,
+        "source_words": len(source.split()),
+        "output": str(output),
+        "executed_mod_code": False,
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--sdk', type=Path, default=Path(__file__).resolve().parents[1] / 'modding')
-    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument("--sdk", type=Path, default=Path(__file__).resolve().parents[1] / "modding")
+    parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     print(json.dumps(render(args.sdk, args.output), indent=2))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

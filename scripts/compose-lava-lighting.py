@@ -1,55 +1,86 @@
 """Compose local ray-tested lava lighting; never edit dependency/generated sources."""
-from pathlib import Path
+
 import difflib
+from pathlib import Path
 import sys
+
 from water_patch_baseline import read_before
 
-root=Path(__file__).resolve().parents[1]
-stage=Path(sys.argv[1]).resolve()
-output=root/'patches/enhanced-water/dkr-lava-lighting.patch'
-layers=[output] if 'finishLava' in (stage/'src/render/rt64_framebuffer_renderer.cpp').read_text() else []
-if 'lavaGlowActive' in (stage/'src/hle/rt64_workload.h').read_text():
-    layers.insert(0,root/'patches/enhanced-water/dkr-lava-glow.patch')
-changes=[]
-def replace(text,before,after):
-    if text.count(before)!=1:raise SystemExit(f'Non-unique lighting context: {before[:120]}')
-    return text.replace(before,after,1)
-def change(path,fn):
-    overlay=None
-    if layers and path=='src/render/rt64_framebuffer_renderer.cpp':
-        overlay=(stage/path).read_text()
-        if '                instanceDrawCall.worldProjection=false;' not in overlay:
-            overlay=replace(overlay,'                instanceDrawCall.waterIndex = UINT32_MAX;',
-                '                instanceDrawCall.waterIndex = UINT32_MAX;\n                instanceDrawCall.worldProjection=false;\n                instanceDrawCall.projectionIndex=UINT32_MAX;')
-    before=read_before(stage,path,layers,overlay);after=fn(before)
-    if before==after:raise SystemExit(f'No lighting change: {path}')
-    changes.append(f'diff --git a/{path} b/{path}\n')
+root = Path(__file__).resolve().parents[1]
+stage = Path(sys.argv[1]).resolve()
+output = root / "patches/enhanced-water/dkr-lava-lighting.patch"
+layers = [output] if "finishLava" in (stage / "src/render/rt64_framebuffer_renderer.cpp").read_text() else []
+if "lavaGlowActive" in (stage / "src/hle/rt64_workload.h").read_text():
+    layers.insert(0, root / "patches/enhanced-water/dkr-lava-glow.patch")
+changes = []
+
+
+def replace(text, before, after):
+    if text.count(before) != 1:
+        raise SystemExit(f"Non-unique lighting context: {before[:120]}")
+    return text.replace(before, after, 1)
+
+
+def change(path, fn):
+    overlay = None
+    if layers and path == "src/render/rt64_framebuffer_renderer.cpp":
+        overlay = (stage / path).read_text()
+        if "                instanceDrawCall.worldProjection=false;" not in overlay:
+            overlay = replace(
+                overlay,
+                "                instanceDrawCall.waterIndex = UINT32_MAX;",
+                "                instanceDrawCall.waterIndex = UINT32_MAX;\n                instanceDrawCall.worldProjection=false;\n                instanceDrawCall.projectionIndex=UINT32_MAX;",
+            )
+    before = read_before(stage, path, layers, overlay)
+    after = fn(before)
+    if before == after:
+        raise SystemExit(f"No lighting change: {path}")
+    changes.append(f"diff --git a/{path} b/{path}\n")
     # Narrow context preserves Android's adjacent draw-metrics instrumentation.
     # Every edited semantic anchor above is still required to be unique.
-    changes.extend(difflib.unified_diff(before.splitlines(True),after.splitlines(True),fromfile=f'a/{path}',tofile=f'b/{path}',n=1))
+    changes.extend(
+        difflib.unified_diff(
+            before.splitlines(True), after.splitlines(True), fromfile=f"a/{path}", tofile=f"b/{path}", n=1
+        )
+    )
 
-change('src/render/rt64_framebuffer_renderer_call.h',lambda s:replace(s,
-    '        uint32_t waterIndex = UINT32_MAX;',
-    '        uint32_t waterIndex = UINT32_MAX;\n        bool worldProjection = false;\n        uint32_t projectionIndex = UINT32_MAX;'))
+
+change(
+    "src/render/rt64_framebuffer_renderer_call.h",
+    lambda s: replace(
+        s,
+        "        uint32_t waterIndex = UINT32_MAX;",
+        "        uint32_t waterIndex = UINT32_MAX;\n        bool worldProjection = false;\n        uint32_t projectionIndex = UINT32_MAX;",
+    ),
+)
+
+
 def header(s):
-    s=replace(s,'struct WaterDescriptorSet : RenderDescriptorSetBase {',
-'''struct LavaLightingSet : RenderDescriptorSetBase {
+    s = replace(
+        s,
+        "struct WaterDescriptorSet : RenderDescriptorSetBase {",
+        """struct LavaLightingSet : RenderDescriptorSetBase {
     uint32_t output,input;
     explicit LavaLightingSet(RenderDevice *device=nullptr) {
         builder.begin();output=builder.addReadWriteTexture(1);input=builder.addTexture(2);builder.end();
         if(device)create(device);
     }
 };
-struct WaterDescriptorSet : RenderDescriptorSetBase {''')
-    s=replace(s,'        std::unique_ptr<RenderTexture> originalColor;',
-'''        std::unique_ptr<RenderTexture> originalColor, lavaLight;
+struct WaterDescriptorSet : RenderDescriptorSetBase {""",
+    )
+    s = replace(
+        s,
+        "        std::unique_ptr<RenderTexture> originalColor;",
+        """        std::unique_ptr<RenderTexture> originalColor, lavaLight;
         std::unique_ptr<RenderTextureView> lavaLightView;
         std::unique_ptr<LavaLightingSet> lavaLightSet;
         uint32_t lavaWidth=0,lavaHeight=0;
-        bool lavaPrepared=false;''')
-    return replace(s,
-    '    WaterRayScene rays;',
-    '''    WaterRayScene rays;
+        bool lavaPrepared=false;""",
+    )
+    return replace(
+        s,
+        "    WaterRayScene rays;",
+        """    WaterRayScene rays;
     std::unique_ptr<RenderShader> lavaLightingVS,lavaLightingPS,lavaLightingCS;
     std::unique_ptr<RenderPipelineLayout> lavaLightingLayout;
     std::unique_ptr<RenderPipeline> lavaLightingCompute;
@@ -58,10 +89,13 @@ struct WaterDescriptorSet : RenderDescriptorSetBase {''')
     RenderPipeline *lavaLightingPipeline(RenderDevice *device,RenderShaderFormat format,const RenderMultisampling& samples);
     bool prepareLavaLighting(RenderWorker *worker,uint32_t sceneIndex,const interop::WaterDrawParams& draw);
     bool drawLavaLighting(RenderWorker *worker,uint32_t drawIndex,bool depthReadOnly,const RenderViewport& viewport);
-''')
-change('src/render/rt64_water_renderer.h',header)
+""",
+    )
 
-implementation=r'''
+
+change("src/render/rt64_water_renderer.h", header)
+
+implementation = r"""
 RenderPipeline *WaterRenderer::lavaLightingPipeline(RenderDevice *device,RenderShaderFormat format,const RenderMultisampling& samples) {
     if(lavaLightingUnavailable || !device->getCapabilities().rayQuery || !rayLayout)return nullptr;
     const uint32_t key=uint32_t(samples.sampleCount);
@@ -181,23 +215,41 @@ bool WaterRenderer::drawLavaLighting(RenderWorker *worker,uint32_t drawIndex,boo
     worker->commandList->setGraphicsPushConstants(0,pc.data());
     return true;
 }
-'''
+"""
+
+
 # drawLavaLighting prepares bindings; caller binds the target and issues the draw.
 def renderer(s):
-    s=replace(s,'#include "rt64_water_renderer.h"','#include "rt64_water_renderer.h"\n#include "LavaLightingBounds.h"')
-    s=replace(s,'scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false;',
-        'scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; scene.lavaPrepared=false;')
-    for fmt in ('spirv','dxil'):
-        s=replace(s,f'#include "shaders/WaterHardwarePS.hlsl.{fmt}.h"',
-            f'#include "shaders/WaterHardwarePS.hlsl.{fmt}.h"\n#include "shaders/LavaLightingVS.hlsl.{fmt}.h"\n#include "shaders/LavaLightingPS.hlsl.{fmt}.h"\n#include "shaders/LavaLightingCS.hlsl.{fmt}.h"')
-    s=replace(s,'bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight) : uint64_t(0);',
-        'bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight)+uint64_t(s.lavaWidth)*s.lavaHeight*16 : uint64_t(0);')
-    s=replace(s,'classic,owner!=index,selfDepth,depth->width,depth->height,depth->multisampling.sampleCount,ow,oh);',
-        'classic,owner!=index,selfDepth,depth->width,depth->height,depth->multisampling.sampleCount,ow,oh)+(existing ? uint64_t(scenes[index].lavaWidth)*scenes[index].lavaHeight*16 : 0);')
-    return replace(s,'bool WaterRenderer::prepareRays(',implementation+'\nbool WaterRenderer::prepareRays(')
-change('src/render/rt64_water_renderer.cpp',renderer)
+    s = replace(
+        s, '#include "rt64_water_renderer.h"', '#include "rt64_water_renderer.h"\n#include "LavaLightingBounds.h"'
+    )
+    s = replace(
+        s,
+        "scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false;",
+        "scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; scene.lavaPrepared=false;",
+    )
+    for fmt in ("spirv", "dxil"):
+        s = replace(
+            s,
+            f'#include "shaders/WaterHardwarePS.hlsl.{fmt}.h"',
+            f'#include "shaders/WaterHardwarePS.hlsl.{fmt}.h"\n#include "shaders/LavaLightingVS.hlsl.{fmt}.h"\n#include "shaders/LavaLightingPS.hlsl.{fmt}.h"\n#include "shaders/LavaLightingCS.hlsl.{fmt}.h"',
+        )
+    s = replace(
+        s,
+        "bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight) : uint64_t(0);",
+        "bool(s.waterDepth),s.waterDepthWidth,s.waterDepthHeight,s.waterDepthSamples,s.originalWidth,s.originalHeight)+uint64_t(s.lavaWidth)*s.lavaHeight*16 : uint64_t(0);",
+    )
+    s = replace(
+        s,
+        "classic,owner!=index,selfDepth,depth->width,depth->height,depth->multisampling.sampleCount,ow,oh);",
+        "classic,owner!=index,selfDepth,depth->width,depth->height,depth->multisampling.sampleCount,ow,oh)+(existing ? uint64_t(scenes[index].lavaWidth)*scenes[index].lavaHeight*16 : 0);",
+    )
+    return replace(s, "bool WaterRenderer::prepareRays(", implementation + "\nbool WaterRenderer::prepareRays(")
 
-finish=r'''        uint32_t pendingLava=UINT32_MAX,pendingLavaProjection=UINT32_MAX;
+
+change("src/render/rt64_water_renderer.cpp", renderer)
+
+finish = r"""        uint32_t pendingLava=UINT32_MAX,pendingLavaProjection=UINT32_MAX;
         auto finishLava = [&]() {
             if(pendingLava==UINT32_MAX)return;
             finishWater();
@@ -209,45 +261,81 @@ finish=r'''        uint32_t pendingLava=UINT32_MAX,pendingLavaProjection=UINT32_
             switchToGraphicsPipeline();
         };
 
-'''
+"""
+
+
 def framebuffer(s):
-    s=replace(s,'                instanceDrawCall.waterIndex = UINT32_MAX;',
-'''                instanceDrawCall.waterIndex = UINT32_MAX;
+    s = replace(
+        s,
+        "                instanceDrawCall.waterIndex = UINT32_MAX;",
+        """                instanceDrawCall.waterIndex = UINT32_MAX;
                 instanceDrawCall.worldProjection=false;
-                instanceDrawCall.projectionIndex=UINT32_MAX;''')
-    s=replace(s,'        for (uint32_t i : rasterScene.instanceIndices) {',finish+'        for (uint32_t i : rasterScene.instanceIndices) {')
-    s=replace(s,'            const InstanceDrawCall &drawCall = instanceDrawCallVector[i];',
-'''            const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
+                instanceDrawCall.projectionIndex=UINT32_MAX;""",
+    )
+    s = replace(
+        s,
+        "        for (uint32_t i : rasterScene.instanceIndices) {",
+        finish + "        for (uint32_t i : rasterScene.instanceIndices) {",
+    )
+    s = replace(
+        s,
+        "            const InstanceDrawCall &drawCall = instanceDrawCallVector[i];",
+        """            const InstanceDrawCall &drawCall = instanceDrawCallVector[i];
             if(pendingLava!=UINT32_MAX && (!drawCall.worldProjection || drawCall.projectionIndex!=pendingLavaProjection))finishLava();
             if(pendingLava==UINT32_MAX && drawCall.waterIndex!=UINT32_MAX) {
                 const auto& m=waterRenderer->draws[drawCall.waterIndex].material;
                 if(m.effects.z==5 && m.effects.w>0.5f && m.sunDirection.w>0) {
                     pendingLava=drawCall.waterIndex;pendingLavaProjection=drawCall.projectionIndex;
                 }
-            }''')
-    s=replace(s,'        // Mark targets for resolve.\n        finishWater();',
-        '        // Mark targets for resolve.\n        finishLava();\n        finishWater();')
-    s=replace(s,'                        switch (proj.type) {',
-'''                        instanceDrawCall.worldProjection=proj.type==Projection::Type::Perspective;
+            }""",
+    )
+    s = replace(
+        s,
+        "        // Mark targets for resolve.\n        finishWater();",
+        "        // Mark targets for resolve.\n        finishLava();\n        finishWater();",
+    )
+    s = replace(
+        s,
+        "                        switch (proj.type) {",
+        """                        instanceDrawCall.worldProjection=proj.type==Projection::Type::Perspective;
                         instanceDrawCall.projectionIndex=proj.transformsIndex;
-                        switch (proj.type) {''')
-    s=replace(s,'bool hardware=!classic && wp.material.appearance.x>0 && wp.material.effects.w>0.5f &&',
-        'bool hardware=!classic && (wp.material.appearance.x>0 || (wp.material.effects.z==5 && wp.material.sunDirection.w>0)) && wp.material.effects.w>0.5f &&')
-    s=replace(s,'                    wp.material.effects.w=hardware ? 1.0f : 0.0f;',
-'''                    wp.material.effects.w=hardware ? 1.0f : 0.0f;
+                        switch (proj.type) {""",
+    )
+    s = replace(
+        s,
+        "bool hardware=!classic && wp.material.appearance.x>0 && wp.material.effects.w>0.5f &&",
+        "bool hardware=!classic && (wp.material.appearance.x>0 || (wp.material.effects.z==5 && wp.material.sunDirection.w>0)) && wp.material.effects.w>0.5f &&",
+    )
+    s = replace(
+        s,
+        "                    wp.material.effects.w=hardware ? 1.0f : 0.0f;",
+        """                    wp.material.effects.w=hardware ? 1.0f : 0.0f;
                     if(hardware && wp.material.effects.z==5 && wp.material.sunDirection.w>0 &&
                        !waterRenderer->lavaLightingPipeline(p.worker->device,p.rasterShaderCache->shaderFormat,p.fbStorage->colorTarget->multisampling))
-                        wp.material.sunDirection.w=0;''')
-    s=replace(s,'                        if(waterScene!=water_policy::invalidScene) {',
-'''                        if(waterScene!=water_policy::invalidScene) {
+                        wp.material.sunDirection.w=0;""",
+    )
+    s = replace(
+        s,
+        "                        if(waterScene!=water_policy::invalidScene) {",
+        """                        if(waterScene!=water_policy::invalidScene) {
                         if(hardware && wp.material.effects.z==5 && wp.material.sunDirection.w>0 &&
-                           !waterRenderer->prepareLavaLighting(p.worker,waterScene,wp))wp.material.sunDirection.w=0;''')
+                           !waterRenderer->prepareLavaLighting(p.worker,waterScene,wp))wp.material.sunDirection.w=0;""",
+    )
     return s
-change('src/render/rt64_framebuffer_renderer.cpp',framebuffer)
+
+
+change("src/render/rt64_framebuffer_renderer.cpp", framebuffer)
+
+
 def lava_shader(s):
-    s=replace(s,'        float4 reflection=0;\n#ifdef HARDWARE_WATER',
-        '        float4 reflection=0;\n        if(m.appearance.x>0) {\n#ifdef HARDWARE_WATER')
-    return replace(s,'#endif\n        float fresnel=0.04', '#endif\n        }\n        float fresnel=0.04')
-change('src/shaders/WaterPS.hlsl',lava_shader)
-output.write_text(''.join(changes),newline='\n')
-print(f'Composed {output.name}: {len(changes)} diff records')
+    s = replace(
+        s,
+        "        float4 reflection=0;\n#ifdef HARDWARE_WATER",
+        "        float4 reflection=0;\n        if(m.appearance.x>0) {\n#ifdef HARDWARE_WATER",
+    )
+    return replace(s, "#endif\n        float fresnel=0.04", "#endif\n        }\n        float fresnel=0.04")
+
+
+change("src/shaders/WaterPS.hlsl", lava_shader)
+output.write_text("".join(changes), newline="\n")
+print(f"Composed {output.name}: {len(changes)} diff records")

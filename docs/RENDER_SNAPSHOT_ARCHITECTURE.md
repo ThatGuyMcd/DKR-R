@@ -1,26 +1,37 @@
 # Renderer snapshot ownership
 
+## v1.0.14 release contract
+
+SDK 2 local tools/camera and coherent HD-liquid selection preserve copied presentation ownership. No independent online terrain/wave allocation or rolled-back high-LOD experiment is advertised. Checkpoint/save persistence stays confirmed-only.
+
 This reference describes the normal task/decode ownership. Experimental
 Rollback additionally retires owned submissions before correction and separates
 checkpoint memory from mutable presentation workspaces. See [architecture](ARCHITECTURE.md).
 
-Modern presentation uses two distinct ownership stages. Neither stage retains
-a pointer into the game's live RDRAM after its owner releases that memory.
+## Scheduler and submission ownership
 
-## Submission stage
+The graphics-handoff Patch Pipeline captures a completed 8 MiB RDRAM
+image through the existing `gfxtask_run_xbus` callback, before the
+scheduler message. This protects the earlier wait before host RSP
+submission. The lease transfers at `submit_rsp_task`, avoiding a second
+normal-path capture. FIFO matching checks RAM owner, physical root and
+native command count. It never searches by a recycled root alone.
 
-The project Patch Pipeline applies
-`patches/n64-modern-runtime/0007-snapshot-rdram-for-queued-graphics-tasks.patch`.
-Every graphics task is queued with an owned 8 MiB RDRAM image and an `OSTask`
-copy. The graphics worker retains that image until `RT64Renderer::send_dl`
-returns. `RendererSnapshotScope` exposes it to the F3DDKR decoder and restores
-both RT64 RDRAM pointers on every exit path.
+Pending capture is bounded to four images. Invalid capture, mismatch
+or overflow disables early matching until session reset, retaining the
+accepted submission-copy fallback. Suppressed tasks retire their leases;
+session generations reject captures that cross reset. Active workers
+retain their images. SP/DP completion and guest freeing are unchanged.
 
-This image is an isolated decode workspace rather than an interpolation
-endpoint. The bridge uses `0x7FE000..0x7FFFFF` to translate Rare's packed
-vertices, and RT64 can copy native framebuffer readback into the workspace.
-Those writes are allowed because the CPU has already continued on live RDRAM;
-they cannot feed back into simulation or corrupt a later graphics task.
+The immutable task image is separate from the reusable private decode
+workspace. Packed-vertex translation uses the upper private arena rather
+than the original game heap. RT64 readback and decode writes cannot
+alter live simulation RAM or the immutable submitted image.
+
+Producer capture also protects Accurate presentation; semantic transform
+sidecars remain Modern-only. Historical replay suppresses producer side
+effects. No competing GPU queue, guest command format or gameplay state
+is added. Malformed command guards and limited provenance reports remain.
 
 ## Decoded renderer stage
 

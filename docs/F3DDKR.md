@@ -1,5 +1,9 @@
 # F3DDKR graphics HLE
 
+## v1.0.14 release contract
+
+The accepted liquid gate freezes descriptor/dimension/filter selection per renderer workload. It does not change shader passes, guest state or GPU retirement. Renderer/runtime patches are applied only to isolated build copies; protected dependency checkouts remain untouched.
+
 Diddy Kong Racing uses Rare's F3DDKR display-list microcode. DKR-R implements
 its graphics commands with a hand-authored high-level emulation (HLE) decoder
 in `runtime-recomp/src/game/f3ddkr_rt64.cpp`. The class is named
@@ -32,11 +36,13 @@ at the end of RDRAM remains legal. These checks supplement the bridge's
 matrix, vertex, triangle, texture-offset and nested-list range checks; they
 do not establish bit-exact equivalence with the original RSP.
 
-The decoder reads an owned 8 MiB task snapshot. It may use the snapshot's
-reserved translation workspace, but it never writes renderer data back to live
-simulation RDRAM. The runtime's snapshot and SP-completion patches let the CPU
-recycle live display-list buffers while queued graphics still own their input.
-This lifetime mechanism supports the HLE decoder rather than replacing it.
+A completed task captures an immutable 8 MiB image before the game
+scheduler queue. Its lease transfers at host submission. The decoder uses
+a separate private workspace, with packed-vertex translation outside the
+game heap. Decode/readback writes cannot change the immutable source or live
+simulation RDRAM. The existing SP/DP completion and guest lifetimes remain.
+Malformed commands still stop safely and can report limited provenance.
+This ownership mechanism supports the HLE decoder rather than replacing it.
 
 Presentation groups attach stable semantic identities to moving objects,
 vehicle parts, billboards, shadows and animated surfaces so RT64 can interpolate

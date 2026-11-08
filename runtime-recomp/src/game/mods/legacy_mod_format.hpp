@@ -27,6 +27,8 @@ inline std::filesystem::path utf8_path(std::string_view value) {
     return std::filesystem::path(std::u8string(value.begin(),value.end()));
 }
 std::string sha256(View bytes);
+// Canonical little-endian PCM hash without allocating a second song buffer.
+std::string sha256_pcm_le(std::span<const std::int16_t> samples);
 // Absolute private-storage path; Windows hash-addressed asset trees routinely
 // exceed MAX_PATH. This does not change process-wide filesystem behaviour.
 std::filesystem::path private_storage_path(const std::filesystem::path& path);

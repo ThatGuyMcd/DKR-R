@@ -1,0 +1,6 @@
+file(GLOB guest_sources "${DKR_GENERATED}/RecompiledFuncs/funcs_*.c")
+foreach(source IN LISTS guest_sources)
+    file(READ "${source}" text)
+    string(REPLACE "osRecvMesg" "dkr_recv_mesg" text "${text}")
+    file(WRITE "${source}" "${text}")
+endforeach()

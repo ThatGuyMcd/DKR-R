@@ -431,9 +431,9 @@
     {
       "id": "COPY-062",
       "file": "runtime_graphics_ui.inl",
-      "previous": "Experimental Rollback: keep-scenery, view-distance and retention apply locally to restored retail scenery billboards, including removed tree tops; they do not yet extend all actors or level geometry. Vehicle LOD, FOV, animated/effect ranges, water detail and CPU culling remain canonical. Your preferences are kept for single-player and legacy online modes.",
-      "approved": "Some camera and detail settings aren't available in this online mode. Scenery settings affect restored sprites, not every object or part of the track.",
-      "verification": "literal"
+      "previous": "Some camera and detail settings aren't available in this online mode. Scenery settings affect restored sprites, not every object or part of the track.",
+      "approved": "",
+      "verification": "removed"
     },
     {
       "id": "COPY-063",
@@ -2160,8 +2160,8 @@
     {
       "id": "COPY-309",
       "file": "runtime_mod_library_ui.inl",
-      "previous": "Choose the format you downloaded. Both types appear in My mods.",
-      "approved": "Choose a patch or native track.",
+      "previous": "Choose a patch or native track.",
+      "approved": "Choose the type of mod to import.",
       "verification": "literal"
     },
     {
@@ -2217,7 +2217,7 @@
       "id": "COPY-317",
       "file": "runtime_camera_tuning_ui.inl",
       "previous": "Boosts, landings, and the game's own hits and explosions. All at 0 is no shake; the swing when you hit a wall is under Hits.",
-      "approved": "Shake from boosts, landings and impacts. Zero turns shake off.",
+      "approved": "Shake from boosts and landings. Zero turns shake off. Hits and explosions never shake this camera.",
       "verification": "literal"
     },
     {
@@ -2769,8 +2769,8 @@
     {
       "id": "COPY-396",
       "file": "runtime_ui.cpp",
-      "previous": "Enable legacy tracks for Track Select. Installed DKR tracks appear automatically in the in-game track menu.",
-      "approved": "Enable legacy mods to use them. Installed native tracks appear in Track Select.",
+      "previous": "Enable legacy mods to use them. Installed native tracks appear in Track Select.",
+      "approved": "Turn tracks on in My mods to add them to Track Select.",
       "verification": "literal"
     },
     {
@@ -2818,9 +2818,9 @@
     {
       "id": "COPY-403",
       "file": "runtime_ui.cpp",
-      "previous": "Installed DKR tracks appear automatically in the in-game track menu. Enable legacy mods to include them. Track Lab is for development and testing.",
-      "approved": "Installed native tracks appear in Track Select. Enable legacy mods to use them.",
-      "verification": "literal"
+      "previous": "Installed native tracks appear in Track Select. Enable legacy mods to use them.",
+      "approved": "",
+      "verification": "removed"
     },
     {
       "id": "COPY-404",

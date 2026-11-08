@@ -10,9 +10,9 @@ original audio clock.
 
 ## Online differences
 
-Master volume remains local and live in Experimental Rollback. Individual
-category mixing still uses the authored mix there; your saved category
-preferences are retained for offline and legacy modes. A separate output
+Master volume remains local and live in Rollback. Individual category mixing
+still uses the authored mix there; saved category preferences remain available
+offline. The old online backend selector is no longer offered in v1.0.14. A separate output
 category mixer is deferred, not silently claimed complete.
 
 Confirmed audio is kept separate from replay. Correcting old inputs must not

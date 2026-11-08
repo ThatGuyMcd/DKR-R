@@ -16,7 +16,10 @@ public:
     ~TextureReplayScope() { after_call(); }
     void before_load(std::uint32_t address) noexcept {
         if(!enabled_)return;
-        const bool native=address>=kTextureBegin&&address<kTextureEnd;
+        // Online labels use a disjoint, bounded portion of decoder-only RAM.
+        const bool native=(address>=kTextureBegin&&address<kTextureEnd)||
+            (address>=0x00D00000U&&address<0x00E00000U)||
+            (address>=0x00F00000U&&address<0x01000000U);
         if(!native) { after_call();return; }
         if(active_)return;
         std::memcpy(tmem_.data(),rdp_.TMEM,sizeof(rdp_.TMEM));

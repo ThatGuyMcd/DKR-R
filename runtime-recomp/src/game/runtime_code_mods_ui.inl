@@ -158,9 +158,10 @@ void DrawCustomMagicCodeLibrary(float requested_width,bool locked) {
             card.info=item.kept_online?"Kept from online":"Gameplay mod";
             card.enabled=item.enabled;card.gold=item.enabled&&item.approved;
             const bool needs_cup=item.id=="dkr_custom_trophies"&&!item.data.contains("trophies");
-            card.toggle_allowed=!busy&&(!needs_cup||!item.selected||!item.approved);
+            card.toggle_allowed=!busy&&(!needs_cup||!item.selected||!item.approved)&&(item.compatibility.empty()||item.enabled);
             card.status=!item.selected?"Other edition":!item.approved?"Needs approval":needs_cup?"Needs a cup":item.enabled?"On for next launch":"Off";
             card.tone=!item.selected?PaddockTone::Neutral:!item.approved||needs_cup?PaddockTone::Warning:item.enabled?PaddockTone::On:PaddockTone::Neutral;
+            if(!item.compatibility.empty()){card.status="Update needed";card.tone=PaddockTone::Warning;}
             if(needs_cup&&item.selected&&item.approved)card.note="Create a cup in Details.";
             height=std::max(height,MeasureLibraryCard(card,card_width));cards.push_back(std::move(card));
         }
@@ -182,7 +183,7 @@ void DrawCustomMagicCodeDetails(bool locked) {
     constexpr const char* id="Custom Magic Code details###code-mod-details";
     const auto view=g_code_library.view();
     const auto found=std::find_if(view->items.begin(),view->items.end(),[](const auto& item){return item.digest==g_code_details;});
-    const bool trophy=found!=view->items.end()&&found->id=="dkr_custom_trophies"&&found->selected&&found->approved;
+    const bool trophy=found!=view->items.end()&&found->id=="dkr_custom_trophies"&&found->selected&&found->approved&&found->compatibility.empty();
     const char* name=trophy?"Custom Trophy Races###code-mod-details":id;
     if(g_code_details_request) {
         ImGui::OpenPopup(name);g_code_details_request=false;g_code_consent=false;
@@ -213,7 +214,19 @@ void DrawCustomMagicCodeDetails(bool locked) {
         if(!item.description.empty())PaddockModalText(item.description);
         PaddockGap(10.0F);
         ImGui::BeginDisabled(locked||view->busy);
-        if(!item.selected) {
+        if(!item.compatibility.empty()) {
+            PaddockModalText(item.compatibility);
+            PaddockModalText("The update keeps your cups. Approve the new edition and turn it on afterwards.");
+            if(PaddockButton("Update trophy mod",PaddockButtonKind::Primary)) {
+                auto package=RuntimeAssetPath("Custom-Magic-Codes/dkr_custom_trophies.nrm");
+                if(package.empty())package=RuntimeAssetPath("../share/doc/dkr-port/Custom-Magic-Codes/dkr_custom_trophies.nrm");
+                if(package.empty())ImportMagicCodeWithDialog();
+                else if(g_code_library.update_trophies(std::move(package))) {
+                    g_code_details=std::string(dkr::mods::code::TrophyUpdateDigest);g_code_details_request=true;
+                }
+            }
+            if(item.selected&&item.enabled&&PaddockButton("Turn off old edition",PaddockButtonKind::Plain))g_code_library.enable(item.digest,false);
+        } else if(!item.selected) {
             PaddockModalText("Selecting this edition turns the previous edition off.");
             if(PaddockButton("Use this edition"))g_code_library.select(item.digest);
         } else if(!item.approved) {

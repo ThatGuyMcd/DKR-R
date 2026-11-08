@@ -11,6 +11,7 @@ void bind_thread();
 void unbind_thread();
 void boot(std::uint8_t* ram,std::size_t bytes);
 std::string failure();
-mods::Bytes bootstrap_checkpoint();
+// Called inside the quiesced callback, BEFORE recomp::start frees its RAM.
+mods::Bytes retire_bootstrap_checkpoint(std::span<std::uint8_t> live_ram);
 std::shared_ptr<const mods::code::FrozenSet> frozen();
 }

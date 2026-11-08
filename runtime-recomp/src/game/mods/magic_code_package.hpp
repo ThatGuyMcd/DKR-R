@@ -36,6 +36,9 @@ struct Package {
     std::shared_ptr<const N64Recomp::Context> symbols;
 };
 bool valid_id(std::string_view);
+// Exact withdrawn sample images only; third-party IDs/versions are not banned.
+std::string compatibility_issue(std::string_view digest);
+inline constexpr std::string_view TrophyUpdateDigest="6f900a1005c892e4b86a48a3e4bacb7a1e01a7364680ebdd61af954cd94cf154";
 Json parse_document(View,std::size_t limit=1024*1024);
 std::shared_ptr<const Package> inspect(View,std::string_view host_version);
 Json configuration(const Package&,const Json& selected);

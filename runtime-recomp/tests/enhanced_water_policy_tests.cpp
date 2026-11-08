@@ -4,6 +4,10 @@
 #include "WaterResourcePolicy.h"
 #include "WaterWorkPolicy.h"
 #include "enhanced_water_settings.hpp"
+#include "water_style/appearance.hpp"
+#include "water_style/projection_policy.hpp"
+#include <cstring>
+#include <sstream>
 #include "waterfall_scroll_policy.hpp"
 #include <cstdlib>
 #include <fstream>
@@ -132,6 +136,92 @@ int audit_stock_model(const char* path) {
 }
 int main(int argc,char** argv) {
     using namespace RT64::water_policy;
+    {
+        using namespace dkr::runtime::water::style;
+        require(projection_ready(0,1,1,1) && projection_ready(7,8,8,8),"complete water projection tables accept the first and final entries");
+        require(projection_ready(0,0,1,1,true) && !projection_ready(0,0,1,1,false),
+            "captured DKR cameras do not require an unused native view matrix");
+        require(!projection_ready(0,0,0,1,true) && !projection_ready(0,0,1,0,true),
+            "captured cameras still require their raster projection and viewport");
+        require(!projection_ready(0,0,1,1) && !projection_ready(0,1,0,1) && !projection_ready(0,1,1,0),
+            "an empty camera, combined matrix or viewport table cannot be indexed");
+        require(!projection_ready(7,7,8,8) && !projection_ready(7,8,7,8) && !projection_ready(7,8,8,7) &&
+            !projection_ready(UINT32_MAX,8,8,8),"unequal projection table lengths and malformed indices retain the original draw");
+        for(const auto map:kStockWaterMaps) {
+            const auto original=stock_profile(map),styled=styled_stock_profile(map,Style::Dkr);
+            require(valid_profile(styled),"DKR palette remains a valid material on every stock water course");
+            require(styled.roughness==original.roughness && styled.ripple==original.ripple &&
+                styled.absorption==original.absorption && styled.visibility==original.visibility &&
+                styled.foam==original.foam && styled.sky.x==original.sky.x && styled.sky.y==original.sky.y &&
+                styled.sky.z==original.sky.z && styled.sun.x==original.sun.x && styled.sun.y==original.sun.y &&
+                styled.sun.z==original.sun.z,"palette changes cannot alter reflection optics or wave controls");
+            const auto current=styled_stock_profile(map,Style::Current);
+            require(current.deep.x==original.deep.x && current.deep.y==original.deep.y && current.deep.z==original.deep.z &&
+                current.shallow.x==original.shallow.x && current.shallow.y==original.shallow.y && current.shallow.z==original.shallow.z,
+                "Current HD retains the previous course palette exactly");
+        }
+        require(styled_stock_profile(14,Style::Dkr).shallow.y>stock_profile(14).shallow.y &&
+            styled_stock_profile(14,Style::Dkr).shallow.z>stock_profile(14).shallow.z,"tropical body restores brighter cyan and turquoise");
+        require(styled_stock_profile(30,Style::Dkr).shallow.y==stock_profile(30).shallow.y,
+            "dark courses keep their existing water colour");
+        // Check visible contrast after representative diffuse lighting and
+        // the actual display transfer, rather than only comparing raw RGB.
+        // This is a palette acceptance bound, not a full GPU/image comparison.
+        const auto display=[](float value) {
+            return std::pow(std::clamp(value/(1+value*0.35F),0.0F,1.0F),1.0F/2.2F);
+        };
+        const auto luminance=[&](const Profile& p,float wave,float light) {
+            const float blend=wave*0.65F;
+            return 0.2126F*display((p.deep.x*(1-blend)+p.shallow.x*blend)*light)+
+                0.7152F*display((p.deep.y*(1-blend)+p.shallow.y*blend)*light)+
+                0.0722F*display((p.deep.z*(1-blend)+p.shallow.z*blend)*light);
+        };
+        for(const auto map:{8,10,14,23,40,53,61}) {
+            auto previous=stock_profile(map);
+            const bool tropical=map!=23;
+            previous.deep=tropical ? Vec3{0.004F,0.20F,0.30F} : Vec3{0.006F,0.18F,0.26F};
+            previous.shallow=tropical ? Vec3{0.025F,0.65F,0.66F} : Vec3{0.025F,0.58F,0.65F};
+            for(const float wave:{0.35F,0.6F,0.85F})for(const float light:{0.3F,0.5F}) {
+                const auto bright=styled_stock_profile(map,Style::Dkr);
+                require(luminance(bright,wave,light)-luminance(previous,wave,light)>0.18F,
+                    "daylight DKR water is visibly brighter than the first DKR colours build after lighting and tone compression");
+                require(display((bright.shallow.y+bright.deep.y)*0.25F)<0.95F &&
+                    display((bright.shallow.z+bright.deep.z)*0.25F)<0.95F,
+                    "brighter DKR body retains highlight headroom instead of clipping to white");
+            }
+        }
+        requested_reflection=Reflection::Hardware;reflection_strength=137;reflection_distance=125;
+        roughness_scale=83;ripple_scale=91;reflection_detail=2;
+        require(load_setting("enhanced_water_style",999) && selected==int(Style::Current),"persisted style upper bound is safe");
+        require(load_setting("enhanced_water_style",-100) && selected==int(Style::Dkr),"persisted style lower bound is safe");
+        require(requested_reflection==Reflection::Hardware && reflection_strength==137 && reflection_distance==125 &&
+            reflection_detail==2 && roughness_scale==83 && ripple_scale==91,"switching style leaves reflection choices and normals intact");
+        selected=int(Style::Current);apply_preset(3);
+        require(selected==int(Style::Current),"quality presets preserve the independently selected style");
+        reset_tuning();require(selected==int(Style::Current),"quality reset also preserves the independently selected style");
+        std::ostringstream saved;save_setting(saved);
+        require(saved.str()=="enhanced_water_style=1\n","style saves under its dedicated persistent key");
+        reset();require(selected==int(Style::Dkr),"appearance reset selects the approved DKR style");
+        require(!load_setting("enhanced_water_quality",0) && selected==int(Style::Dkr),"style parser leaves quality settings to their existing owner");
+        struct V {float x,y,z,w;};
+        struct Material {V deepColor,shallowColor,identity,optics,reflection;};
+        const Material baseline{{0.1F,0.2F,0.3F,0.006F},{0.2F,0.3F,0.4F,0.25F},{3,2,14,123},{650,1,0.35F,0},{1.37F,36,6000,0.83F}};
+        for(const auto kind:{Kind::None,Kind::Lava,Kind::Waterfall,Kind::Fountain}) {
+            auto m=baseline;apply(m,kind,false);
+            require(std::memcmp(&m,&baseline,sizeof(m))==0,"non-horizontal water and lava materials are byte-identical");
+        }
+        auto m=baseline;apply(m,Kind::Waves,true);
+        require(std::memcmp(&m.deepColor,&baseline.deepColor,sizeof(V)*2)==0,"custom track appearance metadata is preserved exactly");
+        require(std::uint32_t(m.identity.y)==(2U|kDkrStyleFlag),"style bit preserves the existing debug view");
+        m=baseline;apply(m,Kind::Waves,false);
+        require(m.deepColor.w==baseline.deepColor.w && m.shallowColor.w==baseline.shallowColor.w &&
+            std::memcmp(&m.optics,&baseline.optics,sizeof(V)*2)==0,"production material adapter preserves absorption, roughness, optics and reflection inputs");
+        selected=int(Style::Current);m=baseline;apply(m,Kind::Waves,false);
+        require(std::memcmp(&m,&baseline,sizeof(m))==0,"Current HD is a byte-exact material pass-through");
+        reset();
+        require((kDkrStyleFlag&255U)==0,"style flags cannot select a debug view");
+        reset_tuning();set_quality(0);
+    }
     {
         std::vector<LavaEmitter> emitters;
         for(unsigned i=0;i<4000;++i)add_lava_emitter(emitters,{float(i),0,0,20});

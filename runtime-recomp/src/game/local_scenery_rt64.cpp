@@ -1,9 +1,11 @@
 #include "local_scenery_rt64.hpp"
+#include "native_draw_scope_rt64.hpp"
 #include "local_scenery_texture_scope.hpp"
 #include "local_scenery_policy.hpp"
 #include "local_scenery_vertex_state.hpp"
 #include "presentation_identity.hpp"
 #include "runtime_enhancements.hpp"
+#include "revision_addresses.hpp"
 #include "netplay/experimental_performance.hpp"
 
 #include "gbi/rt64_f3d.h"
@@ -21,66 +23,7 @@ using netplay::experimental::LocalSceneryTexture;
 
 // Restore every state domain touched by the typed billboard path. Deferred
 // TMEM/Rice restoration is separate (the checked Patch Pipeline scope).
-class DrawScope final {
-public:
-    explicit DrawScope(RT64::State& state):s_(state),r_(*state.rsp),d_(*state.rdp),
-        matrices_(r_.modelMatrixStack),physical_(r_.modelMatrixPhysicalAddressStack),
-        segmented_(r_.modelMatrixSegmentedAddressStack),size_(r_.modelMatrixStackSize),
-        vertices_(r_.vertices),indices_(r_.indices),used_(r_.used),extended_(r_.extended),
-        texture_(r_.textureState),geometry_(r_.geometryModeStack[r_.geometryModeStackSize-1]),
-        segment0_(r_.segments[0]),tiles_(std::to_array(d_.tiles)),
-        replacements_(std::to_array(d_.tileReplacementHashes)),image_(d_.texture),other_(d_.otherMode),
-        vertex_pipeline_(r_) {
-        s_.flush();
-        d_.pushCombine();d_.pushPrimColor();d_.pushEnvColor();
-        // These RAM textures cannot be framebuffer copies. Splice, don't copy
-        // or destroy, the canonical GPU-copy mappings while they are decoded.
-        regions_.splice(regions_.end(),s_.framebufferManager.activeRegionsTMEM);
-        r_.segments[0]=0;
-        r_.setGeometryMode(1U|G_SHADE|G_FOG|r_.shadingSmoothMask);
-        r_.clearGeometryMode(r_.cullBothMask|G_LIGHTING|G_TEXTURE_GEN|G_TEXTURE_GEN_LINEAR);
-        r_.setTexture(0,0,1,0xFFFF,0xFFFF);
-        // Canonical explicit replacement hashes must not override a new native
-        // texture. Normal TMEM/Rice hashing still resolves enabled local packs.
-        for(unsigned tile=0;tile<RDP_TILES;++tile)d_.clearTileReplacementHash(tile);
-        r_.extended.vertexSegmentEnabled.fill(false);
-    }
-    ~DrawScope() {
-        s_.flush();
-        d_.popCombine();d_.popPrimColor();d_.popEnvColor();
-        r_.modelMatrixStack=matrices_;r_.modelMatrixPhysicalAddressStack=physical_;
-        r_.modelMatrixSegmentedAddressStack=segmented_;r_.modelMatrixStackSize=size_;
-        r_.vertices=vertices_;r_.indices=indices_;r_.used=used_;
-        r_.extended=extended_;r_.extended.modelMatrixIdStackChanged=true;
-        r_.textureState=texture_;r_.geometryModeStack[r_.geometryModeStackSize-1]=geometry_;
-        r_.segments[0]=segment0_;vertex_pipeline_.restore(r_);
-        std::copy(tiles_.begin(),tiles_.end(),d_.tiles);
-        std::copy(replacements_.begin(),replacements_.end(),d_.tileReplacementHashes);
-        d_.texture=image_;d_.setOtherMode(other_.H,other_.L);
-        s_.framebufferManager.activeRegionsTMEM.clear();
-        s_.framebufferManager.activeRegionsTMEM.splice(s_.framebufferManager.activeRegionsTMEM.end(),regions_);
-        for(const auto attribute:{RT64::DrawAttribute::Texture,RT64::DrawAttribute::GeometryMode,
-                RT64::DrawAttribute::Combine,RT64::DrawAttribute::PrimColor,RT64::DrawAttribute::EnvColor,
-                RT64::DrawAttribute::OtherMode})s_.updateDrawStatusAttribute(attribute);
-    }
-private:
-    RT64::State& s_;RT64::RSP& r_;RT64::RDP& d_;
-    decltype(r_.modelMatrixStack) matrices_;
-    decltype(r_.modelMatrixPhysicalAddressStack) physical_,segmented_;
-    int size_;
-    decltype(r_.vertices) vertices_;
-    decltype(r_.indices) indices_;
-    decltype(r_.used) used_;
-    decltype(r_.extended) extended_;
-    RT64::RSP::TextureState texture_;
-    std::uint32_t geometry_,segment0_;
-    std::array<RT64::LoadTile,8> tiles_;
-    std::array<std::uint64_t,8> replacements_;
-    RT64::LoadTexture image_;
-    decltype(d_.otherMode) other_;
-    local_scenery::VertexPipelineSnapshot<RT64::RSP> vertex_pipeline_;
-    std::list<RT64::FramebufferManager::RegionTMEM> regions_;
-};
+using DrawScope=NativeDrawScope;
 // Whitelisted, single RDP commands only. Never RunCommands(), branches,
 // DMAOffsets, guest callbacks, framebuffer/depth targets or full sync.
 void upload_texture(RT64::State& state,const LocalSceneryTexture& texture,std::uint32_t address) {
@@ -103,24 +46,86 @@ void upload_texture(RT64::State& state,const LocalSceneryTexture& texture,std::u
 }
 }
 
-void LocalSceneryRT64Pass::prepare(const netplay::experimental::LocalSceneryScene* scene,
+void LocalSceneryRT64Pass::prepare_live(std::span<const dkr_owned_draw_event> events,std::span<std::uint8_t> decoder) {
+    // Resources are owned by this decoder workspace until its consumers retire.
+    // Static sprite meshes/textures are captured once per scene, not per frame.
+    const auto word=[&](std::uint32_t a){if(a<0x80000000U||a>0x807FFFFCU||(a&3))throw std::runtime_error("local sprite pointer");std::uint32_t v;std::memcpy(&v,decoder.data()+a-0x80000000U,4);return v;};
+    const auto half=[&](std::uint32_t a){if(a<0x80000000U||a>0x807FFFFEU||(a&1))throw std::runtime_error("local sprite pointer");std::uint16_t v;std::memcpy(&v,decoder.data()+((a-0x80000000U)^2U),2);return v;};
+    const auto byte=[&](std::uint32_t a){if(a<0x80000000U||a>0x807FFFFFU)throw std::runtime_error("local sprite pointer");return decoder[(a-0x80000000U)^3U];};
+    const auto real=[&](std::uint32_t a){const auto v=std::bit_cast<float>(word(a));if(!std::isfinite(v))throw std::runtime_error("local sprite position");return v;};
+    for(std::size_t i=base_count_;i<merged_.sprites.size();++i)merged_.sprites[i].transform_flags|=0x80U;
+    if(std::none_of(events.begin(),events.end(),[](const auto& e){return e.kind==DKR_OWNED_LOCAL_OBJECT;}))return;
+    const auto count=word(revision_addresses::ObjectCount),start=word(revision_addresses::ObjectListStart),list=word(revision_addresses::ObjectList);
+    if(count>2048||start>count)throw std::runtime_error("local sprite count");
+    std::array<std::vector<std::uint32_t>,4> drawn;
+    unsigned active_views=0;
+    for(const auto& e:events)if(e.kind==DKR_OWNED_LOCAL_SCENERY&&dkr_owned_draw_event_valid(&e)&&settings_.live_enabled(int(e.parameters[1])))active_views|=1U<<e.token;
+    for(const auto& e:events)if(e.kind==DKR_OWNED_LOCAL_OBJECT&&dkr_owned_draw_event_valid(&e))drawn[e.token].push_back(e.parameters[0]);
+    for(auto& view:drawn)std::sort(view.begin(),view.end());
+    for(unsigned i=start;i<count;++i) {
+        try {
+            const auto object=word(list+i*4),header=word(object+0x40);
+            const auto behaviour=half(object+0x48),flags=half(object+6);
+            if(flags&0xD080U || byte(header+0x53)!=1 ||
+               (behaviour!=0&&!enhancements::is_animated_scenery_behaviour(behaviour)&&
+                !enhancements::is_billboard_or_effect_behaviour(behaviour)&&!enhancements::is_water_or_lava_behaviour(behaviour)))continue;
+            unsigned excluded=0;for(unsigned view=0;view<4;++view)
+                if(std::binary_search(drawn[view].begin(),drawn[view].end(),object))excluded|=1U<<view;
+            if((excluded&active_views)==active_views)continue;
+            const auto model=byte(object+0x3A),models=byte(header+0x55);
+            if(!models||model>=models||models>32)continue;
+            const auto sprite=word(word(object+0x68)+model*4);
+            auto found=std::find_if(live_assets_.begin(),live_assets_.end(),[&](const auto& asset){return asset.object==object&&asset.header==header&&asset.sprite==sprite;});
+            if(found==live_assets_.end()) {
+                if(merged_.sprites.size()==netplay::experimental::LocalSceneryCapture::kMaxSprites)continue;
+                const auto table=revision_addresses::selected_revision()==rom::Revision::UsV80?0x800DEE68U:0x800DE8E8U;
+                auto captured=netplay::experimental::capture_live_local_sprite(decoder,object,table);
+                std::size_t bytes=0;for(const auto& texture:captured.textures)bytes+=texture->bytes.size();
+                for(const auto& frame:captured.frames)bytes+=frame.tiles.size()*sizeof(netplay::experimental::LocalSceneryTile);
+                if(bytes>netplay::experimental::LocalSceneryCapture::kMaxPayloadBytes-merged_.payload_bytes)continue;
+                const auto index=merged_.sprites.size();merged_.sprites.push_back(std::move(captured));
+                live_assets_.push_back({object,header,sprite,index});merged_.payload_bytes+=bytes;found=live_assets_.end()-1;
+            }
+            auto& out=merged_.sprites[found->index];
+            for(unsigned a=0;a<3;++a)out.position[a]=real(object+12+a*4);
+            out.scale=real(object+8);out.roll=std::int16_t(half(object+4));out.animation=half(object+0x18);
+            out.segment=std::int16_t(half(object+0x2E));out.transform_flags=flags;out.view_excluded=std::uint8_t(excluded);
+            const auto shading=word(object+0x54);
+            if(shading) {
+                const auto intensity=std::uint32_t(std::clamp(real(shading)*255.F,0.F,255.F));
+                out.primitive=(intensity<<24)|(intensity<<16)|(intensity<<8)|255U;
+                out.environment=0;for(unsigned c=0;c<4;++c)out.environment=(out.environment<<8)|byte(shading+4+c);
+            }
+        }catch(const std::exception&){} // One unsupported effect cannot remove other scenery.
+    }
+}
+
+void LocalSceneryRT64Pass::prepare(std::shared_ptr<const netplay::experimental::LocalSceneryScene> scene,
         std::span<const dkr_owned_draw_event> observations,std::span<std::uint8_t> decoder,
         std::uint32_t identity) noexcept {
     scene_=nullptr;observation_count_=0;consumed_.fill(false);textures_.clear();identity_=identity;
-    if(!scene||scene->sprites.empty()||decoder.size()<16U*1024U*1024U||
+    if(!scene||decoder.size()<16U*1024U*1024U||
        scene->sprites.size()>netplay::experimental::LocalSceneryCapture::kMaxSprites)return;
     try {
         netplay::experimental::performance::Scope timing(netplay::experimental::performance::Stage::SceneryUpload);
         settings_={enhancements::presentation_profile(),enhancements::scenery_retention_mode(),
             enhancements::view_distance_multiplier(),enhancements::keep_hub_scenery_requested(),
-            enhancements::keep_track_scenery_requested(),enhancements::keep_minigame_scenery_requested()};
+            enhancements::keep_track_scenery_requested(),enhancements::keep_minigame_scenery_requested(),
+            enhancements::animated_scenery_distance_multiplier(),enhancements::billboard_effect_distance_multiplier(),
+            enhancements::water_lava_detail_multiplier(),enhancements::extended_culling_requested()};
+        if(cached_source_!=scene || cached_scene_!=scene->scene || base_count_!=scene->sprites.size()) {
+            merged_=*scene;live_assets_.clear();cached_scene_=scene->scene;base_count_=scene->sprites.size();
+            cached_source_=scene;
+        }
+        if(std::any_of(observations.begin(),observations.end(),[&](const auto& e){return e.kind==DKR_OWNED_LOCAL_SCENERY&&settings_.live_enabled(int(e.parameters[1]));}))
+            prepare_live(observations,decoder);
         for(const auto& event:observations) {
             if(event.kind!=DKR_OWNED_LOCAL_SCENERY||event.parameters[0]!=scene->scene)continue;
             if(!dkr_owned_draw_event_valid(&event)||observation_count_==observations_.size())return;
             // Disabled local scenery must incur no texture copy/upload. This
             // preference is read only by the decoder, never by the CPU adapter.
-            if(!settings_.enabled(int(event.parameters[1])))continue;
-            auto plan=local_scenery::plan_view(*scene,event,settings_);
+            if(!settings_.live_enabled(int(event.parameters[1])))continue;
+            auto plan=local_scenery::plan_view(merged_,event,settings_);
             if(!plan.count)continue;
             plans_[observation_count_]=plan;
             observations_[observation_count_++]=event;
@@ -131,9 +136,9 @@ void LocalSceneryRT64Pass::prepare(const netplay::experimental::LocalSceneryScen
         // Copy the union of textures used by the selected frames, once even
         // when multiple viewports/passes share them. No new resource eviction:
         // the retained immutable scene still owns every animation frame.
-        if(!local_scenery::copy_view_textures(*scene,plans,decoder,textures_,copied))return;
+        if(!local_scenery::copy_view_textures(merged_,plans,decoder,textures_,copied))return;
         for(const auto& plan:plans)selected+=plan.count;
-        scene_=scene;
+        scene_=&merged_;
         netplay::experimental::performance::event(netplay::experimental::performance::Event::LocalSceneryCandidates,selected);
         netplay::experimental::performance::event(netplay::experimental::performance::Event::LocalSceneryTextureBytes,copied);
     } catch(...) { scene_=nullptr; } // Optional visuals cannot abort a match.

@@ -1,9 +1,19 @@
 # DKR-R architecture
 
+## v1.0.14 release contract
+
+The release composes guarded game-heap headroom, immutable scheduler handoff, private decode isolation, water residency and updated vehicle preparation above the Online directory, Scoreboard, party/spectator repairs, vehicles, achievements and texture tools over Camera++, SDK 2, Store, shared saves and presentation fixes through the Patch Pipeline. API 2 is additive. Personal, confirmed-online and development save ownership are separate. Isolated dependency source patches never edit the checked-out submodules.
+
 DKR-R is a static recompilation, with the matching DKR decomp as the readable
 reference for symbols, structures and algorithms. We keep enhancements in the
 authored integration layer and Patch Pipeline rather than hand-editing the
 generated game or dependencies.
+
+The final release adds the accepted online-performance and character/profile
+integration layers. Profile and live-FOV logic lives in first-party modules
+under `runtime-recomp/src/game`. Account/profile APIs handle identity and picture
+sharing; gameplay remains on the admitted peer transport and Rollback path.
+The full source fold is still separate from the guardrail setup in PRs #76–#78.
 
 ## Runtime and patch ownership
 
@@ -36,27 +46,26 @@ executable.
 
 Byte-swapped inputs are converted into a verified private cache without
 modifying the original file. Both revisions use the compatible EEPROM format,
-but online and legacy mod-set save namespaces remain separate from offline
-progress. See [ROM setup](ROM_SETUP.md) and [Saves](SAVES.md).
+but online and development save owners remain separate from personal
+progress. Old mod-set saves are recovery inputs, not current per-mod-list ownership. See [ROM setup](ROM_SETUP.md) and [Saves](SAVES.md).
 
-## Three online backends
+## Public Rollback and party ownership
 
-All concrete backends use the same lobby, Quick Join/friend admission, virtual
-port ownership and save/mod compatibility checks. Auto is a host preference
-that selects Experimental Rollback, not a new wire backend.
+v1.0.14 public hosting admits the owned Rollback engine (the existing internal
+`ExperimentalRollback` value). The old Auto/Host Prediction/Strict Input Sync
+selector is removed. Historical implementations/wire values are not renamed
+or offered as an automatic fallback.
 
-**Host Prediction** retains the original host-authored immutable commit chain.
-Prediction is bounded; delayed replicas use portable host state and explicit
-recovery/finish barriers. Published commits are not rewritten by late inputs.
+Isolated full-scene owned CPU closures for both ROM revisions capture guest
+state plus audited native sidecars, predict bounded remote input and restore/
+replay on correction. Scene construction, start/return, lifetime cuts and
+finish transitions retain explicit ownership/confirmation gates. The directory
+never advances gameplay or replaces checkpoint/save admission.
 
-**Strict Input Sync** advances with the required authenticated input set.
-Its input waits are intentional rather than a hidden rollback implementation.
-
-**Experimental Rollback** uses isolated full-scene owned CPU closures for both
-supported revisions. It captures guest state plus audited native sidecars,
-predicts remote input within a bounded window and restores/replays on correction.
-The launch follows the normal retail menu flow. Scene construction, lifetime
-cuts and finish transitions stay behind explicit ownership/confirmation gates.
+Racer and spectator identities are distinct from four controller ports.
+Spectators consume confirmed viewing checkpoints; approved racer swaps use an
+agreed handover boundary. Required racer departure safely returns the party;
+spectator departure does not remove a racing input owner.
 
 The owned revision registry keeps capsules and native callback dispatch
 separate. Unknown imports, stale object/asset generations, out-of-range guest
@@ -69,6 +78,14 @@ repeat audible events or persist speculative EEPROM/Pak state.
 See [renderer ownership](RENDER_SNAPSHOT_ARCHITECTURE.md).
 
 ## Network and mod admission
+
+The authenticated website API supplies a private worldwide SQLite Durable
+Object directory. It leases/deduplicates account presence, publishes public
+room summaries and serializes bounded admissions/reservations. Account/role/
+epoch/policy/handshake-key binding prevents public browsing from granting
+native membership. Reconnection can expire unused capabilities while preserving
+already approved content preparation. Existing native peers survive directory
+outages independently. See [public lobbies](PUBLIC_LOBBIES.md).
 
 PeerJS introduces Quick Join peers; authenticated WebRTC channels carry native
 session traffic. There is no bundled gameplay relay. Per-peer key agreement,

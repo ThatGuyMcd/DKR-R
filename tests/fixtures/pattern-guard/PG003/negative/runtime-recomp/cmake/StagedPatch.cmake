@@ -1,0 +1,5 @@
+function(dkr_stage_patch target source stage_name patch)
+    get_target_property(sources ${target} SOURCES)
+    list(FILTER sources EXCLUDE REGEX "${stage_name}")
+    set_property(TARGET ${target} PROPERTY SOURCES "${sources}")
+endfunction()

@@ -1,5 +1,15 @@
 # DKR-R development guide
 
+## v1.0.14 release contract
+
+The final release recipe and prepared-input contract are in patches/release-prep/v1.0.11/BUILDING.txt. The SDK 2 Bible/public headers describe supported tools and API 1 compatibility. Gameplay/hardware acceptance is owner-led; compilation and static inspection are not runtime acceptance.
+
+Keep using the accepted Patch Pipeline while the source fold is in progress.
+Edit first-party modules in place and extend an existing baselined layer only
+where it is still needed. Do not add another patch layer. The release work
+records a recoverable source snapshot and the exact documentation changes.
+The pattern guard, pinned-byte checks and contributor rules remain in force.
+
 Keep the changes focused and reproducible. Project-owned runtime code lives in
 `runtime-recomp/src/game`, tests in `runtime-recomp/tests`, release assets in
 `assets`/`packaging`, automation in `scripts` and Track Lab in
@@ -15,8 +25,9 @@ python3 scripts/check.py --list
 python3 scripts/check.py --suite tooling
 ```
 
-The default command runs synthetic tooling tests, release metadata checks and
-the source asset scan. It stops at the first failure and never downloads
+The default command runs the pattern guard, synthetic tooling tests, release
+metadata checks and the source asset scan. `--suite` repeats and takes comma
+lists (`--suite guard,tooling`). It stops at the first failure and never downloads
 anything or changes dependency checkouts. `--list` shows the selected commands.
 On Windows, use `python` in place of `python3`; POSIX-only tests report skips.
 To run the Track Lab Python suites, use `--suite track-lab`. Missing private

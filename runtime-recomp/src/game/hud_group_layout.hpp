@@ -42,12 +42,17 @@ struct Rect { float x, y, w, h; };
 struct Transform {
     float scale = 1, x = 0, y = 0;
     float clip_top = 0, clip_bottom = 240;
-    bool valid() const { return std::isfinite(scale) && scale >= .5F && scale <= 1.5F &&
+    // Decoder-only native-font restoration. Zero preserves the ordinary
+    // uniform layout scale; user-editable layouts retain their 50-150% range.
+    float scale_y = 0;
+    float y_scale() const { return scale_y == 0 ? scale : scale_y; }
+    bool valid(float scale_limit=1.5F) const { return std::isfinite(scale) && scale >= .5F && scale <= scale_limit &&
+        std::isfinite(scale_y) && (scale_y == 0 || (scale_y >= .5F && scale_y <= scale_limit)) &&
         std::isfinite(x) && std::isfinite(y) && std::abs(x) <= 4096 && std::abs(y) <= 1024 &&
         std::isfinite(clip_top) && std::isfinite(clip_bottom) && clip_top >= 0 &&
         clip_bottom <= 240 && clip_bottom > clip_top; }
-    Point apply(Point p) const { return {p.x * scale + x, p.y * scale + y}; }
-    bool identity() const { return scale == 1 && x == 0 && y == 0; }
+    Point apply(Point p) const { return {p.x * scale + x, p.y * y_scale() + y}; }
+    bool identity() const { return scale == 1 && y_scale() == 1 && x == 0 && y == 0; }
 };
 struct Placement {
     // Offsets are fractions of the selected viewport, independent of pixels.

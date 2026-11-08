@@ -1,5 +1,12 @@
 # Android renderer build-stage patch pipeline
 
+## Current release composition
+
+Android is excluded from v1.0.11. The [desktop release pipeline](../release-prep/v1.0.11/BUILDING.txt) does not produce an APK. The module notes below
+explain this layer; their dated playtest paths are historical inputs, not the
+current release command. The accepted water/source capsule preserves the
+composed behaviour. Dependencies and generated guest checkouts stay read-only.
+
 `rt64-rgba-presentation.patch` is deliberately separate from the dependency
 checkout patch manifest. `runtime-recomp/cmake/android/RendererPatches.cmake`
 copies only the two relevant translation units into the Android build tree,

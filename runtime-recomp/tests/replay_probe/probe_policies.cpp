@@ -124,6 +124,11 @@ extern "C" void dkr_probe_presentation_addresses(uint32_t a[8]) {
     a[3]=t.NumberOfActivePlayers;a[4]=t.TrophyRaceWorldId;a[5]=t.ViewportLayout;
     a[6]=t.IsInTracksMenu;a[7]=t.ActiveCameraId;
 }
+extern "C" void dkr_probe_online_addresses(uint32_t a[3]) {
+    const auto& t=DKR_PROBE_REVISION==77 ?
+        dkr::runtime::revision_addresses::kUsV77:dkr::runtime::revision_addresses::kUsV80;
+    a[0]=t.RacersByPort;a[1]=t.NumberOfRacers;a[2]=t.TrackDisplayList;
+}
 extern "C" int dkr_probe_postrace_scope(int mode,int postrace,int players,int trophy,int layout) {
     return dkr::runtime::presentation::postrace_full_view_scope(true,true,mode==0,
         postrace,players,trophy,layout);

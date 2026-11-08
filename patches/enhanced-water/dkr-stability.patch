@@ -1,6 +1,23 @@
 diff --git a/src/shared/rt64_water_params.h b/src/shared/rt64_water_params.h
 --- a/src/shared/rt64_water_params.h
 +++ b/src/shared/rt64_water_params.h
+@@ -2,6 +2,8 @@
+ #include "rt64_hlsl.h"
+ #define WATER_CRAFT_COUNT 8
+ #define WATER_SHORE_SEGMENTS_PER_TILE 8
++#define WATER_STYLE_DKR (1U << 8U)
++#define WATER_DEBUG_MASK 255U
+ 
+ #ifdef HLSL_CPU
+ namespace interop {
+@@ -14,7 +16,7 @@
+     float4 skyColor;        // linear RGB, horizon haze
+     float4 animation;       // previous/current simulation seconds, detail strength, foam strength
+-    float4 identity;        // quality (0 disables), debug view, course, generation
++    float4 identity;        // quality, debug view low 8 bits + style flags, course, generation
+     float4 surface;         // mean height, wind X/Z, view index
+     float4 optics;          // visibility range, authored reflection weight, shallow caustics, classic style
+     float4 craftPrevious[WATER_CRAFT_COUNT]; // world XYZ, wet contact fraction (-1 means inactive)
 @@ -21,6 +21,8 @@
      float4 craftCurrent[WATER_CRAFT_COUNT];
      float4 shoreCounts[2];     // bounded static shoreline segments in each craft's world tile
@@ -455,6 +472,14 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
          uint32_t count=std::min(64u,uint32_t(sprayDistance[i]/10));
          sprayDistance[i]-=float(count)*10;
          const bool landing=old.w==0 && current.w>0 && fromTime<m.animation.y && toTime>=m.animation.y;
+@@ -512,7 +538,7 @@
+ void WaterRenderer::drawSpray(RenderWorker *worker,uint32_t drawIndex) {
+     const auto &draw=draws[drawIndex];
+-    if (particles.empty() || draw.material.identity.x<2 || draw.material.identity.y!=0 || draw.material.effects.x<0.5f) return;
++    if (particles.empty() || draw.material.identity.x<2 || (uint32_t(draw.material.identity.y)&WATER_DEBUG_MASK)!=0 || draw.material.effects.x<0.5f) return;
+     const auto &scene=scenes[drawScenes[drawIndex]];
+     const uint32_t key=scene.surfaceSamples;
+     auto found=sprayPipelines.find(key);
 @@ -536,7 +562,7 @@
      const auto sourceDraw=horizontal==draws.end() ? draws.front() : *horizontal;
      const auto m=sourceDraw.material;
@@ -514,6 +539,14 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
      const auto camera=hlslpp::float4x4(draws.back().material.cameraViewProjection);
      struct CameraCache {hlslpp::float4x4 matrix,inverse;bool valid=false;};
      thread_local CameraCache cache;
+@@ -821,7 +848,7 @@
+     for (uint32_t i=0; i+2<count; i+=3) {
+         interop::uint4 f{data.faceIndices[start+i],data.faceIndices[start+i+1],data.faceIndices[start+i+2],uint32_t(draws.size()-1)};
+-        if (draws.back().material.identity.y==12) wireIndices.insert(wireIndices.end(),{f.x,f.y,f.y,f.z,f.z,f.x});
++        if ((uint32_t(draws.back().material.identity.y)&WATER_DEBUG_MASK)==12) wireIndices.insert(wireIndices.end(),{f.x,f.y,f.y,f.z,f.z,f.x});
+         for (uint32_t j=0;j<3;j++) {
+             const uint32_t v = f[j];
+             const auto &material=draws.back().material;
 @@ -835,6 +862,10 @@
  }
  
@@ -534,6 +567,7 @@ diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuf
  #include "WaterProjection.h"
 +#include "WaterBounds.h"
 +#include "enhanced_water_settings.hpp"
++#include "water_style/projection_policy.hpp"
  
  #include "../include/rt64_extended_gbi.h"
  
@@ -556,6 +590,27 @@ diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuf
                      if(needsSurface) {
                      worker->commandList->setGraphicsPipelineLayout(waterRenderer->layout.get());
                      worker->commandList->setGraphicsDescriptorSet(waterRenderer->materialSet(drawCall.waterIndex),0);
+@@ -1856,7 +1859,9 @@
+                 const bool waterSamplesSupported = wantsWater &&
+                     (p.worker->device->getSampleCountsSupported(RenderFormat::R32_FLOAT) & p.fbStorage->colorTarget->multisampling.sampleCount);
+-                if (wantsWater && waterRenderer && !waterUnavailable && waterRecovery.ready() && waterSamplesSupported) {
++                if (wantsWater && waterRenderer && !waterUnavailable && waterRecovery.ready() && waterSamplesSupported &&
++                    dkr::runtime::water::style::projection_ready(proj.transformsIndex,drawData.modViewTransforms.size(),
++                        drawData.modViewProjTransforms.size(),drawData.rspViewports.size(),waterMaterial->cameraPosition.w==1.0f)) {
+                     try {
+                     interop::WaterDrawParams wp{};
+                     wp.material = *waterMaterial;
+@@ -1867,8 +1872,9 @@
+                     wp.screen = {float(p.fbWidth), float(p.fbHeight), float(p.targetWidth), float(p.targetHeight)};
+                     wp.screenTransform = {triangles.screenScale.x, triangles.screenScale.y, triangles.screenOffset.x, triangles.screenOffset.y};
+-                    const auto inverseView = hlslpp::inverse(drawData.modViewTransforms[proj.transformsIndex]);
+-                    const auto camera = viewPositionFrom(inverseView);
++                    hlslpp::float3 camera(0.0f);
++                    if(wp.material.cameraPosition.w!=1.0f)
++                        camera=viewPositionFrom(hlslpp::inverse(drawData.modViewTransforms[proj.transformsIndex]));
+                     const float t = wp.material.animation.x + (wp.material.animation.y - wp.material.animation.x) * p.interpolationWeight;
+                     wp.camera = {camera.x, camera.y, camera.z, t};
+                     wp.viewProjection = drawData.modViewProjTransforms[proj.transformsIndex];
 @@ -1886,7 +1889,7 @@
                              std::isfinite(wp.inverseWorldViewProjection[row][col]);
                      RenderPipeline *waterPipeline = nullptr;
@@ -701,7 +756,25 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
      float refractedThickness = opticalDepth(refractedPixel,position.z,worldPosition,p);
      // Reject foreground silhouettes at the proposed sample before distorting.
      if (refractedThickness < 0) { refractedPixel = position.xy; refractedThickness = thickness; }
-@@ -324,7 +324,7 @@
+@@ -319,13 +319,25 @@
+         body = bottomColor * transmission + body * (1-transmission);
+     }
++    // Style changes the diffuse body and sun glints only. Keep N, Fresnel,
++    // reflection samples and radiance untouched, including the hardware path.
++    const bool dkrStyle = (uint(m.identity.y) & WATER_STYLE_DKR) != 0;
++    float sunGlint = specular;
++    if (dkrStyle) {
++        // Broad accents follow the existing wave geometry rather than an
++        // extra animated normal map. Derivative filtering prevents distant shimmer.
++        float accent = smoothstep(0.49,0.64,waveLight);
++        accent *= 1-smoothstep(0.06,0.22,fwidth(waveLight));
++        body += m.shallowColor.rgb * (0.12 * accent);
++        sunGlint = lerp(specular,min(specular,0.7),0.65);
++    }
+     float3 color = body * (0.55 + nl * 0.45) * m.sunColor.a * (1-fresnel)
+-        + m.sunColor.rgb * m.sunDirection.a * specular;
++        + m.sunColor.rgb * m.sunDirection.a * sunGlint;
+     float4 reflection=screenReflection(worldPosition,N,V,roughness,p);
  #ifdef HARDWARE_WATER
      // SSR covers moving actors using their exact rendered colours; hardware
      // rays add static off-screen world intersections, not a second game pass.
@@ -733,3 +806,11 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
  #endif
          float3 base=originalColor.Load(int3(originalPixel,0)).rgb;
          float3 classic=base;
+@@ -390,7 +403,7 @@
+     }
+ #endif
+-    uint debug = (uint)m.identity.y;
++    uint debug = (uint)m.identity.y & WATER_DEBUG_MASK;
+     if (debug == 1) return float4(1,0,0.8,1);
+     if (debug == 2) return float4(N*0.5+0.5,1);
+     if (debug == 3) return float4(frac(worldPosition * 0.005),1);

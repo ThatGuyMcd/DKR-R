@@ -468,9 +468,29 @@ extern "C" void dkr_extend_object_draw_distance(std::uint8_t* rdram,
             dkr::runtime::enhancements::billboard_effect_distance_multiplier(),
             dkr::runtime::enhancements::water_lava_detail_multiplier());
     context->r3 = static_cast<gpr>(
-        dkr::runtime::enhancements::effective_view_distance(
+        dkr::runtime::enhancements::object_distance_before_multiplayer_reduction(
             dkr::runtime::enhancements::presentation_profile(), authored,
-            multiplier));
+            multiplier,static_cast<std::int32_t>(MEM_W(0,RdramAddress(
+                dkr::runtime::revision_addresses::selected_revision()==dkr::runtime::rom::Revision::UsV80
+                    ? 0x8011D8FCU:0x8011D37CU)))));
+}
+
+extern "C" void dkr_keep_local_multiplayer_scenery(std::uint8_t* rdram,recomp_context* context) {
+    using namespace dkr::runtime::enhancements;
+    const auto object=static_cast<std::uint32_t>(context->r17);
+    if(object<0x80000000U || object>0x807FFF80U ||
+       !scenery_retention_enabled_for_race_type(presentation_profile(),CurrentLevelRaceType(rdram),
+           keep_hub_scenery_requested(),keep_track_scenery_requested(),keep_minigame_scenery_requested()))return;
+    const auto header=static_cast<std::uint32_t>(MEM_W(0x40,RdramAddress(object)));
+    if(header<0x80000000U || header>0x807FFF88U || MEM_HU(0x48,RdramAddress(object))!=0 ||
+       MEM_BU(0x53,RdramAddress(header))!=1)return;
+    if(MEM_W(0x5C,RdramAddress(object))!=0)return;
+    const auto interaction=static_cast<std::uint32_t>(MEM_W(0x4C,RdramAddress(object)));
+    if(interaction && (interaction<0x80000000U || interaction>0x807FFFEAU ||
+       MEM_HU(0x14,RdramAddress(interaction))!=0))return;
+    // Only the constructor's temporary NO_MULTIPLAYER test is changed. Keep
+    // the separate NO_TIME_TRIAL gate, header flags and interactive actors.
+    context->r16&=~static_cast<gpr>(0x40U);
 }
 
 extern "C" void dkr_maximise_persistent_water_detail(

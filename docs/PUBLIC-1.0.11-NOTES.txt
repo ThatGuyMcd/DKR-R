@@ -1,0 +1,26 @@
+DKR-R v1.0.11 Release Build
+
+This update is mainly about the memory issues and missing HUD elements that
+people have been reporting. I've also worked on the graphics handoff and
+water textures, and added support for Syeo's updated vehicle exports.
+
+- Given the normal game heap the expansion RAM headroom it was missing,
+  with checks for failed allocations and clearer HUD diagnostics.
+- Kept queued graphics data protected while it waits for the renderer.
+- Improved water animation texture handling and recovery after cache eviction.
+  Incomplete HD animations stay consistently vanilla until all frames exist.
+- Added support for the larger textures and new driver seating format in
+  updated .dkrkart exports, including Brute v2. Existing cars still work.
+- Kept the modded lobby, offline mod copy, race start and spectator fixes
+  from v1.0.10. The launcher design stays as it was.
+- Updated the documentation, desktop builds and signed auto update files.
+
+Your saves, mods and settings can stay. Please use the complete v1.0.11
+package on every machine in an Online lobby.
+
+Windows x64, Linux x86_64/ARM64 and Steam Deck are included. Android, macOS
+and iOS are skipped. Linux needs glibc 2.38, GLIBCXX_3.4.32 and Vulkan.
+
+If you still see a problem, send runtime.log and runtime-previous.log with
+the track, mods and what happened just before it. These fixes improve the
+known failure paths; they don't remove every possible mod or hardware limit.

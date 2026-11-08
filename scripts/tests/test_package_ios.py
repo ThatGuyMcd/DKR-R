@@ -1,12 +1,13 @@
 """Packaging regressions runnable without Xcode or a compiled game."""
+
 import json
+from pathlib import Path
 import plistlib
 import sys
 import tempfile
 import unittest
-import zipfile
-from pathlib import Path
 from unittest.mock import patch
+import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import package_ios as package
@@ -31,14 +32,35 @@ class PackageIOSTests(unittest.TestCase):
                 self.assertEqual(package.bundle_version(version), expected)
 
     def test_invalid_versions_are_rejected(self):
-        for version in ("1.0", "1.0.5.1", "01.0.5", "0.1.0", "10000.0.0", "1.100.0", "1.0.100", "1.0.5-rc0", "1.0.5/other", "1.0.5junk"):
+        for version in (
+            "1.0",
+            "1.0.5.1",
+            "01.0.5",
+            "0.1.0",
+            "10000.0.0",
+            "1.100.0",
+            "1.0.100",
+            "1.0.5-rc0",
+            "1.0.5/other",
+            "1.0.5junk",
+        ):
             with self.subTest(version=version), self.assertRaises(RuntimeError):
                 package.release_number(version)
 
     def test_device_platform_and_minimum_are_exact(self):
-        for platform, minimum, accepted in (("IOS", "18.0", True), ("2", "18.0.0", True), ("IOSSIMULATOR", "18.0", False), ("20", "18.0", False), ("IOS", "18.01", False), ("MACOS", "18.0", False)):
+        for platform, minimum, accepted in (
+            ("IOS", "18.0", True),
+            ("2", "18.0.0", True),
+            ("IOSSIMULATOR", "18.0", False),
+            ("20", "18.0", False),
+            ("IOS", "18.01", False),
+            ("MACOS", "18.0", False),
+        ):
             output = f"    platform {platform}\n       minos {minimum}\n"
-            with self.subTest(platform=platform, minimum=minimum), patch.object(package, "run", side_effect=["Mach-O 64-bit executable arm64", output]):
+            with (
+                self.subTest(platform=platform, minimum=minimum),
+                patch.object(package, "run", side_effect=["Mach-O 64-bit executable arm64", output]),
+            ):
                 if accepted:
                     package.check_binary(self.app)
                 else:
@@ -46,7 +68,11 @@ class PackageIOSTests(unittest.TestCase):
                         package.check_binary(self.app)
 
     def test_mixed_device_and_simulator_is_rejected(self):
-        with patch.object(package, "run", side_effect=["Mach-O arm64", "platform IOS\nminos 18.0\nplatform IOSSIMULATOR\nminos 18.0\n"]):
+        with patch.object(
+            package,
+            "run",
+            side_effect=["Mach-O arm64", "platform IOS\nminos 18.0\nplatform IOSSIMULATOR\nminos 18.0\n"],
+        ):
             with self.assertRaises(RuntimeError):
                 package.check_binary(self.app)
 
@@ -110,7 +136,12 @@ class PackageIOSTests(unittest.TestCase):
                 package.require_metadata(self.app, self.build, "1.0.5")
 
     def test_entitlement_inspection_fails_closed(self):
-        for result in (RuntimeError("inspection failed"), "garbage", plistlib.dumps({"get-task-allow": False}).decode(), plistlib.dumps({"unexpected": True}).decode()):
+        for result in (
+            RuntimeError("inspection failed"),
+            "garbage",
+            plistlib.dumps({"get-task-allow": False}).decode(),
+            plistlib.dumps({"unexpected": True}).decode(),
+        ):
             with self.subTest(result=result), patch.object(package, "run", side_effect=["", "", result]):
                 with self.assertRaises(RuntimeError):
                     package.sign_app(self.app)

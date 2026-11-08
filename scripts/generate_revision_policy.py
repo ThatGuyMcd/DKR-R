@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
-
+import re
 
 SYMBOL = re.compile(r"^([A-Za-z_.$][\w.$]*)\s*=\s*0x([0-9A-Fa-f]+);")
 
@@ -58,10 +57,7 @@ def map_site(
         raise ValueError(f"destination symbol is missing: {name}")
     offset = source_site - source_symbols[name]
     if offset < 0 or offset % 4 != 0:
-        raise ValueError(
-            f"invalid site for {name}: {format_address(source_site)} "
-            f"(offset {offset})"
-        )
+        raise ValueError(f"invalid site for {name}: {format_address(source_site)} (offset {offset})")
     destination_site = destination_symbols[name] + offset
     next_address = next_symbol_address(destination_ordered, destination_symbols[name])
     if next_address is not None and destination_site >= next_address:
@@ -88,9 +84,7 @@ def main() -> int:
     arguments = parser.parse_args()
 
     source_by_name, _ = read_symbols(arguments.source_symbols)
-    destination_by_name, destination_ordered = read_symbols(
-        arguments.destination_symbols
-    )
+    destination_by_name, destination_ordered = read_symbols(arguments.destination_symbols)
     for override in arguments.manual_override:
         name, separator, value = override.partition("=")
         if not separator:
@@ -145,9 +139,7 @@ def main() -> int:
         )
 
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
-    arguments.output.write_text(
-        json.dumps(policy, indent=2) + "\n", encoding="utf-8", newline="\n"
-    )
+    arguments.output.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8", newline="\n")
     return 0
 
 

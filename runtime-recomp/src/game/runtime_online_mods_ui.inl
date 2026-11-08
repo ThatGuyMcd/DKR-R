@@ -19,9 +19,17 @@ void ReportOnlinePreparationFailure(std::string_view error) {
 dkr::mods::online::RuntimePreparation OnlineModRuntimePreparation(
     std::vector<std::filesystem::path> roms,std::optional<dkr::runtime::netplay::SynchronizationMode> host_mode={}) {
     return [roms=std::move(roms),host_mode](auto profile,std::stop_token stop)->std::shared_ptr<const dkr::mods::online::RuntimeResources> {
-        const auto mode=host_mode.value_or(dkr::runtime::netplay::session().view().room.rules.synchronization);
-        if(!profile->manifest.code.empty()&&mode!=dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback)
+        // A joining client's RoomSnapshot is not published until AFTER mod
+        // admission. Its default mode is not the host's selected backend.
+        // Only the host has authoritative rules at this stage. Clients still
+        // link/validate the owned dispatcher here, verify identical resources,
+        // and enforce the admitted launch descriptor in game_main.
+        if(!profile->manifest.code.empty()&&host_mode &&
+           *host_mode!=dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback)
             throw dkr::mods::Error("Custom Magic Codes need Auto or Experimental Rollback. Other online modes still support tracks and characters.");
+        if(!profile->manifest.code.empty())std::fprintf(stderr,"[online-mods][code-admission] role=%s backend=%s packages=%zu\n",
+            host_mode?"host":"joining-client",host_mode?dkr::runtime::netplay::synchronization_name(*host_mode):"awaiting-admitted-rules",
+            profile->manifest.code.size());
         return dkr::mods::online::with_matching_game_pak(roms,profile->manifest.revision,stop,
             [](const auto& rom){return dkr::runtime::rom::inspect(rom);},
             [&](const auto& rom){

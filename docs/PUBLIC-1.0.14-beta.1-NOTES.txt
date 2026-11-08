@@ -1,0 +1,9 @@
+DKR-R v1.0.14 Beta 1
+
+This is a test build for the latest online changes. Everyone in the lobby needs to use this build.
+
+The connection check and invite buttons now sit on the right of the lobby. Clients can now see their own ping and the other players' ping as well. These numbers show the round trip to the host and update while the lobby is open. Proxy connections show the ping over the selected route. If a reading goes stale, it shows Measuring instead of leaving an old number there.
+
+All the recent online fixes, Dynamic Input Delay, proxy routing and chat changes are included. The launcher design is otherwise unchanged.
+
+Please test joining, leaving, racing and spectating with mods on and off. Check that everyone's ping updates, and let me know how the input response feels over longer distances. Keep the runtime logs from each PC if anything goes wrong.

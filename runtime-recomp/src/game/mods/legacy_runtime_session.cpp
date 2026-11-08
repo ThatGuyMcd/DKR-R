@@ -2,6 +2,7 @@
 #include "legacy_checkpoint.hpp"
 #include <limits>
 #include <algorithm>
+#include <cstdio>
 
 namespace dkr::mods {
 RuntimeSession::RuntimeSession(std::shared_ptr<const AssetBank> stock,std::shared_ptr<const CharacterNamespace> characters,
@@ -101,6 +102,11 @@ void RuntimeSession::request(std::string id,unsigned carrier) {
             throw Error("Scene request refers to unprepared content or a different carrier.");
     }
     requested_=Request{std::move(id),carrier};++mutation_;
+    // Flush the requested identity BEFORE the retail loader/preview starts.
+    // A crash inside it must not erase which course was being loaded.
+    std::fprintf(stderr,"[legacy][scene-request] carrier=%u content=%s\n",carrier,
+        requested_->id.empty()?"stock":requested_->id.c_str());
+    std::fflush(stderr);
 }
 void RuntimeSession::begin_scene(std::span<std::uint8_t> guest,unsigned carrier,bool external_course) {
     std::lock_guard lock(mutex_);
@@ -113,6 +119,8 @@ void RuntimeSession::begin_scene(std::span<std::uint8_t> guest,unsigned carrier,
         else if(!requested_->id.empty())throw Error("Pending custom scene does not match the actual scene load.");
     }
     if(next!=current_) {
+        std::fprintf(stderr,"[legacy][scene-prepare] carrier=%u content=%s\n",carrier,next.empty()?"stock":next.c_str());
+        std::fflush(stderr);
         const auto bank=next.empty()?original_:admitted_.at(next).resident;
         auto plan=resident_.prepare(guest,bank);
         const auto result=resident_.commit(guest,std::move(plan));

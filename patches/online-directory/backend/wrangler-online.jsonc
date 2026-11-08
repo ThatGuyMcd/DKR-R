@@ -1,0 +1,11 @@
+{
+  "name": "dkrr-online-directory",
+  "main": "directory.mjs",
+  "compatibility_date": "2026-10-24",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "ONLINE_ENABLED": "false", "RUNNING_SPECTATORS_ENABLED": "false" },
+  "durable_objects": { "bindings": [{ "name": "DIRECTORY", "class_name": "WorldwideDirectory" }] },
+  "migrations": [{ "tag": "online-v1", "new_sqlite_classes": ["WorldwideDirectory"] }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 }
+}

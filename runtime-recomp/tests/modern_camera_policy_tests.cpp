@@ -50,6 +50,10 @@ static_assert(effective_view_distance(PresentationProfile::Accurate, 1000, 8) ==
 static_assert(effective_view_distance(PresentationProfile::Modern, 1000, 8) == 8000);
 static_assert(effective_view_distance(PresentationProfile::Modern, 10000, 8) == 32767);
 static_assert(effective_view_distance(PresentationProfile::Modern, -1, 8) == -1);
+static_assert(object_distance_before_multiplayer_reduction(PresentationProfile::Modern,1000,2,3)/2==2000);
+static_assert(object_distance_before_multiplayer_reduction(PresentationProfile::Modern,1000,2,1)==2000);
+static_assert(object_distance_before_multiplayer_reduction(PresentationProfile::Modern,10000,8,3)/2==32767);
+static_assert(object_distance_before_multiplayer_reduction(PresentationProfile::Accurate,1000,2,3)==1000);
 
 static_assert(effective_wave_view_distance(
     PresentationProfile::Modern, 5, kRaceTypeDefault, 3) == 5);

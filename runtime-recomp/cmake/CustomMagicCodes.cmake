@@ -33,6 +33,14 @@ add_executable(DKRMagicCodeInspect EXCLUDE_FROM_ALL
 target_link_libraries(DKRMagicCodeInspect PRIVATE DKRCustomMagicCodes)
 target_compile_definitions(DKRMagicCodeInspect PRIVATE DKR_CODE_HOST_VERSION="${DKR_RELEASE_VERSION}")
 set_target_properties(DKRMagicCodeInspect PROPERTIES OUTPUT_NAME DKR-MagicCode-Inspect)
+if(BUILD_TESTING AND NOT ANDROID)
+    add_executable(DKRCodeModHandoffTests "${DKRPORT_ROOT}/runtime-recomp/tests/code_mod_handoff_tests.cpp")
+    target_link_libraries(DKRCodeModHandoffTests PRIVATE DKRCustomMagicCodes)
+    add_test(NAME DKRCodeModHandoff COMMAND DKRCodeModHandoffTests)
+    add_executable(DKRCodeModNativeArgumentsTests "${DKRPORT_ROOT}/runtime-recomp/tests/code_mod_native_arguments_tests.cpp")
+    target_link_libraries(DKRCodeModNativeArgumentsTests PRIVATE DKRCustomMagicCodes)
+    add_test(NAME DKRCodeModNativeArguments COMMAND DKRCodeModNativeArgumentsTests)
+endif()
 if(WIN32)
     # RT64's static archive names its pinned SDL dependency without exporting
     # its Windows search directory. The inspector never initializes SDL.

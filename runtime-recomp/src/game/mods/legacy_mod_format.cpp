@@ -44,10 +44,8 @@ std::uint32_t be32(View bytes, std::size_t pos) {
     return (std::uint32_t(s[0]) << 24) | (std::uint32_t(s[1]) << 16) |
            (std::uint32_t(s[2]) << 8) | s[3];
 }
-std::string sha256(View bytes) {
-    std::array<unsigned char, 32> hash{};
-    if (mbedtls_sha256(bytes.data(), bytes.size(), hash.data(), 0) != 0)
-        throw Error("Content identity could not be calculated.");
+namespace {
+std::string hex_digest(const std::array<unsigned char,32>& hash) {
     constexpr char hex[] = "0123456789abcdef";
     std::string result;
     result.reserve(64);
@@ -56,6 +54,34 @@ std::string sha256(View bytes) {
         result += hex[byte & 15];
     }
     return result;
+}
+}
+std::string sha256(View bytes) {
+    std::array<unsigned char,32> hash{};
+    if(mbedtls_sha256(bytes.data(),bytes.size(),hash.data(),0)!=0)
+        throw Error("Content identity could not be calculated.");
+    return hex_digest(hash);
+}
+std::string sha256_pcm_le(std::span<const std::int16_t> samples) {
+    struct Hash {
+        mbedtls_sha256_context value;
+        Hash(){mbedtls_sha256_init(&value);}
+        ~Hash(){mbedtls_sha256_free(&value);}
+    } hash;
+    if(mbedtls_sha256_starts(&hash.value,0)!=0)throw Error("Music identity could not be calculated.");
+    std::array<unsigned char,4096> chunk{};
+    while(!samples.empty()) {
+        const auto count=std::min(samples.size(),chunk.size()/2);
+        for(std::size_t i=0;i<count;++i) {
+            const auto value=static_cast<std::uint16_t>(samples[i]);
+            chunk[2*i]=static_cast<unsigned char>(value);chunk[2*i+1]=static_cast<unsigned char>(value>>8);
+        }
+        if(mbedtls_sha256_update(&hash.value,chunk.data(),count*2)!=0)throw Error("Music identity could not be calculated.");
+        samples=samples.subspan(count);
+    }
+    std::array<unsigned char,32> result{};
+    if(mbedtls_sha256_finish(&hash.value,result.data())!=0)throw Error("Music identity could not be calculated.");
+    return hex_digest(result);
 }
 Bytes read_file(const std::filesystem::path& path, std::size_t limit) {
     std::ifstream file(private_storage_path(path), std::ios::binary | std::ios::ate);

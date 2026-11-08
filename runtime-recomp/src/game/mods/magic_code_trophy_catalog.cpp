@@ -193,12 +193,18 @@ void rebind(FrozenSet& code,const std::vector<Course>& courses,std::string_view 
         // Older saved publications only catalogued the editor's selected cup.
         // Preserve every definition and resolve the others against admission's
         // enabled courses, then freeze all of them into the session identity.
-        const auto old=active(data);
-        for(const auto& course:read_catalogue(data.at("catalogue")))if(!course.id.starts_with("stock:")) {
-            const auto actual=std::find_if(courses.begin(),courses.end(),[&](const auto& c){return c.id==course.id;});
-            if(actual==courses.end()||actual->content!=course.content)throw Error("A cup course changed or was disabled. Refresh and save the cup in Custom Magic Codes.");
-        }
+        (void)active(data);
         std::vector<Definition> cups;for(const auto& cup:data.at("cups"))cups.push_back(decode(encoded(cup)));
+        const auto previous=read_catalogue(data.at("catalogue"));
+        for(const auto& cup:cups)for(const auto& round:cup.rounds) {
+            const auto actual=std::find_if(courses.begin(),courses.end(),[&](const auto& c){return c.id==round.course;});
+            const auto old=std::find_if(previous.begin(),previous.end(),[&](const auto& c){return c.id==round.course;});
+            const auto name=old==previous.end()?round.course:old->name;
+            if(actual==courses.end()||!actual->race)
+                throw Error("Cup \""+cup.name+"\": \""+name+"\" is not an enabled race track. Enable it or change the cup before hosting.");
+            if(old!=previous.end()&&!round.course.starts_with("stock:")&&actual->content!=old->content)
+                throw Error("Cup \""+cup.name+"\": \""+name+"\" has changed. Refresh tracks and save this cup in Custom Magic Codes.");
+        }
         data=publication(cups,data.at("selected").get<std::string>(),courses,data.at("seed").get<std::uint64_t>());
     }
     code.identity=session_identity(code.ordered,code.settings,revision,code.data);

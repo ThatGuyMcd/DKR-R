@@ -2,6 +2,11 @@
 setlocal
 cd /d "%~dp0"
 
+rem Prints the hook install command if the hooks are missing; never fails Build.
+if exist "%~dp0scripts\bootstrap_hooks.py" (
+    py -3 "%~dp0scripts\bootstrap_hooks.py" --check 2>nul || python "%~dp0scripts\bootstrap_hooks.py" --check 2>nul
+)
+
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Build-DKR-R-Windows.ps1" %*
 set "RESULT=%ERRORLEVEL%"
 

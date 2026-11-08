@@ -184,6 +184,7 @@ target_link_libraries(DKRLegacyModWorker PRIVATE DKRLegacyWorkerCore DKRLegacyMo
 add_library(DKRLegacyImportLibrary STATIC "${_dkr_mod_src}/legacy_import_library.cpp"
     "${_dkr_mod_src}/online_mod_bundle.cpp"
     "${_dkr_mod_src}/online_mod_profile.cpp"
+    "${_dkr_mod_src}/online_mod_native_prepare.cpp"
     "${_dkr_mod_src}/online_mod_sync.cpp"
     "${_dkr_mod_src}/legacy_mod_library.cpp"
     "${_dkr_mod_src}/legacy_track_catalog.cpp")
@@ -215,7 +216,8 @@ endif()
 target_link_libraries(DKRLegacyModLaunch PUBLIC DKRLegacyImportLibrary DKRCustomTracksCore DKRLegacyGuestIO)
 # Separate worker archive: no renderer/window dependency is pulled into the
 # process that handles untrusted online patches and package metadata.
-add_library(DKROnlineModPreparation STATIC "${_dkr_mod_src}/online_mod_prepare.cpp")
+add_library(DKROnlineModPreparation STATIC "${_dkr_mod_src}/online_mod_prepare.cpp"
+    "${_dkr_mod_src}/online_mod_native_prepare.cpp")
 add_library(DKRCustomTracksWorkerCore STATIC $<TARGET_OBJECTS:DKRCustomTracksCore>)
 target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRCustomTracksCore)
 target_link_libraries(DKRCustomTracksWorkerCore PRIVATE DKRLegacyModMiniz DKRMusicSequenceValidator)

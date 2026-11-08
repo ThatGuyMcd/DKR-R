@@ -1,0 +1,51 @@
+{
+  "description": "DKR-R pattern enforcement. Same scripts as .claude/settings.json; see scripts/agent_hooks/ and AGENTS.md.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)\"/scripts/agent_hooks/run session_start.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)\"/scripts/agent_hooks/run pre_edit_guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)\"/scripts/agent_hooks/run post_edit_check.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)\"/scripts/agent_hooks/run stop_check.py",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

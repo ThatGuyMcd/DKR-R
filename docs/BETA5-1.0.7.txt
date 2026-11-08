@@ -1,0 +1,52 @@
+DKR-R v1.0.7 beta 5
+===================
+
+Multiplayer graphics
+--------------------
+Maximum vehicle detail is now available in Auto / Experimental Rollback.
+Each player chooses their own setting. The host does not choose it for you.
+It uses the most detailed loaded racer model, with its own animated vertices,
+materials and head pivot. Original attachments, cameras and race logic stay
+on the normal path. Ghost models keep their original appearance.
+
+This does NOT bring back the extra world redraw removed in beta 4. Only the
+reviewed model animation, shading and mesh routines are linked into the local
+renderer. They cannot call gameplay, allocate game assets or write the shared
+race memory. Invalid or over-budget optional meshes keep the original model.
+
+Scenery controls extend supported live scenery models and billboards locally,
+as well as the existing cache of scenery removed by the multiplayer loader.
+Animated scenery and sprite/effect distance are available in the overlay too.
+Resources are checked and retained by the decoder; repeated viewport poses
+and texture uploads are reused within a frame. A bounded optional visual pass
+cannot request an unlimited model, texture or command allocation.
+
+These settings do not recreate every special-purpose effect or additional
+terrain section. The shared course geometry, gameplay FOV and procedural
+wave-grid allocation remain canonical online. Water/lava wave detail remains
+disabled in the live online panel; saved offline preferences are preserved.
+Enhanced water, reflections and lava appearance still use local settings.
+
+Local two-, three- and four-player games retain the ordinary offline detail
+hooks. Modern four-player object ranges now compensate for the original extra
+half-distance reduction. Eligible noninteractive scenery sprites can remain
+loaded when the relevant Keep scenery option is enabled before the race.
+Accurate presentation and time-trial exclusions are unchanged.
+
+Compatibility and packages
+--------------------------
+Windows x64 ZIP and Linux x86_64 AppImage. SteamOS/Steam Deck uses the x86_64
+AppImage. Other platforms have not been rebuilt for this candidate.
+Use the complete beta 5 package on EVERY online device: this build has new
+read-only draw observations and a different replay contract from beta 4.
+
+Keep the previous mod admission, music path, asset alignment, Track Select
+callback-stack and startup lifetime fixes. Custom Trophy Races 1.0.2 and
+AI & Boss Difficulty 1.0.0 are bundled unchanged. Do not clear your installed
+mods or saves for this update. No ROM, save or extracted game asset is bundled.
+
+Build scope
+-----------
+Compilation and static source/package inspection only. No game, replay,
+online session, CTest or runtime self-test was executed by the build agent.
+Gameplay and visual acceptance belong to the maintainer.

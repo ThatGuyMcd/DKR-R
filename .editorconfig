@@ -16,3 +16,12 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+# shfmt reads these when run without flags. Measured against the tracked
+# scripts: 2 spaces, no case indent, no -bn/-sr is the style already in use.
+[*.sh]
+indent_style = space
+indent_size = 2
+switch_case_indent = false
+binary_next_line = false
+space_redirects = false

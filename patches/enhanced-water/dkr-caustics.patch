@@ -162,7 +162,7 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
 diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
 --- a/src/render/rt64_framebuffer_renderer.cpp
 +++ b/src/render/rt64_framebuffer_renderer.cpp
-@@ -1360,6 +1360,7 @@
+@@ -1361,6 +1361,7 @@
          if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->rays.record(worker);
          if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->recordNormals(worker, *outputBuffers);
          if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->recordField(worker);
@@ -231,4 +231,4 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
 +        bottomColor+=m.sunColor.rgb*caustic*receiver*m.optics.z*4;
          body = bottomColor * transmission + body * (1-transmission);
      }
-     float3 color = body * (0.55 + nl * 0.45) * m.sunColor.a * (1-fresnel)
+     // Style changes the diffuse body and sun glints only. Keep N, Fresnel,

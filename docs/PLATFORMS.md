@@ -1,62 +1,36 @@
-# DKR-R platform support
+# DKR-R v1.0.14 platforms
 
-We're keeping Windows and Linux together. Linux releases must include an
-AppImage, not just a loose executable. Android and Linux ARM64 have separate
-ports, and macOS now has a source/build workflow.
+Keep each complete package together, including helpers, assets and notices.
+The [release validation record](../RELEASE-VALIDATION.md) records what was
+actually built, tested under emulation and checked on hardware.
 
-1.0.7 release packaging targets (15 October 2026):
+| Platform | Release download / status | Requirements and scope |
+| --- | --- | --- |
+| Windows x64 | `DKR-R-1.0.14-Windows-x64.zip` | Windows 10 or newer with a compatible graphics driver. Extract the full ZIP and use its top-level launcher. |
+| Linux x86_64 | `DKR-R-1.0.14-Linux-x86_64.AppImage` | Compatible Vulkan driver and the recorded glibc/C++ runtime floors. Make the AppImage executable. |
+| Steam Deck | `DKR-R-1.0.14-SteamDeck-x86_64.AppImage` | Identical application payload to Linux x86_64. Test Gaming Mode and Desktop Mode separately. |
+| Linux ARM64 | `DKR-R-1.0.14-Linux-aarch64.AppImage` | 64-bit ARM Linux, Vulkan and the recorded system-library floors. QEMU CPU tests do not qualify a physical GPU. |
+| macOS Apple Silicon | No v1.0.14 download | Source/host checks remain useful; the integrated Rollback backend is gated on Apple. Older signed/notarised releases retain their original scope. |
+| macOS Intel | No v1.0.14 download | Host checks are separate from a complete game build and public packaging qualification. |
+| iOS ARM64 | No v1.0.14 download | Device-adapter compilation is separate from a signed, runnable and device-tested IPA. |
+| Android ARM64 | No v1.0.14 download | Current Android releases remain unsupported because performance is not good enough across devices. Historical APKs keep their original version/signing identity. |
+| Windows ARM64 / 32-bit targets | No qualified v1.0.14 download | A recognised updater platform name does not establish a supported game build. |
 
-| Platform | Current delivery | Important limits |
-|---|---|---|
-| Windows x64 | Public ZIP | Use the whole package, including private workers. |
-| Linux x86_64 | Public AppImage | Requires glibc 2.38+ and a working compatible Vulkan driver. |
-| Linux ARM64 | ARM64 AppImage | Needs glibc 2.38+, compatible 64-bit Linux/Vulkan and physical-device qualification. Cross-build and QEMU checks are not a physical GPU test. |
-| Steam Deck | Linux x86_64 AppImage payload | A separate named artifact, not a different engine build. SteamOS/controller integration needs a physical-device check. |
-| Android ARM64 | APK, code 1070001 | Android 9+, ARM64 OS and compatible Vulkan features are required. Startup, driver behaviour and sustained performance vary; desktop parity is not established. Existing app ID/signature are retained. |
-| macOS | Source/build-kit support | Requires an Apple build host. No newly qualified macOS binary is included in this delivery; integrated Experimental Rollback is currently gated out on Apple. |
-| iOS | Merged sideload source port | Contributor validation is recorded separately. No newly built IPA is supplied in this pass. |
+An AppImage does not replace the system graphics driver, glibc or C++ runtime.
+ELF inspection of both final v1.0.14 Linux packages confirms glibc 2.38 and
+GLIBCXX_3.4.32 as the required floors, with no missing non-system dependencies. Older
+distributions may need a compatible source build. Required non-system linked
+libraries are bundled; the desktop/audio/font stack must still be available.
 
-Both clean US v1.0 and US Rev A/v1.1 ROMs are supported by the native revision
-selection. Owning a 64-bit CPU is not enough if the OS or GPU driver lacks the
-required features. There is no 32-bit ARM or Android x86 package in this workflow.
+Linux requests launcher GPU acceleration automatically. If it fails, a logged
+software fallback remains. The log identifies the SDL renderer and, for OpenGL,
+the rasterizer. llvmpipe/softpipe indicates software graphics; it is not evidence
+of Steam Deck AMD hardware acceleration. See [launcher performance](TROUBLESHOOTING.md#linux-and-steam-deck-launcher-performance).
 
-These Linux packages were built with a glibc 2.38 baseline. An AppImage does
-not replace the system's glibc or Vulkan driver; an older distribution needs
-an appropriate source build rather than a renamed package.
+Both supported US ROM revisions are linked into the application. Online still
+checks architecture, build, floating-point mode, ROM and session content. Two
+downloads for different architectures are not a promise of unrestricted cross-play.
 
-## Android and handhelds
-
-The mobile UI uses a Menu drawer, density-aware text and finger scrolling.
-**Controls → Touch Screen** offers editable N64-style touch groups, including
-position, size, opacity, visibility and left-handed placement. Menu remains
-available when racing controls are hidden. Android uses in-process SDL2 input,
-not the desktop SDL3 helper.
-
-Install compatible updates over the existing app where possible. Uninstalling
-removes Android's private app data, so export saves first. Use file/ZIP imports
-when folder picking is unavailable. APK compilation alone does not certify
-Adreno, Mali or a particular handheld.
-
-For a black screen, crash or slowdown, record the device, Android version,
-build/version code and scene. Reopen the app and use
-**About DKR-R → Support summary → Export Android Startup Logs** if available.
-Do not keep retrying a diagnostic action that itself crashes.
-The [troubleshooting guide](TROUBLESHOOTING.md) explains what to send.
-
-Android's integrated rollback port does not establish cross-architecture
-netplay compatibility: admission still checks architecture and floating-point
-mode. Backgrounding Android ends an active experimental match rather than
-leaving other racers waiting on a suspended app.
-
-## Building and qualification
-
-Follow [Building DKR-R](BUILDING.md). The older
-[ARM build recipes](ARM-PLATFORM-PREVIEW.md) and
-[mobile UI implementation report](ANDROID-MOBILE-UI.md) retain their original
-preview results; check current toolchain settings before reproducing them.
-
-A platform is not qualified just because it compiles. Check ROM import, both
-revisions, rendering, audio, controller/touch input, save reload, return to the
-launcher and background/resume on actual hardware. Online testing comes after
-ordinary play works. [Release validation](../RELEASE-VALIDATION.md) distinguishes
-automated checks from hardware/gameplay acceptance.
+Existing Android/Apple users do not need to uninstall their application or delete
+saves. Excluded platforms must not receive a differently labelled desktop package
+through the updater. See [Building](BUILDING.md) and [Updates](UPDATES.md).

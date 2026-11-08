@@ -1,4 +1,5 @@
 #include "online_mod_bundle.hpp"
+#include "../custom_track_files.hpp"
 #include <json/json.hpp>
 #include <algorithm>
 #include <cctype>
@@ -23,20 +24,7 @@ json document(View bytes) {
 }
 void put32(Bytes& out,std::uint32_t value) {for(unsigned i=0;i<4;++i)out.push_back(static_cast<std::uint8_t>(value>>(24-8*i)));}
 bool safe_path(std::string_view name) {
-    if(name.empty() || name.size()>240 || name.front()=='/' || name.back()=='/' || name.find('\\')!=name.npos || name.find(':')!=name.npos)
-        return false;
-    for(unsigned char c:name)if(c<32 || c==127 || c=='*' || c=='?' || c=='"' || c=='<' || c=='>' || c=='|')return false;
-    std::size_t at=0;
-    while(at<name.size()) {
-        const auto end=name.find('/',at);const auto part=name.substr(at,end==name.npos?name.size()-at:end-at);
-        if(part.empty() || part=="." || part==".." || part.back()=='.' || part.back()==' ')return false;
-        std::string base(part.substr(0,part.find('.')));
-        std::transform(base.begin(),base.end(),base.begin(),[](unsigned char c){return static_cast<char>(std::toupper(c));});
-        if(base=="CON" || base=="PRN" || base=="AUX" || base=="NUL" ||
-           (base.size()==4 && (base.starts_with("COM") || base.starts_with("LPT")) && base[3]>='0' && base[3]<='9'))return false;
-        if(end==name.npos)break;at=end+1;
-    }
-    return true;
+    return dkr::runtime::custom_tracks::files::member(name);
 }
 std::set<std::string> declared_files(View manifest) {
     const auto doc=document(manifest);

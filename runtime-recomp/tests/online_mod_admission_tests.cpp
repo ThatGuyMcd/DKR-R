@@ -50,9 +50,9 @@ struct DirectSessionTestAccess {
         host.state_=ConnectionState::Hosting;host.is_host_=true;host.sender_id_=100;host.match_id_=101;host.room_view_=host.lobby_.room();
         check(host.admission_incompatibility(m).empty());
         auto old_build=m;
-        const auto tag=old_build.build_fingerprint.find("/mod-manifest-2/behaviour-1");
+        const auto tag=old_build.build_fingerprint.find("/mod-manifest-3/behaviour-1");
         check(tag!=std::string::npos);
-        old_build.build_fingerprint.erase(tag,std::string("/mod-manifest-2/behaviour-1").size());
+        old_build.build_fingerprint.erase(tag,std::string("/mod-manifest-3/behaviour-1").size());
         check(!host.admission_incompatibility(old_build).empty());
         old_build=m;
         const auto lifetime=old_build.build_fingerprint.find("/native-guest-lifetime-1");

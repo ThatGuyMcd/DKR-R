@@ -2,6 +2,7 @@
 #include "legacy_mod_process.hpp"
 #include "legacy_track_catalog.hpp"
 #include "online_mod_cache.hpp"
+#include "online_mod_prepare.hpp"
 #include "magic_code_game_world.hpp"
 #include "online_game_pak.hpp"
 #include "../custom_tracks.hpp"
@@ -454,7 +455,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     const std::filesystem::path& worker,std::stop_token stop,const ProfileProgress& progress,const std::filesystem::path& installed_library,
     const std::filesystem::path& installed_track_library,const std::vector<std::filesystem::path>& selected_courses) {
     auto out=std::make_shared<Profile>();out->manifest=canonical(input);out->digest=identity(out->manifest);
-    const bool needs_worker=std::any_of(out->manifest.payloads.begin(),out->manifest.payloads.end(),[](const auto& p){return p.kind!=PayloadKind::Code;});
+    const bool needs_worker=std::any_of(out->manifest.payloads.begin(),out->manifest.payloads.end(),[](const auto& p){return p.kind==PayloadKind::Xdelta;});
     if(needs_worker&&(roms.empty() || roms.size()>8 || !worker.is_absolute()))throw Error("Online preparation needs imported Game Paks and the packaged importer.");
     // check_storage normalizes its queries, not the caller's path. Normalize
     // before deriving directories so every create/rename/iterator uses the
@@ -556,16 +557,36 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
         const auto prefix="Mod "+std::to_string(++index)+"/"+std::to_string(out->manifest.payloads.size())+": ";
         std::string method="cache";
         const bool reused=reuse_installed(subset,installed,installed_tracks,installed_characters,installed_courses,sources);
+        std::optional<ProfileSources> cached;
+        if(!reused && std::filesystem::exists(source)) {
+            if(progress)progress(prefix+"Revalidating previously prepared assets");
+            try {cached=profile_sources(reusable);}
+            catch(const std::exception&) {
+                cancelled(stop);
+                if(payload.kind!=PayloadKind::TrackLab)throw;
+                // Rebuild only this native payload from its verified download.
+                // Preserve the old tree for recovery, never touch offline mods.
+                check_storage(source,true);
+                const auto parent=std::filesystem::canonical(root/"prepared-payloads");
+                if(std::filesystem::canonical(source).parent_path()!=parent || source.filename()!=utf8_path(reusable.digest))
+                    throw Error("Cannot safely refresh the stale native course cache.");
+                child(root/"quarantined-payloads");
+                std::filesystem::rename(source,root/"quarantined-payloads"/(reusable.digest+"-"+nonce()));
+                std::fprintf(stderr,"[online-mods][cache-repair] payload=%s preserved-old-tree=1\n",payload.digest.c_str());
+                if(progress)progress(prefix+"Rebuilding incomplete course cache from verified files");
+            }
+        }
         if(reused) {
             method="installed-reference";++installed_count;
             if(progress)progress(prefix+"Reusing matching installed assets");
-        } else if(std::filesystem::exists(source)) {
+        } else if(cached) {
             method="cache-reference";++cached_count;
             if(progress)progress(prefix+"Revalidating previously prepared assets");
-            append_sources(sources,profile_sources(reusable));
+            append_sources(sources,*cached);
         } else {
-        method="worker";
-        if(std::filesystem::space(root).available<1280ULL*MiB)throw Error("Missing online mods need at least 1.25 GiB of free staging space.");
+        method=payload.kind==PayloadKind::TrackLab?"native-assets":"worker";
+        const auto reserve=payload.kind==PayloadKind::TrackLab?payload.size+64ULL*MiB:1280ULL*MiB;
+        if(std::filesystem::space(root).available<reserve)throw Error("Not enough free space to prepare the missing online mod.");
         if(payload.kind==PayloadKind::Xdelta && !batch_attempted.contains(payload.digest) &&
             std::filesystem::space(root).available>=2304ULL*MiB) {
             // Avoid workers for installed/cached items. Share ROM validation
@@ -618,6 +639,10 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
             }
         }
         if(!std::filesystem::exists(source)) {
+        if(payload.kind==PayloadKind::TrackLab) {
+            if(progress)progress(prefix+"Verifying native course files and music");
+            prepare_track_lab_library(subset,payloads,part/"content",stop,[&](const auto&){return !stop.stop_requested();});
+        } else {
         ++workers;
         write_new_file(part/"manifest.json",encode(subset));
         json request={{"schema",Schema},{"operation","online-prepare"},{"source",path_text(std::filesystem::absolute(payloads))},
@@ -639,6 +664,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
         if(result.outcome!=WorkerOutcome::Completed) {
             if(std::filesystem::exists(part/"failure.json"))throw Error(read(part/"failure.json",8192).at("error").get<std::string>().substr(0,1024));
             throw Error(result.outcome==WorkerOutcome::TimedOut?"A mod exceeded its bounded preparation time.":"The isolated online importer stopped safely; no profile was activated.");
+        }
         }
         // Validate each part before merging. Moving exclusively owned children
         // cannot replace installed/offline files, or a previously cached profile.

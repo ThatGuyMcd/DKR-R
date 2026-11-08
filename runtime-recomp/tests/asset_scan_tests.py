@@ -1,4 +1,5 @@
 """The fast source scan must prune build outputs, while still checking sources."""
+
 import contextlib
 import io
 import os

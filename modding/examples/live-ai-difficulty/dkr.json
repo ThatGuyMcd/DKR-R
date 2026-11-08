@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "api": 2,
+  "activation": "restart",
+  "online": "deterministic",
+  "revisions": [
+    "us.v77",
+    "us.v80"
+  ],
+  "requires": {
+    "core": 1,
+    "settings": 1,
+    "game": 1,
+    "live-settings2": 2
+  },
+  "systems": [
+    "ai-pace"
+  ],
+  "live_options": [
+    "race_ai",
+    "tricky",
+    "bluey",
+    "smokey",
+    "bubbler",
+    "wizpig",
+    "rocket"
+  ]
+}

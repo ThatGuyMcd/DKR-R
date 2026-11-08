@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "dependencies": [
+    {
+      "name": "RT64",
+      "repositoryPath": "extern/rt64",
+      "expectedCommit": "0000000000000000000000000000000000000000",
+      "patches": [
+        {
+          "path": "patches/rt64/0001-cache-limit.patch",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ]
+    }
+  ]
+}

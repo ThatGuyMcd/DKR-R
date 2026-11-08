@@ -111,28 +111,46 @@ void DrawGraphicsPage(float available_width, bool live) {
     bool modern = enh::modern_options_visible(enh::presentation_profile());
     SettingsCard(width, [&](float inner) {
         SettingsCardHead("Performance presets", "Choose a preset, then select Apply.", inner);
-        static int preset = 1;
-        SettingsDropdown("performance-preset", "Preset", &preset,
+        namespace graphics_presets = dkr::runtime::mobile_graphics;
 #if defined(__ANDROID__)
-                         {"Battery", "Balanced", "Quality", "Low load - 30 FPS", "Low load - 60 FPS"},
+        constexpr bool low_load = true;
 #else
-                         {"Battery", "Balanced", "Quality"},
+        constexpr bool low_load = false;
 #endif
-                         inner);
+        std::vector<SettingsChoice> preset_choices{{"Battery"}, {"Balanced"}, {"Quality"}};
+        if (low_load) {
+            preset_choices.push_back({"Low load - 30 FPS"});
+            preset_choices.push_back({"Low load - 60 FPS"});
+        }
+        // Shown when the saved settings match no preset; not something Apply can set.
+        const int custom = static_cast<int>(preset_choices.size());
+        preset_choices.push_back({"Custom", {}, true});
+        const auto applied = enh::modern_presentation_enabled()
+            ? graphics_presets::matching_preset(config, enh::anisotropy_level(), low_load)
+            : std::nullopt;
+        const int applied_index = applied ? static_cast<int>(*applied) : custom;
+        // Follow the saved settings, but keep a pending pick until it is applied.
+        static int preset = 1;
+        static int synced = -1;
+        if (applied_index != synced) {
+            preset = applied_index;
+            synced = applied_index;
+        }
+        SettingsDropdown("performance-preset", "Preset", &preset, preset_choices, inner);
         PaddockGap(8.0F);
         SettingsHelp("Battery: 480p / 30 FPS. Balanced: 480p / 60 FPS. Quality: display resolution / 60 FPS.", inner);
 #if defined(__ANDROID__)
         SettingsHelp("Low load uses 240p for slower devices.", inner);
 #endif
         PaddockGap(12.0F);
-        if (SettingsRaceButton("APPLY PRESET", false)) {
+        if (SettingsRaceButton("APPLY PRESET", preset == custom)) {
             if (!enh::modern_presentation_enabled()) {
                 enh::set_presentation_profile(enh::PresentationProfile::Modern);
                 ApplyProfileGraphics(config, enh::PresentationProfile::Modern);
             }
-            dkr::runtime::mobile_graphics::apply_preset(config,
-                static_cast<dkr::runtime::mobile_graphics::Preset>(preset));
-            enh::set_anisotropy_level(preset == 2 ? 16 : 4);
+            const auto chosen = static_cast<graphics_presets::Preset>(preset);
+            graphics_presets::apply_preset(config, chosen);
+            enh::set_anisotropy_level(graphics_presets::preset_anisotropy(chosen));
             RememberModernGraphics(config);
             profile = static_cast<int>(enh::PresentationProfile::Modern);
             resolution = static_cast<int>(config.res_option);
@@ -516,7 +534,7 @@ void DrawGraphicsPage(float available_width, bool live) {
             PaddockGap(16.0F);
 #endif
             if (owned_camera_settings_deferred) {
-                SettingsHelp("Some camera and detail settings aren't available in this online mode. Scenery settings affect restored sprites, not every object or part of the track.", inner);
+                SettingsHelp("These detail and scenery choices are yours alone. Online play keeps the shared course geometry and wave grid unchanged.", inner);
                 PaddockGap(16.0F);
             }
             const auto check = [&](const char* id, const char* label, bool value, auto setter,
@@ -530,8 +548,11 @@ void DrawGraphicsPage(float available_width, bool live) {
                 ImGui::EndDisabled();
             };
             check("##max-detail", "Maximum vehicle detail", enh::maximum_detail_requested(),
-                  enh::set_maximum_detail_enabled, "Use the most detailed racer models.", true,
-                  owned_camera_settings_deferred);
+                  enh::set_maximum_detail_enabled, "Use the most detailed racer models.", true
+#if !defined(DKR_LOCAL_MODEL_DETAIL)
+                  , owned_camera_settings_deferred
+#endif
+                  );
             check("##hub-scenery", "Keep hub scenery rendered", enh::keep_hub_scenery_requested(),
                   enh::set_keep_hub_scenery_enabled, "Keep visible hub scenery from disappearing.");
             check("##track-scenery", "Keep track and boss scenery rendered", enh::keep_track_scenery_requested(),
@@ -542,20 +563,17 @@ void DrawGraphicsPage(float available_width, bool live) {
                   "Keep visible minigame scenery from disappearing.");
             check("##ultrawide", "Reduce wide-screen scenery pop-in", enh::extended_culling_requested(),
                   enh::set_extended_culling_enabled,
-                  "Keeps scenery visible near wide-screen edges.", false,
-                  owned_camera_settings_deferred);
+                  "Keeps scenery visible near wide-screen edges.");
             if (enh::extended_culling_requested()) {
                 PaddockGap(16.0F);
                 ImGui::Indent(36.0F);
                 int guard = enh::frustum_guard_percent();
-                ImGui::BeginDisabled(owned_camera_settings_deferred);
                 if (SettingsRange("##guard", "Visibility margin", &guard, 0, 20, inner - 36.0F,
                                   [](int value) { return SettingsRangeValue{std::to_string(value), "%"}; },
                                   "Extra scenery around the edges of the view.")) {
                     enh::set_frustum_guard_percent(guard);
                     SaveSettings();
                 }
-                ImGui::EndDisabled();
                 ImGui::Unindent(36.0F);
             }
             PaddockGap(18.0F);
@@ -583,10 +601,10 @@ void DrawGraphicsPage(float available_width, bool live) {
             PaddockGap(16.0F);
             distance("##animated-distance", "Animated scenery distance",
                      enh::animated_scenery_distance_multiplier(), enh::kMaximumAnimatedSceneryMultiplier,
-                     enh::set_animated_scenery_distance_multiplier, owned_camera_settings_deferred);
+                     enh::set_animated_scenery_distance_multiplier);
             distance("##billboard-distance", "Sprites and effects distance",
                      enh::billboard_effect_distance_multiplier(), enh::kMaximumBillboardEffectMultiplier,
-                     enh::set_billboard_effect_distance_multiplier, owned_camera_settings_deferred);
+                     enh::set_billboard_effect_distance_multiplier);
             distance("##water-distance", "Water and lava detail distance", enh::water_lava_detail_multiplier(),
                      enh::kMaximumWaterLavaDetailMultiplier, enh::set_water_lava_detail_multiplier,
                      owned_camera_settings_deferred);

@@ -1,0 +1,127 @@
+DKR-R public lobbies playtest 1
+Version: 1.0.9-public-lobbies-playtest.1
+
+This additive Patch Pipeline layer composes after rollback-scoreboard, retaining
+the accepted party departure, checkpoint clock, party start, lobby link, Rollback,
+spectator, lobby restoration, upstream and store/vehicles layers underneath it.
+The checked-out native source, submodules and generated recomp trees are not
+patched in place. Generated native outputs remain in each external build folder.
+
+Native changes
+
+Three existing units are transformed: DirectSession, launcher UI and Mod Store.
+One directory service unit is added to DKRNetplayCore. DirectSession's class layout
+and existing public header are unchanged; admission metadata uses owner-thread
+sidecars and a bounded command bridge. Network callbacks never acquire gameplay
+or party locks or change controller ownership.
+
+The launcher retains its rail, ROM selector, fonts, panels, signboards, code tiles,
+friend/invite handling, current lobby controls and complete Rollback Scoreboard.
+Open lobbies gains Public/Friends selection; the header shows unique-account
+presence; the profile reuses Discord pairing; hosting gains Private/Public choice.
+Room cards use the existing native component and retain stable room IDs/focus.
+Secondary actions wrap on narrow layouts. Host-card height includes its new field.
+The existing authenticated Room visibility field conveys host privacy to peers
+without changing membership/launch generations or adding a gameplay protocol.
+
+Account sharing
+
+The existing Mod Store implementation supplies a narrow authenticated API client.
+Opaque account credentials remain in its Impl and are never returned to the UI.
+Account generations fence stale replies; remembered-session refresh uses the
+existing protected device flow. Cancellation remains authoritative across Linux
+keyring prompts. Windows retains DPAPI. Linux optionally loads system libsecret
+and uses Secret Service, with a bounded cancellable request and clear session-only
+fallback. No plaintext refresh credential is written to configuration files.
+
+The directory socket uses a 15-second one-use ticket in a WebSocket subprotocol
+header because the retained WebSocket library has no custom header interface.
+Reusable account tokens do not enter connection URLs. Native TLS always receives
+an explicit trust source: configured CA file, Windows public ROOT certificates,
+Linux CA bundle, or the exact accepted GTS Root R4 fallback. Certificate checking
+is retained. The existing PeerJS/STUN connection path is unchanged.
+
+Native admission
+
+The native owner publishes its real waiting/testing/starting/loading/racing/
+returning state, role occupancy and pending reservations. Four racing ports and
+eight spectator places remain authoritative. A public row never allocates a port.
+The current host approval UI remains authoritative. A current authenticated friend
+invitation capability preserves its existing auto-admission; possession of a code
+otherwise creates the ordinary host-approved request.
+
+Directory admissions bind a verified account, room epoch, policy generation,
+reservation, requested role and fresh native handshake key. The existing encrypted
+join handshake proves possession of that key. Used capabilities pin the sender;
+role/key/epoch mismatches and raw-code fallthrough into guarded rooms are refused.
+Host lock, visibility, start/return, roster, invitation/key and account changes
+invalidate unused or obsolete pending admissions. Reconnecting the directory wipes
+unused capabilities while authenticated native preparation can continue. Host
+session blocks also bind the verified account. Keys are wiped during retirement.
+
+Reservations last 30 seconds until authenticated native consumption; ordinary
+native mod/save preparation then uses its existing bounded workflow. Cancellation,
+clean disconnection, stale replies and reconnection release or revoke pending work.
+Approved preparation also survives benign roster and account-session refreshes;
+changes to visibility, lock, native phase, invitation/key or capacity revoke its
+authorization. Unapproved abandoned requests expire. The directory's short lease
+does not impose a new timeout on an approved mod transfer.
+Client request/key correlation prevents a cancelled request from claiming a newer
+join. Already admitted peers continue readiness, Scoreboard, start, racing and
+safe return/leave during directory outages. The directory never advances frames,
+installs a checkpoint, marks Ready, starts a match or removes a racing controller.
+
+The late-spectator adapter has a separate staging switch, false by default. Its
+scope permits a spectator only in a native running party, preserving the existing
+committed-descriptor and checkpoint path. It never opens a racer place or bypasses
+the countdown/prepare/commit gate. Native compile-time assertions cover wrong key,
+capability, role, scope, policy and replay sender, plus running-spectator gates.
+Nineteen compile-time assertions also cover retention of approved preparation
+and expiry of unapproved admissions.
+
+A lobby created while the service was unavailable remains a legacy private lobby.
+It is not silently upgraded with unauthenticated members. Connect first and
+recreate that lobby before publishing it; its existing peer session stays intact.
+
+Backend changes
+
+The current local library-workflow r8 Worker is hash-pinned. The API composer adds
+only an early /v1/online router, preserving WebSocket upgrade responses ahead of
+the old normal-response wrapper. Existing FTP transfers, image handling, library
+workflows, filters, vehicles and account authority remain in that baseline.
+
+A private service binding reaches one named worldwide SQLite Durable Object.
+Workers have no public private-service route. Verified account/session metadata
+is supplied by the existing authenticated API, never by a client's claimed ID.
+All admission decisions/reservations are serialized at the worldwide authority.
+Public summaries exclude codes, credentials, account IDs and transport addresses.
+Private code resolution has a shared account limit across duplicate instances.
+
+Session heartbeats run about every 20 seconds, leases expire after 60 seconds,
+and account authority renews every minute with a 125-second hard authorization
+lease. Presence deduplicates accounts across instances and includes private rooms
+anonymously. Clean close removes presence; reads also filter expired leases.
+Coalesced paginated snapshots/deltas reduce fan-out. Revision/change queues and
+connection ordering survive hibernation. Lost acknowledgements are idempotent;
+reconnect supplies canonical owner revisions and retains the room identity.
+
+The private audit contains bounded room visibility/closure and bootstrap events,
+at most 10,000 rows for 24 hours. It excludes tokens, codes, titles and packet
+contents. Feature flags start disabled; disabling closes new service operations
+without sending a gameplay stop. TURN, host migration and public chat are outside
+this release. No live service is deployed by this layer.
+
+Delivery and validation
+
+The API bundle contains complete patched Worker source, private Worker/config,
+bindings to merge, a pinned rollback Worker, deployment instructions and hashes.
+The owner must preserve current live secrets/bindings and compare any newer live
+API edits with the pinned local baseline before deployment. The website frontend
+and FTP files need no upload for this feature.
+
+Native validation uses compilation/linking, compile-time assertions, retained
+layer/source receipts and static PE/ELF/archive checks. Local backend tests use
+Cloudflare's actual Worker, service-binding, SQLite Durable Object and D1 runtime.
+No game, mod, native test executable or AppImage is executed by these tools.
+Real Discord, remote multiplayer, controller and hardware acceptance is the
+owner's PLAYTEST.txt checklist. The packages are unsigned/unpublished playtests.

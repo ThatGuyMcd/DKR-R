@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Wrap the iOS device build as an ad-hoc-signed, sideloadable IPA."""
+
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import plistlib
 import re
 import shutil
@@ -12,7 +14,6 @@ import sys
 import tempfile
 import zipfile
 import zlib
-from pathlib import Path
 
 import scan_for_game_assets as asset_scan
 
@@ -33,9 +34,7 @@ LICENSE_SOURCES = [
 def run(args: list[str], cwd: Path | None = None) -> str:
     result = subprocess.run(args, cwd=cwd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"{' '.join(args)} failed ({result.returncode})\n{result.stdout}\n{result.stderr}"
-        )
+        raise RuntimeError(f"{' '.join(args)} failed ({result.returncode})\n{result.stdout}\n{result.stderr}")
     return result.stdout
 
 
@@ -146,16 +145,27 @@ def install_icon(app: Path, scratch: Path) -> None:
     )
     partial = scratch / "ActoolPartial.plist"
     try:
-        run([
-            "xcrun", "actool", str(scratch / "Assets.xcassets"),
-            "--compile", str(app),
-            "--platform", "iphoneos",
-            "--minimum-deployment-target", "18.0",
-            "--target-device", "iphone",
-            "--target-device", "ipad",
-            "--app-icon", "AppIcon",
-            "--output-partial-info-plist", str(partial),
-        ])
+        run(
+            [
+                "xcrun",
+                "actool",
+                str(scratch / "Assets.xcassets"),
+                "--compile",
+                str(app),
+                "--platform",
+                "iphoneos",
+                "--minimum-deployment-target",
+                "18.0",
+                "--target-device",
+                "iphone",
+                "--target-device",
+                "ipad",
+                "--app-icon",
+                "AppIcon",
+                "--output-partial-info-plist",
+                str(partial),
+            ]
+        )
     except RuntimeError as exc:
         print(f"actool failed, using classic PNG icons ({exc})", file=sys.stderr)
         install_classic_icons(app, scratch, logo)
@@ -203,10 +213,11 @@ def stage_assets(app: Path, build: Path) -> None:
         (ROOT / "assets/ui/Icons/DKR-R-Logo.bmp", app / "assets/ui/Icons/DKR-R-Logo.bmp"),
         (ROOT / "assets/ui/Icons/DKR-R-Spinning-Icon.png", app / "assets/ui/Icons/DKR-R-Spinning-Icon.png"),
         (ROOT / "assets/ui/Icons/DKR-R-Short-Logo.png", app / "assets/ui/Icons/DKR-R-Short-Logo.png"),
-        (ROOT / "assets/ui/Backgrounds/DKR-R-Launcher-Background.png",
-         app / "assets/ui/Backgrounds/DKR-R-Launcher-Background.png"),
-        (ROOT / "assets/controllers/gamecontrollerdb.txt",
-         app / "assets/controllers/gamecontrollerdb.txt"),
+        (
+            ROOT / "assets/ui/Backgrounds/DKR-R-Launcher-Background.png",
+            app / "assets/ui/Backgrounds/DKR-R-Launcher-Background.png",
+        ),
+        (ROOT / "assets/controllers/gamecontrollerdb.txt", app / "assets/controllers/gamecontrollerdb.txt"),
     ]
     for source, dest in copies:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -240,15 +251,24 @@ def compile_launch_screen(app: Path) -> None:
     compiled = app / "LaunchScreen.storyboardc"
     if compiled.exists():
         shutil.rmtree(compiled)
-    run([
-        "xcrun", "ibtool",
-        "--errors", "--warnings", "--notices",
-        "--minimum-deployment-target", "18.0",
-        "--target-device", "iphone",
-        "--target-device", "ipad",
-        "--compile", str(compiled),
-        str(ROOT / "packaging/ios/LaunchScreen.storyboard"),
-    ])
+    run(
+        [
+            "xcrun",
+            "ibtool",
+            "--errors",
+            "--warnings",
+            "--notices",
+            "--minimum-deployment-target",
+            "18.0",
+            "--target-device",
+            "iphone",
+            "--target-device",
+            "ipad",
+            "--compile",
+            str(compiled),
+            str(ROOT / "packaging/ios/LaunchScreen.storyboard"),
+        ]
+    )
 
 
 def require_plist(app: Path, version: str, bundle_version: str) -> None:
@@ -279,8 +299,12 @@ def require_plist(app: Path, version: str, bundle_version: str) -> None:
 def sign_app(app: Path) -> None:
     entitlements = ROOT / "packaging/ios/entitlements.plist"
     command = [
-        "codesign", "--force", "--sign", "-",
-        "--entitlements", str(entitlements),
+        "codesign",
+        "--force",
+        "--sign",
+        "-",
+        "--entitlements",
+        str(entitlements),
         "--timestamp=none",
         str(app),
     ]
@@ -370,7 +394,9 @@ def write_ipa(app: Path, destination: Path) -> None:
 
 
 def release_number(version: str) -> str:
-    match = re.fullmatch(r"([1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(?:-rc[1-9][0-9]*)?", version)
+    match = re.fullmatch(
+        r"([1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)(?:-rc[1-9][0-9]*)?(?:\+[0-9A-Za-z.-]+)?", version
+    )
     if match is None:
         raise RuntimeError(f"Invalid iOS release version: {version!r}; expected major.minor.patch[-rcN] (4/2/2 digits)")
     return ".".join(match.groups())
@@ -414,7 +440,7 @@ def main() -> int:
     require_plist(app, short, bundle_version(short))
     scan_app(app)
     sign_app(app)
-    ipa = ROOT / "dist" / f"DKR-R-{version}-iOS-arm64.ipa"
+    ipa = ROOT / "dist" / f"DKR-R-{version.replace('+', '-')}-iOS-arm64.ipa"
     write_ipa(app, ipa)
     print(f"Wrote {ipa}")
     return 0

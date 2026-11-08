@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise report portability, failure semantics and untrusted diagnostics."""
+
 import json
 from pathlib import Path
 import sys
@@ -20,11 +21,28 @@ class HarnessReportTests(unittest.TestCase):
             "identity": {"revision": "a&b"},
             "summary": {"passed": 1, "failed": 1, "skipped": 1},
             "scenarios": [
-                {"id": "pass", "status": "passed", "metrics": {"wall_ms": 12.5}, "attempts": [
-                    {"index": 1, "phase": "measured", "status": "passed", "elapsed_ms": 12.5,
-                     "exit_code": 0, "stdout": "logs/log one.txt", "stderr": "logs/stderr.txt"}]},
-                {"id": "failure", "status": "failed", "errors": ["bad <tag>\x1b"], "comparisons": [
-                    {"metric": "time", "baseline": 1, "current": 2, "limit": 1.1, "status": "failed"}]},
+                {
+                    "id": "pass",
+                    "status": "passed",
+                    "metrics": {"wall_ms": 12.5},
+                    "attempts": [
+                        {
+                            "index": 1,
+                            "phase": "measured",
+                            "status": "passed",
+                            "elapsed_ms": 12.5,
+                            "exit_code": 0,
+                            "stdout": "logs/log one.txt",
+                            "stderr": "logs/stderr.txt",
+                        }
+                    ],
+                },
+                {
+                    "id": "failure",
+                    "status": "failed",
+                    "errors": ["bad <tag>\x1b"],
+                    "comparisons": [{"metric": "time", "baseline": 1, "current": 2, "limit": 1.1, "status": "failed"}],
+                },
                 {"id": "skip", "status": "skipped", "errors": ["ROM absent"]},
             ],
         }
@@ -49,7 +67,17 @@ class HarnessReportTests(unittest.TestCase):
             self.assertEqual(cases["skip"].find("skipped").attrib["message"], "ROM absent")
 
     def test_log_links_reject_active_and_escaping_paths(self):
-        for path in ["javascript:alert(1)", "https://example.org", "//example.org", "../secret", "/secret", "logs/../../secret", "C:\\secret", "//[bad", "\nmalicious"]:
+        for path in [
+            "javascript:alert(1)",
+            "https://example.org",
+            "//example.org",
+            "../secret",
+            "/secret",
+            "logs/../../secret",
+            "C:\\secret",
+            "//[bad",
+            "\nmalicious",
+        ]:
             with self.subTest(path=path), tempfile.TemporaryDirectory() as directory:
                 report = self.report()
                 report["scenarios"][0]["attempts"][0]["stdout"] = path

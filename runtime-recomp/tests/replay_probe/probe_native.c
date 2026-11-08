@@ -8,6 +8,7 @@
 #include "../../src/game/camera_obstruction_guest.h"
 #include "../../src/game/mods/legacy_memory_safety.h"
 #include "../../src/game/track_select_draw_guest.h"
+#include "../../src/game/netplay/experimental_guest_memory.h"
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
@@ -23,16 +24,22 @@ static int active_menu_tick;
 static int inline_menu_preview;
 static dkr_owned_draw_event draw_events[DKR_OWNED_MAX_DRAW_EVENTS];
 static unsigned draw_count;
+static dkr_owned_draw_event local_models[128],local_objects[512];
+static unsigned local_model_count,local_object_count;
+static int local_model_overflow,local_object_overflow,local_flushed;
 static int draw_invalid;
 static int framed_scope, lens_scope, split_world_scope, panel_scope;
 static int clear_scope, mosaic_scope, chequer_scope;
 static unsigned scenery_viewmask;
+static uint32_t online_divider_holders[2];
 static dkr_track_draw_state track_draw;
 
 void dkr_probe_draw_begin(void) {
     draw_count=0;draw_invalid=0;framed_scope=0;lens_scope=0;split_world_scope=0;panel_scope=0;
+    local_model_count=local_object_count=0;local_model_overflow=local_object_overflow=local_flushed=0;
     clear_scope=mosaic_scope=chequer_scope=0;
     scenery_viewmask=0;
+    memset(online_divider_holders,0,sizeof(online_divider_holders));
     memset(&track_draw,0,sizeof(track_draw));
     dkr_probe_parity_begin();
 }
@@ -41,7 +48,77 @@ static void parity_emit(const dkr_owned_draw_event* event) {
     if(!dkr_owned_draw_event_valid(event)||draw_count>=DKR_OWNED_MAX_DRAW_EVENTS-1){draw_invalid=1;return;}
     draw_events[draw_count++]=*event;
 }
+static void local_emit(const dkr_owned_draw_event* event) {
+    // Optional quality observations must not exhaust mandatory HUD/camera
+    // metadata. Publish actor visibility only when the complete set fits:
+    // a partial set could make the renderer duplicate an original actor.
+    if(!dkr_owned_draw_event_valid(event))return;
+    if(event->kind==DKR_OWNED_LOCAL_MODEL) {
+        if(local_model_overflow)return;
+        if(local_model_count==128){local_model_overflow=1;local_model_count=0;return;}
+        local_models[local_model_count++]=*event;
+    } else if(event->kind==DKR_OWNED_LOCAL_OBJECT) {
+        if(local_object_overflow)return;
+        if(local_object_count==512){local_object_overflow=1;local_object_count=0;return;}
+        local_objects[local_object_count++]=*event;
+    }
+}
+void dkr_probe_online_function(const char* name,int leaving,uint8_t* ram,recomp_context* ctx) {
+    if(!canonical_presentation||!ctx)return;
+    if(strcmp(name,"hud_render_general")==0||strcmp(name,"hud_timer_render")==0) {
+        dkr_probe_online_hud_function(name,leaving,ram,ctx,parity_emit);return;
+    }
+    const int reset=strcmp(name,"viewport_reset")==0;
+    const unsigned index=strcmp(name,"divider_clear_coverage")==0;
+    if(reset&&leaving)return;
+    uint32_t holder=(uint32_t)ctx->r4,p=0;
+    if(!reset) {
+        if(leaving)holder=online_divider_holders[index];
+        else online_divider_holders[index]=holder;
+    }
+    if(dkr_probe_diagnostic_read(ram,holder,4,&p)&&p>=0x80000000U&&p<=0x807FFFD8U&&!(p&7)) {
+        dkr_owned_draw_event e={reset?DKR_OWNED_ONLINE_SHARED:
+            leaving?DKR_OWNED_ONLINE_DIVIDER_END:DKR_OWNED_ONLINE_DIVIDER_BEGIN,p,0,{0}};
+        parity_emit(&e);
+    }
+    if(!reset&&leaving)online_divider_holders[index]=0;
+}
 static dkr_probe_native_state state;
+/* Observe the exact canonical mesh range. Preferences are intentionally absent:
+   the renderer may replace it, or keep it, using its own immutable image. */
+void dkr_probe_mesh_begin(uint8_t* ram,recomp_context* ctx,dkr_owned_draw_event* e) {
+    memset(e,0,sizeof(*e));if(!canonical_presentation || state.scene_unload_phase)return;
+    const uint32_t object=(uint32_t)ctx->r5;
+    const uint32_t dl=DKR_PROBE_REVISION==77?0x8011AE8CU:0x8011B40CU;
+    const uint32_t view=DKR_PROBE_REVISION==77?0x8011B0B4U:0x8011B634U;
+    const uint32_t intensity=DKR_PROBE_REVISION==77?0x8011AD30U:0x8011B2B0U;
+    uint32_t behaviour,header,count,slots,index,racer,start,instance,highest=0,override;
+    if(!dkr_probe_diagnostic_read(ram,object+0x48,2,&behaviour) || behaviour!=1 ||
+       !dkr_probe_diagnostic_read(ram,object+0x40,4,&header) ||
+       !dkr_probe_diagnostic_read(ram,header+0x55,1,&count) || !count || count>32 ||
+       !dkr_probe_diagnostic_read(ram,object+0x68,4,&slots) ||
+       !dkr_probe_diagnostic_read(ram,object+0x3A,1,&index) || index>=count ||
+       !dkr_probe_diagnostic_read(ram,slots+index*4,4,&instance) || !instance)return;
+    for(unsigned i=0;i<count && !highest;++i)
+        if(!dkr_probe_diagnostic_read(ram,slots+i*4,4,&highest))return;
+    if(!highest || highest==instance || !dkr_probe_diagnostic_read(ram,dl,4,&start) ||
+       !dkr_probe_diagnostic_read(ram,view,4,&e->token) || e->token>3 ||
+       !dkr_probe_diagnostic_read(ram,(uint32_t)ctx->r29+16,4,&override) || override>1 ||
+       !dkr_probe_diagnostic_read(ram,object+0x64,4,&racer))return;
+    e->address=start;e->parameters[1]=object;e->parameters[2]=highest;
+    if(!dkr_probe_diagnostic_read(ram,object+0x18,2,&e->parameters[3]) ||
+       !dkr_probe_diagnostic_read(ram,object+0x3B,1,&e->parameters[4]) ||
+       !dkr_probe_diagnostic_read(ram,racer+0x16A,2,&e->parameters[8]) ||
+       !dkr_probe_diagnostic_read(ram,intensity,4,&e->parameters[9])){memset(e,0,sizeof(*e));return;}
+    e->parameters[5]=(uint32_t)ctx->r7;e->parameters[6]=ctx->r6!=0;e->parameters[7]=override;
+    e->kind=DKR_OWNED_LOCAL_MODEL;
+}
+void dkr_probe_mesh_end(uint8_t* ram,recomp_context* ctx,dkr_owned_draw_event* e) {
+    (void)ctx;if(e->kind!=DKR_OWNED_LOCAL_MODEL)return;
+    const uint32_t dl=DKR_PROBE_REVISION==77?0x8011AE8CU:0x8011B40CU;
+    if(dkr_probe_diagnostic_read(ram,dl,4,&e->parameters[0]))local_emit(e);
+    e->kind=0;
+}
 static dkr_probe_scenery_observer scenery_observer;
 static void* scenery_user;
 void dkr_probe_scenery_observe(dkr_probe_scenery_observer observer,void* user) {
@@ -185,6 +262,15 @@ void dkr_probe_boss_diagnostic_failure(const dkr_probe_result* result,recomp_con
 }
 unsigned dkr_probe_draw_capture(dkr_owned_draw_event* events,unsigned capacity) {
     if(draw_invalid || track_draw.active || track_draw.pending)return 0; // Never publish a truncated scope transaction.
+    if(!local_flushed) {
+        if(local_model_count<DKR_OWNED_MAX_DRAW_EVENTS-draw_count) {
+            memcpy(draw_events+draw_count,local_models,local_model_count*sizeof(*local_models));draw_count+=local_model_count;
+        }
+        if(local_object_count<DKR_OWNED_MAX_DRAW_EVENTS-draw_count) {
+            memcpy(draw_events+draw_count,local_objects,local_object_count*sizeof(*local_objects));draw_count+=local_object_count;
+        }
+        local_flushed=1;
+    }
     dkr_owned_draw_event metadata={DKR_OWNED_FRAME_METADATA,0x80000000U,0,{0}};
     metadata.parameters[0]=state.presentation.scene;
     if(draw_count<DKR_OWNED_MAX_DRAW_EVENTS&&(!draw_count||draw_events[draw_count-1].kind!=DKR_OWNED_FRAME_METADATA))draw_events[draw_count++]=metadata;
@@ -277,12 +363,14 @@ static void rom_dma(uint8_t* rdram,recomp_context* context) {
     const uint32_t offset=physical-0x10000000U;
     if(!rom || !rom_bytes) dkr_probe_block("immutable-retail-rom-not-installed");
     const int virtual_asset=(((uint32_t)context->r7&0xc0000000U)==0x40000000U);
-    if(context->r6 || (destination&7) || !size || size>0x5000 ||
+    // Native mod assets are bounded byte copies, including retail's unaligned
+    // compressed-map scratch. Never relax real ROM or audio DMA alignment.
+    if(context->r6 || (!virtual_asset && (destination&7)) || !size || size>0x5000 ||
        (!virtual_asset && (physical<0x10000000U || (physical&1) || offset>rom_bytes || size>rom_bytes-offset)))
         dkr_probe_block("invalid-owned-rom-dma");
     const int audio=audio_owned && address==audio_dma_queue();
     if(address!=dma_queue() && !audio) dkr_probe_block("unowned-rom-dma-completion");
-    if(audio && size!=0x400) dkr_probe_block("unreviewed-audio-rom-dma-size");
+    if(audio && (size!=0x400 || (destination&7))) dkr_probe_block("unreviewed-audio-rom-dma-size");
     check_queue(rdram,address);
     if(MEM_W(8,guest_address(address))==(audio ? 50:1)) dkr_probe_block("rom-dma-completion-still-pending");
     // Complete validation before copying; no partial copy of a corrupt range.
@@ -607,10 +695,10 @@ void dkr_probe_menu_preview_begin(uint8_t* rdram,recomp_context* ctx) {
     // copied RAM and can finish normally; no completion is fabricated here.
     recomp_context background=*ctx;
     background.f_odd=background.mips3_float_mode ? &background.f1.u32l:&background.f0.u32h;
-    background.r29=guest_address(0x80FE0000U);
+    background.r29=guest_address(DKR_OWNED_PREVIEW_STACK_TOP);
     background.r4=MEM_W(4,globals);background.r5=guest_address(UINT32_MAX);background.r6=MEM_W(8,globals);
     load_level_for_menu(rdram,&background);
-    if(background.r29!=guest_address(0x80FE0000U) || state.scene_unload_phase || state.scene_load_resets ||
+    if(background.r29!=guest_address(DKR_OWNED_PREVIEW_STACK_TOP) || state.scene_unload_phase || state.scene_load_resets ||
        state.pending_scene_site || scene_authorization)
         dkr_probe_block("incomplete-confirmed-track-preview");
     // Publish request completion only after the real constructor succeeds.
@@ -747,6 +835,7 @@ static int canonical_identity_hook(const char* name) {
     static const char* const identities[]={
         "dkr_split_screen_viewport_fill", "dkr_split_screen_world_aspect_begin", "dkr_split_screen_world_aspect_end",
         "dkr_apply_gameplay_fov", "dkr_apply_maximum_racer_detail", "dkr_extend_object_draw_distance",
+        "dkr_keep_local_multiplayer_scenery", /* Canonical constructor still prunes; native immutable cache owns restoration. */
         "dkr_extended_frustum_begin", "dkr_extended_frustum_end",
         "dkr_extend_hub_segment_bitfield", "dkr_keep_hub_segment_visible",
         "dkr_anchor_persistent_water_to_camera", "dkr_maximise_persistent_water_detail", "dkr_stabilise_persistent_water_transition",
@@ -786,6 +875,18 @@ static void draw_marker(uint8_t* rdram,gpr pointer,unsigned kind,unsigned token)
     draw_event(kind,(uint32_t)MEM_W(0,pointer),token);
 }
 static int owned_presentation_hook(const char* name,uint8_t* rdram,recomp_context* ctx) {
+    if(strcmp(name,"dkr_presentation_object_begin")==0) {
+        const uint32_t view=DKR_PROBE_REVISION==77?0x8011B0B4U:0x8011B634U;
+        // At this pinned site a0 is already the trace category (2). The
+        // original Gfx** argument was saved at sp+0x20 by the retail prologue.
+        uint32_t holder,command,slot;
+        if(dkr_probe_diagnostic_read(rdram,(uint32_t)ctx->r29+0x20,4,&holder) &&
+           dkr_probe_diagnostic_read(rdram,holder,4,&command) &&
+           dkr_probe_diagnostic_read(rdram,view,4,&slot)) {
+            dkr_owned_draw_event e={DKR_OWNED_LOCAL_OBJECT,command,slot,{(uint32_t)ctx->r7}};
+            local_emit(&e);
+        }
+    }
     if(dkr_probe_parity_hook(name,rdram,ctx,&state.presentation,state.video_frames,parity_emit))return 1;
     if(strcmp(name,"dkr_netplay_postrace_barrier")==0 ||
        strcmp(name,"dkr_netplay_adventure_finish_barrier")==0) {
@@ -862,6 +963,7 @@ static int owned_presentation_hook(const char* name,uint8_t* rdram,recomp_contex
             (int8_t)MEM_B(0,guest_address(a[2])),MEM_W(0,guest_address(a[3])),
             MEM_W(0,guest_address(a[4])),layout);
         if(strcmp(name,"dkr_split_screen_viewport_fill")==0) {
+            dkr_probe_online_view(rdram,(uint32_t)ctx->r17,parity_emit);
             if(postrace && !state.postrace_contracted)
                 draw_marker(rdram,ctx->r17,DKR_OWNED_POSTRACE_FULL_VIEWPORT,0);
             if(split)draw_marker(rdram,ctx->r17,DKR_OWNED_SPLIT_VIEWPORT,
@@ -875,6 +977,7 @@ static int owned_presentation_hook(const char* name,uint8_t* rdram,recomp_contex
         return 1;
     }
     if(strcmp(name,"dkr_split_screen_world_aspect_end")==0) {
+        dkr_probe_online_racers(rdram,(uint32_t)ctx->r17,parity_emit);
         if(framed_scope)draw_marker(rdram,ctx->r17,DKR_OWNED_FRAMED_END,0);
         if(split_world_scope)draw_marker(rdram,ctx->r17,DKR_OWNED_SPLIT_WORLD_END,0);
         framed_scope=split_world_scope=0;return 1;
@@ -896,7 +999,7 @@ static void split_background_observation(uint8_t* rdram,gpr vertices,unsigned ki
     if(!vertices)return;
     uint32_t a[8];dkr_probe_presentation_addresses(a);
     const int layout=MEM_W(0,guest_address(a[5]));
-    if(layout!=2 && layout!=3)return;
+    if(layout<1 || layout>3)return;
     dkr_probe_memory(rdram,vertices,2,2);dkr_probe_memory(rdram,vertices+38,2,2);
     const unsigned first=draw_count;
     draw_event(kind,(uint32_t)vertices,(unsigned)layout);
@@ -1333,6 +1436,7 @@ uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_con
        strcmp(name,"dkr_track_select_draw")==0 && args[0]<=10 && args[1]<=UINT32_MAX) {
         uint8_t* rdram=ram;
         const unsigned event=(unsigned)args[0];
+        if(event==5||event==6)dkr_probe_online_hud_texture(rdram,context,event,parity_emit);
         // Low-level font/rectangle helpers are shared with racing and other
         // menus. Their inactive scope is an exact no-op, not a new permission.
         if(!dkr_probe_menu_callback_enabled()) {

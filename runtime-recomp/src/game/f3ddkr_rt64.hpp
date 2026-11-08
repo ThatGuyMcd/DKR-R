@@ -15,6 +15,8 @@ struct State;
 
 namespace dkr::runtime {
 class LocalSceneryRT64Pass;
+class LocalModelRT64Pass;
+namespace online_view {class Pass;}
 
 std::uint64_t completed_f3ddkr_task_count();
 
@@ -27,7 +29,8 @@ public:
     F3DDKRRT64Bridge& operator=(const F3DDKRRT64Bridge&) = delete;
 
     void process(RT64::Application& application, const OSTask& task,
-                 LocalSceneryRT64Pass* scenery=nullptr);
+                 LocalSceneryRT64Pass* scenery=nullptr,online_view::Pass* online=nullptr,
+                 LocalModelRT64Pass* models=nullptr);
 
 private:
     using Handler = void (*)(RT64::State*, RT64::DisplayList**);

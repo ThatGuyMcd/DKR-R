@@ -102,12 +102,18 @@ def _junit(report: dict) -> bytes:
             indent=2,
             allow_nan=False,
         )
+
     # Child diagnostics can contain terminal controls, which XML 1.0 rejects.
     def xml_text(value: str) -> str:
         return "".join(
-            char if (char in "\t\n\r" or 0x20 <= ord(char) <= 0xD7FF
-                     or 0xE000 <= ord(char) <= 0xFFFD
-                     or 0x10000 <= ord(char) <= 0x10FFFF) else "\ufffd"
+            char
+            if (
+                char in "\t\n\r"
+                or 0x20 <= ord(char) <= 0xD7FF
+                or 0xE000 <= ord(char) <= 0xFFFD
+                or 0x10000 <= ord(char) <= 0x10FFFF
+            )
+            else "\ufffd"
             for char in value
         )
 
@@ -122,13 +128,23 @@ def _junit(report: dict) -> bytes:
 
 def _html(report: dict) -> str:
     scenarios = report.get("scenarios", [])
-    counts = {status: sum(item.get("status") == status for item in scenarios) for status in ("passed", "failed", "skipped")}
-    cards = "".join(f'<div class="card {status}"><strong>{count}</strong><span>{status}</span></div>' for status, count in counts.items())
-    identity = "".join(f"<dt>{_escape(key)}</dt><dd>{_escape(value)}</dd>" for key, value in sorted(report.get("identity", {}).items()))
+    counts = {
+        status: sum(item.get("status") == status for item in scenarios) for status in ("passed", "failed", "skipped")
+    }
+    cards = "".join(
+        f'<div class="card {status}"><strong>{count}</strong><span>{status}</span></div>'
+        for status, count in counts.items()
+    )
+    identity = "".join(
+        f"<dt>{_escape(key)}</dt><dd>{_escape(value)}</dd>" for key, value in sorted(report.get("identity", {}).items())
+    )
     rows = []
     for scenario in scenarios:
         attempts = scenario.get("attempts", [])
-        metrics = "".join(f"<tr><th>{_escape(key)}</th><td>{_number(value)}</td></tr>" for key, value in sorted(scenario.get("metrics", {}).items()))
+        metrics = "".join(
+            f"<tr><th>{_escape(key)}</th><td>{_number(value)}</td></tr>"
+            for key, value in sorted(scenario.get("metrics", {}).items())
+        )
         comparisons = "".join(
             f"<tr><th>{_escape(item.get('metric', ''))}</th><td>{_number(item.get('baseline'))}</td>"
             f"<td>{_number(item.get('current'))}</td><td>{_number(item.get('limit'))}</td><td>{_status(item.get('status'))}</td></tr>"
@@ -142,19 +158,25 @@ def _html(report: dict) -> str:
         )
         details = []
         if metrics:
-            details.append(f'<h3>Metrics</h3><div class="scroll"><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{metrics}</tbody></table></div>')
+            details.append(
+                f'<h3>Metrics</h3><div class="scroll"><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{metrics}</tbody></table></div>'
+            )
         if comparisons:
-            details.append(f'<h3>Baseline comparisons</h3><div class="scroll"><table><thead><tr><th>Metric</th><th>Baseline</th><th>Current</th><th>Limit</th><th>Status</th></tr></thead><tbody>{comparisons}</tbody></table></div>')
+            details.append(
+                f'<h3>Baseline comparisons</h3><div class="scroll"><table><thead><tr><th>Metric</th><th>Baseline</th><th>Current</th><th>Limit</th><th>Status</th></tr></thead><tbody>{comparisons}</tbody></table></div>'
+            )
         if attempt_rows:
-            details.append(f'<h3>Attempts</h3><div class="scroll"><table><thead><tr><th>Attempt</th><th>Phase</th><th>Status</th><th>Wall time (ms)</th><th>Exit code</th><th>Logs</th></tr></thead><tbody>{attempt_rows}</tbody></table></div>')
+            details.append(
+                f'<h3>Attempts</h3><div class="scroll"><table><thead><tr><th>Attempt</th><th>Phase</th><th>Status</th><th>Wall time (ms)</th><th>Exit code</th><th>Logs</th></tr></thead><tbody>{attempt_rows}</tbody></table></div>'
+            )
         opened = " open" if scenario.get("status") == "failed" else ""
         rows.append(
             f'<section class="scenario"><details{opened}><summary>{_status(scenario.get("status"))} '
             f'<strong>{_escape(scenario["id"])}</strong><span class="duration">{_number(_elapsed(scenario))} s total</span></summary>'
-            f'<p>{_escape(scenario.get("description", ""))}</p>{_errors(scenario.get("errors", []))}{"".join(details)}</details></section>'
+            f"<p>{_escape(scenario.get('description', ''))}</p>{_errors(scenario.get('errors', []))}{''.join(details)}</details></section>"
         )
     title = _escape(report.get("suite", "Regression harness"))
-    return f'''<!doctype html>
+    return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} — regression report</title>
 <style>
@@ -169,14 +191,14 @@ a{{color:#8fcbff}}.subtitle,.duration{{color:var(--muted)}}.scope{{border-left:3
 dl{{display:grid;grid-template-columns:minmax(120px,1fr) 3fr;gap:8px 24px}}dt{{color:var(--muted)}}dd{{margin:0}}footer{{color:var(--muted);margin-top:32px;font-size:.9rem}}
 @media(max-width:600px){{main{{padding:24px 14px}}.duration{{float:none;display:block}}dl{{display:block}}dd{{margin-bottom:12px}}}}
 </style></head><body><main>
-<p class="subtitle">DKR-R · Regression &amp; performance</p><h1>{title}</h1><p class="subtitle">Started {_escape(report.get('started_at', ''))} · {len(scenarios)} scenarios</p>
+<p class="subtitle">DKR-R · Regression &amp; performance</p><h1>{title}</h1><p class="subtitle">Started {_escape(report.get("started_at", ""))} · {len(scenarios)} scenarios</p>
 <div class="cards">{cards}</div>
 <p class="scope">Process wall time includes startup and shutdown; it is not frame time. Skipped scenarios are not passes. This report covers the configured checks and does not certify real gameplay or hardware acceptance.</p>
 <p><a href="report.json">Machine-readable JSON</a> · <a href="junit.xml">JUnit XML</a></p>
-<details><summary>Run identity</summary><dl>{identity or '<dt>Identity</dt><dd>Not recorded</dd>'}</dl></details>
-<h2>Scenarios</h2>{''.join(rows) or '<p>No scenarios were recorded.</p>'}
+<details><summary>Run identity</summary><dl>{identity or "<dt>Identity</dt><dd>Not recorded</dd>"}</dl></details>
+<h2>Scenarios</h2>{"".join(rows) or "<p>No scenarios were recorded.</p>"}
 <footer>Warmup and measured attempts are shown separately. Scenario totals include all attempts. Metric names define their units.</footer>
-</main></body></html>'''
+</main></body></html>"""
 
 
 def write_reports(output: Path, report: dict) -> None:

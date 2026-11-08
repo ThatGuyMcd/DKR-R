@@ -82,6 +82,14 @@ if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim() -e
 if ($Version -eq '1.0.7+beta.2') {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BETA2-1.0.7.txt') -Destination (Join-Path $notices 'RELEASE-NOTES.txt')
 }
+if ($Version -eq '1.0.7+beta.4') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BETA4-1.0.7.txt') -Destination (Join-Path $notices 'RELEASE-NOTES.txt')
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/RELEASE-README.md') -Destination (Join-Path $notices 'README.md')
+}
+if ($Version -eq '1.0.7+beta.3') {
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BETA3-1.0.7.txt') -Destination (Join-Path $notices 'RELEASE-NOTES.txt')
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'packaging/RELEASE-README.md') -Destination (Join-Path $notices 'README.md')
+}
 if ((Get-Content -LiteralPath (Join-Path $projectRoot 'VERSION') -Raw).Trim().StartsWith('1.0.5-beta.15') -and
     (Test-Path -LiteralPath (Join-Path $projectRoot 'docs/ENHANCED-WATER-BETA15.txt'))) {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/ENHANCED-WATER-BETA15.txt') -Destination $notices

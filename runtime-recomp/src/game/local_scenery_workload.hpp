@@ -26,7 +26,7 @@ inline ViewPlan plan_view(const netplay::experimental::LocalSceneryScene& scene,
         const dkr_owned_draw_event& event,const Settings& settings) noexcept {
     ViewPlan plan;
     if(event.kind!=DKR_OWNED_LOCAL_SCENERY || !dkr_owned_draw_event_valid(&event) ||
-       event.parameters[0]!=scene.scene || !settings.enabled(int(event.parameters[1])) ||
+       event.parameters[0]!=scene.scene || !settings.live_enabled(int(event.parameters[1])) ||
        scene.sprites.size()>plan.candidates.size())return plan;
     const auto aspect=std::bit_cast<float>(event.parameters[7]);
     std::array<float,3> camera;
@@ -37,6 +37,7 @@ inline ViewPlan plan_view(const netplay::experimental::LocalSceneryScene& scene,
     if(!std::isfinite(aspect)||aspect<0.1F||aspect>8)return plan;
     for(std::size_t index=0;index<scene.sprites.size();++index) {
         const auto& sprite=scene.sprites[index];
+        if((sprite.removed&&!settings.enabled(int(event.parameters[1]))) || (sprite.view_excluded&(1U<<event.token)))continue;
         if(sprite.transform_flags&(0x5000U|0x80U|(0x200U<<(event.token&1U))) ||
            !region_visible(sprite.segment,event,settings.retention))continue;
         float length2=0;
@@ -47,7 +48,11 @@ inline ViewPlan plan_view(const netplay::experimental::LocalSceneryScene& scene,
             const auto difference=position-camera[axis];length2+=difference*difference;
         }
         if(!position_valid)continue;
-        const auto alpha=fade_alpha(settings.distance(sprite.draw_distance),length2);
+        const auto multiplier=enhancements::object_view_distance_multiplier(sprite.behaviour,settings.view_distance,
+            settings.animated_distance,settings.billboard_distance,settings.water_distance);
+        const auto distance=std::max(settings.sprite_distance(sprite.draw_distance,sprite.frames.size()>1),
+            enhancements::effective_view_distance(settings.profile,sprite.draw_distance,multiplier));
+        const auto alpha=fade_alpha(distance,length2);
         if(!alpha || unsigned(alpha<255||((sprite.flags|sprite.transform_flags)&4U)!=0)!=event.parameters[15])continue;
         const std::size_t frame=event.parameters[6]?sprite.animation:
             (sprite.animation&255U)*sprite.frames.size()/256;

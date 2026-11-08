@@ -17,6 +17,10 @@
 #include "presentation_identity.hpp"
 #include "renderer_snapshot.hpp"
 #include "local_scenery_rt64.hpp"
+#if defined(DKR_LOCAL_MODEL_DETAIL)
+#include "local_model_rt64.hpp"
+#endif
+#include "online_view_rt64.hpp"
 #include "revision_addresses.hpp"
 #include "runtime_enhancements.hpp"
 #include "widescreen_policy.hpp"
@@ -86,6 +90,10 @@ namespace dkr::runtime {
 // into RT64 before reuse; no queued GPU consumer retains these vectors.
 struct OwnedDecodeScratch {
     LocalSceneryRT64Pass local_scenery;
+#if defined(DKR_LOCAL_MODEL_DETAIL)
+    LocalModelRT64Pass local_models;
+#endif
+    online_view::Pass online;
     std::vector<presentation::LocatedPresentationMarker> markers;
     std::vector<presentation::OwnedMatrixBinding> matrices;
     std::vector<presentation::OwnedShadowBinding> shadows;
@@ -1109,8 +1117,14 @@ void dkr::runtime::RT64Renderer::present_owned(
         scene=presentation::normalise_identity(event.parameters[0]^presentation::mix_identity(std::uint32_t(lease->epoch()))^
             presentation::mix_identity(std::uint32_t(lease->generation())));
     }
+    owned_decode_scratch_->online.prepare(online_view_session_,lease->draw_events(),
+        workspace->bytes(),scene,cover*4.F/3.F,d.framebuffer,hud_mode);
+    // Salt BEFORE constructing any matrix/shadow identities. Layout changes
+    // must not interpolate a previous quadrant into the new full canvas.
+    // This identity belongs to the renderer only, never the CPU/checkpoint.
+    if(owned_decode_scratch_->online.focused())scene=presentation::normalise_identity(scene^0x46554C4CU^online_view_session_.owner);
     for(const auto& event:lease->draw_events()) {
-        if(event.kind==DKR_OWNED_FRAME_METADATA||event.kind==DKR_OWNED_LOCAL_SCENERY)continue;
+        if(event.kind==DKR_OWNED_FRAME_METADATA||event.kind==DKR_OWNED_LOCAL_SCENERY||event.kind>=DKR_OWNED_ONLINE_VIEW)continue;
         if(event.kind==DKR_OWNED_MATRIX) {
             const auto flags=event.parameters[0];
             const auto identity=event.token?presentation::normalise_identity(event.token^presentation::mix_identity(scene)):0U;
@@ -1151,10 +1165,16 @@ void dkr::runtime::RT64Renderer::present_owned(
             continue;
         }
         if(event.kind==DKR_OWNED_SPLIT_SKY_QUAD) {
-            // Three/four-player CPU vertices remain canonical (cover=1).
-            // Apply the accepted gradient-cover policy only to this image.
-            const float horizontal=enhancements::split_sky_horizontal_cover_scale(cover,int(event.token));
-            const float vertical=enhancements::split_sky_vertical_cover_scale(cover,int(event.token));
+            // CPU vertices ALREADY include the canonical split correction.
+            // Convert that geometry to the chosen canvas, rather than applying
+            // the two-player 2x expansion for a second time. Its authored sky
+            // is half-height; a full view must undo that as well.
+            const bool focus=owned_decode_scratch_->online.focused();
+            const float native_x=enhancements::split_sky_horizontal_cover_scale(1.F,int(event.token));
+            const float native_y=enhancements::split_sky_vertical_cover_scale(1.F,int(event.token));
+            const float horizontal=(focus?cover:enhancements::split_sky_horizontal_cover_scale(cover,int(event.token)))/native_x;
+            const float vertical=(focus?std::max(1.F,enhancements::sky_vertical_cover_scale(cover))*(event.token==1?2.F:1.F):
+                enhancements::split_sky_vertical_cover_scale(cover,int(event.token)))/native_y;
             for(unsigned v=0;v<4;++v) {
                 const auto address=event.address+v*10U;
                 write_vertex(address,float(read_vertex(address))*horizontal);
@@ -1169,7 +1189,9 @@ void dkr::runtime::RT64Renderer::present_owned(
             // Same healthy-geometry guard as the legacy Patch Pipeline hook.
             if(!std::isfinite(lx)||!std::isfinite(lz)||!std::isfinite(cx)||!std::isfinite(cz)||
                length<0.5F||length>1.5F)continue;
-            const float horizontal=enhancements::split_sky_horizontal_cover_scale(cover,int(event.token));
+            const float horizontal=(owned_decode_scratch_->online.focused()?cover:
+                enhancements::split_sky_horizontal_cover_scale(cover,int(event.token)))/
+                enhancements::split_sky_horizontal_cover_scale(1.F,int(event.token));
             for(unsigned v=0;v<4;++v) {
                 const auto address=event.address+v*10U;
                 const float x=read_vertex(address),z=read_vertex(address+4);
@@ -1242,8 +1264,11 @@ void dkr::runtime::RT64Renderer::present_owned(
         owned_markers.push_back({event.address,marker});
     }
     }
-    owned_decode_scratch_->local_scenery.prepare(lease->local_scenery().get(),
+    owned_decode_scratch_->local_scenery.prepare(lease->local_scenery(),
         lease->draw_events(),workspace->bytes(),scene);
+#if defined(DKR_LOCAL_MODEL_DETAIL)
+    owned_decode_scratch_->local_models.prepare(lease->draw_events(),workspace->bytes(),scene);
+#endif
     const auto present_cursor=application_->presentQueue->writeCursor;
     {std::scoped_lock lock(presentation_mutex_);
         presentation::TaskIdentityScope identity{owned_markers,owned_matrices,owned_shadows,scene,modern,double(lease->descriptor().frame)/30.0};
@@ -1253,7 +1278,11 @@ void dkr::runtime::RT64Renderer::present_owned(
          try {
              graphics_health::TaskBoundary boundary;
 #endif
-             f3ddkr_.process(*application_,task,&owned_decode_scratch_->local_scenery);
+             f3ddkr_.process(*application_,task,&owned_decode_scratch_->local_scenery,&owned_decode_scratch_->online
+#if defined(DKR_LOCAL_MODEL_DETAIL)
+                 ,&owned_decode_scratch_->local_models
+#endif
+             );
 #if defined(__ANDROID__)
          } catch (const graphics_health::TaskAborted&) {
              // DrainOnExit retains the immutable image, decode workspace and

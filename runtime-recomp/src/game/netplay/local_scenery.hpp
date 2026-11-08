@@ -20,6 +20,9 @@ struct LocalSceneryTexture {
     // FD addresses are offsets into bytes, not freed guest addresses.
     std::vector<std::array<std::uint32_t,2>> commands;
 };
+// Shared checked capture for renderer-owned sprites and replacement model
+// materials. Owns texels, palette and whitelisted uploads; no guest lifetime.
+LocalSceneryTexture capture_local_texture(std::span<const std::uint8_t> ram,std::uint32_t header);
 struct LocalSceneryTile {
     std::uint16_t texture=0;
     std::array<LocalSceneryVertex,6> vertices{};
@@ -31,12 +34,19 @@ struct LocalScenerySprite {
     float scale=1;
     std::int16_t roll=0,draw_distance=0,segment=-1;
     std::uint16_t animation=0,flags=0,transform_flags=0;
+    std::uint16_t behaviour=0;
+    std::uint8_t view_excluded=0;
+    bool removed=true;
     std::uint32_t primitive=0xFFFFFFFFU,environment=0xFFFFFF00U;
     std::array<std::array<std::uint32_t,2>,2> material{};
     std::array<std::array<std::uint32_t,2>,2> faded_material{};
     std::vector<std::shared_ptr<const LocalSceneryTexture>> textures;
     std::vector<LocalSceneryFrame> frames;
 };
+// Snapshot only: does not keep the actor alive or run its behaviour. Caller
+// selects non-interactive scenery/effect classes and excludes canonical draws.
+LocalScenerySprite capture_live_local_sprite(std::span<const std::uint8_t> ram,
+    std::uint32_t object,std::uint32_t material_table);
 struct LocalSceneryScene {
     std::uint32_t scene=0;
     std::size_t payload_bytes=0;

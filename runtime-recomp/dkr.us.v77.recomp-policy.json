@@ -795,6 +795,12 @@
       "reason": "When the optional maximum-detail setting is enabled, select the first valid highest-detail racer model after DKR's original bounds checks while preserving the time-trial ghost model."
     },
     {
+      "function": "track_setup_racers",
+      "beforeVram": "0x8000DA20",
+      "text": "extern void dkr_keep_local_multiplayer_scenery(uint8_t*, recomp_context*); dkr_keep_local_multiplayer_scenery(rdram, ctx);",
+      "reason": "Keep eligible noninteractive scenery sprites in local multiplayer when Modern scenery retention is requested; preserve header flags and time-trial exclusions. The owned online constructor retains its canonical pruning and renderer-only resource cache."
+    },
+    {
       "function": "trackbg_render_gradient",
       "beforeVram": "0x80028BE8",
       "text": "extern void dkr_widen_gradient_sky(uint8_t*, recomp_context*); dkr_widen_gradient_sky(rdram, ctx);",
