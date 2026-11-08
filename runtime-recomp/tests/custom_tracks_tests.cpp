@@ -298,8 +298,69 @@ int level_count(const std::vector<std::int32_t>& table) {
 
 } // namespace
 
+// A hub's exits name other .dkrmap tracks through levelLinks, resolved
+// against the installed set; a missing track resolves to -1, and the race
+// type a boss track declares is read back from its header.
+void level_link_tests(const std::filesystem::path& base) {
+    {
+        const std::filesystem::path links = base / "level-links";
+        std::filesystem::remove_all(links);
+        set_working_directory({});
+        const std::filesystem::path hub = links / "hub.dkrmap";
+        std::filesystem::create_directories(hub);
+        write_file(hub / "manifest.json",
+                   "{\"schemaVersion\":1,\"id\":\"hub\",\"name\":\"Hub\","
+                   "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"},"
+                   "{\"section\":\"LEVEL_OBJECT_MAPS\",\"slot\":\"structure\",\"file\":\"s.bin\"},"
+                   "{\"section\":\"LEVEL_OBJECT_MAPS\",\"slot\":\"collectables\",\"file\":\"o.bin\"}],"
+                   "\"levelLinks\":[{\"slot\":\"structure\",\"offset\":24,\"track\":\"race\"},"
+                   "{\"slot\":\"structure\",\"offset\":40,\"track\":\"gone\"}]}");
+        std::string boss_header(200U, '\0');
+        boss_header[0x4C] = static_cast<char>(kRaceTypeBoss);
+        write_file(hub / "h.bin", boss_header);
+        write_file(hub / "s.bin", std::string(48U, 's'));
+        write_file(hub / "o.bin", std::string(64U, 'o'));
+        write_track(links / "race.dkrmap", "race", 128U);
+        const std::filesystem::path bad = links / "bad.dkrmap";
+        std::filesystem::create_directories(bad);
+        write_file(bad / "manifest.json",
+                   "{\"schemaVersion\":1,\"id\":\"bad\",\"name\":\"Bad\","
+                   "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}],"
+                   "\"levelLinks\":[{\"slot\":\"structure\",\"offset\":12,\"track\":\"race\"}]}");
+        write_file(bad / "h.bin", std::string(200U, 'h'));
+        scan(links);
+        assert(tracks().size() == 2U); // The map header is not a link target.
+
+        constexpr std::int32_t kMaps[] = {0x0, 0x80, 0x100, -1};
+        const auto headers = build_extended_table(Section::LevelHeaders, kRetail);
+        const auto maps = build_extended_table(Section::LevelObjectMaps, kMaps);
+        assert(!headers.empty() && !maps.empty());
+        const std::int32_t hub_level = resolved_level_id("hub");
+        const std::int32_t race_level = resolved_level_id("race");
+        assert(hub_level >= 0 && race_level >= 0 && hub_level != race_level);
+        assert(level_race_type(hub_level) == kRaceTypeBoss);
+        assert(level_race_type(race_level) >= 0); // Read from its own header.
+        assert(level_race_type(0) == -1);
+
+        const std::int32_t structure = sibling_index(
+            Section::LevelHeaders, static_cast<std::uint32_t>(headers[hub_level]),
+            Section::LevelObjectMaps, MapSlot::Structure);
+        const std::int32_t collectables = sibling_index(
+            Section::LevelHeaders, static_cast<std::uint32_t>(headers[hub_level]),
+            Section::LevelObjectMaps, MapSlot::Collectables);
+        assert(structure >= 0 && collectables >= 0);
+        const auto found = level_links_for_object_map(static_cast<std::uint32_t>(maps[structure]));
+        assert(found.size() == 2U);
+        assert(found[0].offset == 24U && found[0].level_id == race_level && found[0].track == "race");
+        assert(found[1].offset == 40U && found[1].level_id == -1);
+        assert(level_links_for_object_map(static_cast<std::uint32_t>(maps[collectables])).empty());
+        assert(level_links_for_object_map(0x0).empty()); // Retail map.
+    }
+}
+
 int main() {
     const TemporaryDirectory temporary("dkrr-custom-tracks-tests");
+    level_link_tests(temporary.path());
     const std::filesystem::path root = temporary.path() / "fixtures";
     std::filesystem::remove_all(root);
     write_track(root / "beta.dkrmap", "beta", 192U);

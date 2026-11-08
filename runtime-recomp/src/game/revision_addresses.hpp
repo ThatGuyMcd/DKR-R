@@ -113,6 +113,9 @@ struct AddressTable {
     std::uint32_t SequenceTable;       // gSequenceTable (ALSeqFile *)
     std::uint32_t SequenceLengths;     // gSeqLengthTable (u32 *)
     std::uint32_t SequenceSoundTable;  // gSeqSoundTable (MusicData *)
+    std::uint32_t ShadowVertexCount;   // D_8011B118 (tracks.c): entries in the 32-slot shadow vertex array
+    std::uint32_t ShadowPolygonCount;  // D_8011C230 (tracks.c): entries in the 32-slot shadow polygon array
+    std::uint32_t ShadowEdgePointCounts; // D_8011B320[4] (tracks.c): clip points per shadow edge, groups of 32 in D_8011B330[120]
 };
 
 inline constexpr AddressTable kUsV77{
@@ -218,6 +221,9 @@ inline constexpr AddressTable kUsV77{
     0x80115CF8U,
     0x80115D0CU,
     0x80115D1CU,
+    0x8011B118U, // D_8011B118, verified v77 symbol table
+    0x8011C230U, // D_8011C230
+    0x8011B320U, // D_8011B320
 };
 
 inline constexpr AddressTable kUsV80{
@@ -323,6 +329,9 @@ inline constexpr AddressTable kUsV80{
     0x80116278U,
     0x8011628CU,
     0x8011629CU,
+    0x8011B698U, // D_8011B118, verified v80 symbol table
+    0x8011C7B0U, // D_8011C230
+    0x8011B8A0U, // D_8011B320
 };
 
 inline rom::Revision gSelectedRevision = rom::Revision::UsV77;
@@ -428,6 +437,9 @@ inline std::uint32_t CurrentSequence = kUsV77.CurrentSequence;
 inline std::uint32_t SequenceTable = kUsV77.SequenceTable;
 inline std::uint32_t SequenceLengths = kUsV77.SequenceLengths;
 inline std::uint32_t SequenceSoundTable = kUsV77.SequenceSoundTable;
+inline std::uint32_t ShadowVertexCount = kUsV77.ShadowVertexCount;
+inline std::uint32_t ShadowPolygonCount = kUsV77.ShadowPolygonCount;
+inline std::uint32_t ShadowEdgePointCounts = kUsV77.ShadowEdgePointCounts;
 
 inline const AddressTable& table_for(const rom::Revision revision) {
     return revision == rom::Revision::UsV80 ? kUsV80 : kUsV77;
@@ -541,6 +553,9 @@ inline bool select(const rom::Revision revision) {
     SequenceTable = table.SequenceTable;
     SequenceLengths = table.SequenceLengths;
     SequenceSoundTable = table.SequenceSoundTable;
+    ShadowVertexCount = table.ShadowVertexCount;
+    ShadowPolygonCount = table.ShadowPolygonCount;
+    ShadowEdgePointCounts = table.ShadowEdgePointCounts;
     gSelectedRevision = revision;
     return true;
 }

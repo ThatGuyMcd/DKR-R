@@ -114,3 +114,17 @@ extern "C" std::uint32_t dkr_code_lap_address(std::uint32_t address,std::uint8_t
     if(bound->world->lap_address(address,result)<0)stop(bound->world->error());
     return std::uint32_t(result);
 }
+
+// The composed payload always calls dkr_analogue_driving (legacy_behaviour_policy),
+// but its definition still arrives with the release overlay
+// (patches/online-performance). A plain runtime-recomp configure therefore did not
+// link. When nothing else defines it, the linker falls back to this pass-through,
+// which leaves the retail throttle and brake values untouched; the overlay's real
+// definition wins whenever it is present.
+extern "C" std::uint32_t dkr_analogue_driving_retail(std::uint8_t*, recomp_context*, unsigned,
+                                                     std::uint32_t, std::uint32_t bits) {
+    return bits;
+}
+#if defined(_MSC_VER)
+#pragma comment(linker, "/alternatename:dkr_analogue_driving=dkr_analogue_driving_retail")
+#endif
