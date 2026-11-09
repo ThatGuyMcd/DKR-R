@@ -362,7 +362,10 @@ class DKR_OT_ai_tag_destinations(bpy.types.Operator):
                     if str(o.get(scene.PROP_ID)) == level_types.WEAPON_BALLOON]
         chests = []
         if bananas:
-            chests = [(int(o.get("playerID", 1)) - 1, o) for o in objects
+            # The racer as the game reads it: playerID 0 is racer 3, not -1.
+            chests = [(mode_checklist.owner(mode_checklist.CHEST,
+                                            int(o.get("playerID", 1))), o)
+                      for o in objects
                       if str(o.get(scene.PROP_ID)) == mode_checklist.CHEST]
         if not balloons and not chests:
             self.report({"WARNING"}, "no weapon balloons%s to tag nodes for"
