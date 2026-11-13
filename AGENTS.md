@@ -25,7 +25,12 @@ strict version.
 > built from a chain of first-party layers under `patches/`, and those
 > directories and their pipelines still exist. They are listed in
 > `architecture/pattern-guard-baseline.txt`; the guard tolerates them and fails
-> on anything new. Editing a listed file is fine, adding a new layer is not.
+> on anything new. The fold is rewriting them into `runtime-recomp/src` from
+> what they produce, so they are frozen until it merges:
+> `scripts/check_frozen_layers.py` fails on any edit, addition or deletion of
+> a first-party file under `patches/` (`architecture/frozen-layers.txt`).
+> Registered third-party patches stay editable. A layer change both owners
+> agree can't wait is re-recorded with `--write` and ported to the fold branch.
 > `guest-hooks/hooks.toml`, `symbols/*.toml`, `scripts/guest_hooks.py`,
 > `scripts/gen_guest_symbols.py` and `netplay/legacy_identity.hpp` arrive with
 > later fold steps. Until a path exists, don't invent a stand-in for it; ask.

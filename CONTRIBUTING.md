@@ -17,7 +17,10 @@ can merge.
 > Transition note: until the patch-layer fold lands, `patches/<layer>/`
 > directories and the configure-time pipelines still exist on `main`. They are
 > listed in `architecture/pattern-guard-baseline.txt` and the guard only fails
-> on new ones. Don't add a new layer; edit the source in place instead.
+> on new ones. Don't add a new layer; edit the source in place instead. The
+> existing layers are frozen until the fold merges
+> (`scripts/check_frozen_layers.py`): the fold is built from what they produce,
+> so an edit to one would be lost.
 
 ## Local setup
 
