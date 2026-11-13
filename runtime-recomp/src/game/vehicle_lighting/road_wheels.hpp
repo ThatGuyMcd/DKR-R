@@ -1,5 +1,6 @@
 #pragma once
 #include "capture.hpp"
+#include "../atomic_snapshot.hpp"
 #include <atomic>
 #include <memory>
 #include <optional>
@@ -9,7 +10,7 @@ namespace dkr::runtime::vehicles::lighting::road_wheels {
 inline constexpr unsigned BeginColour=26,EndColour=27;
 // A character-only launch need not prepare any replacement-car resources.
 // Publish just its immutable car-header identities before render workers run.
-inline std::atomic<std::shared_ptr<const std::vector<unsigned>>> driver_headers;
+inline AtomicSnapshot<const std::vector<unsigned>> driver_headers;
 inline void publish_headers(std::vector<unsigned> headers) {
     std::sort(headers.begin(),headers.end());headers.erase(std::unique(headers.begin(),headers.end()),headers.end());
     driver_headers.store(std::make_shared<const std::vector<unsigned>>(std::move(headers)),std::memory_order_release);

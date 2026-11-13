@@ -115,11 +115,18 @@ def embed(root, output):
     def quote(text):
         return json.dumps(text, ensure_ascii=False)
 
+    def view(text):
+        # A sized literal: building a string_view from a bare literal makes the
+        # compiler count every character at compile time, and the whole table
+        # then runs past clang's constexpr step limit with libstdc++.
+        return quote(text) + "sv"
+
     lines = [
         "// Generated resource bytes; edit the UTF-8 catalogues, not this file.",
         "#pragma once",
         "#include <array>",
         "namespace dkr::localisation::data {",
+        "using namespace std::string_view_literals;",
         f"inline constexpr std::array<Language,{len(packs)}> languages{{{{",
     ]
     lines += [f"{{{quote(pack['code'])},{quote(pack['name'])}}}," for pack in packs]
@@ -132,13 +139,13 @@ def embed(root, output):
     for key, message in sorted(packs[0]["messages"].items()):
         values = [message["text"]] + [pack["messages"][key] for pack in packs[1:]]
         flag = "true" if message.get("format") == "printf" else "false"
-        lines.append("{" + quote(key) + "," + flag + ",{{" + ",".join(map(quote, values)) + "}}},")
+        lines.append("{" + view(key) + "," + flag + ",{{" + ",".join(map(view, values)) + "}}},")
     lines += [
         "}};",
         "struct Alias { std::string_view english,id; };",
         f"inline constexpr std::array<Alias,{len(aliases)}> aliases{{{{",
     ]
-    lines += ["{" + quote(source) + "," + quote(key) + "}," for source, key in sorted(aliases.items())]
+    lines += ["{" + view(source) + "," + view(key) + "}," for source, key in sorted(aliases.items())]
     lines += ["}};"]
     characters = set(range(0x20, 0x7F)) | set(range(0xA0, 0x100))
     for pack in packs:

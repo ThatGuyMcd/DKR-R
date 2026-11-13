@@ -1,4 +1,5 @@
 #pragma once
+#include "../atomic_snapshot.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -24,7 +25,7 @@ struct Settings {
 };
 inline Settings preference;
 inline bool loaded=false;
-inline std::atomic<std::shared_ptr<const Settings>> published{std::make_shared<const Settings>()};
+inline dkr::runtime::AtomicSnapshot<const Settings> published{std::make_shared<const Settings>()};
 inline std::atomic<unsigned> output_width{1280},output_height{720};
 inline constexpr unsigned DimensionLimit=8192;
 inline std::atomic<unsigned> device_limit{DimensionLimit};

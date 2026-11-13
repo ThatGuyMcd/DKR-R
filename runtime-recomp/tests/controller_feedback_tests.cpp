@@ -59,13 +59,14 @@ int main() {
     Service worker;std::mutex mutex;std::vector<std::pair<int,Output>> writes;
     worker.sink([&](const Device& d,Output v){std::lock_guard l(mutex);writes.emplace_back(d.instance,v);return true;});
     Device device{};device.instance=42;device.allowed=true;device.capabilities=Rumble;
+    // The worker writes from its own thread, so poll for each state instead of trusting one fixed sleep on a loaded runner.
+    const auto eventually=[&](auto&& reached){for(int i=0;i<400;++i){{std::lock_guard l(mutex);if(reached())return true;}std::this_thread::sleep_for(std::chrono::milliseconds(5));}return false;};
     worker.input(0,device);worker.input(1,device);worker.test(0,1,100);
-    std::this_thread::sleep_for(std::chrono::milliseconds(80));
-    {std::lock_guard l(mutex);assert(!writes.empty());assert(writes.back().second.left==65535&&writes.back().second.right==0);}
-    worker.stop(0);std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    {std::lock_guard l(mutex);assert(writes.back().second==Output{});}
+    assert(eventually([&]{return !writes.empty()&&writes.back().second.left==65535&&writes.back().second.right==0;}));
+    worker.stop(0);
+    assert(eventually([&]{return writes.back().second==Output{};}));
     worker.test(0,0,100);std::this_thread::sleep_for(std::chrono::milliseconds(520));
-    {std::lock_guard l(mutex);assert(writes.back().second==Output{});}
+    assert(eventually([&]{return writes.back().second==Output{};}));
     worker.shutdown();
     // A confirmed frame is consumed once; replaying it cannot create another pulse.
     Service confirmed(false);confirmed.input(0,device);s={};s.mode=2;confirmed.settings(0,s);

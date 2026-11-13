@@ -3,6 +3,7 @@
 #include "updates/update_process.hpp"
 #include <cassert>
 #include <fstream>
+#include <stdexcept>
 #include <thread>
 #include <json/json.hpp>
 #include <miniz/miniz.h>
@@ -21,7 +22,11 @@ static void write(const fs::path& path, const std::string& text) {
     std::ofstream out(path, std::ios::binary); out << text; assert(out.good());
 }
 int main() {
-    const auto root = fs::temp_directory_path() / ("dkr-crash-report-test-" + dkr::updates::unique_id());
+    // The temp dir can sit behind a link (macOS /var, a Windows 8.3 or junction profile path);
+    // callers hand the API a canonical profile, so the fixture does too.
+    const auto id = dkr::updates::unique_id();
+    const auto root = fs::canonical(fs::temp_directory_path()) / ("dkr-crash-report-test-" + id);
+    const auto alias = fs::temp_directory_path() / ("dkr-crash-report-alias-" + id);
     fs::create_directories(root / "logs"); fs::create_directory(root / "crash-dumps");
     try {
         const auto now = now_ms(); const Consent enabled{1, false, now - 10000};
@@ -97,6 +102,21 @@ int main() {
             restarted.discover({1, true, enabled.since}, now);
             assert(entry(restarted.due(now), "crash.dmp").empty());
         }
+        // A link above the profile is resolved once and tolerated.
+        std::error_code alias_error;
+        fs::create_directory_symlink(root, alias, alias_error);
+        if (!alias_error) {
+            assert(Queue(alias, "1.0.14-beta.3").count() == restarted.count());
+            fs::remove(alias);
+        }
+        // A link inside the diagnostic tree is still refused.
+        fs::create_directories(root / "other");
+        fs::create_directory_symlink(reportRoot, root / "other/crash-reports", link_error);
+        if (!link_error) {
+            bool refused = false;
+            try { Queue other(root / "other", "1.0.14-beta.3"); } catch (const std::runtime_error&) { refused = true; }
+            assert(refused);
+        }
         // Startup/disable state persists through the same service API as UI.
         restarted.reconcile({0, false, now}, now); // synthetic reports never leave the test
         write(root / "logs/runtime-previous.log", "[boot] clean synthetic session\n");
@@ -112,7 +132,7 @@ int main() {
             assert(read_consent(reportRoot).choice == 0);
         }
         shutdown(); assert(read_consent(reportRoot).choice == 0);
-    } catch (...) { shutdown(); fs::remove_all(root); throw; }
+    } catch (...) { shutdown(); std::error_code ignored; fs::remove(alias, ignored); fs::remove_all(root); throw; }
     // The absolute root is a fresh, uniquely named test directory above.
     fs::remove_all(root);
 }

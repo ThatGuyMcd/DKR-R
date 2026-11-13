@@ -2,6 +2,7 @@
 #include "netplay/quick_join_transport.cpp"
 #include <cassert>
 #include <iostream>
+#include <source_location>
 #include <thread>
 #include <set>
 
@@ -63,6 +64,8 @@ struct QuickJoinTestAccess {
         // Test-only SDK configuration: a small real SCTP send buffer makes
         // backpressure reproducible on fast loopback without an OS firewall
         // or altering the production transport/dependency configuration.
+        // Surface ICE and transport warnings in a failing run's output.
+        rtc::InitLogger(rtc::LogLevel::Warning);
         rtc::SctpSettings constrained_sctp{};
         constrained_sctp.sendBufferSize = 16U << 10U;
         constrained_sctp.recvBufferSize = 16U << 10U;
@@ -104,12 +107,34 @@ struct QuickJoinTestAccess {
         QuickJoinTransport host(true, "ABCDE"), client(false, "ABCDE");
         std::string error;
         assert(host.open(0, error));
-        const auto wait = [&](auto predicate) {
+        // When a wait times out, name it and show where each side's negotiation
+        // stopped, so a failure identifies the stuck step and not only this helper.
+        const auto describe = [&] {
+            for (auto* side : {&host, &client}) {
+                std::scoped_lock lock(side->mutex_);
+                std::cerr << (side->host_ ? "host" : "client") << ": signalling ready=" << side->signaling_ready_.load()
+                          << " websocket=" << (side->websocket_ ? int(side->websocket_->readyState()) : -1)
+                          << " peers=" << side->peers_.size() << '\n';
+                for (const auto& [id, peer] : side->peers_) {
+                    if (!peer->connection) { std::cerr << "  peer " << id << ": no connection\n"; continue; }
+                    std::cerr << "  peer " << id << ": state=" << peer->connection->state() << " ice=" << peer->connection->iceState()
+                              << " gathering=" << peer->connection->gatheringState()
+                              << " control open=" << (peer->control_channel && peer->control_channel->isOpen()) << '\n';
+                    if (const auto local = peer->connection->localDescription())
+                        for (const auto& candidate : local->candidates()) std::cerr << "    local " << std::string(candidate) << '\n';
+                    if (const auto remote = peer->connection->remoteDescription())
+                        for (const auto& candidate : remote->candidates()) std::cerr << "    remote " << std::string(candidate) << '\n';
+                }
+            }
+        };
+        const auto wait = [&](auto predicate, std::source_location where = std::source_location::current()) {
             const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(20);
-            while (!predicate() && std::chrono::steady_clock::now() < end) {
+            bool reached = false;
+            while (!(reached = predicate()) && std::chrono::steady_clock::now() < end) {
                 host.service(); client.service();
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
             }
+            if (!reached) { std::cerr << "Timed out in the wait at line " << where.line() << '\n'; describe(); }
             assert(predicate());
         };
         wait([&] { return host.signaling_ready_.load(); });
