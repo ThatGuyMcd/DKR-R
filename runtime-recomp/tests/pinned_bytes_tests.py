@@ -142,11 +142,39 @@ class CheckerTests(unittest.TestCase):
         }
         write(capsule / "manifest.json", json.dumps(manifest).encode())
         write(self.root / name, b"new first-party feature\n")
+        # An edited base fails until the drifted list names it.
+        status, message = run_checker(self.root)
+        self.assertEqual(status, 1)
+        self.assertIn(f"{name}: sha256", message)
+        self.assertIn(check_pinned_bytes.DRIFTED_BASES, message)
+        write(self.root / check_pinned_bytes.DRIFTED_BASES, f"# comment\n\n{name}\n".encode())
+        self.assertEqual(run_checker(self.root)[0], 0)
+        self.assertEqual(run_checker(self.root, check_pinned_bytes.DRIFTED_BASES)[0], 0)
+        # An entry for a base that has not moved on would only switch its check off.
+        write(self.root / name, canonical)
+        status, message = run_checker(self.root)
+        self.assertEqual(status, 1)
+        self.assertIn("still matches its pin", message)
+        write(self.root / name, b"new first-party feature\n")
         self.assertEqual(run_checker(self.root)[0], 0)
         write(self.root / "patches/upstream-sync/pins.json", json.dumps({"base": "0" * 40}).encode())
         status, message = run_checker(self.root)
         self.assertEqual(status, 1)
         self.assertIn("unavailable", message)
+        # The list on its own selects the bases it covers.
+        status, message = run_checker(self.root, f"./{check_pinned_bytes.DRIFTED_BASES}")
+        self.assertEqual(status, 1)
+        self.assertIn("unavailable", message)
+
+    def test_drifted_list_entry_that_no_capsule_pins_fails(self):
+        self.write_capsule_manifest(b"base\n")
+        write(self.root / "src/base.py", b"base\n")
+        write(self.root / check_pinned_bytes.DRIFTED_BASES, b"src/other.py\n")
+        for paths in ((), (check_pinned_bytes.DRIFTED_BASES,)):
+            status, err = run_checker(self.root, *paths)
+            self.assertEqual(status, 1)
+            self.assertIn("src/other.py: listed in", err)
+        self.assertEqual(run_checker(self.root, "src/base.py")[0], 0)
 
     def test_stripped_whitespace_on_a_patch_context_line_fails(self):
         # What trailing-whitespace does to a blank context line.
