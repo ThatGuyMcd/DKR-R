@@ -29,6 +29,9 @@ symbols = [
   "gCurrentRNGSeed",
   "gCurrentPlayerIndex",
   "gRacersByPort",
+  "gCurrentLightIntensity",
+  "gInverseViewMatrixF",
+  "gViewportLayout",
 ]
 template = '''#pragma once
 // Generated from the admitted, revision-specific SDK symbol tables.

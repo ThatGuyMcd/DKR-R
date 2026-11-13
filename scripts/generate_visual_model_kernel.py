@@ -63,7 +63,9 @@ def generate(source: Path, header_path: Path, elf: Path, revision: int, output: 
         raise ValueError("Unreviewed visual kernel register/memory ABI")
     functions: dict[str, str] = {}
     for path in sorted(source.glob("*.c")):
-        text = path.read_text(encoding="utf-8")
+        # Read hooks without the null statement patches/n64recomp/0003 prints
+        # before them (see generate_replay_probe.HOOK_NULL_STATEMENT).
+        text = re.sub(r"(?m)^    ; ", "    ", path.read_text(encoding="utf-8"))
         matches = list(DEF.finditer(text))
         for i, match in enumerate(matches):
             if match[1] in PINS[revision]:

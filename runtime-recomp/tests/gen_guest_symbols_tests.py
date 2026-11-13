@@ -23,7 +23,8 @@ GOLDEN = {
     "achievement_symbols.hpp": "36b9daa3",
     "polish_symbols.hpp": "4eac568d",
     "render_heap_addresses.hpp": "0cbe828b",
-    "vehicle_symbols.hpp": "a3c8f2a1",
+    # v1.0.15 added the light intensity, inverse view and viewport layout symbols.
+    "vehicle_symbols.hpp": "fd41fa2d",
 }
 DECOMP = ROOT / "extern/dkr-decomp/ver/symbols"
 

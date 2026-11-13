@@ -1,7 +1,9 @@
 include_guard(GLOBAL)
-get_filename_component(_dkr_online_root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 function(dkr_add_online_stability)
+    # Set here, not at file scope: the first include can come from inside
+    # another function, whose scope a file-level variable would not outlive.
+    get_filename_component(_dkr_online_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../.." ABSOLUTE)
     if(NOT TARGET DKRQualificationDeliveryTests)
         add_executable(DKRQualificationDeliveryTests "${_dkr_online_root}/runtime-recomp/tests/qualification_delivery_tests.cpp")
         target_include_directories(DKRQualificationDeliveryTests PRIVATE "${_dkr_online_root}/runtime-recomp/src/game")

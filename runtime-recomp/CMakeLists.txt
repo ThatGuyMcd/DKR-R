@@ -59,11 +59,7 @@ endif()
 include(CTest)
 include(cmake/ProjectTests.cmake)
 include(cmake/Localisation.cmake)
-# Capsule builds register new first-party modules at the retained final UI
-# hook, after the historical source rebinding has completed.
-if(NOT DKR_RELEASE_CAPSULE)
-    dkr_add_localisation()
-endif()
+dkr_add_localisation()
 
 if(BUILD_TESTING AND NOT ANDROID)
     add_executable(DKRLauncherCopyTests tests/launcher_copy_tests.cpp)
@@ -435,7 +431,7 @@ if(DKR_RUNTIME_BUILD_RT64 AND DKR_RUNTIME_BUILD_SDL3_INPUT_HOST)
 endif()
 
 if(DKR_RUNTIME_BUILD_RT64 AND DKR_RUNTIME_BUILD_SDL3_INPUT_HOST)
-    add_executable(DKRSdl3InputHost src/input/sdl3_input_host.cpp)
+    add_executable(DKRSdl3InputHost src/game/controller_feedback/input_host.cpp)
     target_include_directories(DKRSdl3InputHost PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
     target_compile_definitions(DKRSdl3InputHost PRIVATE NOMINMAX)
     target_link_libraries(DKRSdl3InputHost PRIVATE SDL3::SDL3-shared)
@@ -1215,7 +1211,7 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
         src/game/runtime_netplay.cpp
         src/game/runtime_platform.cpp
         src/game/runtime_quick_restart.cpp
-        src/game/sdl3_input_client.cpp
+        src/game/controller_feedback/input_client.cpp
         src/game/save_manager.cpp
         src/game/runtime_save_routing.cpp
         src/game/runtime_portable.cpp
@@ -1379,6 +1375,13 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
     target_link_libraries(DKRPortGameCore PRIVATE DKRUpdateClient)
     include(cmake/FilePicker.cmake)
     dkr_add_file_picker()
+    # The launcher's text, its crash reporter (which brings storage
+    # maintenance) and the Mod Store's in-game image overlay.
+    dkr_add_localisation()
+    include(cmake/CrashReports.cmake)
+    dkr_add_crash_reports()
+    target_link_libraries(DKRPortGameCore PRIVATE DKRLocalisation DKRCrashReports)
+    target_sources(DKRPortGameCore PRIVATE src/game/mod_store/overlay_images.cpp)
     if(DKR_EXPERIMENTAL_RACE_TEST)
         target_compile_definitions(DKRPortGameCore PRIVATE DKR_EXPERIMENTAL_RACE_TEST=1)
     endif()
@@ -2314,7 +2317,11 @@ if(BUILD_TESTING)
         add_test(NAME DKRAtomicSnapshot${snapshot_variant} COMMAND DKRAtomicSnapshot${snapshot_variant}Tests)
     endforeach()
     if(DKR_RUNTIME_BUILD_RT64 AND DKR_RUNTIME_BUILD_SDL3_INPUT_HOST)
-        add_executable(DKRSdl3InputClientTests tests/sdl3_input_client_tests.cpp src/game/sdl3_input_client.cpp)
+        add_executable(
+            DKRSdl3InputClientTests
+            tests/sdl3_input_client_tests.cpp
+            src/game/controller_feedback/input_client.cpp
+        )
         target_include_directories(DKRSdl3InputClientTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
         target_compile_definitions(DKRSdl3InputClientTests PRIVATE NOMINMAX)
         if(WIN32)

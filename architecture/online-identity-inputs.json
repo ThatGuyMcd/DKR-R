@@ -117,7 +117,7 @@
     "runtime-recomp/symbols/achievement_symbols.toml": "565d8e8c96549fc69e47d741753766e535187241275b87d54b546cd133df69f2",
     "runtime-recomp/symbols/polish_symbols.toml": "ad5c563f3cc0e0bd44e4d2043563bd84ca294f6883b565c4613d3c1036b5d42a",
     "runtime-recomp/symbols/render_heap_addresses.toml": "0b8d0d2600cc38132800581eeedf8746ae25c1b3bcb37f85a22ec7e02a575230",
-    "runtime-recomp/symbols/vehicle_symbols.toml": "035ef42b77b67efa04a71947f3f20dbf1b8b14eb4736ad54fbffa73f9cd12b94",
+    "runtime-recomp/symbols/vehicle_symbols.toml": "2582392e1618d17eaebfb721ea046918acb524fe025dcba94aa5d6ab5886992f",
     "runtime-recomp/tests/replay_probe/owned_game.hpp": "0a957531a929a1b2f91a6de4567269052fc245002c795af12b23a9e8bb71c0b6",
     "runtime-recomp/tests/replay_probe/probe_audio.c": "ff938e9dc6178fa06a33d697f1f08d305a92d8b45bd49246de3ea3393e000f71",
     "runtime-recomp/tests/replay_probe/probe_audio.cpp": "e467f0c5f9d8ff8f0cb379a54600d1b4aff5adcc5c6b408d6ca0c9a395038a12",
@@ -164,7 +164,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "32a8294e498443044ef91249c67e2c85cbb7a9e0417c5538ee85d8390d058d1b",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "8d8b22472d6b0eddd6a9ce08430f4462822c1a8e93235627312d44eb2e181d76",
+    "scripts/generate_replay_probe.py": "ac24ed6386c363dd2e4b0291c9053534dd61d9cc2c816be891cbd67ad64b20da",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -186,7 +186,7 @@
     "scripts/water_profile_policy.py": "f02374ea65262da79767ccf9fab76b8cf8ecc8afeb7915d95692476df6bc9c28"
   },
   "last_update": {
-    "identity_changed": true,
-    "reason": "online identity changed"
+    "identity_changed": false,
+    "reason": "generate_replay_probe.py reads hooked bodies without the null statement N64Recomp patch 0003 prints; generated engines are unchanged"
   }
 }

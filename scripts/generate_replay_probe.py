@@ -34,6 +34,11 @@ def reviewed_bytes(data: bytes, expected: str) -> bytes | None:
 
 
 DEF = re.compile(r"RECOMP_FUNC\s+void\s+(\w+)\s*\([^{};]*\)\s*\{")
+# patches/n64recomp/0003 makes N64Recomp print a null statement before every
+# instruction hook ("    ; <hook>"), so a hook that declares something may
+# follow a branch label under C17. The reviewed function bodies pinned below
+# predate it; read them without it, so payloads from either N64Recomp match.
+HOOK_NULL_STATEMENT = re.compile(r"^    ; ", re.M)
 PROTO = re.compile(
     r"(?:extern\s+)?\b(void|int|unsigned|float|double|gpr|u?int(?:8|16|32|64)_t|recomp_func_t\s*\*)\s+(\w+)\s*\(([^();{}]*)\)\s*;"
 )
@@ -1387,7 +1392,7 @@ def generate(
     merge(PROJECT_IMPORTS)
     merge(declarations((source_dir / "funcs.h").read_text(encoding="utf-8")))
     for file in sorted(source_dir.glob("*.c")):
-        source = file.read_text(encoding="utf-8")
+        source = HOOK_NULL_STATEMENT.sub("    ", file.read_text(encoding="utf-8"))
         matches = list(DEF.finditer(source))
         for i, match in enumerate(matches):
             body = source[match.start() : matches[i + 1].start() if i + 1 < len(matches) else len(source)]

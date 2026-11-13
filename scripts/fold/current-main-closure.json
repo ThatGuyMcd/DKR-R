@@ -3,13 +3,13 @@
  "about": "ROM-free regression checkpoint of the fold's compiler-selected first-party source closure after comparison with main 4e461ea (v1.0.15 plus later main commits). Includes are pinned; comments and whitespace are ignored. It is a source comparison only: not a release reproduction, not binary identity, not cross-play or platform qualification.",
  "reference_commit": "4e461ea360c655147f1f3c20aa69d483369dc7fc",
  "image": "sha256:4d389ad000a26a6e18e1d28ab5f59d18858a709263e990383557a08cac5ee6ea",
- "source_files": 921,
+ "source_files": 917,
  "comparison": {
   "level": "token-level source closure",
   "shipped_translation_units": 1378,
   "first_party_translation_units_scanned": 542,
-  "files_token_identical_to_reference": 901,
-  "files_differing_deliberately": 20,
+  "files_token_identical_to_reference": 896,
+  "files_differing_deliberately": 21,
   "not_compared_for_this_reference": "Per-TU compile settings, preprocessed tokens, objects and link lines. Those levels were compared for d457741 only (git history of this file)."
  },
  "reference_input_limitations": {
@@ -56,6 +56,10 @@
   {
    "file": "runtime-recomp/src/game/f3ddkr_rt64.cpp",
    "reason": "Fold portability: Metal builds have no enhanced-water renderer, so the residency include is excluded on Apple."
+  },
+  {
+   "file": "runtime-recomp/src/game/library_ui/handoff_ui.inl",
+   "reason": "Fold portability: builds without the rollback runtime (Apple) have no owned match to query."
   },
   {
    "file": "runtime-recomp/src/game/mod_store.cpp",
@@ -334,7 +338,7 @@
   "runtime-recomp/src/game/library_ui/greeting_ui.inl": "054a354e17a3229124d2868fa07b76c1340dfa44b75bab7621b76ca25d80c463",
   "runtime-recomp/src/game/library_ui/handoff.hpp": "320340fb5a72af07160c905f6e9895198012f49adc3be6b115e423d1c3c5ac7b",
   "runtime-recomp/src/game/library_ui/handoff_check.inl": "25c9d71b3f2bece1ab01d56f4e77a95d85432ac76821db5d8227564770a8ce5a",
-  "runtime-recomp/src/game/library_ui/handoff_ui.inl": "327603cb66a6f7476abea18efc4eb509b7d88efbf7014c3d084699f63cb55ead",
+  "runtime-recomp/src/game/library_ui/handoff_ui.inl": "ee5c2a5edf82a92933ffedc7aa808dd337b55d84b85e67ad203f4ee6c679b1ec",
   "runtime-recomp/src/game/library_ui/header_layout.inl": "019bc11a01d79eeb3e618a5e46c2eb80f89a701374f3b31c838a15ccf8ffc562",
   "runtime-recomp/src/game/library_ui/header_ui.inl": "9f31713a7c0bc682ec8a17b1178821de88f041712376eb1346cfe7cee5208427",
   "runtime-recomp/src/game/library_ui/installed_toolbar.inl": "6638c993525d3c178c1d5a9b143906b7904c53f700331eecce46d46fbb617278",
@@ -901,9 +905,6 @@
   "runtime-recomp/src/game/scheduler_event_policy.hpp": "de64d752d18ebdd93cf433bc6ce252c8b454841eaeffccbea7b5e3785ad62331",
   "runtime-recomp/src/game/scoreboard_wire.inl": "73cdc4ad4f99d6c4e94254a3975d5712eb777bbf74281c5dab2a35730fb844a3",
   "runtime-recomp/src/game/sdk_task_source.hpp": "5ba0a90c40088d3b443a6d1c4fd5101314b63f7d568eaf1f0ba2a0d7bfa85a9e",
-  "runtime-recomp/src/game/sdl3_input_client.cpp": "d8eb1df928ac59a48f90b41d787e7159f3c86faec0bc56118244609cd11c46b3",
-  "runtime-recomp/src/game/sdl3_input_client.hpp": "9123f52435b8b8bb0311674d8bb61953693db952cce6bb1b1aa28a9fd403ebc4",
-  "runtime-recomp/src/game/sdl3_input_protocol.hpp": "09efc6b7b0ed7923c237b25b71c15da9399f55508e383f10765eb5d8a7611ec3",
   "runtime-recomp/src/game/session_content/policy.hpp": "628ee7f67bb771b8cb9d0c0b0b845d7d7dda0426d74a1badda06bd2dd1ff0834",
   "runtime-recomp/src/game/shared_save_backend.inl": "fec6880e9ba2974de59cca056741e839de114e0382f3a5ab63019b941297d5fc",
   "runtime-recomp/src/game/shared_save_jobs.inl": "d67f4585c21ce8024cf053c21b2790c3a0e8698337c5308c1c00b36ff881864e",
@@ -1003,7 +1004,6 @@
   "runtime-recomp/src/game/waterfall_scroll_policy.hpp": "2b249ac89e0667a1294553f292a19ffe82e0cd20a71eae7263a1775fd73773b5",
   "runtime-recomp/src/game/widescreen_policy.hpp": "37908b2a1505cf9cf17a94893adf97cc5aeabd1de51dd255e2087628a33641e5",
   "runtime-recomp/src/game/wrapped_input.inl": "d43c32ab875efc72e0d0ff0a6921ce3ead1b487c9bb0a465bb5a4902c2a78064",
-  "runtime-recomp/src/input/sdl3_input_host.cpp": "84e2b2387cca8e3cc3547968c8dd100655d117243fcb2024c38814d3cce9af48",
   "runtime-recomp/src/water/LavaLightingBounds.h": "c088b003de0e5fc20a289128167a0511bc15a30e6e5ea955ec4fbfa9dcbce1ec",
   "runtime-recomp/src/water/WaterBounds.h": "24bdde31aa5db0380f3cacad505ee206c411a6e5bcb51f7e6f8a3cc7201fab95",
   "runtime-recomp/src/water/WaterPipelineSafety.h": "930acc4f2af1e114ecff5225cfdad4bb944d17d79eb6ad98ee8de2a96b6e4e87",
