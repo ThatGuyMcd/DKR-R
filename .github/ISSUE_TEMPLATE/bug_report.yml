@@ -1,0 +1,98 @@
+name: Bug report
+description: Something is broken, crashes or looks wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please never upload a ROM or other game assets (see [asset policy](https://github.com/ThatGuyMcd/DKR-R/blob/main/docs/ASSET_POLICY.md)).
+        Check the [troubleshooting guide](https://github.com/ThatGuyMcd/DKR-R/blob/main/docs/TROUBLESHOOTING.md) first.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before posting
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: I read the troubleshooting guide
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: DKR-R version
+      description: The release you installed, for example 1.0.15 (it's in the download's file name).
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows x64
+        - Linux x86_64
+        - Steam Deck
+        - Linux ARM64
+        - macOS (older release)
+        - iOS (older release)
+        - Android (older release)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Device, GPU and OS version
+      description: For example, "Ryzen 5 5600, RX 6600, Windows 11 23H2".
+    validations:
+      required: true
+  - type: dropdown
+    id: rom
+    attributes:
+      label: ROM revision
+      description: Never upload the ROM itself.
+      options:
+        - US 1.0
+        - US 1.1 (Rev A)
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Offline or online
+      options:
+        - Offline
+        - Online
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Graphics settings and mods
+      description: Accurate or Modern, FPS target, resolution, texture packs, and any mods or magic codes installed. Skip if not relevant.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the track or screen and what you did right before it happened.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What should happen, and what happens instead? Screenshots help.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and crash report
+      description: |
+        In the launcher open About DKR-R > Support summary. Use EXPORT SUPPORT SUMMARY (omits private paths and save contents), or OPEN LOGS and attach `runtime.log` and `runtime-previous.log`.
+        Default folders: `%APPDATA%\DKRPort\logs` on Windows, the `dkr-port/logs` config folder on Linux. Portable mode uses its own folder.
+        For online problems attach the host and client logs from the same attempt.
+        Review raw logs for private info before posting. Crash reporting is opt-in and doesn't replace attaching logs here.
