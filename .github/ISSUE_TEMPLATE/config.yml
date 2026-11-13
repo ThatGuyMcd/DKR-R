@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/ThatGuyMcd/DKR-R/blob/main/docs/TROUBLESHOOTING.md
+    about: Common fixes for ROM, saves, mods, online and graphics problems.
+  - name: DKR-R Discord
+    url: https://discord.com/invite/AMWfXdBjNP
+    about: Questions and community help.
