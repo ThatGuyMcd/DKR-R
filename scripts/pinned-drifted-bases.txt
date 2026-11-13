@@ -4,6 +4,8 @@
 # work tree. Add a path here in the same commit as the first real change to
 # that file. Keep the list sorted.
 runtime-recomp/src/game/custom_tracks.cpp
+runtime-recomp/src/game/dkr_save_codec.cpp
+runtime-recomp/src/game/dkr_save_codec.hpp
 runtime-recomp/src/game/game_main.cpp
 runtime-recomp/src/game/game_payload.hpp
 runtime-recomp/src/game/game_payload_v77.cpp
@@ -15,10 +17,12 @@ runtime-recomp/src/game/mods/legacy_character_menu_render.hpp
 runtime-recomp/src/game/mods/legacy_character_stage.cpp
 runtime-recomp/src/game/mods/legacy_character_stage.hpp
 runtime-recomp/src/game/mods/magic_code_dispatch.h
+runtime-recomp/src/game/netplay/quick_join_transport.cpp
 runtime-recomp/src/game/rt64_renderer.cpp
 runtime-recomp/src/game/runtime_code_mods.cpp
 runtime-recomp/src/game/runtime_graphics_ui.inl
 runtime-recomp/src/game/runtime_legacy_mods.cpp
+runtime-recomp/src/game/runtime_saves_ui.inl
 runtime-recomp/src/game/runtime_ui.cpp
 runtime-recomp/src/game/updates/update_process.cpp
 runtime-recomp/src/game/updates/update_process.hpp

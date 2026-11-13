@@ -240,23 +240,26 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
     }
 
     SavesSeparator("Golden Balloons", width, false);
-    SavesNote("Up to 7 on the central island and 8 in each world. The total updates automatically.", width);
-    unsigned worlds = 0U;
-    for (std::size_t world = 1U; world < kWorldCount; ++world) worlds += slot.balloons[world];
-    int hub = slot.balloons[0] > worlds
-        ? static_cast<int>(std::min<unsigned>(slot.balloons[0] - worlds, kMaximumHubBalloons)) : 0;
+    int hub = static_cast<int>(hub_balloons(slot));
+    const unsigned bonus = bonus_balloons(slot);
+    SavesNote(bonus > 0U ? "Up to 7 on the central island and 8 in each world. Remove the bonus balloons before "
+                           "lowering the central island."
+                         : "Up to 7 on the central island and 8 in each world. The total updates automatically.",
+              width);
     {
         // The total (.saves-progress): a dark bar that fills amber.
         const ImVec2 at = ImGui::GetCursorScreenPos();
         ImDrawList* draw = ImGui::GetWindowDrawList();
         PaddockFill(draw, at, {at.x + width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x153E50));
-        const float t = static_cast<float>(slot.balloons[0]) / static_cast<float>(kMaximumTotalBalloons);
+        const float t = std::min(1.0F, static_cast<float>(slot.balloons[0]) /
+                                           static_cast<float>(kMaximumTotalBalloons));
         if (t > 0.0F) {
             draw->PushClipRect(at, {at.x + width * t, at.y + 32.0F}, true);
             PaddockFill(draw, at, {at.x + width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x806000));
             draw->PopClipRect();
         }
-        const std::string total = std::to_string(slot.balloons[0]) + " / " + std::to_string(kMaximumTotalBalloons);
+        std::string total = std::to_string(slot.balloons[0] - bonus) + " / " + std::to_string(kMaximumTotalBalloons);
+        if (bonus > 0U) total += " + " + std::to_string(bonus) + " bonus";
         const PaddockType type = PaddockReading(16.0F, true, 1.0F);
         const float text_width = PaddockMeasure(type, total);
         PaddockDrawRun(draw, type, {std::round(at.x + (width - text_width) * 0.5F),
@@ -273,18 +276,37 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
         balloons.Begin();
         ImGui::PushID(static_cast<int>(area));
         int value = area == 0U ? hub : slot.balloons[area];
-        if (SettingsRange("##balloons", kAreas[area], &value, 0,
-                          area == 0U ? kMaximumHubBalloons : kMaximumWorldBalloons, balloons.column, count)) {
+        // Bonus balloons only exist on top of a full island, so the island stays full while any are held.
+        const bool island_locked = area == 0U && bonus > 0U;
+        if (SettingsRange("##balloons", kAreas[area], &value, island_locked ? kMaximumHubBalloons : 0,
+                          area == 0U ? kMaximumHubBalloons : kMaximumWorldBalloons, balloons.column, count, {},
+                          island_locked)) {
             if (area == 0U) hub = value;
             else slot.balloons[area] = static_cast<std::uint8_t>(value);
-            unsigned total = static_cast<unsigned>(hub);
-            for (std::size_t world = 1U; world < kWorldCount; ++world) total += slot.balloons[world];
-            slot.balloons[0] = static_cast<std::uint8_t>(std::min<unsigned>(total, kMaximumTotalBalloons));
+            set_balloon_total(slot, static_cast<unsigned>(hub), bonus);
         }
         ImGui::PopID();
         balloons.End();
     }
     balloons.Finish(width);
+
+    SavesSeparator("Bonus balloons", width, false);
+    SavesNote("Extra balloons from the Free Balloon magic code. They need a full central island.", width);
+    SavesGrid extra(width, panel);
+    extra.Begin();
+    int bonus_value = static_cast<int>(bonus_balloons(slot));
+    const int bonus_limit = static_cast<int>(maximum_bonus_balloons(slot));
+    if (SettingsRange("##bonus-balloons", "Bonus balloons", &bonus_value, 0, bonus_limit, extra.column, count, {},
+                      bonus_limit == 0)) {
+        set_balloon_total(slot, hub_balloons(slot), static_cast<unsigned>(bonus_value));
+    }
+    extra.End();
+    extra.Finish(width);
+    if (SavesRaceButton("REMOVE BONUS BALLOONS", 0.0F, SavesTone::Plain, bonus_balloons(slot) == 0U,
+                        "This slot has no bonus balloons.")) {
+        set_balloon_total(slot, hub_balloons(slot), 0U);
+    }
+    PaddockGap(20.0F);
 
     SavesSeparator("Amulets and keys", width, false);
     SavesGrid keys(width, panel);
@@ -584,7 +606,10 @@ void DrawSavesOverview(SavesPageState& state, float width, float panel, const Sa
                             blank ? std::string("No racer initials") : name, inner);
                 PaddockGap(8.0F);
                 PaddockText(PaddockReading(16.0F, true, 1.5F), PaddockRgb(kSetText),
-                            std::to_string(slot.balloons[0]) + " / 47 balloons", inner);
+                            std::to_string(slot.balloons[0] - codec::bonus_balloons(slot)) + " / 47 balloons" +
+                                (codec::bonus_balloons(slot) > 0U
+                                     ? " + " + std::to_string(codec::bonus_balloons(slot)) + " bonus" : ""),
+                            inner);
                 PaddockGap(8.0F);
                 ImGui::PushID(static_cast<int>(index));
                 const std::string label = "Edit slot " + std::to_string(index + 1U);
@@ -856,7 +881,9 @@ void DrawSavesConfirmations(SavesPageState& state) {
                     slot.taj_flags = 0x3F;
                     slot.trophies = 0x3FF;
                     slot.bosses = 0xFFF;
+                    const unsigned bonus = codec::bonus_balloons(slot);
                     slot.balloons = {47, 8, 8, 8, 8, 8};
+                    codec::set_balloon_total(slot, codec::kMaximumHubBalloons, bonus);
                     slot.tt_amulet = 4;
                     slot.wizpig_amulet = 4;
                     slot.world_flags.fill(0xFFFF);

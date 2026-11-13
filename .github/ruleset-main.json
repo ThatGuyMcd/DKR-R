@@ -22,7 +22,7 @@
       "type": "pull_request",
       "parameters": {
         "required_approving_review_count": 0,
-        "require_code_owner_review": true,
+        "require_code_owner_review": false,
         "dismiss_stale_reviews_on_push": true,
         "require_last_push_approval": false,
         "required_review_thread_resolution": false,

@@ -103,8 +103,13 @@ int main(int argc, char** argv) {
     bounded.slots[0].wizpig_amulet = 6;
     bounded.slots[0].course_status[0] = 7;
     normalise_editable_fields(bounded);
+    // Worlds clamp to eight; the rest of the 7-bit total is kept as island
+    // balloons plus Free Balloon bonus.
     assert(bounded.slots[0].balloons ==
-           (std::array<std::uint8_t, kWorldCount>{47, 8, 8, 8, 8, 8}));
+           (std::array<std::uint8_t, kWorldCount>{127, 8, 8, 8, 8, 8}));
+    assert(bonus_balloons(bounded.slots[0]) == 80U);
+    set_balloon_total(bounded.slots[0], hub_balloons(bounded.slots[0]), 0U);
+    assert(bounded.slots[0].balloons[0] == 47U);
     assert(bounded.slots[0].tt_amulet == 4);
     assert(bounded.slots[0].wizpig_amulet == 4);
     assert(bounded.slots[0].course_status[0] == 3);
@@ -114,6 +119,73 @@ int main(int argc, char** argv) {
     bounded.slots[0].balloons[1] = 8;
     bounded.slots[0].balloons[0] = 39;
     assert(!validate_editable_ranges(bounded));
+
+    // Free Balloon magic code: 51 balloons on a complete save is 4 bonus.
+    AdventureSlot cheated{};
+    cheated.balloons = {51, 8, 8, 8, 8, 8};
+    assert(world_balloons(cheated) == 40U);
+    assert(hub_balloons(cheated) == 7U);
+    assert(bonus_balloons(cheated) == 4U);
+    assert(maximum_bonus_balloons(cheated) == 80U);
+    SaveImage cheated_image = blank_image();
+    cheated_image.slots[1] = cheated;
+    assert(validate_editable_ranges(cheated_image));
+    normalise_editable_fields(cheated_image);
+    assert(cheated_image.slots[1].balloons[0] == 51U);
+    SaveImage cheated_round_trip{};
+    assert(decode(encode(cheated_image), cheated_round_trip));
+    assert(bonus_balloons(cheated_round_trip.slots[1]) == 4U);
+    // Editor world-slider path: capture hub and bonus, change a world, then
+    // rewrite the total. Lowering or raising a world keeps the bonus count.
+    {
+        const unsigned saved_hub = hub_balloons(cheated);
+        const unsigned saved_bonus = bonus_balloons(cheated);
+        cheated.balloons[1] = 5;
+        set_balloon_total(cheated, saved_hub, saved_bonus);
+        assert(cheated.balloons[0] == 48U);
+        assert(bonus_balloons(cheated) == 4U);
+        cheated.balloons[1] = 8;
+        set_balloon_total(cheated, saved_hub, saved_bonus);
+        assert(cheated.balloons[0] == 51U);
+        assert(bonus_balloons(cheated) == 4U);
+    }
+    // Max Out path: fill every world and the island, keeping the bonus.
+    {
+        AdventureSlot partial_cheat{};
+        partial_cheat.balloons = {51, 8, 8, 8, 8, 8};
+        const unsigned saved_bonus = bonus_balloons(partial_cheat);
+        partial_cheat.balloons = {47, 8, 8, 8, 8, 8};
+        set_balloon_total(partial_cheat, kMaximumHubBalloons, saved_bonus);
+        assert(partial_cheat.balloons[0] == 51U);
+    }
+    set_balloon_total(cheated, hub_balloons(cheated), 200U);
+    assert(cheated.balloons[0] == kMaximumStoredBalloons);
+    assert(bonus_balloons(cheated) == 80U);
+    set_balloon_total(cheated, hub_balloons(cheated), 0U);
+    assert(cheated.balloons[0] == kMaximumTotalBalloons);
+    assert(bonus_balloons(cheated) == 0U);
+    // Removing the bonus re-encodes with a valid slot checksum.
+    cheated_image.slots[1] = cheated;
+    const std::vector<std::uint8_t> cleaned = encode(cheated_image);
+    assert(validate(cleaned));
+    SaveImage cleaned_image{};
+    assert(decode(cleaned, cleaned_image));
+    assert(cleaned_image.slots[1].balloons ==
+           (std::array<std::uint8_t, kWorldCount>{47, 8, 8, 8, 8, 8}));
+
+    // With a partial island the format can't hold a bonus: extra balloons
+    // would read back as island balloons, so the bonus is dropped.
+    AdventureSlot partial{};
+    partial.balloons = {35, 8, 8, 8, 8, 0};
+    assert(hub_balloons(partial) == 3U);
+    assert(bonus_balloons(partial) == 0U);
+    assert(maximum_bonus_balloons(partial) == 0U);
+    set_balloon_total(partial, 3U, 5U);
+    assert(partial.balloons[0] == 35U);
+    set_balloon_total(partial, 9U, 5U);
+    assert(partial.balloons[0] == 44U);
+    assert(bonus_balloons(partial) == 5U);
+    assert(maximum_bonus_balloons(partial) == 127U - 39U);
     if (argc == 2) {
         std::ifstream input(argv[1], std::ios::binary);
         const std::vector<std::uint8_t> external{
