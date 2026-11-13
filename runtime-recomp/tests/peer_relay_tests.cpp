@@ -302,6 +302,10 @@ public:
         static const bool initialized=[]{WSADATA w;return WSAStartup(MAKEWORD(2,2),&w)==0;}();if(!initialized)return false;
 #endif
         socket_=::socket(AF_INET,SOCK_DGRAM,0);if(socket_==invalid)return false;
+        // macOS caps a UDP datagram at the send buffer, 9216 bytes by default and below MaxWire.
+        // Ask for the same queue the production socket does.
+        const int queue=1<<20;setsockopt(socket_,SOL_SOCKET,SO_SNDBUF,reinterpret_cast<const char*>(&queue),sizeof(queue));
+        setsockopt(socket_,SOL_SOCKET,SO_RCVBUF,reinterpret_cast<const char*>(&queue),sizeof(queue));
         sockaddr_in a{};a.sin_family=AF_INET;a.sin_addr.s_addr=htonl(INADDR_LOOPBACK);a.sin_port=htons(port);
         if(::bind(socket_,reinterpret_cast<sockaddr*>(&a),sizeof(a))!=0)return false;
 #if defined(_WIN32)
