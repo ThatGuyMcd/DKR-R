@@ -8,8 +8,8 @@
   "level": "token-level source closure",
   "shipped_translation_units": 1378,
   "first_party_translation_units_scanned": 542,
-  "files_token_identical_to_reference": 896,
-  "files_differing_deliberately": 21,
+  "files_token_identical_to_reference": 895,
+  "files_differing_deliberately": 22,
   "not_compared_for_this_reference": "Per-TU compile settings, preprocessed tokens, objects and link lines. Those levels were compared for d457741 only (git history of this file)."
  },
  "reference_input_limitations": {
@@ -108,6 +108,10 @@
   {
    "file": "runtime-recomp/src/game/texture_gallery.inl",
    "reason": "Fold deviation recorded with the d457741 checkpoint; unchanged since, and the reference file did not change between d457741 and 4e461ea."
+  },
+  {
+   "file": "runtime-recomp/src/game/updates/update_process.cpp",
+   "reason": "Keeps the v1.0.12 hardening: helper processes start without handle inheritance on Windows. v1.0.15's pipeline replaced Child::Child with the base source's after applying it, so the shipped build inherits handles; DKRUpdateProcess and DKROnlineSetup assert it does not."
   },
   {
    "file": "runtime-recomp/src/game/vehicle_binding.cpp",
@@ -956,7 +960,7 @@
   "runtime-recomp/src/game/updates/update_http.hpp": "27023bab5d1d229ea10c9b953e72e3911344ce682ecfb77d41179b8b96655a2a",
   "runtime-recomp/src/game/updates/update_install.cpp": "bcbaa525b9565aaa7fa0b4eefdff9c48836c4e1b5e4a737154ff4904d7d2dc50",
   "runtime-recomp/src/game/updates/update_install.hpp": "ac8c33a6edad6a636a897d6860e111c880fbfecd7850ad718ec33379ec314d53",
-  "runtime-recomp/src/game/updates/update_process.cpp": "455542f8d60a6c9bea78a8c6aece3fd6cafaf2d9236a771cfc21d6bfe1c1a61c",
+  "runtime-recomp/src/game/updates/update_process.cpp": "31ae133266b518c9a13502b0a6a989c117ef8698bca980e51f64230409a51b46",
   "runtime-recomp/src/game/updates/update_process.hpp": "cb905cd9e78107cb5102749d34e46c0de94bb4c52f891fbd3e7cf1a0c20d31d4",
   "runtime-recomp/src/game/updates/update_service.cpp": "e92301c8a493a097368afd5a238c6ffe978ff43cd495a120e83132fc47367e3d",
   "runtime-recomp/src/game/updates/update_service.hpp": "be59383789af19a31adc58092fcd7045485766f13fc1bcf4fc2e6850327acaa7",
