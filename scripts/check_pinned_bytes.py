@@ -12,11 +12,13 @@ would "fix":
   whose file names are their own sha256;
 * the capsules' "base" files (``base_sha256``). Evolving first-party bases
   reconstructed by restore_capsule.py are checked against their pinned Git
-  blobs; the remaining bases still require exact working-tree bytes.
+  blobs; the remaining bases still require exact working-tree bytes. The
+  evolving ones are listed in scripts/pinned-drifted-bases.txt.
 
 With no arguments every pin is checked. With paths (what pre-commit passes),
 only the pins those paths belong to are checked; a manifest or receipt in the
-list checks every file it pins. Bytes are read from the work tree, which is
+list checks every file it pins, and the drifted-bases list checks every capsule
+base. Bytes are read from the work tree, which is
 what pre-commit stashes to before running hooks. Standard library only.
 
 Exit status: 0 all checked pins match, 1 a pinned file is missing or changed.
@@ -38,32 +40,11 @@ ROOT = Path(__file__).resolve().parents[1]
 PATCH_MANIFEST = "patches/manifest.json"
 RECEIPTS = "modding/reference-us-v*/receipt.json"
 CAPSULE_MANIFESTS = "patches/release-prep/*/source-capsule-*/manifest.json"
-# Historical bases are read by restore_capsule.py from the pinned Git commit,
-# never from these evolving first-party implementations. Check that historical
-# blob instead of weakening its hash or adding another source archive/layer.
-DRIFTED_BASES = frozenset(
-    {
-        "runtime-recomp/src/game/custom_tracks.cpp",
-        "runtime-recomp/src/game/mobile_graphics_preset.hpp",
-        "runtime-recomp/src/game/mods/magic_code_dispatch.h",
-        "runtime-recomp/src/game/runtime_code_mods.cpp",
-        "runtime-recomp/src/game/runtime_graphics_ui.inl",
-        "runtime-recomp/src/game/game_main.cpp",
-        "runtime-recomp/src/game/game_payload.hpp",
-        "runtime-recomp/src/game/game_payload_v77.cpp",
-        "runtime-recomp/src/game/game_payload_v80.cpp",
-        "runtime-recomp/src/game/mods/legacy_character_menu.hpp",
-        "runtime-recomp/src/game/mods/legacy_character_menu_render.cpp",
-        "runtime-recomp/src/game/mods/legacy_character_menu_render.hpp",
-        "runtime-recomp/src/game/mods/legacy_character_stage.cpp",
-        "runtime-recomp/src/game/mods/legacy_character_stage.hpp",
-        "runtime-recomp/src/game/rt64_renderer.cpp",
-        "runtime-recomp/src/game/runtime_legacy_mods.cpp",
-        "runtime-recomp/src/game/runtime_ui.cpp",
-        "runtime-recomp/src/game/updates/update_process.cpp",
-        "runtime-recomp/src/game/updates/update_process.hpp",
-    }
-)
+# Capsule bases that have moved on from their pinned bytes, one path per line.
+# restore_capsule.py reads those from the pinned Git commit, never from the
+# evolving first-party file, so the check verifies that historical blob instead
+# of weakening the hash or adding another source archive/layer.
+DRIFTED_BASES = "scripts/pinned-drifted-bases.txt"
 CAPSULE = re.compile(r"^patches/release-prep/[^/]+/source-capsule-[^/]+/(?P<sha>[0-9a-f]{64})\.[A-Za-z0-9]+$")
 
 
@@ -77,9 +58,19 @@ class Pin(NamedTuple):
     git_revision: str = ""
 
 
+def drifted_bases(root: Path) -> frozenset[str]:
+    """The capsule bases listed as drifted; none if the tree has no list."""
+    try:
+        lines = (root / DRIFTED_BASES).read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return frozenset()
+    return frozenset(line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#"))
+
+
 def pins(root: Path) -> dict[str, Pin]:
     """Map each pinned path to (expected sha256, file that pins it)."""
     pinned: dict[str, Pin] = {}
+    drifted = drifted_bases(root)
     manifest = json.loads((root / PATCH_MANIFEST).read_text(encoding="utf-8"))
     for dependency in manifest["dependencies"]:
         for patch in dependency.get("patches", []):
@@ -111,7 +102,7 @@ def pins(root: Path) -> dict[str, Pin]:
                 base = entry.get("base")
                 if base:
                     revision = ""
-                    if base in DRIFTED_BASES:
+                    if base in drifted:
                         history = root / "patches/upstream-sync/pins.json"
                         revision = json.loads(history.read_text())["base"]
                         if not re.fullmatch(r"[0-9a-f]{40}", revision):
@@ -127,13 +118,30 @@ def selected(pinned: dict[str, Pin], paths: Iterable[str]) -> list[str]:
         if path in pinned:
             chosen.add(path)
         chosen.update(name for name, pin in pinned.items() if pin.source == path)
+        if path == DRIFTED_BASES:
+            # Only capsule bases are CRLF-normalised. A removed entry has to
+            # match its work-tree pin again, so check them all.
+            chosen.update(name for name, pin in pinned.items() if pin.crlf_normalised)
     return sorted(chosen)
+
+
+def digest(raw: bytes, crlf_normalised: bool) -> str:
+    """The sha256 a pin is compared with."""
+    if crlf_normalised:
+        raw = raw.replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def check(root: Path, paths: Iterable[str] | None = None) -> list[str]:
     """One message per pinned file that is missing or whose sha256 changed."""
     pinned = pins(root)
     problems: list[str] = []
+    if paths is not None:
+        paths = [Path(p).as_posix().removeprefix("./") for p in paths]
+    if paths is None or DRIFTED_BASES in paths:
+        bases = {path for path, pin in pinned.items() if pin.crlf_normalised}
+        for path in sorted(drifted_bases(root) - bases):
+            problems.append(f"{path}: listed in {DRIFTED_BASES}, but no capsule pins it as a base")
     for path in sorted(pinned) if paths is None else selected(pinned, paths):
         expected, source, crlf_normalised, revision = pinned[path]
         try:
@@ -145,14 +153,16 @@ def check(root: Path, paths: Iterable[str] | None = None) -> list[str]:
                     problems.append(f"{path}: pinned historical Git blob {revision} is unavailable")
                     continue
                 raw = result.stdout
+                # An entry for an untouched file would only switch its work-tree check off.
+                current = root / path
+                if current.is_file() and digest(current.read_bytes(), crlf_normalised) == expected:
+                    problems.append(f"{path}: listed in {DRIFTED_BASES}, but still matches its pin; remove the entry")
             else:
                 raw = (root / path).read_bytes()
         except FileNotFoundError:
             problems.append(f"{path}: missing, but pinned by {source}")
             continue
-        if crlf_normalised:
-            raw = raw.replace(b"\r\n", b"\n")
-        actual = hashlib.sha256(raw).hexdigest()
+        actual = digest(raw, crlf_normalised)
         if actual != expected:
             problems.append(f"{path}: sha256 {actual} does not match {expected} pinned by {source}")
     return problems
@@ -169,7 +179,8 @@ def main(argv: list[str] | None = None) -> int:
     if problems:
         print(
             "Pinned bytes changed. If a formatter or editor did this, restore the file "
-            "(git checkout -- <path>); if the change is intended, update the pin in the same commit.",
+            "(git checkout -- <path>); if the change is intended, update the pin in the same commit "
+            f"(for a capsule base, add its path to {DRIFTED_BASES}).",
             file=sys.stderr,
         )
     return 1 if problems else 0
