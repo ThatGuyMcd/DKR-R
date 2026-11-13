@@ -1008,6 +1008,13 @@ struct DirectSessionTestAccess {
         std::scoped_lock lock(session.mutex_);
         return session.next_commit_frame_;
     }
+    // True once Player 1 holds a racer's authored (not predicted) sample for
+    // a frame, i.e. the sample beat the commit deadline.
+    static bool remote_input_received(const DirectSession& session,
+                                      std::uint8_t slot, std::uint32_t frame) {
+        std::scoped_lock lock(session.mutex_);
+        return session.timeline_.slot_confirmed(slot, frame);
+    }
     static void prepare_fast_forward_guest(
         DirectSession& session, std::uint32_t first_frame,
         std::uint32_t frame_count, bool break_last_link = false) {
@@ -1854,7 +1861,12 @@ int main() {
             diagnostic_error));
         assert(diagnostic_client.join(diagnostic_host.view().invite,
             "Client", diagnostic_error));
-        pump_pair(diagnostic_host, diagnostic_client, 80);
+        pump_pair_until(diagnostic_host, diagnostic_client,
+            "save diagnostic pending join", [&] {
+                return diagnostic_client.view().state ==
+                           ConnectionState::AwaitingApproval &&
+                       !diagnostic_host.view().pending_joins.empty();
+            });
         assert(diagnostic_client.view().state ==
                ConnectionState::AwaitingApproval);
         assert(diagnostic_host.view().pending_joins.size() == 1U);
@@ -1864,7 +1876,16 @@ int main() {
         assert(diagnostic_host.approve_join(
             diagnostic_host.view().pending_joins[0].request_id,
             diagnostic_error));
-        pump_pair(diagnostic_host, diagnostic_client, 80);
+        // Admission and the save transfer each cross both network workers;
+        // wait for the synchronized end state, not a fixed pump count.
+        pump_pair_until(diagnostic_host, diagnostic_client,
+            "synchronized online save", [&] {
+                const auto client_view = diagnostic_client.view();
+                return client_view.state == ConnectionState::Lobby &&
+                       client_view.local_online_save_ready &&
+                       client_view.online_save_ready[0] &&
+                       diagnostic_host.view().online_save_ready[1];
+            });
         assert(diagnostic_client.view().state == ConnectionState::Lobby);
         assert(installed && installed_save == host_save);
         assert(diagnostic_client.view().local_online_save_ready);
@@ -1885,7 +1906,11 @@ int main() {
             ConnectionMethod::Lan, "Host", rules, error));
         assert(mismatched_client.join(no_save_host.view().invite,
             "Client", error));
-        pump_pair(no_save_host, mismatched_client, 80);
+        pump_pair_until(no_save_host, mismatched_client,
+            "unvalidated save rejection", [&] {
+                return mismatched_client.view().state ==
+                       ConnectionState::Failed;
+            });
         assert(mismatched_client.view().state == ConnectionState::Failed);
         assert(mismatched_client.view().status.find("validated save") !=
                std::string::npos);
@@ -1902,7 +1927,10 @@ int main() {
         const std::string first_invite = guarded_host.view().invite;
         assert(guarded_host.set_lobby_locked(true, guarded_error));
         assert(rejected_client.join(first_invite, "Rejected", guarded_error));
-        pump_pair(guarded_host, rejected_client, 80);
+        pump_pair_until(guarded_host, rejected_client, "locked lobby rejection",
+            [&] {
+                return rejected_client.view().state == ConnectionState::Failed;
+            });
         assert(rejected_client.view().state == ConnectionState::Failed);
         assert(guarded_host.view().pending_joins.empty());
         assert(guarded_host.set_lobby_locked(false, guarded_error));
@@ -1912,14 +1940,25 @@ int main() {
         DirectSession admitted_client;
         configure_online_session(admitted_client);
         assert(admitted_client.join(guarded_host.view().invite, "Admitted", guarded_error));
-        pump_pair(guarded_host, admitted_client, 80);
+        pump_pair_until(guarded_host, admitted_client, "pending join", [&] {
+            return !guarded_host.view().pending_joins.empty();
+        });
         assert(guarded_host.view().pending_joins.size() == 1U);
         assert(guarded_host.approve_join(
             guarded_host.view().pending_joins[0].request_id, guarded_error));
-        pump_pair(guarded_host, admitted_client, 80);
+        pump_pair_until(guarded_host, admitted_client, "admitted lobby", [&] {
+            return admitted_client.view().state == ConnectionState::Lobby;
+        });
         assert(admitted_client.view().state == ConnectionState::Lobby);
         assert(guarded_host.kick_player(1U, guarded_error));
-        pump_pair(guarded_host, admitted_client, 20);
+        // The kick is one Disconnect datagram: Player 1's worker sends it and
+        // the guest's worker must receive it before the guest fails. Wait for
+        // that transition, not a fixed 20 ms of pumping that a descheduled
+        // worker overruns while the guest is still in Lobby.
+        pump_pair_until(guarded_host, admitted_client, "kicked guest to fail",
+            [&] {
+                return admitted_client.view().state == ConnectionState::Failed;
+            });
         assert(admitted_client.view().state == ConnectionState::Failed);
         assert(!guarded_host.view().room.players[1].occupied);
     }
@@ -2208,6 +2247,28 @@ int main() {
         }
 
         for (std::uint32_t frame = 0U; frame < 64U; ++frame) {
+            if (frame >= four_rules.manual_input_delay) {
+                // Rollback lets Player 1 commit a hold-last prediction for a
+                // racer whose sample misses the input-delay deadline, and that
+                // commit is immutable. Each guest submitted this frame's
+                // sample two iterations ago; wait until Player 1 holds it so
+                // the slot check below sees routing, not network latency.
+                const auto received_deadline =
+                    std::chrono::steady_clock::now() + std::chrono::seconds(3);
+                for (std::uint8_t slot = 1U; slot < PlayerCount; ++slot) {
+                    while (!DirectSessionTestAccess::remote_input_received(
+                        four_host, slot, frame)) {
+                        if (std::chrono::steady_clock::now() >=
+                            received_deadline) {
+                            std::cerr << "Timed out waiting for Player "
+                                      << int(slot) + 1 << "'s frame " << frame
+                                      << " input at Player 1\n";
+                            std::abort();
+                        }
+                        pump_sessions(sessions, 1);
+                    }
+                }
+            }
             std::array<FrameInputs, PlayerCount> committed{};
             std::array<std::future<bool>, PlayerCount> input_futures;
             for (std::size_t index = 0U; index < sessions.size(); ++index) {
