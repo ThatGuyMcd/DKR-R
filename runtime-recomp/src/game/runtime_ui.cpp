@@ -9501,6 +9501,15 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     if (application.presentQueue == nullptr || application.framebufferGraphicsWorker == nullptr) {
         return;
     }
+    // HUD Fit gutters read g_frame_state viewport aspect. Publish every present
+    // even when the ImGui overlay is closed — otherwise Expand world + stale HUD.
+    if (auto* hud_window = static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window())) {
+        int hud_viewport_width = 0;
+        int hud_viewport_height = 0;
+        SDL_GetWindowSize(hud_window, &hud_viewport_width, &hud_viewport_height);
+        dkr::runtime::hud::set_viewport_extent(hud_viewport_width,
+                                               hud_viewport_height);
+    }
     PumpFriendPresence();
     const bool show_overlay =
         g_overlay_visible.load(std::memory_order_acquire);
@@ -9563,13 +9572,6 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     }
 #endif
     inspector->newFrame(application.framebufferGraphicsWorker.get());
-    if (auto* hud_window = static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window())) {
-        int hud_viewport_width = 0;
-        int hud_viewport_height = 0;
-        SDL_GetWindowSize(hud_window, &hud_viewport_width, &hud_viewport_height);
-        dkr::runtime::hud::set_viewport_extent(hud_viewport_width,
-                                               hud_viewport_height);
-    }
     ApplyStyle();
     ImGui::GetIO().ConfigFlags |=
         ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
