@@ -17,6 +17,7 @@ runtime-recomp/src/game/mods/legacy_character_menu_render.hpp
 runtime-recomp/src/game/mods/legacy_character_stage.cpp
 runtime-recomp/src/game/mods/legacy_character_stage.hpp
 runtime-recomp/src/game/mods/magic_code_dispatch.h
+runtime-recomp/src/game/netplay/quick_join_transport.cpp
 runtime-recomp/src/game/rt64_renderer.cpp
 runtime-recomp/src/game/runtime_code_mods.cpp
 runtime-recomp/src/game/runtime_graphics_ui.inl

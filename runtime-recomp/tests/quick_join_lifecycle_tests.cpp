@@ -76,6 +76,8 @@ struct QuickJoinTestAccess {
             std::map<std::string, std::shared_ptr<rtc::WebSocket>> routes;
             std::vector<std::shared_ptr<rtc::WebSocket>> sockets;
             std::atomic<bool> reject{false};
+            std::map<std::string, unsigned> delivered;
+            std::set<std::string> answered;
         };
         auto state = std::make_shared<Server>();
         rtc::WebSocketServer::Configuration config;
@@ -88,7 +90,7 @@ struct QuickJoinTestAccess {
                 const auto socket = weak.lock(); if (!socket) return;
                 const auto id = socket->path().value_or("/").substr(1);
                 if (state->reject.load()) { socket->send(Json{{"type", "ID-TAKEN"}}.dump()); return; }
-                { std::lock_guard lock(state->mutex); state->routes[id] = socket; }
+                { std::lock_guard lock(state->mutex); state->routes[id] = socket; ++state->delivered[id]; }
                 socket->onMessage([state, id](rtc::message_variant message) {
                     if (!std::holds_alternative<std::string>(message)) return;
                     auto packet = Json::parse(std::get<std::string>(message));
@@ -98,7 +100,12 @@ struct QuickJoinTestAccess {
                       const auto found = state->routes.find(packet["dst"].get<std::string>());
                       if (found != state->routes.end()) target = found->second; }
                     packet["src"] = id;
-                    if (target && target->isOpen()) target->send(packet.dump());
+                    if (!target || !target->isOpen()) return;
+                    { std::lock_guard lock(state->mutex);
+                      const auto dst = packet["dst"].get<std::string>();
+                      ++state->delivered[dst];
+                      if (packet.value("type", "") == "ANSWER") state->answered.insert(dst); }
+                    target->send(packet.dump());
                 });
                 socket->send(Json{{"type", "OPEN"}}.dump());
             });
@@ -145,10 +152,38 @@ struct QuickJoinTestAccess {
         assert(host.quick_join_code() == "ABCDE" && host.signaling_ready_.load());
         state->reject.store(false);
         assert(client.open(0, error));
+        // Hold the client's first offer construction open after its channels
+        // exist but before the route is registered, until the window has really
+        // been exercised: either the transport is holding signalling for the
+        // unregistered route (the OFFER was produced and kept back), or the
+        // host's ANSWER was delivered and every delivered message was handled
+        // (the OFFER escaped and the reply met an unregistered route). The test
+        // asserts only on the connection outcome. The bound is a safety net.
+        bool construction_held = false;
+        client.construction_hook_ = [&](int stage) {
+            if (stage != 6 || construction_held) return;
+            construction_held = true;
+            const auto start = std::chrono::steady_clock::now();
+            const char* reason = "2 s bound";
+            while (std::chrono::steady_clock::now() < start + std::chrono::seconds(2)) {
+                if (client.signals_held_.load() > 0U) { reason = "signalling held"; break; }
+                {
+                    std::lock_guard lock(state->mutex);
+                    if (state->answered.contains(client.local_peer_id_) &&
+                        client.signals_handled_.load() >= state->delivered[client.local_peer_id_]) {
+                        reason = "answer handled"; break;
+                    }
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            std::cerr << "Construction hold exited on " << reason << " after "
+                      << std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - start).count() << " ms\n";
+        };
         host.set_quick_join_bootstrap("original");
         std::string bootstrap; PeerAddress address;
         wait([&] { return !bootstrap.empty() || client.take_quick_join_bootstrap(bootstrap, address); });
-        assert(bootstrap == "original");
+        assert(bootstrap == "original" && construction_held);
         wait([&] { return client.traffic_ready(address, TransportTrafficClass::Authoritative); });
         // Actual SCTP delivery: this first run is not a saturation claim.
         std::set<unsigned> received;
