@@ -34,7 +34,7 @@ def main():
             "reference-sdk-only.toml",
         )
     ]
-    for name in ("include", "examples", "reference-us-v77", "reference-us-v80"):
+    for name in ("include", "examples", "schema", "reference-us-v77", "reference-us-v80"):
         sources += sorted(f for f in (sdk / name).rglob("*") if f.is_file())
     for source in sources:
         if source.is_symlink() or source.suffix not in (

@@ -111,6 +111,11 @@ not by changing schema to 2. Tools UI resources have their own schema: 2.
       "requires": {"core": 1, "game-events": 1, "entities2": 2, "transactions2": 2}
     }
 
+schema/dkr.schema.json is a JSON Schema for dkr.json. Add a "$schema" key
+pointing at it (the loader ignores keys it doesn't know) to get completion
+and validation in your editor, for example
+"$schema": "https://raw.githubusercontent.com/ThatGuyMcd/DKR-R/main/modding/schema/dkr.schema.json".
+
 Resources map logical IDs to project-relative files. No absolute paths,
 parent-directory escapes or symlinks. Declare every resource you use; a mod
 cannot fetch an undeclared file from someone's computer. The example Dev Menu
