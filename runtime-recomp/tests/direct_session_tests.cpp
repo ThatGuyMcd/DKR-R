@@ -3113,7 +3113,9 @@ int main() {
     const std::uint32_t prefinish_mismatch = *recovery + 1U;
     assert(client.request_rollback_recovery(
         prefinish_mismatch, "rollback gameplay state"));
-    pump_pair(host, client, 30);
+    pump_pair_until(host, client, "pre-finish recovery announcement", [&] {
+        return host.recovery_frame().has_value() && client.recovery_frame().has_value();
+    });
     assert(host.recovery_frame().has_value());
     assert(client.recovery_frame().has_value());
     std::uint32_t finish_frame = prefinish_mismatch;
