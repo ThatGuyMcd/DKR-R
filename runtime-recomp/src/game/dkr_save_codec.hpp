@@ -19,6 +19,9 @@ constexpr std::uint8_t kMaximumTotalBalloons = 47U;
 constexpr std::uint8_t kMaximumHubBalloons = 7U;
 constexpr std::uint8_t kMaximumWorldBalloons = 8U;
 constexpr std::uint8_t kMaximumAmuletPieces = 4U;
+// The total balloon counter is a 7-bit field. The Free Balloon magic code can
+// push it past kMaximumTotalBalloons, so the editor allows anything that fits.
+constexpr std::uint8_t kMaximumStoredBalloons = 127U;
 
 struct AdventureSlot {
     std::array<std::uint8_t, kCourseCount> course_status{};
@@ -88,6 +91,21 @@ bool canonical_bytes(std::span<const std::uint8_t> bytes,
 void normalise_editable_fields(SaveImage& image);
 bool validate_editable_ranges(const SaveImage& image,
                               std::string* error = nullptr);
+
+// Balloon accounting. The save stores a total plus one count per racing world;
+// central island balloons exist only in the total. Anything above the five
+// worlds plus a full central island (7) can only come from the Free Balloon
+// magic code and is reported as bonus. Below that the format can't tell a code
+// balloon from a central island balloon, so it counts as central island.
+unsigned world_balloons(const AdventureSlot& slot);
+unsigned hub_balloons(const AdventureSlot& slot);
+unsigned bonus_balloons(const AdventureSlot& slot);
+// Largest bonus the slot can hold: 0 unless the central island is full, then
+// whatever still fits in the 7-bit total.
+unsigned maximum_bonus_balloons(const AdventureSlot& slot);
+// Rewrite the total from the current world counts, a central island count and
+// a bonus count. Each is clamped to what the save can represent.
+void set_balloon_total(AdventureSlot& slot, unsigned hub, unsigned bonus);
 
 std::string sanitise_name(std::string_view value);
 const std::array<const char*, kCourseCount>& course_names();

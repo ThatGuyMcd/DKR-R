@@ -412,19 +412,11 @@ void dkr::runtime::saves::codec::normalise_editable_fields(SaveImage& image) {
         slot.wizpig_amulet = std::min(slot.wizpig_amulet,
                                       kMaximumAmuletPieces);
 
-        unsigned world_total = 0U;
         for (std::size_t world = 1U; world < kWorldCount; ++world) {
             slot.balloons[world] = std::min(slot.balloons[world],
                                              kMaximumWorldBalloons);
-            world_total += slot.balloons[world];
         }
-        const unsigned saved_total = std::min<unsigned>(
-            slot.balloons[0], kMaximumTotalBalloons);
-        const unsigned hub_count = saved_total > world_total
-            ? std::min<unsigned>(saved_total - world_total,
-                                 kMaximumHubBalloons)
-            : 0U;
-        slot.balloons[0] = static_cast<std::uint8_t>(world_total + hub_count);
+        set_balloon_total(slot, hub_balloons(slot), bonus_balloons(slot));
         slot.name = sanitise_name(slot.name);
     }
     image.settings.language = std::min(image.settings.language,
@@ -463,11 +455,10 @@ bool dkr::runtime::saves::codec::validate_editable_ranges(
             }
             world_total += slot.balloons[world];
         }
-        if (slot.balloons[0] > kMaximumTotalBalloons ||
-            world_total > slot.balloons[0] ||
-            slot.balloons[0] - world_total > kMaximumHubBalloons) {
+        if (slot.balloons[0] > kMaximumStoredBalloons ||
+            world_total > slot.balloons[0]) {
             if (error) *error = prefix +
-                "balloon totals must equal the five worlds plus DKR-R's central island region.";
+                "the balloon total cannot be less than the five worlds combined.";
             return false;
         }
     }
@@ -476,6 +467,47 @@ bool dkr::runtime::saves::codec::validate_editable_ranges(
         return false;
     }
     return true;
+}
+
+unsigned dkr::runtime::saves::codec::world_balloons(const AdventureSlot& slot) {
+    unsigned total = 0U;
+    for (std::size_t world = 1U; world < kWorldCount; ++world) {
+        total += std::min(slot.balloons[world], kMaximumWorldBalloons);
+    }
+    return total;
+}
+
+unsigned dkr::runtime::saves::codec::hub_balloons(const AdventureSlot& slot) {
+    const unsigned worlds = world_balloons(slot);
+    return slot.balloons[0] > worlds
+        ? std::min<unsigned>(slot.balloons[0] - worlds, kMaximumHubBalloons)
+        : 0U;
+}
+
+unsigned dkr::runtime::saves::codec::bonus_balloons(const AdventureSlot& slot) {
+    const unsigned earned = world_balloons(slot) + hub_balloons(slot);
+    const unsigned total = std::min(slot.balloons[0], kMaximumStoredBalloons);
+    return total > earned ? total - earned : 0U;
+}
+
+unsigned dkr::runtime::saves::codec::maximum_bonus_balloons(
+    const AdventureSlot& slot) {
+    if (hub_balloons(slot) < kMaximumHubBalloons) return 0U;
+    return kMaximumStoredBalloons -
+        (world_balloons(slot) + kMaximumHubBalloons);
+}
+
+void dkr::runtime::saves::codec::set_balloon_total(AdventureSlot& slot,
+                                                   unsigned hub,
+                                                   unsigned bonus) {
+    const unsigned worlds = world_balloons(slot);
+    hub = std::min<unsigned>(hub, kMaximumHubBalloons);
+    // A bonus is only representable on top of a full central island; with a
+    // partial island the extra balloons would read back as island balloons.
+    bonus = hub == kMaximumHubBalloons
+        ? std::min<unsigned>(bonus, kMaximumStoredBalloons - worlds - hub)
+        : 0U;
+    slot.balloons[0] = static_cast<std::uint8_t>(worlds + hub + bonus);
 }
 
 std::string dkr::runtime::saves::codec::sanitise_name(std::string_view value) {
