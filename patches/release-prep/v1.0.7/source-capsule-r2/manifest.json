@@ -246,7 +246,7 @@
       "src/game/custom_tracks.cpp": {
         "sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563",
         "base": "runtime-recomp/src/game/custom_tracks.cpp",
-        "base_sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563"
+        "base_sha256": "166b32373929c80fb7a342146c6fe30e25c4a4ecdc8ece03d26ef7aa22902587"
       },
       "src/game/custom_tracks.hpp": {
         "sha256": "05e2c5d5590be62c2880ea997da9f8221f57801356e54198665caa1fc3e22cc0",
@@ -613,7 +613,7 @@
       "src/game/mobile_graphics_preset.hpp": {
         "sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2",
         "base": "runtime-recomp/src/game/mobile_graphics_preset.hpp",
-        "base_sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2"
+        "base_sha256": "0df57598bb10b72429159a77a44c30d42f11855f4c903e1af14828f542a0ab2d"
       },
       "src/game/mobile_touch_policy.hpp": {
         "sha256": "f2de5ebc0f403385244d33b7b4355fabbc9a7634c1aab4d0691738f96ce0ff9d",
@@ -1059,7 +1059,7 @@
       "src/game/mods/magic_code_dispatch.h": {
         "sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7",
         "base": "runtime-recomp/src/game/mods/magic_code_dispatch.h",
-        "base_sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7"
+        "base_sha256": "d819d4ffb0dac82ea2dbbb9b1555088b3a759e40a0ba2dfa26557a506ec593da"
       },
       "src/game/mods/magic_code_effects.cpp": {
         "sha256": "0109aea8ac4edd36ee6d9a51b2bc1982cc31bf311b369377cc7092ebf8abbb17",
@@ -2095,7 +2095,7 @@
       "src/game/runtime_code_mods.cpp": {
         "sha256": "f5f34ecda5ea2598349850d8bad4f3ae108502d7f0f833ff19093336a61be445",
         "base": "runtime-recomp/src/game/runtime_code_mods.cpp",
-        "base_sha256": "f5f34ecda5ea2598349850d8bad4f3ae108502d7f0f833ff19093336a61be445"
+        "base_sha256": "5656765336c8263f098135e7207b8f62e5f39f2bb472796b98ce306fd6c32199"
       },
       "src/game/runtime_code_mods.hpp": {
         "sha256": "3072c6e850c0966064c474d24a74d8ad30572feb5a6ce8558b53d396df7722e3",
@@ -2140,7 +2140,7 @@
       "src/game/runtime_graphics_ui.inl": {
         "sha256": "dcc2a46d71534baecfb9c503f98bb83a2bf229b5c4df9318832ef1bb72ff982f",
         "base": "runtime-recomp/src/game/runtime_graphics_ui.inl",
-        "base_sha256": "dcc2a46d71534baecfb9c503f98bb83a2bf229b5c4df9318832ef1bb72ff982f"
+        "base_sha256": "150958d74243a0a08743104cb51c2e7b46ae4e17a83b7e3980ca94b1ff0ba074"
       },
       "src/game/runtime_hud_layout.cpp": {
         "sha256": "9ec1d648e835dfb6b61495f888a6685d10ce75daf3137c7308e368709ab4d7ad",
@@ -2195,7 +2195,7 @@
       "src/game/runtime_metal_layer.mm": {
         "sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a",
         "base": "runtime-recomp/src/game/runtime_metal_layer.mm",
-        "base_sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a"
+        "base_sha256": "8868dff8eafff0caf1c15b644310a47571bd964010c2908d5dafd77a4fe9d148"
       },
       "src/game/runtime_mipmap_loading.hpp": {
         "sha256": "3b454625d8ce2291ad777fc2cefb2f022aabb6c2031b51b0c18772a7920c294f",
@@ -2233,9 +2233,9 @@
         "base_sha256": "a9c10f99e687b069908dc846b11ee9fe1396a7e4f93d29ab861803b44523a03a"
       },
       "src/game/runtime_platform.cpp": {
-        "sha256": "d935cc6b0edaa281c77540bcdf2ea3c6c78de56de151cc3d9a4205772840fce5",
+        "sha256": "efdba8e31fc32a9636bd456c1dffb1998c8bef485fa8a5e6f9384ce4ffaeae65",
         "base": "runtime-recomp/src/game/runtime_platform.cpp",
-        "base_sha256": "d935cc6b0edaa281c77540bcdf2ea3c6c78de56de151cc3d9a4205772840fce5"
+        "base_sha256": "ebe74a5ff81146c87dec9a2da7c7f324ccc176bb84fd2c8e2427b64c1ac0c3b7"
       },
       "src/game/runtime_platform.hpp": {
         "sha256": "51f44b3b0719a09e3b6176a8e4e4d92a041f1fe16205ef2199c320f4898d6c22",
@@ -2593,9 +2593,9 @@
         "base_sha256": "0d6080326b9794cf468e5c54f2b93bfbb01f43f39b6c6eaf04cbd9f1e53df0dd"
       },
       "src/input/sdl3_input_host.cpp": {
-        "sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5",
+        "sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520",
         "base": "runtime-recomp/src/input/sdl3_input_host.cpp",
-        "base_sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5"
+        "base_sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520"
       },
       "src/ios/apple_update_http.mm": {
         "sha256": "7a5bb4c23d25f5df264dad68105fcdae29f17c118e39c665d7d5361a2874cb37",
@@ -2980,7 +2980,7 @@
       "src/game/custom_tracks.cpp": {
         "sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563",
         "base": "runtime-recomp/src/game/custom_tracks.cpp",
-        "base_sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563"
+        "base_sha256": "166b32373929c80fb7a342146c6fe30e25c4a4ecdc8ece03d26ef7aa22902587"
       },
       "src/game/custom_tracks.hpp": {
         "sha256": "05e2c5d5590be62c2880ea997da9f8221f57801356e54198665caa1fc3e22cc0",
@@ -3350,7 +3350,7 @@
       "src/game/mobile_graphics_preset.hpp": {
         "sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2",
         "base": "runtime-recomp/src/game/mobile_graphics_preset.hpp",
-        "base_sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2"
+        "base_sha256": "0df57598bb10b72429159a77a44c30d42f11855f4c903e1af14828f542a0ab2d"
       },
       "src/game/mobile_touch_policy.hpp": {
         "sha256": "f2de5ebc0f403385244d33b7b4355fabbc9a7634c1aab4d0691738f96ce0ff9d",
@@ -3796,7 +3796,7 @@
       "src/game/mods/magic_code_dispatch.h": {
         "sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7",
         "base": "runtime-recomp/src/game/mods/magic_code_dispatch.h",
-        "base_sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7"
+        "base_sha256": "d819d4ffb0dac82ea2dbbb9b1555088b3a759e40a0ba2dfa26557a506ec593da"
       },
       "src/game/mods/magic_code_effects.cpp": {
         "sha256": "0109aea8ac4edd36ee6d9a51b2bc1982cc31bf311b369377cc7092ebf8abbb17",
@@ -4842,7 +4842,7 @@
       "src/game/runtime_code_mods.cpp": {
         "sha256": "f5f34ecda5ea2598349850d8bad4f3ae108502d7f0f833ff19093336a61be445",
         "base": "runtime-recomp/src/game/runtime_code_mods.cpp",
-        "base_sha256": "f5f34ecda5ea2598349850d8bad4f3ae108502d7f0f833ff19093336a61be445"
+        "base_sha256": "5656765336c8263f098135e7207b8f62e5f39f2bb472796b98ce306fd6c32199"
       },
       "src/game/runtime_code_mods.hpp": {
         "sha256": "3072c6e850c0966064c474d24a74d8ad30572feb5a6ce8558b53d396df7722e3",
@@ -4888,7 +4888,7 @@
       "src/game/runtime_graphics_ui.inl": {
         "sha256": "692a0489adfa74d83761ceb06055fe89f628bef9a590e9ac0673ac66800e86f2",
         "base": "runtime-recomp/src/game/runtime_graphics_ui.inl",
-        "base_sha256": "dcc2a46d71534baecfb9c503f98bb83a2bf229b5c4df9318832ef1bb72ff982f",
+        "base_sha256": "150958d74243a0a08743104cb51c2e7b46ae4e17a83b7e3980ca94b1ff0ba074",
         "patch": "0f00e9ca7731b782bd69da6ae4aa1eec93de6ac6bf685ce8bc545081ddddcc5e.patch"
       },
       "src/game/runtime_hud_layout.cpp": {
@@ -4946,7 +4946,7 @@
       "src/game/runtime_metal_layer.mm": {
         "sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a",
         "base": "runtime-recomp/src/game/runtime_metal_layer.mm",
-        "base_sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a"
+        "base_sha256": "8868dff8eafff0caf1c15b644310a47571bd964010c2908d5dafd77a4fe9d148"
       },
       "src/game/runtime_mipmap_loading.hpp": {
         "sha256": "3b454625d8ce2291ad777fc2cefb2f022aabb6c2031b51b0c18772a7920c294f",
@@ -4984,9 +4984,9 @@
         "base_sha256": "a9c10f99e687b069908dc846b11ee9fe1396a7e4f93d29ab861803b44523a03a"
       },
       "src/game/runtime_platform.cpp": {
-        "sha256": "87d0099784a3716223de0595ef16211daf43ca8453f9c0041f9b32df8e475b2e",
+        "sha256": "efdba8e31fc32a9636bd456c1dffb1998c8bef485fa8a5e6f9384ce4ffaeae65",
         "base": "runtime-recomp/src/game/runtime_platform.cpp",
-        "base_sha256": "d935cc6b0edaa281c77540bcdf2ea3c6c78de56de151cc3d9a4205772840fce5",
+        "base_sha256": "ebe74a5ff81146c87dec9a2da7c7f324ccc176bb84fd2c8e2427b64c1ac0c3b7",
         "patch": "02750fc3d26c5aa7bd1a250b2218908e04ece846ce046f8e0801e214a0f168c4.patch"
       },
       "src/game/runtime_platform.hpp": {
@@ -5091,7 +5091,7 @@
         "base_sha256": "033bae61b4d30a0f94177182dfa20da43d8d3296ddd68f1ae58c77f66d2a54dd"
       },
       "src/game/runtime_ui.cpp": {
-        "sha256": "07f88dd1aa60690c4967bf104427773b9abc808cc5f90a7b968fe3171507d40b",
+        "sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
         "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "patch": "2c20ef4f18f9e2e62bdc92143d226e7bf5e851949b7a13d67f898b3c6a35fd19.patch"
@@ -5347,9 +5347,9 @@
         "base_sha256": "0d6080326b9794cf468e5c54f2b93bfbb01f43f39b6c6eaf04cbd9f1e53df0dd"
       },
       "src/input/sdl3_input_host.cpp": {
-        "sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5",
+        "sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520",
         "base": "runtime-recomp/src/input/sdl3_input_host.cpp",
-        "base_sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5"
+        "base_sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520"
       },
       "src/ios/apple_update_http.mm": {
         "sha256": "7a5bb4c23d25f5df264dad68105fcdae29f17c118e39c665d7d5361a2874cb37",
@@ -5651,7 +5651,7 @@
         "patch": "88155f6417c4e8ce8a3492d2cfbd088f36edf9a3a9c673b1afaae0ef0a58776b.patch"
       },
       "src/game/runtime_ui.cpp": {
-        "sha256": "dfb596090da7b860f358d7a5fc686e275b2f86557fe741460a3f4868201e04fa",
+        "sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
         "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "patch": "9119f8ab41db037f855ba836434393feb85abf5a1995ee83058177f1d38050dd.patch"
@@ -6030,7 +6030,7 @@
       "native/src/game/custom_tracks.cpp": {
         "sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563",
         "base": "runtime-recomp/src/game/custom_tracks.cpp",
-        "base_sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563"
+        "base_sha256": "166b32373929c80fb7a342146c6fe30e25c4a4ecdc8ece03d26ef7aa22902587"
       },
       "native/src/game/custom_tracks.hpp": {
         "sha256": "05e2c5d5590be62c2880ea997da9f8221f57801356e54198665caa1fc3e22cc0",
@@ -6401,7 +6401,7 @@
       "native/src/game/mobile_graphics_preset.hpp": {
         "sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2",
         "base": "runtime-recomp/src/game/mobile_graphics_preset.hpp",
-        "base_sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2"
+        "base_sha256": "0df57598bb10b72429159a77a44c30d42f11855f4c903e1af14828f542a0ab2d"
       },
       "native/src/game/mobile_touch_policy.hpp": {
         "sha256": "f2de5ebc0f403385244d33b7b4355fabbc9a7634c1aab4d0691738f96ce0ff9d",
@@ -6848,7 +6848,7 @@
       "native/src/game/mods/magic_code_dispatch.h": {
         "sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7",
         "base": "runtime-recomp/src/game/mods/magic_code_dispatch.h",
-        "base_sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7"
+        "base_sha256": "d819d4ffb0dac82ea2dbbb9b1555088b3a759e40a0ba2dfa26557a506ec593da"
       },
       "native/src/game/mods/magic_code_effects.cpp": {
         "sha256": "0109aea8ac4edd36ee6d9a51b2bc1982cc31bf311b369377cc7092ebf8abbb17",
@@ -8022,7 +8022,7 @@
       "native/src/game/runtime_code_mods.cpp": {
         "sha256": "08b99abc4d3fbf0e3afabbe45c8b94e735660e09aaada663e35729ba90605f64",
         "base": "runtime-recomp/src/game/runtime_code_mods.cpp",
-        "base_sha256": "f5f34ecda5ea2598349850d8bad4f3ae108502d7f0f833ff19093336a61be445",
+        "base_sha256": "5656765336c8263f098135e7207b8f62e5f39f2bb472796b98ce306fd6c32199",
         "patch": "5bf2b33d8e9b3ecf200cbdd297c576a700f30042fc2323c1839b39d2930712e9.patch"
       },
       "native/src/game/runtime_code_mods.hpp": {
@@ -8070,7 +8070,7 @@
       "native/src/game/runtime_graphics_ui.inl": {
         "sha256": "692a0489adfa74d83761ceb06055fe89f628bef9a590e9ac0673ac66800e86f2",
         "base": "runtime-recomp/src/game/runtime_graphics_ui.inl",
-        "base_sha256": "dcc2a46d71534baecfb9c503f98bb83a2bf229b5c4df9318832ef1bb72ff982f",
+        "base_sha256": "150958d74243a0a08743104cb51c2e7b46ae4e17a83b7e3980ca94b1ff0ba074",
         "patch": "0f00e9ca7731b782bd69da6ae4aa1eec93de6ac6bf685ce8bc545081ddddcc5e.patch"
       },
       "native/src/game/runtime_hud_layout.cpp": {
@@ -8130,7 +8130,7 @@
       "native/src/game/runtime_metal_layer.mm": {
         "sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a",
         "base": "runtime-recomp/src/game/runtime_metal_layer.mm",
-        "base_sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a"
+        "base_sha256": "8868dff8eafff0caf1c15b644310a47571bd964010c2908d5dafd77a4fe9d148"
       },
       "native/src/game/runtime_mipmap_loading.hpp": {
         "sha256": "3b454625d8ce2291ad777fc2cefb2f022aabb6c2031b51b0c18772a7920c294f",
@@ -8170,9 +8170,9 @@
         "patch": "4cd93525825a9866cb18cfe32366d9cbd4c79256bde7793ebf4ce09aa97a041a.patch"
       },
       "native/src/game/runtime_platform.cpp": {
-        "sha256": "87d0099784a3716223de0595ef16211daf43ca8453f9c0041f9b32df8e475b2e",
+        "sha256": "efdba8e31fc32a9636bd456c1dffb1998c8bef485fa8a5e6f9384ce4ffaeae65",
         "base": "runtime-recomp/src/game/runtime_platform.cpp",
-        "base_sha256": "d935cc6b0edaa281c77540bcdf2ea3c6c78de56de151cc3d9a4205772840fce5",
+        "base_sha256": "ebe74a5ff81146c87dec9a2da7c7f324ccc176bb84fd2c8e2427b64c1ac0c3b7",
         "patch": "02750fc3d26c5aa7bd1a250b2218908e04ece846ce046f8e0801e214a0f168c4.patch"
       },
       "native/src/game/runtime_platform.hpp": {
@@ -8280,7 +8280,7 @@
         "base_sha256": "033bae61b4d30a0f94177182dfa20da43d8d3296ddd68f1ae58c77f66d2a54dd"
       },
       "native/src/game/runtime_ui.cpp": {
-        "sha256": "1930980ebeec7e07d8619c68b37495ef73e743299da0aa91f698f0b6bbb7bd75",
+        "sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
         "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "patch": "cb29ff8fb40932821e7bd5cb665dc8ceaced72d35617c816bf066f333e62fad4.patch"
@@ -8536,9 +8536,9 @@
         "base_sha256": "0d6080326b9794cf468e5c54f2b93bfbb01f43f39b6c6eaf04cbd9f1e53df0dd"
       },
       "native/src/input/sdl3_input_host.cpp": {
-        "sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5",
+        "sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520",
         "base": "runtime-recomp/src/input/sdl3_input_host.cpp",
-        "base_sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5"
+        "base_sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520"
       },
       "native/src/ios/apple_update_http.mm": {
         "sha256": "7a5bb4c23d25f5df264dad68105fcdae29f17c118e39c665d7d5361a2874cb37",
@@ -8856,7 +8856,7 @@
       "native/src/game/custom_tracks.cpp": {
         "sha256": "7ec1cd3b7b4d39e0eaaccf632b56fc3b99135c758ab219d8a12fd24db41913f4",
         "base": "runtime-recomp/src/game/custom_tracks.cpp",
-        "base_sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563",
+        "base_sha256": "166b32373929c80fb7a342146c6fe30e25c4a4ecdc8ece03d26ef7aa22902587",
         "patch": "2cb7bfcf74d162b325d8421df7351249c8521177d5b72d3a13af49a3119b0448.patch"
       },
       "native/src/game/mod_store.cpp": {
@@ -8928,7 +8928,7 @@
         "patch": "c16216aceff04f0ce34506ad6292260f350347b84e20c9a6e1b50f8066a1df73.patch"
       },
       "native/src/game/runtime_ui.cpp": {
-        "sha256": "64ec197f04746fa22cffd258f3b388198cb6d8857daae8f009d11177a9659c4e",
+        "sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
         "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "patch": "516011edbe66c7101c15b9b4744f2d85ec33a6fd2b823a6d3e63d5ea7715e6fa.patch"
@@ -9046,7 +9046,7 @@
         "patch": "0424853dd1a0c31276b007d0a2ff8eab58b9800d1dbf1cc8e10f1fd02c8136b8.patch"
       },
       "native/src/game/runtime_ui.cpp": {
-        "sha256": "4363f93073d81fb89ca1c3646fd65f7eea7f82936235a007de1b2a34ef2aa38d",
+        "sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
         "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "patch": "1d06998488c2b1ecdef3151d1a21cf7b808ea56c33b5eec034e1e541e55f3c92.patch"
@@ -9919,7 +9919,7 @@
       "native/src/game/custom_tracks.cpp": {
         "sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563",
         "base": "runtime-recomp/src/game/custom_tracks.cpp",
-        "base_sha256": "10f5c6454d787f0df12c5c28a25260a916fb26e0c5ac43a3bcf243542a8e2563"
+        "base_sha256": "166b32373929c80fb7a342146c6fe30e25c4a4ecdc8ece03d26ef7aa22902587"
       },
       "native/src/game/custom_tracks.hpp": {
         "sha256": "05e2c5d5590be62c2880ea997da9f8221f57801356e54198665caa1fc3e22cc0",
@@ -10289,7 +10289,7 @@
       "native/src/game/mobile_graphics_preset.hpp": {
         "sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2",
         "base": "runtime-recomp/src/game/mobile_graphics_preset.hpp",
-        "base_sha256": "9e55df08cd3f4d6b33b86971515e7e9105f2efd3e174f704077903b45a9ecab2"
+        "base_sha256": "0df57598bb10b72429159a77a44c30d42f11855f4c903e1af14828f542a0ab2d"
       },
       "native/src/game/mobile_touch_policy.hpp": {
         "sha256": "f2de5ebc0f403385244d33b7b4355fabbc9a7634c1aab4d0691738f96ce0ff9d",
@@ -10736,7 +10736,7 @@
       "native/src/game/mods/magic_code_dispatch.h": {
         "sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7",
         "base": "runtime-recomp/src/game/mods/magic_code_dispatch.h",
-        "base_sha256": "c80661027bad9b790ed71fa2a1a446a6e2b82a932396e25c9c9092caff76c8f7"
+        "base_sha256": "d819d4ffb0dac82ea2dbbb9b1555088b3a759e40a0ba2dfa26557a506ec593da"
       },
       "native/src/game/mods/magic_code_effects.cpp": {
         "sha256": "0109aea8ac4edd36ee6d9a51b2bc1982cc31bf311b369377cc7092ebf8abbb17",
@@ -11910,7 +11910,7 @@
       "native/src/game/runtime_code_mods.cpp": {
         "sha256": "08b99abc4d3fbf0e3afabbe45c8b94e735660e09aaada663e35729ba90605f64",
         "base": "runtime-recomp/src/game/runtime_code_mods.cpp",
-        "base_sha256": "f5f34ecda5ea2598349850d8bad4f3ae108502d7f0f833ff19093336a61be445",
+        "base_sha256": "5656765336c8263f098135e7207b8f62e5f39f2bb472796b98ce306fd6c32199",
         "patch": "5bf2b33d8e9b3ecf200cbdd297c576a700f30042fc2323c1839b39d2930712e9.patch"
       },
       "native/src/game/runtime_code_mods.hpp": {
@@ -11958,7 +11958,7 @@
       "native/src/game/runtime_graphics_ui.inl": {
         "sha256": "692a0489adfa74d83761ceb06055fe89f628bef9a590e9ac0673ac66800e86f2",
         "base": "runtime-recomp/src/game/runtime_graphics_ui.inl",
-        "base_sha256": "dcc2a46d71534baecfb9c503f98bb83a2bf229b5c4df9318832ef1bb72ff982f",
+        "base_sha256": "150958d74243a0a08743104cb51c2e7b46ae4e17a83b7e3980ca94b1ff0ba074",
         "patch": "0f00e9ca7731b782bd69da6ae4aa1eec93de6ac6bf685ce8bc545081ddddcc5e.patch"
       },
       "native/src/game/runtime_hud_layout.cpp": {
@@ -12018,7 +12018,7 @@
       "native/src/game/runtime_metal_layer.mm": {
         "sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a",
         "base": "runtime-recomp/src/game/runtime_metal_layer.mm",
-        "base_sha256": "3a232db83a179e18a83f5d13f1de10a79f926ddb67f432bd2c1d5fed6d76e98a"
+        "base_sha256": "8868dff8eafff0caf1c15b644310a47571bd964010c2908d5dafd77a4fe9d148"
       },
       "native/src/game/runtime_mipmap_loading.hpp": {
         "sha256": "3b454625d8ce2291ad777fc2cefb2f022aabb6c2031b51b0c18772a7920c294f",
@@ -12058,9 +12058,9 @@
         "patch": "4cd93525825a9866cb18cfe32366d9cbd4c79256bde7793ebf4ce09aa97a041a.patch"
       },
       "native/src/game/runtime_platform.cpp": {
-        "sha256": "87d0099784a3716223de0595ef16211daf43ca8453f9c0041f9b32df8e475b2e",
+        "sha256": "efdba8e31fc32a9636bd456c1dffb1998c8bef485fa8a5e6f9384ce4ffaeae65",
         "base": "runtime-recomp/src/game/runtime_platform.cpp",
-        "base_sha256": "d935cc6b0edaa281c77540bcdf2ea3c6c78de56de151cc3d9a4205772840fce5",
+        "base_sha256": "ebe74a5ff81146c87dec9a2da7c7f324ccc176bb84fd2c8e2427b64c1ac0c3b7",
         "patch": "02750fc3d26c5aa7bd1a250b2218908e04ece846ce046f8e0801e214a0f168c4.patch"
       },
       "native/src/game/runtime_platform.hpp": {
@@ -12168,7 +12168,7 @@
         "base_sha256": "033bae61b4d30a0f94177182dfa20da43d8d3296ddd68f1ae58c77f66d2a54dd"
       },
       "native/src/game/runtime_ui.cpp": {
-        "sha256": "1930980ebeec7e07d8619c68b37495ef73e743299da0aa91f698f0b6bbb7bd75",
+        "sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "base": "runtime-recomp/src/game/runtime_ui.cpp",
         "base_sha256": "a7605d72848020da28f2fae1b75b55c524a997c021a660b50b4acc51c05fa4fe",
         "patch": "cb29ff8fb40932821e7bd5cb665dc8ceaced72d35617c816bf066f333e62fad4.patch"
@@ -12424,9 +12424,9 @@
         "base_sha256": "0d6080326b9794cf468e5c54f2b93bfbb01f43f39b6c6eaf04cbd9f1e53df0dd"
       },
       "native/src/input/sdl3_input_host.cpp": {
-        "sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5",
+        "sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520",
         "base": "runtime-recomp/src/input/sdl3_input_host.cpp",
-        "base_sha256": "b684b224f3819ab18542f35ab0950e0cfba61d1c3eeaa088a17a6363e381dfa5"
+        "base_sha256": "c0cee7a1c988386698b0e9e51119496a9270438e51b912dec606a5f4d40bb520"
       },
       "native/src/ios/apple_update_http.mm": {
         "sha256": "7a5bb4c23d25f5df264dad68105fcdae29f17c118e39c665d7d5361a2874cb37",

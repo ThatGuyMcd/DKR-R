@@ -1,6 +1,7 @@
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 
+#include "controller_face_etiquette.hpp"
 #include "sdl3_input_protocol.hpp"
 
 #include <algorithm>
@@ -466,6 +467,31 @@ std::optional<Options> ParseOptions(int argc, char** argv) {
     return options;
 }
 
+int SdlControllerTypeCode(SDL_Gamepad* gamepad) {
+    switch (SDL_GetGamepadType(gamepad)) {
+    case SDL_GAMEPAD_TYPE_XBOX360:
+        return dkr::runtime::controllers::kSdlControllerTypeXbox360;
+    case SDL_GAMEPAD_TYPE_XBOXONE:
+        return dkr::runtime::controllers::kSdlControllerTypeXboxOne;
+    case SDL_GAMEPAD_TYPE_PS3:
+        return dkr::runtime::controllers::kSdlControllerTypePs3;
+    case SDL_GAMEPAD_TYPE_PS4:
+        return dkr::runtime::controllers::kSdlControllerTypePs4;
+    case SDL_GAMEPAD_TYPE_PS5:
+        return dkr::runtime::controllers::kSdlControllerTypePs5;
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
+        return dkr::runtime::controllers::kSdlControllerTypeNintendoSwitchPro;
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+        return dkr::runtime::controllers::kSdlControllerTypeJoyConLeft;
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+        return dkr::runtime::controllers::kSdlControllerTypeJoyConRight;
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+        return dkr::runtime::controllers::kSdlControllerTypeJoyConPair;
+    default:
+        return dkr::runtime::controllers::kSdlControllerTypeUnknown;
+    }
+}
+
 void ConfigureSdlHints() {
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "1");
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_STEAMDECK, "1");
@@ -611,6 +637,15 @@ void FillDevicePacket(DevicePacket& packet, const HostDevice& device) {
     for (std::size_t index = 0U; index < packet.buttons.size(); ++index) {
         packet.buttons[index] = SDL_GetGamepadButton(
             device.gamepad, static_cast<SDL_GamepadButton>(index)) ? 1U : 0U;
+    }
+    // SDL3 reports Switch Pro / Joy-Con by Xbox position. Remap the diamond to
+    // Nintendo letters so defaults (confirm = SDL A) match the printed face.
+    const auto family = dkr::runtime::controllers::detect_controller_family(
+        device.name, SdlControllerTypeCode(device.gamepad));
+    if (dkr::runtime::controllers::uses_nintendo_face_etiquette(family)) {
+        dkr::runtime::controllers::apply_nintendo_face_etiquette(packet.buttons);
+        dkr::runtime::controllers::apply_nintendo_face_etiquette(
+            packet.button_bound);
     }
     for (std::size_t index = 0U; index < packet.axes.size(); ++index) {
         packet.axes[index] = SDL_GetGamepadAxis(

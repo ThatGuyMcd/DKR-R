@@ -2634,6 +2634,15 @@ if(BUILD_TESTING)
     add_test(NAME DKRControllerMappingPolicy
              COMMAND DKRControllerMappingPolicyTests)
 
+    add_executable(DKRControllerFaceEtiquetteTests
+        tests/controller_face_etiquette_tests.cpp
+    )
+    target_include_directories(DKRControllerFaceEtiquetteTests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/src/game"
+    )
+    add_test(NAME DKRControllerFaceEtiquette
+             COMMAND DKRControllerFaceEtiquetteTests)
+
     add_executable(DKRControllerDatabaseTests
         tests/controller_database_tests.cpp
     )
