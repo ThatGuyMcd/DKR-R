@@ -1,0 +1,67 @@
+#!/bin/sh
+# AppImage entry point for DKR-R.
+#
+# linuxdeploy keeps libwayland-client.so.0 out of usr/lib on purpose: a bundled
+# copy older than the host's breaks host Mesa EGL/Vulkan drivers built against
+# newer Wayland symbols. SDL2 and GTK still link it directly, so hosts with no
+# Wayland at all (Batocera, minimal X11 installs) can't start without it. The
+# packaged fallback copy is only put on the search path when the host has no
+# copy the loader could actually use.
+set -eu
+
+here="$(dirname "$(readlink -f "$0")")"
+fallback="${here}/usr/lib/wayland-fallback"
+library=libwayland-client.so.0
+
+# ELF magic, EI_CLASS and e_machine as hex, or nothing for a non-ELF file. A
+# host copy only counts when it matches the bundled fallback, so a 32-bit
+# /usr/lib copy on a 64-bit host (or an x86_64 AppImage under FEX/box64) does
+# not hide the fallback.
+elf_identity() {
+  magic="$(od -An -tx1 -N4 "$1" 2>/dev/null | tr -d ' \n')" || magic=''
+  [ "${magic}" = 7f454c46 ] || return 0
+  class="$(od -An -tx1 -j4 -N1 "$1" 2>/dev/null | tr -d ' \n')" || class=''
+  machine="$(od -An -tx1 -j18 -N2 "$1" 2>/dev/null | tr -d ' \n')" || machine=''
+  printf '%s-%s' "${class}" "${machine}"
+}
+
+host_has_matching_library() {
+  wanted="$(elf_identity "${fallback}/${library}")"
+  [ -n "${wanted}" ] || return 1
+  # DKR_APPRUN_LIBRARY_DIRS replaces the whole probe (directories and ldconfig)
+  # so tests can point it at a fake root.
+  if [ -n "${DKR_APPRUN_LIBRARY_DIRS:-}" ]; then
+    candidates=''
+    for directory in ${DKR_APPRUN_LIBRARY_DIRS}; do
+      candidates="${candidates} ${directory}/${library}"
+    done
+  else
+    case "${wanted##*-}" in
+    3e00) triplet=x86_64-linux-gnu ;;
+    b700) triplet=aarch64-linux-gnu ;;
+    *) triplet='' ;;
+    esac
+    candidates=''
+    if [ -n "${triplet}" ]; then
+      candidates="/usr/lib/${triplet}/${library} /lib/${triplet}/${library}"
+    fi
+    candidates="${candidates} /usr/lib64/${library} /lib64/${library} /usr/lib/${library} /lib/${library}"
+    for ldconfig in ldconfig /sbin/ldconfig /usr/sbin/ldconfig; do
+      if command -v "${ldconfig}" >/dev/null 2>&1; then
+        candidates="${candidates} $("${ldconfig}" -p 2>/dev/null | grep -F "${library} (" | sed 's/.*=> //' | tr '\n' ' ')" || true
+        break
+      fi
+    done
+  fi
+  for candidate in ${candidates}; do
+    [ -f "${candidate}" ] && [ "$(elf_identity "${candidate}")" = "${wanted}" ] && return 0
+  done
+  return 1
+}
+
+if [ -d "${fallback}" ] && ! host_has_matching_library; then
+  LD_LIBRARY_PATH="${LD_LIBRARY_PATH:+${LD_LIBRARY_PATH}:}${fallback}"
+  export LD_LIBRARY_PATH
+fi
+
+exec "${here}/usr/bin/DKR-R" "$@"
