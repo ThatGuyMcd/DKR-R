@@ -79,7 +79,7 @@ changed, so untouched legacy code doesn't block you.
 
 Anything that changes simulation, the wire format or an owned service changes
 online compatibility. Bump the identity in `netplay/legacy_identity.hpp` in the
-same PR. Both owners review that file (see `.github/CODEOWNERS`).
+same PR. Both owners review that file.
 
 ## What happened to `patches/<feature>`
 
@@ -99,8 +99,7 @@ settings are in `.github/ruleset-main.json`:
   `macos (macos-15-intel)`, `windows`, `asset-scan`, `dependency-lock`,
   `tooling` and `workflow-lint`. Skipping local hooks with `--no-verify`
   changes nothing about mergeability.
-- No approval is required for ordinary code. Files listed in
-  `.github/CODEOWNERS` (the rule files) need a review from the other owner.
+- No approval is required. The required checks are the gate.
 - Force-pushes and branch deletion are blocked.
 
 `tidy` is advisory for its first four weeks: it annotates findings on changed
