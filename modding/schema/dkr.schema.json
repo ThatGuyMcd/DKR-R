@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/ThatGuyMcd/DKR-R/main/modding/schema/dkr.schema.json",
+  "title": "DKR-R mod metadata (dkr.json)",
+  "description": "DKR-specific metadata at the root of a code mod (.nrm or .dkrcode). Mirrors the package inspector in runtime-recomp/src/game/mods/magic_code_package.cpp plus the SDK 2 layers in patches/sdk2/. Unknown keys are ignored by the inspector, so editor-only keys such as $schema are allowed. Duplicate keys and nesting deeper than 20 levels are rejected. Cross-file rules (resources must exist in the archive, live_options must name Number/Enum options in mod.json) are not expressible here.",
+  "type": "object",
+  "required": ["schema", "api", "revisions"],
+  "properties": {
+    "$schema": {
+      "title": "Editor schema",
+      "description": "Optional editor hint. The inspector ignores it.",
+      "type": "string"
+    },
+    "schema": {
+      "title": "Metadata schema",
+      "description": "Metadata schema version. Still 1 for both APIs; API 2 is selected with api: 2, not by changing schema. Write integers without a decimal point; the loader rejects 1.0.",
+      "const": 1,
+      "examples": [1]
+    },
+    "api": {
+      "title": "Executable API",
+      "description": "DKR SDK API major version the mod is built against. API 2 unlocks development sessions, portable profiles, live reload, live options and v2 modules. Write integers without a decimal point; the loader rejects 2.0.",
+      "enum": [1, 2],
+      "examples": [1, 2]
+    },
+    "activation": {
+      "title": "Activation",
+      "description": "When code changes apply. Only restart is supported: code changes require a new game session.",
+      "const": "restart",
+      "default": "restart",
+      "examples": ["restart"]
+    },
+    "online": {
+      "title": "Online execution mode",
+      "description": "Deterministic online policy. offline-only (the default) keeps the mod out of online sessions; deterministic declares the mod safe to run in lockstep.",
+      "enum": ["offline-only", "deterministic"],
+      "default": "offline-only",
+      "examples": ["deterministic"]
+    },
+    "revisions": {
+      "title": "Supported ROM revisions",
+      "description": "ROM revisions the mod supports. One or two distinct values.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": { "enum": ["us.v77", "us.v80"] },
+      "examples": [["us.v77", "us.v80"]]
+    },
+    "requires": {
+      "title": "SDK module versions",
+      "description": "SDK modules the mod imports, mapped to the module version. Versions run from 1 up to the mod's api (API 1 mods can only require version 1). Write integers without a decimal point; the loader rejects 1.0.",
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "type": "integer", "minimum": 1, "maximum": 2 },
+      "examples": [{ "core": 1, "game-events": 1, "entities2": 2 }]
+    },
+    "systems": {
+      "title": "Exclusive systems",
+      "description": "Exclusive systems this mod owns. Two enabled mods that claim the same system are rejected at preparation.",
+      "$ref": "#/$defs/idList",
+      "examples": [["race-laps", "trophy-flow"]]
+    },
+    "conflicts": {
+      "title": "Conflicting mods",
+      "description": "Mod IDs this mod can't be enabled alongside.",
+      "$ref": "#/$defs/idList",
+      "examples": [["another_mod"]]
+    },
+    "requires_tracks": {
+      "title": "Course dependencies",
+      "description": "Course identities the mod needs installed. Distinct non-empty strings of at most 160 characters.",
+      "type": "array",
+      "maxItems": 512,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 160 },
+      "examples": [["fulano_taj_brawl/arena"]]
+    },
+    "resources": {
+      "title": "Immutable resources",
+      "description": "Logical resource IDs mapped to archive-relative files. No absolute paths, parent-directory escapes, backslashes, colons, Windows reserved names or non-ASCII; each file can be mapped once and must exist in the archive. mod.json, dkr.json, mod_binary.bin and mod_syms.bin can't be resources. tools-ui (API 2 only) and source-map have their own schema: 2.",
+      "type": "object",
+      "maxProperties": 256,
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 240,
+        "pattern": "^(?!(?:.*/)?(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|(?:[Cc][Oo][Mm]|[Ll][Pp][Tt])[0-9])(?:[./]|$))(?!.*[^ -~])(?!.*[\\\\:*?\"<>|])(?!(mod\\.json|dkr\\.json|mod_binary\\.bin|mod_syms\\.bin)$)[^/]*[^/. ](/[^/]*[^/. ])*$"
+      },
+      "examples": [{ "tools-ui": "tools.json" }]
+    },
+    "development": {
+      "title": "Development session",
+      "description": "API 2 only: opt into development saves. Must be a boolean for any API; ignored under API 1.",
+      "type": "boolean",
+      "default": false,
+      "examples": [true]
+    },
+    "profile": {
+      "title": "Portable SDK profile",
+      "description": "API 2 only: portable budget profile. compact (32 KiB heap, 100k instructions, 32 native calls), standard (64 KiB, 200k, 128, the default) or large (256 KiB, 500k, 256). Ignored under API 1.",
+      "default": "standard",
+      "examples": ["standard", "large"]
+    },
+    "live_reload": {
+      "title": "Live reload",
+      "description": "API 2 development mods only: offline instruction-only reload. Needs development: true and a nonzero state_schema.",
+      "const": "instruction-only",
+      "examples": ["instruction-only"]
+    },
+    "state_schema": {
+      "title": "Reload state schema",
+      "description": "Nonzero 32-bit version of the state carried across a live reload. Required with live_reload and only checked then. Write integers without a decimal point; the loader rejects 1.0.",
+      "examples": [1]
+    },
+    "live_options": {
+      "title": "Live options",
+      "description": "API 2 mods that require live-settings2: option IDs from mod.json config_schema that may change mid-race. Only Number and Enum options qualify.",
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" },
+      "examples": [["pace"]]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "api": { "const": 1 } } },
+      "then": {
+        "properties": {
+          "requires": { "additionalProperties": { "maximum": 1 } },
+          "live_reload": false,
+          "live_options": false
+        }
+      },
+      "else": {
+        "properties": { "profile": { "enum": ["compact", "standard", "large"] } }
+      }
+    },
+    {
+      "if": { "required": ["live_reload"] },
+      "then": {
+        "required": ["development", "state_schema"],
+        "properties": {
+          "development": { "const": true },
+          "state_schema": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+        }
+      }
+    },
+    {
+      "if": { "required": ["live_options"] },
+      "then": {
+        "required": ["requires"],
+        "properties": { "requires": { "required": ["live-settings2"] } }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]{1,96}$"
+    },
+    "idList": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    }
+  },
+  "examples": [
+    {
+      "schema": 1,
+      "api": 2,
+      "activation": "restart",
+      "online": "deterministic",
+      "development": false,
+      "profile": "standard",
+      "revisions": ["us.v77", "us.v80"],
+      "requires": { "core": 1, "game-events": 1, "entities2": 2, "transactions2": 2 }
+    }
+  ]
+}
