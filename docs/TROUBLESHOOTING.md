@@ -112,7 +112,7 @@ An xdelta needs its exact original source revision; all clients must own that
 source if reconstruction requires it. A filename or successful emulator run is
 not proof of native compatibility.
 
-Use **Help & imports â†’ Prepare all source imports again** after supplying missing
+Use **Help & imports → Prepare all source imports again** after supplying missing
 sources/revisions. Cancel safely; do not modify receipts/reviews/journals.
 Memory budgets remain real even with the larger character roster.
 Reduce enabled content for a budget failure without deleting the installed set.
@@ -190,12 +190,29 @@ launch rather than deleting a ROM/save.
 Some graphics/scenery controls have narrower scope in Experimental Rollback.
 See [Graphics](GRAPHICS.md) for the actual restrictions.
 
+Flickering in Modern that moves as you turn, for example looking at a doorway
+in a hub or in Snowball Valley, is the sparkle particle effect being culled.
+It is more noticeable with a higher FOV and **Visibility margin** (Graphics >
+Vehicles & scenery > Reduce wide-screen scenery pop-in). It does not happen in
+Accurate. Still open: [#10](https://github.com/ThatGuyMcd/DKR-R/issues/10).
+
 ## Controller or gyro trouble
 
 Use [Controls](CONTROLLERS.md) to choose SDL2/SDL3 and run the N64 mapping wizard.
 Auto keeps one selected backend; it should not repeatedly rediscover every
 device during a race. Report periodic spikes with controller model, connection
 type, OS and backend; compare explicit SDL2/SDL3.
+
+If the launcher or game slows down as soon as a controller is connected, set
+**Controls > Advanced compatibility > Controller backend** to SDL2 or SDL3
+instead of Auto. Some controllers only behave on one of them; an 8BitDo N64
+pad over Bluetooth needed SDL3. Adding DKR-R to Steam as a non-Steam game with
+Steam Input enabled has also helped ([#29](https://github.com/ThatGuyMcd/DKR-R/issues/29),
+[#30](https://github.com/ThatGuyMcd/DKR-R/issues/30)).
+
+If controllers land on the wrong player, **Controller assignment** is probably
+on Automatic, which takes the first controller it sees. Choose Manual and
+assign each player's controller; that assignment is saved ([#79](https://github.com/ThatGuyMcd/DKR-R/issues/79)).
 
 Steam Deck native gyro must not also be mapped to mouse/stick by Steam Input.
 Calibrate while still, then recenter at the desired neutral angle.
@@ -210,10 +227,24 @@ character details and the log from that session.
 See [Sound](SOUND.md). Do not claim a missing cue was supplied by a mod until
 its source actually contains it.
 
+## Audio crackles or pops
+
+For short bursts of crackling or popping every few minutes, setting the
+controller backend to SDL2 or SDL3 instead of Auto (see above) is known to
+help, as is launching through Steam.
+If neither helps, add your OS, audio device, controller and FPS target to
+[#62](https://github.com/ThatGuyMcd/DKR-R/issues/62) or
+[#75](https://github.com/ThatGuyMcd/DKR-R/issues/75).
+
 ## Android startup and performance
 
+Android releases are currently unsupported; there is no v1.0.15 APK. See
+[Platform support](PLATFORMS.md). Snapdragon 865 / Adreno 650 devices such as
+the Retroid Pocket 5 crash at launch after `AdrenoVK-0: Failed to link shaders`
+in logcat; that is still open as [#70](https://github.com/ThatGuyMcd/DKR-R/issues/70).
+
 Send device/Android version, build code, graphics settings and scene.
-Use **About DKR-R â†’ Support summary â†’ Export Android Startup Logs** after
+Use **About DKR-R → Support summary → Export Android Startup Logs** after
 reopening the app. If performance recording or export itself crashes, stop
 retrying and report that separately. `adb logcat -d` can capture earlier
 Java/native loader failures when a normal runtime log never starts.
@@ -225,7 +256,7 @@ does not promise every handheld is already qualified.
 
 ## Logs and support reports
 
-Open **About DKR-R â†’ Support summary â†’ EXPORT SUPPORT SUMMARY**.
+Open **About DKR-R → Support summary → EXPORT SUPPORT SUMMARY**.
 The summary omits private paths, save contents, account/device identifiers and
 lobby codes. Raw logs/dumps are different: review them before sharing.
 
@@ -269,6 +300,18 @@ If CMake reports an old `DKRPORT_ROOT` override, migrate to
 A configure failure lists missing dependencies together. The platform setup
 scripts check compiler/SDK prerequisites; the ROM-free checks do not require
 full runtime SDKs.
+
+## Linux AppImage won't start: libwayland-client.so.0
+
+```text
+error while loading shared libraries: libwayland-client.so.0: cannot open shared object file: No such file or directory
+```
+
+AppImages up to v1.0.15 expect the host to supply the Wayland client library.
+Install your distribution's package for it (`libwayland-client0` on
+Debian/Ubuntu). On systems without it, such as Batocera, see
+[#45](https://github.com/ThatGuyMcd/DKR-R/issues/45) for a user-tested
+workaround. Later AppImages carry their own fallback copy and start without it.
 
 ## Linux and Steam Deck launcher performance
 

@@ -71,4 +71,5 @@ Never reformat or "tidy" them:
 - `*.patch` files listed in `patches/manifest.json`, and `modding/reference-us-v*/`.
 - Until the fold deletes the 1.0.7 source capsule: everything under `runtime-recomp/src/` and
   `runtime-recomp/tests/replay_probe/` that the capsule pins as a base. Real code changes there are fine; formatting
-  passes and whitespace fixes are not.
+  passes and whitespace fixes are not. The first real change to a base also adds its path to
+  `scripts/pinned-drifted-bases.txt`, in the same commit.

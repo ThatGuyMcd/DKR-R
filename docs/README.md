@@ -28,7 +28,7 @@ are still useful, but they aren't the current feature list.
 | [Vehicles](VEHICLES.md) | Custom .dkrkart cars, native selection and managed Store installations. |
 | [Achievements](ACHIEVEMENTS.md) | 94 local goals, recognition, notifications and progress protection. |
 | [Library administration](MOD_LIBRARY_ADMIN.md) | FTP uploads, batch entries, image controls, usage filters and deployment. |
-| [Troubleshooting](TROUBLESHOOTING.md) | Failures, support exports and the correct runtime logs. |
+| [Troubleshooting](TROUBLESHOOTING.md) | Failures, recurring player issues, support exports and the correct runtime logs. |
 | [Platform support](PLATFORMS.md) | v1.0.15 packages, Linux requirements and excluded platforms. |
 
 ## Track Lab and development

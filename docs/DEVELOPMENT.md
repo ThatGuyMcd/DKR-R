@@ -38,6 +38,8 @@ anything or changes dependency checkouts. `--list` shows the selected commands.
 On Windows, use `python` in place of `python3`; POSIX-only tests report skips.
 To run the Track Lab Python suites, use `--suite track-lab`. Missing private
 fixtures are reported as SKIP, not as successful retail-content tests.
+Tooling tests that need CMake (and Ninja) run in the opt-in `--suite host-tools`
+(CTest runs them too); `--suite all` includes both.
 
 For a single regression, invoke its test file directly, for example:
 
