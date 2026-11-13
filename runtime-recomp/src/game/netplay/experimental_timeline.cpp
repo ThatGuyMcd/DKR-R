@@ -1,3 +1,4 @@
+#include "online_stability/live_delay.hpp"
 #include "experimental_timeline.hpp"
 #include <algorithm>
 #include <limits>
@@ -30,13 +31,14 @@ bool Timeline::needs_local_input(bool live_lead) const {
     // Physical time must not rewind with the simulation. Permit a small,
     // bounded live lead while correcting or waiting, not an unbounded queue
     // of old controls after an outage. Historical samples remain immutable.
-    const auto limit=std::uint64_t(frontier_)+configuration_.input_delay+(live_lead ? 2 : 1);
+    const auto limit=dkr::online_stability::sample_limit(frontier_,configuration_.input_delay,live_lead);
     return inputs_.received_next(configuration_.local_owner)<limit && limit<UINT32_MAX;
 }
 OwnerInputResult Timeline::sample_local(PackedInput input,bool live_lead,dkr::sdk2::Command command) {
     if (!needs_local_input(live_lead)) return OwnerInputResult::Rejected;
     const auto frame=inputs_.received_next(configuration_.local_owner);
     const auto result=inputs_.publish(frame,input,command);
+    if(result==OwnerInputResult::Accepted)dkr::online_stability::input_authored(frame);
     if (result==OwnerInputResult::Accepted && !stage(configuration_.local_owner,frame,input,command))
         return OwnerInputResult::Rejected;
     return result;

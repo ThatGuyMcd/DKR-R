@@ -99,7 +99,7 @@ void StoreQueueRelease(const StoreJson& item, const StoreJson& release, std::str
 void StoreManagerPump() {
     auto& manager = dkr::store::installations();
     const auto view = manager.view();
-    const bool safe = !dkr::runtime::netplay::session().active() && !g_online_mod_host_request.has_value() &&
+    const bool safe = !g_store_in_game && !dkr::runtime::netplay::session().active() && !g_online_mod_host_request.has_value() &&
                       !g_mod_launch.snapshot().modal && !g_legacy_imports.snapshot().busy &&
                       !g_code_library.view()->busy && !StoreVehiclesBusy() && !TexturePackImportRunning() && !DialogJobRunning();
     manager.safe_to_write(safe);
@@ -310,10 +310,7 @@ void StoreManagerModals() {
         ImGui::EndChild();
         StoreActionLine({{"Review updates",
                           [] {
-                              g_mods_page.entry_section = 4;
-                              g_mods_page.section = 4;
-                              g_page_navigation_request = kPageModsHacks;
-                              g_mod_store.page = 5;
+                              OpenModLibrary(5);
                               ImGui::CloseCurrentPopup();
                           }},
                          {"Later", [] { ImGui::CloseCurrentPopup(); }}},
@@ -328,7 +325,7 @@ void StoreManagerModals() {
     }
     if (StoreBeginManagerModal("Remove installed mod?", 680.F, 380.F)) {
         const float width = ImGui::GetContentRegionAvail().x;
-        StoreModalBody("Removal details", width, {"Remove installation", "Keep files, unlink Store", "Cancel"});
+        StoreModalBody("Removal details", width, {"Remove installation", "Keep files, unlink Library", "Cancel"});
         const float body_width = std::max(1.F, ImGui::GetContentRegionAvail().x);
         StoreHeading("Remove this installation?", body_width);
         StoreNote(g_mod_store.remove_title, body_width);
@@ -343,7 +340,7 @@ void StoreManagerModals() {
                                   ImGui::CloseCurrentPopup();
                               }
                           }},
-                         {"Keep files, unlink Store",
+                         {"Keep files, unlink Library",
                           [] {
                               if (!dkr::store::installations().view()->busy) {
                                   dkr::store::installations().forget(g_mod_store.remove_instance, false);
@@ -363,13 +360,13 @@ void StoreManagerModals() {
     }
     if (StoreBeginManagerModal("Link installed mod", 760.F, 640.F)) {
         const float width = ImGui::GetContentRegionAvail().x;
-        StoreModalBody("Store listings", width, {"Cancel"});
+        StoreModalBody("Library listings", width, {"Cancel"});
         const float body_width = std::max(1.F, ImGui::GetContentRegionAvail().x);
-        StoreHeading("Choose its Store listing", body_width);
+        StoreHeading("Choose its Library listing", body_width);
         StoreNote("This links update notifications. It does not claim your local files match a published release, or "
                   "replace anything now.",
                   body_width);
-        StoreField("link-search", "Find a Store mod", body_width, 200);
+        StoreField("link-search", "Find a Library mod", body_width, 200);
         const auto query = StoreLower(g_mod_store.fields["link-search"]);
         unsigned shown = 0, matching = 0;
         for (const auto& item : *dkr::store::service().view()->items) {

@@ -1,3 +1,4 @@
+#include "analog_driving/input.hpp"
 #include "magic_code_game_world.hpp"
 #include "magic_code_game_services.hpp"
 #include "magic_code_native_arguments.hpp"
@@ -59,6 +60,7 @@ LinkPolicy GameWorld::policy(DispatchTable table,bool online) {
     p.services.insert("dkr2_setting_apply");p.events.insert("on_live_setting");
     p.modules.emplace("reload2",2);p.events.insert({"on_cleanup","on_reload"});
     p.modules.emplace("overrides2",2);p.services.insert("dkr2_override");
+    p.modules.emplace("analogue-driving",1);p.services.insert({"dkr2_driving_input","dkr2_driving_apply"});
     p.modules.emplace("game-hooks",1);
     p.modules.emplace("game-events",1);
     p.modules.emplace("game",1);

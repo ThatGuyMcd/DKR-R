@@ -1,3 +1,4 @@
+#include "display_settings/ui.inl"
 // Included by runtime_ui.cpp inside its UI namespace, after
 // runtime_settings_ui.inl. Presentation only: every setting goes through the
 // same renderer configuration and enhancement calls as before.
@@ -79,6 +80,7 @@ void DrawGraphicsPage(float available_width, bool live) {
 
     GraphicsConfig config = ultramodern::renderer::get_graphics_config();
     bool changed = false;
+    if(!live){const auto& io=ImGui::GetIO();dkr::display::output_width=unsigned(std::max(1.F,io.DisplaySize.x*io.DisplayFramebufferScale.x));dkr::display::output_height=unsigned(std::max(1.F,io.DisplaySize.y*io.DisplayFramebufferScale.y));}
     const bool owned_camera_settings_deferred =
         dkr::runtime::netplay::experimental::owned_runtime_active();
     int profile = static_cast<int>(enh::presentation_profile());
@@ -102,8 +104,7 @@ void DrawGraphicsPage(float available_width, bool live) {
                 "Display, effects and scenery.", width);
     PaddockGap(6.0F);
     PaddockText(SetHelpType(), PaddockRgb(kSetMuted),
-                live ? "Changes apply while playing unless marked otherwise."
-                     : "",
+                "Changes apply while playing unless marked otherwise.",
                 width);
     PaddockGap(18.0F);
 
@@ -125,7 +126,7 @@ void DrawGraphicsPage(float available_width, bool live) {
         // Shown when the saved settings match no preset; not something Apply can set.
         const int custom = static_cast<int>(preset_choices.size());
         preset_choices.push_back({"Custom", {}, true});
-        const auto applied = enh::modern_presentation_enabled()
+        const auto applied = enh::modern_presentation_enabled()&&dkr::display::legacy_matches(int(config.res_option),int(config.ar_option),config.ds_option)
             ? graphics_presets::matching_preset(config, enh::anisotropy_level(), low_load)
             : std::nullopt;
         const int applied_index = applied ? static_cast<int>(*applied) : custom;
@@ -150,6 +151,7 @@ void DrawGraphicsPage(float available_width, bool live) {
             }
             const auto chosen = static_cast<graphics_presets::Preset>(preset);
             graphics_presets::apply_preset(config, chosen);
+            dkr::display::loaded=false;dkr::display::migrate(int(config.res_option),int(config.ar_option),config.ds_option);
             enh::set_anisotropy_level(graphics_presets::preset_anisotropy(chosen));
             RememberModernGraphics(config);
             profile = static_cast<int>(enh::PresentationProfile::Modern);
@@ -205,15 +207,10 @@ void DrawGraphicsPage(float available_width, bool live) {
 
         if (modern) {
             fields.Begin();
-            changed |= SettingsDropdown("resolution", "Resolution", &resolution,
-                                        {"Original (240p)", "Original 2x", "Automatic integer scale"},
-                                        fields.column, false,
-                                        "Higher resolutions look sharper but use more GPU power.");
+            if(DrawDisplayChoices(fields.column,true)){aspect=dkr::display::preference.aspect==dkr::display::Aspect::Original?0:1;changed=true;}
             fields.End();
             fields.Begin();
-            changed |= SettingsDropdown("aspect", "Aspect ratio", &aspect, {"Original 4:3", "Fit to window"},
-                                        fields.column, false,
-                                        "Fit to window fills the available screen.");
+            if(DrawDisplayChoices(fields.column,false)){resolution=2;downsample=1;changed=true;}
             fields.End();
         }
         if (enh::modern_presentation_enabled()) {
@@ -295,14 +292,7 @@ void DrawGraphicsPage(float available_width, bool live) {
                                     {"Automatic", "On", "Off"}, renderer.column, false,
                                     "Reduces colour banding in effects and fades.");
         renderer.End();
-        renderer.Begin();
-        changed |= SettingsRange("##downsample", "Supersampling", &downsample, 1, 4, renderer.column,
-                                 [](int value) {
-                                     return value <= 1 ? SettingsRangeValue{"Off", ""}
-                                                       : SettingsRangeValue{std::to_string(value), "x"};
-                                 },
-                                 "Renders extra pixels for a cleaner image. Higher values use much more GPU power.");
-        renderer.End();
+
         renderer.Begin();
         {
             int bias = static_cast<int>(std::lround(enh::texture_lod_bias() * 20.0F));
@@ -357,7 +347,7 @@ void DrawGraphicsPage(float available_width, bool live) {
             enh::set_generated_mipmaps_requested(generate_mips);
             changed = true;
         }
-        if (live) {
+        {
             ImGui::Indent(36.0F);
             PaddockGap(4.0F);
             if (generate_mips != RT64::generatedMipSessionEnabled())
@@ -494,18 +484,19 @@ void DrawGraphicsPage(float available_width, bool live) {
             PaddockGap(16.0F);
             ImGui::EndDisabled();
             const auto camera_provider=dkr::runtime::camera::activation();
-            SettingsHelp("ModernCamera++ is available as an optional mod in Mods/Hacks.",inner);
-            if(live&&camera_provider&&SettingsButton("Camera++ settings (F7)",inner)) {
+            SettingsHelp("ModernCamera++ is available as an optional mod in Installed Mods.",inner);
+            bool rear=dkr::runtime::look_behind::enabled.load();
+            if(SettingsCheck("standalone-look-behind","Look behind",&rear,inner,
+                "Hold your Look back binding while racing. Works offline and online, without ModernCamera++.")) {
+                dkr::runtime::look_behind::enabled=rear;SaveSettings();
+            }
+            PaddockGap(12.F);
+            if(SettingsButton("Camera++ settings (F7)",inner,!live||!camera_provider||!camera_provider->editor,SettingsButtonTone::Plain,false,"Available in-game when a camera mod supplies an editor.")) {
                 OpenCameraTuning();g_overlay_visible.store(false,std::memory_order_release);
             }
 
             PaddockGap(16.0F);
-            bool crt = g_crt_enabled;
-            if (SettingsCheck("##crt", "Enable CRT filter", &crt, inner,
-                              "Adds a retro screen effect. Choose a filter in Textures.")) {
-                g_crt_enabled = crt;
-                SaveSettings();
-            }
+            DrawCrtOverlaySection(inner);
         }, [&](float inner) {
             SettingsCardHead("Vehicles & scenery", "Higher detail can reduce performance.", inner);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
@@ -613,6 +604,7 @@ void DrawGraphicsPage(float available_width, bool live) {
         PaddockGap(16.0F);
         int reflections=int(water::requested_reflection.load());
         ImGui::BeginDisabled(quality==0);
+        #include "water_style/settings_ui.inl"
         if(SettingsDropdown("water-reflections", "Reflections", &reflections,
             {"Sky", "Screen-space", "Hardware ray tracing"}, inner)) {
             water::set_reflection(reflections); SaveSettings();
@@ -707,7 +699,7 @@ void DrawGraphicsPage(float available_width, bool live) {
                 percent("##water-green","Water tint: green",water::tint_green,0,200,"100% keeps the original green component.");
                 percent("##water-blue","Water tint: blue",water::tint_blue,0,200,"100% keeps the original blue component.");
             }
-            if(SettingsButton("Reset water appearance")) {water::reset_appearance();SaveSettings();}
+            if(SettingsButton("Reset water appearance")) {water::reset_appearance();dkr::runtime::water::style::reset();SaveSettings();}
             PaddockGap(8.0F);
             if(SettingsButton("Reset water quality")) {water::reset_tuning();SaveSettings();}
             PaddockGap(12.0F);
@@ -779,3 +771,4 @@ void DrawGraphicsPage(float available_width, bool live) {
     }
     ImGui::PopStyleVar();
 }
+

@@ -34,7 +34,7 @@ std::mutex resource_cache_mutex;
 std::string resource_cache_key;
 std::shared_ptr<const RuntimeResources> resource_cache;
 std::weak_ptr<const RuntimeResources> live_resource_cache;
-std::uint64_t retained_bytes = 0;
+std::uint64_t retained_bytes=0;
 std::uint64_t retention_budget() {
 #ifdef _WIN32
     MEMORYSTATUSEX memory{};memory.dwLength=sizeof(memory);
@@ -63,33 +63,19 @@ std::uint64_t retention_budget() {
 }
 }
 std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_ptr<const Profile> profile,
-                                                                  const std::filesystem::path& rom,
-                                                                  std::stop_token stop, std::string_view version) {
-    const auto began = std::chrono::steady_clock::now();
-    if (!profile)
-        throw Error("Online resources require a verified host profile.");
-    auto phase_at = began;
-    const auto phase = [&](const char* name) {
-        const auto now = std::chrono::steady_clock::now();
-        std::fprintf(
-            stderr, "[online-mods][prepare-phase] phase=%s elapsed-ms=%lld\n", name,
-            static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(now - phase_at).count()));
-        phase_at = now;
-    };
-    cancelled(stop);
-    const auto sources = profile_sources(*profile);
-    check_storage(rom, false);
-    phase("profile-verification");
-    auto out = std::shared_ptr<RuntimeResources>(new RuntimeResources);
-    out->profile_ = std::move(profile);
-    auto bytes = read_file(rom, MaxImage);
-    canonicalize_rom(bytes);
-    const auto key = out->profile_->digest + ":" + sha256(bytes) + ":selected-music-v1";
+    const std::filesystem::path& rom,std::stop_token stop,std::string_view version) {
+    const auto began=std::chrono::steady_clock::now();
+    if(!profile)throw Error("Online resources require a verified host profile.");
+    auto phase_at=began;
+    const auto phase=[&](const char* name){const auto now=std::chrono::steady_clock::now();std::fprintf(stderr,"[online-mods][prepare-phase] phase=%s elapsed-ms=%lld\n",name,static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(now-phase_at).count()));phase_at=now;};
+    cancelled(stop);if(identity(profile->manifest)!=profile->digest)throw Error("Online resource identity differs from its manifest.");check_storage(rom,false);phase("profile-identity");
+    auto out=std::shared_ptr<RuntimeResources>(new RuntimeResources);out->profile_=std::move(profile);
+    auto bytes=read_file(rom,MaxImage);canonicalize_rom(bytes);
+    const auto key=out->profile_->digest+":"+sha256(bytes)+":selected-music-v1:"+std::string(version);
     {
         std::lock_guard lock(resource_cache_mutex);
-        if (resource_cache && retained_bytes > retention_budget())
-            resource_cache.reset();
-        if (auto reusable = live_resource_cache.lock(); reusable && resource_cache_key == key) {
+        if(resource_cache && retained_bytes>retention_budget())resource_cache.reset();
+        if(auto reusable=live_resource_cache.lock();reusable && resource_cache_key==key) {
             cancelled(stop);
             std::fprintf(stderr,"[online-mods][runtime] immutable-cache-hit=1 elapsed-ms=%lld\n",
                 static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-began).count()));
@@ -98,9 +84,8 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
         // Do not keep an unrelated collection while preparing a new one.
         resource_cache.reset();live_resource_cache.reset();resource_cache_key.clear();
     }
-    phase("rom-verification");
-    out->stock_ = AssetBank::stock(std::move(bytes));
-    if (out->stock_->revision() != out->profile_->manifest.revision)
+    phase("rom-verification");const auto sources=profile_sources(*out->profile_);phase("profile-verification");out->stock_=AssetBank::stock(std::move(bytes));
+    if(out->stock_->revision()!=out->profile_->manifest.revision)
         throw Error("The locally imported Game Pak revision does not match this lobby.");
     cancelled(stop);
     if(!out->profile_->manifest.code.empty()) {
@@ -127,9 +112,9 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
         code_set->identity=code::session_identity(code_set->ordered,code_set->settings,out->profile_->manifest.revision,code_set->data);
         out->code_=std::move(code_set);
     }
-    auto characters=TrackCatalog::load_selected_characters(sources.characters,out->stock_);
+    phase("stock-and-portable-code");auto characters=TrackCatalog::load_selected_characters(sources.characters,out->stock_);phase("character-artifacts");
     if(!characters.empty())out->characters_=std::make_shared<const CharacterNamespace>(allocate_characters(out->stock_,std::move(characters)));
-    cancelled(stop);out->tracks_=TrackCatalog::load_selected(sources.tracks,out->stock_);
+    phase("character-namespace");cancelled(stop);out->tracks_=TrackCatalog::load_selected(sources.tracks,out->stock_);phase("legacy-courses");
     // Runtime ordering is content identity, not a translated/display name or
     // filesystem scan. The native character namespace already sorts IDs.
     std::sort(out->tracks_.begin(),out->tracks_.end(),[](const auto& a,const auto& b){return a.root.content_id<b.root.content_id;});
@@ -161,7 +146,7 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
     out->authored_=std::make_shared<const dkr::runtime::custom_tracks::PreparedTracks>(
         dkr::runtime::custom_tracks::prepare_tracks(std::move(selected),tables));
     (void)course_display_budgets(out->authored_.get());
-    auto music=std::make_shared<MusicLibrary>();std::size_t music_encoded_bytes=0;
+    phase("native-course-namespace");auto music=std::make_shared<MusicLibrary>();std::size_t music_encoded_bytes=0;
     std::map<std::string,resident_music::Prepared> decoded;
     std::string music_identity;
     for(const auto& course:out->authored_->courses) {
@@ -248,14 +233,10 @@ std::shared_ptr<const RuntimeResources> RuntimeResources::prepare(std::shared_pt
         for(const auto& c:out->characters_->characters)cache_bytes+=c.audio.samples.size()+c.audio.control.size()+c.race_audio.samples.size()+c.race_audio.control.size();
     }
     phase("vehicles-and-world");
-    const auto budget = retention_budget();
+    const auto budget=retention_budget();
     {
-        std::lock_guard lock(resource_cache_mutex);
-        resource_cache_key = key;
-        live_resource_cache = out;
-        retained_bytes = cache_bytes;
-        if (cache_bytes <= budget)
-            resource_cache = out;
+        std::lock_guard lock(resource_cache_mutex);resource_cache_key=key;live_resource_cache=out;
+        retained_bytes=cache_bytes;if(cache_bytes<=budget)resource_cache=out;
     }
     std::fprintf(stderr,"[online-mods][runtime] roots=%zu immutable-cache-hit=0 cache-bytes=%zu cache-budget=%llu cache-retained=%u elapsed-ms=%lld\n",
         out->profile_->manifest.content.size(),cache_bytes,static_cast<unsigned long long>(budget),unsigned(cache_bytes<=budget),

@@ -61,7 +61,7 @@ inline void effect_contract(const Json& manifest) {
 }
 
 inline constexpr unsigned Interior=30, MaxTiles=32, MaxMeshes=64, MaxVertices=8192, MaxTriangles=4096;
-using Point=std::array<double,5>; // source XYZ and pixel-space ST
+using Point=std::array<double,8>; // source XYZ, pixel-space ST, interpolated normal XYZ
 struct Cell {unsigned tile=0;double low=0,high=0,origin=0;};
 struct Axis {
     unsigned size;bool repeat;
@@ -104,7 +104,7 @@ inline Point intersection(Point a,Point b,unsigned axis,double edge) {
     const auto delta=b[axis]-a[axis];
     if(delta==0)return a;
     const auto t=std::clamp((edge-a[axis])/delta,0.0,1.0);
-    Point p{};for(unsigned i=0;i<5;++i)p[i]=a[i]+(b[i]-a[i])*t;
+    Point p{};for(unsigned i=0;i<8;++i)p[i]=a[i]+(b[i]-a[i])*t;
     p[axis]=edge;return p;
 }
 inline std::vector<Point> clip(std::vector<Point> input,unsigned axis,double edge,bool greater) {
@@ -159,12 +159,15 @@ inline void prepare(Package& car) {
             if(!sx.split()&&!sy.split()) {auto mesh=source;mesh.texture=int(mappings[original][0]);out.meshes.push_back(std::move(mesh));vertices+=unsigned(source.vertices.size());out.triangles+=unsigned(source.faces.size());continue;}
             struct Group {Mesh mesh;std::map<std::array<std::uint32_t,5>,unsigned> vertices;};
             std::map<unsigned,Group> groups;
-            for(const auto& face:source.faces) {
+            for(unsigned face_index=0;face_index<source.faces.size();++face_index) {
+                const auto& face=source.faces[face_index];
                 std::vector<Point> polygon;
                 double min_s=std::numeric_limits<double>::infinity(),min_t=min_s,max_s=-min_s,max_t=-min_s;
+                unsigned source_corner=0;
                 for(const auto index:face) {
                     const auto& p=source.vertices.at(index);const auto& uv=source.uv.at(index);
-                    Point v{p.x,p.y,p.z,double(uv.x)*sx.size,double(uv.y)*sy.size};polygon.push_back(v);
+                    const auto& normal=source.normals.at(face_index)[source_corner++];
+                    Point v{p.x,p.y,p.z,double(uv.x)*sx.size,double(uv.y)*sy.size,normal.x,normal.y,normal.z};polygon.push_back(v);
                     min_s=std::min(min_s,v[3]);max_s=std::max(max_s,v[3]);min_t=std::min(min_t,v[4]);max_t=std::max(max_t,v[4]);
                 }
                 const auto xs=sx.cells(min_s,max_s),ys=sy.cells(min_t,max_t);
@@ -192,6 +195,10 @@ inline void prepare(Package& car) {
                         }
                         if(triangle[0]==triangle[1] || triangle[1]==triangle[2] || triangle[2]==triangle[0])continue;
                         group.mesh.faces.push_back(triangle);
+                        runtime::vehicles::lighting::Corners normals{};unsigned normal_corner=0;
+                        for(const auto* p:{&cut[0],&cut[i],&cut[i+1]})
+                            normals[normal_corner++]={float((*p)[5]),float((*p)[6]),float((*p)[7])};
+                        group.mesh.normals.push_back(normals);
                         if(++out.triangles>MaxTriangles)fail("original texture clipping exceeds 4096 triangles in one LOD.");
                     }
                 }

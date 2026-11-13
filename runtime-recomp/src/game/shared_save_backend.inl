@@ -193,7 +193,10 @@ void complete(codec::SaveImage& image,int selected) {
     for(int i=0;i<int(image.slots.size());++i)if(selected<0||selected==i) {
         auto& slot=image.slots[i];
         slot.course_status.fill(3);slot.taj_flags=0x3f;slot.trophies=0x3ff;slot.bosses=0xfff;
-        slot.balloons={47,8,8,8,8,8};slot.tt_amulet=slot.wizpig_amulet=4;
+        // Completing a save keeps any Free Balloon bonus the slot already holds.
+        const unsigned bonus=codec::bonus_balloons(slot);
+        slot.balloons={47,8,8,8,8,8};codec::set_balloon_total(slot,codec::kMaximumHubBalloons,bonus);
+        slot.tt_amulet=slot.wizpig_amulet=4;
         slot.world_flags.fill(0xffff);slot.keys=0x1e;
         // Mark the known progression cinematics seen without changing the
         // per-slot Adventure Two flag (0x4) or inventing unknown cutscene bits.

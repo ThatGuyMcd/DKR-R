@@ -195,6 +195,7 @@ SoundRowLayout LayoutSoundRow(ImVec2 at, float width, bool narrow, bool band, bo
 
 void DrawSoundRowLabel(const SoundRowLayout& row, std::string_view label, bool master,
                        float alpha) {
+    label=dkr::localisation::source(label);
     const PaddockType type = master ? PaddockReading(19.0F, true, 1.2F)
                                     : PaddockReading(16.0F, true, 1.2F);
     const std::string shown = PaddockEllipsize(type, label, row.label_width);
@@ -313,6 +314,8 @@ void DrawSoundBandRow(std::size_t band, const char* label, ImVec2 at, float widt
 
 // .snd-link: the card's quiet action (Reset mix / Undo reset).
 bool DrawSoundLinkButton(const char* label, bool disabled, const char* hint) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
+    if(hint)hint=dkr::localisation::source(hint).data();
     const PaddockType type = PaddockReading(14.0F, true, 1.0F);
     const char* end = PaddockLabelEnd(label);
     const float width = std::ceil(PaddockMeasure(type, label, end) + 28.0F + 2.0F);
@@ -341,11 +344,13 @@ bool DrawSoundLinkButton(const char* label, bool disabled, const char* hint) {
 // An EQ preset: the MODS / HACKS painted sign without its chevron; the preset
 // in use is the red sign (.snd-chip).
 float SoundChipWidth(const char* label) {
+    label=dkr::localisation::source(label).data();
     const PaddockType type = PaddockSign(18.0F, 1.4F);
     return std::ceil(PaddockMeasure(type, label, PaddockLabelEnd(label)) + 24.0F + 4.0F);
 }
 
 bool DrawSoundChip(const char* label, bool selected, float width) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const PaddockType type = PaddockSign(18.0F, 1.4F);
     const char* end = PaddockLabelEnd(label);
     const float height = std::ceil(type.line + 20.0F + 4.0F);
@@ -380,6 +385,7 @@ bool DrawSoundChip(const char* label, bool selected, float width) {
 template <typename Action>
 float DrawSoundCardHead(const char* title, std::string_view caption, float width,
                         float action_width, Action&& action) {
+    title=dkr::localisation::source(title).data();caption=dkr::localisation::source(caption);
     const ImVec2 at = ImGui::GetCursorScreenPos();
     const float text_width = std::max(width - (action_width > 0.0F ? action_width + 16.0F : 0.0F), 1.0F);
     ImGui::BeginGroup();

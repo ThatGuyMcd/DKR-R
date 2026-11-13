@@ -1,4 +1,11 @@
+#include "online_input_broker.hpp"
+#include "online_stability/startup_transport.hpp"
+#include "online_stability/flow_trace.hpp"
+#include "online_stability/response_trace.hpp"
+#include "vehicle_lighting/check.hpp"
 #include "../rollback_policy.hpp"
+#include "online_stability/live_delay.hpp"
+#include "online_stability/host_settings_qualification.hpp"
 #include "party_runtime.hpp"
 #include "party_camera.hpp"
 #include "vehicle_binding.hpp"
@@ -176,7 +183,7 @@ struct Shared {
     ConfirmedAudioMailbox audio;
     OwnerActivity simulation_activity,save_activity;
     std::atomic<bool> stop{false},renderer_ready{false},simulation_done{false},renderer_done{false};
-    std::atomic<std::uint32_t> input{0};
+    std::atomic<std::uint64_t> input{0};
     std::atomic<int> confirmed_motor{-1};
     std::mutex mutex;std::string failure;
     std::vector<std::uint8_t> confirmed_save;
@@ -241,8 +248,8 @@ struct RuntimeWorkers {
         report({});
     }
 };
-std::uint32_t pack(PackedInput p) {return p.buttons|(std::uint32_t(std::uint8_t(p.stick_x))<<16)|(std::uint32_t(std::uint8_t(p.stick_y))<<24);}
-PackedInput unpack(std::uint32_t p) {return {std::uint16_t(p),std::int8_t(p>>16),std::int8_t(p>>24)};}
+std::uint64_t pack(PackedInput p) {return packed_input_bits(p);}
+PackedInput unpack(std::uint64_t p) {return input_from_bits(p);}
 }
 bool runtime_available(rom::Revision revision) {return owned_adapter_available(revision);}
 std::string_view runtime_engine_identity(rom::Revision revision) {
@@ -256,7 +263,7 @@ RuntimeView runtime_view() {std::scoped_lock lock(view_mutex);return view;}
 void request_runtime_stop() {requested_stop=true;}
 bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::filesystem::path& canonical_rom,
     std::vector<std::uint8_t> bootstrap,DirectSession& lobby,const LaunchDescriptor& launch,
-    unsigned timeout_seconds,std::string& error,std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,
+    unsigned timeout_seconds,std::string& error,bool scripted_check,std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,
     std::vector<std::uint8_t> mod_bootstrap,std::vector<std::uint8_t> code_bootstrap) {
     namespace party=dkr::runtime::spectators;
     auto hub=party::party_link(&lobby);const auto initial=party::party_link_view(&lobby);
@@ -338,12 +345,51 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
             if(!runtime.begin(message))throw std::runtime_error(message);
             std::fprintf(stderr,"[party][boot] checkpoint admission started\n");
             bool prior_watching=true;unsigned prior_port=4;auto next_save=Network::Clock::now()+std::chrono::seconds(5);
+            auto observed=world->scene_view();auto observed_cursor=runtime.next();auto menu_since=observed_cursor.frame;
+            bool car_selection_sent=false;
+            dkr::online_stability::HostSettingsQualification host_settings_check(scripted_check);
             while(!shared.stop) {
                 OwnerActivity::Scope stage(shared.simulation_activity,OwnerStage::Pump);
                 const auto now=Network::Clock::now();
-                if(!runtime.pulse(now,unpack(shared.input.load()),message)) {
-                    if(!message.empty())throw std::runtime_error(message);shared.stop=true;break;
+                auto sampled=unpack(shared.input.load());
+                if(scripted_check) {
+                    const auto scene=world->scene_view();const auto at=runtime.next();
+                    host_settings_check.pulse(&lobby,initial.host,at.epoch,Network::Clock::now());
+                    if(scene.menu!=observed.menu||(scene.menu&&scene.menu_id!=observed.menu_id)||observed_cursor.epoch!=at.epoch) {
+                        observed=scene;observed_cursor=at;menu_since=at.frame;car_selection_sent=false;
+                        std::fprintf(stderr,"[party][scene] epoch=%llu menu=%d id=%d level=%d type=%d viewports=%u\n",static_cast<unsigned long long>(at.epoch),scene.menu,scene.menu_id,scene.level,scene.race_type,unsigned(scene.viewports));
+                    }
+                    sampled={};const auto age=at.frame>=menu_since?at.frame-menu_since:0;
+                    if(scene.menu) {
+                        if(scene.menu_id==0&&age>=150&&age%30==0)sampled={0x1000,0,0};
+                        if((scene.menu_id==3||scene.menu_id==15)&&age>=50&&age%30==20)sampled={0x8000,0,0};
+                        // Opt-in disposable-profile lighting check: move the
+                        // host's real cursor down/left to the first custom
+                        // stage actor, then use ordinary A confirmation.
+                        if(scene.menu_id==3&&dkr::runtime::vehicles::lighting::owned_road_wheel_check&&local_port.load()==0) {
+                            sampled={};
+                            if(age==5)sampled={0,0,-75};
+                            if(age>=20&&age<220&&age%30==5)sampled={0,-75,0};
+                            if(age>=220&&age%30==20)sampled={0x8000,0,0};
+                        }
+                        // The opt-in fresh-profile car check exercises the
+                        // ordinary wooden picker with a real direction press.
+                        // This branch is unreachable during normal play.
+                        if(scene.menu_id==15&&dkr::runtime::vehicles::lighting::owned_car_check&&!car_selection_sent&&
+                           dkr::runtime::vehicles::lighting::owned_car_picker.load(std::memory_order_relaxed)==1&&age%30==5) {
+                            sampled={0x0100,0,0};car_selection_sent=true;
+                            std::fprintf(stderr,"[custom-vehicles][isolated-check] local-port=%u picker-input=d-pad-right; ordinary confirmation follows\n",local_port.load());
+                        }
+                    } else sampled={0x8000,std::int8_t((at.frame/15)%2?30:-30),0};
                 }
+                dkr::online_stability::ReplaySlice replay_slice(Network::Clock::now());
+                do {
+                    if(!runtime.pulse(Network::Clock::now(),sampled,message)) {
+                        if(!message.empty())throw std::runtime_error(message);shared.stop=true;break;
+                    }
+                    if(!scripted_check)sampled=unpack(shared.input.load());
+                }while(!shared.stop&&replay_slice.again(runtime.replay_ready(),Network::Clock::now()));
+                if(shared.stop)break;
                 watching=runtime.watching();local_port=runtime.local_port();
                 if(prior_watching!=watching.load()||prior_port!=local_port.load()) {
                     // A role transition starts fresh local achievement context;
@@ -353,12 +399,22 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
                 }
                 const auto cursor=runtime.next();
                 const auto stats=runtime.statistics();
-                report({true,PumpWait::None,cursor.epoch,cursor.frame,runtime.confirmed(),stats.rollbacks,stats.replayed_frames,runtime.status(),cursor.epoch==0});
+                const auto cause=runtime.pause_reason();
+                using Pause=dkr::online_stability::Pause;
+                const auto wait=cause==Pause::Network||cause==Pause::LocalInput?PumpWait::OwnerInput:
+                    cause==Pause::Confirmation?PumpWait::Confirmation:cause==Pause::Presentation?PumpWait::PresentationDrain:
+                    cause==Pause::ScenePeers?PumpWait::ScenePeers:cause==Pause::ScenePreparation?PumpWait::ScenePreparation:
+                    cause==Pause::Pacing?PumpWait::FramePacing:PumpWait::None;
+                report({true,wait,cursor.epoch,cursor.frame,runtime.confirmed(),stats.rollbacks,stats.replayed_frames,runtime.status(),cursor.epoch==0});
                 if(now>=next_save) {
                     if(initial.host&&!save_writer.submit(world->confirmed_save(),world->confirmed_paks(),message,world->confirmed_records()))throw std::runtime_error(message);
                     next_save=now+std::chrono::seconds(5);
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                // Correction already has finite admitted work. Yield after a
+                // bounded slice instead of adding a timer sleep to every
+                // replayed frame. Pacing/input/GPU waits still sleep normally.
+                if(runtime.replay_ready())std::this_thread::yield();
+                else std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
         }catch(const std::exception& e){std::fprintf(stderr,"[party][failure] %s\n",e.what());shared.fail(e.what());if(!initial.host&&party::party_watching(&lobby))lobby.disconnect("Stopped watching: "+std::string(e.what()));else party::party_stop(&lobby,e.what());}
          catch(...){shared.fail("Party simulation worker failed.");if(!initial.host&&party::party_watching(&lobby))lobby.disconnect("Stopped watching.");else party::party_stop(&lobby,"Party simulation stopped.");}
@@ -366,8 +422,19 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
     });
     const auto start=Network::Clock::now();ConfirmedAudioMailbox::Block block;
     std::array<std::int16_t,ConfirmedAudioMailbox::kMaximumBytes/2> pcm{};unsigned routed=99;
-    std::uint16_t prior_buttons=0;
+    std::uint16_t prior_buttons=0;auto qualified_approval_at=start;
     while(!shared.stop&&!shared.simulation_done) {
+        // Continue the isolated CLI host's existing admission automation after
+        // launch, so late spectators exercise the ordinary approval API too.
+        // Normal launcher/overlay sessions still require the host's decision.
+        if(scripted_check&&initial.host&&Network::Clock::now()>=qualified_approval_at) {
+            qualified_approval_at=Network::Clock::now()+std::chrono::milliseconds(100);
+            for(const auto& pending:lobby.view().pending_joins) {
+                std::string admission_error;
+                if(lobby.approve_join(pending.request_id,admission_error))
+                    std::fprintf(stderr,"[spectator][qualification] approved-late-member=%llu\n",static_cast<unsigned long long>(pending.request_id));
+            }
+        }
         const auto port=local_port.load();
         if(port!=routed){for(int p=0;p<4;++p)platform::set_rumble(p,false);platform::set_online_input_routing(true,launch.occupied_mask,port<4?std::uint8_t(port):255);routed=port;}
         const auto motor=shared.confirmed_motor.exchange(-1);if(motor>=0&&port<4&&!watching.load())platform::set_rumble(int(port),motor!=0);
@@ -380,7 +447,7 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window,const std::fil
             if(pressed&0x0300)party::party_camera(&lobby,party::WatchCamera::Follow,
                 (camera.target+((pressed&0x0100)?1:unsigned(launch.player_count-1)))%launch.player_count);
         }
-        shared.input=pack(blocked||watching.load()?PackedInput{}:PackedInput{buttons,std::int8_t(std::clamp(x,-1.0F,1.0F)*80),std::int8_t(std::clamp(y,-1.0F,1.0F)*80)});
+        shared.input=pack(blocked||watching.load()?PackedInput{}:online_input_broker().local_sample().input);
         for(unsigned i=0;i<ConfirmedAudioMailbox::kCapacity&&shared.audio.take(block);++i) {
             for(std::size_t j=0;j<block.bytes/2;++j)pcm[j^1]=std::int16_t(std::uint16_t(block.pcm[2*j])|(std::uint16_t(block.pcm[2*j+1])<<8));
             platform::set_audio_frequency(block.rate);platform::queue_audio(pcm.data(),block.bytes/2);
@@ -409,7 +476,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
     std::vector<std::uint8_t> bootstrap,DirectSession& lobby,const LaunchDescriptor& accepted_launch,
     unsigned timeout_seconds,std::string& error,bool scripted_check,
     std::shared_ptr<const dkr::mods::online::RuntimeResources> mods,std::vector<std::uint8_t> mod_bootstrap,std::vector<std::uint8_t> code_bootstrap) {
-    if(dkr::runtime::spectators::party_enabled(&lobby))return run_party_runtime(window,canonical_rom,std::move(bootstrap),lobby,accepted_launch,timeout_seconds,error,std::move(mods),std::move(mod_bootstrap),std::move(code_bootstrap));
+    if(dkr::runtime::spectators::party_enabled(&lobby))return run_party_runtime(window,canonical_rom,std::move(bootstrap),lobby,accepted_launch,timeout_seconds,error,scripted_check,std::move(mods),std::move(mod_bootstrap),std::move(code_bootstrap));
     const std::optional<LaunchDescriptor> launch{accepted_launch};const auto initial=lobby.runtime_view();
     // A departure may retire the accepted descriptor during cold boot, or
     // between this caller and the worker startup. Validate against the caller's
@@ -544,12 +611,28 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
             if(!admission.begin(std::move(baseline),[&](auto b,std::string& e){return world->admit_initial(b,e);},message))throw std::runtime_error(message);
             std::fprintf(stderr,"[rollback][admission] owner=%u checkpoint-captured decoded=%u wire=%u\n",
                 unsigned(local),admission.decoded_bytes(),admission.total_bytes());
+            using StartupRoute=dkr::online_stability::StartupTransport<SessionTransport,TransportTrafficClass,LobbyAdmission,LobbyRoute>;
+            StartupRoute startup_route(admission,route);
+            std::unique_ptr<Session> prepared_session;
+            std::unique_ptr<Network> prepared_network;
+            const auto prepare_network=[&] {
+                if(prepared_network)return;
+                prepared_session=std::make_unique<Session>(*world);
+                const auto budget=std::max<std::size_t>(128U*1024U*1024U,contract.state_bytes*(std::size_t(launch->rollback_window)+2));
+                if(!prepared_session->start({{epoch,launch->player_count,launch->rollback_window,budget},local,launch->input_delay_frames},message))throw std::runtime_error(message);
+                NetworkConfiguration config;if(!route.configuration(admission.incarnation(),config,message))throw std::runtime_error(message);
+                prepared_network=std::make_unique<Network>(*prepared_session,startup_route);
+                if(!prepared_network->start(config,message))throw std::runtime_error(message);
+            };
             bool loaded=false;
             auto admission_report_at=Network::Clock::now();
             auto prepared_at=Network::Clock::time_point{};
             while(!shared.stop&&!lobby.running()) {
                 if(!lobby.owned_game_active()){shared.stop=true;break;}
-                if(!admission.service_admission())throw std::runtime_error(admission.error());
+                if(prepared_network) {
+                    if(!prepared_network->service())throw std::runtime_error(prepared_network->error());
+                } else if(!admission.service_admission())throw std::runtime_error(admission.error());
+                if(initial.host||admission.prepared())prepare_network();
                 const auto now=Network::Clock::now();
                 const bool prepared=admission.prepared();
                 if(admission.all_prepared()&&!prepared_at.time_since_epoch().count())prepared_at=now;
@@ -585,12 +668,13 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
             if(!shared.stop) {
                 admission.complete_start();
                 std::fprintf(stderr,"[rollback][admission] owner=%u normal Start released; starting owned simulation\n",unsigned(local));
-                Session session(*world);
-                const auto budget=std::max<std::size_t>(128U*1024U*1024U,contract.state_bytes*(std::size_t(launch->rollback_window)+2));
-                if(!session.start({{epoch,launch->player_count,launch->rollback_window,budget},local,launch->input_delay_frames},message))throw std::runtime_error(message);
+                prepare_network();auto& session=*prepared_session;
+                dkr::online_stability::LiveDelay live_delay(dkr::online_stability::control(&lobby),launch->input_delay_frames,launch->rollback_window);
+                live_delay.local_owner(local);
+                dkr::online_stability::DelayScope delay_scope(live_delay);
+                dkr::online_stability::HostSettingsQualification host_settings_check(scripted_check);
                 simulation_started=true;
-                NetworkConfiguration config;if(!route.configuration(admission.incarnation(),config,message))throw std::runtime_error(message);
-                Network network(session,admission);if(!network.start(config,message))throw std::runtime_error(message);Pump pump(session,network);
+                auto& network=*prepared_network;Pump pump(session,network);
                 pump.command_source([local,development=launch->development]{return local==0&&development?dkr::sdk2::take(true):dkr::sdk2::Command{};});
                 std::uint64_t published_epoch=0;std::uint32_t published_frame=UINT32_MAX,published_replays=UINT32_MAX;
                 auto last_save_at=seed;
@@ -614,8 +698,20 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                         std::fprintf(stderr,"[rollback][scene] epoch=%llu menu=%d id=%d owners=%u level=%d type=%d viewports=%u\n",
                             static_cast<unsigned long long>(observed_epoch),scene.menu,scene.menu_id,unsigned(scene.owners),scene.level,scene.race_type,unsigned(scene.viewports));
                     }
+                    host_settings_check.pulse(&lobby,initial.host,session.epoch(),now);
+                    const bool dynamic=lobby.view().room.rules.automatic_input_delay;
+                    const bool delay_paused=pump.view().wait==PumpWait::ScenePeers||pump.view().wait==PumpWait::ScenePreparation;
+                    live_delay.pulse(session.epoch(),1,session.frontier(),delay_paused,pump.view().wait==PumpWait::OwnerInput||pump.view().wait==PumpWait::Confirmation,now,session.missing_input_mask());
+                    if(!scripted_check) {
+                        const auto physical=unpack(shared.input.load());
+                        if(!live_delay.capture({physical.buttons,physical.stick_x,physical.stick_y,physical.accelerator,physical.brake,physical.driving_flags},now))throw std::runtime_error("Dynamic input transition queue exceeded its safe bound.");
+                    }
+                    for(unsigned fill=live_delay.take_fill();fill&&session.needs_local_input(true);--fill) {
+                        const auto held=live_delay.held();
+                        if(session.sample_local({held.buttons,held.x,held.y,held.accelerator,held.brake,held.driving_flags},true)!=OwnerInputResult::Accepted)throw std::runtime_error("Dynamic input lead could not retain immutable owner input.");
+                    }
                     if(!pump.pulse(now,[&]{
-                        if(!scripted_check)return unpack(shared.input.load());
+                        if(!scripted_check){const auto value=live_delay.take();return PackedInput{value.buttons,value.x,value.y,value.accelerator,value.brake,value.driving_flags};}
                         if(scene.menu) {
                             const auto age=session.frontier()-menu_since;
                             if(scene.menu_id==0&&age>=150&&age%30==0)return PackedInput{0x1000,0,0};
@@ -664,10 +760,12 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
                     if(progress_epoch!=session.epoch()||confirmed_progress!=stats.confirmed_frames) {
                         progress_epoch=session.epoch();confirmed_progress=stats.confirmed_frames;progress_at=now;
                     } else if(now-progress_at>=std::chrono::seconds(90)) {
+                        dkr::online_stability::flow::dump(&network);
                         throw std::runtime_error("Experimental peers made no confirmed progress for 90 seconds. The session ended safely; separate saves are retained.");
                     }
                     if(session.presentation_ready()&&(published_epoch!=session.epoch()||published_frame!=stats.next_frame||published_replays!=stats.replayed_frames)) {
                         if(!world->publish_current(session.epoch(),stats.next_frame-1,message))throw std::runtime_error(message);
+                        dkr::online_stability::response::reached(session.epoch(),stats.next_frame-1,dkr::online_stability::response::Stage::Publish);
                         published_epoch=session.epoch();published_frame=stats.next_frame;published_replays=stats.replayed_frames;
                     }
                     // The network pump runs about every millisecond, but this
@@ -761,7 +859,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,const std::filesyste
 #endif
         std::uint16_t buttons=0;float x=0,y=0;bool blocked=false;
         platform::get_local_online_input(&buttons,&x,&y,&blocked);
-        shared.input=pack(blocked?PackedInput{}:PackedInput{buttons,std::int8_t(std::clamp(x,-1.0F,1.0F)*80),std::int8_t(std::clamp(y,-1.0F,1.0F)*80)});
+        shared.input=pack(blocked?PackedInput{}:online_input_broker().local_sample().input);
         // Device calls share SDL/input synchronization. Keep them on the event
         // owner, AFTER input sampling, never on the rollback packet consumer.
         for(unsigned i=0;i<ConfirmedAudioMailbox::kCapacity&&!shared.stop&&shared.audio.take(audio_block);++i) {

@@ -46,3 +46,4 @@ bool active(const void*);
 bool engaged(const void*);
 void forget(const void*);
 }
+

@@ -48,6 +48,9 @@ inline void evicted(const void* map) {
 inline std::uint64_t eviction_epoch(const void* map) {
     auto& r=registry();std::scoped_lock lock(r.mutex);return cache_locked(r,map).evictions;
 }
+inline Cache cache_state(const void* map) {
+    auto& r=registry();std::scoped_lock lock(r.mutex);return cache_locked(r,map);
+}
 
 // One immutable selection per prepared scene. Queue slots retain that selection
 // until reused; loading a new scene cannot change a queued older workload.

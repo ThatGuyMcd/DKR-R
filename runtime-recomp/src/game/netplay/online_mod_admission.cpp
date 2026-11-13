@@ -1,3 +1,4 @@
+#include "online_stability/transfer_window.hpp"
 #include "party_link.hpp"
 #include "direct_session.hpp"
 #include "mods/online_mod_manifest.hpp"
@@ -8,7 +9,7 @@ namespace dkr::runtime::netplay {
 namespace {
 // One complete advertised window plus envelope/control headroom. Still bounded
 // per session; no admitted-game traffic is stored in this staging queue.
-constexpr std::size_t MaxModPacket=8192+142,MaxModQueue=512*1024;
+constexpr std::size_t MaxModPacket=8192+142,MaxModQueue=dkr::online_stability::MaximumTransferWindow+128*1024;
 bool waiting(ConnectionState state){return state==ConnectionState::Hosting || state==ConnectionState::Lobby;}
 bool joining(ConnectionState state){return state==ConnectionState::Connecting || state==ConnectionState::AwaitingApproval;}
 }

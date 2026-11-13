@@ -339,6 +339,14 @@ diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuf
                      }
                      const bool hardware=waterRenderer->draws[drawCall.waterIndex].material.effects.w>0.5f;
                      worker->commandList->setGraphicsPipelineLayout(hardware ? waterRenderer->rayLayout.get() : waterRenderer->layout.get());
+@@ -660,7 +663,7 @@
+                     worker->commandList->setPipeline(triangles.pipeline);
+                     activeWaterDraw=drawCall.waterIndex;
+-                    if (waterRenderer->draws[drawCall.waterIndex].material.identity.y==12) {
++                    if ((uint32_t(waterRenderer->draws[drawCall.waterIndex].material.identity.y)&WATER_DEBUG_MASK)==12) {
+                         worker->commandList->setIndexBuffer(&waterRenderer->wireView);
+                         worker->commandList->drawIndexedInstanced(triangles.faceCount*6,1,waterRenderer->wireStarts[drawCall.waterIndex],0,0);
+                     } else drawCallTriangles(drawCall);
 @@ -1833,10 +1836,11 @@
                  const auto *waterMaterial = call.callDesc.waterMaterialIndex < p.curWorkload->waterMaterials.size()
                      ? &p.curWorkload->waterMaterials[call.callDesc.waterMaterialIndex] : nullptr;
@@ -360,12 +368,14 @@ diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuf
 +                        waterPipeline = classic ? waterRenderer->waterfallPipeline(p.worker->device,p.fbStorage->colorTarget->multisampling,
 +                            call.callDesc.otherMode.zCmp(),call.callDesc.otherMode.zUpd(),call.callDesc.otherMode.cvgDst()==CVG_DST_WRAP) :
 +                            waterRenderer->pipeline(p.worker->device,p.fbStorage->colorTarget->multisampling,
-                             call.callDesc.otherMode.zCmp() || selfDepth,call.callDesc.otherMode.zUpd() && !selfDepth,wp.material.identity.y==12,false,classic,selfDepth,hardware);
+-                            call.callDesc.otherMode.zCmp() || selfDepth,call.callDesc.otherMode.zUpd() && !selfDepth,wp.material.identity.y==12,false,classic,selfDepth,hardware);
++                            call.callDesc.otherMode.zCmp() || selfDepth,call.callDesc.otherMode.zUpd() && !selfDepth,(uint32_t(wp.material.identity.y)&WATER_DEBUG_MASK)==12,false,classic,selfDepth,hardware);
                          if(hardware && !waterPipeline) {
                              // Failure of the optional hardware pipeline must
 @@ -1906,13 +1912,11 @@
                              waterPipeline=waterRenderer->pipeline(p.worker->device,p.fbStorage->colorTarget->multisampling,
-                                 call.callDesc.otherMode.zCmp() || selfDepth,call.callDesc.otherMode.zUpd() && !selfDepth,wp.material.identity.y==12,false,classic,selfDepth,false);
+-                                call.callDesc.otherMode.zCmp() || selfDepth,call.callDesc.otherMode.zUpd() && !selfDepth,wp.material.identity.y==12,false,classic,selfDepth,false);
++                                call.callDesc.otherMode.zCmp() || selfDepth,call.callDesc.otherMode.zUpd() && !selfDepth,(uint32_t(wp.material.identity.y)&WATER_DEBUG_MASK)==12,false,classic,selfDepth,false);
                          }
 -                        waterMatricesValid = waterPipeline && waterRenderer->pipeline(p.worker->device,p.fbStorage->colorTarget->multisampling,
 -                            call.callDesc.otherMode.zCmp() || selfDepth,selfDepth,false,true,classic,selfDepth);
@@ -508,7 +518,7 @@ diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
 @@ -320,14 +320,19 @@
      }
      float3 color = body * (0.55 + nl * 0.45) * m.sunColor.a * (1-fresnel)
-         + m.sunColor.rgb * m.sunDirection.a * specular;
+         + m.sunColor.rgb * m.sunDirection.a * sunGlint;
 -    float4 reflection=screenReflection(worldPosition,N,V,roughness,p);
 +    float4 reflection=0;
  #ifdef HARDWARE_WATER

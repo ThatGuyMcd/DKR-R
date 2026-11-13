@@ -1,3 +1,4 @@
+#include "analog_driving/native.hpp"
 #include "../../src/game/observer_music.hpp"
 #include "owned_observer.hpp"
 #include "scene_load_work.hpp"
@@ -455,6 +456,9 @@ public:
         try{code_->sdk2_command(command);return true;}catch(const std::exception& e){error=e.what();return false;}
     }
     bool tick(std::uint32_t frame, const FrameInputs& inputs, TickOutput& output, std::string& error) override {
+        std::array<dkr::runtime::driving::Pedals,4> driving_inputs{};
+        for(unsigned p=0;p<4;++p)driving_inputs[p]={inputs[p].accelerator,inputs[p].brake,inputs[p].driving_flags};
+        dkr::runtime::driving::InputScope driving_scope(driving_inputs);
         dkr_probe_boss_diagnostic_tick(current_epoch_,frame);
         if(audio_phases_ && (frame!=audio_.next_frame || frame==UINT32_MAX)) return false;
         const bool menu_tick=menu_tick_active();
@@ -1290,6 +1294,10 @@ private:
             static int dispatch(void* owner,const char* name,std::uint8_t* ram,recomp_context* ctx,
                 const std::uint64_t* args,unsigned count,const std::uint32_t* fields,unsigned event,std::uint64_t* result) noexcept {
                 auto& world=*static_cast<Component*>(owner);
+                if(std::strcmp(name,"dkr_analogue_driving")==0) {
+                    if(count!=3||!args||!result)return -1;
+                    *result=dkr::runtime::driving::apply(ram,unsigned(args[0]),std::uint32_t(args[1]),std::uint32_t(args[2]));return 1;
+                }
                 if(std::strcmp(name,"dkr_owned_vehicle_menu_draw")==0) {
                     if(!result||count||!world.mods_)return -1;
                     const auto status=dkr::runtime::legacy::draw_owned_vehicle_menu(*world.mods_,ram,ctx,

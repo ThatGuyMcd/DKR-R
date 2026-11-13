@@ -1,4 +1,9 @@
+#include "session_content/policy.hpp"
+#include "crash_reports/reporting.hpp"
+#include "crash_reports/native_context.hpp"
+#include "online_stability/process_services.hpp"
 #include "runtime_log_handles.hpp"
+#include "vehicle_lighting/check.hpp"
 #include "build_contract.hpp"
 #include "diagnostics.hpp"
 #include "rollback_policy.hpp"
@@ -117,11 +122,9 @@ bool ConfigurePersistentRuntimeLog(
     if (error) {
         return false;
     }
-    const bool rotated = dkr::runtime::support::history::rotate(log_directory);
-    const std::filesystem::path current =
-        rotated ? log_directory / "runtime.log" : dkr::online_performance::fallback_log(log_directory);
-    if (current.empty())
-        return false;
+    const bool rotated=dkr::runtime::support::history::rotate(log_directory);
+    const std::filesystem::path current = rotated ? log_directory / "runtime.log" : dkr::online_performance::fallback_log(log_directory);
+    if(current.empty())return false;
 #ifdef _WIN32
     FILE* stream = nullptr;
     if (_wfreopen_s(&stream, current.c_str(), L"w", stderr) != 0 ||
@@ -135,10 +138,7 @@ bool ConfigurePersistentRuntimeLog(
 #endif
     dkr::online_performance::protect_log(stderr);
     std::setvbuf(stderr, nullptr, _IONBF, 0);
-    if (!rotated) {
-        dkr::runtime::support::history::prune(log_directory / "history");
-        std::fprintf(stderr, "[boot][logging] current log busy; separate instance log=%s\n", current.string().c_str());
-    }
+    if(!rotated){dkr::runtime::support::history::prune(log_directory/"history");std::fprintf(stderr,"[boot][logging] current log busy; separate instance log=%s\n",current.string().c_str());}
 #if defined(__ANDROID__) || defined(DKR_IOS)
     // RT64 writes GPU/driver identification to stdout. Keep it in the same
     // private log as startup errors so phone users can export both together.
@@ -146,6 +146,7 @@ bool ConfigurePersistentRuntimeLog(
 #endif
     std::fprintf(stderr, "[boot] DKR-R %s persistent runtime log\n",
                  DKR_RELEASE_VERSION);
+    dkr::crash_reports::refresh_native_context(true);
     return true;
 }
 
@@ -279,7 +280,6 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
     SymInitialize(process, nullptr, TRUE);
 
     const DWORD64 fault_address = reinterpret_cast<DWORD64>(exception->ExceptionRecord->ExceptionAddress);
-    const DWORD64 module_base = reinterpret_cast<DWORD64>(GetModuleHandleW(nullptr));
     std::fprintf(stderr, "[boot][crash] exception=0x%08lX address=0x%016llX\n",
                  exception->ExceptionRecord->ExceptionCode,
                  static_cast<unsigned long long>(fault_address));
@@ -296,9 +296,7 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
                      static_cast<unsigned long long>(
                          exception->ExceptionRecord->ExceptionInformation[1]));
     }
-    std::fprintf(stderr, "[boot][crash] module-base=0x%016llX rva=0x%llX\n",
-                 static_cast<unsigned long long>(module_base),
-                 static_cast<unsigned long long>(fault_address - module_base));
+    dkr::crash_reports::print_native_frame(fault_address, 0);
     std::fprintf(stderr,
                  "[boot][crash] registers rcx=0x%016llX rdx=0x%016llX "
                  "r8=0x%016llX r9=0x%016llX rsp=0x%016llX\n",
@@ -348,6 +346,7 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
             break;
         }
         DWORD64 displacement = 0;
+        dkr::crash_reports::print_native_frame(frame.AddrPC.Offset, index + 1);
         if (SymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol)) {
             std::fprintf(stderr, "[boot][crash] #%u %s+0x%llX\n", index, symbol->Name,
                          static_cast<unsigned long long>(displacement));
@@ -369,22 +368,22 @@ LONG WINAPI RuntimeCrashFilter(EXCEPTION_POINTERS* exception) {
 
 #else
 
-void RuntimeSignalHandler(int signal_number) {
-    std::fprintf(stderr, "[boot][crash] signal=%d\n", signal_number);
+void RuntimeSignalHandler(int signal_number, siginfo_t* information, void* context) {
 #if defined(__linux__) && !defined(__ANDROID__)
-    void* frames[48]{};
-    const int count = backtrace(frames, 48);
-    backtrace_symbols_fd(frames, count, STDERR_FILENO);
-#endif
+    dkr::crash_reports::fatal_signal(signal_number, information, context);
+#else
+    (void)information; (void)context;
+    std::fprintf(stderr, "[boot][crash] signal=%d\n", signal_number);
     std::fflush(stderr);
     _exit(128 + signal_number);
+#endif
 }
 
 void InstallRuntimeSignalHandlers() {
     struct sigaction action {};
-    action.sa_handler = RuntimeSignalHandler;
+    action.sa_sigaction = RuntimeSignalHandler;
     sigemptyset(&action.sa_mask);
-    action.sa_flags = SA_RESETHAND;
+    action.sa_flags = SA_RESETHAND | SA_SIGINFO;
     for (const int signal_number : {SIGSEGV, SIGABRT, SIGFPE, SIGILL}) {
         sigaction(signal_number, &action, nullptr);
     }
@@ -561,6 +560,7 @@ int DkrMain(int argc, char** argv) {
     // Hold a shared lock for normal play, including multiple local instances.
     // The external updater must obtain exclusive access before any replacement.
     std::unique_ptr<dkr::updates::InstallLock> application_update_lock;
+    dkr::online_stability::ProcessServices process_services([]{dkr::crash_reports::shutdown();dkr::online_stability::retire_store_http();dkr::online::shutdown_account();});
     try {
         auto executable=dkr::updates::application_executable();
 #if defined(__APPLE__)
@@ -813,6 +813,7 @@ int DkrMain(int argc, char** argv) {
                      "[boot][log] could not create the persistent runtime log\n");
     }
     dkr::runtime::startup_performance::mark("persistent-log-ready");
+    dkr::crash_reports::start(config_directory,DKR_RELEASE_VERSION);
     {
         dkr::runtime::startup_performance::ScopedPhase phase(
             "rom-identity-cache-configure");
@@ -941,6 +942,7 @@ int DkrMain(int argc, char** argv) {
         auto report_at=std::chrono::steady_clock::now();
         const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(60);
         while(std::chrono::steady_clock::now()<deadline&&!accepted) {
+            dkr::runtime::vehicles::lighting::pump_owned_check();
             dkr::runtime::platform::pump_window_events(nullptr);
             const auto state=online.view();
             if(std::chrono::steady_clock::now()>=report_at) {
@@ -977,6 +979,7 @@ int DkrMain(int argc, char** argv) {
     }
 #endif
     if (rom_path.empty()) {
+        dkr::session_content::end();
         const auto startup = dkr::runtime::ui::run_startup_screen(
             static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()));
         if (!startup.start_game) {
@@ -1152,6 +1155,12 @@ int DkrMain(int argc, char** argv) {
         // per-session Magic Code state before the new RDRAM is created.
         // A lobby's accepted manifest, not later overlay preferences, owns
         // the simulation selection on every peer.
+        const bool online_content=dkr::runtime::netplay::session().active();
+        const bool content_enabled=online_content&&dkr::runtime::netplay::session().view().host?dkr::session_content::host_enabled.load():prepared_mods?prepared_mods->content_enabled:dkr::session_content::next_enabled.load();
+        dkr::crash_reports::Gameplay quiet_reports;
+        dkr::session_content::Session content_session(content_enabled,online_content);
+        dkr::session_content::Preparation content_preparation(content_enabled);
+        std::fprintf(stderr,"[mods][session] enabled=%u online=%u; selections preserved\n",unsigned(content_enabled),unsigned(online_content));
         std::optional<std::uint32_t> online_magic_codes;
         if (dkr::runtime::netplay::session().active()) {
             online_magic_codes = static_cast<std::uint32_t>(
@@ -1171,6 +1180,9 @@ int DkrMain(int argc, char** argv) {
             // modal. Explicit command-line launches validate here instead.
             if(!prepared_mods)prepared_mods=dkr::mods::prepare_mod_launch(config_directory,rom_path,
                 dkr::runtime::netplay::session().active(),[](const char* stage){std::fprintf(stderr,"[legacy][launch] %s\n",stage);});
+            bool modified=!prepared_mods->fingerprint.empty()||dkr::runtime::magic_codes::launch_mask()!=0||dkr::runtime::custom_tracks::enabled_count()!=0;
+            for(const auto& pack:dkr::runtime::texture_packs::snapshot())modified|=pack.enabled&&pack.compatible;
+            dkr::session_content::running_modded=content_enabled&&modified;
             if(prepared_mods->session && dkr::runtime::netplay::session().active())
                 throw dkr::mods::Error("Offline custom assets cannot enter an online runtime.");
             if(dkr::runtime::netplay::session().active()) {
@@ -1254,7 +1266,8 @@ int DkrMain(int argc, char** argv) {
                 if (dkr::runtime::netplay::session().active())
                     dkr::runtime::netplay::session().fail_runtime_start(std::string("Save protection: ") + error.what());
                 dkr::runtime::ui::report_mod_error(std::string("Save protection: ") + error.what());
-                const auto startup = dkr::runtime::ui::run_startup_screen(
+                dkr::session_content::end();
+        const auto startup = dkr::runtime::ui::run_startup_screen(
                     static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window()), rom_path);
                 if (!startup.start_game) {
                     dkr::runtime::platform::shutdown();
@@ -1572,7 +1585,8 @@ int DkrMain(int argc, char** argv) {
             dkr::runtime::ui::reset_lifecycle_request();
             const bool software_launcher_return = dkr::runtime::launcher_surface_recovery(
                 owned_failed, return_from_owned, !mod_failure.empty() || !save_failure.empty());
-            const auto startup = dkr::runtime::ui::run_startup_screen(
+            dkr::session_content::end();
+        const auto startup = dkr::runtime::ui::run_startup_screen(
                 static_cast<SDL_Window*>(
                     dkr::runtime::platform::sdl_window()),
                 rom_path, software_launcher_return);

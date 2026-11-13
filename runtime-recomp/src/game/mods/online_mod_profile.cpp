@@ -1,3 +1,6 @@
+#include "storage/maintenance.hpp"
+#include "online_stability/preparation_policy.hpp"
+#include "online_stability/catalogue_cache.hpp"
 #include "../offline_keep.hpp"
 #include "../cache_repair.hpp"
 #include "../vehicle_online.hpp"
@@ -24,6 +27,7 @@
 namespace dkr::mods::online {
 namespace {
 using nlohmann::json;
+using CatalogueScope=dkr::online_stability::CatalogueScope<TrackCatalog,TrackCatalogItem>;
 std::string path_text(const std::filesystem::path& path){const auto text=path.generic_u8string();return {text.begin(),text.end()};}
 void cancelled(std::stop_token stop){if(stop.stop_requested())throw Error("Online mod preparation cancelled. Offline mods and saves were not changed.");}
 json read(const std::filesystem::path& path,std::size_t limit=MiB){check_storage(path,false);const auto bytes=read_file(path,limit);return json::parse(bytes.begin(),bytes.end(),[](int depth,json::parse_event_t,json&){if(depth>24)throw Error("Online metadata nesting exceeds its limit.");return true;});}
@@ -116,7 +120,7 @@ ProfileSources profile_sources(const Profile& input_profile) {
             const auto type=kind?TrackCatalog::Kind::Character:TrackCatalog::Kind::Track;
             const auto key=std::make_pair(library,type);
             auto at=catalogs.find(key);
-            if(at==catalogs.end())at=catalogs.emplace(key,TrackCatalog::installed_items(library,manifest.revision,type)).first;
+            if(at==catalogs.end())at=catalogs.emplace(key,CatalogueScope::installed(library,manifest.revision,type)).first;
             const auto id=ref.at("id").get<std::string>(),group=ref.at("group").get<std::string>();
             const auto item=std::find_if(at->second.begin(),at->second.end(),[&](const auto& c){return c.id==id && c.group==group;});
             if(item==at->second.end())throw Error("A referenced online asset was removed or needs repair. Retry preparation.");
@@ -291,12 +295,22 @@ void retain_profile(const Profile& input_profile,const std::filesystem::path& li
         cancelled(stop);dkr::runtime::custom_tracks::Track track;std::string error;
         if(!dkr::runtime::custom_tracks::inspect_package(course,track,error))throw Error(error);
         const auto data=pack_track_lab(course,stop);
+        bool alternate=false;
         if(const auto at=existing.find(track.id);at!=existing.end()) {
-            if(pack_track_lab(at->second,stop)!=data)throw Error("A downloaded Track Lab course conflicts with an installed id. The installed course was not replaced.");
-            continue;
+            if(pack_track_lab(at->second,stop)==data)continue;
+            alternate=true;
         }
-        const auto target=tracks/course.filename();
-        if(std::filesystem::exists(target))throw Error("The offline Track Lab destination is already in use.");
+        auto target=tracks/course.filename();
+        if(alternate||std::filesystem::exists(target)) {
+            ensure_directory(tracks/"online-variants");
+            target=dkr::online_stability::archived_course(tracks,sha256(data));
+            if(std::filesystem::exists(target)) {
+                check_storage(target,true);
+                if(pack_track_lab(target,stop)!=data)throw Error("The archived offline course needs repair. Existing files were not replaced.");
+                continue;
+            }
+            std::fprintf(stderr,"[online-mods][offline-variant] course=%s preserved-installed=1 archived-inactive=1\n",track.id.c_str());
+        }
         if(data.size()>std::uint64_t(1024*MiB)-bytes)throw Error("Offline Track Lab copy exceeds its storage budget.");
         bytes+=data.size();courses.emplace_back(target,data);
     }
@@ -458,6 +472,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     const std::vector<std::filesystem::path>& roms,const std::filesystem::path& input_root,
     const std::filesystem::path& worker,std::stop_token stop,const ProfileProgress& progress,const std::filesystem::path& installed_library,
     const std::filesystem::path& installed_track_library,const std::vector<std::filesystem::path>& selected_courses) {
+    CatalogueScope catalogue_scope;
     auto out=std::make_shared<Profile>();out->manifest=canonical(input);out->digest=identity(out->manifest);
     const bool needs_worker=std::any_of(out->manifest.payloads.begin(),out->manifest.payloads.end(),[](const auto& p){return p.kind==PayloadKind::Xdelta;});
     if(needs_worker&&(roms.empty() || roms.size()>8 || !worker.is_absolute()))throw Error("Online preparation needs imported Game Paks and the packaged importer.");
@@ -473,7 +488,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     out->directory=root/"source-profiles"/out->digest;
     if(std::filesystem::exists(out->directory)) {
         if(progress)progress("Revalidating the cached online mod profile");
-        try{validate_profile(*out);cancelled(stop);std::fprintf(stderr,"[online-mods][profile] verified-index-reused=1 manifest=%s\n",out->digest.c_str());return out;}
+        try{validate_profile(*out);dkr::storage::used(out->directory);cancelled(stop);std::fprintf(stderr,"[online-mods][profile] verified-index-reused=1 manifest=%s\n",out->digest.c_str());return out;}
         catch(const std::exception&) {
             cancelled(stop);
             // Preserve the stale index for QA and rebuild its named receipt
@@ -492,8 +507,8 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
         try {
             installed=private_storage_path(installed_library);
             if(progress)progress("Checking already installed mod resources");
-            installed_tracks=TrackCatalog::installed_items(installed,out->manifest.revision,TrackCatalog::Kind::Track);
-            installed_characters=TrackCatalog::installed_items(installed,out->manifest.revision,TrackCatalog::Kind::Character);
+            installed_tracks=CatalogueScope::installed(installed,out->manifest.revision,TrackCatalog::Kind::Track);
+            installed_characters=CatalogueScope::installed(installed,out->manifest.revision,TrackCatalog::Kind::Character);
         }catch(const std::exception&){cancelled(stop);installed.clear();installed_tracks.clear();installed_characters.clear();}
     }
     std::map<std::string,std::filesystem::path> installed_courses;
@@ -589,6 +604,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
             method="installed-reference";++installed_count;
             if(progress)progress(prefix+"Reusing matching installed assets");
         } else if(cached) {
+            dkr::storage::used(source);
             method="cache-reference";++cached_count;
             if(progress)progress(prefix+"Revalidating previously prepared assets");
             append_sources(sources,*cached);
@@ -602,7 +618,8 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
             // Avoid workers for installed/cached items. Share ROM validation
             // only for two truly missing payloads; never make a whole library
             // one unbounded import. A capped batch may fall back per item.
-            std::optional<Manifest> second;
+            const auto batch_limit=dkr::online_stability::preparation_batch(std::filesystem::space(root).available,dkr::online_stability::available_memory());
+            std::vector<Manifest> items{subset};
             for(const auto& candidate:out->manifest.payloads) {
                 if(candidate.digest==payload.digest || candidate.kind!=PayloadKind::Xdelta || batch_attempted.contains(candidate.digest))continue;
                 Manifest next;next.revision=out->manifest.revision;next.payloads.push_back(candidate);
@@ -611,21 +628,20 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
                 ProfileSources scratch;
                 if(std::filesystem::exists(root/"prepared-payloads"/identity(next)) ||
                     reuse_installed(next,installed,installed_tracks,installed_characters,installed_courses,scratch))continue;
-                second=std::move(next);break;
+                items.push_back(std::move(next));if(items.size()>=batch_limit)break;
             }
-            if(second) {
+            if(items.size()>1) {
                 const auto batch=job.path/"parts"/nonce();child(batch);child(batch/"batch");
-                const std::array<Manifest,2> items{subset,*second};
                 for(unsigned i=0;i<items.size();++i) {
                     const auto item=batch/"batch"/std::to_string(i);child(item);
                     write_new_file(item/"manifest.json",encode(items[i]));
                     batch_attempted.insert(items[i].payloads.front().digest);
                 }
                 json batch_request={{"schema",Schema},{"operation","online-prepare-batch"},{"source",path_text(std::filesystem::absolute(payloads))},
-                    {"count",2},{"roms",json::array()}};
+                    {"count",items.size()},{"roms",json::array()}};
                 for(const auto& rom:roms)batch_request["roms"].push_back(path_text(std::filesystem::absolute(rom)));
                 write(batch/"request.json",batch_request);++workers;
-                if(progress)progress(prefix+"Preparing two missing mods with shared verified ROM sources");
+                if(progress)progress(prefix+"Preparing "+std::to_string(items.size())+" missing mods with shared verified ROM sources");
                 const auto batch_start=std::chrono::steady_clock::now();
                 const auto result=run_worker(worker,batch/"request.json",[&] {
                     return !stop.stop_requested() && std::chrono::steady_clock::now()<deadline;
@@ -644,7 +660,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
                 // the second item's resource limit ended this bounded batch.
                 // This publishes cache only, never selection/readiness.
                 cancelled(stop);
-                std::fprintf(stderr,"[online-mods][batch] items=2 complete=%u outcome=%u elapsed-ms=%lld\n",completed,unsigned(result.outcome),
+                std::fprintf(stderr,"[online-mods][batch] items=%zu complete=%u outcome=%u elapsed-ms=%lld\n",items.size(),completed,unsigned(result.outcome),
                     static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-batch_start).count()));
             }
         }
@@ -683,10 +699,10 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
         std::filesystem::rename(part/"content",source,publish_error);
         if(publish_error) {
             if(!std::filesystem::exists(source))throw Error("Could not publish a verified per-mod preparation cache.");
-            validate_profile(reusable);
+            cached=profile_sources(reusable);
         }
         }
-        append_sources(sources,profile_sources(reusable));
+        append_sources(sources,cached?*cached:profile_sources(reusable));
         }
         // Each source is referenced once; no aggregate pack/review copy.
         const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();

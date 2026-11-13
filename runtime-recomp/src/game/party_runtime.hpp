@@ -2,6 +2,8 @@
 #include "party_link.hpp"
 #include "owned_observer.hpp"
 #include "owned_game.hpp"
+#include "online_stability/party_pacing.hpp"
+#include "online_stability/peer_clock.hpp"
 #include <functional>
 
 namespace dkr::runtime::spectators {
@@ -21,7 +23,10 @@ public:
     std::uint32_t confirmed()const;
     net::experimental::Statistics statistics()const;
     std::string status()const;
+    bool replay_ready()const;
+    dkr::online_stability::Pause pause_reason()const;
 private:
     struct Impl;std::unique_ptr<Impl> impl_;
 };
 }
+

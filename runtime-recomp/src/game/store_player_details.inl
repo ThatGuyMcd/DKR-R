@@ -24,18 +24,20 @@ void StoreReviewForm(const StoreJson& row, float width, const dkr::store::Snapsh
     StorePanel form(std::min(width, 820.F));
     const auto inner = form.inner();
     StoreHeading("Your review", inner, 20);
-    ImGui::PushID(prefix.c_str());
     ImGui::BeginDisabled(StoreBusyAction(store));
     auto& rating = g_mod_store.fields[prefix + "-rating"];
     StoreNote("Rating", inner);
-    const int selected = rating.empty() ? 4 : std::clamp(rating[0] - '1', 0, 4);
-    rating = std::to_string(StoreTabLine({"1 star", "2 stars", "3 stars", "4 stars", "5 stars"},
-                                        selected, inner, "review-rating") + 1);
-    StoreField((prefix + "-text").c_str(), "Review", inner, 4000, true, true);
-    StoreField((prefix + "-version").c_str(), "Version played", std::min(inner, 340.F), 80, false, true);
+    std::vector<std::pair<std::string, std::function<void()>>> choices;
+    for (int i = 1; i <= 5; ++i)
+        choices.push_back({std::string(rating == std::to_string(i) ? "[ " : "") + std::to_string(i) +
+                               (i == 1 ? " star" : " stars") + (rating == std::to_string(i) ? " ]" : ""),
+                           [prefix, i] { g_mod_store.fields[prefix + "-rating"] = std::to_string(i); }});
+    StoreActionLine(choices, inner);
+    StoreField((prefix + "-text").c_str(), "Review", inner, 4000, true);
+    StoreField((prefix + "-version").c_str(), "Version played", std::min(inner, 340.F), 80);
     if (StoreButton("Save review", 0, true)) {
         StoreAction("review.save", {{"itemId", item},
-                                    {"score", std::clamp(rating[0] - '0', 1, 5)},
+                                    {"score", rating.empty() ? 5 : std::clamp(rating[0] - '0', 1, 5)},
                                     {"text", g_mod_store.fields[prefix + "-text"]},
                                     {"version", g_mod_store.fields[prefix + "-version"]}});
         g_mod_store.review_editing = false;
@@ -43,9 +45,7 @@ void StoreReviewForm(const StoreJson& row, float width, const dkr::store::Snapsh
     ImGui::EndDisabled();
     if (StoreButton("Keep for later"))
         g_mod_store.review_editing = false;
-    ImGui::PopID();
 }
-
 void StoreDetails(const StoreJson& row, float width, const dkr::store::Snapshot& store, bool inspect) {
     if (!inspect && StoreBack("Back to browse", [] { g_mod_store.detail = false; }))
         return;
@@ -67,6 +67,7 @@ void StoreDetails(const StoreJson& row, float width, const dkr::store::Snapshot&
         StoreHeading(StoreText(row, "title", 200), inner, 23);
         StoreNote("by " + StoreText(row, "author", 200) + "  |  " + StoreCategory(row), inner);
         StoreNote(StoreRating(row), inner);
+        StoreCommunityCounts(row,inner);
         StoreNote("Version " + StoreText(row, "version", 80) + "  |  " + StoreDate(row), inner);
         StoreDownloadButton(row, StoreCurrentRelease(row), inner);
     }
@@ -74,7 +75,7 @@ void StoreDetails(const StoreJson& row, float width, const dkr::store::Snapshot&
         ImGui::EndTable();
     width = std::min(1120.F, outer);
     g_mod_store.detail_tab =
-        StoreTabLine({"Overview", "Reviews", "Install help", "Releases"}, g_mod_store.detail_tab, width, "mod-details");
+        StoreTabLine({"Overview", "Reviews", "Install help", "Releases", "Comments"}, g_mod_store.detail_tab, width, "mod-details");
     if (g_mod_store.detail_tab == 0) {
         const auto description = StoreText(row, "description", 16000);
         StoreNote(description.empty() ? StoreText(row, "summary", 4000) : description, width, false);
@@ -158,6 +159,8 @@ void StoreDetails(const StoreJson& row, float width, const dkr::store::Snapshot&
         const auto install = StoreText(row, "install", 6000);
         StoreNote(install.empty() ? "Choose Download & install. DKR-R handles the package for you." : install, width);
         StoreNote("Code mods still need your permission. Patch imports may need your original ROM.", width);
+    } else if(g_mod_store.detail_tab==4) {
+        StoreComments(row,width,store);
     } else if (row.contains("releases") && row["releases"].is_array()) {
         int shown = 0;
         const auto current = StoreText(StoreCurrentRelease(row), "id", 160);

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "controller_snapshot.hpp"
 
 #include <cstddef>
@@ -40,6 +39,7 @@ enum class Action : std::uint8_t {
     OrbitUp, OrbitDown, OrbitLeft, OrbitRight,
     CameraRecenter, CameraCycle, CameraZoomIn, CameraZoomOut,
     CameraFirstPerson, CameraXrRecenter,
+    AnalogueAccelerator, AnalogueBrake,
     Count,
 };
 
@@ -76,6 +76,7 @@ struct State {
     bool accelerate = false;
     float orbit_x=0,orbit_y=0;
     std::uint32_t camera_actions=0;
+    std::uint8_t accelerator=0,brake=0,driving_flags=0;
 };
 
 struct ShortcutBinding {
@@ -184,3 +185,4 @@ State poll_snapshot(
     bool global_shortcut_owner = true);
 
 } // namespace dkr::runtime::input
+

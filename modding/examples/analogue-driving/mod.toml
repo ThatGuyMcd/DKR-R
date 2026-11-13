@@ -1,0 +1,14 @@
+[manifest]
+id = "dkr_analogue_driving"
+version = "1.0.1"
+display_name = "Analogue Acceleration & Braking"
+authors = ["ThatGuyMcd"]
+description = "Independent analogue accelerator and brake for cars, hovercraft and planes. Open this mod's Details to set up each local player's triggers. Requires DKR-R 1.0.14 or newer."
+# RecompModTool accepts numeric floors only. The required analogue-driving v1
+# capability is available from 1.0.14-beta.3 and enforces the actual boundary.
+minimum_recomp_version = "1.0.14"
+game_id = "dkr"
+dependencies = []
+
+[build]
+sources = ["main.c"]

@@ -1,3 +1,4 @@
+#include "storage/maintenance.hpp"
 #include "update_service.hpp"
 #include "update_install.hpp"
 #include "update_trust.hpp"
@@ -177,6 +178,7 @@ void Service::run(std::function<void(std::stop_token)> action) {
     if (worker.joinable())
         worker.join();
     worker = std::jthread([this, action = std::move(action)](std::stop_token stop) {
+    dkr::storage::Activity storage_activity;
         try {
             action(stop);
         } catch (const std::exception &e) {
@@ -514,6 +516,11 @@ void configure(const std::filesystem::path &data, const std::filesystem::path &a
     } catch (const std::exception &e) {
         std::fprintf(stderr, "[updates] configuration disabled: %s\n", e.what());
     }
+}
+void shutdown() {
+    // Explicitly join while process-wide TLS providers are still alive.
+    // cancel() remains non-blocking for ordinary launcher interactions.
+    owner.reset();
 }
 Service *service() {
     return owner.get();

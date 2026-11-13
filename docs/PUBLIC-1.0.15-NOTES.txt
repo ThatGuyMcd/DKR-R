@@ -1,0 +1,135 @@
+DKR-R v1.0.15 Release Build
+
+I've spent quite a bit of time working through DKR-R Online since v1.0.14.
+This update improves how it handles late inputs and latency spikes, reduces
+some of the CPU work, and makes full lobbies with spectators behave better.
+Hosts can now change their prediction window and input delay during a race too!
+I've also tidied up Play, replaced the custom character labels and added cleanup
+for old downloads and caches that were taking up far too much space.
+
+ONLINE
+- Steering and analogue pedals stay up to date while the game recovers from
+  a delay. Button presses and releases are kept rather than getting lost.
+- Automatic input delay handles isolated late packets more sensibly. Waiting
+  for a menu or a resource no longer increases the racing input delay.
+- Clients follow the host's progress and recover their timing gradually after
+  a hitch. The game still keeps every simulation step and final input.
+- Racing inputs can use a separate encrypted datagram route when available.
+  The existing connection remains available as a fallback. Input repair traffic
+  is batched, and old progress reports no longer build up behind newer ones.
+- Ping readings can recover after longer spikes instead of staying on an old
+  value. This doesn't remove the actual network delay.
+
+CPU AND RECOVERY
+- Reworked checkpoint storage to reuse buffers and avoid repeated copying and
+  delta construction. This uses some extra RAM to reduce CPU work. Larger mod
+  states keep the bounded fallback; state checks and restore checks remain.
+- Short rollback corrections service the connection between steps.
+- Fixed an idle secure WebSocket ping causing connection shutdown to hang.
+- Logs now separate racing, correction, network and presentation work more
+  clearly, which should make future reports easier to investigate.
+
+SPECTATORS
+- Spectators watch buffered confirmed playback. They don't send racing inputs
+  and a slow viewer doesn't become someone the racers wait for input from.
+- History transfers can continue while acknowledgements return, with a shared
+  background allowance during the race.
+- Fixed a timing issue that could unnecessarily slow spectator downloads.
+  The existing bandwidth and burst limits stay in place.
+- Late spectator checkpoints copy retained confirmed state without rewinding
+  the live race or suppressing racing ticks. Existing viewers keep their history.
+- The initial buffer targets 1.5 seconds. Loading and catching up can take longer,
+  especially when several spectators join together. This is not video streaming
+  or a promise that every viewer will always be only 1.5 seconds behind.
+
+LIVE HOST SETTINGS
+Open Host settings in the lobby or the in-game DKR-R Online overlay, make your
+changes and press Apply changes. Accepted settings are saved for future lobbies.
+- Prediction window and automatic/manual input delay change during the race.
+- Allow new spectators closes or reopens joins without removing current viewers.
+- Capacity, menu control and replay edits made during play wait until the lobby.
+  Queued changes can be cancelled.
+- Development mode still needs a new lobby. A room created without spectator
+  capability also needs recreating before spectators can be enabled.
+- Loading and return transitions must finish before settings can be applied.
+
+Fresh profiles start with Automatic input delay ON, a one-frame starting lead
+and a 14-frame prediction window. Your existing saved preferences are kept.
+A larger window can help with distant racers but needs more memory and can
+increase correction work. A very small window can cause more waiting.
+
+PLAY PAGE
+Start Game now stays at the bottom of the Play page, so you don't need to
+scroll down to find it on smaller screens. The button is shorter, but still
+easy to find, and is selected when you open Play with a ROM ready to go.
+The settings and Community Spotlight scroll above it. The in-game overlay
+uses the same layout, with Return to the Race in that spot.
+The bar reaches the panel edges, with a narrower, centred button. You can move
+away from Start Game normally with the controller. The scrollbar only appears
+when needed and sits against the right edge. I've removed the extra opaque
+background and the Session mods tooltip, and fixed the Save Manager's bottom bar.
+
+PLAYER SELECT AND SAVE NAMES
+Selected custom characters now have names using the game's colourful font.
+The top row keeps its names above their heads, and the bottom row has them below
+their feet. There's no extra player number or Choose your Racer footer.
+This works for up to four players, with one name when players share a character.
+I've also fixed labels disappearing while browsing through characters. Long
+names and unusually sized models stay within their part of the screen.
+The scrolling keyboard for a new save now uses the wider screen properly too.
+
+FILE DIALOGS AND CRASH REPORTS
+Windows and Linux file dialogs now open in a separate helper. If a dialog fails,
+it should return an error instead of closing DKR-R. Keep the whole Windows ZIP
+together when updating; the helper is part of the installation.
+Crash reports now keep better fault information and the matching binary details,
+which should make the next report easier to investigate. I've also fixed a
+Windows issue where changing the reporting setting wasn't always saved.
+Reporting is still optional. Text is cleaned up as best we can, but anonymity
+isn't guaranteed. Raw dumps have their own setting and can contain personal data.
+
+STORAGE CLEANUP
+I've also added cleanup for files DKR-R no longer needs. Downloaded mod ZIPs,
+leftover install files and old caches were building up far too quickly.
+Automatic cleanup runs once each time you start DKR-R. It can carry on while
+you're playing, at low priority. Browsing the library or installing mods won't
+keep setting it off again. Your saves, ROMs, installed mods and texture packs
+are kept, and files being used by Online are left alone.
+
+When a Mod Library install finishes, it now tidies up its own download and
+leftover install files straight away. It checks the installed copy first and
+keeps the files needed for saved editions and recovery. This works even if
+you've turned startup cleanup off, without checking through everything again.
+
+You'll find the controls in About DKR-R > Support > Storage. You can turn
+automatic cleanup off, check how much space can be cleared, or clear it yourself.
+Current and previous mod recovery files are kept. Original crash dumps are
+only removed if you select the separate option for dumps older than 30 days.
+The first cleanup can take a while if your profile has built up a lot of files.
+
+WHAT STILL NEEDS WORK
+Online waiting has been reduced, not completely removed. A connection can still
+exceed the available prediction history. This update can't remove propagation
+delay or guarantee 60 FPS on every device. The release validation record lists
+the exact final-build tests separately from earlier private playtests.
+
+The reported missing vanilla online car textures and other racers' road wheels
+remain under investigation. This update does not claim to repair that issue.
+Physical Steam Deck LCD Wi-Fi and separate-machine testing remain necessary.
+The supplied Windows graphics-startup crash and Linux gameplay crash still need
+a reproduction with the improved diagnostics. The supplied ZIPs had logs but no
+actual memory dumps, so I'm not claiming those two crashes have been fixed.
+Existing translation, experimental graphics/haptics and custom battle-map
+limitations from v1.0.14 still apply.
+
+INSTALLING AND UPDATING
+Updating from the launcher is the recommended way to update. For a manual
+install, download the whole package for your platform. Windows users should
+extract the complete ZIP and run DKR-R.exe. Linux and Steam Deck users should
+make the AppImage executable. Keep your existing profile, saves, mods and settings.
+Portable mode selects a different location; it doesn't move your data for you.
+
+Everyone in an online lobby needs matching complete v1.0.15 packages and
+compatible session content. Use your own supported US v1.0 or US v1.1 ROM.
+No ROM or extracted game data is included. Some legacy .xdelta mods still need
+a clean US v1.0 ROM to install, even when v1.1 is selected for playing.

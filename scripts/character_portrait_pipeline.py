@@ -24,12 +24,13 @@ from save_layout_pipeline import DEF
 ROOT = Path(__file__).resolve().parents[1]
 WORLD_PORTRAIT = ROOT / "runtime-recomp/guest/world_portrait.inc"
 MODS = ROOT / "runtime-recomp/src/game/mods"
-# The seven native portrait edits as v1.0.11 shipped them (runtime-recomp/src).
+# The seven native portrait edits as shipped (runtime-recomp/src): v1.0.11,
+# with the storage activity v1.0.15 added to legacy_track_catalog.cpp.
 NATIVE_FILES = {
     "legacy_mod_format.cpp": "b3cdd9d7bcab6f54355592f90eed0e5c9ccf98e92d331746a8e186b06982cf4d",
     "legacy_character_materialize.hpp": "7fa418bb9fd4da9b79eab21dd98876f2b05b4496330b809e17c9359bf4eef4fb",
     "legacy_character_materialize.cpp": "2270d3efce0dcfcef2f5364e946fe70a5d5401f11b1960917ba5449678423563",
-    "legacy_track_catalog.cpp": "ad6d37cb7196738dfe9d2a1c07af28e94e69040ebc9909ffbed30aae7055796f",
+    "legacy_track_catalog.cpp": "91dafb69f308f74928dbdbc01b2b5e460c01bfe4047328f7bb812f3f89fa72d3",
     "legacy_track_prepare_job.hpp": "810b3cfa3c62e43c557f9d3c5d134888b7b9e3b9ad4ac7643badfd3c1e75d14c",
     "legacy_track_prepare_job.cpp": "d1a0f6a906c261f9d8104d167da5ebc3fcf1aef686ec6142efd39c0da3f5d82d",
     "online_mod_prepare.cpp": "e0ec53916dfd0f75582835f2198b2934164b9e5080d3766e7a2423c24063c9bb",

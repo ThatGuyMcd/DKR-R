@@ -10,7 +10,7 @@ from source_text import Source
 
 ROOT = Path(__file__).resolve().parents[2]
 GAME = ROOT / "runtime-recomp/src/game"
-# Reviewed copy that v1.0.11 no longer ships: the named release layer replaced
+# Reviewed copy that a release no longer ships: the named release layer replaced
 # that part of the launcher, and the fold wrote the shipped bytes back. Each
 # string must stay absent; docs/fold-in/launcher-copy-review.md lists them for
 # the Phase C copy review, which re-baselines them against the shipped strings.
@@ -86,6 +86,26 @@ SUPERSEDED = {
     "COPY-399": "launcher-polish, v1.0.11",
     "COPY-413": "shared-saves, v1.0.11",
     "COPY-414": "shared-saves, v1.0.11",
+    # v1.0.14 and v1.0.15 reworked these pages through the release layers.
+    "COPY-004": "release layers, v1.0.15",
+    "COPY-009": "release layers, v1.0.15",
+    "COPY-011": "release layers, v1.0.15",
+    "COPY-012": "release layers, v1.0.15",
+    "COPY-013": "release layers, v1.0.15",
+    "COPY-015": "release layers, v1.0.15",
+    "COPY-031": "release layers, v1.0.15",
+    "COPY-032": "release layers, v1.0.15",
+    "COPY-042": "release layers, v1.0.15",
+    "COPY-043": "release layers, v1.0.15",
+    "COPY-057": "release layers, v1.0.15",
+    "COPY-058": "release layers, v1.0.15",
+    "COPY-154": "release layers, v1.0.15",
+    "COPY-207": "release layers, v1.0.15",
+    "COPY-258": "release layers, v1.0.15",
+    "COPY-332": "release layers, v1.0.15",
+    "COPY-404": "release layers, v1.0.15",
+    "COPY-407": "release layers, v1.0.15",
+    "COPY-408": "release layers, v1.0.15",
 }
 
 
@@ -129,7 +149,9 @@ class LauncherCopyTests(unittest.TestCase):
         self.assertNotIn("PathUtf8(save.adventure.path)", play)
         self.assertNotIn("Current data folder:", play)
         self.assertIn("Existing saves aren't moved automatically.", play)
-        self.assertIn("Your offline save needs attention.", play)
+        # v1.0.15's Play page dropped the offline Adventure block (COPY-011 to
+        # COPY-013 are superseded), and its save warning went with it.
+        self.assertNotIn("Your offline save needs attention.", play)
 
     def test_play_button_only_checks(self):
         updates = source("runtime_updates_ui.inl")

@@ -78,11 +78,12 @@ void OnlineInputBroker::reset() {
 
 void OnlineInputBroker::capture_local(std::size_t profile,
                                       std::uint16_t buttons, float stick_x,
-                                      float stick_y, bool blocked) {
+                                      float stick_y, bool blocked,std::uint8_t accelerator,std::uint8_t brake,std::uint8_t driving_flags) {
     std::scoped_lock lock(mutex_);
     if (!enabled_ || profile != local_profile_) return;
     local_.input = {buttons, pack_input_axis(stick_x),
-                    pack_input_axis(stick_y)};
+                    pack_input_axis(stick_y),accelerator,brake,driving_flags};
+    if(blocked||!valid_input(local_.input))local_.input={};
     local_.profile = profile;
     local_.generation = next_local_generation_++;
     local_.blocked = blocked;

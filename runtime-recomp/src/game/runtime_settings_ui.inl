@@ -23,6 +23,7 @@ inline PaddockType SetHelpType() { return PaddockReading(14.0F, false, 1.5F); }
 
 // A field's label (.field > label): 600 16px, 8 px above its control.
 void SettingsLabel(std::string_view label, float width) {
+    label=dkr::localisation::source(label);
     if (label.empty()) return;
     PaddockText(SetLabelType(), PaddockRgb(kSetText), label, width);
     PaddockGap(8.0F);
@@ -30,34 +31,14 @@ void SettingsLabel(std::string_view label, float width) {
 
 // Help under a control (.gfx-help).
 float SettingsHelp(std::string_view text, float width, unsigned colour = kSetMuted) {
+    text=dkr::localisation::source(text);
     if (text.empty()) return 0.0F;
     return PaddockText(SetHelpType(), PaddockRgb(colour), text, width);
 }
 
 // ------------------------------------------------------------ drop-down
 
-struct SettingsChoice {
-    std::string label;
-    std::string detail;
-    bool disabled = false;
-    bool action = false;     // .picker-option.is-action: an amber "+" row
-    bool separator = false;  // .picker-sep: a hairline, not a choice
-
-    SettingsChoice(const char* text) : label(text) {}
-    SettingsChoice(std::string text, std::string more = {}, bool off = false)
-        : label(std::move(text)), detail(std::move(more)), disabled(off) {}
-
-    static SettingsChoice Action(std::string text) {
-        SettingsChoice choice(std::move(text));
-        choice.action = true;
-        return choice;
-    }
-    static SettingsChoice Separator() {
-        SettingsChoice choice(std::string{});
-        choice.separator = true;
-        return choice;
-    }
-};
+using SettingsChoice=dkr::localisation::Choice;
 
 // The open list (.picker): a dark panel under its field, with a check on
 // the current choice. Returns the picked index, or -1.
@@ -150,13 +131,13 @@ int DrawSettingsPicker(const char* popup, ImVec2 anchor_min, ImVec2 anchor_max, 
             }
             const float text_x = press.min.x + 36.0F;
             const float text_width = std::max(press.max.x - 12.0F - text_x, 1.0F);
-            const std::string label = PaddockEllipsize(label_type, choice.label, text_width);
+            const std::string label = PaddockEllipsize(label_type, choice.display_label(), text_width);
             const float top = choice.detail.empty() ? std::round(press.min.y + (row - label_type.line) * 0.5F)
                                                     : press.min.y + 9.0F;
             PaddockDrawRun(draw, label_type, {text_x, top}, tone(choice.action ? 0xFFC453 : 0xEAF3F5), label.data(),
                            label.data() + label.size());
             if (!choice.detail.empty()) {
-                const std::string detail = PaddockEllipsize(detail_type, choice.detail, text_width);
+                const std::string detail = PaddockEllipsize(detail_type, choice.display_detail(), text_width);
                 PaddockDrawRun(draw, detail_type, {text_x, top + label_type.line + 1.0F},
                                tone(0x9FB8C4), detail.data(), detail.data() + detail.size());
             }
@@ -198,7 +179,7 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value,
                   1.0F);
     const PaddockType type = PaddockReading(16.0F, true, 1.25F);
     const std::string shown = PaddockEllipsize(
-        type, choices.empty() ? "Unavailable" : choices[static_cast<std::size_t>(*value)].label,
+        type, choices.empty() ? dkr::localisation::source("Unavailable") : choices[static_cast<std::size_t>(*value)].display_label(),
         width - 14.0F - 14.0F - 12.0F - 16.0F);
     PaddockDrawRun(draw, type, {press.min.x + 15.0F, std::round(press.min.y + (52.0F - type.line) * 0.5F)},
                    PaddockRgb(0xFFFFFF), shown.data(), shown.data() + shown.size());
@@ -226,7 +207,7 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value,
                       std::initializer_list<const char*> items, float width,
                       bool disabled = false, std::string_view help = {}) {
     std::vector<SettingsChoice> choices;
-    for (const char* item : items) choices.push_back({item, {}, false});
+    for (const char* item : items) choices.push_back({std::string(dkr::localisation::source(item)), {}, false});
     return SettingsDropdown(id, label, value, choices, width, disabled, help);
 }
 
@@ -235,6 +216,7 @@ bool SettingsDropdown(const char* id, std::string_view label, int* value,
 // A checkbox with its label, and its help 36 px in under it (.gfx-option).
 bool SettingsCheck(const char* id, std::string_view label, bool* value, float width,
                    std::string_view help = {}, bool disabled = false) {
+    label=dkr::localisation::source(label);
     const PaddockType type = SetLabelType();
     const float text_width = std::max(width - 36.0F, 1.0F);
     const auto lines = PaddockWrap(type, label, text_width);
@@ -283,6 +265,7 @@ template <typename Format>
 bool SettingsRange(const char* id, std::string_view label, int* value, int minimum, int maximum,
                    float width, Format&& format, std::string_view help = {},
                    bool disabled = false) {
+    label=dkr::localisation::source(label);
     const ImVec2 at = ImGui::GetCursorScreenPos();
     ImDrawList* draw = ImGui::GetWindowDrawList();
     // The ring and tint go under the field once its height is known.
@@ -339,6 +322,7 @@ bool SettingsRange(const char* id, std::string_view label, int* value, int minim
 // A card's title (.gfx-section h2: 26 px lettering; an ampersand is set in
 // the reading face, as the study's .gfx-heading-symbol).
 float SettingsCardTitle(std::string_view title, float width) {
+    title=dkr::localisation::source(title);
     const PaddockType sign = PaddockSign(26.0F, 1.05F, 0.02F);
     const PaddockType symbol = PaddockReading(20.0F, true, 1.05F);
     const ImVec2 at = ImGui::GetCursorScreenPos();
@@ -451,6 +435,7 @@ void SettingsCardPair(const char* key, float width, bool stacked, float gap,
 // A disclosure row (.gfx-advanced summary): a hairline above, a turning
 // marker and a semibold label. Returns the open state.
 bool SettingsDisclosure(const char* id, std::string_view label, bool& open, float width) {
+    label=dkr::localisation::source(label);
     const ImVec2 at = ImGui::GetCursorScreenPos();
     ImDrawList* draw = ImGui::GetWindowDrawList();
     draw->AddRectFilled(at, {at.x + width, at.y + 1.0F}, PaddockCol(kSetBorder));
@@ -484,6 +469,7 @@ bool SettingsDisclosure(const char* id, std::string_view label, bool& open, floa
 // A quiet race button for page footers (.gfx-reset-actions .race-button).
 bool SettingsRaceButton(const char* label, bool disabled, const char* reason = nullptr,
                         unsigned fill = 0x123E50) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     RaceButtonLook look;
     look.fill = fill;
     look.hover_in = 0.12F;
@@ -554,6 +540,7 @@ enum class SettingsButtonTone {
 };
 
 inline float SettingsButtonWidth(std::string_view label) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     return std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.35F), label) + 28.0F + 2.0F);
 }
 
@@ -562,6 +549,7 @@ inline float SettingsButtonWidth(std::string_view label) {
 bool SettingsButton(const char* label, float width = 0.0F, bool disabled = false,
                     SettingsButtonTone tone = SettingsButtonTone::Plain, bool regular = false,
                     const char* reason = nullptr, float padding_x = 14.0F) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const char* end = PaddockLabelEnd(label);
     const std::string_view text(label, static_cast<std::size_t>(end - label));
     const PaddockType type = PaddockReading(14.0F, !regular, 1.35F);
@@ -718,6 +706,7 @@ int SettingsSectionSigns(const std::vector<const char*>& labels, int current, fl
 // paragraphs, then the actions on the right. Open with ImGui::OpenPopup(name).
 bool BeginSettingsDialog(const char* name, std::string_view heading, float max_width = 620.0F,
                          unsigned fill = 0x06336E) {
+    heading=dkr::localisation::source(heading);
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     const float width = std::min(max_width, display.x - 32.0F);
     ImGui::SetNextWindowSize({width, 0.0F}, ImGuiCond_Always);

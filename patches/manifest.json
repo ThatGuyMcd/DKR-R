@@ -268,6 +268,10 @@
         {
           "path": "patches/libdatachannel/0001-verify-explicit-windows-websocket-ca.patch",
           "sha256": "4e1ebb9d0fa5440ee0513a00d4e8e6975f0b5be0405441f1e769e91e1e9fb398"
+        },
+        {
+          "path": "patches/libdatachannel/0002-dispatch-mbedtls-idle-notifications-outside-read-lock.patch",
+          "sha256": "502d9edb0e41aef4e0316c608358fc3acc6c026fe16db6adeadef7e9bc28ad98"
         }
       ]
     },
@@ -510,7 +514,7 @@
     },
     {
       "path": "patches/enhanced-water/dkr-stability.patch",
-      "sha256": "75f1860b0fcf35b6d89f126ab82878d1466ed6fd645601c4c46d5b8d7a225131"
+      "sha256": "7fe7c44ac25849d88afd9a60ba961d25945defeb3df43211921890be62bdc7bb"
     },
     {
       "path": "patches/enhanced-water/dkr-views.patch",
@@ -518,7 +522,7 @@
     },
     {
       "path": "patches/enhanced-water/dkr-waterfall.patch",
-      "sha256": "16958771541b0c783a78e33c5463de2f3e3149ddb59bc6f47fe21902dfe63b47"
+      "sha256": "6c4c8e915bde3adfd899470b9d656b8a4e0b28933a83a6826a2699c8e8d521ff"
     },
     {
       "path": "patches/enhanced-water/renderer.patch",

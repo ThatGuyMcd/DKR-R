@@ -1,6 +1,6 @@
 DKR-R Modding Bible - SDK 2.0
 =============================
-v1.0.12 release — SDK 2.0 retained
+v1.0.14 release — SDK 2.0 retained
 
 RIGHT - LET'S GET STARTED
 -------------------------
@@ -16,7 +16,7 @@ ModernCamera++ do not need to be rewritten just because the authoring kit now
 says SDK 2.0. New executable API 2 packages opt into the additional services.
 The exact supported modules and limits are part of the reference below.
 
-This book is for v1.0.12 with the retained SDK 2.0/API 1 compatibility. Compilation and package inspection are
+This book is for v1.0.14 with the retained SDK 2.0/API 1 compatibility. Compilation and package inspection are
 not a promise that every possible combination of mods is bug free. Gameplay,
 visual, performance, multiplayer and headset testing are carried out by the
 players testing the build. Keep backups, work in a development session and
@@ -110,6 +110,11 @@ not by changing schema to 2. Tools UI resources have their own schema: 2.
       "revisions": ["us.v77", "us.v80"],
       "requires": {"core": 1, "game-events": 1, "entities2": 2, "transactions2": 2}
     }
+
+schema/dkr.schema.json is a JSON Schema for dkr.json. Add a "$schema" key
+pointing at it (the loader ignores keys it doesn't know) to get completion
+and validation in your editor, for example
+"$schema": "https://raw.githubusercontent.com/ThatGuyMcd/DKR-R/main/modding/schema/dkr.schema.json".
 
 Resources map logical IDs to project-relative files. No absolute paths,
 parent-directory escapes or symlinks. Declare every resource you use; a mod
@@ -631,7 +636,7 @@ for reviewed adapters and must validate their own payloads just as carefully.
 ONLINE DEVELOPMENT - HOST AUTHORITY
 -----------------------------------
 
-Use the v1.0.12 Rollback host mode for code mods. Unsupported engines do not acquire
+Use the v1.0.14 Rollback host mode for code mods. Unsupported engines do not acquire
 shared code support just because a tools panel exists. Enable Development
 lobby before hosting a session with development mods. Every racer must consent
 before readying. All peers admit the same package editions, dependencies,
@@ -1350,6 +1355,7 @@ engine identity and compile/package evidence are recorded with the delivery.
 
 SDK REFERENCE - magic_codes.h
 -----------------------------
+```c
 
 #ifndef DKR_CUSTOM_MAGIC_CODES_H
 #define DKR_CUSTOM_MAGIC_CODES_H
@@ -1465,8 +1471,11 @@ DKR_IMPORT void dkr_log(const char* message) { (void)message; }
 #endif
 
 
+```
+
 SDK REFERENCE - game.h
 ----------------------
+```c
 
 #ifndef DKR_GAME_SDK_H
 #define DKR_GAME_SDK_H
@@ -1541,8 +1550,11 @@ _Static_assert(sizeof(DkrHudText)==28,"HUD SDK ABI");
 #endif
 
 
+```
+
 SDK REFERENCE - development.h
 -----------------------------
+```c
 
 #ifndef DKR_DEVELOPMENT_H
 #define DKR_DEVELOPMENT_H
@@ -1755,8 +1767,11 @@ static_assert(sizeof(Dkr2Tune)==32,"tuning ABI");
 #endif
 
 
+```
+
 SDK REFERENCE - development.hpp
 -------------------------------
+```cpp
 
 #ifndef DKR_SDK2_DEVELOPMENT_HPP
 #define DKR_SDK2_DEVELOPMENT_HPP
@@ -1829,8 +1844,11 @@ public:
 #endif
 
 
+```
+
 SDK REFERENCE - json.h
 ----------------------
+```c
 
 #ifndef DKR_SDK2_JSON_H
 #define DKR_SDK2_JSON_H
@@ -1867,8 +1885,11 @@ static inline void dkr_json_key(DkrJson* j,const char* key){dkr_json_text(j,key)
 #endif
 
 
+```
+
 SDK REFERENCE - json_read.h
 ---------------------------
+```c
 
 #ifndef DKR_SDK2_JSON_READ_H
 #define DKR_SDK2_JSON_READ_H
@@ -1945,8 +1966,11 @@ static inline int dkr_json_real(const char* bytes,const DkrJsonToken* token,floa
 #endif
 
 
+```
+
 SDK REFERENCE - presentation.h
 ------------------------------
+```c
 
 #ifndef DKR_PRESENTATION_SDK_H
 #define DKR_PRESENTATION_SDK_H
@@ -2079,3 +2103,25 @@ Spectators do not gain a racing port or authority to issue gameplay commands.
 Watching/development do not award gameplay achievements. API 1/2 headers,
 capability versions and package formats are unchanged by lobby discovery.
 See docs/ONLINE_MULTIPLAYER.md, docs/SPECTATORS.md and docs/ACHIEVEMENTS.md.
+
+```
+
+## Analogue driving in v1.0.14
+
+The additive analogue-driving version-1 capability exposes dkr/driving.h in
+API 2. Existing DkrInput and API 1 layouts stay unchanged. DkrDrivingInput is
+a separate 20-byte record: api, size, flags, accelerator and brake. Levels are
+independent calibrated integers from 0 to 255; flags bit 0 means enabled.
+
+dkr2_driving_input(player, output) reads the logical recorded sample for that
+tick. dkr2_driving_apply(player) requests native effort caps for the same sample
+from on_frame. Native coast, boosts and control restrictions retain ownership;
+CPU and special boss vehicles are not changed. Replay uses recorded samples,
+never physical-controller reads from simulation. Require analogue-driving 1
+and use the complete examples/analogue-driving source and manifest.
+
+The optional companion mod must be installed, approved and enabled. Its Details
+contains bindings, calibration and live bars for the selected local player. In
+Online the host enables the gameplay mod and every player keeps local controls.
+Use matching compatible v1.0.14 application/package editions. Standalone Look
+behind is a separate graphics option and does not require ModernCamera++.

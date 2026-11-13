@@ -24,7 +24,7 @@ void begin(const std::filesystem::path& config,const std::string& version,rom::R
         mods::code::Library library(config/"mods"/"custom-magic-codes",version);
         auto set=library.freeze(revision==rom::Revision::UsV77?"us.v77":"us.v80",false,Program::policy().modules,{},true);
         if(set.ordered.empty()) {
-            if(!development_tools)return;
+            (void)development_tools; // Standalone local rear view is always available.
             auto next=std::make_shared<Activation>();next->revision=revision;next->online=online;
             next->settings=std::make_shared<SettingsChannel>();std::array<Json,4> defaults;for(auto& value:defaults)value=Json::object();next->settings->publish(defaults);
             current.store(std::move(next));return;
@@ -40,7 +40,11 @@ void begin(const std::filesystem::path& config,const std::string& version,rom::R
         Program checked(package,next->frozen.settings.at(package->id),revision==rom::Revision::UsV77?"us.v77":"us.v80");
         current.store(std::move(next));
         std::fprintf(stderr,"[camera++][ready] provider=%s domain=local-presentation online=%u\n",package->id.c_str(),unsigned(online));
-    }catch(const std::exception& e){report(e.what());}
+    }catch(const std::exception& e){
+        auto next=std::make_shared<Activation>();next->revision=revision;next->online=online;
+        next->settings=std::make_shared<SettingsChannel>();std::array<Json,4> defaults;for(auto& v:defaults)v=Json::object();next->settings->publish(defaults);
+        current.store(std::move(next));report(e.what());
+    }
 }
 void reset()noexcept {
     current.store(nullptr);editor_open.store(false);input.reset();

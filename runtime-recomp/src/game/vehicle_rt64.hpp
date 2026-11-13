@@ -35,8 +35,14 @@ private:
     hlslpp::float4x4 root_=hlslpp::float4x4::identity(),adjustment_=hlslpp::float4x4::identity();
     float scale_=1,draw_scale_=1,steer_=0;
     std::array<std::uint64_t,4> spin_{};
+    lighting::Stream lighting_;
     bool active_=false,root_ready_=false,replacement_submitted_=false,hide_attachment_=false;
     bool maximum_detail_=false; // Local presentation policy, never checkpointed.
+    bool native_wheel_colour_=false;
+    bool native_wheel_passthrough_=false;
+    lighting::Stream native_wheel_light_;
+    std::array<unsigned,2> native_wheel_rotation_{};
+    unsigned native_wheel_rotation_seen_=0;
 };
 // Decoder-thread scope only; never simulation/checkpoint state.
 const RenderPass* active_render_pass() noexcept;

@@ -26,6 +26,8 @@ N64ModernRuntime must also satisfy GPL-3.0; see
 | SDL3 | Private headless controller and Steam Deck sensor helper | Zlib |
 | SDL_GameControllerDB | Community controller mappings loaded before user mappings | Zlib |
 | Dear ImGui | Launcher and in-game settings UI | MIT |
+| Native File Dialog Extended | Private desktop open/save/folder dialog helper | Zlib |
+| GCC runtime libraries | Statically linked libstdc++/libgcc in the Linux file-picker helper | GPL-3.0 with the GCC Runtime Library Exception; applicable upstream notices are included |
 | DirectX Shader Compiler | Windows shader compilation | University of Illinois/NCSA and bundled notices |
 | dr_mp3 / dr_wav (mackron/dr_libs) | Decoding a custom track's own MP3/WAV music; vendored in `runtime-recomp/third_party/dr_libs` | Public domain (Unlicense) or MIT-0 |
 
@@ -33,6 +35,11 @@ Exact dependency commits are recorded in `dependencies.lock.json`. Windows
 packages include applicable notices in `ThirdPartyLicenses`. Linux AppImages
 include project notices plus the copyright records and common licences for each
 deployed system library under `usr/share/doc/dkr-port`.
+
+The Linux picker includes `licenses/GCC-RUNTIME-COPYRIGHT.txt` and
+`licenses/GCC-GPL-3.txt` under that directory. The copyright record includes
+the runtime exception and source references. Host desktop dialog/portal services
+are not bundled by the helper; they retain their own system licences.
 
 The optional enhanced-water adapter derives renderer code from Wave Race 64
 Recomp at commit `9041cc8024f6d2015859f88f5a0307b36cd4e50a` (see the
@@ -52,6 +59,14 @@ created or imported mappings are stored in the user's DKR-R configuration
 directory and are never written into the installed database.
 
 ## Fonts
+
+Noto Sans Regular supplies missing Latin and Cyrillic launcher/overlay glyphs.
+The unmodified unhinted TrueType font is distributed under the SIL Open Font
+License 1.1. Its full licence is in
+`runtime-recomp/assets/localisation/OFL-NotoSans.txt` and packaged as
+`NotoSans-LICENSE.txt`. Source and SHA-256 are recorded beside the font in
+`FONT-SOURCE.txt`. Existing project and system fonts retain their supported
+glyphs; system fonts are not redistributed.
 
 Racing Banana is the launcher body font supplied by the project owner. It is not
 extracted from Diddy Kong Racing. Its supplied source SHA-256 is

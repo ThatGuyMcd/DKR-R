@@ -37,7 +37,9 @@ private:
     std::unique_ptr<Program> program_;
     std::shared_ptr<const CollisionScene> collision_;
     std::uint32_t scene_=0,epoch_=0,model_=0;
+    std::array<bool,4> rear_active_{};
     bool scene_attempted_=false;
     std::string scene_error_;
 };
 }
+

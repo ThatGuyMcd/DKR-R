@@ -8,7 +8,7 @@ std::string g_dump_browser_status;
 bool g_dump_browser=false,g_dump_sources=false;
 // Keep the existing Texture Packs and CRT page completely unchanged. These
 // session-local controls belong only to the new disclosure beneath that page.
-bool g_dump_open=false,g_dump_folder_info=false;
+bool g_dump_folder_info=false;
 enum class DumpPanel { Export,Capture,Dumps };
 DumpPanel g_dump_panel=DumpPanel::Export;
 bool g_dump_clear_previews=false;
@@ -256,18 +256,13 @@ void DrawTextureDumping(float width) {
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign,{.5F,.5F});
     const bool locked=state->busy||state->capturing||state->gallery_loading;
     ImGui::PushID("texture-dumping");
-    const ImVec2 header=ImGui::GetCursorScreenPos();
-    const bool expanded=DetailSectionSign("TEXTURE DUMPING##texture-dump",g_dump_open,width);
+    PaddockGap(26.F);
+    PaddockHeading("Texture dumping",22.F,kSetWarm,width);
+    PaddockGap(10.F);
     const std::string summary=state->capturing?(state->paused?"Capture paused":"Capturing - "+std::to_string(state->exported)+" saved"):
         state->busy?"Working...":!state->error.empty()?"Needs attention":state->folder.empty()?"Ready":"Dump ready";
-    const auto summary_type=PaddockReading(13.F,true,1.4F);
-    const float summary_width=PaddockMeasure(summary_type,summary);
-    if(PaddockSectionTabWidth("TEXTURE DUMPING")+summary_width+24.F<=width) {
-        PaddockDrawRun(ImGui::GetWindowDrawList(),summary_type,
-            {header.x+width-summary_width-16.F,header.y+22.F+(PaddockSectionTabHeight()-summary_type.line)*.5F},
-            PaddockCol(kSetText),summary.data(),summary.data()+summary.size());
-    }else if(locked||!state->error.empty())DetailText(summary,width,kSetMuted,8.F);
-    if(expanded) {
+    DetailText(summary,width,kSetMuted,12.F);
+    {
         DumpActionRow tabs(width);
         if(tabs.Button("Export",false,g_dump_panel==DumpPanel::Export?SettingsButtonTone::Selected:SettingsButtonTone::Plain))g_dump_panel=DumpPanel::Export;
         if(tabs.Button("Capture",false,g_dump_panel==DumpPanel::Capture?SettingsButtonTone::Selected:SettingsButtonTone::Plain))g_dump_panel=DumpPanel::Capture;
@@ -323,8 +318,6 @@ void DrawTextureDumping(float width) {
             if(actions.Button("Open existing dump",locked))ChooseDumpFolder(true);
         }
         DrawDumpJob(width,state);
-    }else if(!state->error.empty()) {
-        DetailText(state->error,width,kSetWarm,8.F);
     }
     // Modal ownership remains independent of the disclosure/tab visibility.
     {
@@ -367,7 +360,7 @@ void DrawTextureDumping(float width) {
     ImGui::PopID();ImGui::PopStyleVar(2);
     --g_settings_regular_labels;
 }
-void DrawTexturesPage(float width) {
-    DrawTexturesPageWithoutDump(width);
+void DrawTexturesPage(float width, bool embedded = false) {
+    DrawTexturesPageWithoutDump(width,embedded);
     DrawTextureDumping(width);
 }

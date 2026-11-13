@@ -1,3 +1,4 @@
+#include "analog_driving/native.hpp"
 #include "mods/magic_code_dispatch.h"
 #include "runtime_code_mods.hpp"
 #include "runtime_legacy_mods.hpp"
@@ -121,4 +122,9 @@ extern "C" std::uint32_t dkr_code_lap_address(std::uint32_t address,std::uint8_t
     std::uint64_t result=address;
     if(bound->world->lap_address(address,result)<0)stop(bound->world->error());
     return std::uint32_t(result);
+}
+
+extern "C" std::uint32_t dkr_analogue_driving(std::uint8_t* ram,recomp_context*,unsigned channel,std::uint32_t racer,std::uint32_t bits) {
+    if(!dkr_code_callbacks_enabled)return bits;
+    return dkr::runtime::driving::apply(ram,channel,racer,bits);
 }

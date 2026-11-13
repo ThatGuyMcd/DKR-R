@@ -66,6 +66,7 @@ void GameWorld::sdk2_lifetime(std::string_view function,bool leaving,const Regis
     }
 }
 void GameWorld::sdk2_boundary(unsigned event) {
+    if(event==DKR_CODE_EVENT_FRAME)dkr::runtime::driving::begin_frame(online_);
     if(!sdk2_enabled()||!native_bus_)return;
     auto& bus=*native_bus_;
     for(const auto& owner:linked().owners)if(owner.package->api==2) {
@@ -213,6 +214,8 @@ bool GameWorld::sdk2_service(std::string_view name,std::size_t index,Memory& bus
     const auto a=std::uint32_t(c.integer[4]),b=std::uint32_t(c.integer[5]),d=std::uint32_t(c.integer[6]);
     auto result=[&](int status){c.integer[2]=std::uint64_t(std::int64_t(status));return true;};
     if(owner.package->api!=2)return result(-5);
+#include "analog_driving/sdk_service.inl"
+
     if(name=="dkr2_setting_apply")return result(sdk2_setting_apply(bus,index,a,b,d,budget));
     if(name=="dkr2_freeze_cpus") {
         if(!owner.package->modules.contains("racer-tuning2"))return result(-5);
@@ -480,3 +483,4 @@ bool GameWorld::sdk2_service(std::string_view name,std::size_t index,Memory& bus
     }
     return result(-5);
 }
+

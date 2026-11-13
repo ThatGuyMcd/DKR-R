@@ -67,6 +67,7 @@ bool CreateOnlineLobby() {
         g_online_action_status=reason;ReportOnlinePreparationFailure(reason);return false;
     }
     OnlineHostRequest request;
+    request.content_enabled=dkr::session_content::next_enabled.load();
     request.rules.host_control=static_cast<HostControlPolicy>(g_online_host_control);
     request.rules.maximum_players=static_cast<std::uint8_t>(g_online_maximum_players);
     request.rules.synchronization=CurrentOnlineSynchronization();
@@ -79,6 +80,13 @@ bool CreateOnlineLobby() {
     request.manifest=BuildNetplayManifest(g_online_mod_identity);
     request.save_mode=static_cast<dkr::runtime::saves::OnlineSaveSeedMode>(g_online_save_seed_mode);
     request.room=g_online_room_name;request.name=g_online_player_name;
+    if(!request.content_enabled){
+        request.manifest.magic_codes_hash=0;
+        request.manifest.gameplay_settings_hash=stable_hash("0:retail-simulation-30");
+        g_online_mod_notice.clear();
+        if(g_online_mod_sync)g_online_mod_sync->cancel();
+        return FinishOnlineLobby(request,{},0);
+    }
     std::vector<std::filesystem::path> labs;
     for(const auto& track:dkr::runtime::custom_tracks::tracks())if(track.enabled)labs.push_back(track.source);
     auto settings=OnlineModSettings();
@@ -116,7 +124,7 @@ void PumpOnlineMods() {
         g_online_kept_profile=view.profile->digest;
         if(view.kept_offline) {
             g_legacy_imports.refresh();g_code_library.refresh();dkr::runtime::custom_tracks::reload();
-            g_online_action_status="Mods saved in Mods / Hacks. New offline copies start disabled.";
+            g_online_action_status="Mods saved in Installed Mods. New offline copies start disabled.";
             std::fprintf(stderr,"[online-mods][offline-keep] complete manifest=%s\n",view.profile->digest.c_str());
         } else if(!view.keep_error.empty()) {
             g_online_action_status="Joined the lobby, but couldn't keep offline mod copies: "+view.keep_error;
@@ -253,3 +261,4 @@ void DrawOnlineModModal() {
     }
     ImGui::EndPopup();
 }
+

@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0 # host tooling verifies historical pinned capsule bases
       - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y cmake ninja-build ccache libcurl4-openssl-dev
       - name: Prepare pinned runtime dependencies

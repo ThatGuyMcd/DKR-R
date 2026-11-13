@@ -2,6 +2,8 @@
 #include "online_directory.hpp"
 #include "monocypher.h"
 #include "admission_contract.hpp"
+#include "online_stability/control.hpp"
+#include "netplay/peer_relay/transport.hpp"
 #include <map>
 #include <set>
 
@@ -24,7 +26,7 @@ struct Owner {
 struct Registry {std::mutex mutex;std::map<const void*,std::shared_ptr<Owner>> owners;};
 inline Registry& registry(){static auto* p=new Registry;return *p;}
 inline std::shared_ptr<Owner> owner(const void* session){auto& r=registry();std::lock_guard lock(r.mutex);auto& p=r.owners[session];if(!p)p=std::make_shared<Owner>();return p;}
-inline void reset(const void* session){auto p=owner(session);for(auto& a:p->admissions)crypto_wipe(a.capability.data(),32);*p={};dkr::online::publish(session,Json::object());}
+inline void reset(const void* session){auto p=owner(session);for(auto& a:p->admissions)crypto_wipe(a.capability.data(),32);*p={};dkr::online::publish(session,Json::object());dkr::online_stability::control(session)->configure({});dkr::relay::reset(session);}
 inline void forget(const void* session){auto& r=registry();std::lock_guard lock(r.mutex);auto p=r.owners.find(session);
     if(p!=r.owners.end()){for(auto& a:p->second->admissions)crypto_wipe(a.capability.data(),32);r.owners.erase(p);}dkr::online::forget(session);}
 inline Admission* binding(Owner& state,std::uint64_t sender){

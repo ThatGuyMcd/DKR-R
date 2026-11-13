@@ -19,8 +19,10 @@ void codec_tests() {
     // v1.0.11 (sdk2 capsule role): DKRX v3 adds a command mask byte to the
     // header and 64 bytes of SDK2 command words to each input that has one.
     // Only Player 1 (owner 0) may author commands.
+    // v1.0.15 (analogue driving): DKRX v4 follows each input's four bytes
+    // with its accelerator, brake and driving flags.
     const auto bytes = encode_owner_inputs(p);
-    assert(bytes.size() == 53U + 4U * kOwnerInputBatch && bytes[4] == 3U && bytes[8] == 0xF0 && bytes[15] == 0x12);
+    assert(bytes.size() == 53U + 7U * kOwnerInputBatch && bytes[4] == 4U && bytes[8] == 0xF0 && bytes[15] == 0x12);
     const auto decoded = decode_owner_inputs(bytes);
     assert(decoded && decoded->epoch == p.epoch && decoded->inputs == p.inputs && decoded->received_next == p.received_next);
     {

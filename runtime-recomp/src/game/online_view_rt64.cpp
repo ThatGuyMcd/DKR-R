@@ -1,4 +1,5 @@
 #include "online_view_rt64.hpp"
+#include "online_stability/battle_view.hpp"
 #include "online_nameplates_rt64.hpp"
 #include "hud_projection_rt64.hpp"
 #include "hud_reference_layout.hpp"
@@ -15,7 +16,7 @@ struct Pass::Impl {
     unsigned count=0,view=4;
     enum class Phase {Shared,World,Hud};Phase phase=Phase::Shared;
     bool divider=false,projection=false,camera_valid=false;
-    std::uint32_t scene=0,framebuffer=0;
+    std::uint32_t scene=0,framebuffer=0,race_type=0;
     float aspect=4.F/3.F;
     hud::LayoutMode hud_mode=hud::LayoutMode::Original;
     hlslpp::float4x4 camera{};
@@ -48,7 +49,10 @@ Pass::~Pass()=default;
 void Pass::prepare(const Session& session,std::span<const dkr_owned_draw_event> events,
         std::span<std::uint8_t> decoder,std::uint32_t scene,float aspect,std::uint32_t framebuffer,
         hud::LayoutMode hud_mode) noexcept {
-    auto& p=*impl_;p.plan=online_view::plan(session,events);p.count=0;p.view=4;
+    auto& p=*impl_;const auto eligibility=dkr::online_stability::view_eligibility(session.owner,session.players,events);
+    p.race_type=eligibility.race_type;
+    p.plan=dkr::online_stability::focus_plan(online_view::plan(session,events),eligibility,session.owner,
+        requested_layout.load(std::memory_order_relaxed)==Layout::MyRacer,requested_labels.load(std::memory_order_relaxed),requested_label_size.load(std::memory_order_relaxed));p.count=0;p.view=4;
     p.phase=Impl::Phase::Shared;p.divider=p.projection=p.camera_valid=false;
     p.widget_depth=p.rejected_widgets=0;
     p.scene=scene;p.aspect=std::isfinite(aspect)?std::clamp(aspect,1.F,8.F):4.F/3.F;
@@ -122,7 +126,7 @@ void Pass::before_command(RT64::State& s,std::uint32_t command) {
                 }
                 const auto element=e.parameters[2];
                 const auto widget=element<59?hud::kElements[element].widget:hud::Widget::Minimap;
-                const auto anchor=hud::reference::anchor(element,widget,hud::groups::Scenario::Race,false,false);
+                const auto anchor=hud::reference::anchor(element,widget,hud::groups::scenario_for(int(p.race_type),false),p.plan.layout==1,p.phase==Impl::Phase::Shared);
                 // Same single-player edge policy as offline. The native
                 // multiplayer source already contains its current animation.
                 transform.x+=hud::reference::transform(p.hud_mode,p.aspect,anchor,0,false).x;

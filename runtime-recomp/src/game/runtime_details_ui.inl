@@ -7,14 +7,16 @@
 // launcher's own sections and cards, set in the reading face.
 
 // .launcher-detail-page p: 16 / 1.5, 13 px under each paragraph.
-void DetailText(std::string_view text, float width, unsigned colour = kSetText, float after = 13.0F) {
+template<class T> void DetailText(T&& raw, float width, unsigned colour = kSetText, float after = 13.0F) {
+    const auto text=LocalisedUi::copy(std::forward<T>(raw));
     if (text.empty()) return;
     PaddockText(PaddockReading(16.0F, false, 1.5F), PaddockRgb(colour), text, width);
     PaddockGap(after);
 }
 
 // A 600 18 px heading (h2 / h3 on the detail pages).
-void DetailHeading(std::string_view text, float width, unsigned colour = kSetText, float after = 13.0F) {
+template<class T> void DetailHeading(T&& raw, float width, unsigned colour = kSetText, float after = 13.0F) {
+    const auto text=LocalisedUi::copy(std::forward<T>(raw));
     PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(colour), text, width);
     PaddockGap(after);
 }
@@ -63,11 +65,6 @@ bool DetailSectionSign(const char* label, bool& open, float width) {
 
 // ------------------------------------------------------------ textures
 
-struct TexturesPageState {
-    bool packs_open = true;
-    bool crt_open = false;
-};
-TexturesPageState g_textures_page;
 
 void DrawTexturePackLibrary(float width) {
     using namespace dkr::runtime;
@@ -323,25 +320,20 @@ void DrawCrtOverlaySection(float width) {
     }
 }
 
-void DrawTexturesPage(float width) {
-    TexturesPageState& state = g_textures_page;
+void DrawTexturesPage(float width, bool embedded = false) {
     const bool modern = dkr::runtime::enhancements::modern_presentation_enabled();
     ++g_settings_regular_labels;
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
-    DrawPageHeading("TEXTURES");
+    if(!embedded)DrawPageHeading("TEXTURES");
+    else PaddockHeading("Textures",30.F,0xFFCD67,width);
     PaddockGap(13.0F);
-    DetailText("Personalise the look of DKR-R with texture packs and CRT filters.", width, kSetMuted, 0.0F);
-    if (DetailSectionSign("TEXTURE PACKS##textures", state.packs_open, width)) {
+    DetailText("Personalise the look of DKR-R with texture packs.", width, kSetMuted, 0.0F);
+    PaddockGap(22.F);
+    PaddockHeading("Texture packs",22.F,kSetWarm,width);
+    PaddockGap(16.F);
+    {
         if (modern) {
             DrawTexturePackLibrary(width);
-        } else {
-            DetailText("Requires Modern graphics.",
-                       width, kSetMuted);
-        }
-    }
-    if (DetailSectionSign("CRT OVERLAYS##crt", state.crt_open, width)) {
-        if (modern) {
-            DrawCrtOverlaySection(width);
         } else {
             DetailText("Requires Modern graphics.",
                        width, kSetMuted);
@@ -352,7 +344,7 @@ void DrawTexturesPage(float width) {
     // The pack modals are shared with MODS / HACKS and keep its look.
     const PaddockFlatScope paddock;
     ++g_paddock_modal_windows;
-    DrawSharedTexturePackModal();
+    if(!embedded)DrawSharedTexturePackModal();
     --g_paddock_modal_windows;
 }
 
@@ -496,6 +488,8 @@ void DrawSupportActionRow(float width) {
 #endif
 }
 
+#include "crash_reports/ui.inl"
+
 void DrawAboutSupport(float width) {
     PollSupportSystemSummary();
     AboutSectionTitle("Support summary", width);
@@ -545,6 +539,7 @@ void DrawAboutSupport(float width) {
             ImGui::Dummy({inner, 0.0F});
         }
         PaddockGap(20.0F);
+        DrawCrashReportingSettings(inner);
         bool logging = dkr::runtime::support::diagnostic_logging_enabled();
         if (SettingsCheck("##diagnostic-logging", "Extra diagnostic logging", &logging, inner)) {
             dkr::runtime::support::set_diagnostic_logging_enabled(logging);

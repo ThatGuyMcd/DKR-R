@@ -2,13 +2,13 @@
 
 Before two players' engines run a rollback match, they compare the owned
 rollback contract of the ROM revision they share. If the contracts differ,
-the lobby refuses the peer. The contracts are frozen at the values v1.0.12
+the lobby refuses the peer. The contracts are frozen at the values v1.0.15
 shipped, so a build from this tree uses the current release contracts.
 
 | Revision | Define | Contract |
 |---|---|---|
-| US v1.0 (v77) | `DKR_OWNED_BUILD_ID_V77` | `dc883843594ccb02931dbab4071080c0dcf0d7c0a960ee501529dd37230651c7` |
-| US v1.1 (v80) | `DKR_OWNED_BUILD_ID_V80` | `105df80b777b20df308fede4235575dce5881e643130ebabf8cc60d71ff000e0` |
+| US v1.0 (v77) | `DKR_OWNED_BUILD_ID_V77` | `e5c8df41e92c766cb46d137111a289793308e398033127160ff321ff4672a4bf` |
+| US v1.1 (v80) | `DKR_OWNED_BUILD_ID_V80` | `a9a0d18fccc59d42aaa8b9cd6fdee50c22fa0699283eee8087a82f99ac85ef80` |
 
 ## Where they live
 
@@ -27,13 +27,18 @@ The rollback test frontend (`DKR-R-RollbackTest`, not shipped) negotiates
 
 ## Provenance
 
-Both owners approved adopting the shipped v1.0.12 values on 31 October 2026.
-They were reconstructed from the retained online-performance ledger and verified
-in the official Windows, Linux x86_64 and ARM64 binaries; Steam Deck has the
-same published hash as Linux x86_64. See the
-[verification and approval record](../notes/2026-10-31-v1012-identity-proposal.md).
-The four engine salts remain unchanged. The historical fold-equivalence record
-still describes its original v1.0.11 checkpoint.
+The header holds the shipped v1.0.15 values: both contracts and all four engine
+salts, which v1.0.14 and v1.0.15 changed. They were read from the official
+v1.0.15 Windows, Linux x86_64 and ARM64 runtimes without running them; Steam
+Deck has the same published hash as Linux x86_64. Steve Whittaker approved
+adopting them on 13 November 2026. See the
+[verification record](../notes/2026-11-13-fold-v1015.md).
+
+Before that the header held the shipped v1.0.12 contracts, which both owners
+approved on 31 October 2026
+([record](../notes/2026-10-31-v1012-identity-proposal.md)), with the v1.0.11
+salts. The historical fold-equivalence record still describes its original
+v1.0.11 checkpoint.
 
 
 v1.0.11 derived each value at configure time from a sha256 chain over the

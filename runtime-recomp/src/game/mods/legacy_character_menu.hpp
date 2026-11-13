@@ -1,3 +1,4 @@
+#include "legacy_character_label_layout.hpp"
 #pragma once
 #include "legacy_character_roster.hpp"
 
@@ -33,6 +34,7 @@ struct CharacterMenuView {
     std::array<bool,4> active{},ready{};
     std::array<std::optional<std::size_t>,4> custom{};
     std::array<std::optional<std::size_t>,CustomStageSlots> displayed{};
+    std::array<std::optional<CharacterLabelWorld>,CustomStageSlots> label_anchors{};
     std::array<unsigned,4> native{};
 };
 class CharacterMenuAdapter {
@@ -58,3 +60,4 @@ private:
     bool drumstick_=false,tt_=false;
 };
 }
+

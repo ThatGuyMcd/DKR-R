@@ -1,6 +1,6 @@
 # DKR-R architecture
 
-## v1.0.12 release contract
+## v1.0.15 release contract
 
 The folded source includes guarded game-heap headroom, immutable scheduler
 handoff, private decode isolation, water residency, vehicle preparation,
@@ -9,6 +9,15 @@ tools, Camera++, SDK 2, Store, shared saves and presentation fixes. API 2 is
 additive. Personal, confirmed-online and development save ownership are
 separate. Dependency fixes are checksum-pinned patches registered in
 `patches/manifest.json`.
+
+The `file_picker` module owns a bounded child-process protocol for native
+desktop dialogs. Its private helper contains dialog failures and uses the host
+desktop stack without changing the game process's loader environment.
+`crash_reports` owns native fault context, report consent and queued delivery;
+producer and collector identities remain distinct across updates. Custom racer
+labels use read-only camera/font bindings and derived presentation layout, not
+checkpointed selection state. See [crash reporting](CRASH_REPORTING.md) and
+[custom characters](LEGACY-MODS-BETA.md#player-select-names).
 
 DKR-R is a static recompilation, with the matching DKR decomp as the readable
 reference for symbols, structures and algorithms. Enhancements live in first-party
@@ -60,7 +69,7 @@ progress. Old mod-set saves are recovery inputs, not current per-mod-list owners
 
 ## Public Rollback and party ownership
 
-v1.0.12 public hosting admits the owned Rollback engine (the existing internal
+v1.0.14 public hosting admits the owned Rollback engine (the existing internal
 `ExperimentalRollback` value). The old Auto/Host Prediction/Strict Input Sync
 selector is removed. Historical implementations/wire values are not renamed
 or offered as an automatic fallback.

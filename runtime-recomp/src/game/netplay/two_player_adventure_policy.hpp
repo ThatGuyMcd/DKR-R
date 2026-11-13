@@ -1,5 +1,4 @@
 #pragma once
-
 #include "netplay_pacing_policy.hpp"
 
 #include <cstdint>
@@ -191,3 +190,4 @@ inline constexpr bool two_player_adventure_bootstrap_hub_topology_ready(
 }
 
 } // namespace dkr::runtime::netplay
+

@@ -57,3 +57,4 @@ inline Assessment race_assessment(const View& v){
 }
 inline Assessment assessment(const View& v,const Row& r){return r.host?race_assessment(v):remote_assessment(v,r);}
 }
+

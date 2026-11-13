@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The owned rollback contracts stay frozen at the approved v1.0.12 values: the
+"""The owned rollback contracts stay frozen at the approved v1.0.15 values: the
 configure emits exactly those, the contract doc records them, and no source
 hash chain feeds them again."""
 
@@ -14,19 +14,19 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "runtime-recomp"
 HEADER = RUNTIME / "src/game/netplay/legacy_identity.hpp"
 DOC = ROOT / "docs/contracts/ONLINE_IDENTITY.md"
-# Shipped v1.0.12 values, verified against official Windows/Linux artifacts.
-# Both owners approved their adoption; see docs/notes/2026-10-31-v1012-identity-proposal.md.
+# Shipped v1.0.15 values, verified against official Windows/Linux artifacts;
+# see docs/notes/2026-11-13-fold-v1015.md.
 SHIPPED = {
-    "77": "dc883843594ccb02931dbab4071080c0dcf0d7c0a960ee501529dd37230651c7",
-    "80": "105df80b777b20df308fede4235575dce5881e643130ebabf8cc60d71ff000e0",
+    "77": "e5c8df41e92c766cb46d137111a289793308e398033127160ff321ff4672a4bf",
+    "80": "a9a0d18fccc59d42aaa8b9cd6fdee50c22fa0699283eee8087a82f99ac85ef80",
 }
-# The digests v1.0.11 appended to the owned adapter identity, in order
+# The digests v1.0.15 appended to the owned adapter identity, in order
 # (experimental_runtime.cpp runtime_engine_identity).
 ENGINE_SALTS = (
-    "dcb1e8df777d341f2e96d4ee78cdc4337d32a6ddc86b4b60dbcc46fabfd31efc",
-    "893bbedb02a3c87771e75befab107a2ce54641073742be69e97b995a9d0a3bbf",
-    "2a82142dc00619b29b80f5f0b6485c3ffe8c0a33e89a7a6c48d0a6ac8eeb4a66",
-    "c4d77b07ed3b7f9aabcf7ce1430780fc65a1ce086e62b66a0af672aac40eb5ac",
+    "5b174d993b686bc965a25b30d2469716c129e701b0f46d5aadd1d771cb7e3056",
+    "213eec0456be89e847a29a8952914eb374976aacf95f18c90ab37479dd9245b3",
+    "e1f2ebf647cdbe03052096f099ed26c2f35a4656c3c749031c81390781a4fedc",
+    "731559cac6456c0b54894752e473a258bd0883d947b86003067c86be508ff055",
 )
 
 

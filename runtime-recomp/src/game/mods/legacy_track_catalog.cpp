@@ -1,3 +1,4 @@
+#include "storage/maintenance.hpp"
 #include "legacy_track_catalog.hpp"
 #include "legacy_mod_process.hpp"
 #include <json/json.hpp>
@@ -381,6 +382,7 @@ bool TrackCatalog::start(Action action,std::string id,std::vector<std::filesyste
         view_.stage="Preparing custom track catalogue";view_.result.clear();view_.completed=0;view_.total=0;publish();}
     try {
         thread_=std::jthread([this,action,previous,id=std::move(id),roms=std::move(roms)](std::stop_token stop) {
+    dkr::storage::Activity storage_activity;
             std::filesystem::path job;
             try {
                 const bool characters=kind_==Kind::Character;

@@ -116,3 +116,30 @@ The maintainer owns the review: for each entry, find the shipped string that rep
 | Entry | File | Reviewed copy (pre-v1.0.11) |
 |---|---|---|
 | COPY-399 | `runtime_ui.cpp` | Legacy patches need the ROM version they were made for. Native tracks don't need patch preparation. |
+
+## Superseded by v1.0.15
+
+v1.0.14 and v1.0.15 reworked the Play, Graphics, Controls and Online pages
+through the release layers. These reviewed strings no longer ship:
+
+| ID | File | Reviewed string |
+|---|---|---|
+| COPY-004 | `runtime_play_ui.inl` | ROMs available. |
+| COPY-009 | `runtime_play_ui.inl` | Store saves and settings beside DKR-R. |
+| COPY-011 | `runtime_play_ui.inl` | OFFLINE ADVENTURE |
+| COPY-012 | `runtime_play_ui.inl` | No offline Adventure save yet. |
+| COPY-013 | `runtime_play_ui.inl` | Online and modded games use separate saves. |
+| COPY-015 | `runtime_play_ui.inl` | Track preview: |
+| COPY-031 | `runtime_graphics_ui.inl` | Higher resolutions look sharper but use more GPU power. |
+| COPY-032 | `runtime_graphics_ui.inl` | Fit to window fills the available screen. |
+| COPY-042 | `runtime_graphics_ui.inl` | Supersampling |
+| COPY-043 | `runtime_graphics_ui.inl` | Renders extra pixels for a cleaner image. Higher values use much more GPU power. |
+| COPY-057 | `runtime_graphics_ui.inl` | Enable CRT filter |
+| COPY-058 | `runtime_graphics_ui.inl` | Adds a retro screen effect. Choose a filter in Textures. |
+| COPY-154 | `runtime_controls_ui.inl` | , or hold it and press a second. Escape cancels. |
+| COPY-207 | `runtime_online_ui.inl` | Adjusts input delay for the lobby's connection. |
+| COPY-258 | `runtime_online_mods_ui.inl` | Mods saved in Mods / Hacks. New offline copies start disabled. |
+| COPY-332 | `runtime_ui.cpp` | Check Mods / Hacks or disable the affected mods, then try again. |
+| COPY-404 | `runtime_ui.cpp` | legacy mods enabled. Applies next game. |
+| COPY-407 | `runtime_ui.cpp` | Return to the launcher and leave the lobby to change mods. |
+| COPY-408 | `runtime_ui.cpp` | Leave the lobby to change mods or Magic Codes. |

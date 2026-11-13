@@ -12,3 +12,4 @@ constexpr bool newer_preflight(std::uint32_t id, std::uint32_t terminal,
         (!active || static_cast<std::int32_t>(id - current) > 0);
 }
 } // namespace dkr::runtime::netplay
+

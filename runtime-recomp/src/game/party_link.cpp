@@ -1,5 +1,7 @@
 #include "party_link.hpp"
 #include "monocypher.h"
+#include "online_stability/live_inputs.hpp"
+#include "online_stability/live_reports.hpp"
 #include <algorithm>
 
 namespace dkr::runtime::spectators {
@@ -29,14 +31,14 @@ std::filesystem::path party_bootstrap_path(){return {};}
 bool party_bootstrap_load(const std::filesystem::path&,std::vector<char>& bytes){std::scoped_lock lock(bootstrap_mutex);if(bootstrap_bytes.size()!=512)return false;bytes=bootstrap_bytes;return true;}
 bool party_bootstrap_write(const std::filesystem::path&,const std::vector<char>& bytes){std::scoped_lock lock(bootstrap_mutex);return bootstrap_bytes.size()==512&&bytes==bootstrap_bytes;}
 std::vector<std::uint8_t> link_encode(LinkKind kind,std::span<const std::uint8_t> body){
-    if(kind<LinkKind::Accepted||kind>LinkKind::Leave||body.size()>12300)return {};
+    if(kind<LinkKind::Accepted||kind>LinkKind::Extension||kind==LinkKind::Reserved||body.size()>12300)return {};
     std::vector<std::uint8_t> out{'D','K','P','L',1,std::uint8_t(kind)};out.insert(out.end(),body.begin(),body.end());return out;
 }
 std::vector<std::uint8_t> link_heartbeat(std::uint64_t token,bool reply){std::vector<std::uint8_t> b{std::uint8_t(reply)};for(unsigned i=0;i<8;++i)b.push_back(std::uint8_t(token>>(i*8)));return b;}
 bool link_heartbeat(std::span<const std::uint8_t> b,std::uint64_t& token,bool& reply){if(b.size()!=9||b[0]>1)return false;token=0;reply=b[0]!=0;for(unsigned i=0;i<8;++i)token|=std::uint64_t(b[i+1])<<(i*8);return token!=0;}
 bool link_decode(std::span<const std::uint8_t> b,LinkMessage& out){
     if(b.size()<6||b.size()>12306||!std::equal(b.begin(),b.begin()+5,std::array<std::uint8_t,5>{'D','K','P','L',1}.begin())||
-       b[5]<unsigned(LinkKind::Accepted)||b[5]>unsigned(LinkKind::Leave))return false;
+       b[5]<unsigned(LinkKind::Accepted)||b[5]>unsigned(LinkKind::Extension)||b[5]==unsigned(LinkKind::Reserved))return false;
     LinkMessage next{LinkKind(b[5]),{b.begin()+6,b.end()}};out=std::move(next);return true;
 }
 LinkPeer* PartyLink::peer(MemberId id){auto p=std::find_if(peers.begin(),peers.end(),[&](const auto& v){return v.id==id;});return p==peers.end()?nullptr:&*p;}
@@ -44,15 +46,38 @@ LinkPeer* PartyLink::peer(const net::PeerAddress& a){auto p=std::find_if(peers.b
 bool PartyLink::local_watching()const{const auto* m=party.find(local);return admitted&&m&&m->role==Role::Spectator;}
 bool PartyLink::participant(MemberId id)const{const auto* m=party.find(id);return m&&m->connected&&(m->host||m->role==Role::Racer);}
 void PartyLink::reset_connection(){
+    queue_age.reset();
     for(auto& p:peers)crypto_wipe(p.key.data(),p.key.size());
     enabled=host=admitted=running=stopping=returned=start_requested=ready_requested=launch_sent=stop_requested=false;
     local=authority=room_id=0;party={};ready.clear();pending_watch.clear();peers.clear();seed.clear();save_generation=0;save_hash=0;launch.reset();
     incoming.clear();for(auto& q:outgoing)q.clear();incoming_bytes=outgoing_bytes=0;advertised=heartbeat=budget_at={};bulk_tokens=256*1024;status.clear();
     swap_requests.clear();requested_swap.reset();approved_swap.reset();cancel_swap=false;
-    ping_token=0;ping_sent={};rtt_ms=0;
+    maximum_racers=4;allow_spectators=true;
+    ping_window={};ping_token=0;ping_sent={};rtt_ms=0;
 }
 bool PartyLink::enqueue(LinkOutgoing p){
     const auto lane=unsigned(p.traffic);
+    if(!enabled)return false;
+    if(lane==2&&p.kind==LinkKind::Runtime)for(auto& old:outgoing[2])
+        if(old.target==p.target&&old.kind==p.kind&&dkr::online_stability::report_supersedes(old.bytes,p.bytes)) {
+            if(p.bytes.size()>QueueBytes-(outgoing_bytes-old.bytes.size()))return false;
+            outgoing_bytes=outgoing_bytes-old.bytes.size()+p.bytes.size();old=std::move(p);return true;
+        }
+    // An unsent live batch is disposable too. Every final sample remains in
+    // the exact repair history. Commands and historical repairs never merge.
+    if(lane==2&&p.kind==LinkKind::Runtime&&p.bytes.size()>21&&
+        std::equal(p.bytes.begin(),p.bytes.begin()+5,std::array<std::uint8_t,5>{'D','P','R',2,19}.begin())) {
+        dkr::online_stability::LiveInputs next;
+        if(dkr::online_stability::decode_live_inputs(std::span(p.bytes).subspan(21),next))for(auto& old:outgoing[2]) {
+            if(old.target!=p.target||old.kind!=p.kind||old.bytes.size()<=21||old.bytes[4]!=19)continue;
+            dkr::online_stability::LiveInputs prior;
+            if(!dkr::online_stability::decode_live_inputs(std::span(old.bytes).subspan(21),prior)||
+                prior.controls!=next.controls||prior.epoch!=next.epoch||prior.owner!=next.owner||prior.lease!=next.lease||
+                std::uint64_t(next.first)+next.count<std::uint64_t(prior.first)+prior.count)continue;
+            if(p.bytes.size()>QueueBytes-(outgoing_bytes-old.bytes.size()))return false;
+            outgoing_bytes=outgoing_bytes-old.bytes.size()+p.bytes.size();old=std::move(p);return true;
+        }
+    }
     if(!enabled||lane>=outgoing.size()||p.bytes.size()>12300||p.bytes.size()>QueueBytes-outgoing_bytes)return false;
     auto& q=outgoing[lane];if(q.size()>=QueuePackets)return false;
     if(lane==3||lane==4) {

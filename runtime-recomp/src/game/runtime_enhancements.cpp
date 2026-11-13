@@ -1,3 +1,4 @@
+#include "display_settings/policy.hpp"
 #include "runtime_enhancements.hpp"
 #include "runtime_netplay.hpp"
 #include "detail_contract.hpp"
@@ -665,7 +666,7 @@ extern "C" void dkr_extended_frustum_begin(std::uint8_t* rdram,
         dkr::runtime::enhancements::presentation_profile(),
         dkr::runtime::enhancements::fit_to_window_enabled(),
         dkr::runtime::enhancements::extended_culling_enabled(),
-        static_cast<float>(width) / static_cast<float>(height), layout,
+        dkr::display::view_aspect(width,height), layout,
         dkr::runtime::enhancements::frustum_guard_percent());
     const float retention_scale =
         dkr::runtime::enhancements::scenery_retention_frustum_scale(

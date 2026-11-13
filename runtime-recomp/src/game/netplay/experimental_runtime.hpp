@@ -28,3 +28,4 @@ bool run_runtime(ultramodern::renderer::WindowHandle window,
     std::shared_ptr<const dkr::mods::online::RuntimeResources> mods={},
     std::vector<std::uint8_t> mod_bootstrap={},std::vector<std::uint8_t> code_bootstrap={});
 }
+

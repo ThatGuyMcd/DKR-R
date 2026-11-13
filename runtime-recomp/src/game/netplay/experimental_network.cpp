@@ -1,6 +1,8 @@
+#include "online_stability/flow_trace.hpp"
+#include "online_stability/live_delay.hpp"
 #include "experimental_network.hpp"
 #include "monocypher.h"
-#include "../mods/sdk2_bridge.hpp"
+#include "mods/sdk2_bridge.hpp"
 #include <algorithm>
 #include <exception>
 
@@ -23,10 +25,11 @@ secure::Key network_key(const secure::Key& admitted,std::uint64_t match,const se
 }
 }
 Network::~Network() {
+    dkr::online_stability::flow::forget(this);
     for(auto& key:keys_) crypto_wipe(key.data(),key.size());
     for(auto& peer:configuration_.peers) crypto_wipe(peer.admitted_key.data(),peer.admitted_key.size());
 }
-bool Network::fail(std::string message) { error_=std::move(message); return false; }
+bool Network::fail(std::string message) { dkr::online_stability::flow::dump(this); error_=std::move(message); return false; }
 bool Network::start(NetworkConfiguration configuration,std::string& error) {
     const unsigned players=session_.player_count(),local=session_.local_owner();
     if(started_ || !session_.epoch() || players<2 || players>4 || local>=players ||
@@ -63,7 +66,7 @@ bool Network::queue(unsigned peer,unsigned lane,unsigned kind,std::vector<std::u
     if(payload.empty()) return true;
     if(payload.size()>kOwnerInputMaximumBytes) return fail("Experimental wire bound exceeded.");
     std::vector<std::uint8_t> plain(kPrefix.begin(),kPrefix.end());
-    plain.push_back(std::uint8_t(kind)); plain.insert(plain.end(),payload.begin(),payload.end());
+    plain.push_back(std::uint8_t(kind==0&&traffic==TransportTrafficClass::Authoritative?3:kind)); plain.insert(plain.end(),payload.begin(),payload.end());
     if(!pending.bytes.empty()) {
         if(traffic!=TransportTrafficClass::Realtime || pending.plain==plain) return true;
         // ONLY an unsent live packet may be superseded. Final input stays in
@@ -94,11 +97,16 @@ void Network::receive(const PeerAddress& source,std::span<const std::uint8_t> by
     std::uint64_t sender=0,sequence=0; std::vector<std::uint8_t> plain;
     if(!secure::open(bytes,keys_[peer],configuration_.match_id,sender,sequence,plain) ||
        sender!=configuration_.peers[peer].sender_id || plain.size()<6 ||
-       !std::equal(kPrefix.begin(),kPrefix.end(),plain.begin()) || plain[5]>2) { ++statistics_.rejected; return; }
+       !std::equal(kPrefix.begin(),kPrefix.end(),plain.begin()) || plain[5]>3) { ++statistics_.rejected; return; }
     if(!replay_[peer].accept(sequence)) { ++statistics_.duplicate; return; }
     const auto payload=std::span(plain).subspan(6);
-    if(plain[5]==0) {
+    if(plain[5]==0||plain[5]==3) {
+        dkr::online_stability::ArrivalScope arrival_scope;
         const auto result=session_.receive_input(std::uint8_t(peer),payload);
+        if(result==SessionInputResult::Accepted)if(const auto input=decode_owner_inputs(payload);input&&input->count)
+            dkr::online_stability::batch_arrival(input->owner,input->first_frame+input->count-1,plain[5]==3);
+        if(result==SessionInputResult::Accepted||result==SessionInputResult::Duplicate)
+            if(const auto input=decode_owner_inputs(payload))dkr::online_stability::flow::received(this,peer,*input,result==SessionInputResult::Duplicate);
         if(result==SessionInputResult::Rejected) ++statistics_.rejected;
         if(result==SessionInputResult::Conflict) fail("Conflicting authenticated experimental owner input.");
     } else if(plain[5]==2) {
@@ -115,6 +123,7 @@ bool Network::service(Clock::time_point now) {
         if(clock_started_ && now<last_service_) return fail("Experimental transport clock moved backwards.");
         clock_started_=true; last_service_=now;
         if(!session_.error().empty()) return fail(session_.error());
+        dkr::online_stability::flow::pulse(this,configuration_.match_id,session_.epoch(),session_.local_owner(),now);
         transport_.service();
         if(!transport_.is_open()) return fail("Experimental transport closed; speculative gameplay remains halted.");
         for(unsigned n=0;n<32;++n) {
@@ -150,6 +159,7 @@ bool Network::service(Clock::time_point now) {
                 // The live lane already carries cumulative actual-input ACKs.
                 // Do not send a second ACK-only repair when there is no hole.
                 if(!packet || (repair && !packet->count))continue;
+                dkr::online_stability::flow::offer(this,peer,*packet,repair!=0);
                 auto& pending=pending_[peer][lane];
                 const auto interval=std::chrono::milliseconds(repair ? 50:33);
                 if(pending.input_key && *pending.input_key==*packet &&
@@ -182,6 +192,7 @@ bool Network::service(Clock::time_point now) {
                 const auto result=packet.traffic==TransportTrafficClass::Realtime ?
                     transport_.send_live_status(configuration_.peers[peer].address,packet.bytes,std::uint8_t((lane-2)/2),error):
                     transport_.send_status(configuration_.peers[peer].address,packet.bytes,packet.traffic,error);
+                if(packet.input_key)dkr::online_stability::flow::sent(this,peer,*packet.input_key,result==DatagramSendStatus::Sent);
                 if(result==DatagramSendStatus::Sent) {
                     ++statistics_.sent; packet.bytes.clear(); packet.last_sent_plain=std::move(packet.plain);
                     packet.sent=true; packet.sent_at=now; packet.attempted=false;

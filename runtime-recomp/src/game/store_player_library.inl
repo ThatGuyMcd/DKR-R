@@ -50,7 +50,6 @@ int StoreLocalCategory(const StoreJson& local) {
 }
 void StoreInstalledPage(float width, const dkr::store::Snapshot& store, bool locked) {
     const auto view = dkr::store::installations().view();
-    width = std::min(width, 1280.F);
     if (!g_mod_store.installed_selected.empty()) {
         const StoreJson* record = nullptr;
         for (const auto& row : view->records)
@@ -76,7 +75,7 @@ void StoreInstalledPage(float width, const dkr::store::Snapshot& store, bool loc
             if (warning.is_string())
                 StoreNotice("Needs attention", warning.get<std::string>(), width, true);
         ImGui::BeginDisabled(locked || view->busy);
-        StorePanel settings(std::min(width, 820.F));
+        StorePanel settings(width);
         bool follow = row.value("follow", true);
         if (StoreCheck("Notify me about updates", follow, settings.inner()))
             dkr::store::installations().policy(instance, follow);
@@ -99,7 +98,7 @@ void StoreInstalledPage(float width, const dkr::store::Snapshot& store, bool loc
                                }});
         StoreActionLine(actions, settings.inner());
         PaddockSeparatorText("Remove or unlink", settings.inner());
-        StoreNote("Remove this copy, or keep its files and stop linking it to the Store.", settings.inner());
+        StoreNote("Remove this copy, or keep its files and stop linking it to the Library.", settings.inner());
         if (StoreButton("Remove or unlink")) {
             g_mod_store.remove_instance = instance;
             g_mod_store.remove_title = StoreText(row, "title", 200);
@@ -122,7 +121,7 @@ void StoreInstalledPage(float width, const dkr::store::Snapshot& store, bool loc
         ImGui::TableNextColumn();
     g_mod_store.installed_state =
         StoreCombo("Show", g_mod_store.installed_state,
-                   {"All installations", "Installed", "Saved editions", "Needs attention", "Not linked to Store"},
+                   {"All installations", "Installed", "Saved editions", "Needs attention", "Not linked to Library"},
                    std::min(width, 340.F));
     if (filters)
         ImGui::TableNextColumn();
@@ -183,7 +182,7 @@ void StoreInstalledPage(float width, const dkr::store::Snapshot& store, bool loc
             break;
         ImGui::BeginDisabled(locked || view->busy);
         if (StoreRow(StoreText(*local, "key", 512), StoreJson::object(), StoreText(*local, "name", 200),
-                     "Installed locally  |  Not linked to Store updates", "Link to Store", width)) {
+                     "Installed locally  |  Not linked to Library updates", "Link to Library", width)) {
             g_mod_store.link_key = StoreText(*local, "key", 512);
             g_mod_store.link_requested = true;
         }
@@ -195,7 +194,6 @@ void StoreInstalledPage(float width, const dkr::store::Snapshot& store, bool loc
 }
 void StoreUpdatesPage(float width, const dkr::store::Snapshot& store, bool locked) {
     const auto view = dkr::store::installations().view();
-    width = std::min(width, 1280.F);
     StoreHeading("Mod updates", width);
     if (!g_mod_store.update_detail.empty() && StoreBack("Back to updates", [] { g_mod_store.update_detail.clear(); }))
         return;
@@ -310,7 +308,6 @@ void StoreUpdatesPage(float width, const dkr::store::Snapshot& store, bool locke
 }
 void StoreDuplicatesPage(float width, const dkr::store::Snapshot&, bool locked) {
     const auto view = dkr::store::installations().view();
-    width = std::min(width, 1280.F);
     StoreHeading("Duplicates", width);
     StoreNote("Compare copies before removing one. Matching names do not prove matching content.", width);
     StoreField("duplicates-search", "Find a duplicate", std::min(width, 760.F), 200);

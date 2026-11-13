@@ -1,13 +1,13 @@
-# Building DKR-R v1.0.12
+# Building DKR-R v1.0.15
 
 The tree is the release: the memory, render, scheduler handoff and vehicle
 repairs, the playtest 4 fixes for mod joining, offline copies, race starts and
 spectator music, the Online directory, Scoreboard, party repairs, spectators,
 vehicles, achievements, texture tools and the SDK/Store/save/presentation
 work are all source here. `VERSION` and the compiled release value are
-`1.0.12`. Prepare the ROM-derived inputs (below), then build the tree.
+`1.0.15`. Prepare the ROM-derived inputs (below), then build the tree.
 
-The v1.0.12 build set and exact static checks are in
+The v1.0.15 build set and exact static checks are in
 [release validation](../RELEASE-VALIDATION.md). Source build commands for Apple
 remain below; no new Apple package was built in this pass.
 
@@ -24,9 +24,15 @@ The [platform guide](PLATFORMS.md) lists package versions, ABI requirements and 
 ## Tools and preparation
 
 Windows needs Visual Studio 2022 Desktop development with C++, Git, Python 3,
-PowerShell and WSL2/Ubuntu for the preparation workflow.
+PowerShell and WSL2/Ubuntu for the preparation workflow. `Setup-Windows.cmd`
+checks for them.
+Use native Windows Git and CMake. MSYS executables ahead of them in PATH can
+misinterpret Windows paths and Git revision expressions during the checks.
 Linux needs CMake 3.24+, Ninja, a compatible C++ toolchain, Vulkan/display
-development libraries and the AppImage packaging tools.
+development libraries and the AppImage packaging tools. `./Setup-Linux.sh`
+checks the build tools and development packages, and prints the Ubuntu 24.04
+package list when one is missing.
+Each Setup script then installs the git hooks unless you pass `--skip-hooks`.
 Use the locked dependency revisions, not arbitrary installed substitutes.
 
 Linux updater checks use libcurl 7.85+ with HTTPS certificate validation; install
@@ -105,15 +111,23 @@ then build without the prepared owned engines and kernels). `Build-Linux.sh`
 takes `DKR_LINUX_GENERATED_SOURCE`/`DKR_LINUX_V80_GENERATED_SOURCE`.
 `./Build-Linux.sh` builds and tests; add `--package` only when you want an
 AppImage. `./Build-Linux.sh --help` lists the input and output overrides.
-`Build-Linux.sh` doesn't configure the extra owned outputs automatically;
-don't describe that basic build as reproduction of the full Public Build.
+`--package` also needs linuxdeploy and its AppImage plugin, by default at
+`.deps/tools/linuxdeploy-x86_64.AppImage` and `.deps/tools/linuxdeploy-plugin-appimage`;
+set `LINUXDEPLOY` and `LINUXDEPLOY_PLUGIN_APPIMAGE` to use other copies.
+Packaging copies the build host's `libwayland-client.so.0` into the AppImage as a
+fallback, so install `libwayland-client0` (or set `DKR_WAYLAND_CLIENT_LIBRARY` and
+`DKR_WAYLAND_CLIENT_COPYRIGHT`). It then fails if a bundled binary needs a library
+that is neither bundled nor on the host-provided list in
+`scripts/Check-AppDir-Closure.sh`; `DKR_APPDIR_EXTRA_HOST_LIBS` extends that list.
+Neither wrapper configures the extra owned outputs automatically; don't describe
+that basic build as reproduction of the full Public Build.
 
 ## macOS
 
 Run `./Setup-macOS.sh` to install and check prerequisites, or
 `./Setup-macOS.sh --skip-deps` to check without installing. Setup and Build's
 preparation share the same checks: the Command Line Tools (`xcode-select --install`),
-GNU Make 4+ (`gmake`), CMake, Ninja, Python, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
+GNU Make 4+ (`gmake`), CMake, Ninja, Python 3.11+, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
 (Homebrew `coreutils`). The verifier is checked before ROM extraction.
 
 Full Xcode is optional. When its Metal toolchain runs (`xcrun metal -v`), RT64's
@@ -148,6 +162,8 @@ With the Command Line Tools and Homebrew installed:
 The script prepares pinned checkouts and both normal payloads. Add `--package`
 for an ad-hoc-signed app ZIP, not a notarised public release. Bundled Homebrew
 libraries inherit the host's macOS deployment requirements.
+`./Build-macOS.sh --help` lists `--jobs`, `--force` and the build and payload
+directory overrides.
 
 For a public release, use `--notarize` instead. It signs with a Developer ID,
 notarizes, staples, and writes `dist/DKR-R-<version>-macOS-<arch>-notarized.zip`:
@@ -163,9 +179,9 @@ Setup recovery checks staged Python/native tools, and preparation uses isolated
 revision trees. Do not edit live dependencies or delete protected directories
 to recover a stage. See [macOS kit notes](../packaging/MACOS-BUILD-README.md).
 The current integrated Rollback backend remains gated out on Apple. The public
-Rollback-only v1.0.12 layer does not promise a fallback to a removed backend.
+Rollback-only v1.0.15 layer does not promise a fallback to a removed backend.
 Existing v1.0.8 Apple releases have their own feature/build scope; validate
-current Apple integration before producing a v1.0.12 package.
+current Apple integration before producing a v1.0.15 package.
 
 ## iOS sideload build
 
@@ -200,7 +216,7 @@ check those on an iPhone or iPad before distributing a release.
 
 Use the reviewed Linux ARM64 toolchain/sysroot and separate compiled
 outputs. Compose both normal and owned payloads above, with matching
-visual-model inputs, then configure through the v1.0.12 release overlay.
+visual-model inputs, then configure through the v1.0.15 release overlay.
 The older [ARM recipes](ARM-PLATFORM-PREVIEW.md) describe the initial
 cross-build setup; their preview versions and results stay historical.
 
@@ -211,7 +227,7 @@ Linux x86_64. QEMU checks do not replace physical GPU/audio/input tests.
 
 ## Android source work
 
-Android releases are no longer supported and there is no v1.0.12 APK.
+Android releases are no longer supported and there is no v1.0.15 APK.
 The new release overlay rejects Android. Historical source recipes and
 the v1.0.9 Android adapter remain available for development, with their
 original application identity, signing and version-code requirements.
@@ -266,3 +282,23 @@ outstanding device/gameplay checks in [release validation](../RELEASE-VALIDATION
 The v1.0.8 startup correction (Android code 1080001) is the registered
 dependency patch `patches/startup-memory/runtime-memory.patch`. Android
 release metadata is not changed by this release.
+
+## v1.0.15 integration and reproducibility
+
+The accepted pipeline also binds the first-party analogue driving, controller
+feedback, launcher/overlay layouts, localisation resources, seasonal art, session
+content, display settings, lighting and crash reporting modules. Stable packages
+must be rebuilt from the final source, including their private helpers. Merely
+renaming a beta archive does not update embedded version or source identity.
+
+Windows and Linux builds also include `DKR-R-FilePicker` from the first-party
+file-picker module. Package its executable on x64 and ARM64, not just the game
+binary. The Linux child uses the host desktop dialog stack and a static C++ runtime. Crash-context
+tests exercise native fault capture; retain matching private symbols for support.
+The current guest pipeline also carries the widescreen initials drawing fix and
+read-only native font/camera bindings for Player Select labels in both ROMs.
+
+Use [Releasing](RELEASING.md) for the source freeze, exact package validation,
+update signing and approval boundary. Runtime compilation still needs the
+legitimate frozen/generated inputs described above. A source ZIP includes
+authored integration, not copyrighted ROMs, extracted assets or prepared game data.

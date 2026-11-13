@@ -21,3 +21,4 @@ std::string diagnostic();
 void report(const std::string&);
 inline std::atomic<bool> editor_open{false};
 }
+

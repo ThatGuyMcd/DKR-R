@@ -240,23 +240,26 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
     }
 
     SavesSeparator("Golden Balloons", width, false);
-    SavesNote("Up to 7 on the central island and 8 in each world. The total updates automatically.", width);
-    unsigned worlds = 0U;
-    for (std::size_t world = 1U; world < kWorldCount; ++world) worlds += slot.balloons[world];
-    int hub = slot.balloons[0] > worlds
-        ? static_cast<int>(std::min<unsigned>(slot.balloons[0] - worlds, kMaximumHubBalloons)) : 0;
+    int hub = static_cast<int>(hub_balloons(slot));
+    const unsigned bonus = bonus_balloons(slot);
+    SavesNote(bonus > 0U ? "Up to 7 on the central island and 8 in each world. Remove the bonus balloons before "
+                           "lowering the central island."
+                         : "Up to 7 on the central island and 8 in each world. The total updates automatically.",
+              width);
     {
         // The total (.saves-progress): a dark bar that fills amber.
         const ImVec2 at = ImGui::GetCursorScreenPos();
         ImDrawList* draw = ImGui::GetWindowDrawList();
         PaddockFill(draw, at, {at.x + width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x153E50));
-        const float t = static_cast<float>(slot.balloons[0]) / static_cast<float>(kMaximumTotalBalloons);
+        const float t = std::min(1.0F, static_cast<float>(slot.balloons[0]) /
+                                           static_cast<float>(kMaximumTotalBalloons));
         if (t > 0.0F) {
             draw->PushClipRect(at, {at.x + width * t, at.y + 32.0F}, true);
             PaddockFill(draw, at, {at.x + width, at.y + 32.0F}, PaddockRound(6.0F), PaddockCol(0x806000));
             draw->PopClipRect();
         }
-        const std::string total = std::to_string(slot.balloons[0]) + " / " + std::to_string(kMaximumTotalBalloons);
+        std::string total = std::to_string(slot.balloons[0] - bonus) + " / " + std::to_string(kMaximumTotalBalloons);
+        if (bonus > 0U) total += " + " + std::to_string(bonus) + " bonus";
         const PaddockType type = PaddockReading(16.0F, true, 1.0F);
         const float text_width = PaddockMeasure(type, total);
         PaddockDrawRun(draw, type, {std::round(at.x + (width - text_width) * 0.5F),
@@ -273,18 +276,37 @@ void DrawSavesSlotEditor(SavesPageState& state, float width, float panel, int sl
         balloons.Begin();
         ImGui::PushID(static_cast<int>(area));
         int value = area == 0U ? hub : slot.balloons[area];
-        if (SettingsRange("##balloons", kAreas[area], &value, 0,
-                          area == 0U ? kMaximumHubBalloons : kMaximumWorldBalloons, balloons.column, count)) {
+        // Bonus balloons only exist on top of a full island, so the island stays full while any are held.
+        const bool island_locked = area == 0U && bonus > 0U;
+        if (SettingsRange("##balloons", kAreas[area], &value, island_locked ? kMaximumHubBalloons : 0,
+                          area == 0U ? kMaximumHubBalloons : kMaximumWorldBalloons, balloons.column, count, {},
+                          island_locked)) {
             if (area == 0U) hub = value;
             else slot.balloons[area] = static_cast<std::uint8_t>(value);
-            unsigned total = static_cast<unsigned>(hub);
-            for (std::size_t world = 1U; world < kWorldCount; ++world) total += slot.balloons[world];
-            slot.balloons[0] = static_cast<std::uint8_t>(std::min<unsigned>(total, kMaximumTotalBalloons));
+            set_balloon_total(slot, static_cast<unsigned>(hub), bonus);
         }
         ImGui::PopID();
         balloons.End();
     }
     balloons.Finish(width);
+
+    SavesSeparator("Bonus balloons", width, false);
+    SavesNote("Extra balloons from the Free Balloon magic code. They need a full central island.", width);
+    SavesGrid extra(width, panel);
+    extra.Begin();
+    int bonus_value = static_cast<int>(bonus_balloons(slot));
+    const int bonus_limit = static_cast<int>(maximum_bonus_balloons(slot));
+    if (SettingsRange("##bonus-balloons", "Bonus balloons", &bonus_value, 0, bonus_limit, extra.column, count, {},
+                      bonus_limit == 0)) {
+        set_balloon_total(slot, hub_balloons(slot), static_cast<unsigned>(bonus_value));
+    }
+    extra.End();
+    extra.Finish(width);
+    if (SavesRaceButton("REMOVE BONUS BALLOONS", 0.0F, SavesTone::Plain, bonus_balloons(slot) == 0U,
+                        "This slot has no bonus balloons.")) {
+        set_balloon_total(slot, hub_balloons(slot), 0U);
+    }
+    PaddockGap(20.0F);
 
     SavesSeparator("Amulets and keys", width, false);
     SavesGrid keys(width, panel);
@@ -481,17 +503,19 @@ void DrawSavesEditor(SavesPageState& state, float width, float panel, bool edita
     const bool wraps = width - discard_width - apply_width - 24.0F < 180.0F;
     const float bar_height = 1.0F + 16.0F + (wraps ? 49.0F + 12.0F + 44.0F : std::max(49.0F, 44.0F)) + 16.0F;
     ImGuiWindow* window = ImGui::GetCurrentWindow();
-    const float visible_bottom = window->InnerRect.Max.y;
+    const float visible_bottom = PanelFooterBounds(window).Max.y;
     const float top = std::min(natural.y, visible_bottom - bar_height);
+    DrawPanelFooterBackground(window, top, PaddockCol(0x0A202C), PaddockCol(kSetBorder));
+    if(SaveDraftLayoutCheck())g_save_draft_geometry={PanelFooterBounds(window),
+        {{window->Pos.x+window->WindowBorderSize,window->Pos.y+window->WindowBorderSize},
+         {window->Pos.x+window->Size.x-window->WindowBorderSize-window->ScrollbarSizes.x,
+          window->Pos.y+window->Size.y-window->WindowBorderSize-window->ScrollbarSizes.y}},top,dirty};
     // Its own child window, so it stays above the editor it covers for both
     // drawing and the pointer.
     ImGui::SetCursorScreenPos({natural.x, top});
     ImGui::BeginChild("##draft-bar", {width, bar_height}, false,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
                           ImGuiWindowFlags_NavFlattened | ImGuiWindowFlags_NoBackground);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled({natural.x, top}, {natural.x + width, top + bar_height}, PaddockCol(0x0A202C));
-    draw->AddRectFilled({natural.x, top}, {natural.x + width, top + 1.0F}, PaddockCol(kSetBorder));
     ImGui::SetCursorScreenPos({natural.x, top + 17.0F});
     ImGui::BeginGroup();
     const float text_width = wraps ? width : width - discard_width - apply_width - 24.0F;
@@ -542,7 +566,7 @@ void DrawSavesOverview(SavesPageState& state,float width,float panel,const SaveM
             SavesSeparator("Adventure slots",width);
             for(unsigned i=0;i<3;++i) {
                 const auto& slot=state.summary->slots[i];
-                SavesNote("Slot "+std::to_string(i+1)+" - "+(slot.name.empty()?"---":slot.name)+" - "+std::to_string(slot.balloons[0])+" / 47 balloons",width,18,kSetText);
+                SavesNote("Slot "+std::to_string(i+1)+" - "+(slot.name.empty()?"---":slot.name)+" - "+std::to_string(slot.balloons[0]-codec::bonus_balloons(slot))+" / 47 balloons"+(codec::bonus_balloons(slot)>0U?" + "+std::to_string(codec::bonus_balloons(slot))+" bonus":""),width,18,kSetText);
             }
             const auto& settings=state.summary->settings;
             SavesNote(std::string("Drumstick: ")+(settings.drumstick?"unlocked":"locked")+"   |   T.T.: "+
@@ -767,10 +791,8 @@ void DrawSaveManagerPage(float available_width,bool live) {
     const int picked=SettingsSectionSigns({"YOUR SAVE","BACKUPS & RECOVERY","ONLINE SAVES"},current,width);
     if(picked>=0){state.scope=picked==0?0:picked==2?1:3;state.ask=SavesPageState::Ask::None;state.restore.clear();}
     PaddockGap(20);
-    if(live) {
-        SavesNote("Save editing is unavailable while the game is running. Return to the launcher first.",width);
-        SavesNote("Active save: "+PathUtf8(runtime_save_path()),width,14);
-    } else if(state.scope!=0)DrawStoredSaves(state,width,locked);
+    SavesNote("Return to the launcher and leave your lobby before changing saves.",width);
+    if(state.scope!=0)DrawStoredSaves(state,width,locked);
     else {
         const auto& view=CachedSaveManagerView();const auto& info=view.adventure;
         if(!view.valid){SavesNote("Reading your personal save...",width);ImGui::PopStyleVar();return;}
@@ -778,18 +800,22 @@ void DrawSaveManagerPage(float available_width,bool live) {
         SavesNote(valid?"YOUR PERSONAL ADVENTURE":info.exists?"YOUR SAVE NEEDS RECOVERY":"NO PERSONAL SAVE YET",width,19,valid?kSavesAccent:kSetWarm);
         if(lobby)SavesNote("Leave the lobby before changing saves. You can export your personal save.",width);
         if(SharedSaveBusy())SavesNote("Finishing the save operation. Launch is temporarily held until it is safe.",width);
-        if(!locked) {
+        {
+            ImGui::BeginDisabled(locked);
             if(!info.valid&&info.exists&&info.size==512) {
                 if(SavesRaceButton("BACK UP & REPAIR CHECKSUMS",0,SavesTone::Primary))state.ask=SavesPageState::Ask::Repair;
                 PaddockGap(12);
             }
+            ImGui::EndDisabled();
             const auto section=SettingsSectionSigns({"OVERVIEW","EDIT PROGRESS","TRANSFER & PAKS"},state.section,width);
             if(section>=0)state.section=section;
             PaddockGap(18);
+            ImGui::BeginDisabled(locked);
             if(state.section==1)DrawSavesEditor(state,width,width,valid,info.exists);
             else if(state.section==2)DrawSavesTransfer(width,width,view);
             else DrawSavesOverview(state,width,width,view,valid);
-        } else if(!SharedSaveBusy()&&valid&&SavesRaceButton("EXPORT PERSONAL COPY"))ExportAdventureWithDialog();
+            ImGui::EndDisabled();
+        }
     }
     if(!g_shared_save_import.path.empty()&&!locked) {
         state.restore=std::move(g_shared_save_import.path);state.slot=g_shared_save_import.port;

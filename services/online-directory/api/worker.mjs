@@ -1,10 +1,16 @@
 import library, { HttpError } from './library_api.mjs';
 import { handleLauncherProfile, launcherVerifiedSocial } from './profile_api.mjs';
+import { handleCommunity, communityCatalogue, cleanupCommunity } from './community_api.mjs';
 
 export default {
-  scheduled(event,env,ctx) { return library.scheduled(event,env,ctx); },
+  scheduled(event,env,ctx) {
+    ctx.waitUntil(cleanupCommunity(env).catch(() => {}));
+    return library.scheduled(event,env,ctx);
+  },
   async fetch(request, env, ctx) {
     try {
+      const community = await handleCommunity(request, env, ctx);
+      if (community) return community;
       const profile = await handleLauncherProfile(request, env);
       if(profile)return profile;
       const url=new URL(request.url);
@@ -30,7 +36,7 @@ export default {
         }};
         return library.fetch(request,{...env,ONLINE_DIRECTORY:directory},ctx);
       }
-      return library.fetch(request,env,ctx);
+      return communityCatalogue(await library.fetch(request,env,ctx),request,env);
     } catch(error) {
       return Response.json({error:{code:error instanceof HttpError?error.code:'profile_service',
         message:error instanceof HttpError?error.message:'The profile service could not complete this request. Please try again.'}},

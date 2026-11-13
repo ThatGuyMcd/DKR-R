@@ -1,4 +1,11 @@
+#include <tuple>
+#include "display_settings/policy.hpp"
+#include "crash_reports/native_context.hpp"
 #include "render_provenance.hpp"
+#include "online_stability/render_probe.hpp"
+#include "online_stability/response_trace.hpp"
+#include "online_presentation/frame_policy.hpp"
+#include "online_stability/battle_view.hpp"
 #include "vehicle_binding.hpp"
 #include "rt64_renderer.hpp"
 #include "camera_rt64.hpp"
@@ -245,6 +252,8 @@ int DetectDisplayRate() {
     return dkr::runtime::enhancements::clamp_presentation_rate(mode.refresh_rate);
 }
 
+#include "display_settings/renderer.inl"
+
 void ApplyConfig(RT64::Application& application,
                  const ultramodern::renderer::GraphicsConfig& config) {
     application.userConfig.idleWorkActive = dkr::runtime::render_power::gpu_keep_awake.load();
@@ -278,6 +287,7 @@ void ApplyConfig(RT64::Application& application,
             ? 2.0 * std::max(config.ds_option, 1)
             : static_cast<double>(std::max(config.ds_option, 1));
     application.userConfig.downsampleMultiplier = std::max(config.ds_option, 1);
+    ApplyDisplayRequest(application,false);
     // Accurate is a hard renderer boundary, not a cosmetic launcher preset.
     // Modern may request presentation-only interpolation after DKR's sky,
     // transition, gradient and menu-background matrices have been explicitly
@@ -589,6 +599,13 @@ dkr::runtime::RT64Renderer::RT64Renderer(
     // setup/fallback creates a fresh texture cache. Reapply persisted enabled
     // packs on its first presentation, even if the retired renderer had already
     // consumed this library generation. Do not change users' enabled settings.
+if(application_->device) {
+        const auto& description=application_->device->getDescription();
+        std::fprintf(stderr,"[boot][graphics] requested-api=%u chosen-api=%u vendor=%u device=%.96s driver=%llu\n",
+            static_cast<unsigned>(config.api_option),static_cast<unsigned>(chosen_api),
+            static_cast<unsigned>(description.vendor),description.name.c_str(),
+            static_cast<unsigned long long>(description.driverVersion));
+    }
     dkr::runtime::texture_packs::renderer_started();
     std::fprintf(stderr,"[perf][surgical-features] reusable-flow=%u texture-index=%u mip-scratch=%u monotonic-pacer=%u; quality, guest clocks and GPU fences preserved\n",
         unsigned(surgical::flow_reuse()),unsigned(surgical::texture_index()),unsigned(surgical::mip_scratch()),unsigned(surgical::monotonic_pacer()));
@@ -636,6 +653,7 @@ dkr::runtime::RT64Renderer::RT64Renderer(
         std::scoped_lock lock(g_active_renderer_mutex);
         g_active_renderer = this;
     }
+    dkr::crash_reports::refresh_native_context();
     dkr::runtime::startup_performance::report("renderer-ready",
                                                renderer_started_at);
 }
@@ -665,13 +683,15 @@ bool dkr::runtime::RT64Renderer::update_config(
         application_->setFullScreen(fullscreen);
 #endif
     }
-    const bool resolution_or_aspect_changed =
+    bool resolution_or_aspect_changed =
         old_config.res_option != new_config.res_option ||
         old_config.ar_option != new_config.ar_option ||
         old_config.ds_option != new_config.ds_option;
     const bool multisampling_changed =
         old_config.msaa_option != new_config.msaa_option;
+    const auto previous_display=std::tuple{application_->userConfig.aspectTarget,application_->userConfig.resolutionMultiplier,application_->userConfig.downsampleMultiplier};
     ApplyConfig(*application_, new_config);
+    resolution_or_aspect_changed|=previous_display!=std::tuple{application_->userConfig.aspectTarget,application_->userConfig.resolutionMultiplier,application_->userConfig.downsampleMultiplier};
     if (owned_mode_) {
         application_->enhancementConfig.presentation.mode = PresentationMode(true);
     }
@@ -728,6 +748,7 @@ void dkr::runtime::RT64Renderer::send_dl(const OSTask* task,
     if (application_ == nullptr || rdram_snapshot == nullptr) {
         return;
     }
+    ApplyDisplayRequest(*application_,true);
     dkr::runtime::telemetry::record_graphics_task();
     RT64::MipWaitFeedbackScope mipFeedback([this] { present_mipmap_loading(*application_); });
 
@@ -892,6 +913,7 @@ void dkr::runtime::RT64Renderer::update_screen() {
     if (application_ == nullptr) {
         return;
     }
+    ApplyDisplayRequest(*application_,true);
     const bool keep_awake = render_power::gpu_keep_awake.load();
     if (application_->userConfig.idleWorkActive != keep_awake) {
         application_->userConfig.idleWorkActive = keep_awake;
@@ -1110,6 +1132,7 @@ void dkr::runtime::RT64Renderer::present_owned(
 #if defined(__ANDROID__)
     if (graphics_health::failed()) return;
 #endif
+    ApplyDisplayRequest(*application_,true);
     reap_owned();
     // The render loop leaves the latest mailbox image pending until capacity
     // returns; it never blocks on an unbounded completion wait or adds debt.
@@ -1149,12 +1172,11 @@ void dkr::runtime::RT64Renderer::present_owned(
     // One immutable local layout policy for this decode. Never consulted by
     // the rewindable CPU or included in peer/checkpoint fingerprints.
     const auto hud_mode=hud::mode();
-    const bool expanded=enhancements::modern_presentation_enabled() &&
-        ultramodern::renderer::get_graphics_config().ar_option==ultramodern::renderer::AspectRatio::Expand;
     int width=0,height=0;
     if(auto* window=static_cast<SDL_Window*>(platform::sdl_window()))SDL_GetWindowSize(window,&width,&height);
-    const float cover=expanded && width>0 && height>0 ?
-        (std::max)(1.0F,float(width)/float(height)/(4.0F/3.0F)):1.0F;
+    const float local_aspect=modern?dkr::display::view_aspect(std::max(1,width),std::max(1,height)):4.F/3.F;
+    const bool expanded=modern&&std::abs(local_aspect-4.F/3.F)>0.00001F;
+    const float cover=expanded?(std::max)(1.F,local_aspect/(4.F/3.F)):1.F;
     const auto read_vertex=[&](std::uint32_t address) {
         std::int16_t value;
         std::memcpy(&value,workspace->bytes().data()+((address-0x80000000U)^2U),2);
@@ -1165,15 +1187,19 @@ void dkr::runtime::RT64Renderer::present_owned(
         const auto clamped=std::int16_t(std::lround(std::clamp(value,-32768.0F,32767.0F)));
         std::memcpy(workspace->bytes().data()+((address-0x80000000U)^2U),&clamped,2);
     };
+    dkr::online_presentation::ResourceScope resource_scope(lease->epoch());
     std::uint32_t scene=0;
     {
     netplay::experimental::performance::Scope metadata_timing(netplay::experimental::performance::Stage::Metadata);
     for(const auto& event:lease->draw_events())if(event.kind==DKR_OWNED_FRAME_METADATA) {
+        resource_scope.scene(event.parameters[0]);
         scene=presentation::normalise_identity(event.parameters[0]^presentation::mix_identity(std::uint32_t(lease->epoch()))^
             presentation::mix_identity(std::uint32_t(lease->generation())));
     }
     owned_decode_scratch_->online.prepare(online_view_session_,lease->draw_events(),
-        workspace->bytes(),scene,cover*4.F/3.F,d.framebuffer,hud_mode);
+        workspace->bytes(),scene,local_aspect,d.framebuffer,hud_mode);
+    const auto view_decision=dkr::online_stability::view_eligibility(online_view_session_.owner,online_view_session_.players,lease->draw_events());
+    dkr::online_presentation::view(owned_decode_scratch_->online.focused(),unsigned(view_decision.reason),unsigned(std::max(0,width)),unsigned(std::max(0,height)),cover);
     // Salt BEFORE constructing any matrix/shadow identities. Layout changes
     // must not interpolate a previous quadrant into the new full canvas.
     // This identity belongs to the renderer only, never the CPU/checkpoint.
@@ -1281,7 +1307,7 @@ void dkr::runtime::RT64Renderer::present_owned(
         }
         case DKR_OWNED_HUD_PASS:
             marker.kind=presentation::PresentationMarkerKind::HudPass;marker.mode=std::uint8_t(event.parameters[0]);marker.variant=std::uint8_t(event.token);
-            marker.token=marker.mode?hud::encode_hud_viewport_cover(cover*4.0F/3.0F):0;
+            marker.token=marker.mode?hud::encode_hud_viewport_cover(local_aspect):0;
             break;
         case DKR_OWNED_HUD_RECT:
             marker.kind=presentation::PresentationMarkerKind::HudRect;marker.mode=std::uint8_t(event.token);marker.token=0;marker.variant=std::uint8_t(event.parameters[0]);break;
@@ -1289,10 +1315,10 @@ void dkr::runtime::RT64Renderer::present_owned(
             marker.kind=presentation::PresentationMarkerKind::HudWidget;marker.mode=std::uint8_t(event.token);marker.token=0;
             const auto& p=event.parameters;
             if(marker.mode&&modern) {
-                if(p[10])marker.hud_transform.x=(p[10]==2?1:-1)*hud::fullscreen_gutter_authored(cover*4.0F/3.0F);
+                if(p[10])marker.hud_transform.x=(p[10]==2?1:-1)*hud::fullscreen_gutter_authored(local_aspect);
                 else if(p[0]<=1&&p[1]<=1&&p[3]<=std::uint32_t(hud::Widget::TimerGlyphs)) {
                     const auto scenario=p[5]?hud::groups::Scenario::TimeTrial:p[4]==1?hud::groups::Scenario::Adventure:hud::groups::scenario_for(int(p[4]),false);
-                    marker.hud_transform=hud::reference::transform(hud_mode,cover*4.0F/3.0F,
+                    marker.hud_transform=hud::reference::transform(hud_mode,local_aspect,
                         hud::reference::anchor(p[2],hud::Widget(p[3]),scenario,p[0]==1,p[6]!=0,std::bit_cast<float>(p[7])),float(std::int32_t(p[8])),p[9]!=0);
                 }
             }
@@ -1331,7 +1357,7 @@ void dkr::runtime::RT64Renderer::present_owned(
         camera::FrameStamp camera_frame{};camera_frame.scene=scene;
         camera_frame.epoch=std::uint32_t(lease->epoch());camera_frame.frame=d.frame;
         camera_frame.time=float(d.frame)/30.F;camera_frame.dt=1.F/30.F;
-        camera_frame.aspect=cover*4.F/3.F;camera_frame.online=true;
+        camera_frame.aspect=local_aspect;camera_frame.online=true;
         camera_pass_->prepare(lease->bytes(),workspace->bytes(),camera_frame,lease->draw_events(),
             online_view_session_.owner,unsigned(platform::online_input_profile()),owned_decode_scratch_->online.focused());
         application_->state->setRefreshRate(30);
@@ -1367,6 +1393,7 @@ void dkr::runtime::RT64Renderer::present_owned(
     }
     {netplay::experimental::performance::Scope timing(netplay::experimental::performance::Stage::Present);
      update_screen();}
+    if(lease)dkr::online_stability::response::reached(lease->epoch(),lease->descriptor().frame,dkr::online_stability::response::Stage::Renderer);
     {
         netplay::experimental::performance::Scope upload_timing(netplay::experimental::performance::Stage::UploadWait);
         application_->drawDataUploader->wait();application_->transformsUploader->wait();application_->tilesUploader->wait();
@@ -1379,7 +1406,9 @@ void dkr::runtime::RT64Renderer::present_owned(
     workspace.reset();
     if(!mailbox.finish_decode(lease))throw std::runtime_error("Owned decoder lease could not retire its CPU readers.");
     queued=true;
+    if(dkr::online_stability::render_probe_due(lease->epoch(),d.frame)){drain();dkr::online_stability::render_probe(*application_,d.framebuffer,lease->bytes());}
     const auto now=std::chrono::steady_clock::now();
+    last_wait_presentation_=now;
     if(now-last_owned_report_>=std::chrono::seconds(5)) {
         // Routine reporting MUST NOT synchronize WSI/GPU workers. Exact target
         // inspection is an explicitly intrusive developer diagnostic only.
@@ -1437,6 +1466,7 @@ void dkr::runtime::RT64Renderer::present_owned(
                 netplay::experimental::PresentationMailbox::kPeakDecodePayloadBytes,
                 netplay::experimental::PresentationMailbox::kPeakDrawEventBytes);
         }
+        dkr::online_presentation::report();
         last_owned_report_=now;
     }
 }
@@ -1450,7 +1480,8 @@ void dkr::runtime::RT64Renderer::repeat_owned() {
     // a paused workload would stall/reset interpolation and race its slot.
     if(!owned_submissions_.empty())return;
     const auto now=std::chrono::steady_clock::now();
-    if(now-last_wait_presentation_<std::chrono::milliseconds(33))return;
+    if(!dkr::online_presentation::idle_refresh_due(now-last_wait_presentation_,present_count_!=0))return;
+    dkr::online_presentation::count(dkr::online_presentation::Event::IdleRepeat);
     std::scoped_lock lock(presentation_mutex_);
     ui::draw(*application_);
     if(!present_count_&&application_->presentQueue->inspector) {

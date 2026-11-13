@@ -6,6 +6,7 @@ namespace dkr::mods {
 struct CharacterMenuDrawCalls {
     OriginalPiHandler allocate=nullptr,release=nullptr,load_texture=nullptr,free_texture=nullptr;
     OriginalPiHandler texture=nullptr,font=nullptr,colour=nullptr,background=nullptr,text=nullptr,reset=nullptr;
+    OriginalPiHandler text_width=nullptr,view_matrix=nullptr,projection=nullptr;
 };
 // Native drawing/resources only. Never hold an adapter mutex while these
 // methods invoke guest functions, which can yield to the scheduler.
@@ -25,3 +26,4 @@ private:
     std::vector<std::uint32_t> portraits_;
 };
 }
+

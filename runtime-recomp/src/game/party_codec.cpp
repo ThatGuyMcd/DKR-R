@@ -18,8 +18,16 @@ struct Reader {
     void end(){if(at!=bytes.size())throw std::runtime_error("Spectator packet has trailing data.");}
 };
 template<class F>bool checked(std::string& error,F f){try{f();error.clear();return true;}catch(const std::exception& e){error=e.what();return false;}catch(...){error="Invalid spectator message.";return false;}}
-void input(Writer& w,PortInput p){w.word(p.buttons,2);w.word(std::uint8_t(p.x),1);w.word(std::uint8_t(p.y),1);}
-PortInput input(Reader& r){PortInput p;p.buttons=std::uint16_t(r.word(2));p.x=std::int8_t(r.word(1));p.y=std::int8_t(r.word(1));return p;}
+void input(Writer& w,PortInput p){
+    if(p.driving_flags>1||(!p.driving_flags&&(p.accelerator||p.brake)))throw std::runtime_error("Invalid driving input.");
+    w.word(p.buttons,2);w.word(std::uint8_t(p.x),1);w.word(std::uint8_t(p.y),1);
+    w.word(p.accelerator,1);w.word(p.brake,1);w.word(p.driving_flags,1);
+}
+PortInput input(Reader& r){
+    PortInput p;p.buttons=std::uint16_t(r.word(2));p.x=std::int8_t(r.word(1));p.y=std::int8_t(r.word(1));
+    p.accelerator=std::uint8_t(r.word(1));p.brake=std::uint8_t(r.word(1));p.driving_flags=std::uint8_t(r.word(1));
+    if(p.driving_flags>1||(!p.driving_flags&&(p.accelerator||p.brake)))throw std::runtime_error("Invalid driving input.");return p;
+}
 }
 std::vector<std::uint8_t> encode(const Packet& p) {
     if(!p.match||!p.serial||p.kind<Kind::Roster||p.kind>Kind::Reject||p.body.size()>MaximumPacket-22)throw std::runtime_error("Invalid spectator packet envelope.");
@@ -83,9 +91,10 @@ bool frames(std::span<const std::uint8_t> bytes,std::vector<ConfirmedFrame>& out
 }
 std::vector<std::uint8_t> controller(const ControllerSample& p) {
     if(!p.cursor.epoch||p.cursor.frame==UINT32_MAX||p.port>=RacingPorts||!p.lease)throw std::runtime_error("Invalid controller lease sample.");
-    Writer w;w.cursor(p.cursor);w.word(p.port,1);w.word(p.lease,8);input(w,p.input);return w.bytes;
+    Writer w;w.cursor(p.cursor);w.word(p.port,1);w.word(p.lease,8);input(w,p.input);
+    if(w.bytes.size()!=ControllerSampleBytes)throw std::runtime_error("Controller sample width differs from the protocol.");return w.bytes;
 }
 bool controller(std::span<const std::uint8_t> bytes,ControllerSample& out,std::string& error) {
-    return checked(error,[&]{Reader r{bytes};ControllerSample p;p.cursor=r.cursor();p.port=std::uint8_t(r.word(1));p.lease=r.word(8);p.input=input(r);r.end();if(!p.cursor.epoch||p.cursor.frame==UINT32_MAX||p.port>=RacingPorts||!p.lease)throw std::runtime_error("Invalid controller sample identity.");out=p;});
+    return checked(error,[&]{if(bytes.size()!=ControllerSampleBytes)throw std::runtime_error("Invalid controller sample width.");Reader r{bytes};ControllerSample p;p.cursor=r.cursor();p.port=std::uint8_t(r.word(1));p.lease=r.word(8);p.input=input(r);r.end();if(!p.cursor.epoch||p.cursor.frame==UINT32_MAX||p.port>=RacingPorts||!p.lease)throw std::runtime_error("Invalid controller sample identity.");out=p;});
 }
 }

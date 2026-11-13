@@ -21,3 +21,4 @@ struct Removal { std::uint64_t room=0,generation=0; spectators::MemberId member=
 bool request_removal(const void* session,const Snapshot&,spectators::MemberId,std::string& error);
 bool take_removal(const void* session,Removal&);
 }
+

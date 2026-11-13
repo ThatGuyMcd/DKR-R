@@ -146,6 +146,7 @@ Lod geometry(const Json& j,std::size_t textures,float scale) {
         }
         m.double_sided=item.value("double_sided",false);
         if(item.value("primitive",0)!=0)bad("unsupported mesh primitive.");
+        m.normals=runtime::vehicles::lighting::normals(m.vertices,m.faces);
         out.meshes.push_back(std::move(m));
     }
     return out;

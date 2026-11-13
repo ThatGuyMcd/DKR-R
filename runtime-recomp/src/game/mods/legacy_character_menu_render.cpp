@@ -33,24 +33,73 @@ void CharacterMenuRenderer::draw_hint(std::span<std::uint8_t> memory,const Chara
     const CharacterMenuDrawCalls& f,const std::vector<AllocatedCharacter>& entries,const CharacterMenuView& view) {
     if(!view.visible)return;
     Calls call(memory,fields,ctx);auto& g=call.guest;
-    // Text-only footer. No page, portrait grid, projection or stock text moves.
+    // Labels use the existing camera/projection and native coloured font.
     // Scratch is on a separate reserved call frame and never retained.
     const auto scratch=call.stack+0x100;
-    auto text=[&](std::string value,unsigned x,unsigned y,unsigned colour) {
+    auto store=[&](const std::string& value) {
         if(value.size()>255)throw Error("Character hint exceeds its scratch budget.");
         Bytes bytes;for(unsigned char c:value)bytes.push_back(c>=32&&c<127?c:'?');bytes.push_back(0);g.bytes(scratch,bytes);
-        call.call(f.font,{1});call.call(f.background,{0,0,0,180});
-        call.call(f.colour,{colour>>24,(colour>>16)&255,(colour>>8)&255,0,255});
-        call.call(f.text,{g.address(CharacterMenuField::DisplayList),x,y,scratch,0});
     };
-    constexpr unsigned colours[]{0xffdc42ff,0x69d8ffff,0xff8f96ff,0x8dff83ff};
-    bool custom=false;
-    for(unsigned p=0;p<4;++p)if(view.active[p]&&view.custom[p]) {
-        custom=true;auto name=entries.at(*view.custom[p]).name;
-        if(name.size()>11)name=name.substr(0,10)+".";
-        text("P"+std::to_string(p+1)+" "+name+(view.ready[p]?" OK":""),8+76*p,220,colours[p]);
+    auto width=[&](const std::string& value) {store(value);return call.call(f.text_width,{scratch,0,0});};
+    auto text=[&](const std::string& value,unsigned x,unsigned y,unsigned font,unsigned colour) {
+        store(value);call.call(f.font,{font});call.call(f.background,{0,0,0,0});
+        call.call(f.colour,{colour>>24,(colour>>16)&255,(colour>>8)&255,0,255});
+        call.call(f.text,{g.address(CharacterMenuField::DisplayList),x,y,scratch,4});
+    };
+    if(std::ranges::none_of(view.label_anchors,[](const auto& a){return a.has_value();}))return;
+    CharacterLabelMatrix camera{},projection{};
+    const auto matrix=call.call(f.view_matrix,{}),perspective=call.call(f.projection,{});
+    for(unsigned i=0;i<16;++i) {
+        camera[i]=std::bit_cast<float>(g.read(matrix+i*4));
+        const auto whole=static_cast<std::int16_t>(g.read(perspective+i*2,2));
+        projection[i]=(float(whole)*65536+float(g.read(perspective+32+i*2,2)))/65536;
     }
-    if(custom&&entries.size()>CustomStageSlots)text("L / R: CHANGE CUSTOM RACER",65,231,0xffe29aff);
+    auto cap=[&](int x,int y,const char* letter) {
+        auto gfx=[&](std::uint32_t a,std::uint32_t b) {const auto at=g.get(CharacterMenuField::DisplayList);g.read(at+4);g.write(at,a);g.write(at+4,b);g.set(CharacterMenuField::DisplayList,at+8);};
+        gfx(0x06000000,g.address(CharacterMenuField::DialogueBegin));
+        gfx(0x07020010,(g.address(CharacterMenuField::DialogueModes)+16)&0x1fffffffU);
+        gfx(0xfb000000,0xd9dcceff);gfx(0xf6000000|((x+8)<<14)|((y+7)<<2),(x<<14)|(y<<2));gfx(0xe7000000,0);
+        text(letter,x+4,y,1,0x26345bff);
+    };
+    for(unsigned slot=0;slot<CustomStageSlots;++slot) {
+        if(!view.displayed[slot] || !view.label_anchors[slot])continue;
+        unsigned owners=0;bool ready=false;
+        for(unsigned p=0;p<4;++p)if(view.active[p] && view.custom[p]==view.displayed[slot]){++owners;ready|=view.ready[p];}
+        if(!owners)continue;
+        const auto point=project_character_label(*view.label_anchors[slot],camera,projection);if(!point)continue;
+        const bool below=CustomStageAnchors[slot].row!=0;
+        const int anchor_y=static_cast<int>(std::lround(std::clamp(point->y,0.f,240.f)));
+        const int row_top=below?195:52,row_bottom=below?238:180;
+        const int feet_y=std::clamp(anchor_y+3,row_top,row_bottom-18);
+        // Lower actors use the lawn below their feet. Shorten a long name to
+        // one line when a second line would run off the native viewport.
+        const int line_limit=below?std::clamp((row_bottom-feet_y)/18,1,2):2;
+        auto name=entries.at(*view.displayed[slot]).name;
+        for(char& ch:name) {const auto c=static_cast<unsigned char>(ch);ch=c>='a'&&c<='z'?c-'a'+'A':c>=32&&c<127?c:'?';}
+        if(name.empty())name="CUSTOM RACER";
+        if(name.size()>160)name.resize(160);
+        std::vector<std::string> lines;
+        while(!name.empty() && lines.size()<static_cast<unsigned>(line_limit)) {
+            size_t end=name.size();while(end>1 && width(name.substr(0,end))>108)--end;
+            if(end<name.size()) {const auto space=name.rfind(' ',end);if(space!=std::string::npos && space>0)end=space;}
+            auto line=name.substr(0,end);name.erase(0,end);while(!name.empty() && name.front()==' ')name.erase(0,1);
+            if(lines.size()+1==static_cast<unsigned>(line_limit) && !name.empty()) {while(line.size()>1 && width(line+"...")>108)line.pop_back();line+="...";name.clear();}
+            lines.push_back(std::move(line));
+        }
+        unsigned widest=0;for(const auto& line:lines)widest=std::max(widest,width(line));
+        if(widest>108)continue;
+        const bool browse=owners==1 && !ready && entries.size()>CustomStageSlots;
+        const int half=static_cast<int>((widest+1)/2)+(browse?13:0);
+        const int height=static_cast<int>(lines.size())*18;
+        // Each physical stage slot owns a separate label area. Resolving an
+        // overlap must never push another player's name off the screen.
+        const int column_left=slot%2?165:5,column_right=slot%2?315:155;
+        const int anchor_x=static_cast<int>(std::lround(std::clamp(point->x,0.f,320.f)));
+        const int x=std::clamp(anchor_x,column_left+half,column_right-half);
+        const int y=below?feet_y:std::clamp(anchor_y-height-3,row_top,row_bottom-height);
+        for(unsigned line=0;line<lines.size();++line)text(lines[line],x,y+line*18,0,0xffffffff);
+        if(browse){const int row=y+(height-8)/2;cap(x-half,row,"L");cap(x+half-8,row,"R");}
+    }
     call.call(f.font,{2});call.call(f.background,{0,0,0,0});call.call(f.colour,{255,255,255,0,255});
     call.call(f.reset,{g.address(CharacterMenuField::DisplayList)});
 }

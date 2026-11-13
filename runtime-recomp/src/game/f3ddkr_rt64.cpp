@@ -1,4 +1,5 @@
 #include "render_provenance.hpp"
+#include "online_presentation/frame_policy.hpp"
 #include "f3ddkr_rt64.hpp"
 #include "vehicle_rt64.hpp"
 #include "mods/sdk2_bridge.hpp"
@@ -1904,11 +1905,13 @@ void dkr::runtime::F3DDKRRT64Bridge::process(RT64::Application& application,
     const bool enhanced_water=water::enhanced::requested_quality.load(std::memory_order_relaxed)!=water::enhanced::Quality::Original;
     if(!enhanced_water)state->waterRayGeometry.reset();
     if(enhancements::modern_presentation_enabled()) {
-        data_->water_registry=&water::enhanced::task_registry(*state,presentation::task_scene_generation(),!enhanced_water);
+        const auto resource_scene=dkr::online_presentation::asset_scene(presentation::task_scene_generation(),
+            water::streaming::cache_state(&state->ext.textureCache->textureMap.replacementMap).era);
+        data_->water_registry=&water::enhanced::task_registry(*state,resource_scene,!enhanced_water);
         data_->water_time=float(presentation::task_presentation_time());
         data_->flow_fractions=water::capture_flow_fractions(*state);
         water::enhanced::Memory flow_memory(std::span<const std::uint8_t>(state->RDRAM,0x800000));
-        water::residency().prepare(*state,*data_->water_registry,presentation::task_scene_generation(),!enhanced_water);
+        water::residency().prepare(*state,*data_->water_registry,resource_scene,!enhanced_water);
         water::flow_history().begin(presentation::task_scene_generation(),
             flow_memory.u32(water::enhanced::level_model_symbol()),presentation::task_presentation_time(),
             presentation::task_interpolation_allowed(),state->ext.textureCache->getReplacementGeneration());

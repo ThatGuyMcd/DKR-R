@@ -1,6 +1,6 @@
 # DKR-R documentation
 
-Start here for the current v1.0.12 instructions. The older plans and playtest logs
+Start here for the current v1.0.15 instructions. The older plans and playtest logs
 are still useful, but they aren't the current feature list.
 
 ## Playing and settings
@@ -16,7 +16,9 @@ are still useful, but they aren't the current feature list.
 | [Controls](CONTROLLERS.md) | Profiles, N64 setup, SDL2/SDL3, gyro and Android touch groups. |
 | [Saves and portable mode](SAVES.md) | Offline/online/modded storage, recovery and profile switching. |
 | [Application updates](UPDATES.md) | GitHub checks, signed packages, installation, backups and publishing. |
-| [Texture packs](TEXTURE_PACKS.md) | Imports, priorities, CRT filters, track-owned HD packs and texture export/capture. |
+| [Storage cleanup](STORAGE.md) | Once-per-launch background maintenance, install cleanup, retained recovery and cache limits. |
+| [Crash reporting](CRASH_REPORTING.md) | Consent, queued reports, native fault context, file dialogs and unresolved crashes. |
+| [Texture packs](TEXTURE_PACKS.md) | Imports, priorities, track-owned HD packs and texture export/capture. |
 | [Custom tracks and characters](LEGACY-MODS-BETA.md) | Legacy imports, roster browsing, AI, adapters and mod management. |
 | [Magic Codes](MAGIC_CODES.md) | Launch selection, online rules and one-shot actions. |
 | [DKR-R Online](ONLINE_MULTIPLAYER.md) | Public/private hosting, Rollback, Scoreboard, session mods, saves and connection limits. |
@@ -26,8 +28,8 @@ are still useful, but they aren't the current feature list.
 | [Vehicles](VEHICLES.md) | Custom .dkrkart cars, native selection and managed Store installations. |
 | [Achievements](ACHIEVEMENTS.md) | 94 local goals, recognition, notifications and progress protection. |
 | [Library administration](MOD_LIBRARY_ADMIN.md) | FTP uploads, batch entries, image controls, usage filters and deployment. |
-| [Troubleshooting](TROUBLESHOOTING.md) | Failures, support exports and the correct runtime logs. |
-| [Platform support](PLATFORMS.md) | v1.0.12 packages, Linux requirements and excluded platforms. |
+| [Troubleshooting](TROUBLESHOOTING.md) | Failures, recurring player issues, support exports and the correct runtime logs. |
+| [Platform support](PLATFORMS.md) | v1.0.15 packages, Linux requirements and excluded platforms. |
 
 ## Track Lab and development
 
@@ -52,6 +54,20 @@ are still useful, but they aren't the current feature list.
 - [Asset policy](ASSET_POLICY.md), [controller database provenance](../assets/controllers/README.md)
   and [CRT asset provenance](../assets/filters/README.md).
 
+## v1.0.15 online update
+
+- [Release notes](PUBLIC-1.0.15-NOTES.txt) and [documentation review](DOCUMENTATION-1.0.15.md).
+- [Online](ONLINE_MULTIPLAYER.md): input recovery, current defaults and live host settings.
+- [Spectators](SPECTATORS.md): buffered confirmed playback and full-lobby limits.
+
+## Previous v1.0.14 additions
+
+- [Release notes](PUBLIC-1.0.14-NOTES.txt) and [documentation review](DOCUMENTATION-1.0.14.md).
+- [Analogue driving](ANALOGUE-DRIVING.md) and [controller feedback](CONTROLLER_FEEDBACK.md).
+- [Launcher and overlay](LAUNCHER.md), [automatic themes](LAUNCHER_THEMES.md)
+  and [languages](LOCALISATION.md).
+- [Opt-in crash reports](CRASH_REPORTING.md) and [release procedure](RELEASING.md).
+
 ## Releases and credits
 
 - [v1.0.12 release notes](PUBLIC-1.0.12-NOTES.txt), [v1.0.11 notes](PUBLIC-1.0.11-NOTES.txt), [v1.0.10 notes](PUBLIC-1.0.10-NOTES.txt), [v1.0.9 notes](PUBLIC-1.0.9-NOTES.txt), [v1.0.8 notes](PUBLIC-1.0.8-NOTES.txt) and
@@ -64,7 +80,7 @@ are still useful, but they aren't the current feature list.
 - [Third-party credits](../THIRD_PARTY.md), [project licence](../LICENSE.md)
   and [runtime licensing notice](../runtime-recomp/COPYING-NOTICE.md).
 
-v1.0.12 includes Windows x64, Linux x86_64/ARM64 AppImages and Steam Deck.
+v1.0.15 includes Windows x64, Linux x86_64/ARM64 AppImages and Steam Deck.
 Android releases are no longer supported. macOS and iOS are skipped in this
 release; their older downloads keep their own version numbers. See the platform guide and validation
 record for exact coverage. Hardware ray tracing and unqualified online graphics
@@ -91,24 +107,24 @@ another machine or against today's source. Use the current guides for setup.
 
 ### Earlier Android and ARM work
 
-- [Android compatibility candidate — 27 September 2026](ANDROID-COMPATIBILITY-IMPLEMENTATION-20260927.md)
-- [Android compatibility and performance audit — 26 September 2026](ANDROID-COMPATIBILITY-PERFORMANCE-AUDIT-20260926.md)
-- [Android frame-pacing pass — build 1050025](ANDROID-FRAMEPACING-20260927.md)
-- [Android mobile launcher and touch controls — preview.5](ANDROID-MOBILE-UI.md)
-- [OPPO/Mali Android startup freeze — 25 September 2026](ANDROID-OPPO-STARTUP-20260925.md)
-- [Android performance follow-up — 26 September 2026](ANDROID-PERFORMANCE-FOLLOWUP-20260926.md)
-- [Android quality-preserving scheduling pass — 1050026](ANDROID-REALWORK-PRIORITY-20260927.md)
-- [Android recording-enabled startup crash — build 1050024](ANDROID-RECORDING-STARTUP-20260927.md)
-- [Android quality-preserving renderer pass — build 1050027](ANDROID-RENDER-PASS-20260927.md)
-- [Android stability and follow-up optimisation — 25 September 2026](ANDROID-STABILITY-20260925.md)
-- [Android startup regression correction — build 1050023](ANDROID-STARTUP-CORRECTION-20260927.md)
-- [ARM platform preview — 1.0.5 beta 11](ARM-PLATFORM-PREVIEW.md)
-- [ARM preview validation — 2026-09-21](ARM-PLATFORM-VALIDATION.md)
+- [Android compatibility candidate â€” 27 September 2026](ANDROID-COMPATIBILITY-IMPLEMENTATION-20260927.md)
+- [Android compatibility and performance audit â€” 26 September 2026](ANDROID-COMPATIBILITY-PERFORMANCE-AUDIT-20260926.md)
+- [Android frame-pacing pass â€” build 1050025](ANDROID-FRAMEPACING-20260927.md)
+- [Android mobile launcher and touch controls â€” preview.5](ANDROID-MOBILE-UI.md)
+- [OPPO/Mali Android startup freeze â€” 25 September 2026](ANDROID-OPPO-STARTUP-20260925.md)
+- [Android performance follow-up â€” 26 September 2026](ANDROID-PERFORMANCE-FOLLOWUP-20260926.md)
+- [Android quality-preserving scheduling pass â€” 1050026](ANDROID-REALWORK-PRIORITY-20260927.md)
+- [Android recording-enabled startup crash â€” build 1050024](ANDROID-RECORDING-STARTUP-20260927.md)
+- [Android quality-preserving renderer pass â€” build 1050027](ANDROID-RENDER-PASS-20260927.md)
+- [Android stability and follow-up optimisation â€” 25 September 2026](ANDROID-STABILITY-20260925.md)
+- [Android startup regression correction â€” build 1050023](ANDROID-STARTUP-CORRECTION-20260927.md)
+- [ARM platform preview â€” 1.0.5 beta 11](ARM-PLATFORM-PREVIEW.md)
+- [ARM preview validation â€” 2026-09-21](ARM-PLATFORM-VALIDATION.md)
 - [DKR-R Beta 15 - Android presentation/performance candidate](BETA15-ANDROID-RENDER-FLOW.txt)
 
 ### Beta and playtest release records
 
-- [v1.0.5 Beta 10 — model-load crash and missing HUD investigation](BETA10-REGRESSION-VALIDATION.md)
+- [v1.0.5 Beta 10 â€” model-load crash and missing HUD investigation](BETA10-REGRESSION-VALIDATION.md)
 - [Beta 12 optimisation scope and qualification](BETA12-OPTIMISATION.md)
 - [DKR-R v1.0.5 beta 15 - online stability correction (2026-10-07)](BETA15-ONLINE-STABILITY-20261007.txt)
 - [DKR-R v1.0.5 Beta 15 - Playtest 10](BETA15-PLAYTEST10-SAVE-PROTECTION.txt)
@@ -143,21 +159,21 @@ another machine or against today's source. Use the current guides for setup.
 ### Online and rollback investigations
 
 - [Experimental Rollback local graphics: restored implementation status](EXPERIMENTAL-LOCAL-SCENERY-STATUS-20261003.txt)
-- [Experimental rollback — development checkpoint, updated 1 October 2026](EXPERIMENTAL-ROLLBACK-IMPLEMENTATION-20260927.md)
-- [Experimental rollback performance pass — 2 October 2026](EXPERIMENTAL-ROLLBACK-PERFORMANCE-20261002.md)
+- [Experimental rollback â€” development checkpoint, updated 1 October 2026](EXPERIMENTAL-ROLLBACK-IMPLEMENTATION-20260927.md)
+- [Experimental rollback performance pass â€” 2 October 2026](EXPERIMENTAL-ROLLBACK-PERFORMANCE-20261002.md)
 - [DKR-R v1.0.5 Beta 15 Playtest 2 - EXPERIMENTAL ROLLBACK](EXPERIMENTAL-ROLLBACK-TESTING.txt)
-- [Beta 12 — host task lifetime correction](HOST-TASK-LIFETIME-20260925.md)
-- [Online latency candidate — 1.0.5-beta.12-online.1](ONLINE-LATENCY-CANDIDATE-20260927.md)
+- [Beta 12 â€” host task lifetime correction](HOST-TASK-LIFETIME-20260925.md)
+- [Online latency candidate â€” 1.0.5-beta.12-online.1](ONLINE-LATENCY-CANDIDATE-20260927.md)
 - [DKR-R v1.0.5 Beta 3: Online input delivery and boss introductions](ONLINE-STABILITY.md)
 
 ### Legacy import and character milestones
 
-- [Legacy activation phase — v1.0.5 Beta 5](LEGACY-ACTIVATION-WORK.md)
-- [Additive legacy Custom Characters — implementation proposal](LEGACY-CUSTOM-CHARACTERS-PLAN.md)
-- [Legacy mod compatibility — v1.0.5 Beta 7](LEGACY-MOD-COMPATIBILITY-BETA7.md)
-- [v1.0.5 Beta 5 — legacy importer preview](LEGACY-MOD-IMPORT-PREVIEW.md)
-- [Native-stage custom character selection — revised proposal](LEGACY-NATIVE-CHARACTER-STAGE-PLAN.md)
-- [Native-stage character selector — private candidate](LEGACY-NATIVE-STAGE-IMPLEMENTATION.md)
+- [Legacy activation phase â€” v1.0.5 Beta 5](LEGACY-ACTIVATION-WORK.md)
+- [Additive legacy Custom Characters â€” implementation proposal](LEGACY-CUSTOM-CHARACTERS-PLAN.md)
+- [Legacy mod compatibility â€” v1.0.5 Beta 7](LEGACY-MOD-COMPATIBILITY-BETA7.md)
+- [v1.0.5 Beta 5 â€” legacy importer preview](LEGACY-MOD-IMPORT-PREVIEW.md)
+- [Native-stage custom character selection â€” revised proposal](LEGACY-NATIVE-CHARACTER-STAGE-PLAN.md)
+- [Native-stage character selector â€” private candidate](LEGACY-NATIVE-STAGE-IMPLEMENTATION.md)
 
 ### Track Lab implementation plans
 
@@ -168,20 +184,20 @@ another machine or against today's source. Use the current guides for setup.
 ### Presentation and optimisation investigations
 
 - [DKR-R - NSO controller investigation and launcher options](CONTROLLER-STUTTER-AND-LAUNCHER-OPTIONS-20261004.txt)
-- [Beta 12 CPU/power follow-up — 25 September 2026](CPU-POWER-OPTIMISATION.md)
+- [Beta 12 CPU/power follow-up â€” 25 September 2026](CPU-POWER-OPTIMISATION.md)
 - [DKR-R 1.0.5 beta 15 - enhanced-water preview (2026-10-08)](ENHANCED-WATER-BETA15.txt)
-- [v1.0.5 Beta 3 — finish presentation rebuild](FINISH-PRESENTATION-VALIDATION.md)
-- [Further optimisation pass — 25 September 2026](FURTHER-OPTIMISATION-20260925.md)
-- [Optional mipmaps — v1.0.5 Beta 2](GENERATED-MIPMAP-VALIDATION.md)
-- [Beta 5 HUD reference alignment — 2026-09-08](HUD-REFERENCE-ALIGNMENT.md)
-- [Standalone launcher performance — 1.0.4](LAUNCHER-PERFORMANCE.md)
-- [Live texture LOD bias — v1.0.5-beta.1 candidate](LIVE-TEXTURE-LOD.md)
+- [v1.0.5 Beta 3 â€” finish presentation rebuild](FINISH-PRESENTATION-VALIDATION.md)
+- [Further optimisation pass â€” 25 September 2026](FURTHER-OPTIMISATION-20260925.md)
+- [Optional mipmaps â€” v1.0.5 Beta 2](GENERATED-MIPMAP-VALIDATION.md)
+- [Beta 5 HUD reference alignment â€” 2026-09-08](HUD-REFERENCE-ALIGNMENT.md)
+- [Standalone launcher performance â€” 1.0.4](LAUNCHER-PERFORMANCE.md)
+- [Live texture LOD bias â€” v1.0.5-beta.1 candidate](LIVE-TEXTURE-LOD.md)
 - [Magic Codes: v1.0.4 repair and validation](MAGIC-CODES.md)
-- [Optional generated texture mipmaps — approved plan and implementation record](OPTIONAL-MIPMAP-PLAN.md)
+- [Optional generated texture mipmaps â€” approved plan and implementation record](OPTIONAL-MIPMAP-PLAN.md)
 - [v1.0.5 Beta 1 split-screen presentation validation](SPLIT-SCREEN-VALIDATION.md)
-- [Track performance pass — v1.0.5 Beta 1](TRACK-PERFORMANCE.md)
-- [Water-heavy level performance investigation — 26 September 2026](WATER-LEVEL-PERFORMANCE-INVESTIGATION-20260926.md)
-- [Water performance pass — implementation and qualification](WATER-PERFORMANCE-IMPLEMENTATION-20260926.md)
+- [Track performance pass â€” v1.0.5 Beta 1](TRACK-PERFORMANCE.md)
+- [Water-heavy level performance investigation â€” 26 September 2026](WATER-LEVEL-PERFORMANCE-INVESTIGATION-20260926.md)
+- [Water performance pass â€” implementation and qualification](WATER-PERFORMANCE-IMPLEMENTATION-20260926.md)
 
 ### Other historical research
 

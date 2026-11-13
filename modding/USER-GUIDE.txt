@@ -1,5 +1,5 @@
 DKR-R MODDING SDK 2.0
-v1.0.12 release — SDK 2.0 retained
+v1.0.14 release — SDK 2.0 retained
 
 Right - start with the Modding Bible. It explains both executable APIs, the
 authoring workflow, settings, hooks, game behaviour, tools UI, online commands,
@@ -14,7 +14,7 @@ inspect a package or generate a source map. None launches a game or a mod.
   python build.py ../my-code --output ../build-001 --mod-tool /path/to/RecompModTool --source-map
 
 Dev Menu 2.0.1 fixes the original beta 7 package's relocation import failure.
-Use it with the current compatible v1.0.12 app. The first import correction was mod-only;
+Use it with the current compatible v1.0.14 app. The first import correction was mod-only;
 the subsequent development-save startup correction requires the updated app.
 Keep the supplied build flags. The builder now checks the complete symbol
 table and resolves local addresses from the linked ELF before packaging. This
@@ -56,3 +56,23 @@ Spectators do not gain a racing port or authority to issue gameplay commands.
 Watching/development do not award gameplay achievements. API 1/2 headers,
 capability versions and package formats are unchanged by lobby discovery.
 See docs/ONLINE_MULTIPLAYER.md, docs/SPECTATORS.md and docs/ACHIEVEMENTS.md.
+
+## Analogue driving in v1.0.14
+
+The additive analogue-driving version-1 capability exposes dkr/driving.h in
+API 2. Existing DkrInput and API 1 layouts stay unchanged. DkrDrivingInput is
+a separate 20-byte record: api, size, flags, accelerator and brake. Levels are
+independent calibrated integers from 0 to 255; flags bit 0 means enabled.
+
+dkr2_driving_input(player, output) reads the logical recorded sample for that
+tick. dkr2_driving_apply(player) requests native effort caps for the same sample
+from on_frame. Native coast, boosts and control restrictions retain ownership;
+CPU and special boss vehicles are not changed. Replay uses recorded samples,
+never physical-controller reads from simulation. Require analogue-driving 1
+and use the complete examples/analogue-driving source and manifest.
+
+The optional companion mod must be installed, approved and enabled. Its Details
+contains bindings, calibration and live bars for the selected local player. In
+Online the host enables the gameplay mod and every player keeps local controls.
+Use matching compatible v1.0.14 application/package editions. Standalone Look
+behind is a separate graphics option and does not require ModernCamera++.

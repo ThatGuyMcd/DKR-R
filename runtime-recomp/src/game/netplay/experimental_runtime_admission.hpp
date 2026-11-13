@@ -1,5 +1,4 @@
 #pragma once
-
 #include "netplay_types.hpp"
 
 namespace dkr::runtime::netplay::experimental {
@@ -53,3 +52,4 @@ inline constexpr const char* runtime_admission_error(SynchronizationMode mode, b
 }
 
 } // namespace dkr::runtime::netplay::experimental
+

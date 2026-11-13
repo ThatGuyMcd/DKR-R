@@ -46,14 +46,14 @@ struct StoreFormLayout {
     StoreFormLayout(const char* id, float available, float maximum = 680.F) {
         columns = available >= maximum + 280.F &&
                   ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings,
-                                    {std::min(available, maximum + 360.F), 0});
+                                    {available, 0});
         if (columns) {
-            ImGui::TableSetupColumn("Form", ImGuiTableColumnFlags_WidthFixed, maximum);
-            ImGui::TableSetupColumn("Summary", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Form", ImGuiTableColumnFlags_WidthStretch, 2.F);
+            ImGui::TableSetupColumn("Summary", ImGuiTableColumnFlags_WidthStretch, 1.F);
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
         }
-        width = std::min(maximum, ImGui::GetContentRegionAvail().x);
+        width = columns ? ImGui::GetContentRegionAvail().x : available;
     }
     void sidebar(const std::function<void(float)>& content) {
         if (columns) {
@@ -79,22 +79,10 @@ void StoreBadge(const std::string& label, float width, PaddockTone tone = Paddoc
 std::string StoreCategory(const StoreJson& item) {
     for (unsigned i = 1; i < kStoreCategoryIds.size(); ++i)
         if (StoreText(item, "category", 32) == kStoreCategoryIds[i])
-            return kStoreCategoryNames[i];
-    return "Mod";
+            return std::string(dkr::localisation::source(kStoreCategoryNames[i]));
+    return std::string(dkr::localisation::source("Mod"));
 }
-std::string StoreRating(const StoreJson& item) {
-    if (item.contains("rating") && item["rating"].is_object()) {
-        const auto& rating = item["rating"];
-        const int count = StoreInt(rating, "count");
-        if (count && rating.contains("average") && rating["average"].is_number()) {
-            char value[100];
-            std::snprintf(value, sizeof(value), "%.1f / 5  |  %d review%s",
-                          std::clamp(rating["average"].get<double>(), 0., 5.), count, count == 1 ? "" : "s");
-            return value;
-        }
-    }
-    return "No reviews yet";
-}
+#include "localisation/library_rating.inl"
 std::string StoreSummary(const StoreJson& item) {
     auto value = StoreText(item, "summary", 4000);
     if (value.size() > 135) {
@@ -115,8 +103,7 @@ int StoreTabLine(const std::vector<std::string>& labels, int selected, float wid
     const auto start = ImGui::GetCursorScreenPos();
     float x = 0, y = 0, row_height = 0;
     for (int i = 0; i < int(labels.size()); ++i) {
-        const auto kind = i == selected ? PaddockButtonKind::Primary : PaddockButtonKind::Plain;
-        const float size = std::min(width, PaddockButtonWidth(labels[i].c_str(), kind));
+        const float size = std::min(width, PaddockSectionTabWidth(labels[i].c_str()));
         if (x > 0 && x + size > width) {
             x = 0;
             y += row_height + 8;
@@ -124,7 +111,7 @@ int StoreTabLine(const std::vector<std::string>& labels, int selected, float wid
         }
         ImGui::SetCursorScreenPos({start.x + x, start.y + y});
         ImGui::PushID(i);
-        if (PaddockButton((labels[i] + "###tab").c_str(), kind, size, 44.F))
+        if (PaddockSectionTab((labels[i] + "###tab").c_str(), i == selected, size))
             selected = i;
         StoreControlFocus();
         row_height = std::max(row_height, ImGui::GetItemRectSize().y);
@@ -156,7 +143,7 @@ std::string StoreDate(const StoreJson& row, const char* key = "updatedAt") {
     return date.empty() ? "Not supplied" : date;
 }
 void StoreNotice(const std::string& title, const std::string& message, float width, bool error = false) {
-    StorePanel panel(std::min(width, 980.F), error);
+    StorePanel panel(width, error);
     if (!title.empty())
         StoreHeading(title, panel.inner(), 18.F);
     StoreNote(message, panel.inner(), !error);

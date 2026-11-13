@@ -1,3 +1,4 @@
+#include "controller_feedback/capture.hpp"
 #include "party_camera.hpp"
 #include "camera_scene.hpp"
 #include "game_payload.hpp"
@@ -34,6 +35,7 @@ void RenderPass::prepare(std::span<const std::uint8_t> retained,std::span<std::u
         unsigned physical_profile,bool full_screen) {
     finish();ranges_.clear();retained_=retained;decoder_=decoder;ended_=0;
     const auto next=activation();
+    if(next)dkr::feedback::capture(retained,next->revision,stamp,online_owner,physical_profile);
     const bool director=stamp.online&&dkr::runtime::spectators::spectator_director.load(std::memory_order_relaxed);
     try {
         if(next!=active_){session_.reset();active_=next;failed_views_=0;shadow_owners_.clear();if(next)session_=std::make_unique<PresentationSession>(next->frozen,next->revision,*next->settings,actions());}
@@ -145,7 +147,7 @@ void RenderPass::before_command(std::uint32_t physical) {
     }
     const std::uint32_t branch[2]={0x06010000U,draw_.start&0xFFFFFFU};
     std::memcpy(decoder_.data()+range->begin,branch,8);drawing_=&*range;
-    presented(range->profile,true);
+    presented(range->profile,session_&&session_->active());
 }
 bool RenderPass::replaced_command(std::uint32_t physical)const {
     return (ended_&&ended_==physical) || (drawing_&&physical>=drawing_->begin&&physical<drawing_->end);

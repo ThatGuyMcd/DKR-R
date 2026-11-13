@@ -80,26 +80,38 @@ int main() {
 
     // Concurrent real-work loop and optional idle attempts. Complete every
     // real workload, never overlap command-list ownership, and stop cleanly.
+    // The threads take turns by handshake, not by yielding: a yield can cost a
+    // whole scheduler quantum on a busy machine. So every frame gets one attempt
+    // during preparation, refused, and one after it, admitted.
     std::atomic<bool> stop{false}, real_active{false}, overlap{false};
-    std::atomic<unsigned> real_frames{0}, idle_frames{0};
+    std::atomic<unsigned> real_frames{0}, idle_frames{0}, refused{0}, asked{0}, answered{0};
     std::thread idle([&] {
-        while (!stop.load()) {
-            try_submit(renderer, worker, [&] { return stop.load(); }, [&] {
+        for (unsigned seen = 0;;) {
+            asked.wait(seen); seen = asked.load();
+            if (stop.load()) return;
+            refused += try_submit(renderer, worker, [&] { return stop.load(); }, [&] {
                 if (real_active.load()) overlap = true;
                 ++idle_frames;
-            });
-            std::this_thread::yield();
+            }) == Result::RendererBusy;
+            ++answered; answered.notify_one();
         }
     });
+    auto idle_attempt = [&] {
+        const unsigned before = answered.load();
+        ++asked; asked.notify_one(); answered.wait(before);
+    };
     for (unsigned i = 0; i < 2000; ++i) {
-        std::unique_lock render_lock(renderer);
-        real_active = true;
-        std::this_thread::yield(); // Preparation, worker mutex still available.
-        { std::unique_lock worker_lock(worker); ++real_frames; }
-        real_active = false;
+        {
+            std::unique_lock render_lock(renderer);
+            real_active = true;
+            idle_attempt(); // Preparation, worker mutex still available.
+            { std::unique_lock worker_lock(worker); ++real_frames; }
+            real_active = false;
+        }
+        idle_attempt();
     }
-    stop = true; idle.join();
-    CHECK(real_frames == 2000 && !overlap);
+    stop = true; ++asked; asked.notify_one(); idle.join();
+    CHECK(real_frames == 2000 && refused == 2000 && idle_frames == 2000 && !overlap);
     CHECK(try_submit(renderer, worker, pending, submit) == Result::Submitted);
     std::puts("PASS: idle, preparation, queued work, worker/cursor contention, failure unwinding, in-flight ownership, stress and shutdown");
 }

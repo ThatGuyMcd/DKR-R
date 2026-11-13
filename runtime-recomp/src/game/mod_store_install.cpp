@@ -1,5 +1,6 @@
 #include "store_vehicle_adapter.hpp"
 #include "atomic_snapshot.hpp"
+#include "storage/maintenance.hpp"
 #include "mod_store_install.hpp"
 #include "custom_tracks.hpp"
 #include "mods/legacy_mod_library.hpp"
@@ -571,8 +572,10 @@ void InstallManager::Impl::run(std::stop_token stop) {
             job = std::move(jobs.front());
             jobs.pop_front();
         }
+        dkr::storage::Activity storage_activity;
         try {
             job(stop);
+            dkr::storage::request();
         } catch (const std::exception& e) {
             std::string message = e.what();
             bool recovery_failed = false;
@@ -2263,6 +2266,16 @@ bool InstallManager::activate(std::string instance, bool previous, std::vector<f
             job.key = job.item + "_" + job.release;
             job.instance = instance;
             job.intent = "activate";
+            if(!path_exists(job.file)) {
+                const auto cached=dkr::storage::cached_package(p.root/"downloads"/job.digest,job.digest,job.total);
+                if(!cached.empty())job.file=cached;
+            }
+            if(!path_exists(job.file)) {
+                service().download(Json{{"id",job.item},{"title",job.title},{"category",job.category}},
+                    Json{{"id",job.release},{"version",job.version},{"sha256",job.digest}},"activate",instance);
+                p.update([](InstallView& s){s.busy=false;s.stage="Downloading the saved mod edition";s.result="The cached download was cleared. The exact edition has been queued again.";});
+                return;
+            }
             p.proposed = job;
             p.prepare(roms, stop);
         })) {

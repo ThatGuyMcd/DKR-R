@@ -17,6 +17,7 @@ bool valid(const OwnerInputPacket& p) {
             std::uint64_t(p.received_next[owner])+bit>=UINT32_MAX)return false;
     }
     for(unsigned i=0;i<p.count;++i)if(!p.commands[i].valid()||(p.owner!=0&&!p.commands[i].empty()))return false;
+    for(unsigned i=0;i<p.count;++i)if(!valid_input(p.inputs[i]))return false;
     return true;
 }
 void put(std::vector<std::uint8_t>& bytes, std::uint64_t value, unsigned width) {
@@ -30,7 +31,7 @@ std::uint64_t get(std::span<const std::uint8_t> bytes, unsigned at, unsigned wid
 }
 std::vector<std::uint8_t> encode_owner_inputs(const OwnerInputPacket& p) {
     if (!valid(p)) return {};
-    std::vector<std::uint8_t> result{'D','K','R','X',3,p.players,p.owner,p.count};
+    std::vector<std::uint8_t> result{'D','K','R','X',4,p.players,p.owner,p.count};
     result.reserve(kOwnerInputMaximumBytes);
     put(result, p.epoch, 8); put(result, p.first_frame, 4);
     for (auto ack : p.received_next) put(result, ack, 4);
@@ -41,13 +42,14 @@ std::vector<std::uint8_t> encode_owner_inputs(const OwnerInputPacket& p) {
         put(result, p.inputs[i].buttons, 2);
         result.push_back(std::bit_cast<std::uint8_t>(p.inputs[i].stick_x));
         result.push_back(std::bit_cast<std::uint8_t>(p.inputs[i].stick_y));
+        result.push_back(p.inputs[i].accelerator);result.push_back(p.inputs[i].brake);result.push_back(p.inputs[i].driving_flags);
         if(mask&(1U<<i))for(auto word:p.commands[i].words)put(result,word,4);
     }
     return result;
 }
 std::optional<OwnerInputPacket> decode_owner_inputs(std::span<const std::uint8_t> bytes) {
     if (bytes.size() < kHeader || bytes[0] != 'D' || bytes[1] != 'K' || bytes[2] != 'R' ||
-        bytes[3] != 'X' || bytes[4] != 3 || bytes[7] > kOwnerInputBatch ||
+        bytes[3] != 'X' || bytes[4] != 4 || bytes[7] > kOwnerInputBatch ||
         bytes.size()>kOwnerInputMaximumBytes || (bytes[52]>>bytes[7])) return {};
     OwnerInputPacket p;
     p.players = bytes[5]; p.owner = bytes[6]; p.count = bytes[7];
@@ -56,8 +58,8 @@ std::optional<OwnerInputPacket> decode_owner_inputs(std::span<const std::uint8_t
     for (unsigned i = 0; i < 4; ++i) p.received_bits[i] = std::uint32_t(get(bytes,36+i*4,4));
     unsigned cursor=kHeader;
     for(unsigned i=0;i<p.count;++i) {
-        if(bytes.size()-cursor<4)return {};
-        p.inputs[i]={std::uint16_t(get(bytes,cursor,2)),std::bit_cast<std::int8_t>(bytes[cursor+2]),std::bit_cast<std::int8_t>(bytes[cursor+3])};cursor+=4;
+        if(bytes.size()-cursor<7)return {};
+        p.inputs[i]={std::uint16_t(get(bytes,cursor,2)),std::bit_cast<std::int8_t>(bytes[cursor+2]),std::bit_cast<std::int8_t>(bytes[cursor+3]),bytes[cursor+4],bytes[cursor+5],bytes[cursor+6]};cursor+=7;
         if(bytes[52]&(1U<<i)) {
             if(bytes.size()-cursor<64)return {};
             for(auto& word:p.commands[i].words){word=std::uint32_t(get(bytes,cursor,4));cursor+=4;}

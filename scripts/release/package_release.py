@@ -200,6 +200,10 @@ def trophy(source: Path | None, target: Path) -> None:
     copy(source, target / "Custom-Magic-Codes/dkr_custom_trophies.nrm")
 
 
+# The launcher's fallback font for localised text.
+NOTO_SANS_LICENSE = ROOT / "runtime-recomp/assets/localisation/OFL-NotoSans.txt"
+
+
 def legal() -> tuple[tuple[str, Path], ...]:
     return (
         ("LICENSE.md", ROOT / "LICENSE.md"),
@@ -214,9 +218,11 @@ def windows(a: argparse.Namespace) -> Package:
     # No blanket template copy: only runtime art and required legal material.
     tree(a.compiled / "assets", root / "assets")
     tree(a.template / "ThirdPartyLicenses", root / "ThirdPartyLicenses")
+    copy(NOTO_SANS_LICENSE, root / "ThirdPartyLicenses/NotoSans-LICENSE.txt")
     for name, source in legal():
         copy(source, root / name)
     helpers = ("DKR-R-Runtime.exe", "DKR-R-InputHost.exe", "DKR-R-ModWorker.exe", "DKR-R-Updater.exe")
+    helpers += ("DKR-R-FilePicker.exe",)
     helpers += ("SDL2.dll", "SDL3.dll", "dxcompiler.dll", "dxil.dll")
     for name in ("DKR-R.exe", *("libexec/dkr-r/" + n for n in helpers)):
         image(a.compiled / name, "windows", name in ("DKR-R.exe", "libexec/dkr-r/DKR-R-Runtime.exe"))
@@ -263,6 +269,10 @@ def linux(a: argparse.Namespace) -> Package:
             tree(a.template / "usr/share/doc/dkr-port" / name, docs / name)
     for name, source in (*legal(), ("WAVE-RACE-WATER-LICENSE.txt", WATER_LICENSE)):
         copy(source, docs / name)
+    copy(NOTO_SANS_LICENSE, docs / "NotoSans-LICENSE.txt")
+    # The isolated Linux picker carries libstdc++/libgcc, with their exception.
+    copy(Path("/usr/share/doc/libstdc++6/copyright"), docs / "licenses/GCC-RUNTIME-COPYRIGHT.txt")
+    copy(Path("/usr/share/common-licenses/GPL-3"), docs / "licenses/GCC-GPL-3.txt")
     for name in ("AppRun", "dkr-r.png", ".DirIcon"):
         path = a.template / name
         if path.is_symlink():
@@ -273,7 +283,7 @@ def linux(a: argparse.Namespace) -> Package:
         (root / path.name).write_text(stamp_version(path.read_text()))
     tree(a.compiled / "assets", root / "usr/bin/assets")
     pairs = [(a.compiled / "DKR-R", root / "usr/bin/DKR-R")]
-    for name in ("DKR-R-ModWorker", "DKR-R-Updater", "DKR-R-InputHost", "libSDL3.so.0"):
+    for name in ("DKR-R-ModWorker", "DKR-R-Updater", "DKR-R-InputHost", "DKR-R-FilePicker", "libSDL3.so.0"):
         pairs.append((a.compiled / "libexec/dkr-r" / name, root / "usr/libexec/dkr-r" / name))
     for source, target in pairs:
         image(source, a.arch, target.name == "DKR-R")
@@ -284,6 +294,8 @@ def linux(a: argparse.Namespace) -> Package:
     for name in ("DKR-R-ModWorker", "DKR-R-Updater"):
         run(["patchelf", "--set-rpath", "$ORIGIN/../../lib", str(libexec / name)])
     run(["patchelf", "--set-rpath", "$ORIGIN", str(libexec / "DKR-R-InputHost")])
+    # The isolated picker uses the host GTK/GLib family, not AppImage copies.
+    run(["patchelf", "--remove-rpath", str(libexec / "DKR-R-FilePicker")])
     ids = features((root / "usr/bin/DKR-R").read_bytes())
     notes(root)
     trophy(a.trophy, root / "usr/bin")

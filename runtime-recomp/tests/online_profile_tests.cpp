@@ -2,10 +2,15 @@
 #include "online_profile/display_name_save.hpp"
 #include "online_profile/linux_device_store.hpp"
 #include "online_profile/profile_retry.hpp"
+#include "online_profile/profile_refresh.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <memory>
+#include <map>
+#include <vector>
+#include "profile_avatar_fixture.inl"
 
 namespace {
 unsigned checks = 0;
@@ -16,7 +21,58 @@ void check(bool condition) {
 }
 } // namespace
 int main() try {
+    check(avatar_fixture::run());
     using namespace dkr::profile;
+    const auto time=ProfileRefresh::Clock::time_point{};
+    ProfileRefresh refresh;
+    check(!refresh.due("", "key-a", time));
+    check(!refresh.due("account-a", "", time));
+    // A client can enter a lobby before optional profile registration finishes.
+    // No idle/host/client condition may stop this metadata publication.
+    check(refresh.due("account-a", "key-a", time));
+    refresh.begin(4);
+    check(!refresh.due("account-a", "key-a", time));
+    refresh.settle("account-a",4,"","","",true,time);
+    check(refresh.pending);
+    refresh.settle("account-a",4,"","","",false,time);
+    check(!refresh.pending && refresh.failures==1);
+    check(!refresh.due("account-a","key-a",time+std::chrono::seconds(59)));
+    check(refresh.due("account-a","key-a",time+std::chrono::minutes(1)));
+    refresh.begin(4);
+    refresh.settle("account-a",5,"account.profile","account-a","key-a",false,time);
+    check(refresh.failures==2); // A name change cannot complete publication.
+    check(!refresh.due("account-a","key-a",time+std::chrono::seconds(119)));
+    check(refresh.due("account-a","key-a",time+std::chrono::minutes(2)));
+    refresh.begin(5);
+    refresh.settle("account-a",6,"launcher.profile","account-b","key-a",false,time);
+    check(refresh.failures==3);
+    refresh.begin(6);
+    refresh.settle("account-a",7,"launcher.profile","account-a","key-b",false,time);
+    check(refresh.failures==4);
+    refresh.begin(7);
+    refresh.settle("account-a",8,"launcher.profile","account-a","key-a",false,time);
+    check(refresh.failures==0 && !refresh.pending);
+    check(!refresh.due("account-a","key-a",time+std::chrono::hours(11)));
+    check(refresh.due("account-a","key-a",time+std::chrono::hours(12)));
+    refresh.begin(8);
+    refresh.settle("account-b",9,"launcher.profile","account-a","key-a",false,time);
+    check(!refresh.pending && refresh.account.empty());
+    check(refresh.due("account-b","key-b",time));
+    refresh.begin(9);
+    check(refresh.due("account-b","replacement-key",time));
+    check(!refresh.pending && refresh.key=="replacement-key");
+    for(unsigned n=0;n<8;++n) {
+        refresh.begin(9);
+        refresh.settle("account-b",9,"","","",false,time);
+    }
+    check(!refresh.due("account-b","replacement-key",time+std::chrono::minutes(31)));
+    check(refresh.due("account-b","replacement-key",time+std::chrono::minutes(32)));
+    check(refresh.due("account-b","replacement-key",time,"current-capability"));
+    refresh.begin(9);
+    refresh.settle("account-b",10,"launcher.profile","account-b","replacement-key",false,time);
+    check(!refresh.due("account-b","replacement-key",time,"current-capability"));
+    check(refresh.due("account-b","replacement-key",time,"renewed-capability"));
+    check(!refresh.pending && refresh.failures==0); // Renew before the stored friend link expires.
     struct RequestError {
         unsigned status;
     };

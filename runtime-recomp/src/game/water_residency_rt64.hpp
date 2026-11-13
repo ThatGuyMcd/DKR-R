@@ -4,6 +4,7 @@
 #include <rice_texture_pack_policy.hpp>
 #include "liquid_replacement_gate.hpp"
 #include <performance_observation.hpp>
+#include "online_presentation/frame_policy.hpp"
 #include "render/rt64_texture_cache.h"
 #include <array>
 #include <chrono>
@@ -19,6 +20,8 @@ class LiquidResidencyT {
     RT64::TextureCache* cache_=nullptr;
     std::uint64_t generation_=0,evictions_=0;
     std::uint32_t scene_=~0U,loaded_=~0U,model_=0;
+    std::vector<std::uint32_t> headers_;
+    std::uint32_t waves_=0;
     streaming::SelectionPtr selection_;
     typename Clock::time_point retry_after_{};
     unsigned retries_=0;
@@ -66,14 +69,20 @@ public:
         const auto generation=cache->getReplacementGeneration();
         enhanced::Memory m(std::span<const std::uint8_t>(state.RDRAM,0x800000));
         const auto loaded=m.u32(revision_addresses::NumberOfLoadedTextures),model=m.u32(enhanced::level_model_symbol());
+        const auto& symbols=presentation::polish_symbols[revision_addresses::CurrentMenuId==revision_addresses::kUsV80.CurrentMenuId?1:0];
+        const auto waves=m.u32(symbols[7]);
         const bool reset=cache!=cache_ || generation!=generation_ || scene!=scene_;
         if(reset) {cache_=cache;generation_=generation;scene_=scene;loaded_=~0U;model_=0;selection_.reset();retries_=0;}
         std::unique_lock map_lock(cache->textureMapMutex);
         auto& map=cache->textureMap.replacementMap;
         if(map.fileSystems.empty()) {selection_.reset();return;}
-        const auto evictions=streaming::eviction_epoch(&map);
+        const auto cache_state=streaming::cache_state(&map);
+        // A different cache can occupy the same address with the same pack
+        // generation. An old immutable selection belongs to its old era.
+        if(selection_&&selection_->era!=cache_state.era) {selection_.reset();retries_=0;}
+        const auto evictions=cache_state.evictions;
         const auto now=Clock::now();
-        if(loaded==loaded_ && model==model_ && selection_) {
+        if(loaded==loaded_ && model==model_ && headers_==materials.liquid_headers() && waves_==waves && selection_) {
             if(evictions!=evictions_) {evictions_=evictions;pending_=true;retries_=0;}
             if(!pending_ || retries_>=5 || now<retry_after_)return;
             auto batch=missing(map);++retries_;retry_after_=now+std::chrono::seconds(1);
@@ -82,12 +91,13 @@ public:
             return;
         }
         surgical::Scope timing(surgical::Region::LiquidWarmup);
+        dkr::online_presentation::count(dkr::online_presentation::Event::ResourceRebuild);
         loaded_=loaded;model_=model;evictions_=evictions;retries_=0;
+        headers_=materials.liquid_headers();waves_=waves;
         struct Header {std::uint32_t address;bool square;};
         std::vector<Header> headers;
         for(const auto address:materials.liquid_headers())headers.push_back({address,false});
-        const auto& symbols=presentation::polish_symbols[revision_addresses::CurrentMenuId==revision_addresses::kUsV80.CurrentMenuId?1:0];
-        if(const auto waves=m.u32(symbols[7]);waves && m.valid(waves,32))headers.push_back({waves,true});
+        if(waves && m.valid(waves,32))headers.push_back({waves,true});
         std::vector<streaming::Family> families;
         unsigned inspected=0,incomplete=0,unsupported=0;
         for(const auto source:headers) {
@@ -136,3 +146,4 @@ public:
 using LiquidResidency=LiquidResidencyT<>;
 inline LiquidResidency& residency(){static thread_local LiquidResidency value;return value;}
 }
+

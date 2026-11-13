@@ -1,3 +1,5 @@
+#include "online_presentation/frame_policy.hpp"
+#include "online_stability/battle_view.hpp"
 #include "experimental_present_gate.hpp"
 #include "experimental_presentation.hpp"
 #include <array>
@@ -203,4 +205,5 @@ bool QueueHoldForTest::wait(std::chrono::milliseconds timeout) {
     std::unique_lock lock(owner_->mutex);
     return owner_->condition.wait_for(lock,timeout,[&]{return owner_->worker_waiting;});
 }
+#include "online_presentation/queue_picture.inl"
 }

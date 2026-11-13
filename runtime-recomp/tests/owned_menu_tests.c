@@ -45,7 +45,7 @@ static int call(unsigned event) {
 int main(void) {
     unsigned checks = 0;
     for (unsigned event = 0; event < 256; ++event) {
-        const int expected = (event <= 23 || (event >= 100 && event <= 105)) ? 0 : -1;
+        const int expected = (event <= 25 || (event >= 100 && event <= 105)) ? 0 : -1;
         if (call(event) != expected)
             return 1;
         ++checks;
@@ -55,15 +55,20 @@ int main(void) {
         ++checks;
         owner = 0;
     }
+    /* Stock input has a paired entry/exit even with all code hooks disabled.
+       Neither notification may inspect a missing guest/field table. */
+    if (call(24) != 0 || call(25) != 0)
+        return 5;
+    checks += 2;
     offline = 0;
-    if (call(100) != -1)
+    if (call(100) != -1 || call(24) != -1 || call(25) != -1)
         return 3;
-    ++checks;
+    checks += 3;
     offline = 1;
     canonical_presentation = 0;
-    if (call(18) != -1)
+    if (call(18) != -1 || call(24) != -1 || call(25) != -1)
         return 4;
-    ++checks;
+    checks += 3;
     printf("%u actual menu-dispatch checks passed, v%d\n", checks, DKR_PROBE_REVISION);
     return 0;
 }

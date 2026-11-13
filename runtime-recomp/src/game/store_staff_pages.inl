@@ -302,7 +302,7 @@ void StoreStaffRequest(const StoreJson& row, float width, const dkr::store::Snap
             StoreNote(StoreText(event, "message", 3000), width);
         }
     {
-        StorePanel notes(std::min(width, 860.F));
+        StorePanel notes(width);
         const float inner = notes.inner();
         ImGui::BeginDisabled(StoreBusyAction(store));
         StoreHeading("Private staff notes", inner, 18);
@@ -323,7 +323,7 @@ void StoreStaffRequest(const StoreJson& row, float width, const dkr::store::Snap
         ImGui::EndDisabled();
         ImGui::EndDisabled();
     }
-    StorePanel decision(std::min(width, 860.F));
+    StorePanel decision(width);
     const float inner = decision.inner();
     StoreHeading("Review decision", inner, 18);
     ImGui::BeginDisabled(StoreBusyAction(store));

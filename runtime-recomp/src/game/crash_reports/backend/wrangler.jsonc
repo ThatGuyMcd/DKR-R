@@ -1,0 +1,11 @@
+{
+  "name": "dkr-crash-reports",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-03",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "durable_objects": { "bindings": [{ "name": "CRASH_REPORTS", "class_name": "CrashReportInbox" }] },
+  "migrations": [{ "tag": "crash-reports-v1", "new_sqlite_classes": ["CrashReportInbox"] }],
+  "ratelimits": [{ "name": "CRASH_REPORT_RATE", "namespace_id": "7941403", "simple": { "limit": 2, "period": 60 } }]
+}

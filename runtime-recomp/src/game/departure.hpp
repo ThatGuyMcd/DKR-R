@@ -29,3 +29,4 @@ inline bool notice(std::span<const std::uint8_t> b,unsigned stage,MemberId id){
     MemberId value=0;for(unsigned i=0;i<8;++i)value|=MemberId(b[6+i])<<(i*8);return value==id;
 }
 }
+

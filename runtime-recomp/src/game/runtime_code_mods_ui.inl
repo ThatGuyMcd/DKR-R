@@ -87,32 +87,18 @@ bool SaveCustomCups(const dkr::mods::code::LibraryItem& item) {
 std::array<char,161> g_code_search{};
 int g_code_state_filter=0,g_code_sort=0;
 void DrawCustomMagicCodeLibrary(float requested_width,bool locked) {
-    const auto snapshot=g_code_library.view();
+    const auto snapshot=LibraryConsistencyView(g_code_library.view());
     const float width=std::max(1.0F,std::min(requested_width,ImGui::GetContentRegionAvail().x));
-    const bool busy=locked||snapshot->busy;
+    const bool busy=locked||snapshot->busy||g_library_controls_check;
     ImGui::PushID("code-card-library");
-    const float status_width=CupSelectWidth({"All","On","Off","Needs approval"});
-    const float sort_width=CupSelectWidth({"Name A-Z","Name Z-A"});
-    const bool inline_fields=width>=status_width+sort_width+24+220;
-    const bool stacked_fields=!inline_fields&&width<2*std::max(status_width,sort_width)+12;
-    const auto origin=ImGui::GetCursorScreenPos();
-    const float caption=PaddockFieldLabelType().line+6;
-    if(inline_fields)ImGui::SetCursorScreenPos({origin.x,origin.y+caption});
-    const auto result=PaddockSearch("search",g_code_search.data(),g_code_search.size(),
-        "Search Custom Magic Codes...",inline_fields?width-status_width-sort_width-24:width);
-    if(result==PaddockFieldResult::GamepadActivated)
-        RequestCustomTextKeyboard("Search Custom Magic Codes",g_code_search.data(),g_code_search.size(),[](const std::string& text){
-            g_code_search.fill(0);std::copy(text.begin(),text.end(),g_code_search.begin());
-        });
-    const auto fields=inline_fields?ImVec2{origin.x+width-status_width-sort_width-12,origin.y}:
-        ImVec2{origin.x,ImGui::GetCursorScreenPos().y+6};
-    const float status=inline_fields?status_width:stacked_fields?width:(width-12)*0.5F,sort=inline_fields?sort_width:status;
-    ImGui::SetCursorScreenPos(fields);
-    PaddockSelect("status","Status",&g_code_state_filter,{"All","On","Off","Needs approval"},status);
-    ImGui::SetCursorScreenPos(stacked_fields?ImVec2{fields.x,fields.y+caption+52}:ImVec2{fields.x+status+12,fields.y});
-    PaddockSelect("sort","Sort by",&g_code_sort,{"Name A-Z","Name Z-A"},sort);
-    ImGui::SetCursorScreenPos(origin);
-    ImGui::Dummy({width,(inline_fields?0:50)+caption+44+(stacked_fields?caption+52:0)});PaddockGap(14);
+
+    DrawInstalledToolbar(width,[&](float available) {
+        const auto result=PaddockSearch("search",g_code_search.data(),g_code_search.size(),"Search Custom Magic Codes...",available);
+        if(result==PaddockFieldResult::GamepadActivated)
+            RequestCustomTextKeyboard("Search Custom Magic Codes",g_code_search.data(),g_code_search.size(),[](const std::string& value){
+                g_code_search.fill(0);std::copy_n(value.begin(),std::min(value.size(),g_code_search.size()-1),g_code_search.begin());
+            });
+    },g_code_state_filter,{"All","On","Off","Needs approval"},g_code_sort,{"Name A-Z","Name Z-A"});
     if(snapshot->busy)DrawToolIntro(snapshot->operation,width);
     if(!snapshot->error.empty())DrawIssue(snapshot->error,dkr::runtime::copy::Area::Mods);
     auto query=std::string(g_code_search.data());
@@ -133,9 +119,15 @@ void DrawCustomMagicCodeLibrary(float requested_width,bool locked) {
         return left==right?a->digest<b->digest:left<right;
     });
     if(g_code_sort==1)std::reverse(shown.begin(),shown.end());
-    PaddockText(PaddockReading(12,false,1.5F),PaddockRgb(0x9BB0BD),
-        std::to_string(shown.size())+" of "+std::to_string(snapshot->items.size())+" Custom Magic Codes",width);
-    PaddockGap(16);
+
+    std::vector<InstalledResultAction> actions;
+    if(g_code_search[0]||g_code_state_filter||g_code_sort)actions.push_back({"Clear filters##results",PaddockButtonKind::Link,[]{
+        g_code_search.fill(0);g_code_state_filter=g_code_sort=0;
+    }});
+    DrawInstalledResults(width,dkr::localisation::format("library.results",{
+        {"shown",std::to_string(shown.size())},{"total",std::to_string(snapshot->items.size())},
+        {"category",dkr::localisation::source("Custom Magic Codes")}}),actions);
+    DrawSessionAnalogueCard(width);
     if(shown.empty()){
         PaddockBox box(width,{24,28});
         PaddockHeading(snapshot->items.empty()?"Your library starts here":"No matching mods",24,0xFFF0C2,box.Inner());
@@ -154,16 +146,16 @@ void DrawCustomMagicCodeLibrary(float requested_width,bool locked) {
         std::vector<LibraryCardView> cards;float height=0;
         for(std::size_t i=first;i<std::min(first+columns,shown.size());++i){
             const auto& item=*shown[i];LibraryCardView card;card.code=true;card.id=item.digest;
-            card.title=dkr::store::library_display_name(item.digest, "magic", item.name);card.byline="Version "+item.version;
+            card.title=dkr::store::library_display_name(item.digest, "magic", item.name);card.byline=dkr::localisation::format("library.version",{{"version",item.version}});
             card.info=item.presentation?"Local camera mod":item.kept_online?"Kept from online":"Gameplay mod";
             card.enabled=item.enabled;card.gold=item.enabled&&item.approved;
             const bool needs_cup=item.id=="dkr_custom_trophies"&&!item.data.contains("trophies");
             card.toggle_allowed=!busy&&(!needs_cup||!item.selected||!item.approved)&&(item.compatibility.empty()||item.enabled);
-            card.status=!item.selected?"Other edition":!item.approved?"Needs approval":needs_cup?"Needs a cup":item.enabled?"On for next launch":"Off";
+            card.status=!item.selected?"Other edition":!item.approved?"Needs approval":needs_cup?"Needs a cup":item.enabled?"ON":"Off";
             card.tone=!item.selected?PaddockTone::Neutral:!item.approved||needs_cup?PaddockTone::Warning:item.enabled?PaddockTone::On:PaddockTone::Neutral;
             if(!item.compatibility.empty()){card.status="Update needed";card.tone=PaddockTone::Warning;}
             if(needs_cup&&item.selected&&item.approved)card.note="Create a cup in Details.";
-            height=std::max(height,MeasureLibraryCard(card,card_width));cards.push_back(std::move(card));
+            ResolveLibraryCardCopy(card);height=std::max(height,MeasureLibraryCard(card,card_width));cards.push_back(std::move(card));
         }
         for(std::size_t col=0;col<cards.size();++col){
             const auto& item=*shown[first+col];ImGui::PushID(item.digest.c_str());PaddockEnter enter(int(first+col)+4);
@@ -211,7 +203,8 @@ void DrawCustomMagicCodeDetails(bool locked) {
         const auto& item=*found;
         PaddockHeading(dkr::store::library_display_name(item.digest, "magic", item.name),30,0xFFCD67,ImGui::GetContentRegionAvail().x);
         PaddockModalText("Version "+item.version);
-        if(!item.description.empty())PaddockModalText(item.description);
+        if(item.id==dkr::library_ui::AnalogueId)PaddockModalText(std::string(dkr::library_ui::AnalogueHelp));
+        else if(!item.description.empty())PaddockModalText(item.description);
         PaddockGap(10.0F);
         ImGui::BeginDisabled(locked||view->busy);
         if(!item.compatibility.empty()) {
@@ -312,6 +305,7 @@ void DrawCustomMagicCodeDetails(bool locked) {
             ImGui::EndPopup();
         }
         ImGui::EndDisabled();
+        DrawInstalledAnalogueSettings(item);
         if(locked)PaddockModalText("Leave the game and lobby to change code mods.");
         if(!view->error.empty())PaddockModalText(view->error);
     }

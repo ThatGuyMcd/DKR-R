@@ -1,8 +1,9 @@
-# Custom tracks, characters, vehicles and the Mod Store — v1.0.12
+# Custom tracks, characters, vehicles and the Mod Library
 
-Open **Mods / Hacks** to manage tracks, characters, Vehicles and Custom Magic Codes.
-The **Mod Store** brings the library into the launcher. Choose grid view or
-the detailed browse-and-inspect view, then search/filter the catalogue.
+Open **Installed Mods** to manage tracks, characters, Vehicles and Custom Magic Codes.
+The **Mod Library** has its own sidebar button above **Installed Mods**, in the
+launcher and in-game overlay. Browse the card grid, or use search, categories
+and sorting to find a mod. Open a card for its details, comments and downloads.
 
 ## Install and update
 
@@ -10,14 +11,14 @@ One Install action downloads, verifies and imports a package. Review code
 permissions before enabling executable mods. A webpage or incomplete archive
 is not a mod package and is not installed as one.
 
-The Store keeps installation receipts, so a managed item can show Installed,
+The Library keeps installation receipts, so a managed item can show Installed,
 Update or Repair. Duplicate candidates offer a choice rather than silently
 creating another copy. Updates replace the selected managed installation;
 compatible settings are retained, and changed executable code needs approval.
 Same-name matches alone are not proof that two mods are identical.
 
-Use the Store's installed/update pages for managed content. Imports made
-outside the Store may need an explicit duplicate/replacement choice. Backups
+Use the Library's installed/update pages for managed content. Imports made
+outside the Library may need an explicit duplicate/replacement choice. Backups
 and interrupted-install recovery protect owned files; do not delete receipts
 or recovery folders while diagnosing an installation.
 
@@ -25,7 +26,7 @@ Discord sign-in provides account features, reviews and requests. Moderators
 and admins see only the library actions their server-side role allows. A
 launcher checkbox cannot grant moderation rights.
 
-Online and the Mod Store now share one display name. You can reach the account
+Online and the Mod Library share one display name. You can reach the account
 settings from **DKR-R Online → Online Profile** too. Picture choices, sharing,
 remembered sign-in and friend cards are covered in the [Online guide](ONLINE_MULTIPLAYER.md#profile-pictures-and-friends).
 Character entries show portraits using the same compact preview style as vehicles.
@@ -33,7 +34,7 @@ Character entries show portraits using the same compact preview style as vehicle
 ## Vehicles
 
 Import supported `.dkrkart` cars directly or from ZIPs, or install from the
-Store's Vehicles category. Managed cars use the same receipts/Update/Repair
+Library's Vehicles category. Managed cars use the same receipts/Update/Repair
 workflow. Enable them before Track Select; Vanilla remains available. Custom
 cars change visuals, not handling, and Adventure does not use them. Hover/plane
 formats are reserved. The stored category ID remains `legacy` for compatibility.
@@ -59,3 +60,23 @@ Offline mod choices and saves are not replaced by a host's online activation.
 The host selects the exact online content/settings and clients consent before
 verified preparation. Existing matching installed data can be reused. See
 [Online](ONLINE_MULTIPLAYER.md), [Magic Codes](MAGIC_CODES.md) and [Saves](SAVES.md).
+
+## Player Select names
+
+Only selected custom characters receive an added name, drawn with the native
+colourful font. The upper two stage slots place names above the models and the
+lower two below their feet. There is no added player-number plate or global
+Choose your Racer footer. Up to four local players are supported; players
+sharing one character share its label.
+
+Names use a bounded two-line area, shortening lower-row text to one line when
+needed. Each physical slot has its own visible area so long names, model sizes
+and paging do not push another selected label off screen. Native L/R hints
+appear only when that selected actor can be browsed. Unselected custom actors
+keep the original stage presentation.
+
+## Battle maps
+
+Track Lab battle courses require valid mode objects and connected AI paths.
+The v1.0.15 release does not turn an arbitrary course into a supported battle
+map just by changing its type. See [Track Lab authoring](../tools/blender/README.md#battle-course-authoring-limits).

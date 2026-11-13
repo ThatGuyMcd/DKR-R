@@ -91,6 +91,9 @@ OWNED_MOD_CALLS = {
     "menu_background": "set_text_background_colour",
     "menu_text": "draw_text",
     "menu_render_reset": "rendermode_reset",
+    "menu_text_width": "get_text_width",
+    "menu_view_matrix": "get_camera_matrix",
+    "menu_projection": "get_projection_matrix_s16",
     "filtered_cheats": "get_filtered_cheats",
     "stage_spawn": "spawn_object",
     "stage_free": "free_object",
@@ -582,7 +585,9 @@ INPUT_NATIVE_HASH = {
     "runtime-recomp/src/game/virtual_pak.cpp": "0dd5e4b81817f4d50db6e701d0d1ad517b47a94e721bf29d4ee94ae65d121747",
     # Oct 1 reviewed opt-in capture hook; stable drive/input branches unchanged.
     "runtime-recomp/src/game/runtime_netplay.cpp": "4cb001dd32e158978221f1536ff6c8695b5ab0c330e7fcaa9dc06686c3376709",
-    "runtime-recomp/src/game/runtime_magic_codes.cpp": "e7d661472bb041991b3e8cfc6373c1d647b0fa300281d21448ed74efdb01021f",
+    # v1.0.15: an offline session with session content off starts with no
+    # codes. A supplied online mask is used unchanged.
+    "runtime-recomp/src/game/runtime_magic_codes.cpp": "69e4159cf2e5f3d6e15cf4e2161f0e8bc20b78024b785b7d6b6a3501533c4860",
     # Frozen online course sizing/ID routing bypasses the offline catalogue.
     # The no-session path remains the prior offline/vanilla implementation.
     # Oct 11: aligned, RAM-bounded scans/copies; frozen online tables still
@@ -597,7 +602,7 @@ INPUT_NATIVE_HASH = {
     # Oct 12: reviewed merge with PR56's frozen-course guard BEFORE any live
     # transport read. Retains caller-owned background lists and offline vehicle
     # selection; neither changes owned checkpoint semantics or asset routing.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4ee51ab618aeaaa661b6cd97c73a3b04d9952298f95f761bba065c86ddef095b",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "59407ed2453e0f05d2d8ae146d386e0693334563be3ae94a568ebbde306ce6e4",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
     "runtime-recomp/src/game/mods/legacy_memory_safety.h": "17b293ec170dd7d8d25377a01a73b9c5cdfca9636b2c959d06930c178d02cd85",
     "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "64520d21f6721b9caf40ee51f88548266ffaf5bc8821a7c17e6bdc72fa244bb7",
@@ -659,7 +664,9 @@ FULL_SCENE_NATIVE_HASH = {
     # Beta 5: four-player range compensation and a normal-runtime-only
     # noninteractive sprite retention hook. Both remain explicit identities
     # in the owned CPU; per-player preferences are consumed by the decoder.
-    "runtime-recomp/src/game/runtime_enhancements.cpp": "14b77607f65e926c3a18c7cee9a9a073f23f83a70726c11f4aef58815cd8edb8",
+    # v1.0.15: the layout aspect comes from the display settings policy
+    # instead of the raw window size. Still a per-player presentation input.
+    "runtime-recomp/src/game/runtime_enhancements.cpp": "a245cce5d05daa7ac2a8f2aad99ddb7e9ee89eb378e7bf8169e480aceefc6c7a",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "ab8a0f4220c00ce1b5726ff75953f0c4944b5b4e24eba942b442e07268ad04da",
     "runtime-recomp/src/game/character_select_music_policy.hpp": "e2e308c4821e2b11cba32ecafd7195cdf7ed9cc4c4166c8b4078ec513441da6c",
 }
@@ -695,7 +702,10 @@ REVIEWED_MAIN_MERGE_HASH = {
     # transient semantic cursor scopes cannot cross a checkpoint. Track Lab
     # requests use their admitted appended IDs, not legacy retail carriers.
     # DMA/save/character dispatch signatures and ownership remain unchanged.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "4ee51ab618aeaaa661b6cd97c73a3b04d9952298f95f761bba065c86ddef095b",
+    # Nov 8: event 2 derives selected-actor label anchors and calls three
+    # read-only font/camera accessors through the same private payload. The
+    # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "59407ed2453e0f05d2d8ae146d386e0693334563be3ae94a568ebbde306ce6e4",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "e204c7cc1dfac8205d8078b359f911e799fbdd33c4b94a351c0a37508b562094",
 }
 
@@ -1232,6 +1242,10 @@ def native_stub(name, signature, full_scenes=False):
     # This pointer is a native constant field table, not a guest address. The
     # private no-mods service never dereferences it. Only this audited ABI may
     # pass it through; unknown pointer signatures remain fenced.
+    if name == "dkr_analogue_driving":
+        if signature != ("uint32_t", ["uint8_t*", "recomp_context*", "unsigned", "uint32_t", "uint32_t"]):
+            raise ValueError("Unreviewed analogue driving ABI")
+        return f'uint32_t {name}({params}) {{ uint64_t args[]={{p2,p3,p4}}, result=p4; if(dkr_probe_mod_dispatch("{name}",p0,p1,args,3,0,0,&result)<0)dkr_probe_block("owned-mod-service-failure"); return (uint32_t)result; }}'
     if name == "dkr_legacy_character_menu":
         if signature != ("int", ["uint8_t*", "recomp_context*", "unsigned", "const uint32_t*"]):
             raise ValueError("Unreviewed character-menu hook ABI")

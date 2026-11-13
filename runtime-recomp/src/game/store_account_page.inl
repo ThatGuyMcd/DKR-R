@@ -1,8 +1,7 @@
 void StoreAccount(float width, const dkr::store::Snapshot& store) {
-    width = std::min(width, 1120.F);
     StoreHeading(store.user.is_null() ? "Sign in" : "Your account", width);
     if (store.user.is_null()) {
-        StorePanel panel(std::min(width, 650.F));
+        StorePanel panel(width);
         StoreHeading("Sign in with Discord", panel.inner(), 22);
         StoreNote("Browse and install without an account. Sign in to review mods, send requests or use staff tools.",
                   panel.inner());
@@ -60,7 +59,7 @@ void StoreAccount(float width, const dkr::store::Snapshot& store) {
         return;
     }
     {
-        StorePanel profile(std::min(width, 700.F));
+        StorePanel profile(width);
         ImGui::BeginDisabled(StoreBusyAction(store));
         DrawOlStoreProfileName(profile.inner(), StoreBusyAction(store));
         ImGui::EndDisabled();
@@ -74,7 +73,7 @@ void StoreAccount(float width, const dkr::store::Snapshot& store) {
             profile.inner());
     }
     {
-        StorePanel session(std::min(width, 700.F));
+        StorePanel session(width);
         StoreHeading("Session", session.inner(), 18);
 #ifdef _WIN32
         StoreNote(store.remember ? "This PC remembers your sign-in." : "Signed in for this session.", session.inner());
@@ -87,7 +86,7 @@ void StoreAccount(float width, const dkr::store::Snapshot& store) {
         ImGui::EndDisabled();
     }
     {
-        StorePanel danger(std::min(width, 700.F));
+        StorePanel danger(width);
         StoreHeading("Delete library account", danger.inner(), 18);
         StoreNote("Deletes your library account, not your installed mods or Discord account.", danger.inner());
         ImGui::BeginDisabled(StoreBusyAction(store));

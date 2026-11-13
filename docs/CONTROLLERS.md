@@ -106,3 +106,20 @@ Menu remains reachable. See [platform support](PLATFORMS.md).
 
 The exact bundled mapping list and its source hash are documented in
 [`assets/controllers/README.md`](../assets/controllers/README.md).
+
+## Launcher navigation and new driving/feedback options
+
+Use the sidebar switch above Restart to choose LB/RB or D-pad for the sidebar.
+The left stick navigates page elements and the right stick scrolls in both
+modes. A dialog receives its own scrolling. In D-pad sidebar mode the D-pad
+is reserved for the sidebar; in LB/RB mode it can also navigate the main page.
+
+**Controls > Controller feedback** provides Classic/Enhanced settings, finite
+left/right tests and output diagnostics for each local player. DualSense and
+direct Deck extras require an exposed, supported physical route and remain
+capability gated. See [Controller feedback](CONTROLLER_FEEDBACK.md).
+
+Analogue acceleration/braking requires its optional Custom Magic Code. Bindings,
+calibration and live input bars live in that mod's **Details**, not in generic
+Controls. See [Analogue driving](ANALOGUE-DRIVING.md). Standalone Look behind
+is enabled in Graphics > HUD & effects, then bound as Look back in Controls.

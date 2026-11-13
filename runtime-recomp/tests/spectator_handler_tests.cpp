@@ -52,8 +52,12 @@ void recovery_and_progress() {
     check(h.f.runtime->pulse(now + std::chrono::milliseconds(10), {}, h.f.error),
           "Verified baseline admission should recover");
     check(h.f.runtime->observer_retry.failures() == 1, "Admission alone must not reset the failure streak");
-    const std::array frames{ConfirmedFrame{{92, 0}, {}, {}, false}};
-    check(h.f.runtime->playback.append(frames, h.f.error) == FeedResult::Accepted, "Confirmed history appended");
+    std::array<ConfirmedFrame, 45> frames{};
+    for (unsigned i = 0; i < frames.size(); ++i)
+        frames[i].cursor = {92, i};
+    check(h.f.runtime->playback.append(std::span(frames).first(30), h.f.error) == FeedResult::Accepted &&
+              h.f.runtime->playback.append(std::span(frames).subspan(30), h.f.error) == FeedResult::Accepted,
+          "Confirmed history appended");
     check(h.f.runtime->pulse(now + std::chrono::milliseconds(20), {}, h.f.error),
           "Recovered watcher must consume confirmed frame");
     check(h.f.world.committed == 1 && h.f.runtime->observer_retry.failures() == 0,

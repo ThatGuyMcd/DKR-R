@@ -1,3 +1,4 @@
+#include "storage/maintenance.hpp"
 #include "magic_code_library.hpp"
 #include "online_mod_bundle.hpp"
 #include <algorithm>
@@ -29,6 +30,7 @@ std::string nonce() {
     return sha256(bytes);
 }
 struct Lease {
+    dkr::storage::Activity storage_activity;
 #ifdef _WIN32
     HANDLE handle=INVALID_HANDLE_VALUE;
 #else

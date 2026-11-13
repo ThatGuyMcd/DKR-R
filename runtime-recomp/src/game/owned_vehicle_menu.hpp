@@ -8,3 +8,4 @@ class ModWorld;
 int draw_owned_vehicle_menu(ModWorld&,std::uint8_t*,recomp_context*,
     RecompiledEntrypoint frame,RecompiledEntrypoint text_width) noexcept;
 }
+

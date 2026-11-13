@@ -12,7 +12,9 @@ and compares, for the asset types the addon reads:
 and checks no file the reference holds for those types is missing. It also runs
 the ROM-free parts: byte-order normalisation and refusing what is not a DKR ROM.
 
-Runs on any Python 3.8+ with numpy; it does not need Blender.
+Runs on any Python 3.8+; it does not need Blender. The ROM-backed extraction
+needs numpy (bundled with Blender), and is skipped with a reason when numpy
+can't be imported.
 
     python tools/blender/tests/test_rom_extract.py
 """
@@ -252,6 +254,14 @@ def test_cancel(rom_path, scratch):
     check(not os.listdir(scratch), "a cancelled extraction leaves nothing behind")
 
 
+def _have_numpy():
+    try:
+        import numpy  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def main():
     print("ROM-free")
     test_normalise()
@@ -274,6 +284,9 @@ def main():
 
     if not roms:
         print("skip: no DKR ROM in %s" % BASEROMS)
+    elif not _have_numpy():
+        print("skip: ROM extraction needs numpy, which isn't available outside Blender; "
+              "run inside Blender or install numpy")
     else:
         print("ROMs")
         done = set()

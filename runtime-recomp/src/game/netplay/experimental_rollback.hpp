@@ -1,5 +1,7 @@
+#include "experimental_checkpoint_hash.hpp"
+#include "online_stability/live_prediction.hpp"
+#include "online_stability/snapshot_history.hpp"
 #pragma once
-
 #include "netplay_types.hpp"
 #include "../mods/sdk2_command.hpp"
 #include "rollback_state_store.hpp"
@@ -155,6 +157,19 @@ public:
     const std::string& error() const { return error_; }
     bool active() const { return active_ && error_.empty(); }
     bool correcting() const;
+    unsigned prediction_window()const{return configuration_.prediction_window;}
+    bool set_prediction_window(unsigned value,std::string& error) {
+        return dkr::online_stability::update_prediction_window(active(),value,contract_.state_bytes,
+            configuration_.prediction_window,configuration_.checkpoint_budget_bytes,checkpoints_.get(),statistics_.checkpoint_bytes,
+            std::max(statistics_.next_frame,replay_goal_),error);
+    }
+    // Copy only the verified retained state at the confirmed frontier. Never
+    // rewind the live world or expose a speculative checkpoint to observers.
+    bool copy_confirmed_checkpoint(std::span<std::uint8_t> destination) const {
+        if(!active()||correcting()||statistics_.confirmed_frames>=statistics_.next_frame)return false;
+        std::uint64_t expected=0;
+        return checkpoints_->load(statistics_.confirmed_frames,destination,&expected)&&checkpoint_hash(destination)==expected;
+    }
     std::uint8_t missing_input_mask() const;
     bool scene_boundary_pending() const { return boundary_frame_ != UINT32_MAX || committed_boundary_; }
     static bool valid_contract(const SimulationContract& contract);
@@ -186,7 +201,7 @@ private:
     SimulationContract contract_{};
     std::array<Frame, kHistory> frames_{};
     FrameInputs confirmed_inputs_{};
-    std::unique_ptr<RollbackStateStore> checkpoints_;
+    std::unique_ptr<dkr::online_stability::SnapshotHistory<RollbackStateStore>> checkpoints_;
     std::vector<std::uint8_t> scratch_;
     std::optional<std::uint32_t> prepared_restore_;
     Statistics statistics_{};
@@ -201,3 +216,4 @@ private:
 };
 
 } // namespace dkr::runtime::netplay::experimental
+

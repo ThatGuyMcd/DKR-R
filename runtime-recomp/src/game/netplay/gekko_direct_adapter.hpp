@@ -1,5 +1,4 @@
 #pragma once
-
 #include "direct_session.hpp"
 #include "gekkonet.h"
 
@@ -26,3 +25,4 @@ private:
 };
 
 } // namespace dkr::runtime::netplay
+

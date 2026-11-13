@@ -1,5 +1,4 @@
 #pragma once
-
 #include "netplay_types.hpp"
 
 #include <chrono>
@@ -47,3 +46,4 @@ private:
 };
 
 } // namespace dkr::runtime::netplay
+

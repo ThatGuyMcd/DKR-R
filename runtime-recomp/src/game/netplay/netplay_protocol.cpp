@@ -219,7 +219,7 @@ std::vector<std::uint8_t> encode_input_batch(const InputBatch& batch) {
         return {};
     }
     std::vector<std::uint8_t> out;
-    out.reserve(10U + batch.inputs.size() * 8U +
+    out.reserve(10U + batch.inputs.size() * 11U +
                 (batch.simulation_progress_present ? 8U : 0U));
     Put32(out, batch.epoch);
     out.push_back(batch.player_slot);
@@ -232,6 +232,8 @@ std::vector<std::uint8_t> encode_input_batch(const InputBatch& batch) {
         Put16(out, input.buttons);
         out.push_back(static_cast<std::uint8_t>(input.stick_x));
         out.push_back(static_cast<std::uint8_t>(input.stick_y));
+        if(!valid_input(input))return {};
+        out.push_back(input.accelerator);out.push_back(input.brake);out.push_back(input.driving_flags);
         Put32(out, revision);
     }
     if (batch.simulation_progress_present) {
@@ -244,7 +246,7 @@ std::vector<std::uint8_t> encode_input_batch(const InputBatch& batch) {
 bool decode_input_batch(std::span<const std::uint8_t> bytes,
                         InputBatch& batch, std::string& error) {
     batch = {};
-    if (bytes.size() < 18U) {
+    if (bytes.size() < 21U) {
         error = "Input batch is truncated.";
         return false;
     }
@@ -256,7 +258,7 @@ bool decode_input_batch(std::span<const std::uint8_t> bytes,
     batch.player_slot = bytes[cursor++];
     const std::uint8_t count = bytes[cursor++];
     const std::size_t input_bytes =
-        10U + static_cast<std::size_t>(count) * 8U;
+        10U + static_cast<std::size_t>(count) * 11U;
     if (batch.epoch == 0U || batch.player_slot >= kMaximumPlayers ||
         count == 0U || count > 64U ||
         (bytes.size() != input_bytes && bytes.size() != input_bytes + 8U) ||
@@ -276,6 +278,8 @@ bool decode_input_batch(std::span<const std::uint8_t> bytes,
         }
         input.stick_x = static_cast<std::int8_t>(bytes[cursor++]);
         input.stick_y = static_cast<std::int8_t>(bytes[cursor++]);
+        input.accelerator=bytes[cursor++];input.brake=bytes[cursor++];input.driving_flags=bytes[cursor++];
+        if(!valid_input(input)){error="Invalid analogue input.";return false;}
         std::uint32_t revision = 0U;
         if (!Take32(bytes, cursor, revision) || revision == 0U) {
             error = "Input sample revision is invalid.";
@@ -530,6 +534,7 @@ std::uint64_t frame_commit_hash(std::uint64_t match_id,
         add(input.buttons, 2U);
         add(static_cast<std::uint8_t>(input.stick_x), 1U);
         add(static_cast<std::uint8_t>(input.stick_y), 1U);
+        add(input.accelerator,1U);add(input.brake,1U);add(input.driving_flags,1U);
     }
     add(commit.previous_hash, 8U);
     return hash != 0U ? hash : 1U;
@@ -542,7 +547,7 @@ std::vector<std::uint8_t> encode_frame_commit_batch(
         (batch.generation == 0U ||
          batch.correction_first > batch.correction_last)) return {};
     std::vector<std::uint8_t> out;
-    out.reserve(14U + batch.commits.size() * 44U);
+    out.reserve(14U + batch.commits.size() * 56U);
     out.push_back(static_cast<std::uint8_t>(batch.commits.size()));
     out.push_back(batch.correction ? 1U : 0U);
     Put32(out, batch.generation);
@@ -560,6 +565,8 @@ std::vector<std::uint8_t> encode_frame_commit_batch(
             Put16(out, input.buttons);
             out.push_back(static_cast<std::uint8_t>(input.stick_x));
             out.push_back(static_cast<std::uint8_t>(input.stick_y));
+            if(!valid_input(input))return {};
+            out.push_back(input.accelerator);out.push_back(input.brake);out.push_back(input.driving_flags);
         }
         Put64(out, commit.previous_hash);
         Put64(out, commit.commit_hash);
@@ -573,7 +580,7 @@ bool decode_frame_commit_batch(std::span<const std::uint8_t> bytes,
     batch = {};
     if (bytes.size() < 14U || bytes[0] == 0U || bytes[0] > 16U ||
         bytes[1] > 1U ||
-        bytes.size() != 14U + static_cast<std::size_t>(bytes[0]) * 44U) {
+        bytes.size() != 14U + static_cast<std::size_t>(bytes[0]) * 56U) {
         error = "Frame commit batch metadata is invalid.";
         return false;
     }
@@ -611,6 +618,8 @@ bool decode_frame_commit_batch(std::span<const std::uint8_t> bytes,
             }
             input.stick_x = static_cast<std::int8_t>(bytes[cursor++]);
             input.stick_y = static_cast<std::int8_t>(bytes[cursor++]);
+            input.accelerator=bytes[cursor++];input.brake=bytes[cursor++];input.driving_flags=bytes[cursor++];
+            if(!valid_input(input)){error="Invalid analogue input.";return false;}
         }
         if (!Take64(bytes, cursor, commit.previous_hash) ||
             !Take64(bytes, cursor, commit.commit_hash) ||

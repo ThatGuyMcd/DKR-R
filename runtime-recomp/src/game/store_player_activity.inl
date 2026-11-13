@@ -1,5 +1,4 @@
 void StoreDownloads(float width, bool locked, const dkr::store::Snapshot& store) {
-    width = std::min(width, 1280.F);
     StoreHeading("Downloads", width);
     g_mod_store.download_section = StoreTabLine({"In progress", "Needs attention", "History"},
                                                 g_mod_store.download_section, width, "download-sections");
@@ -221,7 +220,7 @@ void StoreRequestForm(float width, const dkr::store::Snapshot& store) {
         StoreHeading("Request history", width, 18);
         if (request.contains("events"))
             for (const auto& event : request["events"]) {
-                StorePanel entry(std::min(width, 960.F));
+                StorePanel entry(width);
                 StoreHeading(StoreText(event, "label", 200), entry.inner(), 17);
                 StoreNote(StoreText(event, "message", 3000), entry.inner());
                 StoreNote(StoreDate(event, "createdAt"), entry.inner());
@@ -231,7 +230,7 @@ void StoreRequestForm(float width, const dkr::store::Snapshot& store) {
             for (const char* key : {"sourceUrl", "downloadUrl", "screenshotUrl", "requirements", "testedVersion"})
                 if (!g_mod_store.fields.contains(prefix + key))
                     g_mod_store.fields[prefix + key] = StoreText(request, key, 2000);
-            StorePanel reply(std::min(width, 820.F));
+            StorePanel reply(width);
             ImGui::BeginDisabled(StoreBusyAction(store));
             StoreField((prefix + "reply").c_str(), "Reply to the library team", reply.inner(), 2400, true);
             StoreField((prefix + "sourceUrl").c_str(), "Updated source link", reply.inner(), 1500);

@@ -87,35 +87,49 @@ void ImportVehicleWithDialog() {
         };
     });
 }
+int g_vehicle_state_filter=0,g_vehicle_sort=0;
 void DrawVehicleLibrary(float requested_width,bool locked) {
-    const auto snapshot=g_vehicle_library.view();
+    const auto snapshot=LibraryConsistencyView(g_vehicle_library.view());
     const auto frame=ImGui::GetFrameCount();
     if(frame!=g_vehicle_last_draw+1&&!locked&&!snapshot->busy&&!snapshot->pending)g_vehicle_library.job();
     g_vehicle_last_draw=frame;
     if(g_vehicle_preview_view!=snapshot.get()){ReleaseVehicleTextures();g_vehicle_preview_view=snapshot.get();}
-    const bool busy=locked||snapshot->busy||bool(snapshot->pending);
+    const bool busy=locked||snapshot->busy||bool(snapshot->pending)||g_library_controls_check;
     const float width=std::max(1.F,std::min(requested_width,ImGui::GetContentRegionAvail().x));
     ImGui::PushID("vehicle-card-library");
-    const auto search=PaddockSearch("search",g_vehicle_search.data(),g_vehicle_search.size(),"Search vehicles...",width);
-    if(search==PaddockFieldResult::GamepadActivated)
-        RequestCustomTextKeyboard("Search vehicles",g_vehicle_search.data(),g_vehicle_search.size(),[](const std::string& s){g_vehicle_search.fill(0);std::copy_n(s.begin(),std::min(s.size(),g_vehicle_search.size()-1),g_vehicle_search.begin());});
-    PaddockGap(14);
+
+    DrawInstalledToolbar(width,[&](float available) {
+        const auto result=PaddockSearch("search",g_vehicle_search.data(),g_vehicle_search.size(),"Search vehicles...",available);
+        if(result==PaddockFieldResult::GamepadActivated)
+            RequestCustomTextKeyboard("Search vehicles",g_vehicle_search.data(),g_vehicle_search.size(),[](const std::string& value){
+                g_vehicle_search.fill(0);std::copy_n(value.begin(),std::min(value.size(),g_vehicle_search.size()-1),g_vehicle_search.begin());
+            });
+    },g_vehicle_state_filter,{"All","On","Off"},g_vehicle_sort,{"Name A-Z","Name Z-A"});
     if(snapshot->busy)DrawToolIntro("Updating vehicle library...",width);
     if(!snapshot->error.empty())DrawIssue(snapshot->error,dkr::runtime::copy::Area::Mods);
     if(!snapshot->message.empty())DrawToolIntro(snapshot->message,width);
-    auto query=std::string(g_vehicle_search.data());
-    std::transform(query.begin(),query.end(),query.begin(),[](unsigned char c){return char(std::tolower(c));});
+
     std::vector<const vehicle_mods::Item*> shown;
-    for(const auto& item:snapshot->items) {
-        auto name=item.name;std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return char(std::tolower(c));});
-        if(query.empty()||name.find(query)!=name.npos)shown.push_back(&item);
-    }
+    for(const auto& item:snapshot->items)
+        if(dkr::library_ui::vehicle_matches(item.name,item.enabled,g_vehicle_search.data(),g_vehicle_state_filter))shown.push_back(&item);
+    std::sort(shown.begin(),shown.end(),[](const auto* a,const auto* b){
+        return dkr::library_ui::vehicle_before(a->name,a->digest,b->name,b->digest,g_vehicle_sort);
+    });
+    std::vector<InstalledResultAction> actions;
+    if(g_vehicle_search[0]||g_vehicle_state_filter||g_vehicle_sort)actions.push_back({"Clear filters##results",PaddockButtonKind::Link,[]{
+        g_vehicle_search.fill(0);g_vehicle_state_filter=g_vehicle_sort=0;
+    }});
+    DrawInstalledResults(width,dkr::localisation::format("library.results",{
+        {"shown",std::to_string(shown.size())},{"total",std::to_string(snapshot->items.size())},
+        {"category",dkr::localisation::source("vehicles")}}),actions);
     const auto count=std::count_if(snapshot->items.begin(),snapshot->items.end(),[](const auto& item){return item.enabled;});
     PaddockText(PaddockReading(12,false,1.5F),PaddockRgb(0x9BB0BD),std::to_string(count)+" cars enabled. Track Select only.",width);PaddockGap(16);
     if(shown.empty()) {
+        PaddockEnter empty_enter(4);
         PaddockBox box(width,{24,28});PaddockHeading(snapshot->items.empty()?"Your vehicle library starts here":"No matching vehicles",24,0xFFF0C2,box.Inner());
         PaddockGap(12);ImGui::BeginDisabled(busy);
-        if(PaddockButton("Import car",PaddockButtonKind::Primary))ImportVehicleWithDialog();
+        if(snapshot->items.empty()){if(PaddockButton("Import car",PaddockButtonKind::Primary))ImportVehicleWithDialog();}
+        else if(PaddockButton("Clear filters",PaddockButtonKind::Plain)){g_vehicle_search.fill(0);g_vehicle_state_filter=g_vehicle_sort=0;}
         ImGui::EndDisabled();box.End(CupCardBackground);
     }else {
         const int columns=std::max(1,int((width+kModsCardGap)/(265+kModsCardGap)));
@@ -125,14 +139,15 @@ void DrawVehicleLibrary(float requested_width,bool locked) {
             std::vector<LibraryCardView> cards;float height=0;
             for(std::size_t i=first;i<std::min(first+columns,shown.size());++i) {
                 const auto& item=*shown[i];LibraryCardView card;card.native=true;card.id=item.digest;card.title=item.name;
-                card.byline=vehicle_mods::type_name(item.type);card.info="Vehicle only";card.enabled=item.enabled;card.gold=item.enabled;
-                card.toggle_allowed=!busy;card.status=item.enabled?"On for next launch":"Off";card.tone=item.enabled?PaddockTone::On:PaddockTone::Neutral;
+                card.byline=dkr::localisation::source(vehicle_mods::type_name(item.type));card.info="Vehicle only";card.enabled=item.enabled;card.gold=item.enabled;
+                card.toggle_allowed=!busy;card.status=item.enabled?"ON":"Off";card.tone=item.enabled?PaddockTone::On:PaddockTone::Neutral;
                 card.preview_height=100;card.preview=[item_ptr=&item](float w,float h){DrawVehiclePortrait(*item_ptr,w,h);};
-                height=std::max(height,MeasureLibraryCard(card,card_width));cards.push_back(std::move(card));
+                ResolveLibraryCardCopy(card);height=std::max(height,MeasureLibraryCard(card,card_width));cards.push_back(std::move(card));
             }
             for(std::size_t col=0;col<cards.size();++col) {
                 const auto& item=*shown[first+col];ImGui::PushID(item.digest.c_str());
                 const ImVec2 at{grid.x+col*(card_width+kModsCardGap),y};
+                PaddockEnter card_enter(int(first+col)+4);
                 const bool details=DrawLibraryCard(cards[col],at,card_width,height,false,busy,[hash=item.digest](bool enabled){g_vehicle_library.job([hash,enabled](auto& library,auto&){library.enable(hash,enabled);});});
                 if(details){g_vehicle_details=item.digest;g_vehicle_details_request=true;}
                 ImGui::PopID();

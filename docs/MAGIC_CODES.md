@@ -5,7 +5,7 @@ different things. Original codes keep their normal unlock/gameplay rules.
 Custom Magic Codes are executable `.nrm`/`.dkrcode` packages with their own
 settings and reviewed game-service access.
 
-Import a package through **Mods / Hacks > Custom Magic Codes** or the Mod Store.
+Import a package through **Installed Mods > Custom Magic Codes** or the Mod Library.
 Open Details, review and approve the exact code edition, save its settings and
 enable it for the next game. Only approve code from creators you trust. A data
 import does not automatically approve code. Revoking permission disables it.
@@ -37,7 +37,7 @@ The [Modding Bible](../modding/MODDERS-GUIDE.txt) includes the exact headers.
 - **ModernCamera++:** optional local presentation presets and live camera tuning.
   VR is unfinished and is not a supported release feature.
 
-Online Custom Magic Codes require the v1.0.12 Rollback host mode and the host's
+Online Custom Magic Codes require the v1.0.14 Rollback host mode and the host's
 admitted code/settings. Development tools additionally need explicit lobby
 consent and host authority. A local setting cannot secretly turn an ordinary
 match into a developer session. See [Online](ONLINE_MULTIPLAYER.md).

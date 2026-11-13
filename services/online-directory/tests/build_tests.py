@@ -38,7 +38,10 @@ class BundleTests(unittest.TestCase):
         status, error = run("--output", str(out), "--rollback-api", str(previous))
         self.assertEqual(status, 0, error)
         inputs = json.loads((out / "API-BUILD-INPUTS.json").read_text())["inputs"]
-        self.assertEqual({Path(name).name for name in inputs}, {"worker.mjs", "library_api.mjs", "profile_api.mjs"})
+        self.assertEqual(
+            {Path(name).name for name in inputs},
+            {"worker.mjs", "library_api.mjs", "profile_api.mjs", "community_api.mjs"},
+        )
         self.assertEqual((out / "ROLLBACK/worker-single-file.mjs").read_bytes(), previous.read_bytes())
         self.assertTrue((out / "PRIVATE-API/002-launcher-profiles.sql").is_file())
         self.assertEqual(run("--verify", "--output", str(out))[0], 0)

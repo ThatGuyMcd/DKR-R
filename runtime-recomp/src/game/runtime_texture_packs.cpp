@@ -1,3 +1,5 @@
+#include "storage/maintenance.hpp"
+#include "session_content/policy.hpp"
 #include "mod_store_install.hpp"
 #include "runtime_texture_packs.hpp"
 #include "mod_store.hpp"
@@ -1037,6 +1039,7 @@ std::uint64_t generation() {
 bool import_archive(const std::filesystem::path& source, std::string& status_text,
                     const ImportProgressCallback& progress,
                     const TrackPackOwner* owner) {
+    dkr::storage::Activity storage_activity;
     // See g_import_apply_hold: whatever this import changes reaches RT64 as a
     // single reload, after it returns, however many steps it takes to get there.
     struct ApplyHold {
@@ -1505,6 +1508,7 @@ void renderer_started() {
 }
 
 void apply_pending(RT64::Application& application, bool modern_profile) {
+    modern_profile=modern_profile&&dkr::session_content::textures_allowed();
     std::vector<RT64::ReplacementDirectory> replacements;
     std::vector<RT64::ReplacementDirectory> previous_replacements;
     std::set<std::string> replacement_ids;

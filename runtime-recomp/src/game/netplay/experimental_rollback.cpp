@@ -1,4 +1,5 @@
 #include "../rollback_policy.hpp"
+#include "online_stability/live_delay.hpp"
 #include "confirmed_observer.hpp"
 #include "experimental_rollback.hpp"
 #include "experimental_checkpoint_hash.hpp"
@@ -44,8 +45,9 @@ bool Driver::start(Configuration configuration, std::string& error) {
     try {
         // Stage allocations and the initial checkpoint before replacing the
         // active history. The adapter is unchanged if admission fails.
-        auto checkpoints = std::make_unique<RollbackStateStore>(
-            contract.state_bytes, configuration.prediction_window + 8U, 4U, 2U, true);
+        auto checkpoints = std::make_unique<dkr::online_stability::SnapshotHistory<RollbackStateStore>>(
+            contract.state_bytes, configuration.prediction_window,
+            configuration.checkpoint_budget_bytes-contract.state_bytes);
         std::vector<std::uint8_t> scratch(contract.state_bytes);
         if (!simulation_.capture(scratch, error)) return false;
         if (!checkpoints->save(0U, scratch, checkpoint_hash(scratch)) ||
@@ -53,6 +55,7 @@ bool Driver::start(Configuration configuration, std::string& error) {
             error = "Rollback checkpoint budget is insufficient.";
             return false;
         }
+        std::fprintf(stderr,"[rollback][checkpoints] direct=%u state-bytes=%zu retained-bytes=%zu budget=%zu\n",unsigned(checkpoints->direct()),contract.state_bytes,checkpoints->allocated_bytes()+scratch.capacity(),configuration.checkpoint_budget_bytes);
         configuration_ = configuration;
         contract_ = contract;
         checkpoints_ = std::move(checkpoints);
@@ -117,6 +120,7 @@ InputResult Driver::receive(std::uint64_t epoch, std::uint8_t owner,
     }
     if (frame < statistics_.confirmed_frames) return InputResult::OutOfRange;
     auto& value = entry(frame);
+    dkr::online_stability::input_arrival(owner,frame);
     value.actual[owner] = input;
     if(owner==0)value.actual_command=command;
     value.actual_mask |= mask;
@@ -145,12 +149,14 @@ FrameInputs Driver::predict(const Frame& frame) {
 bool Driver::save(std::uint32_t frame) {
     prepared_restore_.reset(); // capture overwrites the sole staged checkpoint.
     std::string detail;
+    auto target=checkpoints_->staging(frame);
+    if(target.empty())target=scratch_;
     {performance::Scope timing(performance::Stage::Capture);
-     if (!simulation_.capture(scratch_, detail)) return fail("Checkpoint capture failed: " + detail);}
+     if (!simulation_.capture(target, detail)) return fail("Checkpoint capture failed: " + detail);}
     std::uint64_t hash;
-    {performance::Scope timing(performance::Stage::Hash);hash=checkpoint_hash(scratch_);}
+    {performance::Scope timing(performance::Stage::Hash);hash=checkpoint_hash(target);}
     performance::Scope store_timing(performance::Stage::Store);
-    if (!checkpoints_->save(frame, scratch_, hash))
+    if (!checkpoints_->save(frame, target, hash))
         return fail("The experimental checkpoint store rejected a frame.");
     checkpoints_->trim_spares(configuration_.checkpoint_budget_bytes-scratch_.capacity());
     statistics_.checkpoint_bytes = checkpoints_->allocated_bytes() + scratch_.capacity();
@@ -205,10 +211,10 @@ bool Driver::confirm() {
         // An observer sees actual, committed inputs only. Observation is
         // noexcept and opt-in; spectator failures never abort this commit.
         dkr::runtime::spectators::observe_confirmed(configuration_.epoch,frame->number,
-            {{{frame->actual[0].buttons,frame->actual[0].stick_x,frame->actual[0].stick_y},
-              {frame->actual[1].buttons,frame->actual[1].stick_x,frame->actual[1].stick_y},
-              {frame->actual[2].buttons,frame->actual[2].stick_x,frame->actual[2].stick_y},
-              {frame->actual[3].buttons,frame->actual[3].stick_x,frame->actual[3].stick_y}}},
+            {{{frame->actual[0].buttons,frame->actual[0].stick_x,frame->actual[0].stick_y,frame->actual[0].accelerator,frame->actual[0].brake,frame->actual[0].driving_flags},
+              {frame->actual[1].buttons,frame->actual[1].stick_x,frame->actual[1].stick_y,frame->actual[1].accelerator,frame->actual[1].brake,frame->actual[1].driving_flags},
+              {frame->actual[2].buttons,frame->actual[2].stick_x,frame->actual[2].stick_y,frame->actual[2].accelerator,frame->actual[2].brake,frame->actual[2].driving_flags},
+              {frame->actual[3].buttons,frame->actual[3].stick_x,frame->actual[3].stick_y,frame->actual[3].accelerator,frame->actual[3].brake,frame->actual[3].driving_flags}}},
             frame->actual_command.words,frame->output.scene_boundary);
         confirmed_inputs_ = frame->actual;
         ++statistics_.confirmed_frames;
@@ -238,6 +244,10 @@ std::uint8_t Driver::missing_input_mask() const {
 }
 
 Step Driver::step(bool allow_advance) {
+    if(const auto requested=dkr::online_stability::requested_prediction_window();requested&&*requested!=prediction_window()) {
+        std::string detail;if(!set_prediction_window(*requested,detail)){fail(detail);return Step::Failed;}
+    }
+    dkr::online_stability::WorkScope response_work(statistics_.next_frame,statistics_.replayed_frames);
     if (!active()) return Step::Failed;
     if (committed_boundary_) return Step::ConfirmedBoundary;
     try {
@@ -275,7 +285,7 @@ Step Driver::step(bool allow_advance) {
         if (!confirm()) return Step::Failed;
         if (committed_boundary_) return Step::ConfirmedBoundary;
         if (boundary_frame_ != UINT32_MAX) return Step::AwaitingBoundaryConfirmation;
-        if (statistics_.next_frame - statistics_.confirmed_frames >= configuration_.prediction_window)
+        if (statistics_.next_frame >= replay_goal_ && statistics_.next_frame - statistics_.confirmed_frames >= configuration_.prediction_window)
             return Step::PredictionLimit;
         // A scene epoch is finite; wrapping a frame number could alias an old
         // authenticated packet and must not be treated as an ordinary tick.

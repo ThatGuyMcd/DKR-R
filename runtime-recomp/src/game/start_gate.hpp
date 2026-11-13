@@ -41,3 +41,4 @@ inline unsigned receipt(std::span<const std::uint8_t> b,const Gate& g){
     return get(6,8)==g.hash&&get(14,8)==g.roster&&get(22,4)==g.save_generation&&get(26,8)==g.save_hash?b[5]:0;
 }
 }
+

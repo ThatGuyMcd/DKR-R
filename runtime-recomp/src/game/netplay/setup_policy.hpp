@@ -14,7 +14,7 @@ public:
     SetupBulk(const SetupBulk&)=delete;
     SetupBulk& operator=(const SetupBulk&)=delete;
 };
-inline constexpr std::size_t SetupBytes=256U*1024U;
+inline constexpr std::size_t SetupBytes=2U*1024U*1024U;
 inline constexpr std::size_t ControlReserve=32U*1024U;
 inline constexpr std::size_t DurableBatch=1024U*1024U;
 constexpr bool fits(std::size_t used,std::size_t bytes,std::size_t limit) {

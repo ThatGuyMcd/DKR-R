@@ -1,3 +1,5 @@
+#include "storage/maintenance.hpp"
+#include "session_content/policy.hpp"
 #include "mod_store_install.hpp"
 #include "custom_tracks.hpp"
 #include "custom_track_files.hpp"
@@ -741,6 +743,7 @@ void arm_track_override(std::string track_id) {
 }
 
 std::string armed_track_id() {
+    if(!dkr::session_content::local_assets_allowed())return {};
     std::scoped_lock lock(g_mutex);
     return g_armed_track;
 }
@@ -759,11 +762,13 @@ void set_auto_boot(bool enabled) {
 }
 
 bool auto_boot_enabled() {
+    if(!dkr::session_content::local_assets_allowed())return false;
     std::scoped_lock lock(g_mutex);
     return g_auto_boot;
 }
 
 bool consume_auto_boot() {
+    if(!dkr::session_content::local_assets_allowed())return false;
     std::scoped_lock lock(g_mutex);
     if (!g_auto_boot || g_auto_boot_consumed) {
         return false;
@@ -776,6 +781,7 @@ bool consume_auto_boot() {
 }
 
 std::int32_t track_override() {
+    if(!dkr::session_content::local_assets_allowed())return kNoTrackOverride;
     std::scoped_lock lock(g_mutex);
     if (g_armed_track.empty()) {
         return kNoTrackOverride;
@@ -788,6 +794,7 @@ std::int32_t track_override() {
 }
 
 bool owns_level_id(std::int32_t level_id) {
+    if(!dkr::session_content::local_assets_allowed())return false;
     std::scoped_lock lock(g_mutex);
     return std::any_of(g_resolved_level_ids.begin(),g_resolved_level_ids.end(),
         [level_id](const auto& entry){return entry.second==level_id;});
@@ -1153,6 +1160,10 @@ std::vector<std::int32_t> build_extended_table(
         std::fprintf(stderr, "[custom-tracks] applying deferred rescan\n");
         scan_locked(g_directory);
     }
+    if(!dkr::session_content::local_assets_allowed()) {
+        const std::vector<Track> vanilla;
+        return assemble_table(section,retail_table,vanilla,g_sections,g_resolved_level_ids,table_words);
+    }
     return assemble_table(section,retail_table,g_tracks,g_sections,g_resolved_level_ids,table_words);
 }
 
@@ -1234,6 +1245,7 @@ PreparedTracks prepare_tracks(std::vector<Track> tracks,
 const std::uint8_t* payload_for(Section section, std::uint32_t offset,
                                  std::int32_t size) {
     std::scoped_lock lock(g_mutex);
+    if(!dkr::session_content::local_assets_allowed())return nullptr;
     const SectionState& state = g_sections[section_slot(section)];
     if (!state.built || size <= 0 || offset < state.end_offset) {
         return nullptr; // Retail range: the ROM loader owns it.
@@ -1251,6 +1263,7 @@ const std::uint8_t* payload_for(Section section, std::uint32_t offset,
 std::int32_t sibling_index(Section from, std::uint32_t offset, Section to,
                             MapSlot slot) {
     std::scoped_lock lock(g_mutex);
+    if(!dkr::session_content::local_assets_allowed())return -1;
     const SectionState& source = g_sections[section_slot(from)];
     const SectionState& target = g_sections[section_slot(to)];
     if (!source.built || !target.built) {
@@ -2271,6 +2284,7 @@ static bool valid_folder_id(const std::string& id) {
 
 bool install(const std::filesystem::path& source, std::string& error,
              InstallOutcome* outcome) {
+    dkr::storage::Activity storage_activity;
     std::filesystem::path destination_root;
     {
         std::scoped_lock lock(g_mutex);

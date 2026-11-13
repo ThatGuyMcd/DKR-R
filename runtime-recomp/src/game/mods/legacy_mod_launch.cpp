@@ -1,3 +1,4 @@
+#include "session_content/policy.hpp"
 #include "../shared_saves.hpp"
 #include "legacy_mod_launch.hpp"
 #include "vehicle_binding.hpp"
@@ -51,14 +52,16 @@ AssetBank::Overrides publish_dkrmap_artwork(std::shared_ptr<const AssetBank> boo
 }
 std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     const std::filesystem::path& config,const std::filesystem::path& rom,bool online,
-    const LaunchProgress& progress,std::stop_token stop) {
+    const LaunchProgress& progress,std::stop_token stop,const DetailedLaunchProgress& detailed) {
     auto out=std::make_shared<PreparedModLaunch>();
+    out->content_enabled=dkr::session_content::preparing();
+    if(!online&&!out->content_enabled)return out;
     // The offline catalog is never consulted for online launches. The lobby's
     // separately verified, frozen RuntimeResources supply online assets.
     if(online)return out;
     std::string personal_error;
     if(!dkr::runtime::saves::shared::prepare(config,personal_error))throw Error(personal_error);
-    auto report=[&](const char* message){if(stop.stop_requested())throw Error("Game launch cancelled.");if(progress)progress(message);};
+    auto report=[&](const char* message,std::size_t completed=0,std::size_t total=0){if(stop.stop_requested())throw Error("Game launch cancelled.");if(detailed)detailed(message,{completed,total});if(progress)progress(message);};
     const auto code_root=config/"mods"/"custom-magic-codes";
     if(std::filesystem::exists(code_root/"library.json")) {
         report("Preparing Custom Magic Codes");
@@ -119,10 +122,12 @@ std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     vehicles::bind_resources(session,vehicle_resources);
     std::vector<std::string> identities;
     if(!vehicle_resources->library.packages.empty())identities.push_back("vehicles:"+vehicle_resources->identity);
+    std::size_t preview_index=0;
     for(auto& track:tracks) {
-        report("Preparing custom Track Select previews");
+        report("Preparing custom Track Select previews",preview_index,tracks.size());
         identities.push_back("track:"+track.root.content_id+":"+track.bank->fingerprint());
         session->admit(std::move(track));
+        report("Preparing custom Track Select previews",++preview_index,tracks.size());
     }
     if(names)for(const auto& character:names->characters)identities.push_back("character:"+character.id);
     // dkrmap artwork stays out of this identity: it names the modded save
@@ -151,11 +156,12 @@ bool ModLaunch::start(std::filesystem::path config,std::filesystem::path rom,boo
     if(thread_.joinable())thread_.join();
     {std::lock_guard lock(mutex_);state_={};state_.busy=true;state_.modal=true;state_.stage="Checking custom mods";}
     try {
-        thread_=std::jthread([this,config=std::move(config),rom=std::move(rom),online](std::stop_token stop) {
+        thread_=std::jthread([this,config=std::move(config),rom=std::move(rom),online,enabled=dkr::session_content::next_enabled.load()](std::stop_token stop) {
+            dkr::session_content::Preparation selection(enabled);
             try {
-                auto prepared=prepare_mod_launch(config,rom,online,[&](const char* stage){std::lock_guard lock(mutex_);state_.stage=stage;},stop);
+                auto prepared=prepare_mod_launch(config,rom,online,{},stop,[&](const char* stage,dkr::library_ui::StartupProgress value){std::lock_guard lock(mutex_);state_.stage=stage;state_.progress=value;});
                 std::lock_guard lock(mutex_);
-                if(state_.modal && !stop.stop_requested())state_.prepared=std::move(prepared);
+                if(state_.modal && !stop.stop_requested()){state_.prepared=std::move(prepared);state_.progress={1,1};}
                 state_.busy=false;
             }catch(const std::exception& error){std::lock_guard lock(mutex_);state_.busy=false;state_.error=error.what();}
              catch(...){std::lock_guard lock(mutex_);state_.busy=false;state_.error="Custom mod preparation stopped safely after an unexpected error.";}

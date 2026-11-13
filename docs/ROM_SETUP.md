@@ -19,7 +19,7 @@ Both CPU payloads run inside the same application, frontend and runtime.
 Players never choose a separate engine executable. Validation happens before
 registration and renderer/audio startup.
 
-Import a legacy patch through Mods / Hacks, not by selecting its patched ROM
+Import a legacy patch through Installed Mods, not by selecting its patched ROM
 as the game. Xdelta decoding requires the exact original source revision, even
 when prepared content can later target both supported engines.
 PAL/Japanese native engines are not included.
@@ -27,3 +27,9 @@ PAL/Japanese native engines are not included.
 For development, keep each revision's ELF/ROM/generated files in separate
 local build directories and use [Building](BUILDING.md).
 For rejection/recovery, see [troubleshooting](TROUBLESHOOTING.md).
+
+Some legacy `.xdelta` mods require clean **US v1.0** to install. This applies
+to Mod Library installations and manual imports. Add that source ROM once
+in Play; v1.1 can remain selected for playing compatible prepared mods. The
+application does not bundle revision-conversion game data or reconstruct an
+arbitrary patch from the wrong source revision.

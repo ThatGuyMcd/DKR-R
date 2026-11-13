@@ -23,6 +23,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0 # host tooling verifies historical pinned capsule bases
       - name: Prepare pinned runtime dependencies
         uses: ./.github/actions/prepare-dependencies # zizmor: ignore[self-repository] -- actionlint 1.7.12 compatibility; checkout uses this workflow revision.
       - name: Install pinned compiler cache

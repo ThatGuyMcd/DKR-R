@@ -11,7 +11,7 @@ struct ReplayHeader {
     std::array<char, 8> magic{'D', 'K', 'R', 'R', 'E', 'P', 'L', 'Y'};
     std::uint64_t manifest_hash = 0U;
     std::uint32_t frame_count = 0U;
-    std::uint32_t version = 1U;
+    std::uint32_t version = 2U;
     std::uint8_t player_count = 0U;
     std::array<std::uint8_t, 7> reserved{};
 };
@@ -74,7 +74,7 @@ bool ReplayRecorder::finalize(std::string& error) {
         return false;
     }
     const ReplayHeader header{{'D', 'K', 'R', 'R', 'E', 'P', 'L', 'Y'},
-        manifest_hash_, static_cast<std::uint32_t>(frames_.size()), 1U,
+        manifest_hash_, static_cast<std::uint32_t>(frames_.size()), 2U,
         player_count_, {}};
     stream.write(reinterpret_cast<const char*>(&header), sizeof(header));
     stream.write(reinterpret_cast<const char*>(frames_.data()),

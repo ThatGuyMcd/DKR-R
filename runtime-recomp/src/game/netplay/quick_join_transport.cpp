@@ -1,4 +1,7 @@
 #include "setup_policy.hpp"
+#include <cstdio>
+#include "online_presentation/test_receive_delay.hpp"
+#include "online_stability/live_send_capacity.hpp"
 #include "session_transport.hpp"
 #include "callback_lifetime.hpp"
 #include "transport_send_policy.hpp"
@@ -358,12 +361,10 @@ public:
         // feeding SCTP as soon as one useful state is already in flight.
         const auto buffered = channel->bufferedAmount();
         std::size_t aggregate = 0;
-        for (const auto& lane : peer_channels)
-            if (lane)
-                aggregate += lane->bufferedAmount();
+        for (const auto& lane : peer_channels) if (lane) aggregate += lane->bufferedAmount();
         if (!(quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U) ||
-              dkr::online_performance::additional_capacity(traffic, dkr::online_performance::setup_bulk,
-                                                         buffered, aggregate, bytes.size() + 1U))) {
+              dkr::online_performance::additional_capacity(traffic,dkr::online_performance::setup_bulk,buffered,aggregate,bytes.size()+1U)) ||
+              !dkr::online_stability::fresh_input_capacity(traffic,buffered,bytes.size()+1U)) {
             error.clear();
             return DatagramSendStatus::WouldBlock;
         }
@@ -414,7 +415,7 @@ public:
         for (unsigned attempt = 0; attempt < schedule.size(); ++attempt) {
             auto* candidate = queues[schedule[receive_service_cursor_]];
             receive_service_cursor_ = (receive_service_cursor_ + 1U) % schedule.size();
-            if (!candidate->empty()) { queue = candidate; break; }
+            if (!candidate->empty()&&dkr::online_presentation::test_receive_delay::ready(candidate->front().test_ready)) { queue = candidate; break; }
         }
         if (queue == nullptr) {
             source = {};
@@ -567,6 +568,24 @@ public:
             now - last_heartbeat_ >= std::chrono::seconds(5)) {
             send_signal(Json{{"type", "HEARTBEAT"}});
             last_heartbeat_ = now;
+            struct SdkRow {
+                std::shared_ptr<rtc::PeerConnection> connection;
+                std::array<std::shared_ptr<rtc::DataChannel>,5> channels;
+            };
+            std::vector<SdkRow> sdk_rows;
+            {
+                std::scoped_lock lock(mutex_);
+                for(const auto& [identifier,peer]:peers_)if(peer->current.load())
+                    sdk_rows.push_back({peer->connection,{peer->control_channel,peer->authority_channel,
+                        peer->realtime_channel,peer->checkpoint_channel,peer->replica_channel}});
+            }
+            for(const auto& row:sdk_rows)if(row.connection) {
+                const auto rtt=row.connection->rtt();std::array<std::size_t,5> queued{};
+                for(unsigned n=0;n<queued.size();++n)if(row.channels[n])queued[n]=row.channels[n]->bufferedAmount();
+                std::fprintf(stderr,"[online][sdk] role=%s sctp-rtt-ms=%lld bytes-sent=%zu bytes-received=%zu queued-control=%zu queued-authority=%zu queued-live=%zu queued-checkpoint=%zu queued-replica=%zu\n",
+                    host_?"host":"client",static_cast<long long>(rtt?rtt->count():-1),row.connection->bytesSent(),row.connection->bytesReceived(),
+                    queued[0],queued[1],queued[2],queued[3],queued[4]);
+            }
         }
     }
 
@@ -653,6 +672,8 @@ private:
         std::atomic<bool> current{true};
         std::atomic<bool> route_ready{false};
         bool departure_reported = false; // mutex_ protected
+        bool signals_released = false; // mutex_ protected
+        std::vector<Json> held_signals; // mutex_ protected
         std::chrono::steady_clock::time_point created = std::chrono::steady_clock::now();
         std::size_t queued_bytes = 0U;
         std::shared_ptr<rtc::PeerConnection> connection;
@@ -666,6 +687,7 @@ private:
     struct InboundPacket {
         PeerAddress source{};
         std::vector<std::uint8_t> bytes;
+        std::chrono::steady_clock::time_point test_ready=dkr::online_presentation::test_receive_delay::ready_at();
     };
 
     void release_packet_bytes_locked(const InboundPacket& packet) {
@@ -892,7 +914,7 @@ private:
                     payload["reliable"] = true;
                     payload["serialization"] = "none";
                 }
-                send_signal(Json{{"type", type == "offer" ? "OFFER" : "ANSWER"},
+                send_peer_signal(locked, Json{{"type", type == "offer" ? "OFFER" : "ANSWER"},
                                  {"dst", locked->remote_id},
                                  {"payload", std::move(payload)}});
             }));
@@ -900,7 +922,7 @@ private:
             callbacks_.wrap([this, weak_peer](rtc::Candidate candidate) {
                 const auto locked = weak_peer.lock();
                 if (!locked || !locked->current.load()) return;
-                send_signal(Json{
+                send_peer_signal(locked, Json{
                     {"type", "CANDIDATE"}, {"dst", locked->remote_id},
                     {"payload", {
                         {"connectionId", locked->connection_id},
@@ -960,6 +982,7 @@ private:
             std::scoped_lock lock(mutex_);
             retired_peers_.push_back(std::move(replaced));
         }
+        release_peer_signals(peer);
         return peer;
         } catch (const std::exception&) {
             request_route_retry(peer);
@@ -970,12 +993,48 @@ private:
         }
     }
 
+    // The first data channel starts negotiation on an SDK thread, so the OFFER
+    // can be ready before create_peer registers the route. Hold a route's
+    // signalling until it is registered; otherwise the ANSWER and candidates
+    // can return first and be dropped as unknown, stalling ICE until reaped.
+    void send_peer_signal(const std::shared_ptr<Peer>& peer, Json message) {
+        {
+            std::scoped_lock lock(mutex_);
+            if (!peer->signals_released) {
+                peer->held_signals.push_back(std::move(message));
+#ifdef DKR_QUICK_JOIN_TESTING
+                signals_held_.fetch_add(1U);
+#endif
+                return;
+            }
+        }
+        send_signal(message);
+    }
+
+    void release_peer_signals(const std::shared_ptr<Peer>& peer) {
+        // Drain until empty before releasing so held signals keep their order
+        // ahead of any that SDK callbacks produce meanwhile.
+        for (;;) {
+            std::vector<Json> held;
+            {
+                std::scoped_lock lock(mutex_);
+                if (peer->held_signals.empty()) {
+                    peer->signals_released = true;
+                    return;
+                }
+                held.swap(peer->held_signals);
+            }
+            for (const auto& message : held) send_signal(message);
+        }
+    }
+
     void create_offer(const std::string& remote) {
         (void)create_peer(remote, "dkrr-" + random_token(20U, kCodeAlphabet), true);
     }
 
     void route_construction_check(int stage) {
 #ifdef DKR_QUICK_JOIN_TESTING
+        if (construction_hook_) construction_hook_(stage);
         if (construction_failure_stage_ == stage)
             throw std::runtime_error("Injected route construction failure");
 #else
@@ -1005,7 +1064,7 @@ private:
 
         rtc::DataChannelInit realtime{};
         realtime.reliability.unordered = true;
-        realtime.reliability.maxRetransmits = 0U;
+        dkr::online_stability::configure_live_reliability(realtime.reliability);
         route_construction_check(4);
         bind_channel(peer, peer->connection->createDataChannel(
             "dkr-r-realtime", realtime));
@@ -1189,6 +1248,9 @@ private:
     }
 
     void handle_signal(const std::string& text) {
+#ifdef DKR_QUICK_JOIN_TESTING
+        signals_handled_.fetch_add(1U);
+#endif
         Json message;
         if (text.size() > 65536U) return;
         try { message = Json::parse(text); } catch (...) { return; }
@@ -1264,6 +1326,9 @@ private:
     bool host_ = false;
 #ifdef DKR_QUICK_JOIN_TESTING
     int construction_failure_stage_ = -1;
+    std::function<void(int)> construction_hook_;
+    std::atomic<unsigned> signals_handled_{0U};
+    std::atomic<unsigned> signals_held_{0U};
 #endif
     std::string code_;
     std::string local_peer_id_;

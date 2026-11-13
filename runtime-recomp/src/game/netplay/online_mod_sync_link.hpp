@@ -35,3 +35,4 @@ private:
     DirectSession& session_;
 };
 }
+

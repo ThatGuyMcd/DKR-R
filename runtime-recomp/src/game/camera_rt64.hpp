@@ -55,3 +55,4 @@ private:
     float aspect_=4.F/3.F;
 };
 }
+

@@ -13,7 +13,7 @@ namespace dkr::runtime::netplay::experimental {
 // every published owner sample is final. Transport encryption/authentication
 // belongs to SecureChannel; this codec is its bounded plaintext payload only.
 inline constexpr unsigned kOwnerInputBatch = 8;
-inline constexpr unsigned kOwnerInputMaximumBytes = 53+68*kOwnerInputBatch;
+inline constexpr unsigned kOwnerInputMaximumBytes = 53+71*kOwnerInputBatch;
 struct OwnerInputPacket {
     std::uint64_t epoch = 0;
     std::uint32_t first_frame = 0;
@@ -72,3 +72,4 @@ private:
     bool conflict_ = false;
 };
 }
+

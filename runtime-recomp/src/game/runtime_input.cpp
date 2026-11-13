@@ -1,3 +1,8 @@
+#include "analog_driving/poll.hpp"
+#if DKR_RUNTIME_HAS_RT64
+#include "analog_driving/raw_axes.hpp"
+#endif
+namespace driving=dkr::runtime::driving;
 #include "runtime_input.hpp"
 #include "motion_steering_policy.hpp"
 #include "runtime_enhancements.hpp"
@@ -73,6 +78,8 @@ constexpr std::array<BindingPair, static_cast<std::size_t>(Action::Count)> kDefa
     {SDL_SCANCODE_PAGEDOWN,dkr::runtime::input::kUnbound},
     {SDL_SCANCODE_F6,dkr::runtime::input::kUnbound},
     {SDL_SCANCODE_HOME,dkr::runtime::input::kUnbound},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_TRIGGERRIGHT*2+1},
+    {dkr::runtime::input::kUnbound,kAxisSourceBase+SDL_CONTROLLER_AXIS_TRIGGERLEFT*2+1},
 }};
 #else
 constexpr std::array<BindingPair, static_cast<std::size_t>(Action::Count)> kDefaults{};
@@ -159,6 +166,7 @@ constexpr std::array<const char*, static_cast<std::size_t>(Action::Count)> kIden
     "c_up", "c_down", "c_left", "c_right", "look_back", "accelerate",
     "camera_up","camera_down","camera_left","camera_right","camera_recenter","camera_cycle",
     "camera_zoom_in","camera_zoom_out","camera_first_person","camera_xr_recenter",
+    "analogue_accelerator","analogue_brake",
 }};
 
 constexpr std::array<const char*, static_cast<std::size_t>(Action::Count)> kLabels{{
@@ -168,6 +176,7 @@ constexpr std::array<const char*, static_cast<std::size_t>(Action::Count)> kLabe
     "Look back", "Accelerate",
     "Camera up","Camera down","Camera left","Camera right","Centre camera","Cycle camera",
     "Camera zoom in","Camera zoom out","First-person camera","Centre headset",
+    "Analogue accelerator","Analogue brake",
 }};
 
 std::size_t Index(Action action) {
@@ -985,12 +994,6 @@ dkr::runtime::input::State dkr::runtime::input::poll(
             }
         }
     }
-    if (blocked) {
-        // Keep sampling Controller 1 while the overlay is open so calibration
-        // and both live preview bars remain truthful. Gameplay receives a
-        // neutral sample until the overlay closes.
-        return state;
-    }
     const auto value = [&](Action action) {
         const BindingPair& binding = bindings[Index(action)];
         const auto controller_suppressed = [&](int source) {
@@ -1026,7 +1029,10 @@ dkr::runtime::input::State dkr::runtime::input::poll(
         }
         return result;
     };
+#include "analog_driving/poll.inl"
     const auto press = [&](Action action, std::uint16_t mask, float threshold = 0.5F) {
+        if(analogue_enabled&&(action==Action::A||action==Action::B)){if(action==Action::A?pedals.accelerate:pedals.braking)state.buttons|=mask;return;}
+        if(analogue_enabled&&action==Action::Z){if(raw_value(action,true)>threshold)state.buttons|=mask;return;}
         if (value(action) > threshold) {
             state.buttons |= mask;
         }
@@ -1136,7 +1142,6 @@ dkr::runtime::input::State dkr::runtime::input::poll_snapshot(
             }
         }
     }
-    if (blocked) return state;
     const auto value = [&](Action action) {
         const BindingPair& binding = bindings[Index(action)];
         const auto controller_suppressed = [&](int source) {
@@ -1172,8 +1177,11 @@ dkr::runtime::input::State dkr::runtime::input::poll_snapshot(
         }
         return result;
     };
+#include "analog_driving/poll.inl"
     const auto press = [&](Action action, std::uint16_t mask,
                            float threshold = 0.5F) {
+        if(analogue_enabled&&(action==Action::A||action==Action::B)){if(action==Action::A?pedals.accelerate:pedals.braking)state.buttons|=mask;return;}
+        if(analogue_enabled&&action==Action::Z){if(raw_value(action,true)>threshold)state.buttons|=mask;return;}
         if (value(action) > threshold) state.buttons |= mask;
     };
     press(Action::A, kButtonA);

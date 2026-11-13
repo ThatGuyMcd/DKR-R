@@ -1,3 +1,4 @@
+#include "display_settings/policy.hpp"
 #include "mods/legacy_memory_safety.h"
 #include "runtime_hud_layout.hpp"
 #include "atomic_snapshot.hpp"
@@ -365,7 +366,7 @@ bool BeginWidget(std::uint8_t* rdram, std::uint32_t holder,
         !IsRdramPointer(holder, 4)) return false;
     const auto& state = *g_frame_state;
     const float aspect = dkr::runtime::enhancements::fit_to_window_enabled() ?
-        static_cast<float>(state.viewport_width) / state.viewport_height : 4.0F/3.0F;
+        dkr::display::view_aspect(state.viewport_width,state.viewport_height) : 4.0F/3.0F;
     const bool v80=dkr::runtime::revision_addresses::CurrentHud==dkr::runtime::revision_addresses::kUsV80.CurrentHud;
     const auto transform = dkr::runtime::hud::reference::transform(state.mode, aspect,
         dkr::runtime::hud::reference::anchor(element, widget, g_scenario,

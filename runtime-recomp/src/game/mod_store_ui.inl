@@ -1,5 +1,5 @@
-// Native Mod Store: included only in the staged launcher translation unit.
-// No browser engine, remote script, store texture or network worker enters RT64.
+// Native Mod Store shared by launcher and Inspector overlay.
+// Each renderer owns its own textures; HTTP and image decoding stay on workers.
 namespace {
 using StoreJson = dkr::store::Json;
 struct ModStoreUi {
@@ -62,6 +62,7 @@ void StoreControlFocus() {
         g_mod_store.page_focus = id;
 }
 SDL_Renderer* g_mod_store_renderer = nullptr;
+bool g_store_in_game=false;
 constexpr std::array<const char*, 6> kStoreCategoryNames = {
     "All", "Tracks", "Characters", "Vehicles", "Custom Magic Codes", "Texture packs"};
 constexpr std::array<const char*, 6> kStoreCategoryIds = {"", "tracks", "characters", "legacy", "magic", "textures"};
@@ -85,14 +86,17 @@ const StoreJson* StoreFind(const StoreJson& rows, const std::string& id) {
                 return &row;
     return nullptr;
 }
-void StoreNote(const std::string& value, float width, bool muted = true) {
-    PaddockText(PaddockReading(14.F, false, 1.45F), PaddockRgb(muted ? 0xBDCFD9 : 0xFFF4D3), value, width);
+template<class T> void StoreNote(T&& raw, float width, bool muted = true) {
+    const std::string value(LocalisedUi::copy(std::forward<T>(raw)));
+    PaddockText(PaddockReading(14.F, false, 1.45F), PaddockRgb(muted ? 0xBDCFD9 : 0xFFF4D3), dkr::library_ui::visible_status(value), width);
 }
-void StoreHeading(const std::string& value, float width, float size = 23.F) {
+template<class T> void StoreHeading(T&& raw, float width, float size = 23.F) {
+    const std::string value(LocalisedUi::copy(std::forward<T>(raw)));
     PaddockHeading(value.c_str(), size, 0xFFCD67, width);
     PaddockGap(9.F);
 }
-bool StoreButton(const std::string& label, float width = 0, bool primary = false) {
+template<class T> bool StoreButton(T&& raw, float width = 0, bool primary = false) {
+    const std::string label=LocalisedUi::widget(std::forward<T>(raw));
     width = std::min(
         width > 0 ? width
                   : PaddockButtonWidth(label.c_str(), primary ? PaddockButtonKind::Primary : PaddockButtonKind::Plain),
@@ -120,7 +124,8 @@ bool StoreCheck(const std::string& label, bool& value, float width) {
 void StoreActionLine(const std::vector<std::pair<std::string, std::function<void()>>>& actions, float width) {
     const auto start = ImGui::GetCursorScreenPos();
     float x = 0, y = 0, height = 0;
-    for (const auto& [label, action] : actions) {
+    for (const auto& [raw_label, action] : actions) {
+        const auto label=dkr::localisation::label(raw_label);
         const float w = std::min(width, std::max(90.F, PaddockButtonWidth(label.c_str(), PaddockButtonKind::Plain)));
         if (x > 0 && x + w > width) {
             x = 0;
@@ -135,69 +140,13 @@ void StoreActionLine(const std::vector<std::pair<std::string, std::function<void
     }
     ImGui::SetCursorScreenPos({start.x, start.y + y + height + 9});
 }
-void StoreField(const char* key, const char* label, float width, std::size_t maximum = 500, bool multiline = false, bool review = false) {
-    width = std::max(1.F, std::min(width, ImGui::GetContentRegionAvail().x));
-    auto& value = g_mod_store.fields[key];
-    ImGui::PushID(key);
-    const auto open_keyboard = [&] {
-        const std::string name = key, identity = g_mod_store.identity;
-        RequestCustomTextKeyboard(label, value, maximum + 1, [name, identity](const std::string& accepted) {
-            if (g_mod_store.identity == identity) {
-                g_mod_store.fields[name] = accepted;
-                if (name.starts_with("draft-")) {
-                    g_mod_store.dirty = true;
-                    g_mod_store.previewed = false;
-                }
-            }
-        });
-    };
-    const float keyboard = std::max(104.F, PaddockButtonWidth("Keyboard", PaddockButtonKind::Plain));
-    if (width >= keyboard + 150.F) {
-        const auto origin = ImGui::GetCursorScreenPos();
-        StoreNote(label, width - keyboard - 10.F);
-        const float bottom = ImGui::GetCursorScreenPos().y;
-        ImGui::SetCursorScreenPos({origin.x + width - keyboard, origin.y});
-        if (StoreButton("Keyboard", keyboard))
-            open_keyboard();
-        ImGui::SetCursorScreenPos({origin.x, std::max(bottom, ImGui::GetCursorScreenPos().y) + 4.F});
-    } else {
-        StoreNote(label, width);
-        if (StoreButton("Keyboard", std::min(width, keyboard)))
-            open_keyboard();
-    }
-    const float edit = width;
-    ImGui::SetNextItemWidth(edit);
-    std::vector<char> buffer(maximum + 1, 0);
-    const auto copy = std::min(maximum, value.size());
-    std::memcpy(buffer.data(), value.data(), copy);
-    if (review)
-        ImGui::PushFont(PaddockReading(14.F, false, 1.45F).font);
-    const bool changed = review && multiline
-        ? DkrReviewInputText("##text", buffer.data(), buffer.size(), {edit, ImGui::GetTextLineHeight() * 6.F + ImGui::GetStyle().FramePadding.y * 2.F})
-        : multiline ? ImGui::InputTextMultiline("##text", buffer.data(), buffer.size(), {edit, 90.F})
-                    : ImGui::InputText("##text", buffer.data(), buffer.size());
-    if (review)
-        ImGui::PopFont();
-    const bool controller_keyboard = ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_GamepadFaceDown) &&
-                                     !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
-    StoreControlFocus();
-    if (changed) {
-        value = buffer.data();
-        if (std::string(key).starts_with("draft-")) {
-            g_mod_store.dirty = true;
-            g_mod_store.previewed = false;
-        }
-    }
-    if (controller_keyboard)
-        open_keyboard();
-    ImGui::PopID();
-    PaddockGap(9.F);
-}
-int StoreCombo(const char* id, int current, const std::vector<std::string>& labels, float width) {
+#include "library_ui/store_field.inl"
+int StoreCombo(const char* id, int current, const std::vector<std::string>& raw_labels, float width) {
+    const auto labels=LocalisedUi::enum_items(raw_labels);
     if (labels.empty())
         return 0;
     current = std::clamp(current, 0, int(labels.size() - 1));
-    StoreNote(id, width);
+    StoreNote(dkr::localisation::source(id), width);
     PaddockGap(4.F);
     ImGui::PushID(id);
     ImGui::SetNextItemWidth(std::min(width, ImGui::GetContentRegionAvail().x));
@@ -228,7 +177,7 @@ void ReleaseModStoreTextures() {
     g_mod_store.retired_textures.clear();
     g_mod_store_renderer = nullptr;
 }
-void StoreCover(const StoreJson& row, float width, float height = 0, bool contain = false) {
+void StoreCover(const StoreJson& row, float width, float height = 0, bool contain = false, float rounding = 8.F) {
     height = height > 0 ? height : width * .53F;
     if (!ImGui::IsRectVisible({width, height})) {
         ImGui::Dummy({width, height});
@@ -285,9 +234,16 @@ void StoreCover(const StoreJson& row, float width, float height = 0, bool contai
         } else
             dkr::store::service().request_image(url);
     }
-    if (texture) {
+    dkr::store::overlay::View native;
+    if(!g_mod_store_renderer&&dkr::store::trusted_url(url)) {
+        const auto pixels=dkr::store::service().image(url);
+        native=dkr::store::overlay::image(url,pixels?pixels->width:0,pixels?pixels->height:0,
+            pixels?std::span<const unsigned char>(pixels->rgba):std::span<const unsigned char>{});
+        if(!pixels&&!native.id)dkr::store::service().request_image(url);
+    }
+    if (texture || native.id) {
         const auto image = dkr::store::service().image(url);
-        const float source = image ? float(image->width) / float(image->height) : 1.8F,
+        const float source = native.id?native.aspect:image ? float(image->width) / float(image->height) : 1.8F,
                     dest = width / std::max(1.F, height);
         ImVec2 a{0, 0}, b{1, 1};
         ImVec2 image_min = at, image_max{at.x + width, at.y + height};
@@ -311,9 +267,9 @@ void StoreCover(const StoreJson& row, float width, float height = 0, bool contai
             a.y = (1 - visible) * .5F;
             b.y = 1 - a.y;
         }
-        ImGui::GetWindowDrawList()->AddImage(reinterpret_cast<ImTextureID>(texture), image_min, image_max, a, b);
+        ImGui::GetWindowDrawList()->AddImageRounded(native.id?reinterpret_cast<ImTextureID>(native.id):reinterpret_cast<ImTextureID>(texture), image_min, image_max, a, b, IM_COL32_WHITE, rounding);
     } else
-        ImGui::GetWindowDrawList()->AddRectFilled(at, {at.x + width, at.y + height}, PaddockCol(0x184459), 8.F);
+        ImGui::GetWindowDrawList()->AddRectFilled(at, {at.x + width, at.y + height}, PaddockCol(0x184459), rounding);
     ImGui::Dummy({width, height});
     PaddockGap(9.F);
 }
@@ -363,6 +319,9 @@ std::vector<const StoreJson*> StoreFiltered(const dkr::store::Snapshot& store) {
 StoreJson StoreCurrentRelease(const StoreJson& row) {
     return dkr::store::current_release(row);
 }
+#include "mod_store/community_ui.inl"
+#include "mod_store/overlay_test_ui.inl"
+
 void StoreOpenMod(const StoreJson& row, bool detail) {
     g_mod_store.review_editing = false;
     g_mod_store.selected = StoreText(row, "id", 160);
@@ -372,6 +331,8 @@ void StoreOpenMod(const StoreJson& row, bool detail) {
 }
 #include "mod_store_management_ui.inl"
 #include "store_polish_modals.inl"
+#include "library_ui/featured_ui.inl"
+#include "library_ui/header_ui.inl"
 void StoreInstall(const dkr::store::Download& job, bool locked) {
     StoreManagerInstall(job, locked);
 }
@@ -420,7 +381,7 @@ void StoreDownloadButton(const StoreJson& row, const StoreJson& release, float w
     const bool selected_update =
         update_available && StoreText(release, "id", 160) == StoreText(StoreCurrentRelease(row), "id", 160);
     if (installed_release || selected_update) {
-        if (StoreButton(selected_update ? "Update available" : compact ? "Installed" : "Installed - manage", width)) {
+        if (StoreButton(dkr::localisation::label(selected_update ? "Update available" : compact ? "Installed" : "Installed - manage"), width)) {
             g_mod_store.page = 4;
             g_mod_store.installed_section = selected_update ? 1 : 0;
             if (selected_update)
@@ -428,6 +389,18 @@ void StoreDownloadButton(const StoreJson& row, const StoreJson& release, float w
             else
                 g_mod_store.installed_selected = installed_instance;
         }
+        return;
+    }
+    if(g_store_in_game) {
+        const bool prepared=!StoreText(release,"id",160).empty()&&StoreText(release,"sha256",64).size()==64;
+        ImGui::BeginDisabled(!prepared);
+        if(StoreButton(dkr::localisation::label(compact?"Queue":"Queue download for launcher"),width,true))StoreQueueRelease(row,release,
+            repair_instance.empty()?"":"reinstall",repair_instance);
+        ImGui::EndDisabled();
+        if(compact&&(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)||ImGui::IsItemFocused()))
+            ImGui::SetTooltip("Queue this mod for the launcher. Installation waits until the game stops.%s",
+                prepared?"":" Prepare this release in the launcher before downloading.");
+        if(!prepared&&!compact)StoreNote("Prepare this release in the launcher before downloading.",width);
         return;
     }
     if (!repair_instance.empty()) {
@@ -454,7 +427,7 @@ void StoreDownloadButton(const StoreJson& row, const StoreJson& release, float w
                        : compact ? "Install"
                                  : "Download & install";
     ImGui::BeginDisabled(version.empty());
-    if (StoreButton(std::string(label) + "##download", width, true)) {
+    if (StoreButton(dkr::localisation::label(std::string(label) + "##download"), width, true)) {
         if (installed) {
             g_mods_page.section = 0;
             const auto category = StoreText(row, "category", 32);
@@ -488,7 +461,7 @@ void StoreStartQueuedInstall(bool locked) {
         return;
     const auto store = dkr::store::service().view();
     for (const auto& job : store->downloads) {
-        if (!g_mod_store.install_after_download.contains(job.key))
+        if (!g_mod_store.install_after_download.contains(job.key) && job.intent != "activate")
             continue;
         if (job.state == "Failed" || job.state == "Paused") {
             g_mod_store.install_after_download.erase(job.key);
@@ -516,43 +489,9 @@ void StoreCardCover(const StoreJson& row, float width, float height, bool detail
         StoreOpenMod(row, detail);
     ImGui::SetCursorScreenPos(after);
 }
-void StoreGridCard(const StoreJson& row, float width, float title_height, float body_height) {
-    StorePanel card(width);
-    const auto inner = card.inner();
-    StoreCardCover(row, inner, inner / 1.8F, true);
-    const auto title_start = ImGui::GetCursorScreenPos();
-    const auto title_press = PaddockBeginPress("##title", {inner, title_height});
-    PaddockTextStyle title_style;
-    title_style.colour = PaddockApply(PaddockRgb(title_press.hover > .1F ? 0xFFCD67 : 0xFFF6DA));
-    PaddockTextAt(ImGui::GetWindowDrawList(), PaddockSign(22.F, 1.25F), title_start, inner,
-                  StoreText(row, "title", 200), title_style);
-    PaddockEndPress(title_press, 4.F);
-    if (title_press.pressed)
-        StoreOpenMod(row, true);
-    PaddockGap(6.F);
-    StoreNote("by " + StoreText(row, "author", 100), inner);
-    PaddockGap(7.F);
-    StoreTags(row, inner);
-    ImGui::SetCursorScreenPos({title_start.x, std::max(ImGui::GetCursorScreenPos().y, title_start.y + body_height)});
-    ImGui::Separator();
-    PaddockGap(9.F);
-    if (inner >= 240.F &&
-        ImGui::BeginTable("card-footer", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings,
-                          {inner, 0})) {
-        ImGui::TableSetupColumn("Rating", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Install", ImGuiTableColumnFlags_WidthFixed, 130.F);
-        ImGui::TableNextColumn();
-        StoreNote(StoreRating(row), ImGui::GetContentRegionAvail().x);
-        ImGui::TableNextColumn();
-        StoreDownloadButton(row, StoreCurrentRelease(row), ImGui::GetContentRegionAvail().x, true);
-        ImGui::EndTable();
-    } else {
-        StoreNote(StoreRating(row), inner);
-        PaddockGap(7.F);
-        StoreDownloadButton(row, StoreCurrentRelease(row), inner);
-    }
-}
+#include "library_ui/compact_cards.inl"
 #include "store_player_details.inl"
+#include "library_ui/browse_toolbar.inl"
 void StoreBrowser(float width, const dkr::store::Snapshot& store) {
     if (g_mod_store.detail) {
         if (const auto* row = StoreFind(StoreItems(store), g_mod_store.selected))
@@ -564,34 +503,7 @@ void StoreBrowser(float width, const dkr::store::Snapshot& store) {
         }
         return;
     }
-    if (width >= 720.F &&
-        ImGui::BeginTable("store-search-sort", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings,
-                          {width, 0})) {
-        ImGui::TableSetupColumn("Search", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Sort", ImGuiTableColumnFlags_WidthFixed, 240.F);
-        ImGui::TableNextColumn();
-        StoreField("search", "Search mods, creators or tags", ImGui::GetContentRegionAvail().x, 160);
-        ImGui::TableNextColumn();
-        g_mod_store.sort =
-            StoreCombo("Sort by", g_mod_store.sort, {"Featured", "Name", "Top rated", "Recently updated"},
-                       ImGui::GetContentRegionAvail().x);
-        ImGui::EndTable();
-    } else {
-        StoreField("search", "Search mods, creators or tags", width, 160);
-        g_mod_store.sort = StoreCombo("Sort by", g_mod_store.sort,
-                                      {"Featured", "Name", "Top rated", "Recently updated"}, std::min(width, 260.F));
-    }
-    if (width >= 700.F) {
-        const auto chosen = StoreTabLine({"Library grid", "Browse and inspect"}, store.layout, std::min(width, 400.F),
-                                         "store-view-tabs");
-        if (chosen != store.layout)
-            dkr::store::service().layout(chosen);
-    } else {
-        const auto chosen = StoreCombo("View", store.layout, {"Library grid", "Browse and inspect"}, width);
-        if (chosen != store.layout)
-            dkr::store::service().layout(chosen);
-    }
-    PaddockGap(12.F);
+    DrawLibraryBrowseToolbar(width);
     std::vector<std::string> categories;
     constexpr const char* short_categories[] = {"All downloads",      "Tracks",      "Characters",
                                                 "Vehicles", "Magic Codes", "Texture packs"};
@@ -630,70 +542,24 @@ void StoreBrowser(float width, const dkr::store::Snapshot& store) {
                      [&](const auto* row) { return StoreText(*row, "id", 160) == g_mod_store.selected; }))
         g_mod_store.selected = StoreText(*rows.front(), "id", 160);
     const int limit = std::min(int(rows.size()), g_mod_store.visible);
-    if (store.layout == 1 && width >= 760.F) {
-        if (ImGui::BeginTable("store-inspect", 2, ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("Mods", ImGuiTableColumnFlags_WidthStretch, .75F);
-            ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch, 1.25F);
-            ImGui::TableNextRow();
-            ImGui::TableSetColumnIndex(0);
-            const float list_width = ImGui::GetContentRegionAvail().x;
-            for (int i = 0; i < limit; ++i) {
-                const auto& row = *rows[i];
-                ImGui::PushID(StoreText(row, "id", 160).c_str());
-                {
-                    StorePanel card(list_width, StoreText(row, "id", 160) == g_mod_store.selected);
-                    const float inner = card.inner();
-                    if (inner >= 240.F &&
-                        ImGui::BeginTable("inspect-row", 2,
-                                          ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings,
-                                          {inner, 0})) {
-                        ImGui::TableSetupColumn("Cover", ImGuiTableColumnFlags_WidthFixed, 88.F);
-                        ImGui::TableSetupColumn("Mod", ImGuiTableColumnFlags_WidthStretch);
-                        ImGui::TableNextColumn();
-                        StoreCardCover(row, 88.F, 64.F, false);
-                        ImGui::TableNextColumn();
-                        if (StoreButton(StoreText(row, "title", 200) + "###select-mod",
-                                        ImGui::GetContentRegionAvail().x))
-                            StoreOpenMod(row, false);
-                        StoreNote("by " + StoreText(row, "author", 100), ImGui::GetContentRegionAvail().x);
-                        ImGui::EndTable();
-                    } else {
-                        if (StoreButton(StoreText(row, "title", 200) + "###select-mod", inner))
-                            StoreOpenMod(row, false);
-                        StoreNote("by " + StoreText(row, "author", 100), inner);
-                    }
-                }
-                ImGui::PopID();
-            }
-            ImGui::TableSetColumnIndex(1);
-            if (const auto* row = StoreFind(StoreItems(store), g_mod_store.selected))
-                StoreDetails(*row, ImGui::GetContentRegionAvail().x, store, true);
-            ImGui::EndTable();
-        }
-    } else {
-        const int columns = store.layout == 1 ? 1 : std::clamp(int((width + 16.F) / 290.F), 1, 4);
+    {
+        const int columns = dkr::library_ui::grid_columns(width);
+        if(g_compact_card_capture)ImGui::SetScrollY(std::max(0.F,ImGui::GetCursorPosY()-24.F));
         if (ImGui::BeginTable("store-grid", columns,
                               ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoSavedSettings, {width, 0})) {
             for (int base = 0; base < limit; base += columns) {
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 const float text_width = std::max(1.F, ImGui::GetContentRegionAvail().x - 32.F);
-                float title_height = 0, author_height = 0;
-                for (int j = base; j < std::min(limit, base + columns); ++j) {
-                    title_height =
-                        std::max(title_height, PaddockTextHeight(PaddockSign(22.F, 1.25F),
-                                                                 StoreText(*rows[j], "title", 200), text_width));
-                    author_height = std::max(author_height,
-                                             PaddockTextHeight(PaddockReading(14.F, false, 1.45F),
-                                                               "by " + StoreText(*rows[j], "author", 100), text_width));
-                }
+                float title_height=0;
+                for(int j=base;j<std::min(limit,base+columns);++j)
+                    title_height=std::max(title_height,PaddockTextHeight(PaddockSign(20.F,1.25F),
+                        StoreGridTitle(StoreText(*rows[j],"title",200),text_width),text_width));
                 for (int j = base; j < std::min(limit, base + columns); ++j) {
                     ImGui::TableSetColumnIndex(j - base);
                     const auto& row = *rows[j];
                     ImGui::PushID(StoreText(row, "id", 160).c_str());
-                    StoreGridCard(row, ImGui::GetContentRegionAvail().x, title_height,
-                                  title_height + author_height + PaddockBadgeSize("x").y + 32.F +
-                                      6.F * ImGui::GetStyle().ItemSpacing.y);
+                    StoreGridCard(row, ImGui::GetContentRegionAvail().x, title_height);
                     ImGui::PopID();
                 }
             }

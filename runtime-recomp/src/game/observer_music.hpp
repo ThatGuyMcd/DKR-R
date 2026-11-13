@@ -19,3 +19,4 @@ decltype(auto) prepare_verified_music(Stage&& stage) {
     return std::forward<Stage>(stage)();
 }
 }
+

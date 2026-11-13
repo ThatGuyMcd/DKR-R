@@ -1,6 +1,43 @@
+#include "vehicle_lighting/check.hpp"
+#include "launcher_themes/corner_atlas.hpp"
+#include "library_ui/control_layout.hpp"
+#include "library_ui/surface_policy.hpp"
+#include "launcher_themes/button_pattern_ui.hpp"
+#include "library_ui/handoff.hpp"
+#include "library_ui/launcher_fade.hpp"
+#include "library_ui/automatic_start.hpp"
+#include "library_ui/navigation_icons.hpp"
+#include "localisation/choice.hpp"
+#include "localisation/save_preview.hpp"
+#include "localisation/service.hpp"
+#include "crash_reports/reporting.hpp"
+#include "controller_feedback/settings.hpp"
+#include "library_ui/policy.hpp"
+#include "library_ui/presentation.hpp"
+#include "launcher_themes/settings.hpp"
+#include "launcher_themes/system.hpp"
+#include "launcher_themes/session.hpp"
+#include "launcher_themes/draw.hpp"
+#include "launcher_themes/art_sdl.hpp"
+#include "launcher_themes/greeting.hpp"
 #include "character_portraits/character_portraits.hpp"
+#include "netplay/session_chat/chat.hpp"
+#include "netplay/session_chat/feed_policy.hpp"
+#include "netplay/session_chat/settings.hpp"
+#include "netplay/session_chat/input_policy.hpp"
+#include "netplay/peer_relay/settings.hpp"
+#include "online_stability/control.hpp"
 #include "online_profile/display_name_save.hpp"
 #include "online_profile/profile_bridge.hpp"
+#include "mod_store/community_policy.hpp"
+#include "mod_store/overlay_images.hpp"
+#include "mod_store/install_notice.hpp"
+#include "water_style/appearance.hpp"
+#include "display_settings/policy.hpp"
+#include "session_content/policy.hpp"
+#include "analog_driving/settings.hpp"
+#include "look_behind/policy.hpp"
+#include "file_picker/client.hpp"
 #include "diagnostics.hpp"
 #include "online_directory.hpp"
 #include "linux_keyring.hpp"
@@ -11,6 +48,8 @@
 #include "invite_handoff.hpp"
 #include <deque>
 #include "party_link.hpp"
+#include "online_presentation/test_receive_delay.hpp"
+#include "online_stability/qualification_delivery.hpp"
 #include "runtime_ui.hpp"
 #include "achievements.hpp"
 #include <cfloat>
@@ -127,6 +166,7 @@ bool DkrReviewInputText(const char*, char*, size_t, const ImVec2&);
 #include "stb/stb_image.h"
 
 #include <SDL.h>
+#include "launcher_gpu.hpp"
 #if defined(__APPLE__)
 #include <SDL_syswm.h>
 extern "C" bool dkr_show_metal_layer(void* ns_window_ptr, void* layer_ptr);
@@ -168,8 +208,8 @@ namespace {
 // The atlas itself is 2048 px wide; 1984 is 31 exact 64 px pattern periods and
 // therefore packs without a separate renderer texture or a partial tile.
 constexpr int kRaceButtonAtlasWidth = 2048;
-constexpr int kRaceButtonPatternWidth = 1984;
-constexpr int kRaceButtonPatternHeight = 64;
+constexpr int kRaceButtonPatternWidth = dkr::launcher_themes::ButtonPatternWidth;
+constexpr int kRaceButtonPatternHeight = dkr::launcher_themes::ButtonPatternHeight;
 constexpr int kRaceButtonPatternCell = 32;
 int g_race_button_pattern_rect = -1;
 // Scopes that restyle the shared button: the paddock's flat buttons (MODS /
@@ -230,50 +270,11 @@ void DrawRaceButtonHover(const char* label, ImVec2 minimum, ImVec2 maximum,
     const auto faded = [amount](int r, int g, int b, int a) {
         return IM_COL32(r, g, b, static_cast<int>(std::lround(a * amount)));
     };
-    // Keep the racing motif broad and calm. A dense black/cream grid creates
-    // high-frequency noise behind the label (especially on handheld panels),
-    // while two or three rows remain recognisably checkered without competing
-    // with the text.
-    const float cell = std::clamp(height * 0.62F, 20.0F, 34.0F);
-    const float time = static_cast<float>(GetTime());
-    const float pattern_period = cell * 2.0F;
-    const float travel = std::fmod(time * 16.0F, pattern_period);
-    ImFontAtlas* atlas = GetIO().Fonts;
-    ImFontAtlasCustomRect* pattern =
-        g_race_button_pattern_rect >= 0
-            ? atlas->GetCustomRectByIndex(g_race_button_pattern_rect)
-            : nullptr;
-    if (pattern != nullptr && pattern->IsPacked() && atlas->TexID != nullptr &&
-        atlas->TexWidth > 0 && atlas->TexHeight > 0) {
-        const float source_scale =
-            static_cast<float>(kRaceButtonPatternCell) / cell;
-        const float source_phase = std::fmod(
-            static_cast<float>(kRaceButtonPatternCell * 2) -
-                travel * source_scale,
-            static_cast<float>(kRaceButtonPatternCell * 2));
-        const float source_width = std::min(
-            width * source_scale,
-            std::max(static_cast<float>(pattern->Width) - source_phase, 1.0F));
-        const float source_height = std::min(
-            height * source_scale, static_cast<float>(pattern->Height));
-        const ImVec2 uv_min{
-            (static_cast<float>(pattern->X) + source_phase) /
-                static_cast<float>(atlas->TexWidth),
-            static_cast<float>(pattern->Y) /
-                static_cast<float>(atlas->TexHeight)};
-        const ImVec2 uv_max{
-            (static_cast<float>(pattern->X) + source_phase + source_width) /
-                static_cast<float>(atlas->TexWidth),
-            (static_cast<float>(pattern->Y) + source_height) /
-                static_cast<float>(atlas->TexHeight)};
-        draw->AddImageRounded(atlas->TexID, minimum, maximum, uv_min, uv_max,
-                              faded(255, 255, 255, 255), rounding);
-    } else {
-        // Preserve a readable hover state if a constrained backend cannot
-        // pack the optional checker artwork into its atlas.
-        draw->AddRectFilled(minimum, maximum, faded(226, 112, 25, 255),
-                            rounding);
-    }
+    auto* atlas=GetIO().Fonts;
+    auto* pattern=g_race_button_pattern_rect>=0?atlas->GetCustomRectByIndex(g_race_button_pattern_rect):nullptr;
+    if(pattern&&pattern->IsPacked()&&atlas->TexID&&atlas->TexWidth>0&&atlas->TexHeight>0)
+        dkr::launcher_themes::draw_button_pattern(draw,minimum,maximum,*pattern,rounding,amount,GetTime());
+    else draw->AddRectFilled(minimum,maximum,faded(226,112,25,255),rounding);
     draw->AddRect(minimum, maximum, faded(255, 218, 99, 245),
                   rounding, 0, 1.5F);
     const char* rendered_end = FindRenderedTextEnd(label);
@@ -437,6 +438,7 @@ bool DkrRaceButton(const char* label, const ImVec2& size = ImVec2(0.0F, 0.0F)) {
 // Route existing ImGui::Button calls through the shared primitive without
 // changing call sites or widget IDs.
 #define Button DkrRaceButton
+#include "localisation/imgui_ui.hpp"
 
 namespace {
 
@@ -470,6 +472,7 @@ struct OnlineHostRequest {
     dkr::runtime::netplay::CompatibilityManifest manifest;
     dkr::runtime::saves::OnlineSaveSeedMode save_mode;
     std::string room,name;
+    bool content_enabled=dkr::session_content::next_enabled.load();
 };
 std::optional<OnlineHostRequest> g_online_mod_host_request;
 bool g_online_mod_watching=false;
@@ -620,11 +623,10 @@ char g_online_code_entry[6]{};
 char g_online_profile_name[25] = "Racer";
 std::string g_discord_choice_account, g_discord_avatar_url;
 bool g_profile_share_picture = true;
-void DrawOlDisplayName(float, bool);
+void DrawOlDisplayName(float,bool);
 void DrawOlDisplayNameStatus(float);
-void DrawOlStoreProfileName(float, bool);
+void DrawOlStoreProfileName(float,bool);
 bool SaveOlDisplayName(std::string_view);
-
 bool g_online_hide_lobby_code = false;
 char g_friend_code_entry[128]{};
 char g_friend_search[64]{};
@@ -748,10 +750,12 @@ constexpr int kPageModsHacks = 6;
 constexpr int kPageAbout = 7;
 constexpr int kPageTextures = 8;
 constexpr int kPageAchievements = 9;
-constexpr int kMenuPageCount = 10;
+constexpr int kPageModLibrary = dkr::library_ui::LibraryPage;
+constexpr int kMenuPageCount = dkr::library_ui::PageCount;
 // Stable page IDs, explicit visual order for both pointer and controller use.
-constexpr std::array<int,kMenuPageCount+2> kSidebarOrder{0,5,6,1,2,3,4,8,9,7,10,11};
+constexpr auto kSidebarOrder=dkr::library_ui::SidebarOrder;
 int StepSidebarSelection(int current,int direction) {
+    current=dkr::library_ui::sidebar_parent(current);
     const auto found=std::find(kSidebarOrder.begin(),kSidebarOrder.end(),current);
     const int index=found==kSidebarOrder.end()?0:static_cast<int>(found-kSidebarOrder.begin());
     return kSidebarOrder[(index+direction+static_cast<int>(kSidebarOrder.size()))%kSidebarOrder.size()];
@@ -887,6 +891,8 @@ constexpr ImVec4 kMenuContentSurface{0.035F, 0.085F, 0.12F, 0.96F};
 constexpr ImVec4 kMenuContentBorder{0.12F, 0.62F, 0.58F, 0.88F};
 
 #include "runtime_ui_paddock.inl"
+#include "localisation/literal_ui.inl"
+#include "localisation/font_ui.inl"
 
 // A page asks the launcher or overlay to show another page (-1: none).
 int g_page_navigation_request = -1;
@@ -1004,7 +1010,7 @@ void PrepareLauncherBackground(LauncherBackgroundTexture& background,
 }
 
 LauncherBackgroundTexture LoadLauncherBackground(SDL_Renderer* renderer,
-                                                  bool software_return = false) {
+                                                  bool software_return = false, dkr::launcher_themes::Theme theme = dkr::launcher_themes::Theme::Original) {
     LauncherBackgroundTexture result{};
     if (renderer == nullptr) return result;
 
@@ -1029,6 +1035,7 @@ LauncherBackgroundTexture LoadLauncherBackground(SDL_Renderer* renderer,
         return result;
     }
 
+    dkr::launcher_themes::tint(std::span<unsigned char>(pixels,std::size_t(result.width)*std::size_t(result.height)*4),result.width,result.height,theme);
     result.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32,
                                        SDL_TEXTUREACCESS_STATIC, result.width,
                                        result.height);
@@ -1151,6 +1158,7 @@ void LoadBrandLogoIntoAtlas() {
         logos[index].rect_index = atlas->AddCustomRectRegular(
             logos[index].width, logos[index].height);
     }
+    const int corner_rect_index=atlas->AddCustomRectRegular(dkr::launcher_themes::ArtWidth,dkr::launcher_themes::ArtHeight);
     const int pattern_rect_index = atlas->AddCustomRectRegular(
         kRaceButtonPatternWidth, kRaceButtonPatternHeight);
 
@@ -1194,25 +1202,14 @@ void LoadBrandLogoIntoAtlas() {
         pattern->IsPacked() && pattern->X + pattern->Width <= atlas_width &&
         pattern->Y + pattern->Height <= atlas_height;
     if (pattern_fits) {
-        constexpr std::array<unsigned char, 4> kCheckerDark{{176, 67, 22, 255}};
-        constexpr std::array<unsigned char, 4> kCheckerLight{{244, 145, 31, 255}};
-        for (int row = 0; row < pattern->Height; ++row) {
-            for (int column = 0; column < pattern->Width; ++column) {
-                const bool dark =
-                    (((column / kRaceButtonPatternCell) +
-                      (row / kRaceButtonPatternCell)) & 1) != 0;
-                const auto& colour = dark ? kCheckerDark : kCheckerLight;
-                auto* destination = pixels +
-                    (static_cast<std::size_t>(pattern->Y + row) * atlas_width +
-                     pattern->X + column) * 4U;
-                std::memcpy(destination, colour.data(), colour.size());
-            }
-        }
+        dkr::launcher_themes::fill_button_patterns(pixels,atlas_width,pattern->X,pattern->Y);
+        std::fprintf(stderr,"[ui][button-patterns] cached seasonal tiles=20\n");
         g_race_button_pattern_rect = pattern_rect_index;
     } else {
         std::fprintf(stderr,
                      "[boot][ui] racing button pattern would not fit the font atlas\n");
     }
+    dkr::launcher_themes::fill_corner_atlas(atlas,pixels,atlas_width,corner_rect_index);
     atlas->TexPixelsUseColors = true;
 }
 
@@ -1279,6 +1276,7 @@ void ApplyStyle() {
 }
 
 void LoadLauncherFonts() {
+    const auto localisation_started=std::chrono::steady_clock::now();
     ++g_font_generation;
     ImGuiIO& io = ImGui::GetIO();
     static constexpr ImWchar kLauncherGlyphRanges[] = {
@@ -1408,7 +1406,11 @@ void LoadLauncherFonts() {
     if (g_font_fps == nullptr) {
         g_font_fps = g_font_controls != nullptr ? g_font_controls : body_font;
     }
+    MergeLocalisationFonts(io.Fonts);
     LoadBrandLogoIntoAtlas();
+    std::fprintf(stderr,"[ui][localisation] language=%s fonts=%d atlas=%dx%d build_ms=%.1f\n",
+        dkr::localisation::active().data(),io.Fonts->Fonts.Size,io.Fonts->TexWidth,io.Fonts->TexHeight,
+        std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-localisation_started).count());
 #if defined(__ANDROID__) || defined(DKR_IOS)
     dkr::runtime::mobile::install_context();
 #endif
@@ -1484,40 +1486,11 @@ void PopHeadingFont(bool title = false) {
     }
 }
 
-float TrackedTextWidth(ImFont* font, float size, const char* text,
-                       float tracking) {
-    if (font == nullptr || text == nullptr || *text == '\0') return 0.0F;
-    const float scale = size / std::max(font->FontSize, 1.0F);
-    float width = 0.0F;
-    const std::size_t length = std::strlen(text);
-    for (std::size_t index = 0; index < length; ++index) {
-        const auto character = static_cast<unsigned char>(text[index]);
-        const ImFontGlyph* glyph = font->FindGlyph(character);
-        if (glyph != nullptr) width += glyph->AdvanceX * scale;
-        if (index + 1U < length) width += tracking;
-    }
-    return width;
-}
-
-void AddTrackedText(ImDrawList* draw, ImFont* font, float size,
-                    ImVec2 position, ImU32 colour, const char* text,
-                    float tracking) {
-    if (draw == nullptr || font == nullptr || text == nullptr) return;
-    const float scale = size / std::max(font->FontSize, 1.0F);
-    const std::size_t length = std::strlen(text);
-    for (std::size_t index = 0; index < length; ++index) {
-        const char glyph_text[2]{text[index], '\0'};
-        draw->AddText(font, size, position, colour, glyph_text,
-                      glyph_text + 1);
-        const ImFontGlyph* glyph = font->FindGlyph(
-            static_cast<unsigned char>(text[index]));
-        position.x += glyph != nullptr ? glyph->AdvanceX * scale : 0.0F;
-        if (index + 1U < length) position.x += tracking;
-    }
-}
+#include "localisation/tracked_text_ui.inl"
 
 void DrawPageHeading(const char* text, bool title = false,
                      float size_override = 0.0F) {
+    text=dkr::localisation::source(text?text:"").data();
     ImFont* font = title ? g_font_title : g_font_heading;
     if (font == nullptr || text == nullptr) {
         ImGui::TextUnformatted(text != nullptr ? text : "");
@@ -1698,6 +1671,8 @@ void SaveSettings() {
         output << "modern_refresh_target="
                << dkr::runtime::enhancements::clamp_presentation_rate(
                       g_modern_refresh_target) << '\n';
+        dkr::display::save(output);
+        output << "session_mods=" << unsigned(dkr::session_content::next_enabled.load()) << '\n';
         output << "modern_resolution=" << static_cast<int>(g_modern_resolution) << '\n';
         output << "modern_aspect=" << static_cast<int>(g_modern_aspect) << '\n';
         output << "modern_antialiasing="
@@ -1778,6 +1753,8 @@ void SaveSettings() {
                << (dkr::runtime::enhancements::maximum_detail_requested() ? 1 : 0) << '\n';
         output << "modern_fov_offset="
                << dkr::runtime::enhancements::fov_offset() << '\n';
+        dkr::runtime::driving::save(output);
+        output << "standalone_look_behind=" << dkr::runtime::look_behind::enabled.load() << '\n';
         output << "modern_camera="
                << (dkr::runtime::modern_camera::requested() ? 1 : 0) << '\n';
         output << "modern_look_back="
@@ -1809,6 +1786,7 @@ void SaveSettings() {
         output << "modern_water_lava_detail_multiplier="
                << dkr::runtime::enhancements::water_lava_detail_multiplier()
                << '\n';
+        dkr::runtime::water::style::save_setting(output);
         output << "enhanced_water_quality=" << int(dkr::runtime::water::enhanced::requested_quality.load()) << '\n';
         output << "enhanced_water_reflections=" << int(dkr::runtime::water::enhanced::requested_reflection.load()) << '\n';
         output << "enhanced_water_wakes=" << int(dkr::runtime::water::enhanced::wakes_enabled.load()) << '\n';
@@ -1898,7 +1876,7 @@ void SaveSettings() {
                    << '\n';
         }
         output << "discord_choice_account=" << g_discord_choice_account << '\n';
-        output << "profile_share_picture=" << (g_profile_share_picture ? 1 : 0) << '\n';
+        output << "profile_share_picture=" << (g_profile_share_picture?1:0) << '\n';
         output << "discord_avatar_url=" << g_discord_avatar_url << '\n';
         output << "online_player_name=" << g_online_player_name << '\n';
         output << "online_hide_lobby_code=" << (g_online_hide_lobby_code ? 1 : 0) << '\n';
@@ -1916,6 +1894,13 @@ void SaveSettings() {
         output << "online_experimental_adventure=" << (g_online_experimental_adventure ? 1 : 0) << '\n';
 #endif
         output << "online_rollback_window=" << g_online_rollback_window << '\n';
+        dkr::launcher_themes::save(output);
+        dkr::feedback::save_settings(output);
+        output << "skip_launcher=" << (dkr::library_ui::skip_launcher?1:0) << '\n';
+        output << "launcher_language=" << dkr::localisation::preference() << '\n';
+        output << "sidebar_navigation=" << int(dkr::library_ui::sidebar_input.load()) << '\n';
+        dkr::chat::save_settings(output);
+        dkr::relay::save_settings(output);
         output << "online_automatic_delay=" << (g_online_automatic_delay ? 1 : 0) << '\n';
         output << "online_manual_delay=" << g_online_manual_delay << '\n';
         output << "sdk2_tools_key=" << g_sdk2_tools_key << '\n';
@@ -2091,6 +2076,8 @@ bool LoadLegacyBindingSetting(const std::string& key, int number) {
 }
 
 void LoadSettings() {
+    dkr::library_ui::skip_launcher=false;
+    dkr::localisation::detect_system_language();
     g_skip_intro = false;
     g_skip_intro_destination = 0;
     GraphicsConfig config = ultramodern::renderer::get_graphics_config();
@@ -2133,6 +2120,8 @@ void LoadSettings() {
         }
         const std::string key = line.substr(0, separator);
         const std::string value = line.substr(separator + 1);
+        if(key=="skip_launcher"){dkr::library_ui::skip_launcher=dkr::library_ui::parse_skip_launcher(value);continue;}
+        if(key=="launcher_language"){dkr::localisation::select(value);continue;}
         if (key == "skip_intro") {
             g_skip_intro = dkr::runtime::startup::parse_skip_intro(value);
             continue;
@@ -2179,22 +2168,9 @@ void LoadSettings() {
             std::memcpy(destination, text.data(), length);
             destination[length] = '\0';
         };
-        if (key == "discord_choice_account") {
-            if (value.size() <= 80 &&
-                value.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") ==
-                    value.npos)
-                g_discord_choice_account = value;
-            continue;
-        }
-        if (key == "profile_share_picture") {
-            g_profile_share_picture = value != "0";
-            continue;
-        }
-        if (key == "discord_avatar_url") {
-            if (dkr::profile::avatar_url(value))
-                g_discord_avatar_url = value;
-            continue;
-        }
+        if (key == "discord_choice_account") { if(value.size()<=80 && value.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")==value.npos)g_discord_choice_account=value; continue; }
+        if (key == "profile_share_picture") { g_profile_share_picture=value!="0"; continue; }
+        if (key == "discord_avatar_url") { if(dkr::profile::avatar_url(value))g_discord_avatar_url=value; continue; }
         if (key == "online_player_name") {
             copy_online_text(g_online_player_name, sizeof(g_online_player_name), value);
             continue;
@@ -2265,7 +2241,13 @@ void LoadSettings() {
         if (player_gyro_key) continue;
         try {
             const int number = std::stoi(value);
-            if(dkr::runtime::water::enhanced::load_tuning(key,number))continue;
+            if(dkr::feedback::load_setting(key,number))continue;
+            if(key=="sidebar_navigation"){dkr::library_ui::sidebar_input.store(number==1?dkr::library_ui::SidebarInput::Dpad:dkr::library_ui::SidebarInput::Shoulders);continue;}
+            if(dkr::launcher_themes::load(key,number))continue;
+            if(dkr::chat::load_setting(key,number)||dkr::relay::load_setting(key,number))continue;
+            if(dkr::display::load(key,number))continue;
+            if(key=="session_mods"){dkr::session_content::next_enabled=number!=0;continue;}
+            if(dkr::runtime::water::style::load_setting(key,number)||dkr::runtime::water::enhanced::load_tuning(key,number))continue;
             if(key=="enhanced_water_timings") {dkr::runtime::water::enhanced::timing_enabled.store(number!=0);continue;}
             if (key == "enhanced_water_quality") {
                 dkr::runtime::water::enhanced::set_quality(number);continue;
@@ -2322,6 +2304,8 @@ void LoadSettings() {
             }
             if (shortcut_setting) continue;
             // Outside the long compatibility parser below (MSVC nesting limit).
+            if(dkr::runtime::driving::load(key,number))continue;
+            if(key=="standalone_look_behind"){dkr::runtime::look_behind::enabled=number!=0;continue;}
             if (key == "modern_camera") {
                 dkr::runtime::modern_camera::set_enabled(number != 0);
                 continue;
@@ -2646,7 +2630,7 @@ void LoadSettings() {
     g_online_synchronization = 0;
     g_online_experimental_rollback = true;
     g_online_automatic_backend = false;
-    if (migrated_rollback_backend) SaveSettings();
+    migrated |= migrated_rollback_backend; // Persist only after every setting owner has loaded.
     for (std::size_t channel = 0; channel < kSoundChannelCount; ++channel) {
         SetSoundMuted(channel, (sound_muted & (1U << channel)) != 0U);
     }
@@ -2719,6 +2703,8 @@ void LoadSettings() {
         dkr::runtime::input::set_quick_restart_enabled(false);
         migrated = true;
     }
+    if(!dkr::display::loaded)migrated=true;
+    dkr::display::migrate(int(g_modern_resolution),int(g_modern_aspect),g_modern_downsample);
     profile = resolved_profile;
     dkr::runtime::enhancements::set_presentation_profile(profile);
     ApplyProfileGraphics(config, profile);
@@ -3699,7 +3685,7 @@ void DrawModLaunchModal() {
         ImGui::TextUnformatted("THE GAME COULDN'T CONTINUE");
         DrawIssue(state.error, area);
         if (area == dkr::runtime::copy::Area::Mods)
-            ImGui::TextWrapped("Check Mods / Hacks or disable the affected mods, then try again.");
+            ImGui::TextWrapped("Check Installed Mods or disable the affected mods, then try again.");
         else if (area == dkr::runtime::copy::Area::Saves)
             ImGui::TextWrapped("Check the affected save in Save Manager before trying again.");
         if(ImGui::Button("BACK TO LAUNCHER",{ImGui::GetContentRegionAvail().x,42})) {
@@ -3901,6 +3887,10 @@ void RenderLauncherDrawData(SDL_Renderer* renderer, ImDrawData* data,
                            dkr::runtime::launcher::Profile& profile,
                            dkr::runtime::launcher::PanelCache& panel_cache,
                            bool software_failure_recovery=false) {
+    if (dkr::runtime::launcher::accelerated_renderer(renderer)) {
+        ImGui_ImplSDLRenderer2_RenderDrawData(data);
+        return;
+    }
 #if defined(__linux__) || defined(_WIN32)
 #if defined(_WIN32)
     // Share the proven software solid/panel adapter only on the returned
@@ -4374,13 +4364,13 @@ SidebarLayout CalculateSidebarLayout(float panel_height, float panel_width) {
 
     constexpr float kMinimumLogoSize = 64.0F;
     constexpr float kMinimumButtonHeight = 26.0F;
-    constexpr float kButtonCount = static_cast<float>(kMenuPageCount + 2);
+    constexpr float kButtonCount = static_cast<float>(kSidebarOrder.size()-1);
     constexpr float kItemSpacingCount = kButtonCount + 3.0F;
     const float desired_logo = std::min(
         compact ? 112.0F : 218.0F,
         std::max(panel_width - result.padding * 2.0F, kMinimumLogoSize));
     const float desired_button = compact ? 40.0F : 46.0F;
-    const float fixed_height = result.padding * 2.0F + result.brand_gap +
+    const float fixed_height = dkr::library_ui::NavigationToggleHeight + result.padding * 2.0F + result.brand_gap +
         result.action_section_gap + result.action_gap +
         result.item_spacing_y * kItemSpacingCount;
     const float content_budget = std::max(panel_height - fixed_height, 1.0F);
@@ -4446,7 +4436,8 @@ void DrawSidebarCurrentStripe() {
 
 bool SidebarButton(const char* label, int page, int& sidebar_selection,
                    float width = -1.0F, float height = 46.0F) {
-    const bool current = sidebar_selection == page;
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
+    const bool current = dkr::library_ui::sidebar_parent(sidebar_selection) == page;
     PushSidebarButtonColour(page, current);
     const bool pressed = ImGui::Button(label, {width, height});
     ImGui::PopStyleColor();
@@ -4462,7 +4453,8 @@ bool SidebarButton(const char* label, int page, int& sidebar_selection,
 bool LauncherSidebarButton(const char* label, int target_page, int& page,
                            int& sidebar_selection, float width,
                            float height = 46.0F) {
-    const bool current = sidebar_selection == target_page;
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
+    const bool current = dkr::library_ui::sidebar_parent(sidebar_selection) == target_page;
     PushSidebarButtonColour(target_page, current);
     const bool pressed = ImGui::Button(label, {width, height});
     ImGui::PopStyleColor();
@@ -4809,7 +4801,12 @@ bool FinishOnlineLobby(const OnlineHostRequest& request,std::string mod_digest,s
     }
     std::string error;
     std::vector<std::uint8_t> online_save;
-    auto manifest=request.manifest;manifest.mod_manifest_hash=mod_digest;
+    auto manifest=request.manifest;
+    if(!request.content_enabled) {
+        if(!mod_digest.empty()){g_online_action_status="Vanilla lobby cannot admit a mod profile.";return false;}
+        manifest.magic_codes_hash=0;manifest.gameplay_settings_hash=stable_hash("0:retail-simulation-30");
+    }
+    manifest.mod_manifest_hash=mod_digest;
     if(!mod_digest.empty()) {
         const auto prepared=g_online_mod_sync?g_online_mod_sync->snapshot():dkr::mods::online::SyncView{};
         const auto resources=std::static_pointer_cast<const dkr::mods::online::RuntimeResources>(prepared.runtime);
@@ -4844,9 +4841,9 @@ bool FinishOnlineLobby(const OnlineHostRequest& request,std::string mod_digest,s
         session().disconnect(error);dkr::runtime::saves::discard_staged_host_online_adventure();
         g_online_action_status=error;return false;
     }
+    dkr::session_content::host_enabled=request.content_enabled;
     return true;
 }
-
 #include "runtime_online_mods_ui.inl"
 
 struct TextEntrySpec {
@@ -6745,13 +6742,18 @@ bool DrawTexturePackManagementModal(
 }
 
 
+#include "library_ui/installed_toolbar.inl"
 #include "runtime_mod_library_ui.inl"
+#include "library_ui/header_layout.inl"
 void DrawToolIntro(std::string_view,float);
+void DrawInstalledAnalogueSettings(const dkr::mods::code::LibraryItem&);
+void DrawSessionAnalogueCard(float);
 #include "runtime_code_mods_ui.inl"
 bool StoreVehiclesBusy();
 std::shared_ptr<const void> StoreVehiclesSnapshot();
 void StoreRefreshVehicles();
 dkr::store::Json StoreVehicleInventory();
+void OpenModLibrary(int);
 #include "mod_store_ui.inl"
 #include "vehicle_ui.inl"
 #include "vehicle_store_ui.inl"
@@ -7744,12 +7746,12 @@ void DrawModsLibrarySection(float width, const dkr::mods::ModLibraryView& mods,
                             bool mods_locked,
                             const std::vector<DkrLibraryTrack>& dkr_tracks) {
     const bool locked = mods_locked || mods.busy || g_vehicle_library.view()->busy;
-    const std::size_t track_count = g_mod_browsers[0].all.size() + dkr_tracks.size();
-    const std::size_t character_count = g_mod_browsers[1].all.size();
+    const std::size_t track_count = g_library_controls_check?8:g_mod_browsers[0].all.size()+dkr_tracks.size();
+    const std::size_t character_count = g_library_controls_check?8:g_mod_browsers[1].all.size();
     {
         PaddockEnter enter(0);
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        const int chosen = DrawLibraryCategories(g_mods_page.category, track_count, character_count,g_code_library.view()->items.size(),g_vehicle_library.view()->items.size(),width);
+        const int chosen = DrawLibraryCategories(g_mods_page.category, track_count, character_count,LibraryConsistencyView(g_code_library.view())->items.size(),LibraryConsistencyView(g_vehicle_library.view())->items.size(),width);
         float row = ImGui::GetItemRectSize().y;
         if (chosen != g_mods_page.category) {
             g_mods_page.category = chosen;
@@ -7773,29 +7775,7 @@ void DrawModsLibrarySection(float width, const dkr::mods::ModLibraryView& mods,
     if(g_mods_page.category==3){DrawVehicleLibrary(width,locked);return;}
     if(g_mods_page.category==2){DrawCustomMagicCodeLibrary(width,locked);return;}
     const bool characters = g_mods_page.category == 1;
-    if (!characters) {
-        PaddockEnter enter(1);
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        const PaddockType type = PaddockReading(12.0F, false, 1.5F);
-        const ImVec2 tag = PaddockFormatTagSize(PaddockFormat::Legacy);
-        float x = at.x;
-        const float text_top = at.y + (tag.y - type.line) * 0.5F;
-        PaddockFormatTag(draw, {x, at.y}, PaddockFormat::Legacy);
-        x += tag.x + 8.0F;
-        constexpr std::string_view legacy = "Original-ROM patches";
-        PaddockDrawRun(draw, type, {x, text_top}, PaddockCol(0xC0D4DF), legacy.data(),
-                       legacy.data() + legacy.size());
-        x += PaddockMeasure(type, legacy) + 8.0F + 12.0F;
-        PaddockFormatTag(draw, {x, at.y}, PaddockFormat::Dkr);
-        x += PaddockFormatTagSize(PaddockFormat::Dkr).x + 8.0F;
-        constexpr std::string_view native = "Native .dkrmap tracks";
-        PaddockDrawRun(draw, type, {x, text_top}, PaddockCol(0xC0D4DF), native.data(),
-                       native.data() + native.size());
-        ImGui::Dummy({width, tag.y});
-        PaddockGap(16.0F);
-        DrawFriendlyStatus(g_track_import_status, width, dkr::runtime::copy::Area::Mods);
-    }
+    if(!characters)DrawFriendlyStatus(g_track_import_status,width,dkr::runtime::copy::Area::Mods);
     DrawModCardBrowser(width, characters, mods, mods_locked, dkr_tracks, [] {
         g_mods_page.request_import_chooser = true;
     });
@@ -7832,6 +7812,8 @@ void RefreshModBrowserCards(const dkr::mods::ModLibraryView& mods) {
     }
 }
 
+void DrawModLibraryPage(float,bool);
+void DrawTexturesPage(float,bool);
 void DrawModsHacks(float available_width, bool game_running = false) {
     namespace tracks_ns = dkr::runtime::custom_tracks;
     // Each visit starts with every section closed, unless a link asked for one.
@@ -7844,9 +7826,9 @@ void DrawModsHacks(float available_width, bool game_running = false) {
         g_mods_page.disclosures.clear();
     }
     g_mods_page.last_frame = frame;
+    if(g_mods_page.section>=int(dkr::library_ui::ModsSections.size()))g_mods_page.section=-1;
 
-    const float width = game_running ? std::min(available_width, 1400.0F)
-                                      : std::max(available_width, 1.0F);
+    const float width = std::max(available_width,1.F);
     const float indent = std::floor((available_width - width) * 0.5F);
     if (indent > 0.0F) ImGui::Indent(indent);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
@@ -7863,36 +7845,17 @@ void DrawModsHacks(float available_width, bool game_running = false) {
     // Card caches follow the library snapshots even while My mods is closed.
     RefreshModBrowserCards(mods);
 
-    // Header: the page title and the import sign.
-    {
-        const ImVec2 header = ImGui::GetCursorScreenPos();
-        const char* import_label = "Import mods";
-        const float import_width = PaddockImportButtonWidth(import_label);
-        const bool stacked = width < 700.0F;
-        const float text_width = stacked ? width : width - import_width - 24.0F;
-        ImGui::BeginGroup();
-        DrawPageHeading("MODS / HACKS");
-        PaddockGap(9.0F);
-        PaddockText(PaddockReading(14.0F, false, 1.55F), PaddockRgb(0xABC0CC),
-                    "Your tracks, racers, vehicles and race modifiers.", text_width);
-        ImGui::EndGroup();
-        const float title_height = ImGui::GetItemRectSize().y;
-        const ImVec2 import_at = stacked
-            ? ImVec2{header.x, header.y + title_height + 16.0F}
-            : ImVec2{header.x + width - import_width,
-                     header.y + std::round((title_height - 56.0F) * 0.5F)};
-        ImGui::SetCursorScreenPos(import_at);
-        ImGui::BeginDisabled(mods_locked || mods.busy || picking);
-        if (PaddockImportButton(import_label, width < 420.0F ? width : 0.0F)) {
-            g_mods_page.request_import_chooser = true;
-        }
-        ImGui::EndDisabled();
-        const float header_height = stacked ? title_height + 16.0F + 56.0F
-                                            : std::max(title_height, 56.0F);
-        ImGui::SetCursorScreenPos(header);
-        ImGui::Dummy({width, header_height});
-        PaddockGap(26.0F);
-    }
+    DrawSharedPageHeader(width,"INSTALLED MODS","Your tracks, racers, vehicles and race modifiers.",
+        PaddockImportButtonWidth("Import mods"),[&]{
+            ImGui::BeginDisabled(mods_locked||mods.busy||picking);
+            if(PaddockImportButton("Import mods",std::min(width,PaddockImportButtonWidth("Import mods"))))
+                g_mods_page.request_import_chooser=true;
+            ImGui::EndDisabled();
+        });
+    PaddockText(PaddockReading(13.F,false,1.55F),PaddockRgb(0xFFC15A),dkr::localisation::source(dkr::store::LegacyRomInstallNotice),width);
+    PaddockGap(12.F);
+
+    DrawLauncherFeatured(width,game_running);
 
     // The ROM line.
     {
@@ -7906,12 +7869,12 @@ void DrawModsHacks(float available_width, bool game_running = false) {
             }
         }
         const std::string status = revision != 0U
-            ? std::to_string(enabled) + " legacy mods enabled. Applies next game."
-            : "Choose a ROM to prepare legacy mods.";
+            ? dkr::localisation::plural("library.legacy_enabled",enabled)
+            : std::string(dkr::localisation::source("Choose a ROM to prepare legacy mods."));
         const char* link = revision != 0U ? "Go to Play" : "Choose ROM";
         const PaddockType type = PaddockReading(13.0F, false, 1.55F);
         const PaddockType link_type = PaddockReading(14.0F, true, 1.5F);
-        const float link_width = PaddockMeasure(link_type, link);
+        const float link_width = PaddockMeasure(link_type, dkr::localisation::source(link));
         const bool side_by_side = width - link_width - 24.0F >= 300.0F;
         const float text_width = side_by_side ? width - link_width - 24.0F : width;
         const float text_height = PaddockTextHeight(type, status, text_width);
@@ -7923,13 +7886,13 @@ void DrawModsHacks(float available_width, bool game_running = false) {
             PaddockTextAt(ImGui::GetWindowDrawList(), type,
                           {at.x, at.y + 4.0F + (row - text_height) * 0.5F}, text_width, status, style);
             ImGui::SetCursorScreenPos({at.x + width - link_width, at.y + 4.0F + (row - 40.0F) * 0.5F});
-            if (PaddockTextLink(link)) go_to_play();
+            if (PaddockTextLink(dkr::localisation::label(link))) go_to_play();
             height += row;
         } else {
             ImGui::SetCursorScreenPos({at.x, at.y + 4.0F});
             PaddockText(type, PaddockRgb(0xC3D3DC), status, width);
             PaddockGap(12.0F);
-            if (PaddockTextLink(link)) go_to_play();
+            if (PaddockTextLink(dkr::localisation::label(link))) go_to_play();
             height += text_height + 12.0F + 40.0F;
         }
         height += 16.0F;
@@ -7984,14 +7947,9 @@ void DrawModsHacks(float available_width, bool game_running = false) {
         PaddockGap(14.0F);
         PaddockAlert("Prepare the affected mods for the selected ROM.", width);
     }
-    if (game_running) {
-        PaddockGap(14.0F);
-        PaddockAlert("Return to the launcher and leave the lobby to change mods.",
-                     width);
-    } else if (mods_locked) {
-        PaddockGap(14.0F);
-        PaddockAlert("Leave the lobby to change mods or Magic Codes.", width);
-    }
+    PaddockGap(14.F);
+    PaddockText(PaddockReading(14.F,false,1.5F),PaddockRgb(0xB0C9CC),
+        "Mod changes apply next game. Return to the launcher and leave your lobby to change them.",width);
     if (mods.busy) {
         PaddockGap(14.0F);
         const ImVec2 at = ImGui::GetCursorScreenPos();
@@ -8011,22 +7969,20 @@ void DrawModsHacks(float available_width, bool game_running = false) {
     PaddockGap(24.0F);
     {
         const ImVec2 at = ImGui::GetCursorScreenPos();
-        constexpr std::array<const char*, 5> labels{{
-            "My mods##section", "Magic Codes##section", "Track Lab##section",
-            "Help & imports##section", "Mod Store##section"}};
+        constexpr auto& labels=dkr::library_ui::ModsSections;
         const float tab_height = PaddockSectionTabHeight();
         float x = at.x;
         float y = at.y;
-        for (int index = 0; index < 5; ++index) {
-            if(index==4&&game_running)continue;
-            const float tab = PaddockSectionTabWidth(labels[index]);
+        for (int visual = 0; visual < static_cast<int>(labels.size()); ++visual) {
+            const int index=dkr::library_ui::ModsSectionOrder[visual];
+            const float tab = PaddockSectionTabWidth(labels[visual]);
             if (x > at.x && x + tab > at.x + width) {
                 x = at.x;
                 y += tab_height + 10.0F;
             }
             ImGui::SetCursorScreenPos({x, y});
             const bool open = g_mods_page.section == index;
-            if (PaddockSectionTab(labels[index], open)) {
+            if (PaddockSectionTab(labels[visual], open)) {
                 g_mods_page.section = open ? -1 : index;
                 g_mods_page.entered_at = PaddockClock();
             }
@@ -8042,11 +7998,10 @@ void DrawModsHacks(float available_width, bool game_running = false) {
     if (g_mods_page.section >= 0) {
         PaddockGap(24.0F);
         const bool tools_locked = mods_locked;
-        if (game_running && g_mods_page.section == 4) g_mods_page.section = kModsSectionLibrary;
-        if (g_mods_page.section == 4) {
-            DrawModStore(width, mods_locked);
-        } else if (g_mods_page.section == kModsSectionLibrary) {
+        if (g_mods_page.section == kModsSectionLibrary) {
             DrawModsLibrarySection(width, mods, mods_locked, dkr_tracks);
+        } else if(g_mods_page.section==dkr::library_ui::TexturesSection) {
+            DrawTexturesPage(width,true);
         } else {
             constexpr std::array<std::array<const char*, 2>, 4> titles{{
                 {{"", ""}},
@@ -8131,8 +8086,10 @@ std::string FormatRecordTime(std::uint16_t frames) {
 }
 
 #include "runtime_settings_ui.inl"
+#include "localisation/settings_ui.inl"
 #include "runtime_sound_ui.inl"
 #include "runtime_camera_tuning_ui.inl"
+void DrawCrtOverlaySection(float);
 #include "runtime_graphics_ui.inl"
 #include "runtime_saves_ui.inl"
 #define DrawTexturesPage DrawTexturesPageWithoutDump
@@ -8275,8 +8232,15 @@ void DrawControllerMappingModal() {
     }
     ImGui::EndPopup();
 }
-
+bool g_feedback_live_surface=false;
+void DrawFeedbackSettings(float,const std::function<void()>&);
+std::size_t LibraryCapturePlayer();
 #include "runtime_controls_ui.inl"
+#include "library_ui/analogue_details.inl"
+#include "library_ui/page.inl"
+#include "library_ui/navigation_check.inl"
+#include "library_ui/navigation_ui.inl"
+#include "controller_feedback/ui.inl"
 
 bool HandleInputCaptureEvent(SDL_Event* event) {
     const auto mapping =
@@ -8333,14 +8297,14 @@ bool HandleInputCaptureEvent(SDL_Event* event) {
         }
         if (event->type == SDL_CONTROLLERBUTTONDOWN &&
             dkr::runtime::platform::assign_controller(
-                g_selected_player, event->cbutton.which)) {
+                LibraryCapturePlayer(), event->cbutton.which)) {
             SaveSettings();
             g_capture_finished = true;
             return true;
         }
         if (event->type == SDL_JOYBUTTONDOWN &&
             dkr::runtime::platform::begin_controller_mapping(
-                event->jbutton.which, g_selected_player)) {
+                event->jbutton.which, LibraryCapturePlayer())) {
             g_capture_finished = true;
             g_controller_mapping_popup_pending = true;
             g_controller_mapping_completion_saved = false;
@@ -8357,7 +8321,7 @@ bool HandleInputCaptureEvent(SDL_Event* event) {
         }
         if (g_capture_device == CaptureDevice::Keyboard) {
             dkr::runtime::input::set_keyboard_binding(
-                g_selected_player, action,
+                LibraryCapturePlayer(), action,
                 static_cast<int>(event->key.keysym.scancode));
             SaveSettings();
             g_capture_finished = true;
@@ -8368,15 +8332,15 @@ bool HandleInputCaptureEvent(SDL_Event* event) {
         event->type == SDL_CONTROLLERBUTTONDOWN &&
         event->cbutton.which ==
             dkr::runtime::platform::controller_instance_for_player(
-                g_selected_player)) {
+                LibraryCapturePlayer())) {
         const int source = dkr::runtime::input::encode_controller_button(
             event->cbutton.button);
         if (g_capture_secondary_controller) {
             dkr::runtime::input::set_secondary_controller_binding(
-                g_selected_player, action, source);
+                LibraryCapturePlayer(), action, source);
         } else {
             dkr::runtime::input::set_controller_binding(
-                g_selected_player, action, source);
+                LibraryCapturePlayer(), action, source);
         }
         SaveSettings();
         g_capture_finished = true;
@@ -8386,16 +8350,16 @@ bool HandleInputCaptureEvent(SDL_Event* event) {
         event->type == SDL_CONTROLLERAXISMOTION &&
         event->caxis.which ==
             dkr::runtime::platform::controller_instance_for_player(
-                g_selected_player) &&
+                LibraryCapturePlayer()) &&
         std::abs(event->caxis.value) >= 20000) {
         const int source = dkr::runtime::input::encode_controller_axis(
             event->caxis.axis, event->caxis.value > 0);
         if (g_capture_secondary_controller) {
             dkr::runtime::input::set_secondary_controller_binding(
-                g_selected_player, action, source);
+                LibraryCapturePlayer(), action, source);
         } else {
             dkr::runtime::input::set_controller_binding(
-                g_selected_player, action, source);
+                LibraryCapturePlayer(), action, source);
         }
         SaveSettings();
         g_capture_finished = true;
@@ -8404,51 +8368,19 @@ bool HandleInputCaptureEvent(SDL_Event* event) {
     return false;
 }
 
+#include "library_ui/motion_ui.inl"
+
+#include "library_ui/shared_page_ui.inl"
+
 void DrawOverlayContent(float content_width) {
-    if(dkr::sdk2::available()) {
-        if(ImGui::Button("CUSTOM MAGIC CODE TOOLS",{std::min(content_width,320.F),42})) {
-            dkr::sdk2::tools_open=true;g_overlay_visible=false;
-        }
-    }
-    if (g_overlay_page == kPagePlay) {
-        DrawPageHeading("PLAY");
-        ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
-        ImGui::TextWrapped("Taj has paused the race. The island is waiting whenever you are ready.");
-        ImGui::PopStyleColor();
-        ImGui::Dummy({0.0F, 18.0F});
-        DrawStartingLights(true);
-        ImGui::Dummy({0.0F, 12.0F});
-        ImGui::PushStyleColor(ImGuiCol_Button, kAccent);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, kWarm);
-        if (ImGui::Button("RETURN TO THE RACE", {content_width, 64.0F})) {
-            g_overlay_visible.store(false, std::memory_order_release);
-        }
-        ImGui::PopStyleColor(2);
-    } else if (g_overlay_page == kPageGraphics) {
-        DrawGraphicsPage(content_width, true);
-    } else if (g_overlay_page == kPageSound) {
-        DrawSoundPage(content_width, true);
-    } else if (g_overlay_page == kPageControls) {
-        DrawControlsPage(content_width, true);
-    } else if (g_overlay_page == kPageSaveManager) {
-        DrawSaveManagerPage(content_width, true);
-    } else if (g_overlay_page == kPageOnlineMp) {
-        DrawOnlinePage(content_width, false, true);
-    } else if (g_overlay_page == kPageModsHacks) {
-        DrawModsHacks(content_width, true);
-    } else if (g_overlay_page == kPageTextures) {
-        DrawTexturesPage(content_width);
-    } else if (g_overlay_page == kPageAchievements) {
-        DrawAchievementsPage(content_width);
-    } else if (g_overlay_page == kPageAbout) {
-        DrawAboutPage(content_width, false);
-    }
-    ImGui::Dummy({0.0F, 44.0F});
+    LauncherContentEnter content_enter([]{return g_overlay_page.load();});
+    DrawSharedUiPage(content_width,g_overlay_page.load(),true);
 }
 
 } // namespace
 
 void dkr::runtime::ui::configure(const std::filesystem::path& config_directory) {
+    LibraryNavigationCheckLauncherInit(config_directory);
     g_config_directory = config_directory;
     dkr::runtime::achievements::configure(config_directory);
 #if defined(__ANDROID__) || defined(DKR_IOS)
@@ -8504,6 +8436,7 @@ void dkr::runtime::ui::configure(const std::filesystem::path& config_directory) 
     g_online_mod_settings={config_directory / "online-mods",mod_worker,{}};
     g_online_mod_link=std::make_unique<dkr::runtime::netplay::DirectModSyncLink>(dkr::runtime::netplay::session());
     g_online_mod_sync=std::make_unique<dkr::mods::online::ModSync>(*g_online_mod_link);
+    dkr::online_stability::bind_mod_sync(g_online_mod_link.get(),&dkr::runtime::netplay::session());
     dkr::runtime::hud::configure(config_directory);
     // Checksum repair is explicit; never bless unknown payload damage at startup.
     dkr::runtime::magic_codes::configure(config_directory);
@@ -8566,18 +8499,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     const auto launcher_renderer_started_at =
         dkr::runtime::startup_performance::Clock::now();
 #if defined(__linux__) && !defined(__ANDROID__)
-    // The launcher and RT64 share this Vulkan-capable SDL window for the
-    // complete process lifetime. An accelerated SDL renderer can replace the
-    // native surface state under Gamescope, so keep the lightweight launcher
-    // on the software backend and let RT64 take over the same window directly.
-    SDL_Renderer* renderer = nullptr;
-    const char* accelerated_launcher = SDL_getenv("DKR_LINUX_ACCELERATED_LAUNCHER");
-    if (!software_failure_recovery && accelerated_launcher && std::string_view(accelerated_launcher) == "1" &&
-        !(SDL_GetWindowFlags(window) & SDL_WINDOW_VULKAN)) {
-        renderer = SDL_CreateRenderer(window, -1,
-            SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    }
-    if (!renderer) renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    SDL_Renderer* renderer = dkr::runtime::launcher::create_linux_launcher_renderer(window);
 #else
     SDL_Renderer* renderer = nullptr;
     struct ReturnFramebufferHint {
@@ -8670,11 +8592,13 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     const auto launcher_assets_started_at =
         dkr::runtime::startup_performance::Clock::now();
     LoadLauncherFonts();
+    LibraryInstallNavigationHook(false);
     ApplyStyle();
     ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer2_Init(renderer);
     dkr::store::service().gameplay(false);
     g_mod_store_renderer = renderer;
+    g_store_in_game=false;
     g_character_portrait_renderer = renderer;
     int launcher_display_refresh_rate = 60;
     const int launcher_display = SDL_GetWindowDisplayIndex(window);
@@ -8696,8 +8620,17 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                  launcher_interactive_refresh_rate,
                  launcher_quiet_refresh_rate);
 
+    LibraryCancelAnalogueCapture();
+    dkr::launcher_themes::SystemSettings launcher_region;
+    launcher_region.refresh(0.0,true,true);
+    dkr::launcher_themes::ArtTexture launcher_art(renderer);
+    dkr::launcher_themes::Session launcher_theme;
+    launcher_theme.tick(0.0,true,true,dkr::launcher_themes::preferences,dkr::launcher_themes::local_date);
+    dkr::launcher_themes::displayed=launcher_theme.theme();
+    dkr::launcher_themes::next_switch=launcher_theme.next();
     LauncherBackgroundTexture launcher_background =
-        LoadLauncherBackground(renderer, bounded_software_return);
+        LoadLauncherBackground(renderer, bounded_software_return,launcher_theme.theme());
+    std::fprintf(stderr,"[launcher][theme] region=%s active=%s; automatic local calendar; cached cloud tint; launcher only\n",launcher_region.country().empty()?"unspecified":launcher_region.country().c_str(),dkr::launcher_themes::Names[int(launcher_theme.theme())]);
     dkr::runtime::startup_performance::report(
         "launcher-assets-load", launcher_assets_started_at);
     const auto launcher_animation_epoch = std::chrono::steady_clock::now();
@@ -8769,6 +8702,10 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     int sidebar_selection = 0;
     bool focus_content = true;
     bool running = true;
+    dkr::library_ui::AutomaticStart automatic_start(dkr::library_ui::skip_launcher&&!LibraryStartupCheckEnabled(),dkr::library_ui::startup_screen_seen,!preselected_rom.empty(),software_failure_recovery);
+    dkr::library_ui::LauncherFade launch_fade;
+    dkr::library_ui::runtime_intro.clear();
+    bool online_start_pending=false;
     bool launch_requested = false;
     std::filesystem::path mod_launch_rom;
     // Events may arrive between redraw deadlines. Retain actions until the
@@ -8989,18 +8926,21 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         g_online_mod_identity=rom_ready?online_manifest_identity:dkr::runtime::rom::Identity{};
         PumpOnlineMods();
         PumpInviteLauncher(rom_ready,online_manifest.has_value());
-        if (rom_ready &&
+        if (rom_ready && !online_start_pending &&
             dkr::runtime::netplay::session().consume_launch_request()) {
             dkr::runtime::startup_performance::mark(
                 "launcher-online-launch-requested");
             if(SharedSaveBusy())continue;
-            result.start_game = true;
-            result.rom_path = selected_rom;
-            running = false;
-            continue;
+            online_start_pending=true;
+        }
+        if(online_start_pending&&!dkr::runtime::netplay::session().active()){online_start_pending=false;launch_fade.clear();}
+        if(online_start_pending&&launch_fade.started()&&launch_fade.finished(PaddockClock())) {
+            result.start_game=true;result.rom_path=selected_rom;
+            dkr::library_ui::runtime_intro.begin(true,launcher_theme.seconds());
+            running=false;continue;
         }
         constexpr int launcher_page_count = kMenuPageCount;
-        constexpr int launcher_sidebar_count = kMenuPageCount + 2;
+        constexpr int launcher_sidebar_count = kMenuPageCount + 3;
         if (page >= launcher_page_count) {
             page = 0;
         }
@@ -9053,9 +8993,17 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             if (HandleInputCaptureEvent(&event)) {
                 return;
             }
+            LibrarySidebarEvent(event);
             if (dkr::runtime::platform::handle_window_shortcut(&event, false)) {
                 return;
             }
+            if((automatic_start.active()||online_start_pending)&&
+               ((event.type==SDL_KEYDOWN&&event.key.keysym.scancode==SDL_SCANCODE_ESCAPE)||
+                (event.type==SDL_CONTROLLERBUTTONDOWN&&event.cbutton.button==SDL_CONTROLLER_BUTTON_B))) {
+                if(online_start_pending){online_start_pending=false;dkr::runtime::netplay::session().disconnect("Game startup cancelled.");}
+                automatic_start.cancel();g_mod_launch.cancel();launch_fade.clear();return;
+            }
+            if((automatic_start.active()||online_start_pending)&&(event.type==SDL_KEYDOWN||event.type==SDL_CONTROLLERBUTTONDOWN))return;
             if (event.type == SDL_QUIT ||
                 (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE)) {
                 running = false;
@@ -9083,23 +9031,11 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                 if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B && g_rom_browser.open) {
                     RomBrowserBack();
                 } else if (!g_rom_browser.open && !code_keyboard_visible &&
-                           event.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
-                    sidebar_selection = StepSidebarSelection(sidebar_selection,-1);
-                    if (sidebar_selection < launcher_page_count) {
-                        page = sidebar_selection;
-                        focus_content = true;
-                    }
-                } else if (!g_rom_browser.open && !code_keyboard_visible &&
-                           event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-                    sidebar_selection = StepSidebarSelection(sidebar_selection,1);
-                    if (sidebar_selection < launcher_page_count) {
-                        page = sidebar_selection;
-                        focus_content = true;
-                    }
-                } else if (!g_rom_browser.open && !code_keyboard_visible &&
                            event.cbutton.button == SDL_CONTROLLER_BUTTON_A &&
                            sidebar_selection >= launcher_page_count) {
-                    if (sidebar_selection == launcher_page_count) {
+                    if(dkr::library_ui::sidebar_input_blocked.load())return;
+                    if(sidebar_selection==dkr::library_ui::SidebarToggle)dkr::library_ui::sidebar_toggle_requested.store(true);
+                    else if (sidebar_selection == launcher_page_count) {
                         request_restart_popup = true;
                     } else {
                         request_quit_popup = true;
@@ -9128,19 +9064,49 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         g_launcher_animation_seconds = std::chrono::duration<double>(
             animation_now - launcher_animation_epoch).count();
         constexpr double kBackgroundScrollPixelsPerSecond = 12.5;
-        launcher_background_scroll =
-            g_launcher_animation_seconds * kBackgroundScrollPixelsPerSecond;
+        launcher_region.refresh(g_launcher_animation_seconds,launcher_window_visible,launcher_window_focused);
+        if(launcher_theme.tick(g_launcher_animation_seconds,launcher_window_visible,
+                launcher_window_focused,dkr::launcher_themes::preferences,dkr::launcher_themes::local_date)) {
+            auto next_background=LoadLauncherBackground(renderer,bounded_software_return,launcher_theme.theme());
+            if(!next_background.texture) {
+                ReleaseLauncherBackground(next_background);
+                next_background=LoadLauncherBackground(renderer,bounded_software_return);
+            }
+            ReleaseLauncherBackground(launcher_background);
+            launcher_background=next_background;
+            std::fprintf(stderr,"[launcher][theme] active=%s; cached cloud tint; launcher only\n",dkr::launcher_themes::Names[int(launcher_theme.theme())]);
+        }
+        dkr::launcher_themes::displayed=launcher_theme.theme();
+        dkr::launcher_themes::next_switch=launcher_theme.next();
+        launcher_background_scroll = launcher_theme.seconds() * kBackgroundScrollPixelsPerSecond;
 
+        {
+            const auto preparation=g_mod_launch.snapshot();
+            const bool busy=dkr::crash_reports::view().consent.choice==-1||g_legacy_imports.snapshot().busy||g_code_library.view()->busy||
+                g_vehicle_library.view()->busy||bool(g_vehicle_library.view()->pending)||dkr::store::installations().view()->busy;
+            const auto action=online_start_pending?dkr::library_ui::AutomaticStart::Action::None:automatic_start.poll({rom_ready,dkr::runtime::netplay::session().active(),busy,
+                preparation.modal,preparation.busy,!preparation.error.empty()});
+            if(action==dkr::library_ui::AutomaticStart::Action::Start){
+                automatic_start.loading_mods(AutomaticStartHasMods());
+                std::fprintf(stderr,"[launcher][automatic-start] preparing selected ROM through normal Play flow\n");launch_requested=true;
+            } else if(action==dkr::library_ui::AutomaticStart::Action::ShowLauncher)
+                launch_fade.clear();
+            if(action==dkr::library_ui::AutomaticStart::Action::ShowLauncher)std::fprintf(stderr,"[launcher][automatic-start] showing launcher for selection, cancellation or recovery\n");
+        }
+        if(launch_requested&&dkr::crash_reports::view().consent.choice==-1)launch_requested=false;
         if (launch_requested) {
             launch_requested=false;
             if(!dkr::runtime::netplay::session().active() &&
                !dkr::store::installations().view()->busy && dkr::store::installations().view()->ready &&
                !g_legacy_imports.snapshot().busy && !g_code_library.view()->busy && !g_mod_launch.snapshot().modal) {
                 mod_launch_rom=selected_rom;
-                if(!SharedSaveBusy())g_mod_launch.start(g_config_directory,mod_launch_rom,false);
+                if(!SharedSaveBusy()) {
+                    if(!automatic_start.active()){automatic_start.manual(AutomaticStartHasMods());std::fprintf(stderr,"[startup][manual] shared starting screen\n");}
+                    g_mod_launch.start(g_config_directory,mod_launch_rom,false);
+                }
             }
         }
-        if(const auto prepared=g_mod_launch.snapshot();prepared.modal && prepared.prepared && !prepared.busy) {
+        if(const auto prepared=g_mod_launch.snapshot();prepared.modal && prepared.prepared && !prepared.busy && launch_fade.finished(PaddockClock())) {
             // The modal owns the selection while preparing; do not admit a
             // local bank if an online session began in the meantime.
             if(dkr::runtime::netplay::session().active()) {
@@ -9149,6 +9115,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                 dkr::runtime::startup_performance::mark("launcher-local-launch-requested");
                 if(SharedSaveBusy())continue;
                 result.start_game=true;result.rom_path=mod_launch_rom;result.mods=prepared.prepared;
+                dkr::library_ui::runtime_intro.begin(false,launcher_theme.seconds());
                 dkr::runtime::startup::prepare_launch(g_skip_intro, false,
                     dkr::runtime::custom_tracks::auto_boot_enabled() &&
                     !dkr::runtime::custom_tracks::armed_track_id().empty(),
@@ -9199,6 +9166,11 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         ImGui_ImplSDL2_NewFrame();
         dkr::runtime::platform::update_ui_gamepad_navigation();
         ImGui::NewFrame();
+        if(const int step=LibraryTakeSidebarStep(false)) {
+            sidebar_selection=StepSidebarSelection(sidebar_selection,step);
+            if(sidebar_selection<launcher_page_count){page=sidebar_selection;focus_content=true;}
+        }
+        if(LibraryTakeContentMotion(false))sidebar_selection=dkr::library_ui::sidebar_parent(page);
         int hud_viewport_width = 0;
         int hud_viewport_height = 0;
         SDL_GetWindowSize(window, &hud_viewport_width, &hud_viewport_height);
@@ -9207,10 +9179,19 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         // The opaque cloud backdrop (or opaque missing-asset fallback) covers
         // this entire undecorated window. Drawing ImGui's background underneath
         // it wastes a full software-rendered viewport every frame.
+        if(online_start_pending&&launch_fade.started()) {
+            if(DrawAutomaticStart(automatic_start,launcher_background,renderer,launcher_background_scroll,bounded_software_return,launcher_theme.theme(),launcher_theme.seconds(),nullptr,true)) {
+                online_start_pending=false;launch_fade.clear();dkr::runtime::netplay::session().disconnect("Game startup cancelled.");
+            }
+        }
+        else if(automatic_start.active()||LibraryStartupCheckEnabled())DrawAutomaticStartFrame(automatic_start,launcher_background,renderer,launcher_background_scroll,bounded_software_return,launcher_theme.theme(),launcher_theme.seconds());
+        else {
         BeginMainWindow("DKR-R Startup", ImGuiWindowFlags_NoBackground);
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::begin, &background_profile);
         DrawLauncherBackdrop(launcher_background, renderer, launcher_background_scroll,
                              bounded_software_return);
+        dkr::launcher_themes::weather(ImGui::GetWindowDrawList(),ImGui::GetMainViewport()->Pos,
+            ImGui::GetMainViewport()->Size,launcher_theme.theme(),launcher_theme.seconds(),dkr::launcher_themes::preferences.calendar);
         if (launcher_profile.enabled()) ImGui::GetWindowDrawList()->AddCallback(LauncherDrawProfileRange::end, &background_profile);
 #if defined(__ANDROID__) || defined(DKR_IOS)
         dkr::runtime::mobile::menu(page, false, request_restart_popup, request_quit_popup);
@@ -9247,6 +9228,11 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         ImGui::BeginGroup();
         BrandBlock(nav_inner_width, sidebar_layout.logo_size);
         ImGui::Dummy({0.0F, sidebar_layout.brand_gap});
+        const auto sidebar_position=dkr::library_ui::sidebar_placement(
+            ImGui::GetWindowSize().y,nav_padding,ImGui::GetCursorPosY(),
+            sidebar_layout.button_height,sidebar_layout.item_spacing_y,
+            sidebar_layout.action_section_gap,sidebar_layout.action_gap,kSidebarOrder.size()-3);
+        ImGui::SetCursorPosY(sidebar_position.navigation);
         if (g_page_navigation_request >= 0) {
             page = g_page_navigation_request;
             sidebar_selection = page;
@@ -9254,11 +9240,16 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         }
         ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
         ++g_race_button_sidebar;
+        LibraryNavigationCheckRoute(false,page);
+        if(!g_launcher_layout_root.empty())sidebar_selection=page;
+        if(LibraryRedirectTextures(page))sidebar_selection=page;
         LauncherSidebarButton("PLAY", 0, page, sidebar_selection,
                               nav_inner_width, sidebar_layout.button_height);
         LauncherSidebarButton("DKR-R ONLINE", kPageOnlineMp, page, sidebar_selection,
                               nav_inner_width, sidebar_layout.button_height);
-        LauncherSidebarButton("MODS / HACKS", kPageModsHacks, page, sidebar_selection,
+        LauncherSidebarButton("MOD LIBRARY", kPageModLibrary, page, sidebar_selection,
+                              nav_inner_width, sidebar_layout.button_height);
+        LauncherSidebarButton("INSTALLED MODS", kPageModsHacks, page, sidebar_selection,
                               nav_inner_width, sidebar_layout.button_height);
         LauncherSidebarButton("GRAPHICS", kPageGraphics, page, sidebar_selection,
                               nav_inner_width, sidebar_layout.button_height);
@@ -9266,14 +9257,11 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
                               nav_inner_width, sidebar_layout.button_height);
         LauncherSidebarButton("CONTROLS", kPageControls, page, sidebar_selection,
                               nav_inner_width, sidebar_layout.button_height);
-        LauncherSidebarButton("SAVE MANAGER", kPageSaveManager, page, sidebar_selection,
-                              nav_inner_width, sidebar_layout.button_height);
-        LauncherSidebarButton("TEXTURES", kPageTextures, page, sidebar_selection,
-                              nav_inner_width, sidebar_layout.button_height);
-        LauncherSidebarButton("ACHIEVEMENTS", kPageAchievements, page, sidebar_selection,
-                              nav_inner_width, sidebar_layout.button_height);
         LauncherSidebarButton("ABOUT DKR-R", kPageAbout, page, sidebar_selection,
                               nav_inner_width, sidebar_layout.button_height);
+        ImGui::SetCursorPosY(sidebar_position.actions-sidebar_layout.action_section_gap-sidebar_layout.item_spacing_y-dkr::library_ui::NavigationToggleHeight);
+        DrawSidebarNavigationToggle(nav_inner_width,sidebar_selection);
+        ImGui::SetCursorPosY(sidebar_position.actions-sidebar_layout.action_section_gap-sidebar_layout.item_spacing_y);
         SidebarActionGap(nav_inner_width, sidebar_layout.action_section_gap);
         ImGui::PushStyleColor(
             ImGuiCol_Button,
@@ -9333,31 +9321,12 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         const PlayPageContext play_context{selected_rom, rom_status, rom_ready, rom_catalog,
                                            launch_requested};
         g_launcher_rom = &play_context;
-        if (page == 0) {
-            DrawPlayPage(right_inner_width, play_context);
-        } else if (page == 1) {
-            DrawGraphicsPage(right_inner_width, false);
-        } else if (page == 2) {
-            DrawSoundPage(right_inner_width);
-        } else if (page == 3) {
-            DrawControlsPage(right_inner_width, false);
-        } else if (page == 4) {
-            DrawSaveManagerPage(right_inner_width, false);
-        } else if (page == kPageOnlineMp) {
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-            g_online_experimental_rom=selected_rom;
+        g_online_experimental_rom=selected_rom;
 #endif
-            DrawOnlinePage(right_inner_width, true, rom_ready);
-        } else if (page == kPageModsHacks) {
-            DrawModsHacks(right_inner_width);
-        } else if (page == kPageTextures) {
-            DrawTexturesPage(right_inner_width);
-        } else if (page == kPageAchievements) {
-            DrawAchievementsPage(right_inner_width);
-        } else {
-            DrawAboutPage(right_inner_width, true);
+        { LauncherContentEnter content_enter([&]{return page;});
+        DrawSharedUiPage(right_inner_width,page,false,&play_context);
         }
-        ImGui::Dummy({0.0F, 54.0F});
         g_launcher_rom = nullptr;
 #if defined(__ANDROID__) || defined(DKR_IOS)
         dkr::runtime::mobile::end_content();
@@ -9408,19 +9377,28 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             ImGui::EndPopup();
         }
         ImGui::End();
+        dkr::launcher_themes::atlas_corners(ImGui::GetForegroundDrawList(),ImGui::GetMainViewport()->Pos,
+            ImGui::GetMainViewport()->Size,launcher_theme.theme(),dkr::launcher_themes::preferences.calendar);
+        }
+        if(automatic_start.active()||online_start_pending)DrawLauncherFade(launch_fade,PaddockClock());
         PumpDialogJob();
         PumpSharedSaveJob();
         PumpModStoreLauncher();
         DrawTexturePackImportModal();
         DrawPaddockLegacyModImportModal();
-        DrawModLaunchModal();
+        LibraryManualHandoffRequest(rom_ready&&!g_legacy_imports.snapshot().busy&&!g_code_library.view()->busy&&!g_vehicle_library.view()->busy&&dkr::store::installations().view()->ready&&!dkr::store::installations().view()->busy,launch_requested);
+        if(!dkr::library_ui::inline_preparation(automatic_start.active(),g_mod_launch.snapshot().modal,!g_mod_launch.snapshot().error.empty()))DrawModLaunchModal();
         DrawOnlineModModal();
+        PumpSessionChatUi();
         DrawDiscordProfilePrompt();
+        DrawSessionAnalogueModal();
+        LibraryFinishUiFrame();
+        PumpFeedbackUi(true);
         DrawTextEntryKeyboard();
         DrawOnlineNotification();
         DrawOlToast();
         DrawOnlineStartCountdown();
-        DrawOnlineWaitingNotification(
+        if(!online_start_pending)DrawOnlineWaitingNotification(
             dkr::runtime::netplay::session().presentation_view());
         const bool show_online_error = UpdateOnlineErrorNotification();
         DrawOnlineFailureModal();
@@ -9428,6 +9406,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
             DrawOnlineErrorNotification();
         }
 
+        DrawCrashReportingConsent();
         ApplyPaddockModalDim();
 #if defined(__ANDROID__) || defined(DKR_IOS)
         if (dkr::runtime::mobile::editing()) {
@@ -9471,6 +9450,10 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
         // Present. Flush only in the opt-in profiler to separate those costs.
         if (launcher_profile.enabled()) SDL_RenderFlush(renderer);
         const auto launcher_draw_finished = std::chrono::steady_clock::now();
+        if(!launch_requested&&!automatic_start.active()&&!online_start_pending)launch_fade.clear();
+        if((launch_requested&&!automatic_start.active())||(online_start_pending&&!launch_fade.started()))launch_fade.capture(renderer,PaddockClock());
+        LibraryCaptureHandoff(renderer,launch_fade,automatic_start.active());
+        LauncherLayoutCheckCapture(renderer);
         SDL_RenderPresent(renderer);
         const auto launcher_present_finished =
             std::chrono::steady_clock::now();
@@ -9523,6 +9506,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     std::fprintf(stderr, "[perf][launcher-background] cache-rebuilds=%llu tiles=%llu\n",
         static_cast<unsigned long long>(launcher_background.cache_rebuilds),
         static_cast<unsigned long long>(launcher_background.tiles_submitted));
+    launcher_art.release();
     ReleaseLauncherBackground(launcher_background);
     std::fprintf(stderr, "[perf][launcher-panels] cache-builds=%llu cache-hits=%llu\n",
         static_cast<unsigned long long>(launcher_panel_cache.builds()),
@@ -9539,6 +9523,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     ReleaseDiscordProfileTexture();
     ReleaseCharacterPortraits();
     ReleaseModStoreTextures();
+    launch_fade.clear();
     SDL_DestroyRenderer(renderer);
     const auto launcher_elapsed_microseconds =
         std::chrono::duration_cast<std::chrono::microseconds>(
@@ -9579,6 +9564,7 @@ dkr::runtime::ui::StartupResult dkr::runtime::ui::run_startup_screen(
     std::fprintf(stderr,
                  "[boot][launcher] handoff complete window-flags=0x%08X\n",
                  static_cast<unsigned>(SDL_GetWindowFlags(window)));
+    g_shared_play={selected_rom,rom_status,rom_ready,false,rom_catalog};
     return result;
 }
 
@@ -9601,6 +9587,9 @@ void dkr::runtime::ui::attach(RT64::Application& application) {
     ImGui::GetIO().ConfigFlags |=
         ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
     LoadLauncherFonts();
+    LibraryInstallNavigationHook(true);
+    dkr::store::service().gameplay(true);
+    dkr::store::installations().safe_to_write(false);
     std::fprintf(stderr, "[boot][ui] in-game overlay attached (F1/Escape/Back)\n");
 }
 
@@ -9612,6 +9601,7 @@ void dkr::runtime::ui::detach(RT64::Application& application) {
 #endif
     if (application.presentQueue != nullptr) {
         std::scoped_lock present_lock(application.presentQueue->inspectorMutex);
+        dkr::store::overlay::release();
         dkr::runtime::crt::release();
         dkr::runtime::hud::editor::cancel();
         application.presentQueue->inspector.reset();
@@ -9631,6 +9621,12 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         return;
     }
     PumpFriendPresence();
+    if(!g_overlay_visible.load())LibraryCancelAnalogueCapture();
+    if(g_store_overlay_test&&std::chrono::steady_clock::now()>=g_store_overlay_test_after) {
+        g_overlay_visible=true;g_overlay_page=kPageModLibrary;
+    }
+    PumpFeedbackUi();
+    const bool show_starting_game=dkr::library_ui::runtime_intro.active() || (dkr::runtime::netplay::session().runtime_view().active && dkr::runtime::netplay::session().runtime_view().state==dkr::runtime::netplay::ConnectionState::Loading);
     const bool show_overlay =
         g_overlay_visible.load(std::memory_order_acquire);
     const bool show_fps = g_fps_overlay_enabled &&
@@ -9655,16 +9651,17 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     const bool show_achievement_toast=AchievementToastVisible();
     const bool show_mipmap_loading = RT64::mipLoadingVisible();
     const bool show_camera_tuning = CameraTuningVisible();
+    const bool show_session_chat = dkr::runtime::netplay::session().presentation_active() && (dkr::chat::show_feed.load() || dkr::chat::typing.load() || dkr::chat::open_requested.load());
     const bool keep_owned_ui = dkr::runtime::netplay::experimental::owned_runtime_active();
     if (
 #if defined(__ANDROID__) || defined(DKR_IOS)
         false && // Touch Menu remains available, even when all other overlays are off.
 #endif
-        !show_achievement_toast && !show_overlay && !show_fps && !show_crt && !show_online_error &&
+        !show_starting_game && !show_achievement_toast && !show_overlay && !show_fps && !show_crt && !show_online_error &&
         !show_online_failure_modal &&
         !show_online_notification &&
         !show_network && !show_controller_input && !show_online_countdown &&
-        !show_online_waiting && !show_mipmap_loading && !show_camera_tuning && !keep_owned_ui && !dkr::sdk2::tools_open.load() && !dkr::sdk2::debug_available()) {
+        !show_online_waiting && !show_mipmap_loading && !show_camera_tuning && !show_session_chat && !keep_owned_ui && !dkr::sdk2::tools_open.load() && !dkr::sdk2::debug_available()) {
         if (application.presentQueue->inspector != nullptr) {
             detach(application);
         }
@@ -9679,7 +9676,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     if (application.presentQueue->inspector == nullptr) {
         return;
     }
-    if (show_overlay || show_camera_tuning || dkr::runtime::invites::dialog()) {
+    if (show_starting_game || show_overlay || show_camera_tuning || dkr::chat::typing.load() || dkr::runtime::invites::dialog()) {
         dkr::runtime::platform::update_ui_gamepad_navigation();
     }
     RT64::Inspector* inspector = application.presentQueue->inspector.get();
@@ -9693,6 +9690,15 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     }
 #endif
     inspector->newFrame(application.framebufferGraphicsWorker.get());
+    if(show_overlay)if(const int step=LibraryTakeSidebarStep(true)) {
+        const int selected=StepSidebarSelection(g_overlay_sidebar_selection.load(),step);
+        g_overlay_sidebar_selection.store(selected);
+        if(selected<kMenuPageCount){g_overlay_page.store(selected);g_overlay_focus_requested.store(true);}
+    }
+    if(show_overlay&&LibraryTakeContentMotion(true))
+        g_overlay_sidebar_selection.store(dkr::library_ui::sidebar_parent(g_overlay_page.load()));
+    dkr::store::overlay::begin(application);
+    if(show_overlay)StoreOverlayTestFrame();
     if (auto* hud_window = static_cast<SDL_Window*>(dkr::runtime::platform::sdl_window())) {
         int hud_viewport_width = 0;
         int hud_viewport_height = 0;
@@ -9701,6 +9707,10 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
                                                hud_viewport_height);
     }
     ApplyStyle();
+    if(DrawRuntimeStartingGame()) {
+        DrawOnlineFailureModal();if(show_online_error)DrawOnlineErrorNotification();
+        dkr::store::overlay::end();inspector->endFrame();return;
+    }
     ImGui::GetIO().ConfigFlags |=
         ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
     if (show_crt) {
@@ -9717,11 +9727,19 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         dkr::runtime::hud::editor::draw_review();
         ImGui::End();
     } else if (show_overlay) {
+    static dkr::launcher_themes::SystemSettings overlay_region;
+    static dkr::launcher_themes::Session overlay_theme;
+    overlay_region.refresh(ImGui::GetTime(),true,!ImGui::GetIO().AppFocusLost);
+    overlay_theme.tick(ImGui::GetTime(),true,!ImGui::GetIO().AppFocusLost,
+        dkr::launcher_themes::preferences,dkr::launcher_themes::local_date);
+    dkr::launcher_themes::displayed=overlay_theme.theme();
+    dkr::launcher_themes::next_switch=overlay_theme.next();
     BeginMainWindow("DKR-R Overlay", ImGuiWindowFlags_NoBackground);
+    dkr::launcher_themes::atlas_corners(ImGui::GetForegroundDrawList(),ImGui::GetMainViewport()->Pos,ImGui::GetMainViewport()->Size,overlay_theme.theme(),dkr::launcher_themes::preferences.calendar);
         const PaddockLauncherTypographyScope overlay_typography;
         bool request_quit_popup = false;
         bool request_restart_popup = false;
-        constexpr int overlay_sidebar_count = kMenuPageCount + 2;
+        constexpr int overlay_sidebar_count = kMenuPageCount + 3;
         int sidebar_selection = std::clamp(
             g_overlay_sidebar_selection.load(std::memory_order_acquire), 0,
             overlay_sidebar_count - 1);
@@ -9768,6 +9786,11 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         ImGui::BeginGroup();
         BrandBlock(nav_inner_width, sidebar_layout.logo_size);
         ImGui::Dummy({0.0F, sidebar_layout.brand_gap});
+        const auto sidebar_position=dkr::library_ui::sidebar_placement(
+            ImGui::GetWindowSize().y,nav_padding,ImGui::GetCursorPosY(),
+            sidebar_layout.button_height,sidebar_layout.item_spacing_y,
+            sidebar_layout.action_section_gap,sidebar_layout.action_gap,kSidebarOrder.size()-3);
+        ImGui::SetCursorPosY(sidebar_position.navigation);
         // The sidebar is a shoulder-button rail. Excluding its widgets from
         // ImGui navigation keeps the D-pad entirely inside the content panel.
         if (g_page_navigation_request >= 0) {
@@ -9779,11 +9802,14 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         }
         ImGui::PushItemFlag(ImGuiItemFlags_NoNav, true);
         ++g_race_button_sidebar;
+        LibraryNavigationCheckOverlayRoute();
         SidebarButton("PLAY", 0, sidebar_selection, nav_inner_width,
                       sidebar_layout.button_height);
         SidebarButton("DKR-R ONLINE", kPageOnlineMp, sidebar_selection, nav_inner_width,
                       sidebar_layout.button_height);
-        SidebarButton("MODS / HACKS", kPageModsHacks, sidebar_selection, nav_inner_width,
+        SidebarButton("MOD LIBRARY", kPageModLibrary, sidebar_selection, nav_inner_width,
+                      sidebar_layout.button_height);
+        SidebarButton("INSTALLED MODS", kPageModsHacks, sidebar_selection, nav_inner_width,
                       sidebar_layout.button_height);
         SidebarButton("GRAPHICS", kPageGraphics, sidebar_selection, nav_inner_width,
                       sidebar_layout.button_height);
@@ -9791,14 +9817,11 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
                       sidebar_layout.button_height);
         SidebarButton("CONTROLS", kPageControls, sidebar_selection, nav_inner_width,
                       sidebar_layout.button_height);
-        SidebarButton("SAVE MANAGER", kPageSaveManager, sidebar_selection, nav_inner_width,
-                      sidebar_layout.button_height);
-        SidebarButton("TEXTURES", kPageTextures, sidebar_selection, nav_inner_width,
-                      sidebar_layout.button_height);
-        SidebarButton("ACHIEVEMENTS", kPageAchievements, sidebar_selection, nav_inner_width,
-                      sidebar_layout.button_height);
         SidebarButton("ABOUT DKR-R", kPageAbout, sidebar_selection, nav_inner_width,
                       sidebar_layout.button_height);
+        ImGui::SetCursorPosY(sidebar_position.actions-sidebar_layout.action_section_gap-sidebar_layout.item_spacing_y-dkr::library_ui::NavigationToggleHeight);
+        DrawSidebarNavigationToggle(nav_inner_width,sidebar_selection);
+        ImGui::SetCursorPosY(sidebar_position.actions-sidebar_layout.action_section_gap-sidebar_layout.item_spacing_y);
         SidebarActionGap(nav_inner_width, sidebar_layout.action_section_gap);
         ImGui::PushStyleColor(
             ImGuiCol_Button,
@@ -9914,11 +9937,16 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
         // Match launcher modal text without enlarging FPS/network notifications
         // or the game HUD. These dialogs render outside the content child.
         const PaddockLauncherTypographyScope modal_typography(show_overlay);
+        if(g_store_in_game)StorePolishModals();
         PumpDialogJob();
         PumpSharedSaveJob();
         DrawTexturePackImportModal();
         DrawPaddockLegacyModImportModal();
+        PumpSessionChatUi();
         DrawDiscordProfilePrompt();
+        DrawSessionAnalogueModal();
+        LibraryFinishUiFrame();
+        PumpFeedbackUi(true);
         DrawTextEntryKeyboard();
     }
     // Over the race, not the menu: the panel is for tuning while driving.
@@ -9927,6 +9955,7 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     if(dkr::sdk2::tools_open.load())DrawSdk2Tools();
     DrawFpsOverlay(application);
     DrawNetworkOverlay();
+    DrawSessionChatOverlay(show_overlay);
     DrawControllerInputOverlay();
     DrawOnlineStartCountdown();
     DrawOnlineWaitingNotification(online_session_view);
@@ -9935,17 +9964,20 @@ void dkr::runtime::ui::draw(RT64::Application& application) {
     if (show_online_error) DrawOnlineErrorNotification();
     if (show_online_notification) DrawOnlineNotification();
     if (show_overlay) DrawOlToast();
-    ApplyPaddockModalDim();
+    DrawCrashReportingConsent();
+        ApplyPaddockModalDim();
 #if defined(__ANDROID__) || defined(DKR_IOS)
     dkr::runtime::mobile::draw_controls(show_overlay);
     dkr::runtime::mobile::editor();
 #endif
     DrawPinnedAchievement();
     DrawAchievementToast();
+    dkr::store::overlay::end();
     inspector->endFrame();
 }
 
 void dkr::runtime::ui::update_camera_mouse() {
+    if(dkr::chat::captures_game_input())return;
     if(dkr::runtime::invites::capture()&&!g_overlay_visible.load())return;
     UpdateCameraMouseOrbit();
 }
@@ -9954,6 +9986,10 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
     if (event == nullptr) {
         return false;
     }
+    if(dkr::library_ui::runtime_intro_visible.load()&&((event->type==SDL_KEYDOWN&&event->key.keysym.scancode==SDL_SCANCODE_ESCAPE)||(event->type==SDL_CONTROLLERBUTTONDOWN&&event->cbutton.button==SDL_CONTROLLER_BUTTON_B))) {
+        g_lifecycle_request.store(dkr::runtime::ui::LifecycleRequest::StopGame);g_overlay_visible=false;ultramodern::quit();return true;
+    }
+    if(HandleSessionChatEvent(event))return true;
     if(dkr::runtime::invites::dialog()) {
         if((event->type==SDL_KEYDOWN&&!event->key.repeat&&event->key.keysym.scancode==SDL_SCANCODE_ESCAPE)||
            (event->type==SDL_CONTROLLERBUTTONDOWN&&event->cbutton.button==SDL_CONTROLLER_BUTTON_B)) {
@@ -9991,6 +10027,7 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
     if (HandleInputCaptureEvent(event)) {
         return true;
     }
+    if(g_overlay_visible.load())LibrarySidebarEvent(*event);
     const bool code_keyboard_visible =
         g_online_code_keyboard_visible.load(std::memory_order_acquire);
     if (code_keyboard_visible &&
@@ -10023,37 +10060,11 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
         !dkr::runtime::hud::editor::active() &&
         !code_keyboard_visible &&
         event->type == SDL_CONTROLLERBUTTONDOWN) {
-        if (event->cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
-            constexpr int sidebar_count = kMenuPageCount + 2;
-            const int current = g_overlay_sidebar_selection.load(
-                std::memory_order_relaxed);
-            const int selected = StepSidebarSelection(current,-1);
-            g_overlay_sidebar_selection.store(selected,
-                                              std::memory_order_release);
-            if (selected < kMenuPageCount) {
-                g_overlay_page.store(selected, std::memory_order_relaxed);
-                g_overlay_focus_requested.store(true,
-                                                std::memory_order_release);
-            }
-            return true;
-        }
-        if (event->cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-            constexpr int sidebar_count = kMenuPageCount + 2;
-            const int current = g_overlay_sidebar_selection.load(
-                std::memory_order_relaxed);
-            const int selected = StepSidebarSelection(current,1);
-            g_overlay_sidebar_selection.store(selected,
-                                              std::memory_order_release);
-            if (selected < kMenuPageCount) {
-                g_overlay_page.store(selected, std::memory_order_relaxed);
-                g_overlay_focus_requested.store(true,
-                                                std::memory_order_release);
-            }
-            return true;
-        }
         if (event->cbutton.button == SDL_CONTROLLER_BUTTON_A) {
             const int selected = g_overlay_sidebar_selection.load(
                 std::memory_order_relaxed);
+            if(dkr::library_ui::sidebar_input_blocked.load())return false;
+            if(selected==dkr::library_ui::SidebarToggle){dkr::library_ui::sidebar_toggle_requested.store(true);return true;}
             if (selected == kMenuPageCount) {
                 g_overlay_sidebar_action.store(1, std::memory_order_release);
                 return true;
@@ -10090,7 +10101,7 @@ bool dkr::runtime::ui::handle_runtime_event(SDL_Event* event) {
 }
 
 bool dkr::runtime::ui::input_capture_active() {
-    return
+    return dkr::library_ui::runtime_intro_visible.load() || dkr::chat::captures_game_input() ||
 #if defined(__ANDROID__) || defined(DKR_IOS)
            dkr::runtime::mobile::editing() ||
 #endif
@@ -10133,7 +10144,7 @@ void dkr::runtime::ui::report_mod_error(std::string error) {
 void dkr::runtime::ui::shutdown_online_mods() {
     // Explicitly join while DirectSession is alive, outside any SDL/network
     // locks. Never let cross-translation-unit static destruction own this.
-    g_online_mod_sync.reset();g_online_mod_link.reset();
+    g_online_mod_sync.reset();dkr::online_stability::unbind_mod_sync(g_online_mod_link.get());g_online_mod_link.reset();
     g_online_mod_host_request.reset();g_online_mod_watching=false;
 }
 
@@ -10164,10 +10175,29 @@ void dkr::runtime::ui::report_online_game_end(std::string message, bool lobby_re
 
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identity,bool host,unsigned players,std::string& error) {
+    if(const char* missing=std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");missing&&std::string_view(missing)=="1")
+        dkr::online_presentation::test_fixture::missing_gpu_target=true;
+    if(const char* delay=std::getenv("DKR_OWNED_CHECK_RECEIVE_MS")) {
+        const unsigned value=unsigned(std::strtoul(delay,nullptr,10));
+        dkr::online_presentation::test_receive_delay::arm(value,15);
+        std::fprintf(stderr,"[online][isolated-check] receive-delay-ms=%u jitter-ms=15; test profile only\n",value);
+    }
+    if(const char* full=std::getenv("DKR_OWNED_CHECK_DELIVERY_MS")) {
+        const unsigned delay=unsigned(std::strtoul(full,nullptr,10));
+        const auto number=[](const char* key){const char* v=std::getenv(key);return v?unsigned(std::strtoul(v,nullptr,10)):0U;};
+        if(!dkr::online_stability::qualification_delivery::arm(delay,number("DKR_OWNED_CHECK_JITTER_MS"),number("DKR_OWNED_CHECK_SPIKE_MS"),number("DKR_OWNED_CHECK_LOSS_EVERY"))) {
+            error="Invalid isolated full-lobby delivery profile";return false;
+        }
+        std::fprintf(stderr,"[online][isolated-check] all-route-delivery-ms=%u; disposable-profile only\n",delay);
+    }
     auto& online=netplay::session();
     if(!identity.supported()||players<2||players>4||!online.enable_owned_backend(netplay::experimental::runtime_available(identity.revision))) {
         error="Invalid isolated owned online check.";return false;
     }
+    if(const char* test=std::getenv("DKR_OWNED_CHECK_MOD_STORE");test&&std::string_view(test)=="1") {
+        g_store_overlay_test=true;g_store_overlay_test_after=std::chrono::steady_clock::now()+std::chrono::seconds(70);
+    }
+    LibraryNavigationCheckInit();
     // This function is reachable only after the NEW isolated-profile check.
     // Compare the public Modern preset without altering a real user's setup.
     if(const char* modern=std::getenv("DKR_OWNED_CHECK_MODERN");modern&&std::string_view(modern)=="1") {
@@ -10184,6 +10214,10 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
                 config.rr_manual_value=std::atoi(rate);
             }
         }
+        if(const char* focus=std::getenv("DKR_OWNED_CHECK_FULLSCREEN");focus&&std::string_view(focus)=="1") {
+            config.ar_option=ultramodern::renderer::AspectRatio::Expand;
+            dkr::runtime::online_view::requested_layout=dkr::runtime::online_view::Layout::MyRacer;
+        }
         ultramodern::renderer::set_graphics_config(config);
     }
     online.configure_manifest(BuildNetplayManifest(identity));
@@ -10191,14 +10225,72 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
     // session save; never create or replace a single-player save for this check.
     auto bytes=saves::codec::blank_bytes();
     online.configure_session_save(std::move(bytes),saves::install_synchronized_online_adventure);
-    if(!host)return true;
+    if(!host&&std::getenv("DKR_OWNED_CHECK_WATCH")&&std::string_view(std::getenv("DKR_OWNED_CHECK_WATCH"))=="1") {
+        dkr::runtime::spectators::request_party_join(&online,true);
+        std::fprintf(stderr,"[spectator][qualification] watch=1; fresh-profile=1\n");return true;
+    }
+    if(std::getenv("DKR_OWNED_CHECK_CARS")||std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS")) {
+        g_online_mod_identity=identity;
+        dkr::runtime::vehicles::lighting::owned_car_check=std::getenv("DKR_OWNED_CHECK_CARS")!=nullptr;
+        dkr::runtime::vehicles::lighting::owned_road_wheel_check=std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS")!=nullptr;
+        dkr::runtime::vehicles::lighting::owned_check_pump=[] {
+            PumpOnlineMods();
+            if(!g_online_mod_sync)return;
+            const auto view=g_online_mod_sync->snapshot();
+            if(view.phase==dkr::mods::online::SyncPhase::Review && view.manifest) {
+                const bool cars_only=view.manifest->code.empty() && !view.manifest->content.empty() &&
+                    std::ranges::all_of(view.manifest->content,[](const auto& content){return content.kind==dkr::mods::online::CarContent;});
+                // This check accepts data-only cars from its disposable local
+                // host. It never auto-approves executable code or keeps mods.
+                const bool characters_only=dkr::runtime::vehicles::lighting::owned_road_wheel_check &&
+                    view.manifest->code.empty() && !view.manifest->content.empty() &&
+                    std::ranges::all_of(view.manifest->content,[](const auto& content){return content.kind==dkr::mods::online::Kind::Character;});
+                g_online_mod_sync->consent(cars_only||characters_only,false);
+            }
+        };
+    }
+    if(!host){dkr::runtime::spectators::request_party_join(&online,false);return true;}
     g_online_experimental_rollback=true;g_online_maximum_players=int(players);
-    g_online_automatic_delay=false;g_online_manual_delay=1;g_online_rollback_window=6;
+    g_online_automatic_delay=std::getenv("DKR_OWNED_CHECK_DYNAMIC")&&std::string_view(std::getenv("DKR_OWNED_CHECK_DYNAMIC"))=="1";
+    g_online_allow_spectators=!(std::getenv("DKR_OWNED_CHECK_PARTY")&&std::string_view(std::getenv("DKR_OWNED_CHECK_PARTY"))=="0");
+    g_online_manual_delay=1;g_online_rollback_window=6;
+    // This entry point is guarded by the NEW disposable-profile requirement.
+    // Explicit qualification values never replace a player's saved settings.
+    auto qualification_number=[](const char* name,int fallback,int minimum,int maximum) {
+        const char* value=std::getenv(name);if(!value||!*value)return fallback;
+        unsigned number=0;for(const char* at=value;*at;++at) {
+            if(*at<'0'||*at>'9'||number>100)return fallback;
+            number=number*10+unsigned(*at-'0');
+        }
+        return number>=unsigned(minimum)&&number<=unsigned(maximum)?int(number):fallback;
+    };
+    g_online_manual_delay=qualification_number("DKR_OWNED_CHECK_DELAY",1,0,9);
+    g_online_rollback_window=qualification_number("DKR_OWNED_CHECK_WINDOW",6,2,20);
+    std::fprintf(stderr,"[rollback][qualification] auto=%u delay=%u window=%u fresh-profile=1\n",
+        unsigned(g_online_automatic_delay),unsigned(g_online_manual_delay),unsigned(g_online_rollback_window));
     g_online_save_seed_mode=int(saves::OnlineSaveSeedMode::Fresh);
     OnlineHostRequest request;request.manifest=BuildNetplayManifest(identity);
     request.rules.maximum_players=std::uint8_t(players);request.rules.synchronization=netplay::SynchronizationMode::ExperimentalRollback;
-    request.rules.automatic_input_delay=false;request.rules.manual_input_delay=1;request.rules.rollback_window=6;
+    request.rules.automatic_input_delay=g_online_automatic_delay;request.rules.manual_input_delay=std::uint8_t(g_online_manual_delay);request.rules.rollback_window=std::uint8_t(g_online_rollback_window);
     request.save_mode=saves::OnlineSaveSeedMode::Fresh;request.room=g_online_room_name;request.name=g_online_player_name;
+    if(std::getenv("DKR_OWNED_CHECK_CARS")||std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS")) {
+        // The fresh-profile launcher starts asynchronous library scans. Let
+        // those release their ordinary library locks before freezing cars.
+        const auto ready=std::chrono::steady_clock::now()+std::chrono::seconds(30);
+        while(g_vehicle_library.view()->busy || g_legacy_imports.snapshot().busy || g_code_library.view()->busy) {
+            g_legacy_imports.tick();
+            if(std::chrono::steady_clock::now()>=ready){error="The isolated car library scan timed out.";return false;}
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        auto settings=OnlineModSettings();
+        if(!g_online_mod_sync || !g_online_mod_sync->prepare_host(settings,g_config_directory/"mods"/"legacy",{},
+                std::string(dkr::mods::online::asset_revision(identity.revision)),true,
+                OnlineModRuntimePreparation(settings.imported_roms,request.rules.synchronization))) {
+            error="The isolated car preparation could not start.";return false;
+        }
+        g_online_mod_host_request=request;
+        return true;
+    }
     if(!FinishOnlineLobby(request,{},0)){error=g_online_action_status;return false;}
     return true;
 }

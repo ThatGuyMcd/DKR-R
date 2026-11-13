@@ -1,10 +1,12 @@
-void DrawModStore(float width, bool locked) {
+void DrawModStore(float width, bool locked, bool game_running = false) {
+    g_store_in_game=game_running;
     auto& service = dkr::store::service();
     if (!g_mod_store.opened) {
         g_mod_store.opened = true;
         service.refresh();
     }
     auto store = service.view();
+    if(game_running&&g_store_overlay_test)store=StoreOverlayFixture(*store);
     StoreSyncIdentity(*store);
     if (!store->writing && store->mutation != g_mod_store.mutation) {
         g_mod_store.mutation = store->mutation;
@@ -40,8 +42,8 @@ void DrawModStore(float width, bool locked) {
     }
     if (auto url = service.take_browser_url(); !url.empty())
         SDL_OpenURL(url.c_str());
-    StorePumpInstall();
-    StoreStartQueuedInstall(locked || store->writing);
+    if(!game_running)StorePumpInstall();
+    StoreStartQueuedInstall(locked || game_running || store->writing);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.F);
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {10.F, 8.F});
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, {.5F, .5F});
@@ -51,34 +53,14 @@ void DrawModStore(float width, bool locked) {
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, PaddockCol(0x205774));
     ImGui::PushStyleColor(ImGuiCol_Border, PaddockCol(0x496579));
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, PaddockCol(0xFFC15A));
-    const bool header =
-        width >= 700.F && ImGui::BeginTable("store-header", 2, ImGuiTableFlags_NoSavedSettings, {width, 0});
-    if (header) {
-        ImGui::TableSetupColumn("Store", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Tools", ImGuiTableColumnFlags_WidthFixed, 300.F);
-        ImGui::TableNextColumn();
-    }
-    StoreHeading("MOD STORE", ImGui::GetContentRegionAvail().x, 27);
-    StoreNote(store->user.is_null() ? "Community mods for DKR-R"
-                                    : "Signed in as " + StoreText(store->user, "displayName", 100),
-              ImGui::GetContentRegionAvail().x);
-    if (header)
-        ImGui::TableNextColumn();
-    ImGui::BeginDisabled(store->loading);
-    StoreActionLine({{store->writing   ? "Saving..."
-                      : store->loading ? "Refreshing..."
-                                       : "Refresh",
-                      [&] {
-                          g_mod_store.message_page = std::to_string(g_mod_store.page);
-                          service.refresh();
-                      }},
-                     {"Website", [] { SDL_OpenURL("https://positron-portal.com/dkr-r/index.html"); }}},
-                    ImGui::GetContentRegionAvail().x);
-    ImGui::EndDisabled();
-    if (header)
-        ImGui::EndTable();
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{0.F,0.F});
+    DrawLibraryPageHeader(width,*store);
+    ImGui::PopStyleVar();
+    StoreNote(dkr::localisation::source(dkr::store::LegacyRomInstallNotice),width,false);
+    PaddockGap(8.F);
     if (store->cached && !store->loading)
         StoreNote("Showing the saved library. Refresh to try connecting again.", width);
+    DrawLauncherFeatured(width,game_running);
     const auto active = std::count_if(store->downloads.begin(), store->downloads.end(), StoreTransferActive);
     const auto manager = dkr::store::installations().view();
     const int current = g_mod_store.page == 0                                                     ? 0
@@ -117,7 +99,7 @@ void DrawModStore(float width, bool locked) {
         StoreMessage("Couldn't complete that action", store->error, width);
     else if (!store->status.empty() && g_mod_store.message_page == std::to_string(g_mod_store.page) &&
              (store->status == "Your change was saved." || store->status.starts_with("Library account deleted"))) {
-        StoreNote(store->status, width, false);
+        StoreNote(dkr::localisation::source(store->status), width, false);
         if (StoreButton("Dismiss message"))
             service.clear_messages();
     }

@@ -8,6 +8,8 @@
 #include "achievements.hpp"
 #include "vehicle_binding.hpp"
 #include "vehicle_world.hpp"
+#include "vehicle_lighting/road_wheels.h"
+#include "vehicle_lighting/road_wheels.hpp"
 #include <bit>
 #include "mods/magic_code_package.hpp"
 #include "atomic_snapshot.hpp"
@@ -247,6 +249,11 @@ void begin_session(std::shared_ptr<mods::RuntimeSession> value) {
     const auto assets=session.load();const auto cars=mods::vehicles::resources_for(assets.get());
     ordinary_world.vehicles=cars&&!cars->library.packages.empty()?std::make_shared<vehicles::World>(cars,assets->boot_bank()->revision()=="us.v80"):nullptr;
     mods::vehicles::publish_render_resources(cars);
+    std::vector<unsigned> road_headers;
+    if(assets&&assets->characters())for(const auto& character:assets->characters()->characters)
+        road_headers.push_back(character.headers[0]);
+    if(!road_headers.empty())std::fprintf(stderr,"[graphics][road-wheels][catalogue] custom-headers=%zu; normal renderer\n",road_headers.size());
+    vehicles::lighting::road_wheels::publish_headers(std::move(road_headers));
 }
 void begin_online(std::shared_ptr<const mods::online::RuntimeResources> resources) {
     if(!resources)throw mods::Error("Online mod admission has no pinned game resources.");
@@ -406,6 +413,19 @@ extern "C" void dkr_legacy_character_event(std::uint8_t* rdram,recomp_context* c
             else if(event==202||event==203){if(cars)cars->wheel_scope({rdram,legacy::guest_memory_size()},roster_address,event==202);}
             else if(event==204){if(cars)cars->advance_wheels({rdram,legacy::guest_memory_size()},roster_address,std::bit_cast<float>(std::uint32_t(ctx->r6)));}
             else throw dkr::mods::Error("Unknown custom vehicle render event.");
+            if(event<=203) {
+                const auto assets=legacy::session.load();
+                if(assets) {
+                    const auto& s=vehicles::symbols(assets->boot_bank()->revision()=="us.v80");
+                    dkr_road_wheel_call call{event,roster_address,unsigned(ctx->r4),0,0,
+                        s.light_intensity,s.inverse_view,s.viewport_layout,event==200?unsigned(ctx->r2):0};
+                    if(event==202) {
+                        const vehicles::lighting::road_wheels::Memory g({rdram,legacy::guest_memory_size()});
+                        call.sprite=g.get(unsigned(ctx->r29)+16);call.flags=g.get(unsigned(ctx->r29)+20);
+                    }
+                    dkr_native_road_wheel_scope(rdram,legacy::guest_memory_size(),&call);
+                }
+            }
             return;
         }catch(const ultramodern::thread_terminated&){throw;}
          catch(const std::exception& error){legacy::fail(error.what());}
@@ -492,7 +512,9 @@ extern "C" int dkr_legacy_character_menu(std::uint8_t* rdram,recomp_context* ctx
             dkr::mods::CharacterMenuView view;
             {std::lock_guard lock(state->mutex);view=state->selector->view(guest);}
             const dkr::mods::CharacterMenuDrawCalls draw{p->asset_allocate,p->asset_release,p->menu_texture_load,p->menu_texture_free,
-                p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset};
+                p->menu_texture_draw,p->menu_font,p->menu_colour,p->menu_background,p->menu_text,p->menu_render_reset,
+                p->menu_text_width,p->menu_view_matrix,p->menu_projection};
+            state->stage.label_anchors({rdram,legacy::guest_memory_size()},view);
             state->hints.draw_hint({rdram,legacy::guest_memory_size()},addresses,*ctx,draw,state->selector->entries(),view);
         }
         else if(event==6) {
@@ -997,6 +1019,11 @@ ModWorld::ModWorld(std::shared_ptr<mods::RuntimeSession> assets,GamePayload call
     if(!assets)throw mods::Error("An owned mod world needs admitted resources.");
     (void)mods::online::course_display_budgets(authored.get());
     state_->session.store(assets);state_->private_owner=true;state_->calls=calls;
+    std::vector<unsigned> road_headers;
+    if(assets&&assets->characters())for(const auto& character:assets->characters()->characters)
+        road_headers.push_back(character.headers[0]);
+    if(!road_headers.empty())std::fprintf(stderr,"[graphics][road-wheels][catalogue] custom-headers=%zu; owned renderer\n",road_headers.size());
+    vehicles::lighting::road_wheels::publish_headers(std::move(road_headers));
     if(const auto cars=mods::vehicles::resources_for(assets.get());cars&&!cars->library.packages.empty()) {
         state_->vehicles=std::make_shared<vehicles::World>(cars,assets->boot_bank()->revision()=="us.v80");
         mods::vehicles::publish_render_resources(cars);

@@ -84,3 +84,4 @@ std::unique_ptr<OwnedGame> make_owned_game(std::span<const std::uint8_t> local_b
     bool start_at_title = false, std::uint32_t magic_codes = 0,
     std::span<const std::uint8_t> initial_save = {}, OwnedBootOptions boot = {});
 }
+

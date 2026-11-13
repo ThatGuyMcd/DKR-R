@@ -47,7 +47,7 @@ why = "30 render stability checks."
 [[check]]
 id = "liquid-residency"
 ctest_test = "DKRLiquidResidencyChecks"
-why = "23 water residency checks."
+why = "28 water residency checks."
 
 [[check]]
 id = "memory-stability-v77"

@@ -42,6 +42,7 @@ INPUT_HOST_DIRECTORY="${BUILD_DIRECTORY}/bin/Release/libexec/dkr-r"
 INPUT_HOST="${INPUT_HOST_DIRECTORY}/DKR-R-InputHost"
 MOD_WORKER="${INPUT_HOST_DIRECTORY}/DKR-R-ModWorker"
 UPDATE_HELPER="${INPUT_HOST_DIRECTORY}/DKR-R-Updater"
+FILE_PICKER="${INPUT_HOST_DIRECTORY}/DKR-R-FilePicker"
 SDL3_LIBRARY="${INPUT_HOST_DIRECTORY}/libSDL3.so.0"
 VERSION_FILE_VALUE="$(tr -d '\r\n' <"${PROJECT_ROOT}/VERSION")"
 VERSION="${DKR_RELEASE_VERSION:-${VERSION_FILE_VALUE}}"
@@ -130,6 +131,7 @@ collect_linux_dependency_notices() {
   local library_count copyright_count
 
   mkdir -p "${notice_root}/common-licenses"
+  install -m 0644 /usr/share/doc/libstdc++6/copyright "${notice_root}/GCC-RUNTIME-COPYRIGHT.txt"
   : >"${manifest}"
   printf '%s\n' \
     'Debian package notice directories deployed with the Linux dependencies:' \
@@ -382,7 +384,43 @@ run_appimage "${LINUXDEPLOY}" --appimage-extract-and-run \
   --executable "${BINARY_STAGE}/DKR-R" \
   "${EXPERIMENTAL_DEPLOY_ARGS[@]}" \
   --desktop-file "${PROJECT_ROOT}/packaging/linux/dkr-port.desktop" \
-  --icon-file "${ICON_STAGE}/dkr-r.png"
+  --icon-file "${ICON_STAGE}/dkr-r.png" \
+  --custom-apprun "${PROJECT_ROOT}/packaging/linux/AppRun"
+
+# linuxdeploy's excludelist drops libwayland-client.so.0 while still bundling
+# SDL2, GTK, libwayland-egl and libwayland-cursor, which all need it, so hosts
+# without Wayland fail at startup (issue #45). A bundled copy older than the
+# host's would break host Mesa drivers, so it goes into a fallback directory
+# that packaging/linux/AppRun only exposes when the host has no copy.
+if [[ ! -e "${APPDIR}/usr/lib/libwayland-client.so.0" ]]; then
+  WAYLAND_CLIENT="${DKR_WAYLAND_CLIENT_LIBRARY:-}"
+  if [[ -z "${WAYLAND_CLIENT}" ]]; then
+    for library_directory in "/usr/lib/${ARCH}-linux-gnu" "/lib/${ARCH}-linux-gnu" /usr/lib64 /lib64 /usr/lib /lib; do
+      candidate="${library_directory}/libwayland-client.so.0"
+      if [[ -f "${candidate}" ]] && "${READELF}" -h "${candidate}" | grep -F "${ELF_MACHINE}" >/dev/null; then
+        WAYLAND_CLIENT="${candidate}"
+        break
+      fi
+    done
+  fi
+  [[ -n "${WAYLAND_CLIENT}" && -f "${WAYLAND_CLIENT}" ]] || {
+    echo "Missing ${ARCH} libwayland-client.so.0 for the AppImage fallback; install libwayland-client0 or set DKR_WAYLAND_CLIENT_LIBRARY." >&2
+    exit 1
+  }
+  "${READELF}" -h "${WAYLAND_CLIENT}" | grep -F "${ELF_MACHINE}" >/dev/null || {
+    echo "Wrong architecture for the libwayland-client fallback (expected ${ARCH}): ${WAYLAND_CLIENT}" >&2
+    exit 1
+  }
+  WAYLAND_COPYRIGHT="${DKR_WAYLAND_CLIENT_COPYRIGHT:-/usr/share/doc/libwayland-client0/copyright}"
+  [[ -f "${WAYLAND_COPYRIGHT}" ]] || {
+    echo "Missing libwayland-client copyright record: ${WAYLAND_COPYRIGHT}" >&2
+    exit 1
+  }
+  mkdir -p "${APPDIR}/usr/lib/wayland-fallback" "${APPDIR}/usr/share/doc/libwayland-client0"
+  install -m 0644 "${WAYLAND_CLIENT}" "${APPDIR}/usr/lib/wayland-fallback/libwayland-client.so.0"
+  patchelf --set-rpath '$ORIGIN/..' "${APPDIR}/usr/lib/wayland-fallback/libwayland-client.so.0"
+  install -m 0644 "${WAYLAND_COPYRIGHT}" "${APPDIR}/usr/share/doc/libwayland-client0/copyright"
+fi
 
 mkdir -p "${APPDIR}/usr/bin/assets/ui/Icons"
 install -m 0644 "${PROJECT_ROOT}/assets/ui/Icons/DKR-R-Logo.bmp" \
@@ -409,6 +447,8 @@ install -m 0644 "${PROJECT_ROOT}/assets/controllers/gamecontrollerdb.txt" \
 mkdir -p "${APPDIR}/usr/libexec/dkr-r"
 install -m 0755 "${MOD_WORKER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker"
 install -m 0755 "${UPDATE_HELPER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-Updater"
+install -m 0755 "${FILE_PICKER}" "${APPDIR}/usr/libexec/dkr-r/DKR-R-FilePicker"
+patchelf --remove-rpath "${APPDIR}/usr/libexec/dkr-r/DKR-R-FilePicker"
 patchelf --set-rpath '$ORIGIN/../../lib' "${APPDIR}/usr/libexec/dkr-r/DKR-R-Updater"
 patchelf --set-rpath '$ORIGIN/../../lib' "${APPDIR}/usr/libexec/dkr-r/DKR-R-ModWorker"
 install -m 0755 "${INPUT_HOST}" \
@@ -432,6 +472,8 @@ if [[ "${SKIP_RUNTIME_TESTS}" == 0 ]]; then
     "${APPDIR}/usr/bin/assets/controllers/gamecontrollerdb.txt"
 fi
 
+READELF="${READELF}" bash "${PROJECT_ROOT}/scripts/Check-AppDir-Closure.sh" "${APPDIR}" \
+  --host-resolved usr/libexec/dkr-r/DKR-R-FilePicker
 collect_linux_dependency_notices "${APPDIR}"
 validate_release_tree "${APPDIR}"
 run_appimage "${APPIMAGE_PLUGIN}" --appdir "${APPDIR}"

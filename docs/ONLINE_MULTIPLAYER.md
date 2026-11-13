@@ -1,4 +1,4 @@
-# DKR-R Online — v1.0.12
+# DKR-R Online — v1.0.15
 
 Open **DKR-R Online** in the existing launcher. Public/Friends browsing,
 Private/Public hosting, Discord sign-in and a total online count sit alongside
@@ -6,7 +6,7 @@ the existing lobby controls. There is no separate website page to use.
 
 Races and minigames support up to four racing ports; Adventure supports two
 racers. A spectator-capable lobby can also have eight spectators. Everyone
-needs a compatible complete v1.0.12 package, supported original ROM revision,
+needs a compatible complete v1.0.15 package, supported original ROM revision,
 admitted gameplay rules and verified session mods. Keep `assets` and private
 workers with the installation.
 
@@ -14,7 +14,7 @@ workers with the installation.
 
 1. Select your original ROM and local input profile. Your local controller
    mapping is independent of the online player number.
-2. Reuse your existing Mod Store Discord account or select **Sign in with
+2. Reuse your existing Mod Library Discord account or select **Sign in with
    Discord** in Online. Finish the normal browser pairing flow.
 3. Connect Online. **Public** lists worldwide public lobbies; **Friends** keeps
    the friend/invitation list. Public cards offer **Request to join** or
@@ -38,7 +38,7 @@ removes this instance. See [public lobbies and privacy](PUBLIC_LOBBIES.md).
 ## Profile, pictures and friends
 
 Open **Online Profile** for your shared display name, picture and account
-settings. There is one name for Online, friends and the Mod Store. Edit it and
+settings. There is one name for Online, friends and the Mod Library. Edit it and
 choose **Save profile**. An active lobby keeps its current name until you leave;
 failed saves keep your draft so you can retry. Ordinary text fields use a
 case-readable font. The Discord username is no longer repeated underneath.
@@ -51,7 +51,7 @@ name and image metadata. The launcher offers separate choices for each.
 
 Privacy and Share a friend code sit below the profile header. Account settings
 contains **Keep me signed in**, sign-out, privacy information and the existing
-confirmed library-account deletion. Reviews and requests stay in the Mod Store.
+confirmed library-account deletion. Reviews and requests stay in the Mod Library.
 Deleting the library account does not delete your Discord account or local mods.
 
 The Friends tab uses compact cards with a picture, name, status and actions.
@@ -98,14 +98,15 @@ narrow windows, the lobby filters remain above the list.
 6. The host can run **Check Rollback connection**, review the Scoreboard, then
    start the synchronised countdown.
 
-Host rules and the enabled mod catalogue are frozen for the session. Changing
-the mod set requires recreating the lobby. The host guides shared menus until
+The admitted mod catalogue and launch content are frozen for the session. Changing
+the mod set requires recreating the lobby. Timing and selected host rules can
+be edited as described below. The host guides shared menus until
 Player Select by default; online slots receive their correct native players
 without remapping physical controllers to local ports.
 
 The public host mode is **Rollback**. It uses the existing owned replay backend
 internally named `ExperimentalRollback`. The old Auto, Host Prediction and
-Strict Input Sync selector is no longer offered for v1.0.12 public hosting.
+Strict Input Sync selector is no longer offered for v1.0.15 public hosting.
 Old wire enum values and historical investigations have not been reinterpreted.
 Do not change configuration files to bypass the supported-mode gate.
 
@@ -138,9 +139,46 @@ racing grade. Role/roster or tested-setting changes make an old report stale.
 Grades describe a short network sample, not hardware FPS, checkpoint download
 speed or a guarantee against desync. No settings change automatically. Start
 with automatic input delay; the prediction window is adjustable from 2–20
-frames, with ten frames a useful starting recommendation for distant players.
-More prediction can increase replay work. A small window can run out before
-actual inputs arrive. Changes apply to the next agreed lobby rules.
+frames. Fresh profiles start at 14 frames with Auto delay ON and a one-frame
+initial lead; existing saved preferences are kept. A larger window can help
+with distant players but costs more memory and can increase replay work. A small
+window can run out before actual inputs arrive. Auto delay cannot remove network
+propagation time or hide an arbitrary outage.
+
+## Changing host settings while playing
+
+Open **Host settings** in the waiting lobby or the in-game Online overlay.
+Edit the draft and press **Apply changes**. Only the current host can apply it;
+accepted values are also saved for future lobbies. Loading/return transitions
+must finish first. Unsubmitted edits do not affect the session.
+
+| Setting | When it applies |
+| --- | --- |
+| Prediction window, 2–20 frames | During the current game; existing correction history is retained. |
+| Auto/manual input delay, 0–9 frames | During the current game; published inputs and button edges are retained. |
+| Allow new spectators | Immediately; current viewers remain connected. |
+| Capacity, menu control and replay edits during play | Queued until return to the lobby; the host can cancel them. |
+| Development mode | Requires a new lobby with its usual consent/save rules. |
+
+A room created without spectator capability must be recreated before spectators
+can be enabled. Reducing the prediction window can hold further prediction while
+missing input catches up. It does not reset the race or discard an in-flight
+correction. Applying unchanged values preserves Ready status.
+
+## Input delivery and recovery
+
+Analogue values stay current while queued button edges are retained. Automatic
+delay uses typical delivery lateness and measured waiting rather than one old
+packet; confirmed menu/resource waits are excluded from race-delay feedback.
+Clients follow authenticated host progress and recover gradually after hitches.
+Short corrections service the connection between steps.
+
+Compatible peers can establish a separate encrypted ICE datagram route for
+small racing inputs and repairs. The existing WebRTC path remains the fallback;
+setup and lifecycle messages keep their existing delivery. Input queues are
+bounded, repair history is batched and old unsent progress reports can be
+replaced. Final racing inputs remain immutable. The route is not available on
+every network and does not guarantee a particular frame rate or input delay.
 
 ## Spectators and player swaps
 
@@ -227,7 +265,7 @@ other racers. See [Graphics](GRAPHICS.md) and [Sound](SOUND.md).
 The website API provides worldwide discovery, account presence and bounded
 admission. PeerJS/STUN still establishes the existing direct WebRTC connection;
 Rollback carries the match. The website does not relay gameplay frames. There
-is no bundled TURN service, voice/text chat or universal NAT traversal.
+is no bundled TURN service, voice chat or universal NAT traversal.
 Restrictive firewalls/mobile networks can still block a direct route, and peers
 can see each other's public network addresses.
 
@@ -246,3 +284,14 @@ ROM revision, racer/spectator count, enabled mods, delay/window and exact scene.
 Distinguish input waits, replay work, loading and rendering. Remove private
 codes, credentials and paths before sharing. [Troubleshooting](TROUBLESHOOTING.md)
 lists the relevant recovery steps and log locations.
+
+## Initial startup presentation
+
+Starting from the lobby fades into **Syncing Game / Getting everyone ready...**,
+using the circular logo, scrolling clouds and grey caption from offline startup.
+The game renderer keeps that screen through initial admission and fades it away
+after a real ready presentation. It does not release peers on a timer or show
+an invented completion percentage. Open Launcher or Escape/B uses the ordinary
+stop/end-match path. Later course transitions keep their existing presentation.
+Renderer creation can still cause a brief native window transition before the
+UI can draw. See [Launcher](LAUNCHER.md).

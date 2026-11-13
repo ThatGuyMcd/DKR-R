@@ -1,0 +1,141 @@
+DKR-R v1.0.14 Beta 3
+
+Controller Navigation Fix Test
+
+The left stick moves between main-panel elements and the right stick scrolls.
+This mapping works with D-pad sidebar navigation and LB / RB navigation in
+both the launcher and in-game overlay. In LB / RB mode, the D-pad can also
+navigate the main panel. Dialogs receive their own scrolling. Held sticks
+must return to neutral after an input capture or reopening the overlay.
+
+Library Controls Consistency Test
+
+Tracks, Characters, Custom Magic Codes and Vehicles now share one Search,
+Status and Sort layout. Vehicles has working On/Off filtering and name
+sorting. Duplicate review and the other result actions have their own padded
+row. The Tracks format key is under Filters so the search bar stays in place.
+
+Mod Library keyboard buttons sit beside their textboxes, including searches,
+comments, reviews, requests and management forms. Labels stay above the input.
+Multiline fields keep the button at their top right; very narrow fields put
+it below the input. This works in the launcher and the in-game overlay.
+
+Launcher and Overlay Parity Test
+
+The launcher and overlay now share their page layouts. Play keeps its card,
+Spotlight and tools while playing, with Return to the race in the same place.
+Installed Mods uses the full width, including Textures and its ROM warning.
+Import Mods lines up with Refresh and Website. Ready to race is centred.
+
+The save summary has a small Vanilla / Modded / Online light indicator.
+Ordinary offline mods still share your personal Adventure; the label says so.
+Online and isolated development saves keep their own owners. Using shows the
+running save, while Next describes the next launch.
+
+Sidebar navigation, just above Restart's divider, switches between LB / RB
+and D-pad. In D-pad mode use the stick to navigate the page on the right.
+The choice is saved and works in the launcher and overlay.
+
+Hover and controller focus patterns follow the automatic seasonal theme:
+spiderwebs for Halloween, fireworks for Bonfire Night, wrapping paper for
+Christmas and matching patterns for the other supported seasons and holidays.
+The seasonal corner decorations also appear in the overlay.
+
+Mod Library Toolbar Test
+
+Removed Browse and Inspect and the view-switch buttons. Mod Library now
+always uses the card grid, including when an old view choice was saved.
+Search, Keyboard and Sort by share one aligned row. Smaller windows put
+Sort by underneath. Cards still open their full details and comments.
+
+Sidebar Layout Test
+
+Centred the sidebar's page buttons and moved Restart and Exit to the bottom.
+Mods / Hacks is now called Installed Mods, including in the in-game overlay.
+Your installed mods, selections and settings stay where they are.
+Texture Packs and Texture Dumping no longer need expanding. Their controls
+are visible as soon as you open Installed Mods > Textures.
+Play now greets you during the active holiday, beside the page heading.
+It follows the same automatic region and calendar as the launcher decorations.
+
+Seasonal Artwork and Controls Test
+
+Added the new seasonal corner decorations! They use the approved rendered
+designs, with a different pair for each season and event. These are sprites,
+so there is no live 3D rendering in the launcher.
+
+Themes now follow your computer's region and local date. Removed Launcher
+appearance from About DKR-R. Old manual theme choices won't override it.
+Windows uses its country setting. Linux and Steam Deck use the regional locale.
+If no region is available, the original blue clouds are kept.
+
+Device, Button mapping, Stick response, Motion and Shortcuts now use the same
+lettered category tabs as My mods. The row wraps on smaller screens.
+
+Launcher Layout Test
+
+Shortened the Mod Library cards! The grid fits up to six across, with shorter
+title space and compact metadata. Long names are still shown in Details.
+Achievements and Save Manager now live in Play, with orange buttons at the
+bottom of the ROM area. They are in the in-game Play overlay too.
+
+Moved Community Spotlight above Ready to Race and fixed the image corners.
+The banner stays above the Mod Library tabs on every page now, so they stay put.
+Library pages fill the width, with smaller mod cards to match Mods / Hacks.
+Refresh and Website have the same orange button style as Check for updates.
+
+Textures now lives in Mods / Hacks, between Magic Codes and Track Lab.
+Enabled mod cards just say ON. Their next-launch behaviour stays the same.
+
+Tidied up Play! The ROM controls sit on the left, with Skip intro, Portable
+mode and your offline save on the right. Smaller windows stack them neatly.
+Play and Mods / Hacks now show the website's rotating featured mods too.
+
+Added smooth page and section fades throughout the launcher, including vehicle
+cards. Mod Library now uses the same heading and section buttons as the rest.
+
+Controller Feedback Test
+
+Added Controller feedback in Controls! Choose Classic or Enhanced, set up
+each player's controller and test the left and right sides separately.
+Enhanced adds impacts, boost, landings, pickups and optional engine/road feel.
+DualSense users can try trigger resistance, player lights and touch shortcuts.
+The analogue driving mod still needs to be active for pedal resistance.
+
+Deck users can compare ordinary haptic rumble with experimental native patterns
+when the physical Deck controller is available. Steam virtual controllers keep
+their normal output route. Experimental USB waveform haptics needs a matching
+four-channel DualSense audio endpoint. These extras are off by default and
+still need real controller testing. Copy feedback diagnostics if output fails.
+
+Fixed a crash when opening Mods / Hacks after moving Mod Library to the sidebar.
+
+You can now use proper analogue acceleration and braking! Pull the trigger
+a little for a little throttle or brake, or pull it all the way for full input.
+Both triggers work together, with separate settings for each local player.
+
+Import and enable the companion Analogue Acceleration & Braking mod, then go
+to the mod's Details and apply the RT / LT driving layout. RT is the
+accelerator, LT is the brake and LB uses items. You can change the bindings,
+deadzone, full travel and response curve. The live bars show what is being read.
+
+Look behind is back in Graphics > HUD & effects! Map Look back in Controls.
+It works without ModernCamera++, including for hosts and clients online.
+Your own binding controls your own view.
+
+The full CRT filter controls are now in Graphics > HUD & effects. Removed the
+duplicate section from Textures. Your existing filter settings are kept.
+
+Mod Library has its own sidebar button above Mods / Hacks! It works in the
+launcher and in-game overlay. Renamed it from Mod Store as the mods are free.
+
+Analogue bindings and calibration now live in the Custom Magic Code's Details.
+Pick your local player there. Existing controls are kept, and you can adjust
+them during an online lobby or game, including with a temporary session copy.
+
+The brighter DKR water and all the recent online, input, rendering, memory,
+HUD, spectator, lobby and launcher fixes are kept.
+
+Everyone testing online needs these matching Beta 3 builds. The analogue mod
+needs to be enabled by the host, and each player can choose their own controls.
+Use a separate folder for this test. This beta is not on the stable updater.

@@ -1,3 +1,4 @@
+#include "storage/maintenance.hpp"
 #include "legacy_import_library.hpp"
 #include "legacy_mod_process.hpp"
 #include <json/json.hpp>
@@ -138,6 +139,7 @@ bool ImportLibrary::start(std::filesystem::path source,std::vector<std::filesyst
      view_.stage=scan?"Reading imported content":"Preparing legacy import";view_.result.clear();publish();}
     try {
         thread_=std::jthread([this,source=std::move(source),roms=std::move(roms),scan](std::stop_token stop) {
+    dkr::storage::Activity storage_activity;
             std::filesystem::path job;
             try {
                 std::filesystem::create_directories(root_);ordinary_directory(root_);

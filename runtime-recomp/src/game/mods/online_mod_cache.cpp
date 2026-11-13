@@ -1,3 +1,4 @@
+#include "storage/maintenance.hpp"
 #include "../netplay/setup_policy.hpp"
 #include "online_mod_cache.hpp"
 #include <cerrno>
@@ -13,11 +14,13 @@
 
 namespace dkr::mods::online {
 bool cached_payload(const std::filesystem::path& directory,const Payload& expected) {
+    dkr::storage::Activity storage_activity;
     check_storage(directory,true);const auto file=private_storage_path(directory)/expected.digest;
     if(!std::filesystem::exists(file))return false;
     check_storage(file,false);
     if(std::filesystem::file_size(file)!=expected.size || sha256(read_file(file,static_cast<std::size_t>(expected.size)))!=expected.digest)
         throw Error("A cached online mod is corrupt. No profile was activated; remove the affected online cache before retrying.");
+    dkr::storage::used(file);
     return true;
 }
 void cache_bundle(const Bundle& bundle,const std::filesystem::path& directory,std::stop_token stop) {
@@ -89,9 +92,8 @@ void PayloadFile::append(View bytes) {
         at+=static_cast<std::size_t>(count);
     }
 #endif
-    size_ += bytes.size();
-    if (size_ - flushed_ >= dkr::online_performance::DurableBatch)
-        flush();
+    size_+=bytes.size();
+    if(size_-flushed_>=dkr::online_performance::DurableBatch)flush();
 }
 void PayloadFile::flush() {
     if(handle_==-1 || size_==flushed_)return;

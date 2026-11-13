@@ -132,7 +132,8 @@ int main() {
                 used += frame;
                 ++packets;
             }
-            assert(used <= (256U << 10U) && packets > 16);
+            // v1.0.15 raised the setup allowance from 256 KiB to 2 MiB.
+            assert(used <= dkr::online_performance::SetupBytes && packets > 16);
             assert(additional_capacity(TransportTrafficClass::Control, setup_bulk, 0, used, 1000));
             assert(additional_capacity(TransportTrafficClass::Authoritative, setup_bulk, 0, used, 1000));
         }

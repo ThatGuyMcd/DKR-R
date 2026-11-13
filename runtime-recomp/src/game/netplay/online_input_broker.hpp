@@ -1,5 +1,4 @@
 #pragma once
-
 #include "netplay_types.hpp"
 
 #include <array>
@@ -58,7 +57,7 @@ public:
     void reset();
 
     void capture_local(std::size_t profile, std::uint16_t buttons,
-                       float stick_x, float stick_y, bool blocked);
+                       float stick_x, float stick_y, bool blocked, std::uint8_t accelerator=0,std::uint8_t brake=0,std::uint8_t driving_flags=0);
     LocalInputSample local_sample() const;
 
     bool publish(std::uint32_t frame, InputFrameSource source,
@@ -84,3 +83,4 @@ private:
 OnlineInputBroker& online_input_broker();
 
 } // namespace dkr::runtime::netplay
+

@@ -1,5 +1,6 @@
 #include "direct_session.hpp"
 #include "online_mod_sync_link.hpp"
+#include "online_stability/transfer_window.hpp"
 #include "mods/online_mod_manifest.hpp"
 #include "netplay_build_identity.hpp"
 #include <stdexcept>
@@ -130,7 +131,8 @@ struct DirectSessionTestAccess {
             check(host.mod_inbound_bytes_==std::size_t(packets)*data.payload.size());
             // Overflow remains bounded and cannot disconnect unrelated peers.
             for(unsigned i=0;i<600;++i)check(host.handle_mod_packet_locked(201,data));
-            check(host.mod_inbound_bytes_<=512U*1024 && host.mod_inbound_.size()<=512);
+            // v1.0.15 holds the largest negotiable transfer window plus 128 KiB of headroom.
+            check(host.mod_inbound_bytes_<=dkr::online_stability::MaximumTransferWindow+128U*1024 && host.mod_inbound_.size()<=512);
             const auto before=host.mod_inbound_bytes_;
             check(host.handle_mod_packet_locked(201,data) && host.mod_inbound_bytes_==before);
             check(host.state_==ConnectionState::Hosting);

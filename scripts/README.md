@@ -1,6 +1,6 @@
 # Repository scripts
 
-## v1.0.12 release contract
+## v1.0.14 release contract
 
 The release steps are `scripts/release/` ([Building](../docs/BUILDING.md#release-packages)). Packaging uses explicit runtime/legal allowlists; no offline Player Guide or old playtest handoff notes. Both US revisions, all owned payloads and exact staged inputs are required. Run only the named synthetic fixtures and ROM-free helper/updater checks; gameplay acceptance remains separate.
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "legacy_mod_format.hpp"
 #include "vehicle_protocol.hpp"
+#include "vehicle_lighting/lighting.hpp"
 #include <json/json.hpp>
 #include <map>
 #include <memory>
@@ -20,6 +21,7 @@ struct Mesh {
     std::vector<Vec3> vertices;
     std::vector<Vec2> uv;
     std::vector<std::array<unsigned,3>> faces;
+    std::vector<runtime::vehicles::lighting::Corners> normals; // Derived face corners; not package/simulation data.
     std::array<std::uint8_t,4> colour{255,255,255,255};
     int texture=-1;
     bool double_sided=false;

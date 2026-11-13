@@ -1,3 +1,4 @@
+#include "water_style/appearance.hpp"
 #pragma once
 #include "enhanced_water_registry.hpp"
 #include "enhanced_water_settings.hpp"
@@ -209,6 +210,10 @@ inline void apply_material(RT64::State& state, const Registry& registry,
                 camera_valid ? "valid" : "missing",unsigned(procedural));
         }
     }
+    static_assert(dkr::runtime::water::style::kDkrStyleFlag==WATER_STYLE_DKR);
+    if(material.identity.x>0 && surface)
+        dkr::runtime::water::style::apply(material,surface->kind,
+            registry.metadata() && registry.metadata()->profile.has_value());
     if(std::memcmp(&material,&state.waterMaterial,sizeof(material))!=0) {
         state.flush();
         state.waterMaterial=material;
@@ -217,3 +222,4 @@ inline void apply_material(RT64::State& state, const Registry& registry,
     state.waterRayGeometry=material.effects.w>0.5F ? registry.ray_geometry() : nullptr;
 }
 }
+
