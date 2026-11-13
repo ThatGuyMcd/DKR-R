@@ -36,11 +36,15 @@ The [platform guide](PLATFORMS.md) lists package versions, ABI requirements and 
 ## Tools and preparation
 
 Windows needs Visual Studio 2022 Desktop development with C++, Git, Python 3,
-PowerShell and WSL2/Ubuntu for the preparation workflow.
+PowerShell and WSL2/Ubuntu for the preparation workflow. `Setup-Windows.cmd`
+checks for them.
 Use native Windows Git and CMake. MSYS executables ahead of them in PATH can
 misinterpret Windows paths and Git revision expressions during the checks.
 Linux needs CMake 3.24+, Ninja, a compatible C++ toolchain, Vulkan/display
-development libraries and the AppImage packaging tools.
+development libraries and the AppImage packaging tools. `./Setup-Linux.sh`
+checks the build tools and development packages, and prints the Ubuntu 24.04
+package list when one is missing.
+Each Setup script then installs the git hooks unless you pass `--skip-hooks`.
 Use the locked dependency revisions, not arbitrary installed substitutes.
 
 Linux updater checks use libcurl 7.85+ with HTTPS certificate validation; install
@@ -165,7 +169,15 @@ on the Windows script, or `DKR_LINUX_GENERATED_SOURCE`/
 `DKR_LINUX_V80_GENERATED_SOURCE` on Linux.
 `./Build-Linux.sh` builds and tests; add `--package` only when you want an
 AppImage. `./Build-Linux.sh --help` lists the input and output overrides.
-They do not configure the extra owned outputs automatically; don't describe
+`--package` also needs linuxdeploy and its AppImage plugin, by default at
+`.deps/tools/linuxdeploy-x86_64.AppImage` and `.deps/tools/linuxdeploy-plugin-appimage`;
+set `LINUXDEPLOY` and `LINUXDEPLOY_PLUGIN_APPIMAGE` to use other copies.
+Packaging copies the build host's `libwayland-client.so.0` into the AppImage as a
+fallback, so install `libwayland-client0` (or set `DKR_WAYLAND_CLIENT_LIBRARY` and
+`DKR_WAYLAND_CLIENT_COPYRIGHT`). It then fails if a bundled binary needs a library
+that is neither bundled nor on the host-provided list in
+`scripts/Check-AppDir-Closure.sh`; `DKR_APPDIR_EXTRA_HOST_LIBS` extends that list.
+Neither wrapper configures the extra owned outputs automatically; don't describe
 that basic build as reproduction of the full experimental Public Build.
 
 ## macOS
@@ -173,7 +185,7 @@ that basic build as reproduction of the full experimental Public Build.
 Run `./Setup-macOS.sh` to install and check prerequisites, or
 `./Setup-macOS.sh --skip-deps` to check without installing. Setup and Build's
 preparation share the same checks: the Command Line Tools (`xcode-select --install`),
-GNU Make 4+ (`gmake`), CMake, Ninja, Python, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
+GNU Make 4+ (`gmake`), CMake, Ninja, Python 3.11+, SDL2, PCRE2, and a `sha1sum` supporting `-c --quiet`
 (Homebrew `coreutils`). The verifier is checked before ROM extraction.
 
 Full Xcode is optional. When its Metal toolchain runs (`xcrun metal -v`), RT64's
@@ -208,6 +220,8 @@ With the Command Line Tools and Homebrew installed:
 The script prepares pinned checkouts and both normal payloads. Add `--package`
 for an ad-hoc-signed app ZIP, not a notarised public release. Bundled Homebrew
 libraries inherit the host's macOS deployment requirements.
+`./Build-macOS.sh --help` lists `--jobs`, `--force` and the build and payload
+directory overrides.
 
 For a public release, use `--notarize` instead. It signs with a Developer ID,
 notarizes, staples, and writes `dist/DKR-R-<version>-macOS-<arch>-notarized.zip`:
