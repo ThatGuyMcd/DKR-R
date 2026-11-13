@@ -57,6 +57,8 @@ runs:
         PYTHON_EXECUTABLE: ${{ runner.os == 'Windows' && 'python' || 'python3' }}
       run: |
         read -r repository commit < <("$PYTHON_EXECUTABLE" -c "import json; e = next(d for d in json.load(open('dependencies.lock.json'))['dependencies'] if d['name'] == 'dkr-decomp'); print(e['repository'], e['commit'])")
+        # Python on Windows ends the line with CRLF; read keeps the CR.
+        commit="${commit%$'\r'}"
         if [[ ! -d extern/dkr-decomp/.git ]]; then
           git init --quiet extern/dkr-decomp
           git -C extern/dkr-decomp remote add origin "$repository"
