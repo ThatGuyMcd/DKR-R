@@ -229,6 +229,26 @@ static float mc_fbm(unsigned int seed, float t) {
     return mc_noise(seed, t) * 0.57f + mc_noise(seed + 17u, t * 2.13f) * 0.29f + mc_noise(seed + 31u, t * 4.37f) * 0.14f;
 }
 
+/* Ponta do braço a partir da âncora, com essa direção e elevação. */
+static MCVec3 mc_boom_eye(MCVec3 anchor, float camYaw, float elev, float boomLen) {
+    MCVec3 dir = mc_v3(-MC_SIN(camYaw) * MC_COS(elev), MC_SIN(elev), -MC_COS(camYaw) * MC_COS(elev));
+    return mc_add(anchor, mc_scale(dir, boomLen));
+}
+
+/* Fração livre do braço do pivô até eye (1 = nada no caminho). */
+static float mc_boom_clear(MCRaycastFn raycast, void* user, MCVec3 pivot, MCVec3 eye, float radius) {
+    float f = 1.0f;
+    if (raycast && raycast(user, pivot, eye, radius, &f)) {
+        return mc_clamp(f, 0.0f, 1.0f);
+    }
+    return 1.0f;
+}
+
+/* Subida por cima de uma parede: elevações tentadas e o teto delas. */
+#define MC_LIFT_STEPS 5
+#define MC_LIFT_RISE  10.0f
+#define MC_ELEV_MAX   1.4f
+
 /* Mola amortecida (massa-mola) integrada em sub-passos de até 1/240 s. */
 static void mc_spring(float* x, float* v, float target, float freq, float damp, float dt) {
     float om = MC_TWO_PI * freq;
@@ -274,9 +294,11 @@ void ModernCam_DefaultParams(MCParams* p) {
     p->heightSharpness = 7.0f;
     p->airHeightSharpness = 2.5f;
     p->maxVerticalLag = 2.0f;
+    p->riseLag = 0.3f;
 
     p->slopeFollow = 0.6f;
     p->slopeSharpness = 4.0f;
+    p->slopeMax = 0.2f;
 
     p->lookAhead = 0.18f;
     p->lookAheadMax = 3.0f;
@@ -300,6 +322,9 @@ void ModernCam_DefaultParams(MCParams* p) {
 
     p->collisionRadius = 0.3f;
     p->collisionReleaseSharpness = 4.0f;
+    p->collisionPullSharpness = 0.0f;
+    p->collisionMinDist = 1.6f;
+    p->collisionLiftMax = 1.0f;
 
     p->traumaDecay = 1.4f;
     p->boostTrauma = 0.15f;
@@ -338,7 +363,7 @@ void ModernCam_Reset(MCState* s, const MCParams* p, const MCInput* in) {
     s->anchor = in->pos;
     s->lookAheadVec = mc_v3(0.0f, 0.0f, 0.0f);
     s->speed01 = speed01;
-    s->slope = in->grounded ? in->slopePitch * p->slopeFollow : 0.0f;
+    s->slope = in->grounded ? mc_clamp(in->slopePitch * p->slopeFollow, -p->slopeMax, p->slopeMax) : 0.0f;
     s->fov = p->fovBase + p->fovSpeed * speed01;
     s->boostFov = 0.0f;
     s->roll = 0.0f;
@@ -346,6 +371,8 @@ void ModernCam_Reset(MCState* s, const MCParams* p, const MCInput* in) {
     s->orbitPitch = 0.0f;
     s->idleTime = 0.0f;
     s->collisionDist = 1.0f;
+    s->collisionTarget = 1.0f;
+    s->lift = 0.0f;
     s->trauma = 0.0f;
     s->time = 0.0f;
     s->prevVehicleYaw = s->yaw;
@@ -376,7 +403,7 @@ void ModernCam_Update(MCState* s, const MCParams* p, const MCInput* in, float dt
                       MCRaycastFn raycast, void* user, MCOutput* out) {
     const MCVec3 worldUp = mc_v3(0.0f, 1.0f, 0.0f);
     const float sc = p->unitScale;
-    MCVec3 flatVel, pivot, eyeDesired, eye, target, boomDir;
+    MCVec3 flatVel, pivot, eyeDesired, eye, target;
     MCVec3 forward, right, camUp;
     float flatSpeed, speed01, heading, targetYaw, minSpeed;
     float headingRate, offset, spinW, velYaw, omega;
@@ -539,14 +566,32 @@ void ModernCam_Update(MCState* s, const MCParams* p, const MCInput* in, float dt
             s->anchorVel.x = in->vel.x;
             s->anchorVel.z = in->vel.z;
         }
+        /* Numa batida o carro é jogado para trás e arranca de novo. A mola
+           passava do ponto, recuava e avançava: a câmera chegava perto do
+           carro e se afastava. Com hold a âncora fica presa ao carro, como
+           a câmera original: o rebote leva a câmera junto e a distância não
+           muda. A velocidade segue a do carro, para soltar sem tranco. */
+        if (in->hold > 0.0f && dt > 0.0f) {
+            float h = mc_clamp(in->hold, 0.0f, 1.0f);
+            s->anchor.x += (in->pos.x - s->anchor.x) * h;
+            s->anchor.z += (in->pos.z - s->anchor.z) * h;
+            s->anchorVel.x += (vel.x - s->anchorVel.x) * h;
+            s->anchorVel.z += (vel.z - s->anchorVel.z) * h;
+        }
         s->prevVel = vel;
         s->anchor.y = mc_follow_moving(s->anchor.y, s->prevPos.y, in->pos.y, kV, dt);
-        s->anchor.y = mc_clamp(s->anchor.y, in->pos.y - maxLag, in->pos.y + maxLag);
+        /* no chão, um carro que sobe (rampa, barranco, parede) leva a câmera
+           junto: ela nunca fica mais que riseLag abaixo dele olhando para
+           cima. No ar o atraso inteiro continua, para o pulo não sacudir. */
+        s->anchor.y = mc_clamp(s->anchor.y,
+                               in->pos.y - (in->grounded ? mc_min(mc_max(p->riseLag, 0.0f) * sc, maxLag) : maxLag),
+                               in->pos.y + maxLag);
     }
 
-    /* 6. Inclinação do terreno (congela no ar) --------------------------- */
+    /* 6. Inclinação do terreno (congela no ar), até slopeMax ------------- */
     if (in->grounded) {
-        s->slope += (in->slopePitch * p->slopeFollow - s->slope) * mc_follow(p->slopeSharpness, dt);
+        float tilt = mc_clamp(in->slopePitch * p->slopeFollow, -p->slopeMax, p->slopeMax);
+        s->slope += (tilt - s->slope) * mc_follow(p->slopeSharpness, dt);
     }
 
     /* 7. Look-ahead -------------------------------------------------------- */
@@ -597,27 +642,67 @@ void ModernCam_Update(MCState* s, const MCParams* p, const MCInput* in, float dt
     dist = mc_lerp(p->distMin, p->distMax, s->speed01) * sc + s->kick;
     height = mc_lerp(p->heightMin, p->heightMax, s->speed01) * sc;
     boomLen = MC_SQRT(dist * dist + height * height);
-    elev = mc_clamp(MC_ATAN2(height, dist) + s->orbitPitch - s->slope, -0.3f, 1.4f);
+    elev = mc_clamp(MC_ATAN2(height, dist) + s->orbitPitch - s->slope, -0.3f, MC_ELEV_MAX);
     camYaw = s->yaw + s->orbitYaw + (in->lookBack ? MC_PI : 0.0f);
-
-    boomDir = mc_v3(-MC_SIN(camYaw) * MC_COS(elev), MC_SIN(elev), -MC_COS(camYaw) * MC_COS(elev));
-    eyeDesired = mc_add(s->anchor, mc_scale(boomDir, boomLen));
     pivot = mc_add(s->anchor, mc_scale(worldUp, p->targetHeight * sc));
 
     /* 9. Colisão: entra na hora, sai devagar ----------------------------- */
+    /* Uma parede entre o carro e a câmera encurta o braço, mas nunca a menos
+       de collisionMinDist do pivô: mais perto que isso a câmera entra no
+       personagem. Antes de chegar lá ela sobe por cima do carro, o mínimo que
+       deixa o braço livre (até collisionLiftMax), e desce devagar depois. */
     {
-        float allowed = 1.0f;
-        if (raycast) {
-            float f = 1.0f;
-            if (raycast(user, pivot, eyeDesired, p->collisionRadius * sc, &f)) {
-                allowed = mc_clamp(f, 0.05f, 1.0f);
+        float radius = p->collisionRadius * sc;
+        float minDist = mc_max(p->collisionMinDist, 0.0f) * sc;
+        float enough = mc_min(minDist * 1.25f, boomLen);
+        float allowed, floorFrac, pivotLen;
+        if (p->collisionLiftMax <= 0.0f) {
+            s->lift = 0.0f;
+        }
+        eyeDesired = mc_boom_eye(s->anchor, camYaw, mc_min(elev + s->lift, MC_ELEV_MAX), boomLen);
+        allowed = mc_boom_clear(raycast, user, pivot, eyeDesired, radius);
+        if (raycast && p->collisionLiftMax > 0.0f &&
+            (s->lift > 0.0f || (allowed < 1.0f && allowed * boomLen < enough))) {
+            float liftTarget = p->collisionLiftMax;
+            int k;
+            for (k = 0; k <= MC_LIFT_STEPS; ++k) {
+                float lift = p->collisionLiftMax * (float)k / (float)MC_LIFT_STEPS;
+                float f = mc_boom_clear(raycast, user, pivot,
+                                        mc_boom_eye(s->anchor, camYaw, mc_min(elev + lift, MC_ELEV_MAX), boomLen),
+                                        radius);
+                if (f >= 1.0f || f * boomLen >= enough) {
+                    liftTarget = lift;
+                    break;
+                }
             }
+            s->lift += (liftTarget - s->lift) *
+                mc_follow(liftTarget > s->lift ? MC_LIFT_RISE : p->collisionReleaseSharpness, dt);
+            if (liftTarget <= 0.0f && s->lift < 0.001f) {
+                s->lift = 0.0f;
+            }
+            eyeDesired = mc_boom_eye(s->anchor, camYaw, mc_min(elev + s->lift, MC_ELEV_MAX), boomLen);
+            allowed = mc_boom_clear(raycast, user, pivot, eyeDesired, radius);
         }
+        pivotLen = mc_len(mc_sub(eyeDesired, pivot));
+        floorFrac = mc_max(pivotLen > minDist ? minDist / pivotLen : 1.0f, 0.05f);
+        allowed = mc_clamp(allowed, floorFrac, 1.0f);
+        s->collisionTarget = allowed;
         if (allowed < s->collisionDist) {
-            s->collisionDist = allowed;
+            /* entra rápido, mas desliza: encurtar o braço de uma vez fazia o
+               olho saltar metros num quadro. collisionPullSharpness 0 (ou
+               muito alto) volta ao corte seco. */
+            if (p->collisionPullSharpness > 0.0f && p->collisionPullSharpness < 100.0f) {
+                s->collisionDist += (allowed - s->collisionDist) * mc_follow(p->collisionPullSharpness, dt);
+            } else {
+                s->collisionDist = allowed;
+            }
         } else {
-            s->collisionDist += (allowed - s->collisionDist) * mc_follow(p->collisionReleaseSharpness, dt);
+            /* numa batida (hold) o braço não volta a esticar: o carro
+               quicando tira a parede do caminho e a câmera recuaria junto */
+            s->collisionDist += (allowed - s->collisionDist) *
+                mc_follow(p->collisionReleaseSharpness * (1.0f - mc_clamp(in->hold, 0.0f, 1.0f)), dt);
         }
+        s->collisionDist = mc_max(s->collisionDist, floorFrac);
     }
     eye = mc_add(pivot, mc_scale(mc_sub(eyeDesired, pivot), s->collisionDist));
     target = mc_add(pivot, s->lookAheadVec);

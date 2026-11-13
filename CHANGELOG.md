@@ -88,6 +88,19 @@
   Steam Deck Wi-Fi and separate-machine acceptance remain necessary. See the
   release validation record for exact final-build coverage.
 
+- Custom tracks can carry up to 127 checkpoints per vehicle set, up from
+  retail's 60, for finer AI racing lines. Two recomp-policy instruction patches
+  grow the checkpoint table and its load bound in both revisions.
+- Track Lab boss races start and end: a `.dkrmap` boss level no longer loads an
+  unrelated level in place of the retail intro and outro scenes, whose lookup
+  table holds only retail level ids.
+- Shadows can no longer overflow the game's fixed shadow arrays. A custom floor
+  cut into many small faces under a racer used to draw stray triangles and then
+  crash; the shadow now drops the pieces that do not fit.
+- A hub's exits can lead to other `.dkrmap` tracks. The package names the
+  destination track in `levelLinks`, and the runtime writes its level id into
+  the exit when the hub's object map loads.
+
 ## 1.0.14 — 2026-11-04
 
 - Manual Play now fades into the shared Starting Game screen with inline mod

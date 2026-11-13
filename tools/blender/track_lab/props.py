@@ -543,6 +543,69 @@ class DKR_SceneSettings(bpy.types.PropertyGroup):
         update=_redraw_update,
     )
 
+    # -- the AI node graph -------------------------------------------------
+
+    auto_weapon_node: BoolProperty(
+        name="Auto Weapon Node",
+        description=(
+            "Bots in Battle and Bananas never see balloons: they follow the AI "
+            "node graph and fetch weapons at nodes marked destination class 1. "
+            "With this on, placing a weapon balloon also places a weapon node "
+            "on it, parented so it moves with the balloon, and links it to the "
+            "nearest graph nodes. Turn off for a balloon only players take"
+        ),
+        default=True,
+    )
+
+    show_ai_graph: BoolProperty(
+        name="Show AI Graph",
+        description=(
+            "Draw the AI node graph in the viewport: every link, weapon nodes "
+            "ringed in their balloon's colour with a green or red circle for "
+            "whether a balloon is close enough to be taken, and bank nodes in "
+            "their racer's colour. Select a node to see how far everything is "
+            "from it and the route a bot without a weapon drives from there"
+        ),
+        default=False,
+        update=_redraw_update,
+    )
+
+    ai_graph_on_top: BoolProperty(
+        name="Draw On Top",
+        description=(
+            "Draw the graph through the track instead of behind it, so nodes "
+            "under a floor or behind a wall still show"
+        ),
+        default=True,
+        update=_redraw_update,
+    )
+
+    ai_graph_colour: EnumProperty(
+        name="Colour By",
+        description=(
+            "How the selected node's heat map measures how far each node is: "
+            "red next to it, through orange, yellow and green, to blue the "
+            "furthest. Grey nodes cannot be reached from it at all"
+        ),
+        items=[
+            ("STEPS", "Steps", "By links: neighbours are one step, theirs two"),
+            ("DISTANCE", "Distance",
+             "By length along the links, as the bots' pathfinder measures it"),
+        ],
+        default="STEPS",
+        update=_redraw_update,
+    )
+
+    ai_graph_show_ids: BoolProperty(
+        name="Show Node IDs",
+        description=(
+            "Write each node's nodeID beside it - the numbers the links, the "
+            "DKR Object panel and validation use"
+        ),
+        default=False,
+        update=_redraw_update,
+    )
+
     # -- the minimap -------------------------------------------------------
     #
     # How the picture looks. Where the dots go is never a setting: the numbers

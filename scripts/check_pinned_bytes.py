@@ -62,6 +62,19 @@ DRIFTED_BASES = frozenset(
         "runtime-recomp/src/game/runtime_ui.cpp",
         "runtime-recomp/src/game/updates/update_process.cpp",
         "runtime-recomp/src/game/updates/update_process.hpp",
+        # Evolved by the Track Lab, modern camera and enhanced-water work.
+        "runtime-recomp/src/game/custom_tracks.hpp",
+        "runtime-recomp/src/game/custom_tracks_hooks.cpp",
+        "runtime-recomp/src/game/enhanced_water_rt64.hpp",
+        "runtime-recomp/src/game/modern_cam/modern_cam.c",
+        "runtime-recomp/src/game/modern_cam/modern_cam.h",
+        "runtime-recomp/src/game/modern_camera.cpp",
+        "runtime-recomp/src/game/modern_camera.hpp",
+        "runtime-recomp/src/game/modern_camera_dkr.hpp",
+        "runtime-recomp/src/game/mods/legacy_character_presentation.hpp",
+        "runtime-recomp/src/game/presentation_identity.cpp",
+        "runtime-recomp/src/game/revision_addresses.hpp",
+        "runtime-recomp/src/game/runtime_camera_tuning_ui.inl",
     }
 )
 CAPSULE = re.compile(r"^patches/release-prep/[^/]+/source-capsule-[^/]+/(?P<sha>[0-9a-f]{64})\.[A-Za-z0-9]+$")

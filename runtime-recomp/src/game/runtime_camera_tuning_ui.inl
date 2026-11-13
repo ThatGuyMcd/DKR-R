@@ -28,9 +28,10 @@ constexpr std::array<CameraTuningGroup, 12> kCameraTuningGroups{{
     {camtune::TuningGroup::Roll, "Roll", "A slight tilt as the racer turns.", false},
     {camtune::TuningGroup::Orbit, "Manual orbit",
      "Turn the camera with the right stick or mouse. Hold the right mouse button to keep the view; Escape frees the pointer.", false},
-    {camtune::TuningGroup::Collision, "Walls", "When a wall comes between the camera and the racer.", false},
+    {camtune::TuningGroup::Collision, "Walls",
+     "When a wall comes between the camera and the racer. The camera rises over the racer rather than into it.", false},
     {camtune::TuningGroup::Shake, "Shake",
-     "Shake from boosts, landings and impacts. Zero turns shake off.", true},
+     "Shake from boosts and landings. Zero turns shake off. Hits and explosions never shake this camera.", true},
     {camtune::TuningGroup::Hits, "Hits",
      "Lower values smooth the camera after collisions. 100% follows the impact immediately.",
      true},
@@ -55,11 +56,15 @@ bool SaveCameraTuning(const camtune::Tuning& tuning);
 void LoadCameraTuning() {
     camtune::Tuning tuning = camtune::default_tuning();
     bool migrated = false;
-    std::ifstream input(CameraTuningPath(), std::ios::binary);
-    if (input) {
-        std::ostringstream text;
-        text << input.rdbuf();
-        tuning = camtune::parse_tuning(text.str(), &migrated);
+    {
+        // Closed before the save below: Windows will not replace a file
+        // that is still open.
+        std::ifstream input(CameraTuningPath(), std::ios::binary);
+        if (input) {
+            std::ostringstream text;
+            text << input.rdbuf();
+            tuning = camtune::parse_tuning(text.str(), &migrated);
+        }
     }
     camtune::set_tuning(tuning);
     g_camera_tuning.saved = tuning;

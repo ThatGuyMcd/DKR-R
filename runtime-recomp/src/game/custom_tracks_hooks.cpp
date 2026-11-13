@@ -757,6 +757,51 @@ void dkr::runtime::custom_tracks::set_level_load_observer(LevelLoadObserver obse
     g_level_load_observer = observer;
 }
 
+// A boss race that has not been visited is not loaded at all the first time:
+// level_load (game.c, the RACETYPE_BOSS branch) pushes it and loads the boss's
+// introduction scene instead, found by scanning ASSET_MISC_67 for pairs of
+// {boss level, intro level} until the level id matches. A .dkrmap level is in
+// no such pair, so the scan runs past the table and loads whatever level id it
+// meets - the camera then sits frozen in an unrelated scene. racer_boss_finish
+// (vehicle_tricky.c) repeats that scan with settings->courseId when the player
+// finishes, unless the course is already cleared, and pushes the level it found
+// as the next scene. So the course is marked visited and cleared (bits 0 and 1
+// of its courseFlags): retail's own rematch path, which starts the race
+// directly and ends it with a plain transition. world 6 is served as Dino
+// Domain, so the Wizpig worlds' unconditional intro never applies to a .dkrmap
+// header, and a boss level never runs a silver coin race (objects.c tests
+// level_type()), so the cleared bit unlocks nothing.
+static void skip_custom_boss_intro(std::uint8_t* rdram, recomp_context* context,
+                                   std::int32_t level) {
+    namespace tracks_ns = dkr::runtime::custom_tracks;
+    if (level < 0 || tracks_ns::level_race_type(level) != tracks_ns::kRaceTypeBoss) {
+        return;
+    }
+    const auto* payload = dkr::runtime::active_payload();
+    if (!payload || !payload->get_settings) {
+        return;
+    }
+    recomp_context call = *context;
+    payload->get_settings(rdram, &call);
+    const auto settings = static_cast<std::uint32_t>(call.r2);
+    constexpr std::uint32_t kCourseFlagsPointer = 4U; // Settings::courseFlagsPtr
+    constexpr std::int32_t kRaceVisitedAndCleared = 1 | 2;
+    if (!addressable(settings + kCourseFlagsPointer)) {
+        return;
+    }
+    const auto flags = static_cast<std::uint32_t>(read_word(rdram, settings + kCourseFlagsPointer));
+    const std::uint32_t at = flags + 4U * static_cast<std::uint32_t>(level);
+    if (!addressable(flags) || !addressable(at)) {
+        return;
+    }
+    const std::int32_t value = read_word(rdram, at);
+    if ((value & kRaceVisitedAndCleared) != kRaceVisitedAndCleared) {
+        write_word(rdram, at, value | kRaceVisitedAndCleared);
+        std::fprintf(stderr, "[custom-tracks] level %d: boss race runs without the retail intro and outro scenes\n",
+                     static_cast<int>(level));
+    }
+}
+
 // Called by the existing level_load scene-reset hook, before the level
 // allocates anything. Every load passes here - races, Track Lab and restarts,
 // and also the Track Select previews that load_level_game's hook never sees -
@@ -773,6 +818,7 @@ extern "C" void dkr_custom_tracks_prepare_memory(std::uint8_t* rdram,
     const auto level = static_cast<std::int32_t>(context->r4);
     grow_main_pool_for_level(rdram, level);
     prepare_track_heap(level);
+    skip_custom_boss_intro(rdram, context, level);
     if (g_level_load_observer != nullptr) {
         g_level_load_observer(level);
     }
@@ -907,4 +953,115 @@ extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram,
     context->r7 = static_cast<gpr>(vehicle);
     std::fprintf(stderr, "[track-lab] level=%d vehicle=%d selected=%d players=%d\n",
                  level, vehicle, selected, players_minus_one + 1);
+}
+
+// In track_spawn_objects, on the instruction after gzip_inflate returns
+// (0x8000CAC8 in US 1.0 and Rev A alike) and before any entry is spawned:
+// s0 still holds the object map's asset offset, the one asset_load was given,
+// and 0x48(sp) the buffer the map was inflated into - a 16-byte header that
+// starts with the entries' byte count, then the entries. A hub EXIT that leads to another .dkrmap track was exported with
+// a placeholder destination, since that track's level id depends on what is
+// installed; the package's levelLinks name the byte and the track, and the id
+// resolved for this session is written in before the exit spawns. A link whose
+// track is missing keeps the placeholder (the exporter writes a retail hub).
+extern "C" void dkr_custom_tracks_object_map_links(std::uint8_t* rdram,
+                                                   recomp_context* context) {
+    if (dkr::runtime::legacy::frozen_online_resources()) return;
+    if (owned_vanilla_bootstrap()) return;
+    const auto offset = static_cast<std::uint32_t>(context->r16);
+    const auto links = dkr::runtime::custom_tracks::level_links_for_object_map(offset);
+    if (links.empty()) {
+        return;
+    }
+    const auto stack = static_cast<std::uint32_t>(context->r29);
+    if (!addressable(stack + 0x48U)) {
+        return;
+    }
+    const auto buffer = static_cast<std::uint32_t>(read_word(rdram, stack + 0x48U));
+    if (!addressable(buffer)) {
+        return;
+    }
+    const std::int32_t entry_bytes = read_word(rdram, buffer);
+    for (const auto& link : links) {
+        if (entry_bytes <= 0 || link.offset < 0x10U ||
+            link.offset >= 0x10U + static_cast<std::uint32_t>(entry_bytes) ||
+            !addressable(buffer + link.offset)) {
+            std::fprintf(stderr, "[custom-tracks] level link to %s at byte %u is outside the object map\n",
+                         link.track.c_str(), link.offset);
+            continue;
+        }
+        if (link.level_id < 0 || link.level_id > 0xFF) {
+            std::fprintf(stderr, "[custom-tracks] level link to %s: track not installed, exit keeps its placeholder\n",
+                         link.track.c_str());
+            continue;
+        }
+        MEM_B(static_cast<std::int32_t>(link.offset), rdram_address(buffer)) =
+            static_cast<std::int8_t>(link.level_id);
+        std::fprintf(stderr, "[custom-tracks] level link to %s now leads to level %d\n",
+                     link.track.c_str(), static_cast<int>(link.level_id));
+    }
+}
+
+// In func_8002E904 (tracks.c, the per-segment pass of shadow_generate), on the
+// instruction after func_8002FF6C returns: v0 is the vertex count of the
+// shadow polygon just clipped from one floor triangle. The pass then appends
+// that polygon to D_8011C238[32] and its new vertices to D_8011B120[32] with
+// no bound check. Retail floors never come near either limit, but a custom
+// floor cut into many small faces can: under a .dkrmap's covered plaza a
+// plane's shadow gathered more than 32 vertices, ran over the arrays behind
+// them into the polygon count, and the next store through that count wrote far
+// outside RDRAM (stray triangles on screen, then an access violation). When
+// the clipped polygon might not fit - the vertex count plus every one of its
+// vertices being new, or no polygon slot left - v0 is set to 0, so the retail
+// `someCount >= 3` test skips it and the shadow simply misses that piece.
+extern "C" void dkr_shadow_polygon_budget(std::uint8_t* rdram, recomp_context* context) {
+    namespace addresses = dkr::runtime::revision_addresses;
+    constexpr std::int32_t kSlots = 32; // D_8011B120[32] and D_8011C238[32]
+    const auto clipped = static_cast<std::int32_t>(context->r2);
+    if (clipped < 3) {
+        return;
+    }
+    const std::int32_t vertices = read_word(rdram, addresses::ShadowVertexCount);
+    const std::int32_t polygons = read_word(rdram, addresses::ShadowPolygonCount);
+    if (polygons >= 0 && polygons < kSlots && vertices >= 0 && vertices + clipped <= kSlots) {
+        return;
+    }
+    context->r2 = 0;
+    static bool reported = false;
+    if (!reported) {
+        reported = true;
+        std::fprintf(stderr,
+                     "[custom-tracks] a shadow covers more floor polygons than the game's 32-entry "
+                     "shadow arrays hold; the rest of that shadow is dropped\n");
+    }
+}
+
+// In func_8002E904, on the jal to func_8002FF6C (a0 = 3, the triangle's vertex
+// count, is already set). Clipping against the shadow's four edges appends the
+// points it creates to D_8011B330, in groups of 32 per edge counted by
+// D_8011B320[4] - and retail clamps each group at index 31. But D_8011B330
+// holds 120 entries, not 128, so the fourth group fits only 24: its entries 24
+// to 31 land on D_8011C230 (the polygon count) and the polygon array behind it.
+// One clip adds at most two points to each group. When the fourth group has no
+// room for two more, or no polygon slot is left, a0 is set to 0: the clip then
+// processes no vertices, adds nothing and returns 0, and the polygon is skipped.
+extern "C" void dkr_shadow_clip_budget(std::uint8_t* rdram, recomp_context* context) {
+    namespace addresses = dkr::runtime::revision_addresses;
+    constexpr std::int32_t kPolygonSlots = 32;     // D_8011C238[32]
+    constexpr std::int32_t kLastGroupSlots = 24;   // D_8011B330[120] - 3 * 32
+    constexpr std::int32_t kPointsPerClip = 2;     // a convex polygon crosses an edge at most twice
+    const std::int32_t polygons = read_word(rdram, addresses::ShadowPolygonCount);
+    const std::int32_t last_group = read_word(rdram, addresses::ShadowEdgePointCounts + 12U);
+    if (polygons >= 0 && polygons < kPolygonSlots && last_group >= 0 &&
+        last_group + kPointsPerClip <= kLastGroupSlots) {
+        return;
+    }
+    context->r4 = 0;
+    static bool reported = false;
+    if (!reported) {
+        reported = true;
+        std::fprintf(stderr,
+                     "[custom-tracks] a shadow crosses more floor edges than the game's shadow "
+                     "clip arrays hold; the rest of that shadow is dropped\n");
+    }
 }

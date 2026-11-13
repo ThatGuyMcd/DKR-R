@@ -1,25 +1,23 @@
-diff --git a/src/hle/rt64_workload.h b/src/hle/rt64_workload.h
---- a/src/hle/rt64_workload.h
-+++ b/src/hle/rt64_workload.h
-@@ -27,4 +27,8 @@
- namespace RT64 {
-     struct DrawData {
-+        // Immutable local irradiance; the existing RSP pass interpolates its pulse.
-+        std::vector<float> lavaGlow;
-+        bool lavaGlowActive=false;
-+        float lavaGlowTime=0,lavaGlowStep=0,lavaGlowStrength=0,lavaGlowSpeed=1,lavaGlowIntensity=0;
-         std::vector<float> posFloats;
-         std::vector<float> velFloats;
-@@ -146,4 +150,5 @@
-         BufferPair texcoordVelocityBuffer;
-         BufferPair normalColorBuffer;
-+        BufferPair lavaGlowBuffer;
-         BufferPair viewProjIndicesBuffer;
-         BufferPair worldIndicesBuffer;
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -760,6 +760,11 @@ namespace RT64 {
+             auto &worldIndices = workload.drawData.worldIndices;
+             auto &posTransformed = workload.drawData.posTransformed;
+             const uint32_t newIndex = workload.drawData.vertexCount();
++            if(workload.drawData.lavaGlowActive) {
++                auto& glow=workload.drawData.lavaGlow;
++                const float value=globalIndex<glow.size() ? glow[globalIndex] : 0;
++                glow.resize(newIndex+1,0);glow[newIndex]=value;
++            }
+             posFloats.emplace_back(posFloats[globalIndex * 3 + 0]);
+             posFloats.emplace_back(posFloats[globalIndex * 3 + 1]);
+             posFloats.emplace_back(posFloats[globalIndex * 3 + 2]);
 diff --git a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
 --- a/src/hle/rt64_workload.cpp
 +++ b/src/hle/rt64_workload.cpp
-@@ -48,4 +48,7 @@
+@@ -47,6 +47,9 @@ namespace RT64 {
+     }
  
      void Workload::resetDrawData() {
 +        drawData.lavaGlow.clear();drawData.lavaGlowActive=false;
@@ -27,7 +25,9 @@ diff --git a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
 +        drawData.lavaGlowSpeed=1;
          drawData.posFloats.clear();
          drawData.velFloats.clear();
-@@ -202,6 +205,10 @@
+         drawData.tcFloats.clear();
+@@ -201,8 +204,12 @@ namespace RT64 {
+     }
      
      void Workload::uploadDrawData(RenderWorker *worker, BufferUploader *bufferUploader) {
 +        // Only lava scenes upload a per-vertex stream; otherwise bind a 4-byte dummy.
@@ -38,67 +38,85 @@ diff --git a/src/hle/rt64_workload.cpp b/src/hle/rt64_workload.cpp
 +             {RenderFormat::R32_FLOAT},&drawBuffers.lavaGlowBuffer},
              { drawData.posFloats.data(), drawRanges.posFloats, sizeof(float), RenderBufferFlag::FORMATTED, { RenderFormat::R32_FLOAT }, &drawBuffers.positionBuffer },
              { drawData.velFloats.data(), drawRanges.velFloats, sizeof(float), RenderBufferFlag::FORMATTED, { RenderFormat::R32_FLOAT }, &drawBuffers.velocityBuffer },
-diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
---- a/src/hle/rt64_rsp.cpp
-+++ b/src/hle/rt64_rsp.cpp
-@@ -761,4 +761,9 @@
-             auto &posTransformed = workload.drawData.posTransformed;
-             const uint32_t newIndex = workload.drawData.vertexCount();
-+            if(workload.drawData.lavaGlowActive) {
-+                auto& glow=workload.drawData.lavaGlow;
-+                const float value=globalIndex<glow.size() ? glow[globalIndex] : 0;
-+                glow.resize(newIndex+1,0);glow[newIndex]=value;
-+            }
-             posFloats.emplace_back(posFloats[globalIndex * 3 + 0]);
-             posFloats.emplace_back(posFloats[globalIndex * 3 + 1]);
+             { drawData.tcFloats.data(), drawRanges.tcFloats, sizeof(float), RenderBufferFlag::FORMATTED, { RenderFormat::R32_FLOAT }, &drawBuffers.texcoordBuffer },
+diff --git a/src/hle/rt64_workload.h b/src/hle/rt64_workload.h
+--- a/src/hle/rt64_workload.h
++++ b/src/hle/rt64_workload.h
+@@ -26,6 +26,10 @@
+ 
+ namespace RT64 {
+     struct DrawData {
++        // Immutable local irradiance; the existing RSP pass interpolates its pulse.
++        std::vector<float> lavaGlow;
++        bool lavaGlowActive=false;
++        float lavaGlowTime=0,lavaGlowStep=0,lavaGlowStrength=0,lavaGlowSpeed=1,lavaGlowIntensity=0;
+         std::vector<float> posFloats;
+         std::vector<float> velFloats;
+         std::vector<float> tcFloats;
+@@ -145,6 +149,7 @@ namespace RT64 {
+         BufferPair texcoordBuffer;
+         BufferPair texcoordVelocityBuffer;
+         BufferPair normalColorBuffer;
++        BufferPair lavaGlowBuffer;
+         BufferPair viewProjIndicesBuffer;
+         BufferPair worldIndicesBuffer;
+         BufferPair fogIndicesBuffer;
 diff --git a/src/render/rt64_descriptor_sets.h b/src/render/rt64_descriptor_sets.h
 --- a/src/render/rt64_descriptor_sets.h
 +++ b/src/render/rt64_descriptor_sets.h
-@@ -529,4 +529,5 @@
+@@ -528,6 +528,7 @@ namespace RT64 {
+         uint32_t dstTc;
          uint32_t dstCol;
          uint32_t dstWorld;
 +        uint32_t srcLavaGlow;
  
          RSPProcessDescriptorSet(RenderDevice *device = nullptr) {
-@@ -554,4 +555,5 @@
+             builder.begin();
+@@ -553,6 +554,7 @@ namespace RT64 {
+             dstTc = builder.addReadWriteStructuredBuffer(20);
              dstCol = builder.addReadWriteStructuredBuffer(21);
              dstWorld = builder.addReadWriteStructuredBuffer(22);
 +            srcLavaGlow = builder.addFormattedBuffer(23);
              builder.end();
  
-diff --git a/src/render/rt64_rsp_processor.h b/src/render/rt64_rsp_processor.h
---- a/src/render/rt64_rsp_processor.h
-+++ b/src/render/rt64_rsp_processor.h
-@@ -17,5 +17,8 @@
-             float curFrameWeight;
-             uint32_t waterWorldActive;
-+            float lavaGlowScale,lavaGlowCooling;
-+            uint32_t padding{};
+             if (device != nullptr) {
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -549,10 +549,12 @@ namespace RT64 {
+         auto finishLava = [&]() {
+             if(pendingLava==UINT32_MAX)return;
+             finishWater();
++            const auto lavaProfileToken=waterRenderer->beginProfile(worker,4);
+             if(waterRenderer->drawLavaLighting(worker,pendingLava,depthState,framebuffer.viewport)) {
+                 worker->commandList->setFramebuffer(depthState ? fbStorage->colorWriteDepthRead.get() : fbStorage->colorDepthWrite.get());
+                 worker->commandList->drawInstanced(3,1,0,0);
+             }
++            waterRenderer->endProfile(worker,lavaProfileToken);
+             pendingLava=UINT32_MAX;pendingLavaProjection=UINT32_MAX;
+             switchToGraphicsPipeline();
          };
-+        static_assert(sizeof(ProcessCB)==32,"RSP HLSL constant rows");
+@@ -1359,6 +1361,7 @@ namespace RT64 {
+         if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->rays.record(worker);
+         if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->recordNormals(worker, *outputBuffers);
+         if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->recordField(worker);
++        if (waterRenderer && !waterRenderer->draws.empty()) waterRenderer->recordCaustics(worker);
  
-         struct ModifyCB {
-diff --git a/src/render/rt64_shader_library.cpp b/src/render/rt64_shader_library.cpp
---- a/src/render/rt64_shader_library.cpp
-+++ b/src/render/rt64_shader_library.cpp
-@@ -543,5 +543,6 @@
-             RSPProcessDescriptorSet descriptorSet;
-             layoutBuilder.begin();
--            layoutBuilder.addPushConstant(0, 0, sizeof(uint32_t) * 4, RenderShaderStageFlag::COMPUTE);
-+            // Match both 16-byte HLSL constant rows, including padding.
-+            layoutBuilder.addPushConstant(0, 0, sizeof(uint32_t) * 8, RenderShaderStageFlag::COMPUTE);
-             layoutBuilder.addDescriptorSet(descriptorSet);
-             layoutBuilder.end();
+         if (vertexProcessor != nullptr) {
+             vertexProcessor->recordCommandList(worker, shaderLibrary, outputBuffers);
 diff --git a/src/render/rt64_rsp_processor.cpp b/src/render/rt64_rsp_processor.cpp
 --- a/src/render/rt64_rsp_processor.cpp
 +++ b/src/render/rt64_rsp_processor.cpp
-@@ -6,4 +6,5 @@
+@@ -5,6 +5,7 @@
+ #include "rt64_rsp_processor.h"
  
  #include "rt64_buffer_uploader.h"
 +#include "lava_lighting_policy.hpp"
  
  namespace RT64 {
-@@ -25,4 +26,8 @@
+     // RSPProcessor
+@@ -24,6 +25,10 @@ namespace RT64 {
+         processCB.prevFrameWeight = p.prevFrameWeight;
          processCB.curFrameWeight = p.curFrameWeight;
          processCB.waterWorldActive = p.outputBuffers->waterWorldActive ? 1U : 0U;
 +        const float glowTime=drawData.lavaGlowTime-drawData.lavaGlowStep*(1-std::clamp(p.curFrameWeight,0.0f,1.0f));
@@ -107,72 +125,237 @@ diff --git a/src/render/rt64_rsp_processor.cpp b/src/render/rt64_rsp_processor.c
 +            dkr::runtime::water::enhanced::lava_pulse(glowTime,drawData.lavaGlowStrength,drawData.lavaGlowSpeed) : 0;
          p.outputBuffers->screenPosBuffer.computedSize += processCB.vertexCount * sizeof(float) * 4;
          p.outputBuffers->genTexCoordBuffer.computedSize += processCB.vertexCount * sizeof(float) * 2;
-@@ -51,4 +56,5 @@
+         p.outputBuffers->shadedColBuffer.computedSize += processCB.vertexCount * sizeof(float) * 4;
+@@ -50,6 +55,7 @@ namespace RT64 {
+         processSet->setBuffer(processSet->dstCol, p.outputBuffers->shadedColBuffer.buffer.get(), RenderBufferStructuredView(sizeof(float) * 4));
          processSet->setBuffer(processSet->dstWorld, p.outputBuffers->rasterWorldPosBuffer.buffer.get(), RenderBufferStructuredView(sizeof(float) * 4));
  
 +        processSet->setBuffer(processSet->srcLavaGlow,p.drawBuffers->lavaGlowBuffer.get(),p.drawBuffers->lavaGlowBuffer.getView(0));
          const uint32_t modifyCount = drawData.modifyCount();
          modifyCB.modifyCount = modifyCount;
-diff --git a/src/shaders/RSPProcessCS.hlsl b/src/shaders/RSPProcessCS.hlsl
---- a/src/shaders/RSPProcessCS.hlsl
-+++ b/src/shaders/RSPProcessCS.hlsl
-@@ -18,4 +18,7 @@
-     float curFrameWeight;
-     uint waterWorldActive;
-+    float lavaGlowScale;
-+    float lavaGlowCooling;
-+    uint reserved;
- };
+         modifySet->setBuffer(modifySet->srcModifyPos, p.drawBuffers->modifyPosUintsBuffer.get(), p.drawBuffers->modifyPosUintsBuffer.getView(0));
+diff --git a/src/render/rt64_rsp_processor.h b/src/render/rt64_rsp_processor.h
+--- a/src/render/rt64_rsp_processor.h
++++ b/src/render/rt64_rsp_processor.h
+@@ -16,7 +16,10 @@ namespace RT64 {
+             float prevFrameWeight;
+             float curFrameWeight;
+             uint32_t waterWorldActive;
++            float lavaGlowScale,lavaGlowCooling;
++            uint32_t padding{};
+         };
++        static_assert(sizeof(ProcessCB)==32,"RSP HLSL constant rows");
  
-@@ -43,4 +46,5 @@
- RWStructuredBuffer<float4> dstCol : register(u21);
- RWStructuredBuffer<float4> dstWorld : register(u22);
-+Buffer<float> srcLavaGlow : register(t23);
- 
- [numthreads(GROUP_SIZE, 1, 1)]
-@@ -133,4 +137,9 @@
-     dstPos[vertexOffsetIndex] = screenPos;
-     dstTc[vertexOffsetIndex] = tc;
-+    if(gConstants.lavaGlowScale>0) {
-+        const float energy=min(0.18,min(0.14,max(0,srcLavaGlow[vertexOffsetIndex]))*gConstants.lavaGlowScale);
-+        const float3 warmth=lerp(float3(1,0.19,0.012),float3(1,0.07,0.006),saturate(gConstants.lavaGlowCooling));
-+        vertexColor.rgb=min(vertexColor.rgb+max(vertexColor.rgb,0.12)*warmth*energy,1);
-+    }
-     dstCol[vertexOffsetIndex] = vertexColor;
-     if (gConstants.waterWorldActive) dstWorld[vertexOffsetIndex] = mul(worldMat, float4(pos - vel * (1.0f - gConstants.curFrameWeight), 1.0f));
-diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
---- a/src/shaders/WaterPS.hlsl
-+++ b/src/shaders/WaterPS.hlsl
-@@ -250,4 +250,8 @@
-         float footprint=max(length(ddx(worldPosition.xz)),length(ddy(worldPosition.xz)))*LAVA_WORLD_SCALE;
-         float4 molten=lavaSurface(worldPosition.xz,p.camera.w,footprint);
-+        // Surface heat and nearby glow share the interpolated clock. Pulse
-+        // between hot and cooling palettes, never between lit and black.
-+        const float cooling=saturate(m.sunColor.w)*0.5*(1-sin(p.camera.w*m.optics.y*1.7));
-+        molten.rgb=lavaHeatPalette(molten.rgb,cooling)*m.shoreCounts[0].z;
-         float roughness=clamp(m.shallowColor.a+molten.a*0.18,0.065,0.65);
-         float4 reflection=0;
-@@ -255,5 +259,5 @@
- #ifdef HARDWARE_WATER
-         bool fallingHit=false,capturedHit=false;
--        float4 traced=hardwareWaterReflection(worldPosition,N,V,p,fallingHit,capturedHit);
-+        float4 traced=m.shoreCounts[0].y>0.5 ? hardwareWaterReflection(worldPosition,N,V,p,fallingHit,capturedHit) : float4(0,0,0,0);
-         if(fallingHit || capturedHit)reflection=traced;
-         else {
-diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
---- a/src/render/rt64_water_renderer.h
-+++ b/src/render/rt64_water_renderer.h
-@@ -239,5 +239,5 @@
-     std::vector<uint32_t> profileKinds;
-     uint32_t profileFrames=0;
--    std::array<double,5> profileTotals{};
-+    std::array<double,6> profileTotals{};
-     bool usesHDR;
- 
+         struct ModifyCB {
+             uint32_t modifyCount;
+diff --git a/src/render/rt64_shader_library.cpp b/src/render/rt64_shader_library.cpp
+--- a/src/render/rt64_shader_library.cpp
++++ b/src/render/rt64_shader_library.cpp
+@@ -542,7 +542,8 @@ namespace RT64 {
+         {
+             RSPProcessDescriptorSet descriptorSet;
+             layoutBuilder.begin();
+-            layoutBuilder.addPushConstant(0, 0, sizeof(uint32_t) * 4, RenderShaderStageFlag::COMPUTE);
++            // Match both 16-byte HLSL constant rows, including padding.
++            layoutBuilder.addPushConstant(0, 0, sizeof(uint32_t) * 8, RenderShaderStageFlag::COMPUTE);
+             layoutBuilder.addDescriptorSet(descriptorSet);
+             layoutBuilder.end();
+             rspProcess.pipelineLayout = layoutBuilder.create(device);
 diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer.cpp
 --- a/src/render/rt64_water_renderer.cpp
 +++ b/src/render/rt64_water_renderer.cpp
-@@ -744,14 +744,14 @@
+@@ -11,6 +11,8 @@
+ #include <cstdio>
+ #include <cstdlib>
+ #include <stdexcept>
++#include "stb/stb_image.h"
++#include "textures/WaterCaustics.png.h"
+ #include "shaders/WaterVS.hlsl.spirv.h"
+ #include "shaders/WaterfallVS.hlsl.spirv.h"
+ #include "shaders/WaterfallPS.hlsl.spirv.h"
+@@ -124,7 +126,53 @@ WaterRenderer::WaterRenderer(RenderDevice *device, RenderShaderFormat format, bo
+     waterfallVS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(WaterfallVSBlobDXIL,WaterfallVSBlobSPIRV,WaterfallVSBlobMSL,"VSMain",format)));
+     waterfallPS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(WaterfallPSBlobDXIL,WaterfallPSBlobSPIRV,WaterfallPSBlobMSL,"PSMain",format)));
+     waterfallMSPS=checkedWaterResource(device->createShader(CREATE_SHADER_INPUTS(WaterfallMSPSBlobDXIL,WaterfallMSPSBlobSPIRV,WaterfallMSPSBlobMSL,"PSMain",format)));
+-    descriptorSet = std::make_unique<WaterDescriptorSet>(device);
++    // The caustic pattern is an authored grayscale PNG embedded at build time.
++    // Box-filtered mips are staged here and uploaded once by recordCaustics.
++    RenderSamplerDesc causticDesc;
++    causticDesc.maxAnisotropy=getDefaultSamplerAnisotropy();
++    causticDesc.anisotropyEnabled=causticDesc.maxAnisotropy>1;
++    causticSampler=checkedWaterResource(device->createSampler(causticDesc));
++    int causticWidth=0,causticHeight=0,causticChannels=0;
++    stbi_uc *causticPixels=stbi_load_from_memory(reinterpret_cast<const stbi_uc *>(WaterCausticsPNG),int(sizeof(WaterCausticsPNG)),
++        &causticWidth,&causticHeight,&causticChannels,1);
++    if (!causticPixels || causticWidth<1 || causticWidth!=causticHeight || (causticWidth&(causticWidth-1))) {
++        stbi_image_free(causticPixels);
++        throw std::runtime_error("water caustic texture is invalid; retaining Original");
++    }
++    causticSize=uint32_t(causticWidth);
++    std::vector<std::vector<uint8_t>> causticMips{std::vector<uint8_t>(causticPixels,causticPixels+size_t(causticSize)*causticSize)};
++    stbi_image_free(causticPixels);
++    for (uint32_t size=causticSize;size>1;size/=2) {
++        const auto &source=causticMips.back();
++        const uint32_t half=size/2;
++        std::vector<uint8_t> next(size_t(half)*half);
++        for (uint32_t y=0;y<half;y++) for (uint32_t x=0;x<half;x++) {
++            const size_t at=size_t(2*y)*size+2*x;
++            next[size_t(y)*half+x]=uint8_t((source[at]+source[at+1]+source[at+size]+source[at+size+1]+2)/4);
++        }
++        causticMips.push_back(std::move(next));
++    }
++    // D3D12 placed footprints: 256-byte row pitch, 512-byte mip placement.
++    uint32_t causticBytes=0;
++    for (uint32_t level=0;level<causticMips.size();level++) {
++        causticBytes=(causticBytes+511)&~511u;
++        causticOffsets.push_back(causticBytes);
++        const uint32_t size=std::max(causticSize>>level,1u);
++        causticBytes+=((size+255)&~255u)*size;
++    }
++    causticUpload=checkedWaterResource(device->createBuffer(RenderBufferDesc::UploadBuffer(causticBytes)));
++    auto *causticStaging=static_cast<uint8_t *>(causticUpload->map());
++    std::memset(causticStaging,0,causticBytes);
++    for (uint32_t level=0;level<causticMips.size();level++) {
++        const uint32_t size=std::max(causticSize>>level,1u), pitch=(size+255)&~255u;
++        for (uint32_t y=0;y<size;y++) std::memcpy(causticStaging+causticOffsets[level]+size_t(y)*pitch,causticMips[level].data()+size_t(y)*size,size);
++    }
++    causticUpload->unmap();
++    causticTexture=checkedWaterResource(device->createTexture(RenderTextureDesc::Texture2D(causticSize,causticSize,uint32_t(causticMips.size()),RenderFormat::R8_UNORM)));
++    causticView=checkedWaterResource(causticTexture->createTextureView(RenderTextureViewDesc::Texture2D(RenderFormat::R8_UNORM)));
++    causticTexture->setName("Water authored caustic pattern");
++    causticPending=true;
++    descriptorSet = std::make_unique<WaterDescriptorSet>(device,causticSampler.get());
+     RenderPipelineLayoutBuilder builder;
+     builder.begin(false, true); // Water vertices use the input assembler on D3D12.
+     builder.addPushConstant(0, 0, sizeof(interop::WaterPushConstants), RenderShaderStageFlag::VERTEX | RenderShaderStageFlag::PIXEL);
+@@ -233,6 +281,8 @@ void WaterRenderer::reset() {
+     wireIndices.clear(); wireStarts.clear();
+     profileKinds.clear();
+     for (auto &scene : scenes) { scene.captured=false; scene.opticalCaptured=false; scene.surfaceCleared=false; scene.lavaPrepared=false; }
++    // The workload that recorded the caustic upload has completed.
++    if (!causticPending) causticUpload.reset();
+ }
+ 
+ uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTarget *color, RenderTarget *depth, uint64_t key, bool classic, bool selfDepth,water_work::Region originalRegion) {
+@@ -313,7 +363,7 @@ uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTarget *color,
+             }
+         }
+         scene.captureSet=std::make_unique<WaterCaptureSet>(worker->device);
+-        scene.materialSet=std::make_unique<WaterDescriptorSet>(worker->device);
++        scene.materialSet=std::make_unique<WaterDescriptorSet>(worker->device,causticSampler.get());
+         if(!classic) {
+             scene.surfaceView=checkedWaterResource(scene.surface->createTextureView(RenderTextureViewDesc::Texture2D(RenderFormat::R32_FLOAT)));
+             scene.surfaceWidth=width;scene.surfaceHeight=height;scene.spraySet=std::make_unique<WaterSpraySet>(worker->device);
+@@ -348,6 +398,7 @@ uint32_t WaterRenderer::prepareScene(RenderWorker *worker, RenderTarget *color,
+     ms->setTexture(ms->originalColor,scene.color.get(),RenderTextureLayout::SHADER_READ,scene.colorView.get());
+     ms->setTexture(ms->sceneColor,scene.color.get(),RenderTextureLayout::SHADER_READ,scene.colorView.get());
+     ms->setTexture(ms->sceneDepth,scene.depth.get(),RenderTextureLayout::SHADER_READ,scene.depthView.get());
++    ms->setTexture(ms->caustics,causticTexture.get(),RenderTextureLayout::SHADER_READ,causticView.get());
+     if(!existing)sceneKeys.emplace(sceneKey,index);
+     return index;
+     } catch(...) {
+@@ -498,9 +549,20 @@ void WaterRenderer::beginColor(RenderWorker *worker,uint32_t drawIndex) {
+     worker->commandList->setFramebuffer(scene.waterColorFramebuffer.get());
+ }
+ 
++// Matches waterLowPassStrength in rt64_water_params.h.
++static float lowPassStrength(float air) {
++    const auto fade=[](float full,float ceiling,float clearance) {
++        const float t=std::clamp((clearance-full)/(ceiling-full),0.0f,1.0f);
++        return 1-t*t*(3-2*t);
++    };
++    if (air>0) return fade(WATER_LOWPASS_PLANE_FULL,WATER_LOWPASS_PLANE_CEILING,air);
++    if (air<0) return WATER_LOWPASS_HOVER_SCALE*fade(WATER_LOWPASS_HOVER_FULL,WATER_LOWPASS_HOVER_CEILING,-air);
++    return 0;
++}
++
+ void WaterRenderer::stepSpray(const interop::WaterMaterial &m,float fromTime,float toTime,bool reset) {
+     if (reset || m.identity.x<2 || m.effects.x<0.5f) {
+-        particles.clear(); sprayDistance.fill(0); sprayHeading.fill({0,0,0,0});
++        particles.clear(); sprayDistance.fill(0); sprayHeading.fill({0,0,0,0}); lowPassDistance.fill(0);
+         spraySeed=0x57A064u^uint32_t(m.identity.w);
+         return;
+     }
+@@ -536,6 +598,45 @@ void WaterRenderer::stepSpray(const interop::WaterMaterial &m,float fromTime,flo
+             particles.push_back(p);
+         }
+     }
++    // Low passes lift spray from the liquid beneath the craft, not from its
++    // hull: outward curtains (kind 2) and slowly settling mist (kind 1).
++    for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) {
++        const auto &old=m.craftPrevious[i], &current=m.craftCurrent[i];
++        const float air=WATER_CRAFT_AIR(m,i);
++        const float dx=current.x-old.x,dz=current.z-old.z;
++        const float distance=std::sqrt(dx*dx+dz*dz), speed=distance/interval;
++        const float wash=current.w<0 ? 0.0f : lowPassStrength(air)*std::clamp(speed/WATER_LOWPASS_FULL_SPEED,0.0f,1.0f);
++        if (wash<=0.02f) { lowPassDistance[i]=0; continue; }
++        const float hx=dx/distance, hz=dz/distance;
++        const float clearance=std::abs(air), radius=20+clearance*0.3f, back=10+clearance*0.15f;
++        const float surface=current.y-clearance;
++        lowPassDistance[i]+=distance*(b-a)*wash;
++        uint32_t count=std::min(48u,uint32_t(lowPassDistance[i]/2));
++        lowPassDistance[i]-=float(count)*2;
++        for (uint32_t j=0;j<count && particles.size()<budget;j++) {
++            const float f=a+(b-a)*(float(j)+0.5f)/float(count);
++            const float x=old.x+dx*f-hx*back, z=old.z+dz*f-hz*back;
++            const float birth=fromTime+(toTime-fromTime)*(float(j)+0.5f)/float(count);
++            interop::WaterSprayParticle p{};
++            if (random()<0.06f) {
++                // A faint haze, visible mostly against the sun.
++                const float spread=(random()*2-1)*radius*0.6f;
++                p.origin={x+hz*spread,surface+3,z-hx*spread,birth};
++                p.velocity={hx*speed*0.10f+hz*spread*0.4f,12+random()*28*wash,hz*speed*0.10f-hx*spread*0.4f,1.1f+random()*1.2f};
++                p.appearance={18+random()*18+radius*0.1f,0.02f+random()*0.03f*wash,random(),1};
++            } else {
++                // Fine droplets thrown outward and up, drawn as motion streaks.
++                const float side=random()<0.5f ? -1.0f : 1.0f;
++                const float offset=side*radius*(0.25f+random()*0.35f);
++                const float lateral=side*(60+random()*120)*(0.5f+0.5f*wash);
++                const float drift=speed*(0.06f+random()*0.12f);
++                p.origin={x+hz*offset,surface+1.5f,z-hx*offset,birth};
++                p.velocity={hx*drift+hz*lateral,(70+random()*160)*(0.45f+0.55f*wash),hz*drift-hx*lateral,0.3f+random()*0.45f};
++                p.appearance={0.6f+random()*0.8f,(0.55f+random()*0.35f)*(0.6f+0.4f*wash),random(),2};
++            }
++            particles.push_back(p);
++        }
++    }
+ }
+ 
+ void WaterRenderer::drawSpray(RenderWorker *worker,uint32_t drawIndex) {
+@@ -576,7 +677,11 @@ void WaterRenderer::prepareField(RenderWorker *worker) {
+     const auto horizontal=std::find_if(draws.begin(),draws.end(),[](const auto& d){return d.material.effects.z<3;});
+     const auto sourceDraw=horizontal==draws.end() ? draws.front() : *horizontal;
+     const auto m=sourceDraw.material;
+-    const bool active=horizontal!=draws.end() && std::any_of(std::begin(m.craftCurrent),std::end(m.craftCurrent),[](const auto& c){return c.w>0;});
++    // A low pass over the liquid keeps the field alive without hull contact.
++    bool lowPass=false;
++    for (uint32_t i=0;i<WATER_CRAFT_COUNT;i++) lowPass|=m.craftCurrent[i].w>=0 && WATER_CRAFT_AIR(m,i)!=0;
++    const bool active=horizontal!=draws.end() && (lowPass ||
++        std::any_of(std::begin(m.craftCurrent),std::end(m.craftCurrent),[](const auto& c){return c.w>0;}));
+     const uint32_t resolution=active && m.performance.y>=128 ? uint32_t(m.performance.y) : water_work::fieldResolution(active,bool(fieldTextures[0]),fieldResolution,uint32_t(m.identity.x));
+     constexpr float extent=4096, dt=1.0f/60;
+     if (fieldResolution!=resolution) {
+@@ -704,6 +809,18 @@ void WaterRenderer::recordField(RenderWorker *worker) {
+ 
+ }
+ 
++void WaterRenderer::recordCaustics(RenderWorker *worker) {
++    if (!causticPending) return;
++    worker->commandList->barriers(RenderBarrierStage::COPY,RenderTextureBarrier(causticTexture.get(),RenderTextureLayout::COPY_DEST));
++    for (uint32_t level=0;level<causticOffsets.size();level++) {
++        const uint32_t size=std::max(causticSize>>level,1u);
++        worker->commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(causticTexture.get(),level),
++            RenderTextureCopyLocation::PlacedFootprint(causticUpload.get(),RenderFormat::R8_UNORM,size,size,1,(size+255)&~255u,causticOffsets[level]));
++    }
++    worker->commandList->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(causticTexture.get(),RenderTextureLayout::SHADER_READ));
++    causticPending=false;
++}
++
+ uint32_t WaterRenderer::beginProfile(RenderWorker *worker, uint32_t kind) {
+     if (!profilePool || profileKinds.size() >= 64) return UINT32_MAX;
+     const uint32_t token = uint32_t(profileKinds.size())*2;
+@@ -743,28 +860,28 @@ void WaterRenderer::finishProfile(double frameMilliseconds) {
+     if (!profilePool || profileKinds.empty() || draws.empty()) return;
      profilePool->queryResults();
      const auto *times = profilePool->getResults();
 -    double milliseconds[4] = {};
@@ -192,7 +375,7 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
 +            profileTotals[3]/profileFrames,profileTotals[4]/profileFrames,profileTotals[5]/profileFrames,static_cast<unsigned long long>(allocationBytes()));
          profileFrames=0;profileTotals.fill(0);
      }
-@@ -759,11 +759,11 @@
+     static FILE *csv = []() {
          const char *name = std::getenv("DKRR_WATER_PROFILE");
          FILE *file = name ? std::fopen(name,"w") : nullptr;
 -        if (file) std::fprintf(file,"course,quality,debug,views,width,height,water_draws,normal_vertices,normal_ms,capture_ms,surface_ms,field_ms,frame_gpu_ms\n");
@@ -207,17 +390,468 @@ diff --git a/src/render/rt64_water_renderer.cpp b/src/render/rt64_water_renderer
 +            drawScenes.size(),normalVertices.size(),milliseconds[0],milliseconds[1],milliseconds[2],milliseconds[3],milliseconds[4],frameMilliseconds);
          std::fflush(csv);
      }
-diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
---- a/src/render/rt64_framebuffer_renderer.cpp
-+++ b/src/render/rt64_framebuffer_renderer.cpp
-@@ -549,8 +549,10 @@
-             if(pendingLava==UINT32_MAX)return;
-             finishWater();
-+            const auto lavaProfileToken=waterRenderer->beginProfile(worker,4);
-             if(waterRenderer->drawLavaLighting(worker,pendingLava,depthState,framebuffer.viewport)) {
-                 worker->commandList->setFramebuffer(depthState ? fbStorage->colorWriteDepthRead.get() : fbStorage->colorDepthWrite.get());
-                 worker->commandList->drawInstanced(3,1,0,0);
-             }
-+            waterRenderer->endProfile(worker,lavaProfileToken);
-             pendingLava=UINT32_MAX;pendingLavaProjection=UINT32_MAX;
-             switchToGraphicsPipeline();
+ }
+diff --git a/src/render/rt64_water_renderer.h b/src/render/rt64_water_renderer.h
+--- a/src/render/rt64_water_renderer.h
++++ b/src/render/rt64_water_renderer.h
+@@ -95,8 +95,8 @@ struct LavaLightingSet : RenderDescriptorSetBase {
+     }
+ };
+ struct WaterDescriptorSet : RenderDescriptorSetBase {
+-    uint32_t draws, sceneColor, sceneDepth, currentField, previousField, originalColor;
+-    explicit WaterDescriptorSet(RenderDevice *device = nullptr) {
++    uint32_t draws, sceneColor, sceneDepth, currentField, previousField, originalColor, caustics;
++    explicit WaterDescriptorSet(RenderDevice *device = nullptr, const RenderSampler *causticSampler = nullptr) {
+         builder.begin();
+         draws = builder.addStructuredBuffer(1);
+         sceneColor = builder.addTexture(2);
+@@ -104,6 +104,10 @@ struct WaterDescriptorSet : RenderDescriptorSetBase {
+         currentField = builder.addTexture(4);
+         previousField = builder.addTexture(5);
+         originalColor = builder.addTexture(6);
++        caustics = builder.addTexture(7);
++        // Immutable samplers go last: D3D12 drops them from the root table but
++        // still counts them in the set, so any later range would read empty.
++        builder.addImmutableSampler(8, causticSampler);
+         builder.end();
+         if (device) create(device);
+     }
+@@ -113,6 +117,15 @@ struct WaterDescriptorSet : RenderDescriptorSetBase {
+ struct WaterRenderer {
+     std::vector<interop::WaterDrawParams> draws;
+     BufferPair drawBuffer;
++    // Declared before every descriptor set: the immutable sampler and the
++    // texture must outlive the sets that sample them.
++    std::unique_ptr<RenderSampler> causticSampler;
++    std::unique_ptr<RenderTexture> causticTexture;
++    std::unique_ptr<RenderTextureView> causticView;
++    std::unique_ptr<RenderBuffer> causticUpload;
++    std::vector<uint32_t> causticOffsets;
++    uint32_t causticSize=0;
++    bool causticPending=false;
+     std::unique_ptr<WaterDescriptorSet> descriptorSet;
+     std::unique_ptr<RenderPipelineLayout> layout;
+     struct WaterfallSet : RenderDescriptorSetBase {
+@@ -155,6 +168,7 @@ struct WaterRenderer {
+     BufferPair particleBuffer;
+     std::array<float,WATER_CRAFT_COUNT> sprayDistance{};
+     std::array<interop::float4,WATER_CRAFT_COUNT> sprayHeading{};
++    std::array<float,WATER_CRAFT_COUNT> lowPassDistance{};
+     uint32_t spraySeed=1;
+     std::map<uint32_t, std::unique_ptr<RenderPipeline>> pipelines;
+     RenderVertexBufferView worldView;
+@@ -238,7 +252,7 @@ struct WaterRenderer {
+     interop::WaterMaterial statsMaterial{};
+     std::vector<uint32_t> profileKinds;
+     uint32_t profileFrames=0;
+-    std::array<double,5> profileTotals{};
++    std::array<double,6> profileTotals{};
+     bool usesHDR;
+ 
+     WaterRenderer(RenderDevice *device, RenderShaderFormat format, bool usesHDR,const ShaderLibrary *library);
+@@ -258,6 +272,7 @@ struct WaterRenderer {
+     uint64_t allocationBytes() const;
+     void prepareField(RenderWorker *worker);
+     void recordField(RenderWorker *worker);
++    void recordCaustics(RenderWorker *worker);
+     void stepSpray(const interop::WaterMaterial &material, float previousTime, float nextTime, bool reset);
+     void beginSurface(RenderWorker *worker,uint32_t drawIndex);
+     void beginColor(RenderWorker *worker,uint32_t drawIndex);
+diff --git a/src/shaders/RSPProcessCS.hlsl b/src/shaders/RSPProcessCS.hlsl
+--- a/src/shaders/RSPProcessCS.hlsl
++++ b/src/shaders/RSPProcessCS.hlsl
+@@ -17,6 +17,9 @@ struct RSPProcessCB {
+     float prevFrameWeight;
+     float curFrameWeight;
+     uint waterWorldActive;
++    float lavaGlowScale;
++    float lavaGlowCooling;
++    uint reserved;
+ };
+ 
+ [[vk::push_constant]] ConstantBuffer<RSPProcessCB> gConstants : register(b0);
+@@ -42,6 +45,7 @@ RWStructuredBuffer<float4> dstPos : register(u19);
+ RWStructuredBuffer<float2> dstTc : register(u20);
+ RWStructuredBuffer<float4> dstCol : register(u21);
+ RWStructuredBuffer<float4> dstWorld : register(u22);
++Buffer<float> srcLavaGlow : register(t23);
+ 
+ [numthreads(GROUP_SIZE, 1, 1)]
+ void CSMain(uint vertexIndex : SV_DispatchThreadID) {
+@@ -132,6 +136,11 @@ void CSMain(uint vertexIndex : SV_DispatchThreadID) {
+     const float4 screenPos = float4(ndcPos * rspViewport.scale + rspViewport.translate, tfPos.w);
+     dstPos[vertexOffsetIndex] = screenPos;
+     dstTc[vertexOffsetIndex] = tc;
++    if(gConstants.lavaGlowScale>0) {
++        const float energy=min(0.18,min(0.14,max(0,srcLavaGlow[vertexOffsetIndex]))*gConstants.lavaGlowScale);
++        const float3 warmth=lerp(float3(1,0.19,0.012),float3(1,0.07,0.006),saturate(gConstants.lavaGlowCooling));
++        vertexColor.rgb=min(vertexColor.rgb+max(vertexColor.rgb,0.12)*warmth*energy,1);
++    }
+     dstCol[vertexOffsetIndex] = vertexColor;
+     if (gConstants.waterWorldActive) dstWorld[vertexOffsetIndex] = mul(worldMat, float4(pos - vel * (1.0f - gConstants.curFrameWeight), 1.0f));
+ }
+\ No newline at end of file
+diff --git a/src/shaders/WaterFieldCS.hlsl b/src/shaders/WaterFieldCS.hlsl
+--- a/src/shaders/WaterFieldCS.hlsl
++++ b/src/shaders/WaterFieldCS.hlsl
+@@ -22,6 +22,7 @@ float segmentDistance(float2 p,float2 a,float2 b) {
+ groupshared float4 craftPath[WATER_CRAFT_COUNT];
+ groupshared float4 craftMotion[WATER_CRAFT_COUNT];
+ groupshared float4 craftResponse[WATER_CRAFT_COUNT];
++groupshared float4 craftWash[WATER_CRAFT_COUNT];
+ [numthreads(8,8,1)]
+ void CSMain(uint2 pixel : SV_DispatchThreadID, uint lane : SV_GroupIndex) {
+     // Zero-duration reset has no history, swept motion, or shoreline growth.
+@@ -48,6 +49,11 @@ void CSMain(uint2 pixel : SV_DispatchThreadID, uint lane : SV_GroupIndex) {
+         craftMotion[lane]=float4(heading,distance/interval,min(length(to-from)/cell,2)*saturate(current.w*3));
+         bool landed=!params.reset && old.w==0 && current.w>0 && params.simulation.y<m.animation.y && params.simulation.z>=m.animation.y;
+         craftResponse[lane]=float4(saturate((old.y-current.y)/interval/180),landed ? 1 : 0,current.w,0);
++        // Low pass: a footprint trailing beneath the craft, wider when higher.
++        float air=WATER_CRAFT_AIR(m,lane);
++        float clearance=abs(air);
++        float wash=current.w>=0 ? waterLowPassStrength(air)*saturate(distance/interval/WATER_LOWPASS_FULL_SPEED) : 0;
++        craftWash[lane]=float4(to-heading*(10+clearance*0.15),20+clearance*0.3,wash*min(length(to-from)/cell,2));
+     }
+     GroupMemoryBarrierWithGroupSync();
+     if (pixel.x>=params.resolution*WATER_CRAFT_COUNT || pixel.y>=params.resolution) return;
+@@ -109,6 +115,19 @@ void CSMain(uint2 pixel : SV_DispatchThreadID, uint lane : SV_GroupIndex) {
+             foam += ring*0.65;
+             velocity += ring*0.7;
+         }
++        float4 wash=craftWash[i];
++        if (wash.w>0) {
++            float2 offset=world-wash.xy;
++            float r=wash.z, behind=max(-dot(offset,heading),0);
++            float lateral=abs(dot(offset,float2(-heading.y,heading.x)));
++            // The moving pressure dent radiates its own waves; curtains spread
++            // wider than the hull wake; a churned trail follows the path.
++            float dent=exp(-dot(offset,offset)/(r*r));
++            float curtain=exp(-pow((lateral-behind*0.55-r*0.35)/(6+r*0.25),2))*smoothstep(0,r*0.5,behind)*(1-smoothstep(r*2.5,r*4.5,behind));
++            float churn=exp(-pow(d/(r*0.5),2));
++            foam += (churn*0.035+curtain*0.03)*wash.w;
++            velocity += (curtain*0.05-dent*0.12)*wash.w;
++        }
+     }
+     if (m.craftCurrent[tile].w<0) { height=0;velocity=0;foam=0;shore=0; }
+     nextField[pixel]=float4(clamp(height,-1,1),clamp(velocity,-4,4),saturate(foam),saturate(shore));
+diff --git a/src/shaders/WaterPS.hlsl b/src/shaders/WaterPS.hlsl
+--- a/src/shaders/WaterPS.hlsl
++++ b/src/shaders/WaterPS.hlsl
+@@ -7,6 +7,8 @@ Texture2D<float> sceneDepth : register(t3);
+ Texture2D<float4> currentField : register(t4);
+ Texture2D<float4> previousField : register(t5);
+ Texture2D<float4> originalColor : register(t6);
++Texture2D<float> causticTexture : register(t7);
++SamplerState causticSampler : register(s8);
+ 
+ static const float PI = 3.14159265359;
+ 
+@@ -249,12 +251,16 @@ float4 PSMain(float4 position : SV_POSITION, float3 worldPosition : TEXCOORD0,
+         float3 V=normalize(p.camera.xyz-worldPosition);
+         float footprint=max(length(ddx(worldPosition.xz)),length(ddy(worldPosition.xz)))*LAVA_WORLD_SCALE;
+         float4 molten=lavaSurface(worldPosition.xz,p.camera.w,footprint);
++        // Surface heat and nearby glow share the interpolated clock. Pulse
++        // between hot and cooling palettes, never between lit and black.
++        const float cooling=saturate(m.sunColor.w)*0.5*(1-sin(p.camera.w*m.optics.y*1.7));
++        molten.rgb=lavaHeatPalette(molten.rgb,cooling)*m.shoreCounts[0].z;
+         float roughness=clamp(m.shallowColor.a+molten.a*0.18,0.065,0.65);
+         float4 reflection=0;
+         if(m.appearance.x>0) {
+ #ifdef HARDWARE_WATER
+         bool fallingHit=false,capturedHit=false;
+-        float4 traced=hardwareWaterReflection(worldPosition,N,V,p,fallingHit,capturedHit);
++        float4 traced=m.shoreCounts[0].y>0.5 ? hardwareWaterReflection(worldPosition,N,V,p,fallingHit,capturedHit) : float4(0,0,0,0);
+         if(fallingHit || capturedHit)reflection=traced;
+         else {
+             reflection=screenReflection(worldPosition,N,V,roughness,p);
+@@ -295,6 +301,38 @@ float4 PSMain(float4 position : SV_POSITION, float3 worldPosition : TEXCOORD0,
+     float determinant=dx.x*dy.y-dx.y*dy.x;
+     float2 wakeGradient=float2(ddx(wake.x)*dy.y-ddy(wake.x)*dx.y,ddy(wake.x)*dx.x-ddx(wake.x)*dy.x)/max(abs(determinant),0.001)*sign(determinant);
+     ripples += clamp(wakeGradient*8,-0.10,0.10);
++    // Low pass: downwash and hovercraft skirts roughen and whiten a teardrop
++    // of liquid beneath and behind each craft. Analytic, so it never lags.
++    float churn=0,churnFoam=0;
++    float2 churnHeading=0;
++    {
++        float interval=max(m.animation.y-m.animation.x,0.00001);
++        float f=saturate((p.camera.w-m.animation.x)/interval);
++        [loop] for (uint i=0;i<WATER_CRAFT_COUNT;i++) {
++            float air=WATER_CRAFT_AIR(m,i);
++            if (air==0 || m.craftCurrent[i].w<0) continue;
++            float2 delta=m.craftCurrent[i].xz-m.craftPrevious[i].xz;
++            float travel=length(delta);
++            float wash=waterLowPassStrength(air)*saturate(travel/interval/WATER_LOWPASS_FULL_SPEED);
++            if (wash<=0.001) continue;
++            float2 heading=delta/travel;
++            float clearance=abs(air),radius=20+clearance*0.3;
++            float2 offset=worldPosition.xz-lerp(m.craftPrevious[i].xz,m.craftCurrent[i].xz,f)+heading*(10+clearance*0.15);
++            float ahead=dot(offset,heading),lateral=dot(offset,float2(-heading.y,heading.x));
++            float extent=ahead>0 ? radius*0.7 : radius*3.5;
++            float footprint=exp(-pow(lateral/radius,2)-pow(ahead/extent,2))*wash;
++            if (footprint>churn) { churn=footprint; churnHeading=heading; }
++        }
++    }
++    if (churn>0.001) {
++        // World-anchored streaks along the heading: the craft sweeps over them.
++        float2 across=float2(-churnHeading.y,churnHeading.x);
++        float2 streakAt=float2(dot(worldPosition.xz,across)*0.16,dot(worldPosition.xz,churnHeading)*0.012);
++        float s0=foamNoise(streakAt);
++        float2 slope=across*(foamNoise(streakAt+float2(0.35,0))-s0)*0.5+churnHeading*(foamNoise(streakAt+float2(0,0.03))-s0)*0.2;
++        ripples += clamp(slope*churn*0.6,-0.12,0.12);
++        churnFoam=churn*(0.25+0.75*smoothstep(0.35,0.8,s0))*0.35;
++    }
+     float3 N = normalize(geometric + float3(-ripples.x, 0, -ripples.y));
+     float3 V = normalize(p.camera.xyz - worldPosition);
+     float3 L = normalize(m.sunDirection.xyz);
+@@ -304,7 +342,7 @@ float4 PSMain(float4 position : SV_POSITION, float3 worldPosition : TEXCOORD0,
+     float nh = saturate(dot(N,H));
+     float vh = saturate(dot(V,H));
+     float fresnel = 0.0204 + 0.9796 * pow(1-nv, 5);
+-    float roughness = clamp(m.shallowColor.a + length(float2(ddx(N.x), ddy(N.z))) * 0.2, 0.065, 0.65);
++    float roughness = clamp(m.shallowColor.a + length(float2(ddx(N.x), ddy(N.z))) * 0.2 + churn * 0.25, 0.065, 0.65);
+     float a2 = pow(roughness, 4);
+     float d = a2 / max(PI * pow(nh*nh*(a2-1)+1, 2), 0.00001);
+     float k = pow(roughness + 1, 2) * 0.125;
+@@ -318,16 +356,18 @@ float4 PSMain(float4 position : SV_POSITION, float3 worldPosition : TEXCOORD0,
+     float refractedThickness = opticalDepth(refractedPixel,position.z,worldPosition,p);
+     // Reject foreground silhouettes at the proposed sample before distorting.
+     if (refractedThickness < 0) { refractedPixel = position.xy; refractedThickness = thickness; }
+-    // Derivatives must be evaluated for the whole pixel quad, before the
+-    // depth-validity branch. A branch crossing a shoreline otherwise leaves
+-    // caustic receiver normals/filter widths undefined on some backends.
+-    float bottomDepth=sceneDepth.Load(int3(int2(boundPixel(refractedPixel,p)),0));
+-    float3 bottom=waterWorldFromPixel(refractedPixel,bottomDepth,p);
+-    float3 bottomNormal=cross(ddx(bottom),ddy(bottom));
+-    bottomNormal*=rsqrt(max(dot(bottomNormal,bottomNormal),0.000001));
+-    if (bottomNormal.y<0) bottomNormal=-bottomNormal;
+-    float2 causticUV=bottom.xz*0.035;
+-    float causticFilter=1-smoothstep(0.25,1.5,length(fwidth(causticUV)));
++    // Caustics follow the reference water workflow: one authored pattern read
++    // twice on the water plane, panned in opposite directions, the second
++    // layer rescaled so the two never align. Mipmaps keep distant cells from
++    // breaking into stair-stepped lines. Sample before the depth-validity
++    // branch: a branch crossing a shoreline leaves derivatives undefined.
++    float2 causticUV=worldPosition.xz/130+ripples*0.6;
++    float caustic=causticTexture.Sample(causticSampler,causticUV+float2(-0.05,0.05)*p.camera.w)
++        +causticTexture.Sample(causticSampler,(causticUV+float2(0.05,-0.05)*p.camera.w)*0.66);
++    // Vertical water column under this pixel. Unlike the view-ray thickness it
++    // does not grow at grazing angles. Negative without a submerged surface.
++    float waterDepth=thickness>=0 ? max(worldPosition.y-waterWorldFromPixel(position.xy,
++        sceneDepth.Load(int3(int2(position.xy),0)),p).y,0) : -1;
+     if (thickness >= 0 && refractedThickness >= 0) {
+         float3 transmission = exp(-m.deepColor.a * float3(1.8,0.55,0.30) * refractedThickness);
+         // Course geometry often ends a short distance below the shoreline.
+@@ -341,15 +381,12 @@ float4 PSMain(float4 position : SV_POSITION, float3 worldPosition : TEXCOORD0,
+         // Uncovered taps transition to the water body, not an unrelated
+         // background color. Keep fractional coverage for a soft boundary.
+         transmission*=receiverColor.a;
+-        // Stable world-space light focusing, confined to an actual shallow
+-        // submerged receiver. Dark source lighting and steep walls reject it.
+-        float phaseA=causticUV.x+sin(causticUV.y*1.3+p.camera.w*0.65);
+-        float phaseB=causticUV.y-sin(causticUV.x*1.1-p.camera.w*0.5);
+-        float focusing=pow(saturate(1-abs(sin(phaseA)+sin(phaseB)*0.55)),12);
+-        float receiver=smoothstep(0.2,0.65,bottomNormal.y)*saturate(dot(bottomNormal,L));
++        // Focused light only in shallow water and near the camera, and never
++        // on receivers whose source lighting is dark.
++        float receiver=smoothstep(0,2,waterDepth)*(1-smoothstep(0,60,waterDepth));
++        receiver*=1-smoothstep(900,2200,length(p.camera.xyz-worldPosition));
+         receiver*=smoothstep(0.015,0.08,dot(bottomColor,float3(0.2126,0.7152,0.0722)));
+-        receiver*=bottom.y<worldPosition.y-2 && refractedThickness<visibilityRange ? 1 : 0;
+-        bottomColor+=m.sunColor.rgb*focusing*causticFilter*receiver*m.optics.z;
++        bottomColor+=m.sunColor.rgb*caustic*receiver*m.optics.z*4;
+         body = bottomColor * transmission + body * (1-transmission);
+     }
+     // Style changes the diffuse body and sun glints only. Keep N, Fresnel,
+@@ -400,7 +437,15 @@ float4 PSMain(float4 position : SV_POSITION, float3 worldPosition : TEXCOORD0,
+     float breakup=foamBreakup(worldPosition.xz,p.camera.w,m.surface.yz);
+     float shore=wake.z*(1-smoothstep(30,100,abs(worldPosition.y-m.surface.x)));
+     float foam=saturate((wake.y*1.8+shore*1.3+crest+contact)*m.animation.w*breakup);
++    foam=saturate(foam+churnFoam);
+     color=lerp(color,float3(0.73,0.79,0.80)*(0.65+0.35*nl)*m.sunColor.a,foam);
++    // Sun glitter on churned liquid; sub-pixel cells are filtered out.
++    float2 glitterAt=worldPosition.xz*0.45;
++    float glitterFilter=1-smoothstep(0.35,1.0,length(fwidth(glitterAt)));
++    if (churn>0.001) {
++        float spark=smoothstep(0.93,1.0,foamHash(floor(glitterAt)+floor(p.camera.w*12)*float2(7.13,3.71)));
++        color+=m.sunColor.rgb*m.sunDirection.a*spark*pow(saturate(dot(reflect(-V,N),L)),4)*churn*glitterFilter*1.2;
++    }
+     if (p.fogColor.a > 0.5) color = lerp(color, p.fogColor.rgb, saturate(sourceColor.a));
+     // The original mirrored scene has already passed through course fog.
+     // Compose it here to avoid applying that fog a second time and erasing
+diff --git a/src/shaders/WaterSprayPS.hlsl b/src/shaders/WaterSprayPS.hlsl
+--- a/src/shaders/WaterSprayPS.hlsl
++++ b/src/shaders/WaterSprayPS.hlsl
+@@ -8,10 +8,14 @@ Texture2DMS<float> waterDepth : register(t4);
+ Texture2D<float> waterDepth : register(t4);
+ #endif
+ float4 PSMain(float4 position : SV_POSITION, float2 uv : TEXCOORD0,
+-    float3 world : TEXCOORD1, float2 fade : TEXCOORD2) : SV_TARGET0 {
++    float3 world : TEXCOORD1, float4 fade : TEXCOORD2) : SV_TARGET0 {
+     WaterDrawParams p=waterDraws[gConstants.drawIndex];
+     float radius=dot(uv,uv);
+-    float alpha=(1-smoothstep(0.10,1,radius))*fade.x;
++    bool mist=fade.z>0.5 && fade.z<1.5;
++    // Streaks are brightest at the head (uv.y=+1) and fade toward the tail.
++    float streak=(1-smoothstep(0.15,1,abs(uv.x)))*smoothstep(-1,0.3,uv.y)*(1-smoothstep(0.75,1,uv.y));
++    float alpha=(mist ? exp(-radius*2.2)*(1-smoothstep(0.6,1,radius)) : fade.z>1.5 ? streak : 1-smoothstep(0.10,1,radius))*fade.x;
++    float soft=mist ? 40 : 12;
+     int2 pixel=int2(clamp(position.xy,p.viewBounds.xy,p.viewBounds.zw-1));
+     float water=0;
+ #ifdef SPRAY_MSAA
+@@ -23,13 +27,21 @@ float4 PSMain(float4 position : SV_POSITION, float2 uv : TEXCOORD0,
+ #else
+     water=waterDepth.Load(int3(pixel,0));
+ #endif
+-    if (water>0) alpha*=saturate((water-fade.y)/12);
++    if (water>0) alpha*=saturate((water-fade.y)/soft);
+     float depth=sceneDepth.Load(int3(pixel,0));
+     if (depth<0.9999) {
+         float3 background=waterWorldFromPixel(position.xy,depth,p);
+-        alpha*=saturate((length(background-p.camera.xyz)-fade.y)/12);
++        alpha*=saturate((length(background-p.camera.xyz)-fade.y)/soft);
+     }
+     float3 light=(p.material.skyColor.rgb*0.3+p.material.sunColor.rgb*0.7)*p.material.sunColor.a;
++    if (fade.z>0.5) {
++        // Low-pass spray is lit white water, glowing faintly against the sun.
++        light=max(light,float3(0.62,0.66,0.68)*p.material.sunColor.a*2);
++        float scatter=pow(saturate(dot(normalize(world-p.camera.xyz),normalize(p.material.sunDirection.xyz))),6);
++        light+=p.material.sunColor.rgb*scatter*(mist ? 0.55 : 0.35);
++        // A few droplets catch the sun as glints.
++        if (fade.z>1.5 && fade.w>0.85) light+=p.material.sunColor.rgb*(0.25+scatter);
++    }
+     // Match the course haze without introducing a second exposure system.
+     float fog=p.fogColor.a*saturate((fade.y-1200)/5000);
+     light=lerp(light,p.fogColor.rgb,fog);
+diff --git a/src/shaders/WaterSprayVS.hlsl b/src/shaders/WaterSprayVS.hlsl
+--- a/src/shaders/WaterSprayVS.hlsl
++++ b/src/shaders/WaterSprayVS.hlsl
+@@ -5,7 +5,7 @@ StructuredBuffer<WaterSprayParticle> particles : register(t2);
+ 
+ void VSMain(uint vertex : SV_VertexID, uint instance : SV_InstanceID,
+     out float4 position : SV_POSITION, out float2 uv : TEXCOORD0,
+-    out float3 world : TEXCOORD1, out float2 fade : TEXCOORD2) {
++    out float3 world : TEXCOORD1, out float4 fade : TEXCOORD2) {
+     // Return a finite, degenerate offscreen primitive for invisible particles.
+     // Alpha zero alone cannot make invalid projected positions safe.
+     position=float4(2,2,2,1); uv=0; world=0; fade=0;
+@@ -13,11 +13,16 @@ void VSMain(uint vertex : SV_VertexID, uint instance : SV_InstanceID,
+     WaterSprayParticle particle=particles[instance];
+     float age=p.camera.w-particle.origin.w;
+     if (age<0 || age>=particle.velocity.w || particle.velocity.w<=0) return;
+-    float drag=1.5, response=(1-exp(-drag*age))/drag;
++    // Kind 0 is hull spray, 1 low-pass mist, 2 low-pass curtain droplets.
++    float kind=particle.appearance.w;
++    bool mist=kind>0.5 && kind<1.5, streak=kind>1.5;
++    float life=saturate(age/particle.velocity.w);
++    float drag=mist ? 2.6 : 1.5, gravity=mist ? 12 : 140, response=(1-exp(-drag*age))/drag;
+     world=particle.origin.xyz+particle.velocity.xyz*response;
+-    world.y-=140*(age-response)/drag;
++    world.y-=gravity*(age-response)/drag;
++    float size=particle.appearance.x*(mist ? 1+life*1.2 : 1);
+     float4 clip=mul(p.viewProjection,float4(world,1));
+-    float4 top=mul(p.viewProjection,float4(world+float3(0,particle.appearance.x,0),1));
++    float4 top=mul(p.viewProjection,float4(world+float3(0,size,0),1));
+     // Both points must be in front of the eye before either perspective divide.
+     // A top edge crossing the eye plane used to create an enormous white quad.
+     if (!all(isfinite(clip)) || !all(isfinite(top)) || clip.w<=0.01 || top.w<=0.01) return;
+@@ -29,11 +34,32 @@ void VSMain(uint vertex : SV_VertexID, uint instance : SV_InstanceID,
+     const float2 corners[6]={float2(-1,-1),float2(1,-1),float2(-1,1),float2(-1,1),float2(1,-1),float2(1,1)};
+     uv=corners[vertex];
+     position=float4(xy*clip.w,screen.z*clip.w,clip.w);
+-    float radius=clamp(projectedRadius,0.0005,0.035);
+-    position.xy+=uv*radius*float2(p.screen.y/p.screen.x,1)*clip.w;
+-    float life=saturate(age/particle.velocity.w);
++    // Streaks keep a minimum width so fine droplets stay visible.
++    float radius=clamp(projectedRadius,streak ? 0.0022 : 0.0005,mist ? 0.24 : streak ? 0.12 : 0.035);
++    float2 aspect=float2(p.screen.y/p.screen.x,1);
++    float2 offset=uv*radius*aspect;
++    float energy=1;
++    if (streak) {
++        // Stretch curtain droplets along their recent screen motion.
++        float decay=exp(-drag*age);
++        float3 velocity=particle.velocity.xyz*decay-float3(0,gravity*(1-decay)/drag,0);
++        float4 tail=mul(p.viewProjection,float4(world-velocity*0.09,1));
++        if (all(isfinite(tail)) && tail.w>0.01) {
++            float3 tailScreen=tail.xyz/tail.w*float3(1,-1,1)*p.viewportScale.xyz+p.viewportTranslate.xyz;
++            float2 tailXY=(tailScreen.xy/p.screen.xy*float2(2,-2)+float2(-1,1))*p.screenTransform.xy+p.screenTransform.zw;
++            float2 trail=(xy-tailXY)/aspect;
++            float span=length(trail);
++            if (all(isfinite(trail)) && span>radius*0.5) {
++                float2 along=trail/span, across=float2(-along.y,along.x);
++                span=min(span,0.2);
++                offset=(across*uv.x*radius+along*(uv.y*(span*0.5+radius)-span*0.5))*aspect;
++                energy=pow(saturate(2*radius/(span+2*radius)),0.3);
++            }
++        }
++    }
++    position.xy+=offset*clip.w;
+     float distance=length(world-p.camera.xyz);
+-    float nearFade=smoothstep(particle.appearance.x*4,particle.appearance.x*12,distance);
+-    float sizeFade=1-smoothstep(0.012,0.035,projectedRadius);
+-    fade=float2(particle.appearance.y*smoothstep(0,0.07,age)*(1-smoothstep(0.55,1,life))*nearFade*sizeFade,distance);
++    float nearFade=mist ? smoothstep(size*1.5,size*4,distance) : smoothstep(particle.appearance.x*4,particle.appearance.x*12,distance);
++    float sizeFade=mist ? 1-smoothstep(0.14,0.24,projectedRadius) : streak ? 1-smoothstep(0.07,0.12,projectedRadius) : 1-smoothstep(0.012,0.035,projectedRadius);
++    fade=float4(particle.appearance.y*smoothstep(0,0.07,age)*(1-smoothstep(0.55,1,life))*nearFade*sizeFade*energy,distance,kind,particle.appearance.z);
+ }
+diff --git a/src/shared/rt64_water_params.h b/src/shared/rt64_water_params.h
+--- a/src/shared/rt64_water_params.h
++++ b/src/shared/rt64_water_params.h
+@@ -2,6 +2,14 @@
+ #include "rt64_hlsl.h"
+ #define WATER_CRAFT_COUNT 8
+ #define WATER_SHORE_SEGMENTS_PER_TILE 8
++// Low passes: clearance above the liquid at which a skimming craft still
++// disturbs it, full-strength clearance, and the speed for full spray.
++#define WATER_LOWPASS_PLANE_CEILING 300.0f
++#define WATER_LOWPASS_PLANE_FULL 30.0f
++#define WATER_LOWPASS_HOVER_CEILING 120.0f
++#define WATER_LOWPASS_HOVER_FULL 20.0f
++#define WATER_LOWPASS_HOVER_SCALE 0.55f
++#define WATER_LOWPASS_FULL_SPEED 900.0f
+ #define WATER_STYLE_DKR (1U << 8U)
+ #define WATER_DEBUG_MASK 255U
+ 
+@@ -22,6 +30,7 @@ struct WaterMaterial {
+     float4 craftPrevious[WATER_CRAFT_COUNT]; // world XYZ, wet contact fraction (-1 means inactive)
+     float4 craftCurrent[WATER_CRAFT_COUNT];
+     float4 shoreCounts[2];     // bounded static shoreline segments in each craft's world tile
++    // Water draws carry low-pass clearance in the last two shoreline vectors (WATER_CRAFT_AIR).
+     float4 shoreSegments[WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE]; // immutable mean-water intersections, XZ endpoints
+     float4 performance;    // SSR steps, wake resolution, hardware distance, spray tier
+     float4 appearance;     // reflection, refraction, wake and waterfall strengths
+@@ -32,6 +41,17 @@ struct WaterMaterial {
+     float4 cameraPosition;  // XYZ, W=1 marks the reviewed DKR adapter
+ };
+ 
++// Low-pass clearance above the liquid, four crafts per vector: positive
++// values are aircraft, negative values hovercraft, zero means no low pass.
++// WaterDrawParams is exactly at the 2048-byte structured-buffer stride, so
++// the clearance shares the last two shoreline vectors instead of growing it.
++// Water draws publish no shoreline segments (every shoreCounts entry stays
++// zero, so the field shaders never read them) and lava draws reuse only
++// shoreSegments[0..15] for emitters and write no clearance. Low passes are
++// gated on active crafts (W>=0), which lava and vertical water never have.
++#define WATER_CRAFT_AIR_SEGMENT (WATER_CRAFT_COUNT * WATER_SHORE_SEGMENTS_PER_TILE - WATER_CRAFT_COUNT / 4)
++#define WATER_CRAFT_AIR(m, i) ((m).shoreSegments[WATER_CRAFT_AIR_SEGMENT + (i) / 4][(i) % 4])
++
+ struct WaterDrawParams {
+     WaterMaterial material;
+     float4 screen;          // original framebuffer width/height, target width/height
+@@ -68,7 +88,17 @@ struct WaterFieldPushConstants {
+ static_assert(sizeof(WaterMaterial) == 1584, "DKR water task ABI");
+ static_assert(sizeof(WaterDrawParams) == 2048, "DKR water shader ABI");
+ static_assert(sizeof(WaterDrawParams) <= 2048, "D3D structured-buffer stride limit");
++static_assert(WATER_CRAFT_AIR_SEGMENT >= 16, "Low-pass clearance must not overlap the lava emitters");
+ static_assert(sizeof(WaterFieldPushConstants) == 32, "Portable water field shader ABI");
+ static_assert(sizeof(WaterFieldPushConstants) <= 128, "Vulkan guaranteed push-constant budget");
+ }
+ #endif
++
++#ifndef HLSL_CPU
++// Matches lowPassStrength in rt64_water_renderer.cpp.
++float waterLowPassStrength(float air) {
++    if (air>0) return 1-smoothstep(WATER_LOWPASS_PLANE_FULL,WATER_LOWPASS_PLANE_CEILING,air);
++    if (air<0) return WATER_LOWPASS_HOVER_SCALE*(1-smoothstep(WATER_LOWPASS_HOVER_FULL,WATER_LOWPASS_HOVER_CEILING,-air));
++    return 0;
++}
++#endif

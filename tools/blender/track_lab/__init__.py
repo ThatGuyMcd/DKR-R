@@ -37,8 +37,8 @@ def _module_classes():
     """
     from . import prefs, props
     from .operators import (ai, checks, custom_textures, edit, geometry,
-                            header, io_objects, level_type, minimap, music,
-                            new_track, pack, placeholders, race_ai, rom_assets,
+                            header, io_objects, level_type, minimap,
+                            mode_checklist, music, new_track, pack, placeholders, race_ai, rom_assets,
                             skybox, start_grid, textures, water, waterfall)
     from .ui import panels
 
@@ -58,6 +58,7 @@ def _module_classes():
     classes += list(waterfall.CLASSES)
     classes += list(edit.CLASSES)
     classes += list(ai.CLASSES)
+    classes += list(mode_checklist.CLASSES)
     classes += list(race_ai.CLASSES)
     classes += list(minimap.CLASSES)
     classes += list(checks.CLASSES)
@@ -197,19 +198,21 @@ def register():
         bpy.types.TOPBAR_MT_file_import.append(_menu_import)
         bpy.types.TOPBAR_MT_file_export.append(_menu_export)
 
-        # The bot lines and the minimap are draw handlers, not registered
+        # The bot lines, the AI graph and the minimap are draw handlers, not registered
         # classes, so they need explicit lifecycle handling.
-        from .operators import minimap, race_ai
+        from .operators import ai as ai_ops, minimap, race_ai
 
         race_ai.register_overlay()
+        ai_ops.register_overlay()
         minimap.register_overlay()
     except Exception:
         # Never leave Blender half-registered: otherwise the next enable fails
         # on the first surviving class with "already registered as a subclass".
         try:
-            from .operators import minimap, race_ai
+            from .operators import ai as ai_ops, minimap, race_ai
 
             race_ai.unregister_overlay()
+            ai_ops.unregister_overlay()
             minimap.teardown()
         except Exception:  # noqa: BLE001 - rollback must continue
             pass
@@ -229,9 +232,10 @@ def unregister():
     from . import props
 
     try:
-        from .operators import minimap, race_ai
+        from .operators import ai as ai_ops, minimap, race_ai
 
         race_ai.unregister_overlay()
+        ai_ops.unregister_overlay()
         minimap.teardown()
     except Exception:  # noqa: BLE001 - unregistering must not fail
         pass

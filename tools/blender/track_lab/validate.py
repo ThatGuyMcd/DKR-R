@@ -19,7 +19,8 @@ from __future__ import annotations
 import collections
 from typing import List, Optional
 
-from . import ai_graph, catalog as catalog_module, level_types
+from . import (ai_graph, catalog as catalog_module, level_links, level_types,
+               mode_checklist, race_ai)
 from .gltf_io import ObjectMap
 
 AINODE = "ASSET_OBJECT_AINODE"
@@ -82,7 +83,8 @@ class Report:
 
 
 def validate(object_map: ObjectMap, catalog=None, require_racing_track=True,
-             level_key: Optional[str] = None) -> Report:
+             level_key: Optional[str] = None, boss: Optional[str] = None,
+             surfaces=None) -> Report:
     """Run every check over an object map.
 
     ``level_key`` is the track's :mod:`level_types` key, and when given it
@@ -93,6 +95,11 @@ def validate(object_map: ObjectMap, catalog=None, require_racing_track=True,
     Without one, ``require_racing_track`` is the older and blunter switch, which
     the retail sanity check still uses: it turns off the checks that only make
     sense for a track people race on.
+
+    A challenge, a hub or a boss race is also held to its Mode Checklist
+    (:mod:`mode_checklist`), with ``boss`` the scene's boss and ``surfaces``
+    the ``SurfaceType`` names its geometry uses - both ``None`` when unknown,
+    which skips the rules that need them.
     """
     if catalog is None:
         catalog = catalog_module.load()
@@ -110,11 +117,17 @@ def validate(object_map: ObjectMap, catalog=None, require_racing_track=True,
         issues += _check_checkpoints(object_map, require_racing_track)
         issues += _check_setup_points(object_map, require_racing_track)
     else:
+        # A boss race's missing checkpoints are its checklist's error, not
+        # this warning as well.
         issues += _check_checkpoints(object_map,
-                                     level_types.needs_checkpoints(level_key))
+                                     level_types.needs_checkpoints(level_key)
+                                     and level_key != level_types.BOSS)
         issues += _check_start_grid(object_map, level_key)
         issues += _check_level_type(object_map, catalog, level_key)
-    issues += _check_exits(object_map, catalog)
+        issues += [Issue(severity, message, object_id, objects=where)
+                   for severity, message, object_id, where in
+                   mode_checklist.issues(object_map, level_key, boss, surfaces)]
+    issues += _check_exits(object_map, catalog, level_key)
     issues += _check_budget(object_map, catalog)
     return Report(issues)
 
@@ -443,6 +456,56 @@ def _check_checkpoints(object_map: ObjectMap, require_racing_track: bool) -> Lis
                sum(len(w) for w in indices.values()), min(indices), max(indices)),
             CHECKPOINT,
         ))
+    issues += _check_checkpoint_counts(checkpoints, positions)
+    return issues
+
+
+def _check_checkpoint_counts(checkpoints, positions) -> List[Issue]:
+    """A vehicle set holds at most ``race_ai.MAX_CHECKPOINTS`` gates.
+
+    ``checkpoint_update_all`` loads one set's gates, main and alternate route
+    together, into a fixed table in spawn order and silently skips the rest.
+    Retail's table holds 60. DKR-R's holds 127: a gate's place in it is kept in
+    signed bytes (``Object_Racer.nextCheckpoint``, ``CheckpointNode.altRouteID``),
+    so 127 is the runtime's real ceiling, and past it a set is an error. Past 60
+    it still plays on DKR-R, but older builds and original hardware drop gates,
+    which is worth a warning.
+    """
+    sets = collections.defaultdict(list)
+    for checkpoint in checkpoints:
+        sets[checkpoint.fields.get("vehicleType", 0)].append(
+            positions.get(id(checkpoint)))
+    issues = []
+    for vehicle_type, where in sorted(sets.items()):
+        count = len(where)
+        if count > race_ai.MAX_CHECKPOINTS:
+            issues.append(Issue(
+                ERROR,
+                "vehicle type %s has %d checkpoints, main and alternate route "
+                "together; DKR-R loads at most %d per vehicle type (the "
+                "racer's next-checkpoint counter is a signed byte) and "
+                "silently skips the last %d placed, so their laps and AI line "
+                "break. Older DKR-R builds and original hardware load only %d"
+                % (vehicle_type, count, race_ai.MAX_CHECKPOINTS,
+                   count - race_ai.MAX_CHECKPOINTS,
+                   race_ai.RETAIL_MAX_CHECKPOINTS),
+                CHECKPOINT,
+                objects=[p for p in where[race_ai.MAX_CHECKPOINTS:] if p is not None],
+            ))
+        elif count > race_ai.RETAIL_MAX_CHECKPOINTS:
+            issues.append(Issue(
+                WARNING,
+                "vehicle type %s has %d checkpoints, main and alternate route "
+                "together; DKR-R loads up to %d, but older DKR-R builds and "
+                "original hardware load only the first %d placed and skip the "
+                "other %d"
+                % (vehicle_type, count, race_ai.MAX_CHECKPOINTS,
+                   race_ai.RETAIL_MAX_CHECKPOINTS,
+                   count - race_ai.RETAIL_MAX_CHECKPOINTS),
+                CHECKPOINT,
+                objects=[p for p in where[race_ai.RETAIL_MAX_CHECKPOINTS:]
+                         if p is not None],
+            ))
     return issues
 
 
@@ -491,14 +554,30 @@ def _check_setup_points(object_map: ObjectMap, require_racing_track: bool) -> Li
     return issues
 
 
-def _check_exits(object_map: ObjectMap, catalog) -> List[Issue]:
+def _check_exits(object_map: ObjectMap, catalog,
+                 level_key: Optional[str] = None) -> List[Issue]:
     known = set(catalog.levels)
     if not known:
         return []
     issues = []
     for exit_object in object_map.by_id(EXIT):
         destination = exit_object.fields.get("destinationMapId")
+        track = level_links.linked_track(exit_object)
+        if track:
+            # Leads to another custom track, whose level id the runtime
+            # assigns; the byte it ships is a placeholder by design.
+            if not _is_track_id(track):
+                issues.append(Issue(
+                    ERROR,
+                    "an exit leads to custom track %r, which is not a track id: "
+                    "lowercase words joined by single hyphens, as that track's "
+                    "Package panel shows it" % track,
+                    EXIT,
+                ))
+            continue
         if destination is None:
+            if level_key == level_types.HUB:
+                continue  # The hub's checklist reports it, as an error.
             issues.append(Issue(
                 WARNING,
                 "an exit has no destinationMapId and will not lead anywhere",
@@ -514,6 +593,15 @@ def _check_exits(object_map: ObjectMap, catalog) -> List[Issue]:
                 EXIT,
             ))
     return issues
+
+
+def _is_track_id(text: str) -> bool:
+    from . import dkrmap  # noqa: PLC0415 - dkrmap is heavier than validation needs
+    try:
+        dkrmap.validate_id(text)
+    except dkrmap.DkrMapError:
+        return False
+    return True
 
 
 def _check_budget(object_map: ObjectMap, catalog) -> List[Issue]:

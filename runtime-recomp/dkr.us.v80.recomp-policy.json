@@ -999,6 +999,24 @@
       "reason": "Immediately after mode_menu reads menu_loop result, before the MENU_RESULT_FLAGS_200 test. Track Lab auto boot answers with the same value the menus produce when a track is chosen, so retail performs its own start sequence rather than the host reproducing vehicle, entrance, cutscene and game mode by hand."
     },
     {
+      "function": "track_spawn_objects",
+      "beforeVram": "0x8000CAC8",
+      "text": "extern void dkr_custom_tracks_object_map_links(uint8_t*, recomp_context*); dkr_custom_tracks_object_map_links(rdram, ctx);",
+      "reason": "Right after gzip_inflate returns in track_spawn_objects (the jal at 0x8000CAC0 and its nop delay slot), before any entry spawns. s0 still holds the object map's asset offset and 0x48(sp) the inflated buffer. A Track Lab hub whose EXIT leads to another .dkrmap track carries a placeholder destinationMapId plus manifest levelLinks; the runtime writes the level id resolved for the installed set into that byte. Retail maps and tracks without links are untouched."
+    },
+    {
+      "function": "func_8002E904",
+      "beforeVram": "0x8002ED44",
+      "text": "extern void dkr_shadow_clip_budget(uint8_t*, recomp_context*); dkr_shadow_clip_budget(rdram, ctx);",
+      "reason": "On the jal to func_8002FF6C, with a0 = 3 already set. The clip appends edge points to D_8011B330 in groups of 32 (retail clamps each at 31), but the array holds 120 entries, so the fourth group's entries 24-31 overwrite D_8011C230 and the polygon array. A custom floor with many small faces under a shadow reached that. When the fourth group cannot take two more points or no polygon slot is left, a0 is set to 0 so the clip adds nothing and returns 0. Retail floors never reach the limit."
+    },
+    {
+      "function": "func_8002E904",
+      "beforeVram": "0x8002ED4C",
+      "text": "extern void dkr_shadow_polygon_budget(uint8_t*, recomp_context*); dkr_shadow_polygon_budget(rdram, ctx);",
+      "reason": "After func_8002FF6C returns the clipped shadow polygon's vertex count in v0 and before the someCount >= 3 test. func_8002E904 appends polygons to D_8011C238[32] and vertices to D_8011B120[32] without a bound; a custom floor cut into many small faces overflowed them (into the polygon count, then a write outside RDRAM). v0 is zeroed when the polygon may not fit, so the shadow loses that piece instead. Retail floors never reach the limit."
+    },
+    {
       "function": "asset_table_load",
       "beforeVram": "0x80076F0C",
       "text": "extern void dkr_v11_asset_mutex_acquire(uint8_t*, recomp_context*); dkr_v11_asset_mutex_acquire(rdram, ctx);",
@@ -1335,6 +1353,18 @@
       "vram": "0x800773BC",
       "value": "0x00000000",
       "reason": "Replace the raw-ROM-copy mutex send call with the contention-safe native hook at the same instruction."
+    },
+    {
+      "function": "allocate_object_pools",
+      "vram": "0x8000C008",
+      "value": "0x24041DC4",
+      "reason": "Size gTrackCheckpoints for 127 CheckpointNode entries (0x1DC4 = 127 * 0x3C bytes, originally addiu a0, zero, 0xE10 for MAX_CHECKPOINTS 60) so custom tracks can carry finer AI racing lines."
+    },
+    {
+      "function": "checkpoint_update_all",
+      "vram": "0x80017F88",
+      "value": "0x28E1007F",
+      "reason": "Raise the checkpoint load bound to the patched 127-entry gTrackCheckpoints table (originally slti at, a3, 60); 127 keeps every index and nextCheckpoint + 1 inside the s8 Object_Racer.nextCheckpoint, Object_Weapon.checkpoint and CheckpointNode.altRouteID fields."
     }
   ],
   "ignored": [

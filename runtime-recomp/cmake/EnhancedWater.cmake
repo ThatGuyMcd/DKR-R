@@ -280,5 +280,14 @@ dkr_water_shader(WaterSurfacePS WaterSurfacePS ps PSMain)
 dkr_water_shader(WaterSprayVS WaterSprayVS vs VSMain)
 dkr_water_shader(WaterSprayPS WaterSprayPS ps PSMain)
 dkr_water_shader(WaterSprayMSPS WaterSprayPS ps PSMain -D SPRAY_MSAA)
+# The authored caustic pattern is embedded like the shader blobs, so no
+# runtime file is packaged or looked up.
+set(water_caustics_png "${DKRPORT_ROOT}/runtime-recomp/assets/water/WaterCaustics.png")
+set(water_caustics_out "${water_shader_out}/textures/WaterCaustics.png")
+add_custom_command(OUTPUT "${water_caustics_out}.c" "${water_caustics_out}.h"
+    COMMAND file_to_c "${water_caustics_png}" WaterCausticsPNG "${water_caustics_out}.c" "${water_caustics_out}.h"
+    DEPENDS "${water_caustics_png}" file_to_c VERBATIM)
+target_sources(rt64 PRIVATE "${water_caustics_out}.c")
+list(APPEND water_shader_outputs "${water_caustics_out}.c" "${water_caustics_out}.h")
 add_custom_target(DKREnhancedWaterShaders DEPENDS ${water_shader_outputs})
 add_dependencies(rt64 DKREnhancedWaterShaders)

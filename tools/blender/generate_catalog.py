@@ -532,6 +532,20 @@ FIELD_LABELS = {
         + [("unk%s" % name, "Route flag, lane %d" % (index + 1))
            for index, name in enumerate(("13", "14", "15", "16"))]
     ),
+    # The arena AI's pathfinder targets nodes by this byte (func_8001CD28,
+    # objects.c:7675): 1 is a weapon balloon (racer.c:929, :948), 4 + racer
+    # the racer's bank in the banana challenge (racer.c:951).
+    "ASSET_OBJECT_AINODE": {"unk8": "Destination class"},
+    # racer_ai_eggs (racer.c:1052) matches a Head-For Point on unk8 as the
+    # kind of target and unk9 as the racer it belongs to (racer.c:1219-1223):
+    # 0 is where a racer carrying an egg drops it, 2 its way home.
+    "ASSET_OBJECT_HEADFORPOINT": {"unk8": "Kind (0 drop, 2 home)",
+                                  "unk9": "Racer (0-3)"},
+    # obj_init_treasuresucker stores (playerID - 1) & 3 (object_functions.c:
+    # 4204), so the chest of racer 0 says 1; the flag's index is 0-based
+    # (object_functions.c:1084).
+    "ASSET_OBJECT_TREASURESUCKER": {"playerID": "Racer (1-4)"},
+    "ASSET_OBJECT_CHARACTERFLAG": {"playerIndex": "Racer (0-3)"},
 }
 
 

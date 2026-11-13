@@ -2217,7 +2217,7 @@
       "id": "COPY-317",
       "file": "runtime_camera_tuning_ui.inl",
       "previous": "Boosts, landings, and the game's own hits and explosions. All at 0 is no shake; the swing when you hit a wall is under Hits.",
-      "approved": "Shake from boosts, landings and impacts. Zero turns shake off.",
+      "approved": "Shake from boosts and landings. Zero turns shake off. Hits and explosions never shake this camera.",
       "verification": "literal"
     },
     {

@@ -21,7 +21,9 @@
  *   - Vertical amortecida separada (pulos e lombadas não chacoalham a tela).
  *   - Acompanha a inclinação da pista suavemente.
  *   - Órbita manual no analógico direito com recentralização automática.
- *   - Colisão por callback (entra rápido, sai devagar).
+ *   - Colisão por callback (entra rápido, sai devagar). A parede nunca traz
+ *     a câmera para dentro do personagem: antes disso ela sobe por cima do
+ *     carro (collisionMinDist, collisionLiftMax).
  *   - Tremor por "trauma" (boost, aterrissagem), roll leve nas curvas.
  *   - Tudo depende de dt de forma exponencial: o mesmo comportamento a
  *     20, 30, 60 ou 144 fps.
@@ -84,6 +86,7 @@ typedef struct {
     float stickY;
     int lookBack;      /* 1 = olhar para trás pressionado */
     float steer;       /* volante, -1..1, + = virando para yaw POSITIVO (0 se não usar a antecipação) */
+    float hold;        /* 0..1: numa batida, a câmera fica presa ao carro (sem a mola de posição) e o braço não estica */
 } MCInput;
 
 /* Ajuste fino. ModernCam_DefaultParams preenche valores bons para kart. */
@@ -117,10 +120,12 @@ typedef struct {
     float heightSharpness;      /* vertical no chão (1/s) */
     float airHeightSharpness;   /* vertical no ar (1/s) */
     float maxVerticalLag;       /* atraso vertical máximo permitido (m) */
+    float riseLag;              /* no chão, o máximo que a câmera fica abaixo de um carro que sobe (m) */
 
     /* terreno */
     float slopeFollow;          /* 0..1, quanto a câmera acompanha a inclinação */
     float slopeSharpness;
+    float slopeMax;             /* o máximo que a câmera inclina com o terreno (rad) */
 
     /* look-ahead */
     float lookAhead;            /* segundos de velocidade somados ao alvo */
@@ -147,6 +152,9 @@ typedef struct {
     /* colisão */
     float collisionRadius;      /* (m) */
     float collisionReleaseSharpness;
+    float collisionPullSharpness; /* quão rápido o braço encolhe por uma parede (1/s); 0 = corte seco */
+    float collisionMinDist;     /* a parede nunca traz a câmera mais perto que isso do pivô (m); 0 desliga */
+    float collisionLiftMax;     /* quanto a câmera pode subir por cima do carro para fugir da parede (rad) */
 
     /* tremor */
     float traumaDecay;          /* por segundo */
@@ -187,6 +195,8 @@ typedef struct {
     float orbitYaw, orbitPitch;
     float idleTime;
     float collisionDist;
+    float collisionTarget;      /* até onde a parede deixa o braço ir neste passo (collisionDist desliza até ele) */
+    float lift;                 /* quanto o braço subiu por causa de uma parede (rad) */
     float trauma;
     float time;
     float prevVehicleYaw;

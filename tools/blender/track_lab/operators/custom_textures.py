@@ -1205,8 +1205,8 @@ class DKR_OT_remove_unused_custom_textures(bpy.types.Operator):
             ids = [int(record.get("id", 0)) for record in geometry.base_textures(obj)]
             if all(renumbered_id(i, renumber) == i for i in ids):
                 continue
-            path = bpy.path.abspath(obj.get(geometry.PROP_MODEL_PATH) or "")
-            if not obj.get(geometry.PROP_AUTHORED_BASE, False) or not os.path.isfile(path):
+            path = geometry.model_path(context, obj)
+            if not obj.get(geometry.PROP_AUTHORED_BASE, False) or not path:
                 self.report(
                     {"ERROR"},
                     "%s's model file is not one this addon wrote beside the "

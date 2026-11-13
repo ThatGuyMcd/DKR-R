@@ -13,6 +13,7 @@ class CharacterPresentation {
 public:
     void initialize(std::span<std::uint8_t>,const recomp_context&,const CharacterPresentationCalls&,
         const std::vector<AllocatedCharacter>&,std::span<const std::uint32_t> sample_addresses);
+    bool ready()const{return ready_;}
     // Unused library entries allocate no guest resources. Loaded resources
     // remain immutable until shutdown, including previously queued sounds.
     void prepare(std::span<std::uint8_t>,const recomp_context&,const CharacterPresentationCalls&,

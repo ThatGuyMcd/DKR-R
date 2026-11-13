@@ -22,11 +22,14 @@ import textwrap
 
 import bpy
 
-from .. import (catalog as catalog_module, level_types, prefs, race_ai, scene,
-                skyboxes, transparency as looks)
+from .. import (ai_graph, catalog as catalog_module, level_links, level_types,
+                mode_checklist, prefs, race_ai, scene, skyboxes,
+                transparency as looks)
+from ..operators import ai as ai_ops
 from ..operators import geometry as geometry_ops
 from ..operators import header as header_ops
 from ..operators import level_type as level_type_ops
+from ..operators import mode_checklist as checklist_ops
 from ..operators import new_track as new_track_ops
 from ..operators import race_ai as race_ai_ops
 from ..operators import rom_assets as rom_assets_ops
@@ -403,6 +406,128 @@ class DKR_PT_level_type(DkrPanel, bpy.types.Panel):
             _draw_grid_button(layout, context, key)
         if level_types.needs_checkpoints(key):
             layout.prop(settings, "laps")
+
+
+class DKR_PT_mode_checklist(DkrPanel, bpy.types.Panel):
+    """What this kind of level needs before the game can play it, each with
+    why, and a button that adds it where one can"""
+
+    bl_label = "Mode Checklist"
+    bl_idname = "DKR_PT_mode_checklist"
+    bl_parent_id = "DKR_PT_level_type"
+
+    @classmethod
+    def poll(cls, context):
+        return (not prefs.setup_pending(context)
+                and mode_checklist.applies(_key(context)))
+
+    def draw_header_preset(self, context):
+        rows = _checklist_or_none(context)
+        if rows:
+            _dim_label(self.layout, mode_checklist.summary(rows))
+
+    def draw(self, context):
+        layout = self.layout
+        rows = _checklist_or_none(context)
+        if rows is None:
+            info_box(layout, context, "The checklist could not be read.",
+                     icon="ERROR", alert=True)
+            return
+        column = layout.column()
+        for row in rows:
+            _draw_check(column, context, row)
+        lines(layout, context, "Validate reports the same list, and an error "
+              "here stops the export.", dim=True)
+
+
+def _checklist_or_none(context):
+    try:
+        return checklist_ops.checklist(context)
+    except Exception:  # noqa: BLE001 - the panel must still draw
+        return None
+
+
+#: Row state -> icon. A missing row that would stop the export is drawn red.
+_CHECK_ICONS = {mode_checklist.OK: "CHECKMARK", mode_checklist.MISSING: "ERROR",
+                mode_checklist.ADVISE: "ERROR",
+                mode_checklist.NOTE: "INFO", mode_checklist.UNKNOWN: "INFO"}
+
+#: The states a row has something to point at or fix in.
+_ACTIONABLE = (mode_checklist.MISSING, mode_checklist.ADVISE)
+
+
+def _draw_check(layout, context, row):
+    """One requirement: its state and label, then - unless it is met - why,
+    and the button that fixes it."""
+    block = layout.column(align=True)
+    head = block.row(align=True)
+    head.alert = (row.status == mode_checklist.MISSING
+                  and row.severity == mode_checklist.ERROR)
+    head.label(text=row.label, icon=_CHECK_ICONS.get(row.status, "INFO"))
+    if row.objects and row.status in _ACTIONABLE:
+        head.operator("dkr.select_issue", text="", icon="RESTRICT_SELECT_OFF",
+                      emboss=False).objects = ",".join(str(o) for o in row.objects)
+    if row.ok:
+        return
+    lines(block, context, row.detail, icon="BLANK1", dim=True)
+    if row.status in _ACTIONABLE and row.fix:
+        button = block.row(align=True)
+        button.label(text="", icon="BLANK1")
+        _draw_fix(button, context, row.fix)
+    layout.separator(factor=0.5)
+
+
+def _draw_fix(layout, context, fix):
+    """The button a checklist row offers, reusing the operator that does it."""
+    key = _key(context)
+    if fix == mode_checklist.FIX_START:
+        text = ("Add Entrance Point" if key == level_types.HUB else
+                "Build Start Ring" if level_types.is_challenge(key) else
+                "Generate Start Grid")
+        layout.operator("dkr.generate_start_grid", text=text, icon="EMPTY_ARROWS")
+    elif fix == mode_checklist.FIX_AI_LINE:
+        layout.operator("dkr.ai_from_curve", text="AI Line From Curve",
+                        icon="CURVE_PATH")
+    elif fix == mode_checklist.FIX_AI_TAG:
+        layout.operator("dkr.ai_tag_destinations", icon="BOOKMARKS")
+    elif fix == mode_checklist.FIX_AI_LINK:
+        layout.operator("dkr.ai_link_weapon_nodes", icon="LINKED")
+    elif fix in (mode_checklist.FIX_CHESTS, mode_checklist.FIX_FLAGS,
+                 mode_checklist.FIX_HEAD_FOR):
+        kind, object_id, field, name = {
+            mode_checklist.FIX_CHESTS: ("CHESTS", mode_checklist.CHEST,
+                                        "playerID", "Treasure Chest"),
+            mode_checklist.FIX_FLAGS: ("FLAGS", mode_checklist.FLAG,
+                                       "playerIndex", "Racer Flag"),
+            mode_checklist.FIX_HEAD_FOR: ("HEAD_FOR", None, None,
+                                          "Head-For Points"),
+        }[fix]
+        if object_id:
+            count = len(mode_checklist.missing_racers(
+                checklist_ops.scene_map(context), object_id, field))
+            text = "Add %d %s%s" % (count, name, "s" if count != 1 else "")
+        else:
+            text = "Add %s" % name
+        layout.operator("dkr.add_racer_set", text=text, icon="ADD").kind = kind
+    else:
+        placed = {
+            mode_checklist.FIX_EGG_CREATOR: (mode_checklist.EGG_CREATOR, "",
+                                             "Place Egg Creator"),
+            mode_checklist.FIX_COIN_CREATOR: (mode_checklist.COIN_CREATOR, "",
+                                              "Place Banana Creators"),
+            mode_checklist.FIX_BALLOON: (level_types.WEAPON_BALLOON, "RED",
+                                         "Place Weapon Balloons"),
+            mode_checklist.FIX_EXIT: (level_links.EXIT, "", "Place Exit"),
+            mode_checklist.FIX_CHECKPOINT: (level_types.CHECKPOINT, "",
+                                            "Place Checkpoints"),
+        }.get(fix)
+        if placed is None:
+            return
+        object_id, preset, text = placed
+        op = layout.operator("dkr.place_object", text=text,
+                             icon="RESTRICT_SELECT_OFF")
+        op.object_id = object_id
+        op.preset = preset
 
 
 def _sub_help(key):
@@ -1024,6 +1149,8 @@ class DKR_PT_place(DkrPanel, bpy.types.Panel):
         layout.prop(settings, "show_incompatible",
                     text="Show incompatible types%s"
                     % (" (%d hidden)" % hidden if hidden else ""))
+        if key in level_types.WEAPON_NODE_KEYS:
+            layout.prop(settings, "auto_weapon_node")
 
         placing = DKR_OT_place_object.placing()
         if placing is None:
@@ -1304,6 +1431,11 @@ class DKR_PT_object(LevelPanel, bpy.types.Panel):
             info_box(layout, context,
                      "Part of %s. Move or rotate the root to move the whole grid."
                      % obj.parent.name)
+        if object_id == mode_checklist.AINODE:
+            _draw_node_role(layout, context, obj)
+        elif (object_id == level_types.WEAPON_BALLOON
+              and key in level_types.WEAPON_NODE_KEYS):
+            _draw_balloon_node(layout, context, obj)
 
         angle_field = object_type.angle_field
         if angle_field is not None:
@@ -1322,11 +1454,16 @@ class DKR_PT_object(LevelPanel, bpy.types.Panel):
 
         from .. import texture_scroll
         is_scroll = object_id == texture_scroll.OBJECT_ID
+        is_exit = object_id == level_links.EXIT
         if is_scroll:
             _draw_scroll(layout, context, obj)
+        if is_exit:
+            _draw_exit_destination(layout, context, obj)
         column = layout.column()
         drawn = 3 if is_scroll else 0
         for field in object_type.fields:
+            if is_exit and field.name == level_links.DESTINATION_FIELD:
+                continue
             if is_scroll and field.name in ("textureIndex", "unkA", "unkB") and not settings.show_raw:
                 continue
             if field.unused:
@@ -1354,6 +1491,70 @@ class DKR_PT_object(LevelPanel, bpy.types.Panel):
         absent = obj.get(scene.PROP_ABSENT)
         if absent:
             layout.label(text="Omitted on import: %s" % absent, icon="INFO")
+
+
+def _node_role(obj) -> str:
+    """A node's destination class in plain words."""
+    value = obj.get("unk8", 0)
+    if value == ai_graph.CLASS_WEAPON:
+        balloon = ai_ops.balloon_of(obj)
+        whose = (" of %s" % ai_ops.balloon_label(balloon)) if balloon else ""
+        return "Weapon node%s: bots without a weapon come here" % whose
+    if isinstance(value, int) and ai_graph.CLASS_BANK <= value <= ai_graph.CLASS_BANK + 3:
+        return ("Bank node of racer %d: that bot drives here to bank two or "
+                "more bananas" % (value - ai_graph.CLASS_BANK))
+    if value == ai_graph.CLASS_REENTRY:
+        return "Re-entry node: where bots rejoin after an elevation change"
+    if value == ai_graph.CLASS_PLAIN:
+        return "Plain node: bots drive through it"
+    return ai_graph.describe_class(value)
+
+
+def _draw_node_role(layout, context, obj):
+    """What this node is for, who it links to, and its balloon if it has one."""
+    box = layout.box()
+    lines(box, context, _node_role(obj), icon="INFO", tight=True)
+    linked = ai_ops.neighbours(obj)
+    _dim_label(box, ("Linked to %s" % ", ".join(str(n) for n in linked))
+               if linked else "Not linked to any node", icon="LINKED"
+               if linked else "UNLINKED")
+    if ai_ops.balloon_of(obj) is not None:
+        box.operator("dkr.ai_select_balloon", icon="RESTRICT_SELECT_OFF")
+
+
+def _draw_balloon_node(layout, context, obj):
+    """Whether the arena bots will ever come for this balloon."""
+    nodes = ai_ops.weapon_nodes_of(obj)
+    if nodes:
+        node = nodes[0]
+        linked = ai_ops.neighbours(node)
+        text = ("Bots fetch it at weapon node %s, linked to %s." % (
+            node.get("nodeID", "?"), ", ".join(str(n) for n in linked))
+            if linked else
+            "Its weapon node %s is not linked to the graph yet, so no bot "
+            "comes for it." % node.get("nodeID", "?"))
+        lines(layout, context, text, icon="CHECKMARK" if linked else "ERROR",
+              dim=bool(linked))
+    else:
+        lines(layout, context, "No weapon node on it: bots never see balloons, "
+              "so only players take this one unless a destination class 1 node "
+              "sits on it.", icon="INFO", dim=True)
+
+
+def _draw_exit_destination(layout, context, obj):
+    """Where an exit leads: a retail level, or another custom track by id."""
+    box = layout.box()
+    shown = checklist_ops.describe_destination(obj, prefs.resolve(context))
+    row = box.row(align=True)
+    row.alert = not shown
+    split = row.split(factor=0.35, align=True)
+    split.label(text="Leads to")
+    split.operator("dkr.set_exit_destination", text=shown or "Nowhere - choose",
+                   icon="LINKED" if scene.destination_track(obj) else "FORWARD")
+    if scene.destination_track(obj):
+        lines(box, context, "A custom track: DKR-R fills in its level id when "
+              "the hub loads. If it is not installed, the exit leads to the "
+              "Central Area hub.", dim=True, tight=True)
 
 
 def is_hidden_raw(field, show_raw: bool) -> bool:
@@ -1533,9 +1734,19 @@ class DKR_PT_race_ai(LevelPanel, bpy.types.Panel):
         if route.dropped:
             info_box(layout, context,
                      "%d checkpoint(s) past the first %d in this set are never "
-                     "loaded: the game stops counting there."
+                     "loaded: DKR-R stops counting there, alternates "
+                     "included, and Validate refuses the export."
                      % (route.dropped, race_ai.MAX_CHECKPOINTS),
                      icon="ERROR", alert=True)
+        elif route.past_retail:
+            info_box(layout, context,
+                     "This set has %d checkpoints. Current DKR-R loads up to "
+                     "%d; older DKR-R builds and original hardware load only "
+                     "the first %d placed and drop the other %d."
+                     % (len(route.main) + len(route.alternates),
+                        race_ai.MAX_CHECKPOINTS,
+                        race_ai.RETAIL_MAX_CHECKPOINTS, route.past_retail),
+                     icon="INFO")
         if route.unpaired:
             info_box(layout, context,
                      "%d alternate checkpoint(s) name an index no main "
@@ -1646,27 +1857,154 @@ class DKR_PT_race_ai_sets(DkrPanel, bpy.types.Panel):
                      % " and ".join(stranded), icon="ERROR", alert=True)
 
 
+#: Where the AI node graph is read: the arena bots, and a hub's T.T. and Taj.
+_GRAPH_KEYS = (level_types.BATTLE, level_types.BANANAS, level_types.HUB)
+
+
+def _has_loop_or_nodes(context) -> bool:
+    for obj in scene.iter_dkr_objects(context):
+        object_id = str(obj.get(scene.PROP_ID))
+        if object_id == mode_checklist.AINODE:
+            return True
+        if (object_id == level_types.MODECHANGE
+                and obj.get("vehicleID") == "VEHICLE_LOOPDELOOP"):
+            return True
+    return False
+
+
 class DKR_PT_ai(LevelPanel, bpy.types.Panel):
+    """The AI node graph: what the battle and banana bots, and a hub's T.T.
+    and Taj, find their way along. Race and boss bots follow the checkpoints
+    instead, and egg bots steer straight at their targets"""
+
     bl_label = "AI Node Graph"
     bl_idname = "DKR_PT_ai"
     bl_options = {"DEFAULT_CLOSED"}
 
+    @classmethod
+    def poll(cls, context):
+        if not super().poll(context):
+            return False
+        key = _key(context)
+        if key in _GRAPH_KEYS:
+            return True
+        # A race reads the graph only on a loop-de-loop; shown there once a
+        # loop or a node is in the scene, so a plain circuit is not offered a
+        # tool that does nothing for it.
+        return key in (level_types.RACE, level_types.BOSS,
+                       level_types.TEST_RACE) and _has_loop_or_nodes(context)
+
     def draw_header_preset(self, context):
-        self.layout.label(text="in development", icon="EXPERIMENTAL")
+        count = sum(1 for o in scene.iter_dkr_objects(context)
+                    if str(o.get(scene.PROP_ID)) == mode_checklist.AINODE)
+        if count:
+            _dim_label(self.layout, "%d nodes" % count)
 
     def draw(self, context):
         layout = self.layout
-        lines(layout, context,
-              "Battle and banana arenas steer their bots along this graph. Race "
-              "bots follow the checkpoints instead - see AI Racers. The arena "
-              "tools stay off until the arena AI has been studied.",
-              icon="INFO")
+        key = _key(context)
+        found = checklist_ops.scene_map(context)
+        nodes = found.count_of(mode_checklist.AINODE)
+
+        if key in (level_types.BATTLE, level_types.BANANAS):
+            text = ("The bots steer along this graph: from the node nearest "
+                    "them, node to node, to a weapon balloon's node "
+                    "(destination class 1)%s." % (
+                        " or to their chest's (4 + racer)"
+                        if key == level_types.BANANAS else ""))
+        elif key == level_types.HUB:
+            text = ("T.T. and Taj walk this graph. Racers do not: a hub spawns "
+                    "only the players.")
+        else:
+            text = ("Racers here follow the checkpoints - see AI Racers. Only a "
+                    "loop-de-loop reads this graph: a racer crossing a Loop "
+                    "Entry rides the nodes nearest it.")
+        lines(layout, context, text, icon="INFO")
+        _draw_graph_overlay(layout, context)
+
+        linked = sum(1 for obj in found.objects
+                     if obj.object_id == mode_checklist.AINODE
+                     and any(a != 255 for a in (obj.fields.get("adjacent") or [])))
+        if nodes:
+            _dim_label(layout, "%d nodes, %d linked" % (nodes, linked),
+                       icon="CHECKMARK" if linked >= 2 else "ERROR")
+
         column = layout.column(align=True)
-        column.enabled = False
         column.operator("dkr.ai_from_curve", text="AI Line From Curve",
                         icon="CURVE_PATH")
         column.operator("dkr.ai_add_branch", text="Add Branch",
                         icon="CURVE_BEZCIRCLE")
+        active = context.active_object
+        if active is None or active.type != "CURVE":
+            lines(layout, context, "Draw a curve along the way the bots should "
+                  "go (Add > Curve), select it, then sample it. A branch is a "
+                  "second curve that starts and ends near the line.", dim=True)
+
+        if nodes:
+            row = layout.row(align=True)
+            row.operator("dkr.ai_link_nodes", text="Link", icon="LINKED")
+            row.operator("dkr.ai_unlink_nodes", text="Unlink", icon="UNLINKED")
+
+        if key in (level_types.BATTLE, level_types.BANANAS) and nodes:
+            layout.separator()
+            classes = {}
+            for obj in found.objects:
+                if obj.object_id == mode_checklist.AINODE:
+                    value = obj.fields.get("unk8", 0)
+                    classes[value] = classes.get(value, 0) + 1
+            text = "Weapon nodes: %d" % classes.get(mode_checklist.CLASS_BALLOON, 0)
+            if key == level_types.BANANAS:
+                text += "  ·  bank nodes: %d/4" % sum(
+                    1 for r in mode_checklist.RACERS
+                    if classes.get(mode_checklist.CLASS_BANK + r))
+            _dim_label(layout, text)
+            column = layout.column(align=True)
+            column.operator("dkr.ai_tag_destinations", icon="BOOKMARKS")
+            if ai_ops.loose_weapon_nodes(context):
+                column.operator("dkr.ai_link_weapon_nodes", icon="LINKED")
+            lines(layout, context, "Each node's destination class is in the DKR "
+                  "Object panel.", dim=True)
+
+
+def _draw_graph_overlay(layout, context):
+    """The overlay's switches, and what it shows about the active node."""
+    settings = context.scene.dkr
+    box = layout.box()
+    row = box.row(align=True)
+    row.prop(settings, "show_ai_graph", toggle=True,
+             icon="HIDE_OFF" if settings.show_ai_graph else "HIDE_ON")
+    row.prop(settings, "ai_graph_on_top", text="", toggle=True, icon="XRAY")
+    row.prop(settings, "ai_graph_show_ids", text="", toggle=True,
+             icon="LINENUMBERS_ON")
+    if not settings.show_ai_graph:
+        return
+    _labelled(box, "Colour by").row(align=True).prop(
+        settings, "ai_graph_colour", expand=True)
+
+    active = context.view_layer.objects.active if context.view_layer else None
+    if not ai_ops.is_node(active):
+        lines(box, context, "Select a node to colour the graph by how far each "
+              "node is from it, and to see the route a bot without a weapon "
+              "drives from there.", dim=True, tight=True)
+        return
+    try:
+        found = ai_ops.graph_geometry(context)
+    except Exception:  # noqa: BLE001 - the panel must still draw
+        return
+    route = found["route_ids"]
+    start = ai_ops.node_id(active)
+    if route:
+        steps = " > ".join(str(n) for n in route)
+        if len(route) > 7:
+            steps = " > ".join(str(n) for n in route[:3]) + " > ... > " + \
+                " > ".join(str(n) for n in route[-2:])
+        lines(box, context, "Bot route from %s to the nearest weapon node: %s "
+              "(dashed)" % (start, steps), icon="TRACKING", tight=True)
+    elif any(int(o.get("unk8", 0)) == ai_graph.CLASS_WEAPON
+             for o in ai_ops.node_empties(context)):
+        info_box(box, context, "No weapon node can be reached from node %s: a "
+                 "bot here never finds a weapon. Link this part of the graph "
+                 "to the rest." % start, icon="ERROR", alert=True)
 
 
 class DKR_PT_validate(LevelPanel, bpy.types.Panel):
@@ -2049,6 +2387,7 @@ CLASSES = (
     DKR_MT_default_vehicle,
     DKR_PT_assets,
     DKR_PT_level_type,
+    DKR_PT_mode_checklist,
     DKR_PT_track,
     DKR_PT_geometry,
     DKR_PT_textures,

@@ -35,6 +35,7 @@ using dkr::runtime::custom_tracks::Entry;
 using dkr::runtime::custom_tracks::MapSlot;
 using dkr::runtime::custom_tracks::Section;
 using dkr::runtime::custom_tracks::Track;
+using dkr::runtime::custom_tracks::LevelLink;
 
 constexpr std::size_t kSectionCount = 7U;
 
@@ -846,6 +847,57 @@ std::int32_t level_model_batches(std::int32_t level_id) {
             for (const Entry& entry : track.entries) {
                 if (entry.section == Section::LevelModels) {
                     return count_level_model_batches(entry.bytes.data(), entry.bytes.size());
+                }
+            }
+        }
+    }
+    return -1;
+}
+
+std::vector<ResolvedLevelLink> level_links_for_object_map(std::uint32_t offset) {
+    std::vector<ResolvedLevelLink> found;
+    std::scoped_lock lock(g_mutex);
+    const SectionState& maps = g_sections[section_slot(Section::LevelObjectMaps)];
+    if (!maps.built) {
+        return found;
+    }
+    for (const AddedEntry& entry : maps.added) {
+        if (entry.offset != offset || entry.track_id.empty()) {
+            continue;
+        }
+        for (const Track& track : g_tracks) {
+            if (track.id != entry.track_id || !track.enabled) {
+                continue;
+            }
+            for (const LevelLink& link : track.level_links) {
+                if (link.slot != entry.slot) {
+                    continue;
+                }
+                const auto resolved = g_resolved_level_ids.find(link.track);
+                found.push_back({link.offset,
+                                 resolved != g_resolved_level_ids.end() ? resolved->second : -1,
+                                 link.track});
+            }
+        }
+        break;
+    }
+    return found;
+}
+
+std::int32_t level_race_type(std::int32_t level_id) {
+    constexpr std::size_t kRaceTypeOffset = 0x4CU;
+    std::scoped_lock lock(g_mutex);
+    for (const auto& [track_id, resolved] : g_resolved_level_ids) {
+        if (resolved != level_id) {
+            continue;
+        }
+        for (const Track& track : g_tracks) {
+            if (track.id != track_id || !track.enabled) {
+                continue;
+            }
+            for (const Entry& entry : track.entries) {
+                if (entry.section == Section::LevelHeaders && entry.bytes.size() > kRaceTypeOffset) {
+                    return entry.bytes[kRaceTypeOffset];
                 }
             }
         }
@@ -1930,6 +1982,49 @@ bool parse_track(const std::filesystem::path& input_root, Track& track,
         !parse_music(manifest["music"], root, track, error)) {
         error = "music: " + error;
         return false;
+    }
+
+    // A hub's exits may lead to other .dkrmap tracks. Their level ids exist only
+    // once the installed set is known, so the package names the track and the
+    // byte to fill in; see level_links_for_object_map().
+    if (manifest.contains("levelLinks")) {
+        const auto& links = manifest["levelLinks"];
+        if (!links.is_array() || links.size() > 255) {
+            error = "levelLinks must be an array of at most 255 links";
+            return false;
+        }
+        constexpr std::uint32_t kMaxObjectMapBytes = 0x10000U;
+        for (const auto& link : links) {
+            if (!link.is_object() || !link.contains("slot") || !link["slot"].is_string() ||
+                !link.contains("offset") || !link["offset"].is_number_unsigned() ||
+                !link.contains("track") || !link["track"].is_string()) {
+                error = "levelLinks entries need slot, offset and track";
+                return false;
+            }
+            LevelLink parsed;
+            const auto slot = link["slot"].get<std::string>();
+            if (slot == "structure") {
+                parsed.slot = MapSlot::Structure;
+            } else if (slot == "collectables") {
+                parsed.slot = MapSlot::Collectables;
+            } else {
+                error = "levelLinks slot must be structure or collectables";
+                return false;
+            }
+            const auto offset = link["offset"].get<std::uint64_t>();
+            // Past the 16-byte map header, inside the game's object map buffer.
+            if (offset < 0x10U || offset >= kMaxObjectMapBytes) {
+                error = "levelLinks offset " + std::to_string(offset) + " is outside an object map";
+                return false;
+            }
+            parsed.offset = static_cast<std::uint32_t>(offset);
+            parsed.track = link["track"].get<std::string>();
+            if (parsed.track.empty()) {
+                error = "levelLinks track is empty";
+                return false;
+            }
+            track.level_links.push_back(std::move(parsed));
+        }
     }
 
     // A header carries 0 in both object map fields, because the real indices

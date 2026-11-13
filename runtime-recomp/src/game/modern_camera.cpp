@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 
 namespace {
@@ -90,6 +91,9 @@ struct Player {
     dkr_cam::BumpGuard bump{};
     std::uint32_t hits = 0U; // seen since this camera started, for the panel
     bool view_cut = false;   // look back toggled since the last step
+    dkr_cam_vec pivot{};     // what modern_cam aimed at in the last step
+    double closest = 0.0;    // its collisionMinDist, in units
+    bool sliding = false;    // its boom is still sliding in towards a wall
 };
 std::array<Player, kPorts> g_players{};
 
@@ -117,6 +121,12 @@ std::array<Saved, kPlayerCameras> g_saved{};
 bool g_pending = false;
 std::uint32_t g_pending_camera = 0U;
 Fields g_pending_retail{};
+// The Modern camera's own eye and how close to its pivot it may come, for
+// commit(); closest is 0 for a look back on the retail camera.
+dkr_cam_vec g_pending_eye{};
+dkr_cam_vec g_pending_pivot{};
+double g_pending_closest = 0.0;
+bool g_pending_sliding = false;
 std::uint64_t g_guest_generation = 0U;
 
 void reset_guest_state_if_needed() {
@@ -129,6 +139,15 @@ void reset_guest_state_if_needed() {
     g_pending = false;
     g_pending_camera = 0U;
     g_pending_retail = {};
+    g_pending_eye = {};
+    g_pending_pivot = {};
+    g_pending_closest = 0.0;
+    g_pending_sliding = false;
+}
+
+double distance_between(dkr_cam_vec a, dkr_cam_vec b) {
+    const dkr_cam_vec d = dkr_cam_sub(a, b);
+    return std::sqrt(dkr_cam_dot(d, d));
 }
 
 bool camera_slot(std::uint32_t camera, std::uint32_t& slot) {
@@ -361,6 +380,10 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
         nose, dt, player.bump, hit_timing);
     in.yaw = steady.heading;
     in.vel = steady.velocity;
+    // While a hit is steadied the camera is tied to the racer, as the retail
+    // camera is: it rides the bounce at the same distance instead of the
+    // position spring overshooting, backing off and coming in again.
+    in.hold = player.bump.blend;
     if (player.bump.hit) ++player.hits;
     in.slopePitch = static_cast<float>(dkr_cam::slope_from_racer_pitch(MEM_H(0x02, dkr_cam_addr(object))));
     in.grounded = scene.mode == kCameraModePlane ||
@@ -373,23 +396,28 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
     in.stickY = -input.y.load(std::memory_order_relaxed);
     in.lookBack = look_back ? 1 : 0;
     in.steer = dkr_cam::steer_from_racer(static_cast<std::int8_t>(MEM_B(kRacerSteerAngle, dkr_cam_addr(racer))));
-
-    // Retail hits and explosions shake the camera; feed them in as trauma.
-    const float shake = std::fabs(read_float(rdram, scene.camera + 0x30U));
-    if (std::isfinite(shake) && player.state.initialized) {
-        player.state.trauma = std::max(player.state.trauma,
-                                       std::min(shake / 12.0F, 0.5F) * tuning.retailShake);
-    }
+    // Retail hits and explosions bob the retail camera (Camera +0x30) for a
+    // second or so. That pose is replaced, and while the bob lasts nothing
+    // shakes this one either: no trauma, and the bounce landing is no dip.
+    const float retail_shake = std::fabs(read_float(rdram, scene.camera + 0x30U));
+    const bool retail_hit = std::isfinite(retail_shake) && retail_shake > 0.1F;
 
     Raycast ray{rdram, scene.model,
                 dkr_cam_authored_radius(scene.layout, MEM_BU(0x9C, dkr_cam_addr(scene.header))),
                 dkr_cam_add(position, dkr_cam_v(0.0, kClearanceHeight, 0.0))};
     MCOutput out{};
+    if (retail_hit) {
+        player.state.trauma = 0.0F;
+        params.boostTrauma = 0.0F;
+        params.landingTrauma = 0.0F;
+    }
     const float trauma_before = player.state.trauma;
     // While a hit is being steadied the yaw spring is not to keep up with
     // the nose, and a hop off a wall is not a landing: no dip, no shake.
     params = dkr_cam::hit_step_params(params, player.bump);
-    if (player.state.initialized && player.bump.blend > 0.0F) player.state.prevGrounded = in.grounded;
+    if (player.state.initialized && (player.bump.blend > 0.0F || retail_hit)) {
+        player.state.prevGrounded = in.grounded;
+    }
     const bool landing = player.state.initialized && in.grounded && !player.state.prevGrounded;
     // modern_cam starts over on its first step and after a teleport.
     const MCVec3 anchor = player.state.anchor;
@@ -422,6 +450,10 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
         return false;
     }
     player.view_cut = false;
+    player.pivot = dkr_cam_v(player.state.anchor.x, player.state.anchor.y + params.targetHeight * params.unitScale,
+                             player.state.anchor.z);
+    player.closest = std::max(params.collisionMinDist, 0.0F) * params.unitScale;
+    player.sliding = player.state.collisionDist > player.state.collisionTarget + 0.01F;
     const dkr_cam_vec eye = dkr_cam_v(out.eye.x, out.eye.y, out.eye.z);
     player.pose.x = eye.x;
     player.pose.y = eye.y;
@@ -435,14 +467,16 @@ bool step_modern(std::uint8_t* rdram, recomp_context* context, std::uint32_t obj
         std::fprintf(stderr,
                      "[modern-camera][step] port=%zu dt=%.4f speed=%.0f vy=%.0f grounded=%d landing=%d "
                      "retail-shake=%.2f trauma=%.3f->%.3f dip=%.1f kick=%.1f roll=%.2f nose=%.3f heading=%.3f "
-                     "view=%.3f pitch=%.3f eye=(%.0f,%.0f,%.0f) racer=(%.0f,%.0f,%.0f) clear=%.2f "
-                     "bump-hold=%.2f bump-blend=%.2f hit=%d recovered=%.2f drift=%d boost=%.0f fov=%.1f\n",
+                     "view=%.3f pitch=%.3f eye=(%.0f,%.0f,%.0f) racer=(%.0f,%.0f,%.0f) clear=%.2f lift=%.2f "
+                     "bump-hold=%.2f bump-blend=%.2f hit=%d recovered=%.2f drift=%d boost=%.0f fov=%.1f "
+                     "lookback=%d\n",
                      port, dt, std::hypot(player.velocity.x, player.velocity.z), player.velocity.y,
-                     in.grounded, landing ? 1 : 0, shake, trauma_before, player.state.trauma,
+                     in.grounded, landing ? 1 : 0, retail_shake, trauma_before, player.state.trauma,
                      player.state.dipY, player.state.kick, degrees(out.roll), nose, in.yaw, out.yaw, out.pitch,
                      eye.x, eye.y, eye.z, position.x, position.y, position.z, player.state.collisionDist,
+                     player.state.lift,
                      player.bump.hold, player.bump.blend, player.bump.hit ? 1 : 0, player.bump.recovered,
-                     in.drifting, in.boost, player.fov);
+                     in.drifting, in.boost, player.fov, in.lookBack);
     } else if (trace_level() == 1 && (++player.trace_ticks % 15U) == 0U) {
         const double speed = std::hypot(player.velocity.x, player.velocity.z);
         const double motion = speed > 1.0 ? std::atan2(player.velocity.x, player.velocity.z) : 0.0;
@@ -577,11 +611,26 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
     const std::uint32_t racer = dkr_cam_span(sp, 0x44, 4) ? dkr_cam_word(rdram, sp + 0x3CU) : 0U;
     if (!follow_camera(rdram, object, fields, scene) || !dkr_cam_span(racer, 0x1F0, 4)) {
         // Finish, loop and door cameras are retail; start fresh afterwards.
+        if (player.active && trace_level() >= 1) {
+            const std::uint32_t camera = dkr_cam_word(rdram, fields[5]);
+            std::fprintf(stderr,
+                         "[modern-camera] port=%u hands over to the retail camera: game-mode=%u cutscene=%u "
+                         "dialogue=%d camera-mode=%d\n",
+                         static_cast<unsigned>(port), dkr_cam_word(rdram, fields[0]),
+                         static_cast<unsigned>(MEM_BU(0, dkr_cam_addr(fields[3]))),
+                         static_cast<int>(MEM_H(0, dkr_cam_addr(fields[6]))),
+                         dkr_cam_span(camera, kCameraSize, 4) ? static_cast<int>(MEM_H(0x36, dkr_cam_addr(camera)))
+                                                              : -1);
+        }
         player.active = false;
         if (scene.layout == 0U) release_fov(rdram, context);
         return false;
     }
     if (!player.active || player.header != scene.header || player.camera != scene.camera) {
+        if (trace_level() >= 1) {
+            std::fprintf(stderr, "[modern-camera] port=%u takes the camera: camera-mode=%d layout=%u\n",
+                         static_cast<unsigned>(port), scene.mode, scene.layout);
+        }
         player = Player{};
         player.active = true;
         player.header = scene.header;
@@ -616,6 +665,10 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
             player.frame = frame;
         }
         write_pose(rdram, scene.camera, player.pose, player.roll);
+        g_pending_eye = dkr_cam_v(player.pose.x, player.pose.y, player.pose.z);
+        g_pending_pivot = player.pivot;
+        g_pending_closest = player.closest;
+        g_pending_sliding = player.sliding;
         if (scene.layout == 0U && std::isfinite(g_fov.level) && g_fov.level > 0.0F) {
             const float current = read_float(rdram, dkr::runtime::revision_addresses::CurrentCameraFov);
             if (!(std::fabs(current - player.fov) < 0.01F)) set_fov(rdram, context, player.fov);
@@ -637,6 +690,8 @@ bool dkr::runtime::modern_camera::begin(std::uint8_t* rdram, recomp_context* con
         camera.pitch = retail.pitch;
         write_pose(rdram, scene.camera, dkr_cam::turn_around(camera, pivot.x, pivot.z, dkr_cam::kPi),
                    retail.roll);
+        g_pending_closest = 0.0;
+        g_pending_sliding = false;
     }
     g_pending = true;
     g_pending_camera = scene.camera;
@@ -653,6 +708,21 @@ void dkr::runtime::modern_camera::commit(std::uint8_t* rdram, const std::uint32_
     const std::uint32_t model = dkr_cam_word(rdram, fields[4]);
     std::uint32_t slot = 0U;
     if (camera != g_pending_camera || !camera_slot(camera, slot)) return;
+    // The clearance pass pulls the eye towards the racer to keep it out of a
+    // wall, but never into the racer: within modern_cam's closest distance
+    // its own eye stands (it has already risen over what it could). Nor in
+    // one jump: while modern_cam's boom is still sliding in towards a wall,
+    // its eye stands too, so a wall cutting the boom is a quick slide rather
+    // than metres in one frame.
+    if (g_pending_closest > 0.0) {
+        const double cleared = distance_between(dkr_cam_position(rdram, camera), g_pending_pivot);
+        if ((cleared < g_pending_closest * 0.95 || g_pending_sliding) &&
+            distance_between(g_pending_eye, g_pending_pivot) > cleared) {
+            dkr_cam_store(rdram, camera + 0x0CU, g_pending_eye.x);
+            dkr_cam_store(rdram, camera + 0x10U, g_pending_eye.y);
+            dkr_cam_store(rdram, camera + 0x14U, g_pending_eye.z);
+        }
+    }
     // Rendering and BSP selection start from the segment the moved eye is in.
     // The clearance pass only rewrites it when it had to move the eye.
     if (dkr_cam_span(model, 0x40, 4)) {
@@ -683,6 +753,35 @@ void dkr::runtime::modern_camera::restore(std::uint8_t* rdram, const std::uint32
     if (now.pitch == saved.written.pitch) MEM_H(0x02, base) = saved.retail.pitch;
     if (now.roll == saved.written.roll) MEM_H(0x04, base) = saved.retail.roll;
     if (now.segment == saved.written.segment) MEM_H(0x34, base) = saved.retail.segment;
+}
+
+void dkr::runtime::modern_camera::trace_drawn_pose(std::uint8_t* rdram, std::uint32_t camera_slot) {
+    if (trace_level() < 2 || camera_slot >= kPlayerCameras || g_online.load(std::memory_order_acquire)) return;
+    const std::uint32_t camera = dkr::runtime::revision_addresses::Cameras + camera_slot * kCameraSize;
+    if (!dkr_cam_span(camera, kCameraSize, 4)) return;
+    const Fields drawn = read_fields(rdram, camera);
+    const Saved& saved = g_saved[camera_slot];
+    if (saved.valid && saved.camera == camera && drawn.x == saved.written.x && drawn.y == saved.written.y &&
+        drawn.z == saved.written.z && drawn.yaw == saved.written.yaw && drawn.pitch == saved.written.pitch &&
+        drawn.roll == saved.written.roll) {
+        return;
+    }
+    bool any = false;
+    for (const Player& player : g_players) any = any || player.active;
+    if (!any) return;
+    const auto f = [](std::uint32_t bits) {
+        float value;
+        std::memcpy(&value, &bits, sizeof(value));
+        return static_cast<double>(value);
+    };
+    std::fprintf(stderr,
+                 "[modern-camera][drawn] slot=%u pending=%d mode=%d drawn=(%.0f,%.0f,%.0f yaw=%d pitch=%d roll=%d) "
+                 "modern=(%.0f,%.0f,%.0f yaw=%d pitch=%d roll=%d) retail=(%.0f,%.0f,%.0f yaw=%d pitch=%d roll=%d)\n",
+                 static_cast<unsigned>(camera_slot), saved.valid ? 1 : 0,
+                 static_cast<int>(MEM_H(0x36, dkr_cam_addr(camera))), f(drawn.x), f(drawn.y), f(drawn.z),
+                 drawn.yaw, drawn.pitch, drawn.roll, f(saved.written.x), f(saved.written.y), f(saved.written.z),
+                 saved.written.yaw, saved.written.pitch, saved.written.roll, f(saved.retail.x), f(saved.retail.y),
+                 f(saved.retail.z), saved.retail.yaw, saved.retail.pitch, saved.retail.roll);
 }
 
 bool dkr::runtime::modern_camera::consume_cut(std::uint32_t camera_slot) {

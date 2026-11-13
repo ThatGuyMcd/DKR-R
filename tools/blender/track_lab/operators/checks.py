@@ -48,8 +48,11 @@ class DKR_OT_validate(bpy.types.Operator):
         try:
             catalog = catalog_module.load()
             object_map = scene.export_object_map(context, catalog, resolve_scroll=False)
+            from . import mode_checklist  # noqa: PLC0415
+            boss, surfaces = mode_checklist.validation_facts(context)
             report = validate.validate(
                 object_map, catalog, level_key=key or level_types.NONE,
+                boss=boss, surfaces=surfaces,
             )
             if key:
                 report = validate.Report(list(report) + grid_issues(context, key))
