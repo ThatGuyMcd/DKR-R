@@ -648,6 +648,8 @@ private:
         std::atomic<bool> current{true};
         std::atomic<bool> route_ready{false};
         bool departure_reported = false; // mutex_ protected
+        bool signals_released = false; // mutex_ protected
+        std::vector<Json> held_signals; // mutex_ protected
         std::chrono::steady_clock::time_point created = std::chrono::steady_clock::now();
         std::size_t queued_bytes = 0U;
         std::shared_ptr<rtc::PeerConnection> connection;
@@ -887,7 +889,7 @@ private:
                     payload["reliable"] = true;
                     payload["serialization"] = "none";
                 }
-                send_signal(Json{{"type", type == "offer" ? "OFFER" : "ANSWER"},
+                send_peer_signal(locked, Json{{"type", type == "offer" ? "OFFER" : "ANSWER"},
                                  {"dst", locked->remote_id},
                                  {"payload", std::move(payload)}});
             }));
@@ -895,7 +897,7 @@ private:
             callbacks_.wrap([this, weak_peer](rtc::Candidate candidate) {
                 const auto locked = weak_peer.lock();
                 if (!locked || !locked->current.load()) return;
-                send_signal(Json{
+                send_peer_signal(locked, Json{
                     {"type", "CANDIDATE"}, {"dst", locked->remote_id},
                     {"payload", {
                         {"connectionId", locked->connection_id},
@@ -955,6 +957,7 @@ private:
             std::scoped_lock lock(mutex_);
             retired_peers_.push_back(std::move(replaced));
         }
+        release_peer_signals(peer);
         return peer;
         } catch (const std::exception&) {
             request_route_retry(peer);
@@ -965,12 +968,48 @@ private:
         }
     }
 
+    // The first data channel starts negotiation on an SDK thread, so the OFFER
+    // can be ready before create_peer registers the route. Hold a route's
+    // signalling until it is registered; otherwise the ANSWER and candidates
+    // can return first and be dropped as unknown, stalling ICE until reaped.
+    void send_peer_signal(const std::shared_ptr<Peer>& peer, Json message) {
+        {
+            std::scoped_lock lock(mutex_);
+            if (!peer->signals_released) {
+                peer->held_signals.push_back(std::move(message));
+#ifdef DKR_QUICK_JOIN_TESTING
+                signals_held_.fetch_add(1U);
+#endif
+                return;
+            }
+        }
+        send_signal(message);
+    }
+
+    void release_peer_signals(const std::shared_ptr<Peer>& peer) {
+        // Drain until empty before releasing so held signals keep their order
+        // ahead of any that SDK callbacks produce meanwhile.
+        for (;;) {
+            std::vector<Json> held;
+            {
+                std::scoped_lock lock(mutex_);
+                if (peer->held_signals.empty()) {
+                    peer->signals_released = true;
+                    return;
+                }
+                held.swap(peer->held_signals);
+            }
+            for (const auto& message : held) send_signal(message);
+        }
+    }
+
     void create_offer(const std::string& remote) {
         (void)create_peer(remote, "dkrr-" + random_token(20U, kCodeAlphabet), true);
     }
 
     void route_construction_check(int stage) {
 #ifdef DKR_QUICK_JOIN_TESTING
+        if (construction_hook_) construction_hook_(stage);
         if (construction_failure_stage_ == stage)
             throw std::runtime_error("Injected route construction failure");
 #else
@@ -1184,6 +1223,9 @@ private:
     }
 
     void handle_signal(const std::string& text) {
+#ifdef DKR_QUICK_JOIN_TESTING
+        signals_handled_.fetch_add(1U);
+#endif
         Json message;
         if (text.size() > 65536U) return;
         try { message = Json::parse(text); } catch (...) { return; }
@@ -1259,6 +1301,9 @@ private:
     bool host_ = false;
 #ifdef DKR_QUICK_JOIN_TESTING
     int construction_failure_stage_ = -1;
+    std::function<void(int)> construction_hook_;
+    std::atomic<unsigned> signals_handled_{0U};
+    std::atomic<unsigned> signals_held_{0U};
 #endif
     std::string code_;
     std::string local_peer_id_;
