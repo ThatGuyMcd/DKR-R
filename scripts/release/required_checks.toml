@@ -1,0 +1,168 @@
+# Every check a release must have run and passed, on every platform, before
+# finalize.py hands it off. finalize.py reads each platform's CTest result
+# (ctest --output-junit WORK/<platform>/ctest.xml) and fails unless each entry
+# below ran there and passed.
+#
+# An entry with `pending` is a gate the release needs that the folded tree
+# doesn't have yet. finalize.py refuses to finalize while any entry is
+# pending, naming them: no release is finalized from this tree until the step
+# named in `pending` restores them. Never delete a pending entry to get past
+# that; land the fixture and drop `pending`.
+#
+#   id          a stable name for messages
+#   ctest_label every CTest test with this label (at least one must run)
+#   ctest_test  one CTest test by name
+#   why         what the check proves
+#   pending     the fold step that restores it
+
+[[check]]
+id = "runtime"
+ctest_label = "runtime"
+why = "The runtime unit and regression suites."
+
+[[check]]
+id = "tooling"
+ctest_label = "tooling"
+why = "The build, packaging and release tooling tests."
+
+[[check]]
+id = "graphics"
+ctest_label = "graphics"
+why = "The renderer and shader policy tests."
+
+# The v1.0.11 release fixtures (patches/release-prep/v1.0.11/run_checks.py).
+# They were release-layer check targets; the fold didn't carry them (C5
+# promotes them). Expected markers are what v1.0.11 required.
+
+[[check]]
+id = "graphics-handoff"
+ctest_test = "DKRGraphicsHandoffChecks"
+why = "37 graphics handoff checks; 8000 concurrent transfers."
+
+[[check]]
+id = "render-stability"
+ctest_test = "DKRRenderStabilityChecks"
+why = "30 render stability checks."
+
+[[check]]
+id = "liquid-residency"
+ctest_test = "DKRLiquidResidencyChecks"
+why = "28 water residency checks."
+
+[[check]]
+id = "memory-stability-v77"
+ctest_test = "DKRMemoryStability77Checks"
+why = "184812 memory stability checks, US v1.0."
+
+[[check]]
+id = "memory-stability-v80"
+ctest_test = "DKRMemoryStability80Checks"
+why = "184812 memory stability checks, US v1.1."
+
+[[check]]
+id = "owned-heap-v77"
+ctest_test = "DKRMemoryOwned77Checks"
+why = "13 owned heap entry checks, US v1.0."
+
+[[check]]
+id = "owned-heap-v80"
+ctest_test = "DKRMemoryOwned80Checks"
+why = "13 owned heap entry checks, US v1.1."
+
+[[check]]
+id = "spectator-admission-before"
+ctest_test = "DKRSpectatorAdmissionBeforeChecks"
+why = "Negative control: the pre-fix admission must fail (custom music not prepared at a loading boundary)."
+
+[[check]]
+id = "spectator-admission"
+ctest_test = "DKRSpectatorAdmissionChecks"
+why = "345 spectator admission checks."
+
+[[check]]
+id = "spectator-handler"
+ctest_test = "DKRSpectatorHandlerChecks"
+why = "45 spectator handler checks."
+
+[[check]]
+id = "offline-retention"
+ctest_test = "DKROfflineRetentionChecks"
+why = "68-69 offline retention checks."
+
+[[check]]
+id = "race-release-before"
+ctest_test = "DKRRaceReleaseBeforeChecks"
+why = "Negative control: the pre-fix party runtime discards the first post-load release."
+
+[[check]]
+id = "race-release"
+ctest_test = "DKRRaceReleaseChecks"
+why = "151 party runtime regression checks, including v1.0.12's DKROnlinePartyChecks (input lane, checkpoint burst)."
+
+[[check]]
+id = "stability-transfer"
+ctest_test = "DKRStabilityTransferChecks"
+why = "Stability transfer checks."
+
+# v1.0.11 parsed Syeo's brute v2.dkrkart and nine installed legacy packages
+# (7449 checks); neither was redistributable, so the gate now generates its
+# packages. Its pinned fingerprints are the same-data-on-every-platform check;
+# ASan/UBSan runs it in the host-sanitizers preset.
+[[check]]
+id = "vehicle-original-textures"
+ctest_test = "DKRVehicleOriginalAudit"
+why = "10869 vehicle checks: tile preparation, nine generated legacy format variants and one original-resolution export with pinned prepared-data fingerprints, and 17 negative admissions."
+
+[[check]]
+id = "vehicle-original-textures-before"
+ctest_test = "DKRVehicleOriginalBeforeChecks"
+why = "Negative control: the pre-v1.0.10 profile admission reproduces the legacy fingerprints but rejects original-resolution-v1."
+
+[[check]]
+id = "online-menu-v77"
+ctest_test = "DKROnlineMenu77Checks"
+why = "514 production native menu dispatch checks."
+
+[[check]]
+id = "online-menu-v77-before"
+ctest_test = "DKROnlineMenu77BeforeChecks"
+why = "Historical notification admission must reject the newer callbacks."
+
+[[check]]
+id = "online-menu-v80"
+ctest_test = "DKROnlineMenu80Checks"
+why = "514 production native menu dispatch checks."
+
+[[check]]
+id = "online-menu-v80-before"
+ctest_test = "DKROnlineMenu80BeforeChecks"
+why = "Historical notification admission must reject the newer callbacks."
+
+# The v1.0.12 release fixtures (patches/online-performance and
+# patches/character-library-portraits, ReleaseOverlay.cmake). The fold made
+# them ordinary CTest tests; these entries keep finalize.py requiring them.
+
+[[check]]
+id = "online-setup"
+ctest_test = "DKROnlineSetup"
+why = "Setup bulk permission and capacity, retention budget, durable payload cache and non-inheritable logs (was DKROnlineSetupChecks)."
+
+[[check]]
+id = "directory-lifecycle"
+ctest_test = "DKRDirectoryLifecycle"
+why = "Online directory session lifecycle (was DKRDirectoryLifecycleChecks)."
+
+[[check]]
+id = "character-portraits"
+ctest_test = "DKRCharacterPortraits"
+why = "Character library portraits (was DKRCharacterPortraitChecks)."
+
+[[check]]
+id = "online-profile"
+ctest_test = "DKROnlineProfile"
+why = "Online profile and account API client (was DKRProfileChecks)."
+
+[[check]]
+id = "mod-store-history"
+ctest_test = "DKRModStoreHistory"
+why = "Mod Store history survives launcher restarts (was DKRModStoreHistoryChecks)."

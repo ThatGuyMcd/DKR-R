@@ -1,3 +1,9 @@
+#include "storage/maintenance.hpp"
+#include "online_stability/preparation_policy.hpp"
+#include "online_stability/catalogue_cache.hpp"
+#include "../offline_keep.hpp"
+#include "../cache_repair.hpp"
+#include "../vehicle_online.hpp"
 #include "online_mod_profile.hpp"
 #include "legacy_mod_process.hpp"
 #include "legacy_track_catalog.hpp"
@@ -21,6 +27,7 @@
 namespace dkr::mods::online {
 namespace {
 using nlohmann::json;
+using CatalogueScope=dkr::online_stability::CatalogueScope<TrackCatalog,TrackCatalogItem>;
 std::string path_text(const std::filesystem::path& path){const auto text=path.generic_u8string();return {text.begin(),text.end()};}
 void cancelled(std::stop_token stop){if(stop.stop_requested())throw Error("Online mod preparation cancelled. Offline mods and saves were not changed.");}
 json read(const std::filesystem::path& path,std::size_t limit=MiB){check_storage(path,false);const auto bytes=read_file(path,limit);return json::parse(bytes.begin(),bytes.end(),[](int depth,json::parse_event_t,json&){if(depth>24)throw Error("Online metadata nesting exceeds its limit.");return true;});}
@@ -61,11 +68,12 @@ Bundle export_host(const std::filesystem::path& library,const std::vector<std::f
     if(!code_root.empty()&&std::filesystem::exists(code_root/"library.json")) {
         code::Library codes(code_root,std::string(version));
         auto frozen=codes.freeze(bundle.manifest.revision,true,code::GameWorld::policy().modules,stop);
-        if(std::any_of(frozen.ordered.begin(),frozen.ordered.end(),[](const auto& p){return p->modules.contains("trophies")||!p->tracks.empty();})) {
+        if(std::any_of(frozen.ordered.begin(),frozen.ordered.end(),[](const auto& p){return (p->api==2&&p->modules.contains("catalogues2"))||p->modules.contains("trophies")||!p->tracks.empty();})) {
+            code::Json sdk2_inventory;
             const auto courses=with_matching_game_pak(roms,bundle.manifest.revision,stop,
                 [](const auto& path){return dkr::runtime::rom::inspect(path);},
-                [&](const auto& path){return code::trophy::installed_catalogue(path,library,labs,stop);});
-            code::trophy::rebind(frozen,courses,bundle.manifest.revision);
+                [&](const auto& path){return code::trophy::installed_catalogue(path,library,labs,stop,true,&sdk2_inventory);});
+            code::trophy::rebind(frozen,courses,bundle.manifest.revision,sdk2_inventory);
         }
         for(const auto& package:frozen.ordered) {
             const auto bytes=frozen.payloads.at(package->digest);
@@ -76,6 +84,15 @@ Bundle export_host(const std::filesystem::path& library,const std::vector<std::f
             if(!bundle.payloads.emplace(package->digest,bytes).second)throw Error("An enabled code payload is duplicated.");
             total+=bytes->size();
         }
+    }
+    auto cars=vehicles::Library(library.parent_path()/"vehicles").freeze(stop);
+    for(const auto& car:cars.packages) {
+        cancelled(stop);if(car->source.size()>MaxTransferBytes-total)throw Error("Custom cars exceed the online transfer budget.");
+        auto label=car->source_name;label.replace(label.size()-8,8,".dkrkart");
+        bundle.manifest.payloads.push_back({CarPayload,car->digest,{},car->source.size(),label});
+        bundle.manifest.content.push_back({CarContent,car->digest,car->name,car->digest,car->digest,car->digest,CarAdapterVersion});
+        if(!bundle.payloads.emplace(car->digest,std::make_shared<const Bytes>(car->source)).second)throw Error("A custom car payload is duplicated.");
+        total+=car->source.size();
     }
     bundle.manifest=canonical(std::move(bundle.manifest));return bundle;
 }
@@ -103,7 +120,7 @@ ProfileSources profile_sources(const Profile& input_profile) {
             const auto type=kind?TrackCatalog::Kind::Character:TrackCatalog::Kind::Track;
             const auto key=std::make_pair(library,type);
             auto at=catalogs.find(key);
-            if(at==catalogs.end())at=catalogs.emplace(key,TrackCatalog::installed_items(library,manifest.revision,type)).first;
+            if(at==catalogs.end())at=catalogs.emplace(key,CatalogueScope::installed(library,manifest.revision,type)).first;
             const auto id=ref.at("id").get<std::string>(),group=ref.at("group").get<std::string>();
             const auto item=std::find_if(at->second.begin(),at->second.end(),[&](const auto& c){return c.id==id && c.group==group;});
             if(item==at->second.end())throw Error("A referenced online asset was removed or needs repair. Retry preparation.");
@@ -116,7 +133,7 @@ ProfileSources profile_sources(const Profile& input_profile) {
             sources.courses.push_back(std::move(path));
         }
         if(refs.contains("code")) {
-            if(!refs["code"].is_object()||refs["code"].size()>128)throw Error("Invalid online code source index.");
+            if(!refs["code"].is_object()||refs["code"].size()>144)throw Error("Invalid online code source index.");
             for(const auto& [hash,ref]:refs["code"].items()) {
                 const auto text=ref.get<std::string>();const auto path=utf8_path(text);
                 if(!valid_digest(hash)||text.size()>32768||!path.is_absolute())throw Error("Invalid online code source path.");
@@ -167,8 +184,15 @@ ProfileSources profile_sources(const Profile& input_profile) {
            sha256(pack_track_lab(path))!=wanted->second.payload || !found.insert(key).second)
             throw Error("Online Track Lab course differs from its host manifest.");
     }
+    // The existing bounded portable-blob map holds both executable code and
+    // data-only cars. Only Manifest::code can ever grant code execution.
+    for(const auto& c:manifest.content)if(c.kind==CarContent) {
+        const auto at=sources.code.find(c.payload);if(at==sources.code.end())throw Error("A required custom car is missing.");
+        check_storage(at->second,false);verified_car(manifest,c,read_file(at->second,vehicles::MaxPackageBytes));
+        found.insert(std::make_pair(CarContent,c.id));
+    }
     if(found.size()!=expected.size())throw Error("Online profile is missing required host content.");
-    if(sources.code.size()!=manifest.code.size())throw Error("Online profile is missing required executable code.");
+    if(sources.code.size()!=manifest.code.size()+car_count(manifest))throw Error("Online profile is missing required executable code.");
     for(const auto& code:manifest.code) {
         const auto at=sources.code.find(code.payload);if(at==sources.code.end())throw Error("Online code payload is missing.");
         check_storage(at->second,false);const auto bytes=read_file(at->second,32*MiB);
@@ -241,45 +265,19 @@ void retain_profile(const Profile& input_profile,const std::filesystem::path& li
             cancelled(stop);codes.import(read_file(sources.code.at(package.payload),code::MaxPackage),true);
         }
     }
+    vehicles::Library cars(library.parent_path()/"vehicles");
+    for(const auto& c:profile.manifest.content)if(c.kind==CarContent) {
+        cancelled(stop);const auto bytes=read_file(sources.code.at(c.payload),vehicles::MaxPackageBytes);
+        const auto package=verified_car(profile.manifest,c,bytes);
+        cars.import({package->source_name,bytes,vehicles::Type::Car},false);
+    }
     if(profile.manifest.content.empty())return;
     const auto root=private_storage_path(library),tracks=private_storage_path(track_library);
     ensure_directory(root);ensure_directory(tracks);
     for(const auto* folder:{"reviews","prepared","prepared-characters","online-keeps"})ensure_directory(root/folder);
-    std::set<std::filesystem::path> libraries;
-    std::map<std::pair<std::string,std::string>,std::filesystem::path> trees;
-    for(const auto* selected:{&sources.tracks,&sources.characters})for(const auto& source:*selected) {
-        libraries.insert(source.library);
-        const auto folder=selected==&sources.tracks?"prepared":"prepared-characters";
-        for(const auto& [type,id]:{std::make_pair(std::string(folder),source.item.group),std::make_pair(std::string("reviews"),source.item.review)}) {
-            if(!valid_digest(id))throw Error("Invalid retained source identity.");
-            const auto path=source.library/type/id;
-            const auto [at,inserted]=trees.emplace(std::make_pair(type,id),path);
-            if(!inserted && at->second!=path && !same_tree(at->second,path,stop))throw Error("Conflicting verified source groups.");
-        }
-    }
-    for(const auto& library: libraries)if(library!=root)TrackCatalog::validate_retained_merge(root,library);
+    retain_legacy_sources(sources,root,stop);
     struct Copy {std::filesystem::path source,target,staged;};std::vector<Copy> copies;
     std::uint64_t bytes=0;unsigned files=0;
-    for(const auto& [identity,source]:trees) {
-            const auto& [folder,name]=identity;
-            cancelled(stop);
-            if(!valid_digest(name))throw Error("Invalid verified offline storage identity.");
-            if(folder=="reviews" && sha256(read_file(source/"review.json",8*MiB))!=name)
-                throw Error("The retained source review no longer matches its identity.");
-            const auto target=root/folder/name;
-            // Already installed assets are the source itself: no copy or
-            // expensive recursive comparison of an entire multi-mod pack.
-            if(source==target)continue;
-            if(std::filesystem::exists(target)) {
-                if(!same_tree(source,target,stop))throw Error("A kept mod conflicts with existing offline files. They were not replaced.");
-                continue;
-            }
-            copies.push_back({source,target,{}});
-            for(const auto& [path,type]:retained_tree(source,stop)) {
-                if(++files>32768 || type.second>std::uint64_t(1024*MiB)-bytes)throw Error("Offline mod copy exceeds its storage budget.");
-                bytes+=type.second;
-            }
-    }
     // Track Lab identity, not folder name, owns a slot. Do not overwrite a
     // user's authored/installed variant that happens to have the same id.
     std::map<std::string,std::filesystem::path> existing;
@@ -297,12 +295,22 @@ void retain_profile(const Profile& input_profile,const std::filesystem::path& li
         cancelled(stop);dkr::runtime::custom_tracks::Track track;std::string error;
         if(!dkr::runtime::custom_tracks::inspect_package(course,track,error))throw Error(error);
         const auto data=pack_track_lab(course,stop);
+        bool alternate=false;
         if(const auto at=existing.find(track.id);at!=existing.end()) {
-            if(pack_track_lab(at->second,stop)!=data)throw Error("A downloaded Track Lab course conflicts with an installed id. The installed course was not replaced.");
-            continue;
+            if(pack_track_lab(at->second,stop)==data)continue;
+            alternate=true;
         }
-        const auto target=tracks/course.filename();
-        if(std::filesystem::exists(target))throw Error("The offline Track Lab destination is already in use.");
+        auto target=tracks/course.filename();
+        if(alternate||std::filesystem::exists(target)) {
+            ensure_directory(tracks/"online-variants");
+            target=dkr::online_stability::archived_course(tracks,sha256(data));
+            if(std::filesystem::exists(target)) {
+                check_storage(target,true);
+                if(pack_track_lab(target,stop)!=data)throw Error("The archived offline course needs repair. Existing files were not replaced.");
+                continue;
+            }
+            std::fprintf(stderr,"[online-mods][offline-variant] course=%s preserved-installed=1 archived-inactive=1\n",track.id.c_str());
+        }
         if(data.size()>std::uint64_t(1024*MiB)-bytes)throw Error("Offline Track Lab copy exceeds its storage budget.");
         bytes+=data.size();courses.emplace_back(target,data);
     }
@@ -331,7 +339,7 @@ void retain_profile(const Profile& input_profile,const std::filesystem::path& li
         if(error && (!std::filesystem::exists(copy.target) || !same_tree(copy.staged,copy.target,stop)))
             throw Error("Could not publish a complete offline copy. Existing mods and selections were not replaced.");
     }
-    std::fprintf(stderr,"[online-mods][keep] unique-trees=%zu copied-trees=%zu copied-files=%u bytes=%llu\n",trees.size(),copies.size(),files,static_cast<unsigned long long>(bytes));
+    std::fprintf(stderr,"[online-mods][keep] unique-trees=%zu copied-trees=%zu copied-files=%u bytes=%llu\n",std::size_t(0),copies.size(),files,static_cast<unsigned long long>(bytes));
     // No host catalogues, enablement lists, visibility, ROMs or saves copied.
 }
 void verify_online_worker(const std::filesystem::path& worker,const std::filesystem::path& online_root,std::stop_token stop) {
@@ -356,21 +364,31 @@ void cache_installed_payloads(const Manifest& input,const std::filesystem::path&
     const std::filesystem::path& code_root,std::string_view version) {
     const auto manifest=canonical(input);
     const auto payloads=private_storage_path(input_payloads);check_storage(payloads,true);
+    const auto available=[&](const auto& payload){return dkr::lobby_stability::verify_or_repair_download(payloads.parent_path(),"payloads",payload,stop);};
     if(!code_root.empty()&&std::filesystem::exists(code_root/"packages")) {
         code::Library library(code_root,std::string(version));
-        for(const auto& payload:manifest.payloads)if(payload.kind==PayloadKind::Code&&!cached_payload(payloads,payload)) {
+        for(const auto& payload:manifest.payloads)if(payload.kind==PayloadKind::Code&&!available(payload)) {
             cancelled(stop);
             try {
                 const auto bytes=library.payload(payload.digest);if(bytes->size()!=payload.size)continue;
-                try{write_new_file(payloads/payload.digest,*bytes);}catch(...){if(!cached_payload(payloads,payload))throw;}
+                try{write_new_file(payloads/payload.digest,*bytes);}catch(...){if(!available(payload))throw;}
             }catch(const std::exception&){cancelled(stop);} // optional reuse never waives SHA/package validation
         }
+    }
+    if(!input_library.empty())for(const auto& p:manifest.payloads)if(p.kind==CarPayload&&!available(p)) {
+        cancelled(stop);
+        try {
+            const auto file=input_library.parent_path()/"vehicles"/"packages"/(p.digest+".dkrkart");
+            check_storage(file,false);const auto bytes=read_file(file,vehicles::MaxPackageBytes);
+            if(bytes.size()!=p.size||sha256(bytes)!=p.digest)continue;
+            try{write_new_file(payloads/p.digest,bytes);}catch(...){if(!available(p))throw;}
+        }catch(const std::exception&){cancelled(stop);}
     }
     // Authored Track Lab packages also have a canonical wire representation.
     // Local enablement sidecars are excluded by the existing packer.
     if(!track_library.empty() && std::filesystem::exists(track_library)) {
         std::map<std::string,Payload> courses;
-        for(const auto& p:manifest.payloads)if(p.kind==PayloadKind::TrackLab && !cached_payload(payloads,p))courses.emplace(p.digest,p);
+        for(const auto& p:manifest.payloads)if(p.kind==PayloadKind::TrackLab && !available(p))courses.emplace(p.digest,p);
         const auto tracks=private_storage_path(track_library);check_storage(tracks,true);unsigned examined=0;
         for(const auto& entry:std::filesystem::directory_iterator(tracks)) {
             cancelled(stop);if(courses.empty())break;
@@ -379,7 +397,7 @@ void cache_installed_payloads(const Manifest& input,const std::filesystem::path&
             try {
                 const auto bytes=pack_track_lab(entry.path(),stop);const auto digest=sha256(bytes);
                 const auto found=courses.find(digest);if(found==courses.end() || bytes.size()!=found->second.size)continue;
-                try{write_new_file(payloads/digest,bytes);}catch(...){if(!cached_payload(payloads,found->second))throw;}
+                try{write_new_file(payloads/digest,bytes);}catch(...){if(!available(found->second))throw;}
                 courses.erase(found);
             }catch(const std::exception&){cancelled(stop);}
         }
@@ -389,7 +407,7 @@ void cache_installed_payloads(const Manifest& input,const std::filesystem::path&
     if(!std::filesystem::exists(library/"reviews"))return;
     check_storage(library,true);check_storage(library/"reviews",true);check_storage(payloads,true);
     std::map<std::string,Payload> missing;
-    for(const auto& payload:manifest.payloads)if(payload.kind==PayloadKind::Xdelta && !cached_payload(payloads,payload))missing.emplace(payload.digest,payload);
+    for(const auto& payload:manifest.payloads)if(payload.kind==PayloadKind::Xdelta && !available(payload))missing.emplace(payload.digest,payload);
     unsigned examined=0;
     for(const auto& entry:std::filesystem::directory_iterator(library/"reviews")) {
         cancelled(stop);if(missing.empty())break;
@@ -407,7 +425,7 @@ void cache_installed_payloads(const Manifest& input,const std::filesystem::path&
                 const auto patch=entry.path()/"patches"/(found->first+".xdelta");check_storage(patch,false);
                 const auto bytes=read_file(patch,static_cast<std::size_t>(found->second.size));
                 if(bytes.size()!=found->second.size || sha256(bytes)!=found->first)continue;
-                try{write_new_file(payloads/found->first,bytes);}catch(...){if(!cached_payload(payloads,found->second))throw;}
+                try{write_new_file(payloads/found->first,bytes);}catch(...){if(!available(found->second))throw;}
                 missing.erase(found);
             }
         }catch(const std::exception&) {
@@ -454,6 +472,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     const std::vector<std::filesystem::path>& roms,const std::filesystem::path& input_root,
     const std::filesystem::path& worker,std::stop_token stop,const ProfileProgress& progress,const std::filesystem::path& installed_library,
     const std::filesystem::path& installed_track_library,const std::vector<std::filesystem::path>& selected_courses) {
+    CatalogueScope catalogue_scope;
     auto out=std::make_shared<Profile>();out->manifest=canonical(input);out->digest=identity(out->manifest);
     const bool needs_worker=std::any_of(out->manifest.payloads.begin(),out->manifest.payloads.end(),[](const auto& p){return p.kind==PayloadKind::Xdelta;});
     if(needs_worker&&(roms.empty() || roms.size()>8 || !worker.is_absolute()))throw Error("Online preparation needs imported Game Paks and the packaged importer.");
@@ -464,26 +483,22 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     const auto payloads=private_storage_path(input_payloads);
     if(needs_worker)check_storage(worker,false);check_storage(payloads,true);cancelled(stop);
     check_storage(root,true);child(root/"source-profiles");child(root/"prepared-payloads");child(root/"jobs");
-    if(needs_worker)verify_online_worker(worker,root,stop);
+    bool worker_verified=false;
+    const auto ensure_worker=[&]{if(!worker_verified){verify_online_worker(worker,root,stop);worker_verified=true;}};
     out->directory=root/"source-profiles"/out->digest;
     if(std::filesystem::exists(out->directory)) {
-        if(!installed_library.empty() || !installed_track_library.empty() || !selected_courses.empty()) {
-            // Prefer the current installed sources on rejoin, particularly
-            // after a first download was kept offline. An older cache index
-            // still references the online staging copy; returning it would
-            // force recursive comparisons of those same packs on every keep.
-            // Preserve the old receipt and publish only a new tiny index.
-            out->directory=root/"source-profiles"/nonce();
-        } else {
         if(progress)progress("Revalidating the cached online mod profile");
-        try{validate_profile(*out);return out;}
+        try{validate_profile(*out);dkr::storage::used(out->directory);cancelled(stop);std::fprintf(stderr,"[online-mods][profile] verified-index-reused=1 manifest=%s\n",out->digest.c_str());return out;}
         catch(const std::exception&) {
             cancelled(stop);
-            // A user may remove/reimport a group after the last lobby. Leave
-            // the old index untouched and build a new fully verified one.
+            // Preserve the stale index for QA and rebuild its named receipt
+            // atomically, so future rejoins reuse the repaired profile too.
             if(progress)progress("Refreshing stale online asset references");
-            out->directory=root/"source-profiles"/nonce();
-        }
+            check_storage(out->directory,true);
+            if(std::filesystem::canonical(out->directory).parent_path()!=std::filesystem::canonical(root/"source-profiles")||out->directory.filename()!=utf8_path(out->digest))
+                throw Error("Cannot safely refresh the stale online profile index.");
+            child(root/"quarantined-profiles");
+            std::filesystem::rename(out->directory,root/"quarantined-profiles"/(out->digest+"-"+nonce()));
         }
     }
     std::filesystem::path installed;
@@ -492,8 +507,8 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
         try {
             installed=private_storage_path(installed_library);
             if(progress)progress("Checking already installed mod resources");
-            installed_tracks=TrackCatalog::installed_items(installed,out->manifest.revision,TrackCatalog::Kind::Track);
-            installed_characters=TrackCatalog::installed_items(installed,out->manifest.revision,TrackCatalog::Kind::Character);
+            installed_tracks=CatalogueScope::installed(installed,out->manifest.revision,TrackCatalog::Kind::Track);
+            installed_characters=CatalogueScope::installed(installed,out->manifest.revision,TrackCatalog::Kind::Character);
         }catch(const std::exception&){cancelled(stop);installed.clear();installed_tracks.clear();installed_characters.clear();}
     }
     std::map<std::string,std::filesystem::path> installed_courses;
@@ -537,6 +552,14 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
     std::set<std::string> batch_attempted;
     for(const auto& payload:out->manifest.payloads) {
         cancelled(stop);
+        if(payload.kind==CarPayload) {
+            if(!cached_payload(payloads,payload))throw Error("A custom car failed its SHA/size check.");
+            const auto wanted=std::find_if(out->manifest.content.begin(),out->manifest.content.end(),[&](const auto& c){return c.kind==CarContent&&c.payload==payload.digest;});
+            if(wanted==out->manifest.content.end())throw Error("A custom car has no selected host identity.");
+            verified_car(out->manifest,*wanted,read_file(payloads/payload.digest,vehicles::MaxPackageBytes));
+            sources.code.emplace(payload.digest,payloads/payload.digest);++index;
+            if(progress)progress("Verifying custom cars");continue;
+        }
         if(payload.kind==PayloadKind::Code) {
             if(!cached_payload(payloads,payload))throw Error("A required executable code package failed its SHA/size check.");
             sources.code.emplace(payload.digest,payloads/payload.digest);++index;
@@ -554,7 +577,9 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
         const Profile reusable{subset,identity(subset),root/"prepared-payloads"/identity(subset)};
         auto source=reusable.directory;
         const auto started=std::chrono::steady_clock::now();
-        const auto prefix="Mod "+std::to_string(++index)+"/"+std::to_string(out->manifest.payloads.size())+": ";
+        const auto named=std::find_if(out->manifest.content.begin(),out->manifest.content.end(),[&](const auto& c){return c.payload==payload.digest;});
+        const auto prefix="Mod "+std::to_string(++index)+"/"+std::to_string(out->manifest.payloads.size())+": "+(named==out->manifest.content.end()?payload.digest.substr(0,12):named->name)+" - ";
+        std::fprintf(stderr,"[online-mods][package] payload=%s item=%u/%zu begin\n",payload.digest.c_str(),index,out->manifest.payloads.size());
         std::string method="cache";
         const bool reused=reuse_installed(subset,installed,installed_tracks,installed_characters,installed_courses,sources);
         std::optional<ProfileSources> cached;
@@ -563,7 +588,6 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
             try {cached=profile_sources(reusable);}
             catch(const std::exception&) {
                 cancelled(stop);
-                if(payload.kind!=PayloadKind::TrackLab)throw;
                 // Rebuild only this native payload from its verified download.
                 // Preserve the old tree for recovery, never touch offline mods.
                 check_storage(source,true);
@@ -573,18 +597,20 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
                 child(root/"quarantined-payloads");
                 std::filesystem::rename(source,root/"quarantined-payloads"/(reusable.digest+"-"+nonce()));
                 std::fprintf(stderr,"[online-mods][cache-repair] payload=%s preserved-old-tree=1\n",payload.digest.c_str());
-                if(progress)progress(prefix+"Rebuilding incomplete course cache from verified files");
+                if(progress)progress(prefix+"Rebuilding this damaged cache from verified files");
             }
         }
         if(reused) {
             method="installed-reference";++installed_count;
             if(progress)progress(prefix+"Reusing matching installed assets");
         } else if(cached) {
+            dkr::storage::used(source);
             method="cache-reference";++cached_count;
             if(progress)progress(prefix+"Revalidating previously prepared assets");
             append_sources(sources,*cached);
         } else {
         method=payload.kind==PayloadKind::TrackLab?"native-assets":"worker";
+        if(payload.kind==PayloadKind::Xdelta)ensure_worker();
         const auto reserve=payload.kind==PayloadKind::TrackLab?payload.size+64ULL*MiB:1280ULL*MiB;
         if(std::filesystem::space(root).available<reserve)throw Error("Not enough free space to prepare the missing online mod.");
         if(payload.kind==PayloadKind::Xdelta && !batch_attempted.contains(payload.digest) &&
@@ -592,7 +618,8 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
             // Avoid workers for installed/cached items. Share ROM validation
             // only for two truly missing payloads; never make a whole library
             // one unbounded import. A capped batch may fall back per item.
-            std::optional<Manifest> second;
+            const auto batch_limit=dkr::online_stability::preparation_batch(std::filesystem::space(root).available,dkr::online_stability::available_memory());
+            std::vector<Manifest> items{subset};
             for(const auto& candidate:out->manifest.payloads) {
                 if(candidate.digest==payload.digest || candidate.kind!=PayloadKind::Xdelta || batch_attempted.contains(candidate.digest))continue;
                 Manifest next;next.revision=out->manifest.revision;next.payloads.push_back(candidate);
@@ -601,21 +628,20 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
                 ProfileSources scratch;
                 if(std::filesystem::exists(root/"prepared-payloads"/identity(next)) ||
                     reuse_installed(next,installed,installed_tracks,installed_characters,installed_courses,scratch))continue;
-                second=std::move(next);break;
+                items.push_back(std::move(next));if(items.size()>=batch_limit)break;
             }
-            if(second) {
+            if(items.size()>1) {
                 const auto batch=job.path/"parts"/nonce();child(batch);child(batch/"batch");
-                const std::array<Manifest,2> items{subset,*second};
                 for(unsigned i=0;i<items.size();++i) {
                     const auto item=batch/"batch"/std::to_string(i);child(item);
                     write_new_file(item/"manifest.json",encode(items[i]));
                     batch_attempted.insert(items[i].payloads.front().digest);
                 }
                 json batch_request={{"schema",Schema},{"operation","online-prepare-batch"},{"source",path_text(std::filesystem::absolute(payloads))},
-                    {"count",2},{"roms",json::array()}};
+                    {"count",items.size()},{"roms",json::array()}};
                 for(const auto& rom:roms)batch_request["roms"].push_back(path_text(std::filesystem::absolute(rom)));
                 write(batch/"request.json",batch_request);++workers;
-                if(progress)progress(prefix+"Preparing two missing mods with shared verified ROM sources");
+                if(progress)progress(prefix+"Preparing "+std::to_string(items.size())+" missing mods with shared verified ROM sources");
                 const auto batch_start=std::chrono::steady_clock::now();
                 const auto result=run_worker(worker,batch/"request.json",[&] {
                     return !stop.stop_requested() && std::chrono::steady_clock::now()<deadline;
@@ -634,7 +660,7 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
                 // the second item's resource limit ended this bounded batch.
                 // This publishes cache only, never selection/readiness.
                 cancelled(stop);
-                std::fprintf(stderr,"[online-mods][batch] items=2 complete=%u outcome=%u elapsed-ms=%lld\n",completed,unsigned(result.outcome),
+                std::fprintf(stderr,"[online-mods][batch] items=%zu complete=%u outcome=%u elapsed-ms=%lld\n",items.size(),completed,unsigned(result.outcome),
                     static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-batch_start).count()));
             }
         }
@@ -673,10 +699,10 @@ std::shared_ptr<const Profile> prepare_profile(const Manifest& input,const std::
         std::filesystem::rename(part/"content",source,publish_error);
         if(publish_error) {
             if(!std::filesystem::exists(source))throw Error("Could not publish a verified per-mod preparation cache.");
-            validate_profile(reusable);
+            cached=profile_sources(reusable);
         }
         }
-        append_sources(sources,profile_sources(reusable));
+        append_sources(sources,cached?*cached:profile_sources(reusable));
         }
         // Each source is referenced once; no aggregate pack/review copy.
         const auto elapsed=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();

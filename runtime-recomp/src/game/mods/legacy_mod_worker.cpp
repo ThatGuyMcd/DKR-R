@@ -1,3 +1,4 @@
+#include "online_stability/preparation_policy.hpp"
 #include "legacy_mod_stage.hpp"
 #include "legacy_mod_process.hpp"
 #include "legacy_track_prepare_job.hpp"
@@ -66,11 +67,11 @@ int execute(const std::filesystem::path& input_request) {
             const auto manifest=online::decode(read_file(manifest_path,online::MaxManifestBytes));
             online::prepare_library(manifest,source,roms,destination,report);
         } else if(operation=="online-prepare-batch") {
-            // Two sequential items, one verified ROM source set, the SAME
+            // Up to four sequential items, one verified ROM source set, the SAME
             // process CPU/memory/wall limits as a single ordinary import.
             // Complete receipts survive a failed/limited second item.
             const auto count=job.at("count").get<unsigned>();
-            if(count!=2)throw Error("Invalid bounded online preparation batch.");
+            if(count<2||count>dkr::online_stability::MaximumPrepareBatch)throw Error("Invalid bounded online preparation batch.");
             auto preparation=load_import_sources(roms);
             for(unsigned i=0;i<count;++i) {
                 const auto part=request.parent_path()/"batch"/std::to_string(i);

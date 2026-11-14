@@ -1,10 +1,16 @@
+#include "controller_feedback/service.hpp"
+#include "library_ui/surface_policy.hpp"
+#include "look_behind/policy.hpp"
+#include "analog_driving/input.hpp"
+#include "netplay/session_chat/input_policy.hpp"
+#include "invite_handoff.hpp"
 #include "runtime_platform.hpp"
 #include "application_layout.hpp"
 #include "audio_equalizer.hpp"
 #include "controller_snapshot.hpp"
 #include "controller_mapping_policy.hpp"
 #include "custom_music.hpp"
-#include "modern_camera.hpp"
+#include "camera_runtime.hpp"
 #include "netplay/online_input_broker.hpp"
 #include "online_input_policy.hpp"
 #include "runtime_input.hpp"
@@ -13,7 +19,7 @@
 #include "runtime_netplay.hpp"
 #include "startup_performance.hpp"
 #include "runtime_telemetry.hpp"
-#include "sdl3_input_client.hpp"
+#include "controller_feedback/input_client.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include "virtual_pak_policy.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
@@ -24,6 +30,7 @@
 #include "runtime_ui.hpp"
 #include "imgui/imgui.h"
 #include <SDL.h>
+#include "launcher_gpu.hpp"
 #if defined(_WIN32) || defined(__APPLE__)
 #include <SDL_syswm.h>
 #endif
@@ -1473,6 +1480,7 @@ bool dkr::runtime::platform::initialise() {
 }
 
 void dkr::runtime::platform::shutdown() {
+    dkr::feedback::service().shutdown();
 #if DKR_RUNTIME_HAS_RT64
     dkr::runtime::ui::shutdown_online_mods();
     CancelSdl3InputProbe();
@@ -1634,57 +1642,9 @@ ultramodern::renderer::WindowHandle dkr::runtime::platform::prepare_window_for_g
             unsigned(old_id),unsigned(SDL_GetWindowID(g_window)));
     }
 #endif
-#if defined(__linux__)
-    if (g_window != nullptr) {
-        const Uint32 existing_flags = SDL_GetWindowFlags(g_window);
-        std::fprintf(stderr,
-                     "[boot][window] launcher handoff flags=0x%08X vulkan=%s\n",
-                     static_cast<unsigned>(existing_flags),
-                     (existing_flags & SDL_WINDOW_VULKAN) != 0 ? "yes" : "no");
-        if ((existing_flags & SDL_WINDOW_VULKAN) == 0) {
-            int x = SDL_WINDOWPOS_CENTERED;
-            int y = SDL_WINDOWPOS_CENTERED;
-            int width = 1440;
-            int height = 900;
-            SDL_GetWindowPosition(g_window, &x, &y);
-            SDL_GetWindowSize(g_window, &width, &height);
-            const bool was_hidden = (existing_flags & SDL_WINDOW_HIDDEN) != 0;
-            const bool was_maximized =
-                (existing_flags & SDL_WINDOW_MAXIMIZED) != 0;
-            const Uint32 fullscreen_mode = existing_flags &
-                (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
-            SDL_DestroyWindow(g_window);
-            g_window = nullptr;
-
-            Uint32 replacement_flags =
-                SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_VULKAN;
-            if (was_hidden) {
-                replacement_flags |= SDL_WINDOW_HIDDEN;
-            }
-            g_window = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", x, y, width, height,
-                                        replacement_flags);
-            if (g_window == nullptr) {
-                std::fprintf(stderr,
-                             "[boot][window] Vulkan handoff recreation failed: %s\n",
-                             SDL_GetError());
-                return {};
-            }
-            SDL_SetWindowMinimumSize(g_window, 800, 600);
-            if (was_maximized) {
-                SDL_MaximizeWindow(g_window);
-            }
-            if (fullscreen_mode != 0U &&
-                SDL_SetWindowFullscreen(g_window, fullscreen_mode) != 0) {
-                std::fprintf(stderr,
-                             "[boot][window] fullscreen handoff restore failed: %s\n",
-                             SDL_GetError());
-            }
-            std::fprintf(stderr,
-                         "[boot][window] recreated Vulkan-capable game window "
-                         "flags=0x%08X\n",
-                         static_cast<unsigned>(SDL_GetWindowFlags(g_window)));
-        }
-    }
+#if defined(__linux__) && !defined(__ANDROID__)
+    if (g_window && !(SDL_GetWindowFlags(g_window) & SDL_WINDOW_VULKAN) &&
+        !dkr::runtime::launcher::replace_surface_window(g_window, SDL_WINDOW_VULKAN, "launcher-to-game")) return {};
 #endif
     auto handle = create_window();
 #if defined(__APPLE__)
@@ -1731,28 +1691,10 @@ void* dkr::runtime::platform::prepare_window_for_launcher(bool retire_game_surfa
     (void)retire_game_surface;
 #endif
 #if defined(__linux__) && !defined(__ANDROID__)
-    // Qualification switch: never allow SDL/OpenGL to convert a live Vulkan
-    // window. Both renderers have been destroyed at this launcher boundary.
-    const char* opt_in = SDL_getenv("DKR_LINUX_ACCELERATED_LAUNCHER");
-    if (g_window && opt_in && std::string_view(opt_in) == "1" &&
+    if (g_window && dkr::runtime::launcher::linux_acceleration_requested() &&
         (SDL_GetWindowFlags(g_window) & SDL_WINDOW_VULKAN)) {
-        int x, y, width, height;
-        SDL_GetWindowPosition(g_window, &x, &y);
-        SDL_GetWindowSize(g_window, &width, &height);
-        const Uint32 flags = SDL_GetWindowFlags(g_window);
-        // Create before destroying so a failed allocation keeps the proven
-        // software path and its original window intact.
-        auto* replacement = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled",
-            x, y, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN);
-        if (replacement) {
-            SDL_DestroyWindow(g_window);
-            g_window = replacement;
-            SDL_SetWindowMinimumSize(g_window, 800, 600);
-            if (flags & SDL_WINDOW_MAXIMIZED) SDL_MaximizeWindow(g_window);
-            const auto fullscreen = flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
-            if (fullscreen) SDL_SetWindowFullscreen(g_window, fullscreen);
-            if (!(flags & SDL_WINDOW_HIDDEN)) SDL_ShowWindow(g_window);
-        }
+        // Failed replacement retains the original window and CPU fallback.
+        dkr::runtime::launcher::replace_surface_window(g_window, 0, "game-to-launcher");
     }
 #endif
     return g_window;
@@ -1958,6 +1900,19 @@ void dkr::runtime::platform::update_fullscreen_cursor(const void* raw_event) {
 
 void dkr::runtime::platform::update_ui_gamepad_navigation() {
     ImGuiIO& io = ImGui::GetIO();
+    const auto rail_button=[&](ImGuiKey key,bool down) {
+        constexpr std::array<ImGuiKey,6> keys{ImGuiKey_GamepadDpadUp,ImGuiKey_GamepadDpadDown,
+            ImGuiKey_GamepadDpadLeft,ImGuiKey_GamepadDpadRight,ImGuiKey_GamepadL1,ImGuiKey_GamepadR1};
+        for(unsigned i=0;i<keys.size();++i)if(key==keys[i])dkr::library_ui::record_navigation_button(i,down);
+        io.AddKeyEvent(key,down);
+    };
+    const auto rail_axis=[&](ImGuiKey negative,ImGuiKey positive,float value) {
+        const unsigned index=negative==ImGuiKey_GamepadLStickLeft?0:negative==ImGuiKey_GamepadLStickUp?1:
+            negative==ImGuiKey_GamepadRStickLeft?2:3;
+        dkr::library_ui::record_navigation_axis(index,value);
+        io.AddKeyAnalogEvent(negative,value<0.F,std::max(-value,0.F));
+        io.AddKeyAnalogEvent(positive,value>0.F,std::max(value,0.F));
+    };
     if (active_input_backend() == InputBackend::SDL3Native) {
         std::scoped_lock lock(g_platform_mutex);
         // pump_input_backend_events() refreshes and reconciles the SDL3 state
@@ -1967,13 +1922,14 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
         const auto* device = Sdl3DeviceForInstance(g_sdl3_player_instances[0]);
         const auto* controller = device != nullptr ? &device->snapshot : nullptr;
         const bool connected = controller != nullptr && controller->connected;
+        dkr::library_ui::navigation_connected.store(connected?1:0,std::memory_order_relaxed);
         if (connected) {
             io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
         } else {
             io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
         }
         const auto button = [&](ImGuiKey key, std::size_t source) {
-            io.AddKeyEvent(key, connected &&
+            rail_button(key, connected &&
                 source < controller->buttons.size() &&
                 controller->buttons[source] != 0U);
         };
@@ -1982,10 +1938,7 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
             float value = connected && source < controller->axes.size()
                 ? NormaliseAxis(controller->axes[source]) : 0.0F;
             if (invert) value = -value;
-            io.AddKeyAnalogEvent(negative_key, value < 0.0F,
-                                 std::max(-value, 0.0F));
-            io.AddKeyAnalogEvent(positive_key, value > 0.0F,
-                                 std::max(value, 0.0F));
+            rail_axis(negative_key,positive_key,value);
         };
         using dkr::runtime::controllers::StandardAxis;
         using dkr::runtime::controllers::StandardButton;
@@ -2047,14 +2000,15 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
 
     SDL_GameController* controller = g_controllers[0];
     const bool connected = controller != nullptr;
-    if (connected) {
+    dkr::library_ui::navigation_connected.store(connected?1:0,std::memory_order_relaxed);
+        if (connected) {
         io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
     } else {
         io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
     }
 
     const auto button = [&](ImGuiKey key, SDL_GameControllerButton source) {
-        io.AddKeyEvent(key, connected &&
+        rail_button(key, connected &&
             SDL_GameControllerGetButton(controller, source) != 0);
     };
     const auto axis = [&](ImGuiKey negative_key, ImGuiKey positive_key,
@@ -2065,8 +2019,7 @@ void dkr::runtime::platform::update_ui_gamepad_navigation() {
         if (invert) {
             value = -value;
         }
-        io.AddKeyAnalogEvent(negative_key, value < 0.0F, std::max(-value, 0.0F));
-        io.AddKeyAnalogEvent(positive_key, value > 0.0F, std::max(value, 0.0F));
+        rail_axis(negative_key,positive_key,value);
     };
 
     button(ImGuiKey_GamepadStart, SDL_CONTROLLER_BUTTON_START);
@@ -2417,9 +2370,18 @@ void dkr::runtime::platform::set_audio_frequency(std::uint32_t frequency) {
 #include "../android/mobile_ui.hpp"
 #endif
 
+namespace {void FeedbackStart();
+#if DKR_RUNTIME_HAS_RT64
+void FeedbackPublishInput(unsigned,bool,bool);
+void FeedbackTouch(unsigned,dkr::runtime::input::State&,bool);
+#endif
+}
 void dkr::runtime::platform::poll_input() {
+    FeedbackStart();
 #if DKR_RUNTIME_HAS_RT64
     if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
+        for(unsigned profile=0;profile<4;++profile)dkr::runtime::camera::actions().publish(profile,{});
+        for(unsigned p=0;p<4;++p)dkr::runtime::driving::publish(p,{});
         ClearPublishedControllerInput(false);
         if (g_online_input_routing.load(std::memory_order_acquire)) {
             const std::size_t profile = std::min(
@@ -2438,7 +2400,26 @@ void dkr::runtime::platform::poll_input() {
         SDL_GameControllerUpdate();
         RefreshControllers(false);
     }
-    const bool blocked = dkr::runtime::ui::overlay_visible();
+    // A confirm/back press used by the invitation must be released before
+    // it can become racing input. Read the already refreshed physical state;
+    // do not clear or mutate any canonical online controller ports.
+    if(dkr::runtime::invites::release_pending()) {
+        bool held=false;int count=0;const auto* keys=SDL_GetKeyboardState(&count);
+        for(int key=0;key<count;++key)held|=keys[key]!=0;
+        held|=SDL_GetMouseState(nullptr,nullptr)!=0;
+        if(sdl3_native) {
+            for(const auto& device:g_sdl3_input_state.devices)if(device.snapshot.connected) {
+                for(auto button:device.snapshot.buttons)held|=button!=0;
+                for(auto axis:device.snapshot.axes)held|=std::abs(int(axis))>16000;
+            }
+        } else for(auto* controller:g_controllers)if(controller) {
+            for(int button=0;button<SDL_CONTROLLER_BUTTON_MAX;++button)held|=SDL_GameControllerGetButton(controller,SDL_GameControllerButton(button))!=0;
+            for(int axis=0;axis<SDL_CONTROLLER_AXIS_MAX;++axis)held|=std::abs(int(SDL_GameControllerGetAxis(controller,SDL_GameControllerAxis(axis))))>16000;
+        }
+        dkr::runtime::invites::release_if_clear(!held);
+    }
+
+    const bool blocked = dkr::runtime::ui::overlay_visible() || dkr::runtime::camera::editor_open.load() || dkr::chat::captures_game_input();
     const bool window_focused = g_window != nullptr &&
         (SDL_GetWindowFlags(g_window) & SDL_WINDOW_INPUT_FOCUS) != 0U;
     const bool online_routing =
@@ -2462,10 +2443,12 @@ void dkr::runtime::platform::poll_input() {
                 g_sdl3_player_instances[player]);
             const auto* gyro = Sdl3DeviceForInstance(
                 g_sdl3_gyro_instances[player]);
+            auto feedback_gyro=gyro?gyro->snapshot:dkr::runtime::controllers::ControllerSnapshot{};
+            if(dkr::feedback::service().status(unsigned(player)).settings.touch_action==3&&!(controller&&controller->feedback.touch_down[0]))feedback_gyro.gyro.valid=false;
             state = dkr::runtime::input::poll_snapshot(
                 player,
                 controller != nullptr ? &controller->snapshot : nullptr,
-                gyro != nullptr ? &gyro->snapshot : nullptr,
+                gyro != nullptr ? &feedback_gyro : nullptr,
                 owns_keyboard && window_focused, gameplay_blocked,
                 !online_routing,
                 player == (online_routing ? online_profile : 0U));
@@ -2488,16 +2471,35 @@ void dkr::runtime::platform::poll_input() {
 #endif
         }
 #endif
-        dkr::runtime::modern_camera::publish_input(
-            player, state.camera_x, state.camera_y, state.look_back,
-            online_routing);
+        FeedbackPublishInput(unsigned(player),sdl3_native,!gameplay_blocked&&(!online_routing||player==online_profile));
+        if(sdl3_native)FeedbackTouch(unsigned(player),state,!gameplay_blocked&&(!online_routing||player==online_profile));
+        dkr::runtime::camera::actions().publish(unsigned(player),
+            {dkr::runtime::camera::owns_controls(unsigned(player))?state.camera_actions:(state.camera_actions&1U),state.orbit_x,state.orbit_y,0,
+                gameplay_blocked||(!dkr::runtime::camera::owns_controls(unsigned(player))&&!dkr::runtime::look_behind::enabled.load()),true});
+        dkr::runtime::driving::publish(unsigned(player),{state.accelerator,state.brake,state.driving_flags});
+        if(dkr::runtime::camera::owns_controls(unsigned(player))) {
+            // Remove only C buttons whose binding is actually shared with a
+            // camera direction. Explicit independent C bindings remain usable.
+            using A=dkr::runtime::input::Action;
+            const A camera[]={A::OrbitUp,A::OrbitDown,A::OrbitLeft,A::OrbitRight};
+            const A native[]={A::CUp,A::CDown,A::CLeft,A::CRight};
+            const unsigned bits[]={8,4,2,1};
+            for(unsigned c=0;c<4;++c)for(unsigned n=0;n<4;++n) {
+                const int cb=dkr::runtime::input::controller_binding(player,camera[c]);
+                const int nb=dkr::runtime::input::controller_binding(player,native[n]);
+                const int ck=dkr::runtime::input::keyboard_binding(player,camera[c]);
+                const int nk=dkr::runtime::input::keyboard_binding(player,native[n]);
+                if((cb>=0&&cb==nb)||(ck>=0&&ck==nk))state.buttons&=std::uint16_t(~bits[n]);
+            }
+            if(state.accelerate&&!(state.driving_flags&1U))state.buttons|=0x8000U;
+        }
         g_physical_buttons[player].store(state.buttons, std::memory_order_release);
         g_physical_stick_x[player].store(state.stick_x, std::memory_order_release);
         g_physical_stick_y[player].store(state.stick_y, std::memory_order_release);
         if (online_routing && player == online_profile) {
             dkr::runtime::netplay::online_input_broker().capture_local(
                 player, state.buttons, state.stick_x, state.stick_y,
-                gameplay_blocked);
+                gameplay_blocked,state.accelerator,state.brake,state.driving_flags);
         }
         // Online physical input is private until the input broker commits a
         // complete synchronized frame. Crucially, a physical poll never
@@ -2507,12 +2509,6 @@ void dkr::runtime::platform::poll_input() {
                 online_routing);
         if (publish_physical) {
             std::uint16_t buttons = state.buttons;
-            if (dkr::runtime::modern_camera::owns_controls(player)) {
-                // During a race the Modern camera owns the C-button bindings
-                // (they orbit it), and Accelerate presses A.
-                buttons &= static_cast<std::uint16_t>(~0x000FU);
-                if (state.accelerate) buttons |= 0x8000U;
-            }
             g_buttons[player].store(buttons, std::memory_order_release);
             g_stick_x[player].store(state.stick_x, std::memory_order_release);
             g_stick_y[player].store(state.stick_y, std::memory_order_release);
@@ -2532,7 +2528,7 @@ void dkr::runtime::platform::poll_input() {
 
 void dkr::runtime::platform::set_online_input_routing(
     bool enabled, std::uint8_t occupied_mask, std::uint8_t local_slot) {
-    dkr::runtime::modern_camera::set_online_routing(enabled);
+
     g_online_occupied_mask.store(enabled ? occupied_mask : 0U,
                                  std::memory_order_release);
     g_online_local_slot.store(
@@ -2599,56 +2595,12 @@ bool dkr::runtime::platform::get_local_online_input(
     return true;
 }
 
-void dkr::runtime::platform::set_rumble(int controller, bool enabled) {
-    if (!dkr::runtime::netplay::external_side_effects_allowed()) return;
-#if DKR_RUNTIME_HAS_RT64
-    if (g_input_backend_switch_in_progress.load(std::memory_order_acquire)) {
-        return;
-    }
-    controller = dkr::runtime::netplay::physical_rumble_port(
-        g_online_input_routing.load(std::memory_order_acquire),
-        g_online_local_slot.load(std::memory_order_acquire),
-        g_online_input_profile.load(std::memory_order_acquire), controller);
-    if (controller < 0 || controller >= static_cast<int>(kControllerCount)) {
-        return;
-    }
-    if (active_input_backend() == InputBackend::SDL3Native) {
-        int instance = -1;
-        {
-            std::scoped_lock lock(g_platform_mutex);
-            instance = g_sdl3_player_instances[static_cast<std::size_t>(controller)];
-        }
-        if (instance >= 0) {
-            const bool active = enabled &&
-                g_rumble_enabled.load(std::memory_order_acquire);
-            const auto strength = active
-                ? static_cast<std::uint16_t>(std::lround(
-                      std::clamp(g_rumble_strength.load(
-                                     std::memory_order_relaxed),
-                                 0.0F, 1.0F) * 65535.0F))
-                : 0U;
-            g_sdl3_input_client.rumble(
-                instance, strength, strength,
-                active ? 0xFFFFFFFFU : 0U);
-        }
-        return;
-    }
-    std::scoped_lock lock(g_platform_mutex);
-    SDL_GameController* game_controller = g_controllers[static_cast<std::size_t>(controller)];
-    if (game_controller != nullptr) {
-        const bool active = enabled && g_rumble_enabled.load(std::memory_order_acquire);
-        const Uint16 strength = active
-            ? static_cast<Uint16>(std::lround(
-                  std::clamp(g_rumble_strength.load(std::memory_order_relaxed),
-                             0.0F, 1.0F) * 65535.0F))
-            : 0U;
-        SDL_GameControllerRumble(game_controller, strength, strength,
-                                 active ? SDL_HAPTIC_INFINITY : 0U);
-    }
-#else
-    (void)controller;
-    (void)enabled;
-#endif
+#include "controller_feedback/platform.inl"
+void dkr::runtime::platform::set_rumble(int controller,bool enabled) {
+    if(!dkr::runtime::netplay::external_side_effects_allowed())return;
+    FeedbackStart();
+    controller=dkr::runtime::netplay::physical_rumble_port(g_online_input_routing.load(),g_online_local_slot.load(),g_online_input_profile.load(),controller);
+    if(controller>=0&&controller<4)dkr::feedback::service().classic(unsigned(controller),enabled&&g_rumble_enabled.load());
 }
 
 float dkr::runtime::platform::rumble_strength() {
@@ -2844,6 +2796,8 @@ dkr::runtime::platform::player_input_preview(std::size_t player) {
         RefreshSdl3Controllers();
         const auto* device = Sdl3DeviceForInstance(
             g_sdl3_player_instances[player]);
+        (void)dkr::runtime::input::poll_snapshot(player,device?&device->snapshot:nullptr,nullptr,
+            dkr::runtime::input::keyboard_player()==int(player),true,false,false);
         if (device != nullptr) {
             using dkr::runtime::controllers::StandardAxis;
             preview.stick_x = NormalisePreviewAxis(device->snapshot.axes[
@@ -2855,6 +2809,8 @@ dkr::runtime::platform::player_input_preview(std::size_t player) {
     }
     SDL_GameControllerUpdate();
     SDL_GameController* controller = g_controllers[player];
+    (void)dkr::runtime::input::poll(player,controller,nullptr,
+        dkr::runtime::input::keyboard_player()==int(player),true,false,false);
     if (controller != nullptr &&
         SDL_GameControllerGetAttached(controller) == SDL_TRUE) {
         preview.stick_x = NormalisePreviewAxis(SDL_GameControllerGetAxis(
@@ -3003,29 +2959,9 @@ int dkr::runtime::platform::controller_player_for_instance(int instance) {
 }
 
 bool dkr::runtime::platform::identify_controller(std::size_t player) {
-#if DKR_RUNTIME_HAS_RT64
-    if (player >= kControllerCount) {
-        return false;
-    }
-    if (active_input_backend() == InputBackend::SDL3Native) {
-        int instance = -1;
-        {
-            std::scoped_lock lock(g_platform_mutex);
-            instance = g_sdl3_player_instances[player];
-        }
-        return instance >= 0 &&
-            g_sdl3_input_client.rumble(instance, 32767U, 32767U, 450U);
-    }
-    std::scoped_lock lock(g_platform_mutex);
-    SDL_GameController* handle = g_controllers[player];
-    if (handle == nullptr) {
-        return false;
-    }
-    return SDL_GameControllerRumble(handle, 32767U, 32767U, 450U) == 0;
-#else
-    (void)player;
-    return false;
-#endif
+    FeedbackStart();
+    if(player>=4||dkr::feedback::service().status(unsigned(player)).device.instance<0)return false;
+    dkr::feedback::service().test(unsigned(player),0,50);return true;
 }
 
 bool dkr::runtime::platform::begin_controller_mapping(int instance,

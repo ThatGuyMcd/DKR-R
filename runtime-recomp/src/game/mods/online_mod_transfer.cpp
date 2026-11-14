@@ -1,3 +1,4 @@
+#include "online_stability/transfer_window.hpp"
 #include "online_mod_transfer.hpp"
 #include <algorithm>
 
@@ -24,10 +25,12 @@ void validate(const Message& value) {
     const bool payload=operation==Operation::PayloadRequest || operation==Operation::PayloadChunk || operation==Operation::PayloadCredit;
     const bool metadata=operation==Operation::ManifestRequest || operation==Operation::ManifestChunk || operation==Operation::ManifestCredit;
     const bool chunk=operation==Operation::ManifestChunk || operation==Operation::PayloadChunk;
+    const bool window=(operation==Operation::PayloadRequest||operation==Operation::PayloadCredit||operation==Operation::ConsentAck)&&!value.bytes.empty();
+    if(window)(void)dkr::online_stability::requested_window(value.bytes);
     if(payload!=!value.payload.empty() || (operation==Operation::Offer && (!value.total || value.total>MaxManifestBytes || value.offset || !value.bytes.empty())) ||
        ((payload||metadata) && (!value.total || value.total>(payload?MaxTransferBytes:MaxManifestBytes) || value.offset>=value.total)) ||
        (chunk && (value.bytes.empty() || value.bytes.size()>value.total-value.offset)) ||
-       (!chunk && !value.bytes.empty()) ||
+       (!chunk && !window && !value.bytes.empty()) ||
        (!payload && !metadata && operation!=Operation::Offer && (value.total || value.offset)))
         throw Error("Online mod transfer range or operation is invalid.");
 }
@@ -137,7 +140,7 @@ void Upload::request(const Message& message,std::size_t chunk) {
            (message.operation==Operation::PayloadCredit && (!consented_ || preparing_)))
             throw Error("Invalid online mod window credit.");
         end_=(std::max)(end_,static_cast<std::uint32_t>(message.offset+
-            (std::min)(source_->size()-message.offset,transfer_window_bytes(chunk))));
+            (std::min)(source_->size()-message.offset,(message.payload.empty()?transfer_window_bytes(chunk):(dkr::online_stability::requested_window(message.bytes)/chunk)*chunk))));
         // A recovered gap can release later buffered chunks already sent in
         // the previous window. Skip ONLY that acknowledged contiguous prefix.
         offset_=(std::max)(offset_,message.offset);
@@ -164,7 +167,7 @@ void Upload::request(const Message& message,std::size_t chunk) {
     if(payload_!=message.payload)sent_high_water_=message.offset;
     sent_high_water_=(std::max)(sent_high_water_,message.offset);
     payload_=message.payload;offset_=message.offset;chunk_=chunk;
-    end_=static_cast<std::uint32_t>(offset_+(std::min)(source_->size()-offset_,transfer_window_bytes(chunk)));
+    end_=static_cast<std::uint32_t>(offset_+(std::min)(source_->size()-offset_,(message.payload.empty()?transfer_window_bytes(chunk):(dkr::online_stability::requested_window(message.bytes)/chunk)*chunk)));
 }
 std::optional<Message> Upload::next()const {
     if(!source_ || offset_>=end_)return {};
@@ -183,7 +186,7 @@ bool ChunkInbox::push(const Message& chunk,const Message& request) {
        chunk.manifest!=request.manifest || chunk.payload!=request.payload || chunk.total!=request.total ||
        chunk.bytes.empty() || chunk.bytes.size()>MaxChunkBytes || chunk.offset<request.offset ||
        chunk.offset>=chunk.total || chunk.bytes.size()>chunk.total-chunk.offset ||
-       chunk.offset-request.offset>=TransferWindowBytes)return false;
+       chunk.offset-request.offset>=(request.bytes.empty()?TransferWindowBytes:dkr::online_stability::MaximumTransferWindow))return false;
     auto next=chunks_.lower_bound(chunk.offset);
     if(next!=chunks_.end() && next->first==chunk.offset) {
         if(next->second!=chunk)throw Error("Conflicting online mod chunks at the same offset.");
@@ -192,7 +195,7 @@ bool ChunkInbox::push(const Message& chunk,const Message& request) {
     if((next!=chunks_.end() && chunk.bytes.size()>next->first-chunk.offset) ||
        (next!=chunks_.begin() && std::prev(next)->second.bytes.size()>chunk.offset-std::prev(next)->first))
         throw Error("Overlapping online mod chunks.");
-    if(chunks_.size()>=512 || chunk.bytes.size()>TransferWindowBytes-bytes_)return false;
+    if(chunks_.size()>=512 || bytes_>(request.bytes.empty()?TransferWindowBytes:dkr::online_stability::MaximumTransferWindow)||chunk.bytes.size()>(request.bytes.empty()?TransferWindowBytes:dkr::online_stability::MaximumTransferWindow)-bytes_)return false;
     bytes_+=chunk.bytes.size();chunks_.emplace_hint(next,chunk.offset,chunk);return true;
 }
 std::optional<Message> ChunkInbox::take(const Message& request) {

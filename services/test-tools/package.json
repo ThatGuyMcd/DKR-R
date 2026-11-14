@@ -1,0 +1,9 @@
+{
+  "name": "dkr-r-services-test-tools",
+  "private": true,
+  "description": "Pinned Node tools the services' tests run with (CI: npm ci --ignore-scripts).",
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0"
+  }
+}

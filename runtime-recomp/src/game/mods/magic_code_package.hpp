@@ -25,6 +25,10 @@ struct Package {
     Version minimum_host;
     unsigned api=ApiVersion;
     bool deterministic=false;
+    bool development=false;
+    std::set<std::string> sdk2_live_options;
+    bool sdk2_reload=false;
+    unsigned sdk2_state_schema=0;
     std::set<std::string> revisions;
     std::map<std::string,unsigned> modules;
     std::vector<Dependency> dependencies;
@@ -32,6 +36,9 @@ struct Package {
     std::vector<std::string> tracks;
     std::map<std::string,Bytes> resources;
     Json options=Json::array();
+    std::map<std::string,std::string> debug_lines;
+    unsigned sdk2_heap=65536,sdk2_instructions=200000,sdk2_native_calls=128;
+    std::string sdk2_profile="standard";
     Bytes binary;
     std::shared_ptr<const N64Recomp::Context> symbols;
 };

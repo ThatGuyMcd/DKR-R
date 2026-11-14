@@ -1,5 +1,4 @@
 #pragma once
-
 #include "experimental_rollback.hpp"
 
 namespace dkr::runtime::netplay::experimental {
@@ -27,3 +26,4 @@ QualificationResult qualify_replay(Simulation& isolated,
                                    std::span<const FrameInputs> inputs);
 
 } // namespace dkr::runtime::netplay::experimental
+

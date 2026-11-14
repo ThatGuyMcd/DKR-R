@@ -1,0 +1,39 @@
+name: Service - library workflow
+on:
+  push:
+    branches: [main]
+    paths: ["services/library-workflow/**", "services/test-tools/**", ".github/workflows/services-library-workflow.yml"]
+  pull_request:
+    paths: ["services/library-workflow/**", "services/test-tools/**", ".github/workflows/services-library-workflow.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  # Stages the website/API update over services/library-workflow/baseline and
+  # runs its tests on the staged bundle (services/library-workflow/README.md).
+  library-workflow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Stage tests
+        run: python3 -B services/library-workflow/tests/build_tests.py
+      - name: Stage the bundle
+        run: python3 -B services/library-workflow/build.py stage --output "$RUNNER_TEMP/stage"
+      - name: Workflow checks
+        run: node services/library-workflow/tests/run.cjs "$RUNNER_TEMP/stage"
+      - name: Cloudflare runtime checks (Miniflare)
+        run: |
+          npm ci --prefix services/test-tools --ignore-scripts
+          node services/library-workflow/tests/d1-runtime.cjs "$RUNNER_TEMP/stage" services/test-tools/node_modules/miniflare

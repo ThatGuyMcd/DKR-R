@@ -54,8 +54,8 @@ class SourcePackageTests(unittest.TestCase):
         selected = [
             Path("assets/ui/CustomTrackBackgrounds/custom-row-1.png"),
             Path("assets/ui/CustomTrackBackgrounds/rt64.json"),
-            Path("patches/enhanced-water/native/LavaLightingCS.hlsl"),
-            Path("patches/enhanced-water/native/LavaFlow.hlsli"),
+            Path("runtime-recomp/src/water/LavaLightingCS.hlsl"),
+            Path("runtime-recomp/src/water/LavaFlow.hlsli"),
         ]
         excluded = [
             Path("downloads/example.png"),

@@ -1,7 +1,9 @@
 include_guard(GLOBAL)
-get_filename_component(_dkr_online_root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 
 function(dkr_add_online_stability)
+    # Set here, not at file scope: the first include can come from inside
+    # another function, whose scope a file-level variable would not outlive.
+    get_filename_component(_dkr_online_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../.." ABSOLUTE)
     if(NOT TARGET DKRQualificationDeliveryTests)
         add_executable(DKRQualificationDeliveryTests "${_dkr_online_root}/runtime-recomp/tests/qualification_delivery_tests.cpp")
         target_include_directories(DKRQualificationDeliveryTests PRIVATE "${_dkr_online_root}/runtime-recomp/src/game")
@@ -101,6 +103,10 @@ function(dkr_add_online_stability)
         if(NOT TARGET DKR_${test}_tests)
             add_executable(DKR_${test}_tests "${_dkr_online_root}/runtime-recomp/tests/${test}_tests.cpp")
             target_link_libraries(DKR_${test}_tests PRIVATE DKRNetplayCore DKROnlineStabilityCore)
+            if(test STREQUAL "online_flow")
+                # Its network object calls the SDK tools broker, which lives in the game.
+                target_sources(DKR_${test}_tests PRIVATE "${_dkr_online_root}/runtime-recomp/tests/sdk2_network_idle.cpp")
+            endif()
             if(TARGET DKRLegacyModCore)
                 target_link_libraries(DKR_${test}_tests PRIVATE DKRLegacyModCore)
             endif()

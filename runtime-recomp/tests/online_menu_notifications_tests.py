@@ -13,7 +13,7 @@ spec.loader.exec_module(producer)
 
 class MenuNotifications(unittest.TestCase):
     def test_every_emitted_option_pair_is_accepted_without_a_mod_owner(self):
-        policy = (ROOT / "patches/online-performance/native/menu_notifications.h").read_text()
+        policy = (ROOT / "runtime-recomp/src/game/netplay/owned_menu_policy.h").read_text()
         upper = int(re.search(r"event\s*<=\s*(\d+)", policy)[1])
         emitted = set(range(18))
         for function, event in producer.TRACK_OPTIONS.items():

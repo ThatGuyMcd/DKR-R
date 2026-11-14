@@ -100,3 +100,4 @@ private:
     std::string error_;
 };
 }
+

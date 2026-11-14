@@ -1,9 +1,8 @@
 #pragma once
-
 #include "authoritative_state.hpp"
 #include "netplay_types.hpp"
-#include "../mods/online_mod_wire_version.hpp"
-#include "../mods/online_mod_manifest.hpp"
+#include "mods/online_mod_wire_version.hpp"
+#include "mods/online_mod_manifest.hpp"
 
 #include <string>
 #include <string_view>
@@ -42,3 +41,4 @@ inline std::string canonical_network_build_fingerprint(
 }
 
 } // namespace dkr::runtime::netplay
+

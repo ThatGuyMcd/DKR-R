@@ -2,7 +2,10 @@
 
 Reuses the complete composed CPU pipeline (characters, tracks, code SDK,
 graphics fixes) rather than regenerating from an incomplete base policy.
+A supported prepare step (scripts/prepare_payloads.py runs it).
 """
+
+from __future__ import annotations
 
 import argparse
 import hashlib
@@ -36,11 +39,14 @@ PINS = {
     },
 }
 ROOT = Path(__file__).resolve().parents[1]
-HEADER = ROOT / "patches/save-layout/guest_save_layout.h"
-sha = lambda text: hashlib.sha256(text.encode()).hexdigest()
+HEADER = ROOT / "runtime-recomp/guest/save_layout_guest.h"
 
 
-def owned_support(source):
+def sha(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def owned_support(source: Path) -> str:
     receipt = source / "save-layout-receipt.json"
     if not receipt.exists():
         return ""
@@ -51,7 +57,7 @@ def owned_support(source):
     return header
 
 
-def stage(source, output, revision, config, output_config):
+def stage(source: Path, output: Path, revision: int, config: Path, output_config: Path) -> None:
     source, output = source.resolve(), output.resolve()
     config, output_config = config.resolve(), output_config.resolve()
     if revision not in PINS or output.exists() or source == output or source in output.parents:
@@ -67,9 +73,9 @@ def stage(source, output, revision, config, output_config):
     scheduler = (ROOT / "extern/n64-modern-runtime/ultramodern/include/ultramodern/ultramodern.hpp").read_text()
     if "struct thread_terminated : std::exception {};" not in scheduler or "void quit();" not in scheduler:
         raise ValueError("Unreviewed scheduler termination ABI; inspect before regenerating")
-    edits = {}
-    found = {}
-    hooks = []
+    edits: dict[str, str] = {}
+    found: dict[str, dict[str, str]] = {}
+    hooks: list[str] = []
     for file in sorted(source.glob("*.c")):
         text = file.read_text()
         matches = list(DEF.finditer(text))

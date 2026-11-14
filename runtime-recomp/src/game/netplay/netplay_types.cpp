@@ -1,3 +1,4 @@
+#include "../rollback_policy.hpp"
 #include "netplay_types.hpp"
 
 #include <algorithm>
@@ -8,7 +9,7 @@
 namespace dkr::runtime::netplay {
 
 bool valid_launch_descriptor(const LaunchDescriptor& descriptor) {
-    if (descriptor.match_id == 0U || descriptor.lobby_generation == 0U ||
+    if (!dkr::runtime::netplay::rollback_policy::supported(descriptor.synchronization) || descriptor.match_id == 0U || descriptor.lobby_generation == 0U ||
         descriptor.compatibility_hash == 0U || descriptor.player_count < 2U ||
         descriptor.player_count > kSupportedOnlinePlayers ||
         descriptor.input_delay_frames > kMaximumInputDelayFrames ||
@@ -18,6 +19,7 @@ bool valid_launch_descriptor(const LaunchDescriptor& descriptor) {
          descriptor.rollback_window < 2U) ||
         (descriptor.synchronization == SynchronizationMode::Lockstep &&
          descriptor.rollback_window != 0U) ||
+        (descriptor.development&&descriptor.synchronization!=SynchronizationMode::ExperimentalRollback) ||
         descriptor.host_control > HostControlPolicy::EveryAssignedPort ||
         (descriptor.occupied_mask & 1U) == 0U) {
         return false;
@@ -44,6 +46,7 @@ std::uint64_t launch_descriptor_hash(const LaunchDescriptor& descriptor) {
     append(descriptor.rollback_window, 1U);
     append(static_cast<std::uint8_t>(descriptor.synchronization), 1U);
     append(static_cast<std::uint8_t>(descriptor.host_control), 1U);
+    append(descriptor.development,1U);
     return stable_hash(bytes);
 }
 namespace {
@@ -88,7 +91,8 @@ bool valid_room_name(std::string_view value) {
 }
 
 bool valid_rules(const Rules& rules) {
-    return rules.maximum_players >= 2U && rules.maximum_players <= kSupportedOnlinePlayers &&
+    if (!dkr::runtime::netplay::rollback_policy::supported(rules.synchronization)) return false;
+    return (!rules.development||rules.synchronization==SynchronizationMode::ExperimentalRollback)&&rules.maximum_players >= 2U && rules.maximum_players <= kSupportedOnlinePlayers &&
            rules.manual_input_delay <= kMaximumInputDelayFrames &&
            valid_synchronization_mode(rules.synchronization) &&
            ((synchronization_has_prediction_window(rules.synchronization) &&

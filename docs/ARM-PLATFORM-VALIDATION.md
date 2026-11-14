@@ -140,7 +140,7 @@ native crash traces. The first GPU failure and renderer setup were missing.
 - The pinned renderer requests `B8G8R8A8_UNORM` for both the swapchain and the
   final VI presentation pipelines. Its Vulkan swapchain constructor requires
   an exact supported surface format. Android guarantees RGBA8, not BGRA8;
-  see the primary reference in `patches/android/README.md`.
+  see the pre-fold `patches/android/README.md` (git history).
 - An Android-only build-stage patch now uses `R8G8B8A8_UNORM` at both sites.
   The inspector already takes its attachment format from the swapchain.
 - Only staged copies of those two source files change. Dependency checkout
@@ -212,8 +212,8 @@ pass. Preview.3 is retained as the known-playing rollback build.
    for externally managed Vulkan; its surface-change callback also lacked an
    OpenGL-window guard, and surface destruction waited for EGL backup even on
    Vulkan. The scoped external-context hint and checked SDL build-stage patch
-   address these concrete defects. See `patches/android/README.md` for source
-   details and the SDL reference. No SDL/RT64 dependency checkout was edited.
+   address these concrete defects. The pre-fold `patches/android/README.md` (git
+   history) has source details and the SDL reference. No SDL/RT64 dependency checkout was edited.
 4. **Diagnostics without screen capture:** Android now logs effective graphics
    configuration, five-second samples of existing presentation/simulation/VI
    counters, and relevant SDL lifecycle events. Metrics are observational and

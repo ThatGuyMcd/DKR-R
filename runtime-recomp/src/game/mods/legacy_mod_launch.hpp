@@ -1,3 +1,4 @@
+#include "library_ui/startup_progress.hpp"
 #pragma once
 #include "legacy_runtime_session.hpp"
 #include <thread>
@@ -6,6 +7,7 @@
 namespace dkr::mods {
 namespace code {struct FrozenSet;}
 struct PreparedModLaunch {
+    bool content_enabled=true;
     std::shared_ptr<RuntimeSession> session;
     std::shared_ptr<const code::FrozenSet> code;
     std::filesystem::path save_subfolder,save_path,pak_directory;
@@ -15,10 +17,12 @@ struct PreparedModLaunch {
 // dependency order (3D, 2D, sprites). Keys are the final boot-owned record IDs.
 AssetBank::Overrides publish_dkrmap_artwork(std::shared_ptr<const AssetBank> boot);
 using LaunchProgress=std::function<void(const char*)>;
+using DetailedLaunchProgress=std::function<void(const char*,dkr::library_ui::StartupProgress)>;
 std::shared_ptr<const PreparedModLaunch> prepare_mod_launch(
     const std::filesystem::path& config,const std::filesystem::path& rom,bool online,
-    const LaunchProgress& progress={},std::stop_token stop={});
+    const LaunchProgress& progress={},std::stop_token stop={},const DetailedLaunchProgress& detailed={});
 struct ModLaunchView {
+    dkr::library_ui::StartupProgress progress;
     bool busy=false,modal=false;
     std::string stage,error;
     std::shared_ptr<const PreparedModLaunch> prepared;
@@ -38,3 +42,4 @@ private:
     std::jthread thread_;
 };
 }
+

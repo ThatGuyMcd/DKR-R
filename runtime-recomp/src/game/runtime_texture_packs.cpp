@@ -1,4 +1,8 @@
+#include "storage/maintenance.hpp"
+#include "session_content/policy.hpp"
+#include "mod_store_install.hpp"
 #include "runtime_texture_packs.hpp"
+#include "mod_store.hpp"
 #include "application_layout.hpp"
 #include "startup_performance.hpp"
 
@@ -1010,11 +1014,20 @@ void refresh() {
 
 std::vector<PackInfo> snapshot(bool include_hidden) {
     std::scoped_lock lock(g_mutex);
-    if (include_hidden) return g_packs;
+    const auto named = [](PackInfo pack) {
+        pack.name = dkr::store::texture_display_name(pack.path, pack.name);
+        return pack;
+    };
+    if (include_hidden) {
+        auto result = g_packs;
+        for (auto& pack : result) pack = named(std::move(pack));
+        return result;
+    }
     std::vector<PackInfo> visible;
     visible.reserve(g_packs.size());
     std::copy_if(g_packs.begin(), g_packs.end(), std::back_inserter(visible),
                  [](const PackInfo& pack) { return !pack.hidden; });
+    for (auto& pack : visible) pack = named(std::move(pack));
     return visible;
 }
 
@@ -1026,6 +1039,7 @@ std::uint64_t generation() {
 bool import_archive(const std::filesystem::path& source, std::string& status_text,
                     const ImportProgressCallback& progress,
                     const TrackPackOwner* owner) {
+    dkr::storage::Activity storage_activity;
     // See g_import_apply_hold: whatever this import changes reaches RT64 as a
     // single reload, after it returns, however many steps it takes to get there.
     struct ApplyHold {
@@ -1494,6 +1508,7 @@ void renderer_started() {
 }
 
 void apply_pending(RT64::Application& application, bool modern_profile) {
+    modern_profile=modern_profile&&dkr::session_content::textures_allowed();
     std::vector<RT64::ReplacementDirectory> replacements;
     std::vector<RT64::ReplacementDirectory> previous_replacements;
     std::set<std::string> replacement_ids;
@@ -1628,3 +1643,5 @@ std::string status() {
 }
 
 } // namespace dkr::runtime::texture_packs
+
+#include "store_texture_adapter.inl"

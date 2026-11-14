@@ -1,3 +1,4 @@
+#include "session_content/policy.hpp"
 #include "runtime_magic_codes.hpp"
 
 #include "magic_code_policy.hpp"
@@ -164,7 +165,7 @@ void dkr::runtime::magic_codes::configure(
 void dkr::runtime::magic_codes::begin_game_session(
     std::optional<std::uint32_t> online_mask) {
     std::lock_guard lock(g_queue_file_guard);
-    const std::uint32_t selected = online_mask.value_or(selected_mask());
+    const std::uint32_t selected = online_mask.value_or(dkr::session_content::running_enabled.load()?selected_mask():0U);
     g_session_state = begin_magic_code_session(
         selected & kPersistentMagicCodeMask, selected & kOneShotMagicCodeMask,
         online_mask.has_value());

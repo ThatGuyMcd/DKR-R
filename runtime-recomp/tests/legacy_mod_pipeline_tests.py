@@ -10,6 +10,8 @@ import struct
 import unittest
 from unittest.mock import patch
 
+from source_text import Source
+
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("legacy_compose", ROOT / "scripts/compose_legacy_mod_policy.py")
 compose = importlib.util.module_from_spec(spec)
@@ -255,22 +257,32 @@ class PipelineTests(unittest.TestCase):
 
     def test_sidebar_visual_and_navigation_order_match(self):
         source = (ROOT / "runtime-recomp/src/game/runtime_ui.cpp").read_text()
+        policy = (ROOT / "runtime-recomp/src/game/library_ui/policy.hpp").read_text()
+        # The walk order and the Mod Library page belong to the library UI policy.
+        self.assertIn("constexpr auto kSidebarOrder=dkr::library_ui::SidebarOrder;", source)
+        self.assertIn("constexpr int kPageModLibrary = dkr::library_ui::LibraryPage;", source)
+        library_page = int(re.search(r"\bLibraryPage=(\d+)", policy).group(1))
         pages = {name: int(value) for name, value in re.findall(r"constexpr int (kPage\w+) = (\d+);", source)}
-        order = re.search(r"kSidebarOrder\{([\d,\s]+)\}", source).group(1)
-        order = [int(page) for page in order.split(",")][: len(pages)]
-        # Launcher and in-game overlay draw their buttons in the order the D-pad walks.
+        pages["kPageModLibrary"] = library_page
+        order = re.search(r"\bSidebarOrder\{([\w,\s]+)\}", policy).group(1)
+        order = [library_page if page.strip() == "LibraryPage" else int(page) for page in order.split(",")]
+        # Launcher and in-game overlay draw their buttons in the order the D-pad
+        # walks; the entries after the pages are the actions below them.
         for button in ("LauncherSidebarButton", "SidebarButton"):
             drawn = [
                 int(page) if page.isdigit() else pages[page]
                 for page in re.findall(r"\b" + button + r'\("[^"]+",\s*(\w+)', source)
             ]
-            self.assertEqual(drawn, order, button)
+            self.assertTrue(drawn, button)
+            self.assertEqual(drawn, order[: len(drawn)], button)
 
     def test_track_lab_is_in_mods_and_keeps_its_texture_modal(self):
         source = (ROOT / "runtime-recomp/src/game/runtime_ui.cpp").read_text()
         details = (ROOT / "runtime-recomp/src/game/runtime_details_ui.inl").read_text()
         mods = source.split("void DrawModsHacks(", 1)[1].split("std::string FormatRecordTime", 1)[0]
-        textures = details.split("void DrawTexturesPage(float width) {", 1)[1].split("\n}\n", 1)[0]
+        textures = details.split("void DrawTexturesPage(float width, bool embedded = false) {", 1)[1].split("\n}\n", 1)[
+            0
+        ]
         # Track Lab is a section of the mods page and never of the textures page.
         self.assertIn("kModsSectionTrackLab", mods)
         self.assertIn("DrawTrackLabSection(", mods)
@@ -287,16 +299,16 @@ class PipelineTests(unittest.TestCase):
     def test_custom_stage_reuses_stock_clock_and_revision_camera(self):
         # The custom early-return hook must not bypass the stock beat override.
         source = ROOT / "runtime-recomp/src/game"
-        owner = (source / "runtime_legacy_mods.cpp").read_text()
+        owner = Source((source / "runtime_legacy_mods.cpp").read_text())
         self.assertIn("dkr_character_select_animation_fraction,p->stage_camera", owner)
-        stage = (source / "mods/legacy_character_stage.cpp").read_text()
+        stage = Source((source / "mods/legacy_character_stage.cpp").read_text())
         self.assertLess(
             stage.index("calls.animation_fraction(memory.data(),&music)"),
             stage.index("calls.animation_override(memory.data(),&music)"),
         )
         self.assertNotIn("advance_character_select_phase", stage)  # never tick per actor
         for rev in (77, 80):
-            payload = (source / f"game_payload_v{rev}.cpp").read_text()
+            payload = Source((source / f"game_payload_v{rev}.cpp").read_text())
             self.assertIn(".stage_camera = cam_get_active_camera,", payload)
             policy = json.loads((ROOT / f"runtime-recomp/dkr.us.v{rev}.recomp-policy.json").read_text())
             clocks = [

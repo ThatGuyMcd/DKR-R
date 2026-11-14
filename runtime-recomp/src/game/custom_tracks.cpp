@@ -1,3 +1,6 @@
+#include "storage/maintenance.hpp"
+#include "session_content/policy.hpp"
+#include "mod_store_install.hpp"
 #include "custom_tracks.hpp"
 #include "custom_track_files.hpp"
 
@@ -740,6 +743,7 @@ void arm_track_override(std::string track_id) {
 }
 
 std::string armed_track_id() {
+    if(!dkr::session_content::local_assets_allowed())return {};
     std::scoped_lock lock(g_mutex);
     return g_armed_track;
 }
@@ -758,11 +762,13 @@ void set_auto_boot(bool enabled) {
 }
 
 bool auto_boot_enabled() {
+    if(!dkr::session_content::local_assets_allowed())return false;
     std::scoped_lock lock(g_mutex);
     return g_auto_boot;
 }
 
 bool consume_auto_boot() {
+    if(!dkr::session_content::local_assets_allowed())return false;
     std::scoped_lock lock(g_mutex);
     if (!g_auto_boot || g_auto_boot_consumed) {
         return false;
@@ -775,6 +781,7 @@ bool consume_auto_boot() {
 }
 
 std::int32_t track_override() {
+    if(!dkr::session_content::local_assets_allowed())return kNoTrackOverride;
     std::scoped_lock lock(g_mutex);
     if (g_armed_track.empty()) {
         return kNoTrackOverride;
@@ -787,6 +794,7 @@ std::int32_t track_override() {
 }
 
 bool owns_level_id(std::int32_t level_id) {
+    if(!dkr::session_content::local_assets_allowed())return false;
     std::scoped_lock lock(g_mutex);
     return std::any_of(g_resolved_level_ids.begin(),g_resolved_level_ids.end(),
         [level_id](const auto& entry){return entry.second==level_id;});
@@ -1152,6 +1160,10 @@ std::vector<std::int32_t> build_extended_table(
         std::fprintf(stderr, "[custom-tracks] applying deferred rescan\n");
         scan_locked(g_directory);
     }
+    if(!dkr::session_content::local_assets_allowed()) {
+        const std::vector<Track> vanilla;
+        return assemble_table(section,retail_table,vanilla,g_sections,g_resolved_level_ids,table_words);
+    }
     return assemble_table(section,retail_table,g_tracks,g_sections,g_resolved_level_ids,table_words);
 }
 
@@ -1233,6 +1245,7 @@ PreparedTracks prepare_tracks(std::vector<Track> tracks,
 const std::uint8_t* payload_for(Section section, std::uint32_t offset,
                                  std::int32_t size) {
     std::scoped_lock lock(g_mutex);
+    if(!dkr::session_content::local_assets_allowed())return nullptr;
     const SectionState& state = g_sections[section_slot(section)];
     if (!state.built || size <= 0 || offset < state.end_offset) {
         return nullptr; // Retail range: the ROM loader owns it.
@@ -1250,6 +1263,7 @@ const std::uint8_t* payload_for(Section section, std::uint32_t offset,
 std::int32_t sibling_index(Section from, std::uint32_t offset, Section to,
                             MapSlot slot) {
     std::scoped_lock lock(g_mutex);
+    if(!dkr::session_content::local_assets_allowed())return -1;
     const SectionState& source = g_sections[section_slot(from)];
     const SectionState& target = g_sections[section_slot(to)];
     if (!source.built || !target.built) {
@@ -1322,23 +1336,11 @@ std::string lower_extension(const std::filesystem::path& path) {
 
 // One entry out of a zip, into `bytes`. False when the zip or entry is missing.
 // Used for the pack stamp; the payloads a track ships are plain files.
-bool read_zip_entry(const std::filesystem::path& zip_path,
-                    const char* entry_name,
+#include "store_track_zip.inl"
+
+bool read_zip_entry(const std::filesystem::path& path, const char* name,
                     std::vector<std::uint8_t>& bytes) {
-    mz_zip_archive zip{};
-    if (mz_zip_reader_init_file(&zip, zip_path.string().c_str(), 0) == MZ_FALSE) {
-        return false;
-    }
-    std::size_t size = 0;
-    void* data = mz_zip_reader_extract_file_to_heap(&zip, entry_name, &size, 0);
-    mz_zip_reader_end(&zip);
-    if (data == nullptr) {
-        return false;
-    }
-    const auto* first = static_cast<const std::uint8_t*>(data);
-    bytes.assign(first, first + size);
-    mz_free(data);
-    return true;
+    return StoreReadTrackZipEntry(path, name, bytes);
 }
 
 // The textureDigest stamped into a <track>-hd.zip by the Blender export
@@ -1361,81 +1363,12 @@ bool read_hd_pack_digest(const std::filesystem::path& archive,
 
 // Unpacks every entry of `zip_path` under `destination`. Rejects absolute
 // paths and `..` so an archive can never write outside the target directory.
-bool extract_zip(const std::filesystem::path& zip_path,
-                 const std::filesystem::path& destination,
-                 std::string& error) {
-    mz_zip_archive zip{};
-    if (mz_zip_reader_init_file(&zip, zip_path.string().c_str(), 0) == MZ_FALSE) {
-        error = "the .zip could not be opened";
-        return false;
-    }
-    const mz_uint count = mz_zip_reader_get_num_files(&zip);
-    for (mz_uint index = 0; index < count; ++index) {
-        mz_zip_archive_file_stat stat{};
-        if (mz_zip_reader_file_stat(&zip, index, &stat) == MZ_FALSE) {
-            continue;
-        }
-        std::string name = stat.m_filename;
-        if (name.empty() || name.front() == '/' || name.front() == '\\' ||
-            name.find("..") != std::string::npos ||
-            (name.size() > 1U && name[1] == ':')) {
-            mz_zip_reader_end(&zip);
-            error = "the .zip contains an unsafe path";
-            return false;
-        }
-        const std::filesystem::path target =
-            destination / std::filesystem::u8path(name);
-        std::error_code code;
-        if (mz_zip_reader_is_file_a_directory(&zip, index) == MZ_TRUE) {
-            std::filesystem::create_directories(target, code);
-            continue;
-        }
-        std::filesystem::create_directories(target.parent_path(), code);
-        if (mz_zip_reader_extract_to_file(
-                &zip, index, target.string().c_str(), 0) == MZ_FALSE) {
-            mz_zip_reader_end(&zip);
-            error = "the .zip could not be fully extracted";
-            return false;
-        }
-    }
-    mz_zip_reader_end(&zip);
-    return true;
+bool extract_zip(const std::filesystem::path& path, const std::filesystem::path& destination,
+                 std::string& error, std::stop_token stop = {}) {
+    return StoreExtractTrackZip(path, destination, error, stop);
 }
 
-// In an unpacked zip under `root`, finds the .dkrmap. A manifest.json at the
-// root means the zip was a bare .dkrmap (no wrapped pack). Otherwise the track
-// is one folder down and the wrapper's <track>-hd.zip is a *.zip beside it,
-// still under `root`. Returns false when no manifest is found.
-bool locate_unpacked_track(const std::filesystem::path& root,
-                           std::filesystem::path& track_dir,
-                           std::filesystem::path& hd_pack) {
-    std::error_code code;
-    if (std::filesystem::is_regular_file(root / "manifest.json", code)) {
-        track_dir = root;
-        return true;
-    }
-    for (const auto& item :
-         std::filesystem::directory_iterator(root, code)) {
-        if (item.is_directory(code) &&
-            std::filesystem::is_regular_file(
-                item.path() / "manifest.json", code)) {
-            track_dir = item.path();
-            break;
-        }
-    }
-    if (track_dir.empty()) {
-        return false;
-    }
-    for (const auto& item :
-         std::filesystem::directory_iterator(root, code)) {
-        if (item.is_regular_file(code) &&
-            lower_extension(item.path()) == ".zip") {
-            hd_pack = item.path();
-            break;
-        }
-    }
-    return true;
-}
+#include "store_track_locator.inl"
 
 // The level header a track ships, if any (the last LEVEL_HEADERS entry).
 const Entry* level_header_of(const Track& track) {
@@ -2351,6 +2284,7 @@ static bool valid_folder_id(const std::string& id) {
 
 bool install(const std::filesystem::path& source, std::string& error,
              InstallOutcome* outcome) {
+    dkr::storage::Activity storage_activity;
     std::filesystem::path destination_root;
     {
         std::scoped_lock lock(g_mutex);
@@ -2387,9 +2321,9 @@ bool install(const std::filesystem::path& source, std::string& error,
             error = "That .zip is not a track: " + extract_error + ".";
             return false;
         }
-        if (!locate_unpacked_track(temp_root, track_dir, wrapped_hd_pack)) {
+        if (!locate_unpacked_track(temp_root, track_dir, wrapped_hd_pack, &extract_error)) {
             discard_install_temp(temp_root);
-            error = "That .zip does not contain a .dkrmap track.";
+            error = extract_error.empty() ? "That .zip does not contain a .dkrmap track." : extract_error;
             return false;
         }
     } else if (!std::filesystem::is_directory(source, code)) {
@@ -2641,3 +2575,5 @@ void reload() {
 }
 
 } // namespace dkr::runtime::custom_tracks
+
+#include "store_track_adapter.inl"

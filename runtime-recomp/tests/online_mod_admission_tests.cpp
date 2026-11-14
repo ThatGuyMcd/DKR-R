@@ -1,5 +1,6 @@
 #include "direct_session.hpp"
 #include "online_mod_sync_link.hpp"
+#include "online_stability/transfer_window.hpp"
 #include "mods/online_mod_manifest.hpp"
 #include "netplay_build_identity.hpp"
 #include <stdexcept>
@@ -46,6 +47,13 @@ struct DirectSessionTestAccess {
         auto route=std::make_unique<ModTestTransport>();auto* counters=route.get();host.transport_=std::move(route);
         Rules rules;rules.maximum_players=4;rules.synchronization=mode;
         if(mode==SynchronizationMode::Lockstep)rules.rollback_window=0;
+        // Superseded in v1.0.11 (rollback-only): the host-prediction and
+        // lockstep backends are gone. They must stay gone: their lobbies are
+        // refused, so admission only runs for the Rollback backend.
+        if(mode!=SynchronizationMode::ExperimentalRollback){
+            check(!host.lobby_.create("room","modtest","Mods",Visibility::Private,"100","Host",host.manifest_,rules,error));
+            return;
+        }
         check(host.lobby_.create("room","modtest","Mods",Visibility::Private,"100","Host",host.manifest_,rules,error));
         host.state_=ConnectionState::Hosting;host.is_host_=true;host.sender_id_=100;host.match_id_=101;host.room_view_=host.lobby_.room();
         check(host.admission_incompatibility(m).empty());
@@ -69,7 +77,7 @@ struct DirectSessionTestAccess {
         mismatch=m;mismatch.owned_engine_hash=wrong;
         check(incompatibility_reason(m,mismatch,true).find("Replay engine")!=std::string::npos);
         check(incompatibility_reason(m,mismatch,false).empty());
-        check(host.admission_incompatibility(mismatch).empty()==(mode!=SynchronizationMode::ExperimentalRollback));
+        check(!host.admission_incompatibility(mismatch).empty());
         mismatch=m;mismatch.mod_manifest_hash=digest;mismatch.owned_resources_hash=wrong;
         check(!incompatibility_reason(host.manifest_,mismatch).empty());
         // Provisional consent may prepare missing resources, but cannot claim
@@ -123,7 +131,8 @@ struct DirectSessionTestAccess {
             check(host.mod_inbound_bytes_==std::size_t(packets)*data.payload.size());
             // Overflow remains bounded and cannot disconnect unrelated peers.
             for(unsigned i=0;i<600;++i)check(host.handle_mod_packet_locked(201,data));
-            check(host.mod_inbound_bytes_<=512U*1024 && host.mod_inbound_.size()<=512);
+            // v1.0.15 holds the largest negotiable transfer window plus 128 KiB of headroom.
+            check(host.mod_inbound_bytes_<=dkr::online_stability::MaximumTransferWindow+128U*1024 && host.mod_inbound_.size()<=512);
             const auto before=host.mod_inbound_bytes_;
             check(host.handle_mod_packet_locked(201,data) && host.mod_inbound_bytes_==before);
             check(host.state_==ConnectionState::Hosting);
@@ -177,5 +186,5 @@ int main(){try{
     for(auto revision:{Revision::UsV77,Revision::UsV80})
         for(auto mode:{SynchronizationMode::Rollback,SynchronizationMode::Lockstep,SynchronizationMode::ExperimentalRollback})
             DirectSessionTestAccess::run(revision,mode);
-    std::cout<<checks<<" mod admission/roster/consent/queue/lifecycle checks passed across two revisions and three backends. No game window opened.\n";
+    std::cout<<checks<<" mod admission/roster/consent/queue/lifecycle checks passed across two revisions (legacy backends refused). No game window opened.\n";
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -155,5 +155,7 @@ runtime-recomp/build/
 /.claude/session-base
 /.claude/session-base.*.tmp
 
+# Pinned Node tools for the services tests (npm ci in services/test-tools)
+/services/test-tools/node_modules/
 # Ruff writes local lint cache on both operating systems.
 .ruff_cache/

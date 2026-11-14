@@ -46,6 +46,11 @@ add_library(DKRUpdateClient STATIC src/game/updates/update_http.cpp src/game/upd
 target_include_directories(DKRUpdateClient PRIVATE "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty")
 target_compile_definitions(DKRUpdateClient PRIVATE NOMINMAX)
 target_link_libraries(DKRUpdateClient PUBLIC DKRUpdateInstall)
+# The update service reports its downloads as storage activity.
+include("${CMAKE_CURRENT_LIST_DIR}/Storage.cmake")
+dkr_add_storage()
+target_include_directories(DKRUpdateClient PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/game")
+target_link_libraries(DKRUpdateClient PUBLIC DKRStorage)
 if(WIN32)
     target_link_libraries(DKRUpdateClient PRIVATE winhttp)
 elseif(ANDROID)

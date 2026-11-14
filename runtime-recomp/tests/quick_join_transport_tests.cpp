@@ -2,6 +2,7 @@
 #include "netplay_protocol.hpp"
 #include "session_transport.hpp"
 #include "transport_send_policy.hpp"
+#include "setup_policy.hpp"
 #include "local_presentation_prototype.hpp"
 
 #if DKR_NETPLAY_WEBRTC
@@ -21,6 +22,9 @@ namespace {
 
 dkr::runtime::netplay::CompatibilityManifest manifest() {
     using namespace dkr::runtime::netplay;
+    using dkr::online_performance::SetupBulk;
+    using dkr::online_performance::setup_bulk;
+    using dkr::online_performance::additional_capacity;
     CompatibilityManifest result{};
     result.release_version = "quick-join-test";
     result.build_fingerprint = "quick-join-test";
@@ -37,6 +41,9 @@ dkr::runtime::netplay::CompatibilityManifest manifest() {
 
 void configure_online_session(dkr::runtime::netplay::DirectSession& session) {
     using namespace dkr::runtime::netplay;
+    using dkr::online_performance::SetupBulk;
+    using dkr::online_performance::setup_bulk;
+    using dkr::online_performance::additional_capacity;
     session.configure_manifest(manifest());
     std::vector<std::uint8_t> save(512U, 0x5AU);
     session.configure_session_save(
@@ -79,6 +86,9 @@ bool wait_until(Predicate predicate, std::chrono::seconds timeout) {
 
 int main() {
     using namespace dkr::runtime::netplay;
+    using dkr::online_performance::SetupBulk;
+    using dkr::online_performance::setup_bulk;
+    using dkr::online_performance::additional_capacity;
     static_assert(quick_join_send_accepted(true, false, false, false));
     static_assert(!LocalPresentationPrototype::kRendererQualified);
     LocalPresentationPrototype prototype;
@@ -104,6 +114,41 @@ int main() {
     static_assert(quick_join_admit(TransportTrafficClass::Control, 0, 32000, 1024));
     static_assert(!quick_join_admit(TransportTrafficClass::Checkpoint, 16000, 16000, 1024));
     static_assert(!quick_join_admit(TransportTrafficClass::Control, 0, SIZE_MAX, 1024));
+    assert(!setup_bulk);
+    {
+        SetupBulk setup(true);
+        assert(setup_bulk);
+        std::thread other([] { assert(!setup_bulk); });
+        other.join();
+        {
+            SetupBulk restricted(false);
+            assert(!additional_capacity(TransportTrafficClass::Checkpoint, setup_bulk, 16000, 16000, 1024));
+        }
+        assert(setup_bulk);
+        for (std::size_t frame : {1U, 8193U, 11300U}) {
+            std::size_t used = 0;
+            unsigned packets = 0;
+            while (additional_capacity(TransportTrafficClass::Checkpoint, setup_bulk, used, used, frame)) {
+                used += frame;
+                ++packets;
+            }
+            // v1.0.15 raised the setup allowance from 256 KiB to 2 MiB.
+            assert(used <= dkr::online_performance::SetupBytes && packets > 16);
+            assert(additional_capacity(TransportTrafficClass::Control, setup_bulk, 0, used, 1000));
+            assert(additional_capacity(TransportTrafficClass::Authoritative, setup_bulk, 0, used, 1000));
+        }
+        assert(!additional_capacity(TransportTrafficClass::Replica, setup_bulk, 16000, 16000, 1024));
+        assert(!additional_capacity(TransportTrafficClass::Realtime, setup_bulk, 16000, 16000, 1024));
+        assert(!additional_capacity(TransportTrafficClass::Checkpoint, setup_bulk, 0, 0, SIZE_MAX));
+        assert(!additional_capacity(TransportTrafficClass::Control, setup_bulk, 32U << 10U, 0, 1));
+    }
+    try {
+        SetupBulk setup(true);
+        throw std::runtime_error("synthetic send failure");
+    } catch (const std::runtime_error&) {
+    }
+    assert(!setup_bulk);
+    assert(!additional_capacity(TransportTrafficClass::Checkpoint, setup_bulk, 16000, 16000, 1024));
     LatencyHistogram histogram;
     assert(histogram.summary().samples == 0);
     for (unsigned i = 0; i < 100; ++i) histogram.observe(i);

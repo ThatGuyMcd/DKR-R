@@ -18,6 +18,7 @@ SKIP_PARTS = {
     "dist",
     "runtime",
     "extern",
+    "node_modules",
     "run-data",
     "--portable",
     "squashfs-root",

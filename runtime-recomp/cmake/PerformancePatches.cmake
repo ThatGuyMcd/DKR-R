@@ -7,6 +7,10 @@ dkr_stage_patch(ultramodern "${CMAKE_BINARY_DIR}/generated/performance-runtime" 
     "${DKRPORT_ROOT}/patches/performance/runtime-host-task-lifetime.patch" ultramodern/src/events.cpp)
 dkr_stage_patch(ultramodern "${CMAKE_BINARY_DIR}/generated/host-task-lifetime" vi-bootstrap
     "${DKRPORT_ROOT}/patches/performance/runtime-vi-bootstrap.patch" ultramodern/src/events.cpp)
+# v1.0.11 producer snapshot handoff (scripts/fold/dependency_stages.py).
+dkr_stage_patch(ultramodern "${CMAKE_BINARY_DIR}/generated/vi-bootstrap" ultramodern-graphics-handoff
+    "${DKRPORT_ROOT}/patches/n64-modern-runtime/staged/0001-graphics-handoff-events.patch"
+    ultramodern/src/events.cpp KEEP_INCLUDE_DIRECTORIES)
 dkr_stage_patch(librecomp "${DKR_MODERN_RUNTIME_SOURCE}" session-bootstrap
     "${DKRPORT_ROOT}/patches/performance/runtime-session-bootstrap.patch" librecomp/src/recomp.cpp)
 dkr_stage_patch(ultramodern "${DKR_MODERN_RUNTIME_SOURCE}" guest-lifetime
@@ -24,7 +28,9 @@ if(DKR_REPLAY_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
 endif()
 dkr_stage_patch(librecomp "${DKR_CODE_RUNTIME_INPUT}" custom-magic-code-heap
     "${DKRPORT_ROOT}/patches/custom-magic-codes/runtime-code-heap.patch" librecomp/src/recomp.cpp)
-include("${DKRPORT_ROOT}/patches/startup-memory/RuntimeMemory.cmake")
+# Startup memory: applied to the custom-magic-code-heap copy above.
+dkr_stage_patch(librecomp "${CMAKE_BINARY_DIR}/generated/custom-magic-code-heap" startup-memory
+    "${DKRPORT_ROOT}/patches/startup-memory/runtime-memory.patch" librecomp/src/recomp.cpp)
 if(BUILD_TESTING AND NOT ANDROID)
     add_executable(DKRNativeGuestLifetimeTests "${DKRPORT_ROOT}/runtime-recomp/tests/native_guest_lifetime_tests.cpp")
     target_compile_definitions(DKRNativeGuestLifetimeTests PRIVATE

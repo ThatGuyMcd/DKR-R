@@ -63,7 +63,7 @@ void DrawSessionChatPanel(float width,bool game=false) {
         ImGui::SetCursorScreenPos(at);ImGui::Dummy({inner,std::max(title_height,36.F)});
         if(!game&&g_session_chat.collapsed){
             unsigned unread=0;for(const auto& m:view.messages)if(m.id>g_session_chat.read&&m.author!=view.local&&!g_session_chat.muted.contains(m.author))++unread;
-            if(unread)OlParagraph(std::to_string(unread)+" unread message"+(unread==1?"":"s"),12.F,kOlGoText,inner);
+            if(unread)OlParagraph(dkr::localisation::plural("chat.unread",unread),12.F,kOlGoText,inner);
             return;
         }
         PaddockGap(10.F);

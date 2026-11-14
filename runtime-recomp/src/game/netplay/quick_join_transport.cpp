@@ -1,3 +1,7 @@
+#include "setup_policy.hpp"
+#include <cstdio>
+#include "online_presentation/test_receive_delay.hpp"
+#include "online_stability/live_send_capacity.hpp"
 #include "session_transport.hpp"
 #include "callback_lifetime.hpp"
 #include "transport_send_policy.hpp"
@@ -225,7 +229,7 @@ public:
         std::scoped_lock lock(mutex_);
         for (const auto& [id, peer] : peers_) {
             if (peer->address == address &&
-                (pinned_routes_.contains(peer->remote_id) || pinned_routes_.size() < 4U)) {
+                (pinned_routes_.contains(peer->remote_id) || pinned_routes_.size() < 16U)) {
                 pinned_routes_[peer->remote_id] = {id, address};
                 return;
             }
@@ -358,7 +362,9 @@ public:
         const auto buffered = channel->bufferedAmount();
         std::size_t aggregate = 0;
         for (const auto& lane : peer_channels) if (lane) aggregate += lane->bufferedAmount();
-        if (!quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U)) {
+        if (!(quick_join_admit(traffic, buffered, aggregate, bytes.size() + 1U) ||
+              dkr::online_performance::additional_capacity(traffic,dkr::online_performance::setup_bulk,buffered,aggregate,bytes.size()+1U)) ||
+              !dkr::online_stability::fresh_input_capacity(traffic,buffered,bytes.size()+1U)) {
             error.clear();
             return DatagramSendStatus::WouldBlock;
         }
@@ -409,7 +415,7 @@ public:
         for (unsigned attempt = 0; attempt < schedule.size(); ++attempt) {
             auto* candidate = queues[schedule[receive_service_cursor_]];
             receive_service_cursor_ = (receive_service_cursor_ + 1U) % schedule.size();
-            if (!candidate->empty()) { queue = candidate; break; }
+            if (!candidate->empty()&&dkr::online_presentation::test_receive_delay::ready(candidate->front().test_ready)) { queue = candidate; break; }
         }
         if (queue == nullptr) {
             source = {};
@@ -562,6 +568,24 @@ public:
             now - last_heartbeat_ >= std::chrono::seconds(5)) {
             send_signal(Json{{"type", "HEARTBEAT"}});
             last_heartbeat_ = now;
+            struct SdkRow {
+                std::shared_ptr<rtc::PeerConnection> connection;
+                std::array<std::shared_ptr<rtc::DataChannel>,5> channels;
+            };
+            std::vector<SdkRow> sdk_rows;
+            {
+                std::scoped_lock lock(mutex_);
+                for(const auto& [identifier,peer]:peers_)if(peer->current.load())
+                    sdk_rows.push_back({peer->connection,{peer->control_channel,peer->authority_channel,
+                        peer->realtime_channel,peer->checkpoint_channel,peer->replica_channel}});
+            }
+            for(const auto& row:sdk_rows)if(row.connection) {
+                const auto rtt=row.connection->rtt();std::array<std::size_t,5> queued{};
+                for(unsigned n=0;n<queued.size();++n)if(row.channels[n])queued[n]=row.channels[n]->bufferedAmount();
+                std::fprintf(stderr,"[online][sdk] role=%s sctp-rtt-ms=%lld bytes-sent=%zu bytes-received=%zu queued-control=%zu queued-authority=%zu queued-live=%zu queued-checkpoint=%zu queued-replica=%zu\n",
+                    host_?"host":"client",static_cast<long long>(rtt?rtt->count():-1),row.connection->bytesSent(),row.connection->bytesReceived(),
+                    queued[0],queued[1],queued[2],queued[3],queued[4]);
+            }
         }
     }
 
@@ -663,6 +687,7 @@ private:
     struct InboundPacket {
         PeerAddress source{};
         std::vector<std::uint8_t> bytes;
+        std::chrono::steady_clock::time_point test_ready=dkr::online_presentation::test_receive_delay::ready_at();
     };
 
     void release_packet_bytes_locked(const InboundPacket& packet) {
@@ -794,7 +819,7 @@ private:
         if(control&&peer->control_channel!=control)return;
         peer->departure_reported=true;
         std::erase_if(departed_peers_,[](const auto& p){const auto live=p.lock();return !live||!live->current.load();});
-        if(departed_peers_.size()<4U)departed_peers_.push_back(peer);
+        if(departed_peers_.size()<16U)departed_peers_.push_back(peer);
         if(receive_signal_)receive_signal_->notify();
     }
 
@@ -843,7 +868,7 @@ private:
             std::scoped_lock lock(mutex_);
             if (peer->remote_id.size() > 128U || peer->connection_id.size() > 128U ||
                 retired_peers_.size() + pending_retirements_.load() >= 16U ||
-                (peers_.size() >= 8U && std::none_of(peers_.begin(), peers_.end(), [&](const auto& entry) { return entry.second->remote_id == peer->remote_id; }))) return {};
+                (peers_.size() >= 16U && std::none_of(peers_.begin(), peers_.end(), [&](const auto& entry) { return entry.second->remote_id == peer->remote_id; }))) return {};
             auto existing = std::find_if(
                 peers_.begin(), peers_.end(), [&](const auto& entry) {
                     return entry.second &&
@@ -1039,7 +1064,7 @@ private:
 
         rtc::DataChannelInit realtime{};
         realtime.reliability.unordered = true;
-        realtime.reliability.maxRetransmits = 0U;
+        dkr::online_stability::configure_live_reliability(realtime.reliability);
         route_construction_check(4);
         bind_channel(peer, peer->connection->createDataChannel(
             "dkr-r-realtime", realtime));

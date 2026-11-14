@@ -14,9 +14,10 @@ hits are inventoried in architecture/pattern-guard-baseline.txt, one
 
 * a finding not in the baseline fails;
 * a baseline entry whose file no longer produces that finding fails (delete it);
-* with --diff, a baseline that gained entries since the base fails unless
-  --transition-layer is passed (CI passes it for PRs labelled
-  ``transition-layer`` until ``fold-in-base`` is tagged).
+* with --diff, a baseline that gained entries since the base fails.
+
+The fold (step B8) emptied the baseline; it stays as the mechanism, and stays
+empty.
 
 Scopes: --tree (default) scans tracked and untracked, non-ignored files;
 --diff BASE scans files changed since merge-base(BASE, HEAD) including local
@@ -62,10 +63,9 @@ BASELINE_HEADER = """\
 # Pattern guard baseline: first-party patch-layer mechanisms that predate the
 # guard. One "<path> <rule>" line per finding, sorted, enumerated (never a glob).
 #
-# This file only ever shrinks. scripts/pattern_guard.py fails on a finding that
-# is not listed here, and on a line here whose file no longer produces it. New
-# lines are accepted only on PRs labelled transition-layer, until fold-in-base
-# is tagged; the fold drives this file to empty.
+# This file only ever shrinks, and the fold left it empty. scripts/pattern_guard.py
+# fails on a finding that is not listed here, on a line here whose file no
+# longer produces it, and (with --diff) on any line a change adds.
 #
 # Regenerate after removing hits: python3 scripts/pattern_guard.py --tree --baseline write
 # Explain a rule: python3 scripts/pattern_guard.py --explain PG001
@@ -126,8 +126,9 @@ RULES = {
             "PG007",
             "unregistered-dependency-patch",
             "a dependency *.patch, or a dkr_stage_patch() patch, missing from patches/manifest.json "
-            "or with a stale sha256",
-            "register the patch with its sha256 in patches/manifest.json",
+            "or with a stale sha256; or a stagedPatches entry no runtime-recomp CMake applies",
+            "register the patch with its sha256 in patches/manifest.json (stagedPatches for "
+            "dkr_stage_patch), or drop the entry with the call",
         ),
         Rule(
             "PG008",
@@ -178,12 +179,38 @@ SOURCE_SWAP_ALLOWED = {
     "runtime-recomp/cmake/StagedPatch.cmake",  # dependency-patch staging
     "runtime-recomp/cmake/GuestHooks.cmake",
 }
+# services/ (server-side code, services/README.md) splices hosted Workers and
+# web pages that live outside this repo; each service's build.py is its
+# supported producer. The pipeline rules (PG004, PG012) guard the runtime tree,
+# so they skip services/ on purpose. Every other rule still applies there.
+SERVICES_PREFIX = "services/"
+# The two owned-engine input stages (AGENTS.md): they write new copies of
+# recompiled guest code that the owned payload is generated from byte for
+# byte, so they can't be hooks.toml entries yet. No other script joins them.
+OWNED_INPUT_STAGES = {
+    "scripts/save_layout_pipeline.py": "save-layout stage of the owned-engine inputs",
+    "scripts/character_portrait_pipeline.py": "portrait stage of the owned-engine inputs",
+}
 PIPELINE_ALLOWED = {
+    **OWNED_INPUT_STAGES,
     "scripts/gen_guest_symbols.py": "writes new symbol headers",
     "scripts/guest_hooks.py": "applies declared hooks to generated guest code",
     "scripts/generate_replay_probe.py": "reads first-party headers only to collect probe symbol names",
+    "scripts/camera_scene_kernel.py": "reads the first-party camera bridge only to record its digests",
+    # Fold-only (step B1): writes the shipped closure into runtime-recomp/ once,
+    # respelling staged #include paths. Deleted with scripts/fold/ after C11.
+    "scripts/fold/apply_closure.py": "writes the shipped v1.0.11 closure back into the tree once",
+    # Fold-only (step B3): diffs the stage chain against the shipped dependency
+    # transforms into registered stage patches, respelling the same includes.
+    "scripts/fold/dependency_stages.py": "writes the v1.0.11 dependency transforms as stage patches",
+    # Fold-only: compares the folded build with the reference; it writes
+    # reports and scratch objects, never a source file.
+    "scripts/fold/equivalence.py": "reads the folded tree to compare it, writes only reports",
+    # Fold-only (B9b): writes docs/fold-in/MIGRATION.md from the reference's
+    # source map; it names first-party paths but reads no source file.
+    "scripts/fold/migration.py": "writes the layer-to-source map document",
 }
-GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake"}
+GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake", *OWNED_INPUT_STAGES}
 IDENTITY_ALLOWED_SUFFIX = "netplay/legacy_identity.hpp"
 
 CMAKE_SUFFIXES = (".cmake",)
@@ -418,16 +445,35 @@ class Tree:
 
     @functools.cached_property
     def registered_patches(self) -> dict[str, str]:
-        """patches/manifest.json path -> sha256 for every dependency patch."""
+        """patches/manifest.json path -> sha256 for every dependency patch:
+        the ones applied to a checkout (``dependencies[].patches[]``) and the
+        ones dkr_stage_patch applies to a staged copy (``stagedPatches[]``)."""
         try:
             manifest = json.loads(self.text("patches/manifest.json") or "{}")
         except json.JSONDecodeError:
             return {}
+        entries = [
+            *(patch for dependency in manifest.get("dependencies", []) for patch in dependency.get("patches", [])),
+            *manifest.get("stagedPatches", []),
+        ]
+        return {patch["path"]: patch.get("sha256", "") for patch in entries if "path" in patch}
+
+    @functools.cached_property
+    def staged_patch_entries(self) -> list[str]:
+        try:
+            manifest = json.loads(self.text("patches/manifest.json") or "{}")
+        except json.JSONDecodeError:
+            return []
+        return [patch["path"] for patch in manifest.get("stagedPatches", []) if "path" in patch]
+
+    @functools.cached_property
+    def cmake_patch_references(self) -> set[str]:
+        """patches/....patch paths named anywhere in runtime-recomp's CMake."""
         return {
-            patch["path"]: patch.get("sha256", "")
-            for dependency in manifest.get("dependencies", [])
-            for patch in dependency.get("patches", [])
-            if "path" in patch
+            match.group(1)
+            for path in self.files
+            if path.startswith("runtime-recomp/") and is_cmake(path)
+            for match in re.finditer(r"(?:^|[/}\s\"])(patches/[^\s\")]+\.patch)", self.text(path) or "")
         }
 
     @functools.cached_property
@@ -701,7 +747,7 @@ def string_replace_pipeline(tree: Tree, path: str) -> Iterator[Finding]:
     """PG004: read text, rewrite it, write it, with first-party source or a
     patch layer named as data. File-level on purpose: pipelines spread the
     read, the edits and the write over helpers."""
-    if not path.endswith(".py") or path in PIPELINE_ALLOWED:
+    if not path.endswith(".py") or path in PIPELINE_ALLOWED or path.startswith(SERVICES_PREFIX):
         return
     module = tree.python(path)
     if module is None:
@@ -758,6 +804,10 @@ def first_party_under_patches(tree: Tree, path: str) -> Iterator[Finding]:
 def unregistered_dependency_patch(tree: Tree, path: str) -> Iterator[Finding]:
     """PG007: dependency patches and staged patches go through one registry."""
     registered = tree.registered_patches
+    if path == "patches/manifest.json":
+        for entry in tree.staged_patch_entries:
+            if entry not in tree.cmake_patch_references:
+                yield Finding(path, 1, "PG007", f"staged patch {entry} is not applied by runtime-recomp CMake")
     if path.endswith(".patch") and "/".join(path.split("/")[:2]) in tree.dependency_dirs:
         if path not in registered:
             yield Finding(path, 1, "PG007", "dependency patch is not in patches/manifest.json")
@@ -827,7 +877,11 @@ def guest_rewrite(tree: Tree, path: str) -> Iterator[Finding]:
     """PG012: read-modify-write of recompiled guest code. Naming those paths
     is fine (build scripts and generators do); rewriting a file in place whose
     path derives from one is not."""
-    if path in GUEST_REWRITE_ALLOWED or not GUEST_CODE.search(tree.text(path) or ""):
+    if (
+        path in GUEST_REWRITE_ALLOWED
+        or path.startswith(SERVICES_PREFIX)
+        or not GUEST_CODE.search(tree.text(path) or "")
+    ):
         return
     if path.endswith(".py"):
         module = tree.python(path)
@@ -990,7 +1044,8 @@ def parse_baseline(text: str, source: str) -> dict[Entry, int]:
 
 def render_baseline(findings: Iterable[Finding]) -> str:
     entries = sorted({(finding.path, finding.rule) for finding in findings})
-    return BASELINE_HEADER + "\n" + "".join(f"{path} {rule}\n" for path, rule in entries)
+    lines = "".join(f"{path} {rule}\n" for path, rule in entries)
+    return BASELINE_HEADER + ("\n" + lines if lines else "")
 
 
 # --- Scopes ------------------------------------------------------------------
@@ -1065,9 +1120,6 @@ def main(argv: list[str] | None = None) -> int:
         default="check",
         help="check findings against the baseline (default), rewrite it, or report every hit",
     )
-    parser.add_argument(
-        "--transition-layer", action="store_true", help="accept new baseline entries (PRs labelled transition-layer)"
-    )
     parser.add_argument("--explain", metavar="PGnnn", help="describe a rule ('all' lists them) and exit")
     parser.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -1116,11 +1168,11 @@ def run(args: argparse.Namespace) -> int:
                 f"{BASELINE}:{number}: {rule} stale entry, {path} no longer matches\n"
                 "    instead: delete the line (the baseline only shrinks)"
             )
-    before = committed_baseline(tree, scope.base) if scope.base and not args.transition_layer else None
+    before = committed_baseline(tree, scope.base) if scope.base else None
     if before is not None:
         problems.extend(
             f"{BASELINE}:{number}: {rule} new baseline entry for {path}\n"
-            "    instead: fix the finding; only transition-layer PRs may add entries"
+            "    instead: fix the finding; the baseline never grows"
             for (path, rule), number in baseline.items()
             if (path, rule) not in before
         )

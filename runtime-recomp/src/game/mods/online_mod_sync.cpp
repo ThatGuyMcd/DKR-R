@@ -1,9 +1,15 @@
+#include "storage/maintenance.hpp"
+#include "online_stability/mod_progress.hpp"
+#include "online_stability/transfer_window.hpp"
+#include "../diagnostics.hpp"
+#include "../cache_repair.hpp"
 #include "online_mod_sync.hpp"
 #include "online_mod_cache.hpp"
 #include "online_mod_runtime.hpp"
 #include <algorithm>
 #include <map>
 #include <cstdio>
+#include <thread>
 
 namespace dkr::mods::online {
 namespace {
@@ -19,7 +25,7 @@ void folders(const SyncSettings& settings) {
 bool data_message(Operation op){return op==Operation::ManifestChunk || op==Operation::PayloadChunk;}
 Message control(Operation op,const Download& download){return {op,download.digest()};}
 }
-ModSync::~ModSync(){cancel();if(thread_.joinable())thread_.join();}
+ModSync::~ModSync(){cancel();if(thread_.joinable())thread_.join();dkr::lobby_stability::erase(this);}
 SyncView ModSync::snapshot()const{std::lock_guard lock(mutex_);return state_;}
 void ModSync::publish(SyncView view){
     std::lock_guard lock(mutex_);
@@ -35,14 +41,16 @@ void ModSync::publish(SyncView view){
         std::fprintf(stderr,"[online-mods][worker-failure] stage=%s error=%s\n",clean(view.stage).c_str(),clean(view.error).c_str());
         std::fflush(stderr);
     }
+    dkr::lobby_stability::stage(this,int(view.phase),view.stage,view.error);
     state_=std::move(view);changed_.notify_all();
 }
-void ModSync::progress(std::string_view stage){std::lock_guard lock(mutex_);state_.stage=std::string(stage);}
+void ModSync::progress(std::string_view stage){std::lock_guard lock(mutex_);state_.stage=std::string(stage);dkr::lobby_stability::stage(this,int(state_.phase),stage);}
 bool ModSync::start(SyncPhase phase) {
     // The frontend starts a new job only after cancellation has finished. Do
     // not join a running child process from an ImGui action.
     if(running_.load())return false;
     if(thread_.joinable())thread_.join();
+    dkr::lobby_stability::begin(this,phase==SyncPhase::HostPreparing?"host":"client");
     {std::lock_guard lock(mutex_);state_={};state_.phase=phase;
         if(phase==SyncPhase::ReadingOffer)state_.stage="Waiting for host approval and any required mod offer";
         decision_.reset();keep_offline_=true;}running_.store(true);return true;
@@ -66,6 +74,7 @@ bool ModSync::prepare_host(SyncSettings settings,std::filesystem::path legacy,st
     if(!prepare || !start(SyncPhase::HostPreparing))return false;
     try {thread_=std::jthread([this,settings=std::move(settings),legacy=std::move(legacy),labs=std::move(labs),
         revision=std::move(revision),ai,prepare=std::move(prepare)](std::stop_token stop) mutable {
+    dkr::storage::OnlineActivity storage_activity;
         try {
             const auto began=Clock::now();
             settings.online_root=private_storage_path(settings.online_root);
@@ -76,7 +85,11 @@ bool ModSync::prepare_host(SyncSettings settings,std::filesystem::path legacy,st
             ready.offer=identity(bundle->manifest);
             ready.total=transfer_size(bundle->manifest);
             if(has_mods(bundle->manifest)) {
-                cache_bundle(*bundle,settings.online_root/"payloads",stop);
+                try {cache_bundle(*bundle,settings.online_root/"payloads",stop);}
+                catch(const Error&) {
+                    for(const auto& payload:bundle->manifest.payloads)dkr::lobby_stability::verify_or_repair_download(settings.online_root,"payloads",payload,stop);
+                    cache_bundle(*bundle,settings.online_root/"payloads",stop);
+                }
                 ready.profile=prepare_profile(bundle->manifest,settings.online_root/"payloads",settings.imported_roms,
                     settings.online_root,settings.worker,stop,[&](auto stage){progress(stage);},legacy,settings.offline_tracks_root,labs);
                 progress("Validating the host's playable mod resources");ready.runtime=prepare(ready.profile,stop);
@@ -91,13 +104,14 @@ bool ModSync::prepare_host(SyncSettings settings,std::filesystem::path legacy,st
             host_loop(std::move(bundle),stop);
         }catch(const std::exception& error){if(!stop.stop_requested())publish({SyncPhase::Failed,{},error.what()});}
          catch(...){if(!stop.stop_requested())publish({SyncPhase::Failed,{},"Online mod preparation stopped safely."});}
-        if(stop.stop_requested())publish({});running_.store(false);
-    });}catch(const std::exception& error){running_.store(false);publish({SyncPhase::Failed,{},error.what()});return false;}
+        if(stop.stop_requested())publish({});running_.store(false);dkr::lobby_stability::retire(this);
+    });}catch(const std::exception& error){running_.store(false);dkr::lobby_stability::retire(this);publish({SyncPhase::Failed,{},error.what()});return false;}
     return true;
 }
 bool ModSync::watch_client(SyncSettings settings,RuntimePreparation prepare) {
     if(!prepare || !start(SyncPhase::ReadingOffer))return false;
     try {thread_=std::jthread([this,settings=std::move(settings),prepare=std::move(prepare)](std::stop_token stop) mutable {
+    dkr::storage::OnlineActivity storage_activity;
         try{settings.online_root=private_storage_path(settings.online_root);folders(settings);client_loop(settings,prepare,stop);}
         catch(const std::exception& error){if(!stop.stop_requested()){
             // A session-level rejection owns its authenticated settings-sync
@@ -110,14 +124,14 @@ bool ModSync::watch_client(SyncSettings settings,RuntimePreparation prepare) {
             if(!link_.view().failed)link_.leave("Online mod synchronization stopped safely.");
             auto failure=snapshot();failure.phase=SyncPhase::Failed;failure.error="Online mod synchronization stopped safely.";publish(std::move(failure));
         }}
-        if(stop.stop_requested())publish({});running_.store(false);
-    });}catch(const std::exception& error){running_.store(false);publish({SyncPhase::Failed,{},error.what()});return false;}
+        if(stop.stop_requested())publish({});running_.store(false);dkr::lobby_stability::retire(this);
+    });}catch(const std::exception& error){running_.store(false);dkr::lobby_stability::retire(this);publish({SyncPhase::Failed,{},error.what()});return false;}
     return true;
 }
 void ModSync::host_loop(std::shared_ptr<const Bundle> bundle,std::stop_token stop) {
-    struct Peer {std::uint64_t request=0;Upload upload;PeerProgress progress;std::optional<Message> acknowledgement;Clock::time_point next{};
+    struct Peer {std::uint64_t request=0;Upload upload;PeerProgress progress;std::optional<Message> acknowledgement;Clock::time_point next{},status_at{};std::uint64_t ticket=0;
         Peer(std::uint64_t id,std::shared_ptr<const Bundle> b):request(id),upload(b),progress{id,0,transfer_size(b->manifest),ProgressPhase::Review,"Waiting for download consent"}{};};
-    std::map<std::uint64_t,Peer> peers;bool hosted=false;
+    std::map<std::uint64_t,Peer> peers;bool hosted=false;std::uint64_t next_ticket=0;
     const auto digest=identity(bundle->manifest);
     while(!stop.stop_requested()) {
         const auto network=link_.view();
@@ -132,7 +146,8 @@ void ModSync::host_loop(std::shared_ptr<const Bundle> bundle,std::stop_token sto
             if(!packet.request || !network.host || std::find(network.preparing_requests.begin(),network.preparing_requests.end(),packet.request)==network.preparing_requests.end())continue;
             try {
                 auto [at,inserted]=peers.try_emplace(packet.sender,packet.request,bundle);
-                if(at->second.request!=packet.request || peers.size()>3)throw Error("Unexpected provisional mod route.");
+                if(at->second.request!=packet.request || peers.size()>dkr::lobby_stability::MaxPending)throw Error("The bounded mod preparation queue is full. Please retry shortly.");
+                if(inserted)std::fprintf(stderr,"[lobby-join][host] request=%llu manifest=%s event=route-created\n",static_cast<unsigned long long>(packet.request),digest.c_str());
                 const auto message=decode_message(packet.bytes);
                 if(message.operation==Operation::Progress) {
                     auto& peer=at->second;
@@ -148,25 +163,41 @@ void ModSync::host_loop(std::shared_ptr<const Bundle> bundle,std::stop_token sto
                     continue;
                 }
                 at->second.upload.request(message,link_.chunk_budget());
-                if(message.operation==Operation::Consent)at->second.acknowledgement=Message{Operation::ConsentAck,message.manifest};
+                if(message.operation==Operation::Consent&&!at->second.ticket)at->second.ticket=++next_ticket;
+                if(message.operation==Operation::Consent)at->second.acknowledgement=Message{Operation::ConsentAck,message.manifest,{},0,0,dkr::online_stability::window_bytes(dkr::online_stability::MaximumTransferWindow)};
                 if(message.operation==Operation::Preparing)at->second.acknowledgement=Message{Operation::PreparingAck,message.manifest};
                 if(message.operation==Operation::Cancel){link_.reject(packet.request,"Mod synchronization declined.");peers.erase(at);}
                 else if(message.operation==Operation::Verified) {
                     std::string error;if(!link_.admit(packet.request,message.manifest,message.payload,error))throw Error(error);
                     peers.erase(at);
                 }
-            }catch(const std::exception& error){link_.reject(packet.request,error.what());peers.erase(packet.sender);}
+            }catch(const std::exception& error){
+                std::fprintf(stderr,"[lobby-join][host] request=%llu manifest=%s event=rejected error=%s\n",static_cast<unsigned long long>(packet.request),digest.c_str(),dkr::lobby_stability::printable(error.what()).c_str());
+                link_.reject(packet.request,error.what());peers.erase(packet.sender);
+            }
         }
         // Small, fair bursts; the transport's existing bulk backpressure still
         // wins. Bulk admission never runs while a game is loading or playing.
+        std::vector<dkr::lobby_stability::Candidate> candidates;
+        for(const auto& [id,peer]:peers)if(peer.upload.consented()&&!peer.upload.preparing())candidates.push_back({id,peer.ticket});
+        const auto slots=dkr::lobby_stability::download_slots(std::move(candidates));
         for(auto& [id,peer]:peers)if(Clock::now()>=peer.next) {
             if(peer.acknowledgement) {
                 std::string error;if(send(id,*peer.acknowledgement,error))peer.acknowledgement.reset();
                 else if(!error.empty())link_.reject(peer.request,error);
                 continue;
             }
+            const bool queued=peer.upload.consented()&&!peer.upload.preparing()&&std::find(slots.begin(),slots.end(),id)==slots.end();
+            if(peer.upload.consented()&&!peer.upload.preparing()&&Clock::now()>=peer.status_at) {
+                const std::string label=queued?dkr::lobby_stability::Queued:dkr::lobby_stability::SlotReady;
+                Message status{Operation::Progress,digest,{},static_cast<std::uint32_t>(peer.progress.received),static_cast<std::uint32_t>(peer.progress.total),{static_cast<std::uint8_t>(ProgressPhase::Downloading)}};
+                status.bytes.insert(status.bytes.end(),label.begin(),label.end());std::string ignored;
+                if(send(id,status,ignored))peer.status_at=Clock::now()+std::chrono::milliseconds(500);
+                if(queued)peer.progress.stage=label;
+            }
             for(unsigned burst=0;burst<UploadBurstPackets;++burst) {
                 const auto message=peer.upload.next();if(!message)break;
+                if(queued&&message->operation==Operation::PayloadChunk)break;
                 std::string error;
                 if(send(id,*message,error)){peer.upload.sent();peer.next=Clock::now()+std::chrono::milliseconds(2);}
                 else {
@@ -175,16 +206,18 @@ void ModSync::host_loop(std::shared_ptr<const Bundle> bundle,std::stop_token sto
                 }
             }
         }
-        {std::lock_guard lock(mutex_);state_.peers.clear();for(const auto& [id,peer]:peers)state_.peers.push_back(peer.progress);}
+        {std::lock_guard lock(mutex_);state_.peers.clear();for(const auto& [id,peer]:peers)state_.peers.push_back(peer.progress);dkr::online_stability::publish_mod_progress(&link_,state_.peers);}
         pause(stop,std::chrono::milliseconds(2));
     }
 }
 void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation& prepare,std::stop_token stop) {
+    dkr::lobby_stability::GapBudget gaps;dkr::lobby_stability::PhaseBudget deadlines;
+    dkr::online_stability::TransferWindow transfer;
     Download download;ChunkInbox inbox;std::unique_ptr<PayloadFile> file;std::shared_ptr<const Profile> profile;
     std::shared_ptr<const RuntimeResources> runtime;Clock::time_point retry{},consent_retry{},preparing_retry{};
     std::string requested_payload;std::uint32_t requested_offset=0;
     bool data_requested=false;
-    const auto download_began=Clock::now();
+    const auto download_began=Clock::now();Clock::time_point payload_began{};
     std::uint64_t wire_bytes=0,cached_bytes=0,retries=0,credits=0;
     bool saw_offer=false,consent_sent=false,preparing_sent=false,prepared=false,keep_requested=false,kept_offline=false;
     std::string keep_error;
@@ -219,6 +252,7 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
             ? "The host connection ended during mod admission.":network.failure_reason);
         if(network.offer) {
             download.offer(network.offer->digest,network.offer->bytes);saw_offer=true;
+            dkr::lobby_stability::manifest(this,download.digest());
         }
         if(network.lobby) {
             if(saw_offer && (!prepared || download.phase()!=TransferPhase::Verified))throw Error("Lobby admission preceded complete local mod preparation.");
@@ -227,17 +261,39 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
             SyncView ready;ready.phase=SyncPhase::Verified;ready.profile=profile;ready.runtime=runtime;
             ready.kept_offline=kept_offline;ready.keep_error=keep_error;
             if(saw_offer){ready.manifest=std::make_shared<const Manifest>(download.manifest());ready.offer=download.digest();ready.received=ready.total=transfer_size(download.manifest());}
-            ready.stage="Host mods verified for this session";publish(std::move(ready));return;
+            ready.stage="Host mods verified for this session";publish(ready);
+            if(profile&&keep_requested&&!settings.offline_legacy_root.empty()&&!settings.offline_tracks_root.empty()) {
+                const auto began=Clock::now();
+                try {retain_profile(*profile,settings.offline_legacy_root,settings.offline_tracks_root,stop,settings.offline_code_root,settings.host_version);ready.kept_offline=true;}
+                catch(const std::exception& error){if(stop.stop_requested())return;ready.keep_error=std::string(error.what()).substr(0,1024);}
+                catch(...){if(stop.stop_requested())return;ready.keep_error="Offline copies could not be saved. Your verified session mods are still available.";}
+                if(!stop.stop_requested())publish(std::move(ready));
+                std::fprintf(stderr,"[online-mods][offline-keep] after-admission=1 elapsed-ms=%lld\n",static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-began).count()));
+            }
+            return;
         }
         if(saw_offer && !network.joining)throw Error("The host connection ended during mod admission.");
+        const auto phase=download.phase();
+        const auto limit=phase==TransferPhase::Consent?600:phase==TransferPhase::Payloads?1200:phase==TransferPhase::Preparing?900:phase==TransferPhase::Verified?45:120;
+        if(deadlines.expired(int(phase),std::chrono::seconds(limit),Clock::now()))throw Error("This mod admission phase exceeded its time budget. Retry to reuse verified files.");
+        dkr::lobby_stability::counters(this,download.received_bytes(),saw_offer&&phase!=TransferPhase::Manifest?transfer_size(download.manifest()):0,wire_bytes,cached_bytes,retries);
         SyncPacket packet;unsigned drained=0;
         while(drained++<32 && link_.receive(packet)) {
             const auto message=decode_message(packet.bytes);
             if(message.manifest!=download.digest())throw Error("Mod response belongs to a different host selection.");
+            if(message.operation==Operation::Progress) {
+                if(download.phase()!=TransferPhase::Payloads||message.total!=transfer_size(download.manifest())||message.bytes.empty()||message.bytes[0]!=static_cast<std::uint8_t>(ProgressPhase::Downloading))continue;
+                const std::string label(message.bytes.begin()+1,message.bytes.end());
+                if(label==dkr::lobby_stability::Queued||label==dkr::lobby_stability::SlotReady) {
+                    gaps.queue(label==dkr::lobby_stability::Queued,Clock::now());
+                    progress(label==dkr::lobby_stability::Queued?label:"Downloading required host mods");
+                }
+                continue; // A status never advances bytes, consent or readiness.
+            }
             if(message.operation==Operation::ConsentAck) {
                 if(download.phase()!=TransferPhase::Payloads && download.phase()!=TransferPhase::Preparing && download.phase()!=TransferPhase::Verified)
                     throw Error("Host acknowledged mods before client consent.");
-                consent_sent=true;continue;
+                transfer.chunk_budget(link_.chunk_budget());transfer.negotiate(message.bytes);consent_sent=true;continue;
             }
             if(message.operation==Operation::PreparingAck) {
                 if(!consent_sent || (download.phase()!=TransferPhase::Preparing && download.phase()!=TransferPhase::Verified))
@@ -245,12 +301,12 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
                 preparing_sent=true;continue;
             }
             if(download.phase()!=TransferPhase::Manifest && download.phase()!=TransferPhase::Payloads)continue;
-            if(inbox.push(message,download.request(link_.chunk_budget())))wire_bytes+=message.bytes.size();
+            if(inbox.push(message,transfer.request(download.request(link_.chunk_budget()))))wire_bytes+=message.bytes.size();
             while(download.phase()==TransferPhase::Manifest || download.phase()==TransferPhase::Payloads) {
-              const auto chunk=inbox.take(download.request(link_.chunk_budget()));if(!chunk)break;
+              const auto chunk=inbox.take(transfer.request(download.request(link_.chunk_budget())));if(!chunk)break;
               if(download.phase()==TransferPhase::Manifest) {
                 const bool advanced=download.manifest_chunk(*chunk);
-                if(advanced)retry=Clock::now()+std::chrono::seconds(1);
+                if(advanced){retry=Clock::now()+transfer.retry_delay();gaps.progress(Clock::now());}
                 if(advanced && download.phase()==TransferPhase::Consent) {
                     SyncView review;review.phase=SyncPhase::Review;review.manifest=std::make_shared<const Manifest>(download.manifest());
                     review.offer=download.digest();
@@ -258,8 +314,8 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
                 }
               } else if(download.accept_payload_chunk(*chunk)) {
                 if(!file)throw Error("Online mod chunk preceded an authorized private download.");
-                file->append(chunk->bytes);download.persisted(chunk->bytes.size());
-                retry=Clock::now()+std::chrono::seconds(1);
+                file->append(chunk->bytes);download.persisted(chunk->bytes.size());transfer.observed(chunk->bytes.size());gaps.progress(Clock::now());
+                retry=Clock::now()+transfer.retry_delay();
                 {std::lock_guard lock(mutex_);state_.received=download.received_bytes();}
                 if(file->size()==chunk->total){file->publish(settings.online_root/"payloads"/chunk->payload);file.reset();download.payload_verified();inbox.clear();retry={};data_requested=false;}
               }
@@ -283,7 +339,7 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
                 progress("Checking installed patches to avoid unnecessary downloads");
                 cache_installed_payloads(download.manifest(),settings.online_root/"payloads",settings.offline_legacy_root,stop,settings.offline_tracks_root,settings.offline_code_root,settings.host_version);
                 heartbeat.request_stop();heartbeat.join();
-                download.consent();progress("Downloading required host mods into the separate online cache");
+                download.consent();payload_began=Clock::now();progress("Downloading required host mods into the separate online cache");
                 std::lock_guard lock(mutex_);keep_requested=keep_offline_;state_.phase=SyncPhase::Downloading;
             }
         }
@@ -292,26 +348,31 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
             if(!error.empty())throw Error(error);pause(stop);continue;
         }
         while(download.phase()==TransferPhase::Payloads && !file) {
-            const auto request=download.request(link_.chunk_budget());
+            const auto request=transfer.request(download.request(link_.chunk_budget()));
             const auto& items=download.manifest().payloads;
             const auto found=std::find_if(items.begin(),items.end(),[&](const auto& p){return p.digest==request.payload;});
             if(found==items.end())throw Error("Required payload disappeared from the frozen host manifest.");
-            if(cached_payload(settings.online_root/"payloads",*found)){cached_bytes+=found->size;download.cached(found->digest,found->size);continue;}
+            dkr::lobby_stability::package(this,found->digest,"required host payload");
+            if(dkr::lobby_stability::verify_or_repair_download(settings.online_root,"payloads",*found,stop)){cached_bytes+=found->size;download.cached(found->digest,found->size);continue;}
+            dkr::lobby_stability::verify_or_repair_download(settings.online_root,"partials",*found,stop);
             file=std::make_unique<PayloadFile>(settings.online_root/"partials"/found->digest,*found);
             if(file->size()==found->size){file->publish(settings.online_root/"payloads"/found->digest);file.reset();download.cached(found->digest,found->size);continue;}
             if(file->size())download.resume_prefix(found->digest,file->size());retry={};
         }
         if(download.phase()==TransferPhase::Manifest || download.phase()==TransferPhase::Payloads) {
-            auto request=download.request(link_.chunk_budget());
+            auto request=transfer.request(download.request(link_.chunk_budget()));
             const bool first=!data_requested || request.payload!=requested_payload;
-            const bool gap=!first && Clock::now()>=retry;
+            const bool gap=!first && gaps.due(Clock::now());
+            if(gap&&gaps.exhausted())throw Error("No mod bytes arrived after five repair attempts. Retry to resume verified downloads.");
             const bool refill=!first && request.offset>=requested_offset &&
-                request.offset-requested_offset>=transfer_window_bytes(link_.chunk_budget())/2;
+                request.offset-requested_offset>=(request.payload.empty()?transfer_window_bytes(link_.chunk_budget())/2:transfer.stride());
             if(first || gap || refill) {
+                transfer.credit(first,gap);request=transfer.request(std::move(request));
                 if(refill && !gap)request.operation=request.payload.empty()?Operation::ManifestCredit:Operation::PayloadCredit;
                 if(send(0,request,error)){
-                    if(gap)++retries;else if(!first)++credits;
-                    retry=Clock::now()+std::chrono::seconds(1);data_requested=true;requested_payload=request.payload;requested_offset=request.offset;
+                    if(first)gaps.progress(Clock::now());
+                    if(gap){++retries;gaps.repaired(Clock::now());}else if(!first)++credits;
+                    retry=Clock::now()+transfer.retry_delay();data_requested=true;requested_payload=request.payload;requested_offset=request.offset;
                 }
                 else if(!error.empty())throw Error(error);
             }
@@ -320,10 +381,12 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
                 if(Clock::now()>=preparing_retry && send(0,control(Operation::Preparing,download),error))preparing_retry=Clock::now()+std::chrono::milliseconds(250);
                 if(!error.empty())throw Error(error);pause(stop);continue;
             }
-            std::fprintf(stderr,"[online-mods][download] wire-bytes=%llu cached-bytes=%llu gap-retries=%llu refill-credits=%llu elapsed-ms=%lld\n",
+            std::fprintf(stderr,"[online-mods][download] wire-bytes=%llu cached-bytes=%llu gap-retries=%llu refill-credits=%llu setup-ms=%lld payload-phase-ms=%lld\n",
                 static_cast<unsigned long long>(wire_bytes),static_cast<unsigned long long>(cached_bytes),
                 static_cast<unsigned long long>(retries),static_cast<unsigned long long>(credits),
-                static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-download_began).count()));
+                static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-download_began).count()),
+                static_cast<long long>(payload_began.time_since_epoch().count()?std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-payload_began).count():0));
+            std::fprintf(stderr,"[online-mods][window] peak-bytes=%zu max-inbox-bytes=%zu\n",transfer.peak(),dkr::online_stability::MaximumTransferWindow);
             {std::lock_guard lock(mutex_);state_.phase=SyncPhase::Preparing;state_.received=download.received_bytes();}
             // Import/runtime validation can take longer than a stage callback.
             // Display-only authenticated heartbeats remain independent of that
@@ -337,12 +400,6 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
             preparation_progress("Validating playable mod resources for this online backend");runtime=prepare(profile,stop);
             if(!runtime)throw Error("The host's selected mods do not have a validated online runtime adapter.");
             const auto runtime_ready=Clock::now();
-            if(keep_requested && !settings.offline_legacy_root.empty() && !settings.offline_tracks_root.empty()) {
-                preparation_progress("Keeping verified copies in Mods/Hacks for offline play");
-                try {retain_profile(*profile,settings.offline_legacy_root,settings.offline_tracks_root,stop,settings.offline_code_root,settings.host_version);kept_offline=true;}
-                catch(const std::exception& error){require_running(stop);keep_error=std::string(error.what()).substr(0,1024);}
-                catch(...){require_running(stop);keep_error="Offline copies could not be saved. Your verified session mods are still available.";}
-            }
             std::fprintf(stderr,"[online-mods][client-ready] roots=%zu profile-ms=%lld runtime-ms=%lld keep-ms=%lld total-ms=%lld\n",
                 download.manifest().content.size(),
                 static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(profile_ready-preparation_began).count()),
@@ -361,7 +418,7 @@ void ModSync::client_loop(const SyncSettings& settings,const RuntimePreparation&
             {std::lock_guard lock(mutex_);state_.received=download.received_bytes();}
             report(ProgressPhase::Downloading,"Downloading required host mods");
         } else if(download.phase()==TransferPhase::Verified)report(ProgressPhase::Verified,"Mods verified; entering lobby");
-        pause(stop,std::chrono::milliseconds(2));
+        if(drained>32)std::this_thread::yield();else pause(stop,std::chrono::milliseconds(2));
     }
     if(saw_offer){std::string error;send(0,control(Operation::Cancel,download),error);}
 }

@@ -1,3 +1,4 @@
+#include "vehicle_protocol.hpp"
 #include "online_mod_manifest.hpp"
 #include "legacy_character_artifact.hpp"
 #include "legacy_track_artifact.hpp"
@@ -11,10 +12,12 @@ namespace dkr::mods::online {
 namespace {
 using nlohmann::json;
 const char* kind(Kind value) {
+    if(value==CarContent)return "car";
     switch(value) {case Kind::Track:return "track";case Kind::Character:return "character";case Kind::TrackLab:return "tracklab";}
     throw Error("Invalid online mod kind.");
 }
 const char* payload_kind(PayloadKind value) {
+    if(value==CarPayload)return "car";
     switch(value) {case PayloadKind::Xdelta:return "xdelta";case PayloadKind::TrackLab:return "tracklab";case PayloadKind::Code:return "code";}
     throw Error("Invalid online mod payload kind.");
 }
@@ -56,7 +59,7 @@ Manifest canonical(Manifest value) {
     std::sort(value.content.begin(),value.content.end(),[](const auto& a,const auto& b){return std::tie(a.kind,a.id)<std::tie(b.kind,b.id);});
     std::map<std::string,PayloadKind> payloads;std::uint64_t bytes=0;
     for(const auto& p:value.payloads) {
-        const auto limit=p.kind==PayloadKind::Xdelta?MaxPatch:p.kind==PayloadKind::Code?32*MiB:MaxStaged;
+        const auto limit=p.kind==PayloadKind::Xdelta?MaxPatch:(p.kind==PayloadKind::Code||p.kind==CarPayload)?32*MiB:MaxStaged;
         payload_kind(p.kind);
         if(!valid_digest(p.digest) || !p.size || p.size>limit || p.size>MaxTransferBytes-bytes ||
            (!p.source_label.empty() && (!label(p.source_label) || p.source_label.size()>120)) ||
@@ -66,11 +69,20 @@ Manifest canonical(Manifest value) {
             throw Error("Invalid, duplicate or oversized online mod payload.");
         bytes+=p.size;
     }
-    std::set<std::string> ids,used;std::size_t tracks=0,characters=0;
+    std::set<std::string> ids,used;std::size_t tracks=0,characters=0,cars=0;
     for(const auto& c:value.content) {
         kind(c.kind);
         if(!valid_digest(c.id) || !label(c.name) || !valid_digest(c.artifact) || !valid_digest(c.bank) ||
            !ids.insert(c.id).second || !payloads.contains(c.payload))throw Error("Invalid online mod content identity.");
+        if(c.kind==CarContent) {
+            const auto p=std::find_if(value.payloads.begin(),value.payloads.end(),[&](const auto& p){return p.digest==c.payload;});
+            if(c.adapter!=CarAdapterVersion||c.artifact!=c.payload||c.bank!=c.payload||c.id!=c.payload||
+               !c.behaviour.empty()||c.behaviour_abi||payloads.at(c.payload)!=CarPayload||p==value.payloads.end()||
+               p->source_label.empty()||p->source_label.find_first_of("/\\:")!=std::string::npos||
+               p->source_label.size()<9||p->source_label.substr(p->source_label.size()-8)!=".dkrkart")
+                throw Error("This build cannot safely prepare the required custom car.");
+            ++cars;used.insert(c.payload);continue;
+        }
         const auto expected=c.kind==Kind::Character?CharacterAdapterVersion:c.kind==Kind::Track?TrackAdapterVersion:1U;
         if(c.adapter!=expected || payloads.at(c.payload)!=(c.kind==Kind::TrackLab?PayloadKind::TrackLab:PayloadKind::Xdelta))
             throw Error("This build cannot safely prepare the required online mod adapter.");
@@ -87,7 +99,7 @@ Manifest canonical(Manifest value) {
             throw Error("Invalid or duplicate online code selection.");
         canonical_object(code.settings,512*1024);canonical_object(code.data,65536);used.insert(code.payload);
     }
-    if(tracks>MaxTracks || characters>MaxCharacters || used.size()!=payloads.size())
+    if(tracks>MaxTracks || characters>MaxCharacters || cars>16 || used.size()!=payloads.size())
         throw Error("Online mod selection exceeds the supported budget or includes unused payloads.");
     return value;
 }
@@ -120,15 +132,15 @@ Manifest decode(View bytes) {
     for(const auto& p:payloads) {
         keys(p,{"kind","sha256","source_revision","size","source_label"});
         const auto tag=p.at("kind").get<std::string>();
-        if(tag!="xdelta" && tag!="tracklab"&&tag!="code")throw Error("Unknown online mod payload.");
+        if(tag!="xdelta" && tag!="tracklab"&&tag!="code"&&tag!="car")throw Error("Unknown online mod payload.");
         if(!p.at("size").is_number_unsigned())throw Error("Invalid online mod payload size.");
-        out.payloads.push_back({tag=="xdelta"?PayloadKind::Xdelta:tag=="code"?PayloadKind::Code:PayloadKind::TrackLab,p.at("sha256").get<std::string>(),p.at("source_revision").get<std::string>(),p.at("size").get<std::uint64_t>(),p.at("source_label").get<std::string>()});
+        out.payloads.push_back({tag=="car"?CarPayload:tag=="xdelta"?PayloadKind::Xdelta:tag=="code"?PayloadKind::Code:PayloadKind::TrackLab,p.at("sha256").get<std::string>(),p.at("source_revision").get<std::string>(),p.at("size").get<std::uint64_t>(),p.at("source_label").get<std::string>()});
     }
     for(const auto& c:contents) {
         keys(c,{"kind","id","name","payload","artifact","bank","adapter","behaviour","behaviour_abi"});
         const auto tag=c.at("kind").get<std::string>();
-        if(tag!="track" && tag!="character" && tag!="tracklab")throw Error("Unknown online mod content.");
-        out.content.push_back({tag=="track"?Kind::Track:tag=="character"?Kind::Character:Kind::TrackLab,
+        if(tag!="track" && tag!="character" && tag!="tracklab" && tag!="car")throw Error("Unknown online mod content.");
+        out.content.push_back({tag=="car"?CarContent:tag=="track"?Kind::Track:tag=="character"?Kind::Character:Kind::TrackLab,
             c.at("id").get<std::string>(),c.at("name").get<std::string>(),c.at("payload").get<std::string>(),
             c.at("artifact").get<std::string>(),c.at("bank").get<std::string>(),number(c.at("adapter")),
             c.at("behaviour").get<std::string>(),number(c.at("behaviour_abi"))});

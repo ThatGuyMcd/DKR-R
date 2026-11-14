@@ -1,6 +1,8 @@
 include_guard(GLOBAL)
-get_filename_component(_dkr_chat_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 function(dkr_add_session_chat)
+    # Set here, not at file scope: the first include can come from inside
+    # another function, whose scope a file-level variable would not outlive.
+    get_filename_component(_dkr_chat_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
     if(NOT TARGET DKRSessionChat)
         add_library(DKRSessionChat STATIC "${_dkr_chat_root}/src/game/netplay/session_chat/chat.cpp")
         target_compile_features(DKRSessionChat PUBLIC cxx_std_20)

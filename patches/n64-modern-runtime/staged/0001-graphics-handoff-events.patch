@@ -1,0 +1,55 @@
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -1,3 +1,4 @@
++#include "producer_snapshot.hpp"
+ #include <thread>
+ #include <atomic>
+ #include <chrono>
+@@ -30,7 +31,7 @@ void ultramodern::events::set_callbacks(const ultramodern::events::callbacks_t&
+ }
+ 
+ using RdramSnapshotPool = dkr::runtime::GraphicsSnapshotPool<0x800000>;
+-static RdramSnapshotPool rdram_snapshot_pool;
++// Pool ownership is shared with the earlier producer handoff.
+ namespace host_tasks = dkr::runtime::host_tasks;
+ 
+ struct SpTaskAction {
+@@ -634,6 +635,8 @@ void ultramodern::submit_rsp_task(RDRAM_ARG PTR(OSTask) task_) {
+             events_callbacks.presentation_allowed_callback == nullptr ||
+             events_callbacks.presentation_allowed_callback();
+         if (!presentation_allowed) {
++            dkr::runtime::graphics_handoff::discard(rdram,
++                static_cast<std::uint32_t>(task->t.data_ptr),task->t.data_size);
+             // Historical/catch-up frames do not reach the renderer, but their
+             // emulated graphics task must retain the normal worker-owned SP/DP
+             // lifecycle. Completing both edges inline can publish DP before
+@@ -645,8 +648,10 @@ void ultramodern::submit_rsp_task(RDRAM_ARG PTR(OSTask) task_) {
+             return;
+         }
+         constexpr size_t RDRAMSnapshotSize = 0x800000;
+-        auto rdram_snapshot = rdram_snapshot_pool.acquire();
+-        {
++        auto rdram_snapshot = dkr::runtime::graphics_handoff::take(
++            rdram,static_cast<std::uint32_t>(task->t.data_ptr),task->t.data_size);
++        if (!rdram_snapshot) {
++            rdram_snapshot = dkr::runtime::graphics_handoff::acquire();
+             dkr::runtime::performance_trace::Scope measure(
+                 dkr::runtime::performance_trace::Region::SnapshotCopy, RDRAMSnapshotSize);
+             std::memcpy(rdram_snapshot.get(), rdram, RDRAMSnapshotSize);
+@@ -673,6 +678,7 @@ void ultramodern::send_si_message() {
+ }
+ 
+ static void reset_event_state() {
++    dkr::runtime::graphics_handoff::reset();
+     Action action;
+     while (events_context.action_queue.try_dequeue(action)) {}
+ 
+@@ -777,6 +783,7 @@ void ultramodern::join_event_threads() {
+ 
+     Action action;
+     while (events_context.action_queue.try_dequeue(action)) {}
++    dkr::runtime::graphics_handoff::reset();
+     QueuedRspTask task;
+     while (events_context.sp_task_queue.try_dequeue(task)) {}
+ }

@@ -61,7 +61,12 @@ void DrawRuntimeStartupClouds(double seconds) {
 bool DrawRuntimeStartingGame() {
     auto& intro=dkr::library_ui::runtime_intro;
     const auto online=dkr::runtime::netplay::session().runtime_view();
+#if defined(DKR_EXPERIMENTAL_RACE_TEST)
     const auto owned=dkr::runtime::netplay::experimental::runtime_view();
+#else
+    // Builds without the rollback runtime (Apple) never have an owned match.
+    const struct{bool active=false,initial_admission=false;std::uint64_t epoch=0;std::uint32_t frame=0;} owned;
+#endif
     const bool expects_owned=online.launch_descriptor&&online.launch_descriptor->synchronization==
         dkr::runtime::netplay::SynchronizationMode::ExperimentalRollback;
     const bool initial=!online.owned_match_ending&&(dkr::library_ui::initial_sync(online.active,expects_owned,

@@ -105,6 +105,8 @@ std::vector<std::filesystem::path> ModReviewRoms() {
     return roms;
 }
 
+#include "character_portraits/character_portraits_ui.inl"
+
 // ------------------------------------------------------------ library data
 
 // One card: a legacy catalogue entry or a native track.
@@ -114,6 +116,8 @@ struct LibraryEntry {
 };
 
 struct LibraryCardView {
+    float preview_height=0;
+    std::function<void(float,float)> preview;
     bool code = false;
     bool native = false;
     std::string title;
@@ -131,6 +135,7 @@ struct LibraryCardView {
     std::string review;
 };
 
+#include "localisation/library_card.inl"
 LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
                                     unsigned active, bool locked) {
     using namespace dkr::mods;
@@ -140,7 +145,7 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
         view.native = true;
         view.id = track.id;
         view.title = track.name;
-        view.byline = track.author.empty() ? track.source : "By " + track.author;
+        view.byline = track.author.empty() ? track.source : dkr::localisation::format("library.by",{{"author",track.author}});
         view.info = track.hd_textures
             ? "HD textures \xC2\xB7 Modern graphics" : "Modern graphics";
         if (track.bytes != 0U) view.size = FormatModSize(track.bytes);
@@ -149,7 +154,7 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
         view.gold = track.enabled;
         view.status = track.enabled ? "On" : "Off";
         view.tone = track.enabled ? PaddockTone::On : PaddockTone::Neutral;
-        return view;
+        ResolveLibraryCardCopy(view);return view;
     }
     const browser::Card& card = *entry.legacy;
     const TrackCatalogItem& item = card.item;
@@ -168,12 +173,13 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
     view.gold = item.enabled && ready;
     if (characters) {
         view.info = "Custom racer";
+        view.preview_height=100;view.preview=[item](float w,float h){DrawCharacterPortrait(item,w,h);};
     } else {
         for (const auto& [bit, name] : {std::pair{1U, "Car"}, std::pair{2U, "Hovercraft"},
                                         std::pair{4U, "Plane"}}) {
             if ((item.vehicles & bit) == 0U) continue;
             if (!view.info.empty()) view.info += " \xC2\xB7 ";
-            view.info += name;
+            view.info += dkr::localisation::source(name);
         }
     }
     view.size = FormatModSize(item.managed_bytes);
@@ -183,7 +189,7 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
     } else if (mismatch) {
         view.status = "Different ROM version";
     } else {
-        view.status = item.enabled ? "On for next launch" : "Off";
+        view.status = item.enabled ? "ON" : "Off";
     }
     view.tone = mismatch ? PaddockTone::Warning
         : item.enabled && !item.hidden ? PaddockTone::On : PaddockTone::Neutral;
@@ -195,7 +201,7 @@ LibraryCardView DescribeLibraryCard(const LibraryEntry& entry, bool characters,
         view.note = "Too many characters are enabled. Disable some and try again.";
     }
     view.prepare = !item.hidden && mismatch && !item.review.empty();
-    return view;
+    ResolveLibraryCardCopy(view);return view;
 }
 
 // The layout below mirrors .mods-library-card; every number is a CSS pixel.
@@ -216,6 +222,7 @@ float MeasureLibraryCard(const LibraryCardView& view, float width) {
     height += 18.0F + (info_fits ? info.line : info.line + 8.0F + size.line) + 9.0F;
     if (!view.note.empty()) height += PaddockTextHeight(note, view.note, inner) + 18.0F;
     if (view.prepare) height += 42.0F;
+    if(view.preview)height+=view.preview_height+12.F;
     height += 2.0F + 12.0F + 42.0F + 16.0F + 2.0F;
     return std::ceil(height);
 }
@@ -295,6 +302,9 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
         y += PaddockTextAt(draw, note, {left, y}, inner, view.note, note_style) + 18.0F;
     }
 
+    if(view.preview) {
+        ImGui::SetCursorScreenPos({left,y});view.preview(inner,view.preview_height);y+=view.preview_height+12.F;
+    }
     bool details = false;
     if (view.prepare) {
         ImGui::SetCursorScreenPos({left, y});
@@ -314,8 +324,8 @@ bool DrawLibraryCard(const LibraryCardView& view, ImVec2 origin, float width,
         bool enabled = view.enabled;
         ImGui::BeginDisabled(!view.toggle_allowed);
         if (PaddockSwitch("##enabled", &enabled, "On", "Off")) {
-            if (view.code) {
-                if(code_toggle)code_toggle(enabled);
+            if (code_toggle) {
+                code_toggle(enabled);
             } else if (view.native) {
                 if (dkr::runtime::custom_tracks::set_enabled(view.id, enabled, g_legacy_import_status))
                     g_legacy_import_status = enabled ? "Track on for the next game." : "Track off for the next game.";
@@ -482,8 +492,8 @@ void DrawModCardBrowser(float requested_width, bool characters,
                         const std::function<void()>& import_mods) {
     using namespace dkr::mods;
     auto& state = g_mod_browsers[characters ? 1 : 0];
-    const auto snapshot = characters ? mods.characters : mods.tracks;
-    const bool locked = mods_locked || mods.busy;
+    const auto snapshot = LibraryConsistencyView(characters ? mods.characters : mods.tracks,characters);
+    const bool locked = mods_locked || mods.busy || g_library_controls_check;
     ImGui::PushID(characters ? "character-card-library" : "track-card-library");
     if (state.snapshot != snapshot) {
         state.snapshot = snapshot;
@@ -495,74 +505,47 @@ void DrawModCardBrowser(float requested_width, bool characters,
     const float width = std::max(std::min(requested_width, ImGui::GetContentRegionAvail().x), 1.0F);
     const char* noun = characters ? "characters" : "tracks";
 
-    // Toolbar: search, status, sort and the filter switch.
-    const std::string filters_label = [&] {
-        const int advanced = (!state.source.empty() ? 1 : 0) + (state.compatibility != 0 ? 1 : 0) +
-                             (state.visibility != 0 ? 1 : 0) + (state.format != 0 ? 1 : 0) +
-                             (state.duplicates != 0 ? 1 : 0);
-        return advanced != 0 ? "Filters (" + std::to_string(advanced) + ")" : std::string("Filters");
-    }();
-    const std::string filters_id = filters_label + "##filters";
-    const float filters_width = PaddockButtonWidth(filters_id.c_str(), PaddockButtonKind::Settings);
-    const float field_label = PaddockFieldLabelType().line + 6.0F;
-    static const std::vector<std::string> kStates{"All", "Active", "Inactive"};
-    static const std::vector<std::string> kSorts{"Name A-Z", "Name Z-A", "Largest first",
-                                                 "Smallest first", "Newest first", "Oldest first"};
-    const auto search = [&](float x, float y, float w) {
-        ImGui::SetCursorScreenPos({x, y});
-        const PaddockFieldResult result = PaddockSearch(
-            "##search", state.search, sizeof(state.search),
-            "Search by name or source pack\xE2\x80\xA6", w);
-        if (result == PaddockFieldResult::GamepadActivated) {
-            RequestTextEntryKeyboard(characters ? TextEntryTarget::CustomCharacterSearch
-                                                : TextEntryTarget::CustomTrackSearch);
-        }
-    };
-    const auto selects = [&](float x, float y, float status_width, float sort_width) {
-        ImGui::SetCursorScreenPos({x, y});
-        PaddockSelect("status", "Status", &state.state, kStates, status_width);
-        ImGui::SetCursorScreenPos({x + status_width + 12.0F, y});
-        PaddockSelect("sort", "Sort by", &state.sort, kSorts, sort_width);
-    };
-    const auto filters_button = [&](float x, float y, float w) {
-        ImGui::SetCursorScreenPos({x, y});
-        if (PaddockButton(filters_id.c_str(), g_mods_page.filters_open ? PaddockButtonKind::SettingsSelected
-                                                                       : PaddockButtonKind::Settings, w)) {
-            g_mods_page.filters_open = !g_mods_page.filters_open;
-            g_mods_page.filters_entered_at = PaddockClock();
-        }
-    };
-    const ImVec2 top = ImGui::GetCursorScreenPos();
-    const float row = field_label + 44.0F;
-    {
-    PaddockEnter enter(2);
-    if (width >= 700.0F) {
-        const float fixed = 120.0F + 150.0F + filters_width + 36.0F;
-        const float search_width = std::max(width - fixed, 150.0F);
-        search(top.x, top.y + field_label, search_width);
-        selects(top.x + search_width + 12.0F, top.y, 120.0F, 150.0F);
-        filters_button(top.x + width - filters_width, top.y + row - 42.0F, filters_width);
-        ImGui::SetCursorScreenPos(top);
-        ImGui::Dummy({width, row});
-    } else if (width >= 420.0F) {
-        search(top.x, top.y, width);
-        const float half = (width - filters_width - 24.0F) * 0.5F;
-        selects(top.x, top.y + 56.0F, half, half);
-        filters_button(top.x + width - filters_width, top.y + 56.0F + row - 42.0F, filters_width);
-        ImGui::SetCursorScreenPos(top);
-        ImGui::Dummy({width, 56.0F + row});
-    } else {
-        search(top.x, top.y, width);
-        const float half = (width - 10.0F) * 0.5F;
-        selects(top.x, top.y + 54.0F, half, half);
-        filters_button(top.x, top.y + 54.0F + row + 10.0F, width);
-        ImGui::SetCursorScreenPos(top);
-        ImGui::Dummy({width, 54.0F + row + 10.0F + 42.0F});
-    }
+
+    const float row=PaddockFieldLabelType().line+6.F+44.F;
+    static const std::vector<std::string> kStates{"All","On","Off"};
+    static const std::vector<std::string> kSorts{"Name A-Z","Name Z-A","Largest first","Smallest first","Newest first","Oldest first"};
+    DrawInstalledToolbar(width,[&](float available) {
+        const auto result=PaddockSearch("##search",state.search,sizeof(state.search),"Search by name or source pack...",available);
+        if(result==PaddockFieldResult::GamepadActivated)
+            RequestTextEntryKeyboard(characters?TextEntryTarget::CustomCharacterSearch:TextEntryTarget::CustomTrackSearch);
+    },state.state,kStates,state.sort,kSorts);
+    const std::string key = std::string(state.search) + '|' + state.source + '|' +
+        std::to_string(state.sort) + ':' + std::to_string(state.state) + ':' +
+        std::to_string(state.compatibility) + ':' + std::to_string(state.visibility) + ':' +
+        std::to_string(state.format) + ':' + std::to_string(state.duplicates) + ':' + std::to_string(g_mod_browser_revision) + '|' +
+        (characters ? std::string{} : DkrLibrarySignature(dkr_tracks));
+    if (state.filter_key != key) {
+        UpdateLibraryDuplicates(state, dkr_tracks, characters);
+        state.shown = SelectLibraryEntries(state, dkr_tracks, characters);
+        state.filter_key = key;
+        state.layout_key.clear();
     }
 
+    const auto duplicate_count=std::count_if(state.duplicate_matches.begin(),state.duplicate_matches.end(),
+        [](const auto& entry){return entry.second.matches();});
+    const int advanced_count=(!state.source.empty()?1:0)+(state.compatibility!=0?1:0)+
+        (state.visibility!=0?1:0)+(state.format!=0?1:0)+(state.duplicates!=0?1:0);
+    std::vector<InstalledResultAction> actions;
+    const std::string filters_label=advanced_count?"Filters ("+std::to_string(advanced_count)+")##filters":"Filters##filters";
+    actions.push_back({filters_label,g_mods_page.filters_open?PaddockButtonKind::SettingsSelected:PaddockButtonKind::Settings,[&] {
+        g_mods_page.filters_open=!g_mods_page.filters_open;g_mods_page.filters_entered_at=PaddockClock();
+    }});
+    if(duplicate_count!=0&&state.duplicates==0)actions.push_back({"Review duplicates##review-duplicates",PaddockButtonKind::Settings,[&] {
+        ResetLibraryFilters(state);state.duplicates=1;state.visibility=1;
+    }});
+    if(LibraryFiltered(state)||state.sort!=0)actions.push_back({"Clear filters##results",PaddockButtonKind::Link,[&]{ResetLibraryFilters(state);}});
+    const std::size_t total=state.all.size()+(characters?0U:dkr_tracks.size());
+    DrawInstalledResults(width,dkr::localisation::format("library.results",{
+        {"shown",std::to_string(state.shown.size())},{"total",std::to_string(total)},
+        {"category",dkr::localisation::source(noun)}}),actions);
+    if(state.duplicates!=0){PaddockText(PaddockReading(13.F,false,1.5F),PaddockRgb(0xC7DCE6),
+        "Matching names may be different versions. Compare Details before removing a copy.",width);PaddockGap(12.F);}
     if (g_mods_page.filters_open) {
-        PaddockGap(16.0F);
         PaddockEnter enter(0, g_mods_page.filters_entered_at);
         std::set<std::string> sources;
         for (const auto& card : state.all) sources.insert(card.sources.begin(), card.sources.end());
@@ -570,13 +553,14 @@ void DrawModCardBrowser(float requested_width, bool characters,
             for (const auto& track : dkr_tracks) sources.insert(track.source);
         }
         if (!state.source.empty() && !sources.contains(state.source)) state.source.clear();
-        std::vector<std::string> source_items{"All packs"};
+        std::vector<std::string> source_items{std::string(dkr::localisation::source("All packs"))};
         int source_index = 0;
         for (const auto& source : sources) {
             if (source == state.source) source_index = static_cast<int>(source_items.size());
             source_items.push_back(source);
         }
         PaddockBox box(width, {16.0F, 16.0F});
+        if(!characters){PaddockText(PaddockReading(13.F,false,1.5F),PaddockRgb(0xC0D4DF),"LEGACY: Original-ROM patches. DKR: Native .dkrmap tracks.",box.Inner());PaddockGap(12.F);}
         const int fields = characters ? 4 : 5;
         const int columns = std::clamp(static_cast<int>((box.Inner() + 16.0F) / 186.0F), 1, fields);
         const float field_width = (box.Inner() - 16.0F * (columns - 1)) / columns;
@@ -594,19 +578,19 @@ void DrawModCardBrowser(float requested_width, bool characters,
         static const std::vector<std::string> kVisibility{"Visible", "All", "Hidden"};
         if (!characters) {
             place();
-            PaddockSelect("format", "Track format", &state.format, kFormats, field_width);
+            PaddockSelect("format", "Track format", &state.format, LocalisedUi::enum_items(kFormats), field_width);
         }
         place();
-        PaddockSelect("compatibility", "Compatibility", &state.compatibility, kCompatibility, field_width);
+        PaddockSelect("compatibility", "Compatibility", &state.compatibility, LocalisedUi::enum_items(kCompatibility), field_width);
         place();
         if (PaddockSelect("source", "Source pack", &source_index, source_items, field_width)) {
             state.source = source_index > 0 ? source_items[source_index] : std::string{};
         }
         place();
-        PaddockSelect("visibility", "Visibility", &state.visibility, kVisibility, field_width);
+        PaddockSelect("visibility", "Visibility", &state.visibility, LocalisedUi::enum_items(kVisibility), field_width);
         place();
         static const std::vector<std::string> kDuplicates{"All mods", "Possible duplicates", "Same source & slot"};
-        PaddockSelect("duplicates", "Duplicate review", &state.duplicates, kDuplicates, field_width);
+        PaddockSelect("duplicates", "Duplicate review", &state.duplicates, LocalisedUi::enum_items(kDuplicates), field_width);
         const int lines = (slot + columns - 1) / columns;
         ImGui::SetCursorScreenPos(grid);
         ImGui::Dummy({box.Inner(), lines * row + (lines - 1) * 16.0F});
@@ -620,59 +604,12 @@ void DrawModCardBrowser(float requested_width, bool characters,
         });
     }
 
-    const std::string key = std::string(state.search) + '|' + state.source + '|' +
-        std::to_string(state.sort) + ':' + std::to_string(state.state) + ':' +
-        std::to_string(state.compatibility) + ':' + std::to_string(state.visibility) + ':' +
-        std::to_string(state.format) + ':' + std::to_string(state.duplicates) + ':' + std::to_string(g_mod_browser_revision) + '|' +
-        (characters ? std::string{} : DkrLibrarySignature(dkr_tracks));
-    if (state.filter_key != key) {
-        UpdateLibraryDuplicates(state, dkr_tracks, characters);
-        state.shown = SelectLibraryEntries(state, dkr_tracks, characters);
-        state.filter_key = key;
-        state.layout_key.clear();
-    }
-    const auto duplicate_count = std::count_if(state.duplicate_matches.begin(), state.duplicate_matches.end(),
-        [](const auto& entry) { return entry.second.matches(); });
-    if (duplicate_count != 0 || state.duplicates != 0) {
-        if (state.duplicates == 0) {
-            if (PaddockButton("Review duplicates##review-duplicates", PaddockButtonKind::Settings)) {
-                ResetLibraryFilters(state);
-                state.duplicates = 1;
-                state.visibility = 1; // Include hidden copies when reviewing.
-            }
-        } else {
-            PaddockText(PaddockReading(13.0F, false, 1.5F), PaddockRgb(0xC7DCE6),
-                "Matching names may be different versions. Compare Details before removing a copy.", width);
-        }
-        PaddockGap(12.0F);
-    }
-    const std::size_t total = state.all.size() + (characters ? 0U : dkr_tracks.size());
-
-    // Results line.
-    {
-        PaddockEnter enter(3);
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        const PaddockType type = PaddockReading(12.0F, false, 1.5F);
-        const std::string count = std::to_string(state.shown.size()) + " of " +
-                                  std::to_string(total) + ' ' + noun;
-        PaddockDrawRun(ImGui::GetWindowDrawList(), type, {at.x, at.y + (52.0F - type.line) * 0.5F},
-                       PaddockCol(0x9BB0BD), count.data(), count.data() + count.size());
-        if (LibraryFiltered(state)) {
-            const float clear = PaddockButtonWidth("Clear filters", PaddockButtonKind::Link);
-            ImGui::SetCursorScreenPos({at.x + width - clear, at.y + 5.0F});
-            if (PaddockButton("Clear filters##results", PaddockButtonKind::Link)) {
-                ResetLibraryFilters(state);
-            }
-        }
-        ImGui::SetCursorScreenPos(at);
-        ImGui::Dummy({width, 52.0F});
-    }
     if (characters) {
-        const std::string slots = std::to_string(active) + " custom characters enabled";
+        const std::string slots = dkr::localisation::plural("library.characters_enabled",active);
         PaddockInlineNote(slots,
-                          active >= MaxActiveStageCharacters
+                          dkr::localisation::source(active >= MaxActiveStageCharacters
                               ? "The native identity range is full. Installed mods remain available."
-                              : "Four custom racers appear on the stage. Select one and use L / R to browse more characters.",
+                              : "Four custom racers appear on the stage. Select one and use L / R to browse more characters."),
                           width);
         PaddockGap(18.0F);
     }
@@ -783,17 +720,20 @@ void DrawModCardBrowser(float requested_width, bool characters,
 
 // ------------------------------------------------------------ modals
 
-void PaddockModalText(const ImVec4& colour, std::string_view text) {
+template<class T> void PaddockModalText(const ImVec4& colour, T&& raw) {
+    const auto text=LocalisedUi::copy(std::forward<T>(raw));
     ImGui::PushStyleColor(ImGuiCol_Text, colour);
     ImGui::TextWrapped("%.*s", static_cast<int>(text.size()), text.data());
     ImGui::PopStyleColor();
 }
 
-void PaddockModalText(std::string_view text) {
+template<class T> void PaddockModalText(T&& raw) {
+    const auto text=LocalisedUi::copy(std::forward<T>(raw));
     ImGui::TextWrapped("%.*s", static_cast<int>(text.size()), text.data());
 }
 
 bool PaddockModalButton(const char* label, float height = 42.0F) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     return PaddockButton(label, PaddockButtonKind::Flat,
                          std::max(ImGui::GetContentRegionAvail().x, 1.0F), height);
 }
@@ -976,6 +916,7 @@ struct ModImportActions {
     std::function<void()> choose_track_zip;
     std::function<void()> choose_rom;
     std::function<void()> choose_code;
+    std::function<void()> choose_vehicle;
 };
 
 void DrawModImportOption(const char* id, PaddockFormat format, const char* title,
@@ -1077,6 +1018,15 @@ void DrawModImportChooser(const ModImportActions& actions) {
         ImGui::EndDisabled();
     });
     PaddockGap(18.0F);
+    DrawModImportOption("vehicle",PaddockFormat::Dkr,"Custom vehicles",
+        "Import a .dkrkart car or a vehicle ZIP. Choose your car from Track Select.",width,[&] {
+        ImGui::BeginDisabled(actions.locked);
+        if(PaddockButton("Choose car package")) {
+            ImGui::CloseCurrentPopup();if(actions.choose_vehicle)actions.choose_vehicle();
+        }
+        ImGui::EndDisabled();
+    });
+    PaddockGap(18.0F);
     if (PaddockButton("Cancel##import-chooser", PaddockButtonKind::Link)) ImGui::CloseCurrentPopup();
     ImGui::PopStyleVar();
     ImGui::EndPopup();
@@ -1170,13 +1120,15 @@ void DrawDkrTrackDetails(const std::vector<DkrLibraryTrack>& tracks, bool rom_re
 // ------------------------------------------------------------ page controls
 
 float PaddockImportButtonWidth(const char* label) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const PaddockType type = PaddockSign(22.0F, 1.1F);
     return std::ceil(2.0F + 12.0F + 30.0F + 12.0F +
                      PaddockMeasure(type, label, PaddockLabelEnd(label)) + 20.0F + 2.0F);
 }
 
 // The painted "+ Import mods" sign (.mods-import-button).
-bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool update_icon = false) {
+bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool update_icon = false, bool website_icon = false, int tool_icon = 0) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const PaddockType type = PaddockSign(22.0F, 1.1F);
     const char* end = PaddockLabelEnd(label);
     const float natural = PaddockImportButtonWidth(label);
@@ -1200,7 +1152,27 @@ bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool upda
     // Two centred strokes, which a font glyph's baseline would not give
     // (.import-button-symbol).
     const ImU32 ink = PaddockCol(0xFFF3C9);
-    if (update_icon) {
+    if (website_icon) {
+        draw->AddRect({symbol.x+7.F,symbol.y+11.F},{symbol.x+19.F,symbol.y+23.F},ink,2.F,0,2.F);
+        draw->AddLine({symbol.x+13.F,symbol.y+17.F},{symbol.x+23.F,symbol.y+7.F},ink,2.F);
+        draw->AddLine({symbol.x+16.F,symbol.y+7.F},{symbol.x+23.F,symbol.y+7.F},ink,2.F);
+        draw->AddLine({symbol.x+23.F,symbol.y+7.F},{symbol.x+23.F,symbol.y+14.F},ink,2.F);
+    } else if (tool_icon==1) {
+        draw->AddLine({symbol.x+9.F,symbol.y+7.F},{symbol.x+21.F,symbol.y+7.F},ink,2.F);
+        draw->PathArcTo({symbol.x+15.F,symbol.y+12.F},6.F,0.F,3.141593F,16);draw->PathStroke(ink,0,2.F);
+        draw->AddLine({symbol.x+9.F,symbol.y+7.F},{symbol.x+9.F,symbol.y+12.F},ink,2.F);
+        draw->AddLine({symbol.x+21.F,symbol.y+7.F},{symbol.x+21.F,symbol.y+12.F},ink,2.F);
+        draw->AddLine({symbol.x+15.F,symbol.y+18.F},{symbol.x+15.F,symbol.y+23.F},ink,2.F);
+        draw->AddLine({symbol.x+10.F,symbol.y+23.F},{symbol.x+20.F,symbol.y+23.F},ink,2.F);
+    } else if (tool_icon==3) {
+        const bool on=dkr::session_content::next_enabled.load();
+        draw->AddRectFilled({symbol.x+3.F,symbol.y+9.F},{symbol.x+27.F,symbol.y+21.F},PaddockCol(on?0x13B99B:0x32576A),6.F);
+        draw->AddCircleFilled({symbol.x+(on?21.F:9.F),symbol.y+15.F},4.F,ink,16);
+    } else if (tool_icon==2) {
+        draw->AddRect({symbol.x+7.F,symbol.y+7.F},{symbol.x+23.F,symbol.y+23.F},ink,2.F,0,2.F);
+        draw->AddRect({symbol.x+11.F,symbol.y+7.F},{symbol.x+19.F,symbol.y+13.F},ink,0.F,0,2.F);
+        draw->AddRect({symbol.x+11.F,symbol.y+17.F},{symbol.x+19.F,symbol.y+23.F},ink,0.F,0,2.F);
+    } else if (update_icon) {
         draw->PathArcTo({symbol.x + 15.0F, symbol.y + 15.0F}, 8.0F, -1.4F, 3.8F, 20);
         draw->PathStroke(ink, 0, 2.0F);
         draw->AddTriangleFilled({symbol.x + 13.0F, symbol.y + 4.0F},
@@ -1221,77 +1193,10 @@ bool PaddockImportButton(const char* label, float forced_width = 0.0F, bool upda
 }
 
 // Tracks / Characters (.mods-categories). Returns the selected index.
-int DrawLibraryCategories(int current, std::size_t tracks, std::size_t characters,std::size_t codes,float available) {
-    const PaddockType type = PaddockSign(19.0F, 1.4F);
-    const PaddockType count_type = PaddockReading(12.0F, true, 1.5F);
-    const std::array<const char*, 3> labels{{"Tracks", "Characters", "Custom Magic Codes"}};
-    const std::array<std::string, 3> counts{{std::to_string(tracks), std::to_string(characters),std::to_string(codes)}};
-    std::array<float, 3> widths{};
-    for (std::size_t index = 0U; index < labels.size(); ++index) {
-        const float pill = std::max(23.0F, PaddockMeasure(count_type, counts[index]) + 12.0F);
-        widths[index] = std::ceil(2.0F + 26.0F + PaddockMeasure(type, labels[index]) + 9.0F + pill);
-    }
-    const float button_height = std::ceil(type.line + 14.0F + 2.0F);
-    const ImVec2 origin = ImGui::GetCursorScreenPos();
-    std::array<ImVec2,3> positions{};
-    float column=4.0F,row=4.0F,total=0;
-    for(unsigned i=0;i<3;++i) {
-        if(column>4.0F&&column+widths[i]+4.0F>available){column=4.0F;row+=button_height+4.0F;}
-        positions[i]={origin.x+column,origin.y+row};
-        column+=widths[i]+4.0F;total=std::max(total,column);
-    }
-    const ImVec2 end{origin.x + total, origin.y + row + button_height + 4.0F};
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    PaddockPanelStyle frame;
-    frame.radii = PaddockRound(12.0F);
-    frame.fill = PaddockRgb(0x031C2C);
-    frame.ring = PaddockRgb(0x316782);
-    frame.ring_width = 1.0F;
-    PaddockPanel(draw, origin, end, frame);
-    int selected = current;
-    for (int index = 0; index < 3; ++index) {
-        ImGui::SetCursorScreenPos(positions[index]);
-        const bool pressed_now = current == index;
-        const PaddockPress press = PaddockBeginPress(labels[index], {widths[index], button_height});
-        if (press.pressed) selected = index;
-        const float on = PaddockEase(PaddockTween(PaddockKey("category", press.id),
-                                                  pressed_now, 0.15F, 0.15F));
-        const ImU32 fill = PaddockMix(PaddockMix(PaddockRgb(0x244353, 0U), PaddockRgb(0x244353),
-                                                 press.hover),
-                                      PaddockRgb(0x087C91), on);
-        if (on > 0.0F) {
-            PaddockFill(draw, {press.min.x, press.min.y + 2.0F}, {press.max.x, press.max.y + 2.0F},
-                        PaddockRound(8.0F), PaddockCol(0x03131E, static_cast<unsigned>(255.0F * on)));
-        }
-        PaddockFill(draw, press.min, press.max, PaddockRound(8.0F), PaddockApply(fill));
-        if (on > 0.0F) {
-            draw->PushClipRect({press.min.x, press.min.y}, {press.max.x, press.min.y + 2.0F}, true);
-            PaddockFill(draw, press.min, press.max, PaddockRound(8.0F),
-                        PaddockCol(0xFFFFFF, static_cast<unsigned>(36.0F * on)));
-            draw->PopClipRect();
-        }
-        if (press.hover > 0.0F) {
-            PaddockStroke(draw, press.min, press.max, PaddockRound(8.0F),
-                          PaddockCol(0x7A9BA7, static_cast<unsigned>(255.0F * press.hover)), 1.0F);
-        }
-        const ImU32 text = PaddockApply(PaddockMix(PaddockRgb(0xBED9E5), PaddockRgb(0xFFF4CE), on));
-        const float top = press.min.y + 8.0F;
-        const float label_width = PaddockMeasure(type, labels[index]);
-        const char* label_end = labels[index] + std::strlen(labels[index]);
-        PaddockDrawRun(draw, type, {press.min.x + 14.0F, top + 2.0F}, PaddockCol(0x031623),
-                       labels[index], label_end);
-        PaddockDrawRun(draw, type, {press.min.x + 14.0F, top}, text, labels[index], label_end);
-        const float pill_x = press.min.x + 14.0F + label_width + 9.0F;
-        const float pill_width = std::max(23.0F, PaddockMeasure(count_type, counts[index]) + 12.0F);
-        const float pill_top = press.min.y + (button_height - count_type.line) * 0.5F;
-        PaddockFill(draw, {pill_x, pill_top}, {pill_x + pill_width, pill_top + count_type.line},
-                    PaddockRound(5.0F), PaddockCol(0xFFFFFF, 13U));
-        const float digits = PaddockMeasure(count_type, counts[index]);
-        PaddockDrawRun(draw, count_type, {pill_x + (pill_width - digits) * 0.5F, pill_top}, text,
-                       counts[index].data(), counts[index].data() + counts[index].size());
-        PaddockEndPress(press, 8.0F);
-    }
-    ImGui::SetCursorScreenPos(origin);
-    ImGui::Dummy({total, end.y - origin.y});
-    return selected;
+#include "library_ui/category_tabs.inl"
+int DrawLibraryCategories(int current, std::size_t tracks, std::size_t characters,std::size_t codes,std::size_t vehicles,float available) {
+    const std::array<const char*,4> labels{"Tracks","Characters","Custom Magic Codes","Vehicles"};
+    const std::array<std::string,4> counts{std::to_string(tracks),std::to_string(characters),std::to_string(codes),std::to_string(vehicles)};
+    return LauncherCategoryTabs("mods-categories",labels,counts,current,available);
+
 }

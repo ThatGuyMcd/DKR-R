@@ -30,10 +30,9 @@ First-party implementation is in `runtime-recomp/src/game/localisation/`.
 UTF-8 catalogues and the licensed fallback font are in
 `runtime-recomp/assets/localisation/`. `scripts/embed_localisation.py` validates
 and embeds data through `runtime-recomp/cmake/Localisation.cmake`; it does not
-rewrite application or generated guest sources. The retained checked UI
-adapter connects the shared presentation boundaries during the ongoing fold.
-Do not add a new overlay layer or edit the pinned capsules, generated guest code
-or submodules.
+rewrite application or generated guest sources. The launcher includes the
+shared presentation boundaries directly. Do not add an overlay layer or edit
+generated guest code or submodules.
 
 English owns stable message IDs and translator contexts. Other packs contain
 the same IDs. Use an explicit ID for ambiguous words: launching a game and

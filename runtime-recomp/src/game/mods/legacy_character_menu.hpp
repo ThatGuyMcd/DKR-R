@@ -1,6 +1,6 @@
+#include "legacy_character_label_layout.hpp"
 #pragma once
 #include "legacy_character_roster.hpp"
-#include "legacy_character_label_layout.hpp"
 
 namespace dkr::mods {
 inline constexpr unsigned CustomStageSlots=4, CustomCharacterLimit=MaxEnabledCharacters;
@@ -34,7 +34,6 @@ struct CharacterMenuView {
     std::array<bool,4> active{},ready{};
     std::array<std::optional<std::size_t>,4> custom{};
     std::array<std::optional<std::size_t>,CustomStageSlots> displayed{};
-    // Derived presentation data only; never part of selector/checkpoint state.
     std::array<std::optional<CharacterLabelWorld>,CustomStageSlots> label_anchors{};
     std::array<unsigned,4> native{};
 };
@@ -61,3 +60,4 @@ private:
     bool drumstick_=false,tt_=false;
 };
 }
+

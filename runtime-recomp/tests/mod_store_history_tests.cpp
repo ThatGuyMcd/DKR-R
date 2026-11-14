@@ -21,17 +21,29 @@ void check(bool condition) {
 }
 const std::string hash(64, 'a');
 Json row(std::string state = "Installed") {
-    return {{"item", "mod_one"}, {"release", "release_one"}, {"category", "characters"},
-            {"title", "Test character"}, {"state", state}, {"sha256", hash}, {"bytes", 100ULL},
-            {"version", "1.0.0"}, {"intent", ""}, {"instance", ""}};
+    return {{"item", "mod_one"},
+            {"release", "release_one"},
+            {"category", "characters"},
+            {"title", "Test character"},
+            {"state", state},
+            {"sha256", hash},
+            {"bytes", 100ULL},
+            {"version", "1.0.0"},
+            {"intent", ""},
+            {"instance", ""}};
 }
 Json receipt() {
-    return {{"schema", 1}, {"records", Json::array({
-        {{"item", "mod_one"}, {"release", "release_one"}, {"category", "characters"},
-         {"state", "Installed"}, {"stored", false}, {"digest", hash}, {"bytes", 100ULL},
-         {"members", Json::array({{{"key", "character:one"}, {"kind", "legacy-character"},
-                                    {"path", "mods/character-one"}}})}}
-    })}};
+    return {{"schema", 1},
+            {"records", Json::array({{{"item", "mod_one"},
+                                      {"release", "release_one"},
+                                      {"category", "characters"},
+                                      {"state", "Installed"},
+                                      {"stored", false},
+                                      {"digest", hash},
+                                      {"bytes", 100ULL},
+                                      {"members", Json::array({{{"key", "character:one"},
+                                                                {"kind", "legacy-character"},
+                                                                {"path", "mods/character-one"}}})}}})}};
 }
 Json saved(const Json& job, unsigned schema = 1) {
     return {{"schema", schema}, {"jobs", Json::array({job})}};
@@ -40,10 +52,16 @@ auto load(const Json& data, const Json& receipts = Json::object(), bool present 
     return restore<Job>(data, receipts, [present](const std::string& path) { return present && !path.empty(); });
 }
 struct Temp {
-    std::filesystem::path path = std::filesystem::temp_directory_path() /
+    std::filesystem::path path =
+        std::filesystem::temp_directory_path() /
         ("dkrr-history-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    Temp() { std::filesystem::create_directories(path / "mods"); }
-    ~Temp() { std::error_code error; std::filesystem::remove_all(path, error); }
+    Temp() {
+        std::filesystem::create_directories(path / "mods");
+    }
+    ~Temp() {
+        std::error_code error;
+        std::filesystem::remove_all(path, error);
+    }
 };
 } // namespace
 
@@ -102,8 +120,7 @@ int main(int argc, char** argv) try {
         check(jobs[0].state == "Failed" && jobs[0].error == failed["error"].get<std::string>());
         check(load(Json::parse(save<Json>(jobs).dump()), receipt())[0].error == failed["error"].get<std::string>());
     }
-    for (const auto& malformed : {Json(), Json::array(), Json("invalid"), Json{{"jobs", "invalid"}},
-                                  saved(row(), 99)})
+    for (const auto& malformed : {Json(), Json::array(), Json("invalid"), Json{{"jobs", "invalid"}}, saved(row(), 99)})
         check(load(malformed).empty());
     for (const auto* field : {"item", "release"}) {
         auto invalid = row();
@@ -123,17 +140,19 @@ int main(int argc, char** argv) try {
     std::ofstream(temp.path / "mods/character-one") << "fixture";
     check(member_present(temp.path, "mods/character-one"));
     check(member_present(temp.path, "mods"));
-    for (const auto* path : {"", "../outside", "/outside", "C:/outside", "mods/../character-one",
-                             "mods\\character-one", "mods/./character-one", "mods/missing"})
+    for (const auto* path : {"", "../outside", "/outside", "C:/outside", "mods/../character-one", "mods\\character-one",
+                             "mods/./character-one", "mods/missing"})
         check(!member_present(temp.path, path));
     std::error_code error;
     std::filesystem::create_symlink(temp.path / "mods/character-one", temp.path / "mods/link", error);
     if (!error)
         check(!member_present(temp.path, "mods/link"));
-    jobs = restore<Job>(saved(legacy), receipt(), [&](const std::string& path) { return member_present(temp.path, path); });
+    jobs = restore<Job>(saved(legacy), receipt(),
+                        [&](const std::string& path) { return member_present(temp.path, path); });
     check(jobs[0].state == "Installed");
     std::filesystem::remove(temp.path / "mods/character-one");
-    jobs = restore<Job>(saved(legacy), receipt(), [&](const std::string& path) { return member_present(temp.path, path); });
+    jobs = restore<Job>(saved(legacy), receipt(),
+                        [&](const std::string& path) { return member_present(temp.path, path); });
     check(jobs[0].state == "Paused");
     std::cout << checks << " Mod Store history checks passed; no network or user profile used.\n";
     if (argc == 4) {
@@ -142,9 +161,8 @@ int main(int argc, char** argv) try {
         std::ifstream history_file(utf8_path(argv[1])), receipt_file(utf8_path(argv[2]));
         const auto data = Json::parse(history_file), receipts = Json::parse(receipt_file);
         const auto config = utf8_path(argv[3]);
-        const auto restored = restore<Job>(data, receipts, [&](const std::string& path) {
-            return member_present(config, path);
-        });
+        const auto restored =
+            restore<Job>(data, receipts, [&](const std::string& path) { return member_present(config, path); });
         Json counts = Json::object();
         for (const auto& job : restored) {
             if (!counts.contains(job.state))

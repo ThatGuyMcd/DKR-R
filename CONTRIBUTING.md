@@ -6,7 +6,9 @@ First-party code lives in `runtime-recomp/`, `modding/` and `scripts/` and is
 edited in place. Third-party code is changed only through `patches/manifest.json`
 patch sets against `extern/`. Nothing stages, copies, string-replaces or swaps
 first-party sources at configure time. Guest hooks go in
-`guest-hooks/hooks.toml`, symbol tables in `symbols/*.toml`, and online
+`guest-hooks/hooks.toml` (the save-layout and portrait stages that feed the
+owned payload are the only scripts that write guest code), symbol tables in
+`symbols/*.toml`, and online
 identity lives in `netplay/legacy_identity.hpp` and changes only by deliberate
 edit.
 
@@ -14,10 +16,10 @@ The pattern guard (`scripts/pattern_guard.py`), the local hooks and the
 required CI checks all enforce this, so a change that breaks it fails before it
 can merge.
 
-> Transition note: until the patch-layer fold lands, `patches/<layer>/`
-> directories and the configure-time pipelines still exist on `main`. They are
-> listed in `architecture/pattern-guard-baseline.txt` and the guard only fails
-> on new ones. Don't add a new layer; edit the source in place instead.
+Through v1.0.11 the release was built from first-party layers under
+`patches/`; the fold replaced them with source, and the guard's baseline
+(`architecture/pattern-guard-baseline.txt`) is empty. Server-side code is in
+`services/`.
 
 ## Local setup
 

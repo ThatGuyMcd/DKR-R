@@ -1,3 +1,4 @@
+#include "party_link.hpp"
 #include "replay_probe_capture.hpp"
 #include "game_payload.hpp"
 #include "revision_addresses.hpp"
@@ -121,6 +122,13 @@ bool dkr_experimental_bootstrap_arm_memory(std::uint8_t players, bool host,
     error.clear();return true;
 }
 bool dkr_experimental_bootstrap_activate_save(std::string& error) {
+    if(requested_memory&&dkr::runtime::spectators::party_bootstrap_active()){
+        std::vector<char> seed;if(!dkr::runtime::spectators::party_bootstrap_load({},seed)||
+            dkr::runtime::netplay::stable_hash(std::string_view(seed.data(),seed.size()))!=requested_save_hash) {
+            error="The private party EEPROM does not match the authenticated launch.";return false;
+        }
+        error.clear();return true;
+    }
     return requested_memory && dkr::runtime::saves::activate_online_save_for_runtime(
         requested_host,requested_match,requested_save_hash,error);
 }

@@ -26,3 +26,4 @@ private:
     std::vector<std::uint32_t> portraits_;
 };
 }
+

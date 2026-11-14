@@ -1,0 +1,24 @@
+DKR-R v1.0.12 - signed auto updates
+
+The filenames are DKR-R-update.json and DKR-R-update.sig. Use the original
+trusted Ed25519 private key outside the repository and release folders.
+Never put the key or its contents in a commit, package, log or GitHub asset.
+
+Finish the Windows x64 and both Linux packages first. Steam Deck must be
+an exact copy of the Linux x86_64 AppImage. Run the release checks and commit
+the complete release source. Use that full commit SHA for the manifest/tag.
+
+python -B scripts/release/update_assets.py sign --packages <finished-release-folder> --commit <40-character-source-commit> --private-key <protected-original-key.pem> --output <fresh-signing-folder>
+python -B scripts/release/update_assets.py verify --packages <finished-release-folder> --output <signed-pair-folder>
+
+The wrapper checks source identity, package receipts, exact sizes and hashes,
+Windows file ownership and the existing pinned trust key. It reuses the
+existing signer and verifies the newly signed canonical manifest. The result
+has three platform entries: windows-x64, linux-x86_64 and linux-aarch64.
+Steam Deck uses linux-x86_64. No Android/Apple entry is created.
+
+Upload the four downloads and both signed files to a draft GitHub release
+tagged Version1.0.12 at the same source commit. Add release notes and hashes.
+Check the uploaded bytes, then publish. Do not change or recompress packages
+after signing. Keep the previous release as its own version for recovery.
+The wrapper itself does not push, create tags, upload or publish anything.

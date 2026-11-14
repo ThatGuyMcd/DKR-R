@@ -128,8 +128,15 @@ if(TARGET rt64)
     # The game gets miniz from RT64's existing archive, exactly once. The child
     # worker gets a separate small provider, never the renderer or window stack.
     target_link_libraries(DKRLegacyModCore PRIVATE rt64)
+    if(APPLE)
+        # Metal builds skip the enhanced-water stage, whose RT64 interface
+        # carries src/game (the vehicle protocol headers) elsewhere.
+        target_include_directories(DKRLegacyModCore PRIVATE "${_dkr_mod_src}/..")
+    endif()
 else()
     target_link_libraries(DKRLegacyModCore PRIVATE DKRLegacyModMiniz)
+    # RT64's interface carries src/game (the vehicle protocol headers) otherwise.
+    target_include_directories(DKRLegacyModCore PRIVATE "${_dkr_mod_src}/..")
 endif()
 
 add_library(DKRLegacyGuestIO STATIC "${_dkr_mod_src}/legacy_runtime_io.cpp"
@@ -190,7 +197,8 @@ add_library(DKRLegacyImportLibrary STATIC "${_dkr_mod_src}/legacy_import_library
     "${_dkr_mod_src}/online_mod_native_prepare.cpp"
     "${_dkr_mod_src}/online_mod_sync.cpp"
     "${_dkr_mod_src}/legacy_mod_library.cpp"
-    "${_dkr_mod_src}/legacy_track_catalog.cpp")
+    "${_dkr_mod_src}/legacy_track_catalog.cpp"
+    "${_dkr_mod_src}/../offline_keep.cpp")
 target_link_libraries(DKRLegacyImportLibrary PUBLIC DKRLegacyModCore DKRLegacyModProcess)
 target_include_directories(DKRLegacyImportLibrary PRIVATE
     "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include")
@@ -198,8 +206,12 @@ target_include_directories(DKRLegacyImportLibrary PRIVATE
 add_library(DKRLegacyModLaunch STATIC "${_dkr_mod_src}/legacy_mod_launch.cpp"
     "${_dkr_mod_src}/online_mod_runtime.cpp"
     "${_dkr_mod_src}/online_mod_music.cpp"
-    "${_dkr_mod_src}/../custom_music_decode.cpp")
-target_include_directories(DKRLegacyModLaunch PRIVATE "${DKRPORT_ROOT}/runtime-recomp/third_party/dr_libs")
+    "${_dkr_mod_src}/../custom_music_decode.cpp"
+    "${_dkr_mod_src}/../resident_music.cpp")
+target_include_directories(DKRLegacyModLaunch BEFORE PRIVATE "${_dkr_mod_src}/.."
+    "${DKRPORT_ROOT}/runtime-recomp/tests/replay_probe")
+target_include_directories(DKRLegacyModLaunch PRIVATE "${DKRPORT_ROOT}/runtime-recomp/third_party/dr_libs"
+    "${_dkr_mod_src}")
 # .dkrmap table logic. A mod launch publishes the tracks' artwork into the
 # character-augmented boot bank, so the launch owns this dependency.
 # A track's native music sequence is validated at scan, so its checker

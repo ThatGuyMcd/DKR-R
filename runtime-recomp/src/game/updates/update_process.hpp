@@ -32,3 +32,4 @@ struct Child {
 bool parent_alive(std::uint64_t pid);
 void wait_for_parent(std::uint64_t pid, const std::filesystem::path &ready);
 } // namespace dkr::updates
+

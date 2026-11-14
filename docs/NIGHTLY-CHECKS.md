@@ -8,7 +8,7 @@ covers Linux, macOS, and Windows.
 
 ## Prepare once
 
-Use Python 3.10+, Ninja, the platform's C++20 compiler, and the
+Use Python 3.11+, Ninja, the platform's C++20 compiler, and the
 [prepared host dependencies](DEVELOPMENT.md#first-contribution-tests-without-a-rom).
 The stress runner requires CTest 4.1+ for explicit random seeds. If your current
 CMake is older, install the same checksum-verified tools used by the workflow:

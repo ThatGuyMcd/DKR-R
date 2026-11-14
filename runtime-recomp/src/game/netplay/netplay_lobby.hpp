@@ -1,5 +1,4 @@
 #pragma once
-
 #include "netplay_types.hpp"
 
 #include <optional>
@@ -10,6 +9,8 @@ namespace dkr::runtime::netplay {
 
 class Lobby final {
 public:
+#include "online_stability/host_timing_member.inl"
+
     bool create(std::string room_id, std::string join_code,
                 std::string room_name, Visibility visibility,
                 std::string host_peer_id, std::string host_name,
@@ -50,3 +51,4 @@ private:
 };
 
 } // namespace dkr::runtime::netplay
+

@@ -3,7 +3,7 @@
 #include "legacy_runtime_session.hpp"
 #include "online_mod_music.hpp"
 #include "magic_code_library.hpp"
-#include "../custom_tracks.hpp"
+#include "custom_tracks.hpp"
 
 namespace dkr::mods::online {
 // Immutable, locally reconstructed game resources, pinned through a lobby and
@@ -35,3 +35,4 @@ private:
     std::shared_ptr<const AssetBank> augment(std::shared_ptr<const AssetBank>)const;
 };
 }
+

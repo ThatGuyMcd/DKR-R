@@ -51,10 +51,13 @@ extern "C" void get_player_selected_vehicle(std::uint8_t*,recomp_context* c){c->
 extern "C" void mempool_alloc_safe(std::uint8_t*,recomp_context* c){check(c->r4==16,"Native AI entry allocation changed.");c->r2=ptr(Entry);}
 extern "C" void cam_get_cameras(std::uint8_t*,recomp_context* c){c->r2=ptr(Header+0x400);}
 #define NOOP(name) extern "C" void name(std::uint8_t*,recomp_context*){}
+// clang-format off: clang-format never settles on a list of macro calls without semicolons
 NOOP(set_taj_status) NOOP(model_anim_offset) NOOP(set_scene_viewport_num)
+// clang-format on
 #define UNREACHED(name) extern "C" void name(std::uint8_t*,recomp_context*){throw Error("Past primary spawn boundary: " #name);}
 extern "C" void spawn_object(std::uint8_t*,recomp_context* c){check(null_spawn,"Unexpected spawn fixture");c->r2=0;}
 extern "C" void dkr_legacy_racer_spawn_failed(std::uint8_t*,recomp_context* c){check(c->r2==0,"Wrong null-spawn guard ABI");null_guard=true;throw Stop{};}
+// clang-format off: clang-format never settles on a list of macro calls without semicolons
 UNREACHED(free_object) UNREACHED(get_filtered_cheats) UNREACHED(get_save_file_index)
 UNREACHED(is_in_adventure_two) UNREACHED(is_in_tracks_mode) UNREACHED(level_id) UNREACHED(level_music_start)
 UNREACHED(mempool_free_timer) UNREACHED(mempool_free) UNREACHED(racer_sound_init) UNREACHED(racer_special_init)
@@ -62,6 +65,7 @@ UNREACHED(racetype_demo) UNREACHED(rumble_init) UNREACHED(safe_mark_write_save_f
 UNREACHED(set_next_taj_challenge_menu) UNREACHED(set_taj_voice_line) UNREACHED(timetrial_free_staff_ghost)
 UNREACHED(timetrial_init_player_ghost) UNREACHED(timetrial_init_staff_ghost) UNREACHED(timetrial_reset_player_ghost)
 UNREACHED(timetrial_valid_player_ghost) UNREACHED(update_player_racer)
+// clang-format on
 int main(){try{
  auto assets=std::make_shared<CharacterNamespace>();
  for(unsigned i=0;i<16;++i){AllocatedCharacter a;a.id=std::string(64,'a'+i);a.base_character=i%10;assets->characters.push_back(a);}

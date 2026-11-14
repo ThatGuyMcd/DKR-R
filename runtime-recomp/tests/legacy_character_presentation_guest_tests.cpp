@@ -108,6 +108,7 @@ extern "C" void audspat_calculate_echo(std::uint8_t*,recomp_context*){++echoes;}
 extern "C" void dkr_netplay_presentation_random_begin(std::uint8_t*,recomp_context*){++random_begin;}
 extern "C" void dkr_netplay_presentation_random_end(std::uint8_t*,recomp_context*){++random_end;}
 #define NOOP(name) extern "C" void name(std::uint8_t*,recomp_context*){}
+// clang-format off: clang-format never settles on a list of macro calls without semicolons
 NOOP(menu_asset_load) NOOP(menu_imagegroup_load) NOOP(cam_set_sprite_anim_mode)
 NOOP(clear_dialogue_box_open_flag) NOOP(dialogue_clear) NOOP(draw_text) NOOP(menu_element_render)
 NOOP(mtx_ortho) NOOP(open_dialogue_box) NOOP(render_dialogue_text) NOOP(rendermode_reset)
@@ -119,6 +120,7 @@ NOOP(hud_balloons) NOOP(hud_speedometre) NOOP(rdp_init)
 NOOP(hud_draw_model) NOOP(mtx_cam_push) NOOP(mtx_pop) NOOP(render_object)
 NOOP(dkr_hud_element_begin) NOOP(dkr_hud_element_end)
 NOOP(cinematic_free) NOOP(load_level_for_menu) NOOP(music_change_off)
+// clang-format on
 extern "C" void do_break(std::uint32_t){throw Error("Native fixture reached an arithmetic break");}
 int main(){try {
  for(unsigned i=0;i<2;++i){AllocatedCharacter a;a.id=std::string(64,'a'+i);a.base_character=3;a.portrait=906+i;a.race_audio.control=Bytes(32);

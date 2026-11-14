@@ -2,7 +2,7 @@
 #pragma once
 
 #include "controller_snapshot.hpp"
-#include "controller_feedback/policy.hpp"
+#include "policy.hpp"
 
 #include <array>
 #include <cstddef>

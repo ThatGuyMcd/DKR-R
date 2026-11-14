@@ -1,3 +1,4 @@
+#include "analog_driving/packed_input.hpp"
 #pragma once
 
 #include <array>
@@ -44,7 +45,7 @@ namespace dkr::runtime::netplay {
 // An older peer must never interpret these tokens/checkpoints as its roster.
 // v50 checks the replay engine and prepared resources before lobby admission,
 // and carries named startup contract components instead of an opaque digest.
-inline constexpr std::uint32_t kProtocolVersion = 50U;
+inline constexpr std::uint32_t kProtocolVersion = 52U;
 inline constexpr std::uint8_t kMaximumInputDelayFrames = 9U;
 inline constexpr std::size_t kMaximumPlayers = 4U;
 // Regular races/minigames support 2-4 peers. Adventure remains two-player.
@@ -100,15 +101,6 @@ constexpr const char* synchronization_name(SynchronizationMode mode) {
     return "Unknown synchronization mode";
 }
 
-struct PackedInput {
-    std::uint16_t buttons = 0;
-    std::int8_t stick_x = 0;
-    std::int8_t stick_y = 0;
-
-    constexpr bool operator==(const PackedInput&) const = default;
-};
-static_assert(sizeof(PackedInput) == 4U);
-
 using FrameInputs = std::array<PackedInput, kMaximumPlayers>;
 
 struct CompatibilityManifest {
@@ -143,6 +135,7 @@ struct Rules {
     SynchronizationMode synchronization = SynchronizationMode::Rollback;
     bool relay_only = false;
     bool record_replay = true;
+    bool development = false;
 
     bool operator==(const Rules&) const = default;
 };
@@ -185,6 +178,8 @@ struct LaunchDescriptor {
     SynchronizationMode synchronization = SynchronizationMode::Rollback;
     HostControlPolicy host_control =
         HostControlPolicy::GuidedUntilCharacterSelect;
+
+    bool development = false;
 
     constexpr bool occupied(std::size_t slot) const {
         return slot < kMaximumPlayers &&
@@ -247,3 +242,4 @@ OnlineFailure classify_online_failure(std::string_view message);
 std::string online_failure_display_message(std::string_view message);
 
 } // namespace dkr::runtime::netplay
+

@@ -1,0 +1,37 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -6,6 +6,7 @@
+ #include "netplay/experimental_present_gate.hpp"
+ #include "netplay/experimental_performance.hpp"
+ #include "rt64_present_queue.h"
++#include "presentation_pacer.hpp"
+ 
+ #include "common/rt64_thread.h"
+ #include "rhi/rt64_render_hooks.h"
+@@ -398,7 +399,9 @@ namespace RT64 {
+             if (presentFrame && swapChainValid) {
+                 // Wait until the approximate time the next present should be at the current intended rate.
+                 if ((presentTimestamp != Timestamp()) && (targetRate > 0) && (targetRate > viOriginalRate)) {
+-                    Timer::preciseSleepUntil(presentTimestamp + std::chrono::nanoseconds(1'000'000'000 / targetRate));
++                    if(dkr::runtime::surgical::monotonic_pacer())
++                        dkr::runtime::surgical::presentation_pacer().wait(this,presentTimestamp,targetRate);
++                    else Timer::preciseSleepUntil(presentTimestamp + std::chrono::nanoseconds(1'000'000'000 / targetRate));
+                 }
+ 
+                 if (presentWaitEnabled) {
+@@ -407,9 +410,13 @@ namespace RT64 {
+ 
+                 RenderCommandSemaphore *waitSemaphore = drawSemaphores[swapChainIndex].get();
+                 presentTimestamp = Timer::current();
++                dkr::runtime::surgical::presentation_pacer().submitted(this,presentTimestamp,targetRate);
+                 swapChainValid = ext.swapChain->present(swapChainIndex, &waitSemaphore, 1);
+                 presentProfiler.logAndRestart();
+-                if (swapChainValid) dkr::runtime::performance_trace::record_present();
++                if (swapChainValid) {
++                    dkr::runtime::performance_trace::record_present();
++                    dkr::runtime::surgical::observe_present(ext.swapChain->getWidth(),ext.swapChain->getHeight(),targetRate);
++                }
+                 if (swapChainValid) {
+                     ext.sharedResources->totalPresentations.fetch_add(
+                         1, std::memory_order_relaxed);

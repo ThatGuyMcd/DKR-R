@@ -1,6 +1,8 @@
 include_guard(GLOBAL)
-get_filename_component(_dkr_relay_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 function(dkr_add_peer_relay)
+    # Set here, not at file scope: the first include can come from inside
+    # another function, whose scope a file-level variable would not outlive.
+    get_filename_component(_dkr_relay_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/.." ABSOLUTE)
     if(TARGET datachannel AND NOT TARGET DKRWebSocketIdleTests)
         add_executable(DKRWebSocketIdleTests "${_dkr_relay_root}/tests/websocket_idle_tests.cpp")
         target_link_libraries(DKRWebSocketIdleTests PRIVATE datachannel Threads::Threads)

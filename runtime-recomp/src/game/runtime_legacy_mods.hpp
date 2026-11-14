@@ -31,6 +31,8 @@ std::shared_ptr<const mods::PreparedModLaunch> prepared_launch();
 void begin_track_menu(bool allow_races=false);
 void set_trophy_menu(std::vector<mods::TrackMenuCup>);
 std::string selected_trophy();
+std::string current_course();
+std::string asset_inventory();
 // Explicit roster seeding is reserved for development qualification.
 void begin_character_roster(const std::array<std::string,4>& selected);
 void begin_character_menu();
@@ -65,6 +67,8 @@ public:
     const std::string& error()const;
     void select_course(const std::string&,unsigned);
     std::string selected_trophy()const;
+    std::string current_course()const;
+    std::string asset_inventory()const;
 private:
     struct State;
     std::unique_ptr<State> state_;

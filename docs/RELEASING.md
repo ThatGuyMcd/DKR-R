@@ -1,102 +1,94 @@
-# Preparing a DKR-R release
+# Releasing DKR-R
 
-The current release is prepared locally through the existing checked Patch
-Pipeline. The GitHub workflows perform host/tooling/device-adapter checks;
-there is no tag-triggered full game release workflow in this checkout.
-Publication is a separate maintainer action.
+A release is an annotated, signed tag `Version<VERSION>` on `main` (for
+example `Version1.0.13`). The tag is the only release input: the version,
+package names, update manifest and notes all follow from `VERSION`. The
+builds need your ROM-derived inputs, so they run on your machines. Run the
+contributor checks and platform acceptance before publishing a release.
 
-## Source and version
+`scripts/release/finalize.py` requires every check in
+`scripts/release/required_checks.toml` to have run and passed on every
+platform. None is pending; `finalize.py --check-registry` says so.
 
-1. Preserve a recoverable source snapshot outside the repository. Review all
-   changed and new source, documentation, fonts, artwork and backend files.
-2. Keep dependencies, RecompiledFuncs, RecompiledPatches and frozen source
-   capsules unchanged. Use existing baselined integration while the fold is
-   incomplete; do not create another first-party patch layer.
-3. Set the root VERSION and current package/AppStream metadata. Retain old
-   notes, independent SDK/addon versions and dependency versions.
-4. Rebuild the complete accepted integration for both supported ROM revisions.
-   The historical recipe path remains `patches/release-prep/v1.0.11/`; its
-   current configure/build/package scripts read VERSION. Do not rerun the old
-   `apply`/`content.py` authoring operation against today's source.
-5. Record the exact reviewed source commit before final signing. All source
-   needed for the build must be included; a dirty or incomplete tree is not
-   a committed release identity. Source ZIPs exclude private prepared game data.
+## Before tagging
 
-## Platforms and checks
+1. On a branch, set `VERSION`, add the `<release>` entry to
+   `packaging/linux/dkr-port.appdata.xml`, and write
+   `docs/releases/<VERSION>/RELEASE-NOTES.txt` and `UPDATER.txt` (copy the
+   previous release's and edit them). Merge it once CI is green.
+2. Tag the merge commit and push the tag:
 
-Windows x64, Linux x86_64 and Linux ARM64 have complete runtime/helper builds.
-Steam Deck uses an exact copy of the Linux x86_64 AppImage. Review all other
-platforms and record their actual status in [Platforms](PLATFORMS.md); a host
-or adapter compile is not a qualified game download.
+       git tag -s -a Version<VERSION> -m "DKR-R <VERSION>"
+       git push origin Version<VERSION>
 
-Run the mandatory checks described in [Contributing](../CONTRIBUTING.md):
+   Before publishing, verify that the tag matches VERSION and run the guard,
+   tooling and required release checks. The release finalizer refuses pending
+   checks. No automatic tag-triggered release workflow is introduced here.
 
-```sh
-python3 scripts/check.py --suite all
-cmake --preset host -S runtime-recomp
-cd runtime-recomp
-cmake --build --preset host
-ctest --preset host
-```
+## Build each platform
 
-Use `python`/`py -3` and the host-windows preset on Windows. Run installed
-pre-commit hooks on the changed files. Keep failures visible. Run timing-heavy
-regression fixtures on native Linux storage when a mounted-volume timeout is
-encountered; record that rerun and its exact coverage.
+On each build machine (Windows x64, Linux x86_64, Linux ARM64; macOS is
+built separately, below), from a clean checkout of the tag:
 
-CI jobs running the tooling or full host suite need a full Git checkout
-(`fetch-depth: 0`). The capsule checker verifies historical base blobs from the
-recorded Git revision, so a depth-one checkout cannot pass that check. Fetch
-the required history; do not skip verification, weaken hashes or repin the capsule.
+1. Prepare: `Prepare-DKR-Runtime.cmd -RomV77 <US 1.0> -RomV80 <US Rev A>` on
+   Windows, `bash scripts/Prepare-DKR-Runtime-macOS.sh --rom-v77 ... --rom-v80 ...`
+   elsewhere. It ends with `scripts/prepare_payloads.py`, which writes
+   `build/prepared`.
+2. Build and test:
 
-The retained release fixture tools check original behaviour, render/memory
-ownership, content preparation, vehicles and online policies. ARM64 CPU/data
-fixtures may use QEMU with the matching sysroot. Native graphics, controller
-feel, audio, Gamescope and real network play remain separate acceptance checks.
-Exercise both ROM revisions, modded/vanilla launches, failure recovery, saves,
-launcher return and the current startup/online handover on the finished packages.
+       python scripts/release/build.py --platform windows|linux --record <work>/<windows|linux|arm64>
 
-## Packaging
+   It checks `build/prepared` against `runtime-recomp/build-inputs.lock.json`,
+   configures `release-<platform>` (runtime-recomp/CMakePresets.json), builds
+   and runs the tests into `<work>/<platform>/ctest.xml`. The configure
+   verifies the inputs again (`DKR_VERIFY_BUILD_INPUTS`).
+3. Package and inspect (`--help` lists each script's inputs):
 
-Use the existing release package allowlist and current source audit. Package
-all helpers, assets and licence notices. Read every ZIP/AppImage back against
-its file list and hashes. Inspect both Linux ELF dependency closures and system
-ABI floors, and probe the packaged workers. Do not rename an old binary.
-Include the new private file-picker helper on Windows, Linux x64 and Linux
-ARM64, with its required notices. Exercise cancellation and failure containment;
-emulated ARM checks do not establish a working physical desktop portal or GPU.
-Keep matching runtime/helper symbols privately by binary identity. They do not
-belong in the public game ZIPs or AppImages.
+       python scripts/release/package_release.py windows|linux --compiled build/release-<platform>/bin/Release ... --output <work>/packages/<windows|linux|arm64>
+       python scripts/release/probe_worker.py --worker <packaged DKR-R-ModWorker> --output <work>/<platform>/packaged-worker-probe
+       python scripts/release/inspect_elf.py --tree <AppDir> --arch x86_64|aarch64 --output <work>/<platform>/elf-inspection.json
 
-Keep build directories, source backups, hashes/receipts, screenshots, test
-profiles, extracted packages, credentials and downloaded game data outside the
-repository source. Required local read-only build inputs can remain ignored.
-The public source archive includes authored resources and tests, with no ROM,
-extracted assets, player saves, private keys or live-service secrets. Run the
-asset scan before committing and inspect the source ZIP contents too.
+4. Record the evidence:
 
-## Updates and review
+       python scripts/release/evidence.py write --record <work>/<platform> --output <work>/<platform>/RELEASE-EVIDENCE.json
 
-Finish packages before signing. Use the original trusted Ed25519 key outside
-both the repository and release output. Do not generate a replacement key for
-convenience. The final `DKR-R-update.json` and `DKR-R-update.sig` must bind the
-stable version, exact source commit, tag and final package bytes. Steam Deck
-uses the linux-x86_64 updater entry. Excluded platforms get no entry.
+   `evidence.py compare A B` checks two builds of the same tag (yours and a
+   second machine's) compiled the same sources with the same definitions,
+   identity constants and inputs.
 
-The current wrapper is:
+## Hand off, sign and seal
 
-```text
-python -B patches/release-prep/v1.0.11/update_assets.py sign --packages <finished-release-folder> --commit <full-reviewed-commit> --private-key <protected-original-key> --output <fresh-signing-folder>
-python -B patches/release-prep/v1.0.11/update_assets.py verify --packages <finished-release-folder> --output <signed-pair-folder>
-```
+    python scripts/release/check_docs.py --since Version<previous> --evidence <work>/evidence
+    python scripts/release/finalize.py --work <work> --output <handoff>
+    python scripts/release/update_assets.py sign --packages <handoff> --output <handoff> --commit <tag commit> --private-key <key>
+    python scripts/release/qualify_updates.py --previous <previous Windows zip> --previous-receipt <its BUILD-RECEIPT.json> -- --case normal ...
+    python scripts/release/seal.py --work <work> --output <handoff>
 
-Qualify normal upgrades, corruption rejection, interruption recovery and
-preservation of synthetic saves/settings/mod selections. Verify packages after
-copying them into the final handoff. If documents or source change after the
-commit, update the source identity and regenerate affected packages/signatures.
+Run `qualify_updates.py` for each case (`normal`, `corrupt-stage`,
+`interrupted`, `migrate-layout`) with the updater test arguments, writing
+`<work>/windows/updater-<case>.log`. Keep the private key outside the
+repository and the release folders. Then follow `<handoff>/UPLOAD.txt`:
+draft the GitHub release at the tag, upload, verify the hashes, publish.
 
-For v1.0.15 the proposed release tag is **Version1.0.15**. Prepare release notes,
-checksums, the complete document review and validation evidence for the owner.
-Do not push, upload, create a public release or publish until the owner approves.
-Publishing a stable release can make automatic updates available. After approval,
-verify uploaded hashes before publication and preserve the previous release.
+## macOS
+
+`./Build-macOS.sh --rom-v77 ... --rom-v80 ... --notarize` builds from
+`build/prepared` and writes the notarised package; `build.py --platform
+macos` is the same build with the release record. Integrated rollback is off
+on Apple (see "Rollback on Apple" in docs/fold-in/open-items.md), and macOS
+isn't in the update manifest yet.
+
+## When the pins move
+
+A new N64Recomp, decomp or generator change changes the prepared inputs.
+Prepare from the pinned ROMs, check the change is the one you meant, then
+relock in the same PR:
+
+    python scripts/release/lock_inputs.py write
+
+## Tools
+
+The lint and format tools are pinned in `.github/lint-tools.txt`; formatting
+is `python scripts/format_sources.py --write` (a pinned image, so it gives
+the same output everywhere). Compilers: Visual Studio 2022 on Windows, the
+distribution GCC (glibc 2.38 or newer) on Linux, Xcode on macOS.

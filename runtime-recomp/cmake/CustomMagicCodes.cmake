@@ -10,11 +10,13 @@ add_library(DKRCustomMagicCodes STATIC EXCLUDE_FROM_ALL
     "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/magic_code_game_world.cpp"
     "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/magic_code_game_services.cpp"
     "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/magic_code_effects.cpp"
-    "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/magic_code_trophy_definition.cpp")
+    "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/magic_code_trophy_definition.cpp"
+    "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/sdk2_bridge.cpp")
 target_sources(DKRCustomMagicCodes PRIVATE "${DKRPORT_ROOT}/runtime-recomp/src/game/mods/magic_code_trophy_catalog.cpp")
 target_compile_features(DKRCustomMagicCodes PUBLIC cxx_std_20)
 target_include_directories(DKRCustomMagicCodes PUBLIC
-    "${DKRPORT_ROOT}/runtime-recomp/src/game/mods" "${DKR_RECOMP_SOURCE}/include")
+    "${DKRPORT_ROOT}/runtime-recomp/src/game/mods" "${DKR_RECOMP_SOURCE}/include"
+    "${DKRPORT_ROOT}/runtime-recomp/include")
 target_include_directories(DKRCustomMagicCodes BEFORE PRIVATE
     "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
 target_compile_definitions(DKRCustomMagicCodes PRIVATE NOMINMAX)

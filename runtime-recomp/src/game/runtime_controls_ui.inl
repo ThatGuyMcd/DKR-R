@@ -103,7 +103,7 @@ std::string FriendlyBinding(const std::string& value) {
         {"rightx -", "Right stick \xE2\x86\x90"}, {"rightx +", "Right stick \xE2\x86\x92"},
         {"righty -", "Right stick \xE2\x86\x91"}, {"righty +", "Right stick \xE2\x86\x93"},
     };
-    if (const auto found = kNames.find(value); found != kNames.end()) return found->second;
+    if (const auto found = kNames.find(value); found != kNames.end()) return dkr::localisation::directional_caption(found->second);
     // A two-input shortcut: name each half.
     if (const std::size_t plus = value.find(" + "); plus != std::string::npos) {
         return FriendlyBinding(value.substr(0, plus)) + " + " + FriendlyBinding(value.substr(plus + 3U));
@@ -113,26 +113,29 @@ std::string FriendlyBinding(const std::string& value) {
 
 // .controls-scope: who a section applies to.
 void ControlsScope(bool shared, float width) {
-    const std::string text = shared ? std::string("Applies to all players")
-                                    : "Player " + std::to_string(g_selected_player + 1U) + " settings";
+    const std::string text=shared?std::string(dkr::localisation::text("controls.all_players")):
+        dkr::localisation::format("controls.player_settings",{{"player",std::to_string(g_selected_player+1U)}});
     PaddockText(PaddockReading(13.0F, true, 1.45F), PaddockRgb(kSetWarm), text, width);
     PaddockGap(12.0F);
 }
 
 // .controls-separator: a 600 18 px heading, 16 px above its content.
 void ControlsHeading(std::string_view text, float width, float top = 0.0F) {
+    text=dkr::localisation::source(text);
     PaddockGap(top);
     PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), text, width);
     PaddockGap(16.0F);
 }
 
-void ControlsNote(std::string_view text, float width, unsigned colour = kSetMuted) {
+template<class T> void ControlsNote(T&& raw, float width, unsigned colour = kSetMuted) {
+    const auto text=LocalisedUi::copy(std::forward<T>(raw));
     PaddockText(PaddockReading(14.0F, false, 1.45F), PaddockRgb(colour), text, width);
     PaddockGap(12.0F);
 }
 
 // .controls-page .disclosure: a hairline, a quiet label and a + / - marker.
 bool ControlsDisclosure(const char* id, std::string_view label, bool& open, float width) {
+    label=dkr::localisation::source(label);
     PaddockGap(24.0F);
     const ImVec2 at = ImGui::GetCursorScreenPos();
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -330,6 +333,7 @@ void DrawControlsDevice(ControlsPageState& state, float width, const std::functi
     PaddockGap(8.0F);
     ControlsNote("For this player. Keyboard input still needs a focused game window.", width);
 
+    DrawFeedbackSettings(width,commit);
     if (ControlsDisclosure("##shared", "Shared settings", state.shared_open, width)) {
         ControlsScope(true, width);
         int keyboard_player = dkr::runtime::input::keyboard_player();
@@ -444,7 +448,8 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
     const PaddockType head = PaddockReading(13.0F, true, 1.45F);
     const PaddockType group_type = PaddockReading(14.0F, true, 1.45F);
     const PaddockType label_type = PaddockReading(15.0F, true, 1.45F);
-    const std::array<const char*, 4> kHeads{{"N64 control", "Keyboard", "Controller", "Alternate"}};
+    std::array<const char*, 4> kHeads{{"N64 control", "Keyboard", "Controller", "Alternate"}};
+    for(auto& caption:kHeads)caption=dkr::localisation::source(caption).data();
     if (!cards) {
         const ImVec2 at = ImGui::GetCursorScreenPos();
         int slot = 0;
@@ -463,17 +468,18 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
         {"Main buttons", {4, 5, 6, 7, 12, 13}},
         {"D-pad", {8, 9, 10, 11, -1, -1}},
         {"C-buttons", {14, 15, 16, 17, -1, -1}},
-        {"Modern camera", {18, 19, -1, -1, -1, -1}},
+        {"Camera", {18, 19, -1, -1, -1, -1}},
     }};
     for (const auto& [group, actions] : kGroups) {
         PaddockGap(20.0F);
         ImGui::Indent(8.0F);
-        PaddockText(group_type, PaddockRgb(kSetText), group, width - 16.0F);
+        PaddockText(group_type, PaddockRgb(kSetText), dkr::localisation::source(group), width - 16.0F);
         ImGui::Unindent(8.0F);
         PaddockGap(8.0F);
         int row_index = 0;
         for (const int index : actions) {
             if (index < 0) continue;
+            if(index==18&&!dkr::runtime::look_behind::enabled.load())continue;
             const auto action = static_cast<input::Action>(index);
             const ImVec2 at = ImGui::GetCursorScreenPos();
             ImGui::PushID(index);
@@ -488,7 +494,7 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
                 const std::string name = FriendlyBinding(
                     is_keyboard ? input::keyboard_binding_name(source) : input::controller_binding_name(source));
                 ImGui::PushID(device_column);
-                const std::string label = name + "##binding";
+                const std::string label = name + "###binding";
                 if (SettingsButton(label.c_str(), cell_width, false,
                                    unbound ? SettingsButtonTone::Unbound
                                    : secondary ? SettingsButtonTone::Outline : SettingsButtonTone::Plain,
@@ -505,7 +511,7 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
                 }
                 draw->AddRectFilled({at.x, at.y + row_height - 1.0F}, {at.x + width, at.y + row_height},
                                     PaddockCol(0xFFFFFF, 12U));
-                const char* label = input::action_label(action);
+                const char* label = dkr::localisation::source(input::action_label(action)).data();
                 PaddockDrawRun(draw, label_type, {at.x + 8.0F, std::round(at.y + (row_height - label_type.line) * 0.5F)},
                                PaddockCol(kSetText), label, label + std::strlen(label));
                 int slot = 1;
@@ -521,7 +527,7 @@ void DrawControlsBindings(ControlsPageState& state, float width, const std::func
                 // Narrow: the label on its own line, then labelled cells.
                 PaddockGap(8.0F);
                 ImGui::Indent(4.0F);
-                PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(kSetText), input::action_label(action),
+                PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(kSetText), dkr::localisation::source(input::action_label(action)).data(),
                             width - 8.0F);
                 ImGui::Unindent(4.0F);
                 PaddockGap(6.0F);
@@ -820,7 +826,8 @@ void DrawControlsShortcuts(float width, const std::function<void()>& commit) {
     }};
     ImDrawList* draw = ImGui::GetWindowDrawList();
     PaddockGap(8.0F);
-    for (const auto& [shortcut, label] : kShortcuts) {
+    for (const auto& [shortcut, raw_label] : kShortcuts) {
+        const auto label=dkr::localisation::source(raw_label).data();
         if (shortcut == input::ShortcutAction::QuickRestart && !quick_restart) continue;
         ImGui::PushID(static_cast<int>(shortcut));
         PaddockGap(20.0F);
@@ -831,7 +838,7 @@ void DrawControlsShortcuts(float width, const std::function<void()>& commit) {
             PaddockGap(6.0F);
             const auto binding = input::shortcut_keyboard_binding(shortcut);
             const std::string name =
-                FriendlyBinding(ShortcutBindingName(CaptureDevice::Keyboard, binding)) + "##keyboard";
+                FriendlyBinding(ShortcutBindingName(CaptureDevice::Keyboard, binding)) + "###keyboard";
             if (SettingsButton(name.c_str(), cell, false,
                                binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
                                                                   : SettingsButtonTone::Plain)) {
@@ -842,7 +849,7 @@ void DrawControlsShortcuts(float width, const std::function<void()>& commit) {
             PaddockGap(6.0F);
             const auto binding = input::shortcut_controller_binding(shortcut);
             const std::string name =
-                FriendlyBinding(ShortcutBindingName(CaptureDevice::Controller, binding)) + "##controller";
+                FriendlyBinding(ShortcutBindingName(CaptureDevice::Controller, binding)) + "###controller";
             if (SettingsButton(name.c_str(), cell, false,
                                binding.primary == input::kUnbound ? SettingsButtonTone::Unbound
                                                                   : SettingsButtonTone::Plain)) {
@@ -898,28 +905,27 @@ void DrawControlsCaptureModal() {
     std::string heading;
     std::string help;
     if (g_capture_action >= 0) {
-        heading = "Player " + std::to_string(g_selected_player + 1U) + " \xC2\xB7 " +
-                  dkr::runtime::input::action_label(static_cast<Action>(g_capture_action));
+        heading=dkr::localisation::format("controls.capture_heading",{{"player",std::to_string(LibraryCapturePlayer()+1U)},
+            {"action",dkr::localisation::source(dkr::runtime::input::action_label(static_cast<Action>(g_capture_action)))}});
         help = g_capture_device == CaptureDevice::Keyboard
             ? "Press a keyboard key. Escape cancels."
             : "Press a button or move the stick. Escape cancels.";
     } else if (g_capture_action == kShortcutCaptureAction) {
-        heading = ShortcutActionLabel(g_capture_shortcut_action);
-        help = std::string("Press one ") + (g_capture_device == CaptureDevice::Keyboard ? "key" : "controller button") +
-               ", or hold it and press a second. Escape cancels.";
+        heading = dkr::localisation::source(ShortcutActionLabel(g_capture_shortcut_action));
+        help=dkr::localisation::text(g_capture_device==CaptureDevice::Keyboard?"controls.shortcut_key_help":"controls.shortcut_button_help");
     } else if (g_capture_action == kAssignControllerCaptureAction) {
-        heading = "Assign Player " + std::to_string(g_selected_player + 1U);
+        heading=dkr::localisation::format("controls.assign_player",{{"player",std::to_string(LibraryCapturePlayer()+1U)}});
         help = "Press a button on this player's controller. Escape cancels.";
     }
     PaddockText(PaddockReading(18.0F, true, 1.4F), PaddockRgb(kSetText), heading, inner);
     PaddockGap(13.0F);
-    PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetText), help, inner);
+    PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(kSetText), dkr::localisation::source(help), inner);
     if (g_capture_action == kShortcutCaptureAction && g_shortcut_capture_count == 1) {
         PaddockGap(12.0F);
         const dkr::runtime::input::ShortcutBinding pending{g_shortcut_capture_sources[0],
                                                            dkr::runtime::input::kUnbound};
         PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(kSetWarm),
-                    "Captured: " + FriendlyBinding(ShortcutBindingName(g_capture_device, pending)), inner);
+                    dkr::localisation::format("controls.captured",{{"input",FriendlyBinding(ShortcutBindingName(g_capture_device,pending))}}), inner);
     }
     PaddockGap(24.0F);
     const char* clear_label = g_capture_action == kAssignControllerCaptureAction ? "Clear assignment"
@@ -931,12 +937,12 @@ void DrawControlsCaptureModal() {
         if (g_capture_action >= 0) {
             const auto action = static_cast<Action>(g_capture_action);
             if (g_capture_device == CaptureDevice::Keyboard) {
-                dkr::runtime::input::set_keyboard_binding(g_selected_player, action, dkr::runtime::input::kUnbound);
+                dkr::runtime::input::set_keyboard_binding(LibraryCapturePlayer(), action, dkr::runtime::input::kUnbound);
             } else if (g_capture_secondary_controller) {
-                dkr::runtime::input::set_secondary_controller_binding(g_selected_player, action,
+                dkr::runtime::input::set_secondary_controller_binding(LibraryCapturePlayer(), action,
                                                                       dkr::runtime::input::kUnbound);
             } else {
-                dkr::runtime::input::set_controller_binding(g_selected_player, action, dkr::runtime::input::kUnbound);
+                dkr::runtime::input::set_controller_binding(LibraryCapturePlayer(), action, dkr::runtime::input::kUnbound);
             }
         } else if (g_capture_action == kShortcutCaptureAction) {
             const dkr::runtime::input::ShortcutBinding unbound{};
@@ -946,7 +952,7 @@ void DrawControlsCaptureModal() {
                 dkr::runtime::input::set_shortcut_controller_binding(g_capture_shortcut_action, unbound);
             }
         } else if (g_capture_action == kAssignControllerCaptureAction) {
-            dkr::runtime::platform::clear_controller_assignment(g_selected_player);
+            dkr::runtime::platform::clear_controller_assignment(LibraryCapturePlayer());
         }
         SaveSettings();
         g_capture_finished = true;
@@ -965,8 +971,8 @@ void DrawControlsCaptureModal() {
 }
 
 // ------------------------------------------------------------ page
-
 void DrawControlsPage(float available_width, bool live) {
+    g_feedback_live_surface=live;
     ControlsPageState& state = g_controls_page;
     const int frame = ImGui::GetFrameCount();
     const bool entered = state.context != ImGui::GetCurrentContext() || state.last_frame != frame - 1;
@@ -1035,9 +1041,7 @@ void DrawControlsPage(float available_width, bool live) {
         ImGui::Dummy({width, 0.0F});
     }
     PaddockGap(20.0F);
-    const int picked = SettingsSecondaryNav("controls-sections",
-                                            {"Device", "Button mapping", "Stick response", "Motion", "Shortcuts"},
-                                            g_controls_section, width);
+    const int picked = LauncherCategoryTabs("controls-sections",dkr::library_ui::ControlsSections,{},g_controls_section,width);
     if (picked >= 0) g_controls_section = picked;
     PaddockGap(22.0F);
 
@@ -1099,3 +1103,4 @@ void DrawControlsPage(float available_width, bool live) {
     DrawControlsCaptureModal();
     DrawControllerMappingModal();
 }
+

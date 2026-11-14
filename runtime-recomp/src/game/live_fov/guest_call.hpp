@@ -3,8 +3,7 @@
 #include "recomp.h"
 
 namespace dkr::runtime::live_fov {
-inline void apply_guest_fov(std::uint8_t* rdram, const recomp_context& context,
-                            float target, recomp_func_t* setter) {
+inline void apply_guest_fov(std::uint8_t* rdram, const recomp_context& context, float target, recomp_func_t* setter) {
     recomp_context call = context;
     // f_odd points inside its owning context. A plain copy leaves odd-register
     // writes targeting the live CPU, while double arithmetic reads stale high

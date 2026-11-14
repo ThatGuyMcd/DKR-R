@@ -8,7 +8,8 @@ void DrawTechnicalDetails(std::string_view diagnostic, const char *label = "Deta
     if (diagnostic.empty())
         return;
     ImGui::PushID(diagnostic.data(), diagnostic.data() + diagnostic.size());
-    if (ImGui::CollapsingHeader(label)) {
+    const auto caption=dkr::localisation::label(label);
+    if (ImGui::CollapsingHeader(caption.c_str())) {
         const float height = std::clamp(ImGui::GetIO().DisplaySize.y * 0.22F, 70.0F, 180.0F);
         ImGui::BeginChild("##technical-text", {0.0F, height}, true);
         PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), diagnostic,
@@ -24,7 +25,7 @@ void DrawTechnicalDetails(std::string_view diagnostic, const char *label = "Deta
 
 void DrawIssue(std::string_view diagnostic, dkr::runtime::copy::Area area) {
     const auto summary = dkr::runtime::copy::error_summary(diagnostic, area);
-    DrawColoredWrapped(kWarm, summary);
+    DrawColoredWrapped(kWarm, dkr::localisation::source(summary));
     DrawTechnicalDetails(diagnostic);
 }
 
@@ -35,5 +36,5 @@ void DrawFriendlyStatus(std::string_view text, float width,
     if (dkr::runtime::copy::looks_like_error(text))
         DrawIssue(text, area);
     else
-        PaddockFeedback(text, width);
+        PaddockFeedback(dkr::localisation::source(text), width);
 }

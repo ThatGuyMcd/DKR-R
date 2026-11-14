@@ -21,6 +21,11 @@ payloads remain in the checked integration. New owned identities require
 matching complete packages. Local preparation is not approval of a cross-play
 compatibility-breaking merge; the repository's both-owner rule still applies.
 
+That describes how v1.0.15 was built and validated. The layers and the capsule
+have since been folded into first-party source
+([migration map](docs/fold-in/MIGRATION.md)); the validation record below is
+unchanged.
+
 ## Current build and package coverage
 
 The release handoff supplies Windows x64, Linux x86_64, Linux ARM64 and the

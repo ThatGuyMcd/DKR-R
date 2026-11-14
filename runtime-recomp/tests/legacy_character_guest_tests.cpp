@@ -41,6 +41,7 @@ extern "C" void load_object_header(std::uint8_t* rdram,recomp_context* ctx) {
     ctx->r2=0; // Exercise native failed-allocation return, not an invented success.
 }
 #define UNREACHED(name) extern "C" void name(std::uint8_t*,recomp_context*){throw Error("Unreached loader stage: " #name);}
+// clang-format off: clang-format never settles on a list of macro calls without semicolons
 UNREACHED(func_800245B4) UNREACHED(get_character_id_from_slot) UNREACHED(get_level_segment_index_from_position)
 UNREACHED(get_object_property_size) UNREACHED(init_object_interaction_data) UNREACHED(init_object_shading)
 UNREACHED(init_object_shadow) UNREACHED(init_object_water_effect) UNREACHED(is_in_adventure_two)
@@ -49,6 +50,7 @@ UNREACHED(mempool_free) UNREACHED(model_anim_offset) UNREACHED(obj_init_attachpo
 UNREACHED(obj_init_collision) UNREACHED(obj_init_emitter) UNREACHED(obj_init_property_flags)
 UNREACHED(object_model_init) UNREACHED(objFreeAssets) UNREACHED(run_object_init_func)
 UNREACHED(tex_free) UNREACHED(tex_load_sprite) UNREACHED(try_free_object_header)
+// clang-format on
 #undef UNREACHED
 int main() {
     try {

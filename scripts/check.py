@@ -85,7 +85,10 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     suites = [name for names in args.suite for name in names] if args.suite else list(DEFAULT_SUITES)
     commands = {
-        "guard": [[sys.executable, "scripts/pattern_guard.py", "--tree", "--baseline", "check"]],
+        "guard": [
+            [sys.executable, "scripts/pattern_guard.py", "--tree", "--baseline", "check"],
+            [sys.executable, "scripts/identity_guard.py", "check"],
+        ],
         "tooling": [[sys.executable, f"runtime-recomp/tests/{test}"] for test in TOOLING_TESTS],
         "host-tools": [
             [sys.executable, f"runtime-recomp/tests/{test}"]

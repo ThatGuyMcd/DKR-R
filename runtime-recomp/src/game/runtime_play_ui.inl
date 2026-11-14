@@ -1,3 +1,5 @@
+#include "library_ui/play_tools.inl"
+#include "library_ui/greeting_ui.inl"
 // Included by runtime_ui.cpp inside its UI namespace, after
 // runtime_mod_library_ui.inl. Presentation only: ROM selection, launch and
 // Track Lab changes go through the same launcher helpers as before.
@@ -26,6 +28,7 @@ struct RaceButtonLook {
 };
 
 bool PaddockRaceButton(const char* label, ImVec2 size, const RaceButtonLook& look) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const PaddockPress press = PaddockBeginPress(label, size, 0.15F, 0.15F);
     const bool lit = press.hovered || press.focused;
     const float amount = look.hover_in > 0.0F
@@ -93,6 +96,7 @@ bool PaddockRaceButton(const char* label, ImVec2 size, const RaceButtonLook& loo
 
 float PaddockRaceButtonWidth(const char* label, float font_px = 19.0F,
                              float ellipsis_spread = 0.0F) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const PaddockType type = PaddockSign(font_px, 1.0F, 0.0F);
     const char* end = PaddockLabelEnd(label);
     return std::ceil(ImGui::RaceLabelWidth(type.font, type.size, label, end,
@@ -182,11 +186,13 @@ private:
 
 // .play-text-button: an underlined action on the dark ROM card.
 float PlayTextButtonWidth(const char* label) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     return std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.0F), label,
                                     PaddockLabelEnd(label)) + 16.0F);
 }
 
 bool PlayTextButton(const char* label, bool destructive) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const PaddockType type = PaddockReading(14.0F, true, 1.0F);
     const char* end = PaddockLabelEnd(label);
     const PaddockPress press = PaddockBeginPress(label, {PlayTextButtonWidth(label), 44.0F});
@@ -205,11 +211,13 @@ bool PlayTextButton(const char* label, bool destructive) {
 
 // The action of a launch notice (.play-notice .mods-button).
 float PlayNoticeButtonWidth(const char* label) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     return std::ceil(PaddockMeasure(PaddockReading(13.0F, true, 1.4F), label,
                                     PaddockLabelEnd(label)) + 32.0F);
 }
 
 bool PlayNoticeButton(const char* label) {
+    const auto caption=dkr::localisation::label(label);label=caption.c_str();
     const PaddockType type = PaddockReading(13.0F, true, 1.4F);
     const char* end = PaddockLabelEnd(label);
     const PaddockPress press = PaddockBeginPress(label, {PlayNoticeButtonWidth(label), 42.0F});
@@ -364,6 +372,7 @@ void UndoRemoveRom(const PlayPageContext& play) {
 std::vector<PlayNotice> BuildPlayNotices(bool rom_ready) {
     namespace tracks_ns = dkr::runtime::custom_tracks;
     std::vector<PlayNotice> notices;
+    if(!dkr::session_content::next_enabled.load())return notices;
     const std::string armed = tracks_ns::armed_track_id();
     if (!armed.empty()) {
         std::string name = armed;
@@ -373,10 +382,10 @@ std::vector<PlayNotice> BuildPlayNotices(bool rom_ready) {
                 break;
             }
         }
-        notices.push_back({"test", "Track preview: " + name,
+        notices.push_back({"test", dkr::localisation::format("play.track_preview",{{"name",name}}),
                            tracks_ns::auto_boot_enabled()
-                               ? "Starts directly in this track as Diddy."
-                               : "Uses Modern graphics.",
+                               ? std::string(dkr::localisation::source("Starts directly in this track as Diddy."))
+                               : std::string(dkr::localisation::source("Uses Modern graphics.")),
                            false, "Stop testing"});
     }
     if (rom_ready && g_mod_browser_revision != 0U) {
@@ -390,22 +399,76 @@ std::vector<PlayNotice> BuildPlayNotices(bool rom_ready) {
             }
         }
         if (!names.empty()) {
-            const bool one = names.size() == 1U;
             std::string list;
             for (const auto& name : names) list += (list.empty() ? "" : ", ") + name;
             notices.push_back({"mods",
-                               one ? "1 enabled mod needs preparing"
-                                   : std::to_string(names.size()) + " enabled mods need preparing",
-                               list + (one ? " was" : " were") +
-                                   " prepared for a different ROM version. Use Prepare mod on " +
-                                   (one ? "its card." : "their cards."),
+                               dkr::localisation::plural("play.mods_prepare",names.size()),
+                               dkr::localisation::format("play.mods_prepare_help",{{"names",list}}),
                                true, "Open Mods"});
         }
     }
     return notices;
 }
 
-void DrawPlayPage(float available_width, const PlayPageContext& play) {
+void DrawLanguageSetting(float);
+#include "library_ui/save_indicator.inl"
+#include "library_ui/automatic_ui.inl"
+#include "library_ui/handoff_ui.inl"
+
+void DrawPlayLaunchOptions(float width,bool entered,bool live) {
+    ImGui::BeginDisabled(live);
+    if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, width)) {
+        SaveSettings();
+    }
+    if (g_skip_intro) {
+        PaddockGap(12.0F);
+        if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
+            {"Start menu", "Character select"}, width, false, {})) SaveSettings();
+    }
+    PaddockGap(8.0F);
+    if (g_skip_intro)
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+                    "Offline launches only.", width);
+    PaddockGap(16.0F);
+    if (dkr::runtime::portable::supported()) {
+        // Inspect only on page entry or an explicit click, never per-frame I/O.
+        static bool portable_enabled = false;
+        static std::string portable_status;
+        if (entered) portable_enabled = dkr::runtime::portable::enabled();
+        if (PaddockCheckbox("##portable-mode", "Portable mode", &portable_enabled, width)) {
+            std::string error;
+            if (!dkr::runtime::portable::set_enabled(portable_enabled, error)) {
+                portable_enabled = dkr::runtime::portable::enabled();
+                portable_status = std::move(error);
+            } else {
+                portable_status = "Restart DKR-R to apply. Existing saves aren't moved automatically.";
+            }
+        }
+        PaddockGap(8.0F);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+            "Keep saves and settings beside DKR-R.", width);
+        if (portable_enabled != dkr::runtime::portable::enabled_at_startup()) {
+            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14),
+                "Restart DKR-R to apply.", width);
+        }
+        if (!portable_status.empty()) {
+            if (dkr::runtime::copy::looks_like_error(portable_status))
+                DrawIssue(portable_status, dkr::runtime::copy::Area::Portable);
+            else
+                PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
+                            "Existing saves aren't moved automatically.", width);
+        }
+        PaddockGap(16.0F);
+    }
+    ImGui::EndDisabled();
+    DrawSkipLauncherSetting(width);
+    DrawLanguageSetting(width);
+    DrawPlaySaveSummary(width,live);
+}
+
+#include "library_ui/play_launch_bar.inl"
+
+void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=false) {
     namespace tracks_ns = dkr::runtime::custom_tracks;
     PlayPageState& state = g_play_page;
     const int frame = ImGui::GetFrameCount();
@@ -419,7 +482,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         state.entered.clear();
         state.leaving.reset();
         state.arrived_at = -10.0;
-        state.focus = PlayPageState::Focus::None;
+        state.focus = play.rom_ready ? PlayPageState::Focus::Start : PlayPageState::Focus::Browse;
         state.was_ready = play.rom_ready;
     }
     state.last_frame = frame;
@@ -436,7 +499,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     const bool lobby = dkr::runtime::netplay::session().active();
     const bool nav = ImGui::GetIO().NavVisible;
 
-    const float width = std::max(available_width, 1.0F);
+    float width = std::max(available_width, 1.0F);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 0.0F});
 
     {
@@ -445,14 +508,27 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         ImGui::BeginGroup();
         DrawPageHeading("PLAY");
         ImGui::EndGroup();
-        const float heading_height = ImGui::GetItemRectSize().y;
+        const auto heading_size = ImGui::GetItemRectSize();
+        const float heading_height = heading_size.y;
         const auto layout = dkr::runtime::copy::play_header(width, action, heading_height);
         ImGui::SetCursorScreenPos({header.x + layout.action_x, header.y + layout.action_y});
-        DrawPlayUpdateButton(action);
+        ImGui::BeginDisabled(live);DrawPlayUpdateButton(action);ImGui::EndDisabled();
+        const float header_height=DrawPlayHolidayGreeting(header,width,layout,heading_size.x);
         ImGui::SetCursorScreenPos(header);
-        ImGui::Dummy({width, layout.height});
+        ImGui::Dummy({width, header_height});
     }
-    PaddockGap(20.0F);
+    PaddockGap(12.0F);
+    const auto launch_summary=PlayLaunchSummary(play,live);
+    const float launch_height=PlayLaunchBarHeight(width,launch_summary);
+    const float body_height=std::max(1.F,ImGui::GetContentRegionAvail().y-launch_height);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0.F,0.F});
+    const float body_width=std::max(1.F,PanelFooterBounds(ImGui::GetCurrentWindow()).Max.x-ImGui::GetCursorScreenPos().x);
+    ImGui::BeginChild("play-scroll",{body_width,body_height},false,
+        ImGuiWindowFlags_NavFlattened|ImGuiWindowFlags_NoBackground);
+    ImGui::PopStyleVar();
+    LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
+    width=std::max(1.F,std::min(available_width,ImGui::GetContentRegionAvail().x-8.F));
+    DrawLauncherFeatured(width,live);
 
     // The ROM pass: status, the ROM list, and the actions for it.
     {
@@ -464,8 +540,12 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         // readable, centred group. Narrow panels retain their existing layout.
         constexpr float pass_chrome = 2.0F * 2.0F + 24.0F * 2.0F + 42.0F + 20.0F;
         constexpr float rom_picker_width = 560.0F;
-        const float content_width = std::min(width, rom_picker_width + pass_chrome);
-        const float content_x = at.x + std::floor((width - content_width) * 0.5F);
+        const bool side=width>=780.F;
+        const float options_width=side?std::clamp(width*.36F,330.F,640.F):std::max(1.F,width-52.F);
+        const float slot_width=side?width-options_width-32.F:width;
+        const float content_width=std::min(slot_width,rom_picker_width+pass_chrome);
+        const float content_x=at.x+std::floor((slot_width-content_width)*.5F);
+        ImDrawListSplitter pass_layers;pass_layers.Split(draw,2);pass_layers.SetCurrentChannel(draw,1);
         const float body_x = content_x + 2.0F + 24.0F + 42.0F + 20.0F;
         const float body_width = std::max(content_width - pass_chrome, 1.0F);
         const PaddockType heading = PaddockSign(19.0F, 1.0F, 0.0F);
@@ -474,7 +554,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         PaddockType pick_label = PaddockReading(11.0F, true, 1.0F);
         pick_label.tracking = 11.0F * 0.12F;
         const std::string removed_note = state.removed.empty()
-            ? std::string{} : "Removed " + PathUtf8(state.removed.filename()) + " from your list.";
+            ? std::string{} : dkr::localisation::format("play.rom_removed",{{"file",PathUtf8(state.removed.filename())}});
         std::string meta;
         unsigned meta_colour = 0xB0C9CC;
         if (!removed_note.empty()) {
@@ -485,9 +565,9 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         } else if (count == 1U) {
             meta = "";
         } else if (count > 1U) {
-            meta = std::to_string(count) + " ROMs available.";
+            meta = dkr::localisation::plural("play.rom_count",count);
         } else {
-            meta = "Accepted files: .z64, .n64, .v64";
+            meta = dkr::localisation::source("Accepted files: .z64, .n64, .v64");
         }
         const char* primary = count > 0U ? "ADD A ROM...##rom" : "BROWSE FOR ROM...##rom";
         const char* secondary = !state.removed.empty() ? "Undo##rom"
@@ -499,13 +579,12 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         const float actions_height = actions_row ? 46.0F : 46.0F + 8.0F + 44.0F;
         const float pick_width = std::min(body_width, rom_picker_width);
         const float pick_height = 4.0F + pick_label.line + 6.0F + 60.0F + 8.0F;
-        const std::string_view no_rom = "Choose a Diddy Kong Racing ROM to start.";
+        const auto no_rom=dkr::localisation::source("Choose a Diddy Kong Racing ROM to start.");
         const float detail_height = count > 0U ? pick_height : PaddockTextHeight(file_type, no_rom, body_width);
         const float meta_height = PaddockTextHeight(meta_type, meta, body_width);
         const float body_height = 6.0F + heading.line + 8.0F + detail_height + 2.0F +
                                   meta_height + 16.0F + actions_height;
         const float height = 2.0F + 20.0F + std::max(112.0F, body_height) + 20.0F + 2.0F;
-        const ImVec2 end{at.x + width, at.y + height};
 
         // The border turns green with the last light.
         const float since = static_cast<float>(PaddockClock() - state.arrived_at);
@@ -519,11 +598,10 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         panel.fill = PaddockRgb(0x0B2E40, 245U);
         panel.border = border;
         panel.border_width = 2.0F;
-        PaddockPanel(draw, at, end, panel);
         DrawPlayLights(draw, {content_x + 2.0F + 24.0F, at.y + 2.0F + 20.0F}, ready, state.arrived_at);
 
         float y = at.y + 2.0F + 20.0F + 6.0F;
-        const std::string_view title = ready ? "Ready to race" : "ROM not loaded";
+        const auto title=dkr::localisation::source(ready?"Ready to race":"ROM not loaded");
         PaddockDrawRun(draw, heading, {body_x, y}, PaddockCol(ready ? 0x1AC2A3U : 0xFFAA97U),
                        title.data(), title.data() + title.size());
         y += heading.line + 8.0F;
@@ -539,7 +617,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
                 if (nav) ImGui::SetKeyboardFocusHere();
                 state.focus = PlayPageState::Focus::None;
             }
-            const RomSelectResult picked = DrawRomSelect("play-rom", pick_width, false, lobby || launch_modal,
+            const RomSelectResult picked = DrawRomSelect("play-rom", pick_width, false, live || lobby || launch_modal,
                                                          "Locked while you are in a lobby.");
             if (picked == RomSelectResult::Switched) {
                 state.removed.clear();
@@ -568,7 +646,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
         look.fill = count > 0U ? 0x0A6EA1U : 0x1AC2A3U;
         look.hover_in = 0.12F;
         look.ellipsis_spread = 0.12F;
-        if (PaddockRaceButton(primary, {primary_width, 46.0F}, look)) {
+        ImGui::BeginDisabled(live || lobby || launch_modal);
+        if (PaddockRaceButton(primary, {std::min(body_width,primary_width), 46.0F}, look)) {
             OpenRomBrowser(play.selected_rom);
         }
         if (secondary != nullptr) {
@@ -589,13 +668,28 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
                 state.focus = PlayPageState::Focus::Rom;
             }
         }
+        ImGui::EndDisabled();
         ImGui::PopStyleColor();
-        ImGui::SetCursorScreenPos(at);
-        ImGui::Dummy({width, height});
+        const float options_x=side?at.x+width-options_width-26.F:at.x+26.F;
+        const float tools_width=side?options_x-at.x-58.F:width-52.F;
+        const float tools_height=PlayToolsHeight(tools_width);
+        const float left_height=height+tools_height+16.F;
+        const float options_y=side?at.y+26.F:at.y+left_height+8.F;
+        ImGui::SetCursorScreenPos({options_x,options_y});
+        ImGui::BeginGroup();DrawPlayLaunchOptions(options_width,entered,live);ImGui::EndGroup();
+        const float options_height=ImGui::GetItemRectSize().y;
+        const float final_height=side?std::max(left_height,options_height+52.F):left_height+options_height+34.F;
+        ImGui::SetCursorScreenPos({at.x+26.F,at.y+(side?final_height:left_height)-26.F-tools_height});
+        DrawPlayTools(tools_width);
+        if(side)draw->AddLine({options_x-16.F,at.y+26.F},{options_x-16.F,at.y+final_height-26.F},PaddockCol(0x325365));
+        pass_layers.SetCurrentChannel(draw,0);
+        PaddockPanel(draw,at,{at.x+width,at.y+final_height},panel);
+        pass_layers.Merge(draw);
+        ImGui::SetCursorScreenPos(at);ImGui::Dummy({width,final_height});
     }
 
     // Anything that changes what START does sits directly above it.
-    std::vector<PlayNotice> notices = BuildPlayNotices(play.rom_ready);
+    std::vector<PlayNotice> notices = live?std::vector<PlayNotice>{}:BuildPlayNotices(play.rom_ready);
     {
         const double now = PaddockClock();
         int entering = 0;
@@ -668,66 +762,15 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
     }
     // START.
     PaddockGap(16.0F);
-    if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, width)) {
-        SaveSettings();
-    }
-    if (g_skip_intro) {
-        PaddockGap(12.0F);
-        if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
-            {"Start menu", "Character select"}, width, false, {})) SaveSettings();
-    }
-    PaddockGap(8.0F);
-    if (g_skip_intro)
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-                    "Offline launches only.", width);
-    PaddockGap(16.0F);
-    if (dkr::runtime::portable::supported()) {
-        // Inspect only on page entry or an explicit click, never per-frame I/O.
-        static bool portable_enabled = false;
-        static std::string portable_status;
-        if (entered) portable_enabled = dkr::runtime::portable::enabled();
-        if (PaddockCheckbox("##portable-mode", "Portable mode", &portable_enabled, width)) {
-            std::string error;
-            if (!dkr::runtime::portable::set_enabled(portable_enabled, error)) {
-                portable_enabled = dkr::runtime::portable::enabled();
-                portable_status = std::move(error);
-            } else {
-                portable_status = "Restart DKR-R to apply. Existing saves aren't moved automatically.";
-            }
-        }
-        PaddockGap(8.0F);
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            "Store saves and settings beside DKR-R.", width);
-        if (portable_enabled != dkr::runtime::portable::enabled_at_startup()) {
-            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14),
-                "Restart DKR-R to apply.", width);
-        }
-        if (!portable_status.empty()) {
-            if (dkr::runtime::copy::looks_like_error(portable_status))
-                DrawIssue(portable_status, dkr::runtime::copy::Area::Portable);
-            else
-                PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-                            "Existing saves aren't moved automatically.", width);
-        }
-        PaddockGap(16.0F);
-    }
+    PaddockGap(16.F);
+    PlayLaunchBodyCheck();
+    ImGui::EndChild();
+    width=std::max(1.F,available_width);
+    DrawPlayLaunchSummary(width,launch_summary);
     {
-        const auto& save = CachedSaveManagerView();
-        PaddockText(PaddockReading(16.0F, true, 1.45F), PaddockRgb(0xFFF6DA), "OFFLINE ADVENTURE", width);
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            save.preview.empty() ? (save.adventure.exists ? "Offline save couldn't be read."
-                                                         : "No offline Adventure save yet.")
-                                 : save.preview, width);
-        if (save.adventure.exists && !save.adventure.valid)
-            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14),
-                        "Your offline save needs attention. Check Save Manager before playing.", width);
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            "Online and modded games use separate saves.", width);
-        PaddockGap(12.0F);
-    }
-    {
-        const bool can_start = play.rom_ready && !imports_busy && !launch_modal && !g_play_offline_after_leave;
+        const bool can_start = live || (play.rom_ready && !imports_busy && !launch_modal && !g_play_offline_after_leave);
         RaceButtonLook look;
+        look.font_px=21.F;
         look.hover_in = 0.12F;
         if (can_start) {
             look.fill = 0x1AC2A3;
@@ -742,17 +785,20 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
             look.text = 0x8FA6AD;
             look.ring_alpha = 20U;
         }
-        if (state.focus == PlayPageState::Focus::Start && can_start) {
-            if (nav) ImGui::SetKeyboardFocusHere();
+        if (state.focus == PlayPageState::Focus::Start && can_start && ImGui::GetCurrentContext()->OpenPopupStack.empty()) {
+            ImGui::GetCurrentContext()->NavDisableHighlight=false;
+            ImGui::SetKeyboardFocusHere();
             state.focus = PlayPageState::Focus::None;
         }
         ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
         ImGui::BeginDisabled(!can_start);
-        if (PaddockRaceButton(lobby ? "LEAVE LOBBY & PLAY OFFLINE" : "PLAY OFFLINE - Diddy Kong Racing", {width, 68.0F}, look)) {
-            if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");
+        if (PaddockRaceButton(live?"RETURN TO THE RACE":lobby ? "LEAVE LOBBY & PLAY OFFLINE" : dkr::localisation::text("play.start_game").data(), {PlayLaunchButtonWidth(width), kPlayStartHeight}, look)) {
+            if(live)g_overlay_visible.store(false,std::memory_order_release);
+            else if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");
             else play.launch_requested = true;
         }
         ImGui::EndDisabled();
+        PlayLaunchButtonCheck(can_start);
         ImGui::PopStyleVar();
     }
     if (BeginSettingsDialog("Leave lobby and play offline?", "LEAVE LOBBY & PLAY OFFLINE?", 620.0F, 0x06336E)) {
@@ -767,17 +813,6 @@ void DrawPlayPage(float available_width, const PlayPageContext& play) {
             ImGui::CloseCurrentPopup();
         }
         EndSettingsDialog();
-    }
-    if (!play.rom_ready) {
-        PaddockGap(8.0F);
-        const PaddockType hint = PaddockReading(14.0F, false, 1.5F);
-        constexpr std::string_view text = "Load a ROM to start.";
-        const ImVec2 at = ImGui::GetCursorScreenPos();
-        PaddockTextStyle style;
-        style.colour = PaddockCol(0xB0C9CC);
-        style.centre = true;
-        PaddockTextAt(ImGui::GetWindowDrawList(), hint, at, width, text, style);
-        ImGui::Dummy({width, hint.line});
     }
     ImGui::PopStyleVar();
 }

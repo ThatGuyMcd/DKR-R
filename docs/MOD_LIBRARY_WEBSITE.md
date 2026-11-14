@@ -3,9 +3,9 @@
 The maintained website code is in
 `runtime-recomp/src/game/mod_library/website/`. Existing sign-in, upload, batch
 and hosted-file assets remain on the web host. The private API source is in
-`runtime-recomp/src/game/online_profile/backend/`. The existing library patch
-pipeline packages these sources directly; it does not rewrite them or change
-the launcher, dependencies or generated guest code.
+`services/online-directory/api/`. `services/library-workflow/build.py community`
+packages these sources directly; it does not rewrite them or change the
+launcher, dependencies or generated guest code.
 
 ## Build and verify the website package
 
@@ -14,7 +14,7 @@ Use Python 3.11+ and Node.js 24+ on Windows or Linux. On Windows substitute
 
 ```sh
 npm install --prefix build/library-community-tools --no-save --ignore-scripts --package-lock=false esbuild@0.28.2 jsdom@29.1.1
-python3 patches/library-workflow/pipeline.py community --output build/library-community-release/stage --baseline build/mod-library-community-20261029/baseline --archive build/library-community-release/DKR-R-website-update.zip
+python3 services/library-workflow/build.py community --output build/library-community-release/stage --baseline build/mod-library-community-20261029/baseline --archive build/library-community-release/DKR-R-website-update.zip
 node runtime-recomp/tests/mod_library_community_tests.cjs build/library-workflow-d1-runtime/node_modules/miniflare build/library-community-tools/node_modules/jsdom
 python3 scripts/check.py --suite guard,tooling
 ```

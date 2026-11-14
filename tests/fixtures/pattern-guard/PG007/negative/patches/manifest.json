@@ -12,5 +12,11 @@
         }
       ]
     }
+  ],
+  "stagedPatches": [
+    {
+      "path": "patches/rt64/staged/0002-staged.patch",
+      "sha256": "12d4abba5da0b4f2440519aab67a2e9dfb1e2606d32a2e912a063590b5c2b8ee"
+    }
   ]
 }
