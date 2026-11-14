@@ -69,15 +69,18 @@ frame number stopping.
 ## Who is driving
 
 The racers steer themselves along the track's checkpoints the way the game's
-CPU racers do (`netplay/check_autopilot.cpp`), holding the accelerator. About
-once a second each peer logs
+CPU racers do (`netplay/check_autopilot.cpp`), holding the accelerator. Every
+60 race frames (about two seconds) each peer logs
 
 ```text
 [check][autopilot] frame=.. stick=.. checkpoint=.. valid=1
 ```
 
-`checkpoint` should climb as the lap goes on. `valid=0` means there was no
-race to read (menus, loading) and the old pattern was used for that frame.
+`checkpoint` should climb as the lap goes on and wrap to 0 at the line.
+`frame` is the predicted frame, so it runs a little ahead of the last
+`[rollback][render]` line. `valid=0` means the old pattern was used for that
+frame: there was no race to read (menus, loading), or
+`DKR_OWNED_CHECK_INPUT=wave` is set.
 
 The menus are not steered: the test presses Start and A on a timer, so the
 race is whatever the character, vehicle and track cursors start on.
