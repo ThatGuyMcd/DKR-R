@@ -1626,7 +1626,9 @@ def generate(
         (output / "librecomp").mkdir()
         for name, source in rsp_headers.items():
             (output / "librecomp" / name).write_text(source, encoding="utf-8")
-        (output / "private_audio_rsp.cpp").write_text(rsp_source, encoding="utf-8")
+        # Bytes, not text: the pinned RSP source has CRLF lines, and text mode on
+        # Windows would turn them into CR CR LF and change the owned input digest.
+        (output / "private_audio_rsp.cpp").write_bytes(rsp_source.encode("utf-8"))
     (output / "recomp.h").write_text(header, encoding="utf-8")
     extra = authored_declarations(full_scenes) if authored_cpu else ""
     private_names = '#include "isolated_symbols.h"\n' if isolate_symbols else ""
