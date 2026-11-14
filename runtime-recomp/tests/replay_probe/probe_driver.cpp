@@ -1298,6 +1298,7 @@ class Component final : public SceneSimulation {
             view.tt_camera = ram_[hud_toggle ^ 3U] == 0 && view.race_type != 0x40 && view.race_type != 0x42 &&
                              view.race_type != 0x41;
         }
+        view.autopilot = capture_autopilot_observations(ram_.data(), ram_.size(), DKR_PROBE_REVISION);
         return view;
     }
     unsigned menu_for_test() const {

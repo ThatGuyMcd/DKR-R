@@ -641,7 +641,7 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                                 local_port.load());
                         }
                     } else
-                        sampled = {0x8000, std::int8_t((at.frame / 15) % 2 ? 30 : -30), 0};
+                        sampled = check_autopilot_input(scene.autopilot, local_port.load(), at.frame);
                 }
                 dkr::online_stability::ReplaySlice replay_slice(Network::Clock::now());
                 do {
@@ -1186,7 +1186,7 @@ bool run_runtime(ultramodern::renderer::WindowHandle window, const std::filesyst
                                     return PackedInput{0x8000, 0, 0};
                                 return PackedInput{};
                             }
-                            return PackedInput{0x8000, std::int8_t((session.frontier() / 15) % 2 ? 30 : -30), 0};
+                            return check_autopilot_input(scene.autopilot, session.local_owner(), session.frontier());
                         })) {
                         const auto lifecycle = lobby.runtime_view();
                         if (!lifecycle.active || lifecycle.owned_match_ending) {
