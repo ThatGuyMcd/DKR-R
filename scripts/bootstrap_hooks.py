@@ -10,6 +10,9 @@ hooks are a convenience.
 pre-commit itself comes from `uv tool install`, then `pipx install`, then
 `pip install --user`, whichever works first.
 
+It also points `git blame` at .git-blame-ignore-revs (the tree-wide format
+commits), unless blame.ignoreRevsFile is already set in this checkout.
+
 pre-commit refuses to install while core.hooksPath is set, because git then
 runs hooks from that directory and not the repository's own. This installs
 into the repository's own hooks directory anyway (blanking core.hooksPath for
@@ -32,6 +35,7 @@ CONFIG = ".pre-commit-config.yaml"
 # Written next to the installed hooks; holds the sha256 of the config they were
 # installed from so --check can tell when they need reinstalling.
 STAMP = ".dkr-bootstrap-version"
+BLAME_IGNORE = ".git-blame-ignore-revs"
 INSTALLERS = (
     ("uv", "tool", "install", "pre-commit"),
     ("pipx", "install", "pre-commit"),
@@ -103,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Git hooks are installed but core.hooksPath bypasses them here. {bootstrap} prints the fix.")
         return 0
 
+    ignore_blame_revs()
     pre_commit = find_pre_commit() or install_pre_commit()
     if pre_commit is None:
         print(f"bootstrap_hooks: could not install pre-commit. Run `uv tool install pre-commit`, then {bootstrap}")
@@ -129,6 +134,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(not_active(own, runs_from))
     return 0
+
+
+def ignore_blame_revs() -> None:
+    """Make `git blame` skip the format commits. GitHub reads the file by itself;
+    a local git only does with this setting. Someone's own value is left alone."""
+    if not (ROOT / BLAME_IGNORE).is_file() or git("config", "--local", "--get", "blame.ignoreRevsFile"):
+        return
+    if git("config", "--local", "blame.ignoreRevsFile", BLAME_IGNORE) is not None:
+        print(f"bootstrap_hooks: git blame now skips the commits in {BLAME_IGNORE}")
 
 
 def not_active(own: Path, runs_from: Path) -> str:
