@@ -10,8 +10,9 @@ default_stages: [pre-commit]
 # trailing whitespace on blank context lines), modding/reference-us-v*/* are
 # byte-exact receipts and services/*/baseline/ match their SHA256SUMS. No fixer
 # may touch them; the pinned-bytes hook below proves it on every commit.
-# runtime-recomp/src/ is clang-format's and gersemi's since the B9 format pass;
-# the whitespace fixers still leave it alone (their own excludes below).
+# runtime-recomp/src/ is clang-format's and gersemi's: both run on every commit
+# and CI checks the whole tree (scripts/format_sources.py --check). The
+# whitespace fixers leave it alone (their own excludes below).
 # services/*/baseline/ are deployed bases pinned by their SHA256SUMS,
 # tests/fixtures/ are pattern-guard inputs and packaging/licenses/ are verbatim
 # third-party texts.
@@ -39,7 +40,7 @@ repos:
       - id: check-merge-conflict
       - id: check-symlinks
       # CRLF .cmd/.bat/.ps1 per .gitattributes. C/C++/CMake and
-      # runtime-recomp/src wait for the B9 format commit.
+      # runtime-recomp/src belong to clang-format and gersemi.
       - id: end-of-file-fixer
         exclude: ^runtime-recomp/src/
         exclude_types: [batch, c, c++, cmake]
@@ -86,14 +87,12 @@ repos:
       # .clang-format-ignore (scripts/format_sources.py NEVER).
       - id: clang-format
         types_or: [c, c++]
-        stages: [manual]
   - repo: https://github.com/BlankSpruce/gersemi-pre-commit
     rev: 0.29.2
     hooks:
       # scripts/format_sources.py NEVER: the guard's fixtures.
       - id: gersemi
         exclude: ^tests/fixtures/
-        stages: [manual]
   - repo: local
     hooks:
       - id: pattern-guard

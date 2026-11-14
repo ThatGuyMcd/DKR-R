@@ -39,6 +39,10 @@ jobs:
         run: ruff check --output-format=github
       - name: Ruff format
         run: ruff format --check
+      # The tree is formatted, so clang-format and gersemi from the pinned
+      # tools above must leave it unchanged (.clang-format, .gersemirc).
+      - name: C/C++ and CMake format
+        run: python3 scripts/format_sources.py --check --local
       # Same scope as the pre-commit shfmt hook. No flags, so shfmt reads the
       # [*.sh] section of .editorconfig.
       - name: shfmt
@@ -56,9 +60,8 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 scripts/pattern_guard.py --diff "$BASE_SHA"
-      # Keep main's advisory formatter policy; bulk formatting is deferred.
       # Report only until shellcheck's remaining warnings are fixed by hand.
-      - name: Format drift report (advisory)
+      - name: shellcheck (advisory)
         continue-on-error: true
         run: |
           status=0
