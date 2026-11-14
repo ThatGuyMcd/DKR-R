@@ -197,18 +197,6 @@ PIPELINE_ALLOWED = {
     "scripts/guest_hooks.py": "applies declared hooks to generated guest code",
     "scripts/generate_replay_probe.py": "reads first-party headers only to collect probe symbol names",
     "scripts/camera_scene_kernel.py": "reads the first-party camera bridge only to record its digests",
-    # Fold-only (step B1): writes the shipped closure into runtime-recomp/ once,
-    # respelling staged #include paths. Deleted with scripts/fold/ after C11.
-    "scripts/fold/apply_closure.py": "writes the shipped v1.0.11 closure back into the tree once",
-    # Fold-only (step B3): diffs the stage chain against the shipped dependency
-    # transforms into registered stage patches, respelling the same includes.
-    "scripts/fold/dependency_stages.py": "writes the v1.0.11 dependency transforms as stage patches",
-    # Fold-only: compares the folded build with the reference; it writes
-    # reports and scratch objects, never a source file.
-    "scripts/fold/equivalence.py": "reads the folded tree to compare it, writes only reports",
-    # Fold-only (B9b): writes docs/fold-in/MIGRATION.md from the reference's
-    # source map; it names first-party paths but reads no source file.
-    "scripts/fold/migration.py": "writes the layer-to-source map document",
 }
 GUEST_REWRITE_ALLOWED = {"scripts/guest_hooks.py", "runtime-recomp/cmake/GuestHooks.cmake", *OWNED_INPUT_STAGES}
 IDENTITY_ALLOWED_SUFFIX = "netplay/legacy_identity.hpp"

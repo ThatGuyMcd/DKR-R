@@ -22,7 +22,7 @@ dkr_stage_patch(
     "${DKRPORT_ROOT}/patches/performance/runtime-vi-bootstrap.patch"
     ultramodern/src/events.cpp
 )
-# v1.0.11 producer snapshot handoff (scripts/fold/dependency_stages.py).
+# v1.0.11 producer snapshot handoff (derived once from the v1.0.11 build).
 dkr_stage_patch(
     ultramodern
     "${CMAKE_BINARY_DIR}/generated/vi-bootstrap"

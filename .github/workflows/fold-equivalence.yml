@@ -1,11 +1,7 @@
 name: Fold equivalence
-# ROM-free source checkpoint after the current-main preservation comparison.
-# The historical v1.0.11 record stays separate. This was the fold's migration
-# gate: it pins the folded sources token for token, so it runs on the fold
-# branches and on request, not on the follow-up PRs that change those sources.
+# ROM-free check of main against the recorded current-main checkpoint
+# (scripts/fold/current_main.py). Run on request.
 on:
-  push:
-    branches: [refactor/patch-fold-in, refactor/fold-current-main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,10 +10,6 @@ concurrency:
   cancel-in-progress: true
 jobs:
   fold-equivalence:
-    if: >-
-      github.event_name != 'pull_request' ||
-      startsWith(github.head_ref, 'refactor/fold-') ||
-      github.head_ref == 'refactor/patch-fold-in'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
