@@ -1,7 +1,10 @@
 """Compile a closed draw-only routine set into NEW private pipeline output.
 
-No routine in this output links to the live game, renderer globals or native
-mod services. All guest accesses are checked against the supplied DECODE COPY.
+No routine in this output links to the live game or renderer globals. The only
+native call is dkr_native_road_wheel_scope (vehicle_lighting/road_wheels.h), which
+the "camera" hooks of runtime-recomp/guest-hooks/hooks.toml put around the bodies
+of render_3d_model and render_sprite_billboard (scripts/guest_hooks.py applies them).
+All guest accesses are checked against the supplied DECODE COPY.
 The approved roots prepare/draw ONE view, never render_scene or a logic tick.
 This is the Camera++ scene kernel (DKR_CAMERA_KERNEL_V77/V80), a supported
 prepare step: scripts/prepare_payloads.py runs it.
@@ -16,6 +19,7 @@ from pathlib import Path
 import re
 from typing import cast
 
+import guest_hooks
 from kernel_inputs import CALL, DEF, HEADER_HASH, elf_symbols, reviewed_bytes, strip
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -117,7 +121,32 @@ gCutsceneCameraActive gModelMatrixStackPos gMtxOriginID gObjectCurrDisplayList g
 gViewProjMatrixF gWaveController gCurrWeatherDisplayList gCurrWeatherMatrix gCurrWeatherVertexList
 gCurrWeatherTriList gWeatherCamera gWeatherCameraMatrix gWeatherType gSnowParticleCount gSnowVerts
 gSnowVertexData gSnowVertexFlip gRainSplashDelay gRainGfx gLightningFrequency D_800DC8AC
-D_8011D4A0 D_8011D4A4 D_8011D4AC D_8011D4B0""".split()
+D_8011D4A0 D_8011D4A4 D_8011D4AC D_8011D4B0 gCurrentLightIntensity gInverseViewMatrixF""".split()
+
+
+HOOK_SPEC = ROOT / "runtime-recomp/guest-hooks/hooks.toml"
+
+
+def camera_hooks(revision: int, spec: Path = HOOK_SPEC) -> dict[str, guest_hooks.Hook]:
+    """The hooks.toml hooks of the camera payload, by guest function."""
+    hooks: dict[str, guest_hooks.Hook] = {}
+    for hook in guest_hooks.load(spec, str(revision), "camera"):
+        if hook.function in hooks:
+            raise ValueError(f"Two camera hooks for {hook.function}")
+        hooks[hook.function] = hook
+    return hooks
+
+
+def hook_routine(text: str, hook: guest_hooks.Hook) -> str:
+    """One routine (signature and body) with a hooks.toml hook applied inside
+    its braces, by the same code that hooks the funcs and owned payloads, so the
+    unbraced-return refusal is shared. The entry text lands at the routine's
+    first brace, ahead of the dkr_camera_step() that generate() inserts there."""
+    brace = text.index("{") + 1
+    try:
+        return text[:brace] + guest_hooks.hooked_body(text[brace:], hook)
+    except guest_hooks.HookError as error:
+        raise ValueError(f"Camera hook does not apply: {error}") from error
 
 
 def generate(source: Path, header: Path, elf: Path, revision: int, output: Path) -> None:
@@ -188,7 +217,19 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
         | HOOKS
         | MATH
         | macros
-        | {"if", "while", "for", "switch", "return", "sizeof", "void", "sqrtf", "do_break", "switch_error"}
+        | {
+            "if",
+            "while",
+            "for",
+            "switch",
+            "return",
+            "sizeof",
+            "void",
+            "sqrtf",
+            "do_break",
+            "switch_error",
+            "dkr_native_road_wheel_scope",
+        }
     )
     symbols = elf_symbols(elf, (0, 1, 2))
     addresses: dict[str, int] = {}
@@ -197,8 +238,13 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
         if len(entries) != 1:
             raise ValueError("Unknown scene global: " + name)
         addresses[name] = next(iter(entries))[0]
+    hooks = camera_hooks(revision)
+    if missing := set(hooks) - set(selected):
+        raise ValueError("Camera hook for a routine outside the closure: " + str(sorted(missing)))
     emitted: list[str] = []
     for name, body in sorted(selected.items()):
+        if name in hooks:
+            body = hook_routine(body, hooks[name])
         extra = set(CALL.findall(strip(body))) - allowed
         if extra or re.search(r"\brdram\s*(?:\[|\+)", strip(body)):
             raise ValueError("Scene escaped its closed boundary: " + name + " " + str(extra))
@@ -218,7 +264,9 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
     prototypes += "".join(f"unsigned {prefix}{n}(uint8_t*,recomp_context*,...);\n" for n in sorted(HOOKS))
     prototypes += f"void {prefix}do_break(uint32_t);\nvoid {prefix}switch_error(const char*,uint32_t,uint32_t);\n"
     (output / "funcs.h").write_text('#pragma once\n#include "recomp.h"\n' + prototypes)
-    (output / "camera_scene_functions.c").write_text('#include "funcs.h"\n' + "".join(emitted))
+    (output / "camera_scene_functions.c").write_text(
+        '#include "funcs.h"\n#include "vehicle_lighting/road_wheels.h"\n' + "".join(emitted)
+    )
     special = {
         "dkr_presentation_world_origin_matrix",
         "dkr_presentation_object_begin",
