@@ -40,6 +40,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from typing import Any
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -134,6 +135,9 @@ PIN_HOLDERS = (
     "scripts/character_portrait_pipeline.py",
     "runtime-recomp/tests/replay_probe/test_generator.py",
 )
+# The identity guard's record of its inputs' sha256. A format pass moves the
+# digests of the inputs it reformats and nothing else in it.
+IDENTITY_RECORD = "architecture/online-identity-inputs.json"
 DIGEST = re.compile(r"[0-9a-f]{64}")
 CMAKE_TOKEN = re.compile(
     r"(?P<comment>#\[(?P<eq>=*)\[.*?\](?P=eq)\]|#[^\n]*)"
@@ -162,6 +166,32 @@ def python_tree(data: bytes, digests: dict[str, str] | None = None) -> str:
             if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in digests:
                 node.value = digests[node.value]
     return ast.dump(tree)
+
+
+def identity_record_problems(
+    old: dict[str, Any], new: dict[str, Any], base: str, head: str, changed: dict[str, str]
+) -> list[str]:
+    """The record may only follow the files this range changed: same globs,
+    identity and inputs, and each moved digest is that input's own old and new
+    sha256. Whether the input's change is a format change is judged on the
+    input itself."""
+    if old["globs"] != new["globs"] or old["identity"] != new["identity"] or set(old["inputs"]) != set(new["inputs"]):
+        return [f"{IDENTITY_RECORD}: globs, identity or the input set changed"]
+    problems = []
+    for path in sorted(new["inputs"]):
+        if old["inputs"][path] == new["inputs"][path]:
+            continue
+        before, after = show(base, path), show(head, path)
+        moved = (
+            changed.get(path) == "M"
+            and before is not None
+            and after is not None
+            and old["inputs"][path] == hashlib.sha256(before).hexdigest()
+            and new["inputs"][path] == hashlib.sha256(after).hexdigest()
+        )
+        if not moved:
+            problems.append(f"{IDENTITY_RECORD}: {path} digest does not follow a change to that file in this range")
+    return problems
 
 
 def prove(base: str, head: str) -> tuple[dict[str, object], list[str]]:
@@ -202,6 +232,8 @@ def prove(base: str, head: str) -> tuple[dict[str, object], list[str]]:
         elif name.endswith(".py"):
             if python_tree(old) != python_tree(new):
                 problems.append(f"{name}: Python syntax tree changed")
+        elif name == IDENTITY_RECORD:
+            problems += identity_record_problems(json.loads(old), json.loads(new), base, head, changed)
         else:
             problems.append(f"{name}: not a C/C++, CMake or Python file")
     record: dict[str, object] = {
