@@ -4,8 +4,9 @@ ColumnLimit: 120
 PointerAlignment: Left
 AllowShortFunctionsOnASingleLine: Empty
 SortIncludes: Never  # include order is load-bearing in spliced TUs (runtime_ui.cpp)
-# The format proof compares tokens, so the formatter may only move whitespace.
-SortUsingDeclarations: Never
+# One canonical order for adjacent using-declarations. Their order carries no
+# meaning, and the format proof treats a run of them as a set.
+SortUsingDeclarations: LexicographicNumeric
 # User-facing text stays one literal: the copy inventory and the localisation
 # lookups search for it.
 BreakStringLiterals: false

@@ -12,7 +12,8 @@ clang-format, gersemi and ruff run inside a pinned image (IMAGE) with the
 exact versions .github/lint-tools.txt pins, installed with --require-hashes,
 so a reviewer who reruns it gets identical output. --write then proves the pass changed
 layout only: every rewritten C/C++ file must lex to the same tokens as before
-(comments and whitespace aside; scripts/format_tokens.py). A file that
+(comments, whitespace and the order of adjacent using-declarations aside;
+scripts/format_tokens.py and canonical_tokens below). A file that
 doesn't is restored and reported, and the run fails.
 
 The C/C++ and CMake set is SOURCES minus NEVER: guest code fragments spliced
@@ -168,6 +169,38 @@ def python_tree(data: bytes, digests: dict[str, str] | None = None) -> str:
     return ast.dump(tree)
 
 
+def canonical_tokens(data: bytes) -> list[str]:
+    """A file's tokens with every run of consecutive using-declarations sorted.
+    The formatter orders them (SortUsingDeclarations) and their order carries
+    no meaning, so two files that differ only there are the same file. Aliases
+    (using A = B), using-directives and anything between two declarations end
+    a run."""
+    stream = format_tokens.tokens(data)
+    out: list[str] = []
+    run: list[list[str]] = []
+    at = 0
+    while at <= len(stream):
+        statement: list[str] = []
+        if at < len(stream) and stream[at] == "using":
+            end = at
+            while end < len(stream) and stream[end] != ";":
+                end += 1
+            candidate = stream[at : end + 1]
+            if end < len(stream) and not {"=", "namespace", "enum", "{", "}"} & set(candidate):
+                statement = candidate
+        if statement:
+            run.append(statement)
+            at += len(statement)
+            continue
+        for declaration in sorted(run):
+            out += declaration
+        run = []
+        if at < len(stream):
+            out.append(stream[at])
+        at += 1
+    return out
+
+
 def identity_record_problems(
     old: dict[str, Any], new: dict[str, Any], base: str, head: str, changed: dict[str, str]
 ) -> list[str]:
@@ -209,7 +242,7 @@ def prove(base: str, head: str) -> tuple[dict[str, object], list[str]]:
         if status != "M" or old is None or new is None:
             continue
         if C_FAMILY.search(name):
-            if format_tokens.tokens(old) != format_tokens.tokens(new):
+            if canonical_tokens(old) != canonical_tokens(new):
                 problems.append(f"{name}: tokens changed")
                 continue
             digests[hashlib.sha256(old).hexdigest()] = hashlib.sha256(new).hexdigest()
@@ -292,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     changed = [name for name, data in before.items() if (ROOT / name).read_bytes() != data]
     mismatched: list[str] = []
     for name in changed:
-        if format_tokens.tokens(before[name]) != format_tokens.tokens((ROOT / name).read_bytes()):
+        if canonical_tokens(before[name]) != canonical_tokens((ROOT / name).read_bytes()):
             (ROOT / name).write_bytes(before[name])
             mismatched.append(name)
     print(f"format_sources: {len(changed)} C/C++ files reformatted, {len(cmake_files)} CMake files checked")

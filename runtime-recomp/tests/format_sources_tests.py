@@ -68,6 +68,19 @@ class ProofTests(unittest.TestCase):
         self.assertNotEqual(tree(before, {}), tree(after))
         self.assertNotEqual(tree(before, {old: new}), tree(after.replace(b"x.cpp", b"y.cpp")))
 
+    def test_adjacent_using_declarations_may_be_reordered(self):
+        canonical = format_sources.canonical_tokens
+        a = b"using b::Y;\nusing a::X;\nint f();\nusing c::Z;\n"
+        self.assertEqual(canonical(a), canonical(b"using a::X;\nusing b::Y;\nint f();\nusing c::Z;\n"))
+        # Not across another declaration, and never a different name.
+        self.assertNotEqual(canonical(a), canonical(b"using a::X;\nusing c::Z;\nint f();\nusing b::Y;\n"))
+        self.assertNotEqual(canonical(a), canonical(b"using b::Y;\nusing a::W;\nint f();\nusing c::Z;\n"))
+        # Aliases and using-directives keep their place.
+        alias = b"using B = int;\nusing A = long;\n"
+        self.assertNotEqual(canonical(alias), canonical(b"using A = long;\nusing B = int;\n"))
+        directive = b"using namespace b;\nusing namespace a;\n"
+        self.assertNotEqual(canonical(directive), canonical(b"using namespace a;\nusing namespace b;\n"))
+
     def test_the_identity_record_may_only_follow_changed_inputs(self):
         blobs = {("base", "a.hpp"): b"int  a;\n", ("head", "a.hpp"): b"int a;\n"}
 
