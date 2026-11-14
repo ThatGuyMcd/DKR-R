@@ -316,6 +316,7 @@ add_library(
     STATIC
     src/game/netplay/authoritative_state.cpp
     src/game/netplay/authoritative_state_codec.cpp
+    src/game/netplay/check_autopilot.cpp
     src/game/determinism_state_hash.cpp
     src/game/netplay/datagram_socket.cpp
     src/game/netplay/direct_session.cpp
@@ -1043,6 +1044,7 @@ include(cmake/CharacterPortraits.cmake)
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomMagicCodes.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/GuestHooks.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/GuestSymbols.cmake")
+dkr_guest_symbols(DKRNetplayCore)
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomVehicles.cmake")
 foreach(config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
     string(TOUPPER "${config}" config_upper)
@@ -3407,6 +3409,13 @@ if(BUILD_TESTING)
     target_link_libraries(DKRProfileBridgeTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRProfileBridge COMMAND DKRProfileBridgeTests)
     set_tests_properties(DKRProfileBridge PROPERTIES TIMEOUT 30)
+
+    # The self-test autopilot's steering maths, driven around synthetic tracks.
+    add_executable(DKRCheckAutopilotTests tests/check_autopilot_tests.cpp)
+    target_compile_features(DKRCheckAutopilotTests PRIVATE cxx_std_20)
+    target_link_libraries(DKRCheckAutopilotTests PRIVATE DKRNetplayCore)
+    dkr_guest_symbols(DKRCheckAutopilotTests)
+    add_test(NAME DKRCheckAutopilot COMMAND DKRCheckAutopilotTests)
 
     # Compile the production residency algorithm with synthetic cache interfaces.
     add_executable(DKRLiquidResidencyTests tests/liquid_residency_tests.cpp)

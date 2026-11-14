@@ -91,10 +91,10 @@
     "runtime-recomp/src/game/netplay/experimental_process.hpp": "5db5d2d4b04db0c08d3f102d41d0843866d6171ca3c76b7dcf95a841a9b44da9",
     "runtime-recomp/src/game/netplay/experimental_pump.cpp": "6bda29d224d5030344475a8127b9061d4801e125a5f2c1dde99d86748e716130",
     "runtime-recomp/src/game/netplay/experimental_pump.hpp": "cc0854af90a8bd12005b1dc37f76d8dfa25a6dab9ce2cf3ab56bdccfccbdebaa",
-    "runtime-recomp/src/game/netplay/experimental_race_frontend.cpp": "9cb9ceebd7a9fb22f1197695abd4a87571fc507fb796980513666ed591cb2ccb",
+    "runtime-recomp/src/game/netplay/experimental_race_frontend.cpp": "6223a033bcbbc51417d850e6d1acb359d2d987b172daf32de28b615e44228b61",
     "runtime-recomp/src/game/netplay/experimental_rollback.cpp": "a6ea5fc63d1556d631a270ad1199484c57fc8929dc7d8de2025e8f9839bd889b",
     "runtime-recomp/src/game/netplay/experimental_rollback.hpp": "9ef96ed2af7f60cea91bcf56164cfc0ff97e9a93d7b848c68091a44fe2b636d8",
-    "runtime-recomp/src/game/netplay/experimental_runtime.cpp": "f524a941695b77ff6d699af0dae8266ddbd8f497792023a76d0cd2adaa56a690",
+    "runtime-recomp/src/game/netplay/experimental_runtime.cpp": "fead1b921b039ca3817861ad32fc1418c1e9606f37319cdba6c96963d5ea3b53",
     "runtime-recomp/src/game/netplay/experimental_runtime.hpp": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",
     "runtime-recomp/src/game/netplay/experimental_runtime_admission.hpp": "6e2e1b60086bebaccdb50089ea5dce8c40b572fab6912b2562acc7e81211f527",
     "runtime-recomp/src/game/netplay/experimental_runtime_presence.hpp": "0c14e186cd618998e0902f28a1e88be53d4601bd2ffee1cbc5ba19cc5bb851ba",
@@ -115,10 +115,11 @@
     "runtime-recomp/src/game/save_storage.hpp": "ca3a5457b5f7a6341473661e10a662fa590f64bf240053648a4a120a7838bc78",
     "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
     "runtime-recomp/symbols/achievement_symbols.toml": "565d8e8c96549fc69e47d741753766e535187241275b87d54b546cd133df69f2",
+    "runtime-recomp/symbols/autopilot_symbols.toml": "0d3f7f89ae01d1d4d3974cf7687484649e7934f25c3fe1ba85393dd10845fec6",
     "runtime-recomp/symbols/polish_symbols.toml": "ad5c563f3cc0e0bd44e4d2043563bd84ca294f6883b565c4613d3c1036b5d42a",
     "runtime-recomp/symbols/render_heap_addresses.toml": "0b8d0d2600cc38132800581eeedf8746ae25c1b3bcb37f85a22ec7e02a575230",
     "runtime-recomp/symbols/vehicle_symbols.toml": "2582392e1618d17eaebfb721ea046918acb524fe025dcba94aa5d6ab5886992f",
-    "runtime-recomp/tests/replay_probe/owned_game.hpp": "911b150b7a7a6042b50cba4dc5b0e5bb4eb79c116aead6289a9452f6d24d2496",
+    "runtime-recomp/tests/replay_probe/owned_game.hpp": "81439b1cd7fb292ba3e7e70dfe09cc6bc2efef800757195d9c26e333a2061d0a",
     "runtime-recomp/tests/replay_probe/probe_audio.c": "51793a68a6f51bbf82f5bf4319ceb60a8a39bc02b0976470e5e22a8d42152ef1",
     "runtime-recomp/tests/replay_probe/probe_audio.cpp": "c3484526760f84084ac0ed2131079b1c780e59d7f58c1a8817c08e5562cfb149",
     "runtime-recomp/tests/replay_probe/probe_audio.h": "e5fb17fadf1c8b46af5284fab215ca754713faf1438c9be4a4c8aa3a8ab19235",
@@ -129,7 +130,7 @@
     "runtime-recomp/tests/replay_probe/probe_bridge.h": "893652acb1858fd5a93e17f1a8dd720e6634b532212096b123b87ddd34f91c03",
     "runtime-recomp/tests/replay_probe/probe_component.c": "022cc844ac8a5879168e82dd79035c98ebe2203eadabf4268cff0559c58979c3",
     "runtime-recomp/tests/replay_probe/probe_component.h": "bd1919c9701e6aeba909af45e17d89e7e4275d846f66a9df806857b7e2460009",
-    "runtime-recomp/tests/replay_probe/probe_driver.cpp": "49a0b4905139422908f6b3cad696fb9d2481a32c5631fcf23f936cbe6d04fa90",
+    "runtime-recomp/tests/replay_probe/probe_driver.cpp": "fff34af743389d95efb920cbd09a36cef4bf7f9166d9e5499be342c4ec01f728",
     "runtime-recomp/tests/replay_probe/probe_driver.hpp": "630fb96603ea6f9d3abc2a6554c63d1acbaa43b5dc741e767df06a2d154660f6",
     "runtime-recomp/tests/replay_probe/probe_eeprom.cpp": "b3596a6727f899508d111e5a73acf755822d42e6901b7d89a95c546ae708d89b",
     "runtime-recomp/tests/replay_probe/probe_input.c": "40eef7c9fdd82da5e1247711b9cca1ef38852176681b5e3addb819eca1d7ced7",
@@ -187,6 +188,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Launch carries full-size Network input batches: receive side only, nothing sent or simulated changes"
+    "reason": "Self-test input generator only: the scripted check steers along checkpoints, inputs are still sent as plain inputs"
   }
 }

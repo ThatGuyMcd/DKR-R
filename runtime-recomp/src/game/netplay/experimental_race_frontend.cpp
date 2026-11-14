@@ -497,7 +497,7 @@ void simulation(Shared& shared, SDL_AudioDeviceID audio, const Options& o) try {
                             return PackedInput{0x8000, 0, 0};
                         return PackedInput{};
                     }
-                    return PackedInput{0x8000, std::int8_t((session.frontier() / 15) % 2 ? 30 : -30), 0};
+                    return check_autopilot_input(scene.autopilot, session.local_owner(), session.frontier());
                 }
                 return unpack(shared.input.load());
             }))
