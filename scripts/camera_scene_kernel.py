@@ -1,7 +1,9 @@
 """Compile a closed draw-only routine set into NEW private pipeline output.
 
-No routine in this output links to the live game, renderer globals or native
-mod services. All guest accesses are checked against the supplied DECODE COPY.
+No routine in this output links to the live game or renderer globals. The only
+native call is dkr_native_road_wheel_scope, which render_3d_model and
+render_sprite_billboard make around their bodies (vehicle_lighting/road_wheels.h).
+All guest accesses are checked against the supplied DECODE COPY.
 The approved roots prepare/draw ONE view, never render_scene or a logic tick.
 This is the Camera++ scene kernel (DKR_CAMERA_KERNEL_V77/V80), a supported
 prepare step: scripts/prepare_payloads.py runs it.
@@ -117,7 +119,47 @@ gCutsceneCameraActive gModelMatrixStackPos gMtxOriginID gObjectCurrDisplayList g
 gViewProjMatrixF gWaveController gCurrWeatherDisplayList gCurrWeatherMatrix gCurrWeatherVertexList
 gCurrWeatherTriList gWeatherCamera gWeatherCameraMatrix gWeatherType gSnowParticleCount gSnowVerts
 gSnowVertexData gSnowVertexFlip gRainSplashDelay gRainGfx gLightningFrequency D_800DC8AC
-D_8011D4A0 D_8011D4A4 D_8011D4AC D_8011D4B0""".split()
+D_8011D4A0 D_8011D4A4 D_8011D4AC D_8011D4B0 gCurrentLightIntensity gInverseViewMatrixF""".split()
+
+
+# Routines that bracket their body with dkr_native_road_wheel_scope: the event
+# numbers are (enter, leave) and the guest register that holds the object.
+ROAD_WHEEL_SCOPES = {"render_3d_model": (200, 201, "r4"), "render_sprite_billboard": (202, 203, "r7")}
+
+
+def add_road_wheel_hooks(name: str, body: str, addresses: dict[str, int]) -> str:
+    """Bracket render_3d_model and render_sprite_billboard with the native
+    road-wheel scope call (events 200 to 203); any other routine is returned as is.
+
+    The enter call follows the first brace, ahead of dkr_camera_step(), which the
+    caller inserts at the same brace later. The routine must have exactly one
+    `return;`: the replacement is several statements, which would be wrong under
+    an unbraced `if (...) return;`, and a second exit would need its own review."""
+    if name not in ROAD_WHEEL_SCOPES:
+        return body
+    enter, leave, register = ROAD_WHEEL_SCOPES[name]
+    model = name == "render_3d_model"
+    before = f"\n    dkr_road_wheel_call road_call={{0}};\n    road_call.event={enter};\n"
+    before += f"    road_call.object=(uint32_t)ctx->{register};\n"
+    if model:
+        for field, symbol in (
+            ("intensity", "gCurrentLightIntensity"),
+            ("inverse_view", "gInverseViewMatrixF"),
+            ("viewport_layout", "gViewportLayout"),
+        ):
+            before += f"    road_call.{field}=0x{addresses[symbol]:08X}U;\n"
+    else:
+        before += (
+            "    road_call.holder=(uint32_t)ctx->r4;"
+            "road_call.sprite=MEM_W(16,ctx->r29);road_call.flags=MEM_W(20,ctx->r29);\n"
+        )
+    before += "    dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);\n"
+    body = body.replace("{", "{" + before, 1)
+    finish = f"road_call.event={leave};dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);return;"
+    returns = len(re.findall(r"\breturn;", body))
+    if returns != 1:
+        raise ValueError(f"Private road-wheel return boundary changed: {name} has {returns} returns")
+    return re.sub(r"\breturn;", lambda _: finish, body)
 
 
 def generate(source: Path, header: Path, elf: Path, revision: int, output: Path) -> None:
@@ -188,7 +230,19 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
         | HOOKS
         | MATH
         | macros
-        | {"if", "while", "for", "switch", "return", "sizeof", "void", "sqrtf", "do_break", "switch_error"}
+        | {
+            "if",
+            "while",
+            "for",
+            "switch",
+            "return",
+            "sizeof",
+            "void",
+            "sqrtf",
+            "do_break",
+            "switch_error",
+            "dkr_native_road_wheel_scope",
+        }
     )
     symbols = elf_symbols(elf, (0, 1, 2))
     addresses: dict[str, int] = {}
@@ -199,6 +253,7 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
         addresses[name] = next(iter(entries))[0]
     emitted: list[str] = []
     for name, body in sorted(selected.items()):
+        body = add_road_wheel_hooks(name, body, addresses)
         extra = set(CALL.findall(strip(body))) - allowed
         if extra or re.search(r"\brdram\s*(?:\[|\+)", strip(body)):
             raise ValueError("Scene escaped its closed boundary: " + name + " " + str(extra))
@@ -218,7 +273,9 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
     prototypes += "".join(f"unsigned {prefix}{n}(uint8_t*,recomp_context*,...);\n" for n in sorted(HOOKS))
     prototypes += f"void {prefix}do_break(uint32_t);\nvoid {prefix}switch_error(const char*,uint32_t,uint32_t);\n"
     (output / "funcs.h").write_text('#pragma once\n#include "recomp.h"\n' + prototypes)
-    (output / "camera_scene_functions.c").write_text('#include "funcs.h"\n' + "".join(emitted))
+    (output / "camera_scene_functions.c").write_text(
+        '#include "funcs.h"\n#include "vehicle_lighting/road_wheels.h"\n' + "".join(emitted)
+    )
     special = {
         "dkr_presentation_world_origin_matrix",
         "dkr_presentation_object_begin",
