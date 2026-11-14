@@ -35,7 +35,7 @@ if not defined PYTHON (echo Missing required tool: Python 3 & set "MISSING=1")
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 set "VS="
 if exist "%VSWHERE%" (
-    for /f "usebackq delims=" %%I in (`"%VSWHERE%" -version [17.0^,18.0^) -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS=%%I"
+    for /f "usebackq delims=" %%I in (`"%VSWHERE%" -products * -version [17.0^,18.0^) -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS=%%I"
 )
 if not defined VS (echo Missing required tool: Visual Studio 2022 with Desktop development with C++ & set "MISSING=1")
 

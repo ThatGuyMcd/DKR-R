@@ -42,17 +42,22 @@ def cmake_tool(name: str) -> str:
     found = shutil.which(name)
     if found or os.name != "nt":
         return found or name
-    program_files = Path(os.environ.get("ProgramFiles", r"C:\Program Files"))
-    for edition in ("Community", "Professional", "Enterprise", "BuildTools"):
-        candidate = (
-            program_files
-            / "Microsoft Visual Studio/2022"
-            / edition
-            / "Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin"
-            / f"{name}.exe"
-        )
-        if candidate.is_file():
-            return str(candidate)
+    # The IDE editions install under %ProgramFiles%, the Build Tools under %ProgramFiles(x86)%.
+    roots = (
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")),
+    )
+    for program_files in roots:
+        for edition in ("Community", "Professional", "Enterprise", "BuildTools"):
+            candidate = (
+                program_files
+                / "Microsoft Visual Studio/2022"
+                / edition
+                / "Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin"
+                / f"{name}.exe"
+            )
+            if candidate.is_file():
+                return str(candidate)
     return name
 
 

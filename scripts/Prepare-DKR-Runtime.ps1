@@ -250,7 +250,7 @@ try {
         'rsync -a --delete --exclude /.git --exclude /build --exclude /asm --exclude /assets \',
         '    --exclude /baseroms --exclude /.venv "$source/" "$tree/"',
         'cd "$tree"',
-        "if [ ! -x .venv/bin/python3 ] || ! .venv/bin/python3 -c 'import splat' >/dev/null 2>&1; then",
+        "if [ ! -x .venv/bin/python3 ] || [ ! -x tools/dkr_assets_tool ] || ! .venv/bin/python3 -c 'import splat' >/dev/null 2>&1; then",
         '    echo "[INFO] The decomp Python/tool environment is incomplete; running make setup."',
         '    make setup',
         'fi',
@@ -321,6 +321,9 @@ try {
     $sdl3Commit = [string](
         $patchManifest.dependencies | Where-Object name -eq 'SDL3' |
         Select-Object -ExpandProperty expectedCommit)
+    $sdl2Commit = [string](
+        $patchManifest.dependencies | Where-Object name -eq 'SDL2' |
+        Select-Object -ExpandProperty expectedCommit)
 
     # N64ModernRuntime pins the N64Recomp revision it is compatible with as a
     # git submodule. Always build that copy instead of independently selecting
@@ -344,6 +347,8 @@ try {
     $resolved.libdatachannel = Clone-Or-Update 'libdatachannel' 'https://github.com/paullouisageneau/libdatachannel.git' $libdatachannelPath $libdatachannelCommit -Recursive
     $resolved.mbedTls = Clone-Or-Update 'MbedTLS' 'https://github.com/Mbed-TLS/mbedtls.git' $mbedTlsPath $mbedTlsCommit -Recursive
     $resolved.sdl3 = Clone-Or-Update 'SDL3' 'https://github.com/libsdl-org/SDL.git' $sdl3Path $sdl3Commit
+    # The patch manifest lists SDL2 (iOS backend) and Apply-Dependency-Patches.ps1 requires every checkout.
+    $resolved.sdl2 = Clone-Or-Update 'SDL2' 'https://github.com/libsdl-org/SDL.git' (Join-Path $ProjectRoot 'extern\sdl2') $sdl2Commit
 
     if ($BuildRenderer) {
         $resolved.rt64 = Clone-Or-Update 'RT64' 'https://github.com/rt64/rt64.git' $rt64Path $rt64Commit -Recursive
