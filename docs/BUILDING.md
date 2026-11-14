@@ -50,7 +50,7 @@ output. Ordinary players only need the ROM they want to play.
 One prepare script per platform does the whole job, the same way on both:
 
 ```text
-Prepare-DKR-Runtime.cmd -RomV77 "<US 1.0 ROM>" -RomV80 "<US Rev A ROM>"
+Prepare-DKR-Runtime.cmd -RomV77 "<US 1.0 ROM>" -RomV80 "<US Rev A ROM>" -BuildRenderer
 bash scripts/Prepare-DKR-Runtime-macOS.sh --rom-v77 "<US 1.0 ROM>" --rom-v80 "<US Rev A ROM>"
 ```
 
