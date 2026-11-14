@@ -30,8 +30,8 @@ platform. None is pending; `finalize.py --check-registry` says so.
 On each build machine (Windows x64, Linux x86_64, Linux ARM64; macOS is
 built separately, below), from a clean checkout of the tag:
 
-1. Prepare: `Prepare-DKR-Runtime.cmd -RomV77 <US 1.0> -RomV80 <US Rev A>` on
-   Windows, `bash scripts/Prepare-DKR-Runtime-macOS.sh --rom-v77 ... --rom-v80 ...`
+1. Prepare: `Prepare-DKR-Runtime.cmd -RomV77 <US 1.0> -RomV80 <US Rev A> -BuildRenderer`
+   on Windows, `bash scripts/Prepare-DKR-Runtime-macOS.sh --rom-v77 ... --rom-v80 ...`
    elsewhere. It ends with `scripts/prepare_payloads.py`, which writes
    `build/prepared`.
 2. Build and test:

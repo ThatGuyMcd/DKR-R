@@ -1206,7 +1206,8 @@ int main() {
             const auto stored = files::storage(deep);
             std::filesystem::create_directories(stored / "music");
             write_file(stored / "h.bin", header);
-            write_file(stored / "music/main.mp3", mp3);
+            // Two components: Win32 doesn't translate "/" inside a verbatim path.
+            write_file(stored / "music" / "main.mp3", mp3);
             write_file(stored / "manifest.json", "{\"schemaVersion\":2,\"id\":\"deep-song\"," +
                                                      descriptor(ok_mp3, mp3.size()) +
                                                      "\"adds\":[{\"section\":\"LEVEL_HEADERS\",\"file\":\"h.bin\"}]}");
@@ -1282,7 +1283,7 @@ int main() {
 
     // A native sequence (schema 2, dkr-alcseq-v1). Read and validated at scan;
     // the header's /music is the carrier and its /instruments the channel mask.
-    std::filesystem::remove_all(root);
+    std::filesystem::remove_all(files::storage(root)); // the tree above is past MAX_PATH
     {
         std::string header(0xC8, '\0');
         header[0x37] = 1;
