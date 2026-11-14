@@ -210,7 +210,7 @@ def identity_record_problems(
     input itself."""
     if old["globs"] != new["globs"] or old["identity"] != new["identity"] or set(old["inputs"]) != set(new["inputs"]):
         return [f"{IDENTITY_RECORD}: globs, identity or the input set changed"]
-    problems = []
+    problems: list[str] = []
     for path in sorted(new["inputs"]):
         if old["inputs"][path] == new["inputs"][path]:
             continue
