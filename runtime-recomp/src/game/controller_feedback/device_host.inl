@@ -1,6 +1,6 @@
 // All SDL3 feedback I/O stays on the private helper's owner thread.
-using dkr::feedback::Output;
 using dkr::feedback::Kind;
+using dkr::feedback::Output;
 using dkr::feedback::Transport;
 Kind FeedbackKind(const HostDevice& d) {
     if (d.vendor == 0x054C && (d.product == 0x0CE6 || d.product == 0x0DF2))

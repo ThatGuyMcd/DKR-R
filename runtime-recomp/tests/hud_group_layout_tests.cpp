@@ -7,8 +7,8 @@
 #include "hud_reference_rt64_tests.hpp"
 
 namespace hg = dkr::runtime::hud::groups;
-using dkr::runtime::hud::Widget;
 using dkr::runtime::hud::LayoutMode;
+using dkr::runtime::hud::Widget;
 static void near(float a, float b) {
     assert(std::abs(a - b) < .002F);
 }

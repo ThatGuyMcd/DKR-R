@@ -3,8 +3,8 @@
 #include <cassert>
 #include <cstdio>
 
-using dkr::runtime::quick_restart::State;
 using dkr::runtime::quick_restart::retail_restart_available;
+using dkr::runtime::quick_restart::State;
 
 int main() {
     State state{};

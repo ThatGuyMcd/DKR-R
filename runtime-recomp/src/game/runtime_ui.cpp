@@ -424,8 +424,8 @@ using ultramodern::renderer::GraphicsApi;
 using ultramodern::renderer::GraphicsConfig;
 using ultramodern::renderer::HighPrecisionFramebuffer;
 using ultramodern::renderer::HUDRatioMode;
-using ultramodern::renderer::Resolution;
 using ultramodern::renderer::RefreshRate;
+using ultramodern::renderer::Resolution;
 using ultramodern::renderer::WindowMode;
 
 std::filesystem::path g_config_directory;

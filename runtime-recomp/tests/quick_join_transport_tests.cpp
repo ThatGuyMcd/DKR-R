@@ -22,9 +22,9 @@ namespace {
 
 dkr::runtime::netplay::CompatibilityManifest manifest() {
     using namespace dkr::runtime::netplay;
-    using dkr::online_performance::SetupBulk;
-    using dkr::online_performance::setup_bulk;
     using dkr::online_performance::additional_capacity;
+    using dkr::online_performance::setup_bulk;
+    using dkr::online_performance::SetupBulk;
     CompatibilityManifest result{};
     result.release_version = "quick-join-test";
     result.build_fingerprint = "quick-join-test";
@@ -41,9 +41,9 @@ dkr::runtime::netplay::CompatibilityManifest manifest() {
 
 void configure_online_session(dkr::runtime::netplay::DirectSession& session) {
     using namespace dkr::runtime::netplay;
-    using dkr::online_performance::SetupBulk;
-    using dkr::online_performance::setup_bulk;
     using dkr::online_performance::additional_capacity;
+    using dkr::online_performance::setup_bulk;
+    using dkr::online_performance::SetupBulk;
     session.configure_manifest(manifest());
     std::vector<std::uint8_t> save(512U, 0x5AU);
     session.configure_session_save(std::move(save), [](std::uint64_t match_id, std::span<const std::uint8_t> bytes,
@@ -79,9 +79,9 @@ template <typename Predicate> bool wait_until(Predicate predicate, std::chrono::
 
 int main() {
     using namespace dkr::runtime::netplay;
-    using dkr::online_performance::SetupBulk;
-    using dkr::online_performance::setup_bulk;
     using dkr::online_performance::additional_capacity;
+    using dkr::online_performance::setup_bulk;
+    using dkr::online_performance::SetupBulk;
     static_assert(quick_join_send_accepted(true, false, false, false));
     static_assert(!LocalPresentationPrototype::kRendererQualified);
     LocalPresentationPrototype prototype;

@@ -76,8 +76,8 @@ int main() {
             return 5;
     }
     {
-        using dkr::runtime::mobile_graphics::Preset;
         using dkr::runtime::mobile_graphics::matching_preset;
+        using dkr::runtime::mobile_graphics::Preset;
         using dkr::runtime::mobile_graphics::preset_anisotropy;
         for (auto preset : {Preset::Battery, Preset::Balanced, Preset::Quality, Preset::LowLoad30, Preset::LowLoad60}) {
             const bool low_load = preset == Preset::LowLoad30 || preset == Preset::LowLoad60;

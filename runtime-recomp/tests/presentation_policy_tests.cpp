@@ -2,21 +2,21 @@
 
 #include <cstdio>
 
-using dkr::runtime::enhancements::PresentationProfile;
 using dkr::runtime::enhancements::clamp_presentation_rate;
 using dkr::runtime::enhancements::clamp_texture_lod_bias_hundredths;
+using dkr::runtime::enhancements::fit_to_window_allowed;
+using dkr::runtime::enhancements::graphics_api_selection_allowed;
 using dkr::runtime::enhancements::interpolation_allowed;
 using dkr::runtime::enhancements::interpolation_allowed_for_camera;
 using dkr::runtime::enhancements::is_finish_camera_mode;
-using dkr::runtime::enhancements::fit_to_window_allowed;
-using dkr::runtime::enhancements::graphics_api_selection_allowed;
 using dkr::runtime::enhancements::kCurrentSettingsVersion;
 using dkr::runtime::enhancements::maximum_detail_effective;
 using dkr::runtime::enhancements::modern_options_visible;
 using dkr::runtime::enhancements::multiplayer_race_music_effective;
 using dkr::runtime::enhancements::normalise_presentation_profile;
-using dkr::runtime::enhancements::resolve_settings_profile;
+using dkr::runtime::enhancements::PresentationProfile;
 using dkr::runtime::enhancements::resolve_effective_presentation_rate;
+using dkr::runtime::enhancements::resolve_settings_profile;
 
 static_assert(normalise_presentation_profile(-1) == PresentationProfile::Accurate);
 static_assert(normalise_presentation_profile(0) == PresentationProfile::Accurate);
