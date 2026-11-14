@@ -43,6 +43,9 @@ strict version.
   with or without hooks.
 - `python3 scripts/check.py --suite guard,tooling` after changing scripts, CMake or tests.
 - `pre-commit run --files <changed files>` for format and lint, if the git hooks are installed.
+  The tree is formatted (clang-format, gersemi, ruff) and the `lint` check fails on drift;
+  `python3 scripts/format_sources.py --check` is the same check in its pinned image. Keep layout-only changes in
+  their own commit and add it to `.git-blame-ignore-revs` (`scripts/bootstrap_hooks.py` points `git blame` at it).
 - `cmake --preset host -S runtime-recomp && cmake --build --preset host && ctest --preset host` before claiming a
   C/C++ change done (`CMakePresets.json` lives in `runtime-recomp/`, so pass `-S` or `cd` there).
 
