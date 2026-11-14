@@ -4,7 +4,10 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-typedef struct dkr_probe_pad { uint16_t buttons; int8_t stick_x, stick_y; } dkr_probe_pad;
+typedef struct dkr_probe_pad {
+    uint16_t buttons;
+    int8_t stick_x, stick_y;
+} dkr_probe_pad;
 void dkr_probe_component_inputs(const dkr_probe_pad inputs[4]);
 void dkr_probe_component_tick(uint8_t* ram, struct recomp_context* context);
 // Adds audited real CPU water/contact-shadow/lighting/fog/texture phases.
@@ -21,7 +24,7 @@ void dkr_probe_mode_component_tick(uint8_t* ram, struct recomp_context* context)
 #else
 #define dkr_probe_sdk2_pulse dkr_experimental_v80_sdk2_pulse
 #endif
-void dkr_probe_sdk2_pulse(uint8_t*,struct recomp_context*);
+void dkr_probe_sdk2_pulse(uint8_t*, struct recomp_context*);
 void dkr_probe_authored_component_tick(uint8_t* ram, struct recomp_context* context);
 // Confirmed private game-to-game transaction resumes the saved guest stack.
 // Does not sample input again or rerun the suspended scene's CPU prefix.

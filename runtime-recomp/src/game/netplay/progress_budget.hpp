@@ -15,9 +15,11 @@ struct ProgressBudget {
         marker = value;
     }
     bool expired(std::uint64_t value, Clock::time_point now = Clock::now()) {
-        if (value != marker) { marker = value; progressed = now; }
-        return now - progressed >= std::chrono::seconds(45) ||
-               now - started >= std::chrono::seconds(90);
+        if (value != marker) {
+            marker = value;
+            progressed = now;
+        }
+        return now - progressed >= std::chrono::seconds(45) || now - started >= std::chrono::seconds(90);
     }
 };
-}
+} // namespace dkr::runtime::netplay

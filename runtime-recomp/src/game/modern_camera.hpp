@@ -46,8 +46,8 @@ struct Readout {
     bool drifting = false;
     bool boosting = false;
     bool look_back = false;
-    bool steadying = false;   // easing out of a wall or kart hit
-    std::uint32_t hits = 0U;  // hits seen since this camera started
+    bool steadying = false;  // easing out of a wall or kart hit
+    std::uint32_t hits = 0U; // hits seen since this camera started
 };
 Readout readout();
 
@@ -68,8 +68,7 @@ void set_mouse_orbit_held(std::size_t port, bool held);
 // Latest host input for an N64 controller port. camera_x/camera_y are the
 // analogue values of whatever is bound to the C-buttons (right stick by
 // default); online is true while netplay owns input routing.
-void publish_input(std::size_t port, float camera_x, float camera_y,
-                   bool look_back, bool online);
+void publish_input(std::size_t port, float camera_x, float camera_y, bool look_back, bool online);
 
 // Update the online gate at routing handoff, before the first input poll.
 // Reset requests are serviced by the guest thread; never retain poses/FOV
@@ -85,8 +84,7 @@ bool owns_controls(std::size_t port);
 // Called with the finished retail camera (after its clearance pass). Returns
 // true when it moved the camera; the caller then resolves clearance for the
 // new pose and calls commit().
-bool begin(std::uint8_t* rdram, recomp_context* context, std::uint32_t object,
-           const std::uint32_t fields[8]);
+bool begin(std::uint8_t* rdram, recomp_context* context, std::uint32_t object, const std::uint32_t fields[8]);
 void commit(std::uint8_t* rdram, const std::uint32_t fields[8]);
 
 // At update_player_camera entry: put back the retail pose of the camera about

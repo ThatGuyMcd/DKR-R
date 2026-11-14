@@ -14,8 +14,7 @@ int main() {
     // values formerly mistaken for UI/viewport commands by the live decoder.
     for (std::uint8_t mode = 0U; mode <= 9U; ++mode) {
         for (std::uint8_t variant = 0U; variant < 32U; ++variant) {
-            const PresentationMarker marker{mode, 123U, variant,
-                                             PresentationMarkerKind::Geometry};
+            const PresentationMarker marker{mode, 123U, variant, PresentationMarkerKind::Geometry};
             assert(valid_presentation_marker(marker.kind, marker.mode, marker.variant));
             assert(!is_aspect_marker(marker.kind));
             assert(marker.kind != PresentationMarkerKind::HudPass);
@@ -40,16 +39,12 @@ int main() {
         assert(!state.has_active_scope());
         // Compatibility decoder must not repeat the dynamic geometry bug.
         for (std::uint8_t mode : {2U, 4U, 6U, 7U}) {
-            assert(legacy_presentation_marker_kind(mode, variant) ==
-                   PresentationMarkerKind::Geometry);
+            assert(legacy_presentation_marker_kind(mode, variant) == PresentationMarkerKind::Geometry);
         }
     }
-    for (auto kind : {PresentationMarkerKind::FramedResults,
-                      PresentationMarkerKind::FixedUi,
-                      PresentationMarkerKind::BackgroundAspect,
-                      PresentationMarkerKind::HudPass,
-                      PresentationMarkerKind::TrackSelectUi,
-                      PresentationMarkerKind::TrackSelectLensFlare}) {
+    for (auto kind : {PresentationMarkerKind::FramedResults, PresentationMarkerKind::FixedUi,
+                      PresentationMarkerKind::BackgroundAspect, PresentationMarkerKind::HudPass,
+                      PresentationMarkerKind::TrackSelectUi, PresentationMarkerKind::TrackSelectLensFlare}) {
         assert(valid_presentation_marker(kind, 0U, 0U));
         assert(valid_presentation_marker(kind, 1U, 0U));
         assert(!valid_presentation_marker(kind, 7U, 0U));
@@ -60,8 +55,8 @@ int main() {
     assert(valid_presentation_marker(PresentationMarkerKind::PostraceFullViewport, 0U, 0U));
     assert(!valid_presentation_marker(PresentationMarkerKind::PostraceFullViewport, 1U, 0U));
     assert(!is_aspect_marker(PresentationMarkerKind::PostraceFullViewport));
-    assert(valid_presentation_marker(PresentationMarkerKind::TrackSelectPreview,0U,0U));
-    assert(!valid_presentation_marker(PresentationMarkerKind::TrackSelectPreview,1U,0U));
+    assert(valid_presentation_marker(PresentationMarkerKind::TrackSelectPreview, 0U, 0U));
+    assert(!valid_presentation_marker(PresentationMarkerKind::TrackSelectPreview, 1U, 0U));
     assert(!is_aspect_marker(PresentationMarkerKind::TrackSelectPreview));
     assert(!valid_presentation_marker(PresentationMarkerKind::Geometry, 10U, 0U));
     assert(!valid_presentation_marker(PresentationMarkerKind::Geometry, 7U, 32U));
@@ -77,7 +72,8 @@ int main() {
     PresentationDiagnosticBudget budget;
     assert(budget.record(10U));
     assert(budget.take_pending() == 1U);
-    for (unsigned i = 0; i < 10000U; ++i) assert(!budget.record(10U));
+    for (unsigned i = 0; i < 10000U; ++i)
+        assert(!budget.record(10U));
     assert(!budget.record(129U));
     assert(budget.record(130U));
     assert(budget.total == 10003U);
@@ -123,7 +119,8 @@ int main() {
     assert(!recording.valid);
     dkr::runtime::track_performance::Samples samples{};
     assert(dkr::runtime::track_performance::summarize(samples).count == 0U);
-    for (std::size_t i = 0U; i < samples.size(); ++i) samples[i] = double(i + 1U);
+    for (std::size_t i = 0U; i < samples.size(); ++i)
+        samples[i] = double(i + 1U);
     const auto timings = dkr::runtime::track_performance::summarize(samples);
     assert(timings.count == 120U && timings.median == 60.0);
     assert(timings.p95 == 114.0 && timings.p99 == 119.0);

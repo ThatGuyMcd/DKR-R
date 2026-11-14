@@ -10,32 +10,43 @@ namespace dkr::runtime::netplay::experimental {
 // session, queue file or wall-clock retry enters speculative guest execution.
 // Confirmation exposes completed actions to a future owned persistence sink.
 class MagicCodes final {
-public:
-    static constexpr std::size_t kCheckpointBytes=64,kJournalBytes=24;
-    bool start(std::uint64_t epoch,std::uint32_t canonical_selection,bool online);
+  public:
+    static constexpr std::size_t kCheckpointBytes = 64, kJournalBytes = 24;
+    bool start(std::uint64_t epoch, std::uint32_t canonical_selection, bool online);
     bool begin_epoch(std::uint64_t epoch);
     bool begin_frame(std::uint32_t frame);
-    bool apply(std::uint32_t active,std::uint32_t unlocked,
-               std::uint32_t& new_active,std::uint32_t& new_unlocked);
+    bool apply(std::uint32_t active, std::uint32_t unlocked, std::uint32_t& new_active, std::uint32_t& new_unlocked);
     bool complete(std::uint32_t action);
     bool frame_complete();
     bool end_frame(std::vector<std::uint8_t>& journal);
     bool capture(std::span<std::uint8_t> checkpoint) const;
     bool restore(std::span<const std::uint8_t> checkpoint);
-    bool commit(std::uint64_t epoch,std::uint32_t frame,std::span<const std::uint8_t> journal);
-    std::uint32_t confirmed_actions() const {return confirmed_actions_;}
-    bool admit_confirmed(std::uint64_t epoch,std::uint32_t frame,std::uint32_t actions,std::span<const std::uint8_t> bytes) {
-        if(!epoch||frame==UINT32_MAX||bytes.size()!=kCheckpointBytes||(actions&~initial_.deferred_action_mask))return false;
-        MagicCodes staged;if(!staged.start(epoch,selection_,online_))return false;
-        staged.next_=frame;
-        if(!staged.restore(bytes)||(staged.working_.armed_action_mask&actions))return false;
-        staged.confirmed_next_=frame;staged.confirmed_actions_=actions;*this=std::move(staged);return true;
+    bool commit(std::uint64_t epoch, std::uint32_t frame, std::span<const std::uint8_t> journal);
+    std::uint32_t confirmed_actions() const {
+        return confirmed_actions_;
     }
-private:
+    bool admit_confirmed(std::uint64_t epoch, std::uint32_t frame, std::uint32_t actions,
+                         std::span<const std::uint8_t> bytes) {
+        if (!epoch || frame == UINT32_MAX || bytes.size() != kCheckpointBytes ||
+            (actions & ~initial_.deferred_action_mask))
+            return false;
+        MagicCodes staged;
+        if (!staged.start(epoch, selection_, online_))
+            return false;
+        staged.next_ = frame;
+        if (!staged.restore(bytes) || (staged.working_.armed_action_mask & actions))
+            return false;
+        staged.confirmed_next_ = frame;
+        staged.confirmed_actions_ = actions;
+        *this = std::move(staged);
+        return true;
+    }
+
+  private:
     bool valid(const magic_codes::MagicCodeSessionState& state) const;
-    magic_codes::MagicCodeSessionState working_{},initial_{};
-    std::uint64_t epoch_=0;
-    std::uint32_t selection_=0,next_=0,confirmed_next_=0,actions_=0,confirmed_actions_=0;
-    bool online_=false,open_=false;
+    magic_codes::MagicCodeSessionState working_{}, initial_{};
+    std::uint64_t epoch_ = 0;
+    std::uint32_t selection_ = 0, next_ = 0, confirmed_next_ = 0, actions_ = 0, confirmed_actions_ = 0;
+    bool online_ = false, open_ = false;
 };
-}
+} // namespace dkr::runtime::netplay::experimental

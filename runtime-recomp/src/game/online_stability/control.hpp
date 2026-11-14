@@ -35,26 +35,40 @@ struct Progress {
 };
 Bytes encode(const Progress& value);
 bool decode(std::span<const std::uint8_t> bytes, Progress& value);
-struct Route { Member id = 0; unsigned rtt_ms = 0; bool racer = false; unsigned owner = 255; };
+struct Route {
+    Member id = 0;
+    unsigned rtt_ms = 0;
+    bool racer = false;
+    unsigned owner = 255;
+};
 struct Identity {
     std::uint64_t room = 0;
     Member local = 0, host = 0;
     bool active = false, authority = false, dynamic = false;
     std::vector<Route> routes;
     bool local_racer = true;
-    std::optional<unsigned> manual_delay,prediction_window;
+    std::optional<unsigned> manual_delay, prediction_window;
 };
-struct Packet { Member target = 0; Bytes bytes; };
-struct Received { Member source = 0; Bytes bytes; };
+struct Packet {
+    Member target = 0;
+    Bytes bytes;
+};
+struct Received {
+    Member source = 0;
+    Bytes bytes;
+};
 struct DelayView {
-    bool requested = false, negotiated = false; unsigned frames = 0; std::string reason; bool stalled=false;
-    std::uint8_t stalled_owners=0;
-    unsigned arrival_age_ms=0,queued_transitions=0;
+    bool requested = false, negotiated = false;
+    unsigned frames = 0;
+    std::string reason;
+    bool stalled = false;
+    std::uint8_t stalled_owners = 0;
+    unsigned arrival_age_ms = 0, queued_transitions = 0;
 };
 // This bridge owns bounded metadata only. Its mutex never nests a session lock
 // in the reverse direction; callers do not invoke DirectSession from here.
 class Control final {
-public:
+  public:
     void configure(Identity identity);
     Identity identity() const;
     void mods(std::vector<Join> rows);
@@ -68,12 +82,14 @@ public:
     std::vector<Received> incoming();
     void report(DelayView value);
     DelayView delay() const;
-    void publish_host_settings(HostSettings current,HostSettingsContext context);
-    HostSettingsView host_settings()const;
-    bool request_host_settings(std::uint64_t room,HostSettings desired,std::uint64_t& serial,std::string& error);
+    void publish_host_settings(HostSettings current, HostSettingsContext context);
+    HostSettingsView host_settings() const;
+    bool request_host_settings(std::uint64_t room, HostSettings desired, std::uint64_t& serial, std::string& error);
     std::optional<HostSettingsRequest> take_host_settings();
-    void finish_host_settings(const HostSettingsRequest& request,std::optional<HostSettings> queued,std::string status,bool accepted);
-private:
+    void finish_host_settings(const HostSettingsRequest& request, std::optional<HostSettings> queued,
+                              std::string status, bool accepted);
+
+  private:
     mutable std::mutex mutex_;
     Identity identity_;
     Progress progress_;
@@ -85,11 +101,11 @@ private:
     DelayView delay_;
     HostSettingsView host_settings_;
     std::optional<HostSettingsRequest> host_settings_request_;
-    std::uint64_t host_settings_serial_=0;
+    std::uint64_t host_settings_serial_ = 0;
 };
 std::shared_ptr<Control> control(const void* session);
 void forget(const void* session);
-void bind_mod_sync(const void* link,const void* session);
+void bind_mod_sync(const void* link, const void* session);
 void unbind_mod_sync(const void* link);
 std::shared_ptr<Control> mod_control(const void* link);
 } // namespace dkr::online_stability

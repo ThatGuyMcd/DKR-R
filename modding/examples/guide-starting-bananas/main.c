@@ -21,10 +21,14 @@ DKR_CALLBACK(after_track_setup_racers) void apply_start(void) {
     DkrU32 count = dkr_racer_count();
     for (DkrU32 i = 0; i < count; ++i) {
         DkrRacerState racer;
-        if (!dkr_racer_get(i, &racer)) continue;
-        if (racer.finished) continue;
-        if (affected == 1 && racer.player < 0) continue;
-        if (affected == 2 && racer.player >= 0) continue;
+        if (!dkr_racer_get(i, &racer))
+            continue;
+        if (racer.finished)
+            continue;
+        if (affected == 1 && racer.player < 0)
+            continue;
+        if (affected == 2 && racer.player >= 0)
+            continue;
         dkr_racer_set(i, DKR_RACER_BANANAS, starting_bananas);
     }
 }

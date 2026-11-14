@@ -30,19 +30,23 @@ std::filesystem::path ExecutablePath(const char* argument) {
     std::vector<wchar_t> buffer(512);
     while (buffer.size() <= 32768) {
         const DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-        if (length == 0) break;
-        if (length < buffer.size()) return std::filesystem::path(std::wstring(buffer.data(), length));
+        if (length == 0)
+            break;
+        if (length < buffer.size())
+            return std::filesystem::path(std::wstring(buffer.data(), length));
         buffer.resize(buffer.size() * 2);
     }
 #elif defined(__linux__) && !defined(__ANDROID__)
     if (const char* image = std::getenv("APPIMAGE"); image && *image) {
         const auto path = std::filesystem::u8path(image);
         std::error_code ec;
-        if (path.is_absolute() && std::filesystem::is_regular_file(path, ec)) return path;
+        if (path.is_absolute() && std::filesystem::is_regular_file(path, ec))
+            return path;
     }
     std::error_code ec;
     const auto path = std::filesystem::read_symlink("/proc/self/exe", ec);
-    if (!ec && path.is_absolute()) return path;
+    if (!ec && path.is_absolute())
+        return path;
 #elif defined(__APPLE__)
     std::uint32_t size = 0;
     _NSGetExecutablePath(nullptr, &size);
@@ -56,7 +60,8 @@ std::filesystem::path ExecutablePath(const char* argument) {
             const auto contents = path.parent_path().parent_path();
             const auto bundle = contents.parent_path();
             if (path.parent_path().filename() == "MacOS" && contents.filename() == "Contents" &&
-                bundle.extension() == ".app") return bundle;
+                bundle.extension() == ".app")
+                return bundle;
             return path;
         }
     }
@@ -97,8 +102,12 @@ void configure(const char* executable_argument) {
     g_marker = g_application_directory.empty() ? std::filesystem::path{} : g_application_directory / "portable.txt";
     g_enabled_at_startup = enabled();
 }
-const std::filesystem::path& application_directory() { return g_application_directory; }
-const std::filesystem::path& marker_path() { return g_marker; }
+const std::filesystem::path& application_directory() {
+    return g_application_directory;
+}
+const std::filesystem::path& marker_path() {
+    return g_marker;
+}
 bool supported() {
 #if defined(DKR_IOS)
     return false; // signed bundle cannot hold portable.txt
@@ -112,43 +121,63 @@ bool enabled() {
     std::error_code ec;
     return supported() && std::filesystem::exists(g_marker, ec);
 }
-bool enabled_at_startup() { return g_enabled_at_startup; }
+bool enabled_at_startup() {
+    return g_enabled_at_startup;
+}
 
 bool set_enabled(bool value, std::string& error) {
     error.clear();
-    if (!supported()) { error = "Portable mode is not available for this application location."; return false; }
+    if (!supported()) {
+        error = "Portable mode is not available for this application location.";
+        return false;
+    }
     std::error_code ec;
     const auto status = std::filesystem::symlink_status(g_marker, ec);
     const bool absent = status.type() == std::filesystem::file_type::not_found;
-    if (ec && !absent) { error = "Could not inspect portable.txt: " + ec.message(); return false; }
+    if (ec && !absent) {
+        error = "Could not inspect portable.txt: " + ec.message();
+        return false;
+    }
     if (!absent) {
-        if (!SafeExistingMarker(error)) return false;
-        if (value) return true; // Never truncate an existing marker.
+        if (!SafeExistingMarker(error))
+            return false;
+        if (value)
+            return true; // Never truncate an existing marker.
         if (!std::filesystem::remove(g_marker, ec) || ec) {
-            error = "Could not remove portable.txt: " + ec.message(); return false;
+            error = "Could not remove portable.txt: " + ec.message();
+            return false;
         }
         return true;
     }
-    if (!value) return true;
+    if (!value)
+        return true;
     constexpr char contents[] = "DKR-R portable mode\n";
 #if defined(_WIN32)
     HANDLE file = CreateFileW(g_marker.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
-        error = "Could not create portable.txt (Windows error " + std::to_string(GetLastError()) + ")."; return false;
+        error = "Could not create portable.txt (Windows error " + std::to_string(GetLastError()) + ").";
+        return false;
     }
     DWORD written = 0;
     const bool ok = WriteFile(file, contents, sizeof(contents) - 1, &written, nullptr) &&
-        written == sizeof(contents) - 1 && FlushFileBuffers(file);
+                    written == sizeof(contents) - 1 && FlushFileBuffers(file);
     const bool closed = CloseHandle(file) != 0;
 #else
     const int file = open(g_marker.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0600);
-    if (file < 0) { error = "Could not create portable.txt: " + std::string(std::strerror(errno)); return false; }
+    if (file < 0) {
+        error = "Could not create portable.txt: " + std::string(std::strerror(errno));
+        return false;
+    }
     std::size_t written = 0;
     bool ok = true;
     while (written < sizeof(contents) - 1) {
         const auto amount = write(file, contents + written, sizeof(contents) - 1 - written);
-        if (amount < 0 && errno == EINTR) continue;
-        if (amount <= 0) { ok = false; break; }
+        if (amount < 0 && errno == EINTR)
+            continue;
+        if (amount <= 0) {
+            ok = false;
+            break;
+        }
         written += static_cast<std::size_t>(amount);
     }
     ok = ok && fsync(file) == 0;

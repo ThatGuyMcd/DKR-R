@@ -20,4 +20,4 @@ bool recover_transaction(std::string& error);
 bool prepare_development(const std::filesystem::path& root, const std::filesystem::path& folder, std::string& error);
 bool queue_development_copy(std::string& error);
 std::string describe(const std::filesystem::path& path);
-}
+} // namespace dkr::runtime::saves::shared

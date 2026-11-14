@@ -24,32 +24,40 @@ bool draw_mode_selector(float width) {
                 changed = apply_basic_mode(values[i]);
                 save_failed = !changed;
             }
-            if (current == values[i]) ImGui::SetItemDefaultFocus();
+            if (current == values[i])
+                ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
     }
     ImGui::PopStyleVar();
     return changed;
 }
-}
+} // namespace
 bool draw_settings(bool modern, float width, void (*)(), void (*)(), bool) {
     ImGui::SeparatorText("HUD - SINGLE / TWO PLAYER");
-    ImGui::TextWrapped("Choose the 4:3 HUD area or fit the HUD to the window. HUD size stays at 100%%. Three/four-player HUDs are unchanged.");
+    ImGui::TextWrapped(
+        "Choose the 4:3 HUD area or fit the HUD to the window. HUD size stays at 100%%. Three/four-player HUDs are unchanged.");
     ImGui::TextUnformatted("HUD layout");
     ImGui::BeginDisabled(!modern);
     const bool changed = draw_mode_selector(width);
     ImGui::EndDisabled();
-    if (save_failed) ImGui::TextWrapped("Could not save HUD settings. The previous layout is still active.");
-    if (!modern) ImGui::TextWrapped("HUD layout options require Modern presentation.");
+    if (save_failed)
+        ImGui::TextWrapped("Could not save HUD settings. The previous layout is still active.");
+    if (!modern)
+        ImGui::TextWrapped("HUD layout options require Modern presentation.");
     return changed;
 }
 // Keep existing overlay integration inert; there is no editor modal, input
 // capture, keyboard request, preview, or live-review surface in this build.
-bool active() { return false; }
-bool review_active() { return false; }
+bool active() {
+    return false;
+}
+bool review_active() {
+    return false;
+}
 void draw_review() {}
 void accept_preset_name(const std::string&) {}
 void cancel() {}
 void request_back() {}
 void interrupt_move() {}
-}
+} // namespace dkr::runtime::hud::editor

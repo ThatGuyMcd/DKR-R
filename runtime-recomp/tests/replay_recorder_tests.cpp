@@ -7,8 +7,7 @@
 
 int main() {
     using namespace dkr::runtime::netplay;
-    const auto directory = std::filesystem::temp_directory_path() /
-        "dkr-r-replay-recorder-test";
+    const auto directory = std::filesystem::temp_directory_path() / "dkr-r-replay-recorder-test";
     std::error_code cleanup_error;
     std::filesystem::remove_all(directory, cleanup_error);
     Room room{};

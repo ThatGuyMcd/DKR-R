@@ -52,7 +52,8 @@ constexpr NativeSocket kInvalidSocket = -1;
 #endif
 
 void CloseSocket(NativeSocket& socket) {
-    if (socket == kInvalidSocket) return;
+    if (socket == kInvalidSocket)
+        return;
 #if defined(_WIN32)
     closesocket(socket);
 #else
@@ -62,7 +63,8 @@ void CloseSocket(NativeSocket& socket) {
 }
 
 void ShutdownSocket(NativeSocket socket) {
-    if (socket == kInvalidSocket) return;
+    if (socket == kInvalidSocket)
+        return;
 #if defined(_WIN32)
     shutdown(socket, SD_BOTH);
 #else
@@ -75,12 +77,12 @@ bool SendAll(NativeSocket socket, const void* data, std::size_t size) {
     while (size > 0U) {
 #if defined(_WIN32)
         const int chunk = send(socket, reinterpret_cast<const char*>(bytes),
-                               static_cast<int>(std::min<std::size_t>(
-                                   size, static_cast<std::size_t>(INT_MAX))), 0);
+                               static_cast<int>(std::min<std::size_t>(size, static_cast<std::size_t>(INT_MAX))), 0);
 #else
         const ssize_t chunk = send(socket, bytes, size, MSG_NOSIGNAL);
 #endif
-        if (chunk <= 0) return false;
+        if (chunk <= 0)
+            return false;
         bytes += static_cast<std::size_t>(chunk);
         size -= static_cast<std::size_t>(chunk);
     }
@@ -92,27 +94,26 @@ bool ReceiveAll(NativeSocket socket, void* data, std::size_t size) {
     while (size > 0U) {
 #if defined(_WIN32)
         const int chunk = recv(socket, reinterpret_cast<char*>(bytes),
-                               static_cast<int>(std::min<std::size_t>(
-                                   size, static_cast<std::size_t>(INT_MAX))), 0);
+                               static_cast<int>(std::min<std::size_t>(size, static_cast<std::size_t>(INT_MAX))), 0);
 #else
         const ssize_t chunk = recv(socket, bytes, size, 0);
 #endif
-        if (chunk <= 0) return false;
+        if (chunk <= 0)
+            return false;
         bytes += static_cast<std::size_t>(chunk);
         size -= static_cast<std::size_t>(chunk);
     }
     return true;
 }
 
-bool WaitReadable(NativeSocket socket, std::chrono::milliseconds timeout,
-                  std::stop_token stop_token) {
+bool WaitReadable(NativeSocket socket, std::chrono::milliseconds timeout, std::stop_token stop_token) {
     constexpr auto kCancellationPoll = std::chrono::milliseconds(50);
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (!stop_token.stop_requested()) {
         const auto now = std::chrono::steady_clock::now();
-        if (now >= deadline) return false;
-        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-            deadline - now);
+        if (now >= deadline)
+            return false;
+        const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
         const auto slice = std::min(remaining, kCancellationPoll);
         fd_set readable;
         FD_ZERO(&readable);
@@ -123,11 +124,12 @@ bool WaitReadable(NativeSocket socket, std::chrono::milliseconds timeout,
 #if defined(_WIN32)
         const int result = select(0, &readable, nullptr, nullptr, &value);
 #else
-        const int result = select(socket + 1, &readable, nullptr, nullptr,
-                                  &value);
+        const int result = select(socket + 1, &readable, nullptr, nullptr, &value);
 #endif
-        if (result > 0) return true;
-        if (result < 0) return false;
+        if (result > 0)
+            return true;
+        if (result < 0)
+            return false;
     }
     return false;
 }
@@ -150,8 +152,7 @@ std::string TokenText(const std::array<std::uint8_t, kTokenBytes>& token) {
     return output.str();
 }
 
-template <std::size_t Size>
-std::string FixedString(const std::array<char, Size>& value) {
+template <std::size_t Size> std::string FixedString(const std::array<char, Size>& value) {
     const auto end = std::find(value.begin(), value.end(), '\0');
     return std::string(value.begin(), end);
 }
@@ -227,14 +228,14 @@ struct dkr::runtime::sdl3_input::Client::Impl {
 #endif
     }
 
-    bool spawn(const std::filesystem::path& host, std::uint16_t port,
-               const std::filesystem::path& mappings, std::string& error) {
+    bool spawn(const std::filesystem::path& host, std::uint16_t port, const std::filesystem::path& mappings,
+               std::string& error) {
         const std::string port_text = std::to_string(port);
         const std::string token_text = TokenText(token);
 #if defined(_WIN32)
         const std::wstring host_text = host.wstring();
-        std::wstring command = QuoteWindowsArgument(host_text) + L" --port " +
-            WidenAscii(port_text) + L" --token " + WidenAscii(token_text);
+        std::wstring command = QuoteWindowsArgument(host_text) + L" --port " + WidenAscii(port_text) + L" --token " +
+                               WidenAscii(token_text);
         if (!mappings.empty()) {
             command += L" --mappings " + QuoteWindowsArgument(mappings.wstring());
         }
@@ -243,12 +244,10 @@ struct dkr::runtime::sdl3_input::Client::Impl {
         STARTUPINFOW startup{};
         startup.cb = sizeof(startup);
         PROCESS_INFORMATION process_info{};
-        if (!CreateProcessW(host_text.c_str(), mutable_command.data(), nullptr,
-                            nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
-                            host.parent_path().wstring().c_str(), &startup,
-                            &process_info)) {
-            error = "Could not start the private SDL3 input host (Windows error " +
-                    std::to_string(GetLastError()) + ").";
+        if (!CreateProcessW(host_text.c_str(), mutable_command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                            nullptr, host.parent_path().wstring().c_str(), &startup, &process_info)) {
+            error =
+                "Could not start the private SDL3 input host (Windows error " + std::to_string(GetLastError()) + ").";
             return false;
         }
         CloseHandle(process_info.hThread);
@@ -256,22 +255,20 @@ struct dkr::runtime::sdl3_input::Client::Impl {
 #else
         const std::string host_text = host.string();
         const std::string mappings_text = mappings.string();
-        std::vector<std::string> arguments{
-            host_text, "--port", port_text, "--token", token_text};
+        std::vector<std::string> arguments{host_text, "--port", port_text, "--token", token_text};
         if (!mappings.empty()) {
             arguments.push_back("--mappings");
             arguments.push_back(mappings_text);
         }
         std::vector<char*> argv;
         argv.reserve(arguments.size() + 1U);
-        for (auto& argument : arguments) argv.push_back(argument.data());
+        for (auto& argument : arguments)
+            argv.push_back(argument.data());
         argv.push_back(nullptr);
-        const int result = posix_spawn(&process, host_text.c_str(), nullptr,
-                                       nullptr, argv.data(), environ);
+        const int result = posix_spawn(&process, host_text.c_str(), nullptr, nullptr, argv.data(), environ);
         if (result != 0) {
             process = -1;
-            error = "Could not start the private SDL3 input host (error " +
-                    std::to_string(result) + ").";
+            error = "Could not start the private SDL3 input host (error " + std::to_string(result) + ").";
             return false;
         }
 #endif
@@ -280,7 +277,8 @@ struct dkr::runtime::sdl3_input::Client::Impl {
 
     void reap_process(bool force) {
 #if defined(_WIN32)
-        if (process == nullptr) return;
+        if (process == nullptr)
+            return;
         DWORD result = WaitForSingleObject(process, force ? 500U : 0U);
         if (force && result == WAIT_TIMEOUT) {
             TerminateProcess(process, 0U);
@@ -289,7 +287,8 @@ struct dkr::runtime::sdl3_input::Client::Impl {
         CloseHandle(process);
         process = nullptr;
 #else
-        if (process <= 0) return;
+        if (process <= 0)
+            return;
         int status = 0;
         pid_t result = waitpid(process, &status, WNOHANG);
         if (force && result == 0) {
@@ -323,21 +322,22 @@ struct dkr::runtime::sdl3_input::Client::Impl {
                 }
                 return;
             }
-            if (!valid_header(packet.header, PacketType::State,
-                              sizeof(packet), token) ||
+            if (!valid_header(packet.header, PacketType::State, sizeof(packet), token) ||
                 packet.device_count > packet.devices.size()) {
                 set_failed("The SDL3 input host sent an invalid protocol packet.");
                 return;
             }
             State next{};
-            next.generation=generation.load(std::memory_order_acquire);
+            next.generation = generation.load(std::memory_order_acquire);
             next.sequence = packet.sequence;
             next.devices.reserve(packet.device_count);
             for (std::size_t index = 0U; index < packet.device_count; ++index) {
                 const DevicePacket& source = packet.devices[index];
-                if(unsigned(source.kind)>3||unsigned(source.transport)>3||source.audio_count>4||
-                   std::any_of(source.audio_names.begin(),source.audio_names.end(),[](const auto& text){return text.back()!='\0';})) {
-                    set_failed("The input host sent invalid feedback capabilities.");return;
+                if (unsigned(source.kind) > 3 || unsigned(source.transport) > 3 || source.audio_count > 4 ||
+                    std::any_of(source.audio_names.begin(), source.audio_names.end(),
+                                [](const auto& text) { return text.back() != '\0'; })) {
+                    set_failed("The input host sent invalid feedback capabilities.");
+                    return;
                 }
                 Device device{};
                 device.feedback = source;
@@ -354,8 +354,7 @@ struct dkr::runtime::sdl3_input::Client::Impl {
                 device.snapshot.axes = source.axes;
                 device.snapshot.gyro.available = source.gyro != 0U;
                 device.snapshot.gyro.valid = source.gyro_valid != 0U;
-                device.snapshot.gyro.sensor_timestamp_us =
-                    source.gyro_timestamp_us;
+                device.snapshot.gyro.sensor_timestamp_us = source.gyro_timestamp_us;
                 device.snapshot.gyro.sample_rate_hz = source.gyro_rate_hz;
                 device.snapshot.gyro.data = source.gyro_data;
                 next.devices.push_back(std::move(device));
@@ -376,16 +375,16 @@ dkr::runtime::sdl3_input::Client::~Client() {
     stop();
 }
 
-bool dkr::runtime::sdl3_input::Client::start(
-    const std::filesystem::path& host,
-    const std::filesystem::path& mapping_database, std::string& error,
-    std::stop_token stop_token) {
+bool dkr::runtime::sdl3_input::Client::start(const std::filesystem::path& host,
+                                             const std::filesystem::path& mapping_database, std::string& error,
+                                             std::stop_token stop_token) {
     stop();
     if (!std::filesystem::is_regular_file(host)) {
         error = "SDL3 input host is missing: " + host.string();
         return false;
     }
-    if (!impl_->start_socket_runtime(error)) return false;
+    if (!impl_->start_socket_runtime(error))
+        return false;
 
     NativeSocket listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (listener == kInvalidSocket) {
@@ -394,14 +393,12 @@ bool dkr::runtime::sdl3_input::Client::start(
         return false;
     }
     int enabled = 1;
-    setsockopt(listener, IPPROTO_TCP, TCP_NODELAY,
-               reinterpret_cast<const char*>(&enabled), sizeof(enabled));
+    setsockopt(listener, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&enabled), sizeof(enabled));
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     address.sin_port = 0;
-    if (bind(listener, reinterpret_cast<const sockaddr*>(&address),
-             sizeof(address)) != 0 || listen(listener, 1) != 0) {
+    if (bind(listener, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0 || listen(listener, 1) != 0) {
         error = "Could not bind the private SDL3 input host listener.";
         CloseSocket(listener);
         impl_->stop_socket_runtime();
@@ -412,8 +409,7 @@ bool dkr::runtime::sdl3_input::Client::start(
 #else
     socklen_t address_size = sizeof(address);
 #endif
-    if (getsockname(listener, reinterpret_cast<sockaddr*>(&address),
-                    &address_size) != 0) {
+    if (getsockname(listener, reinterpret_cast<sockaddr*>(&address), &address_size) != 0) {
         error = "Could not determine the SDL3 input host listener port.";
         CloseSocket(listener);
         impl_->stop_socket_runtime();
@@ -427,9 +423,8 @@ bool dkr::runtime::sdl3_input::Client::start(
         return false;
     }
     if (!WaitReadable(listener, std::chrono::milliseconds(4000), stop_token)) {
-        error = stop_token.stop_requested()
-            ? "SDL3 input initialization was cancelled."
-            : "The private SDL3 input host did not connect within four seconds.";
+        error = stop_token.stop_requested() ? "SDL3 input initialization was cancelled."
+                                            : "The private SDL3 input host did not connect within four seconds.";
         CloseSocket(listener);
         impl_->reap_process(true);
         impl_->stop_socket_runtime();
@@ -443,44 +438,40 @@ bool dkr::runtime::sdl3_input::Client::start(
         impl_->stop_socket_runtime();
         return false;
     }
-    setsockopt(impl_->socket, IPPROTO_TCP, TCP_NODELAY,
-               reinterpret_cast<const char*>(&enabled), sizeof(enabled));
+    setsockopt(impl_->socket, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&enabled), sizeof(enabled));
 #if defined(_WIN32)
     DWORD send_timeout = 200;
 #else
     timeval send_timeout{0, 200000};
 #endif
-    setsockopt(impl_->socket, SOL_SOCKET, SO_SNDTIMEO,
-               reinterpret_cast<const char*>(&send_timeout), sizeof(send_timeout));
-    if (!WaitReadable(impl_->socket, std::chrono::milliseconds(4000),
-                      stop_token)) {
-        error = stop_token.stop_requested()
-            ? "SDL3 input initialization was cancelled."
-            : "The SDL3 input host did not finish initialization.";
+    setsockopt(impl_->socket, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&send_timeout),
+               sizeof(send_timeout));
+    if (!WaitReadable(impl_->socket, std::chrono::milliseconds(4000), stop_token)) {
+        error = stop_token.stop_requested() ? "SDL3 input initialization was cancelled."
+                                            : "The SDL3 input host did not finish initialization.";
         stop();
         return false;
     }
     HelloPacket hello{};
     if (!ReceiveAll(impl_->socket, &hello, sizeof(hello)) ||
-        !valid_header(hello.header, PacketType::Hello, sizeof(hello),
-                      impl_->token)) {
+        !valid_header(hello.header, PacketType::Hello, sizeof(hello), impl_->token)) {
         error = "The SDL3 input host handshake was invalid.";
         stop();
         return false;
     }
     if (hello.ready == 0U) {
         error = FixedString(hello.detail);
-        if (error.empty()) error = "SDL3 input initialization failed.";
+        if (error.empty())
+            error = "SDL3 input initialization failed.";
         stop();
         return false;
     }
     {
         std::scoped_lock lock(impl_->state_mutex);
-        impl_->status_detail = "SDL3 " + std::to_string(hello.sdl_major) + "." +
-            std::to_string(hello.sdl_minor) + "." +
-            std::to_string(hello.sdl_micro) + " native input host connected.";
+        impl_->status_detail = "SDL3 " + std::to_string(hello.sdl_major) + "." + std::to_string(hello.sdl_minor) + "." +
+                               std::to_string(hello.sdl_micro) + " native input host connected.";
     }
-    impl_->generation.fetch_add(1,std::memory_order_acq_rel);
+    impl_->generation.fetch_add(1, std::memory_order_acq_rel);
     impl_->running.store(true, std::memory_order_release);
     impl_->healthy.store(true, std::memory_order_release);
     impl_->reader = std::thread([this]() { impl_->read_states(); });
@@ -488,10 +479,10 @@ bool dkr::runtime::sdl3_input::Client::start(
 }
 
 void dkr::runtime::sdl3_input::Client::stop() {
-    if (!impl_) return;
-    impl_->healthy.store(false,std::memory_order_release);
-    const bool was_running = impl_->running.exchange(false,
-                                                      std::memory_order_acq_rel);
+    if (!impl_)
+        return;
+    impl_->healthy.store(false, std::memory_order_release);
+    const bool was_running = impl_->running.exchange(false, std::memory_order_acq_rel);
     if (impl_->socket != kInvalidSocket) {
         if (was_running) {
             ShutdownPacket packet{};
@@ -499,10 +490,17 @@ void dkr::runtime::sdl3_input::Client::stop() {
             std::scoped_lock lock(impl_->send_mutex);
             SendAll(impl_->socket, &packet, sizeof(packet));
         }
-        {std::scoped_lock lock(impl_->send_mutex);ShutdownSocket(impl_->socket);}
+        {
+            std::scoped_lock lock(impl_->send_mutex);
+            ShutdownSocket(impl_->socket);
+        }
     }
-    if (impl_->reader.joinable()) impl_->reader.join();
-    {std::scoped_lock lock(impl_->send_mutex);CloseSocket(impl_->socket);}
+    if (impl_->reader.joinable())
+        impl_->reader.join();
+    {
+        std::scoped_lock lock(impl_->send_mutex);
+        CloseSocket(impl_->socket);
+    }
     impl_->healthy.store(false, std::memory_order_release);
     impl_->reap_process(true);
     impl_->stop_socket_runtime();
@@ -526,12 +524,13 @@ dkr::runtime::sdl3_input::State dkr::runtime::sdl3_input::Client::state() const 
     return impl_->latest_state;
 }
 
-bool dkr::runtime::sdl3_input::Client::rumble(
-    int instance, std::uint16_t low_frequency,
-    std::uint16_t high_frequency, std::uint32_t duration_ms) {
-    if (!healthy() || impl_->socket == kInvalidSocket) return false;
+bool dkr::runtime::sdl3_input::Client::rumble(int instance, std::uint16_t low_frequency, std::uint16_t high_frequency,
+                                              std::uint32_t duration_ms) {
+    if (!healthy() || impl_->socket == kInvalidSocket)
+        return false;
     std::scoped_lock lock(impl_->send_mutex);
-    if(!healthy()||!impl_->running.load()||impl_->socket==kInvalidSocket)return false;
+    if (!healthy() || !impl_->running.load() || impl_->socket == kInvalidSocket)
+        return false;
     RumblePacket packet{};
     initialise(packet, PacketType::Rumble, impl_->token);
     packet.instance = instance;
@@ -541,18 +540,28 @@ bool dkr::runtime::sdl3_input::Client::rumble(
     return SendAll(impl_->socket, &packet, sizeof(packet));
 }
 
-bool dkr::runtime::sdl3_input::Client::feedback(int instance,dkr::feedback::Output output,std::string_view key,std::uint64_t generation) {
-    if(!healthy()||!dkr::feedback::valid(output))return false;
+bool dkr::runtime::sdl3_input::Client::feedback(int instance, dkr::feedback::Output output, std::string_view key,
+                                                std::uint64_t generation) {
+    if (!healthy() || !dkr::feedback::valid(output))
+        return false;
     std::scoped_lock lock(impl_->send_mutex);
-    if(!healthy()||!impl_->running.load()||impl_->socket==kInvalidSocket)return false;
-    if(generation&&generation!=impl_->generation.load(std::memory_order_acquire))return false;
-    FeedbackPacket packet{};initialise(packet,PacketType::Feedback,impl_->token);
+    if (!healthy() || !impl_->running.load() || impl_->socket == kInvalidSocket)
+        return false;
+    if (generation && generation != impl_->generation.load(std::memory_order_acquire))
+        return false;
+    FeedbackPacket packet{};
+    initialise(packet, PacketType::Feedback, impl_->token);
     static std::atomic<std::uint64_t> sequence{0};
-    packet.sequence=++sequence;packet.instance=instance;packet.output=output;
-    if(key.size()>=packet.device_key.size())return false;
-    std::memcpy(packet.device_key.data(),key.data(),key.size());
-    if(SendAll(impl_->socket,&packet,sizeof(packet)))return true;
+    packet.sequence = ++sequence;
+    packet.instance = instance;
+    packet.output = output;
+    if (key.size() >= packet.device_key.size())
+        return false;
+    std::memcpy(packet.device_key.data(), key.data(), key.size());
+    if (SendAll(impl_->socket, &packet, sizeof(packet)))
+        return true;
     // A partial TCP frame must never be followed by another command.
     impl_->set_failed("Controller feedback output timed out; reconnect the native backend.");
-    ShutdownSocket(impl_->socket);return false;
+    ShutdownSocket(impl_->socket);
+    return false;
 }

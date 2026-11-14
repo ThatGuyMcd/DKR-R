@@ -47,38 +47,35 @@ enum class MappingControl : std::uint8_t {
     Count,
 };
 
-inline constexpr std::size_t kMappingControlCount =
-    static_cast<std::size_t>(MappingControl::Count);
+inline constexpr std::size_t kMappingControlCount = static_cast<std::size_t>(MappingControl::Count);
 
 struct ControllerMappingDefinition {
     std::array<PhysicalInput, kMappingControlCount> inputs{};
 };
 
-inline constexpr std::array<const char*, kMappingControlCount>
-    kMappingPrompts{{
-        "Move the analogue stick LEFT",
-        "Move the analogue stick RIGHT",
-        "Move the analogue stick UP",
-        "Move the analogue stick DOWN",
-        "Press the N64 A button",
-        "Press the N64 B button",
-        "Press the N64 Z trigger",
-        "Press START",
-        "Press D-PAD UP",
-        "Press D-PAD DOWN",
-        "Press D-PAD LEFT",
-        "Press D-PAD RIGHT",
-        "Press the L shoulder button",
-        "Press the R shoulder button",
-        "Press C-UP",
-        "Press C-DOWN",
-        "Press C-LEFT",
-        "Press C-RIGHT",
-    }};
+inline constexpr std::array<const char*, kMappingControlCount> kMappingPrompts{{
+    "Move the analogue stick LEFT",
+    "Move the analogue stick RIGHT",
+    "Move the analogue stick UP",
+    "Move the analogue stick DOWN",
+    "Press the N64 A button",
+    "Press the N64 B button",
+    "Press the N64 Z trigger",
+    "Press START",
+    "Press D-PAD UP",
+    "Press D-PAD DOWN",
+    "Press D-PAD LEFT",
+    "Press D-PAD RIGHT",
+    "Press the L shoulder button",
+    "Press the R shoulder button",
+    "Press C-UP",
+    "Press C-DOWN",
+    "Press C-LEFT",
+    "Press C-RIGHT",
+}};
 
 constexpr std::size_t mapping_index(MappingControl control) {
-    return std::min(static_cast<std::size_t>(control),
-                    kMappingControlCount - 1U);
+    return std::min(static_cast<std::size_t>(control), kMappingControlCount - 1U);
 }
 
 inline const char* mapping_prompt(MappingControl control) {
@@ -98,8 +95,7 @@ inline bool physical_input_valid(const PhysicalInput& input) {
     }
 }
 
-inline bool mapping_input_available(const ControllerMappingDefinition& mapping,
-                                    std::size_t next_index,
+inline bool mapping_input_available(const ControllerMappingDefinition& mapping, std::size_t next_index,
                                     const PhysicalInput& input) {
     if (!physical_input_valid(input)) {
         return false;
@@ -134,31 +130,25 @@ inline std::string encode_physical_input(const PhysicalInput& input) {
     case PhysicalInputKind::Button:
         return "b" + std::to_string(input.index);
     case PhysicalInputKind::Axis:
-        return std::string(input.direction > 0 ? "+a" : "-a") +
-               std::to_string(input.index);
+        return std::string(input.direction > 0 ? "+a" : "-a") + std::to_string(input.index);
     case PhysicalInputKind::Hat:
-        return "h" + std::to_string(input.index) + "." +
-               std::to_string(static_cast<unsigned>(input.hat_mask));
+        return "h" + std::to_string(input.index) + "." + std::to_string(static_cast<unsigned>(input.hat_mask));
     default:
         return {};
     }
 }
 
-inline void append_mapping_field(std::string& output, std::string_view target,
-                                 const PhysicalInput& input) {
+inline void append_mapping_field(std::string& output, std::string_view target, const PhysicalInput& input) {
     output.append(target);
     output.push_back(':');
     output.append(encode_physical_input(input));
     output.push_back(',');
 }
 
-inline void append_axis_pair(std::string& output, std::string_view target,
-                             const PhysicalInput& negative,
+inline void append_axis_pair(std::string& output, std::string_view target, const PhysicalInput& negative,
                              const PhysicalInput& positive) {
-    if (negative.kind == PhysicalInputKind::Axis &&
-        positive.kind == PhysicalInputKind::Axis &&
-        negative.index == positive.index &&
-        negative.direction == -positive.direction) {
+    if (negative.kind == PhysicalInputKind::Axis && positive.kind == PhysicalInputKind::Axis &&
+        negative.index == positive.index && negative.direction == -positive.direction) {
         output.append(target);
         output.append(":a");
         output.append(std::to_string(negative.index));
@@ -168,20 +158,16 @@ inline void append_axis_pair(std::string& output, std::string_view target,
         output.push_back(',');
         return;
     }
-    append_mapping_field(output, std::string("-") + std::string(target),
-                         negative);
-    append_mapping_field(output, std::string("+") + std::string(target),
-                         positive);
+    append_mapping_field(output, std::string("-") + std::string(target), negative);
+    append_mapping_field(output, std::string("+") + std::string(target), positive);
 }
 
 inline bool mapping_complete(const ControllerMappingDefinition& mapping) {
-    return std::all_of(mapping.inputs.begin(), mapping.inputs.end(),
-                       physical_input_valid);
+    return std::all_of(mapping.inputs.begin(), mapping.inputs.end(), physical_input_valid);
 }
 
-inline std::string build_sdl_mapping(
-    std::string_view guid, std::string_view name, std::string_view platform,
-    const ControllerMappingDefinition& mapping) {
+inline std::string build_sdl_mapping(std::string_view guid, std::string_view name, std::string_view platform,
+                                     const ControllerMappingDefinition& mapping) {
     if (guid.empty() || !mapping_complete(mapping)) {
         return {};
     }
@@ -196,10 +182,8 @@ inline std::string build_sdl_mapping(
     output.append(sanitise_mapping_name(name));
     output.push_back(',');
 
-    append_axis_pair(output, "leftx", input(MappingControl::StickLeft),
-                     input(MappingControl::StickRight));
-    append_axis_pair(output, "lefty", input(MappingControl::StickUp),
-                     input(MappingControl::StickDown));
+    append_axis_pair(output, "leftx", input(MappingControl::StickLeft), input(MappingControl::StickRight));
+    append_axis_pair(output, "lefty", input(MappingControl::StickUp), input(MappingControl::StickDown));
     append_mapping_field(output, "a", input(MappingControl::A));
     // DKR-R's default N64 B binding uses SDL's X face button, leaving SDL B/Y
     // free for controllers which expose C buttons instead of a right stick.
@@ -212,10 +196,8 @@ inline std::string build_sdl_mapping(
     append_mapping_field(output, "dpright", input(MappingControl::DpadRight));
     append_mapping_field(output, "leftshoulder", input(MappingControl::L));
     append_mapping_field(output, "rightshoulder", input(MappingControl::R));
-    append_axis_pair(output, "righty", input(MappingControl::CUp),
-                     input(MappingControl::CDown));
-    append_axis_pair(output, "rightx", input(MappingControl::CLeft),
-                     input(MappingControl::CRight));
+    append_axis_pair(output, "righty", input(MappingControl::CUp), input(MappingControl::CDown));
+    append_axis_pair(output, "rightx", input(MappingControl::CLeft), input(MappingControl::CRight));
     if (!platform.empty()) {
         output.append("platform:");
         output.append(platform);

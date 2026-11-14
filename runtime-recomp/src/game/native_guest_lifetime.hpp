@@ -4,4 +4,4 @@
 namespace ultramodern {
 void cancel_native_guest_threads();
 void reset_native_guest_queue();
-}
+} // namespace ultramodern

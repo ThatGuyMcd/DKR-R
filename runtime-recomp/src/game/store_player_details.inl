@@ -67,15 +67,15 @@ void StoreDetails(const StoreJson& row, float width, const dkr::store::Snapshot&
         StoreHeading(StoreText(row, "title", 200), inner, 23);
         StoreNote("by " + StoreText(row, "author", 200) + "  |  " + StoreCategory(row), inner);
         StoreNote(StoreRating(row), inner);
-        StoreCommunityCounts(row,inner);
+        StoreCommunityCounts(row, inner);
         StoreNote("Version " + StoreText(row, "version", 80) + "  |  " + StoreDate(row), inner);
         StoreDownloadButton(row, StoreCurrentRelease(row), inner);
     }
     if (hero)
         ImGui::EndTable();
     width = std::min(1120.F, outer);
-    g_mod_store.detail_tab =
-        StoreTabLine({"Overview", "Reviews", "Install help", "Releases", "Comments"}, g_mod_store.detail_tab, width, "mod-details");
+    g_mod_store.detail_tab = StoreTabLine({"Overview", "Reviews", "Install help", "Releases", "Comments"},
+                                          g_mod_store.detail_tab, width, "mod-details");
     if (g_mod_store.detail_tab == 0) {
         const auto description = StoreText(row, "description", 16000);
         StoreNote(description.empty() ? StoreText(row, "summary", 4000) : description, width, false);
@@ -159,8 +159,8 @@ void StoreDetails(const StoreJson& row, float width, const dkr::store::Snapshot&
         const auto install = StoreText(row, "install", 6000);
         StoreNote(install.empty() ? "Choose Download & install. DKR-R handles the package for you." : install, width);
         StoreNote("Code mods still need your permission. Patch imports may need your original ROM.", width);
-    } else if(g_mod_store.detail_tab==4) {
-        StoreComments(row,width,store);
+    } else if (g_mod_store.detail_tab == 4) {
+        StoreComments(row, width, store);
     } else if (row.contains("releases") && row["releases"].is_array()) {
         int shown = 0;
         const auto current = StoreText(StoreCurrentRelease(row), "id", 160);

@@ -2,7 +2,11 @@
 #include <atomic>
 #include <vector>
 
-#define CHECK(c) do { if (!(c)) throw std::runtime_error(#c); } while(false)
+#define CHECK(c)                                                                                                       \
+    do {                                                                                                               \
+        if (!(c))                                                                                                      \
+            throw std::runtime_error(#c);                                                                              \
+    } while (false)
 using namespace dkr::runtime::host_tasks;
 using namespace std::chrono_literals;
 int main() {
@@ -13,7 +17,11 @@ int main() {
     CHECK(r.protect(0xA0100010, Engine::Dp, 1000));
     CHECK(!r.protect(0x80100110, Engine::Sp, 11));
     bool rejected = false;
-    try { r.begin(0xA0100010, 1); } catch (const std::runtime_error&) { rejected = true; }
+    try {
+        r.begin(0xA0100010, 1);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
     CHECK(rejected);
     Task stalled;
     CHECK(!r.take_stall(stalled, now + 14s));
@@ -45,26 +53,32 @@ int main() {
     CHECK(!r.lookup(audio.address, Engine::Sp));
     for (auto bad : {0U, 0x80800000U, 0x807FFFD0U, 0xC0100000U}) {
         rejected = false;
-        try { r.begin(bad, 1); } catch (const std::runtime_error&) { rejected = true; }
+        try {
+            r.begin(bad, 1);
+        } catch (const std::runtime_error&) {
+            rejected = true;
+        }
         CHECK(rejected);
     }
     // Independent queued tasks keep ownership while workers and the scheduler
     // concurrently record/consume edges. Exercise reuse thousands of times.
     std::vector<std::thread> workers;
-    for (unsigned worker = 0; worker < 4; ++worker) workers.emplace_back([&, worker] {
-        auto address = 0x80200010U + worker * 0x100;
-        for (int i = 0; i < 2000; ++i) {
-            auto task = r.begin(address, 1);
-            CHECK(r.lookup(address, Engine::Sp).generation == task.generation);
-            r.mark(task, Stage::SpNotify);
-            r.consume(task, Engine::Sp);
-            CHECK(r.lookup(address, Engine::Dp).generation == task.generation);
-            r.mark(task, Stage::Parse);
-            r.mark(task, Stage::DpNotify);
-            r.consume(task, Engine::Dp);
-        }
-    });
-    for (auto& worker : workers) worker.join();
+    for (unsigned worker = 0; worker < 4; ++worker)
+        workers.emplace_back([&, worker] {
+            auto address = 0x80200010U + worker * 0x100;
+            for (int i = 0; i < 2000; ++i) {
+                auto task = r.begin(address, 1);
+                CHECK(r.lookup(address, Engine::Sp).generation == task.generation);
+                r.mark(task, Stage::SpNotify);
+                r.consume(task, Engine::Sp);
+                CHECK(r.lookup(address, Engine::Dp).generation == task.generation);
+                r.mark(task, Stage::Parse);
+                r.mark(task, Stage::DpNotify);
+                r.consume(task, Engine::Dp);
+            }
+        });
+    for (auto& worker : workers)
+        worker.join();
     CHECK(!r.take_stall(stalled, Clock::now() + 30s));
     return 0;
 }

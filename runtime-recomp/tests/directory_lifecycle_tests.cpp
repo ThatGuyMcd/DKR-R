@@ -33,37 +33,57 @@ struct DirectSessionTestAccess {
         session.invite_ = "ABCDE";
         session.sender_id_ = 18446744073709551614ULL;
         std::string error;
-        if (!session.transport_->open(0, error)) throw std::runtime_error(error);
+        if (!session.transport_->open(0, error))
+            throw std::runtime_error(error);
         session.last_client_request_ = std::chrono::steady_clock::now();
         session.pump_locked();
     }
     static void status_pair(DirectSession& host, DirectSession& guest) {
-        prepare(host,true);prepare(guest,false);
-        std::scoped_lock lock(host.mutex_,guest.mutex_);
+        prepare(host, true);
+        prepare(guest, false);
+        std::scoped_lock lock(host.mutex_, guest.mutex_);
         std::string error;
-        if(!host.transport_->open(0,error)||!guest.transport_->open(0,error))throw std::runtime_error(error);
-        PeerAddress host_address,guest_address;
-        if(!DatagramSocket::resolve("127.0.0.1",host.transport_->local_port(),host_address,error)||
-            !DatagramSocket::resolve("127.0.0.1",guest.transport_->local_port(),guest_address,error))throw std::runtime_error(error);
-        const auto key=secure::generate_key();
-        host.match_id_=guest.match_id_=1234;host.sender_id_=1;guest.sender_id_=2;guest.host_sender_id_=1;
-        guest.host_address_=host_address;guest.key_=key;guest.local_slot_=1;host.local_slot_=0;
-        host.room_view_.name=guest.room_view_.name="Status test";
-        auto& peer=host.peers_[0];peer.active=true;peer.sender_id=2;peer.address=guest_address;peer.slot=1;peer.key=key;
-        const auto now=std::chrono::steady_clock::now();
-        guest.last_admission_response_=guest.last_client_request_=now;
-        auto& pending=host.pending_joins_[0];pending.active=true;pending.sender_id=3;pending.display_name="Joining racer";
-        pending.first_seen=pending.last_seen=now;pending.mods_approved=true;
+        if (!host.transport_->open(0, error) || !guest.transport_->open(0, error))
+            throw std::runtime_error(error);
+        PeerAddress host_address, guest_address;
+        if (!DatagramSocket::resolve("127.0.0.1", host.transport_->local_port(), host_address, error) ||
+            !DatagramSocket::resolve("127.0.0.1", guest.transport_->local_port(), guest_address, error))
+            throw std::runtime_error(error);
+        const auto key = secure::generate_key();
+        host.match_id_ = guest.match_id_ = 1234;
+        host.sender_id_ = 1;
+        guest.sender_id_ = 2;
+        guest.host_sender_id_ = 1;
+        guest.host_address_ = host_address;
+        guest.key_ = key;
+        guest.local_slot_ = 1;
+        host.local_slot_ = 0;
+        host.room_view_.name = guest.room_view_.name = "Status test";
+        auto& peer = host.peers_[0];
+        peer.active = true;
+        peer.sender_id = 2;
+        peer.address = guest_address;
+        peer.slot = 1;
+        peer.key = key;
+        const auto now = std::chrono::steady_clock::now();
+        guest.last_admission_response_ = guest.last_client_request_ = now;
+        auto& pending = host.pending_joins_[0];
+        pending.active = true;
+        pending.sender_id = 3;
+        pending.display_name = "Joining racer";
+        pending.first_seen = pending.last_seen = now;
+        pending.mods_approved = true;
         // Retain the synthetic pending row without sending it an admission ACK.
-        pending.last_acknowledgement=now+std::chrono::seconds(5);
+        pending.last_acknowledgement = now + std::chrono::seconds(5);
     }
     static void pump_status(DirectSession& session) {
-        std::scoped_lock lock(session.mutex_);session.pump_locked();
+        std::scoped_lock lock(session.mutex_);
+        session.pump_locked();
     }
-    static void dynamic_pair(DirectSession& host,DirectSession& guest) {
-        status_pair(host,guest);
-        std::scoped_lock lock(host.mutex_,guest.mutex_);
-        host.room_view_.rules.automatic_input_delay=guest.room_view_.rules.automatic_input_delay=true;
+    static void dynamic_pair(DirectSession& host, DirectSession& guest) {
+        status_pair(host, guest);
+        std::scoped_lock lock(host.mutex_, guest.mutex_);
+        host.room_view_.rules.automatic_input_delay = guest.room_view_.rules.automatic_input_delay = true;
     }
 };
 } // namespace dkr::runtime::netplay
@@ -149,50 +169,62 @@ void client_publishes_social_membership() {
     const auto state = online::bridge(&guest)->state;
     check(state.value("socialMember", false), "admitted client publishes social membership");
     check(state.value("code", std::string{}) == "ABCDE", "client publishes the joined lobby code");
-    check(state.value("sender", std::string{}) == "18446744073709551614", "client preserves its full native sender identity");
+    check(state.value("sender", std::string{}) == "18446744073709551614",
+          "client preserves its full native sender identity");
 }
 void clients_receive_joining_progress() {
-    DirectSession host,guest;
-    DirectSessionTestAccess::status_pair(host,guest);
+    DirectSession host, guest;
+    DirectSessionTestAccess::status_pair(host, guest);
     // The first host pump establishes its room incarnation. The following
     // pumps send the metadata through real authenticated loopback UDP.
     DirectSessionTestAccess::pump_status(host);
     DirectSessionTestAccess::pump_status(host);
-    auto bridge=dkr::online_stability::control(&host);
-    bridge->mods({{3,0,50,100,{},dkr::online_stability::Stage::Downloading}});
+    auto bridge = dkr::online_stability::control(&host);
+    bridge->mods({{3, 0, 50, 100, {}, dkr::online_stability::Stage::Downloading}});
     std::this_thread::sleep_for(std::chrono::milliseconds(510));
-    for(unsigned i=0;i<8;++i) {
-        DirectSessionTestAccess::pump_status(host);DirectSessionTestAccess::pump_status(guest);
+    for (unsigned i = 0; i < 8; ++i) {
+        DirectSessionTestAccess::pump_status(host);
+        DirectSessionTestAccess::pump_status(guest);
     }
-    const auto rows=dkr::online_stability::control(&guest)->joins();
-    check(rows.size()==1,"admitted client receives host joining snapshot");
-    check(rows[0].name=="Joining racer"&&rows[0].stage==dkr::online_stability::Stage::Downloading,
-        "client sees canonical download stage and joining name");
-    check(rows[0].received==50&&rows[0].total==100,"client receives exact bounded progress counters");
+    const auto rows = dkr::online_stability::control(&guest)->joins();
+    check(rows.size() == 1, "admitted client receives host joining snapshot");
+    check(rows[0].name == "Joining racer" && rows[0].stage == dkr::online_stability::Stage::Downloading,
+          "client sees canonical download stage and joining name");
+    check(rows[0].received == 50 && rows[0].total == 100, "client receives exact bounded progress counters");
     guest.disconnect("Leave status test");
-    check(dkr::online_stability::control(&guest)->joins().empty(),"leaving immediately clears joining rows");
+    check(dkr::online_stability::control(&guest)->joins().empty(), "leaving immediately clears joining rows");
     host.disconnect("Close status test");
-    check(dkr::online_stability::control(&host)->joins().empty(),"closing immediately clears host progress");
+    check(dkr::online_stability::control(&host)->joins().empty(), "closing immediately clears host progress");
 }
 void dynamic_delay_uses_the_authenticated_extension_dispatcher() {
-    namespace stability=dkr::online_stability;
-    DirectSession host,guest;DirectSessionTestAccess::dynamic_pair(host,guest);
-    DirectSessionTestAccess::pump_status(host);DirectSessionTestAccess::pump_status(guest);
-    auto host_bridge=stability::control(&host),guest_bridge=stability::control(&guest);
-    stability::LiveDelay a(host_bridge,4,12),b(guest_bridge,4,12);a.local_owner(0);b.local_owner(1);
-    const auto start=stability::Clock::now();
-    for(unsigned ms=0;ms<12000;ms+=20) {
-        const auto frame=ms*30/1000;const auto now=start+std::chrono::milliseconds(ms);
-        a.arrival(1,frame);b.arrival(0,frame);
-        a.pulse(91,1,frame,false,false,now);b.pulse(91,1,frame,false,false,now);
+    namespace stability = dkr::online_stability;
+    DirectSession host, guest;
+    DirectSessionTestAccess::dynamic_pair(host, guest);
+    DirectSessionTestAccess::pump_status(host);
+    DirectSessionTestAccess::pump_status(guest);
+    auto host_bridge = stability::control(&host), guest_bridge = stability::control(&guest);
+    stability::LiveDelay a(host_bridge, 4, 12), b(guest_bridge, 4, 12);
+    a.local_owner(0);
+    b.local_owner(1);
+    const auto start = stability::Clock::now();
+    for (unsigned ms = 0; ms < 12000; ms += 20) {
+        const auto frame = ms * 30 / 1000;
+        const auto now = start + std::chrono::milliseconds(ms);
+        a.arrival(1, frame);
+        b.arrival(0, frame);
+        a.pulse(91, 1, frame, false, false, now);
+        b.pulse(91, 1, frame, false, false, now);
         // These are real encrypted UDP records through DirectSession's normal
         // extension dispatcher, not a direct call between Control fixtures.
-        DirectSessionTestAccess::pump_status(host);DirectSessionTestAccess::pump_status(guest);
+        DirectSessionTestAccess::pump_status(host);
+        DirectSessionTestAccess::pump_status(guest);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    check(a.negotiated()&&b.negotiated(),"actual authenticated extension dispatch negotiates Dynamic Input Delay");
-    check(a.lead()==0&&b.lead()==0,"actual authenticated targets reduce both local-link owners to zero added delay");
-    host.disconnect("Close dynamic dispatch test");guest.disconnect("Leave dynamic dispatch test");
+    check(a.negotiated() && b.negotiated(), "actual authenticated extension dispatch negotiates Dynamic Input Delay");
+    check(a.lead() == 0 && b.lead() == 0,
+          "actual authenticated targets reduce both local-link owners to zero added delay");
+    host.disconnect("Close dynamic dispatch test");
+    guest.disconnect("Leave dynamic dispatch test");
 }
 } // namespace
 

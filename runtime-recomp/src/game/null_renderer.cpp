@@ -16,9 +16,8 @@ bool dkr::runtime::DiagnosticRenderer::valid() {
     return true;
 }
 
-bool dkr::runtime::DiagnosticRenderer::update_config(
-    const ultramodern::renderer::GraphicsConfig&,
-    const ultramodern::renderer::GraphicsConfig&) {
+bool dkr::runtime::DiagnosticRenderer::update_config(const ultramodern::renderer::GraphicsConfig&,
+                                                     const ultramodern::renderer::GraphicsConfig&) {
     return false;
 }
 
@@ -26,10 +25,8 @@ void dkr::runtime::DiagnosticRenderer::enable_instant_present() {}
 
 void dkr::runtime::DiagnosticRenderer::send_dl(const OSTask* task, std::uint8_t*) {
     const auto index = ++display_list_count_;
-    std::fprintf(stderr,
-                 "[boot][gfx] display-list=%llu ucode=0x%08X data=0x%08X size=%u\n",
-                 static_cast<unsigned long long>(index), task->t.ucode,
-                 task->t.data_ptr, task->t.data_size);
+    std::fprintf(stderr, "[boot][gfx] display-list=%llu ucode=0x%08X data=0x%08X size=%u\n",
+                 static_cast<unsigned long long>(index), task->t.ucode, task->t.data_ptr, task->t.data_size);
 }
 
 void dkr::runtime::DiagnosticRenderer::update_screen() {
@@ -42,8 +39,7 @@ void dkr::runtime::DiagnosticRenderer::update_screen() {
         recomp::start_game(kGameId);
     }
     if (index <= 10 || index % 60 == 0) {
-        std::fprintf(stderr, "[boot][vi] present=%llu\n",
-                     static_cast<unsigned long long>(index));
+        std::fprintf(stderr, "[boot][vi] present=%llu\n", static_cast<unsigned long long>(index));
     }
 }
 
@@ -57,7 +53,7 @@ float dkr::runtime::DiagnosticRenderer::get_resolution_scale() const {
     return 1.0F;
 }
 
-std::unique_ptr<ultramodern::renderer::RendererContext> dkr::runtime::CreateDiagnosticRenderer(
-    std::uint8_t*, ultramodern::renderer::WindowHandle, bool) {
+std::unique_ptr<ultramodern::renderer::RendererContext>
+dkr::runtime::CreateDiagnosticRenderer(std::uint8_t*, ultramodern::renderer::WindowHandle, bool) {
     return std::make_unique<DiagnosticRenderer>();
 }

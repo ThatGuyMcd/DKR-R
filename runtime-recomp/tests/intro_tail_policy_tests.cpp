@@ -23,8 +23,7 @@ int main() {
     assert(!gate.restore({0U, 7U}));
     assert(!gate.restore({2U, 29U}));
     assert(!gate.restore({3U, 0U}));
-    assert(gate.capture().phase == partial.phase &&
-           gate.capture().held_update_units == partial.held_update_units);
+    assert(gate.capture().phase == partial.phase && gate.capture().held_update_units == partial.held_update_units);
     for (unsigned i = 0; i < 8; ++i) {
         const auto expected = reference.update(false, true, false, 5U);
         assert(gate.update(false, true, false, 5U) == expected);
@@ -32,13 +31,11 @@ int main() {
     assert(gate.restore(partial));
     assert(reference.restore(partial));
     for (unsigned i = 0; i < 8; ++i)
-        assert(gate.update(i >= 5, true, false, 5U) ==
-               reference.update(i >= 5, true, false, 5U));
+        assert(gate.update(i >= 5, true, false, 5U) == reference.update(i >= 5, true, false, 5U));
     gate.reset();
     assert(gate.capture().phase == 0U && gate.capture().held_update_units == 0U);
     assert(gate.update(true, true, false, 1U) == TailAction::Hold);
-    for (std::uint32_t tick = 1U;
-         tick < dkr::runtime::intro::TailGate::kTailUpdateUnits; ++tick) {
+    for (std::uint32_t tick = 1U; tick < dkr::runtime::intro::TailGate::kTailUpdateUnits; ++tick) {
         assert(gate.update(false, true, false, 1U) == TailAction::Hold);
     }
     assert(gate.update(false, true, false, 1U) == TailAction::Release);
@@ -58,8 +55,7 @@ int main() {
 
     // A level-triggered completion also produces only one release edge.
     gate.reset();
-    for (std::uint32_t tick = 0U;
-         tick < dkr::runtime::intro::TailGate::kTailUpdateUnits; ++tick) {
+    for (std::uint32_t tick = 0U; tick < dkr::runtime::intro::TailGate::kTailUpdateUnits; ++tick) {
         assert(gate.update(true, true, false, 1U) == TailAction::Hold);
     }
     assert(gate.update(true, true, false, 1U) == TailAction::Release);

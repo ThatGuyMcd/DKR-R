@@ -24,8 +24,7 @@ void OnlineInputBroker::clear_committed_locked() {
     committed_.epoch = epoch_;
 }
 
-void OnlineInputBroker::configure(bool enabled, std::uint8_t occupied_mask,
-                                  std::uint8_t local_slot) {
+void OnlineInputBroker::configure(bool enabled, std::uint8_t occupied_mask, std::uint8_t local_slot) {
     std::scoped_lock lock(mutex_);
     occupied_mask &= 0x0FU;
     if (!enabled) {
@@ -37,8 +36,7 @@ void OnlineInputBroker::configure(bool enabled, std::uint8_t occupied_mask,
         return;
     }
 
-    const bool topology_changed = !enabled_ || occupied_mask_ != occupied_mask ||
-                                  local_slot_ != local_slot;
+    const bool topology_changed = !enabled_ || occupied_mask_ != occupied_mask || local_slot_ != local_slot;
     enabled_ = true;
     occupied_mask_ = occupied_mask;
     local_slot_ = local_slot;
@@ -76,14 +74,15 @@ void OnlineInputBroker::reset() {
     committed_ = {};
 }
 
-void OnlineInputBroker::capture_local(std::size_t profile,
-                                      std::uint16_t buttons, float stick_x,
-                                      float stick_y, bool blocked,std::uint8_t accelerator,std::uint8_t brake,std::uint8_t driving_flags) {
+void OnlineInputBroker::capture_local(std::size_t profile, std::uint16_t buttons, float stick_x, float stick_y,
+                                      bool blocked, std::uint8_t accelerator, std::uint8_t brake,
+                                      std::uint8_t driving_flags) {
     std::scoped_lock lock(mutex_);
-    if (!enabled_ || profile != local_profile_) return;
-    local_.input = {buttons, pack_input_axis(stick_x),
-                    pack_input_axis(stick_y),accelerator,brake,driving_flags};
-    if(blocked||!valid_input(local_.input))local_.input={};
+    if (!enabled_ || profile != local_profile_)
+        return;
+    local_.input = {buttons, pack_input_axis(stick_x), pack_input_axis(stick_y), accelerator, brake, driving_flags};
+    if (blocked || !valid_input(local_.input))
+        local_.input = {};
     local_.profile = profile;
     local_.generation = next_local_generation_++;
     local_.blocked = blocked;
@@ -95,10 +94,10 @@ LocalInputSample OnlineInputBroker::local_sample() const {
     return local_;
 }
 
-bool OnlineInputBroker::publish(std::uint32_t frame, InputFrameSource source,
-                                const FrameInputs& inputs) {
+bool OnlineInputBroker::publish(std::uint32_t frame, InputFrameSource source, const FrameInputs& inputs) {
     std::scoped_lock lock(mutex_);
-    if (!enabled_ || source == InputFrameSource::None) return false;
+    if (!enabled_ || source == InputFrameSource::None)
+        return false;
 
     committed_.inputs = inputs;
     for (std::size_t slot = 0U; slot < committed_.inputs.size(); ++slot) {
@@ -125,10 +124,11 @@ PackedInput OnlineInputBroker::input_for_port(std::size_t port) const {
 
 OnlineInputBrokerView OnlineInputBroker::view() const {
     std::scoped_lock lock(mutex_);
-    return {enabled_, occupied_mask_, local_slot_, local_profile_, epoch_,
-            local_, committed_};
+    return {enabled_, occupied_mask_, local_slot_, local_profile_, epoch_, local_, committed_};
 }
 
-OnlineInputBroker& online_input_broker() { return g_online_input_broker; }
+OnlineInputBroker& online_input_broker() {
+    return g_online_input_broker;
+}
 
 } // namespace dkr::runtime::netplay

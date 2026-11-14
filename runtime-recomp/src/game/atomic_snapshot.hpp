@@ -10,9 +10,10 @@ namespace dkr::runtime {
 // shared_ptr atomic free functions provide the same publication/ownership
 // semantics. Standard libraries that do implement it keep the specialization.
 #if !defined(__cpp_lib_atomic_shared_ptr) || defined(DKR_TEST_ATOMIC_SNAPSHOT_FALLBACK)
-template<class T> class AtomicSnapshot {
+template <class T> class AtomicSnapshot {
     std::shared_ptr<T> value_;
-public:
+
+  public:
     AtomicSnapshot() = default;
     explicit AtomicSnapshot(std::shared_ptr<T> value) : value_(std::move(value)) {}
     AtomicSnapshot(const AtomicSnapshot&) = delete;
@@ -25,6 +26,6 @@ public:
     }
 };
 #else
-template<class T> using AtomicSnapshot = std::atomic<std::shared_ptr<T>>;
+template <class T> using AtomicSnapshot = std::atomic<std::shared_ptr<T>>;
 #endif
-}
+} // namespace dkr::runtime

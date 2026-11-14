@@ -12,101 +12,91 @@
 // A launcher race button painted in the paddock's CSS pixels (.race-button),
 // so pages can give it depth, a soft hover and their own press feedback.
 struct RaceButtonLook {
-    unsigned fill = 0x0A6EA1;       // --blue
-    unsigned border = 0x296B70;     // --border
+    unsigned fill = 0x0A6EA1;   // --blue
+    unsigned border = 0x296B70; // --border
     unsigned border_alpha = 255U;
     unsigned text = 0xFFF6DA;
     float font_px = 19.0F;
-    float drop = 0.0F;              // box-shadow: 0 <drop> 0 <drop_colour>
+    float drop = 0.0F; // box-shadow: 0 <drop> 0 <drop_colour>
     unsigned drop_colour = 0x000000;
-    unsigned highlight_alpha = 0U;  // box-shadow: inset 0 1px 0 #fff<alpha>
-    unsigned ring_alpha = 0U;       // box-shadow: 0 0 0 1px #fff<alpha>
-    float hover_in = 0.0F;          // checker fade-in; 0 is instant
+    unsigned highlight_alpha = 0U; // box-shadow: inset 0 1px 0 #fff<alpha>
+    unsigned ring_alpha = 0U;      // box-shadow: 0 0 0 1px #fff<alpha>
+    float hover_in = 0.0F;         // checker fade-in; 0 is instant
     float ellipsis_spread = 0.0F;
-    bool sink = false;              // presses down into its base, no scale
-    bool text_shadow = true;        // text-shadow: 0 2px 0 #00000038
+    bool sink = false;       // presses down into its base, no scale
+    bool text_shadow = true; // text-shadow: 0 2px 0 #00000038
 };
 
 bool PaddockRaceButton(const char* label, ImVec2 size, const RaceButtonLook& look) {
-    const auto caption=dkr::localisation::label(label);label=caption.c_str();
+    const auto caption = dkr::localisation::label(label);
+    label = caption.c_str();
     const PaddockPress press = PaddockBeginPress(label, size, 0.15F, 0.15F);
     const bool lit = press.hovered || press.focused;
     const float amount = look.hover_in > 0.0F
-        ? PaddockEase(PaddockTween(PaddockKey("race-hover", press.id), lit,
-                                   look.hover_in, 0.0F))
-        : (lit ? 1.0F : 0.0F);
-    const float sunk = look.sink
-        ? PaddockEase(PaddockTween(PaddockKey("race-sink", press.id),
-                                   press.held && press.hovered, 0.08F, 0.2F))
-        : 0.0F;
+                             ? PaddockEase(PaddockTween(PaddockKey("race-hover", press.id), lit, look.hover_in, 0.0F))
+                             : (lit ? 1.0F : 0.0F);
+    const float sunk =
+        look.sink
+            ? PaddockEase(PaddockTween(PaddockKey("race-sink", press.id), press.held && press.hovered, 0.08F, 0.2F))
+            : 0.0F;
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const float offset = 2.0F * sunk;
     const ImVec2 a{press.min.x, press.min.y + offset};
     const ImVec2 b{press.max.x, press.max.y + offset};
     const PaddockRadii radii = PaddockRound(12.0F);
     if (look.ring_alpha != 0U) {
-        PaddockStroke(draw, {press.min.x - 1.0F, press.min.y - 1.0F},
-                      {press.max.x + 1.0F, press.max.y + 1.0F}, PaddockRound(13.0F),
-                      PaddockCol(0xFFFFFF, look.ring_alpha), 1.0F);
+        PaddockStroke(draw, {press.min.x - 1.0F, press.min.y - 1.0F}, {press.max.x + 1.0F, press.max.y + 1.0F},
+                      PaddockRound(13.0F), PaddockCol(0xFFFFFF, look.ring_alpha), 1.0F);
     }
     if (look.drop > 0.0F) {
         const float drop = look.drop - offset;
-        PaddockFill(draw, {a.x, a.y + drop}, {b.x, b.y + drop}, radii,
-                    PaddockCol(look.drop_colour));
+        PaddockFill(draw, {a.x, a.y + drop}, {b.x, b.y + drop}, radii, PaddockCol(look.drop_colour));
     }
     PaddockFill(draw, a, b, radii, PaddockCol(look.fill));
     if (look.highlight_alpha != 0U) {
         draw->PushClipRect({a.x, a.y + 1.0F}, {b.x, a.y + 2.0F}, true);
-        PaddockFill(draw, {a.x + 1.0F, a.y + 1.0F}, {b.x - 1.0F, b.y - 1.0F},
-                    PaddockRound(11.0F), PaddockCol(0xFFFFFF, look.highlight_alpha));
+        PaddockFill(draw, {a.x + 1.0F, a.y + 1.0F}, {b.x - 1.0F, b.y - 1.0F}, PaddockRound(11.0F),
+                    PaddockCol(0xFFFFFF, look.highlight_alpha));
         draw->PopClipRect();
     }
-    const ImU32 border = PaddockMix(PaddockRgb(look.border, look.border_alpha),
-                                    PaddockRgb(0xFFDA63), press.hover);
+    const ImU32 border = PaddockMix(PaddockRgb(look.border, look.border_alpha), PaddockRgb(0xFFDA63), press.hover);
     PaddockStroke(draw, a, b, radii, PaddockApply(border), 1.0F);
 
     const PaddockType type = PaddockSign(look.font_px, 1.0F, 0.0F);
     const char* end = PaddockLabelEnd(label);
     if (lit && amount > 0.0F) {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 12.0F);
-        ImGui::DrawRaceButtonHover(label, a, b, amount,
-                                   look.hover_in > 0.0F ? 0.9F + 0.1F * amount : 1.0F,
-                                   type.font, type.size, look.ellipsis_spread);
+        ImGui::DrawRaceButtonHover(label, a, b, amount, look.hover_in > 0.0F ? 0.9F + 0.1F * amount : 1.0F, type.font,
+                                   type.size, look.ellipsis_spread);
         ImGui::PopStyleVar();
     } else {
-        const float text_width = ImGui::RaceLabelWidth(type.font, type.size, label, end,
-                                                       look.ellipsis_spread);
-        const float text_height =
-            type.font->CalcTextSizeA(type.size, FLT_MAX, 0.0F, label, end).y;
+        const float text_width = ImGui::RaceLabelWidth(type.font, type.size, label, end, look.ellipsis_spread);
+        const float text_height = type.font->CalcTextSizeA(type.size, FLT_MAX, 0.0F, label, end).y;
         const ImVec2 at{std::round(a.x + (b.x - a.x - text_width) * 0.5F),
                         std::round(a.y + (b.y - a.y - text_height) * 0.5F)};
         draw->PushClipRect(a, b, true);
         if (look.text_shadow) {
-            ImGui::DrawRaceLabel(draw, type.font, type.size, {at.x, at.y + 2.0F},
-                                 PaddockCol(0x000000, 56U), label, end,
+            ImGui::DrawRaceLabel(draw, type.font, type.size, {at.x, at.y + 2.0F}, PaddockCol(0x000000, 56U), label, end,
                                  look.ellipsis_spread);
         }
-        ImGui::DrawRaceLabel(draw, type.font, type.size, at, PaddockCol(look.text),
-                             label, end, look.ellipsis_spread);
+        ImGui::DrawRaceLabel(draw, type.font, type.size, at, PaddockCol(look.text), label, end, look.ellipsis_spread);
         draw->PopClipRect();
     }
     PaddockEndPress(press, 12.0F, look.sink ? 1.0F : 0.96F);
     return press.pressed;
 }
 
-float PaddockRaceButtonWidth(const char* label, float font_px = 19.0F,
-                             float ellipsis_spread = 0.0F) {
-    const auto caption=dkr::localisation::label(label);label=caption.c_str();
+float PaddockRaceButtonWidth(const char* label, float font_px = 19.0F, float ellipsis_spread = 0.0F) {
+    const auto caption = dkr::localisation::label(label);
+    label = caption.c_str();
     const PaddockType type = PaddockSign(font_px, 1.0F, 0.0F);
     const char* end = PaddockLabelEnd(label);
-    return std::ceil(ImGui::RaceLabelWidth(type.font, type.size, label, end,
-                                           ellipsis_spread) + 32.0F + 2.0F);
+    return std::ceil(ImGui::RaceLabelWidth(type.font, type.size, label, end, ellipsis_spread) + 32.0F + 2.0F);
 }
 
 // ------------------------------------------------------------ play page
 
-constexpr const char* kRomChoosePrompt =
-    "Choose your Diddy Kong Racing ROM.";
+constexpr const char* kRomChoosePrompt = "Choose your Diddy Kong Racing ROM.";
 
 struct PlayPageContext {
     std::filesystem::path& selected_rom;
@@ -137,12 +127,12 @@ struct PlayPageState {
     ImGuiContext* context = nullptr;
     int last_frame = -100;
     bool was_ready = false;
-    double arrived_at = -10.0;             // a ROM was just loaded (PaddockClock)
+    double arrived_at = -10.0; // a ROM was just loaded (PaddockClock)
     // The last ROM removed from the list and where it sat, so Remove can be
     // undone while the page stays open.
     std::filesystem::path removed;
     std::size_t removed_index = 0;
-    bool notices_known = false;            // nothing animates on page load
+    bool notices_known = false; // nothing animates on page load
     std::set<std::string> shown;
     std::map<std::string, double> entered;
     std::optional<PlayNotice> leaving;
@@ -154,28 +144,27 @@ PlayPageState g_play_page;
 
 // Content that fades up by `offset` px after `delay` seconds.
 class PaddockFadeUp {
-public:
+  public:
     PaddockFadeUp(double started_at, float delay, float duration, float offset)
-        : draw_(ImGui::GetWindowDrawList()),
-          first_vertex_(draw_->VtxBuffer.Size),
-          started_at_(started_at), delay_(delay), duration_(duration),
-          offset_(offset) {}
+        : draw_(ImGui::GetWindowDrawList()), first_vertex_(draw_->VtxBuffer.Size), started_at_(started_at),
+          delay_(delay), duration_(duration), offset_(offset) {}
     PaddockFadeUp(const PaddockFadeUp&) = delete;
     PaddockFadeUp& operator=(const PaddockFadeUp&) = delete;
     ~PaddockFadeUp() {
         const float elapsed = static_cast<float>(PaddockClock() - started_at_) - delay_;
         const float progress = PaddockEase(elapsed / duration_);
-        if (progress >= 1.0F) return;
+        if (progress >= 1.0F)
+            return;
         for (int vertex = first_vertex_; vertex < draw_->VtxBuffer.Size; ++vertex) {
             ImDrawVert& v = draw_->VtxBuffer[vertex];
             v.pos.y += offset_ * (1.0F - progress);
             const ImU32 alpha = (v.col >> IM_COL32_A_SHIFT) & 0xFFU;
-            v.col = (v.col & ~IM_COL32_A_MASK) |
-                (static_cast<ImU32>(std::lround(alpha * progress)) << IM_COL32_A_SHIFT);
+            v.col =
+                (v.col & ~IM_COL32_A_MASK) | (static_cast<ImU32>(std::lround(alpha * progress)) << IM_COL32_A_SHIFT);
         }
     }
 
-private:
+  private:
     ImDrawList* draw_;
     int first_vertex_;
     double started_at_;
@@ -186,13 +175,14 @@ private:
 
 // .play-text-button: an underlined action on the dark ROM card.
 float PlayTextButtonWidth(const char* label) {
-    const auto caption=dkr::localisation::label(label);label=caption.c_str();
-    return std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.0F), label,
-                                    PaddockLabelEnd(label)) + 16.0F);
+    const auto caption = dkr::localisation::label(label);
+    label = caption.c_str();
+    return std::ceil(PaddockMeasure(PaddockReading(14.0F, true, 1.0F), label, PaddockLabelEnd(label)) + 16.0F);
 }
 
 bool PlayTextButton(const char* label, bool destructive) {
-    const auto caption=dkr::localisation::label(label);label=caption.c_str();
+    const auto caption = dkr::localisation::label(label);
+    label = caption.c_str();
     const PaddockType type = PaddockReading(14.0F, true, 1.0F);
     const char* end = PaddockLabelEnd(label);
     const PaddockPress press = PaddockBeginPress(label, {PlayTextButtonWidth(label), 44.0F});
@@ -211,20 +201,20 @@ bool PlayTextButton(const char* label, bool destructive) {
 
 // The action of a launch notice (.play-notice .mods-button).
 float PlayNoticeButtonWidth(const char* label) {
-    const auto caption=dkr::localisation::label(label);label=caption.c_str();
-    return std::ceil(PaddockMeasure(PaddockReading(13.0F, true, 1.4F), label,
-                                    PaddockLabelEnd(label)) + 32.0F);
+    const auto caption = dkr::localisation::label(label);
+    label = caption.c_str();
+    return std::ceil(PaddockMeasure(PaddockReading(13.0F, true, 1.4F), label, PaddockLabelEnd(label)) + 32.0F);
 }
 
 bool PlayNoticeButton(const char* label) {
-    const auto caption=dkr::localisation::label(label);label=caption.c_str();
+    const auto caption = dkr::localisation::label(label);
+    label = caption.c_str();
     const PaddockType type = PaddockReading(13.0F, true, 1.4F);
     const char* end = PaddockLabelEnd(label);
     const PaddockPress press = PaddockBeginPress(label, {PlayNoticeButtonWidth(label), 42.0F});
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    PaddockStroke(draw, {press.min.x - 1.0F, press.min.y - 1.0F},
-                  {press.max.x + 1.0F, press.max.y + 1.0F}, PaddockRound(7.0F),
-                  PaddockCol(0xFFFFFF, static_cast<unsigned>(31.0F + 20.0F * press.hover)), 1.0F);
+    PaddockStroke(draw, {press.min.x - 1.0F, press.min.y - 1.0F}, {press.max.x + 1.0F, press.max.y + 1.0F},
+                  PaddockRound(7.0F), PaddockCol(0xFFFFFF, static_cast<unsigned>(31.0F + 20.0F * press.hover)), 1.0F);
     PaddockFill(draw, press.min, press.max, PaddockRound(6.0F),
                 PaddockCol(0xFFFFFF, static_cast<unsigned>(15.0F + 10.0F * press.hover)));
     PaddockDrawRun(draw, type, {press.min.x + 16.0F, std::round(press.min.y + (42.0F - type.line) * 0.5F)},
@@ -249,10 +239,8 @@ PlayNoticeLayout MeasurePlayNotice(const PlayNotice& notice, float width) {
     layout.one_row = 320.0F + 20.0F + button <= inner;
     layout.text_width = layout.one_row ? inner - 20.0F - button : inner;
     layout.title_height = PaddockTextHeight(strong, notice.title, layout.text_width, true);
-    const float text = layout.title_height + 2.0F +
-                       PaddockTextHeight(body, notice.body, layout.text_width);
-    layout.height = layout.one_row ? 13.0F + std::max(text, 42.0F) + 13.0F
-                                   : 13.0F + text + 12.0F + 42.0F + 13.0F;
+    const float text = layout.title_height + 2.0F + PaddockTextHeight(body, notice.body, layout.text_width);
+    layout.height = layout.one_row ? 13.0F + std::max(text, 42.0F) + 13.0F : 13.0F + text + 12.0F + 42.0F + 13.0F;
     return layout;
 }
 
@@ -267,30 +255,26 @@ bool DrawPlayNotice(const PlayNotice& notice, float width, bool locked) {
     // box-shadow: inset 3px 0 follows the rounded corners.
     PaddockFill(draw, at, end, PaddockRound(18.0F), PaddockCol(stripe));
     draw->PushClipRect(at, end, true);
-    PaddockFill(draw, {at.x + 3.0F, at.y}, {end.x + 3.0F, end.y}, PaddockRound(18.0F),
-                PaddockCol(fill));
+    PaddockFill(draw, {at.x + 3.0F, at.y}, {end.x + 3.0F, end.y}, PaddockRound(18.0F), PaddockCol(fill));
     draw->PopClipRect();
 
     const PaddockType strong = PaddockReading(15.0F, true, 1.4F);
     const PaddockType body = PaddockReading(14.0F, false, 1.5F);
-    const float text_height = layout.title_height + 2.0F +
-                              PaddockTextHeight(body, notice.body, layout.text_width);
-    const float text_top = layout.one_row
-        ? at.y + 13.0F + std::round((std::max(text_height, 42.0F) - text_height) * 0.5F)
-        : at.y + 13.0F;
+    const float text_height = layout.title_height + 2.0F + PaddockTextHeight(body, notice.body, layout.text_width);
+    const float text_top =
+        layout.one_row ? at.y + 13.0F + std::round((std::max(text_height, 42.0F) - text_height) * 0.5F) : at.y + 13.0F;
     PaddockTextStyle title_style;
     title_style.colour = PaddockCol(notice.warning ? 0xFFECCBU : 0xFFE4A5U);
-    PaddockTextAt(draw, strong, {at.x + 20.0F, text_top}, layout.text_width, notice.title,
-                  title_style, true);
+    PaddockTextAt(draw, strong, {at.x + 20.0F, text_top}, layout.text_width, notice.title, title_style, true);
     PaddockTextStyle body_style;
     body_style.colour = PaddockCol(notice.warning ? 0xFFDC9AU : 0xC7DCE6U);
-    PaddockTextAt(draw, body, {at.x + 20.0F, text_top + layout.title_height + 2.0F},
-                  layout.text_width, notice.body, body_style);
+    PaddockTextAt(draw, body, {at.x + 20.0F, text_top + layout.title_height + 2.0F}, layout.text_width, notice.body,
+                  body_style);
 
     const float button = PlayNoticeButtonWidth(notice.action.c_str());
     const ImVec2 button_at = layout.one_row
-        ? ImVec2{end.x - 12.0F - button, at.y + std::round((layout.height - 42.0F) * 0.5F)}
-        : ImVec2{at.x + 20.0F, end.y - 13.0F - 42.0F};
+                                 ? ImVec2{end.x - 12.0F - button, at.y + std::round((layout.height - 42.0F) * 0.5F)}
+                                 : ImVec2{at.x + 20.0F, end.y - 13.0F - 42.0F};
     ImGui::SetCursorScreenPos(button_at);
     ImGui::BeginDisabled(locked);
     const std::string id = notice.action + "##" + notice.key;
@@ -305,10 +289,12 @@ void DrawPlayLights(ImDrawList* draw, ImVec2 at, bool ready, double arrived_at) 
     // A ROM just loaded: the lights run red, amber, green once.
     const float t = static_cast<float>(PaddockClock() - arrived_at);
     const bool arriving = ready && t >= 0.0F && t < 0.56F;
-    PaddockFill(draw, at, {at.x + 42.0F, at.y + 112.0F}, PaddockRound(21.0F),
-                PaddockCol(0x0C1922));
+    PaddockFill(draw, at, {at.x + 42.0F, at.y + 112.0F}, PaddockRound(21.0F), PaddockCol(0x0C1922));
     const ImU32 off = PaddockRgb(0x4E5B5B);
-    const auto ease_in = [](float x) { x = std::clamp(x, 0.0F, 1.0F); return x * x * x; };
+    const auto ease_in = [](float x) {
+        x = std::clamp(x, 0.0F, 1.0F);
+        return x * x * x;
+    };
     ImU32 red = ready ? off : PaddockRgb(0xEC3627);
     ImU32 amber = ready ? off : PaddockRgb(0xFFAE18);
     ImU32 green = ready ? PaddockRgb(0x20DA81) : off;
@@ -322,8 +308,7 @@ void DrawPlayLights(ImDrawList* draw, ImVec2 at, bool ready, double arrived_at) 
     }
     draw->AddCircleFilled({at.x + 21.0F, at.y + 24.0F}, 9.0F, PaddockApply(red), 24);
     draw->AddCircleFilled({at.x + 21.0F, at.y + 56.0F}, 9.0F, PaddockApply(amber), 24);
-    draw->AddCircleFilled({at.x + 21.0F, at.y + 88.0F}, 9.0F * green_scale,
-                          PaddockApply(green), 24);
+    draw->AddCircleFilled({at.x + 21.0F, at.y + 88.0F}, 9.0F * green_scale, PaddockApply(green), 24);
 }
 
 void RemoveSelectedRom(const PlayPageContext& play) {
@@ -331,7 +316,8 @@ void RemoveSelectedRom(const PlayPageContext& play) {
     const auto found = std::find_if(play.rom_catalog.begin(), play.rom_catalog.end(),
                                     [&](const RomCatalogEntry& entry) { return entry.key == key; });
     g_play_page.removed_index = found == play.rom_catalog.end()
-        ? play.rom_catalog.size() : static_cast<std::size_t>(found - play.rom_catalog.begin());
+                                    ? play.rom_catalog.size()
+                                    : static_cast<std::size_t>(found - play.rom_catalog.begin());
     g_play_page.removed = play.selected_rom;
     std::erase_if(play.rom_catalog, [&](const RomCatalogEntry& entry) { return entry.key == key; });
     SaveRomCatalog(play.rom_catalog);
@@ -343,7 +329,8 @@ void RemoveSelectedRom(const PlayPageContext& play) {
         const RomCatalogEntry next = play.rom_catalog.front();
         play.rom_ready = SelectCatalogRom(next, play.selected_rom, play.rom_catalog, play.rom_status);
     }
-    if (!play.rom_ready) SaveLastRom({});
+    if (!play.rom_ready)
+        SaveLastRom({});
 }
 
 void UndoRemoveRom(const PlayPageContext& play) {
@@ -372,7 +359,8 @@ void UndoRemoveRom(const PlayPageContext& play) {
 std::vector<PlayNotice> BuildPlayNotices(bool rom_ready) {
     namespace tracks_ns = dkr::runtime::custom_tracks;
     std::vector<PlayNotice> notices;
-    if(!dkr::session_content::next_enabled.load())return notices;
+    if (!dkr::session_content::next_enabled.load())
+        return notices;
     const std::string armed = tracks_ns::armed_track_id();
     if (!armed.empty()) {
         std::string name = armed;
@@ -382,7 +370,7 @@ std::vector<PlayNotice> BuildPlayNotices(bool rom_ready) {
                 break;
             }
         }
-        notices.push_back({"test", dkr::localisation::format("play.track_preview",{{"name",name}}),
+        notices.push_back({"test", dkr::localisation::format("play.track_preview", {{"name", name}}),
                            tracks_ns::auto_boot_enabled()
                                ? std::string(dkr::localisation::source("Starts directly in this track as Diddy."))
                                : std::string(dkr::localisation::source("Uses Modern graphics.")),
@@ -400,11 +388,11 @@ std::vector<PlayNotice> BuildPlayNotices(bool rom_ready) {
         }
         if (!names.empty()) {
             std::string list;
-            for (const auto& name : names) list += (list.empty() ? "" : ", ") + name;
-            notices.push_back({"mods",
-                               dkr::localisation::plural("play.mods_prepare",names.size()),
-                               dkr::localisation::format("play.mods_prepare_help",{{"names",list}}),
-                               true, "Open Mods"});
+            for (const auto& name : names)
+                list += (list.empty() ? "" : ", ") + name;
+            notices.push_back({"mods", dkr::localisation::plural("play.mods_prepare", names.size()),
+                               dkr::localisation::format("play.mods_prepare_help", {{"names", list}}), true,
+                               "Open Mods"});
         }
     }
     return notices;
@@ -415,7 +403,7 @@ void DrawLanguageSetting(float);
 #include "library_ui/automatic_ui.inl"
 #include "library_ui/handoff_ui.inl"
 
-void DrawPlayLaunchOptions(float width,bool entered,bool live) {
+void DrawPlayLaunchOptions(float width, bool entered, bool live) {
     ImGui::BeginDisabled(live);
     if (PaddockCheckbox("##skip-intro", "Skip intro", &g_skip_intro, width)) {
         SaveSettings();
@@ -423,18 +411,19 @@ void DrawPlayLaunchOptions(float width,bool entered,bool live) {
     if (g_skip_intro) {
         PaddockGap(12.0F);
         if (SettingsDropdown("skip-intro-destination", "Start at", &g_skip_intro_destination,
-            {"Start menu", "Character select"}, width, false, {})) SaveSettings();
+                             {"Start menu", "Character select"}, width, false, {}))
+            SaveSettings();
     }
     PaddockGap(8.0F);
     if (g_skip_intro)
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-                    "Offline launches only.", width);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), "Offline launches only.", width);
     PaddockGap(16.0F);
     if (dkr::runtime::portable::supported()) {
         // Inspect only on page entry or an explicit click, never per-frame I/O.
         static bool portable_enabled = false;
         static std::string portable_status;
-        if (entered) portable_enabled = dkr::runtime::portable::enabled();
+        if (entered)
+            portable_enabled = dkr::runtime::portable::enabled();
         if (PaddockCheckbox("##portable-mode", "Portable mode", &portable_enabled, width)) {
             std::string error;
             if (!dkr::runtime::portable::set_enabled(portable_enabled, error)) {
@@ -445,11 +434,10 @@ void DrawPlayLaunchOptions(float width,bool entered,bool live) {
             }
         }
         PaddockGap(8.0F);
-        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC),
-            "Keep saves and settings beside DKR-R.", width);
+        PaddockText(PaddockReading(14.0F, false, 1.5F), PaddockRgb(0xB0C9CC), "Keep saves and settings beside DKR-R.",
+                    width);
         if (portable_enabled != dkr::runtime::portable::enabled_at_startup()) {
-            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14),
-                "Restart DKR-R to apply.", width);
+            PaddockText(PaddockReading(14.0F, true, 1.5F), PaddockRgb(0xFFAB14), "Restart DKR-R to apply.", width);
         }
         if (!portable_status.empty()) {
             if (dkr::runtime::copy::looks_like_error(portable_status))
@@ -463,17 +451,16 @@ void DrawPlayLaunchOptions(float width,bool entered,bool live) {
     ImGui::EndDisabled();
     DrawSkipLauncherSetting(width);
     DrawLanguageSetting(width);
-    DrawPlaySaveSummary(width,live);
+    DrawPlaySaveSummary(width, live);
 }
 
 #include "library_ui/play_launch_bar.inl"
 
-void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=false) {
+void DrawPlayPage(float available_width, const PlayPageContext& play, bool live = false) {
     namespace tracks_ns = dkr::runtime::custom_tracks;
     PlayPageState& state = g_play_page;
     const int frame = ImGui::GetFrameCount();
-    const bool entered = state.context != ImGui::GetCurrentContext() ||
-                         state.last_frame != frame - 1;
+    const bool entered = state.context != ImGui::GetCurrentContext() || state.last_frame != frame - 1;
     if (entered) {
         state.context = ImGui::GetCurrentContext();
         state.removed.clear();
@@ -491,7 +478,6 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         state.focus = PlayPageState::Focus::Start;
     }
     state.was_ready = play.rom_ready;
-
 
     RefreshModBrowserCards(g_legacy_imports.snapshot());
     const bool imports_busy = g_legacy_imports.snapshot().busy || g_code_library.view()->busy;
@@ -512,23 +498,26 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         const float heading_height = heading_size.y;
         const auto layout = dkr::runtime::copy::play_header(width, action, heading_height);
         ImGui::SetCursorScreenPos({header.x + layout.action_x, header.y + layout.action_y});
-        ImGui::BeginDisabled(live);DrawPlayUpdateButton(action);ImGui::EndDisabled();
-        const float header_height=DrawPlayHolidayGreeting(header,width,layout,heading_size.x);
+        ImGui::BeginDisabled(live);
+        DrawPlayUpdateButton(action);
+        ImGui::EndDisabled();
+        const float header_height = DrawPlayHolidayGreeting(header, width, layout, heading_size.x);
         ImGui::SetCursorScreenPos(header);
         ImGui::Dummy({width, header_height});
     }
     PaddockGap(12.0F);
-    const auto launch_summary=PlayLaunchSummary(play,live);
-    const float launch_height=PlayLaunchBarHeight(width,launch_summary);
-    const float body_height=std::max(1.F,ImGui::GetContentRegionAvail().y-launch_height);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,{0.F,0.F});
-    const float body_width=std::max(1.F,PanelFooterBounds(ImGui::GetCurrentWindow()).Max.x-ImGui::GetCursorScreenPos().x);
-    ImGui::BeginChild("play-scroll",{body_width,body_height},false,
-        ImGuiWindowFlags_NavFlattened|ImGuiWindowFlags_NoBackground);
+    const auto launch_summary = PlayLaunchSummary(play, live);
+    const float launch_height = PlayLaunchBarHeight(width, launch_summary);
+    const float body_height = std::max(1.F, ImGui::GetContentRegionAvail().y - launch_height);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.F, 0.F});
+    const float body_width =
+        std::max(1.F, PanelFooterBounds(ImGui::GetCurrentWindow()).Max.x - ImGui::GetCursorScreenPos().x);
+    ImGui::BeginChild("play-scroll", {body_width, body_height}, false,
+                      ImGuiWindowFlags_NavFlattened | ImGuiWindowFlags_NoBackground);
     ImGui::PopStyleVar();
     LibraryNavigationScrollWindow(ImGui::GetCurrentWindow());
-    width=std::max(1.F,std::min(available_width,ImGui::GetContentRegionAvail().x-8.F));
-    DrawLauncherFeatured(width,live);
+    width = std::max(1.F, std::min(available_width, ImGui::GetContentRegionAvail().x - 8.F));
+    DrawLauncherFeatured(width, live);
 
     // The ROM pass: status, the ROM list, and the actions for it.
     {
@@ -540,12 +529,14 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         // readable, centred group. Narrow panels retain their existing layout.
         constexpr float pass_chrome = 2.0F * 2.0F + 24.0F * 2.0F + 42.0F + 20.0F;
         constexpr float rom_picker_width = 560.0F;
-        const bool side=width>=780.F;
-        const float options_width=side?std::clamp(width*.36F,330.F,640.F):std::max(1.F,width-52.F);
-        const float slot_width=side?width-options_width-32.F:width;
-        const float content_width=std::min(slot_width,rom_picker_width+pass_chrome);
-        const float content_x=at.x+std::floor((slot_width-content_width)*.5F);
-        ImDrawListSplitter pass_layers;pass_layers.Split(draw,2);pass_layers.SetCurrentChannel(draw,1);
+        const bool side = width >= 780.F;
+        const float options_width = side ? std::clamp(width * .36F, 330.F, 640.F) : std::max(1.F, width - 52.F);
+        const float slot_width = side ? width - options_width - 32.F : width;
+        const float content_width = std::min(slot_width, rom_picker_width + pass_chrome);
+        const float content_x = at.x + std::floor((slot_width - content_width) * .5F);
+        ImDrawListSplitter pass_layers;
+        pass_layers.Split(draw, 2);
+        pass_layers.SetCurrentChannel(draw, 1);
         const float body_x = content_x + 2.0F + 24.0F + 42.0F + 20.0F;
         const float body_width = std::max(content_width - pass_chrome, 1.0F);
         const PaddockType heading = PaddockSign(19.0F, 1.0F, 0.0F);
@@ -553,8 +544,10 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         const PaddockType meta_type = PaddockReading(14.0F, false, 1.5F);
         PaddockType pick_label = PaddockReading(11.0F, true, 1.0F);
         pick_label.tracking = 11.0F * 0.12F;
-        const std::string removed_note = state.removed.empty()
-            ? std::string{} : dkr::localisation::format("play.rom_removed",{{"file",PathUtf8(state.removed.filename())}});
+        const std::string removed_note =
+            state.removed.empty()
+                ? std::string{}
+                : dkr::localisation::format("play.rom_removed", {{"file", PathUtf8(state.removed.filename())}});
         std::string meta;
         unsigned meta_colour = 0xB0C9CC;
         if (!removed_note.empty()) {
@@ -565,33 +558,32 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         } else if (count == 1U) {
             meta = "";
         } else if (count > 1U) {
-            meta = dkr::localisation::plural("play.rom_count",count);
+            meta = dkr::localisation::plural("play.rom_count", count);
         } else {
             meta = dkr::localisation::source("Accepted files: .z64, .n64, .v64");
         }
         const char* primary = count > 0U ? "ADD A ROM...##rom" : "BROWSE FOR ROM...##rom";
         const char* secondary = !state.removed.empty() ? "Undo##rom"
-                              : count > 0U && ready ? "Remove from list##rom" : nullptr;
+                                : count > 0U && ready  ? "Remove from list##rom"
+                                                       : nullptr;
         const float primary_width = std::max(240.0F, PaddockRaceButtonWidth(primary, 19.0F, 0.12F));
         const float secondary_width = secondary != nullptr ? PlayTextButtonWidth(secondary) : 0.0F;
-        const bool actions_row = secondary == nullptr ||
-                                 primary_width + 16.0F + secondary_width <= body_width;
+        const bool actions_row = secondary == nullptr || primary_width + 16.0F + secondary_width <= body_width;
         const float actions_height = actions_row ? 46.0F : 46.0F + 8.0F + 44.0F;
         const float pick_width = std::min(body_width, rom_picker_width);
         const float pick_height = 4.0F + pick_label.line + 6.0F + 60.0F + 8.0F;
-        const auto no_rom=dkr::localisation::source("Choose a Diddy Kong Racing ROM to start.");
+        const auto no_rom = dkr::localisation::source("Choose a Diddy Kong Racing ROM to start.");
         const float detail_height = count > 0U ? pick_height : PaddockTextHeight(file_type, no_rom, body_width);
         const float meta_height = PaddockTextHeight(meta_type, meta, body_width);
-        const float body_height = 6.0F + heading.line + 8.0F + detail_height + 2.0F +
-                                  meta_height + 16.0F + actions_height;
+        const float body_height =
+            6.0F + heading.line + 8.0F + detail_height + 2.0F + meta_height + 16.0F + actions_height;
         const float height = 2.0F + 20.0F + std::max(112.0F, body_height) + 20.0F + 2.0F;
 
         // The border turns green with the last light.
         const float since = static_cast<float>(PaddockClock() - state.arrived_at);
         ImU32 border = PaddockRgb(ready ? 0x1AC2A3U : 0xE82E21U);
         if (ready && since >= 0.0F && since < 0.56F) {
-            border = PaddockMix(PaddockRgb(0xE82E21), PaddockRgb(0x1AC2A3),
-                                PaddockEase((since - 0.36F) / 0.2F));
+            border = PaddockMix(PaddockRgb(0xE82E21), PaddockRgb(0x1AC2A3), PaddockEase((since - 0.36F) / 0.2F));
         }
         PaddockPanelStyle panel;
         panel.radii = PaddockRound(18.0F);
@@ -601,9 +593,9 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         DrawPlayLights(draw, {content_x + 2.0F + 24.0F, at.y + 2.0F + 20.0F}, ready, state.arrived_at);
 
         float y = at.y + 2.0F + 20.0F + 6.0F;
-        const auto title=dkr::localisation::source(ready?"Ready to race":"ROM not loaded");
-        PaddockDrawRun(draw, heading, {body_x, y}, PaddockCol(ready ? 0x1AC2A3U : 0xFFAA97U),
-                       title.data(), title.data() + title.size());
+        const auto title = dkr::localisation::source(ready ? "Ready to race" : "ROM not loaded");
+        PaddockDrawRun(draw, heading, {body_x, y}, PaddockCol(ready ? 0x1AC2A3U : 0xFFAA97U), title.data(),
+                       title.data() + title.size());
         y += heading.line + 8.0F;
         // Use the same readable controller focus accent as the other tabs.
         ImGui::PushStyleColor(ImGuiCol_NavHighlight, PaddockRgb(0xFFD11F));
@@ -614,14 +606,16 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
             y += pick_label.line + 6.0F;
             ImGui::SetCursorScreenPos({body_x, y});
             if (state.focus == PlayPageState::Focus::Rom) {
-                if (nav) ImGui::SetKeyboardFocusHere();
+                if (nav)
+                    ImGui::SetKeyboardFocusHere();
                 state.focus = PlayPageState::Focus::None;
             }
             const RomSelectResult picked = DrawRomSelect("play-rom", pick_width, false, live || lobby || launch_modal,
                                                          "Locked while you are in a lobby.");
             if (picked == RomSelectResult::Switched) {
                 state.removed.clear();
-                if (play.rom_ready) state.arrived_at = PaddockClock();
+                if (play.rom_ready)
+                    state.arrived_at = PaddockClock();
                 state.focus = PlayPageState::Focus::Rom;
             }
             y += 60.0F + 8.0F;
@@ -639,7 +633,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
 
         ImGui::SetCursorScreenPos({body_x, y});
         if (state.focus == PlayPageState::Focus::Browse && !ready) {
-            if (nav) ImGui::SetKeyboardFocusHere();
+            if (nav)
+                ImGui::SetKeyboardFocusHere();
             state.focus = PlayPageState::Focus::None;
         }
         RaceButtonLook look;
@@ -647,13 +642,12 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         look.hover_in = 0.12F;
         look.ellipsis_spread = 0.12F;
         ImGui::BeginDisabled(live || lobby || launch_modal);
-        if (PaddockRaceButton(primary, {std::min(body_width,primary_width), 46.0F}, look)) {
+        if (PaddockRaceButton(primary, {std::min(body_width, primary_width), 46.0F}, look)) {
             OpenRomBrowser(play.selected_rom);
         }
         if (secondary != nullptr) {
-            ImGui::SetCursorScreenPos(actions_row
-                ? ImVec2{body_x + primary_width + 16.0F, y + 1.0F}
-                : ImVec2{body_x - 8.0F, y + 46.0F + 8.0F});
+            ImGui::SetCursorScreenPos(actions_row ? ImVec2{body_x + primary_width + 16.0F, y + 1.0F}
+                                                  : ImVec2{body_x - 8.0F, y + 46.0F + 8.0F});
             if (state.removed.empty()) {
                 ImGui::BeginDisabled(lobby || launch_modal);
                 if (PlayTextButton(secondary, true)) {
@@ -670,26 +664,32 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         }
         ImGui::EndDisabled();
         ImGui::PopStyleColor();
-        const float options_x=side?at.x+width-options_width-26.F:at.x+26.F;
-        const float tools_width=side?options_x-at.x-58.F:width-52.F;
-        const float tools_height=PlayToolsHeight(tools_width);
-        const float left_height=height+tools_height+16.F;
-        const float options_y=side?at.y+26.F:at.y+left_height+8.F;
-        ImGui::SetCursorScreenPos({options_x,options_y});
-        ImGui::BeginGroup();DrawPlayLaunchOptions(options_width,entered,live);ImGui::EndGroup();
-        const float options_height=ImGui::GetItemRectSize().y;
-        const float final_height=side?std::max(left_height,options_height+52.F):left_height+options_height+34.F;
-        ImGui::SetCursorScreenPos({at.x+26.F,at.y+(side?final_height:left_height)-26.F-tools_height});
+        const float options_x = side ? at.x + width - options_width - 26.F : at.x + 26.F;
+        const float tools_width = side ? options_x - at.x - 58.F : width - 52.F;
+        const float tools_height = PlayToolsHeight(tools_width);
+        const float left_height = height + tools_height + 16.F;
+        const float options_y = side ? at.y + 26.F : at.y + left_height + 8.F;
+        ImGui::SetCursorScreenPos({options_x, options_y});
+        ImGui::BeginGroup();
+        DrawPlayLaunchOptions(options_width, entered, live);
+        ImGui::EndGroup();
+        const float options_height = ImGui::GetItemRectSize().y;
+        const float final_height =
+            side ? std::max(left_height, options_height + 52.F) : left_height + options_height + 34.F;
+        ImGui::SetCursorScreenPos({at.x + 26.F, at.y + (side ? final_height : left_height) - 26.F - tools_height});
         DrawPlayTools(tools_width);
-        if(side)draw->AddLine({options_x-16.F,at.y+26.F},{options_x-16.F,at.y+final_height-26.F},PaddockCol(0x325365));
-        pass_layers.SetCurrentChannel(draw,0);
-        PaddockPanel(draw,at,{at.x+width,at.y+final_height},panel);
+        if (side)
+            draw->AddLine({options_x - 16.F, at.y + 26.F}, {options_x - 16.F, at.y + final_height - 26.F},
+                          PaddockCol(0x325365));
+        pass_layers.SetCurrentChannel(draw, 0);
+        PaddockPanel(draw, at, {at.x + width, at.y + final_height}, panel);
         pass_layers.Merge(draw);
-        ImGui::SetCursorScreenPos(at);ImGui::Dummy({width,final_height});
+        ImGui::SetCursorScreenPos(at);
+        ImGui::Dummy({width, final_height});
     }
 
     // Anything that changes what START does sits directly above it.
-    std::vector<PlayNotice> notices = live?std::vector<PlayNotice>{}:BuildPlayNotices(play.rom_ready);
+    std::vector<PlayNotice> notices = live ? std::vector<PlayNotice>{} : BuildPlayNotices(play.rom_ready);
     {
         const double now = PaddockClock();
         int entering = 0;
@@ -699,7 +699,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
             }
         }
         state.shown.clear();
-        for (const PlayNotice& notice : notices) state.shown.insert(notice.key);
+        for (const PlayNotice& notice : notices)
+            state.shown.insert(notice.key);
         state.notices_known = true;
     }
     // A dismissed notice fades up first, then its row closes so START glides up.
@@ -707,11 +708,10 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
     if (state.leaving) {
         const float t = static_cast<float>(PaddockClock() - state.leaving_at);
         if (t >= 0.3F || std::any_of(notices.begin(), notices.end(),
-                [&](const PlayNotice& notice) { return notice.key == state.leaving->key; })) {
+                                     [&](const PlayNotice& notice) { return notice.key == state.leaving->key; })) {
             state.leaving.reset();
         } else {
-            const float row = (state.leaving_height + 16.0F) *
-                              (1.0F - PaddockEase((t - 0.1F) / 0.2F));
+            const float row = (state.leaving_height + 16.0F) * (1.0F - PaddockEase((t - 0.1F) / 0.2F));
             const ImVec2 at = ImGui::GetCursorScreenPos();
             ImDrawList* draw = ImGui::GetWindowDrawList();
             const float fade = std::clamp(t / 0.15F, 0.0F, 1.0F);
@@ -729,8 +729,7 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
                     v.pos.y -= 8.0F * fade * fade;
                     const ImU32 alpha = (v.col >> IM_COL32_A_SHIFT) & 0xFFU;
                     v.col = (v.col & ~IM_COL32_A_MASK) |
-                        (static_cast<ImU32>(std::lround(alpha * (1.0F - fade * fade)))
-                         << IM_COL32_A_SHIFT);
+                            (static_cast<ImU32>(std::lround(alpha * (1.0F - fade * fade))) << IM_COL32_A_SHIFT);
                 }
                 draw->PopClipRect();
             }
@@ -744,7 +743,8 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
         PaddockGap(16.0F);
         const auto entered_at = state.entered.find(notice.key);
         std::optional<PaddockFadeUp> fade;
-        if (entered_at != state.entered.end()) fade.emplace(entered_at->second, 0.0F, 0.3F, 12.0F);
+        if (entered_at != state.entered.end())
+            fade.emplace(entered_at->second, 0.0F, 0.3F, 12.0F);
         const float before = ImGui::GetCursorScreenPos().y;
         if (DrawPlayNotice(notice, width, notice.key == "test" && mods_locked)) {
             if (notice.key == "test") {
@@ -765,12 +765,13 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
     PaddockGap(16.F);
     PlayLaunchBodyCheck();
     ImGui::EndChild();
-    width=std::max(1.F,available_width);
-    DrawPlayLaunchSummary(width,launch_summary);
+    width = std::max(1.F, available_width);
+    DrawPlayLaunchSummary(width, launch_summary);
     {
-        const bool can_start = live || (play.rom_ready && !imports_busy && !launch_modal && !g_play_offline_after_leave);
+        const bool can_start =
+            live || (play.rom_ready && !imports_busy && !launch_modal && !g_play_offline_after_leave);
         RaceButtonLook look;
-        look.font_px=21.F;
+        look.font_px = 21.F;
         look.hover_in = 0.12F;
         if (can_start) {
             look.fill = 0x1AC2A3;
@@ -785,27 +786,37 @@ void DrawPlayPage(float available_width, const PlayPageContext& play,bool live=f
             look.text = 0x8FA6AD;
             look.ring_alpha = 20U;
         }
-        if (state.focus == PlayPageState::Focus::Start && can_start && ImGui::GetCurrentContext()->OpenPopupStack.empty()) {
-            ImGui::GetCurrentContext()->NavDisableHighlight=false;
+        if (state.focus == PlayPageState::Focus::Start && can_start &&
+            ImGui::GetCurrentContext()->OpenPopupStack.empty()) {
+            ImGui::GetCurrentContext()->NavDisableHighlight = false;
             ImGui::SetKeyboardFocusHere();
             state.focus = PlayPageState::Focus::None;
         }
         ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 1.0F);
         ImGui::BeginDisabled(!can_start);
-        if (PaddockRaceButton(live?"RETURN TO THE RACE":lobby ? "LEAVE LOBBY & PLAY OFFLINE" : dkr::localisation::text("play.start_game").data(), {PlayLaunchButtonWidth(width), kPlayStartHeight}, look)) {
-            if(live)g_overlay_visible.store(false,std::memory_order_release);
-            else if (lobby) ImGui::OpenPopup("Leave lobby and play offline?");
-            else play.launch_requested = true;
+        if (PaddockRaceButton(live    ? "RETURN TO THE RACE"
+                              : lobby ? "LEAVE LOBBY & PLAY OFFLINE"
+                                      : dkr::localisation::text("play.start_game").data(),
+                              {PlayLaunchButtonWidth(width), kPlayStartHeight}, look)) {
+            if (live)
+                g_overlay_visible.store(false, std::memory_order_release);
+            else if (lobby)
+                ImGui::OpenPopup("Leave lobby and play offline?");
+            else
+                play.launch_requested = true;
         }
         ImGui::EndDisabled();
         PlayLaunchButtonCheck(can_start);
         ImGui::PopStyleVar();
     }
     if (BeginSettingsDialog("Leave lobby and play offline?", "LEAVE LOBBY & PLAY OFFLINE?", 620.0F, 0x06336E)) {
-        PaddockText(PaddockReading(16.0F, false, 1.45F), PaddockRgb(0xB0C9CC),
-            "Leave this lobby and start offline? If you're the host, the lobby closes for everyone. Online progress stays separate.", SettingsDialogInner());
+        PaddockText(
+            PaddockReading(16.0F, false, 1.45F), PaddockRgb(0xB0C9CC),
+            "Leave this lobby and start offline? If you're the host, the lobby closes for everyone. Online progress stays separate.",
+            SettingsDialogInner());
         PaddockGap(20.0F);
-        if (PlayNoticeButton("CANCEL")) ImGui::CloseCurrentPopup();
+        if (PlayNoticeButton("CANCEL"))
+            ImGui::CloseCurrentPopup();
         ImGui::SameLine();
         if (PlayNoticeButton("LEAVE & PLAY OFFLINE")) {
             dkr::runtime::netplay::session().disconnect("Left the lobby to play offline.");

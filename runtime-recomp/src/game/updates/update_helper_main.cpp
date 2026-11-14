@@ -5,7 +5,7 @@
 #include <shellapi.h>
 int main() {
     int argc = 0;
-    auto **wide = CommandLineToArgvW(GetCommandLineW(), &argc);
+    auto** wide = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!wide)
         return 2;
     std::vector<std::string> values;
@@ -17,13 +17,13 @@ int main() {
         values.push_back(std::move(text));
     }
     LocalFree(wide);
-    std::vector<char *> argv;
-    for (auto &s : values)
+    std::vector<char*> argv;
+    for (auto& s : values)
         argv.push_back(s.data());
     return dkr::updates::updater_main(argc, argv.data());
 }
 #else
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     return dkr::updates::updater_main(argc, argv);
 }
 #endif

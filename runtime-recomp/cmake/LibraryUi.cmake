@@ -46,8 +46,14 @@ function(dkr_add_library_ui_checks)
         add_test(NAME DKRDisplaySession COMMAND DKRDisplaySessionTests)
     endif()
     set(imgui "${root}/extern/rt64/src/contrib/imgui")
-    add_executable(DKRUiSurfaceTests "${root}/runtime-recomp/tests/ui_surface_tests.cpp"
-        "${imgui}/imgui.cpp" "${imgui}/imgui_draw.cpp" "${imgui}/imgui_tables.cpp" "${imgui}/imgui_widgets.cpp")
+    add_executable(
+        DKRUiSurfaceTests
+        "${root}/runtime-recomp/tests/ui_surface_tests.cpp"
+        "${imgui}/imgui.cpp"
+        "${imgui}/imgui_draw.cpp"
+        "${imgui}/imgui_tables.cpp"
+        "${imgui}/imgui_widgets.cpp"
+    )
     target_compile_features(DKRUiSurfaceTests PRIVATE cxx_std_20)
     target_include_directories(DKRUiSurfaceTests PRIVATE "${root}/runtime-recomp/src/game" "${imgui}")
     if(MSVC)
@@ -58,8 +64,14 @@ function(dkr_add_library_ui_checks)
     if(BUILD_TESTING)
         add_test(NAME DKRUiSurfaces COMMAND DKRUiSurfaceTests)
     endif()
-    add_executable(DKRUiFieldTests "${root}/runtime-recomp/tests/ui_field_tests.cpp"
-        "${imgui}/imgui.cpp" "${imgui}/imgui_draw.cpp" "${imgui}/imgui_tables.cpp" "${imgui}/imgui_widgets.cpp")
+    add_executable(
+        DKRUiFieldTests
+        "${root}/runtime-recomp/tests/ui_field_tests.cpp"
+        "${imgui}/imgui.cpp"
+        "${imgui}/imgui_draw.cpp"
+        "${imgui}/imgui_tables.cpp"
+        "${imgui}/imgui_widgets.cpp"
+    )
     target_compile_features(DKRUiFieldTests PRIVATE cxx_std_20)
     target_link_libraries(DKRUiFieldTests PRIVATE DKRLocalisation)
     target_include_directories(DKRUiFieldTests PRIVATE "${root}/runtime-recomp/src/game" "${imgui}")

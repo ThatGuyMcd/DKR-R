@@ -12,8 +12,10 @@ typedef struct dkr_camera_shadows {
 #ifdef __cplusplus
 extern "C" {
 #endif
-int dkr_camera_v77_shadow_draw(uint8_t*,size_t,const dkr_camera_draw_request*,dkr_camera_draw_result*,dkr_camera_shadows*);
-int dkr_camera_v80_shadow_draw(uint8_t*,size_t,const dkr_camera_draw_request*,dkr_camera_draw_result*,dkr_camera_shadows*);
+int dkr_camera_v77_shadow_draw(uint8_t*, size_t, const dkr_camera_draw_request*, dkr_camera_draw_result*,
+                               dkr_camera_shadows*);
+int dkr_camera_v80_shadow_draw(uint8_t*, size_t, const dkr_camera_draw_request*, dkr_camera_draw_result*,
+                               dkr_camera_shadows*);
 #ifdef __cplusplus
 }
 #endif

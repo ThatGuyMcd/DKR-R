@@ -56,9 +56,9 @@ struct DevicePacket {
     std::array<char, kErrorBytes> feedback_detail{};
     std::array<float, 6> touch{}; // two pads/fingers: x, y, pressure
     std::array<std::uint8_t, 2> touch_down{};
-    std::uint32_t audio_count=0;
-    std::array<std::uint32_t,4> audio_ids{};
-    std::array<std::array<char,kNameBytes>,4> audio_names{};
+    std::uint32_t audio_count = 0;
+    std::array<std::uint32_t, 4> audio_ids{};
+    std::array<std::array<char, kNameBytes>, 4> audio_names{};
     std::int32_t instance = -1;
     std::uint8_t connected = 0U;
     std::uint8_t mapped = 0U;
@@ -103,7 +103,7 @@ struct FeedbackPacket {
     std::uint32_t lease_ms = 250;
     std::uint64_t sequence = 0;
     feedback::Output output{};
-    std::array<char,kKeyBytes> device_key{};
+    std::array<char, kKeyBytes> device_key{};
 };
 static_assert(std::is_trivially_copyable_v<FeedbackPacket>);
 
@@ -113,8 +113,7 @@ static_assert(std::is_trivially_copyable_v<RumblePacket>);
 static_assert(std::is_trivially_copyable_v<ShutdownPacket>);
 
 template <typename Packet>
-void initialise(Packet& packet, PacketType type,
-                const std::array<std::uint8_t, kTokenBytes>& token) {
+void initialise(Packet& packet, PacketType type, const std::array<std::uint8_t, kTokenBytes>& token) {
     packet = {};
     packet.header.magic = kMagic;
     packet.header.version = kVersion;
@@ -123,11 +122,9 @@ void initialise(Packet& packet, PacketType type,
     packet.header.token = token;
 }
 
-inline bool valid_header(
-    const PacketHeader& header, PacketType type, std::size_t size,
-    const std::array<std::uint8_t, kTokenBytes>& token) {
-    return header.magic == kMagic && header.version == kVersion &&
-           header.type == type && header.size == size &&
+inline bool valid_header(const PacketHeader& header, PacketType type, std::size_t size,
+                         const std::array<std::uint8_t, kTokenBytes>& token) {
+    return header.magic == kMagic && header.version == kVersion && header.type == type && header.size == size &&
            header.token == token;
 }
 

@@ -15,7 +15,8 @@ inline void request_rate(ANativeWindow* native, int rate) {
     // a display-rate hint, not a second frame limiter or forced display mode.
     using SetRate = int (*)(ANativeWindow*, float, int8_t);
     static auto setRate = reinterpret_cast<SetRate>(dlsym(RTLD_DEFAULT, "ANativeWindow_setFrameRate"));
-    if (setRate && native) setRate(native, static_cast<float>(rate), 0 /* DEFAULT compatibility */);
+    if (setRate && native)
+        setRate(native, static_cast<float>(rate), 0 /* DEFAULT compatibility */);
 }
 // Android callbacks publish availability; the Vulkan owner alone rebuilds GPU
 // objects. Each reader owns a native-window reference across callback races.
@@ -28,4 +29,4 @@ struct Lease : Registry::Lease {
 inline bool matches(std::uint64_t expected) {
     return registry.matches(expected);
 }
-}
+} // namespace dkr::runtime::android_surface

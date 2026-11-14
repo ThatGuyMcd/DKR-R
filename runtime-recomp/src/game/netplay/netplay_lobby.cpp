@@ -5,13 +5,10 @@
 
 namespace dkr::runtime::netplay {
 
-bool Lobby::create(std::string room_id, std::string join_code,
-                   std::string room_name, Visibility visibility,
-                   std::string host_peer_id, std::string host_name,
-                   const CompatibilityManifest& manifest, const Rules& rules,
-                   std::string& error) {
-    if (room_id.empty() || join_code.size() < 6U ||
-        !valid_room_name(room_name) || !valid_display_name(host_name) ||
+bool Lobby::create(std::string room_id, std::string join_code, std::string room_name, Visibility visibility,
+                   std::string host_peer_id, std::string host_name, const CompatibilityManifest& manifest,
+                   const Rules& rules, std::string& error) {
+    if (room_id.empty() || join_code.size() < 6U || !valid_room_name(room_name) || !valid_display_name(host_name) ||
         host_peer_id.empty() || !valid_rules(rules)) {
         error = "The lobby settings are invalid.";
         return false;
@@ -25,15 +22,13 @@ bool Lobby::create(std::string room_id, std::string join_code,
     room_.rules = rules;
     room_.phase = RoomPhase::Waiting;
     room_.generation = 1U;
-    room_.players[0] = Player{true, true, false, true, false, 0U,
-                              std::move(host_peer_id), std::move(host_name)};
+    room_.players[0] = Player{true, true, false, true, false, 0U, std::move(host_peer_id), std::move(host_name)};
     error.clear();
     return true;
 }
 
-std::optional<std::uint8_t> Lobby::join(
-    std::string peer_id, std::string display_name,
-    const CompatibilityManifest& manifest, std::string& error) {
+std::optional<std::uint8_t> Lobby::join(std::string peer_id, std::string display_name,
+                                        const CompatibilityManifest& manifest, std::string& error) {
     if (room_.room_id.empty() || room_.phase != RoomPhase::Waiting) {
         error = "This lobby is not accepting racers.";
         return std::nullopt;
@@ -42,8 +37,8 @@ std::optional<std::uint8_t> Lobby::join(
         error = "This racer identity is invalid or already connected.";
         return std::nullopt;
     }
-    const std::string mismatch = incompatibility_reason(room_.manifest, manifest,
-        room_.rules.synchronization==SynchronizationMode::ExperimentalRollback);
+    const std::string mismatch = incompatibility_reason(
+        room_.manifest, manifest, room_.rules.synchronization == SynchronizationMode::ExperimentalRollback);
     if (!mismatch.empty()) {
         error = mismatch;
         return std::nullopt;
@@ -51,7 +46,11 @@ std::optional<std::uint8_t> Lobby::join(
     const std::size_t limit = room_.rules.maximum_players;
     for (std::size_t i = 1U; i < limit; ++i) {
         if (!room_.players[i].occupied) {
-            room_.players[i] = Player{true, false, false, true, false,
+            room_.players[i] = Player{true,
+                                      false,
+                                      false,
+                                      true,
+                                      false,
                                       static_cast<std::uint8_t>(i),
                                       std::move(peer_id),
                                       std::move(display_name)};
@@ -79,18 +78,18 @@ bool Lobby::leave(std::string_view peer_id, bool compact_slots) {
         return true;
     }
     *player = {};
-    if (compact_slots) normalize_slots();
+    if (compact_slots)
+        normalize_slots();
     invalidate_ready();
     return true;
 }
 
-bool Lobby::move_client(std::string_view host_peer_id,
-                        std::string_view client_peer_id,
-                        std::uint8_t destination_slot, std::string& error) {
+bool Lobby::move_client(std::string_view host_peer_id, std::string_view client_peer_id, std::uint8_t destination_slot,
+                        std::string& error) {
     const Player* host = find(host_peer_id);
     Player* client = find(client_peer_id);
-    if (!host || !host->host || !client || client->host ||
-        destination_slot == 0U || destination_slot >= room_.rules.maximum_players) {
+    if (!host || !host->host || !client || client->host || destination_slot == 0U ||
+        destination_slot >= room_.rules.maximum_players) {
         error = "Only the host can move the connected client to Player 2.";
         return false;
     }
@@ -130,11 +129,11 @@ bool Lobby::set_loaded(std::string_view peer_id, bool loaded) {
     return true;
 }
 
-bool Lobby::set_network_metrics(std::string_view peer_id, Route route,
-                                std::uint16_t ping_ms, std::uint16_t jitter_ms,
+bool Lobby::set_network_metrics(std::string_view peer_id, Route route, std::uint16_t ping_ms, std::uint16_t jitter_ms,
                                 float packet_loss_percent) {
     Player* player = find(peer_id);
-    if (!player) return false;
+    if (!player)
+        return false;
     player->route = route;
     player->ping_ms = ping_ms;
     player->jitter_ms = jitter_ms;
@@ -142,11 +141,10 @@ bool Lobby::set_network_metrics(std::string_view peer_id, Route route,
     return true;
 }
 
-bool Lobby::set_rules(std::string_view host_peer_id, const Rules& rules,
-                      std::string& error) {
+bool Lobby::set_rules(std::string_view host_peer_id, const Rules& rules, std::string& error) {
     const Player* host = find(host_peer_id);
-    if (!host || !host->host || room_.phase != RoomPhase::Waiting ||
-        !valid_rules(rules) || rules.maximum_players < player_count()) {
+    if (!host || !host->host || room_.phase != RoomPhase::Waiting || !valid_rules(rules) ||
+        rules.maximum_players < player_count()) {
         error = "The room rules cannot be changed to those values.";
         return false;
     }
@@ -174,7 +172,8 @@ bool Lobby::can_start(std::string* reason) const {
     // JOINTVENTURE is the retail two-player Adventure mode, not a four-player
     // race modifier. Reject that unsupported combination before any launch.
     if (player_count() > 2U && (room_.manifest.magic_codes_hash & (1ULL << 24U))) {
-        return reject("Two-player Adventure (JOINTVENTURE) requires exactly two racers. Disable it for three- or four-player races and minigames.");
+        return reject(
+            "Two-player Adventure (JOINTVENTURE) requires exactly two racers. Disable it for three- or four-player races and minigames.");
     }
     for (const Player& player : room_.players) {
         if (player.occupied && (!player.compatible || !player.ready)) {
@@ -227,30 +226,26 @@ void Lobby::return_to_waiting() {
 }
 
 void Lobby::refresh_online_save_hash(std::uint64_t hash) {
-    if (room_.phase != RoomPhase::Waiting || !hash) return;
+    if (room_.phase != RoomPhase::Waiting || !hash)
+        return;
     room_.manifest.session_save_hash = hash;
     invalidate_ready();
 }
 
 std::size_t Lobby::player_count() const {
-    return static_cast<std::size_t>(std::count_if(
-        room_.players.begin(), room_.players.end(),
-        [](const Player& player) { return player.occupied; }));
+    return static_cast<std::size_t>(std::count_if(room_.players.begin(), room_.players.end(),
+                                                  [](const Player& player) { return player.occupied; }));
 }
 
 Player* Lobby::find(std::string_view peer_id) {
     auto it = std::find_if(room_.players.begin(), room_.players.end(),
-                           [peer_id](const Player& player) {
-                               return player.occupied && player.peer_id == peer_id;
-                           });
+                           [peer_id](const Player& player) { return player.occupied && player.peer_id == peer_id; });
     return it == room_.players.end() ? nullptr : &*it;
 }
 
 const Player* Lobby::find(std::string_view peer_id) const {
     auto it = std::find_if(room_.players.begin(), room_.players.end(),
-                           [peer_id](const Player& player) {
-                               return player.occupied && player.peer_id == peer_id;
-                           });
+                           [peer_id](const Player& player) { return player.occupied && player.peer_id == peer_id; });
     return it == room_.players.end() ? nullptr : &*it;
 }
 

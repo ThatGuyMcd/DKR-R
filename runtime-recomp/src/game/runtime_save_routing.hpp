@@ -15,15 +15,14 @@ struct RuntimeOnlineSaveStatus {
 };
 
 void reset_runtime_online_save_status();
-bool activate_online_save_for_runtime(bool host, std::uint64_t match_id,
-                                      std::uint64_t expected_hash,
+bool activate_online_save_for_runtime(bool host, std::uint64_t match_id, std::uint64_t expected_hash,
                                       std::string& error);
 RuntimeOnlineSaveStatus runtime_online_save_status();
 // Freeze ownership before N64ModernRuntime creates its save buffer/worker.
-bool prepare_runtime_save_context(const std::filesystem::path& root,
-    const std::filesystem::path& offline_subfolder,
-    const std::filesystem::path& offline_paks, bool online, bool host,
-    std::uint64_t match_id, std::uint64_t expected_hash, std::string& error,bool development=false);
+bool prepare_runtime_save_context(const std::filesystem::path& root, const std::filesystem::path& offline_subfolder,
+                                  const std::filesystem::path& offline_paks, bool online, bool host,
+                                  std::uint64_t match_id, std::uint64_t expected_hash, std::string& error,
+                                  bool development = false);
 void retire_runtime_save_context();
 bool runtime_save_context_ready();
 bool runtime_save_writes_allowed();
@@ -32,7 +31,10 @@ std::filesystem::path runtime_pak_directory();
 bool load_runtime_save(const std::filesystem::path&, std::vector<char>&);
 bool commit_runtime_save(const std::filesystem::path&, const std::vector<char>&);
 std::string runtime_save_failure();
-struct RuntimeSaveSelection { bool online = false, host = false; std::uint64_t match = 0, hash = 0; };
+struct RuntimeSaveSelection {
+    bool online = false, host = false;
+    std::uint64_t match = 0, hash = 0;
+};
 RuntimeSaveSelection runtime_save_selection();
 
 } // namespace dkr::runtime::saves

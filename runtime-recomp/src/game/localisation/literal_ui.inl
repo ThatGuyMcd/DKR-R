@@ -14,8 +14,9 @@ template <class T> float UiPaddockMeasure(const PaddockType& type, T&& begin, co
     }
     return PaddockMeasure(type, begin, end);
 }
-template <class T> void UiPaddockDrawRun(ImDrawList* draw, const PaddockType& type,
-                                       ImVec2 position, ImU32 colour, T&& begin, const char* end) {
+template <class T>
+void UiPaddockDrawRun(ImDrawList* draw, const PaddockType& type, ImVec2 position, ImU32 colour, T&& begin,
+                      const char* end) {
     if constexpr (LocalisedUi::caption_array<T>) {
         if (end == begin + std::extent_v<std::remove_reference_t<T>> - 1) {
             const auto shown = LocalisedUi::copy(std::forward<T>(begin));
@@ -28,27 +29,26 @@ template <class T> void UiPaddockDrawRun(ImDrawList* draw, const PaddockType& ty
 template <class T> float UiPaddockTextHeight(const PaddockType& type, T&& text, float width, bool balance = false) {
     return PaddockTextHeight(type, LocalisedUi::copy(std::forward<T>(text)), width, balance);
 }
-template <class T> float UiPaddockTextAt(ImDrawList* draw, const PaddockType& type, ImVec2 position,
-                                      float width, T&& text, const PaddockTextStyle& style, bool balance = false) {
+template <class T>
+float UiPaddockTextAt(ImDrawList* draw, const PaddockType& type, ImVec2 position, float width, T&& text,
+                      const PaddockTextStyle& style, bool balance = false) {
     return PaddockTextAt(draw, type, position, width, LocalisedUi::copy(std::forward<T>(text)), style, balance);
 }
 template <class T>
-float UiPaddockText(const PaddockType& type, ImU32 colour, T&& text, float width,
-                    bool balance = false, ImU32 shadow = 0U) {
+float UiPaddockText(const PaddockType& type, ImU32 colour, T&& text, float width, bool balance = false,
+                    ImU32 shadow = 0U) {
     return PaddockText(type, colour, LocalisedUi::copy(std::forward<T>(text)), width, balance, shadow);
 }
-template <class T>
-float UiPaddockHeading(T&& text, float px, unsigned colour, float width, float line = 1.25F) {
+template <class T> float UiPaddockHeading(T&& text, float px, unsigned colour, float width, float line = 1.25F) {
     return PaddockHeading(LocalisedUi::copy(std::forward<T>(text)), px, colour, width, line);
 }
 template <class T>
-bool UiPaddockButton(T&& label, PaddockButtonKind kind = PaddockButtonKind::Plain,
-                     float width = 0.F, float height = 42.F) {
+bool UiPaddockButton(T&& label, PaddockButtonKind kind = PaddockButtonKind::Plain, float width = 0.F,
+                     float height = 42.F) {
     const auto shown = LocalisedUi::widget(std::forward<T>(label));
     return PaddockButton(shown.c_str(), kind, width, height);
 }
-template <class T>
-float UiPaddockButtonWidth(T&& label, PaddockButtonKind kind) {
+template <class T> float UiPaddockButtonWidth(T&& label, PaddockButtonKind kind) {
     const auto shown = LocalisedUi::widget(std::forward<T>(label));
     return PaddockButtonWidth(shown.c_str(), kind);
 }
@@ -65,9 +65,10 @@ template <class T> bool UiPaddockSectionTab(T&& label, bool open, float width = 
     const auto shown = dkr::localisation::label(std::string_view(label));
     return PaddockSectionTab(shown.c_str(), open, width);
 }
-template <class T> bool UiPaddockCheckbox(const char* id, T&& label, bool* value,
-                                       float width, PaddockCheckKind kind = PaddockCheckKind::Plain,
-                                       const PaddockType* type = nullptr, unsigned colour = 0xFFF6DA) {
+template <class T>
+bool UiPaddockCheckbox(const char* id, T&& label, bool* value, float width,
+                       PaddockCheckKind kind = PaddockCheckKind::Plain, const PaddockType* type = nullptr,
+                       unsigned colour = 0xFFF6DA) {
     const auto shown = LocalisedUi::copy(std::forward<T>(label));
     return PaddockCheckbox(id, shown.data(), value, width, kind, type, colour);
 }
@@ -80,27 +81,29 @@ template <class T> void UiPaddockFeedback(T&& text, float width) {
 template <class T> void UiPaddockSeparatorText(T&& text, float width) {
     PaddockSeparatorText(LocalisedUi::copy(std::forward<T>(text)), width);
 }
-template <class T> PaddockFieldResult UiPaddockSearch(const char* id, char* buffer, std::size_t capacity,
-                                                    T&& hint, float width) {
+template <class T>
+PaddockFieldResult UiPaddockSearch(const char* id, char* buffer, std::size_t capacity, T&& hint, float width) {
     const auto shown = LocalisedUi::copy(std::forward<T>(hint));
     return PaddockSearch(id, buffer, capacity, shown.data(), width);
 }
-template <class T> bool UiPaddockSelect(const char* id, T&& label, int* value,
-                                      const std::vector<std::string>& items, float width) {
+template <class T>
+bool UiPaddockSelect(const char* id, T&& label, int* value, const std::vector<std::string>& items, float width) {
     const auto caption = LocalisedUi::copy(std::forward<T>(label));
     return PaddockSelect(id, caption.data(), value, items, width);
 }
-template <class T> bool UiPaddockSelect(const char* id, T&& label, int* value,
-                                      std::initializer_list<const char*> choices, float width) {
+template <class T>
+bool UiPaddockSelect(const char* id, T&& label, int* value, std::initializer_list<const char*> choices, float width) {
     std::vector<std::string> items;
-    for(const auto* choice:choices)items.emplace_back(dkr::localisation::source(choice));
-    return UiPaddockSelect(id,std::forward<T>(label),value,items,width);
+    for (const auto* choice : choices)
+        items.emplace_back(dkr::localisation::source(choice));
+    return UiPaddockSelect(id, std::forward<T>(label), value, items, width);
 }
 
-inline bool UiPaddockSwitch(const char* id,bool* value,const char* on,const char* off,const char* description=nullptr) {
-    return PaddockSwitch(id,value,dkr::localisation::source(on).data(),dkr::localisation::source(off).data(),description);
+inline bool UiPaddockSwitch(const char* id, bool* value, const char* on, const char* off,
+                            const char* description = nullptr) {
+    return PaddockSwitch(id, value, dkr::localisation::source(on).data(), dkr::localisation::source(off).data(),
+                         description);
 }
-
 
 #define PaddockText(...) UiPaddockText(__VA_ARGS__)
 #define PaddockMeasure(...) UiPaddockMeasure(__VA_ARGS__)

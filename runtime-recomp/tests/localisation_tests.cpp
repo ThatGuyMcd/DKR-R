@@ -41,18 +41,21 @@ int main() {
     const ui::Choice user_choice(std::string("Play"));
     assert(application_choice.display_label() == "Jouer");
     assert(user_choice.display_label() == "Play");
-    const std::string diagnostic="Invalid save checksum at C:/User/Play.sav";
-    const auto summary=dkr::runtime::copy::error_summary(diagnostic,dkr::runtime::copy::Area::Saves);
+    const std::string diagnostic = "Invalid save checksum at C:/User/Play.sav";
+    const auto summary = dkr::runtime::copy::error_summary(diagnostic, dkr::runtime::copy::Area::Saves);
     assert(dkr::runtime::copy::looks_like_error(diagnostic));
-    assert(ui::source(summary)!=summary);
-    assert(diagnostic=="Invalid save checksum at C:/User/Play.sav");
+    assert(ui::source(summary) != summary);
+    assert(diagnostic == "Invalid save checksum at C:/User/Play.sav");
     assert(ui::source("unregistered copy") == "unregistered copy");
-    assert(ui::relay_caption("Via Play {name} %s",true)=="Via Play {name} %s");
-    assert(ui::directional_caption("Left stick ↑")=="Stick gauche ↑");
+    assert(ui::relay_caption("Via Play {name} %s", true) == "Via Play {name} %s");
+    assert(ui::directional_caption("Left stick ↑") == "Stick gauche ↑");
     assert(ui::format("library.by", {{"author", "Play {name} %s"}}) == "par Play {name} %s");
     bool missing_argument = false;
-    try { (void)ui::format("library.by", {}); }
-    catch (const std::invalid_argument&) { missing_argument = true; }
+    try {
+        (void)ui::format("library.by", {});
+    } catch (const std::invalid_argument&) {
+        missing_argument = true;
+    }
     assert(missing_argument);
     assert(ui::label("Play##action") == "Jouer###Play##action");
     assert(ui::label("Downloads (3)##jobs") == "Téléchargements (3)###Downloads (3)##jobs");
@@ -83,12 +86,12 @@ int main() {
     image.slots[0].balloons[0] = 22;
     assert(ui::save_preview(image).find("Empty {name} %s (22 шарика)") != std::string::npos);
     assert(ui::printf_source("Play") == "Play");
-    assert(ui::plural("library.rating",22,{{"average","4.5"}}).find("22 отзыва")!=std::string::npos);
+    assert(ui::plural("library.rating", 22, {{"average", "4.5"}}).find("22 отзыва") != std::string::npos);
     assert(ui::select("en"));
     ui::debug_pseudo(true);
     const auto pseudo_copy = ui::source("Play");
     assert(pseudo_copy != "Play" && pseudo_copy.size() > 4);
-    assert(ui::source(pseudo_copy)==pseudo_copy);
+    assert(ui::source(pseudo_copy) == pseudo_copy);
     assert(ui::format("library.by", {{"author", "{name} %s"}}).find("{name} %s") != std::string::npos);
     assert(ui::preference() == "en");
     ui::debug_pseudo(false);

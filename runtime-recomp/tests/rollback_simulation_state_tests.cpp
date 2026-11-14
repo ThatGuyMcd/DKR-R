@@ -11,29 +11,26 @@
 namespace {
 
 constexpr std::size_t kRdramSize = 0x00800000U;
-std::size_t offset(std::uint32_t address) { return address & 0x1FFFFFFFU; }
+std::size_t offset(std::uint32_t address) {
+    return address & 0x1FFFFFFFU;
+}
 
-void write_word(std::vector<std::uint8_t>& memory, std::uint32_t address,
-                std::uint32_t value) {
+void write_word(std::vector<std::uint8_t>& memory, std::uint32_t address, std::uint32_t value) {
     std::memcpy(memory.data() + offset(address), &value, sizeof(value));
 }
 
-std::uint32_t read_word(const std::vector<std::uint8_t>& memory,
-                        std::uint32_t address) {
+std::uint32_t read_word(const std::vector<std::uint8_t>& memory, std::uint32_t address) {
     std::uint32_t value = 0U;
     std::memcpy(&value, memory.data() + offset(address), sizeof(value));
     return value;
 }
 
-void write_byte(std::vector<std::uint8_t>& memory, std::uint32_t address,
-                std::uint8_t value) {
+void write_byte(std::vector<std::uint8_t>& memory, std::uint32_t address, std::uint8_t value) {
     memory[offset(address) ^ 3U] = value;
 }
 
-void write_half(std::vector<std::uint8_t>& memory, std::uint32_t address,
-                std::uint16_t value) {
-    std::memcpy(memory.data() + (offset(address) ^ 2U), &value,
-                sizeof(value));
+void write_half(std::vector<std::uint8_t>& memory, std::uint32_t address, std::uint16_t value) {
+    std::memcpy(memory.data() + (offset(address) ^ 2U), &value, sizeof(value));
 }
 
 void seed_gameplay(std::vector<std::uint8_t>& memory) {
@@ -114,8 +111,7 @@ int main() {
     std::vector<std::uint8_t> snapshot(kRollbackSimulationStateBytes);
     std::uint64_t checksum = 0U;
     std::string error;
-    assert(capture_rollback_simulation_state(
-        memory.data(), memory.size(), 42U, snapshot, checksum, error));
+    assert(capture_rollback_simulation_state(memory.data(), memory.size(), 42U, snapshot, checksum, error));
     assert(checksum != 0U);
 
     // An authored value must rewind.
@@ -136,8 +132,7 @@ int main() {
     // A renderer-owned location outside the contract must not rewind.
     constexpr std::uint32_t presentation_sentinel = 0x80200000U;
     write_word(memory, presentation_sentinel, 0xCAFEBABEU);
-    assert(restore_rollback_simulation_state(
-        memory.data(), memory.size(), snapshot, 42U, checksum, error));
+    assert(restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum, error));
     assert(read_word(memory, CurrentRngSeed) == 0x12345678U);
     assert(read_word(memory, log_object + 0x0CU) == 0x42C80000U);
     assert(read_word(memory, log_object + 0x78U) == 0x00001234U);
@@ -151,21 +146,18 @@ int main() {
     // tick before the local object list, the live apply must restore globals
     // and matching actors without writing through a stale actor pointer.
     std::vector<std::uint8_t> authoritative_snapshot;
-    assert(capture_authoritative_state(
-        memory.data(), memory.size(), 42U, authoritative_snapshot, error));
+    assert(capture_authoritative_state(memory.data(), memory.size(), 42U, authoritative_snapshot, error));
     write_word(memory, CurrentRngSeed, 0x01020304U);
     write_word(memory, log_object + 0x0CU, 0x05060708U);
     write_word(memory, ObjectCount, 1U);
     write_word(memory, object_list, log_object);
     write_word(memory, object_list + 4U, 0U);
-    assert(!apply_authoritative_state(
-        memory.data(), memory.size(), authoritative_snapshot, 42U, error));
+    assert(!apply_authoritative_state(memory.data(), memory.size(), authoritative_snapshot, 42U, error));
     assert(read_word(memory, CurrentRngSeed) == 0x01020304U);
     assert(read_word(memory, log_object + 0x0CU) == 0x05060708U);
     std::uint32_t unmatched_actors = 0U;
-    assert(apply_live_authoritative_state(
-        memory.data(), memory.size(), authoritative_snapshot, 42U,
-        unmatched_actors, error));
+    assert(apply_live_authoritative_state(memory.data(), memory.size(), authoritative_snapshot, 42U, unmatched_actors,
+                                          error));
     assert(unmatched_actors == 1U);
     assert(read_word(memory, CurrentRngSeed) == 0x12345678U);
     assert(read_word(memory, log_object + 0x0CU) == 0x42C80000U);
@@ -179,25 +171,21 @@ int main() {
     write_word(memory, CurrentRngSeed, 0x13579BDFU);
     write_word(memory, log_object + 0x0CU, 0xCAFED00DU);
     write_half(memory, egg_creator + 0x4AU, 0x9999U);
-    assert(!restore_rollback_simulation_state(
-        memory.data(), memory.size(), snapshot, 42U, checksum, error));
+    assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum, error));
     assert(read_word(memory, CurrentRngSeed) == 0x13579BDFU);
     assert(read_word(memory, log_object + 0x0CU) == 0xCAFED00DU);
     write_half(memory, egg_creator + 0x4AU, 0x4321U);
 
     // Frame/token mismatches are rejected before changing live state.
     write_word(memory, CurrentRngSeed, 0xABCDEF01U);
-    assert(!restore_rollback_simulation_state(
-        memory.data(), memory.size(), snapshot, 43U, checksum, error));
+    assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 43U, checksum, error));
     assert(read_word(memory, CurrentRngSeed) == 0xABCDEF01U);
-    assert(!restore_rollback_simulation_state(
-        memory.data(), memory.size(), snapshot, 42U, checksum + 1U, error));
+    assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum + 1U, error));
     assert(read_word(memory, CurrentRngSeed) == 0xABCDEF01U);
 
     // Corruption is detected without a partial install.
     snapshot[40] ^= 0x80U;
-    assert(!restore_rollback_simulation_state(
-        memory.data(), memory.size(), snapshot, 42U, checksum, error));
+    assert(!restore_rollback_simulation_state(memory.data(), memory.size(), snapshot, 42U, checksum, error));
     assert(read_word(memory, CurrentRngSeed) == 0xABCDEF01U);
 
     // obj_wave_init() legitimately returns NULL when an authored spinning log
@@ -208,12 +196,10 @@ int main() {
     seed_gameplay(static_log_memory);
     write_word(static_log_memory, log_object + 0x64U, 0U);
     std::vector<std::uint8_t> static_log_snapshot;
-    assert(capture_authoritative_state(
-        static_log_memory.data(), static_log_memory.size(), 99U,
-        static_log_snapshot, error));
-    assert(apply_authoritative_state(
-        static_log_memory.data(), static_log_memory.size(),
-        static_log_snapshot, 99U, error));
+    assert(capture_authoritative_state(static_log_memory.data(), static_log_memory.size(), 99U, static_log_snapshot,
+                                       error));
+    assert(
+        apply_authoritative_state(static_log_memory.data(), static_log_memory.size(), static_log_snapshot, 99U, error));
     assert(read_word(static_log_memory, log_object + 0x64U) == 0U);
 
     // A strict lifecycle checkpoint may not silently install a static-log
@@ -224,11 +210,8 @@ int main() {
     seed_gameplay(wave_log_memory);
     const std::uint32_t wave_seed_before = read_word(wave_log_memory, CurrentRngSeed);
     write_word(wave_log_memory, CurrentRngSeed, 0xA5A5A5A5U);
-    assert(!apply_authoritative_state(
-        wave_log_memory.data(), wave_log_memory.size(),
-        static_log_snapshot, 99U, error));
-    assert(error ==
-           "The host and local moving log disagree about optional wave state.");
+    assert(!apply_authoritative_state(wave_log_memory.data(), wave_log_memory.size(), static_log_snapshot, 99U, error));
+    assert(error == "The host and local moving log disagree about optional wave state.");
     assert(read_word(wave_log_memory, CurrentRngSeed) == 0xA5A5A5A5U);
     assert(read_word(wave_log_memory, log_object + 0x64U) == log_state);
 
@@ -237,9 +220,8 @@ int main() {
     // topology settles, but it must report the unmatched log and must never
     // overwrite or discard the local allocation pointer.
     unmatched_actors = 0U;
-    assert(apply_live_authoritative_state(
-        wave_log_memory.data(), wave_log_memory.size(),
-        static_log_snapshot, 99U, unmatched_actors, error));
+    assert(apply_live_authoritative_state(wave_log_memory.data(), wave_log_memory.size(), static_log_snapshot, 99U,
+                                          unmatched_actors, error));
     assert(unmatched_actors == 1U);
     assert(read_word(wave_log_memory, CurrentRngSeed) == wave_seed_before);
     assert(read_word(wave_log_memory, log_object + 0x64U) == log_state);
@@ -248,9 +230,7 @@ int main() {
     // nullable-state repair must not turn real pointer corruption into a
     // packet that can be installed on another peer.
     write_word(static_log_memory, log_object + 0x64U, 0x12345678U);
-    assert(!capture_authoritative_state(
-        static_log_memory.data(), static_log_memory.size(), 100U,
-        static_log_snapshot, error));
-    assert(error ==
-           "A moving log has a non-null wave-state pointer outside RDRAM.");
+    assert(!capture_authoritative_state(static_log_memory.data(), static_log_memory.size(), 100U, static_log_snapshot,
+                                        error));
+    assert(error == "A moving log has a non-null wave-state pointer outside RDRAM.");
 }

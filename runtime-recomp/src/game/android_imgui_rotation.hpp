@@ -15,10 +15,12 @@ class ImGuiDrawScope final {
     inline static thread_local Scratch scratch;
     ImDrawData* data_ = nullptr;
     ImVec2 position_{}, size_{}, scale_{};
-public:
+
+  public:
     ImGuiDrawScope(ImDrawData* data, std::uint32_t rotation) {
-        if (!data || (rotation != rotate90 && rotation != rotate180 && rotation != rotate270)
-            || data->DisplaySize.x <= 0 || data->DisplaySize.y <= 0) return;
+        if (!data || (rotation != rotate90 && rotation != rotate180 && rotation != rotate270) ||
+            data->DisplaySize.x <= 0 || data->DisplaySize.y <= 0)
+            return;
         std::size_t vertices = 0, commands = 0;
         for (int n = 0; n < data->CmdListsCount; ++n) {
             vertices += data->CmdLists[n]->VtxBuffer.Size;
@@ -27,19 +29,25 @@ public:
         // Complete all possibly throwing allocations before mutating draw data.
         scratch.positions.resize(vertices);
         scratch.clips.resize(commands);
-        data_ = data; position_ = data->DisplayPos; size_ = data->DisplaySize; scale_ = data->FramebufferScale;
+        data_ = data;
+        position_ = data->DisplayPos;
+        size_ = data->DisplaySize;
+        scale_ = data->FramebufferScale;
         std::size_t v = 0, c = 0;
         for (int n = 0; n < data->CmdListsCount; ++n) {
             auto* list = data->CmdLists[n];
             for (auto& vertex : list->VtxBuffer) {
                 scratch.positions[v++] = vertex.pos;
-                const auto point = to_image(Point{vertex.pos.x - position_.x, vertex.pos.y - position_.y}, size_.x, size_.y, rotation);
+                const auto point =
+                    to_image(Point{vertex.pos.x - position_.x, vertex.pos.y - position_.y}, size_.x, size_.y, rotation);
                 vertex.pos = ImVec2(point.x, point.y);
             }
             for (auto& command : list->CmdBuffer) {
                 scratch.clips[c++] = command.ClipRect;
                 const auto r = command.ClipRect;
-                const auto clip = to_image(Rect{r.x - position_.x, r.y - position_.y, r.z - position_.x, r.w - position_.y}, size_.x, size_.y, rotation);
+                const auto clip =
+                    to_image(Rect{r.x - position_.x, r.y - position_.y, r.z - position_.x, r.w - position_.y}, size_.x,
+                             size_.y, rotation);
                 command.ClipRect = ImVec4(clip.left, clip.top, clip.right, clip.bottom);
             }
         }
@@ -50,15 +58,20 @@ public:
         }
     }
     ~ImGuiDrawScope() {
-        if (!data_) return;
+        if (!data_)
+            return;
         std::size_t v = 0, c = 0;
         for (int n = 0; n < data_->CmdListsCount; ++n) {
-            for (auto& vertex : data_->CmdLists[n]->VtxBuffer) vertex.pos = scratch.positions[v++];
-            for (auto& command : data_->CmdLists[n]->CmdBuffer) command.ClipRect = scratch.clips[c++];
+            for (auto& vertex : data_->CmdLists[n]->VtxBuffer)
+                vertex.pos = scratch.positions[v++];
+            for (auto& command : data_->CmdLists[n]->CmdBuffer)
+                command.ClipRect = scratch.clips[c++];
         }
-        data_->DisplayPos = position_; data_->DisplaySize = size_; data_->FramebufferScale = scale_;
+        data_->DisplayPos = position_;
+        data_->DisplaySize = size_;
+        data_->FramebufferScale = scale_;
     }
     ImGuiDrawScope(const ImGuiDrawScope&) = delete;
     ImGuiDrawScope& operator=(const ImGuiDrawScope&) = delete;
 };
-}
+} // namespace dkr::runtime::android_rotation

@@ -17,4 +17,3 @@ inline bool owned_runtime_active() {
 }
 
 } // namespace dkr::runtime::netplay::experimental
-

@@ -271,7 +271,8 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     std::string headers = "Accept: */*\r\n";
     if (prefix(r.url, Api)) {
         headers += "Origin: https://positron-portal.com\r\n";
-        if(!r.online_instance.empty())headers+="X-DKRR-Instance: "+r.online_instance+"\r\n";
+        if (!r.online_instance.empty())
+            headers += "X-DKRR-Instance: " + r.online_instance + "\r\n";
         if (!r.token.empty()) {
             if (r.token.size() != 43 || !identifier(r.token))
                 throw Error("Sign in again to continue.");
@@ -374,7 +375,8 @@ Response http_once(const Request& r, std::stop_token stop, const Sink& sink) {
     auto add = [&](std::string value) { cleanup.headers = curl_slist_append(cleanup.headers, value.c_str()); };
     if (prefix(r.url, Api)) {
         add("Origin: https://positron-portal.com");
-        if(!r.online_instance.empty())add("X-DKRR-Instance: "+r.online_instance);
+        if (!r.online_instance.empty())
+            add("X-DKRR-Instance: " + r.online_instance);
         if (!r.token.empty() && r.token.size() == 43 && identifier(r.token))
             add("Authorization: Bearer " + r.token);
     } else {
@@ -661,7 +663,7 @@ struct Service::Impl {
     std::atomic<bool> stop_upload{false};
     std::stop_source download_stop, login_stop;
     std::map<std::string, std::stop_source> preparation_stops;
-    #include "mod_store/community_service.inl"
+#include "mod_store/community_service.inl"
     // Workers are last: joined before the objects captured by their callbacks.
     std::jthread worker, image_worker, download_worker, auth_worker;
     void publish() {
@@ -979,7 +981,7 @@ struct Service::Impl {
 #include "online_profile/profile_service.inl"
 
     void load_image(const std::string& url, std::stop_token stop) {
-    dkr::storage::Activity storage_activity;
+        dkr::storage::Activity storage_activity;
         const auto key = dkr::updates::hash(std::span(reinterpret_cast<const std::uint8_t*>(url.data()), url.size()));
         const auto path = root / "images" / key;
         std::string bytes;
@@ -1030,11 +1032,15 @@ struct Service::Impl {
                                 x * unsigned(width) / image->width) *
                                    4 +
                                c];
-        if(width>512||height>512) {
+        if (width > 512 || height > 512) {
             std::string encoded;
-            const auto write=[](void* context,void* data,int length){static_cast<std::string*>(context)->append(static_cast<const char*>(data),std::size_t(length));};
-            if(stbi_write_png_to_func(write,&encoded,int(image->width),int(image->height),4,image->rgba.data(),int(image->width*4))&&encoded.size()<bytes.size())
-                dkr::updates::durable_write(path,encoded);
+            const auto write = [](void* context, void* data, int length) {
+                static_cast<std::string*>(context)->append(static_cast<const char*>(data), std::size_t(length));
+            };
+            if (stbi_write_png_to_func(write, &encoded, int(image->width), int(image->height), 4, image->rgba.data(),
+                                       int(image->width * 4)) &&
+                encoded.size() < bytes.size())
+                dkr::updates::durable_write(path, encoded);
         }
         dkr::storage::request(dkr::storage::Action::Images);
         std::lock_guard lock(mutex);
@@ -1070,7 +1076,7 @@ struct Service::Impl {
                 std::unique_lock lock(mutex);
                 cv.wait(lock, stop, [&] {
                     return !gameplay && std::any_of(state.downloads.begin(), state.downloads.end(),
-                                       [](const Download& d) { return d.state == "Queued"; });
+                                                    [](const Download& d) { return d.state == "Queued"; });
                 });
                 if (stop.stop_requested())
                     return;
@@ -1099,9 +1105,9 @@ struct Service::Impl {
             std::string source_url;
             try {
                 auto integrity = get("/v1/launcher/releases/" + job.release, cancelled);
-                const auto expected_digest=job.digest;
+                const auto expected_digest = job.digest;
                 job.digest = text(integrity, "sha256", 64);
-                if(job.intent=="activate"&&!expected_digest.empty()&&expected_digest!=job.digest)
+                if (job.intent == "activate" && !expected_digest.empty() && expected_digest != job.digest)
                     throw Error("That edition's published checksum changed. The installed mod was kept.");
                 if (!hash_string(job.digest) || !integrity.contains("bytes") ||
                     !integrity["bytes"].is_number_unsigned())
@@ -1113,8 +1119,8 @@ struct Service::Impl {
                     name.find_first_of("\\/:*?\"<>|") != name.npos || name == "." || name == "..")
                     throw Error("The release has invalid file details.");
                 const auto extension = lower(std::filesystem::path(name).extension().string());
-                const std::set<std::string> formats = {".zip",     ".rtz", ".dkrmap", ".xdelta", ".nrm",
-                                                       ".dkrcode", ".bps", ".ips",    ".7z", ".dkrkart", ".dkrhover", ".dkrplane"};
+                const std::set<std::string> formats = {".zip", ".rtz", ".dkrmap", ".xdelta",  ".nrm",      ".dkrcode",
+                                                       ".bps", ".ips", ".7z",     ".dkrkart", ".dkrhover", ".dkrplane"};
                 if (!formats.contains(extension))
                     throw Error("This package format is not supported.");
                 const auto folder = root / "downloads" / job.digest;
@@ -1169,7 +1175,7 @@ struct Service::Impl {
                 const auto space = std::filesystem::space(folder, ec);
                 if (ec || space.available < job.total - offset + 16 * 1024 * 1024)
                     throw Error("There is not enough free space for this download.");
-                const auto download_attempt=community_download(job.release,marker);
+                const auto download_attempt = community_download(job.release, marker);
                 auto write_progress = Clock::now();
                 bool opened = false;
                 std::ofstream file;
@@ -1195,7 +1201,10 @@ struct Service::Impl {
                             file.open(partial, std::ios::binary | (offset ? std::ios::app : std::ios::trunc));
                             if (!file)
                                 throw Error("The download could not be saved.");
-                            write_json(marker, {{"sha256", job.digest}, {"url", url}, {"etag", headers.etag},{"communityAttempt",download_attempt}});
+                            write_json(marker, {{"sha256", job.digest},
+                                                {"url", url},
+                                                {"etag", headers.etag},
+                                                {"communityAttempt", download_attempt}});
                             opened = true;
                         }
                         if (count > job.total - received)
@@ -1237,7 +1246,9 @@ struct Service::Impl {
                     download_report(job.release, job.title, error, source_url);
                 change([&](Download& d) {
                     d.state = cancelled.stop_requested() ? (gameplay ? "Paused for gameplay" : "Paused") : "Failed";
-                    d.error = cancelled.stop_requested() && gameplay ? "Downloads resume when you return to the launcher." : error.what();
+                    d.error = cancelled.stop_requested() && gameplay
+                                  ? "Downloads resume when you return to the launcher."
+                                  : error.what();
                 });
             }
         }
@@ -1270,11 +1281,18 @@ std::string download_key(const std::string& item, const std::string& release, co
 }
 void Service::gameplay(bool active) {
     dkr::storage::gameplay(active);
-    auto& p=*impl_;
+    auto& p = *impl_;
     {
-        std::lock_guard lock(p.mutex);p.gameplay=active;
-        if(active)p.download_stop.request_stop();
-        else for(auto& d:p.state.downloads)if(d.state=="Paused for gameplay") {d.state="Queued";d.error.clear();}
+        std::lock_guard lock(p.mutex);
+        p.gameplay = active;
+        if (active)
+            p.download_stop.request_stop();
+        else
+            for (auto& d : p.state.downloads)
+                if (d.state == "Paused for gameplay") {
+                    d.state = "Queued";
+                    d.error.clear();
+                }
         p.publish();
     }
     p.cv.notify_all();
@@ -1284,20 +1302,27 @@ void Service::configure(const std::filesystem::path& config, std::string version
     if (p.configured)
         return;
     p.configured = true;
-    dkr::online_stability::bind_store_http(this,[&p] {
-        p.login_stop.request_stop();p.download_stop.request_stop();p.stop_upload=true;
-        p.worker.request_stop();p.image_worker.request_stop();p.download_worker.request_stop();p.auth_worker.request_stop();
+    dkr::online_stability::bind_store_http(this, [&p] {
+        p.login_stop.request_stop();
+        p.download_stop.request_stop();
+        p.stop_upload = true;
+        p.worker.request_stop();
+        p.image_worker.request_stop();
+        p.download_worker.request_stop();
+        p.auth_worker.request_stop();
         p.community_tracking_worker.request_stop();
         p.cv.notify_all();
-        for(auto* worker:{&p.worker,&p.image_worker,&p.download_worker,&p.auth_worker,&p.community_tracking_worker})
-            if(worker->joinable())worker->join();
+        for (auto* worker :
+             {&p.worker, &p.image_worker, &p.download_worker, &p.auth_worker, &p.community_tracking_worker})
+            if (worker->joinable())
+                worker->join();
     });
     p.root = config / "mod-store";
     p.version = std::move(version);
     p.worker = std::jthread([&p](std::stop_token stop) { p.run(stop); });
     p.image_worker = std::jthread([&p](std::stop_token stop) { p.image_run(stop); });
     p.download_worker = std::jthread([&p](std::stop_token stop) { p.download_run(stop); });
-    p.community_tracking_worker=std::jthread([&p](std::stop_token stop){p.community_tracking(stop);});
+    p.community_tracking_worker = std::jthread([&p](std::stop_token stop) { p.community_tracking(stop); });
     p.queue([&p](std::stop_token stop) {
         const auto preferences = read_json(p.root / "preferences.json"), cached = read_json(p.root / "catalogue.json");
         const auto saved = read_json(p.root / "downloads.json");
@@ -1400,7 +1425,8 @@ void Service::reviews(std::string item) {
     });
 }
 void Service::action(std::string name, Json input) {
-    if(impl_->community_action(name,input))return;
+    if (impl_->community_action(name, input))
+        return;
     static const std::set<std::string> allowed = {
         "review.save",       "review.report",     "report.resolve",          "request.submit",  "request.resubmit",
         "request.start",     "request.note",      "request.decide",          "request.publish", "catalogue.save",
@@ -1621,11 +1647,17 @@ void Service::login() {
                         remember_warning = error.what();
                     }
                 // Account cancellation remains authoritative across keyring prompts.
-                if(stop.stop_requested()){
-                    try{Request revoke{std::string(Api)+"/auth/launcher/logout","POST",Json{{"device",device}}.dump(),token};
-                        revoke.timeout=5000;document(revoke,std::stop_token{});}catch(...){}
+                if (stop.stop_requested()) {
+                    try {
+                        Request revoke{std::string(Api) + "/auth/launcher/logout", "POST",
+                                       Json{{"device", device}}.dump(), token};
+                        revoke.timeout = 5000;
+                        document(revoke, std::stop_token{});
+                    } catch (...) {
+                    }
 #ifdef _WIN32
-                    std::error_code cleanup;std::filesystem::remove(p.root/"device.bin",cleanup);
+                    std::error_code cleanup;
+                    std::filesystem::remove(p.root / "device.bin", cleanup);
 #else
                     dkr::profile::devices::clear(p.root.generic_string());
 #endif
@@ -1648,7 +1680,8 @@ void Service::login() {
                     p.state.signing_in = false;
                     p.state.status = "Signed in with Discord.";
                     p.state.error = remember_warning;
-                    if(!remember_warning.empty())p.state.remember=false;
+                    if (!remember_warning.empty())
+                        p.state.remember = false;
                     p.publish();
                 }
                 p.queue([&p](std::stop_token s) { p.private_refresh(s); });
@@ -1724,7 +1757,7 @@ void Service::download(const Json& item, const Json& release, std::string intent
     d.version = text(release, "version", 80);
     d.intent = std::move(intent);
     d.instance = std::move(instance);
-    d.digest = text(release,"sha256",64);
+    d.digest = text(release, "sha256", 64);
     if (!identifier(d.item) || !identifier(d.release))
         return;
     d.key = download_key(d.item, d.release, d.instance);
@@ -1732,7 +1765,8 @@ void Service::download(const Json& item, const Json& release, std::string intent
         auto found =
             std::find_if(s.downloads.begin(), s.downloads.end(), [&](const auto& v) { return v.key == d.key; });
         if (found == s.downloads.end()) {
-            if(s.downloads.size()>=64)std::erase_if(s.downloads,[](const Download& old){return old.state=="Installed";});
+            if (s.downloads.size() >= 64)
+                std::erase_if(s.downloads, [](const Download& old) { return old.state == "Installed"; });
             if (s.downloads.size() >= 64) {
                 s.error = "The download queue is full.";
                 return;
@@ -1839,8 +1873,8 @@ void Service::verify_release(const Json& item, const Json& release, bool downloa
             const auto directory = p.root / "verification" / id;
             std::filesystem::create_directories(directory);
             const auto extension = lower(std::filesystem::path(name).extension().string());
-            const std::set<std::string> allowed = {".zip",     ".rtz", ".dkrmap", ".xdelta", ".nrm",
-                                                   ".dkrcode", ".bps", ".ips",    ".7z", ".dkrkart", ".dkrhover", ".dkrplane"};
+            const std::set<std::string> allowed = {".zip", ".rtz", ".dkrmap", ".xdelta",  ".nrm",      ".dkrcode",
+                                                   ".bps", ".ips", ".7z",     ".dkrkart", ".dkrhover", ".dkrplane"};
             if (!allowed.contains(extension))
                 throw Error("This package format cannot be verified.");
             const auto target = directory / std::filesystem::u8path(package_filename(title, name));
@@ -1985,7 +2019,10 @@ void Service::clear_completed_history() {
     });
 }
 void Service::clear_messages() {
-    impl_->update([](Snapshot& s) { s.status.clear(); s.error.clear(); });
+    impl_->update([](Snapshot& s) {
+        s.status.clear();
+        s.error.clear();
+    });
 }
 bool Service::begin_install(std::string key) {
     auto& p = *impl_;
@@ -2005,16 +2042,18 @@ void Service::installed(std::string key, bool success, std::string message) {
     impl_->update([&](Snapshot& s) {
         for (auto& d : s.downloads)
             if (d.key == key) {
-                const bool cancelled=message.starts_with("Installation cancelled.");
+                const bool cancelled = message.starts_with("Installation cancelled.");
                 d.state = success ? "Installed" : cancelled ? "Ready to install" : "Install failed";
                 d.error = success || cancelled ? "" : message;
-                if(success)installed_digest=d.digest;
+                if (success)
+                    installed_digest = d.digest;
             }
         s.status = std::move(message);
     });
-    impl_->queue([p = impl_.get(), digest=std::move(installed_digest)](std::stop_token stop) {
+    impl_->queue([p = impl_.get(), digest = std::move(installed_digest)](std::stop_token stop) {
         p->persist_downloads();
-        if(!digest.empty())dkr::storage::installed_package(digest);
+        if (!digest.empty())
+            dkr::storage::installed_package(digest);
         refresh_library_names(p->root.parent_path(), *p->published.load()->items, stop);
     });
 }
@@ -2120,9 +2159,10 @@ void Service::upload(std::filesystem::path source, std::string kind, std::string
             current();
             return result;
         };
-        if(kind=="download" && vehicle_store_extension(lower(source.extension().string()))) {
-            if(!vehicle_store_category(category)) throw Error("Choose Vehicles before uploading a vehicle export.");
-            source=prepare_vehicle_store_upload(source,p.root/"vehicle-uploads",stop);
+        if (kind == "download" && vehicle_store_extension(lower(source.extension().string()))) {
+            if (!vehicle_store_category(category))
+                throw Error("Choose Vehicles before uploading a vehicle export.");
+            source = prepare_vehicle_store_upload(source, p.root / "vehicle-uploads", stop);
         }
         const auto size = std::filesystem::file_size(source);
         if (!size || size > (kind == "image" ? 20ULL * 1024 * 1024 : MaxFile))

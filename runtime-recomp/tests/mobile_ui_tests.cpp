@@ -11,7 +11,7 @@
 namespace {
 float metric_scale = 2;
 float metric_insets[4]{};
-}
+} // namespace
 namespace dkr::runtime::mobile {
 void test_metrics(float& scale, float insets[4]) {
     scale = metric_scale;

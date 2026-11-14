@@ -28,11 +28,11 @@ bool ConventionsMatchRetail() {
     for (const int yaw : {0, 0x1234, 0x4000, -0x3000, 0x7FFF, -0x8000}) {
         const auto racer = static_cast<std::int16_t>(yaw);
         const auto retail = static_cast<std::int16_t>(0x8000 - yaw);
-        if (angle_error(camera_yaw_from_view(heading_from_racer_yaw(racer)), retail) > 1) return false;
+        if (angle_error(camera_yaw_from_view(heading_from_racer_yaw(racer)), retail) > 1)
+            return false;
     }
-    return camera_pitch_from_view(-0.2) == to_binary_angle(0.2) &&
-        steer_from_racer(70) == -1.0F && steer_from_racer(-35) == 0.5F &&
-        slope_from_racer_pitch(0x1000) > 0.0;
+    return camera_pitch_from_view(-0.2) == to_binary_angle(0.2) && steer_from_racer(70) == -1.0F &&
+           steer_from_racer(-35) == 0.5F && slope_from_racer_pitch(0x1000) > 0.0;
 }
 
 struct Drive {
@@ -71,8 +71,8 @@ bool FollowsBehindInDkrUnits() {
     const double up = d.out.eye.y;
     const std::int16_t yaw = camera_yaw_from_view(d.out.yaw);
     const std::int16_t pitch = camera_pitch_from_view(d.out.pitch);
-    std::printf("[test][modern-camera] 600 u/s: %.0f units back, %.0f up, yaw error %d, pitch 0x%04X\n",
-                back, up, angle_error(yaw, static_cast<std::int16_t>(0x8000 - racer_yaw)),
+    std::printf("[test][modern-camera] 600 u/s: %.0f units back, %.0f up, yaw error %d, pitch 0x%04X\n", back, up,
+                angle_error(yaw, static_cast<std::int16_t>(0x8000 - racer_yaw)),
                 static_cast<unsigned>(static_cast<std::uint16_t>(pitch)));
     if (back < 120.0 || back > 260.0 || up < 25.0 || up > 70.0 ||
         angle_error(yaw, static_cast<std::int16_t>(0x8000 - racer_yaw)) > 0x200 || pitch <= 0) {
@@ -82,8 +82,7 @@ bool FollowsBehindInDkrUnits() {
     const Drive b = drive(racer_yaw, true);
     const double ahead = (b.out.eye.x - b.x) * std::sin(heading) + (b.out.eye.z - b.z) * std::cos(heading);
     // The Bancada position spring trails the racer at speed, so less than at rest.
-    return ahead > 40.0 &&
-        angle_error(camera_yaw_from_view(b.out.yaw), static_cast<std::int16_t>(-racer_yaw)) < 0x400;
+    return ahead > 40.0 && angle_error(camera_yaw_from_view(b.out.yaw), static_cast<std::int16_t>(-racer_yaw)) < 0x400;
 }
 
 bool LookBackWithRetailCamera() {
@@ -94,20 +93,18 @@ bool LookBackWithRetailCamera() {
     camera.yaw = to_binary_angle(0.3);
     camera.pitch = 0x400;
     const Pose back = turn_around(camera, 100.0, -50.0, kPi);
-    return close(back.x - 100.0, -(camera.x - 100.0), 1e-6) &&
-        close(back.z + 50.0, -(camera.z + 50.0), 1e-6) && back.y == camera.y &&
-        back.pitch == camera.pitch &&
-        static_cast<std::uint16_t>(back.yaw - camera.yaw) == 0x8000U;
+    return close(back.x - 100.0, -(camera.x - 100.0), 1e-6) && close(back.z + 50.0, -(camera.z + 50.0), 1e-6) &&
+           back.y == camera.y && back.pitch == camera.pitch &&
+           static_cast<std::uint16_t>(back.yaw - camera.yaw) == 0x8000U;
 }
 
 bool FramingAndFov() {
     const MCParams one = dkr_params(0U), two = dkr_params(1U), four = dkr_params(3U);
     const MCParams p = one;
-    return close(one.distMin * one.unitScale, 188.8, 0.1) &&
-        close(two.distMin, 5.9 * kTwoPlayerFraming, 1e-5) &&
-        close(four.heightMin, 1.35 * kMultiPlayerFraming, 1e-5) &&
-        close(effective_fov(70.0F, p.fovBase + 6.0F, p), 76.0, 1e-5) &&
-        effective_fov(85.0F, p.fovBase + 18.0F, p) == kMaximumFov;
+    return close(one.distMin * one.unitScale, 188.8, 0.1) && close(two.distMin, 5.9 * kTwoPlayerFraming, 1e-5) &&
+           close(four.heightMin, 1.35 * kMultiPlayerFraming, 1e-5) &&
+           close(effective_fov(70.0F, p.fovBase + 6.0F, p), 76.0, 1e-5) &&
+           effective_fov(85.0F, p.fovBase + 18.0F, p) == kMaximumFov;
 }
 
 // Every preset value sits inside the panel's range (so loading a saved file
@@ -119,18 +116,20 @@ bool TuningRangesHoldPresets() {
             const double scale = field.degrees ? kPi / 180.0 : 1.0;
             const double value = field_value(tuning, field);
             if (value < field.minimum * scale - 1e-6 || value > field.maximum * scale + 1e-6) {
-                std::fprintf(stderr, "[test][modern-camera] %s: %s=%g is outside %g..%g\n", preset.name,
-                             field.key, value, field.minimum * scale, field.maximum * scale);
+                std::fprintf(stderr, "[test][modern-camera] %s: %s=%g is outside %g..%g\n", preset.name, field.key,
+                             value, field.minimum * scale, field.maximum * scale);
                 return false;
             }
         }
     }
     for (std::size_t a = 0; a < kTuningFields.size(); ++a) {
         for (std::size_t b = a + 1; b < kTuningFields.size(); ++b) {
-            if (std::string_view(kTuningFields[a].key) == kTuningFields[b].key) return false;
+            if (std::string_view(kTuningFields[a].key) == kTuningFields[b].key)
+                return false;
         }
         for (const TuningFeature& feature : kTuningFeatures) {
-            if (std::string_view(kTuningFields[a].key) == feature.key) return false;
+            if (std::string_view(kTuningFields[a].key) == feature.key)
+                return false;
         }
     }
     return true;
@@ -144,28 +143,27 @@ bool TuningFileRoundTrip() {
     tuning.retailShake = 0.5F;
     tuning.hitReaction = 40.0F;
     tuning.recenterEase = 1.5F;
-    if (!same_tuning(parse_tuning(serialize_tuning(tuning)), tuning)) return false;
+    if (!same_tuning(parse_tuning(serialize_tuning(tuning)), tuning))
+        return false;
     // Comments, CRLF, unknown keys, junk and out-of-range values.
     const Tuning odd = parse_tuning("# note\r\nyawFreq=99\r\nnope=1\r\ndistMin=abc\r\n"
                                     "rollMax=-5\r\nenableBoostKick=0\r\n");
     const Tuning defaults = default_tuning();
-    return odd.params.yawFreq == 6.0F && odd.params.distMin == defaults.params.distMin &&
-        odd.params.rollMax == 0.0F && odd.params.enableBoostKick == 0 &&
-        same_tuning(parse_tuning(""), defaults) &&
-        tuning_code(defaults).find("p.distMin = 5.9F;") != std::string::npos &&
-        tuning_code(defaults).find("p.yawDamping = 1.0F;") != std::string::npos &&
-        tuning_code(defaults).find("p.enablePosSpring = 1;") != std::string::npos &&
-        tuning_code(defaults).find("p.enableSteerLead") == std::string::npos;
+    return odd.params.yawFreq == 6.0F && odd.params.distMin == defaults.params.distMin && odd.params.rollMax == 0.0F &&
+           odd.params.enableBoostKick == 0 && same_tuning(parse_tuning(""), defaults) &&
+           tuning_code(defaults).find("p.distMin = 5.9F;") != std::string::npos &&
+           tuning_code(defaults).find("p.yawDamping = 1.0F;") != std::string::npos &&
+           tuning_code(defaults).find("p.enablePosSpring = 1;") != std::string::npos &&
+           tuning_code(defaults).find("p.enableSteerLead") == std::string::npos;
 }
 
 // Comfort drops what usually makes a chase camera nauseating.
 bool ComfortIsCalm() {
     const Tuning comfort = comfort_tuning();
     const MCParams& p = comfort.params;
-    return p.rollMax == 0.0F && p.rollFromYawRate == 0.0F && p.boostTrauma == 0.0F &&
-        p.landingTrauma == 0.0F && comfort.retailShake == 0.0F && p.fovBoost == 0.0F &&
-        p.enableLandingDip == 0 && p.enableBoostKick == 0 && p.enableSteerLead == 0 &&
-        p.yawDamping >= 1.0F && p.distMax == p.distMin && p.heightMax == p.heightMin;
+    return p.rollMax == 0.0F && p.rollFromYawRate == 0.0F && p.boostTrauma == 0.0F && p.landingTrauma == 0.0F &&
+           comfort.retailShake == 0.0F && p.fovBoost == 0.0F && p.enableLandingDip == 0 && p.enableBoostKick == 0 &&
+           p.enableSteerLead == 0 && p.yawDamping >= 1.0F && p.distMax == p.distMin && p.heightMax == p.heightMin;
 }
 
 // One tick of a scripted drive: where the nose points and how the racer moves.
@@ -185,8 +183,7 @@ struct DriveResult {
     bool held = false;  // the bump guard held the velocity at some point
 };
 
-template <typename Script>
-DriveResult scripted_drive(bool guarded, float dt, int ticks, int from, Script script) {
+template <typename Script> DriveResult scripted_drive(bool guarded, float dt, int ticks, int from, Script script) {
     const MCParams p = dkr_params(0U);
     MCState s{};
     MCOutput out{};
@@ -206,10 +203,11 @@ DriveResult scripted_drive(bool guarded, float dt, int ticks, int from, Script s
         in.drifting = tick.drifting ? 1 : 0;
         ModernCam_Update(&s, &p, &in, dt, nullptr, nullptr, &out);
         result.held = result.held || guard.hold > 0.0F;
-        if (i == from - 1) before = out.yaw;
+        if (i == from - 1)
+            before = out.yaw;
         if (i >= from) {
-            result.worst = std::max(result.worst,
-                                    std::fabs(std::remainder(out.yaw - tick.heading, 2.0 * kPi)) * 180.0 / kPi);
+            result.worst =
+                std::max(result.worst, std::fabs(std::remainder(out.yaw - tick.heading, 2.0 * kPi)) * 180.0 / kPi);
             result.moved = std::max(result.moved, std::fabs(std::remainder(out.yaw - before, 2.0 * kPi)) * 180.0 / kPi);
         }
     }
@@ -221,16 +219,18 @@ constexpr double kNose = 0.7;
 // Driving into something at 500 units/s and bouncing off at 130 degrees for
 // four ticks: bare modern_cam whips round to face the bounce.
 Tick bounce_tick(int i) {
-    if (i < 60) return Tick{kNose, along(kNose, 500.0F)};
-    if (i < 64) return Tick{kNose, along(kNose + 2.3, 270.0F)};
+    if (i < 60)
+        return Tick{kNose, along(kNose, 500.0F)};
+    if (i < 64)
+        return Tick{kNose, along(kNose + 2.3, 270.0F)};
     return Tick{kNose, along(kNose, 100.0F)};
 }
 
 bool BumpDoesNotWhip() {
     const DriveResult bare = scripted_drive(false, 1.0F / 30.0F, 90, 60, bounce_tick);
     const DriveResult guarded = scripted_drive(true, 1.0F / 30.0F, 90, 60, bounce_tick);
-    std::printf("[test][modern-camera] bounce: view off the nose by %.1f degrees bare, %.1f guarded\n",
-                bare.worst, guarded.worst);
+    std::printf("[test][modern-camera] bounce: view off the nose by %.1f degrees bare, %.1f guarded\n", bare.worst,
+                guarded.worst);
     return bare.worst > 20.0 && guarded.worst < 3.0 && guarded.held;
 }
 
@@ -238,7 +238,8 @@ bool BumpDoesNotWhip() {
 // keeps up with the nose instead of swinging back towards the wall.
 bool BumpThenSteerAway() {
     const auto script = [](int i) {
-        if (i < 64) return bounce_tick(i);
+        if (i < 64)
+            return bounce_tick(i);
         const double heading = kNose - 1.57 * std::min((i - 64) / 16.0, 1.0);
         return Tick{heading, along(heading, std::min(100.0F + 20.0F * static_cast<float>(i - 64), 450.0F))};
     };
@@ -252,14 +253,16 @@ bool BumpThenSteerAway() {
 // view stays where it is instead of swinging to the nose and back.
 bool BumpInDriftKeepsTheView() {
     const auto script = [](int i) {
-        if (i < 60) return Tick{kNose, along(kNose + 0.5, 500.0F), true};
-        if (i < 64) return Tick{kNose, along(kNose + 2.3, 270.0F), true};
+        if (i < 60)
+            return Tick{kNose, along(kNose + 0.5, 500.0F), true};
+        if (i < 64)
+            return Tick{kNose, along(kNose + 2.3, 270.0F), true};
         return Tick{kNose, along(kNose + 0.5, 150.0F), true};
     };
     const DriveResult bare = scripted_drive(false, 1.0F / 30.0F, 120, 60, script);
     const DriveResult guarded = scripted_drive(true, 1.0F / 30.0F, 120, 60, script);
-    std::printf("[test][modern-camera] bounce mid-drift: view moved %.1f degrees bare, %.1f guarded\n",
-                bare.moved, guarded.moved);
+    std::printf("[test][modern-camera] bounce mid-drift: view moved %.1f degrees bare, %.1f guarded\n", bare.moved,
+                guarded.moved);
     return bare.moved > 20.0 && guarded.moved < 5.0;
 }
 
@@ -279,14 +282,14 @@ bool CorneringIsNotABump() {
             const double heading = kNose + 300.0 * kPi / 180.0 * dt * i;
             return Tick{heading, along(heading, 500.0F)};
         };
-        if (scripted_drive(true, dt, 60, 0, script).held) return false;
+        if (scripted_drive(true, dt, 60, 0, script).held)
+            return false;
     }
     return true;
 }
 
 // The view's fastest turn, in degrees/s, from tick `from` on.
-template <typename Script>
-double fastest_turn(bool guarded, float dt, int ticks, int from, Script script) {
+template <typename Script> double fastest_turn(bool guarded, float dt, int ticks, int from, Script script) {
     const MCParams p = dkr_params(0U);
     MCState s{};
     MCOutput out{};
@@ -316,16 +319,18 @@ double fastest_turn(bool guarded, float dt, int ticks, int from, Script script) 
 // nose; then a wall stops the racer dead. Bare modern_cam drops the motion it
 // was following and swings to the nose at once.
 Tick drift_stop_tick(int i) {
-    if (i < 60) return Tick{kNose, along(kNose + 1.2, 600.0F), true};
-    if (i == 60) return Tick{kNose, along(kNose + 1.2, 150.0F), true};
+    if (i < 60)
+        return Tick{kNose, along(kNose + 1.2, 600.0F), true};
+    if (i == 60)
+        return Tick{kNose, along(kNose + 1.2, 150.0F), true};
     return Tick{kNose, along(kNose, 30.0F)};
 }
 
 bool StopInDriftDoesNotSwing() {
     const double bare = fastest_turn(false, 1.0F / 30.0F, 120, 60, drift_stop_tick);
     const double guarded = fastest_turn(true, 1.0F / 30.0F, 120, 60, drift_stop_tick);
-    std::printf("[test][modern-camera] stop mid-drift: view turns at most %.0f degrees/s bare, %.0f guarded\n",
-                bare, guarded);
+    std::printf("[test][modern-camera] stop mid-drift: view turns at most %.0f degrees/s bare, %.0f guarded\n", bare,
+                guarded);
     return bare > 200.0 && guarded < 0.6 * bare;
 }
 
@@ -336,8 +341,10 @@ bool HitsOffLeavesTheVelocity() {
     for (int i = 0; i < 64; ++i) {
         const Tick tick = bounce_tick(i);
         const MCVec3 v = bump_steady_velocity(tick.velocity, static_cast<float>(tick.heading), dt, guard, 0.0F, 0.0F);
-        if (v.x != tick.velocity.x || v.z != tick.velocity.z) return false;
-        if (i == 60 && !guard.hit) return false;
+        if (v.x != tick.velocity.x || v.z != tick.velocity.z)
+            return false;
+        if (i == 60 && !guard.hit)
+            return false;
     }
     return true;
 }
@@ -349,7 +356,8 @@ bool BrakingIsNotAHit() {
         float speed = 700.0F;
         while (speed > 0.0F) {
             bump_steady_velocity(along(kNose, speed), static_cast<float>(kNose), dt, guard);
-            if (guard.hit) return false;
+            if (guard.hit)
+                return false;
             speed -= 960.0F * dt;
         }
     }
@@ -362,15 +370,15 @@ bool BrakingIsNotAHit() {
 // speed and it accelerates again (about 0.9 s to 63%). What the camera does
 // in the three seconds after.
 struct WallResult {
-    double before = 0.0;        // eye to racer, flat, just before the hit
-    double nearest = 1e9;       // the same, at its least after the hit
-    double farthest = 0.0;      // and at its most
-    double settled = 0.0;       // and three seconds later
-    double fov_swing = 0.0;     // degrees the FOV moved
-    double aim_swing = 0.0;     // units the aim point moved along the nose, relative to the racer
-    double turn = 0.0;          // the view's fastest turn, degrees/s
-    double eye_accel = 0.0;     // the eye's fastest speed change, units/s^2
-    bool landed = false;        // modern_cam saw a landing during the hit
+    double before = 0.0;    // eye to racer, flat, just before the hit
+    double nearest = 1e9;   // the same, at its least after the hit
+    double farthest = 0.0;  // and at its most
+    double settled = 0.0;   // and three seconds later
+    double fov_swing = 0.0; // degrees the FOV moved
+    double aim_swing = 0.0; // units the aim point moved along the nose, relative to the racer
+    double turn = 0.0;      // the view's fastest turn, degrees/s
+    double eye_accel = 0.0; // the eye's fastest speed change, units/s^2
+    bool landed = false;    // modern_cam saw a landing during the hit
 };
 
 WallResult wall_hit(const Tuning& tuning, bool hop = false) {
@@ -403,16 +411,20 @@ WallResult wall_hit(const Tuning& tuning, bool hop = false) {
         in.grounded = hop && (i == 60 || i == 61) ? 0 : 1;
         const MCParams p = hit_step_params(params, guard);
         const bool was_grounded = s.prevGrounded != 0;
-        if (s.initialized && guard.blend > 0.0F) s.prevGrounded = in.grounded;
-        if (s.initialized && in.grounded && !was_grounded && guard.blend <= 0.0F) result.landed = true;
+        if (s.initialized && guard.blend > 0.0F)
+            s.prevGrounded = in.grounded;
+        if (s.initialized && in.grounded && !was_grounded && guard.blend <= 0.0F)
+            result.landed = true;
         MCOutput out{};
         ModernCam_Update(&s, &p, &in, dt, nullptr, nullptr, &out);
-        if (s.dipV != 0.0F || s.dipY != 0.0F) result.landed = true;
+        if (s.dipV != 0.0F || s.dipY != 0.0F)
+            result.landed = true;
         const double distance = std::hypot(out.eye.x - x, out.eye.z - z);
         const double aim = (out.target.x - x) * nx + (out.target.z - z) * nz;
         if (i >= 1) {
             const double eye_speed = std::hypot(out.eye.x - previous_x, out.eye.z - previous_z) / dt;
-            if (i >= 60) result.eye_accel = std::max(result.eye_accel, std::fabs(eye_speed - previous_speed) / dt);
+            if (i >= 60)
+                result.eye_accel = std::max(result.eye_accel, std::fabs(eye_speed - previous_speed) / dt);
             previous_speed = eye_speed;
         }
         previous_x = out.eye.x;
@@ -427,11 +439,12 @@ WallResult wall_hit(const Tuning& tuning, bool hop = false) {
             result.farthest = std::max(result.farthest, distance);
             result.fov_swing = std::max(result.fov_swing, std::fabs(out.fovDeg - fov_before));
             result.aim_swing = std::max(result.aim_swing, std::fabs(aim - aim_before));
-            result.turn = std::max(result.turn, std::fabs(std::remainder(out.yaw - previous_yaw, 2.0 * kPi)) / dt *
-                                                    180.0 / kPi);
+            result.turn =
+                std::max(result.turn, std::fabs(std::remainder(out.yaw - previous_yaw, 2.0 * kPi)) / dt * 180.0 / kPi);
         }
         previous_yaw = out.yaw;
-        if (i == 149) result.settled = distance;
+        if (i == 149)
+            result.settled = distance;
     }
     return result;
 }
@@ -450,8 +463,8 @@ bool WallHitIsNotASpring() {
                 held.before, held.nearest, held.farthest, held.settled, held.aim_swing, held.fov_swing, held.turn,
                 bare.nearest, bare.farthest, bare.aim_swing, bare.fov_swing, bare.turn);
     return bare.turn > 100.0 && held.turn < 5.0 && held.nearest > held.before * 0.85 &&
-        held.farthest < held.before * 1.1 && std::fabs(held.settled - held.before) < 8.0 &&
-        held.aim_swing < 40.0 && held.fov_swing < 1.0;
+           held.farthest < held.before * 1.1 && std::fabs(held.settled - held.before) < 8.0 && held.aim_swing < 40.0 &&
+           held.fov_swing < 1.0;
 }
 
 // A hop off the wall is not a landing: no dip and no shake during a hit.
@@ -476,13 +489,19 @@ bool HoldEndsWithRecovery() {
             speed = i < 33 ? -555.0F : 90.0F + 510.0F * (1.0F - std::exp(-t / 0.6F));
         }
         hit_steady_input(along(kNose, speed), static_cast<float>(kNose), dt, driving, calm);
-        hit_steady_input(along(kNose, i < 30 ? 600.0F : i < 33 ? -555.0F : 30.0F), static_cast<float>(kNose), dt,
-                         stopped, calm);
-        if (i == 30 && (!driving.hit || !stopped.hit)) return false;
-        if (i > 33 && driving.blend > 0.0F && driving.blend > driving.recovered + 1.0F) return false;
-        if (released_at < 0 && i > 33 && driving.blend <= 0.0F) released_at = i;
+        hit_steady_input(along(kNose, i < 30   ? 600.0F
+                                      : i < 33 ? -555.0F
+                                               : 30.0F),
+                         static_cast<float>(kNose), dt, stopped, calm);
+        if (i == 30 && (!driving.hit || !stopped.hit))
+            return false;
+        if (i > 33 && driving.blend > 0.0F && driving.blend > driving.recovered + 1.0F)
+            return false;
+        if (released_at < 0 && i > 33 && driving.blend <= 0.0F)
+            released_at = i;
         // Mid-recovery the mix eases with the speed, monotonically.
-        if (i == 60 && !(driving.blend > 0.0F && driving.blend < 0.8F)) return false;
+        if (i == 60 && !(driving.blend > 0.0F && driving.blend < 0.8F))
+            return false;
     }
     std::printf("[test][modern-camera] hold released %.2f s after the hit while driving off (calm timing: %.0f s "
                 "hold + %.0f s release); stopped racer still at %.2f\n",
@@ -490,8 +509,8 @@ bool HoldEndsWithRecovery() {
     // Driving off: over once the speed is back (2.3 s with this
     // acceleration), not at the end of the 4 s timeline. Stopped: a third
     // of the way through the release, with nothing recovered.
-    return released_at > 33 && (released_at - 30) * dt < 3.0F && stopped.blend > 0.25F &&
-        stopped.blend < 0.4F && stopped.recovered < 0.1F;
+    return released_at > 33 && (released_at - 30) * dt < 3.0F && stopped.blend > 0.25F && stopped.blend < 0.4F &&
+           stopped.recovered < 0.1F;
 }
 
 // A version 1 modern-camera.ini: values the player left alone follow the new
@@ -522,7 +541,7 @@ bool LegacyFileMigrates() {
     }
     const Tuning current = parse_tuning("version=2\ndistMax=4.25\nenableSteerLead=1\n", &migrated);
     return !migrated && current.params.distMax == 4.25F && current.params.enableSteerLead == 1 &&
-        serialize_tuning(defaults).find("version=2\n") != std::string::npos;
+           serialize_tuning(defaults).find("version=2\n") != std::string::npos;
 }
 
 // Through a steady 90 degrees/s corner the yaw spring keeps up: what is
@@ -539,7 +558,8 @@ bool SteadyCornerKeepsUp() {
         double heading = kNose, lag = 0.0, roll = 0.0;
         const float dt = 1.0F / 30.0F;
         for (int i = 0; i < 90; ++i) {
-            if (i >= 30) heading += 1.5708 * dt;
+            if (i >= 30)
+                heading += 1.5708 * dt;
             const MCVec3 velocity = along(heading - 0.17, 600.0F);
             x += velocity.x * dt;
             z += velocity.z * dt;
@@ -572,8 +592,8 @@ bool SteadyCornerKeepsUp() {
 bool HitReactionScale() {
     const HitTiming calm = hit_timing(0.0F), raw = hit_timing(100.0F), mid = hit_timing(50.0F);
     return calm.hold == kHitHoldMax && calm.release == kHitReleaseMax && calm.heading_lag == kHitHeadingLagMax &&
-        raw.hold == 0.0F && raw.release == 0.0F && raw.heading_lag == 0.0F &&
-        close(mid.release, kHitReleaseMax / 2.0, 1e-6) && hit_timing(150.0F).hold == 0.0F;
+           raw.hold == 0.0F && raw.release == 0.0F && raw.heading_lag == 0.0F &&
+           close(mid.release, kHitReleaseMax / 2.0, 1e-6) && hit_timing(150.0F).hold == 0.0F;
 }
 
 // A hit that knocks the nose 30 degrees round in two ticks and partly back:
@@ -614,8 +634,7 @@ Tick knocked_tick(int i) {
 bool KnockedNoseTurnsOnScreen() {
     const double raw = fastest_turn_with(hit_timing(100.0F), 1.0F / 30.0F, 120, 60, knocked_tick);
     const double calm = fastest_turn_with(hit_timing(0.0F), 1.0F / 30.0F, 120, 60, knocked_tick);
-    std::printf("[test][modern-camera] knocked nose: view turns at most %.0f degrees/s raw, %.0f calm\n", raw,
-                calm);
+    std::printf("[test][modern-camera] knocked nose: view turns at most %.0f degrees/s raw, %.0f calm\n", raw, calm);
     return calm < 0.5 * raw;
 }
 
@@ -624,11 +643,14 @@ bool KnockedNoseTurnsOnScreen() {
 // a drift hit, then stopping again, must not swing the view back.
 bool SecondHitDoesNotGoStale() {
     const auto script = [](int i) {
-        if (i < 60) return Tick{kNose, along(kNose + 1.2, 600.0F), true};
-        if (i < 62) return Tick{kNose, along(kNose, 30.0F)};
+        if (i < 60)
+            return Tick{kNose, along(kNose + 1.2, 600.0F), true};
+        if (i < 62)
+            return Tick{kNose, along(kNose, 30.0F)};
         // Turned 90 degrees and drove off, then stopped dead again.
         const double heading = kNose - 1.57;
-        if (i < 110) return Tick{heading, along(heading, 450.0F)};
+        if (i < 110)
+            return Tick{heading, along(heading, 450.0F)};
         return Tick{heading, along(heading, 20.0F)};
     };
     const double turn = fastest_turn_with(hit_timing(25.0F), 1.0F / 30.0F, 170, 105, script);
@@ -639,9 +661,9 @@ bool SecondHitDoesNotGoStale() {
 // Recentring builds up from nothing instead of starting at full speed.
 bool RecentringEasesIn() {
     return eased_recenter_sharpness(3.0F, 1.2F, 1.2F, 0.8F) == 0.0F &&
-        close(eased_recenter_sharpness(3.0F, 1.6F, 1.2F, 0.8F), 1.5, 1e-5) &&
-        eased_recenter_sharpness(3.0F, 2.5F, 1.2F, 0.8F) == 3.0F &&
-        eased_recenter_sharpness(3.0F, 1.21F, 1.2F, 0.0F) == 3.0F;
+           close(eased_recenter_sharpness(3.0F, 1.6F, 1.2F, 0.8F), 1.5, 1e-5) &&
+           eased_recenter_sharpness(3.0F, 2.5F, 1.2F, 0.8F) == 3.0F &&
+           eased_recenter_sharpness(3.0F, 1.21F, 1.2F, 0.0F) == 3.0F;
 }
 
 bool TuningScalesWithLayout() {

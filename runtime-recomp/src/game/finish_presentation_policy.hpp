@@ -13,13 +13,16 @@ struct PostraceFrameGate {
     bool contracted_frame_submitted = false;
     bool pending_contracted_frame = false;
 
-    void reset() { *this = {}; }
-    void begin_frame() { pending_contracted_frame = false; }
+    void reset() {
+        *this = {};
+    }
+    void begin_frame() {
+        pending_contracted_frame = false;
+    }
     void observe_wood(int x1, int y1, int x2, int y2, int width, int height) {
-        const bool valid = width > 0 && height > 0 && x1 >= 0 && y1 >= 0 &&
-            x2 > x1 && y2 > y1 && x2 <= width && y2 <= height;
-        pending_contracted_frame |= valid &&
-            (x1 > 0 || y1 > 0 || x2 < width || y2 < height);
+        const bool valid =
+            width > 0 && height > 0 && x1 >= 0 && y1 >= 0 && x2 > x1 && y2 > y1 && x2 <= width && y2 <= height;
+        pending_contracted_frame |= valid && (x1 > 0 || y1 > 0 || x2 < width || y2 < height);
     }
     void submit_frame(bool presented) {
         contracted_frame_submitted |= presented && pending_contracted_frame;
@@ -27,11 +30,9 @@ struct PostraceFrameGate {
     }
 };
 
-constexpr bool postrace_full_view_scope(bool modern, bool expanded, bool in_game,
-                                        int postrace, int players, int trophy,
+constexpr bool postrace_full_view_scope(bool modern, bool expanded, bool in_game, int postrace, int players, int trophy,
                                         int viewport_layout) {
-    return modern && expanded && in_game && postrace != 0 &&
-        players == 1 && trophy == 0 && viewport_layout == 0;
+    return modern && expanded && in_game && postrace != 0 && players == 1 && trophy == 0 && viewport_layout == 0;
 }
 
 // One key per logical camera, sampled at its first root matrix. Repeated
@@ -53,10 +54,9 @@ struct FinishCameraShot {
         using namespace dkr::runtime::enhancements;
         const auto owner = mode == kCameraFinishRace ? observed_owner : 0U;
         const auto node = mode == kCameraFinishRace ? observed_node : 0U;
-        const bool finish_boundary = is_finish_camera_mode(mode) ||
-            is_finish_camera_mode(previous_mode);
-        const bool cut = valid && finish_boundary &&
-            (mode != previous_mode || owner != previous_owner || node != previous_node);
+        const bool finish_boundary = is_finish_camera_mode(mode) || is_finish_camera_mode(previous_mode);
+        const bool cut =
+            valid && finish_boundary && (mode != previous_mode || owner != previous_owner || node != previous_node);
         previous_mode = mode;
         previous_owner = owner;
         previous_node = node;

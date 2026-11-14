@@ -181,8 +181,8 @@ void StoreEditor(float width, const dkr::store::Snapshot& store) {
             if (g_mod_store.fields["draft-category"] == kStoreCategoryIds[i])
                 category = i - 1;
         ImGui::BeginDisabled(g_mod_store.metadata);
-        const int choice = StoreCombo("Category", category,
-                                      {"Tracks", "Characters", "Vehicles", "Custom Magic Codes", "Texture packs"}, inner);
+        const int choice = StoreCombo(
+            "Category", category, {"Tracks", "Characters", "Vehicles", "Custom Magic Codes", "Texture packs"}, inner);
         ImGui::EndDisabled();
         if (choice != category) {
             g_mod_store.fields["draft-category"] = kStoreCategoryIds[choice + 1];

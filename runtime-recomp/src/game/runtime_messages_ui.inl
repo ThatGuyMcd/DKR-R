@@ -1,14 +1,14 @@
-void DrawColoredWrapped(const ImVec4 &color, std::string_view text) {
+void DrawColoredWrapped(const ImVec4& color, std::string_view text) {
     ImGui::PushStyleColor(ImGuiCol_Text, color);
     ImGui::TextWrapped("%.*s", static_cast<int>(text.size()), text.data());
     ImGui::PopStyleColor();
 }
 
-void DrawTechnicalDetails(std::string_view diagnostic, const char *label = "Details") {
+void DrawTechnicalDetails(std::string_view diagnostic, const char* label = "Details") {
     if (diagnostic.empty())
         return;
     ImGui::PushID(diagnostic.data(), diagnostic.data() + diagnostic.size());
-    const auto caption=dkr::localisation::label(label);
+    const auto caption = dkr::localisation::label(label);
     if (ImGui::CollapsingHeader(caption.c_str())) {
         const float height = std::clamp(ImGui::GetIO().DisplaySize.y * 0.22F, 70.0F, 180.0F);
         ImGui::BeginChild("##technical-text", {0.0F, height}, true);

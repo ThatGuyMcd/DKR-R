@@ -8,14 +8,12 @@
 
 namespace {
 
-void write_u32(std::vector<std::uint8_t>& rdram, std::uint32_t address,
-               std::uint32_t value) {
+void write_u32(std::vector<std::uint8_t>& rdram, std::uint32_t address, std::uint32_t value) {
     const std::size_t physical = address & 0x00FFFFFFU;
     std::memcpy(rdram.data() + physical, &value, sizeof(value));
 }
 
-void write_u8(std::vector<std::uint8_t>& rdram, std::uint32_t address,
-              std::uint8_t value) {
+void write_u8(std::vector<std::uint8_t>& rdram, std::uint32_t address, std::uint8_t value) {
     rdram[(address & 0x00FFFFFFU) ^ 3U] = value;
 }
 

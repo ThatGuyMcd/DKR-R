@@ -12,11 +12,11 @@
 
 using namespace std::chrono_literals;
 
-template<class Predicate>
-void await(Predicate ready, const char* failure) {
+template <class Predicate> void await(Predicate ready, const char* failure) {
     const auto deadline = std::chrono::steady_clock::now() + 3s;
     while (!ready()) {
-        if (std::chrono::steady_clock::now() >= deadline) throw std::runtime_error(failure);
+        if (std::chrono::steady_clock::now() >= deadline)
+            throw std::runtime_error(failure);
         std::this_thread::sleep_for(2ms);
     }
 }
@@ -32,7 +32,8 @@ int main() {
     std::vector<std::shared_ptr<rtc::WebSocket>> accepted;
     server.onClient([&](std::shared_ptr<rtc::WebSocket> peer) {
         peer->onMessage([weak = std::weak_ptr(peer)](rtc::message_variant message) {
-            if (auto socket = weak.lock()) socket->send(std::move(message));
+            if (auto socket = weak.lock())
+                socket->send(std::move(message));
         });
         std::lock_guard lock(accepted_mutex);
         accepted.push_back(std::move(peer));
@@ -48,7 +49,8 @@ int main() {
         std::atomic<unsigned> echoes = 0;
         const std::string probe = "idle-tls-probe-" + std::to_string(cycle);
         client.onMessage([&](rtc::message_variant message) {
-            if (auto text = std::get_if<std::string>(&message); text && *text == probe) ++echoes;
+            if (auto text = std::get_if<std::string>(&message); text && *text == probe)
+                ++echoes;
         });
         client.open("wss://127.0.0.1:" + std::to_string(server.port()) + "/idle");
         await([&] { return client.isOpen(); }, "TLS connection did not open");

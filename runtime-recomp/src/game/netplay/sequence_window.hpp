@@ -21,7 +21,8 @@ struct ReceiveSequenceWindow {
     std::bitset<kReceiveSequenceWindowBits> seen{};
 
     bool accept(std::uint64_t sequence) {
-        if (sequence == 0U) return false;
+        if (sequence == 0U)
+            return false;
         if (sequence > highest) {
             const std::uint64_t advance = sequence - highest;
             if (advance >= kReceiveSequenceWindowBits) {
@@ -34,9 +35,11 @@ struct ReceiveSequenceWindow {
             return true;
         }
         const std::uint64_t age = highest - sequence;
-        if (age >= kReceiveSequenceWindowBits) return false;
+        if (age >= kReceiveSequenceWindowBits)
+            return false;
         const auto index = static_cast<std::size_t>(age);
-        if (seen.test(index)) return false;
+        if (seen.test(index))
+            return false;
         seen.set(index);
         return true;
     }

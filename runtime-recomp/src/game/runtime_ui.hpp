@@ -5,9 +5,15 @@
 #include <memory>
 #include <string>
 
-namespace dkr::mods { struct PreparedModLaunch; }
-namespace dkr::mods::online { class RuntimeResources; }
-namespace dkr::runtime::rom { struct Identity; }
+namespace dkr::mods {
+struct PreparedModLaunch;
+}
+namespace dkr::mods::online {
+class RuntimeResources;
+}
+namespace dkr::runtime::rom {
+struct Identity;
+}
 
 struct SDL_Window;
 typedef union SDL_Event SDL_Event;
@@ -45,10 +51,8 @@ void persist_graphics_api_fallback();
 // The bounded software return path is used after experimental failure, and
 // also after graceful experimental GPU retirement on Windows. It does not
 // change the selected graphics API or settings for the next game launch.
-StartupResult run_startup_screen(
-    SDL_Window* window,
-    const std::filesystem::path& preselected_rom = {},
-    bool software_failure_recovery = false);
+StartupResult run_startup_screen(SDL_Window* window, const std::filesystem::path& preselected_rom = {},
+                                 bool software_failure_recovery = false);
 
 void attach(RT64::Application& application);
 void detach(RT64::Application& application);
@@ -67,7 +71,7 @@ void report_mod_error(std::string error);
 void report_online_game_end(std::string message, bool lobby_retained);
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 // Isolated diagnostic entry: same manifest/save/host actions as the real UI.
-bool configure_owned_online_check(const rom::Identity& identity,bool host,unsigned players,std::string& error);
+bool configure_owned_online_check(const rom::Identity& identity, bool host, unsigned players, std::string& error);
 #endif
 
 } // namespace dkr::runtime::ui

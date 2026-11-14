@@ -24,24 +24,38 @@ set(runtime "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime")
 
 # Compile real JNI/window/touch adapters without inventing game or renderer
 # entrypoints. These objects are never presented as a runnable application.
-add_library(DKRAndroidCompileCheck STATIC
+add_library(
+    DKRAndroidCompileCheck
+    STATIC
     "${android}/android_platform.cpp"
     "${android}/android_rt64_window.cpp"
-    "${android}/mobile_ui.cpp")
+    "${android}/mobile_ui.cpp"
+)
 target_compile_definitions(DKRAndroidCompileCheck PRIVATE DKR_RELEASE_VERSION="${DKR_RELEASE_VERSION}")
-target_include_directories(DKRAndroidCompileCheck PRIVATE
-    "${rt64}/src" "${rt64}/src/contrib" "${rt64}/src/contrib/plume"
-    "${runtime}/ultramodern/include" "${runtime}/thirdparty")
+target_include_directories(
+    DKRAndroidCompileCheck
+    PRIVATE
+        "${rt64}/src"
+        "${rt64}/src/contrib"
+        "${rt64}/src/contrib/plume"
+        "${runtime}/ultramodern/include"
+        "${runtime}/thirdparty"
+)
 target_link_libraries(DKRAndroidCompileCheck PRIVATE SDL2::SDL2)
 
 # This self-contained production subset can also link: catch missing Android
 # APIs, shared-C++ dependencies, and ELF page alignment without payload stubs.
-add_library(DKRAndroidPlatformLinkCheck SHARED
+add_library(
+    DKRAndroidPlatformLinkCheck
+    SHARED
     "${android}/android_file_dialog.cpp"
     "${game}/runtime_portable.cpp"
-    "${game}/runtime_support.cpp")
-target_include_directories(DKRAndroidPlatformLinkCheck PRIVATE
-    "${rt64}/src/contrib/nativefiledialog-extended/src/include")
+    "${game}/runtime_support.cpp"
+)
+target_include_directories(
+    DKRAndroidPlatformLinkCheck
+    PRIVATE "${rt64}/src/contrib/nativefiledialog-extended/src/include"
+)
 target_compile_definitions(DKRAndroidPlatformLinkCheck PRIVATE DKR_RELEASE_VERSION="${DKR_RELEASE_VERSION}")
 target_link_libraries(DKRAndroidPlatformLinkCheck PRIVATE SDL2::SDL2 android log)
 target_link_options(DKRAndroidPlatformLinkCheck PRIVATE "-Wl,--no-undefined")

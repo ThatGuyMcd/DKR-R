@@ -51,4 +51,3 @@ inline void refresh(std::uint8_t* rdram, recomp_context* context) {
     });
 }
 } // namespace dkr::runtime::live_fov
-

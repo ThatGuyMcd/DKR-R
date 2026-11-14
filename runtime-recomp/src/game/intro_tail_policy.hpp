@@ -15,7 +15,7 @@ enum class TailAction : std::uint8_t {
 // that the cutscene reports complete. Preserve the finished scene for a short
 // authored-time tail so its final queued voice/music data can drain naturally.
 class TailGate {
-public:
+  public:
     static constexpr std::uint32_t kTailUpdateUnits = 30U;
 
     // Canonical checkpoint fields, not this object's padded host representation.
@@ -32,22 +32,20 @@ public:
 
     [[nodiscard]] static constexpr bool valid(Snapshot value) {
         return (value.phase == 0U && value.held_update_units == 0U) ||
-               (value.phase == 1U && value.held_update_units >= 1U &&
-                                    value.held_update_units <= kTailUpdateUnits) ||
+               (value.phase == 1U && value.held_update_units >= 1U && value.held_update_units <= kTailUpdateUnits) ||
                (value.phase == 2U && value.held_update_units == kTailUpdateUnits);
     }
 
     [[nodiscard]] constexpr bool restore(Snapshot value) {
-        if (!valid(value)) return false;
+        if (!valid(value))
+            return false;
         state_ = static_cast<State>(value.phase);
         held_update_units_ = value.held_update_units;
         return true;
     }
 
-    [[nodiscard]] constexpr TailAction update(bool cinematic_complete,
-                                               bool first_title_demo,
-                                               bool title_revealed,
-                                               std::uint32_t update_rate) {
+    [[nodiscard]] constexpr TailAction update(bool cinematic_complete, bool first_title_demo, bool title_revealed,
+                                              std::uint32_t update_rate) {
         if (!first_title_demo || title_revealed) {
             reset();
             return TailAction::Pass;
@@ -81,9 +79,8 @@ public:
         }
 
         const std::uint32_t step = std::max(update_rate, 1U);
-        held_update_units_ = std::min(
-            kTailUpdateUnits, held_update_units_ +
-                std::min(step, kTailUpdateUnits - held_update_units_));
+        held_update_units_ =
+            std::min(kTailUpdateUnits, held_update_units_ + std::min(step, kTailUpdateUnits - held_update_units_));
         return TailAction::Hold;
     }
 
@@ -92,7 +89,7 @@ public:
         held_update_units_ = 0U;
     }
 
-private:
+  private:
     enum class State : std::uint8_t {
         Idle,
         Holding,

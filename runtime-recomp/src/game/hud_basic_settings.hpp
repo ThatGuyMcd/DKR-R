@@ -7,4 +7,4 @@ namespace dkr::runtime::hud {
 constexpr LayoutMode basic_mode(LayoutMode stored) {
     return stored == LayoutMode::FitToViewport ? stored : LayoutMode::Original;
 }
-}
+} // namespace dkr::runtime::hud

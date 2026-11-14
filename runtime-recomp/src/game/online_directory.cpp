@@ -416,8 +416,11 @@ void run(std::stop_token stop) {
                                     data["members"].is_array() && data["members"].size() <= 12) {
                                     for (const auto& row : data["members"]) {
                                         SocialMember member{string(row, "sender", 20), string(row, "publicKey", 64),
-                                            string(row, "identity", 13), string(row, "friendCode", 100), string(row, "avatar", 180)};
-                                        if (!member.sender.empty() && dkr::profile::bridge::verify(member.public_key, member.identity, member.friend_code) &&
+                                                            string(row, "identity", 13), string(row, "friendCode", 100),
+                                                            string(row, "avatar", 180)};
+                                        if (!member.sender.empty() &&
+                                            dkr::profile::bridge::verify(member.public_key, member.identity,
+                                                                         member.friend_code) &&
                                             dkr::profile::shared_avatar(member.avatar))
                                             members.push_back(std::move(member));
                                     }

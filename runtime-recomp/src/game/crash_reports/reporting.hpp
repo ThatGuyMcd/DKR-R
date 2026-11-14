@@ -42,10 +42,12 @@ class Queue {
     std::filesystem::path profile_, root_;
     std::string version_;
     std::vector<std::string> identities_;
-public:
-    Queue(std::filesystem::path profile, std::string version,
-          std::vector<std::string> identities = {});
-    const std::filesystem::path& directory() const { return root_; }
+
+  public:
+    Queue(std::filesystem::path profile, std::string version, std::vector<std::string> identities = {});
+    const std::filesystem::path& directory() const {
+        return root_;
+    }
     void reconcile(Consent, std::int64_t now);
     void discover(Consent, std::int64_t now);
     Pending due(std::int64_t now) const;
@@ -62,7 +64,11 @@ View view();
 bool choose(bool enabled, bool include_dumps);
 void gameplay(bool active);
 struct Gameplay {
-    Gameplay() { gameplay(true); }
-    ~Gameplay() { gameplay(false); }
+    Gameplay() {
+        gameplay(true);
+    }
+    ~Gameplay() {
+        gameplay(false);
+    }
 };
 } // namespace dkr::crash_reports

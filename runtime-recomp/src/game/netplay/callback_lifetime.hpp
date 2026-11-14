@@ -18,16 +18,19 @@ class CallbackLifetime {
         std::shared_ptr<State> state;
         ~Lease() {
             std::lock_guard lock(state->mutex);
-            if (--state->active == 0) state->drained.notify_all();
+            if (--state->active == 0)
+                state->drained.notify_all();
         }
     };
-public:
+
+  public:
     CallbackLifetime() : state_(std::make_shared<State>()) {}
-    template<class Function> auto wrap(Function function) const {
+    template <class Function> auto wrap(Function function) const {
         return [state = state_, function = std::move(function)](auto... args) {
             {
                 std::lock_guard lock(state->mutex);
-                if (state->retired) return;
+                if (state->retired)
+                    return;
                 ++state->active;
             }
             Lease lease{state};
@@ -39,7 +42,8 @@ public:
         state_->retired = true;
         state_->drained.wait(lock, [this] { return state_->active == 0; });
     }
-private:
+
+  private:
     std::shared_ptr<State> state_;
 };
 } // namespace dkr::runtime::netplay

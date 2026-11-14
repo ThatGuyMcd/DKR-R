@@ -11,9 +11,8 @@ constexpr float clamp_eq_gain(float decibels) {
 }
 
 class StereoEqualizer {
-public:
-    void configure(std::uint32_t sample_rate, float bass_db, float mid_db,
-                   float treble_db);
+  public:
+    void configure(std::uint32_t sample_rate, float bass_db, float mid_db, float treble_db);
     void reset();
     bool neutral() const;
     std::pair<float, float> process(float left, float right);
@@ -31,7 +30,7 @@ public:
         void clear();
     };
 
-private:
+  private:
     std::array<Biquad, 3> left_{};
     std::array<Biquad, 3> right_{};
     std::uint32_t sample_rate_ = 0;

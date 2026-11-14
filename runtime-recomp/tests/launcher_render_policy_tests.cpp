@@ -8,17 +8,26 @@
 
 namespace {
 void check(bool value, const char* message) {
-    if (!value) { std::cerr << message << '\n'; std::exit(1); }
+    if (!value) {
+        std::cerr << message << '\n';
+        std::exit(1);
+    }
 }
-bool near(float a, float b) { return std::abs(a - b) < 0.002F; }
+bool near(float a, float b) {
+    return std::abs(a - b) < 0.002F;
 }
+} // namespace
 
 int main() {
-    struct Point { float x, y; };
-    struct Vertex { Point uv; };
-    Vertex vertices[] = {{{.25F,.25F}}, {{.25F,.25F}}, {{.25F,.25F}}, {{.25F,.26F}}};
-    unsigned short indices[] = {0,1,2};
-    const Point white{.25F,.25F};
+    struct Point {
+        float x, y;
+    };
+    struct Vertex {
+        Point uv;
+    };
+    Vertex vertices[] = {{{.25F, .25F}}, {{.25F, .25F}}, {{.25F, .25F}}, {{.25F, .26F}}};
+    unsigned short indices[] = {0, 1, 2};
+    const Point white{.25F, .25F};
     using dkr::runtime::launcher::is_solid_triangle;
     check(is_solid_triangle(vertices, 4, indices, 0, white), "white triangle not recognized");
     check(!is_solid_triangle(vertices, 4, indices, 1, white), "glyph mistaken for solid colour");
@@ -30,8 +39,7 @@ int main() {
         for (float height : {600.F, 800.F, 900.F, 2160.F}) {
             const float tile_height = height * 1.03F;
             const float tile_width = tile_height * 1672.F / 941.F;
-            for (double phase : {0.0, 0.001, 12.5, double(tile_width),
-                                 double(tile_width) * 1.99999, 1.0e9}) {
+            for (double phase : {0.0, 0.001, 12.5, double(tile_width), double(tile_width) * 1.99999, 1.0e9}) {
                 const auto tiles = background_tiles(width, height, tile_width, tile_height, phase);
                 check(!tiles.empty(), "visible background missing");
                 check(tiles.size() <= static_cast<std::size_t>(std::ceil(width / tile_width)) + 1,
@@ -48,8 +56,8 @@ int main() {
                     right = tile.right;
                 }
                 check(near(right, width), "right edge uncovered");
-                const auto wrapped = background_tiles(width, height, tile_width, tile_height,
-                                                       phase + double(tile_width) * 2);
+                const auto wrapped =
+                    background_tiles(width, height, tile_width, tile_height, phase + double(tile_width) * 2);
                 check(wrapped.size() == tiles.size(), "mirror period changed tile count");
                 for (std::size_t i = 0; i < tiles.size(); ++i) {
                     check(wrapped[i].mirrored == tiles[i].mirrored, "mirror parity jumps at wrap");
@@ -76,8 +84,8 @@ int main() {
     check(schedule.wait_ms(start + 99ms, 10) == 1, "event burst bypassed background cap");
     check(schedule.wait_ms(start + 100ms, 10) == 0, "background frame not released");
     check(schedule.wait_ms(start + 88ms, 60) == 0, "slow draw added another sleep");
-    check(schedule.wait_ms(start + 20ms, 30) == 14 &&
-          schedule.wait_ms(start + 20ms, 60) == 0, "new interaction did not shorten idle deadline");
+    check(schedule.wait_ms(start + 20ms, 30) == 14 && schedule.wait_ms(start + 20ms, 60) == 0,
+          "new interaction did not shorten idle deadline");
     check(schedule.wait_ms(start + 1s, 0) == 50, "hidden launcher busy loop");
     schedule.started(start + 17ms, 60);
     check(schedule.wait_ms(start + 33ms, 60) == 1, "millisecond rounding lost the 60 Hz timebase");

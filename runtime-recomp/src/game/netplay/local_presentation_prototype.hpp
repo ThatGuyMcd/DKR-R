@@ -24,28 +24,39 @@ struct VisualPredictionOffset {
     float x = 0, y = 0, z = 0, yaw_radians = 0;
 };
 class LocalPresentationPrototype {
-public:
+  public:
     static constexpr bool kRendererQualified = false;
-    void reset() { valid_ = false; offset_ = {}; }
-    VisualPredictionOffset update(const VisualPredictionSample& sample,
-                                  float seconds, bool experiment_enabled = false) {
+    void reset() {
+        valid_ = false;
+        offset_ = {};
+    }
+    VisualPredictionOffset update(const VisualPredictionSample& sample, float seconds,
+                                  bool experiment_enabled = false) {
         if (!experiment_enabled || !sample.local_owner || !sample.racing || sample.discontinuity ||
-            !std::isfinite(seconds) || seconds < 0 || !std::isfinite(sample.vx) ||
-            !std::isfinite(sample.vy) || !std::isfinite(sample.vz) || !std::isfinite(sample.steering)) {
-            reset(); return {};
+            !std::isfinite(seconds) || seconds < 0 || !std::isfinite(sample.vx) || !std::isfinite(sample.vy) ||
+            !std::isfinite(sample.vz) || !std::isfinite(sample.steering)) {
+            reset();
+            return {};
         }
         if (!valid_ || sample.identity != identity_) {
-            reset(); identity_ = sample.identity; valid_ = true;
+            reset();
+            identity_ = sample.identity;
+            valid_ = true;
             return {}; // never carry an offset across a lifecycle/owner boundary
         }
         const float horizon = std::min(seconds, 0.05F);
-        VisualPredictionOffset next{sample.vx * horizon, sample.vy * horizon,
-            sample.vz * horizon, std::clamp(sample.steering, -1.0F, 1.0F) * horizon};
+        VisualPredictionOffset next{sample.vx * horizon, sample.vy * horizon, sample.vz * horizon,
+                                    std::clamp(sample.steering, -1.0F, 1.0F) * horizon};
         const float distance = std::hypot(next.x, next.y, next.z);
-        if (!std::isfinite(distance)) { reset(); return {}; }
+        if (!std::isfinite(distance)) {
+            reset();
+            return {};
+        }
         if (distance > 32.0F) {
             const float scale = 32.0F / distance;
-            next.x *= scale; next.y *= scale; next.z *= scale;
+            next.x *= scale;
+            next.y *= scale;
+            next.z *= scale;
         }
         // Bounded reconciliation; every output is sidecar-only. Camera and
         // racer must consume the SAME offset if an adapter is later approved.
@@ -55,7 +66,8 @@ public:
         offset_.yaw_radians += (next.yaw_radians - offset_.yaw_radians) * 0.5F;
         return offset_;
     }
-private:
+
+  private:
     bool valid_ = false;
     VisualPredictionIdentity identity_{};
     VisualPredictionOffset offset_{};

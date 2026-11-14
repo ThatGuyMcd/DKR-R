@@ -11,8 +11,7 @@ int main() {
     assert(queue.current(start) == nullptr);
 
     queue.push(Kind::FriendOnline, "FRIEND ONLINE", "Timber is online.", start);
-    queue.push(Kind::LobbyInvite, "LOBBY INVITE", "Pipsy invited you.",
-               start + 1s);
+    queue.push(Kind::LobbyInvite, "LOBBY INVITE", "Pipsy invited you.", start + 1s);
     assert(queue.size(start + 1s) == 2U);
     assert(queue.current(start + 1s)->kind == Kind::FriendOnline);
     assert(Queue::alpha(*queue.current(start + 1s), start + 1s) == 1.0F);

@@ -17,8 +17,7 @@ void DrawOlSidebarReadiness(float width, const OnlineFrame& frame) {
     DrawOlCard(width, OlPanelLook{}, [&](float inner) {
         OlHeading("Before you race", 24.F, kOlCream, inner);
         PaddockGap(16.F);
-        auto row = [&](int kind, const char* title, const std::string& description,
-                       const char* action, int target) {
+        auto row = [&](int kind, const char* title, const std::string& description, const char* action, int target) {
             PaddockBox box(inner, {10.F, 10.F});
             const auto origin = ImGui::GetCursorScreenPos();
             ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -31,7 +30,8 @@ void DrawOlSidebarReadiness(float width, const OnlineFrame& frame) {
             if (action) {
                 PaddockGap(4.F);
                 if (OlLink(action)) {
-                    if (target == kPageModsHacks) g_mods_page.entry_section = kModsSectionMagic;
+                    if (target == kPageModsHacks)
+                        g_mods_page.entry_section = kModsSectionMagic;
                     g_page_navigation_request = target;
                 }
             }
@@ -47,14 +47,15 @@ void DrawOlSidebarReadiness(float width, const OnlineFrame& frame) {
             frame.rom_ready ? nullptr : "Choose ROM", kPagePlay);
         PaddockGap(8.F);
         unsigned codes = 0;
-        for (auto bits = dkr::runtime::magic_codes::selected_mask(); bits; bits &= bits - 1U) ++codes;
+        for (auto bits = dkr::runtime::magic_codes::selected_mask(); bits; bits &= bits - 1U)
+            ++codes;
         row(2, "Magic Codes", codes ? std::to_string(codes) + " enabled." : "None enabled.",
             frame.active ? nullptr : "Change", kPageModsHacks);
         PaddockGap(8.F);
         row(2, "Adventure save", "Uses the host's online save. Offline progress stays separate.", nullptr, -1);
         PaddockGap(16.F);
-        static const std::vector<std::string> profiles{
-            "Player 1 profile", "Player 2 profile", "Player 3 profile", "Player 4 profile"};
+        static const std::vector<std::string> profiles{"Player 1 profile", "Player 2 profile", "Player 3 profile",
+                                                       "Player 4 profile"};
         if (OlSelect("local-profile", "Your controls", &g_online_input_profile, profiles, inner, frame.active)) {
             g_online_input_profile = std::clamp(g_online_input_profile, 0, 3);
             dkr::runtime::platform::set_online_input_profile(static_cast<std::size_t>(g_online_input_profile));

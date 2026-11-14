@@ -27,7 +27,8 @@ int main() {
         PostraceFrameGate gate;
         for (int frame = 0; frame < 180; ++frame) {
             gate.begin_frame();
-            if (frame > 150) gate.observe_wood(0, 0, 320, 240, 320, 240);
+            if (frame > 150)
+                gate.observe_wood(0, 0, 320, 240, 320, 240);
             for (int render = 0; render < rate; ++render)
                 assert(!gate.contracted_frame_submitted);
             gate.submit_frame(true);
@@ -46,7 +47,7 @@ int main() {
         assert(!gate.contracted_frame_submitted);
         gate.begin_frame();
         gate.observe_wood(80, 24, 240, 144, 320, 240); // skipped to terminal
-        gate.submit_frame(false); // rollback resimulation: not presented
+        gate.submit_frame(false);                      // rollback resimulation: not presented
         assert(!gate.contracted_frame_submitted);
         gate.begin_frame();
         gate.observe_wood(2, 1, 318, 237, 320, 240);
@@ -59,7 +60,8 @@ int main() {
     }
     for (int players : {1, 2, 3, 4}) {
         std::array<FinishCameraShot, 8> shots{};
-        for (int i = 0; i < players; ++i) assert(!shots[i].sample(0));
+        for (int i = 0; i < players; ++i)
+            assert(!shots[i].sample(0));
         for (int i = 0; i < players; ++i) {
             shots[i].observe_node(100 + i, 200 + i);
             assert(shots[i].sample(7)); // this player's finish cut once
@@ -76,7 +78,8 @@ int main() {
             shots[i].observe_node(500 + i, 900 + i); // changes tracked racer
             assert(shots[i].sample(7));
             assert(shots[i].sample(5)); // no-node challenge fallback
-            for (int tick = 0; tick < 1000; ++tick) assert(!shots[i].sample(5));
+            for (int tick = 0; tick < 1000; ++tick)
+                assert(!shots[i].sample(5));
             assert(shots[i].sample(0));
             assert(!shots[i].sample(0));
             shots[i] = {}; // scene reset

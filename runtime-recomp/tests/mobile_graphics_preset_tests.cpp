@@ -18,10 +18,10 @@ int main() {
         accurate.hpfb_option != HighPrecisionFramebuffer::Off || accurate.msaa_option != Antialiasing::None ||
         accurate.rr_manual_value != 30 || accurate.rr_option != RefreshRate::Manual ||
         accurate.ar_option != AspectRatio::Expand || accurate.hr_option != HUDRatioMode::Original ||
-        accurate.api_option != GraphicsApi::Vulkan) return 5;
-    for (const auto precision : {HighPrecisionFramebuffer::Auto,
-                                 HighPrecisionFramebuffer::On,
-                                 HighPrecisionFramebuffer::Off}) {
+        accurate.api_option != GraphicsApi::Vulkan)
+        return 5;
+    for (const auto precision :
+         {HighPrecisionFramebuffer::Auto, HighPrecisionFramebuffer::On, HighPrecisionFramebuffer::Off}) {
         for (const auto aspect : {AspectRatio::Original, AspectRatio::Expand}) {
             GraphicsConfig config{};
             config.res_option = Resolution::Auto;
@@ -36,19 +36,17 @@ int main() {
             config.wm_option = WindowMode::Fullscreen;
             for (int repeat = 0; repeat != 2; ++repeat) {
                 dkr::runtime::mobile_graphics::apply_60_fps_preset(config);
-                if (config.res_option != Resolution::Original2x ||
-                    config.msaa_option != Antialiasing::None || config.ds_option != 1 ||
-                    config.rr_option != RefreshRate::Manual || config.rr_manual_value != 60)
+                if (config.res_option != Resolution::Original2x || config.msaa_option != Antialiasing::None ||
+                    config.ds_option != 1 || config.rr_option != RefreshRate::Manual || config.rr_manual_value != 60)
                     return 1;
                 if (config.hpfb_option != precision || config.ar_option != aspect ||
-                    config.hr_option != HUDRatioMode::Original ||
-                    config.api_option != GraphicsApi::Vulkan ||
-                    config.wm_option != WindowMode::Fullscreen) return 2;
+                    config.hr_option != HUDRatioMode::Original || config.api_option != GraphicsApi::Vulkan ||
+                    config.wm_option != WindowMode::Fullscreen)
+                    return 2;
             }
         }
     }
-    for (auto preset : {dkr::runtime::mobile_graphics::Preset::Battery,
-                        dkr::runtime::mobile_graphics::Preset::Balanced,
+    for (auto preset : {dkr::runtime::mobile_graphics::Preset::Battery, dkr::runtime::mobile_graphics::Preset::Balanced,
                         dkr::runtime::mobile_graphics::Preset::Quality}) {
         GraphicsConfig config{};
         config.ar_option = AspectRatio::Expand;
@@ -56,14 +54,17 @@ int main() {
         config.api_option = GraphicsApi::Vulkan;
         dkr::runtime::mobile_graphics::apply_preset(config, preset);
         if (config.ar_option != AspectRatio::Expand || config.hr_option != HUDRatioMode::Original ||
-            config.api_option != GraphicsApi::Vulkan || config.ds_option != 1 || config.msaa_option != Antialiasing::None) return 3;
+            config.api_option != GraphicsApi::Vulkan || config.ds_option != 1 ||
+            config.msaa_option != Antialiasing::None)
+            return 3;
         const bool quality = preset == dkr::runtime::mobile_graphics::Preset::Quality;
         if (config.res_option != (quality ? Resolution::Auto : Resolution::Original2x) ||
             config.hpfb_option != (quality ? HighPrecisionFramebuffer::On : HighPrecisionFramebuffer::Off) ||
-            config.rr_manual_value != (preset == dkr::runtime::mobile_graphics::Preset::Battery ? 30 : 60)) return 4;
+            config.rr_manual_value != (preset == dkr::runtime::mobile_graphics::Preset::Battery ? 30 : 60))
+            return 4;
     }
-    for (auto preset : {dkr::runtime::mobile_graphics::Preset::LowLoad30,
-                        dkr::runtime::mobile_graphics::Preset::LowLoad60}) {
+    for (auto preset :
+         {dkr::runtime::mobile_graphics::Preset::LowLoad30, dkr::runtime::mobile_graphics::Preset::LowLoad60}) {
         GraphicsConfig config{};
         config.ar_option = AspectRatio::Expand;
         config.hr_option = HUDRatioMode::Original;
@@ -71,29 +72,34 @@ int main() {
         if (config.res_option != Resolution::Original || config.ds_option != 1 ||
             config.msaa_option != Antialiasing::None || config.hpfb_option != HighPrecisionFramebuffer::Off ||
             config.ar_option != AspectRatio::Expand || config.hr_option != HUDRatioMode::Original ||
-            config.rr_manual_value != (preset == dkr::runtime::mobile_graphics::Preset::LowLoad30 ? 30 : 60)) return 5;
+            config.rr_manual_value != (preset == dkr::runtime::mobile_graphics::Preset::LowLoad30 ? 30 : 60))
+            return 5;
     }
     {
         using dkr::runtime::mobile_graphics::Preset;
         using dkr::runtime::mobile_graphics::matching_preset;
         using dkr::runtime::mobile_graphics::preset_anisotropy;
-        for (auto preset : {Preset::Battery, Preset::Balanced, Preset::Quality,
-                            Preset::LowLoad30, Preset::LowLoad60}) {
+        for (auto preset : {Preset::Battery, Preset::Balanced, Preset::Quality, Preset::LowLoad30, Preset::LowLoad60}) {
             const bool low_load = preset == Preset::LowLoad30 || preset == Preset::LowLoad60;
             GraphicsConfig config{};
             config.res_option = Resolution::Auto;
             config.msaa_option = Antialiasing::MSAA8X;
             dkr::runtime::mobile_graphics::apply_preset(config, preset);
             const int anisotropy = preset_anisotropy(preset);
-            if (matching_preset(config, anisotropy, true) != preset) return 6;
-            if (matching_preset(config, anisotropy, false) != (low_load ? std::nullopt : std::optional{preset})) return 7;
-            if (matching_preset(config, anisotropy == 16 ? 4 : 16, true)) return 8;
+            if (matching_preset(config, anisotropy, true) != preset)
+                return 6;
+            if (matching_preset(config, anisotropy, false) != (low_load ? std::nullopt : std::optional{preset}))
+                return 7;
+            if (matching_preset(config, anisotropy == 16 ? 4 : 16, true))
+                return 8;
             auto tuned = config;
             tuned.msaa_option = Antialiasing::MSAA4X;
-            if (matching_preset(tuned, anisotropy, true)) return 9;
+            if (matching_preset(tuned, anisotropy, true))
+                return 9;
             tuned = config;
             tuned.rr_manual_value = 120;
-            if (matching_preset(tuned, anisotropy, true)) return 10;
+            if (matching_preset(tuned, anisotropy, true))
+                return 10;
         }
     }
     std::cout << "PASS: explicit performance budgets and HUD/API/aspect preservation\n";

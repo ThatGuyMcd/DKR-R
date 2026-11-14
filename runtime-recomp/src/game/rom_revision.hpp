@@ -54,17 +54,15 @@ inline constexpr std::uint64_t kUsV80Xxh3 = 0xB55D4348B9AB07F5ULL;
 // already computed. A cache hit is advisory only: librecomp remains the final
 // authoritative ROM validator immediately before runtime start.
 void configure_identity_cache(const std::filesystem::path& config_directory);
-[[nodiscard]] std::optional<Identity> cached_identity(
-    const std::filesystem::path& path);
+[[nodiscard]] std::optional<Identity> cached_identity(const std::filesystem::path& path);
 // N64ModernRuntime accepts every standard ROM byte order, but revision
 // dispatch must not make the selected container format part of the runtime
 // path. Non-big-endian inputs are normalised once into DKR-R's local cache and
 // verified against the identity discovered during inspection. The user's ROM
 // is never modified.
-[[nodiscard]] bool materialize_canonical(
-    const std::filesystem::path& source, const Identity& identity,
-    const std::filesystem::path& cache_directory,
-    std::filesystem::path& canonical_path, std::string& error);
+[[nodiscard]] bool materialize_canonical(const std::filesystem::path& source, const Identity& identity,
+                                         const std::filesystem::path& cache_directory,
+                                         std::filesystem::path& canonical_path, std::string& error);
 [[nodiscard]] std::string describe(const Identity& identity);
 [[nodiscard]] std::string_view revision_id(Revision revision);
 [[nodiscard]] std::string_view revision_name(Revision revision);

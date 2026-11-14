@@ -13,10 +13,13 @@ function(dkr_add_peer_relay)
         endif()
     endif()
     if(NOT TARGET DKRPeerRelay)
-        add_library(DKRPeerRelay STATIC
+        add_library(
+            DKRPeerRelay
+            STATIC
             "${_dkr_relay_root}/src/game/netplay/peer_relay/core.cpp"
             "${_dkr_relay_root}/src/game/netplay/peer_relay/live_datagram.cpp"
-            "${_dkr_relay_root}/src/game/netplay/peer_relay/transport.cpp")
+            "${_dkr_relay_root}/src/game/netplay/peer_relay/transport.cpp"
+        )
         target_compile_features(DKRPeerRelay PUBLIC cxx_std_20)
         target_include_directories(DKRPeerRelay PUBLIC "${_dkr_relay_root}/src/game")
         target_link_libraries(DKRPeerRelay PUBLIC DKRNetplayCrypto)
@@ -30,7 +33,10 @@ function(dkr_add_peer_relay)
         if(TARGET datachannel)
             target_link_libraries(DKRPeerRelay PRIVATE datachannel)
             target_compile_definitions(DKRPeerRelay PRIVATE DKR_NETPLAY_WEBRTC=1)
-            target_include_directories(DKRPeerRelay PRIVATE "${_dkr_relay_root}/../extern/libdatachannel/deps/json/include")
+            target_include_directories(
+                DKRPeerRelay
+                PRIVATE "${_dkr_relay_root}/../extern/libdatachannel/deps/json/include"
+            )
         endif()
     endif()
     if(NOT TARGET DKRLiveDatagramTests)

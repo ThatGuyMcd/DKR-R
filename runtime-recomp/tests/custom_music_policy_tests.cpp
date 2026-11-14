@@ -29,12 +29,12 @@ int main() {
 
     // Game gain: base * slider * fade, with the song's base divided back out.
     assert(near(game_gain(127 * 256, 127U), 1.0));
-    assert(near(game_gain(110 * 256, 110U), 1.0));                // another base, same 100%
-    assert(near(game_gain(127 * 128, 127U), 0.5));                // slider at half
-    assert(near(game_gain((127 * 256) >> 2, 127U), 0.25));        // pause menu
+    assert(near(game_gain(110 * 256, 110U), 1.0));         // another base, same 100%
+    assert(near(game_gain(127 * 128, 127U), 0.5));         // slider at half
+    assert(near(game_gain((127 * 256) >> 2, 127U), 0.25)); // pause menu
     assert(game_gain(0, 127U) == 0.0F && game_gain(-5, 127U) == 0.0F);
     assert(game_gain(1000, 0U) == 0.0F);
-    assert(near(game_gain(127 * 256 * 2, 127U), 1.0));            // never above full
+    assert(near(game_gain(127 * 256 * 2, 127U), 1.0)); // never above full
 
     // Tempo: the final lap's 1.12, only when asked for, and bounded.
     assert(near(tempo_ratio(112, 100, true), 1.12));
@@ -49,7 +49,7 @@ int main() {
     loop = loop_range(100U, 20U, 80U);
     assert(near(advance(10.0, 5.0, loop), 15.0));
     assert(near(advance(79.0, 2.0, loop), 21.0));
-    assert(near(advance(79.0, 122.0, loop), 21.0));   // 2 + two whole loops
+    assert(near(advance(79.0, 122.0, loop), 21.0)); // 2 + two whole loops
 
     // Rendering: a ramp 0..99 in both channels, read at half speed, adds the
     // interpolated value with the gain ramping across the block.
@@ -76,8 +76,8 @@ int main() {
         loop = loop_range(100U, 20U, 80U);
         position = 79.5;
         render(pcm.data(), 100U, loop, position, 1.0, 1.0F, 1.0F, seam.data(), 2U);
-        assert(near(seam[0], (7900.0 + 2000.0) / 2.0, 1e-1));   // 79 blended into 20
-        assert(near(seam[2], 2050.0, 1e-1));                     // wrapped to 20.5
+        assert(near(seam[0], (7900.0 + 2000.0) / 2.0, 1e-1)); // 79 blended into 20
+        assert(near(seam[2], 2050.0, 1e-1));                  // wrapped to 20.5
     }
 
     // The gain ramps linearly to its target over the block.

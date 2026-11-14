@@ -20,7 +20,7 @@ constexpr std::uint64_t kFnvOffset = 14695981039346656037ULL;
 constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 
 class HashBuilder final {
-public:
+  public:
     void word(std::uint32_t value) {
         for (unsigned shift = 0U; shift < 32U; shift += 8U) {
             hash_ ^= static_cast<std::uint8_t>(value >> shift);
@@ -35,35 +35,42 @@ public:
         byte(static_cast<std::uint8_t>(value));
         byte(static_cast<std::uint8_t>(value >> 8U));
     }
-    std::uint64_t finish() const { return hash_; }
-private:
+    std::uint64_t finish() const {
+        return hash_;
+    }
+
+  private:
     std::uint64_t hash_ = kFnvOffset;
 };
 
 class RdramView final {
-public:
-    RdramView(const std::uint8_t* data, std::size_t size)
-        : data_(data), size_(size) {}
+  public:
+    RdramView(const std::uint8_t* data, std::size_t size) : data_(data), size_(size) {}
 
     std::optional<std::uint32_t> word(std::uint32_t address) const {
         const auto offset = physical_offset(address, sizeof(std::uint32_t));
-        if (!offset) return std::nullopt;
+        if (!offset)
+            return std::nullopt;
         std::uint32_t value = 0U;
         std::memcpy(&value, data_ + *offset, sizeof(value));
         return value;
     }
     std::optional<std::uint8_t> byte(std::uint32_t address) const {
         const auto offset = physical_offset(address, 1U);
-        if (!offset) return std::nullopt;
+        if (!offset)
+            return std::nullopt;
         const std::size_t swizzled = *offset ^ 3U;
-        if (swizzled >= size_) return std::nullopt;
+        if (swizzled >= size_)
+            return std::nullopt;
         return data_[swizzled];
     }
     std::optional<std::uint16_t> half(std::uint32_t address) const {
         const auto offset = physical_offset(address, sizeof(std::uint16_t));
-        if (!offset) return std::nullopt;
+        if (!offset)
+            return std::nullopt;
         const std::size_t swizzled = *offset ^ 2U;
-        if (swizzled > size_ - sizeof(std::uint16_t)) return std::nullopt;
+        if (swizzled > size_ - sizeof(std::uint16_t))
+            return std::nullopt;
         std::uint16_t value = 0U;
         std::memcpy(&value, data_ + swizzled, sizeof(value));
         return value;
@@ -71,35 +78,32 @@ public:
     bool pointer(std::uint32_t address, std::size_t extent = 1U) const {
         return physical_offset(address, extent).has_value();
     }
-private:
-    std::optional<std::size_t> physical_offset(std::uint32_t address,
-                                               std::size_t extent) const {
+
+  private:
+    std::optional<std::size_t> physical_offset(std::uint32_t address, std::size_t extent) const {
         const std::uint32_t region = address & 0xE0000000U;
         if (data_ == nullptr || (region != 0x80000000U && region != 0xA0000000U)) {
             return std::nullopt;
         }
         const std::size_t offset = address & 0x1FFFFFFFU;
-        if (extent > size_ || offset > size_ - extent) return std::nullopt;
+        if (extent > size_ || offset > size_ - extent)
+            return std::nullopt;
         return offset;
     }
     const std::uint8_t* data_ = nullptr;
     std::size_t size_ = 0U;
 };
 
-void hash_word(HashBuilder& hash, const RdramView& memory,
-               std::uint32_t address) {
+void hash_word(HashBuilder& hash, const RdramView& memory, std::uint32_t address) {
     hash.word(memory.word(address).value_or(0U));
 }
-void hash_byte(HashBuilder& hash, const RdramView& memory,
-               std::uint32_t address) {
+void hash_byte(HashBuilder& hash, const RdramView& memory, std::uint32_t address) {
     hash.byte(memory.byte(address).value_or(0U));
 }
-void hash_half(HashBuilder& hash, const RdramView& memory,
-               std::uint32_t address) {
+void hash_half(HashBuilder& hash, const RdramView& memory, std::uint32_t address) {
     hash.half(memory.half(address).value_or(0U));
 }
-std::uint64_t hash_racer(HashBuilder& hash, const RdramView& memory,
-                         std::uint32_t object_address) {
+std::uint64_t hash_racer(HashBuilder& hash, const RdramView& memory, std::uint32_t object_address) {
     using namespace authored_contract;
     HashBuilder detail;
     detail.word(0x444B5244U); // DKRD
@@ -118,7 +122,8 @@ std::uint64_t hash_racer(HashBuilder& hash, const RdramView& memory,
     const bool object_valid = memory.pointer(object_address, 0x68U);
     hash.byte(object_valid ? 1U : 0U);
     detail.byte(object_valid ? 1U : 0U);
-    if (!object_valid) return detail.finish();
+    if (!object_valid)
+        return detail.finish();
 
     // Authored racer transform, velocity and segment identity. Scale,
     // animation frame, distance-to-camera, opacity/model selection and every
@@ -127,12 +132,12 @@ std::uint64_t hash_racer(HashBuilder& hash, const RdramView& memory,
         add_word(object_address + offset);
     }
 
-    const std::uint32_t racer_address =
-        memory.word(object_address + 0x0064U).value_or(0U);
+    const std::uint32_t racer_address = memory.word(object_address + 0x0064U).value_or(0U);
     const bool racer_valid = memory.pointer(racer_address, 0x224U);
     hash.byte(racer_valid ? 1U : 0U);
     detail.byte(racer_valid ? 1U : 0U);
-    if (!racer_valid) return detail.finish();
+    if (!racer_valid)
+        return detail.finish();
 
     // Explicit simulation contract derived from Object_Racer: identity,
     // motion/vehicle physics, lap/checkpoint progress, items, attacks and race
@@ -162,14 +167,13 @@ std::uint64_t hash_racer(HashBuilder& hash, const RdramView& memory,
 
 } // namespace
 
-std::uint64_t canonical_gameplay_state_hash(const std::uint8_t* rdram,
-                                            std::size_t rdram_size) {
+std::uint64_t canonical_gameplay_state_hash(const std::uint8_t* rdram, std::size_t rdram_size) {
     return canonical_gameplay_state_digest(rdram, rdram_size).combined;
 }
 
-GameplayStateDigest canonical_gameplay_state_digest(
-    const std::uint8_t* rdram, std::size_t rdram_size) {
-    if (rdram == nullptr || rdram_size < kRetailRdramSize) return {};
+GameplayStateDigest canonical_gameplay_state_digest(const std::uint8_t* rdram, std::size_t rdram_size) {
+    if (rdram == nullptr || rdram_size < kRetailRdramSize)
+        return {};
     const RdramView memory(rdram, rdram_size);
     GameplayStateDigest digest{};
     HashBuilder globals;
@@ -190,19 +194,14 @@ GameplayStateDigest canonical_gameplay_state_digest(
 
     HashBuilder racers;
     racers.word(0x444B5253U); // DKRS
-    const std::uint32_t raw_count =
-        memory.word(revision_addresses::NumberOfRacers).value_or(0U);
-    const std::uint32_t racer_count =
-        (std::min)(raw_count, static_cast<std::uint32_t>(kMaximumRacers));
+    const std::uint32_t raw_count = memory.word(revision_addresses::NumberOfRacers).value_or(0U);
+    const std::uint32_t racer_count = (std::min)(raw_count, static_cast<std::uint32_t>(kMaximumRacers));
     racers.word(racer_count);
-    const std::uint32_t racer_array =
-        memory.word(revision_addresses::Racers).value_or(0U);
-    const bool array_valid = memory.pointer(
-        racer_array, kMaximumRacers * sizeof(std::uint32_t));
+    const std::uint32_t racer_array = memory.word(revision_addresses::Racers).value_or(0U);
+    const bool array_valid = memory.pointer(racer_array, kMaximumRacers * sizeof(std::uint32_t));
     racers.byte(array_valid ? 1U : 0U);
     for (std::uint32_t index = 0U; array_valid && index < racer_count; ++index) {
-        const std::uint32_t object_address =
-            memory.word(racer_array + index * sizeof(std::uint32_t)).value_or(0U);
+        const std::uint32_t object_address = memory.word(racer_array + index * sizeof(std::uint32_t)).value_or(0U);
         digest.racer_details[index] = hash_racer(racers, memory, object_address);
     }
     digest.racer_count = racer_count;
@@ -215,17 +214,16 @@ GameplayStateDigest canonical_gameplay_state_digest(
     // drift into a subtly different definition of "authored state".
     std::vector<std::uint8_t> portable;
     std::string capture_error;
-    if (!capture_authoritative_state(rdram, rdram_size, 0U, portable,
-                                     capture_error)) {
+    if (!capture_authoritative_state(rdram, rdram_size, 0U, portable, capture_error)) {
         return {};
     }
     digest.combined = authoritative_state_checksum(portable);
     return digest;
 }
 
-std::uint64_t canonical_frontend_state_hash(const std::uint8_t* rdram,
-                                            std::size_t rdram_size) {
-    if (rdram == nullptr || rdram_size < kRetailRdramSize) return 0U;
+std::uint64_t canonical_frontend_state_hash(const std::uint8_t* rdram, std::size_t rdram_size) {
+    if (rdram == nullptr || rdram_size < kRetailRdramSize)
+        return 0U;
     const RdramView memory(rdram, rdram_size);
     HashBuilder hash;
     hash.word(0x444B5246U); // Hash schema "DKRF".
@@ -241,18 +239,13 @@ std::uint64_t canonical_frontend_state_hash(const std::uint8_t* rdram,
     // The authored contract is the active roster, its ready state and the
     // characters assigned to the four virtual controller ports.
     for (std::size_t slot = 0U; slot < 4U; ++slot) {
-        hash_byte(hash, memory, revision_addresses::ActivePlayersArray +
-                                    static_cast<std::uint32_t>(slot));
-        hash_byte(hash, memory, revision_addresses::CharacterSelectStatus +
-                                    static_cast<std::uint32_t>(slot));
-        hash_byte(hash, memory, revision_addresses::PlayerIdMap +
-                                    static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::ActivePlayersArray + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::CharacterSelectStatus + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::PlayerIdMap + static_cast<std::uint32_t>(slot));
     }
     for (std::size_t slot = 0U; slot < 8U; ++slot) {
-        hash_byte(hash, memory, revision_addresses::PlayersCharacterArray +
-                                    static_cast<std::uint32_t>(slot));
-        hash_byte(hash, memory, revision_addresses::CharacterIdSlots +
-                                    static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::PlayersCharacterArray + static_cast<std::uint32_t>(slot));
+        hash_byte(hash, memory, revision_addresses::CharacterIdSlots + static_cast<std::uint32_t>(slot));
     }
     return hash.finish();
 }

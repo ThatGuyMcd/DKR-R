@@ -13,6 +13,7 @@ endif()
 set(SDL2_INCLUDE_DIRS
     "${CMAKE_BINARY_DIR}/sdl2/include"
     "${CMAKE_BINARY_DIR}/sdl2/include/SDL2"
-    "${CMAKE_BINARY_DIR}/sdl2/include-config-${_dkr_ios_sdl_config}/SDL2")
+    "${CMAKE_BINARY_DIR}/sdl2/include-config-${_dkr_ios_sdl_config}/SDL2"
+)
 # SDL2main stays on the app target. Linking it into rt64 as well defines main twice.
 set(SDL2_LIBRARIES SDL2::SDL2)

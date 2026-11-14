@@ -19,10 +19,8 @@ void register_runtime_context(std::uint8_t* rdram, recomp_context* context);
 void unregister_runtime_context(std::uint8_t* rdram, recomp_context* context);
 void on_frame_boundary(std::uint8_t* rdram, recomp_context* context);
 void prepare_controller_init();
-void seed_character_select_ai(std::uint8_t* rdram,
-                              recomp_context* context);
-void resolve_authored_input_frame(std::uint8_t* rdram,
-                                  recomp_context* context);
+void seed_character_select_ai(std::uint8_t* rdram, recomp_context* context);
+void resolve_authored_input_frame(std::uint8_t* rdram, recomp_context* context);
 std::uint32_t authored_frame();
 void begin_gameplay_level(std::uint8_t* rdram, recomp_context* context);
 void complete_gameplay_level(std::uint8_t* rdram, recomp_context* context);
@@ -75,30 +73,17 @@ RollbackMetrics rollback_metrics();
 
 } // namespace dkr::runtime::netplay
 
-extern "C" void dkr_netplay_character_select_enter(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_character_select_lock(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_character_select_ai_seed(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_gameplay_level_begin(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_gameplay_level_ready(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_gameplay_level_end(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_prepare_controller_init(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_resolve_authored_input_frame(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_authoritative_frame_commit(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" int dkr_netplay_drive_authored_tick(
-    std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_character_select_enter(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_character_select_lock(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_character_select_ai_seed(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_gameplay_level_begin(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_gameplay_level_ready(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_gameplay_level_end(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_prepare_controller_init(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_resolve_authored_input_frame(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_authoritative_frame_commit(std::uint8_t* rdram, recomp_context* context);
+extern "C" int dkr_netplay_drive_authored_tick(std::uint8_t* rdram, recomp_context* context);
 extern "C" int dkr_netplay_presentation_output_allowed();
-extern "C" void dkr_netplay_presentation_random_begin(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" void dkr_netplay_presentation_random_end(
-    std::uint8_t* rdram, recomp_context* context);
-extern "C" int dkr_netplay_presentation_random_range(
-    std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_presentation_random_begin(std::uint8_t* rdram, recomp_context* context);
+extern "C" void dkr_netplay_presentation_random_end(std::uint8_t* rdram, recomp_context* context);
+extern "C" int dkr_netplay_presentation_random_range(std::uint8_t* rdram, recomp_context* context);
