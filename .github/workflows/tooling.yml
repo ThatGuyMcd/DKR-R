@@ -146,12 +146,23 @@ jobs:
         env:
           MERGE_BASE: ${{ steps.changes.outputs.merge-base }}
         run: |
-          mapfile -t changed <"$RUNNER_TEMP/changed.txt"
+          # Translation units the host preset doesn't compile have no compile
+          # command (tidy-skip.txt lists them), so they stay out of the run.
+          python3 - "$RUNNER_TEMP/changed.txt" >"$RUNNER_TEMP/tidy-files.txt" <<'EOF'
+          import json, os, sys
+          root = os.getcwd()
+          database = json.load(open("build/host/compile_commands.json"))
+          compiled = {os.path.relpath(os.path.realpath(os.path.join(e["directory"], e["file"])), root) for e in database}
+          for line in open(sys.argv[1]):
+              path = line.strip()
+              if path and (not path.endswith((".c", ".cc", ".cpp")) or path in compiled):
+                  print(path)
+          EOF
+          mapfile -t changed <"$RUNNER_TEMP/tidy-files.txt"
           set +e
           git diff -U0 "$MERGE_BASE" HEAD -- "${changed[@]}" |
             python3 /usr/lib/llvm-18/share/clang/clang-tidy-diff.py -p1 -path build/host \
               -clang-tidy-binary clang-tidy-18 -iregex '.*\.(c|cc|cpp|h|hpp)' -j 4 -quiet >"$RUNNER_TEMP/tidy.log" 2>&1
-          status=$?
           set -e
           sed -nE "s#^($PWD/)?([^:]+):([0-9]+):([0-9]+): (warning|error): (.*)\$#::\5 file=\2,line=\3,col=\4::\6#p" "$RUNNER_TEMP/tidy.log"
           {
@@ -160,4 +171,20 @@ jobs:
             grep -E ': (warning|error): ' "$RUNNER_TEMP/tidy.log" | sed "s|^$PWD/||" || echo 'No findings.'
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
-          exit "$status"
+          # A header checked on its own often can't find generated or renderer
+          # includes. That's a compile error, not a finding: the summary shows
+          # it, and the job fails on findings and on compile errors in files
+          # that have a compile command.
+          python3 - "$RUNNER_TEMP/tidy.log" "$RUNNER_TEMP/tidy-files.txt" <<'EOF'
+          import os, re, sys
+          root = os.getcwd()
+          sources = {line.strip() for line in open(sys.argv[2]) if line.strip().endswith((".c", ".cc", ".cpp"))}
+          pattern = re.compile(r"^(?:%s/)?([^:]+):\d+:\d+: error: (.*)$" % re.escape(root))
+          failures = []
+          for line in open(sys.argv[1], errors="replace"):
+              match = pattern.match(line)
+              if match and (os.path.normpath(match[1]) in sources or "[clang-diagnostic-" not in match[2]):
+                  failures.append(line.rstrip())
+          print("\n".join(failures))
+          sys.exit(1 if failures else 0)
+          EOF

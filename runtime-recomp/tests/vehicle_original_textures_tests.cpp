@@ -145,7 +145,10 @@ Bytes bytes(const std::string& s){return Bytes(s.begin(),s.end());}
 using Members=std::vector<std::pair<std::string,Bytes>>;
 Bytes zip(const Members& members){
     Bytes out,directory;
-    for(const auto& [name,data]:members){
+    for(const auto& member:members){
+        // Plain references: the header lambda below captures them, and the
+        // analyzer mistakes a captured structured binding for an uninitialized one.
+        const auto& name=member.first;const auto& data=member.second;
         const auto offset=std::uint32_t(out.size());const auto crc=crc32(data);
         const auto header=[&](Bytes& b,bool central){
             le32(b,central?0x02014B50U:0x04034B50U);if(central)le16(b,20);

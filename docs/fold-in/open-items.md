@@ -14,7 +14,22 @@
 2. **Launcher copy.** 71 reviewed strings are superseded by v1.0.11; see
    [launcher-copy-review.md](launcher-copy-review.md).
 
-3. **`DKRQuickJoinLifecycle` is intermittent** on the Linux host presets
+3. **Road-wheel hooks in the camera scene kernel.** v1.0.14 (`531d265`)
+   changed `patches/camera-plus/scene_kernel_pipeline.py`: `render_3d_model`
+   and `render_sprite_billboard` call `dkr_native_road_wheel_scope` with
+   events 200 to 203, and the kernel includes `vehicle_lighting/road_wheels.h`.
+   The release recipe compiles the capsule's pinned kernel
+   (`release-prep/v1.0.7/release.py` passes `capsule/prepared/CAMERA_KERNEL_V*`
+   and `capsule.py` checks its hashes), which predates the change, so the
+   v1.0.15 binaries have the native handlers but nothing calls them. The fold
+   keeps that: `scripts/camera_scene_kernel.py` does not carry the hooks, and
+   the fold deletes the layer script. The change is in git at
+   `Version1.0.15:patches/camera-plus/scene_kernel_pipeline.py`. Porting it
+   changes guest code in every Camera++ scene and both camera kernel digests
+   in `build-inputs.lock.json`, so it's a follow-up to make on purpose and
+   test with custom vehicles. Was leaving the kernel pinned intended?
+
+4. **`DKRQuickJoinLifecycle` is intermittent** on the Linux host presets
    (amd64 under emulation on the devops Mac). Alone it fails about half its
    runs, at `quick_join_lifecycle_tests.cpp:126`: after the rejected rekey
    the client never takes the host's Quick Join bootstrap, and the 20 s wait
