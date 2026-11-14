@@ -1,0 +1,18 @@
+# Guest addresses the netplay self-test autopilot reads (check_autopilot.cpp).
+schema = 1
+header = "autopilot_symbols.hpp"
+table = "sdk"
+hex = "lower"
+symbols = [
+  "gRacersByPort",
+  "gTrackCheckpoints",
+  "gNumberOfMainCheckpoints",
+]
+template = '''#pragma once
+#include <cstdint>
+namespace dkr::runtime::netplay::experimental::check_autopilot_symbols {
+struct Symbols {std::uint32_t racers_by_port;std::uint32_t checkpoints;std::uint32_t checkpoint_count;};
+inline constexpr Symbols symbols77{@ALL:77@};
+inline constexpr Symbols symbols80{@ALL:80@};
+}
+'''

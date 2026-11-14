@@ -22,6 +22,7 @@ are still useful, but they aren't the current feature list.
 | [Custom tracks and characters](LEGACY-MODS-BETA.md) | Legacy imports, roster browsing, AI, adapters and mod management. |
 | [Magic Codes](MAGIC_CODES.md) | Launch selection, online rules and one-shot actions. |
 | [DKR-R Online](ONLINE_MULTIPLAYER.md) | Public/private hosting, Rollback, Scoreboard, session mods, saves and connection limits. |
+| [Rollback self-test](ROLLBACK-SELF-TEST.md) | Running an automated online race on one machine, its logs and switches. |
 | [Public lobbies](PUBLIC_LOBBIES.md) | Shared Discord sign-in, Public/Friends, account count and directory privacy. |
 | [Profiles, pictures and sign-in](ONLINE_PROFILES.md) | Shared names, friend cards, Steam Deck persistence and the matching API deployment. |
 | [Spectators](SPECTATORS.md) | Watching, cameras, host-approved swaps and late-join gates. |
