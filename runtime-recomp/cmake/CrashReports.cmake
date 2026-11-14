@@ -18,7 +18,7 @@ function(dkr_add_crash_reports)
     target_include_directories(
         DKRCrashReports
         PUBLIC "${root}/runtime-recomp/src/game"
-        PRIVATE "${root}/extern/rt64/src/contrib" "${root}/extern/n64-modern-runtime/thirdparty"
+        PRIVATE "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib" "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty"
     )
     target_compile_definitions(DKRCrashReports PRIVATE NOMINMAX)
     target_link_libraries(DKRCrashReports PUBLIC DKRUpdateInstall DKRStorage PRIVATE DKRUpdateZip)
@@ -33,7 +33,7 @@ function(dkr_add_crash_reports)
         target_link_libraries(DKRCrashReportTests PRIVATE DKRCrashReports DKRUpdateZip)
         target_include_directories(
             DKRCrashReportTests
-            PRIVATE "${root}/extern/rt64/src/contrib" "${root}/extern/n64-modern-runtime/thirdparty"
+            PRIVATE "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib" "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty"
         )
         add_test(NAME DKRCrashReports COMMAND DKRCrashReportTests)
         if(WIN32 OR (UNIX AND NOT APPLE))

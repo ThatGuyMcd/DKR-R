@@ -15,7 +15,7 @@ function(dkr_add_storage)
     target_include_directories(
         DKRStorage
         PUBLIC "${root}/runtime-recomp/src/game"
-        PRIVATE "${root}/extern/n64-modern-runtime/thirdparty" "${DKR_MBEDTLS_SOURCE}/include"
+        PRIVATE "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty" "${DKR_MBEDTLS_SOURCE}/include"
     )
     target_link_libraries(DKRStorage PUBLIC DKRUpdateInstall PRIVATE ${_dkr_update_hash})
     if(TARGET DKRPortGame)
@@ -24,7 +24,7 @@ function(dkr_add_storage)
     if(BUILD_TESTING AND NOT ANDROID AND NOT IOS)
         add_executable(DKRStorageTests "${root}/runtime-recomp/tests/storage_tests.cpp")
         target_compile_features(DKRStorageTests PRIVATE cxx_std_20)
-        target_include_directories(DKRStorageTests PRIVATE "${root}/extern/n64-modern-runtime/thirdparty")
+        target_include_directories(DKRStorageTests PRIVATE "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty")
         target_link_libraries(DKRStorageTests PRIVATE DKRStorage)
         if(MSVC)
             target_compile_options(DKRStorageTests PRIVATE /UNDEBUG)

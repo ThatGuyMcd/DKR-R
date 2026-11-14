@@ -58,6 +58,7 @@ if(IOS)
 endif()
 include(CTest)
 include(cmake/ProjectTests.cmake)
+include(cmake/SourceRoots.cmake)
 include(cmake/Localisation.cmake)
 dkr_add_localisation()
 
@@ -67,7 +68,6 @@ if(BUILD_TESTING AND NOT ANDROID)
     add_test(NAME DKRLauncherCopy COMMAND DKRLauncherCopyTests)
 endif()
 
-include(cmake/SourceRoots.cmake)
 option(DKR_RUNTIME_BUILD_GENERATED "Compile N64Recomp-generated DKR CPU functions" ON)
 option(DKR_RUNTIME_BUILD_RT64 "Also configure and compile the pinned RT64 renderer" OFF)
 include(cmake/HostSanitizers.cmake)
@@ -2684,7 +2684,7 @@ if(BUILD_TESTING)
                     PRIVATE
                         src/game
                         "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}"
-                        "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include"
+                        "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/N64Recomp/include"
                 )
                 if(NOT MSVC)
                     target_compile_options(

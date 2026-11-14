@@ -33,10 +33,7 @@ function(dkr_add_peer_relay)
         if(TARGET datachannel)
             target_link_libraries(DKRPeerRelay PRIVATE datachannel)
             target_compile_definitions(DKRPeerRelay PRIVATE DKR_NETPLAY_WEBRTC=1)
-            target_include_directories(
-                DKRPeerRelay
-                PRIVATE "${_dkr_relay_root}/../extern/libdatachannel/deps/json/include"
-            )
+            target_include_directories(DKRPeerRelay PRIVATE "${DKR_DEPENDENCIES_DIR}/libdatachannel/deps/json/include")
         endif()
     endif()
     if(NOT TARGET DKRLiveDatagramTests)

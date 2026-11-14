@@ -9,7 +9,7 @@ function(dkr_add_mod_store_community_tests)
         target_compile_features(DKRModStoreCommunityTests PRIVATE cxx_std_20)
         target_include_directories(
             DKRModStoreCommunityTests
-            PRIVATE "${_dkr_store_root}/runtime-recomp/src/game" "${_dkr_store_root}/extern/rt64/src/contrib"
+            PRIVATE "${_dkr_store_root}/runtime-recomp/src/game" "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib"
         )
         if(MSVC)
             target_compile_options(DKRModStoreCommunityTests PRIVATE /UNDEBUG)

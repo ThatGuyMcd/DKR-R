@@ -10,7 +10,7 @@ function(dkr_add_launcher_theme_checks)
     if(WIN32)
         target_link_libraries(DKRLauncherThemeTests PRIVATE user32)
     endif()
-    set(imgui "${root}/extern/rt64/src/contrib/imgui")
+    set(imgui "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/imgui")
     add_executable(
         DKRLauncherThemeDrawTests
         "${root}/runtime-recomp/tests/launcher_theme_draw_tests.cpp"
@@ -37,7 +37,7 @@ endfunction()
 function(dkr_add_launcher_theme_render_check)
     if(TARGET DKRPortGame AND NOT TARGET DKRLauncherThemeRenderChecks)
         get_filename_component(root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../.." ABSOLUTE)
-        set(imgui "${root}/extern/rt64/src/contrib/imgui")
+        set(imgui "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/imgui")
         add_executable(
             DKRLauncherThemeRenderChecks
             EXCLUDE_FROM_ALL
@@ -53,7 +53,11 @@ function(dkr_add_launcher_theme_render_check)
         get_target_property(game_links DKRPortGame LINK_DIRECTORIES)
         target_include_directories(
             DKRLauncherThemeRenderChecks
-            PRIVATE ${game_includes} "${root}/runtime-recomp/src/game" "${imgui}" "${root}/extern/rt64/src/contrib/stb"
+            PRIVATE
+                ${game_includes}
+                "${root}/runtime-recomp/src/game"
+                "${imgui}"
+                "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/stb"
         )
         if(game_links)
             target_link_directories(DKRLauncherThemeRenderChecks PRIVATE ${game_links})

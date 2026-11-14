@@ -45,7 +45,7 @@ function(dkr_add_library_ui_checks)
     if(BUILD_TESTING)
         add_test(NAME DKRDisplaySession COMMAND DKRDisplaySessionTests)
     endif()
-    set(imgui "${root}/extern/rt64/src/contrib/imgui")
+    set(imgui "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/imgui")
     add_executable(
         DKRUiSurfaceTests
         "${root}/runtime-recomp/tests/ui_surface_tests.cpp"
