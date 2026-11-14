@@ -8,6 +8,10 @@ those differences disappear. Current-main preservation is a separate check;
 see the latest scope entry in
 [the investigation notes](../notes/2026-10-31-fold-followups.md).
 
+The v1.0.11 gate tooling named below (`apply_closure.py`, `equivalence.py`,
+`run_equivalence.sh` and friends) was deleted after the fold merged. It is in
+git history; only `current_main.py` and its checkpoint remain.
+
 The fold reproduces tag `Version1.0.11` (`6bdbcde`). The reference is a
 materialization of that tag: a clone, the capsule restored with
 `patches/upstream-sync/restore_capsule.py`, and a Linux configure of the full
@@ -76,14 +80,7 @@ hooks, online identity), and each level's counts, allowed entries and
 unexplained differences. The script exits non-zero unless every level passed
 on a clean tree.
 
-Steve signs it on the devops machine and attaches both files to the PR:
-
-    ssh-keygen -Y sign -n fold-equivalence -f ~/.ssh/id_ed25519 fold-equivalence.json
-
-Reviewers verify with the allowed-signers entry for Steve's key:
-
-    ssh-keygen -Y verify -n fold-equivalence -f allowed_signers -I <signer identity> \
-      -s fold-equivalence.json.sig < fold-equivalence.json
+Steve signed it on the devops machine and attached both files to the PR.
 
 CI can't run levels 0-3 (they need ROM-derived payloads). At the historical
 checkpoint, the `fold-equivalence` workflow ran the ROM-free part of level 1:

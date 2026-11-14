@@ -975,7 +975,7 @@ if(DKR_RUNTIME_BUILD_RT64)
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/EnhancedWater.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/cmake/HleCommandGuard.cmake")
     # v1.0.11 renderer changes, applied to the end of the chain above
-    # (scripts/fold/dependency_stages.py derives them). The render-stability
+    # (derived once from the v1.0.11 build). The render-stability
     # and present-pacer patches sit on the rollback stages of rt64_state,
     # rt64_workload_queue and rt64_present_queue, the only chain v1.0.11
     # shipped; without those stages the renderer keeps its earlier behaviour.
