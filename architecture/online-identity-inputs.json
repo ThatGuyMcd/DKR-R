@@ -68,17 +68,17 @@
     "runtime-recomp/src/game/netplay/experimental_epoch.hpp": "b7a27bd2f58de94426d1a2606edaf8de966f8477c7b2d235edbf2acd4b09bfd1",
     "runtime-recomp/src/game/netplay/experimental_guest_memory.h": "220a8bc6ded1ee071cac40c62704a2c48fc1735b3d73c2127f81ee35bb25eea6",
     "runtime-recomp/src/game/netplay/experimental_latency.hpp": "7dcb6ca80b23a4cf0443733aa1458820076e46b49ceb38e12b0c41235d8fb309",
-    "runtime-recomp/src/game/netplay/experimental_launch.cpp": "ccd91e64f0987e7d0514365792a7cebb02cc3726dd1d4495ea851cf3b61f68a2",
+    "runtime-recomp/src/game/netplay/experimental_launch.cpp": "cc7b897716753c81c01c36e7c1537b3c47a2bca8b8daedb047dbcd813bdf924c",
     "runtime-recomp/src/game/netplay/experimental_launch.hpp": "df8fa9b3f7cc26ede16f96f3773a36c43b3c0b7496f3c89eb496e8d8bbae521b",
     "runtime-recomp/src/game/netplay/experimental_lobby_admission.cpp": "edfab6ff205f5197577003a41fc582e63970cff61f135e67b2e8e39dd7f87ed0",
     "runtime-recomp/src/game/netplay/experimental_lobby_admission.hpp": "b7aefa33684c133c54a843a7687844f91d44b8d7450b839544d05f4fa19acc24",
     "runtime-recomp/src/game/netplay/experimental_magic_codes.cpp": "08c266a82d163b38b920e640e77a5a7eab32a30f2603d87f894b917995b40fa2",
     "runtime-recomp/src/game/netplay/experimental_magic_codes.hpp": "77d96c9e6b8efcb6ae50248ed81dc7769a5f41c035bed452b7ca5c7a0f03fd9f",
-    "runtime-recomp/src/game/netplay/experimental_network.cpp": "83498aaad3c882cf29d3e9f538c6e11e77c27fb1bda4a213998bde96b5286931",
+    "runtime-recomp/src/game/netplay/experimental_network.cpp": "c4878043f3318ce48031a47e6a1f641135d917d71387b1ce20f533b1c5dfa191",
     "runtime-recomp/src/game/netplay/experimental_network.hpp": "c69ec0d1b714f14a10a51fdd8c56483556e1ee616ca225158ce171796b6c312d",
     "runtime-recomp/src/game/netplay/experimental_owned_registry.cpp": "5a31f41e2547a6dd9cc96baf5baf8c10804937d4241e967cf6401a8a105aed72",
     "runtime-recomp/src/game/netplay/experimental_owner_inputs.cpp": "e29ee01e4a21e82449368a9ed4a4534296d8124e6181f9f46f814c73d8523985",
-    "runtime-recomp/src/game/netplay/experimental_owner_inputs.hpp": "d6cefdaba3929180c71458037b2c5285319d3def6c0f17db1d9090545cf4a2ae",
+    "runtime-recomp/src/game/netplay/experimental_owner_inputs.hpp": "d190904dc4c24a8285ed6dfd24216021c61eb7367c3c39b077cc822260fde264",
     "runtime-recomp/src/game/netplay/experimental_pak.cpp": "bcffebf84be4f18560a3aae80a52b888ad426e1e267906fe4871f01e96e23c20",
     "runtime-recomp/src/game/netplay/experimental_pak.hpp": "9870fb648e60c00634f67dc216458d3bbf226f85f70d0b943f62468c2ac6d228",
     "runtime-recomp/src/game/netplay/experimental_pcm.hpp": "fa4b59ab11a64c0ea7194c1b2c69009d07c95300b27c823b2b4b2cc66f3c6b37",
@@ -187,6 +187,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "private_audio_rsp.cpp written as bytes: output unchanged on macOS and Linux, Windows output now matches the lock"
+    "reason": "Launch carries full-size Network input batches: receive side only, nothing sent or simulated changes"
   }
 }

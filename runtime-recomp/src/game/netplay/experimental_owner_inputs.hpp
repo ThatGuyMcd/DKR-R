@@ -14,6 +14,10 @@ namespace dkr::runtime::netplay::experimental {
 // belongs to SecureChannel; this codec is its bounded plaintext payload only.
 inline constexpr unsigned kOwnerInputBatch = 8;
 inline constexpr unsigned kOwnerInputMaximumBytes = 53 + 71 * kOwnerInputBatch;
+// Largest sealed Network datagram: 28-byte header + 16-byte MAC + 6-byte prefix
+// + one maximal owner-input batch. Launch must carry up to this much across
+// the admission handoff; a smaller cap silently drops multi-input batches.
+inline constexpr std::size_t kNetworkMaximumWireBytes = 44 + 6 + kOwnerInputMaximumBytes;
 struct OwnerInputPacket {
     std::uint64_t epoch = 0;
     std::uint32_t first_frame = 0;
