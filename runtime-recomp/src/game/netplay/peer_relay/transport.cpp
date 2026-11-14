@@ -52,7 +52,14 @@ public:
     }
     ~Transport()override{close();
 #if defined(DKR_NETPLAY_WEBRTC)
-        closer_.request_stop();close_cv_.notify_all();if(closer_.joinable())closer_.join();
+        {
+            // Under the mutex the closer waits on: otherwise the stop can land
+            // between its predicate check and its wait, the wakeup is lost and
+            // the join below never returns.
+            std::lock_guard lock(close_mutex_);
+            closer_.request_stop();
+        }
+        close_cv_.notify_all();if(closer_.joinable())closer_.join();
 #endif
         auto& state=registry();std::lock_guard lock(state.mutex);const auto i=state.entries.find(key_);if(i!=state.entries.end()&&i->second.owner==this)state.entries.erase(i);
     }
