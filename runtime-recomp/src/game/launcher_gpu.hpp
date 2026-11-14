@@ -24,23 +24,27 @@ inline bool replace_surface_window(SDL_Window*& window, Uint32 api, const char* 
     const Uint32 flags = SDL_GetWindowFlags(window);
     const Uint32 old_id = SDL_GetWindowID(window);
     auto* next = SDL_CreateWindow("DKR-R - Diddy Kong Racing Recompiled", x, y, width, height,
-        SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN | api);
+                                  SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_HIDDEN | api);
     if (!next) {
         std::fprintf(stderr, "[boot][window] %s allocation failed; original retained: %s\n", reason, SDL_GetError());
         return false;
     }
-    if (flags & SDL_WINDOW_FULLSCREEN) SDL_SetWindowFullscreen(window, 0);
+    if (flags & SDL_WINDOW_FULLSCREEN)
+        SDL_SetWindowFullscreen(window, 0);
     SDL_DestroyWindow(window);
     window = next;
     SDL_SetWindowMinimumSize(window, 800, 600);
-    if (flags & SDL_WINDOW_MAXIMIZED) SDL_MaximizeWindow(window);
+    if (flags & SDL_WINDOW_MAXIMIZED)
+        SDL_MaximizeWindow(window);
     const auto fullscreen = flags & (SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
     if (fullscreen && SDL_SetWindowFullscreen(window, fullscreen) != 0)
         std::fprintf(stderr, "[boot][window] %s fullscreen restore failed: %s\n", reason, SDL_GetError());
-    if (!(flags & SDL_WINDOW_HIDDEN)) SDL_ShowWindow(window);
-    if (flags & SDL_WINDOW_MINIMIZED) SDL_MinimizeWindow(window);
-    std::fprintf(stderr, "[boot][window] %s retired=%u replacement=%u flags=0x%08X\n",
-        reason, unsigned(old_id), unsigned(SDL_GetWindowID(window)), unsigned(SDL_GetWindowFlags(window)));
+    if (!(flags & SDL_WINDOW_HIDDEN))
+        SDL_ShowWindow(window);
+    if (flags & SDL_WINDOW_MINIMIZED)
+        SDL_MinimizeWindow(window);
+    std::fprintf(stderr, "[boot][window] %s retired=%u replacement=%u flags=0x%08X\n", reason, unsigned(old_id),
+                 unsigned(SDL_GetWindowID(window)), unsigned(SDL_GetWindowFlags(window)));
     return true;
 }
 
@@ -49,11 +53,14 @@ inline SDL_Renderer* create_linux_launcher_renderer(SDL_Window* window) {
     const bool requested = linux_acceleration_requested();
     if (requested && !(SDL_GetWindowFlags(window) & SDL_WINDOW_VULKAN)) {
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-        if (!renderer) std::fprintf(stderr, "[boot][launcher] acceleration failed: %s; trying software\n", SDL_GetError());
+        if (!renderer)
+            std::fprintf(stderr, "[boot][launcher] acceleration failed: %s; trying software\n", SDL_GetError());
     }
     if (!renderer) {
-        std::fprintf(stderr, "[boot][launcher] CPU fallback reason=%s\n", !requested ? "explicit override" :
-            (SDL_GetWindowFlags(window) & SDL_WINDOW_VULKAN) ? "launcher surface unavailable" : "accelerated renderer unavailable");
+        std::fprintf(stderr, "[boot][launcher] CPU fallback reason=%s\n",
+                     !requested                                         ? "explicit override"
+                     : (SDL_GetWindowFlags(window) & SDL_WINDOW_VULKAN) ? "launcher surface unavailable"
+                                                                        : "accelerated renderer unavailable");
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
     }
     // SDL's accelerated flag describes the API, not the physical GPU. Record
@@ -62,7 +69,8 @@ inline SDL_Renderer* create_linux_launcher_renderer(SDL_Window* window) {
         using GetString = const unsigned char* (*)(unsigned);
         const auto get_string = reinterpret_cast<GetString>(SDL_GL_GetProcAddress("glGetString"));
         const auto* device = get_string ? get_string(0x1F01) : nullptr; // GL_RENDERER
-        std::fprintf(stderr, "[boot][launcher] GL rasterizer=%s\n", device ? reinterpret_cast<const char*>(device) : "unknown");
+        std::fprintf(stderr, "[boot][launcher] GL rasterizer=%s\n",
+                     device ? reinterpret_cast<const char*>(device) : "unknown");
     }
     return renderer;
 }

@@ -25,11 +25,9 @@ const std::filesystem::path& log_directory();
 const std::filesystem::path& crash_dump_directory();
 const std::filesystem::path& support_report_directory();
 
-bool open_directory(const std::filesystem::path& directory,
-                    std::string& error);
-bool export_report(const std::string& report, std::filesystem::path& output,
-                   std::string& error);
+bool open_directory(const std::filesystem::path& directory, std::string& error);
+bool export_report(const std::string& report, std::filesystem::path& output, std::string& error);
 
 SystemSummary collect_system_summary();
 
-}  // namespace dkr::runtime::support
+} // namespace dkr::runtime::support

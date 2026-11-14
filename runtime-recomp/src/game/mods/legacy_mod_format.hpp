@@ -21,10 +21,13 @@ inline constexpr std::size_t MaxStaged = 256 * MiB;
 inline constexpr unsigned MaxEntries = 1024;
 inline constexpr unsigned Schema = 1;
 
-struct Error : std::runtime_error { using std::runtime_error::runtime_error; };
+struct Error : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 inline std::filesystem::path utf8_path(std::string_view value) {
-    if(value.find('\0')!=std::string_view::npos) throw Error("A file path contains a NUL byte.");
-    return std::filesystem::path(std::u8string(value.begin(),value.end()));
+    if (value.find('\0') != std::string_view::npos)
+        throw Error("A file path contains a NUL byte.");
+    return std::filesystem::path(std::u8string(value.begin(), value.end()));
 }
 std::string sha256(View bytes);
 // Canonical little-endian PCM hash without allocating a second song buffer.
@@ -65,9 +68,9 @@ struct Root {
     BehaviourContract behaviour;
 };
 struct CharacterRoot {
-    std::string name,content_id;
-    unsigned base_character=0,portrait=0;
-    std::array<unsigned,3> headers{};
+    std::string name, content_id;
+    unsigned base_character = 0, portrait = 0;
+    std::array<unsigned, 3> headers{};
     std::vector<std::string> blockers;
     BehaviourContract behaviour;
 };
@@ -89,10 +92,13 @@ struct Analysis {
 };
 // Asset-only mode is an explicit frozen compatibility policy for artifacts
 // prepared before the behaviour ABI. It is never an automatic failure fallback.
-Analysis analyze(View base, View target, const std::string& patch_digest, bool behaviour_enabled=true);
+Analysis analyze(View base, View target, const std::string& patch_digest, bool behaviour_enabled = true);
 std::string analysis_json(const Analysis& analysis);
 
-struct PatchInput { std::string name; Bytes data; };
+struct PatchInput {
+    std::string name;
+    Bytes data;
+};
 // ZIP member names are validated but never used as output paths. Only xdelta
 // bytes are read; bundled scripts, executables and links are never executed.
 std::vector<PatchInput> read_patch_inputs(const std::filesystem::path& source);

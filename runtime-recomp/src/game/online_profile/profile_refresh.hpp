@@ -19,7 +19,8 @@ struct ProfileRefresh {
 
     bool due(std::string_view identity, std::string_view public_key, Clock::time_point now,
              std::string_view friend_code = {}) {
-        if (identity.empty() || public_key.empty()) return false;
+        if (identity.empty() || public_key.empty())
+            return false;
         if (account != identity || key != public_key || capability != friend_code) {
             *this = {};
             account = identity;
@@ -28,12 +29,18 @@ struct ProfileRefresh {
         }
         return !pending && now >= next;
     }
-    void begin(std::uint64_t before) { mutation = before; pending = true; }
-    void settle(std::string_view identity, std::uint64_t after, std::string_view action,
-                std::string_view saved_account, std::string_view saved_key, bool busy,
-                Clock::time_point now) {
-        if (account != identity) { *this = {}; return; }
-        if (!pending || busy) return;
+    void begin(std::uint64_t before) {
+        mutation = before;
+        pending = true;
+    }
+    void settle(std::string_view identity, std::uint64_t after, std::string_view action, std::string_view saved_account,
+                std::string_view saved_key, bool busy, Clock::time_point now) {
+        if (account != identity) {
+            *this = {};
+            return;
+        }
+        if (!pending || busy)
+            return;
         pending = false;
         if (after != mutation && action == "launcher.profile" && saved_account == account && saved_key == key) {
             failures = 0;

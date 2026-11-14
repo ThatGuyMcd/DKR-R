@@ -10,11 +10,17 @@ set(hle_guard_headers_root "${DKR_RT64_SOURCE}")
 if(DKR_ENHANCED_WATER)
     set(hle_guard_headers_root "${water_stage}")
 endif()
-file(GLOB_RECURSE hle_guard_headers CONFIGURE_DEPENDS
+file(
+    GLOB_RECURSE hle_guard_headers
+    CONFIGURE_DEPENDS
     "${hle_guard_headers_root}/include/*.h"
-    "${hle_guard_headers_root}/src/common/*.h" "${hle_guard_headers_root}/src/gbi/*.h"
-    "${hle_guard_headers_root}/src/hle/*.h" "${hle_guard_headers_root}/src/render/*.h"
-    "${hle_guard_headers_root}/src/shared/*.h" "${hle_guard_headers_root}/src/include/*.h")
+    "${hle_guard_headers_root}/src/common/*.h"
+    "${hle_guard_headers_root}/src/gbi/*.h"
+    "${hle_guard_headers_root}/src/hle/*.h"
+    "${hle_guard_headers_root}/src/render/*.h"
+    "${hle_guard_headers_root}/src/shared/*.h"
+    "${hle_guard_headers_root}/src/include/*.h"
+)
 foreach(header IN LISTS hle_guard_headers)
     file(RELATIVE_PATH relative "${hle_guard_headers_root}" "${header}")
     get_filename_component(parent "${relative}" DIRECTORY)
@@ -51,8 +57,11 @@ foreach(source IN LISTS hle_guard_original_sources)
         foreach(property IN ITEMS INCLUDE_DIRECTORIES COMPILE_OPTIONS COMPILE_DEFINITIONS)
             get_source_file_property(value "${source}" TARGET_DIRECTORY rt64 ${property})
             if(value AND NOT value STREQUAL "NOTFOUND")
-                set_source_files_properties("${hle_guard_stage}/${relative}" TARGET_DIRECTORY rt64
-                    PROPERTIES ${property} "${value}")
+                set_source_files_properties(
+                    "${hle_guard_stage}/${relative}"
+                    TARGET_DIRECTORY rt64
+                    PROPERTIES ${property} "${value}"
+                )
             endif()
         endforeach()
         list(APPEND hle_guard_sources "${hle_guard_stage}/${relative}")
@@ -62,15 +71,17 @@ foreach(source IN LISTS hle_guard_original_sources)
 endforeach()
 file(READ "${hle_guard_input}/src/hle/rt64_interpreter.h" hle_guard_header)
 if(NOT hle_guard_header MATCHES "hleCommandValidator")
-    execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${hle_guard_input}"
-        COMMAND_ERROR_IS_FATAL ANY)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" init --quiet "${hle_guard_input}" COMMAND_ERROR_IS_FATAL ANY)
     foreach(mode IN ITEMS check apply)
         set(flags --recount --ignore-space-change --whitespace=error)
         if(mode STREQUAL "check")
             list(APPEND flags --check)
         endif()
-        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${hle_guard_input}"
-            apply ${flags} "${hle_guard_patch}" RESULT_VARIABLE result ERROR_VARIABLE error)
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" -C "${hle_guard_input}" apply ${flags} "${hle_guard_patch}"
+            RESULT_VARIABLE result
+            ERROR_VARIABLE error
+        )
         if(NOT result EQUAL 0)
             message(FATAL_ERROR "HLE pre-fetch guard ${mode} failed: ${error}")
         endif()
@@ -79,7 +90,11 @@ endif()
 # Fail closed if a partially prepared tree declared the member without the
 # actual pre-dereference guard. Do not silently disable the client validator.
 file(READ "${hle_guard_input}/src/hle/rt64_interpreter.cpp" hle_guard_impl)
-if(NOT hle_guard_impl MATCHES "while \\(dl != nullptr\\) \\{[\r\n ]+if \\(hleCommandValidator != nullptr && !hleCommandValidator\\(state, dl\\)\\)")
+if(
+    NOT hle_guard_impl
+        MATCHES
+        "while \\(dl != nullptr\\) \\{[\r\n ]+if \\(hleCommandValidator != nullptr && !hleCommandValidator\\(state, dl\\)\\)"
+)
     message(FATAL_ERROR "HLE command validator is not installed before opcode fetch")
 endif()
 # Avoid invalidating every ABI consumer on an unchanged configure: compose

@@ -8,7 +8,8 @@ namespace dkr::localisation {
 inline std::string save_preview(const runtime::saves::codec::SaveImage& image) {
     std::string result;
     for (std::size_t index = 0; index < image.slots.size(); ++index) {
-        if (index) result += " | ";
+        if (index)
+            result += " | ";
         const auto& slot = image.slots[index];
         const auto number = std::to_string(index + 1);
         const auto name = slot.name.empty() ? text("save.empty") : std::string_view(slot.name);

@@ -10,26 +10,27 @@
 
 static int g_fail = 0;
 
-#define CHECK(cond, ...)                         \
-    do {                                         \
-        if (!(cond)) {                           \
-            printf("  FALHOU: " __VA_ARGS__);    \
-            printf("\n");                        \
-            g_fail = 1;                          \
-        }                                        \
+#define CHECK(cond, ...)                                                                                               \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            printf("  FALHOU: " __VA_ARGS__);                                                                          \
+            printf("\n");                                                                                              \
+            g_fail = 1;                                                                                                \
+        }                                                                                                              \
     } while (0)
 
 static float wrapf(float a) {
-    while (a > 3.14159265f) a -= 6.28318531f;
-    while (a <= -3.14159265f) a += 6.28318531f;
+    while (a > 3.14159265f)
+        a -= 6.28318531f;
+    while (a <= -3.14159265f)
+        a += 6.28318531f;
     return a;
 }
 
 static int finite_out(const MCOutput* o) {
-    return isfinite(o->eye.x) && isfinite(o->eye.y) && isfinite(o->eye.z) &&
-           isfinite(o->target.x) && isfinite(o->target.y) && isfinite(o->target.z) &&
-           isfinite(o->up.x) && isfinite(o->up.y) && isfinite(o->up.z) &&
-           isfinite(o->fovDeg) && isfinite(o->yaw) && isfinite(o->pitch);
+    return isfinite(o->eye.x) && isfinite(o->eye.y) && isfinite(o->eye.z) && isfinite(o->target.x) &&
+           isfinite(o->target.y) && isfinite(o->target.z) && isfinite(o->up.x) && isfinite(o->up.y) &&
+           isfinite(o->up.z) && isfinite(o->fovDeg) && isfinite(o->yaw) && isfinite(o->pitch);
 }
 
 static float hdist(MCVec3 a, MCVec3 b) {
@@ -80,18 +81,18 @@ static void bancada_params(MCParams* p) {
 static MCInput circle_input(float t, float speed, float yawRate, float slip, int drifting) {
     MCInput in = base_input();
     float R = speed / yawRate;
-    float velYaw = yawRate * t;                  /* direção do movimento */
-    in.pos.x = R * (1.0f - cosf(velYaw));        /* começa em 0, indo para +z, virando para +x */
+    float velYaw = yawRate * t;           /* direção do movimento */
+    in.pos.x = R * (1.0f - cosf(velYaw)); /* começa em 0, indo para +z, virando para +x */
     in.pos.z = R * sinf(velYaw);
     in.vel.x = speed * sinf(velYaw);
     in.vel.z = speed * cosf(velYaw);
-    in.yaw = velYaw + slip;                      /* nariz aponta para dentro durante o drift */
+    in.yaw = velYaw + slip; /* nariz aponta para dentro durante o drift */
     in.drifting = drifting;
     return in;
 }
 
-static MCOutput run_circle_p(const MCParams* custom, float dt, float duration, float speed, float yawRate,
-                             float slip, int drifting, MCInput* lastIn) {
+static MCOutput run_circle_p(const MCParams* custom, float dt, float duration, float speed, float yawRate, float slip,
+                             int drifting, MCInput* lastIn) {
     MCParams p;
     MCState s;
     MCOutput o;
@@ -138,8 +139,10 @@ static void run_jump(const MCParams* p, float* trace, float* before) {
         }
         ModernCam_Update(&s, p, &in, dt, NULL, NULL, &o);
         CHECK(finite_out(&o), "nao finito no pulo");
-        if (i == 59) *before = o.eye.y - in.pos.y;
-        if (ta >= 0.8f && n < 36) trace[n++] = o.eye.y - in.pos.y;
+        if (i == 59)
+            *before = o.eye.y - in.pos.y;
+        if (ta >= 0.8f && n < 36)
+            trace[n++] = o.eye.y - in.pos.y;
     }
 }
 
@@ -158,8 +161,10 @@ static void run_boost(const MCParams* p, float* armBefore, float* armMax) {
         in.vel.z = 20.0f;
         in.boost = (t >= 2.0f && t < 3.5f) ? 1.0f : 0.0f;
         ModernCam_Update(&s, p, &in, dt, NULL, NULL, &o);
-        if (i == 119) *armBefore = hdist(o.eye, in.pos);
-        if (t >= 2.0f && hdist(o.eye, in.pos) > *armMax) *armMax = hdist(o.eye, in.pos);
+        if (i == 119)
+            *armBefore = hdist(o.eye, in.pos);
+        if (t >= 2.0f && hdist(o.eye, in.pos) > *armMax)
+            *armMax = hdist(o.eye, in.pos);
     }
 }
 
@@ -178,7 +183,8 @@ static float run_steer(const MCParams* p) {
         in.vel.z = 15.0f;
         in.steer = t >= 2.0f ? 1.0f : 0.0f;
         ModernCam_Update(&s, p, &in, dt, NULL, NULL, &o);
-        if (i == 119) y0 = o.yaw;
+        if (i == 119)
+            y0 = o.yaw;
     }
     return o.yaw - y0;
 }
@@ -186,7 +192,10 @@ static float run_steer(const MCParams* p) {
 /* Parede de mentira: bate na metade do braço enquanto ativa. */
 static int g_wall = 0;
 static int wall_raycast(void* user, MCVec3 from, MCVec3 to, float radius, float* hitFraction) {
-    (void)user; (void)from; (void)to; (void)radius;
+    (void)user;
+    (void)from;
+    (void)to;
+    (void)radius;
     if (g_wall) {
         *hitFraction = 0.5f;
         return 1;
@@ -250,7 +259,7 @@ int main(void) {
     /* 3. Independência de FPS */
     printf("[3] mesma curva a 20, 30, 60 e 144 fps\n");
     {
-        const float rates[4] = { 20.0f, 30.0f, 60.0f, 144.0f };
+        const float rates[4] = {20.0f, 30.0f, 60.0f, 144.0f};
         MCOutput ref, cur;
         MCInput last;
         float worst = 0.0f;
@@ -264,7 +273,8 @@ int main(void) {
             dz = cur.eye.z - ref.eye.z;
             d = sqrtf(dx * dx + dy * dy + dz * dz);
             printf("  %3.0f fps: diferenca da posicao final = %.1f cm\n", rates[k], d * 100.0f);
-            if (d > worst) worst = d;
+            if (d > worst)
+                worst = d;
         }
         CHECK(worst < 0.15f, "comportamento depende demais do FPS (%.3f m)", worst);
     }
@@ -278,8 +288,7 @@ int main(void) {
         velYaw = 0.9f * 6.0f;
         toHeading = wrapf(last.yaw - o.yaw);
         toVel = wrapf(velYaw - o.yaw);
-        printf("  nariz %.1f graus a frente da camera, movimento %.1f graus\n", toHeading * 57.2958f,
-               toVel * 57.2958f);
+        printf("  nariz %.1f graus a frente da camera, movimento %.1f graus\n", toHeading * 57.2958f, toVel * 57.2958f);
         CHECK(toHeading > 0.15f, "no drift a camera deveria mostrar a lateral do carro");
     }
 
@@ -296,7 +305,8 @@ int main(void) {
             in.yaw = (t > 1.0f && t < 2.5f) ? (t - 1.0f) * (12.566f / 1.5f) : 0.0f;
             ModernCam_Update(&s, &p, &in, dt, NULL, NULL, &o);
             CHECK(finite_out(&o), "nao finito");
-            if (fabsf(wrapf(o.yaw)) > worst) worst = fabsf(wrapf(o.yaw));
+            if (fabsf(wrapf(o.yaw)) > worst)
+                worst = fabsf(wrapf(o.yaw));
         }
         printf("  desvio maximo da camera: %.1f graus (o carro girou 720)\n", worst * 57.2958f);
         CHECK(worst < 0.5f, "camera nao deveria rodar junto com o carro");
@@ -334,9 +344,12 @@ int main(void) {
                 in.grounded = 0;
             }
             ModernCam_Update(&s, &p, &in, dt, NULL, NULL, &o);
-            if (i == 59) baseRel = o.eye.y - in.pos.y;
-            if (in.grounded == 0 && o.eye.y - in.pos.y > maxRel) maxRel = o.eye.y - in.pos.y;
-            if (in.grounded == 0 && o.eye.y - in.pos.y < minRel) minRel = o.eye.y - in.pos.y;
+            if (i == 59)
+                baseRel = o.eye.y - in.pos.y;
+            if (in.grounded == 0 && o.eye.y - in.pos.y > maxRel)
+                maxRel = o.eye.y - in.pos.y;
+            if (in.grounded == 0 && o.eye.y - in.pos.y < minRel)
+                minRel = o.eye.y - in.pos.y;
             if (ta >= 0.8f && !landed) {
                 landed = 1;
                 printf("  trauma ao aterrissar: %.2f\n", s.trauma);
@@ -364,10 +377,13 @@ int main(void) {
             ModernCam_Update(&s, &p, &in, dt, wall_raycast, NULL, &o);
             piv = s.anchor;
             piv.y += p.targetHeight;
-            if (i == 119) full = sqrtf((o.eye.x - piv.x) * (o.eye.x - piv.x) + (o.eye.y - piv.y) * (o.eye.y - piv.y) +
-                                       (o.eye.z - piv.z) * (o.eye.z - piv.z));
-            if (i == 121) hit = s.collisionDist;
-            if (i == 186) after = s.collisionDist;
+            if (i == 119)
+                full = sqrtf((o.eye.x - piv.x) * (o.eye.x - piv.x) + (o.eye.y - piv.y) * (o.eye.y - piv.y) +
+                             (o.eye.z - piv.z) * (o.eye.z - piv.z));
+            if (i == 121)
+                hit = s.collisionDist;
+            if (i == 186)
+                after = s.collisionDist;
         }
         printf("  braco livre %.2f m; ao bater: %.0f%%; 0.1 s depois de liberar: %.0f%%; final: %.0f%%\n", full,
                hit * 100.0f, after * 100.0f, s.collisionDist * 100.0f);
@@ -388,7 +404,8 @@ int main(void) {
             in.vel.z = 10.0f;
             in.stickX = t < 0.5f ? 1.0f : 0.0f;
             ModernCam_Update(&s, &p, &in, dt, NULL, NULL, &o);
-            if (i == 30) peak = s.orbitYaw;
+            if (i == 30)
+                peak = s.orbitYaw;
         }
         printf("  orbita: %.1f graus -> %.1f graus apos soltar\n", peak * 57.2958f, s.orbitYaw * 57.2958f);
         CHECK(peak > 1.2f, "orbita deveria girar com o analogico");
@@ -426,14 +443,15 @@ int main(void) {
             /* depois da parada: a ancora compensada passa um pouco do carro
                e volta; a antiga avanca o atraso inteiro de uma vez */
             if (t >= 3.0f) {
-                if (s1.anchor.z - in.pos.z > lunge1) lunge1 = s1.anchor.z - in.pos.z;
-                if (s2.anchor.z - d2 > lunge2) lunge2 = s2.anchor.z - d2;
+                if (s1.anchor.z - in.pos.z > lunge1)
+                    lunge1 = s1.anchor.z - in.pos.z;
+                if (s2.anchor.z - d2 > lunge2)
+                    lunge2 = s2.anchor.z - d2;
             }
         }
         (void)d1;
         printf("  a 20 m/s a ancora fica %.2f m atras do carro (%.2f m com posKeepUp = 0)\n", lag1, lag2);
-        printf("  parada seca: a ancora passa %.2f m do carro (com posKeepUp = 0 ela avanca %.2f m)\n", lunge1,
-               lunge2);
+        printf("  parada seca: a ancora passa %.2f m do carro (com posKeepUp = 0 ela avanca %.2f m)\n", lunge1, lunge2);
         CHECK(fabsf(lag1) < 0.1f, "a ancora deveria ficar em cima do carro");
         CHECK(lag2 > 2.0f, "sem compensacao a ancora deveria ficar para tras");
         CHECK(lunge1 < 0.7f, "a parada nao deveria fazer a ancora passar tanto do carro (%.2f m)", lunge1);
@@ -461,7 +479,7 @@ int main(void) {
         /* 11. FPS com tudo ligado */
         printf("[11] valores da bancada: mesma curva a 20, 30, 60 e 144 fps\n");
         {
-            const float rates[3] = { 20.0f, 30.0f, 60.0f };
+            const float rates[3] = {20.0f, 30.0f, 60.0f};
             MCInput last;
             MCOutput ref = run_circle_p(&on, 1.0f / 144.0f, 6.0f, 15.0f, 0.75f, 0.0f, 0, &last), cur;
             float worst = 0.0f;
@@ -469,8 +487,11 @@ int main(void) {
             for (k = 0; k < 3; ++k) {
                 float dx, dy, dz;
                 cur = run_circle_p(&on, 1.0f / rates[k], 6.0f, 15.0f, 0.75f, 0.0f, 0, &last);
-                dx = cur.eye.x - ref.eye.x; dy = cur.eye.y - ref.eye.y; dz = cur.eye.z - ref.eye.z;
-                if (sqrtf(dx * dx + dy * dy + dz * dz) > worst) worst = sqrtf(dx * dx + dy * dy + dz * dz);
+                dx = cur.eye.x - ref.eye.x;
+                dy = cur.eye.y - ref.eye.y;
+                dz = cur.eye.z - ref.eye.z;
+                if (sqrtf(dx * dx + dy * dy + dz * dz) > worst)
+                    worst = sqrtf(dx * dx + dy * dy + dz * dz);
             }
             printf("  maior diferenca: %.1f cm\n", worst * 100.0f);
             CHECK(worst < 0.15f, "melhorias dependem do FPS (%.3f m)", worst);
@@ -492,8 +513,13 @@ int main(void) {
             int k, at = 0;
             run_jump(&on, tOn, &baseOn);
             run_jump(&off, tOff, &baseOff);
-            for (k = 0; k < 36; ++k) if (tOff[k] - tOn[k] > dip) { dip = tOff[k] - tOn[k]; at = k; }
-            printf("  afundou %.2f m a mais que sem a melhoria, %.0f ms depois de tocar o chao\n", dip, (at + 1) * 1000.0f / 60.0f);
+            for (k = 0; k < 36; ++k)
+                if (tOff[k] - tOn[k] > dip) {
+                    dip = tOff[k] - tOn[k];
+                    at = k;
+                }
+            printf("  afundou %.2f m a mais que sem a melhoria, %.0f ms depois de tocar o chao\n", dip,
+                   (at + 1) * 1000.0f / 60.0f);
             CHECK(dip > 0.3f, "a camera deveria afundar ao aterrissar");
             CHECK(fabsf(tOff[35] - tOn[35]) < 0.1f, "deveria voltar ao normal em 0.6 s");
         }
@@ -521,12 +547,17 @@ int main(void) {
                 in = base_input();
                 in.pos.z = 10.0f * i * dt;
                 in.vel.z = 10.0f;
-                if (i == 30) ModernCam_AddTrauma(&s2, 1.0f);
+                if (i == 30)
+                    ModernCam_AddTrauma(&s2, 1.0f);
                 ModernCam_Update(&s1, &on, &in, dt, NULL, NULL, &o1);
                 ModernCam_Update(&s2, &on, &in, dt, NULL, NULL, &o2);
-                dx = o1.eye.x - o2.eye.x; dy = o1.eye.y - o2.eye.y; dz = o1.eye.z - o2.eye.z;
-                if (sqrtf(dx * dx + dy * dy + dz * dz) > worstEye) worstEye = sqrtf(dx * dx + dy * dy + dz * dz);
-                if (fabsf(wrapf(o1.yaw - o2.yaw)) > worstAim) worstAim = fabsf(wrapf(o1.yaw - o2.yaw));
+                dx = o1.eye.x - o2.eye.x;
+                dy = o1.eye.y - o2.eye.y;
+                dz = o1.eye.z - o2.eye.z;
+                if (sqrtf(dx * dx + dy * dy + dz * dz) > worstEye)
+                    worstEye = sqrtf(dx * dx + dy * dy + dz * dz);
+                if (fabsf(wrapf(o1.yaw - o2.yaw)) > worstAim)
+                    worstAim = fabsf(wrapf(o1.yaw - o2.yaw));
             }
             printf("  olho deslocado %.4f m; mira tremeu ate %.2f graus\n", worstEye, worstAim * 57.2958f);
             CHECK(worstEye < 1e-4f, "tremor rotacional nao deveria mover o olho");
@@ -535,8 +566,8 @@ int main(void) {
     }
 
     /* Exemplo de conversão para ângulos binários do N64 */
-    printf("[N64] yaw %.3f rad = 0x%04X, pitch %.3f rad = 0x%04X\n", o.yaw,
-           (unsigned short)ModernCam_ToBinAngle(o.yaw), o.pitch, (unsigned short)ModernCam_ToBinAngle(o.pitch));
+    printf("[N64] yaw %.3f rad = 0x%04X, pitch %.3f rad = 0x%04X\n", o.yaw, (unsigned short)ModernCam_ToBinAngle(o.yaw),
+           o.pitch, (unsigned short)ModernCam_ToBinAngle(o.pitch));
 
     printf(g_fail ? "\nALGUM TESTE FALHOU\n" : "\nTodos os testes passaram\n");
     return g_fail;

@@ -43,14 +43,14 @@ int main() {
         // Retail compact MIDI also permits explicit note-offs, held notes,
         // and velocity-zero note-offs. Preserve those in legacy imports while
         // retaining Track Lab's stricter authoring contract.
-        if(expected=="duration-zero" || expected=="note-off" || expected=="velocity-zero")
-            assert(validate_sequence(data,kRetailSequenceCapacity,nullptr,true).ok());
-        else if(expected!="ok")
-            assert(!validate_sequence(data,kRetailSequenceCapacity,nullptr,true).ok());
+        if (expected == "duration-zero" || expected == "note-off" || expected == "velocity-zero")
+            assert(validate_sequence(data, kRetailSequenceCapacity, nullptr, true).ok());
+        else if (expected != "ok")
+            assert(!validate_sequence(data, kRetailSequenceCapacity, nullptr, true).ok());
         ++cases;
         if (result.code != expected) {
-            std::fprintf(stderr, "%s: got %s, expected %s (%s)\n", name.c_str(),
-                         result.code.c_str(), expected.c_str(), result.message.c_str());
+            std::fprintf(stderr, "%s: got %s, expected %s (%s)\n", name.c_str(), result.code.c_str(), expected.c_str(),
+                         result.message.c_str());
             ++failures;
         }
         if (name == "minimal") {
@@ -73,12 +73,10 @@ int main() {
     programs.fill(true);
     assert(validate_sequence(minimal, kRetailSequenceCapacity, &programs).ok());
     programs[1] = false;
-    assert(validate_sequence(minimal, kRetailSequenceCapacity, &programs).code ==
-           "program-missing");
+    assert(validate_sequence(minimal, kRetailSequenceCapacity, &programs).code == "program-missing");
 
     // The capacity is the caller's: the ROM's own buffer, not a constant.
-    assert(validate_sequence(minimal, static_cast<std::uint32_t>(minimal.size() - 1U)).code ==
-           "too-large");
+    assert(validate_sequence(minimal, static_cast<std::uint32_t>(minimal.size() - 1U)).code == "too-large");
 
     std::printf("custom music sequence tests passed (%d fixtures)\n", cases);
     return 0;

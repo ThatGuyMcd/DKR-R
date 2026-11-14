@@ -4,14 +4,25 @@ function(dkr_add_analogue_driving_checks)
         return()
     endif()
     get_filename_component(root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../.." ABSOLUTE)
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${root}/runtime-recomp/tests/analogue_driving_tests.cpp"
-        "${root}/runtime-recomp/tests/analogue_poll_tests.cpp"
-        "${root}/runtime-recomp/tests/look_behind_tests.cpp")
+    set_property(
+        DIRECTORY
+        APPEND
+        PROPERTY
+            CMAKE_CONFIGURE_DEPENDS
+                "${root}/runtime-recomp/tests/analogue_driving_tests.cpp"
+                "${root}/runtime-recomp/tests/analogue_poll_tests.cpp"
+                "${root}/runtime-recomp/tests/look_behind_tests.cpp"
+    )
     add_executable(DKRAnalogueDrivingTests "${root}/runtime-recomp/tests/analogue_driving_tests.cpp")
     get_target_property(core_includes DKRNetplayCore INCLUDE_DIRECTORIES)
-    target_include_directories(DKRAnalogueDrivingTests PRIVATE
-        ${core_includes} "${root}/runtime-recomp/src/game" "${root}/modding/include" "${root}/patches/camera-plus/sdk")
+    target_include_directories(
+        DKRAnalogueDrivingTests
+        PRIVATE
+            ${core_includes}
+            "${root}/runtime-recomp/src/game"
+            "${root}/modding/include"
+            "${root}/patches/camera-plus/sdk"
+    )
     target_link_libraries(DKRAnalogueDrivingTests PRIVATE DKRNetplayCore)
     target_compile_features(DKRAnalogueDrivingTests PRIVATE cxx_std_20)
     if(DKR_RUNTIME_BUILD_RT64)
@@ -65,9 +76,14 @@ function(dkr_add_analogue_driving_checks)
         endif()
         if(MSVC)
             target_compile_options(DKRAnaloguePollTests PRIVATE /UNDEBUG)
-            add_custom_command(TARGET DKRAnaloguePollTests POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
-                "$<TARGET_FILE_DIR:DKRAnaloguePollTests>/SDL2.dll")
+            add_custom_command(
+                TARGET DKRAnaloguePollTests
+                POST_BUILD
+                COMMAND
+                    "${CMAKE_COMMAND}" -E copy_if_different
+                    "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/mupen64plus-win32-deps/SDL2-2.26.3/lib/x64/SDL2.dll"
+                    "$<TARGET_FILE_DIR:DKRAnaloguePollTests>/SDL2.dll"
+            )
         else()
             target_compile_options(DKRAnaloguePollTests PRIVATE -UNDEBUG)
         endif()

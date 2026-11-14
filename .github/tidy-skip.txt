@@ -5,6 +5,7 @@
 # (most of these need RT64 or generated code; see host-full-nogen in the plan).
 # Paths are repo-relative, one per line, exact match.
 modding/examples/ai-boss-difficulty/main.c
+modding/examples/analogue-driving/main.c
 modding/examples/core-boot/main.c
 modding/examples/custom-trophy-races/main.c
 modding/examples/dev-menu/main.c
@@ -29,10 +30,14 @@ runtime-recomp/src/game/camera_session.cpp
 runtime-recomp/src/game/camera_settings.cpp
 runtime-recomp/src/game/camera_shadow_kernel.c
 runtime-recomp/src/game/camera_snapshot.cpp
+runtime-recomp/src/game/controller_feedback/input_client.cpp
+runtime-recomp/src/game/controller_feedback/input_host.cpp
 runtime-recomp/src/game/custom_music.cpp
 runtime-recomp/src/game/custom_tracks.cpp
 runtime-recomp/src/game/custom_tracks_hooks.cpp
 runtime-recomp/src/game/f3ddkr_rt64.cpp
+runtime-recomp/src/game/file_picker/client.cpp
+runtime-recomp/src/game/file_picker/helper.cpp
 runtime-recomp/src/game/game_main.cpp
 runtime-recomp/src/game/game_payload.cpp
 runtime-recomp/src/game/game_payload_v77.cpp
@@ -48,6 +53,7 @@ runtime-recomp/src/game/legacy_runtime_qualification.cpp
 runtime-recomp/src/game/local_model_rt64.cpp
 runtime-recomp/src/game/local_scenery_rt64.cpp
 runtime-recomp/src/game/mod_store.cpp
+runtime-recomp/src/game/mod_store/overlay_images.cpp
 runtime-recomp/src/game/mod_store_install.cpp
 runtime-recomp/src/game/mod_store_names.cpp
 runtime-recomp/src/game/modern_camera.cpp
@@ -152,6 +158,7 @@ runtime-recomp/src/game/visual_model_kernel.c
 runtime-recomp/src/game/water_profile.cpp
 runtime-recomp/src/tools/magic_code_inspect.cpp
 runtime-recomp/src/water/WaterRayScene.cpp
+runtime-recomp/tests/analogue_poll_tests.cpp
 runtime-recomp/tests/android_imgui_rotation_tests.cpp
 runtime-recomp/tests/android_render_pass_gpu_tests.cpp
 runtime-recomp/tests/android_texture_copy_tests.cpp
@@ -173,13 +180,16 @@ runtime-recomp/tests/experimental_magic_code_tests.cpp
 runtime-recomp/tests/experimental_owned_quick_join_tests.cpp
 runtime-recomp/tests/experimental_pak_tests.cpp
 runtime-recomp/tests/experimental_process_tests.cpp
+runtime-recomp/tests/filename_native_draw_tests.cpp
 runtime-recomp/tests/generated_mips_tests.cpp
 runtime-recomp/tests/hud_basic_settings_tests.cpp
 runtime-recomp/tests/hud_editor_tests.cpp
 runtime-recomp/tests/hud_group_layout_tests.cpp
 runtime-recomp/tests/ios_event_queue_tests.cpp
+runtime-recomp/tests/launcher_gpu_tests.cpp
 runtime-recomp/tests/launcher_recovery_policy_tests.cpp
 runtime-recomp/tests/launcher_software_pixels_tests.cpp
+runtime-recomp/tests/launcher_theme_render_tests.cpp
 runtime-recomp/tests/legacy_asset_capacity_guest_tests.cpp
 runtime-recomp/tests/legacy_behaviour_tests.cpp
 runtime-recomp/tests/legacy_cache_capacity_tests.cpp
@@ -205,6 +215,7 @@ runtime-recomp/tests/legacy_mod_corpus_tests.cpp
 runtime-recomp/tests/legacy_mod_inspect.cpp
 runtime-recomp/tests/legacy_mod_library_tests.cpp
 runtime-recomp/tests/legacy_mod_management_tests.cpp
+runtime-recomp/tests/legacy_mod_sandbox_tests.cpp
 runtime-recomp/tests/legacy_mod_tests.cpp
 runtime-recomp/tests/legacy_model_cache_guest_tests.cpp
 runtime-recomp/tests/legacy_spawn_asset_type_guest_tests.cpp
@@ -213,6 +224,7 @@ runtime-recomp/tests/legacy_track_catalog_tests.cpp
 runtime-recomp/tests/legacy_track_menu_adapter_tests.cpp
 runtime-recomp/tests/legacy_track_menu_tests.cpp
 runtime-recomp/tests/live_lod_tests.cpp
+runtime-recomp/tests/look_behind_tests.cpp
 runtime-recomp/tests/memory_probe_test_entries.c
 runtime-recomp/tests/memory_stability_tests.cpp
 runtime-recomp/tests/mipmap_loading_tests.cpp
@@ -226,10 +238,13 @@ runtime-recomp/tests/online_mod_music_tests.cpp
 runtime-recomp/tests/online_mod_profile_tests.cpp
 runtime-recomp/tests/online_mod_sync_tests.cpp
 runtime-recomp/tests/online_mod_transfer_tests.cpp
+runtime-recomp/tests/online_picture_tests.cpp
+runtime-recomp/tests/online_stability_timeline_tests.cpp
 runtime-recomp/tests/optimisation_microbench.cpp
 runtime-recomp/tests/owned_mod_boundary_guest.c
 runtime-recomp/tests/owned_mod_boundary_tests.cpp
 runtime-recomp/tests/owned_revision_registry_tests.cpp
+runtime-recomp/tests/peer_relay_native_tests.cpp
 runtime-recomp/tests/replay_probe/checked_memory_tests.cpp
 runtime-recomp/tests/replay_probe/probe_audio.c
 runtime-recomp/tests/replay_probe/probe_audio.cpp

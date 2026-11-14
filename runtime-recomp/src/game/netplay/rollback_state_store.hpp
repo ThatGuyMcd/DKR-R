@@ -12,21 +12,17 @@ namespace dkr::runtime::netplay {
 // pages. A token is what GekkoNet saves; the large recomp state stays in this
 // bounded store instead of being copied into GekkoNet for every frame.
 class RollbackStateStore final {
-public:
+  public:
     static constexpr std::size_t kPageBytes = 4096U;
 
-    RollbackStateStore(std::size_t state_bytes, std::size_t capacity,
-                       std::size_t checkpoint_interval = 4U);
+    RollbackStateStore(std::size_t state_bytes, std::size_t capacity, std::size_t checkpoint_interval = 4U);
     // Explicit spare-capacity policy for independent experimental callers.
     // The existing three-argument constructor retains its original policy.
-    RollbackStateStore(std::size_t state_bytes, std::size_t capacity,
-                       std::size_t checkpoint_interval, std::size_t max_spares,
-                       bool contiguous_checkpoints = false);
+    RollbackStateStore(std::size_t state_bytes, std::size_t capacity, std::size_t checkpoint_interval,
+                       std::size_t max_spares, bool contiguous_checkpoints = false);
 
-    bool save(std::uint32_t frame, std::span<const std::uint8_t> state,
-              std::uint64_t checksum);
-    bool load(std::uint32_t frame, std::span<std::uint8_t> state,
-              std::uint64_t* checksum = nullptr) const;
+    bool save(std::uint32_t frame, std::span<const std::uint8_t> state, std::uint64_t checksum);
+    bool load(std::uint32_t frame, std::span<std::uint8_t> state, std::uint64_t* checksum = nullptr) const;
     void discard_after(std::uint32_t frame);
     // Only a caller with an irreversible confirmation cursor may use this.
     // Keep the checkpoint at/before frame and all later deltas intact.
@@ -35,15 +31,19 @@ public:
     void trim_spares(std::size_t allocation_budget);
     void clear();
 
-    std::size_t state_bytes() const { return state_bytes_; }
-    std::size_t capacity() const { return capacity_; }
+    std::size_t state_bytes() const {
+        return state_bytes_;
+    }
+    std::size_t capacity() const {
+        return capacity_;
+    }
     std::size_t memory_bytes() const;
     // Includes retained capacities/spare checkpoint entries, for callers with
     // a hard memory budget. memory_bytes() retains its existing live-byte meaning.
     std::size_t allocated_bytes() const;
     bool contains(std::uint32_t frame) const;
 
-private:
+  private:
     struct Entry {
         std::uint32_t frame = 0U;
         std::uint64_t checksum = 0U;
@@ -56,8 +56,7 @@ private:
         std::vector<std::uint8_t> page_bytes;
     };
 
-    bool reconstruct(std::size_t entry_index,
-                     std::span<std::uint8_t> state) const;
+    bool reconstruct(std::size_t entry_index, std::span<std::uint8_t> state) const;
     void ensure_front_is_checkpoint();
 
     std::size_t state_bytes_ = 0U;

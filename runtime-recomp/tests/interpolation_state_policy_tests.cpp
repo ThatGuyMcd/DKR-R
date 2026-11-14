@@ -3,8 +3,8 @@
 #include <cassert>
 #include <cstdio>
 
-using dkr::runtime::interpolation::GroupState;
 using dkr::runtime::interpolation::effective_tile_interpolation;
+using dkr::runtime::interpolation::GroupState;
 using dkr::runtime::interpolation::kAspectAdjustScopeMode;
 using dkr::runtime::interpolation::kAspectOriginalScopeMode;
 using dkr::runtime::interpolation::kBillboardScopeMode;

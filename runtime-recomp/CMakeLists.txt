@@ -2672,20 +2672,33 @@ if(BUILD_TESTING)
             endif()
             add_test(NAME DKRTrackSelectNative${revision} COMMAND DKRTrackSelectNative${revision}Tests)
             if(EXISTS "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/filename_symbols.hpp")
-                add_executable(DKRFilenameNative${revision}Tests tests/filename_native_draw_tests.cpp
-                    "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/filename_render.c")
+                add_executable(
+                    DKRFilenameNative${revision}Tests
+                    tests/filename_native_draw_tests.cpp
+                    "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/filename_render.c"
+                )
                 target_compile_features(DKRFilenameNative${revision}Tests PRIVATE cxx_std_20)
                 target_compile_definitions(DKRFilenameNative${revision}Tests PRIVATE DKR_TEST_REVISION=${revision})
-                target_include_directories(DKRFilenameNative${revision}Tests PRIVATE src/game
-                    "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}"
-                    "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include")
+                target_include_directories(
+                    DKRFilenameNative${revision}Tests
+                    PRIVATE
+                        src/game
+                        "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}"
+                        "${DKRPORT_ROOT}/extern/n64-modern-runtime/N64Recomp/include"
+                )
                 if(NOT MSVC)
-                    target_compile_options(DKRFilenameNative${revision}Tests PRIVATE
-                        $<$<COMPILE_LANGUAGE:C>:-Wno-implicit-function-declaration>)
+                    target_compile_options(
+                        DKRFilenameNative${revision}Tests
+                        PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-implicit-function-declaration>
+                    )
                     target_link_libraries(DKRFilenameNative${revision}Tests PRIVATE m)
                 endif()
-                add_test(NAME DKRFilenameNative${revision} COMMAND DKRFilenameNative${revision}Tests
-                    "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/filename-data.bin")
+                add_test(
+                    NAME DKRFilenameNative${revision}
+                    COMMAND
+                        DKRFilenameNative${revision}Tests
+                        "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/filename-data.bin"
+                )
             endif()
         endforeach()
     endif()

@@ -4,15 +4,20 @@ set(_dkr_required_inputs
     n64-modern-runtime/N64Recomp/include/recomp.h
     n64-modern-runtime/N64Recomp/lib/fmt/CMakeLists.txt
     gekkonet/GekkoLib/CMakeLists.txt
-    monocypher/src/monocypher.c)
+    monocypher/src/monocypher.c
+)
 if(DKR_RUNTIME_BUILD_RT64 OR (BUILD_TESTING AND NOT ANDROID))
     list(APPEND _dkr_required_inputs rt64/src/contrib/hlslpp/include/hlsl++.h)
 endif()
 if(DKR_NETPLAY_WEBRTC)
-    list(APPEND _dkr_required_inputs
-        libdatachannel/CMakeLists.txt libdatachannel/deps/libjuice/CMakeLists.txt
+    list(
+        APPEND _dkr_required_inputs
+        libdatachannel/CMakeLists.txt
+        libdatachannel/deps/libjuice/CMakeLists.txt
         libdatachannel/deps/json/CMakeLists.txt
-        libdatachannel/deps/plog/CMakeLists.txt mbedtls/CMakeLists.txt)
+        libdatachannel/deps/plog/CMakeLists.txt
+        mbedtls/CMakeLists.txt
+    )
 endif()
 if(DKR_RUNTIME_BUILD_RT64)
     list(APPEND _dkr_required_inputs rt64/CMakeLists.txt)
@@ -28,11 +33,13 @@ foreach(input IN LISTS _dkr_required_inputs)
 endforeach()
 if(_dkr_missing_inputs)
     list(JOIN _dkr_missing_inputs "\n" _dkr_missing_text)
-    message(FATAL_ERROR
+    message(
+        FATAL_ERROR
         "Prepared dependencies are incomplete at ${DKR_DEPENDENCIES_DIR}:\n${_dkr_missing_text}\n"
         "Run scripts/bootstrap_dependencies.py from the repository root (see --help), "
         "or set DKR_DEPENDENCIES_DIR to a complete prepared extern directory. "
-        "CMake never downloads or edits dependency checkouts.")
+        "CMake never downloads or edits dependency checkouts."
+    )
 endif()
 if(BUILD_TESTING)
     # Python tooling tests run on the host even in an Android configuration.

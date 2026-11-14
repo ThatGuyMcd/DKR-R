@@ -46,8 +46,7 @@ std::uint64_t checksum(const State& state) {
 void advance(State& state, const Input* inputs) {
     for (std::size_t player = 0U; player < 2U; ++player) {
         state.heading[player] += inputs[player].steering;
-        state.position[player] += inputs[player].throttle * 8 +
-                                  state.heading[player] / 16;
+        state.position[player] += inputs[player].throttle * 8 + state.heading[player] / 16;
     }
     ++state.ticks;
 }
@@ -55,8 +54,7 @@ void advance(State& state, const Input* inputs) {
 Input input_for(std::uint32_t tick, std::size_t player) {
     return {
         static_cast<std::int16_t>(40 + ((tick + player * 7U) % 13U)),
-        static_cast<std::int16_t>(
-            static_cast<int>((tick * (player + 3U)) % 19U) - 9),
+        static_cast<std::int16_t>(static_cast<int>((tick * (player + 3U)) % 19U) - 9),
     };
 }
 
@@ -86,8 +84,7 @@ int main() {
     constexpr std::uint32_t kTicks = 180U;
 
     for (std::uint32_t tick = 0U; tick < kTicks; ++tick) {
-        std::array<Input, 2> authored{
-            input_for(tick, 0U), input_for(tick, 1U)};
+        std::array<Input, 2> authored{input_for(tick, 0U), input_for(tick, 1U)};
         for (int player = 0; player < 2; ++player) {
             gekko_add_local_input(session, player, &authored[player]);
         }
@@ -102,36 +99,31 @@ int main() {
                 assert(event->data.save.frame >= -1);
                 std::memcpy(capture.data(), &state, sizeof(state));
                 const std::uint64_t hash = checksum(state);
-                const std::uint32_t storage_frame =
-                    static_cast<std::uint32_t>(event->data.save.frame + 1);
+                const std::uint32_t storage_frame = static_cast<std::uint32_t>(event->data.save.frame + 1);
                 assert(snapshots.save(storage_frame, capture, hash));
                 const Token token{kMagic, hash, event->data.save.frame, 0U};
                 std::memcpy(event->data.save.state, &token, sizeof(token));
                 *event->data.save.state_len = sizeof(token);
-                *event->data.save.checksum = static_cast<std::uint32_t>(
-                    hash ^ (hash >> 32U));
+                *event->data.save.checksum = static_cast<std::uint32_t>(hash ^ (hash >> 32U));
             } else if (event->type == GekkoLoadEvent) {
                 assert(event->data.load.state_len == sizeof(Token));
                 Token token{};
                 std::memcpy(&token, event->data.load.state, sizeof(token));
                 assert(token.magic == kMagic && token.frame >= -1);
                 std::uint64_t stored_hash = 0U;
-                const std::uint32_t storage_frame =
-                    static_cast<std::uint32_t>(token.frame + 1);
+                const std::uint32_t storage_frame = static_cast<std::uint32_t>(token.frame + 1);
                 assert(snapshots.load(storage_frame, restore, &stored_hash));
                 assert(stored_hash == token.checksum);
                 std::memcpy(&state, restore.data(), sizeof(state));
                 snapshots.discard_after(storage_frame);
             } else if (event->type == GekkoAdvanceEvent) {
                 assert(event->data.adv.input_len == sizeof(Input) * 2U);
-                advance(state, reinterpret_cast<const Input*>(
-                                   event->data.adv.inputs));
+                advance(state, reinterpret_cast<const Input*>(event->data.adv.inputs));
             }
         }
 
         int session_count = 0;
-        GekkoSessionEvent** session_events =
-            gekko_session_events(session, &session_count);
+        GekkoSessionEvent** session_events = gekko_session_events(session, &session_count);
         for (int index = 0; index < session_count; ++index) {
             assert(session_events[index] != nullptr);
             assert(session_events[index]->type != GekkoDesyncDetected);

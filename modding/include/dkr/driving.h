@@ -11,11 +11,18 @@ extern "C" {
 typedef struct DkrDrivingInput {
     DkrU32 api, size, flags, accelerator, brake;
 } DkrDrivingInput;
-DKR_IMPORT int dkr2_driving_input(DkrU32 player,DkrDrivingInput* output) {(void)player;(void)output;return -1;}
+DKR_IMPORT int dkr2_driving_input(DkrU32 player, DkrDrivingInput* output) {
+    (void)player;
+    (void)output;
+    return -1;
+}
 /* Request native effort caps for this tick using that exact recorded sample.
  * Call from on_frame. Native coast, boosts and control restrictions retain
  * ownership; CPU/boss/special vehicles are not modified. */
-DKR_IMPORT int dkr2_driving_apply(DkrU32 player) {(void)player;return -1;}
+DKR_IMPORT int dkr2_driving_apply(DkrU32 player) {
+    (void)player;
+    return -1;
+}
 #ifdef __cplusplus
 }
 #endif

@@ -44,9 +44,9 @@ struct PackInfo {
     std::int64_t imported_at_unix_seconds = 0;
     std::string detail;
     Origin origin = Origin::User;
-    std::string owner_track_id;   // custom track id, when origin == TrackPack
-    std::string texture_digest;   // digest shared with the track, TrackPack only
-    std::size_t priority = 0U;    // 1 is highest; assigned to every installed pack
+    std::string owner_track_id; // custom track id, when origin == TrackPack
+    std::string texture_digest; // digest shared with the track, TrackPack only
+    std::size_t priority = 0U;  // 1 is highest; assigned to every installed pack
 };
 
 struct ImportProgress {
@@ -84,8 +84,7 @@ struct TrackPackOwner {
 };
 
 bool import_archive(const std::filesystem::path& source, std::string& status,
-                    const ImportProgressCallback& progress = {},
-                    const TrackPackOwner* owner = nullptr);
+                    const ImportProgressCallback& progress = {}, const TrackPackOwner* owner = nullptr);
 
 // What the browser filter and the Track Lab status line need: whether this
 // track's HD pack is installed, enabled, and from the export the track's
@@ -96,8 +95,7 @@ struct TrackPackState {
     bool digest_matches = false;
     std::string pack_id;
 };
-TrackPackState track_pack_state(const std::string& track_id,
-                                const std::string& expected_digest);
+TrackPackState track_pack_state(const std::string& track_id, const std::string& expected_digest);
 
 // Permanently removes the TrackPack filed against `track_id`, if any. For use
 // when a custom track is deleted, so its pack does not linger enabled and

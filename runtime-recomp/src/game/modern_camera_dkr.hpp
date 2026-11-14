@@ -44,8 +44,8 @@ constexpr double from_binary_angle(std::int16_t angle) {
 }
 
 constexpr std::int16_t add_angles(std::int16_t a, std::int16_t b) {
-    return static_cast<std::int16_t>(static_cast<std::uint16_t>(
-        static_cast<std::uint16_t>(a) + static_cast<std::uint16_t>(b)));
+    return static_cast<std::int16_t>(
+        static_cast<std::uint16_t>(static_cast<std::uint16_t>(a) + static_cast<std::uint16_t>(b)));
 }
 
 // A DKR follow camera with yaw c sits at pivot + d*(sin c, -cos c) and looks
@@ -206,8 +206,23 @@ inline MCParams dkr_params(std::uint32_t layout) {
 // ------------------------------------------------------------------ tuning
 
 enum class TuningGroup : std::uint8_t {
-    Framing, Direction, YawSpring, Follow, Terrain, LookAhead, Fov, Roll, Orbit, Collision,
-    Shake, Hits, SteerLead, PosSpring, LandingDip, BoostKick, ShakeStyle,
+    Framing,
+    Direction,
+    YawSpring,
+    Follow,
+    Terrain,
+    LookAhead,
+    Fov,
+    Roll,
+    Orbit,
+    Collision,
+    Shake,
+    Hits,
+    SteerLead,
+    PosSpring,
+    LandingDip,
+    BoostKick,
+    ShakeStyle,
 };
 
 // One tunable value. The key is the MCParams member name (and the
@@ -239,17 +254,24 @@ inline constexpr std::array<TuningField, 60> kTuningFields{{
     {"zoomSharpness", &MCParams::zoomSharpness, TuningGroup::Framing, "Zoom speed", 0.2F, 8.0F, "/s", 1},
     {"velocityAlign", &MCParams::velocityAlign, TuningGroup::Direction, "Follows the motion", 0.0F, 1.0F, "", 2},
     {"driftAlign", &MCParams::driftAlign, TuningGroup::Direction, "Follows the motion in a drift", 0.0F, 1.0F, "", 2},
-    {"driftLead", &MCParams::driftLead, TuningGroup::Direction, "Turns into the drift", -25.0F, 25.0F, "\xC2\xB0", 1, true},
-    {"spinFollowSpeed", &MCParams::spinFollowSpeed, TuningGroup::Direction, "In a spin, follows the motion above", 0.0F, 20.0F, "m/s", 1},
+    {"driftLead", &MCParams::driftLead, TuningGroup::Direction, "Turns into the drift", -25.0F, 25.0F, "\xC2\xB0", 1,
+     true},
+    {"spinFollowSpeed", &MCParams::spinFollowSpeed, TuningGroup::Direction, "In a spin, follows the motion above", 0.0F,
+     20.0F, "m/s", 1},
     {"minAlignSpeed", &MCParams::minAlignSpeed, TuningGroup::Direction, "Minimum speed to align", 0.0F, 5.0F, "m/s", 1},
-    {"alignSharpness", &MCParams::alignSharpness, TuningGroup::Direction, "Speed of the alignment", 0.5F, 15.0F, "/s", 1},
+    {"alignSharpness", &MCParams::alignSharpness, TuningGroup::Direction, "Speed of the alignment", 0.5F, 15.0F, "/s",
+     1},
     {"yawFreq", &MCParams::yawFreq, TuningGroup::YawSpring, "Stiffness", 0.2F, 6.0F, "Hz", 2},
-    {"yawFreqSpeedBoost", &MCParams::yawFreqSpeedBoost, TuningGroup::YawSpring, "Extra stiffness at top speed", 0.0F, 3.0F, "Hz", 2},
+    {"yawFreqSpeedBoost", &MCParams::yawFreqSpeedBoost, TuningGroup::YawSpring, "Extra stiffness at top speed", 0.0F,
+     3.0F, "Hz", 2},
     {"yawDamping", &MCParams::yawDamping, TuningGroup::YawSpring, "Damping (below 1 sways)", 0.2F, 1.5F, "", 2},
-    {"yawKeepUp", &MCParams::yawKeepUp, TuningGroup::YawSpring, "Keeps up in a steady corner (0 lags)", 0.0F, 1.0F, "", 2},
+    {"yawKeepUp", &MCParams::yawKeepUp, TuningGroup::YawSpring, "Keeps up in a steady corner (0 lags)", 0.0F, 1.0F, "",
+     2},
     {"posSharpness", &MCParams::posSharpness, TuningGroup::Follow, "Horizontal", 1.0F, 40.0F, "/s", 1},
-    {"heightSharpness", &MCParams::heightSharpness, TuningGroup::Follow, "Vertical on the ground", 0.5F, 30.0F, "/s", 1},
-    {"airHeightSharpness", &MCParams::airHeightSharpness, TuningGroup::Follow, "Vertical in the air", 0.2F, 20.0F, "/s", 1},
+    {"heightSharpness", &MCParams::heightSharpness, TuningGroup::Follow, "Vertical on the ground", 0.5F, 30.0F, "/s",
+     1},
+    {"airHeightSharpness", &MCParams::airHeightSharpness, TuningGroup::Follow, "Vertical in the air", 0.2F, 20.0F, "/s",
+     1},
     {"maxVerticalLag", &MCParams::maxVerticalLag, TuningGroup::Follow, "Maximum vertical lag", 0.2F, 6.0F, "m", 1},
     {"slopeFollow", &MCParams::slopeFollow, TuningGroup::Terrain, "Follows the slope", 0.0F, 1.0F, "", 2},
     {"slopeSharpness", &MCParams::slopeSharpness, TuningGroup::Terrain, "Speed", 0.5F, 15.0F, "/s", 1},
@@ -261,7 +283,8 @@ inline constexpr std::array<TuningField, 60> kTuningFields{{
     {"fovBoost", &MCParams::fovBoost, TuningGroup::Fov, "Extra on a boost", 0.0F, 25.0F, "\xC2\xB0", 1},
     {"boostFovAttack", &MCParams::boostFovAttack, TuningGroup::Fov, "Boost: opening", 0.5F, 30.0F, "/s", 1},
     {"boostFovRelease", &MCParams::boostFovRelease, TuningGroup::Fov, "Boost: return", 0.2F, 10.0F, "/s", 1},
-    {"rollFromYawRate", &MCParams::rollFromYawRate, TuningGroup::Roll, "Roll per turn (negative inverts)", -0.1F, 0.1F, "", 3},
+    {"rollFromYawRate", &MCParams::rollFromYawRate, TuningGroup::Roll, "Roll per turn (negative inverts)", -0.1F, 0.1F,
+     "", 3},
     {"rollMax", &MCParams::rollMax, TuningGroup::Roll, "Maximum roll", 0.0F, 12.0F, "\xC2\xB0", 2, true},
     {"rollSharpness", &MCParams::rollSharpness, TuningGroup::Roll, "Speed", 0.5F, 15.0F, "/s", 1},
     {"orbitSpeedYaw", &MCParams::orbitSpeedYaw, TuningGroup::Orbit, "Horizontal speed", 0.5F, 6.0F, "rad/s", 1},
@@ -270,24 +293,27 @@ inline constexpr std::array<TuningField, 60> kTuningFields{{
     {"recenterSharpness", &MCParams::recenterSharpness, TuningGroup::Orbit, "Recentring speed", 0.2F, 10.0F, "/s", 1},
     {"recenterEase", nullptr, TuningGroup::Orbit, "Recentring builds up over", 0.0F, 3.0F, "s", 1, false,
      &Tuning::recenterEase},
-    {"mouseOrbit", nullptr, TuningGroup::Orbit, "Mouse, 0 = off", 0.0F, 90.0F,
-     "\xC2\xB0/100 px", 0, false, &Tuning::mouseOrbit},
-    {"collisionReleaseSharpness", &MCParams::collisionReleaseSharpness, TuningGroup::Collision, "Return after a wall", 0.5F, 20.0F, "/s", 1},
+    {"mouseOrbit", nullptr, TuningGroup::Orbit, "Mouse, 0 = off", 0.0F, 90.0F, "\xC2\xB0/100 px", 0, false,
+     &Tuning::mouseOrbit},
+    {"collisionReleaseSharpness", &MCParams::collisionReleaseSharpness, TuningGroup::Collision, "Return after a wall",
+     0.5F, 20.0F, "/s", 1},
     {"traumaDecay", &MCParams::traumaDecay, TuningGroup::Shake, "Decay", 0.2F, 5.0F, "/s", 1},
     {"boostTrauma", &MCParams::boostTrauma, TuningGroup::Shake, "On a boost", 0.0F, 1.0F, "", 2},
     {"landingTrauma", &MCParams::landingTrauma, TuningGroup::Shake, "On landing", 0.0F, 1.0F, "", 2},
-    {"landingSpeedForMax", &MCParams::landingSpeedForMax, TuningGroup::Shake, "Fall speed for full shake", 2.0F, 25.0F, "m/s", 1},
+    {"landingSpeedForMax", &MCParams::landingSpeedForMax, TuningGroup::Shake, "Fall speed for full shake", 2.0F, 25.0F,
+     "m/s", 1},
     {"retailShake", nullptr, TuningGroup::Shake, "Game hits and explosions", 0.0F, 2.0F, "x", 2, false,
      &Tuning::retailShake},
     {"shakeFreq", &MCParams::shakeFreq, TuningGroup::Shake, "Frequency", 2.0F, 40.0F, "Hz", 1},
     {"shakeMaxAngle", &MCParams::shakeMaxAngle, TuningGroup::Shake, "Maximum angle", 0.0F, 8.0F, "\xC2\xB0", 2, true},
     {"shakeMaxOffset", &MCParams::shakeMaxOffset, TuningGroup::Shake, "Maximum offset", 0.0F, 0.5F, "m", 2},
-    {"hitReaction", nullptr, TuningGroup::Hits, "Reaction to hits (0 = calm, 100 = raw)", 0.0F, 100.0F, "%",
-     0, false, &Tuning::hitReaction},
+    {"hitReaction", nullptr, TuningGroup::Hits, "Reaction to hits (0 = calm, 100 = raw)", 0.0F, 100.0F, "%", 0, false,
+     &Tuning::hitReaction},
     {"steerLead", &MCParams::steerLead, TuningGroup::SteerLead, "Lead angle", 0.0F, 30.0F, "\xC2\xB0", 1, true},
     {"posFreq", &MCParams::posFreq, TuningGroup::PosSpring, "Stiffness", 0.5F, 8.0F, "Hz", 2},
     {"posDamping", &MCParams::posDamping, TuningGroup::PosSpring, "Damping", 0.2F, 1.5F, "", 2},
-    {"posKeepUp", &MCParams::posKeepUp, TuningGroup::PosSpring, "Keeps up at speed (0 trails behind)", 0.0F, 1.0F, "", 2},
+    {"posKeepUp", &MCParams::posKeepUp, TuningGroup::PosSpring, "Keeps up at speed (0 trails behind)", 0.0F, 1.0F, "",
+     2},
     {"landingDip", &MCParams::landingDip, TuningGroup::LandingDip, "Depth", 0.0F, 2.0F, "m", 2},
     {"dipFreq", &MCParams::dipFreq, TuningGroup::LandingDip, "Stiffness", 0.5F, 8.0F, "Hz", 1},
     {"dipDamping", &MCParams::dipDamping, TuningGroup::LandingDip, "Damping", 0.1F, 1.2F, "", 2},
@@ -343,7 +369,8 @@ inline std::string format_float(float value) {
     char text[32];
     for (int digits = 1; digits <= 9; ++digits) {
         std::snprintf(text, sizeof(text), "%.*g", digits, static_cast<double>(value));
-        if (std::strtof(text, nullptr) == value) break;
+        if (std::strtof(text, nullptr) == value)
+            break;
     }
     return text;
 }
@@ -370,8 +397,8 @@ inline std::string serialize_tuning(const Tuning& tuning) {
 // speed has to come from distMax instead.
 inline float legacy_position_lag(const MCParams& p) {
     const float lag_per_speed = p.enablePosSpring != 0
-        ? 2.0F * p.posDamping / (2.0F * static_cast<float>(kPi) * std::max(p.posFreq, 0.1F))
-        : 1.0F / std::max(p.posSharpness, 0.1F);
+                                    ? 2.0F * p.posDamping / (2.0F * static_cast<float>(kPi) * std::max(p.posFreq, 0.1F))
+                                    : 1.0F / std::max(p.posSharpness, 0.1F);
     return lag_per_speed * p.speedForMax;
 }
 
@@ -417,31 +444,39 @@ inline Tuning parse_tuning(std::string_view text, bool* migrated = nullptr) {
         const std::size_t end = rest.find('\n');
         std::string_view line = rest.substr(0, end);
         rest = end == std::string_view::npos ? std::string_view{} : rest.substr(end + 1);
-        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.remove_suffix(1);
-        if (line.substr(0, 8) == "version=") version = std::atoi(std::string(line.substr(8)).c_str());
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+            line.remove_suffix(1);
+        if (line.substr(0, 8) == "version=")
+            version = std::atoi(std::string(line.substr(8)).c_str());
     }
     const bool legacy = version < kTuningVersion;
-    if (migrated != nullptr) *migrated = legacy;
+    if (migrated != nullptr)
+        *migrated = legacy;
     Tuning tuning = legacy ? legacy_default_tuning() : default_tuning();
     while (!text.empty()) {
         const std::size_t end = text.find('\n');
         std::string_view line = text.substr(0, end);
         text = end == std::string_view::npos ? std::string_view{} : text.substr(end + 1);
-        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.remove_suffix(1);
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' '))
+            line.remove_suffix(1);
         const std::size_t equals = line.find('=');
-        if (line.empty() || line.front() == '#' || equals == std::string_view::npos) continue;
+        if (line.empty() || line.front() == '#' || equals == std::string_view::npos)
+            continue;
         const std::string_view key = line.substr(0, equals);
         const std::string value(line.substr(equals + 1));
         char* parsed_end = nullptr;
         const float number = std::strtof(value.c_str(), &parsed_end);
-        if (parsed_end == value.c_str() || !std::isfinite(number)) continue;
+        if (parsed_end == value.c_str() || !std::isfinite(number))
+            continue;
         for (const TuningField& field : kTuningFields) {
-            if (key != field.key) continue;
+            if (key != field.key)
+                continue;
             const float scale = field.degrees ? static_cast<float>(kPi / 180.0) : 1.0F;
             field_value(tuning, field) = std::clamp(number, field.minimum * scale, field.maximum * scale);
         }
         for (const TuningFeature& feature : kTuningFeatures) {
-            if (key == feature.key) tuning.params.*feature.member = number != 0.0F ? 1 : 0;
+            if (key == feature.key)
+                tuning.params.*feature.member = number != 0.0F ? 1 : 0;
         }
     }
     return legacy ? migrate_legacy_tuning(tuning) : tuning;
@@ -455,7 +490,8 @@ inline std::string tuning_code(const Tuning& tuning) {
     std::string text = "// Modern camera tuning from the in-game panel (metres).\n";
     const auto number = [](float value) {
         std::string literal = format_float(value);
-        if (literal.find_first_of(".e") == std::string::npos) literal += ".0";
+        if (literal.find_first_of(".e") == std::string::npos)
+            literal += ".0";
         return literal + "F";
     };
     const Tuning shipped{};
@@ -467,7 +503,8 @@ inline std::string tuning_code(const Tuning& tuning) {
             }
             continue;
         }
-        if (value == base.*field.member) continue;
+        if (value == base.*field.member)
+            continue;
         text += std::string("p.") + field.key + " = " + number(value) + ";";
         if (field.degrees) {
             char degrees[32];
@@ -478,7 +515,8 @@ inline std::string tuning_code(const Tuning& tuning) {
     }
     for (const TuningFeature& feature : kTuningFeatures) {
         const int value = tuning.params.*feature.member != 0 ? 1 : 0;
-        if (value != base.*feature.member) text += std::string("p.") + feature.key + " = " + std::to_string(value) + ";\n";
+        if (value != base.*feature.member)
+            text += std::string("p.") + feature.key + " = " + std::to_string(value) + ";\n";
     }
     return text;
 }
@@ -592,8 +630,10 @@ struct TuningPreset {
 
 inline constexpr std::array<TuningPreset, 6> kTuningPresets{{
     {"DKR-R", "The tuning DKR-R ships (the Bancada ModernCam export).", default_tuning},
-    {"Comfort", "Steady for motion-sensitive players: no roll, shake, FOV pumping, landing dip or "
-                "boost kick, and a firm camera that does not sway.", comfort_tuning},
+    {"Comfort",
+     "Steady for motion-sensitive players: no roll, shake, FOV pumping, landing dip or "
+     "boost kick, and a firm camera that does not sway.",
+     comfort_tuning},
     {"Rigid N64", "Locked behind the racer at the retail framing, to compare against.", rigid_tuning},
     {"Kart style", "Turns into the corner in a drift.", kart_tuning},
     {"Cinematic", "Looser, with more sway and roll.", cinematic_tuning},
@@ -674,15 +714,14 @@ struct HitInput {
     float heading = 0.0F;
 };
 
-inline HitInput hit_steady_input(MCVec3 velocity, float heading, float dt, BumpGuard& guard,
-                                 const HitTiming& timing) {
+inline HitInput hit_steady_input(MCVec3 velocity, float heading, float dt, BumpGuard& guard, const HitTiming& timing) {
     const float flat = std::hypot(velocity.x, velocity.z);
     bool bounced = false;
     if (flat > kBumpSpeed) {
         const float x = velocity.x / flat, z = velocity.z / flat;
         if (guard.motion_x != 0.0F || guard.motion_z != 0.0F) {
-            const float turn = std::fabs(std::atan2(guard.motion_x * z - guard.motion_z * x,
-                                                    guard.motion_x * x + guard.motion_z * z));
+            const float turn =
+                std::fabs(std::atan2(guard.motion_x * z - guard.motion_z * x, guard.motion_x * x + guard.motion_z * z));
             bounced = turn > std::max(kBumpMinimumTurn, kBumpTurnRate * dt);
         }
         guard.motion_x = x;
@@ -698,10 +737,11 @@ inline HitInput hit_steady_input(MCVec3 velocity, float heading, float dt, BumpG
             guard.count = i;
             break;
         }
-        if (fastest == nullptr || guard.recent[i].speed > fastest->speed) fastest = &guard.recent[i];
+        if (fastest == nullptr || guard.recent[i].speed > fastest->speed)
+            fastest = &guard.recent[i];
     }
-    const bool stopped = fastest != nullptr && fastest->speed - flat > kStopDrop &&
-        flat < fastest->speed * (1.0F - kStopFraction);
+    const bool stopped =
+        fastest != nullptr && fastest->speed - flat > kStopDrop && flat < fastest->speed * (1.0F - kStopFraction);
     const float nose_x = std::sin(heading), nose_z = std::cos(heading);
     const float forward = velocity.x * nose_x + velocity.z * nose_z;
     const float side = velocity.x * nose_z - velocity.z * nose_x;
@@ -747,7 +787,8 @@ inline HitInput hit_steady_input(MCVec3 velocity, float heading, float dt, BumpG
         guard.count = 0U; // so the same stop is not read again
     } else {
         guard.count = std::min(guard.count + 1U, guard.recent.size());
-        for (std::size_t i = guard.count - 1U; i > 0U; --i) guard.recent[i] = guard.recent[i - 1U];
+        for (std::size_t i = guard.count - 1U; i > 0U; --i)
+            guard.recent[i] = guard.recent[i - 1U];
         guard.recent[0] = BumpSample{flat, forward, side, 0.0F};
     }
     // The nose, through a lag that shrinks to nothing as the hit eases out.
@@ -760,7 +801,8 @@ inline HitInput hit_steady_input(MCVec3 velocity, float heading, float dt, BumpG
             2.0 * kPi));
     }
     guard.started = true;
-    if (guard.blend <= 0.0F) return HitInput{velocity, guard.heading};
+    if (guard.blend <= 0.0F)
+        return HitInput{velocity, guard.heading};
     // Mixed in the frame of the nose modern_cam is given.
     const float given_x = std::sin(guard.heading), given_z = std::cos(guard.heading);
     const float measured_forward = velocity.x * given_x + velocity.z * given_z;
@@ -794,7 +836,8 @@ inline MCParams hit_step_params(const MCParams& params, const BumpGuard& guard) 
 // instead, so the camera drifts back rather than snapping into motion.
 // idle is the orbit's idle time at the end of this step.
 inline float eased_recenter_sharpness(float sharpness, float idle, float delay, float ease) {
-    if (ease <= 0.0F) return sharpness;
+    if (ease <= 0.0F)
+        return sharpness;
     const float t = std::clamp((idle - delay) / ease, 0.0F, 1.0F);
     return sharpness * t * t * (3.0F - 2.0F * t);
 }

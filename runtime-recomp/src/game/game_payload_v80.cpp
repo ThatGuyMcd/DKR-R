@@ -1,5 +1,5 @@
 #include "game_payload.hpp"
-extern "C" void dkr_track_select_background_cover(std::uint8_t*,recomp_context*);
+extern "C" void dkr_track_select_background_cover(std::uint8_t*, recomp_context*);
 
 #include "funcs.h"
 #include "librecomp/overlays.hpp"
@@ -56,8 +56,8 @@ const dkr::runtime::GamePayload& dkr::runtime::payload_v80() {
         .menu_text_width = get_text_width,
         .menu_view_matrix = get_camera_matrix,
         .menu_projection = get_projection_matrix_s16,
-    .menu_material_set = material_set,
-    .menu_background_cover = dkr_track_select_background_cover,
+        .menu_material_set = material_set,
+        .menu_background_cover = dkr_track_select_background_cover,
         .filtered_cheats = get_filtered_cheats,
         .stage_spawn = spawn_object,
         .stage_free = free_object,

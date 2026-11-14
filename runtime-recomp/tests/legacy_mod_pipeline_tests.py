@@ -259,9 +259,9 @@ class PipelineTests(unittest.TestCase):
         source = (ROOT / "runtime-recomp/src/game/runtime_ui.cpp").read_text()
         policy = (ROOT / "runtime-recomp/src/game/library_ui/policy.hpp").read_text()
         # The walk order and the Mod Library page belong to the library UI policy.
-        self.assertIn("constexpr auto kSidebarOrder=dkr::library_ui::SidebarOrder;", source)
-        self.assertIn("constexpr int kPageModLibrary = dkr::library_ui::LibraryPage;", source)
-        library_page = int(re.search(r"\bLibraryPage=(\d+)", policy).group(1))
+        self.assertRegex(source, r"constexpr auto kSidebarOrder\s*=\s*dkr::library_ui::SidebarOrder;")
+        self.assertRegex(source, r"constexpr int kPageModLibrary\s*=\s*dkr::library_ui::LibraryPage;")
+        library_page = int(re.search(r"\bLibraryPage\s*=\s*(\d+)", policy).group(1))
         pages = {name: int(value) for name, value in re.findall(r"constexpr int (kPage\w+) = (\d+);", source)}
         pages["kPageModLibrary"] = library_page
         order = re.search(r"\bSidebarOrder\{([\w,\s]+)\}", policy).group(1)

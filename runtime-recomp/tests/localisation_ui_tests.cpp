@@ -22,9 +22,9 @@ int main() {
         int width = 0, height = 0;
         io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
         assert(pixels && width > 0 && height > 0);
-        const auto glyph_ranges=ui::fallback_ranges();
-        for(std::size_t i=0;glyph_ranges[i];i+=2)
-            for(unsigned code=glyph_ranges[i];code<=glyph_ranges[i+1];++code)
+        const auto glyph_ranges = ui::fallback_ranges();
+        for (std::size_t i = 0; glyph_ranges[i]; i += 2)
+            for (unsigned code = glyph_ranges[i]; code <= glyph_ranges[i + 1]; ++code)
                 assert(font->FindGlyphNoFallback(ImWchar(code)));
         io.Fonts->SetTexID(reinterpret_cast<ImTextureID>(std::uintptr_t(1234)));
         const auto texture = io.Fonts->TexID;
@@ -48,11 +48,11 @@ int main() {
             ImGui::UiInputText("Name##user-input", input, sizeof(input));
             assert(ImGui::GetItemID() == ImGui::GetID("###Name##user-input"));
             assert(std::string(input) == "Unchanged draft %s {name}");
-            const auto popup_id=ImGui::GetID("Settings##dialog");
+            const auto popup_id = ImGui::GetID("Settings##dialog");
             ImGui::OpenPopup("Settings##dialog");
-            bool popup_open=true;
-            if(ImGui::UiBeginPopupModal("Settings##dialog",&popup_open)) {
-                assert(ImGui::GetCurrentWindow()->PopupId==popup_id);
+            bool popup_open = true;
+            if (ImGui::UiBeginPopupModal("Settings##dialog", &popup_open)) {
+                assert(ImGui::GetCurrentWindow()->PopupId == popup_id);
                 ImGui::CloseCurrentPopup();
                 ImGui::EndPopup();
             }
@@ -82,11 +82,14 @@ int main() {
             ImGui::NewFrame();
             ImGui::SetNextWindowSize({600, 300});
             ImGui::Begin("active-editor");
-            if (step == 0) ImGui::SetKeyboardFocusHere();
+            if (step == 0)
+                ImGui::SetKeyboardFocusHere();
             ImGui::UiInputText("Name##live-editor", live_draft, sizeof(live_draft));
-            if (step == 0) editor_id = ImGui::GetItemID();
+            if (step == 0)
+                editor_id = ImGui::GetItemID();
             assert(ImGui::GetItemID() == editor_id);
-            if (step > 0) assert(ImGui::GetActiveID() == editor_id);
+            if (step > 0)
+                assert(ImGui::GetActiveID() == editor_id);
             assert(std::string(live_draft) == "Keep this draft %s {name}");
             ImGui::End();
             ImGui::Render();
@@ -95,5 +98,6 @@ int main() {
         (void)previous_font;
         ImGui::DestroyContext(context);
     }
-    std::cout << "Both contexts: UTF-8 glyphs, stable widget IDs, literal-only translation, retained drafts and immutable font atlas passed\n";
+    std::cout
+        << "Both contexts: UTF-8 glyphs, stable widget IDs, literal-only translation, retained drafts and immutable font atlas passed\n";
 }

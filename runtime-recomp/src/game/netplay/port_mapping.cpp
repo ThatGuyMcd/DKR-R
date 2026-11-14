@@ -33,11 +33,15 @@ namespace {
 #if defined(_WIN32)
 using Socket = SOCKET;
 constexpr Socket kInvalidSocket = INVALID_SOCKET;
-void close_socket(Socket value) { closesocket(value); }
+void close_socket(Socket value) {
+    closesocket(value);
+}
 #else
 using Socket = int;
 constexpr Socket kInvalidSocket = -1;
-void close_socket(Socket value) { close(value); }
+void close_socket(Socket value) {
+    close(value);
+}
 #endif
 
 std::uint16_t read16(const std::uint8_t* data) {
@@ -45,8 +49,7 @@ std::uint16_t read16(const std::uint8_t* data) {
 }
 
 std::uint32_t read32(const std::uint8_t* data) {
-    return (static_cast<std::uint32_t>(data[0]) << 24U) |
-           (static_cast<std::uint32_t>(data[1]) << 16U) |
+    return (static_cast<std::uint32_t>(data[0]) << 24U) | (static_cast<std::uint32_t>(data[1]) << 16U) |
            (static_cast<std::uint32_t>(data[2]) << 8U) | data[3];
 }
 
@@ -68,8 +71,8 @@ bool default_gateway(sockaddr_in& gateway) {
     gateway.sin_port = htons(5351U);
 #if defined(_WIN32)
     MIB_IPFORWARDROW route{};
-    if (GetBestRoute(inet_addr("1.1.1.1"), 0U, &route) != NO_ERROR ||
-        route.dwForwardNextHop == 0U) return false;
+    if (GetBestRoute(inet_addr("1.1.1.1"), 0U, &route) != NO_ERROR || route.dwForwardNextHop == 0U)
+        return false;
     gateway.sin_addr.s_addr = route.dwForwardNextHop;
     return true;
 #elif defined(__linux__)
@@ -82,12 +85,14 @@ bool default_gateway(sockaddr_in& gateway) {
         std::string destination;
         std::string gateway_hex;
         unsigned flags = 0U;
-        if (!(fields >> interface_name >> destination >> gateway_hex >> std::hex >> flags)) continue;
-        if (destination != "00000000" || (flags & 0x2U) == 0U) continue;
+        if (!(fields >> interface_name >> destination >> gateway_hex >> std::hex >> flags))
+            continue;
+        if (destination != "00000000" || (flags & 0x2U) == 0U)
+            continue;
         unsigned long raw = 0U;
-        const auto parsed = std::from_chars(gateway_hex.data(),
-            gateway_hex.data() + gateway_hex.size(), raw, 16);
-        if (parsed.ec != std::errc{}) continue;
+        const auto parsed = std::from_chars(gateway_hex.data(), gateway_hex.data() + gateway_hex.size(), raw, 16);
+        if (parsed.ec != std::errc{})
+            continue;
         gateway.sin_addr.s_addr = static_cast<std::uint32_t>(raw);
         return true;
     }
@@ -97,29 +102,28 @@ bool default_gateway(sockaddr_in& gateway) {
 #endif
 }
 
-bool exchange_nat_pmp(const sockaddr_in& gateway,
-                      std::span<const std::uint8_t> request,
+bool exchange_nat_pmp(const sockaddr_in& gateway, std::span<const std::uint8_t> request,
                       std::vector<std::uint8_t>& response) {
 #if defined(_WIN32)
     static const bool sockets_ready = [] {
         WSADATA data{};
         return WSAStartup(MAKEWORD(2, 2), &data) == 0;
     }();
-    if (!sockets_ready) return false;
+    if (!sockets_ready)
+        return false;
 #endif
     Socket socket_value = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (socket_value == kInvalidSocket) return false;
+    if (socket_value == kInvalidSocket)
+        return false;
 #if defined(_WIN32)
     DWORD timeout = 700U;
 #else
     timeval timeout{0, 700000};
 #endif
-    setsockopt(socket_value, SOL_SOCKET, SO_RCVTIMEO,
-        reinterpret_cast<const char*>(&timeout), sizeof(timeout));
-    const int sent = sendto(socket_value,
-        reinterpret_cast<const char*>(request.data()),
-        static_cast<int>(request.size()), 0,
-        reinterpret_cast<const sockaddr*>(&gateway), sizeof(gateway));
+    setsockopt(socket_value, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    const int sent =
+        sendto(socket_value, reinterpret_cast<const char*>(request.data()), static_cast<int>(request.size()), 0,
+               reinterpret_cast<const sockaddr*>(&gateway), sizeof(gateway));
     if (sent != static_cast<int>(request.size())) {
         close_socket(socket_value);
         return false;
@@ -131,72 +135,74 @@ bool exchange_nat_pmp(const sockaddr_in& gateway,
 #else
     socklen_t source_size = sizeof(source);
 #endif
-    const int received = recvfrom(socket_value,
-        reinterpret_cast<char*>(buffer.data()), static_cast<int>(buffer.size()),
-        0, reinterpret_cast<sockaddr*>(&source), &source_size);
+    const int received = recvfrom(socket_value, reinterpret_cast<char*>(buffer.data()), static_cast<int>(buffer.size()),
+                                  0, reinterpret_cast<sockaddr*>(&source), &source_size);
     close_socket(socket_value);
-    if (received <= 0) return false;
+    if (received <= 0)
+        return false;
     response.assign(buffer.begin(), buffer.begin() + received);
     return true;
 }
 
-bool try_nat_pmp(std::uint16_t local_port, std::uint32_t lifetime,
-                 std::string& external_address, std::uint16_t& external_port) {
+bool try_nat_pmp(std::uint16_t local_port, std::uint32_t lifetime, std::string& external_address,
+                 std::uint16_t& external_port) {
     sockaddr_in gateway{};
-    if (!default_gateway(gateway)) return false;
+    if (!default_gateway(gateway))
+        return false;
     std::vector<std::uint8_t> response;
     const std::array<std::uint8_t, 2> address_request{0U, 0U};
-    if (!exchange_nat_pmp(gateway, address_request, response) ||
-        response.size() < 12U || response[0] != 0U || response[1] != 128U ||
-        read16(response.data() + 2U) != 0U) return false;
+    if (!exchange_nat_pmp(gateway, address_request, response) || response.size() < 12U || response[0] != 0U ||
+        response[1] != 128U || read16(response.data() + 2U) != 0U)
+        return false;
     char address[INET_ADDRSTRLEN]{};
     in_addr external{};
     std::memcpy(&external.s_addr, response.data() + 8U, 4U);
-    if (inet_ntop(AF_INET, &external, address, sizeof(address)) == nullptr) return false;
+    if (inet_ntop(AF_INET, &external, address, sizeof(address)) == nullptr)
+        return false;
     std::array<std::uint8_t, 12> mapping{};
     mapping[1] = 1U;
     write16(mapping.data() + 4U, local_port);
     write16(mapping.data() + 6U, local_port);
     write32(mapping.data() + 8U, lifetime);
     response.clear();
-    if (!exchange_nat_pmp(gateway, mapping, response) || response.size() < 16U ||
-        response[0] != 0U || response[1] != 129U ||
-        read16(response.data() + 2U) != 0U ||
-        read16(response.data() + 8U) != local_port) return false;
+    if (!exchange_nat_pmp(gateway, mapping, response) || response.size() < 16U || response[0] != 0U ||
+        response[1] != 129U || read16(response.data() + 2U) != 0U || read16(response.data() + 8U) != local_port)
+        return false;
     external_address = address;
     external_port = read16(response.data() + 10U);
     return external_port != 0U;
 }
 
 #if defined(_WIN32)
-bool try_upnp(std::string_view local_address, std::uint16_t local_port,
-              IStaticPortMappingCollection** retained, std::string& error) {
+bool try_upnp(std::string_view local_address, std::uint16_t local_port, IStaticPortMappingCollection** retained,
+              std::string& error) {
     const HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    if (FAILED(initialized) && initialized != RPC_E_CHANGED_MODE) return false;
+    if (FAILED(initialized) && initialized != RPC_E_CHANGED_MODE)
+        return false;
     IUPnPNAT* nat = nullptr;
-    HRESULT result = CoCreateInstance(__uuidof(UPnPNAT), nullptr,
-        CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&nat));
-    if (FAILED(result) || nat == nullptr) return false;
+    HRESULT result = CoCreateInstance(__uuidof(UPnPNAT), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&nat));
+    if (FAILED(result) || nat == nullptr)
+        return false;
     IStaticPortMappingCollection* mappings = nullptr;
     result = nat->get_StaticPortMappingCollection(&mappings);
     nat->Release();
-    if (FAILED(result) || mappings == nullptr) return false;
-    const int wide_size = MultiByteToWideChar(CP_UTF8, 0, local_address.data(),
-        static_cast<int>(local_address.size()), nullptr, 0);
+    if (FAILED(result) || mappings == nullptr)
+        return false;
+    const int wide_size =
+        MultiByteToWideChar(CP_UTF8, 0, local_address.data(), static_cast<int>(local_address.size()), nullptr, 0);
     std::wstring wide_address(static_cast<std::size_t>(wide_size), L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, local_address.data(),
-        static_cast<int>(local_address.size()), wide_address.data(), wide_size);
+    MultiByteToWideChar(CP_UTF8, 0, local_address.data(), static_cast<int>(local_address.size()), wide_address.data(),
+                        wide_size);
     BSTR protocol = SysAllocString(L"UDP");
-    BSTR client = SysAllocStringLen(wide_address.data(),
-        static_cast<UINT>(wide_address.size()));
+    BSTR client = SysAllocStringLen(wide_address.data(), static_cast<UINT>(wide_address.size()));
     BSTR description = SysAllocString(L"DKR-R private multiplayer");
     IStaticPortMapping* mapping = nullptr;
-    result = mappings->Add(local_port, protocol, local_port, client,
-        VARIANT_TRUE, description, &mapping);
+    result = mappings->Add(local_port, protocol, local_port, client, VARIANT_TRUE, description, &mapping);
     SysFreeString(protocol);
     SysFreeString(client);
     SysFreeString(description);
-    if (mapping != nullptr) mapping->Release();
+    if (mapping != nullptr)
+        mapping->Release();
     if (FAILED(result)) {
         mappings->Release();
         error = "The router refused the UPnP mapping request.";
@@ -219,43 +225,46 @@ struct PortMapping::Impl {
 };
 
 PortMapping::PortMapping() : impl_(std::make_unique<Impl>()) {}
-PortMapping::~PortMapping() { close(); }
+PortMapping::~PortMapping() {
+    close();
+}
 
-bool PortMapping::open(std::string local_address, std::uint16_t local_port,
-                       std::string& error) {
+bool PortMapping::open(std::string local_address, std::uint16_t local_port, std::string& error) {
     close();
     impl_->local_address = std::move(local_address);
     impl_->local_port = local_port;
     std::string external_address;
     std::uint16_t external_port = 0U;
     if (try_nat_pmp(local_port, 7200U, external_address, external_port)) {
-        impl_->view = {PortMappingState::Mapped, "NAT-PMP", external_address,
-            external_port, "Temporary router mapping created."};
+        impl_->view = {PortMappingState::Mapped, "NAT-PMP", external_address, external_port,
+                       "Temporary router mapping created."};
         error.clear();
         return true;
     }
 #if defined(_WIN32)
     std::string upnp_error;
-    if (try_upnp(impl_->local_address, local_port, &impl_->upnp_mappings,
-                 upnp_error)) {
+    if (try_upnp(impl_->local_address, local_port, &impl_->upnp_mappings, upnp_error)) {
         // Windows' static UPnP mapping API does not report the router's
         // Internet-facing address. Keep that field empty so the launcher
         // retains the public address supplied by the host instead of placing
         // an unroutable LAN address in the invitation.
-        impl_->view = {PortMappingState::Mapped, "UPnP", {},
-            local_port, "Temporary UPnP router mapping created."};
+        impl_->view = {PortMappingState::Mapped, "UPnP", {}, local_port, "Temporary UPnP router mapping created."};
         error.clear();
         return true;
     }
 #endif
-    impl_->view = {PortMappingState::ManualRequired, "Manual", {}, local_port,
-        "Automatic router setup was unavailable. Use Virtual LAN or forward the UDP port manually."};
+    impl_->view = {PortMappingState::ManualRequired,
+                   "Manual",
+                   {},
+                   local_port,
+                   "Automatic router setup was unavailable. Use Virtual LAN or forward the UDP port manually."};
     error = impl_->view.message;
     return false;
 }
 
 void PortMapping::close() {
-    if (!impl_) return;
+    if (!impl_)
+        return;
     if (impl_->view.method == "NAT-PMP" && impl_->local_port != 0U) {
         std::string ignored_address;
         std::uint16_t ignored_port = 0U;
@@ -275,6 +284,8 @@ void PortMapping::close() {
     impl_->local_port = 0U;
 }
 
-const PortMappingView& PortMapping::view() const { return impl_->view; }
+const PortMappingView& PortMapping::view() const {
+    return impl_->view;
+}
 
 } // namespace dkr::runtime::netplay

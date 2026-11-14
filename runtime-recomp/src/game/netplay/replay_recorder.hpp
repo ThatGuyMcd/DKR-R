@@ -15,17 +15,21 @@ struct ReplayFrame {
 };
 
 class ReplayRecorder final {
-public:
+  public:
     void configure(std::filesystem::path directory);
     void begin(const Room& room);
     void record(std::uint32_t frame, const FrameInputs& inputs);
     bool finalize(std::string& error);
     ReplayRecorder detach();
     void reset();
-    bool active() const { return active_; }
-    const std::filesystem::path& last_path() const { return last_path_; }
+    bool active() const {
+        return active_;
+    }
+    const std::filesystem::path& last_path() const {
+        return last_path_;
+    }
 
-private:
+  private:
     std::filesystem::path directory_;
     std::filesystem::path last_path_;
     std::string room_id_;

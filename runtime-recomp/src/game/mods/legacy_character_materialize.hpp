@@ -9,32 +9,34 @@ namespace dkr::mods {
 // retail behaviour ID; content identity and asset IDs live in this sidecar.
 struct PreparedCharacter {
     CharacterRoot root;
-    std::string source_revision,base_fingerprint;
+    std::string source_revision, base_fingerprint;
     AssetBank::Overrides records;
-    std::map<unsigned,std::vector<unsigned>> model_animations;
-    bool runtime_certified=false;
-    unsigned stage_header=0;
+    std::map<unsigned, std::vector<unsigned>> model_animations;
+    bool runtime_certified = false;
+    unsigned stage_header = 0;
     CharacterAudio audio;
     CharacterRaceAudio race_audio;
     // Recovered only by the authenticated source-review loader.
     Bytes source_portrait;
-    unsigned source_portrait_id=0;
+    unsigned source_portrait_id = 0;
 };
-PreparedCharacter prepare_character(View original,View reconstructed,std::string patch_digest,unsigned base_character,bool behaviour_enabled=true,bool legacy_portrait_layout=false);
+PreparedCharacter prepare_character(View original, View reconstructed, std::string patch_digest,
+                                    unsigned base_character, bool behaviour_enabled = true,
+                                    bool legacy_portrait_layout = false);
 // Revalidate persisted dependency graphs without trusting their manifest hashes.
 // Returns the canonical content identity after complete bounds/closure checks.
-std::string validate_prepared_character(const PreparedCharacter&,const AssetBank& original);
+std::string validate_prepared_character(const PreparedCharacter&, const AssetBank& original);
 
 struct AllocatedCharacter {
-    std::string id,name;
-    unsigned base_character=0,portrait=0;
-    std::array<unsigned,3> headers{};
-    unsigned stage_header=0;
-    unsigned stage_source_header=0;
+    std::string id, name;
+    unsigned base_character = 0, portrait = 0;
+    std::array<unsigned, 3> headers{};
+    unsigned stage_header = 0;
+    unsigned stage_source_header = 0;
     CharacterAudio audio;
     CharacterRaceAudio race_audio;
-    bool custom_portrait=true;
-    std::string portrait_identity,selection_audio_identity,race_audio_identity;
+    bool custom_portrait = true;
+    std::string portrait_identity, selection_audio_identity, race_audio_identity;
     BehaviourContract behaviour;
 };
 // Allocated once, before native asset-table initialization. No original record
@@ -48,9 +50,9 @@ struct CharacterNamespace {
     std::shared_ptr<const AssetBank> apply(std::shared_ptr<const AssetBank> bank) const;
 };
 CharacterNamespace allocate_characters(std::shared_ptr<const AssetBank> stock,
-    std::vector<PreparedCharacter> characters);
+                                       std::vector<PreparedCharacter> characters);
 // Exposed for bounds/negative tests and shared artifact verification.
-void validate_character_animation(View packed,unsigned animated_vertices);
+void validate_character_animation(View packed, unsigned animated_vertices);
 // Compare decoded face pixels, ignoring compression and exporter padding.
-bool character_portrait_changed(View replacement,View original);
+bool character_portrait_changed(View replacement, View original);
 } // namespace dkr::mods

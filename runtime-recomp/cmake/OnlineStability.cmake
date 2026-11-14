@@ -5,7 +5,10 @@ function(dkr_add_online_stability)
     # another function, whose scope a file-level variable would not outlive.
     get_filename_component(_dkr_online_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../.." ABSOLUTE)
     if(NOT TARGET DKRQualificationDeliveryTests)
-        add_executable(DKRQualificationDeliveryTests "${_dkr_online_root}/runtime-recomp/tests/qualification_delivery_tests.cpp")
+        add_executable(
+            DKRQualificationDeliveryTests
+            "${_dkr_online_root}/runtime-recomp/tests/qualification_delivery_tests.cpp"
+        )
         target_include_directories(DKRQualificationDeliveryTests PRIVATE "${_dkr_online_root}/runtime-recomp/src/game")
         target_compile_features(DKRQualificationDeliveryTests PRIVATE cxx_std_20)
         if(MSVC)
@@ -18,9 +21,11 @@ function(dkr_add_online_stability)
         endif()
     endif()
     if(NOT TARGET DKRSnapshotHistoryTests)
-        add_executable(DKRSnapshotHistoryTests
+        add_executable(
+            DKRSnapshotHistoryTests
             "${_dkr_online_root}/runtime-recomp/tests/snapshot_history_tests.cpp"
-            "${_dkr_online_root}/runtime-recomp/src/game/netplay/rollback_state_store.cpp")
+            "${_dkr_online_root}/runtime-recomp/src/game/netplay/rollback_state_store.cpp"
+        )
         target_include_directories(DKRSnapshotHistoryTests PRIVATE "${_dkr_online_root}/runtime-recomp/src/game")
         target_compile_features(DKRSnapshotHistoryTests PRIVATE cxx_std_20)
         if(MSVC)
@@ -49,7 +54,10 @@ function(dkr_add_online_stability)
         endif()
     endif()
     if(NOT TARGET DKROnlinePresentationTests)
-        add_executable(DKROnlinePresentationTests "${_dkr_online_root}/runtime-recomp/tests/online_presentation_tests.cpp")
+        add_executable(
+            DKROnlinePresentationTests
+            "${_dkr_online_root}/runtime-recomp/tests/online_presentation_tests.cpp"
+        )
         target_include_directories(DKROnlinePresentationTests PRIVATE "${_dkr_online_root}/runtime-recomp/src/game")
         target_compile_features(DKROnlinePresentationTests PRIVATE cxx_std_20)
         target_link_libraries(DKROnlinePresentationTests PRIVATE Threads::Threads)
@@ -62,7 +70,14 @@ function(dkr_add_online_stability)
             add_test(NAME DKROnlinePresentation COMMAND DKROnlinePresentationTests)
         endif()
     endif()
-    foreach(target DKRNetplayCore DKRPortGame DKRLegacyModCore DKRLegacyImportLibrary DKRLegacyModWorker)
+    foreach(
+        target
+        DKRNetplayCore
+        DKRPortGame
+        DKRLegacyModCore
+        DKRLegacyImportLibrary
+        DKRLegacyModWorker
+    )
         if(TARGET ${target})
             target_include_directories(${target} PRIVATE "${_dkr_online_root}/runtime-recomp/src/game")
         endif()
@@ -74,21 +89,22 @@ function(dkr_add_online_stability)
     dkr_add_peer_relay()
     target_link_libraries(DKRNetplayCore PUBLIC DKRPeerRelay)
     if(NOT TARGET DKROnlineStabilityCore)
-        add_library(DKROnlineStabilityCore STATIC
+        add_library(
+            DKROnlineStabilityCore
+            STATIC
             "${_dkr_online_root}/runtime-recomp/src/game/online_stability/control.cpp"
             "${_dkr_online_root}/runtime-recomp/src/game/online_stability/live_delay.cpp"
             "${_dkr_online_root}/runtime-recomp/src/game/online_stability/preparation_policy.cpp"
-            "${_dkr_online_root}/runtime-recomp/src/game/online_stability/process_services.cpp")
+            "${_dkr_online_root}/runtime-recomp/src/game/online_stability/process_services.cpp"
+        )
         target_compile_features(DKROnlineStabilityCore PUBLIC cxx_std_20)
-        target_include_directories(DKROnlineStabilityCore PUBLIC
-            "${_dkr_online_root}/runtime-recomp/src/game")
+        target_include_directories(DKROnlineStabilityCore PUBLIC "${_dkr_online_root}/runtime-recomp/src/game")
         if(MSVC)
             target_compile_definitions(DKROnlineStabilityCore PRIVATE NOMINMAX)
         endif()
     endif()
     if(NOT TARGET DKROnlineStabilityTests)
-        add_executable(DKROnlineStabilityTests
-            "${_dkr_online_root}/runtime-recomp/tests/online_stability_tests.cpp")
+        add_executable(DKROnlineStabilityTests "${_dkr_online_root}/runtime-recomp/tests/online_stability_tests.cpp")
         target_link_libraries(DKROnlineStabilityTests PRIVATE DKROnlineStabilityCore)
         if(MSVC)
             target_compile_options(DKROnlineStabilityTests PRIVATE /UNDEBUG)
@@ -105,7 +121,10 @@ function(dkr_add_online_stability)
             target_link_libraries(DKR_${test}_tests PRIVATE DKRNetplayCore DKROnlineStabilityCore)
             if(test STREQUAL "online_flow")
                 # Its network object calls the SDK tools broker, which lives in the game.
-                target_sources(DKR_${test}_tests PRIVATE "${_dkr_online_root}/runtime-recomp/tests/sdk2_network_idle.cpp")
+                target_sources(
+                    DKR_${test}_tests
+                    PRIVATE "${_dkr_online_root}/runtime-recomp/tests/sdk2_network_idle.cpp"
+                )
             endif()
             if(TARGET DKRLegacyModCore)
                 target_link_libraries(DKR_${test}_tests PRIVATE DKRLegacyModCore)
@@ -130,9 +149,12 @@ function(dkr_add_online_stability)
         endif()
     endforeach()
     if(TARGET DKRLegacyImportLibrary AND NOT TARGET DKROnlineRetentionTests)
-        add_executable(DKROnlineRetentionTests "${_dkr_online_root}/runtime-recomp/tests/online_retention_tests.cpp"
+        add_executable(
+            DKROnlineRetentionTests
+            "${_dkr_online_root}/runtime-recomp/tests/online_retention_tests.cpp"
             "${_dkr_online_root}/runtime-recomp/src/game/rom_revision.cpp"
-            "${_dkr_online_root}/runtime-recomp/src/game/startup_performance.cpp")
+            "${_dkr_online_root}/runtime-recomp/src/game/startup_performance.cpp"
+        )
         target_link_libraries(DKROnlineRetentionTests PRIVATE DKRLegacyImportLibrary DKROnlineStabilityCore)
         if(MSVC)
             target_compile_options(DKROnlineRetentionTests PRIVATE /UNDEBUG)
@@ -147,7 +169,10 @@ function(dkr_add_online_stability)
         endif()
     endif()
     if(TARGET DKRLegacyModCore AND TARGET DKRUpdateClient AND NOT TARGET DKRUpdateLifetimeTests)
-        add_executable(DKRUpdateLifetimeTests "${_dkr_online_root}/runtime-recomp/tests/update_process_lifetime_tests.cpp")
+        add_executable(
+            DKRUpdateLifetimeTests
+            "${_dkr_online_root}/runtime-recomp/tests/update_process_lifetime_tests.cpp"
+        )
         target_link_libraries(DKRUpdateLifetimeTests PRIVATE DKRUpdateClient DKROnlineStabilityCore)
         if(MSVC)
             target_compile_options(DKRUpdateLifetimeTests PRIVATE /UNDEBUG)
@@ -159,14 +184,21 @@ function(dkr_add_online_stability)
         # Link the existing profile corpus checks to the final production
         # importer/preparation targets, after the retained pipeline has composed
         # them. A standalone historical importer is not sufficient evidence.
-        add_executable(DKROnlinePreparationChecks EXCLUDE_FROM_ALL
+        add_executable(
+            DKROnlinePreparationChecks
+            EXCLUDE_FROM_ALL
             "${_dkr_online_root}/runtime-recomp/tests/online_mod_profile_tests.cpp"
             "${_dkr_online_root}/runtime-recomp/src/game/rom_revision.cpp"
-            "${_dkr_online_root}/runtime-recomp/src/game/startup_performance.cpp")
-        target_link_libraries(DKROnlinePreparationChecks PRIVATE DKRLegacyImportLibrary
-            DKROnlineModPreparation DKRLegacyModLaunch DKROnlineStabilityCore)
-        target_include_directories(DKROnlinePreparationChecks PRIVATE
-            "${_dkr_online_root}/extern/n64-modern-runtime/thirdparty")
+            "${_dkr_online_root}/runtime-recomp/src/game/startup_performance.cpp"
+        )
+        target_link_libraries(
+            DKROnlinePreparationChecks
+            PRIVATE DKRLegacyImportLibrary DKROnlineModPreparation DKRLegacyModLaunch DKROnlineStabilityCore
+        )
+        target_include_directories(
+            DKROnlinePreparationChecks
+            PRIVATE "${_dkr_online_root}/extern/n64-modern-runtime/thirdparty"
+        )
         if(TARGET DKRPortGame)
             get_target_property(preparation_links DKRPortGame LINK_DIRECTORIES)
             if(preparation_links)

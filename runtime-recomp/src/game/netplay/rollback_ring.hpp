@@ -8,18 +8,20 @@
 namespace dkr::runtime::netplay {
 
 class RollbackRing final {
-public:
+  public:
     RollbackRing(std::size_t capacity, std::size_t state_size);
-    bool save(std::uint32_t frame, std::span<const std::uint8_t> state,
-              std::uint64_t checksum);
-    bool load(std::uint32_t frame, std::span<std::uint8_t> state,
-              std::uint64_t* checksum = nullptr) const;
+    bool save(std::uint32_t frame, std::span<const std::uint8_t> state, std::uint64_t checksum);
+    bool load(std::uint32_t frame, std::span<std::uint8_t> state, std::uint64_t* checksum = nullptr) const;
     bool contains(std::uint32_t frame) const;
     void clear();
-    std::size_t capacity() const { return slots_.size(); }
-    std::size_t state_size() const { return state_size_; }
+    std::size_t capacity() const {
+        return slots_.size();
+    }
+    std::size_t state_size() const {
+        return state_size_;
+    }
 
-private:
+  private:
     struct Slot {
         std::uint32_t frame = 0U;
         std::uint64_t checksum = 0U;

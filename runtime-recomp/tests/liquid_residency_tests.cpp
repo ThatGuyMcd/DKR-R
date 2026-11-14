@@ -155,27 +155,43 @@ int main() {
             check(bool(w::streaming::current_workload().selection), "Returning to original optics did not reprepare");
         }
         check(cache.resolvedPathQueue.size() <= 1, "Return scan requested resident or nonstreaming artwork");
-    // Exercise the real residency implementation across correction identities.
-    // Published workload selections are immutable while the lookup is reused.
-    namespace p=dkr::online_presentation;
-    materials.headers={0x1000};map.resident.clear();cache.resolvedPathQueue.clear();
-    w::LiquidResidencyT<Clock> replay_residency;
-    const auto rebuilt=p::counters[unsigned(p::Event::ResourceRebuild)].load();
-    {p::ResourceScope scope(91);scope.scene(4);
-     for(unsigned correction=1;correction<=2000;++correction)
-        replay_residency.prepare(state,materials,p::asset_scene(correction),true);
-     check(p::counters[unsigned(p::Event::ResourceRebuild)].load()==rebuilt+1,"Corrections rebuilt immutable water assets");
-     ++cache.generation;replay_residency.prepare(state,materials,p::asset_scene(2001),true);
-     check(p::counters[unsigned(p::Event::ResourceRebuild)].load()==rebuilt+2,"Pack replacement did not invalidate stable asset lookup");
-     materials.headers={0x2000};replay_residency.prepare(state,materials,p::asset_scene(2002),true);
-     check(p::counters[unsigned(p::Event::ResourceRebuild)].load()==rebuilt+3,"Changed liquid headers reused stale assets");
-     scope.scene(5);replay_residency.prepare(state,materials,p::asset_scene(2003),true);
-     check(p::counters[unsigned(p::Event::ResourceRebuild)].load()==rebuilt+4,"Real scene change did not invalidate assets");}
-    const auto era_before=p::counters[unsigned(p::Event::ResourceRebuild)].load();
-    w::streaming::forget(&map);
-    {p::ResourceScope scope(91);scope.scene(5);
-     replay_residency.prepare(state,materials,p::asset_scene(2004),true);}
-    check(p::counters[unsigned(p::Event::ResourceRebuild)].load()==era_before+1,"Same-address new cache lifetime reused stale selection");
+        // Exercise the real residency implementation across correction identities.
+        // Published workload selections are immutable while the lookup is reused.
+        namespace p = dkr::online_presentation;
+        materials.headers = {0x1000};
+        map.resident.clear();
+        cache.resolvedPathQueue.clear();
+        w::LiquidResidencyT<Clock> replay_residency;
+        const auto rebuilt = p::counters[unsigned(p::Event::ResourceRebuild)].load();
+        {
+            p::ResourceScope scope(91);
+            scope.scene(4);
+            for (unsigned correction = 1; correction <= 2000; ++correction)
+                replay_residency.prepare(state, materials, p::asset_scene(correction), true);
+            check(p::counters[unsigned(p::Event::ResourceRebuild)].load() == rebuilt + 1,
+                  "Corrections rebuilt immutable water assets");
+            ++cache.generation;
+            replay_residency.prepare(state, materials, p::asset_scene(2001), true);
+            check(p::counters[unsigned(p::Event::ResourceRebuild)].load() == rebuilt + 2,
+                  "Pack replacement did not invalidate stable asset lookup");
+            materials.headers = {0x2000};
+            replay_residency.prepare(state, materials, p::asset_scene(2002), true);
+            check(p::counters[unsigned(p::Event::ResourceRebuild)].load() == rebuilt + 3,
+                  "Changed liquid headers reused stale assets");
+            scope.scene(5);
+            replay_residency.prepare(state, materials, p::asset_scene(2003), true);
+            check(p::counters[unsigned(p::Event::ResourceRebuild)].load() == rebuilt + 4,
+                  "Real scene change did not invalidate assets");
+        }
+        const auto era_before = p::counters[unsigned(p::Event::ResourceRebuild)].load();
+        w::streaming::forget(&map);
+        {
+            p::ResourceScope scope(91);
+            scope.scene(5);
+            replay_residency.prepare(state, materials, p::asset_scene(2004), true);
+        }
+        check(p::counters[unsigned(p::Event::ResourceRebuild)].load() == era_before + 1,
+              "Same-address new cache lifetime reused stale selection");
         w::streaming::forget(&map);
         std::cout
             << checks

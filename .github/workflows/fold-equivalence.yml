@@ -1,11 +1,11 @@
 name: Fold equivalence
 # ROM-free source checkpoint after the current-main preservation comparison.
-# The historical v1.0.11 record stays separate. This migration gate applies
-# to fold branches; ordinary follow-up PRs use the contributor/platform gates.
+# The historical v1.0.11 record stays separate. This was the fold's migration
+# gate: it pins the folded sources token for token, so it runs on the fold
+# branches and on request, not on the follow-up PRs that change those sources.
 on:
   push:
     branches: [refactor/patch-fold-in, refactor/fold-current-main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read

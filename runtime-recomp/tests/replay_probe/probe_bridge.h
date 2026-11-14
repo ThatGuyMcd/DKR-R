@@ -14,8 +14,7 @@ enum { DKR_PROBE_SCENE_SITE_MAX = DKR_PROBE_HAS_FULL_SCENES ? 7 : 2 };
    This is only an ID range; ownership/service/argument gates still apply. */
 enum {
     DKR_PROBE_RETAIL_SCENE_LEVEL_COUNT = 65,
-    DKR_PROBE_SCENE_LEVEL_COUNT = DKR_PROBE_HAS_FULL_SCENES ?
-        DKR_PROBE_RETAIL_SCENE_LEVEL_COUNT : 54
+    DKR_PROBE_SCENE_LEVEL_COUNT = DKR_PROBE_HAS_FULL_SCENES ? DKR_PROBE_RETAIL_SCENE_LEVEL_COUNT : 54
 };
 #ifdef __cplusplus
 extern "C" {
@@ -50,39 +49,38 @@ typedef struct dkr_probe_result {
 } dkr_probe_result;
 /* Private, single-threaded process. This trampoline calls C guest functions;
    no C++ objects/destructors may live across its setjmp/longjmp boundary. */
-dkr_probe_result dkr_probe_run(dkr_probe_entry entry, uint8_t* ram, size_t bytes,
-                               struct recomp_context* context, uint64_t budget);
+dkr_probe_result dkr_probe_run(dkr_probe_entry entry, uint8_t* ram, size_t bytes, struct recomp_context* context,
+                               uint64_t budget);
 /* A native mod adapter may invoke ONLY reviewed private guest callbacks. A
    nested C trampoline catches guest traps before returning to its C++ caller,
    so no longjmp crosses C++ locks, leases or destructors. Failed adapters must
    unwind normally and return -1; dispatch then traps on the C side. */
-typedef int (*dkr_probe_mod_service)(void* user,const char* operation,uint8_t* ram,
-    struct recomp_context* context,const uint64_t* args,unsigned count,
-    const uint32_t* fields,unsigned event,uint64_t* result);
-int dkr_probe_bind_mod_service(dkr_probe_mod_service service,void* user);
-int dkr_probe_mod_dispatch(const char* operation,uint8_t* ram,struct recomp_context* context,
-    const uint64_t* args,unsigned count,const uint32_t* fields,unsigned event,uint64_t* result);
-dkr_probe_result dkr_probe_run_native(dkr_probe_entry entry,uint8_t* ram,struct recomp_context* context);
+typedef int (*dkr_probe_mod_service)(void* user, const char* operation, uint8_t* ram, struct recomp_context* context,
+                                     const uint64_t* args, unsigned count, const uint32_t* fields, unsigned event,
+                                     uint64_t* result);
+int dkr_probe_bind_mod_service(dkr_probe_mod_service service, void* user);
+int dkr_probe_mod_dispatch(const char* operation, uint8_t* ram, struct recomp_context* context, const uint64_t* args,
+                           unsigned count, const uint32_t* fields, unsigned event, uint64_t* result);
+dkr_probe_result dkr_probe_run_native(dkr_probe_entry entry, uint8_t* ram, struct recomp_context* context);
 void* dkr_probe_memory(uint8_t* ram, uint64_t address, unsigned width, unsigned lane_xor);
-void* dkr_probe_memory_at(uint8_t* ram, uint64_t address, unsigned width, unsigned lane_xor,
-                          const char* file, unsigned line);
+void* dkr_probe_memory_at(uint8_t* ram, uint64_t address, unsigned width, unsigned lane_xor, const char* file,
+                          unsigned line);
 /* Fixed-width entry points for emitted MEM macros. They use the SAME checked
    implementation; compile-time width/lane constants eliminate parameter and
    dispatch work, never pointer validation, counters or the failure boundary. */
-void* dkr_probe_memory_1_at(uint8_t* ram,uint64_t address,const char* file,unsigned line);
-void* dkr_probe_memory_2_at(uint8_t* ram,uint64_t address,const char* file,unsigned line);
-void* dkr_probe_memory_4_at(uint8_t* ram,uint64_t address,const char* file,unsigned line);
+void* dkr_probe_memory_1_at(uint8_t* ram, uint64_t address, const char* file, unsigned line);
+void* dkr_probe_memory_2_at(uint8_t* ram, uint64_t address, const char* file, unsigned line);
+void* dkr_probe_memory_4_at(uint8_t* ram, uint64_t address, const char* file, unsigned line);
 /* Private audio RSP DMA, after its hardware address/alignment normalization.
    Validate BOTH complete spans before copying any byte. The loop is bounded
    by 4 KiB and preserves the retail byte-lane layout; no per-byte trap call. */
-void dkr_probe_audio_dma(uint8_t* ram, uint8_t* dmem, uint32_t dmem_address,
-                         uint32_t dram_address, uint32_t inclusive_length, int write,
-                         const char* file, unsigned line);
+void dkr_probe_audio_dma(uint8_t* ram, uint8_t* dmem, uint32_t dmem_address, uint32_t dram_address,
+                         uint32_t inclusive_length, int write, const char* file, unsigned line);
 DKR_PROBE_NORETURN void dkr_probe_block(const char* operation);
 void dkr_probe_enter(const char* function);
 void dkr_probe_leave(void);
 /* Observation-only Patch Pipeline boundaries; no local setting or guest write. */
-void dkr_probe_online_function(const char* name,int leaving,uint8_t* ram,struct recomp_context* context);
+void dkr_probe_online_function(const char* name, int leaving, uint8_t* ram, struct recomp_context* context);
 void dkr_probe_online_addresses(uint32_t addresses[3]);
 void dkr_probe_checkpoint(void);
 /* Private diagnostic watchpoint; 0 disables it. Reports the preceding checked
@@ -107,11 +105,11 @@ void dkr_probe_canonical_presentation(int enabled);
 void dkr_probe_rom(const uint8_t* image, size_t bytes);
 void dkr_probe_profile_disabled(const char* name);
 int dkr_probe_native(const char* name, uint8_t* ram, struct recomp_context* context);
-uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_context* context,
-                              const uint64_t* args, unsigned count);
-int dkr_probe_model_safety(uint8_t* ram,unsigned operation,uint32_t address);
-int dkr_probe_native_fields(const char* name, uint8_t* ram, struct recomp_context* context,
-                            unsigned event, const uint32_t* fields);
+uint64_t dkr_probe_native_args(const char* name, uint8_t* ram, struct recomp_context* context, const uint64_t* args,
+                               unsigned count);
+int dkr_probe_model_safety(uint8_t* ram, unsigned operation, uint32_t address);
+int dkr_probe_native_fields(const char* name, uint8_t* ram, struct recomp_context* context, unsigned event,
+                            const uint32_t* fields);
 uint64_t dkr_probe_cop0_read(struct recomp_context* context);
 void dkr_probe_cop0_write(struct recomp_context* context, uint64_t value);
 typedef struct dkr_probe_native_state {
@@ -133,13 +131,13 @@ typedef struct dkr_probe_native_state {
     uint32_t video_enabled, video_black, video_frames;
     uint32_t video_framebuffer, video_depthbuffer;
     uint32_t scene_unload_phase; // 0 running, 1 teardown, 2 retired, 3 constructing, 4 prepared.
-    uint32_t scene_load_resets; // Exactly one owned reset in a retail constructor.
+    uint32_t scene_load_resets;  // Exactly one owned reset in a retail constructor.
     uint32_t title_tail_phase, title_tail_units;
     uint32_t owner_mask; // Immutable contiguous lobby membership, not scene viewport count.
     uint32_t host_control, assigned_ports_released;
     uint32_t initial_world_vacant; // Genuine pre-menu cold boot, not a skipped teardown.
     uint32_t character_animation_active, character_animation_phase; // IEEE-754 phase bits.
-    uint32_t postrace_contracted, postrace_pending; // Owned wooden-frame gate, not renderer globals.
+    uint32_t postrace_contracted, postrace_pending;                 // Owned wooden-frame gate, not renderer globals.
     uint32_t preview_loads; // Confirmed preview replacements; renderer history is separate from the network epoch.
     uint32_t restore_multiplayer_music; // Host's initial policy, admitted/captured with the owned world.
     dkr_owned_identity_state presentation;
@@ -151,16 +149,16 @@ unsigned dkr_probe_draw_capture(dkr_owned_draw_event* events, unsigned capacity)
 // Optional read-only scene capture. Bound by the exclusively owned CPU thread;
 // reset/object notifications may not throw or write guest state. The renderer
 // receives immutable copied assets, never this temporary RDRAM pointer.
-typedef void (*dkr_probe_scenery_observer)(void*,const uint8_t*,uint32_t,uint32_t,uint32_t);
-void dkr_probe_scenery_observe(dkr_probe_scenery_observer observer,void* user);
-void dkr_probe_local_world_draw(uint8_t* ram,struct recomp_context* context,unsigned pass);
-void dkr_probe_mesh_begin(uint8_t* ram,struct recomp_context* context,dkr_owned_draw_event* event);
-void dkr_probe_mesh_end(uint8_t* ram,struct recomp_context* context,dkr_owned_draw_event* event);
+typedef void (*dkr_probe_scenery_observer)(void*, const uint8_t*, uint32_t, uint32_t, uint32_t);
+void dkr_probe_scenery_observe(dkr_probe_scenery_observer observer, void* user);
+void dkr_probe_local_world_draw(uint8_t* ram, struct recomp_context* context, unsigned pass);
+void dkr_probe_mesh_begin(uint8_t* ram, struct recomp_context* context, dkr_owned_draw_event* event);
+void dkr_probe_mesh_end(uint8_t* ram, struct recomp_context* context, dkr_owned_draw_event* event);
 void dkr_probe_scenery_addresses(uint32_t addresses[11]);
 void dkr_probe_presentation_addresses(uint32_t addresses[8]);
-int dkr_probe_postrace_scope(int mode,int postrace,int players,int trophy,int layout);
+int dkr_probe_postrace_scope(int mode, int postrace, int players, int trophy, int layout);
 int dkr_probe_contracted_wood(const int32_t bounds[4]);
-int dkr_probe_lens_scope(const int32_t bounds[8],int tracks);
+int dkr_probe_lens_scope(const int32_t bounds[8], int tracks);
 void dkr_probe_clock_start(uint64_t initial_count);
 void dkr_probe_clock_advance(void);
 void dkr_probe_video_start(uint8_t* ram);
@@ -236,8 +234,8 @@ int dkr_probe_valid_scissor_pointer(uint32_t command);
 int dkr_probe_valid_preview_pointer(uint32_t viewport);
 void dkr_probe_title_tail_addresses(uint32_t addresses[2]);
 int dkr_probe_title_tail_valid(uint32_t phase, uint32_t units);
-int dkr_probe_title_tail_update(uint32_t* phase, uint32_t* units,
-    int cinematic_complete, int first_title_demo, int title_revealed, uint32_t update_rate);
+int dkr_probe_title_tail_update(uint32_t* phase, uint32_t* units, int cinematic_complete, int first_title_demo,
+                                int title_revealed, uint32_t update_rate);
 void dkr_probe_roster_addresses(uint32_t addresses[7]);
 void dkr_probe_roster_seed(uint32_t mask, int8_t active[4], int8_t characters[8], uint8_t ids[16]);
 uint32_t dkr_probe_roster_buttons(int occupied, int8_t status, uint32_t buttons);
@@ -247,19 +245,21 @@ uint32_t dkr_probe_character_animation_advance(uint32_t phase, int update_rate, 
 int dkr_probe_character_animation_valid(uint32_t active, uint32_t phase);
 int dkr_probe_fullscreen_preview_bounds(const int32_t viewport[8]);
 void dkr_probe_parity_addresses(uint32_t addresses[24]);
-uint32_t dkr_probe_object_identity(uint32_t scene,uint32_t object,uint32_t generation,uint16_t id,uint16_t behaviour);
-uint32_t dkr_probe_camera_identity(uint32_t scene,uint32_t camera,uint32_t epoch,unsigned role);
-uint32_t dkr_probe_matrix_identity(uint32_t object,uint32_t ordinal,uint32_t camera);
-uint32_t dkr_probe_wave_identity(uint32_t scene,uint32_t viewport,uint32_t block,const uint32_t fields[7],uint32_t camera);
-int dkr_probe_camera_discontinuous(const uint32_t previous[4],const uint32_t current[4]);
-void dkr_probe_hud_element(uint32_t element,uint32_t fields[4]);
-int dkr_probe_finish_shot(uint32_t mode,uint32_t previous_mode,uint32_t owner,uint32_t node,
-    uint32_t previous_owner,uint32_t previous_node);
-void dkr_probe_geometry_key(uint32_t scene,uint32_t address,unsigned segment,unsigned pass,uint32_t fields[2]);
-uint32_t dkr_probe_part_identity(uint32_t owner,uint32_t ordinal,uint32_t transform,int mirrored,uint32_t camera);
+uint32_t dkr_probe_object_identity(uint32_t scene, uint32_t object, uint32_t generation, uint16_t id,
+                                   uint16_t behaviour);
+uint32_t dkr_probe_camera_identity(uint32_t scene, uint32_t camera, uint32_t epoch, unsigned role);
+uint32_t dkr_probe_matrix_identity(uint32_t object, uint32_t ordinal, uint32_t camera);
+uint32_t dkr_probe_wave_identity(uint32_t scene, uint32_t viewport, uint32_t block, const uint32_t fields[7],
+                                 uint32_t camera);
+int dkr_probe_camera_discontinuous(const uint32_t previous[4], const uint32_t current[4]);
+void dkr_probe_hud_element(uint32_t element, uint32_t fields[4]);
+int dkr_probe_finish_shot(uint32_t mode, uint32_t previous_mode, uint32_t owner, uint32_t node, uint32_t previous_owner,
+                          uint32_t previous_node);
+void dkr_probe_geometry_key(uint32_t scene, uint32_t address, unsigned segment, unsigned pass, uint32_t fields[2]);
+uint32_t dkr_probe_part_identity(uint32_t owner, uint32_t ordinal, uint32_t transform, int mirrored, uint32_t camera);
 unsigned dkr_probe_address_variant(uint32_t address);
-unsigned dkr_probe_part_variant(uint32_t frame,uint32_t count);
-unsigned dkr_probe_water_tag(uint32_t x,uint32_t y);
+unsigned dkr_probe_part_variant(uint32_t frame, uint32_t count);
+unsigned dkr_probe_water_tag(uint32_t x, uint32_t y);
 #ifdef __cplusplus
 }
 #endif

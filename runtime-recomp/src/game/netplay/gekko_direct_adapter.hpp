@@ -8,7 +8,7 @@ namespace dkr::runtime::netplay {
 // authenticated transport. A one-byte address is the immutable lobby slot;
 // DirectSession validates and relays it through the host when necessary.
 class GekkoDirectAdapter final {
-public:
+  public:
     GekkoDirectAdapter() = default;
     ~GekkoDirectAdapter();
     GekkoDirectAdapter(const GekkoDirectAdapter&) = delete;
@@ -18,11 +18,12 @@ public:
     void deactivate();
     bool active() const;
     GekkoNetAdapter* adapter();
-    DirectSession* session() const { return session_; }
+    DirectSession* session() const {
+        return session_;
+    }
 
-private:
+  private:
     DirectSession* session_ = nullptr;
 };
 
 } // namespace dkr::runtime::netplay
-

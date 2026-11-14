@@ -1,12 +1,13 @@
 void DrawModStore(float width, bool locked, bool game_running = false) {
-    g_store_in_game=game_running;
+    g_store_in_game = game_running;
     auto& service = dkr::store::service();
     if (!g_mod_store.opened) {
         g_mod_store.opened = true;
         service.refresh();
     }
     auto store = service.view();
-    if(game_running&&g_store_overlay_test)store=StoreOverlayFixture(*store);
+    if (game_running && g_store_overlay_test)
+        store = StoreOverlayFixture(*store);
     StoreSyncIdentity(*store);
     if (!store->writing && store->mutation != g_mod_store.mutation) {
         g_mod_store.mutation = store->mutation;
@@ -42,7 +43,8 @@ void DrawModStore(float width, bool locked, bool game_running = false) {
     }
     if (auto url = service.take_browser_url(); !url.empty())
         SDL_OpenURL(url.c_str());
-    if(!game_running)StorePumpInstall();
+    if (!game_running)
+        StorePumpInstall();
     StoreStartQueuedInstall(locked || game_running || store->writing);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.F);
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {10.F, 8.F});
@@ -53,14 +55,14 @@ void DrawModStore(float width, bool locked, bool game_running = false) {
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, PaddockCol(0x205774));
     ImGui::PushStyleColor(ImGuiCol_Border, PaddockCol(0x496579));
     ImGui::PushStyleColor(ImGuiCol_PlotHistogram, PaddockCol(0xFFC15A));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,{0.F,0.F});
-    DrawLibraryPageHeader(width,*store);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.F, 0.F});
+    DrawLibraryPageHeader(width, *store);
     ImGui::PopStyleVar();
-    StoreNote(dkr::localisation::source(dkr::store::LegacyRomInstallNotice),width,false);
+    StoreNote(dkr::localisation::source(dkr::store::LegacyRomInstallNotice), width, false);
     PaddockGap(8.F);
     if (store->cached && !store->loading)
         StoreNote("Showing the saved library. Refresh to try connecting again.", width);
-    DrawLauncherFeatured(width,game_running);
+    DrawLauncherFeatured(width, game_running);
     const auto active = std::count_if(store->downloads.begin(), store->downloads.end(), StoreTransferActive);
     const auto manager = dkr::store::installations().view();
     const int current = g_mod_store.page == 0                                                     ? 0

@@ -24,11 +24,11 @@ void put32(std::vector<std::uint8_t>& out, std::uint32_t value) {
 }
 
 // A mono 16-bit WAV of `frames` frames holding 0, 1, 2, ...
-std::vector<std::uint8_t> ramp_wav(std::uint32_t frames, std::uint32_t rate,
-                                   std::uint16_t format = 1) {
+std::vector<std::uint8_t> ramp_wav(std::uint32_t frames, std::uint32_t rate, std::uint16_t format = 1) {
     std::vector<std::uint8_t> wav = {'R', 'I', 'F', 'F'};
     put32(wav, 36U + frames * 2U);
-    for (const char c : std::string("WAVEfmt ")) wav.push_back(static_cast<std::uint8_t>(c));
+    for (const char c : std::string("WAVEfmt "))
+        wav.push_back(static_cast<std::uint8_t>(c));
     put32(wav, 16U);
     put16(wav, format);
     put16(wav, 1U);
@@ -36,7 +36,8 @@ std::vector<std::uint8_t> ramp_wav(std::uint32_t frames, std::uint32_t rate,
     put32(wav, rate * 2U);
     put16(wav, 2U);
     put16(wav, 16U);
-    for (const char c : std::string("data")) wav.push_back(static_cast<std::uint8_t>(c));
+    for (const char c : std::string("data"))
+        wav.push_back(static_cast<std::uint8_t>(c));
     put32(wav, frames * 2U);
     for (std::uint32_t i = 0; i < frames; ++i) {
         put16(wav, i & 0x7FFFU);
@@ -51,15 +52,12 @@ int main(int argc, char** argv) {
     const std::string abc = "abc";
     assert(sha256_hex(reinterpret_cast<const std::uint8_t*>(abc.data()), abc.size()) ==
            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-    assert(sha256_hex(nullptr, 0) ==
-           "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+    assert(sha256_hex(nullptr, 0) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     const std::string thousand(1000, 'a');
-    assert(sha256_hex(reinterpret_cast<const std::uint8_t*>(thousand.data()),
-                      thousand.size()) ==
+    assert(sha256_hex(reinterpret_cast<const std::uint8_t*>(thousand.data()), thousand.size()) ==
            "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3");
-    const std::string fifty_six(56, 'b');   // padding spills into a second block
-    assert(sha256_hex(reinterpret_cast<const std::uint8_t*>(fifty_six.data()),
-                      fifty_six.size()).size() == 64U);
+    const std::string fifty_six(56, 'b'); // padding spills into a second block
+    assert(sha256_hex(reinterpret_cast<const std::uint8_t*>(fifty_six.data()), fifty_six.size()).size() == 64U);
 
     // A WAV decodes to stereo, mono doubled, sample for sample.
     {
@@ -94,17 +92,18 @@ int main(int argc, char** argv) {
     if (argc > 1) {
         fixtures = argv[1];
     }
-    const auto pcm_identity=[](const char* name,const DecodedMusic& music) {
-        std::vector<std::uint8_t> bytes;bytes.reserve(music.samples.size()*2);
-        for(const auto sample:music.samples)put16(bytes,std::uint16_t(sample));
-        std::printf("[test][custom-music-pcm] %s sha256=%s\n",name,sha256_hex(bytes.data(),bytes.size()).c_str());
+    const auto pcm_identity = [](const char* name, const DecodedMusic& music) {
+        std::vector<std::uint8_t> bytes;
+        bytes.reserve(music.samples.size() * 2);
+        for (const auto sample : music.samples)
+            put16(bytes, std::uint16_t(sample));
+        std::printf("[test][custom-music-pcm] %s sha256=%s\n", name, sha256_hex(bytes.data(), bytes.size()).c_str());
     };
     {
         DecodedMusic music;
         std::string error;
         assert(decode_file(fixtures / "sine_stereo_44k.mp3", MusicCodec::Mp3,
-                           "ae1103b3a8882b10e9fb8ef729e46127737b7d4ec0e68f32c062cc0bc49193b5",
-                           music, error));
+                           "ae1103b3a8882b10e9fb8ef729e46127737b7d4ec0e68f32c062cc0bc49193b5", music, error));
         assert(music.frames == 88200U && music.sample_rate == 44100U);
         // A 440 Hz tone, not silence (it peaks at 2884).
         int peak = 0;
@@ -112,17 +111,15 @@ int main(int argc, char** argv) {
             peak = std::max(peak, std::abs(static_cast<int>(sample)));
         }
         assert(peak > 2600 && peak < 3200);
-        pcm_identity("stereo-44k",music);
+        pcm_identity("stereo-44k", music);
 
         assert(decode_file(fixtures / "sine_mono_22k_id3.mp3", MusicCodec::Mp3,
-                           "32c4d06effca0a8ded57208533211dd518cde5f6ae6163d47666ff1f09d165ac",
-                           music, error));
+                           "32c4d06effca0a8ded57208533211dd518cde5f6ae6163d47666ff1f09d165ac", music, error));
         assert(music.frames == 33075U && music.sample_rate == 22050U);
-        assert(music.samples[1000] == music.samples[1001]);   // mono, doubled
-        pcm_identity("mono-22k",music);
+        assert(music.samples[1000] == music.samples[1001]); // mono, doubled
+        pcm_identity("mono-22k", music);
 
-        assert(!decode_file(fixtures / "sine_mono_22k_id3.mp3", MusicCodec::Mp3,
-                            std::string(64, '0'), music, error));
+        assert(!decode_file(fixtures / "sine_mono_22k_id3.mp3", MusicCodec::Mp3, std::string(64, '0'), music, error));
         assert(error.find("changed") != std::string::npos);
         assert(!decode_file(fixtures / "missing.mp3", MusicCodec::Mp3, "", music, error));
     }

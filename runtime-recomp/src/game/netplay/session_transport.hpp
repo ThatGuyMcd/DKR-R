@@ -43,8 +43,7 @@ struct TransportReceiveSignal {
 // message must not hold newer commits behind unrelated ordered lobby/control
 // traffic. Session start explicitly proves every required channel before the
 // launch descriptor is published.
-constexpr TransportTrafficClass quick_join_delivery_class(
-    TransportTrafficClass traffic) {
+constexpr TransportTrafficClass quick_join_delivery_class(TransportTrafficClass traffic) {
     return traffic;
 }
 
@@ -53,26 +52,21 @@ constexpr TransportTrafficClass quick_join_delivery_class(
 // non-blocking contract through a WebRTC data channel without changing the
 // authenticated DKR-R session protocol above it.
 class SessionTransport {
-public:
+  public:
     virtual ~SessionTransport() = default;
     virtual bool open(std::uint16_t port, std::string& error) = 0;
     virtual void close() = 0;
     virtual bool is_open() const = 0;
     virtual std::uint16_t local_port() const = 0;
-    virtual DatagramSendStatus send_status(
-        const PeerAddress& destination,
-        std::span<const std::uint8_t> bytes,
-        TransportTrafficClass traffic,
-        std::string& error) = 0;
-    virtual bool receive(PeerAddress& source,
-                         std::vector<std::uint8_t>& bytes,
-                         std::string& error) = 0;
+    virtual DatagramSendStatus send_status(const PeerAddress& destination, std::span<const std::uint8_t> bytes,
+                                           TransportTrafficClass traffic, std::string& error) = 0;
+    virtual bool receive(PeerAddress& source, std::vector<std::uint8_t>& bytes, std::string& error) = 0;
     // Local scheduling hint ONLY. Immutable input remains in the sender's
     // repair ledger; transport can retire unsent live batches for this owner.
     // Never applied to control, save, checkpoint or repair traffic.
-    virtual DatagramSendStatus send_live_status(const PeerAddress& destination,
-        std::span<const std::uint8_t> bytes,std::uint8_t owner,std::string& error) {
-        return send_status(destination,bytes,TransportTrafficClass::Realtime,error);
+    virtual DatagramSendStatus send_live_status(const PeerAddress& destination, std::span<const std::uint8_t> bytes,
+                                                std::uint8_t owner, std::string& error) {
+        return send_status(destination, bytes, TransportTrafficClass::Realtime, error);
     }
     virtual void service() {}
     virtual void set_receive_signal(std::shared_ptr<TransportReceiveSignal>) {}
@@ -83,15 +77,16 @@ public:
     // Terminal close of a currently admitted route, not an ICE Disconnected
     // notification or signaling-service outage. The session decides whether
     // its selected backend must end the match. UDP has no such close event.
-    virtual bool take_peer_departure(PeerAddress&) { return false; }
+    virtual bool take_peer_departure(PeerAddress&) {
+        return false;
+    }
     virtual std::size_t buffered_bytes(TransportTrafficClass) const {
         return 0U;
     }
     // UDP has one datagram route for all traffic classes. Quick Join overrides
     // this with per-peer data-channel readiness so a race cannot start with a
     // missing authority/realtime/replica lane.
-    virtual bool traffic_ready(const PeerAddress&,
-                               TransportTrafficClass) const {
+    virtual bool traffic_ready(const PeerAddress&, TransportTrafficClass) const {
         return is_open();
     }
     // The native UDP route deliberately keeps authenticated datagrams below
@@ -106,22 +101,28 @@ public:
     // Clearing only the requested lane prevents it from consuming the next
     // race's processing budget without touching reliable control/ledger data.
     virtual void discard_received(TransportTrafficClass) {}
-    virtual bool quick_join() const { return false; }
-    virtual std::string quick_join_code() const { return {}; }
+    virtual bool quick_join() const {
+        return false;
+    }
+    virtual std::string quick_join_code() const {
+        return {};
+    }
     virtual void set_quick_join_bootstrap(std::string) {}
     virtual bool rekey_quick_join(std::string, std::string& error) {
         error = "This transport does not support Quick Join code rotation.";
         return false;
     }
-    virtual QuickJoinRekeyStatus rekey_status() const { return QuickJoinRekeyStatus::Idle; }
+    virtual QuickJoinRekeyStatus rekey_status() const {
+        return QuickJoinRekeyStatus::Idle;
+    }
     virtual bool take_quick_join_bootstrap(std::string&, PeerAddress&) {
         return false;
     }
 };
 
 std::unique_ptr<SessionTransport> make_udp_session_transport();
-std::unique_ptr<SessionTransport> make_quick_join_session_transport(
-    bool host, std::string_view code, std::string& error);
+std::unique_ptr<SessionTransport> make_quick_join_session_transport(bool host, std::string_view code,
+                                                                    std::string& error);
 bool valid_quick_join_code(std::string_view code);
 
 } // namespace dkr::runtime::netplay

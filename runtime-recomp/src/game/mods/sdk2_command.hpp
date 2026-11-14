@@ -8,10 +8,14 @@ namespace dkr::sdk2 {
 // 3..14: mod-defined deterministic arguments; 15: expected scene generation.
 // Zero is the only empty command.
 struct Command {
-    std::array<std::uint32_t,16> words{};
-    bool empty()const {return words==std::array<std::uint32_t,16>{};}
-    bool valid()const {return empty()||(words[0]>=1&&words[0]<=128&&words[1]&&words[2]&&words[15]);}
-    bool operator==(const Command&)const=default;
+    std::array<std::uint32_t, 16> words{};
+    bool empty() const {
+        return words == std::array<std::uint32_t, 16>{};
+    }
+    bool valid() const {
+        return empty() || (words[0] >= 1 && words[0] <= 128 && words[1] && words[2] && words[15]);
+    }
+    bool operator==(const Command&) const = default;
 };
-static_assert(sizeof(Command)==64);
-}
+static_assert(sizeof(Command) == 64);
+} // namespace dkr::sdk2

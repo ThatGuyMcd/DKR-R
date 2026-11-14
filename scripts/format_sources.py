@@ -12,7 +12,8 @@ clang-format, gersemi and ruff run inside a pinned image (IMAGE) with the
 exact versions .github/lint-tools.txt pins, installed with --require-hashes,
 so a reviewer who reruns it gets identical output. --write then proves the pass changed
 layout only: every rewritten C/C++ file must lex to the same tokens as before
-(comments and whitespace aside; scripts/format_tokens.py). A file that
+(comments, whitespace and the order of adjacent using-declarations aside;
+scripts/format_tokens.py and canonical_tokens below). A file that
 doesn't is restored and reported, and the run fails.
 
 The C/C++ and CMake set is SOURCES minus NEVER: guest code fragments spliced
@@ -40,6 +41,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from typing import Any
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -134,6 +136,9 @@ PIN_HOLDERS = (
     "scripts/character_portrait_pipeline.py",
     "runtime-recomp/tests/replay_probe/test_generator.py",
 )
+# The identity guard's record of its inputs' sha256. A format pass moves the
+# digests of the inputs it reformats and nothing else in it.
+IDENTITY_RECORD = "architecture/online-identity-inputs.json"
 DIGEST = re.compile(r"[0-9a-f]{64}")
 CMAKE_TOKEN = re.compile(
     r"(?P<comment>#\[(?P<eq>=*)\[.*?\](?P=eq)\]|#[^\n]*)"
@@ -164,6 +169,64 @@ def python_tree(data: bytes, digests: dict[str, str] | None = None) -> str:
     return ast.dump(tree)
 
 
+def canonical_tokens(data: bytes) -> list[str]:
+    """A file's tokens with every run of consecutive using-declarations sorted.
+    The formatter orders them (SortUsingDeclarations) and their order carries
+    no meaning, so two files that differ only there are the same file. Aliases
+    (using A = B), using-directives and anything between two declarations end
+    a run."""
+    stream = format_tokens.tokens(data)
+    out: list[str] = []
+    run: list[list[str]] = []
+    at = 0
+    while at <= len(stream):
+        statement: list[str] = []
+        if at < len(stream) and stream[at] == "using":
+            end = at
+            while end < len(stream) and stream[end] != ";":
+                end += 1
+            candidate = stream[at : end + 1]
+            if end < len(stream) and not {"=", "namespace", "enum", "{", "}"} & set(candidate):
+                statement = candidate
+        if statement:
+            run.append(statement)
+            at += len(statement)
+            continue
+        for declaration in sorted(run):
+            out += declaration
+        run = []
+        if at < len(stream):
+            out.append(stream[at])
+        at += 1
+    return out
+
+
+def identity_record_problems(
+    old: dict[str, Any], new: dict[str, Any], base: str, head: str, changed: dict[str, str]
+) -> list[str]:
+    """The record may only follow the files this range changed: same globs,
+    identity and inputs, and each moved digest is that input's own old and new
+    sha256. Whether the input's change is a format change is judged on the
+    input itself."""
+    if old["globs"] != new["globs"] or old["identity"] != new["identity"] or set(old["inputs"]) != set(new["inputs"]):
+        return [f"{IDENTITY_RECORD}: globs, identity or the input set changed"]
+    problems: list[str] = []
+    for path in sorted(new["inputs"]):
+        if old["inputs"][path] == new["inputs"][path]:
+            continue
+        before, after = show(base, path), show(head, path)
+        moved = (
+            changed.get(path) == "M"
+            and before is not None
+            and after is not None
+            and old["inputs"][path] == hashlib.sha256(before).hexdigest()
+            and new["inputs"][path] == hashlib.sha256(after).hexdigest()
+        )
+        if not moved:
+            problems.append(f"{IDENTITY_RECORD}: {path} digest does not follow a change to that file in this range")
+    return problems
+
+
 def prove(base: str, head: str) -> tuple[dict[str, object], list[str]]:
     """(record, problems) for the commits from BASE to HEAD."""
     diff = subprocess.check_output(["git", "diff", "--name-status", "--no-renames", base, head], cwd=ROOT, text=True)
@@ -179,7 +242,7 @@ def prove(base: str, head: str) -> tuple[dict[str, object], list[str]]:
         if status != "M" or old is None or new is None:
             continue
         if C_FAMILY.search(name):
-            if format_tokens.tokens(old) != format_tokens.tokens(new):
+            if canonical_tokens(old) != canonical_tokens(new):
                 problems.append(f"{name}: tokens changed")
                 continue
             digests[hashlib.sha256(old).hexdigest()] = hashlib.sha256(new).hexdigest()
@@ -202,6 +265,8 @@ def prove(base: str, head: str) -> tuple[dict[str, object], list[str]]:
         elif name.endswith(".py"):
             if python_tree(old) != python_tree(new):
                 problems.append(f"{name}: Python syntax tree changed")
+        elif name == IDENTITY_RECORD:
+            problems += identity_record_problems(json.loads(old), json.loads(new), base, head, changed)
         else:
             problems.append(f"{name}: not a C/C++, CMake or Python file")
     record: dict[str, object] = {
@@ -260,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     changed = [name for name, data in before.items() if (ROOT / name).read_bytes() != data]
     mismatched: list[str] = []
     for name in changed:
-        if format_tokens.tokens(before[name]) != format_tokens.tokens((ROOT / name).read_bytes()):
+        if canonical_tokens(before[name]) != canonical_tokens((ROOT / name).read_bytes()):
             (ROOT / name).write_bytes(before[name])
             mismatched.append(name)
     print(f"format_sources: {len(changed)} C/C++ files reformatted, {len(cmake_files)} CMake files checked")

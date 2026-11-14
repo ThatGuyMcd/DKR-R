@@ -16,15 +16,22 @@ void MergeLocalisationFont(ImFontAtlas* atlas, ImFont* destination, float size) 
     config.PixelSnapH = true;
     config.OversampleH = 1;
     config.OversampleV = 1;
-    atlas->AddFontFromMemoryTTF(const_cast<unsigned char*>(bytes.data()), int(bytes.size()), size, &config, ranges.data());
+    atlas->AddFontFromMemoryTTF(const_cast<unsigned char*>(bytes.data()), int(bytes.size()), size, &config,
+                                ranges.data());
 }
 void MergeLocalisationFonts(ImFontAtlas* atlas) {
-    static const auto without_digits=[] {
+    static const auto without_digits = [] {
         std::vector<ImWchar> ranges;
-        const auto all=dkr::localisation::fallback_ranges();
-        for(std::size_t i=0;all[i];i+=2) {
-            if(all[i]<'0') {ranges.push_back(all[i]);ranges.push_back(std::min<ImWchar>(all[i+1],'0'-1));}
-            if(all[i+1]>'9') {ranges.push_back(std::max<ImWchar>(all[i],'9'+1));ranges.push_back(all[i+1]);}
+        const auto all = dkr::localisation::fallback_ranges();
+        for (std::size_t i = 0; all[i]; i += 2) {
+            if (all[i] < '0') {
+                ranges.push_back(all[i]);
+                ranges.push_back(std::min<ImWchar>(all[i + 1], '0' - 1));
+            }
+            if (all[i + 1] > '9') {
+                ranges.push_back(std::max<ImWchar>(all[i], '9' + 1));
+                ranges.push_back(all[i + 1]);
+            }
         }
         ranges.push_back(0);
         return ranges;
@@ -34,11 +41,14 @@ void MergeLocalisationFonts(ImFontAtlas* atlas) {
         if (!config.MergeMode && config.DstFont) {
             // Let each original face supply its supported accents/Cyrillic.
             // Preserve bases that deliberately exclude digits for Jumpman.
-            bool digits=config.GlyphRanges==nullptr;
-            if(config.GlyphRanges)for(auto* range=config.GlyphRanges;*range;range+=2)
-                if(range[0]<='0'&&range[1]>='0')digits=true;
-            config.GlyphRanges=digits?dkr::localisation::fallback_ranges().data():without_digits.data();
+            bool digits = config.GlyphRanges == nullptr;
+            if (config.GlyphRanges)
+                for (auto* range = config.GlyphRanges; *range; range += 2)
+                    if (range[0] <= '0' && range[1] >= '0')
+                        digits = true;
+            config.GlyphRanges = digits ? dkr::localisation::fallback_ranges().data() : without_digits.data();
             destinations.emplace_back(config.DstFont, config.SizePixels);
         }
-    for (const auto& [font, size] : destinations) MergeLocalisationFont(atlas, font, size);
+    for (const auto& [font, size] : destinations)
+        MergeLocalisationFont(atlas, font, size);
 }

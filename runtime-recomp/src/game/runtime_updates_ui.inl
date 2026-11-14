@@ -5,19 +5,17 @@ bool g_update_notice_requested = false;
 bool UpdatesLocked(bool launcher);
 
 void DrawPlayUpdateButton(float width) {
-    auto *updates = dkr::updates::service();
+    auto* updates = dkr::updates::service();
     const bool busy = updates && updates->snapshot().busy;
     const bool locked = !updates || UpdatesLocked(true);
     ImGui::BeginDisabled(busy || locked);
-    const char *label = width < PaddockImportButtonWidth("Check for updates")
-                            ? "Updates###play-update-check"
-                            : "Check for updates###play-update-check";
+    const char* label = width < PaddockImportButtonWidth("Check for updates") ? "Updates###play-update-check"
+                                                                              : "Check for updates###play-update-check";
     const bool pressed = PaddockImportButton(label, width, true);
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         if (!updates)
-            ImGui::SetTooltip(
-                "Automatic checks aren't available here. Open Releases in About DKR-R.");
+            ImGui::SetTooltip("Automatic checks aren't available here. Open Releases in About DKR-R.");
         else if (locked)
             ImGui::SetTooltip("Finish your lobby or import first.");
         else if (busy)
@@ -31,7 +29,7 @@ void DrawPlayUpdateButton(float width) {
     }
 }
 
-std::string UpdateDisplayMessage(const dkr::updates::Snapshot &snapshot) {
+std::string UpdateDisplayMessage(const dkr::updates::Snapshot& snapshot) {
     using dkr::updates::State;
     switch (snapshot.state) {
     case State::Idle:
@@ -41,8 +39,7 @@ std::string UpdateDisplayMessage(const dkr::updates::Snapshot &snapshot) {
     case State::Current:
         return "You're up to date.";
     case State::Available:
-        return snapshot.manual_only ? "Open Releases to install this update manually."
-                                    : "An update is available.";
+        return snapshot.manual_only ? "Open Releases to install this update manually." : "An update is available.";
     case State::Downloading:
         return "Downloading update...";
     case State::Ready:
@@ -52,19 +49,17 @@ std::string UpdateDisplayMessage(const dkr::updates::Snapshot &snapshot) {
     case State::Preparing:
         return "Preparing update...";
     case State::Failed:
-        return dkr::runtime::copy::error_summary(snapshot.message,
-                                                 dkr::runtime::copy::Area::Updates);
+        return dkr::runtime::copy::error_summary(snapshot.message, dkr::runtime::copy::Area::Updates);
     }
     return {};
 }
 
 bool UpdatesLocked(bool launcher) {
-    return !launcher || dkr::runtime::netplay::session().active() ||
-           g_legacy_imports.snapshot().busy || g_mod_launch.snapshot().modal ||
-           OnlineModSelectionLocked() || DialogJobRunning();
+    return !launcher || dkr::runtime::netplay::session().active() || g_legacy_imports.snapshot().busy ||
+           g_mod_launch.snapshot().modal || OnlineModSelectionLocked() || DialogJobRunning();
 }
 void DrawUpdateActions(float width, bool launcher) {
-    auto *updates = dkr::updates::service();
+    auto* updates = dkr::updates::service();
     if (!updates)
         return;
     const auto snapshot = updates->snapshot();
@@ -82,27 +77,23 @@ void DrawUpdateActions(float width, bool launcher) {
                 dkr::runtime::portable::enabled() != dkr::runtime::portable::enabled_at_startup())
                 g_update_action_status = "Restart DKR-R before installing this update.";
             else if (!updates->install(g_update_action_status) && !snapshot.notes.empty())
-                g_update_action_status +=
-                    " Your download is kept. Open Releases for manual installation.";
+                g_update_action_status += " Your download is kept. Open Releases for manual installation.";
         }
-    } else if (snapshot.state == dkr::updates::State::Failed && !snapshot.version.empty() &&
-               !snapshot.manual_only) {
+    } else if (snapshot.state == dkr::updates::State::Failed && !snapshot.version.empty() && !snapshot.manual_only) {
         if (DetailRaceButton("RETRY DOWNLOAD", width, 0x0A6EA1, locked || snapshot.busy))
             updates->download();
     }
     if (snapshot.busy && snapshot.state != dkr::updates::State::Preparing) {
         PaddockGap(8.0F);
-        if (DetailRaceButton(snapshot.state == dkr::updates::State::Downloading ? "PAUSE DOWNLOAD"
-                                                                                : "CANCEL CHECK",
+        if (DetailRaceButton(snapshot.state == dkr::updates::State::Downloading ? "PAUSE DOWNLOAD" : "CANCEL CHECK",
                              width))
             updates->cancel();
     }
     if (locked) {
         PaddockGap(8.0F);
-        DetailText(!launcher ? "Return to the launcher to update."
-                   : dkr::runtime::netplay::session().active()
-                       ? "Leave the lobby before updating."
-                       : "Finish the current import before updating.",
+        DetailText(!launcher                                   ? "Return to the launcher to update."
+                   : dkr::runtime::netplay::session().active() ? "Leave the lobby before updating."
+                                                               : "Finish the current import before updating.",
                    width, kSetMuted, 0);
     }
     if (!g_update_action_status.empty()) {
@@ -113,10 +104,9 @@ void DrawUpdateActions(float width, bool launcher) {
 void DrawUpdatesCard(float width) {
     AboutSectionTitle("Updates", width);
     DetailCard(width, {20.0F, 18.0F}, [&](float inner) {
-        auto *updates = dkr::updates::service();
+        auto* updates = dkr::updates::service();
         if (!updates) {
-            DetailText("Automatic updates aren't available here. Open Releases to update manually.",
-                       inner, kSetMuted);
+            DetailText("Automatic updates aren't available here. Open Releases to update manually.", inner, kSetMuted);
             if (DetailRaceButton("OPEN RELEASES", inner))
                 SDL_OpenURL("https://github.com/ThatGuyMcd/DKR-R/releases");
             return;
@@ -126,12 +116,10 @@ void DrawUpdatesCard(float width) {
         auto preferences = snapshot.preferences;
         {
             OlDisabled disabled(snapshot.busy || !launcher, 0.6F);
-            if (SettingsCheck("##updates-startup", "Check for updates at startup",
-                              &preferences.automatic, inner))
+            if (SettingsCheck("##updates-startup", "Check for updates at startup", &preferences.automatic, inner))
                 updates->preferences(preferences);
             PaddockGap(8.0F);
-            if (SettingsCheck("##updates-beta", "Include preview updates", &preferences.beta,
-                              inner)) {
+            if (SettingsCheck("##updates-beta", "Include preview updates", &preferences.beta, inner)) {
                 preferences.skipped.clear();
                 updates->preferences(preferences);
                 updates->check();
@@ -145,13 +133,11 @@ void DrawUpdatesCard(float width) {
         if (snapshot.state == dkr::updates::State::Failed || snapshot.manual_only)
             DrawTechnicalDetails(snapshot.message);
         if (!snapshot.installation_result.empty())
-            DrawFriendlyStatus(snapshot.installation_result, inner,
-                               dkr::runtime::copy::Area::Updates);
+            DrawFriendlyStatus(snapshot.installation_result, inner, dkr::runtime::copy::Area::Updates);
         if (!snapshot.last_check.empty())
             DetailText("Last checked: " + snapshot.last_check, inner, kSetMuted, 8);
         if (snapshot.state == dkr::updates::State::Downloading) {
-            float fraction =
-                snapshot.total ? float(double(snapshot.received) / double(snapshot.total)) : 0;
+            float fraction = snapshot.total ? float(double(snapshot.received) / double(snapshot.total)) : 0;
             ImGui::ProgressBar(std::clamp(fraction, 0.0F, 1.0F), {inner, 24});
             PaddockGap(8.0F);
         }
@@ -163,8 +149,8 @@ void DrawUpdatesCard(float width) {
         DetailText("Your saves, mods, texture packs and settings are kept.", inner, kSetMuted, 0);
     });
 }
-void DrawUpdateNotice(dkr::runtime::ui::StartupResult &result, bool &running) {
-    auto *updates = dkr::updates::service();
+void DrawUpdateNotice(dkr::runtime::ui::StartupResult& result, bool& running) {
+    auto* updates = dkr::updates::service();
     if (!updates)
         return;
     const auto snapshot = updates->snapshot();
@@ -174,10 +160,10 @@ void DrawUpdateNotice(dkr::runtime::ui::StartupResult &result, bool &running) {
         running = false;
         return;
     }
-    if (dkr::runtime::copy::open_update_result(
-            g_update_notice_requested, snapshot.state == dkr::updates::State::Available,
-            snapshot.version == snapshot.preferences.skipped,
-            snapshot.version == g_update_notice_seen, UpdatesLocked(true))) {
+    if (dkr::runtime::copy::open_update_result(g_update_notice_requested,
+                                               snapshot.state == dkr::updates::State::Available,
+                                               snapshot.version == snapshot.preferences.skipped,
+                                               snapshot.version == g_update_notice_seen, UpdatesLocked(true))) {
         if (snapshot.state == dkr::updates::State::Available)
             g_update_notice_seen = snapshot.version;
         g_update_notice_requested = true;
@@ -186,8 +172,7 @@ void DrawUpdateNotice(dkr::runtime::ui::StartupResult &result, bool &running) {
         ImGui::OpenPopup("DKR-R updates");
         g_update_notice_requested = false;
     }
-    ImGui::SetNextWindowSize({std::min(620.0F, ImGui::GetIO().DisplaySize.x - 32.0F), 0},
-                             ImGuiCond_Appearing);
+    ImGui::SetNextWindowSize({std::min(620.0F, ImGui::GetIO().DisplaySize.x - 32.0F), 0}, ImGuiCond_Appearing);
     if (!BeginPaddedModal("DKR-R updates", ImGuiWindowFlags_AlwaysAutoResize))
         return;
     auto width = ImGui::GetContentRegionAvail().x;
@@ -198,18 +183,14 @@ void DrawUpdateNotice(dkr::runtime::ui::StartupResult &result, bool &running) {
     if (snapshot.state == dkr::updates::State::Failed || snapshot.manual_only)
         DrawTechnicalDetails(snapshot.message);
     if (snapshot.total)
-        DetailText("Download size: " + std::to_string(snapshot.total / 1024 / 1024) + " MiB", width,
-                   kSetMuted);
+        DetailText("Download size: " + std::to_string(snapshot.total / 1024 / 1024) + " MiB", width, kSetMuted);
     if (snapshot.state == dkr::updates::State::Downloading) {
-        ImGui::ProgressBar(
-            snapshot.total ? float(double(snapshot.received) / double(snapshot.total)) : 0,
-            {width, 24});
+        ImGui::ProgressBar(snapshot.total ? float(double(snapshot.received) / double(snapshot.total)) : 0, {width, 24});
         PaddockGap(12.0F);
     }
     DrawUpdateActions(width, true);
     PaddockGap(12.0F);
-    if (DetailRaceButton(snapshot.state == dkr::updates::State::Current ||
-                                 snapshot.state == dkr::updates::State::Failed
+    if (DetailRaceButton(snapshot.state == dkr::updates::State::Current || snapshot.state == dkr::updates::State::Failed
                              ? "CLOSE"
                              : "LATER",
                          width, 0x0A6EA1, snapshot.state == dkr::updates::State::Preparing))

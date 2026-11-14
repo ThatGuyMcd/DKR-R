@@ -12,4 +12,4 @@ void import_external_file(const char* utf8_path);
 void configure_session();
 const char* build_identity();
 
-}
+} // namespace dkr::runtime::ios

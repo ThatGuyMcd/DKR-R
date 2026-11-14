@@ -19,9 +19,8 @@ struct HttpResponse {
     std::string body;
 };
 using Progress = std::function<void(std::uint64_t)>;
-using Transport =
-    std::function<HttpResponse(const HttpRequest &, std::stop_token, const Progress &)>;
-HttpResponse https_get(const HttpRequest &, std::stop_token, const Progress &);
+using Transport = std::function<HttpResponse(const HttpRequest&, std::stop_token, const Progress&)>;
+HttpResponse https_get(const HttpRequest&, std::stop_token, const Progress&);
 #if defined(__APPLE__) || defined(__ANDROID__)
 std::string native_os_version();
 #endif
@@ -32,7 +31,7 @@ class HttpSink {
 
   public:
     HttpResponse response;
-    explicit HttpSink(const HttpRequest &, std::stop_token, const Progress &);
+    explicit HttpSink(const HttpRequest&, std::stop_token, const Progress&);
     ~HttpSink();
     bool header(std::string_view key, std::string_view value);
     bool write(std::span<const std::uint8_t>);

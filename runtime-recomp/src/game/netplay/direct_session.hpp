@@ -58,7 +58,7 @@ struct PendingJoinView {
     std::string display_name;
     bool compatible = false;
     std::string compatibility;
-    bool preparing_mods=false;
+    bool preparing_mods = false;
 };
 
 struct ConnectionTestResultView {
@@ -154,8 +154,7 @@ struct SessionView {
     std::uint32_t connection_test_id = 0U;
     std::uint32_t connection_test_remaining_ms = 0U;
     std::uint32_t connection_test_result_generation = 0U;
-    std::array<ConnectionTestResultView, kMaximumPlayers>
-        connection_test_results{};
+    std::array<ConnectionTestResultView, kMaximumPlayers> connection_test_results{};
     std::optional<CompatibilityManifest> compatibility_sync_offer;
     std::optional<protocol::ModOfferPayload> mod_offer;
     bool local_online_save_ready = false;
@@ -190,8 +189,7 @@ struct RuntimeSessionView {
     bool running = false;
     bool host = false;
     std::uint8_t local_slot = 0U;
-    HostControlPolicy host_control =
-        HostControlPolicy::GuidedUntilCharacterSelect;
+    HostControlPolicy host_control = HostControlPolicy::GuidedUntilCharacterSelect;
     std::optional<LaunchDescriptor> launch_descriptor;
     std::uint32_t input_epoch = 0U;
     std::uint32_t scene_epoch = 0U;
@@ -233,194 +231,138 @@ enum class TimelineProgressScope : std::uint8_t {
 };
 
 class DirectSession final {
-public:
-    using SaveInstaller = std::function<bool(
-        std::uint64_t, std::span<const std::uint8_t>,
-        std::filesystem::path&, std::string&)>;
-    using SaveReader = std::function<bool(bool, std::uint64_t,
-        std::vector<std::uint8_t>&, std::filesystem::path&, std::string&)>;
+  public:
+    using SaveInstaller =
+        std::function<bool(std::uint64_t, std::span<const std::uint8_t>, std::filesystem::path&, std::string&)>;
+    using SaveReader =
+        std::function<bool(bool, std::uint64_t, std::vector<std::uint8_t>&, std::filesystem::path&, std::string&)>;
     DirectSession();
     ~DirectSession();
     DirectSession(const DirectSession&) = delete;
     DirectSession& operator=(const DirectSession&) = delete;
 
     void configure_manifest(const CompatibilityManifest& manifest);
-    bool configure_mod_admission(std::string manifest_hash,std::uint32_t manifest_bytes);
+    bool configure_mod_admission(std::string manifest_hash, std::uint32_t manifest_bytes);
     struct ModPacket {
-        std::uint64_t sender=0;
-        bool data=false;
+        std::uint64_t sender = 0;
+        bool data = false;
         std::vector<std::uint8_t> bytes;
         // Host-assigned admission identity, never read from peer payloads.
-        std::uint64_t request_id=0;
+        std::uint64_t request_id = 0;
     };
     // Provisional, authenticated lobby-only route. No player slot, input,
     // checkpoint, save or launch privileges until exact preparation succeeds.
     bool take_mod_packet(ModPacket& packet);
     std::size_t mod_chunk_budget() const;
-    bool send_mod_packet(std::uint64_t target,std::span<const std::uint8_t> bytes,
-                         bool data,std::string& error);
-    bool complete_mod_admission(std::uint64_t request,std::string_view digest,std::string_view resources,std::string& error);
-    bool complete_local_mod_preparation(std::string_view digest,std::string_view resources,std::string& error);
-    void configure_session_save(std::vector<std::uint8_t> canonical_save,
-                                SaveInstaller installer, SaveReader reader = {});
+    bool send_mod_packet(std::uint64_t target, std::span<const std::uint8_t> bytes, bool data, std::string& error);
+    bool complete_mod_admission(std::uint64_t request, std::string_view digest, std::string_view resources,
+                                std::string& error);
+    bool complete_local_mod_preparation(std::string_view digest, std::string_view resources, std::string& error);
+    void configure_session_save(std::vector<std::uint8_t> canonical_save, SaveInstaller installer,
+                                SaveReader reader = {});
     void configure_artifact_directory(std::filesystem::path directory);
-    bool host(std::uint16_t port, std::string advertised_host,
-              std::string room_name, ConnectionMethod method,
-              std::string player_name, const Rules& rules,
-              std::string& error);
-    bool join(std::string_view invite, std::string player_name,
-              std::string& error);
-    bool join_friend_invite(std::string_view invite, std::string player_name,
-                            const secure::Key& admission,
+    bool host(std::uint16_t port, std::string advertised_host, std::string room_name, ConnectionMethod method,
+              std::string player_name, const Rules& rules, std::string& error);
+    bool join(std::string_view invite, std::string player_name, std::string& error);
+    bool join_friend_invite(std::string_view invite, std::string player_name, const secure::Key& admission,
                             std::string& error);
-    bool create_friend_admission(secure::Key& admission,
-                                 std::chrono::seconds lifetime,
-                                 std::string& error);
+    bool create_friend_admission(secure::Key& admission, std::chrono::seconds lifetime, std::string& error);
     void revoke_friend_admission(const secure::Key& admission);
     void disconnect(std::string_view reason = {});
     void pump();
 
     bool set_ready(bool ready, std::string& error);
     bool approve_join(std::uint64_t request_id, std::string& error);
-    bool reject_join(std::uint64_t request_id, bool block_for_session,
-                     std::string& error);
+    bool reject_join(std::uint64_t request_id, bool block_for_session, std::string& error);
     bool set_lobby_locked(bool locked, std::string& error);
     bool kick_player(std::uint8_t slot, std::string& error);
     bool revoke_invitation(std::string& error);
     bool request_start(std::string& error);
     bool request_connection_test(std::string& error);
     bool consume_launch_request();
-    void mark_game_loaded(std::uint64_t bootstrap_hash,
-                          std::uint32_t online_save_generation,
-                          std::uint64_t online_save_hash,std::uint64_t expected_launch_hash=0);
+    void mark_game_loaded(std::uint64_t bootstrap_hash, std::uint32_t online_save_generation,
+                          std::uint64_t online_save_hash, std::uint64_t expected_launch_hash = 0);
     void fail_runtime_start(std::string reason);
     bool wait_until_running(std::chrono::milliseconds timeout);
-    bool synchronize_inputs(std::uint32_t frame, PackedInput local,
-                            FrameInputs& inputs,
+    bool synchronize_inputs(std::uint32_t frame, PackedInput local, FrameInputs& inputs,
                             std::chrono::milliseconds timeout);
-    InputSynchronizationResult synchronize_inputs_result(
-        std::uint32_t frame, PackedInput local, FrameInputs& inputs,
-        std::chrono::milliseconds timeout);
-    bool authoritative_inputs_for(std::uint32_t frame, FrameInputs& inputs,
-                                  std::uint16_t& revision) const;
-    std::uint32_t contiguous_authoritative_commits(
-        std::uint32_t first_frame, std::uint32_t maximum_count) const;
+    InputSynchronizationResult synchronize_inputs_result(std::uint32_t frame, PackedInput local, FrameInputs& inputs,
+                                                         std::chrono::milliseconds timeout);
+    bool authoritative_inputs_for(std::uint32_t frame, FrameInputs& inputs, std::uint16_t& revision) const;
+    std::uint32_t contiguous_authoritative_commits(std::uint32_t first_frame, std::uint32_t maximum_count) const;
     // Advance a guest across already-received immutable commits after a
     // complete Player-1 start-of-frame snapshot has replaced the skipped
     // simulation state. Every skipped hash link is verified before the
     // session cursor moves.
-    bool fast_forward_authoritative_commits(
-        std::uint32_t next_frame, std::string& error);
+    bool fast_forward_authoritative_commits(std::uint32_t next_frame, std::string& error);
     // Pins epoch/ledger across a transactional game-thread installer. The
     // installer must not call DirectSession; Pending never calls it.
-    SessionPollResult install_fast_forward(
-        std::uint32_t next_frame, const std::function<bool()>& installer,
-        std::string& error);
+    SessionPollResult install_fast_forward(std::uint32_t next_frame, const std::function<bool()>& installer,
+                                           std::string& error);
     std::optional<std::uint32_t> native_completed_frame() const;
     std::uint64_t synchronization_progress() const;
     // Records a frame only after the retail game loop has returned. Guests
     // send this authenticated latest-wins watermark to Player 1; the host can
     // then pause before a short local hitch becomes unbounded simulation debt.
-    void report_simulation_progress(
-        std::uint32_t completed_frame,
-        TimelineProgressScope scope = TimelineProgressScope::Gameplay);
-    bool host_should_backpressure(std::uint32_t next_frame,
-                                  std::uint32_t maximum_lead,
-                                  TimelineProgressScope scope =
-                                      TimelineProgressScope::Gameplay) const;
+    void report_simulation_progress(std::uint32_t completed_frame,
+                                    TimelineProgressScope scope = TimelineProgressScope::Gameplay);
+    bool host_should_backpressure(std::uint32_t next_frame, std::uint32_t maximum_lead,
+                                  TimelineProgressScope scope = TimelineProgressScope::Gameplay) const;
     // A parked authored tick waits briefly on the network worker's existing
     // condition variable instead of hot-spinning the outer game thread.
     // Notifications wake this early; the timeout only bounds lost wakeups.
-    void wait_for_simulation_progress(
-        std::uint64_t observed_generation,
-        std::chrono::milliseconds timeout);
+    void wait_for_simulation_progress(std::uint64_t observed_generation, std::chrono::milliseconds timeout);
     std::optional<std::uint32_t> take_authoritative_input_correction();
-    bool begin_gameplay_handoff(std::uint32_t boundary_frame,
-                                std::uint32_t map, std::string& error);
+    bool begin_gameplay_handoff(std::uint32_t boundary_frame, std::uint32_t map, std::string& error);
     bool gameplay_handoff_suspended(std::uint32_t frame) const;
-    bool complete_gameplay_handoff(std::uint32_t& resume_frame,
-                                   std::string& error);
-    bool send_rollback_packet(std::uint8_t target_slot,
-                              std::span<const std::uint8_t> bytes);
+    bool complete_gameplay_handoff(std::uint32_t& resume_frame, std::string& error);
+    bool send_rollback_packet(std::uint8_t target_slot, std::span<const std::uint8_t> bytes);
     std::vector<RollbackPacket> take_rollback_packets();
     void take_rollback_packets(std::vector<RollbackPacket>& packets);
-    bool publish_authoritative_state(std::uint32_t frame,
-                                     std::span<const std::uint8_t> state,
-                                     std::string& error);
-    bool wait_authoritative_state(std::uint32_t frame,
-                                  std::vector<std::uint8_t>& state,
+    bool publish_authoritative_state(std::uint32_t frame, std::span<const std::uint8_t> state, std::string& error);
+    bool wait_authoritative_state(std::uint32_t frame, std::vector<std::uint8_t>& state,
                                   std::chrono::milliseconds timeout);
-    SessionPollResult poll_authoritative_state(
-        std::uint32_t frame, std::vector<std::uint8_t>& state,
-        std::string& error);
+    SessionPollResult poll_authoritative_state(std::uint32_t frame, std::vector<std::uint8_t>& state,
+                                               std::string& error);
     // During an active race Player 1 publishes portable authored-state samples
     // at the bounded live-replica cadence. Guests consume the newest usable
     // sample without blocking the renderer/audio thread. This is a lossy,
     // latest-wins stream; strict reliability is reserved for lifecycle state.
-    bool publish_live_replica(std::uint32_t frame,
-                              std::span<const std::uint8_t> state,
-                              bool reliable_keyframe,
+    bool publish_live_replica(std::uint32_t frame, std::span<const std::uint8_t> state, bool reliable_keyframe,
                               std::string& error);
-    SessionPollResult poll_live_replica(
-        std::uint32_t frame, std::vector<std::uint8_t>& state,
-        std::string& error);
-    SessionPollResult poll_latest_live_replica(
-        std::uint32_t minimum_frame, std::uint32_t maximum_frame,
-        std::uint32_t& state_frame, std::vector<std::uint8_t>& state,
-        std::string& error);
-    bool publish_racer_orientation(std::uint32_t frame,
-                                   std::span<const std::uint8_t> state,
-                                   std::string& error);
-    SessionPollResult poll_latest_racer_orientation(
-        std::uint32_t minimum_frame, std::uint32_t maximum_frame,
-        std::uint32_t& state_frame, std::vector<std::uint8_t>& state,
-        std::string& error);
+    SessionPollResult poll_live_replica(std::uint32_t frame, std::vector<std::uint8_t>& state, std::string& error);
+    SessionPollResult poll_latest_live_replica(std::uint32_t minimum_frame, std::uint32_t maximum_frame,
+                                               std::uint32_t& state_frame, std::vector<std::uint8_t>& state,
+                                               std::string& error);
+    bool publish_racer_orientation(std::uint32_t frame, std::span<const std::uint8_t> state, std::string& error);
+    SessionPollResult poll_latest_racer_orientation(std::uint32_t minimum_frame, std::uint32_t maximum_frame,
+                                                    std::uint32_t& state_frame, std::vector<std::uint8_t>& state,
+                                                    std::string& error);
     void begin_authoritative_phase();
-    bool wait_gameplay_ready(std::uint32_t requested_map,
-                             std::uint32_t resolved_map,
-                             std::uint32_t racer_count,
-                             std::chrono::milliseconds timeout,
-                             std::string& error);
-    SessionPollResult poll_gameplay_ready(
-        std::uint32_t requested_map, std::uint32_t resolved_map,
-        std::uint32_t racer_count, std::string& error);
-    bool synchronize_gameplay_resume(std::uint32_t map,
-                                     std::uint32_t racer_count,
-                                     std::chrono::milliseconds timeout,
+    bool wait_gameplay_ready(std::uint32_t requested_map, std::uint32_t resolved_map, std::uint32_t racer_count,
+                             std::chrono::milliseconds timeout, std::string& error);
+    SessionPollResult poll_gameplay_ready(std::uint32_t requested_map, std::uint32_t resolved_map,
+                                          std::uint32_t racer_count, std::string& error);
+    bool synchronize_gameplay_resume(std::uint32_t map, std::uint32_t racer_count, std::chrono::milliseconds timeout,
                                      std::string& error);
-    SessionPollResult poll_gameplay_resume(
-        std::uint32_t map, std::uint32_t racer_count, std::string& error);
-    bool begin_finish_seal(std::uint32_t& frame,
-                           std::uint8_t transition_kind,
-                           std::string& error);
-    bool wait_authoritative_acknowledgements(
-        std::uint32_t frame, std::chrono::milliseconds timeout);
-    SessionPollResult poll_authoritative_acknowledgements(
-        std::uint32_t frame, std::string& error);
+    SessionPollResult poll_gameplay_resume(std::uint32_t map, std::uint32_t racer_count, std::string& error);
+    bool begin_finish_seal(std::uint32_t& frame, std::uint8_t transition_kind, std::string& error);
+    bool wait_authoritative_acknowledgements(std::uint32_t frame, std::chrono::milliseconds timeout);
+    SessionPollResult poll_authoritative_acknowledgements(std::uint32_t frame, std::string& error);
     bool complete_finish_seal(std::uint32_t frame, std::string& error);
     void end_authoritative_phase();
     void confirm_authoritative_state(std::uint32_t frame, bool corrected);
     void fail_authoritative_state(std::string reason);
     void submit_state_hash(std::uint32_t frame, std::uint64_t hash);
-    void submit_state_digest(std::uint32_t frame, std::uint64_t hash,
-                             std::uint64_t globals_hash,
-                             std::uint64_t roster_hash,
-                             std::uint64_t racers_hash,
-                             std::uint32_t racer_count = 0U,
+    void submit_state_digest(std::uint32_t frame, std::uint64_t hash, std::uint64_t globals_hash,
+                             std::uint64_t roster_hash, std::uint64_t racers_hash, std::uint32_t racer_count = 0U,
                              std::array<std::uint64_t, 10U> racer_hashes = {});
-    bool request_rollback_recovery(std::uint32_t mismatch_frame,
-                                   std::string_view subsystem);
+    bool request_rollback_recovery(std::uint32_t mismatch_frame, std::string_view subsystem);
     std::optional<std::uint32_t> recovery_frame() const;
-    bool wait_recovery_complete(std::uint32_t frame,
-                                std::chrono::milliseconds timeout);
-    SessionPollResult poll_recovery_complete(std::uint32_t frame,
-                                              std::string& error);
-    bool synchronize_transition(std::uint32_t frame,
-                                std::uint8_t transition_kind,
-                                std::chrono::milliseconds timeout);
-    SessionPollResult poll_transition(std::uint32_t frame,
-                                      std::uint8_t transition_kind,
-                                      std::string& error);
+    bool wait_recovery_complete(std::uint32_t frame, std::chrono::milliseconds timeout);
+    SessionPollResult poll_recovery_complete(std::uint32_t frame, std::string& error);
+    bool synchronize_transition(std::uint32_t frame, std::uint8_t transition_kind, std::chrono::milliseconds timeout);
+    SessionPollResult poll_transition(std::uint32_t frame, std::uint8_t transition_kind, std::string& error);
 
     SessionView view() const;
     SessionPacingView pacing_view() const;
@@ -442,26 +384,26 @@ public:
         TransportTrafficClass traffic = TransportTrafficClass::Control;
         std::vector<std::uint8_t> bytes;
     };
-    DatagramSendStatus send_owned_packet(std::uint8_t target,
-        std::span<const std::uint8_t> bytes, TransportTrafficClass traffic,
-        std::string& error,std::uint8_t live_owner=255);
+    DatagramSendStatus send_owned_packet(std::uint8_t target, std::span<const std::uint8_t> bytes,
+                                         TransportTrafficClass traffic, std::string& error,
+                                         std::uint8_t live_owner = 255);
     bool take_owned_packet(OwnedPacket& packet);
-    bool owned_network_configuration(const secure::Key& incarnation,
-        experimental::NetworkConfiguration& configuration, std::string& error) const;
+    bool owned_network_configuration(const secure::Key& incarnation, experimental::NetworkConfiguration& configuration,
+                                     std::string& error) const;
     static PeerAddress owned_peer_address(std::uint8_t slot);
     // Retire an immutable experimental roster, not the retained lobby/keys.
     void request_owned_match_end(std::string reason);
-    bool complete_owned_match_end(std::uint64_t launch_hash,
-        std::span<const std::uint8_t> confirmed_save, std::string& error);
+    bool complete_owned_match_end(std::uint64_t launch_hash, std::span<const std::uint8_t> confirmed_save,
+                                  std::string& error);
 
-private:
+  private:
     friend struct DirectSessionTestAccess;
     struct PendingRecord;
-    std::uint32_t mod_manifest_bytes_=0;
+    std::uint32_t mod_manifest_bytes_ = 0;
     std::optional<protocol::ModOfferPayload> mod_offer_;
     std::deque<ModPacket> mod_inbound_;
-    std::size_t mod_inbound_bytes_=0;
-    bool handle_mod_packet_locked(std::uint64_t sender,const protocol::Datagram& packet);
+    std::size_t mod_inbound_bytes_ = 0;
+    bool handle_mod_packet_locked(std::uint64_t sender, const protocol::Datagram& packet);
     void send_mod_offer_locked(PendingRecord& pending);
     void clear_pending_mod_route_locked(PendingRecord& pending);
     bool owned_backend_available_ = false;
@@ -487,14 +429,22 @@ private:
     void begin_countdown_locked();
     enum class SaveJobKind { Join, Resume, Resync, HostSeal };
     struct PeerRecord;
-    struct SaveResult {bool ok=false;std::vector<std::uint8_t> bytes;std::filesystem::path path;std::string error;};
+    struct SaveResult {
+        bool ok = false;
+        std::vector<std::uint8_t> bytes;
+        std::filesystem::path path;
+        std::string error;
+    };
     struct SaveJob {
-        SaveJobKind kind;std::uint64_t token,match,hash,launch;std::uint32_t generation;std::uint8_t slot;
+        SaveJobKind kind;
+        std::uint64_t token, match, hash, launch;
+        std::uint32_t generation;
+        std::uint8_t slot;
         std::chrono::steady_clock::time_point started;
         std::future<SaveResult> result;
     };
-    bool queue_save_locked(SaveJobKind kind, std::vector<std::uint8_t> bytes,
-        std::uint32_t generation,std::uint64_t hash,std::uint8_t slot,std::uint64_t launch=0);
+    bool queue_save_locked(SaveJobKind kind, std::vector<std::uint8_t> bytes, std::uint32_t generation,
+                           std::uint64_t hash, std::uint8_t slot, std::uint64_t launch = 0);
     void service_save_jobs_locked();
     void offer_online_save_locked(PeerRecord& peer);
     SessionView view_locked() const;
@@ -552,7 +502,7 @@ private:
         std::chrono::steady_clock::time_point first_seen{};
         std::chrono::steady_clock::time_point last_seen{};
         std::chrono::steady_clock::time_point last_acknowledgement{};
-        bool mods_approved=false,mods_verified=false,mod_route_retained=false;
+        bool mods_approved = false, mods_verified = false, mod_route_retained = false;
     };
 
     struct FriendAdmissionRecord {
@@ -567,8 +517,7 @@ private:
         std::array<std::uint64_t, kMaximumPlayers> roster{};
         std::array<std::uint64_t, kMaximumPlayers> racers{};
         std::array<std::uint32_t, kMaximumPlayers> racer_counts{};
-        std::array<std::array<std::uint64_t, 10U>, kMaximumPlayers>
-            racer_details{};
+        std::array<std::array<std::uint64_t, 10U>, kMaximumPlayers> racer_details{};
         std::array<bool, kMaximumPlayers> present{};
     };
 
@@ -651,158 +600,110 @@ private:
         std::array<std::uint64_t, kMaximumPlayers> recipients{};
         std::chrono::steady_clock::time_point expires{};
     };
-    void remember_release_locked(protocol::MessageType type,
-        std::uint32_t epoch, std::uint32_t boundary, std::uint32_t detail);
-    bool completed_release_locked(protocol::MessageType type,
-        std::uint32_t epoch, std::uint32_t boundary, std::uint32_t detail,
-        std::uint64_t recipient = 0U);
+    void remember_release_locked(protocol::MessageType type, std::uint32_t epoch, std::uint32_t boundary,
+                                 std::uint32_t detail);
+    bool completed_release_locked(protocol::MessageType type, std::uint32_t epoch, std::uint32_t boundary,
+                                  std::uint32_t detail, std::uint64_t recipient = 0U);
 
-    bool parse_invite(std::string_view invite, PeerAddress& address,
-                      std::uint64_t& match_id, std::uint64_t& host_sender_id,
-                      ConnectionMethod& method,
-                      secure::Key& host_public,
-                      secure::Key& invitation_capability,
-                      std::string& error) const;
+    bool parse_invite(std::string_view invite, PeerAddress& address, std::uint64_t& match_id,
+                      std::uint64_t& host_sender_id, ConnectionMethod& method, secure::Key& host_public,
+                      secure::Key& invitation_capability, std::string& error) const;
     std::string make_quick_join_bootstrap() const;
     bool activate_quick_join_locked(std::string& error);
     std::string make_invite(std::string_view advertised_host) const;
-    bool send_to(const PeerAddress& address, protocol::MessageType type,
-                 std::span<const std::uint8_t> payload,
+    bool send_to(const PeerAddress& address, protocol::MessageType type, std::span<const std::uint8_t> payload,
                  std::uint32_t frame = 0U);
-    bool send_with_key(const PeerAddress& address, const secure::Key& key,
-                       protocol::MessageType type,
-                       std::span<const std::uint8_t> payload,
-                       std::uint32_t frame = 0U);
+    bool send_with_key(const PeerAddress& address, const secure::Key& key, protocol::MessageType type,
+                       std::span<const std::uint8_t> payload, std::uint32_t frame = 0U);
     bool send_join_request();
-    void broadcast(protocol::MessageType type,
-                   std::span<const std::uint8_t> payload,
-                   std::uint32_t frame = 0U);
+    void broadcast(protocol::MessageType type, std::span<const std::uint8_t> payload, std::uint32_t frame = 0U);
     void pump_locked();
     void network_loop();
     void queue_diagnostics_locked(std::string_view reason = {});
     void flush_outbound_locked();
-    bool enqueue_outbound(PeerAddress destination,
-                          protocol::MessageType type,
-                          std::vector<std::uint8_t> bytes,
-                          std::uint32_t frame = 0U,
-                          std::vector<std::uint8_t> retry_identity = {});
-    void handle_packet(const PeerAddress& source, std::uint64_t sender_id,
-                       const protocol::Datagram& packet);
-    void handle_host_packet(const PeerAddress& source, std::uint64_t sender_id,
-                            const protocol::Datagram& packet);
+    bool enqueue_outbound(PeerAddress destination, protocol::MessageType type, std::vector<std::uint8_t> bytes,
+                          std::uint32_t frame = 0U, std::vector<std::uint8_t> retry_identity = {});
+    void handle_packet(const PeerAddress& source, std::uint64_t sender_id, const protocol::Datagram& packet);
+    void handle_host_packet(const PeerAddress& source, std::uint64_t sender_id, const protocol::Datagram& packet);
     void handle_client_packet(const protocol::Datagram& packet);
     void broadcast_lobby();
     protocol::LobbyStatePayload lobby_payload() const;
     void apply_lobby_payload(const protocol::LobbyStatePayload& payload);
     void apply_online_save_status_locked(const protocol::OnlineSaveStatusPayload& payload);
-    bool all_active_players_acknowledged_locked(
-        const std::array<bool, kMaximumPlayers>& acknowledgements) const;
-    std::chrono::milliseconds launch_control_timeout_locked(
-        std::chrono::milliseconds minimum,
-        std::chrono::milliseconds maximum) const;
+    bool all_active_players_acknowledged_locked(const std::array<bool, kMaximumPlayers>& acknowledgements) const;
+    std::chrono::milliseconds launch_control_timeout_locked(std::chrono::milliseconds minimum,
+                                                            std::chrono::milliseconds maximum) const;
     void reset_launch_transaction_locked();
     void reset_connection_launch_locked();
     void cancel_launch_locked(std::string_view reason);
     bool prepare_launch_locked(std::string& error);
-    bool commit_launch_locked(const protocol::StartPayload& start,
-                               std::uint32_t launch_epoch,
-                               std::string& error);
-    bool release_launch_locked(std::uint32_t launch_epoch,
-                               std::string& error);
-    void service_connection_test_locked(
-        std::chrono::steady_clock::time_point now);
+    bool commit_launch_locked(const protocol::StartPayload& start, std::uint32_t launch_epoch, std::string& error);
+    bool release_launch_locked(std::uint32_t launch_epoch, std::string& error);
+    void service_connection_test_locked(std::chrono::steady_clock::time_point now);
     void reset_connection_test_locked();
     PeerRecord* peer_by_sender(std::uint64_t sender_id);
     PeerRecord* peer_by_address(const PeerAddress& address);
     PendingRecord* pending_by_sender(std::uint64_t sender_id);
     PendingRecord* pending_by_request(std::uint64_t request_id);
-    void handle_join_request(const PeerAddress& source,
-                             std::span<const std::uint8_t> encrypted);
+    void handle_join_request(const PeerAddress& source, std::span<const std::uint8_t> encrypted);
     bool approve_join_locked(std::uint64_t request_id, std::string& error);
     bool consume_friend_admission_locked(const secure::Key& admission);
     void clear_friend_admissions_locked();
     void retire_transport_locked();
     void expire_pending_joins();
     std::uint8_t occupied_players() const;
-    protocol::InputBatch make_local_history_batch(
-        std::uint32_t newest_frame, bool reliable_repair,
-        std::optional<std::uint32_t> requested_first = std::nullopt) const;
-    void send_local_history(std::uint32_t newest_frame,
-                            bool reliable_repair = false,
-                            std::optional<std::uint32_t> requested_first =
-                                std::nullopt);
+    protocol::InputBatch make_local_history_batch(std::uint32_t newest_frame, bool reliable_repair,
+                                                  std::optional<std::uint32_t> requested_first = std::nullopt) const;
+    void send_local_history(std::uint32_t newest_frame, bool reliable_repair = false,
+                            std::optional<std::uint32_t> requested_first = std::nullopt);
     bool ensure_local_input_for_repair_locked(std::uint32_t frame);
     void clear_input_history_locked();
-    void store_local_input_locked(std::uint32_t frame, PackedInput input,
-                                  bool physical_sample = true);
-    void record_input_latency_locked(const protocol::FrameCommitPayload& commit,
-                                     bool consumed);
-    void send_commit_history(std::uint32_t newest_frame,
-                             std::size_t history_count);
-    void send_commit_history_to_peer(PeerRecord& peer,
-                                     std::uint32_t first_frame,
-                                     std::size_t maximum_count);
+    void store_local_input_locked(std::uint32_t frame, PackedInput input, bool physical_sample = true);
+    void record_input_latency_locked(const protocol::FrameCommitPayload& commit, bool consumed);
+    void send_commit_history(std::uint32_t newest_frame, std::size_t history_count);
+    void send_commit_history_to_peer(PeerRecord& peer, std::uint32_t first_frame, std::size_t maximum_count);
     void request_missing_commit_locked(std::uint32_t frame);
     void advertise_missing_inputs_locked();
     void reset_pending_commit_wait_locked();
     void send_frame_correction_locked();
-    bool apply_frame_commit_locked(
-        const protocol::FrameCommitPayload& commit, std::string& error);
+    bool apply_frame_commit_locked(const protocol::FrameCommitPayload& commit, std::string& error);
     bool apply_frame_correction_locked(std::string& error);
-    protocol::FrameCommitPayload make_frame_commit_locked(
-        std::uint32_t frame, std::uint16_t revision);
+    protocol::FrameCommitPayload make_frame_commit_locked(std::uint32_t frame, std::uint16_t revision);
     void rebuild_frame_commits_locked(std::uint32_t first_frame);
-    void send_gameplay_handoff_locked(
-        protocol::GameplayHandoffStage stage);
-    bool adopt_gameplay_handoff_locked(
-        const protocol::GameplayHandoffPayload& handoff,
-        bool local_load_started, std::string& error);
+    void send_gameplay_handoff_locked(protocol::GameplayHandoffStage stage);
+    bool adopt_gameplay_handoff_locked(const protocol::GameplayHandoffPayload& handoff, bool local_load_started,
+                                       std::string& error);
     void reset_pending_input_locked();
-    bool record_simulation_progress_locked(
-        std::uint8_t player_slot, std::uint32_t progress_scene_epoch,
-        std::uint32_t progress_input_epoch,
-        std::uint32_t completed_frame);
-    bool arm_gameplay_handoff_locked(std::uint32_t& resume_frame,
-                                     std::string& error);
+    bool record_simulation_progress_locked(std::uint8_t player_slot, std::uint32_t progress_scene_epoch,
+                                           std::uint32_t progress_input_epoch, std::uint32_t completed_frame);
+    bool arm_gameplay_handoff_locked(std::uint32_t& resume_frame, std::string& error);
     void reset_input_delivery_tracking_locked(std::uint32_t first_frame);
     struct PreparedStateWire {
         std::vector<std::uint8_t> bytes;
         std::uint64_t checksum = 0;
     };
-    bool send_authoritative_state(
-        const PeerAddress* destination, std::uint32_t frame,
-        std::span<const std::uint8_t> state,
-        std::uint16_t requested_chunks = 0xFFFFU,
-        protocol::MessageType message_type =
-            protocol::MessageType::StateSnapshot,
-        bool live_replica = false,
-        const PreparedStateWire* prepared = nullptr);
-    std::uint32_t authority_epoch_for_input_epoch(
-        std::uint32_t input_epoch) const;
+    bool send_authoritative_state(const PeerAddress* destination, std::uint32_t frame,
+                                  std::span<const std::uint8_t> state, std::uint16_t requested_chunks = 0xFFFFU,
+                                  protocol::MessageType message_type = protocol::MessageType::StateSnapshot,
+                                  bool live_replica = false, const PreparedStateWire* prepared = nullptr);
+    std::uint32_t authority_epoch_for_input_epoch(std::uint32_t input_epoch) const;
     std::uint32_t authority_epoch() const;
     std::uint64_t initial_commit_hash() const;
-    bool validate_commit(const protocol::FrameCommitPayload& commit,
-                         std::string& error) const;
+    bool validate_commit(const protocol::FrameCommitPayload& commit, std::string& error) const;
     void evaluate_state_hash(std::uint32_t frame);
-    void schedule_recovery_locked(std::uint32_t mismatch_frame,
-                                  std::string subsystem);
-    void write_determinism_artifact_locked(
-        std::uint32_t frame, std::size_t mismatched_slot,
-        std::string_view subsystem, const HashFrame& hashes);
+    void schedule_recovery_locked(std::uint32_t mismatch_frame, std::string subsystem);
+    void write_determinism_artifact_locked(std::uint32_t frame, std::size_t mismatched_slot, std::string_view subsystem,
+                                           const HashFrame& hashes);
     void send_connection_probes();
     void update_peer_metrics(PeerRecord& peer, std::uint64_t token);
     void fail_locked(std::string message);
     void synchronize_peer_slots();
     LaunchDescriptor make_launch_descriptor() const;
-    bool validate_start_descriptor(const protocol::StartPayload& payload,
-                                   std::string& error) const;
-    bool accept_start_descriptor(const protocol::StartPayload& payload,
-                                 std::string& error);
+    bool validate_start_descriptor(const protocol::StartPayload& payload, std::string& error) const;
+    bool accept_start_descriptor(const protocol::StartPayload& payload, std::string& error);
     bool save_sync_available() const;
-    std::string admission_incompatibility(
-        const CompatibilityManifest& candidate) const;
-    std::uint64_t& outbound_sequence(const PeerAddress& address,
-                                     const secure::Key& key);
+    std::string admission_incompatibility(const CompatibilityManifest& candidate) const;
+    std::uint64_t& outbound_sequence(const PeerAddress& address, const secure::Key& key);
 
     mutable std::mutex mutex_;
     std::shared_ptr<TransportReceiveSignal> receive_signal_ = std::make_shared<TransportReceiveSignal>();
@@ -814,9 +715,7 @@ private:
     InputTimeline timeline_{1024U};
     std::array<PeerRecord, kMaximumPlayers> peers_{};
     std::array<PendingRecord, 8U> pending_joins_{};
-    std::unordered_map<std::uint64_t,
-                       std::array<ReceiveSequenceWindow, 5U>>
-        received_sequences_;
+    std::unordered_map<std::uint64_t, std::array<ReceiveSequenceWindow, 5U>> received_sequences_;
     std::unordered_set<std::uint64_t> blocked_senders_;
     std::unordered_set<std::string> blocked_sources_;
     std::unordered_map<std::uint32_t, HashFrame> state_hashes_;
@@ -829,8 +728,7 @@ private:
         bool echoed = false, consumed = false, enqueued = false;
     };
     std::unordered_map<std::uint32_t, LocalInputMetadata> local_input_metadata_;
-    std::array<std::unordered_map<std::uint32_t, std::uint32_t>, kMaximumPlayers>
-        received_input_revisions_;
+    std::array<std::unordered_map<std::uint32_t, std::uint32_t>, kMaximumPlayers> received_input_revisions_;
     std::uint64_t refreshed_input_samples_ = 0U;
     std::uint64_t stale_input_revisions_ = 0U;
     std::uint64_t prediction_limit_waits_ = 0U;
@@ -845,29 +743,18 @@ private:
     std::unique_ptr<InputLatencyMetrics> input_latency_ = std::make_unique<InputLatencyMetrics>();
     std::uint64_t predicted_local_samples_ = 0, mismatched_local_samples_ = 0;
     std::uint64_t superseded_local_samples_ = 0;
-    std::unordered_map<std::uint32_t, protocol::FrameCommitPayload>
-        frame_commits_;
+    std::unordered_map<std::uint32_t, protocol::FrameCommitPayload> frame_commits_;
     std::deque<protocol::FrameCommitPayload> commit_history_;
     std::optional<FrameCorrectionAssembly> frame_correction_assembly_;
     std::optional<FrameCorrectionTransmission> frame_correction_transmission_;
-    std::unordered_map<std::uint32_t,
-                       std::pair<std::uint32_t,
-                                 protocol::FrameCommitPayload>>
-        deferred_frame_commits_;
-    std::unordered_map<std::uint32_t, std::vector<std::uint8_t>>
-        authoritative_states_;
-    std::unordered_map<std::uint32_t,
-                       std::array<bool, kMaximumPlayers>>
-        authoritative_acknowledgements_;
+    std::unordered_map<std::uint32_t, std::pair<std::uint32_t, protocol::FrameCommitPayload>> deferred_frame_commits_;
+    std::unordered_map<std::uint32_t, std::vector<std::uint8_t>> authoritative_states_;
+    std::unordered_map<std::uint32_t, std::array<bool, kMaximumPlayers>> authoritative_acknowledgements_;
     std::unordered_set<std::uint32_t> fully_acknowledged_states_;
-    std::unordered_map<std::uint32_t, SnapshotAssembly>
-        snapshot_assemblies_;
-    std::unordered_map<std::uint32_t, std::vector<std::uint8_t>>
-        live_replica_states_;
-    std::unordered_map<std::uint32_t, std::vector<std::uint8_t>>
-        racer_orientation_states_;
-    std::unordered_map<std::uint32_t, SnapshotAssembly>
-        live_replica_assemblies_;
+    std::unordered_map<std::uint32_t, SnapshotAssembly> snapshot_assemblies_;
+    std::unordered_map<std::uint32_t, std::vector<std::uint8_t>> live_replica_states_;
+    std::unordered_map<std::uint32_t, std::vector<std::uint8_t>> racer_orientation_states_;
+    std::unordered_map<std::uint32_t, SnapshotAssembly> live_replica_assemblies_;
     std::optional<std::uint32_t> live_replica_keyframe_frame_;
     std::vector<std::uint8_t> live_replica_keyframe_state_;
     std::deque<OutboundPacket> critical_outbound_;
@@ -936,16 +823,14 @@ private:
     std::chrono::steady_clock::time_point connection_test_started_{};
     std::chrono::steady_clock::time_point connection_test_measurement_end_{};
     std::chrono::steady_clock::time_point connection_test_drain_end_{};
-    std::array<std::chrono::steady_clock::time_point, 5U>
-        connection_test_last_send_{};
+    std::array<std::chrono::steady_clock::time_point, 5U> connection_test_last_send_{};
     std::array<std::uint32_t, 5U> connection_test_next_sequence_{};
     std::array<std::array<std::uint32_t, 5U>, kMaximumPlayers> connection_test_sent_{};
     std::array<std::array<std::uint32_t, 5U>, kMaximumPlayers> connection_test_received_{};
     std::array<std::array<std::vector<double>, 5U>, kMaximumPlayers> connection_test_rtt_samples_{};
     std::array<std::array<std::unordered_set<std::uint32_t>, 5U>, kMaximumPlayers> connection_test_echoes_{};
     std::uint64_t connection_test_queue_failures_at_start_ = 0U;
-    std::array<ConnectionTestResultView, kMaximumPlayers>
-        connection_test_results_{};
+    std::array<ConnectionTestResultView, kMaximumPlayers> connection_test_results_{};
     std::optional<CompatibilityManifest> compatibility_sync_offer_;
     bool local_loaded_ = false;
     std::uint64_t local_bootstrap_hash_ = 0U;
@@ -1027,7 +912,7 @@ private:
     std::deque<SaveJob> save_jobs_;
     std::uint64_t save_job_token_ = 1;
     bool host_start_verified_ = false;
-    std::array<std::chrono::steady_clock::time_point,kMaximumPlayers> last_save_offer_{};
+    std::array<std::chrono::steady_clock::time_point, kMaximumPlayers> last_save_offer_{};
     std::chrono::steady_clock::time_point last_save_request_{};
     bool transport_closer_started_ = false;
     bool replay_writer_started_ = false;
@@ -1080,8 +965,7 @@ private:
     bool prediction_failsafe_active_ = false;
     std::uint32_t host_input_accepted_frame_ = 0U;
     std::uint32_t host_input_first_missing_frame_ = 0U;
-    std::array<std::uint32_t, kMaximumPlayers>
-        peer_input_first_missing_frame_{};
+    std::array<std::uint32_t, kMaximumPlayers> peer_input_first_missing_frame_{};
     std::uint32_t authoritative_input_frame_ = 0U;
     FrameInputs authoritative_inputs_{};
     bool authoritative_inputs_valid_ = false;
@@ -1092,13 +976,10 @@ private:
     std::uint64_t commit_repair_requests_received_ = 0U;
     std::uint64_t commit_repair_batches_sent_ = 0U;
     std::uint64_t forced_prediction_frames_ = 0U;
-    std::array<std::uint32_t, kMaximumPlayers>
-        simulation_completed_frame_{};
+    std::array<std::uint32_t, kMaximumPlayers> simulation_completed_frame_{};
     std::array<bool, kMaximumPlayers> simulation_progress_present_{};
-    std::array<std::chrono::steady_clock::time_point, kMaximumPlayers>
-        simulation_progress_time_{};
-    std::chrono::steady_clock::time_point
-        last_simulation_progress_datagram_{};
+    std::array<std::chrono::steady_clock::time_point, kMaximumPlayers> simulation_progress_time_{};
+    std::chrono::steady_clock::time_point last_simulation_progress_datagram_{};
     std::uint64_t simulation_wake_generation_ = 1U;
     std::uint64_t late_inputs_discarded_ = 0U;
     std::uint64_t live_replica_requests_sent_ = 0U;

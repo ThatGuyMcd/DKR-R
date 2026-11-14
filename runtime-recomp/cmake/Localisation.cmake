@@ -9,13 +9,20 @@ function(dkr_add_localisation)
     set(resources "${root}/runtime-recomp/assets/localisation")
     set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated/localisation")
     file(GLOB packs CONFIGURE_DEPENDS "${resources}/*.json")
-    add_custom_command(OUTPUT "${generated}/localisation_data.hpp"
-        COMMAND "${Python3_EXECUTABLE}" "${root}/scripts/embed_localisation.py"
-            --resources "${resources}" --output "${generated}/localisation_data.hpp"
+    add_custom_command(
+        OUTPUT "${generated}/localisation_data.hpp"
+        COMMAND
+            "${Python3_EXECUTABLE}" "${root}/scripts/embed_localisation.py" --resources "${resources}" --output
+            "${generated}/localisation_data.hpp"
         DEPENDS ${packs} "${resources}/NotoSans-Regular.ttf" "${root}/scripts/embed_localisation.py"
-        VERBATIM)
-    add_library(DKRLocalisation STATIC "${root}/runtime-recomp/src/game/localisation/service.cpp"
-        "${generated}/localisation_data.hpp")
+        VERBATIM
+    )
+    add_library(
+        DKRLocalisation
+        STATIC
+        "${root}/runtime-recomp/src/game/localisation/service.cpp"
+        "${generated}/localisation_data.hpp"
+    )
     target_compile_features(DKRLocalisation PUBLIC cxx_std_20)
     target_include_directories(DKRLocalisation PUBLIC "${root}/runtime-recomp/src/game" PRIVATE "${generated}")
     if(MSVC)
@@ -30,11 +37,19 @@ function(dkr_add_localisation)
             target_compile_options(DKRLocalisationTests PRIVATE -UNDEBUG)
         endif()
         add_test(NAME DKRLocalisation COMMAND DKRLocalisationTests)
-        add_test(NAME DKRLocalisationCatalogues COMMAND "${Python3_EXECUTABLE}"
-            "${root}/scripts/embed_localisation.py" --resources "${resources}")
+        add_test(
+            NAME DKRLocalisationCatalogues
+            COMMAND "${Python3_EXECUTABLE}" "${root}/scripts/embed_localisation.py" --resources "${resources}"
+        )
         set(imgui "${root}/extern/rt64/src/contrib/imgui")
-        add_executable(DKRLocalisationUiTests "${root}/runtime-recomp/tests/localisation_ui_tests.cpp"
-            "${imgui}/imgui.cpp" "${imgui}/imgui_draw.cpp" "${imgui}/imgui_tables.cpp" "${imgui}/imgui_widgets.cpp")
+        add_executable(
+            DKRLocalisationUiTests
+            "${root}/runtime-recomp/tests/localisation_ui_tests.cpp"
+            "${imgui}/imgui.cpp"
+            "${imgui}/imgui_draw.cpp"
+            "${imgui}/imgui_tables.cpp"
+            "${imgui}/imgui_widgets.cpp"
+        )
         target_include_directories(DKRLocalisationUiTests PRIVATE "${imgui}")
         target_link_libraries(DKRLocalisationUiTests PRIVATE DKRLocalisation)
         if(MSVC)

@@ -32,7 +32,6 @@ set(ZSTD_BUILD_TESTS OFF CACHE BOOL "No desktop compression tests in APK" FORCE)
 add_subdirectory("${DKR_ANDROID_SDL2_SOURCE}" "${CMAKE_BINARY_DIR}/sdl2" EXCLUDE_FROM_ALL)
 include("${CMAKE_CURRENT_LIST_DIR}/android/SdlPatches.cmake")
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/android")
-set(CMAKE_PROJECT_nativefiledialog-extended_INCLUDE
-    "${CMAKE_CURRENT_LIST_DIR}/android/NfdPlatform.cmake")
+set(CMAKE_PROJECT_nativefiledialog-extended_INCLUDE "${CMAKE_CURRENT_LIST_DIR}/android/NfdPlatform.cmake")
 set(CMAKE_PROJECT_plume_INCLUDE "${CMAKE_CURRENT_LIST_DIR}/android/HostShaders.cmake")
 add_link_options("-Wl,-z,max-page-size=16384")

@@ -11,9 +11,10 @@ int main() {
     const auto* texture = reinterpret_cast<const RenderTexture*>(&token);
     const auto* buffer = reinterpret_cast<const RenderBuffer*>(&token);
     const auto image = RenderTextureCopyLocation::Subresource(texture);
-    const auto footprint = RenderTextureCopyLocation::PlacedFootprint(buffer,
-        RenderFormat::R8G8B8A8_UNORM, 16, 16, 1, 64);
-    if (supported_texture_copy(footprint, image)) throw std::runtime_error("1050022 crash direction accepted");
+    const auto footprint =
+        RenderTextureCopyLocation::PlacedFootprint(buffer, RenderFormat::R8G8B8A8_UNORM, 16, 16, 1, 64);
+    if (supported_texture_copy(footprint, image))
+        throw std::runtime_error("1050022 crash direction accepted");
     if (!supported_texture_copy(image, footprint) || !supported_texture_copy(image, image))
         throw std::runtime_error("Existing upload/image copy rejected");
     unsigned checks = 0;
@@ -28,10 +29,11 @@ int main() {
                 src.texture = pointers & 4 ? texture : nullptr;
                 src.buffer = pointers & 8 ? buffer : nullptr;
                 const bool expected = destination == 1 && (pointers & 1) &&
-                    ((source == 1 && (pointers & 4)) || (source == 2 && (pointers & 8)));
+                                      ((source == 1 && (pointers & 4)) || (source == 2 && (pointers & 8)));
                 if (supported_texture_copy(dst, src) != expected)
                     throw std::runtime_error("copy type/pointer contract mismatch");
                 ++checks;
             }
-    std::cout << "PASS: " << checks << " copy type/pointer combinations; texture-to-buffer rejected, existing paths retained\n";
+    std::cout << "PASS: " << checks
+              << " copy type/pointer combinations; texture-to-buffer rejected, existing paths retained\n";
 }

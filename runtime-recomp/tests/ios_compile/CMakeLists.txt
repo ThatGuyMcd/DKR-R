@@ -28,16 +28,20 @@ foreach(header src/contrib/imgui/imgui.h src/contrib/nativefiledialog-extended/s
     endif()
 endforeach()
 
-add_library(DKRIosCompileCheck STATIC
+add_library(
+    DKRIosCompileCheck
+    STATIC
     "${ios}/ios_platform.mm"
     "${ios}/ios_metal_layer.mm"
     "${ios}/ios_file_dialog.mm"
     "${DKR_SOURCE_ROOT}/runtime-recomp/src/android/mobile_ui.cpp"
     "${game}/runtime_portable.cpp"
-    "${game}/runtime_support.cpp")
+    "${game}/runtime_support.cpp"
+)
 target_compile_options(DKRIosCompileCheck PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
 target_compile_definitions(DKRIosCompileCheck PRIVATE DKR_RELEASE_VERSION="${DKR_RELEASE_VERSION}")
-target_include_directories(DKRIosCompileCheck PRIVATE
-    "${rt64}/src/contrib"
-    "${rt64}/src/contrib/nativefiledialog-extended/src/include")
+target_include_directories(
+    DKRIosCompileCheck
+    PRIVATE "${rt64}/src/contrib" "${rt64}/src/contrib/nativefiledialog-extended/src/include"
+)
 target_link_libraries(DKRIosCompileCheck PRIVATE SDL2::SDL2)

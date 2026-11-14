@@ -30,8 +30,8 @@ struct Content {
     bool operator==(const Content&) const = default;
 };
 struct CodeSelection {
-    std::string id,name,version,payload,settings,data;
-    bool operator==(const CodeSelection&)const=default;
+    std::string id, name, version, payload, settings, data;
+    bool operator==(const CodeSelection&) const = default;
 };
 // No paths, user identities, ROM bytes or machine-local activation state.
 // Names are only labels; all activation and namespace ordering uses IDs.
@@ -52,5 +52,7 @@ Bytes encode(const Manifest& value);
 Manifest decode(View value);
 std::string identity(const Manifest& value);
 std::uint64_t transfer_size(const Manifest& value);
-inline bool has_mods(const Manifest& value){return !value.content.empty()||!value.code.empty();}
+inline bool has_mods(const Manifest& value) {
+    return !value.content.empty() || !value.code.empty();
 }
+} // namespace dkr::mods::online

@@ -17,17 +17,24 @@
 namespace RT64 {
 struct Application;
 }
-namespace dkr::runtime::netplay::experimental {class RenderSnapshot;class PresentationMailbox;namespace present_gate {class Registration;}}
+namespace dkr::runtime::netplay::experimental {
+class RenderSnapshot;
+class PresentationMailbox;
+namespace present_gate {
+class Registration;
+}
+} // namespace dkr::runtime::netplay::experimental
 
 namespace dkr::runtime {
 struct OwnedDecodeScratch;
-namespace camera {class RenderPass;}
+namespace camera {
+class RenderPass;
+}
 
 class RT64Renderer final : public ultramodern::renderer::RendererContext {
-public:
-    RT64Renderer(std::uint8_t* rdram,
-                 ultramodern::renderer::WindowHandle window_handle,
-                 bool developer_mode, bool owned_mode = false);
+  public:
+    RT64Renderer(std::uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode,
+                 bool owned_mode = false);
     ~RT64Renderer() override;
 
     bool valid() override;
@@ -45,16 +52,18 @@ public:
     // or advances authored state.
     void service_online_wait_presentation();
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-    void present_owned(std::shared_ptr<const netplay::experimental::RenderSnapshot>,netplay::experimental::PresentationMailbox&);
+    void present_owned(std::shared_ptr<const netplay::experimental::RenderSnapshot>,
+                       netplay::experimental::PresentationMailbox&);
     void repeat_owned();
     void reap_owned();
     bool owned_capacity_available();
-    void set_online_view_session(online_view::Session value){online_view_session_=std::move(value);}
+    void set_online_view_session(online_view::Session value) {
+        online_view_session_ = std::move(value);
+    }
 #endif
 
-private:
-    void record_track_performance(std::uint8_t* snapshot,
-                                  track_performance::Clock::time_point start);
+  private:
+    void record_track_performance(std::uint8_t* snapshot, track_performance::Clock::time_point start);
     track_performance::Capture track_capture_{};
     std::chrono::steady_clock::time_point last_android_report_{};
     std::mutex presentation_mutex_;
@@ -75,9 +84,9 @@ private:
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     std::unique_ptr<netplay::experimental::present_gate::Registration> owned_registration_;
     std::chrono::steady_clock::time_point last_owned_report_{};
-    std::uint64_t last_owned_presentations_=0,last_owned_interpolated_=0;
+    std::uint64_t last_owned_presentations_ = 0, last_owned_interpolated_ = 0;
     struct OwnedSubmission {
-        std::uint64_t workload=0,present=0;
+        std::uint64_t workload = 0, present = 0;
         std::shared_ptr<const netplay::experimental::RenderSnapshot> lease;
     };
     std::deque<OwnedSubmission> owned_submissions_; // Hard cap TWO, never a long visual FIFO.
@@ -86,10 +95,8 @@ private:
 #endif
 };
 
-std::unique_ptr<ultramodern::renderer::RendererContext> CreateRT64Renderer(
-    std::uint8_t* rdram,
-    ultramodern::renderer::WindowHandle window_handle,
-    bool developer_mode);
+std::unique_ptr<ultramodern::renderer::RendererContext>
+CreateRT64Renderer(std::uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool developer_mode);
 
 // Called from the SDL window thread. The active renderer is lifetime-guarded
 // internally, so a reusable game session can shut down without racing this

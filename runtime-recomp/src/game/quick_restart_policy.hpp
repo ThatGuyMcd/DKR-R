@@ -21,15 +21,13 @@ struct State {
 };
 
 constexpr bool retail_restart_available(const State& state) {
-    if (!state.modern_profile || state.paused || state.post_race ||
-        state.level_loading || state.trophy_race_world != 0) {
+    if (!state.modern_profile || state.paused || state.post_race || state.level_loading ||
+        state.trophy_race_world != 0) {
         return false;
     }
 
-    if (state.world_id > kCentralAreaWorld &&
-        state.race_type != kBossRaceType) {
-        return state.race_type == kDefaultRaceType ||
-               (state.race_type & kChallengeRaceMask) != 0;
+    if (state.world_id > kCentralAreaWorld && state.race_type != kBossRaceType) {
+        return state.race_type == kDefaultRaceType || (state.race_type & kChallengeRaceMask) != 0;
     }
 
     return !state.tracks_mode && state.race_type == kBossRaceType;

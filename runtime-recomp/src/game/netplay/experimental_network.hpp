@@ -19,12 +19,11 @@ struct NetworkConfiguration {
     // not inferred from a frame/scene counter or reused on a reconnect.
     std::uint64_t match_id = 0, local_sender_id = 0;
     secure::Key incarnation{};
-    std::array<PeerBinding,4> peers{};
+    std::array<PeerBinding, 4> peers{};
 };
 struct NetworkStatistics {
-    std::uint64_t received = 0, rejected = 0, duplicate = 0, sent = 0,
-                  backpressure = 0, send_errors = 0, suppressed_resends = 0,
-                  superseded_live = 0, encoded_input_packets = 0;
+    std::uint64_t received = 0, rejected = 0, duplicate = 0, sent = 0, backpressure = 0, send_errors = 0,
+                  suppressed_resends = 0, superseded_live = 0, encoded_input_packets = 0;
     std::size_t pending_packets = 0;
     std::uint64_t oldest_pending_age_ms = 0, maximum_pending_age_ms = 0;
 };
@@ -37,10 +36,9 @@ struct NetworkStatistics {
 // with fresher immutable input under a NEW nonce. One blocked route cannot
 // consume another route's allowance. No stable ledger/checkpoint/replica traffic.
 class Network final {
-public:
+  public:
     using Clock = std::chrono::steady_clock;
-    Network(Session& session, SessionTransport& transport)
-        : session_(session), transport_(transport) {}
+    Network(Session& session, SessionTransport& transport) : session_(session), transport_(transport) {}
     ~Network();
     Network(const Network&) = delete;
     Network& operator=(const Network&) = delete;
@@ -48,31 +46,35 @@ public:
     // Injected monotonic time makes resend/freshness policies testable without
     // sleeps. Receive/service remains available even when sends are paced.
     bool service(Clock::time_point now = Clock::now());
-    const std::string& error() const { return error_; }
-    const NetworkStatistics& statistics() const { return statistics_; }
-private:
+    const std::string& error() const {
+        return error_;
+    }
+    const NetworkStatistics& statistics() const {
+        return statistics_;
+    }
+
+  private:
     struct Pending {
         std::vector<std::uint8_t> bytes;
         std::vector<std::uint8_t> plain;
         std::vector<std::uint8_t> last_sent_plain;
         std::optional<OwnerInputPacket> input_key;
         TransportTrafficClass traffic = TransportTrafficClass::Control;
-        Clock::time_point sent_at{}, attempted_at{},queued_at{};
+        Clock::time_point sent_at{}, attempted_at{}, queued_at{};
         bool sent = false, attempted = false;
     };
     static constexpr unsigned kLanes = 3 + 4 * 2;
     bool fail(std::string message);
-    bool queue(unsigned peer, unsigned lane, unsigned kind,
-               std::vector<std::uint8_t> payload, TransportTrafficClass traffic,
-               Clock::time_point now);
+    bool queue(unsigned peer, unsigned lane, unsigned kind, std::vector<std::uint8_t> payload,
+               TransportTrafficClass traffic, Clock::time_point now);
     void receive(const PeerAddress& source, std::span<const std::uint8_t> bytes);
     Session& session_;
     SessionTransport& transport_;
     NetworkConfiguration configuration_{};
-    std::array<secure::Key,4> keys_{};
-    std::array<std::uint64_t,4> sequences_{};
-    std::array<ReceiveSequenceWindow,4> replay_{};
-    std::array<std::array<Pending,kLanes>,4> pending_{};
+    std::array<secure::Key, 4> keys_{};
+    std::array<std::uint64_t, 4> sequences_{};
+    std::array<ReceiveSequenceWindow, 4> replay_{};
+    std::array<std::array<Pending, kLanes>, 4> pending_{};
     NetworkStatistics statistics_{};
     std::uint64_t epoch_ = 0;
     unsigned next_route_ = 0, next_lane_ = 0;
@@ -81,4 +83,4 @@ private:
     bool started_ = false;
     std::string error_;
 };
-}
+} // namespace dkr::runtime::netplay::experimental

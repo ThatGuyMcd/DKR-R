@@ -8,27 +8,20 @@ int main() {
     using namespace dkr::runtime::controllers;
 
     ControllerMappingDefinition mapping{};
-    mapping.inputs[mapping_index(MappingControl::StickLeft)] =
-        {PhysicalInputKind::Axis, 0, -1, 0};
-    mapping.inputs[mapping_index(MappingControl::StickRight)] =
-        {PhysicalInputKind::Axis, 0, 1, 0};
-    mapping.inputs[mapping_index(MappingControl::StickUp)] =
-        {PhysicalInputKind::Axis, 1, 1, 0};
-    mapping.inputs[mapping_index(MappingControl::StickDown)] =
-        {PhysicalInputKind::Axis, 1, -1, 0};
+    mapping.inputs[mapping_index(MappingControl::StickLeft)] = {PhysicalInputKind::Axis, 0, -1, 0};
+    mapping.inputs[mapping_index(MappingControl::StickRight)] = {PhysicalInputKind::Axis, 0, 1, 0};
+    mapping.inputs[mapping_index(MappingControl::StickUp)] = {PhysicalInputKind::Axis, 1, 1, 0};
+    mapping.inputs[mapping_index(MappingControl::StickDown)] = {PhysicalInputKind::Axis, 1, -1, 0};
 
     int button = 0;
-    for (std::size_t index = mapping_index(MappingControl::A);
-         index < kMappingControlCount; ++index) {
+    for (std::size_t index = mapping_index(MappingControl::A); index < kMappingControlCount; ++index) {
         mapping.inputs[index] = {PhysicalInputKind::Button, button++, 1, 0};
     }
 
     assert(mapping_complete(mapping));
-    const std::string result = build_sdl_mapping(
-        "03000000000000000000000000000000", "N64, Controller\n",
-        "Windows", mapping);
-    assert(result.find(
-        "03000000000000000000000000000000,N64  Controller,") == 0U);
+    const std::string result =
+        build_sdl_mapping("03000000000000000000000000000000", "N64, Controller\n", "Windows", mapping);
+    assert(result.find("03000000000000000000000000000000,N64  Controller,") == 0U);
     assert(result.find("leftx:a0,") != std::string::npos);
     assert(result.find("lefty:a1~,") != std::string::npos);
     assert(result.find("a:b0,") != std::string::npos);
@@ -40,12 +33,10 @@ int main() {
 
     assert(!mapping_input_available(mapping, mapping_index(MappingControl::B),
                                     mapping.inputs[mapping_index(MappingControl::A)]));
-    assert(mapping_input_available(
-        mapping, mapping_index(MappingControl::StickRight),
-        {PhysicalInputKind::Axis, 0, 1, 0}));
-    assert(!mapping_input_available(
-        mapping, mapping_index(MappingControl::StickRight),
-        {PhysicalInputKind::Axis, 0, -1, 0}));
+    assert(mapping_input_available(mapping, mapping_index(MappingControl::StickRight),
+                                   {PhysicalInputKind::Axis, 0, 1, 0}));
+    assert(!mapping_input_available(mapping, mapping_index(MappingControl::StickRight),
+                                    {PhysicalInputKind::Axis, 0, -1, 0}));
 
     std::puts("controller mapping policy tests passed");
     return 0;

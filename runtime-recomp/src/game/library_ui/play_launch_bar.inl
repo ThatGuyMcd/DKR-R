@@ -9,7 +9,7 @@ extern int g_launcher_layout_step;
 bool PlayLaunchLayoutCheck() {
     const char* value = std::getenv("DKR_OWNED_CHECK_PLAY_LAUNCH");
     return !g_launcher_layout_root.empty() && value &&
-        (std::string_view(value) == "1" || std::string_view(value) == "save");
+           (std::string_view(value) == "1" || std::string_view(value) == "save");
 }
 bool SaveDraftLayoutCheck() {
     const char* value = std::getenv("DKR_OWNED_CHECK_PLAY_LAUNCH");
@@ -28,7 +28,8 @@ struct PlayLaunchGeometry {
 };
 PlayLaunchGeometry g_play_launch_geometry;
 void PlayLaunchBodyCheck() {
-    if (!PlayLaunchLayoutCheck()) return;
+    if (!PlayLaunchLayoutCheck())
+        return;
     auto& geometry = g_play_launch_geometry;
     geometry.body_scroll = ImGui::GetScrollY();
     geometry.body_max = ImGui::GetScrollMaxY();
@@ -39,8 +40,9 @@ void PlayLaunchBodyCheck() {
 void LibraryNavigationScrollWindow(ImGuiWindow*);
 void LibraryNavigationPinnedAction(ImGuiID);
 void PlayLaunchButtonCheck(bool enabled) {
-    LibraryNavigationPinnedAction(enabled?ImGui::GetItemID():0);
-    if (!PlayLaunchLayoutCheck()) return;
+    LibraryNavigationPinnedAction(enabled ? ImGui::GetItemID() : 0);
+    if (!PlayLaunchLayoutCheck())
+        return;
     auto& geometry = g_play_launch_geometry;
     const auto* window = ImGui::GetCurrentWindow();
     geometry.button_min = ImGui::GetItemRectMin();
@@ -54,32 +56,40 @@ void PlayLaunchButtonCheck(bool enabled) {
     geometry.focused = ImGui::IsItemFocused();
     geometry.enabled = enabled;
     geometry.main_focused = false;
-    for(auto* item=ImGui::GetCurrentContext()->NavWindow;item;item=item->ParentWindow)
+    for (auto* item = ImGui::GetCurrentContext()->NavWindow; item; item = item->ParentWindow)
         geometry.main_focused |= item == window;
 }
 void PlayLaunchCaptureCheck() {
-    if (!PlayLaunchLayoutCheck()) return;
+    if (!PlayLaunchLayoutCheck())
+        return;
     const auto& g = g_play_launch_geometry;
     const bool visible = g.button_min.x >= g.clip_min.x && g.button_min.y >= g.clip_min.y &&
                          g.button_max.x <= g.clip_max.x && g.button_max.y <= g.clip_max.y;
-    std::fprintf(stderr, "[play-launch][isolated-check] step=%d visible=%d focused=%d enabled=%d "
+    std::fprintf(
+        stderr,
+        "[play-launch][isolated-check] step=%d visible=%d focused=%d enabled=%d "
         "height=%.1f top=%.1f bottom=%.1f body-scroll=%.1f body-max=%.1f parent-scroll=%.1f "
         "button-left=%.1f button-right=%.1f bar-left=%.1f bar-right=%.1f bar-top=%.1f bar-bottom=%.1f available=%.1f "
         "panel-left=%.1f panel-right=%.1f panel-bottom=%.1f body-focused=%d body-scrollbar=%d body-right=%.1f nav-main=%d\n",
-        g_launcher_layout_step, int(visible), int(g.focused), int(g.enabled),
-        g.button_max.y - g.button_min.y, g.button_min.y, g.button_max.y,
-        g.body_scroll, g.body_max, g.parent_scroll, g.button_min.x, g.button_max.x,
-        g.footer_min.x, g.footer_max.x, g.footer_min.y, g.footer_max.y, g.available_width,
-        g.panel_min.x, g.panel_max.x, g.panel_max.y, int(g.body_focused), int(g.body_scrollbar), g.body_right, int(g.main_focused));
+        g_launcher_layout_step, int(visible), int(g.focused), int(g.enabled), g.button_max.y - g.button_min.y,
+        g.button_min.y, g.button_max.y, g.body_scroll, g.body_max, g.parent_scroll, g.button_min.x, g.button_max.x,
+        g.footer_min.x, g.footer_max.x, g.footer_min.y, g.footer_max.y, g.available_width, g.panel_min.x, g.panel_max.x,
+        g.panel_max.y, int(g.body_focused), int(g.body_scrollbar), g.body_right, int(g.main_focused));
 }
 
-struct SaveDraftGeometry {ImRect panel, bounds;float top=0.F;bool dirty=false;};
+struct SaveDraftGeometry {
+    ImRect panel, bounds;
+    float top = 0.F;
+    bool dirty = false;
+};
 SaveDraftGeometry g_save_draft_geometry;
 void SaveDraftCaptureCheck() {
-    const auto& g=g_save_draft_geometry;
-    std::fprintf(stderr,"[save-draft][isolated-check] step=%d bar-left=%.1f bar-right=%.1f bar-top=%.1f bar-bottom=%.1f panel-left=%.1f panel-right=%.1f panel-bottom=%.1f dirty=%d\n",
-        g_launcher_layout_step,g.panel.Min.x,g.panel.Max.x,g.top,g.panel.Max.y,
-        g.bounds.Min.x,g.bounds.Max.x,g.bounds.Max.y,int(g.dirty));
+    const auto& g = g_save_draft_geometry;
+    std::fprintf(
+        stderr,
+        "[save-draft][isolated-check] step=%d bar-left=%.1f bar-right=%.1f bar-top=%.1f bar-bottom=%.1f panel-left=%.1f panel-right=%.1f panel-bottom=%.1f dirty=%d\n",
+        g_launcher_layout_step, g.panel.Min.x, g.panel.Max.x, g.top, g.panel.Max.y, g.bounds.Min.x, g.bounds.Max.x,
+        g.bounds.Max.y, int(g.dirty));
 }
 
 float PlayLaunchButtonWidth(float width) {
@@ -94,17 +104,15 @@ std::string PlayLaunchSummary(const PlayPageContext& play, bool live) {
             break;
         }
     }
-    if (game.empty()) game = std::string(dkr::localisation::source(
-        play.rom_ready ? "Diddy Kong Racing" : "Load a ROM to start."));
-    const bool mods = live ? dkr::session_content::running_modded.load()
-                           : dkr::session_content::next_enabled.load();
+    if (game.empty())
+        game = std::string(dkr::localisation::source(play.rom_ready ? "Diddy Kong Racing" : "Load a ROM to start."));
+    const bool mods = live ? dkr::session_content::running_modded.load() : dkr::session_content::next_enabled.load();
     return game + "  |  " + std::string(dkr::localisation::source(SessionModsCaption(mods)));
 }
 
 float PlayLaunchBarHeight(float width, const std::string& summary) {
-    return 10.F + PaddockTextHeight(PaddockReading(13.F, false, 1.4F), summary,
-                                   std::max(1.F, width - 8.F)) +
-           8.F + kPlayStartHeight + 10.F;
+    return 10.F + PaddockTextHeight(PaddockReading(13.F, false, 1.4F), summary, std::max(1.F, width - 8.F)) + 8.F +
+           kPlayStartHeight + 10.F;
 }
 
 void DrawPlayLaunchSummary(float width, const std::string& summary) {
@@ -123,6 +131,6 @@ void DrawPlayLaunchSummary(float width, const std::string& summary) {
     PaddockGap(10.F);
     PaddockText(PaddockReading(13.F, false, 1.4F), PaddockRgb(0xB0C9CC), summary, width - 8.F);
     PaddockGap(8.F);
-    ImGui::SetCursorScreenPos({std::floor((panel.Min.x + panel.Max.x - PlayLaunchButtonWidth(width)) * .5F),
-                              ImGui::GetCursorScreenPos().y});
+    ImGui::SetCursorScreenPos(
+        {std::floor((panel.Min.x + panel.Max.x - PlayLaunchButtonWidth(width)) * .5F), ImGui::GetCursorScreenPos().y});
 }

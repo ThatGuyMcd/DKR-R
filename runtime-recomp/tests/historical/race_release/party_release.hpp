@@ -23,7 +23,8 @@ enum class ReleaseDisposition { Apply, Stale, Duplicate };
 inline ReleaseDisposition release_disposition(Cursor at, std::uint64_t generation, Cursor cursor,
                                               std::uint64_t controls, bool go,
                                               const std::optional<std::pair<Cursor, std::uint64_t>>&) {
-    if (at.epoch < cursor.epoch || (go && at.epoch == cursor.epoch && at.frame <= cursor.frame && generation <= controls))
+    if (at.epoch < cursor.epoch ||
+        (go && at.epoch == cursor.epoch && at.frame <= cursor.frame && generation <= controls))
         return ReleaseDisposition::Stale;
     return ReleaseDisposition::Apply;
 }

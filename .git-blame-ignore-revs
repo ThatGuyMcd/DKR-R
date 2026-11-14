@@ -2,3 +2,7 @@
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 # Apply ruff format, ruff --fix and shfmt to first-party scripts (A2)
 d6690f6da8690bdaf79ab898f10e5cee69f6ef07
+# Format the first-party C/C++ and CMake sources (layout only, proven per file)
+19f198b4649be95368092085588875d99398ad49
+# Put adjacent using-declarations in canonical order
+32f98f5a664ecf2bc6f02e3793f917e29052d01d

@@ -39,13 +39,12 @@ inline Summary summarize(Samples values) {
     // RT64's unfilled rolling-history entries are zero. Exclude them and
     // invalid samples; never present an empty/unavailable timer as 0 ms.
     const auto end = std::remove_if(values.begin(), values.end(),
-        [](double value) { return !std::isfinite(value) || value <= 0.0; });
+                                    [](double value) { return !std::isfinite(value) || value <= 0.0; });
     const auto count = static_cast<std::size_t>(end - values.begin());
-    if (count == 0U) return {};
+    if (count == 0U)
+        return {};
     std::sort(values.begin(), end);
-    const auto percentile = [&](std::size_t percent) {
-        return values[(count * percent + 99U) / 100U - 1U];
-    };
+    const auto percentile = [&](std::size_t percent) { return values[(count * percent + 99U) / 100U - 1U]; };
     return {count, percentile(50U), percentile(95U), percentile(99U)};
 }
 

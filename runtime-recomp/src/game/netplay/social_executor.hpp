@@ -13,9 +13,11 @@ namespace dkr::runtime::netplay {
 // SDK callbacks only enqueue events. No callback may wait for the social state
 // lock, and no network construction, close or disk flush runs on the UI thread.
 class SocialExecutor {
-public:
+  public:
     using Job = std::function<void()>;
-    ~SocialExecutor() { stop(); }
+    ~SocialExecutor() {
+        stop();
+    }
     void start(Job tick, Job failure) {
         stop();
         {
@@ -28,25 +30,36 @@ public:
                 Job job;
                 {
                     std::unique_lock lock(mutex_);
-                    changed_.wait_until(lock, deadline, [this] {
-                        return !accepting_ || !jobs_.empty();
-                    });
-                    if (!accepting_ && jobs_.empty()) break;
+                    changed_.wait_until(lock, deadline, [this] { return !accepting_ || !jobs_.empty(); });
+                    if (!accepting_ && jobs_.empty())
+                        break;
                     if (!jobs_.empty()) {
                         job = std::move(jobs_.front());
                         jobs_.pop_front();
                     }
                 }
                 const auto report_failure = [&] {
-                    try { failure(); } catch (...) {}
+                    try {
+                        failure();
+                    } catch (...) {
+                    }
                 };
                 // A failed queued operation must not starve scheduled ticks.
-                try { if (job) job(); } catch (...) { report_failure(); }
+                try {
+                    if (job)
+                        job();
+                } catch (...) {
+                    report_failure();
+                }
                 const auto now = std::chrono::steady_clock::now();
                 if (now >= deadline) {
                     // Advance even if user code throws: no expired-deadline loop.
                     deadline = now + std::chrono::milliseconds(100);
-                    try { tick(); } catch (...) { report_failure(); }
+                    try {
+                        tick();
+                    } catch (...) {
+                        report_failure();
+                    }
                     deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
                 }
             }
@@ -68,13 +81,15 @@ public:
             accepting_ = false;
         }
         changed_.notify_all();
-        if (thread_.joinable()) thread_.join();
+        if (thread_.joinable())
+            thread_.join();
     }
     std::uint64_t rejected() const {
         std::lock_guard lock(mutex_);
         return rejected_;
     }
-private:
+
+  private:
     mutable std::mutex mutex_;
     std::condition_variable changed_;
     std::deque<Job> jobs_;

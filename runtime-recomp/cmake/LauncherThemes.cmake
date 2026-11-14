@@ -11,8 +11,14 @@ function(dkr_add_launcher_theme_checks)
         target_link_libraries(DKRLauncherThemeTests PRIVATE user32)
     endif()
     set(imgui "${root}/extern/rt64/src/contrib/imgui")
-    add_executable(DKRLauncherThemeDrawTests "${root}/runtime-recomp/tests/launcher_theme_draw_tests.cpp"
-        "${imgui}/imgui.cpp" "${imgui}/imgui_draw.cpp" "${imgui}/imgui_tables.cpp" "${imgui}/imgui_widgets.cpp")
+    add_executable(
+        DKRLauncherThemeDrawTests
+        "${root}/runtime-recomp/tests/launcher_theme_draw_tests.cpp"
+        "${imgui}/imgui.cpp"
+        "${imgui}/imgui_draw.cpp"
+        "${imgui}/imgui_tables.cpp"
+        "${imgui}/imgui_widgets.cpp"
+    )
     target_include_directories(DKRLauncherThemeDrawTests PRIVATE "${root}/runtime-recomp/src/game" "${imgui}")
     target_compile_features(DKRLauncherThemeDrawTests PRIVATE cxx_std_20)
     foreach(target DKRLauncherThemeTests DKRLauncherThemeDrawTests)
@@ -32,15 +38,23 @@ function(dkr_add_launcher_theme_render_check)
     if(TARGET DKRPortGame AND NOT TARGET DKRLauncherThemeRenderChecks)
         get_filename_component(root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../.." ABSOLUTE)
         set(imgui "${root}/extern/rt64/src/contrib/imgui")
-        add_executable(DKRLauncherThemeRenderChecks EXCLUDE_FROM_ALL
+        add_executable(
+            DKRLauncherThemeRenderChecks
+            EXCLUDE_FROM_ALL
             "${root}/runtime-recomp/tests/launcher_theme_render_tests.cpp"
-            "${imgui}/imgui.cpp" "${imgui}/imgui_draw.cpp" "${imgui}/imgui_tables.cpp" "${imgui}/imgui_widgets.cpp"
-            "${imgui}/backends/imgui_impl_sdlrenderer2.cpp")
+            "${imgui}/imgui.cpp"
+            "${imgui}/imgui_draw.cpp"
+            "${imgui}/imgui_tables.cpp"
+            "${imgui}/imgui_widgets.cpp"
+            "${imgui}/backends/imgui_impl_sdlrenderer2.cpp"
+        )
         target_compile_features(DKRLauncherThemeRenderChecks PRIVATE cxx_std_20)
         get_target_property(game_includes DKRPortGame INCLUDE_DIRECTORIES)
         get_target_property(game_links DKRPortGame LINK_DIRECTORIES)
-        target_include_directories(DKRLauncherThemeRenderChecks PRIVATE ${game_includes}
-            "${root}/runtime-recomp/src/game" "${imgui}" "${root}/extern/rt64/src/contrib/stb")
+        target_include_directories(
+            DKRLauncherThemeRenderChecks
+            PRIVATE ${game_includes} "${root}/runtime-recomp/src/game" "${imgui}" "${root}/extern/rt64/src/contrib/stb"
+        )
         if(game_links)
             target_link_directories(DKRLauncherThemeRenderChecks PRIVATE ${game_links})
         endif()
