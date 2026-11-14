@@ -300,7 +300,7 @@
     {
       "name": "MbedTLS",
       "repositoryPath": "extern/mbedtls",
-      "expectedCommit": "c765c831e5c2a0971410692f92f7a81d6ec65ec2",
+      "expectedCommit": "068ff080b369adfac81509f9b57b2afabaf82dc5",
       "patches": []
     },
     {

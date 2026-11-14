@@ -84,7 +84,7 @@
     {
       "name": "mbedtls",
       "repository": "https://github.com/Mbed-TLS/mbedtls.git",
-      "commit": "c765c831e5c2a0971410692f92f7a81d6ec65ec2",
+      "commit": "068ff080b369adfac81509f9b57b2afabaf82dc5",
       "destination": "extern/mbedtls",
       "recursive": true,
       "purpose": "Apache-2.0 static TLS and DTLS provider for the cross-platform Quick Join transport"
