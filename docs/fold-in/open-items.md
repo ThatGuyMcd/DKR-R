@@ -20,8 +20,9 @@
    `render_sprite_billboard` call `dkr_native_road_wheel_scope` with events 200
    to 203, but the release recipe compiled the capsule's older pinned kernel,
    so no shipped build ever ran the hooks. `scripts/camera_scene_kernel.py` now
-   emits them (`add_road_wheel_hooks`, tested in
-   `runtime-recomp/tests/camera_scene_kernel_tests.py`), which moves the two
+   emits them from the `camera` payload of
+   `runtime-recomp/guest-hooks/hooks.toml` (applied with `scripts/guest_hooks.py`,
+   tested in `runtime-recomp/tests/camera_scene_kernel_tests.py`), which moves the two
    `camera-kernel-*` digests in `build-inputs.lock.json`. Built and booted on
    macOS; nothing has run the hooks in a race. Still to do: a playtest with a
    custom character on the original car, Camera++ and look-behind on, checking

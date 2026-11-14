@@ -1,8 +1,9 @@
 """Compile a closed draw-only routine set into NEW private pipeline output.
 
 No routine in this output links to the live game or renderer globals. The only
-native call is dkr_native_road_wheel_scope, which render_3d_model and
-render_sprite_billboard make around their bodies (vehicle_lighting/road_wheels.h).
+native call is dkr_native_road_wheel_scope (vehicle_lighting/road_wheels.h), which
+the "camera" hooks of runtime-recomp/guest-hooks/hooks.toml put around the bodies
+of render_3d_model and render_sprite_billboard (scripts/guest_hooks.py applies them).
 All guest accesses are checked against the supplied DECODE COPY.
 The approved roots prepare/draw ONE view, never render_scene or a logic tick.
 This is the Camera++ scene kernel (DKR_CAMERA_KERNEL_V77/V80), a supported
@@ -18,6 +19,7 @@ from pathlib import Path
 import re
 from typing import cast
 
+import guest_hooks
 from kernel_inputs import CALL, DEF, HEADER_HASH, elf_symbols, reviewed_bytes, strip
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,44 +124,29 @@ gSnowVertexData gSnowVertexFlip gRainSplashDelay gRainGfx gLightningFrequency D_
 D_8011D4A0 D_8011D4A4 D_8011D4AC D_8011D4B0 gCurrentLightIntensity gInverseViewMatrixF""".split()
 
 
-# Routines that bracket their body with dkr_native_road_wheel_scope: the event
-# numbers are (enter, leave) and the guest register that holds the object.
-ROAD_WHEEL_SCOPES = {"render_3d_model": (200, 201, "r4"), "render_sprite_billboard": (202, 203, "r7")}
+HOOK_SPEC = ROOT / "runtime-recomp/guest-hooks/hooks.toml"
 
 
-def add_road_wheel_hooks(name: str, body: str, addresses: dict[str, int]) -> str:
-    """Bracket render_3d_model and render_sprite_billboard with the native
-    road-wheel scope call (events 200 to 203); any other routine is returned as is.
+def camera_hooks(revision: int, spec: Path = HOOK_SPEC) -> dict[str, guest_hooks.Hook]:
+    """The hooks.toml hooks of the camera payload, by guest function."""
+    hooks: dict[str, guest_hooks.Hook] = {}
+    for hook in guest_hooks.load(spec, str(revision), "camera"):
+        if hook.function in hooks:
+            raise ValueError(f"Two camera hooks for {hook.function}")
+        hooks[hook.function] = hook
+    return hooks
 
-    The enter call follows the first brace, ahead of dkr_camera_step(), which the
-    caller inserts at the same brace later. The routine must have exactly one
-    `return;`: the replacement is several statements, which would be wrong under
-    an unbraced `if (...) return;`, and a second exit would need its own review."""
-    if name not in ROAD_WHEEL_SCOPES:
-        return body
-    enter, leave, register = ROAD_WHEEL_SCOPES[name]
-    model = name == "render_3d_model"
-    before = f"\n    dkr_road_wheel_call road_call={{0}};\n    road_call.event={enter};\n"
-    before += f"    road_call.object=(uint32_t)ctx->{register};\n"
-    if model:
-        for field, symbol in (
-            ("intensity", "gCurrentLightIntensity"),
-            ("inverse_view", "gInverseViewMatrixF"),
-            ("viewport_layout", "gViewportLayout"),
-        ):
-            before += f"    road_call.{field}=0x{addresses[symbol]:08X}U;\n"
-    else:
-        before += (
-            "    road_call.holder=(uint32_t)ctx->r4;"
-            "road_call.sprite=MEM_W(16,ctx->r29);road_call.flags=MEM_W(20,ctx->r29);\n"
-        )
-    before += "    dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);\n"
-    body = body.replace("{", "{" + before, 1)
-    finish = f"road_call.event={leave};dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);return;"
-    returns = len(re.findall(r"\breturn;", body))
-    if returns != 1:
-        raise ValueError(f"Private road-wheel return boundary changed: {name} has {returns} returns")
-    return re.sub(r"\breturn;", lambda _: finish, body)
+
+def hook_routine(text: str, hook: guest_hooks.Hook) -> str:
+    """One routine (signature and body) with a hooks.toml hook applied inside
+    its braces, by the same code that hooks the funcs and owned payloads, so the
+    unbraced-return refusal is shared. The entry text lands at the routine's
+    first brace, ahead of the dkr_camera_step() that generate() inserts there."""
+    brace = text.index("{") + 1
+    try:
+        return text[:brace] + guest_hooks.hooked_body(text[brace:], hook)
+    except guest_hooks.HookError as error:
+        raise ValueError(f"Camera hook does not apply: {error}") from error
 
 
 def generate(source: Path, header: Path, elf: Path, revision: int, output: Path) -> None:
@@ -251,9 +238,13 @@ def generate(source: Path, header: Path, elf: Path, revision: int, output: Path)
         if len(entries) != 1:
             raise ValueError("Unknown scene global: " + name)
         addresses[name] = next(iter(entries))[0]
+    hooks = camera_hooks(revision)
+    if missing := set(hooks) - set(selected):
+        raise ValueError("Camera hook for a routine outside the closure: " + str(sorted(missing)))
     emitted: list[str] = []
     for name, body in sorted(selected.items()):
-        body = add_road_wheel_hooks(name, body, addresses)
+        if name in hooks:
+            body = hook_routine(body, hooks[name])
         extra = set(CALL.findall(strip(body))) - allowed
         if extra or re.search(r"\brdram\s*(?:\[|\+)", strip(body)):
             raise ValueError("Scene escaped its closed boundary: " + name + " " + str(extra))

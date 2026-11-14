@@ -1,6 +1,7 @@
 # Guest hooks: what the runtime adds to N64Recomp output (scripts/guest_hooks.py
 # documents the format). payloads: funcs = DKRRecompiledFuncsV77/V80, owned =
-# the experimental owned game. Every hook applies exactly once per payload.
+# the experimental owned game, camera = the private Camera++ scene kernel
+# (scripts/camera_scene_kernel.py). Every hook applies exactly once per payload.
 schema = 1
 
 # Achievements: observe the frame after each main loop pass (achievements).
@@ -207,3 +208,31 @@ replace = '''    MEM_W(0X5C, ctx->r29) = ctx->r7;
     // Identical resident models on all peers; graphics stays local.
     if((uint32_t)ctx->r30<=2U)ctx->r5&=~(gpr)12U; // primary-driver-lod-residency-v2: fp is vehicle, a3 is Settings row
     spawn_object(rdram, ctx);'''
+
+# Camera++ scene kernel: the native road-wheel scope around the private copies
+# of the model and wheel draws (events 200 to 203, vehicle_lighting/road_wheels.h).
+[[hook]]
+id = "camera-road-wheel-model"
+function = "render_3d_model"
+payloads = ["camera"]
+entry = '''    dkr_road_wheel_call road_call={0};
+    road_call.event=200;
+    road_call.object=(uint32_t)ctx->r4;
+    road_call.intensity={symbol:gCurrentLightIntensity}U;
+    road_call.inverse_view={symbol:gInverseViewMatrixF}U;
+    road_call.viewport_layout={symbol:gViewportLayout}U;
+    dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);
+'''
+returns = '''road_call.event=201;dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);'''
+
+[[hook]]
+id = "camera-road-wheel-sprite"
+function = "render_sprite_billboard"
+payloads = ["camera"]
+entry = '''    dkr_road_wheel_call road_call={0};
+    road_call.event=202;
+    road_call.object=(uint32_t)ctx->r7;
+    road_call.holder=(uint32_t)ctx->r4;road_call.sprite=MEM_W(16,ctx->r29);road_call.flags=MEM_W(20,ctx->r29);
+    dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);
+'''
+returns = '''road_call.event=203;dkr_native_road_wheel_scope(rdram,0x1000000U,&road_call);'''

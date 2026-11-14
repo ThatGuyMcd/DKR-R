@@ -42,7 +42,7 @@
     "patches/n64recomp/0003-null-statement-before-instruction-hooks.patch": "f864ffd285ff4b09f2a3f4e453e5f0e5b2c39e345bc05dd88f47a46b01d3dac7",
     "runtime-recomp/dkr.us.v77.recomp-policy.json": "c4deefd55aca1dc1af1391a86d5df366624dabed2827a0fab055e8ffad8cd702",
     "runtime-recomp/dkr.us.v80.recomp-policy.json": "b8a89ed014f6e6a7f1113adf72fe8c92b1f8cf8323ac4c35de00a258c28adb9b",
-    "runtime-recomp/guest-hooks/hooks.toml": "c4a62b6598c1ab9a01f18bc3dc110c181a72ed97eb59797f3612a92d731e441e",
+    "runtime-recomp/guest-hooks/hooks.toml": "771904d8c684677b87dee5882d8fc97f67cd70fe028bb70c309227e3a30ab4fa",
     "runtime-recomp/legacy-character-menu.v77.recomp-fragment.json": "82db39e16f1e30eff1851d74eaf443cd962a2b65517d95f531f4cc0924357ce0",
     "runtime-recomp/legacy-character-menu.v80.recomp-fragment.json": "36a304eca1e8e889216e931b52a1838b993261bb16e39c2372731b8dad6afb90",
     "runtime-recomp/legacy-characters.v77.recomp-fragment.json": "bf7c193ef8c7c3737720da9bec4c8c9fe4e2eb13b92d2b8b50e68ebba7f93274",
@@ -166,7 +166,7 @@
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
     "scripts/generate_replay_probe.py": "447b69b2adc37223c3587b431ff94304072efc9e77a6be88bfce50b2259aaf0c",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
-    "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
+    "scripts/guest_hooks.py": "c6f4674da918d4efa82243faf1ab105758bf9f7ac7f002e20424f2f06230b71a",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
     "scripts/legacy_asset_capacity_policy.py": "c67065366a5c4e8c1075e6e127fec67394358cf3402577243fe3908fde71b27a",
     "scripts/legacy_behaviour_policy.py": "940cf7b39db752d5268972aba52a70ac2d2b8d638aabd8455145facfffacd4f8",
@@ -187,6 +187,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Launch carries full-size Network input batches: receive side only, nothing sent or simulated changes"
+    "reason": "Camera payload hooks added to hooks.toml: funcs and owned payload output unchanged, camera kernel output byte-identical"
   }
 }
