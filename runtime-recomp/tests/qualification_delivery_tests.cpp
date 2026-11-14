@@ -41,6 +41,24 @@ int main() {
     assert(!queue.receive(source, bytes, error, fetch, spike));
     assert(!queue.receive(source, bytes, error, fetch, spike + 199ms));
     assert(queue.receive(source, bytes, error, fetch, spike + 200ms));
+    // Packets taken in one poll share a due time and must come out as they went in:
+    // the lobby sends a roster and the start that depends on it back to back.
+    queue.clear();
+    assert(q::arm(250, 0, 0, 0));
+    unsigned next = 0;
+    auto burst = [&](int& s, auto& b, auto& e) {
+        e.clear();
+        if (next == 12)
+            return false;
+        s = int(next);
+        b = {std::uint8_t(next++)};
+        return true;
+    };
+    assert(!queue.receive(source, bytes, error, burst, at));
+    for (unsigned i = 0; i < 12; ++i)
+        assert(queue.receive(source, bytes, error, burst, at + 250ms) && source == int(i) && bytes[0] == i);
+    assert(!queue.receive(source, bytes, error, burst, at + 250ms));
+    queue.clear();
     available = true;
     auto oversized = [&](int& s, auto& b, auto& e) {
         if (!available) {

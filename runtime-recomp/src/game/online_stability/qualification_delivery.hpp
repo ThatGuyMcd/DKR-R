@@ -40,17 +40,22 @@ template <class Source> class Queue final {
         Source source;
         std::vector<std::uint8_t> bytes;
         Clock::time_point queued, ready;
+        std::uint64_t order;
     };
+    // Equal due times keep arrival order: a heap alone would shuffle one poll's packets.
+    static bool later(const Packet& a, const Packet& b) {
+        return a.ready != b.ready ? a.ready > b.ready : a.order > b.order;
+    }
     std::vector<Packet> packets_;
     std::size_t bytes_ = 0, peak_ = 0;
-    std::uint64_t sequence_ = 0, admitted_ = 0, delivered_ = 0, min_us_ = UINT64_MAX, max_us_ = 0;
+    std::uint64_t sequence_ = 0, order_ = 0, admitted_ = 0, delivered_ = 0, min_us_ = UINT64_MAX, max_us_ = 0;
     Clock::time_point report_at_{};
 
   public:
     void clear() {
         packets_.clear();
         bytes_ = peak_ = 0;
-        sequence_ = admitted_ = delivered_ = max_us_ = 0;
+        sequence_ = order_ = admitted_ = delivered_ = max_us_ = 0;
         min_us_ = UINT64_MAX;
         report_at_ = {};
     }
@@ -83,9 +88,8 @@ template <class Source> class Queue final {
             bytes_ += payload.size();
             peak_ = std::max(peak_, bytes_);
             ++admitted_;
-            packets_.push_back({incoming, std::move(payload), now, due});
-            std::push_heap(packets_.begin(), packets_.end(),
-                           [](const auto& a, const auto& b) { return a.ready > b.ready; });
+            packets_.push_back({incoming, std::move(payload), now, due, order_++});
+            std::push_heap(packets_.begin(), packets_.end(), later);
         }
         if (!report_at_.time_since_epoch().count())
             report_at_ = now + std::chrono::seconds(5);
@@ -104,7 +108,7 @@ template <class Source> class Queue final {
             error.clear();
             return false;
         }
-        std::pop_heap(packets_.begin(), packets_.end(), [](const auto& a, const auto& b) { return a.ready > b.ready; });
+        std::pop_heap(packets_.begin(), packets_.end(), later);
         auto packet = std::move(packets_.back());
         packets_.pop_back();
         bytes_ -= packet.bytes.size();

@@ -6170,7 +6170,10 @@ void DirectSession::pump_locked() {
                                     "Validating the host's current roster, settings and save before starting...";
                             } else if (start.stage == 0) {
                                 if (!party->launch) {
-                                    if (!gate->launch || gate->hash != start.descriptor_hash) {
+                                    // The roster is part of the receipt. Re-arm when it moves on, or a
+                                    // start validated against the previous roster is never acknowledged.
+                                    if (!gate->launch || gate->hash != start.descriptor_hash ||
+                                        gate->roster != roster.generation) {
                                         gate->launch = launch;
                                         gate->hash = start.descriptor_hash;
                                         gate->roster = roster.generation;
