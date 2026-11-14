@@ -14,7 +14,7 @@ function(dkr_add_file_picker)
         target_compile_features(DKRFilePickerProcess PUBLIC cxx_std_20)
         target_include_directories(
             DKRFilePickerProcess
-            PUBLIC "${root}/runtime-recomp/src/game" "${root}/extern/n64-modern-runtime/thirdparty"
+            PUBLIC "${root}/runtime-recomp/src/game" "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty"
         )
         target_link_libraries(DKRFilePickerProcess PUBLIC DKRUpdateInstall)
         if(WIN32)

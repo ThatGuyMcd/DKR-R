@@ -41,7 +41,7 @@ function(dkr_add_localisation)
             NAME DKRLocalisationCatalogues
             COMMAND "${Python3_EXECUTABLE}" "${root}/scripts/embed_localisation.py" --resources "${resources}"
         )
-        set(imgui "${root}/extern/rt64/src/contrib/imgui")
+        set(imgui "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib/imgui")
         add_executable(
             DKRLocalisationUiTests
             "${root}/runtime-recomp/tests/localisation_ui_tests.cpp"

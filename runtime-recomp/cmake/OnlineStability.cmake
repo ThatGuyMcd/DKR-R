@@ -197,7 +197,7 @@ function(dkr_add_online_stability)
         )
         target_include_directories(
             DKROnlinePreparationChecks
-            PRIVATE "${_dkr_online_root}/extern/n64-modern-runtime/thirdparty"
+            PRIVATE "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty"
         )
         if(TARGET DKRPortGame)
             get_target_property(preparation_links DKRPortGame LINK_DIRECTORIES)
