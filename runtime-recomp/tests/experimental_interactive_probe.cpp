@@ -394,7 +394,8 @@ void simulation(Shared& shared, SDL_AudioDeviceID audio, const Options& o) try {
         const auto now = Network::Clock::now();
         if (!pump.pulse(now, [&] {
                 if (o.script)
-                    return PackedInput{0x8000, std::int8_t((session.frontier() / 15) % 2 ? 30 : -30), 0};
+                    return check_autopilot_input(world->scene_view().autopilot, session.local_owner(),
+                                                 session.frontier());
                 return unpack(shared.input.load());
             }))
             throw std::runtime_error(pump.error());

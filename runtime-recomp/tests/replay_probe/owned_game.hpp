@@ -1,4 +1,5 @@
 #pragma once
+#include "netplay/check_autopilot.hpp"
 #include "netplay/experimental_session.hpp"
 #include "netplay/experimental_presentation.hpp"
 #include "rom_revision.hpp"
@@ -50,6 +51,8 @@ struct OwnedSceneView {
     // Observation only: never a topology/ownership/confirmation decision.
     std::uint8_t finished_racers = 0;
     bool tt_camera = false;
+    // Self-test autopilot input only (check_autopilot.hpp); one racer per port.
+    AutopilotView autopilot;
 };
 class OwnedGame : public SceneSimulation {
   public:
