@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <memory>
 #include <mutex>
+#include <string_view>
 #include <thread>
 
 namespace dkr::crash_reports {
@@ -123,6 +124,17 @@ void start(const std::filesystem::path& profile, std::string version) {
     try {
         owner = std::make_unique<Service>(profile, std::move(version));
     } catch (...) { /* support must never prevent the game from starting */
+        return;
+    }
+    // DKR_CRASH_REPORTS answers the consent question the way its buttons do, so
+    // an unattended run isn't left behind the modal: decline, accept or
+    // accept-dumps. Anything else is ignored and the question is asked as usual.
+    if (const char* answer = std::getenv("DKR_CRASH_REPORTS")) {
+        const std::string_view text(answer);
+        const bool enabled = text == "accept" || text == "accept-dumps", dumps = text == "accept-dumps";
+        const auto current = view().consent;
+        if ((enabled || text == "decline") && (current.choice != int(enabled) || current.dumps != dumps))
+            choose(enabled, dumps);
     }
 }
 void shutdown() {

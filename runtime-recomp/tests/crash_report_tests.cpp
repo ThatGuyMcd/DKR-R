@@ -2,6 +2,7 @@
 #include "updates/update_core.hpp"
 #include "updates/update_process.hpp"
 #include <cassert>
+#include <cstdlib>
 #include <fstream>
 #include <stdexcept>
 #include <thread>
@@ -162,6 +163,28 @@ int main() {
         }
         shutdown();
         assert(read_consent(reportRoot).choice == 0);
+        // DKR_CRASH_REPORTS answers the question at startup like the buttons do.
+        const auto answer = [&](const char* value) {
+#if defined(_WIN32)
+            _putenv_s("DKR_CRASH_REPORTS", value);
+#else
+            setenv("DKR_CRASH_REPORTS", value, 1);
+#endif
+            start(root, "1.0.14-beta.3");
+            const auto consent = view().consent;
+            shutdown();
+            assert(read_consent(reportRoot).choice == consent.choice);
+            return consent;
+        };
+        assert(answer("unknown").choice == 0); // ignored: the stored answer stands
+        const auto with_dumps = answer("accept-dumps");
+        assert(with_dumps.choice == 1 && with_dumps.dumps && with_dumps.since > 0);
+        const auto accepted = answer("accept");
+        assert(accepted.choice == 1 && !accepted.dumps && accepted.since == with_dumps.since);
+        assert(answer("decline").choice == 0);
+        fs::remove(reportRoot / "consent.json");
+        assert(answer("decline").choice == 0); // a first run never shows the question
+        assert(answer("").choice == 0);
     } catch (...) {
         shutdown();
         std::error_code ignored;

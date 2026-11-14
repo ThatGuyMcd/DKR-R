@@ -115,6 +115,21 @@ after Discord accepts a message but before a receipt is saved can still cause
 a duplicate bearing the same report ID. Rate limits respect Discord's returned
 delay. A revoked/invalid webhook is suspended until its server secret changes.
 
+## Answering the question from the environment
+
+For unattended runs (CI, self-tests on a fresh profile) set
+`DKR_CRASH_REPORTS` before starting DKR-R:
+
+| Value | Same as |
+| --- | --- |
+| `decline` | "No thanks" |
+| `accept` | "Yes, send reports", raw dumps unticked |
+| `accept-dumps` | "Yes, send reports", raw dumps ticked |
+
+It goes through the same code as the buttons, so the answer is saved to
+`crash-reports/consent.json` and replaces an earlier one. Any other value is
+ignored and the question is asked as usual.
+
 ## Verification
 
 `DKRCrashReports` covers consent, no retroactive collection, redaction,
