@@ -87,6 +87,18 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      # The same hash-verified clang-format the lint job uses (lint-tools.txt).
+      # tidy_changed.py refuses any other version.
+      - name: Install verified clang-format
+        run: |
+          tool_dir="$RUNNER_TEMP/lint-tools"
+          python3 -m venv "$tool_dir"
+          "$tool_dir/bin/python" -m pip install --quiet \
+            --require-hashes --only-binary=:all: -r .github/lint-tools.txt
+          echo "$tool_dir/bin" >>"$GITHUB_PATH"
+      # Changed means different from the merge base *formatted with the pinned
+      # clang-format*, so a formatting-only commit selects nothing (see
+      # scripts/tidy_changed.py).
       - name: Find changed first-party C/C++
         id: changes
         env:
@@ -94,10 +106,7 @@ jobs:
         run: |
           merge_base="$(git merge-base "$BASE_SHA" HEAD)"
           echo "merge-base=$merge_base" >>"$GITHUB_OUTPUT"
-          git diff --name-only --diff-filter=ACMR "$merge_base" HEAD -- \
-            runtime-recomp/src runtime-recomp/tests modding \
-            ':(exclude)runtime-recomp/src/game/generated' |
-            grep -E '\.(c|cc|cpp|h|hpp|inl)$' >"$RUNNER_TEMP/changed.txt" || true
+          python3 scripts/tidy_changed.py changed --merge-base "$merge_base" >"$RUNNER_TEMP/changed.txt"
           count="$(wc -l <"$RUNNER_TEMP/changed.txt")"
           echo "count=$count" >>"$GITHUB_OUTPUT"
           echo "$count changed first-party C/C++ files"
@@ -161,9 +170,8 @@ jobs:
               if path and (not path.endswith((".c", ".cc", ".cpp")) or path in compiled):
                   print(path)
           EOF
-          mapfile -t changed <"$RUNNER_TEMP/tidy-files.txt"
           set +e
-          git diff -U0 "$MERGE_BASE" HEAD -- "${changed[@]}" |
+          python3 scripts/tidy_changed.py diff --merge-base "$MERGE_BASE" --files "$RUNNER_TEMP/tidy-files.txt" |
             python3 /usr/lib/llvm-18/share/clang/clang-tidy-diff.py -p1 -path build/host \
               -clang-tidy-binary clang-tidy-18 -iregex '.*\.(c|cc|cpp|h|hpp)' -j 4 -quiet >"$RUNNER_TEMP/tidy.log" 2>&1
           set -e
