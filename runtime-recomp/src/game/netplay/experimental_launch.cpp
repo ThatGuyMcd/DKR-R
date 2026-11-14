@@ -1,4 +1,5 @@
 #include "experimental_launch.hpp"
+#include "experimental_owner_inputs.hpp"
 #include "monocypher.h"
 #include <algorithm>
 #include <limits>
@@ -229,10 +230,12 @@ bool Launch::receive_packet(const PeerAddress& source, std::span<const std::uint
         // Network uses a domain-separated key, so its early encrypted inputs
         // cannot authenticate as launch control. Preserve a small bounded lane
         // across the release ACK; Network performs their actual authentication.
+        // The cap must admit a full input batch: Launch keeps owning the
+        // receive path while Running, so anything larger is lost for good.
         std::uint64_t match = 0;
-        if ((view_.phase == LaunchPhase::Releasing || view_.phase == LaunchPhase::Running) && packet.size() <= 118 &&
-            secure::inspect_packet(packet, id, match) && id == remote_sender_ && match == match_ &&
-            gameplay_.size() < 64) {
+        if ((view_.phase == LaunchPhase::Releasing || view_.phase == LaunchPhase::Running) &&
+            packet.size() <= kNetworkMaximumWireBytes && secure::inspect_packet(packet, id, match) &&
+            id == remote_sender_ && match == match_ && gameplay_.size() < 64) {
             gameplay_.emplace_back(packet.begin(), packet.end());
             return true;
         }

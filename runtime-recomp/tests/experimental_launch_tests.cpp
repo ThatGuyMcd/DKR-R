@@ -1,4 +1,5 @@
 #include "netplay/experimental_launch.hpp"
+#include "netplay/experimental_owner_inputs.hpp"
 #include <cassert>
 #include <deque>
 #include <iostream>
@@ -293,6 +294,15 @@ void dropped_release_ack_preserves_inputs() {
         assert(client.service_launch(at(bus.time)) && host.service_launch(at(bus.time)));
     }
     assert(host.is_open() && host.receive(source, received, error) && received == bytes && source == address(1));
+    // A full redundant input batch is far larger than the early packet above.
+    // While Running, Launch still owns the receive path and must pass it on.
+    std::vector<std::uint8_t> batch(kOwnerInputMaximumBytes + 6);
+    const auto large = secure::seal(batch, game_key, conf->local_sender_id, 2, conf->match_id);
+    assert(large.size() == kNetworkMaximumWireBytes);
+    assert(client.send_status(conf->peers[0].address, large, TransportTrafficClass::Realtime, error) ==
+           DatagramSendStatus::Sent);
+    assert(host.service_launch(at(++bus.time)));
+    assert(host.receive(source, received, error) && received == large);
 }
 void delayed_channel_open_and_reuse() {
     Bus bus;

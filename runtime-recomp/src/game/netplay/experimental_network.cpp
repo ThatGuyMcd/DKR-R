@@ -9,7 +9,7 @@
 namespace dkr::runtime::netplay::experimental {
 namespace {
 constexpr std::array<std::uint8_t, 5> kPrefix{'D', 'K', 'X', 'N', 1};
-constexpr std::size_t kMaximumWireBytes = 44 + 6 + kOwnerInputMaximumBytes;
+constexpr std::size_t kMaximumWireBytes = kNetworkMaximumWireBytes;
 bool nonzero(const secure::Key& key) {
     return std::any_of(key.begin(), key.end(), [](auto byte) { return byte != 0; });
 }
