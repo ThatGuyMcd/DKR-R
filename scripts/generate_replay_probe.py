@@ -687,7 +687,9 @@ FULL_SCENE_NATIVE_HASH = {
     # in the owned CPU; per-player preferences are consumed by the decoder.
     # v1.0.15: the layout aspect comes from the display settings policy
     # instead of the raw window size. Still a per-player presentation input.
-    "runtime-recomp/src/game/runtime_enhancements.cpp": "6f3ad102692d2951e3de104025bfc1f17b8aa519acc99e44f4d99d0b0675f9f1",
+    # Nov 16: the scene player and viewport addresses its two reads use come
+    # from generated symbol tables with the same values; no new access.
+    "runtime-recomp/src/game/runtime_enhancements.cpp": "133123433a896ac1b5d6b159d0aeb8beb79c441b6953473026c048ac1fbfad3a",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "03e0f77cd2969926a48ca434964e4a2b813efa93a0dc31e4b779eb7037a547b1",
     "runtime-recomp/src/game/character_select_music_policy.hpp": "0a762402cc3308eb5197dd97eaac81778079bfdfa0f81a2f4aeb98cbc0ec7c22",
 }
