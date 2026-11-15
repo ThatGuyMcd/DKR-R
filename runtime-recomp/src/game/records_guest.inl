@@ -45,7 +45,8 @@ mods::Bytes course_records(std::uint8_t* rdram, const recomp_context&, bool rest
     };
     if (!rdram)
         return {};
-    const auto settings = word(revision == rom::Revision::UsV80 ? 0x80123A90U : 0x80123510U);
+    const auto settings =
+        word(dkr::runtime::legacy_world_symbols::for_revision(revision == rom::Revision::UsV80).settings_pointer);
     if (!valid(settings, 0x48, 4))
         return {};
     Map remembered;

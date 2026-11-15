@@ -1,4 +1,5 @@
 #include "legacy_behaviour.hpp"
+#include "behaviour_site_symbols.hpp"
 #include "legacy_mod_format.hpp"
 #include <algorithm>
 #include <limits>
@@ -38,23 +39,36 @@ unsigned linked_behaviour_profile(View prefix) {
 }
 const std::array<BehaviourSite, BehaviourSites>& behaviour_sites() {
     static constexpr std::array<BehaviourSite, BehaviourSites> sites{
-        {{"track_spawn_objects", 0x8000c928, 0x8d030000, 0x24030007, 0x8000c928, 0x8d030000},
-         {"track_spawn_objects", 0x8000c92c, 0x9450000c, 0x2410ffff, 0x8000c92c, 0x9450000c},
-         {"track_spawn_objects", 0x8000c974, 0x8d090000, 0x24090007, 0x8000c974, 0x8d090000},
-         {"trackmenu_set_records", 0x80082988, 0x94cb000e, 0x240bffff, 0x80082dd8, 0x94cb000e},
-         {"trackmenu_set_records", 0x800829a0, 0x94c9000c, 0x2409ffff, 0x80082df0, 0x94c9000c},
-         {"menu_track_select_init", 0x8008ed98, 0x8d2a0000, 0x240a0007, 0x8008f250, 0x8d2a0000},
-         {"menu_track_select_init", 0x8008edf0, 0x8dcf0000, 0x240f0007, 0x8008f2a8, 0x8dcf0000},
-         {"menu_track_select_init", 0x8008ee20, 0x9689000c, 0x2409ffff, 0x8008f2d8, 0x9689000c},
-         {"menu_track_select_init", 0x8008ee54, 0x968e0008, 0x240e001f, 0x8008f30c, 0x968e0008},
-         {"trackmenu_render_names", 0x800900f8, 0x95cf000e, 0x240fffff, 0x800905b0, 0x95cf000e},
-         {"trackmenu_render_names", 0x8009012c, 0x8dcf0000, 0x240f0007, 0x800905e4, 0x8dcf0000},
-         {"trackmenu_setup_render", 0x80091968, 0x8d8d0000, 0x240d00ff},
-         {"trackmenu_setup_render", 0x80091f70, 0x8dd90000, 0x241900ff},
-         {"trackmenu_setup_render", 0x80091fc8, 0x8dee0000, 0x240e00ff},
-         {"func_80092188", 0x80092638, 0x8dcf0000, 0x240f00ff},
-         {"is_tt_unlocked", 0x8009ecbc, 0x8c42fd98, 0x3402ffff, 0x8009f200, 0x8c420318},
-         {"is_drumstick_unlocked", 0x8009ecd4, 0x8c42fd98, 0x3402ffff, 0x8009f218, 0x8c420318}}};
+        {{"track_spawn_objects", behaviour_site_symbols::track_spawn_objects_30_77, 0x8d030000, 0x24030007,
+          behaviour_site_symbols::track_spawn_objects_30_80, 0x8d030000},
+         {"track_spawn_objects", behaviour_site_symbols::track_spawn_objects_34_77, 0x9450000c, 0x2410ffff,
+          behaviour_site_symbols::track_spawn_objects_34_80, 0x9450000c},
+         {"track_spawn_objects", behaviour_site_symbols::track_spawn_objects_7c_77, 0x8d090000, 0x24090007,
+          behaviour_site_symbols::track_spawn_objects_7c_80, 0x8d090000},
+         {"trackmenu_set_records", behaviour_site_symbols::trackmenu_set_records_d0_77, 0x94cb000e, 0x240bffff,
+          behaviour_site_symbols::trackmenu_set_records_d0_80, 0x94cb000e},
+         {"trackmenu_set_records", behaviour_site_symbols::trackmenu_set_records_e8_77, 0x94c9000c, 0x2409ffff,
+          behaviour_site_symbols::trackmenu_set_records_e8_80, 0x94c9000c},
+         {"menu_track_select_init", behaviour_site_symbols::menu_track_select_init_5f8_77, 0x8d2a0000, 0x240a0007,
+          behaviour_site_symbols::menu_track_select_init_5f8_80, 0x8d2a0000},
+         {"menu_track_select_init", behaviour_site_symbols::menu_track_select_init_650_77, 0x8dcf0000, 0x240f0007,
+          behaviour_site_symbols::menu_track_select_init_650_80, 0x8dcf0000},
+         {"menu_track_select_init", behaviour_site_symbols::menu_track_select_init_680_77, 0x9689000c, 0x2409ffff,
+          behaviour_site_symbols::menu_track_select_init_680_80, 0x9689000c},
+         {"menu_track_select_init", behaviour_site_symbols::menu_track_select_init_6b4_77, 0x968e0008, 0x240e001f,
+          behaviour_site_symbols::menu_track_select_init_6b4_80, 0x968e0008},
+         {"trackmenu_render_names", behaviour_site_symbols::trackmenu_render_names_1dc_77, 0x95cf000e, 0x240fffff,
+          behaviour_site_symbols::trackmenu_render_names_1dc_80, 0x95cf000e},
+         {"trackmenu_render_names", behaviour_site_symbols::trackmenu_render_names_210_77, 0x8dcf0000, 0x240f0007,
+          behaviour_site_symbols::trackmenu_render_names_210_80, 0x8dcf0000},
+         {"trackmenu_setup_render", behaviour_site_symbols::trackmenu_setup_render_a38_77, 0x8d8d0000, 0x240d00ff},
+         {"trackmenu_setup_render", behaviour_site_symbols::trackmenu_setup_render_1040_77, 0x8dd90000, 0x241900ff},
+         {"trackmenu_setup_render", behaviour_site_symbols::trackmenu_setup_render_1098_77, 0x8dee0000, 0x240e00ff},
+         {"func_80092188", behaviour_site_symbols::func_80092188_4b0_77, 0x8dcf0000, 0x240f00ff},
+         {"is_tt_unlocked", behaviour_site_symbols::is_tt_unlocked_4_77, 0x8c42fd98, 0x3402ffff,
+          behaviour_site_symbols::is_tt_unlocked_4_80, 0x8c420318},
+         {"is_drumstick_unlocked", behaviour_site_symbols::is_drumstick_unlocked_4_77, 0x8c42fd98, 0x3402ffff,
+          behaviour_site_symbols::is_drumstick_unlocked_4_80, 0x8c420318}}};
     return sites;
 }
 void validate_behaviour(const BehaviourContract& value) {

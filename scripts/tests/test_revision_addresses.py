@@ -30,6 +30,7 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 HEADER = ROOT / "runtime-recomp/src/game/revision_addresses.hpp"
+CURRENT_TEST = ROOT / "runtime-recomp/tests/revision_addresses_current_tests.cpp"
 SPEC = ROOT / "runtime-recomp/symbols/revision_addresses.toml"
 SDK = {rev: ROOT / f"modding/reference-us-v{rev}/data.toml" for rev in ("77", "80")}
 DECOMP = {rev: ROOT / f"extern/dkr-decomp/ver/symbols/symbol_addrs.us.v{rev}.txt" for rev in ("77", "80")}
@@ -417,6 +418,12 @@ class StructureTests(unittest.TestCase):
     def test_the_template_initialises_every_field_in_declaration_order(self):
         for name, entries in ENTRIES.items():
             self.assertEqual(entries, FIELDS, name)
+
+    def test_the_current_table_test_covers_exactly_the_aliases(self):
+        text = CURRENT_TEST.read_text()
+        listed = re.findall(r"^\s+X\((\w+)\)", text, re.M)
+        self.assertEqual(sorted(listed), sorted(alias for alias, _ in ALIASES))
+        self.assertEqual(len(listed), len(set(listed)))
 
     def test_addresses_are_inside_ram(self):
         for rev, values in TABLES.items():
