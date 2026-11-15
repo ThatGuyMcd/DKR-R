@@ -104,11 +104,26 @@ add_executable(
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/datagram_socket.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/session_transport.cpp"
     "${DKR_DEPENDENCIES_DIR}/monocypher/src/monocypher.c"
+    # Services the netplay sources call; the probe has no online runtime, so
+    # take the self-contained owners. Music preparation (decoders, mod
+    # packages) stays out; see probe_service_shims.cpp.
+    "${CMAKE_CURRENT_LIST_DIR}/probe_service_shims.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/online_stability/live_delay.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/achievements.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/confirmed_observer.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/owned_observer.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/check_autopilot.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/confirmed_feed.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/achievement_catalogue.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../src/game/online_stability/control.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/replay_qualification.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/rollback_state_store.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../src/game/netplay/rollback_ring.cpp"
 )
 target_compile_features(DKRGuestReplayProbe PRIVATE c_std_11 cxx_std_20)
+# achievements.cpp and check_autopilot.cpp include generated symbol headers.
+include("${DKRPORT_ROOT}/runtime-recomp/cmake/GuestSymbols.cmake")
+dkr_guest_symbols(DKRGuestReplayProbe)
 string(JSON mod_services ERROR_VARIABLE mod_services_error GET "${manifest}" owned_mod_services)
 if(NOT mod_services_error AND mod_services)
     include("${DKRPORT_ROOT}/runtime-recomp/cmake/LegacyMods.cmake")
@@ -176,6 +191,9 @@ endif()
 target_include_directories(DKRGuestReplayProbe BEFORE PRIVATE "${DKR_PROBE_GENERATED}")
 if(MSVC)
     target_compile_options(DKRGuestReplayProbe PRIVATE /UNDEBUG /fp:strict)
+    # The driver check keeps large frames on the main thread; match the 8 MiB
+    # stack macOS and Linux give it instead of MSVC's 1 MiB default.
+    target_link_options(DKRGuestReplayProbe PRIVATE /STACK:8388608)
 else()
     target_compile_options(
         DKRGuestReplayProbe

@@ -634,6 +634,7 @@ class Component final : public SceneSimulation {
     }
     bool development_command(std::uint64_t epoch, std::uint32_t frame, const dkr::sdk2::Command& command,
                              std::string& error) override {
+#if DKR_PROBE_HAS_MOD_SERVICES
         if (command.empty()) {
             if (code_)
                 code_->sdk2_command({});
@@ -650,6 +651,13 @@ class Component final : public SceneSimulation {
             error = e.what();
             return false;
         }
+#else
+        // No code world exists without mod services; only the empty command is valid.
+        if (command.empty())
+            return true;
+        error = "No admitted code world for this development command.";
+        return false;
+#endif
     }
     bool tick(std::uint32_t frame, const FrameInputs& inputs, TickOutput& output, std::string& error) override {
         std::array<dkr::runtime::driving::Pedals, 4> driving_inputs{};
@@ -3227,7 +3235,15 @@ bool dkr_probe_driver_check(std::span<const std::uint8_t> fixture, unsigned play
             return false;
         // DKGV's full-RAM evidence is emitted before publication, independently
         // of the mailbox. Match the corrected actual CPU output, not a model.
-        const auto& journal = corrected.commits().back();
+        std::span<const std::uint8_t> journal = corrected.commits().back();
+        // The authored journal is wrapped in a DKRC course-record envelope
+        // (the same layout the tick path unwraps above); DKGV sits inside it.
+        if (journal.size() < 12 || !std::equal(journal.begin(), journal.begin() + 4, "DKRC"))
+            return false;
+        const auto envelope = std::size_t(dkr::runtime::saves::records::integer(journal, 4, 4));
+        if (envelope > journal.size() - 12)
+            return false;
+        journal = journal.subspan(12, envelope);
         std::uint64_t ram_hash = 0;
         if (journal.size() < 56)
             return false;
