@@ -55,13 +55,32 @@ class Request:
     hex: str
     symbols: tuple[str, ...]
     template: str
+    # Listed symbols that come from the decomp list although ``table`` is sdk.
+    decomp: tuple[str, ...] = ()
+    # A listed symbol that has a different name in a revision's table, as
+    # {symbol: {"77": name, "80": name}} (the SDK names unnamed data D_<address>).
+    names: dict[str, dict[str, str]] = dataclasses.field(default_factory=dict, hash=False)
 
 
 def load(path: Path) -> Request:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     if data.get("schema") != 1:
         raise SymbolError(f"{path.name}: unsupported schema")
-    request = Request(data["header"], data["table"], data["hex"], tuple(data["symbols"]), data["template"])
+    request = Request(
+        data["header"],
+        data["table"],
+        data["hex"],
+        tuple(data["symbols"]),
+        data["template"],
+        tuple(data.get("decomp", ())),
+        {symbol: dict(by_revision) for symbol, by_revision in data.get("names", {}).items()},
+    )
+    for listed in (*request.decomp, *request.names):
+        if listed not in request.symbols:
+            raise SymbolError(f"{path.name}: {listed} is not a listed symbol")
+    for symbol, by_revision in request.names.items():
+        if set(by_revision) - set(REVISIONS):
+            raise SymbolError(f"{path.name}: names for {symbol} may only name revisions {REVISIONS}")
     if request.table not in ("sdk", "decomp") or request.hex not in ("upper", "lower"):
         raise SymbolError(f"{path.name}: table must be sdk or decomp, hex upper or lower")
     if "/" in request.header or not request.header.endswith(".hpp"):
@@ -88,14 +107,19 @@ def table(kind: str, revision: str, root: Path, dependencies: Path | None = None
 
 def render(request: Request, root: Path, dependencies: Path | None = None) -> str:
     def address(name: str, revision: str, addresses: dict[str, list[int]]) -> str:
-        values = addresses.get(name, [])
+        kind = "decomp" if name in request.decomp else request.table
+        looked_up = request.names.get(name, {}).get(revision, name)
+        values = (decomp_tables[revision] if name in request.decomp else addresses).get(looked_up, [])
         if len(values) != 1:
             raise SymbolError(
-                f"{request.header}: {name} has {len(values)} addresses in the US v{revision} {request.table} table"
+                f"{request.header}: {looked_up} has {len(values)} addresses in the US v{revision} {kind} table"
             )
         return (f"0x{values[0]:08X}" if request.hex == "upper" else f"0x{values[0]:08x}") + "U"
 
     tables = {revision: table(request.table, revision, root, dependencies) for revision in REVISIONS}
+    decomp_tables = {
+        revision: table("decomp", revision, root, dependencies) for revision in REVISIONS if request.decomp
+    }
 
     def substitute(match: re.Match[str]) -> str:
         name, revision = match.group(1), match.group(2)
