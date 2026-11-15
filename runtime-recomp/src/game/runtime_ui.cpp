@@ -9973,7 +9973,64 @@ void dkr::runtime::ui::report_online_game_end(std::string message, bool lobby_re
 }
 
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
-bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identity, bool host, unsigned players,
+namespace {
+// DKR_OWNED_CHECK_MODS: install every .nrm/.dkrcode in the directory through the
+// ordinary Custom Magic Code library (import, select, approve, enable), as if
+// the player had done it in the Mods page. Self-test only.
+bool g_owned_check_mods = false;
+bool InstallOwnedCheckMods(const std::filesystem::path& directory, std::string& error) {
+    const auto wait = [&] {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+        while (g_code_library.view()->busy || g_legacy_imports.snapshot().busy) {
+            g_legacy_imports.tick();
+            if (std::chrono::steady_clock::now() >= deadline) {
+                error = "The mod library did not finish its work in time.";
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return true;
+    };
+    std::vector<std::filesystem::path> files;
+    for (const auto& entry : std::filesystem::directory_iterator(directory))
+        if (entry.is_regular_file() && (entry.path().extension() == ".nrm" || entry.path().extension() == ".dkrcode"))
+            files.push_back(entry.path());
+    std::ranges::sort(files);
+    if (files.empty()) {
+        error = "DKR_OWNED_CHECK_MODS holds no .nrm or .dkrcode file: " + directory.string();
+        return false;
+    }
+    for (const auto& file : files) {
+        if (!wait() || !g_code_library.import_file(file) || !wait()) {
+            if (error.empty())
+                error = "Could not import " + file.string();
+            return false;
+        }
+        if (!g_code_library.view()->error.empty()) {
+            error = "Importing " + file.string() + " failed: " + g_code_library.view()->error;
+            return false;
+        }
+    }
+    const auto items = g_code_library.view()->items;
+    if (items.size() < files.size()) {
+        error = "The mod library kept fewer packages than DKR_OWNED_CHECK_MODS holds.";
+        return false;
+    }
+    for (const auto& item : items) {
+        if (!wait() || !g_code_library.select(item.digest) || !wait() || !g_code_library.approve(item.digest, true) ||
+            !wait() || !g_code_library.enable(item.digest, true) || !wait()) {
+            if (error.empty())
+                error = "Could not enable " + item.id;
+            return false;
+        }
+        std::fprintf(stderr, "[check][mods] installed id=%s version=%s digest=%s\n", item.id.c_str(),
+                     item.version.c_str(), item.digest.c_str());
+    }
+    return true;
+}
+} // namespace
+bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identity, const std::filesystem::path& rom,
+                                                    bool host, unsigned players,
                                                     std::string& error) {
     // `[check][state]` cadence in confirmed frames (1 to 100, default 30), for
     // host and joiner alike; only this self-test entry point ever turns it on.
@@ -10006,6 +10063,29 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
                 corrupt = 0;
         }
         dkr::runtime::netplay::experimental::set_check_corrupt_state_at(corrupt);
+    }
+    if (const char* mods = std::getenv("DKR_OWNED_CHECK_MODS"); mods && *mods) {
+        const std::filesystem::path directory = std::filesystem::u8path(mods);
+        std::error_code status;
+        if (!directory.is_absolute() || !std::filesystem::is_directory(directory, status)) {
+            error = "DKR_OWNED_CHECK_MODS must be an absolute path to an existing directory.";
+            return false;
+        }
+        // The fresh-profile launcher starts asynchronous library scans; let them finish first.
+        const auto ready = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        while (g_vehicle_library.view()->busy || g_legacy_imports.snapshot().busy || g_code_library.view()->busy) {
+            g_legacy_imports.tick();
+            if (std::chrono::steady_clock::now() >= ready) {
+                error = "The isolated mod library scan timed out.";
+                return false;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        if (!InstallOwnedCheckMods(directory, error))
+            return false;
+        g_owned_check_mods = true;
+        // Mod preparation checks the lobby against the Game Pak this run was started with.
+        g_online_mod_selected_rom = rom;
     }
     if (const char* missing = std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");
         missing && std::string_view(missing) == "1")
@@ -10073,7 +10153,7 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
         std::fprintf(stderr, "[spectator][qualification] watch=1; fresh-profile=1\n");
         return true;
     }
-    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS")) {
+    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS") || g_owned_check_mods) {
         g_online_mod_identity = identity;
         dkr::runtime::vehicles::lighting::owned_car_check = std::getenv("DKR_OWNED_CHECK_CARS") != nullptr;
         dkr::runtime::vehicles::lighting::owned_road_wheel_check =
@@ -10095,7 +10175,11 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
                                              std::ranges::all_of(view.manifest->content, [](const auto& content) {
                                                  return content.kind == dkr::mods::online::Kind::Character;
                                              });
-                g_online_mod_sync->consent(cars_only || characters_only, false);
+                // DKR_OWNED_CHECK_MODS: this peer accepts the lobby's exact mods, code included.
+                if (g_owned_check_mods)
+                    g_online_mod_sync->consent(true, false, view.offer);
+                else
+                    g_online_mod_sync->consent(cars_only || characters_only, false);
             }
         };
     }
@@ -10142,7 +10226,7 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
     request.room = g_online_room_name;
     request.name = netplay::check_names::choose();
     std::fprintf(stderr, "[check][name] %s\n", request.name.c_str());
-    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS")) {
+    if (std::getenv("DKR_OWNED_CHECK_CARS") || std::getenv("DKR_OWNED_CHECK_ROAD_WHEELS") || g_owned_check_mods) {
         // The fresh-profile launcher starts asynchronous library scans. Let
         // those release their ordinary library locks before freezing cars.
         const auto ready = std::chrono::steady_clock::now() + std::chrono::seconds(30);
