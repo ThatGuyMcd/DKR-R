@@ -132,7 +132,7 @@ The contract is a claim. This is what has been checked so far, and the same
 two runs are what to do for a new architecture, compiler or OS before
 shipping it.
 
-Recorded 14 November 2026 on main at `a81b7a5`.
+Recorded 14 and 15 November 2026 on main at `a81b7a5` and `96c67dd`.
 
 Replay probe (`runtime-recomp/tests/replay_probe`, compared with
 `scripts/compare_replay_references.py`): the same captured race replayed on
@@ -143,11 +143,36 @@ byte.
 |---|---|---|
 | macOS arm64 | AppleClang 21, `-O3 -ffp-contract=off -fno-fast-math` | reference |
 | Windows x86_64 | MSVC 14.44, `/O2 /fp:strict` | identical, 18 of 18 |
+| Linux arm64 | GCC 14.2, same flags | identical, 12 of 12 |
+| Linux arm64 | Clang 19.1 | identical, 12 of 12 |
+| Linux x86_64 (emulated) | GCC 14.2 | identical, 12 of 12 |
+| Linux x86_64 (emulated) | Clang 19.1 | identical, 12 of 12 |
+| Linux riscv64 (emulated) | GCC 14.2 | identical, 12 of 12 |
+| Linux ppc64le (emulated) | GCC 14.2 | identical, 12 of 12 |
+| Linux s390x (emulated) | GCC 14.2 | refused: not little-endian, see below |
 
-Both ROM revisions, 2, 3 and 4 players, 120 and 300 frames, two tracks. Each
-machine also matched itself on a second run. An earlier run of the same probe
-(25 October 2026, `c328f63`) matched macOS arm64, macOS x86_64 under Rosetta
-and Linux x86_64 with GCC 13.
+Both ROM revisions, 2, 3 and 4 players, 120 and 300 frames, two tracks (the
+Linux rows: 300 frames, two tracks). Each machine also matched itself on a
+second run. An earlier run of the same probe (25 October 2026, `c328f63`)
+matched macOS arm64, macOS x86_64 under Rosetta and Linux x86_64 with GCC 13.
+
+riscv64 and ppc64le did not match at first, although both advertised
+`strict-ieee754-v1`. Their GCC 14 `-O3` builds used the scalar fallback of the
+RSP vector unit (only x86_64 and arm64 have the SIMD one), and two of its
+multiplies overflowed a signed `int`. Both architectures agreed with each
+other and not with the rest, from the first frame, in the audio heap. Patch
+`0029` fixes the two sites with unsigned arithmetic; the numbers above are
+after it. The x86_64 and arm64 output did not change, and the macOS reference
+is byte-identical before and after.
+
+s390x builds and passes the probe's self-test, but it is big-endian, so its
+build correctly reports `unverified-unknown` (the little-endian clause fails)
+and the captured fixture, which is host-endian, is refused.
+
+The Linux rows ran in Docker on an arm64 Mac, riscv64, ppc64le and s390x as
+static cross builds under qemu user emulation, so they show that the
+simulation computes the same bits on those instruction sets, not how fast it
+runs or that real silicon agrees.
 
 Live races (`docs/ROLLBACK-SELF-TEST.md`, confirmed-state hashes compared with
 `scripts/compare_state_hashes.py`): an arm64 Mac against an x86_64 Windows
@@ -210,6 +235,13 @@ about the platform: every racer needs the same release and the same content.
 `build_architecture()` in `netplay/determinism_contract.hpp` names the common
 architectures for the log. An architecture it does not know shows as
 `unknown` and still races; add its name there when you add the port.
+
+Meeting the contract is necessary, not sufficient: it says the build is
+configured to compute the same bits, and only the replay probe matching shows
+that it does. A target can pass every compile-time check and still diverge,
+as riscv64 and ppc64le did until an undefined-behaviour bug in a code path
+no other architecture compiles was fixed. Build the probe with
+`-fsanitize=signed-integer-overflow,shift` once and read what it reports.
 
 Then check that the promise actually holds on the new hardware, below. It
 takes two machines and about an hour, and it is the only way to find a

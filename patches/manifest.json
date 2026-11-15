@@ -117,6 +117,10 @@
         {
           "path": "patches/n64-modern-runtime/0028-flush-joined-save-owner.patch",
           "sha256": "0233dcf21815a032caf85a282f8cdfadd494da479003f99439b7278e3c9be120"
+        },
+        {
+          "path": "patches/n64-modern-runtime/0029-avoid-signed-overflow-in-scalar-rsp-multiplies.patch",
+          "sha256": "1f1b8160baa8354ee7cf4b6f7b524306a985e9dcfacb142088ec656878d5c87d"
         }
       ]
     },
