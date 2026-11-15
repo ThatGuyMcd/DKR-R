@@ -1,5 +1,6 @@
 #pragma once
 #include "enhanced_water_policy.hpp"
+#include "water_symbols.hpp"
 #include "enhanced_water_ray_geometry.hpp"
 #include "lava_lighting_policy.hpp"
 #include "lava_glow_policy.hpp"
@@ -159,11 +160,9 @@ struct WaveSymbols {
     std::uint32_t controller, players, batch, triangles, fallback, texture, model;
 };
 constexpr WaveSymbols wave_symbols(bool us_v80) {
-    // Reviewed waves_alloc/waves_free/waves_render addresses. The v80 data
-    // arrays move by 0x590, while its BSS controller moves by 0x5C0.
-    return us_v80
-               ? WaveSymbols{0x8012A588U, 0x8012A638U, 0x8012A63CU, 0x800E3610U, 0x800E3620U, 0x800E3660U, 0x800E3668U}
-               : WaveSymbols{0x80129FC8U, 0x8012A078U, 0x8012A07CU, 0x800E3080U, 0x800E3090U, 0x800E30D0U, 0x800E30D8U};
+    // The waves_alloc/waves_free/waves_render addresses, from runtime-recomp/symbols/water_symbols.toml.
+    const auto& wave = water_symbols::for_revision(us_v80);
+    return {wave.controller, wave.players, wave.batch, wave.triangles, wave.fallback, wave.texture, wave.model};
 }
 
 class Registry {

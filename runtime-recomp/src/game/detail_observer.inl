@@ -1,5 +1,6 @@
 // Included in the task identity implementation: recording and submission use
 // its existing lock, buffer parity and immutable OSTask ownership key.
+#include "detail_symbols.hpp"
 namespace dkr::runtime::detail {
 std::span<const dkr_owned_draw_event> ordinary_events() noexcept {
     return g_active_owned_task ? std::span<const dkr_owned_draw_event>{}
@@ -40,9 +41,8 @@ extern "C" void dkr_detail_mesh_begin(std::uint8_t* ram, recomp_context* ctx, st
     const auto current = word(slots + index * 4);
     if (!highest || !current || highest == current)
         return;
-    const auto rev = revision_addresses::selected_revision() == rom::Revision::UsV80 ? 1U : 0U;
-    const auto dl = rev ? 0x8011B40CU : 0x8011AE8CU, view = rev ? 0x8011B634U : 0x8011B0B4U,
-               intensity = rev ? 0x8011B2B0U : 0x8011AD30U;
+    const auto& symbols = detail_symbols::for_revision(revision_addresses::selected_revision() == rom::Revision::UsV80);
+    const auto dl = symbols.display_list, view = symbols.viewport, intensity = symbols.light_intensity;
     const auto start = word(dl), viewport = word(view), stack = std::uint32_t(ctx->r29);
     if (!range(start, 8) || (start & 7) || viewport > 3 || !range(stack + 16, 4))
         return;
@@ -69,9 +69,9 @@ extern "C" void dkr_detail_mesh_end(std::uint8_t* ram, recomp_context*, std::uin
     std::memcpy(&e, words, sizeof(e));
     if (!e.kind)
         return;
-    const auto dl = dkr::runtime::revision_addresses::selected_revision() == dkr::runtime::rom::Revision::UsV80
-                        ? 0x8011B40CU
-                        : 0x8011AE8CU;
+    const auto dl = dkr::runtime::detail_symbols::for_revision(dkr::runtime::revision_addresses::selected_revision() ==
+                                                               dkr::runtime::rom::Revision::UsV80)
+                        .display_list;
     e.parameters[0] = ReadU32(ram, dl);
     if (dkr_owned_draw_event_valid(&e)) {
         std::scoped_lock lock(g_identity_mutex);

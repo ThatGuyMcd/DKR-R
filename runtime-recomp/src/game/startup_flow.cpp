@@ -1,5 +1,6 @@
 #include "startup_flow.hpp"
 #include "revision_addresses.hpp"
+#include "startup_symbols.hpp"
 #include "recomp.h"
 
 #include <cstdio>
@@ -14,17 +15,18 @@ extern "C" void dkr_skip_intro_audio(std::uint8_t* rdram, recomp_context* ctx) {
     // boundary BEFORE retail queues its title song and loads the cinematic.
     // Equivalent to music_change_on + music_volume_reset, not a forced song.
     MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(BlockMusicChange))) = 0;
-    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(v80 ? 0x801162B8U : 0x80115D38U))) = 0;
-    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(v80 ? 0x801162BCU : 0x80115D3CU))) = 0;
-    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(v80 ? 0x800DCBC0U : 0x800DC650U))) = 0x3F800000;
+    const auto& timers = dkr::runtime::startup_symbols::for_revision(v80);
+    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(timers.music_delay_timer))) = 0;
+    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(timers.music_delay_length))) = 0;
+    MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(timers.music_fade_volume))) = 0x3F800000;
 }
 
 extern "C" void dkr_skip_intro_logos(std::uint8_t* rdram, recomp_context* ctx) {
     if (!rdram || !ctx || !dkr::runtime::startup::skip_logos())
         return;
-    const auto timer = dkr::runtime::revision_addresses::selected_revision() == dkr::runtime::rom::Revision::UsV80
-                           ? 0x801269F0U
-                           : 0x80126450U;
+    const auto timer = dkr::runtime::startup_symbols::for_revision(
+                           dkr::runtime::revision_addresses::selected_revision() == dkr::runtime::rom::Revision::UsV80)
+                           .boot_screen_timer;
     // Float zero. Let retail disable its logo viewport, initialize EEPROM
     // unlocks/language/subtitles and construct the title screen normally.
     MEM_W(0, static_cast<gpr>(static_cast<std::int32_t>(timer))) = 0;

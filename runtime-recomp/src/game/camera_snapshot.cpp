@@ -1,5 +1,6 @@
 #include "camera_snapshot.hpp"
 #include "revision_addresses.hpp"
+#include "camera_symbols.hpp"
 #include "camera_clearance_metadata.h"
 #include <algorithm>
 #include <bit>
@@ -126,7 +127,7 @@ std::optional<DkrViewSnapshot> SnapshotReader::capture(std::span<const std::uint
         out.original_near = 10;
         out.original_far = 15000;
         const auto mode = r.half(camera + 0x36), layout = r.word(table.ViewportLayout);
-        const auto dialogue = revision == rom::Revision::UsV77 ? 0x8011D586U : 0x8011DB06U;
+        const auto dialogue = camera_symbols::for_revision(revision != rom::Revision::UsV77).dialogue_angle;
         const bool scripted = r.byte(table.CutsceneCameraActive) || r.half(dialogue);
         if (scripted)
             out.flags |= DKR_VIEW_SCRIPTED;

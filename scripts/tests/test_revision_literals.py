@@ -1,0 +1,146 @@
+"""The revision literals that moved onto generated symbol tables kept their values.
+
+These guest addresses used to be written into the presentation and tooling
+sources next to a revision check. They now come from runtime-recomp/symbols/*.toml
+through scripts/gen_guest_symbols.py. RECORDED holds the values the sources had
+(v77, v80), taken from the removed lines; the test asserts that every named
+symbol still resolves to exactly them in the SDK tables (no ROM, no extern), that
+each request lists exactly these symbols, and that no source still spells one of
+the old literals.
+"""
+
+import importlib.util
+from pathlib import Path
+import re
+import sys
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location("gen_guest_symbols", ROOT / "scripts/gen_guest_symbols.py")
+gen = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = gen
+SPEC.loader.exec_module(gen)
+GAME = "runtime-recomp/src/game/"
+
+# header -> (sources that must not spell the old literals any more, symbol -> (v77, v80))
+RECORDED = {
+    "camera_symbols.hpp": (
+        [
+            "camera_obstruction.cpp",
+            "camera_rt64.cpp",
+            "camera_session.cpp",
+            "camera_snapshot.cpp",
+            "enhanced_water_rt64.hpp",
+        ],
+        {
+            "gCurrentLevelModel": (0x800DC918, 0x800DCE88),
+            "gCameraObject": (0x8011D508, 0x8011DA88),
+            "gDialogueCameraAngle": (0x8011D586, 0x8011DB06),
+            "gCurrentPlayerIndex": (0x8011D55C, 0x8011DADC),
+        },
+    ),
+    "water_symbols.hpp": (
+        ["enhanced_water_registry.hpp"],
+        {
+            "gWaveController": (0x80129FC8, 0x8012A588),
+            "gWavePlayerCount": (0x8012A078, 0x8012A638),
+            "gWaveBatch": (0x8012A07C, 0x8012A63C),
+            "gWaveTriangles": (0x800E3080, 0x800E3610),
+            "D_800E3090": (0x800E3090, 0x800E3620),
+            "gWaveTextureHeader": (0x800E30D0, 0x800E3660),
+            "gWaveModel": (0x800E30D8, 0x800E3668),
+        },
+    ),
+    "scenery_symbols.hpp": (["local_scenery_rt64.cpp"], {"dRenderSettingsCommon": (0x800DE8E8, 0x800DEE68)}),
+    "title_text_symbols.hpp": (
+        ["title_text_rt64.hpp"],
+        {
+            "dDialogueBoxBegin": (0x800E3690, 0x800E3C20),
+            "dDialogueBoxDrawModes": (0x800E36C8, 0x800E3C58),
+            "gFonts": (0x8012A7E4, 0x8012ADA4),
+            "gNumberOfFonts": (0x8012A7E0, 0x8012ADA0),
+            "gCompactKerning": (0x8012A7F0, 0x8012ADB0),
+            "gTitleCinematicText": (0x800DF83C, 0x800DFDBC),
+            "gTitleCinematicTextColours": (0x800DF9F8, 0x800DFF78),
+            "gCreditsMenuElements": (0x800E1B50, 0x800E20D0),
+        },
+    ),
+    "credits_sky_symbols.hpp": (
+        ["credits_sky_rt64.hpp"],
+        {
+            "gVoidData": (0x800DC924, 0x800DCE94),
+            "gVoidVerts": (0x8011D480, 0x8011DA00),
+            "gVoidCurrVerts": (0x8011D488, 0x8011DA08),
+            "gVoidVertexFlip": (0x8011D4B4, 0x8011DA34),
+            "gVoidVertCount": (0x8011D4B6, 0x8011DA36),
+        },
+    ),
+    "startup_symbols.hpp": (
+        ["startup_flow.cpp"],
+        {
+            "sMusicDelayTimer": (0x80115D38, 0x801162B8),
+            "sMusicDelayLength": (0x80115D3C, 0x801162BC),
+            "sMusicFadeVolume": (0x800DC650, 0x800DCBC0),
+            "sBootScreenTimer": (0x80126450, 0x801269F0),
+        },
+    ),
+    "detail_symbols.hpp": (
+        ["detail_observer.inl"],
+        {
+            "gObjectCurrDisplayList": (0x8011AE8C, 0x8011B40C),
+            "gSceneCurrentPlayerID": (0x8011B0B4, 0x8011B634),
+            "gCurrentLightIntensity": (0x8011AD30, 0x8011B2B0),
+        },
+    ),
+    "capture_symbols.hpp": (
+        ["replay_probe_capture.cpp"],
+        {
+            "gCharacterSelectBytesDefault": (0x800DFDD0, 0x800E0350),
+            "gCharacterSelectBytesDrumStick": (0x800DFE40, 0x800E03C0),
+            "gCharacterSelectBytesTT": (0x800DFEC0, 0x800E0440),
+            "gCharacterSelectBytesComplete": (0x800DFF40, 0x800E04C0),
+            "gCurrCharacterSelectData": (0x801263CC, 0x8012696C),
+            "gGameNumPlayers": (0x80123500, 0x80123A80),
+        },
+    ),
+}
+
+
+def requests():
+    return {gen.load(spec).header: gen.load(spec) for spec in gen.SPECS.glob("*.toml")}
+
+
+class MovedLiteralTests(unittest.TestCase):
+    def test_each_request_lists_exactly_the_recorded_symbols_in_order(self):
+        found = requests()
+        for header, (_, recorded) in RECORDED.items():
+            self.assertIn(header, found)
+            self.assertEqual(list(found[header].symbols), list(recorded), header)
+            self.assertEqual(found[header].table, "sdk", header)
+
+    def test_every_symbol_resolves_to_its_old_value_in_both_revisions(self):
+        tables = {revision: gen.table("sdk", revision, ROOT) for revision in gen.REVISIONS}
+        for header, (_, recorded) in RECORDED.items():
+            for symbol, (v77, v80) in recorded.items():
+                for revision, expected in (("77", v77), ("80", v80)):
+                    self.assertEqual(tables[revision].get(symbol), [expected], f"{header} {symbol} v{revision}")
+
+    def test_the_generated_headers_carry_the_recorded_values(self):
+        headers = gen.generate([gen.SPECS / f"{Path(h).stem}.toml" for h in RECORDED])
+        for header, (_, recorded) in RECORDED.items():
+            text = headers[header]
+            for symbol, (v77, v80) in recorded.items():
+                for value in (v77, v80):
+                    self.assertIn(f"0x{value:08X}U", text, f"{header} {symbol}")
+
+    def test_no_source_still_spells_an_old_literal(self):
+        for header, (sources, recorded) in RECORDED.items():
+            old = {value for pair in recorded.values() for value in pair}
+            for source in sources:
+                text = (ROOT / GAME / source).read_text(encoding="utf-8")
+                spelled = {int(m.group(1), 16) for m in re.finditer(r"0[xX](80[0-9A-Fa-f]{6})U?\b", text)}
+                self.assertEqual(spelled & old, set(), f"{source} still carries {header} literals")
+
+
+if __name__ == "__main__":
+    unittest.main()

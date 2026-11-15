@@ -2,6 +2,7 @@
 #include "party_link.hpp"
 #include "replay_probe_capture.hpp"
 #include "game_payload.hpp"
+#include "capture_symbols.hpp"
 #include "revision_addresses.hpp"
 #include "runtime_netplay.hpp"
 #include "runtime_save_routing.hpp"
@@ -224,15 +225,14 @@ bool dkr_private_replay_boot(std::uint8_t* rdram, recomp_context* context) {
     const bool rev_a = a::gSelectedRevision == dkr::runtime::rom::Revision::UsV80;
     const unsigned table =
         unsigned(invoke(payload->unlock_drumstick) != 0) | (unsigned(invoke(payload->unlock_tt) != 0) << 1);
-    constexpr std::uint32_t tables77[]{0x800DFDD0U, 0x800DFE40U, 0x800DFEC0U, 0x800DFF40U};
-    constexpr std::uint32_t tables80[]{0x800E0350U, 0x800E03C0U, 0x800E0440U, 0x800E04C0U};
-    MEM_W(0, address(rev_a ? 0x8012696CU : 0x801263CCU)) = (rev_a ? tables80 : tables77)[table];
+    const auto& capture = dkr::runtime::capture_symbols::for_revision(rev_a);
+    MEM_W(0, address(capture.select_data)) = capture.tables[table];
     constexpr int characters[]{9, 0, 1, 2}; // Four distinct retail characters.
     for (int p = 0; p < players; ++p)
         MEM_B(p, address(a::CharacterIdSlots)) = characters[p];
     invoke(payload->charselect_assign_ai, players);
     invoke(payload->init_racer_headers);
-    MEM_W(0, address(rev_a ? 0x80123A80U : 0x80123500U)) = players - 1;
+    MEM_W(0, address(capture.game_players)) = players - 1;
     context->r2 = (1U << 9U) | map;
     std::fprintf(stderr, "[replay-probe][private] booting retail map=%d players=%d\n", map, players);
     return true;

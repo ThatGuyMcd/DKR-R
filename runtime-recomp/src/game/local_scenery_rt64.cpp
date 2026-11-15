@@ -2,6 +2,7 @@
 #include "native_draw_scope_rt64.hpp"
 #include "local_scenery_texture_scope.hpp"
 #include "local_scenery_policy.hpp"
+#include "scenery_symbols.hpp"
 #include "local_scenery_vertex_state.hpp"
 #include "presentation_identity.hpp"
 #include "runtime_enhancements.hpp"
@@ -136,7 +137,8 @@ void LocalSceneryRT64Pass::prepare_live(std::span<const dkr_owned_draw_event> ev
                 if (merged_.sprites.size() == netplay::experimental::LocalSceneryCapture::kMaxSprites)
                     continue;
                 const auto table =
-                    revision_addresses::selected_revision() == rom::Revision::UsV80 ? 0x800DEE68U : 0x800DE8E8U;
+                    scenery_symbols::for_revision(revision_addresses::selected_revision() == rom::Revision::UsV80)
+                        .render_settings;
                 auto captured = netplay::experimental::capture_live_local_sprite(decoder, object, table);
                 std::size_t bytes = 0;
                 for (const auto& texture : captured.textures)

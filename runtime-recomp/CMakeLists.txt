@@ -1041,6 +1041,9 @@ include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomMagicCodes.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/GuestHooks.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/GuestSymbols.cmake")
 dkr_guest_symbols(DKRNetplayCore)
+if(TARGET DKREnhancedWaterPolicyTests)
+    dkr_guest_symbols(DKREnhancedWaterPolicyTests)
+endif()
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/CustomVehicles.cmake")
 foreach(config IN ITEMS Debug Release RelWithDebInfo MinSizeRel)
     string(TOUPPER "${config}" config_upper)
@@ -3338,6 +3341,7 @@ if(BUILD_TESTING)
         DKRStartupFlowGuestTests
         PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game" "${DKR_MODERN_RUNTIME_SOURCE}/N64Recomp/include"
     )
+    dkr_guest_symbols(DKRStartupFlowGuestTests)
     add_test(NAME DKRStartupFlowGuest COMMAND DKRStartupFlowGuestTests)
     # Explicit for the current tree, also compatible with main's centralized
     # assertion policy (which covers these new targets automatically).

@@ -11,8 +11,6 @@ import tempfile
 import textwrap
 import unittest
 
-from source_text import Source
-
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("gen_guest_symbols", ROOT / "scripts/gen_guest_symbols.py")
 gen_guest_symbols = importlib.util.module_from_spec(SPEC)
@@ -20,6 +18,14 @@ sys.modules[SPEC.name] = gen_guest_symbols
 SPEC.loader.exec_module(gen_guest_symbols)
 
 GOLDEN = {
+    "camera_symbols.hpp": "1e0b6071",
+    "capture_symbols.hpp": "b465bddf",
+    "credits_sky_symbols.hpp": "bddb1255",
+    "detail_symbols.hpp": "3bf05f6b",
+    "scenery_symbols.hpp": "152c08fe",
+    "startup_symbols.hpp": "2c4c29a5",
+    "title_text_symbols.hpp": "33ca82db",
+    "water_symbols.hpp": "f8992cae",
     "achievement_symbols.hpp": "36b9daa3",
     "autopilot_symbols.hpp": "632fb177",
     "polish_symbols.hpp": "4eac568d",
@@ -39,35 +45,6 @@ class RepositoryRequestTests(unittest.TestCase):
                     self.skipTest("needs extern/dkr-decomp")
                 text = gen_guest_symbols.render(request, ROOT)
                 self.assertEqual(hashlib.sha256(text.encode()).hexdigest()[:8], GOLDEN[request.header])
-
-    @unittest.skipUnless(DECOMP.is_dir(), "needs extern/dkr-decomp")
-    def test_inline_title_and_credits_tables_match_the_decomp(self):
-        # title_text_rt64.hpp and credits_sky_rt64.hpp carry their tables
-        # inline, among hand-written code; they must still be what the pinned
-        # symbol table says.
-        def table(*names):
-            rows = []
-            for revision in gen_guest_symbols.REVISIONS:
-                found = gen_guest_symbols.table("decomp", revision, ROOT)
-                rows.append(",".join(f"0x{found[name][0]:08X}U" for name in names))
-            return rows
-
-        game = ROOT / "runtime-recomp/src/game"
-        title = Source((game / "title_text_rt64.hpp").read_text(encoding="utf-8"))
-        rows = table(
-            "dDialogueBoxBegin",
-            "dDialogueBoxDrawModes",
-            "gFonts",
-            "gNumberOfFonts",
-            "gCompactKerning",
-            "gTitleCinematicText",
-            "gTitleCinematicTextColours",
-        )
-        self.assertIn("    {" + rows[0] + "},\n    {" + rows[1] + "}\n", title)
-        self.assertIn("credit_rows_{{" + ",".join(table("gCreditsMenuElements")) + "}}", title)
-        credits = Source((game / "credits_sky_rt64.hpp").read_text(encoding="utf-8"))
-        rows = table("gVoidData", "gVoidVerts", "gVoidCurrVerts", "gVoidVertexFlip", "gVoidVertCount")
-        self.assertIn("    {" + rows[0] + "},\n    {" + rows[1] + "}\n", credits)
 
     def test_every_golden_header_has_a_request(self):
         headers = {gen_guest_symbols.load(spec).header for spec in gen_guest_symbols.SPECS.glob("*.toml")}
