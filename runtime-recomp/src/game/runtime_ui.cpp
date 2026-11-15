@@ -125,6 +125,7 @@
 #include "netplay/experimental_runtime_presence.hpp"
 #include "netplay/experimental_latency.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
+#include "netplay/experimental_rollback.hpp"
 #include "netplay/experimental_runtime.hpp"
 #include "netplay/experimental_performance.hpp"
 #include "netplay/secure_channel.hpp"
@@ -9971,6 +9972,22 @@ void dkr::runtime::ui::report_online_game_end(std::string message, bool lobby_re
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identity, bool host, unsigned players,
                                                     std::string& error) {
+    // `[check][state]` cadence in confirmed frames (1 to 100, default 30), for
+    // host and joiner alike; only this self-test entry point ever turns it on.
+    {
+        unsigned every = 30;
+        if (const char* text = std::getenv("DKR_OWNED_CHECK_STATE_EVERY"); text && *text) {
+            unsigned number = 0;
+            bool valid = true;
+            for (const char* at = text; *at; ++at) {
+                valid = valid && *at >= '0' && *at <= '9' && number <= 100;
+                number = number * 10 + unsigned(*at - '0');
+            }
+            if (valid && number >= 1 && number <= 100)
+                every = number;
+        }
+        dkr::runtime::netplay::experimental::set_check_state_log_interval(every);
+    }
     if (const char* missing = std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");
         missing && std::string_view(missing) == "1")
         dkr::online_presentation::test_fixture::missing_gpu_target = true;
