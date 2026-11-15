@@ -123,17 +123,36 @@ int main() {
                OnlineFailureCode::DeterminismFailure);
     }
 
-    // x86_64 and arm64 share a determinism class: they are admitted together
-    // and agree on the launch hash. An unchecked architecture is its own class.
+    // x86_64 and arm64 share a determinism class and are admitted together.
+    // A lobby on one architecture launches with the hash every earlier build
+    // computes; only a lobby that spans architectures uses the class hash,
+    // and a racer accepts either form of its own manifest.
     {
         const CompatibilityManifest host = Manifest();
         CompatibilityManifest racer = host;
         racer.architecture = "arm64";
+        assert(determinism_class("x86_64") == determinism_class("arm64"));
         assert(incompatibility_reason(host, racer).empty());
         assert(incompatibility_reason(racer, host).empty());
-        assert(manifest_hash(host) == manifest_hash(racer));
-        assert(determinism_class("x86_64") == determinism_class("arm64"));
 
+        // The per-architecture hash is frozen: same-version peers built before
+        // determinism classes existed must keep agreeing with it.
+        assert(manifest_hash(host) == 0xB2DD0BA0FA4A6277ULL);
+        assert(manifest_hash(host) != manifest_hash(racer));
+        assert(manifest_class_hash(host) == manifest_class_hash(racer));
+        assert(manifest_class_hash(host) != manifest_hash(host));
+
+        assert(launch_compatibility_hash(host, false) == manifest_hash(host));
+        assert(launch_compatibility_hash(host, true) == manifest_class_hash(host));
+        assert(launch_hash_accepted(launch_compatibility_hash(host, false), host));
+        assert(launch_hash_accepted(launch_compatibility_hash(host, true), host));
+        assert(launch_hash_accepted(launch_compatibility_hash(host, true), racer));
+        assert(!launch_hash_accepted(launch_compatibility_hash(host, false), racer));
+        CompatibilityManifest other_settings = racer;
+        other_settings.gameplay_settings_hash ^= 1U;
+        assert(!launch_hash_accepted(launch_compatibility_hash(host, true), other_settings));
+
+        // An architecture nobody has checked is a class of its own.
         for (const char* unchecked : {"riscv64", "unknown", ""}) {
             racer.architecture = unchecked;
             assert(determinism_class(unchecked) == unchecked);
@@ -141,16 +160,16 @@ int main() {
                    "This platform pair has not passed deterministic compatibility.");
             assert(incompatibility_reason(racer, host) ==
                    "This platform pair has not passed deterministic compatibility.");
-            assert(manifest_hash(host) != manifest_hash(racer));
+            assert(!launch_hash_accepted(launch_compatibility_hash(host, true), racer));
+            assert(incompatibility_reason(racer, racer).empty());
+            assert(manifest_class_hash(racer) == manifest_hash(racer));
         }
-        CompatibilityManifest same = racer;
-        assert(incompatibility_reason(same, racer).empty());
 
         racer = host;
         racer.architecture = "arm64";
         racer.floating_point_mode = "fast";
         assert(incompatibility_reason(host, racer) == "This platform pair has not passed deterministic compatibility.");
-        assert(manifest_hash(host) != manifest_hash(racer));
+        assert(!launch_hash_accepted(launch_compatibility_hash(host, true), racer));
     }
 
     static_assert(kAuthoritativeDeltaKeyframeInterval % kLiveReplicaCorrectionInterval == 0U,

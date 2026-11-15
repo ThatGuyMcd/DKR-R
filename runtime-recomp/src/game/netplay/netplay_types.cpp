@@ -106,7 +106,8 @@ std::string_view determinism_class(std::string_view architecture) {
     return architecture;
 }
 
-std::uint64_t manifest_hash(const CompatibilityManifest& manifest) {
+namespace {
+std::uint64_t ManifestHash(const CompatibilityManifest& manifest, std::string_view architecture) {
     std::uint64_t hash = 14695981039346656037ULL;
     HashInteger(hash, manifest.protocol_version);
     HashText(hash, manifest.release_version);
@@ -118,13 +119,31 @@ std::uint64_t manifest_hash(const CompatibilityManifest& manifest) {
     HashInteger(hash, manifest.magic_codes_hash);
     HashInteger(hash, manifest.session_save_hash);
     HashInteger(hash, manifest.simulation_rate);
-    HashText(hash, determinism_class(manifest.architecture));
+    HashText(hash, architecture);
     HashText(hash, manifest.floating_point_mode);
     HashText(hash, manifest.mod_manifest_hash);
     HashText(hash, manifest.owned_engine_hash);
     HashText(hash, manifest.owned_resources_hash);
     return hash;
 }
+} // namespace
+
+std::uint64_t manifest_hash(const CompatibilityManifest& manifest) {
+    return ManifestHash(manifest, manifest.architecture);
+}
+
+std::uint64_t manifest_class_hash(const CompatibilityManifest& manifest) {
+    return ManifestHash(manifest, determinism_class(manifest.architecture));
+}
+
+std::uint64_t launch_compatibility_hash(const CompatibilityManifest& host, bool spans_architectures) {
+    return spans_architectures ? manifest_class_hash(host) : manifest_hash(host);
+}
+
+bool launch_hash_accepted(std::uint64_t hash, const CompatibilityManifest& own) {
+    return hash == manifest_hash(own) || hash == manifest_class_hash(own);
+}
+
 bool valid_mod_manifest_hash(std::string_view hash) {
     return hash.empty() || (hash.size() == 64 && std::all_of(hash.begin(), hash.end(), [](char c) {
                                 return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');

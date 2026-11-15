@@ -201,7 +201,18 @@ std::uint64_t stable_hash(std::string_view bytes);
 // not been checked is a class of its own. docs/CROSS-ARCHITECTURE.md has the
 // evidence behind each entry and how to qualify another architecture.
 std::string_view determinism_class(std::string_view architecture);
+// The hash racers on one architecture have always agreed on. It names the
+// architecture itself, so it is what every earlier build computes.
 std::uint64_t manifest_hash(const CompatibilityManifest& manifest);
+// The same hash over the determinism class, which peers on different
+// architectures of one class share.
+std::uint64_t manifest_class_hash(const CompatibilityManifest& manifest);
+// What a host puts in the launch descriptor: the class hash only when the
+// lobby actually spans architectures, so a single-architecture lobby launches
+// with the hash earlier builds expect.
+std::uint64_t launch_compatibility_hash(const CompatibilityManifest& host, bool spans_architectures);
+// A racer accepts either form computed over its own manifest.
+bool launch_hash_accepted(std::uint64_t hash, const CompatibilityManifest& own);
 bool valid_mod_manifest_hash(std::string_view hash);
 
 enum class OnlineFailureCode : std::uint8_t {

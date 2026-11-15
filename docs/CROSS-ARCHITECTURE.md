@@ -7,9 +7,28 @@ passed deterministic compatibility."
 
 The class comes from the CPU architecture the build was compiled for
 (`determinism_class` in `netplay/netplay_types.cpp`) and from the floating
-point mode. It goes into the compatibility hash every racer must agree on
-before a race launches, so it changes what builds can play each other: add an
-architecture to a class only with a release version bump.
+point mode.
+
+## What stays compatible
+
+Every racer has to agree on one compatibility hash before a race launches.
+There are two forms of it:
+
+- `manifest_hash` names the architecture itself. It is what every build
+  before determinism classes computes.
+- `manifest_class_hash` names the class.
+
+The host puts the class form in the launch only when the lobby actually has
+peers on more than one architecture, and a racer accepts either form of its
+own manifest. So a lobby on one architecture launches exactly as it always
+has, including against a build of the same release that predates classes. A
+lobby that spans architectures needs every peer to know about classes.
+
+One case does not end cleanly: a host with classes admits an older build of
+the same release on another architecture, and that peer never accepts the
+launch. The host cancels the start after 30 seconds. Releases cannot join
+each other at all, so this only happens between development builds and the
+release they are based on.
 
 ## Classes
 
@@ -75,5 +94,4 @@ anything, and human input. State was sampled every 30 confirmed frames.
    will refuse each other until step 4, so this run needs a private build
    with the new architecture added to the class.
 4. Add the architecture to `determinism_class`, extend
-   `netplay_core_tests.cpp`, record the evidence in this file, and ship it
-   with a release version bump.
+   `netplay_core_tests.cpp` and record the evidence in this file.
