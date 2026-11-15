@@ -1,3 +1,4 @@
+#include "../guest_call_context.hpp"
 #include "legacy_runtime_assets.hpp"
 
 namespace dkr::mods {
@@ -57,33 +58,33 @@ bool dispatch_asset_api(AssetOperation operation, std::shared_ptr<const AssetBus
     if (!calls.copy)
         throw Error("The revision's serialized guest DMA entry is unavailable.");
     const auto address = mount->address(section, offset);
-    auto call = ctx;
+    dkr::runtime::GuestCallContext call(ctx);
     std::uint32_t destination = static_cast<std::uint32_t>(ctx.r5);
     const bool owns_allocation = operation == AssetOperation::TableLoad;
     if (owns_allocation) {
         if (!calls.allocate || !calls.release)
             throw Error("Guest asset heap callbacks are unavailable.");
-        call.r4 = length;
-        call.r5 = 0x7f7f7fff; // retail COLOUR_TAG_GREY
-        calls.allocate(rdram.data(), &call);
-        destination = static_cast<std::uint32_t>(call.r2);
+        call->r4 = length;
+        call->r5 = 0x7f7f7fff; // retail COLOUR_TAG_GREY
+        calls.allocate(rdram.data(), call.get());
+        destination = static_cast<std::uint32_t>(call->r2);
         if (!destination) {
             ctx.r2 = 0;
             return true;
         }
     }
     validate_destination(rdram, destination, length, section, offset);
-    call = ctx;
-    call.r4 = guest_pointer(address);
-    call.r5 = guest_pointer(destination);
-    call.r6 = length;
+    call.reset(ctx);
+    call->r4 = guest_pointer(address);
+    call->r5 = guest_pointer(destination);
+    call->r6 = length;
     try {
-        calls.copy(rdram.data(), &call);
+        calls.copy(rdram.data(), call.get());
     } catch (const Error&) {
         if (owns_allocation) {
-            auto release = ctx;
-            release.r4 = guest_pointer(destination);
-            calls.release(rdram.data(), &release);
+            dkr::runtime::GuestCallContext release(ctx);
+            release->r4 = guest_pointer(destination);
+            calls.release(rdram.data(), release.get());
         }
         throw;
     }

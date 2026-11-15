@@ -1,3 +1,4 @@
+#include "enhancements_symbols.hpp"
 #include "display_settings/policy.hpp"
 #include "runtime_enhancements.hpp"
 #include "runtime_netplay.hpp"
@@ -375,9 +376,10 @@ extern "C" void dkr_apply_maximum_racer_detail(std::uint8_t* rdram, recomp_conte
         context->r8 = context->r4;
         // Bounded evidence of the native selector's actual first resident LOD.
         // No extra guest reads, allocation, animation tick or model mutation.
-        const auto view = dkr::runtime::revision_addresses::selected_revision() == dkr::runtime::rom::Revision::UsV80
-                              ? 0x8011B634U
-                              : 0x8011B0B4U;
+        const auto view =
+            dkr::runtime::enhancements_symbols::for_revision(dkr::runtime::revision_addresses::selected_revision() ==
+                                                             dkr::runtime::rom::Revision::UsV80)
+                .current_player;
         dkr::runtime::detail::note(
             {dkr::runtime::presentation::recording_scene_generation(), static_cast<unsigned>(context->r16),
              static_cast<unsigned>(MEM_W(0, RdramAddress(view))), authored_lod, static_cast<unsigned>(context->r8), 0,
@@ -424,10 +426,10 @@ extern "C" void dkr_extend_object_draw_distance(std::uint8_t* rdram, recomp_cont
         dkr::runtime::enhancements::water_lava_detail_multiplier());
     context->r3 = static_cast<gpr>(dkr::runtime::enhancements::object_distance_before_multiplayer_reduction(
         dkr::runtime::enhancements::presentation_profile(), authored, multiplier,
-        static_cast<std::int32_t>(MEM_W(
-            0, RdramAddress(dkr::runtime::revision_addresses::selected_revision() == dkr::runtime::rom::Revision::UsV80
-                                ? 0x8011D8FCU
-                                : 0x8011D37CU)))));
+        static_cast<std::int32_t>(MEM_W(0, RdramAddress(dkr::runtime::enhancements_symbols::for_revision(
+                                                            dkr::runtime::revision_addresses::selected_revision() ==
+                                                            dkr::runtime::rom::Revision::UsV80)
+                                                            .player_viewports)))));
 }
 
 extern "C" void dkr_keep_local_multiplayer_scenery(std::uint8_t* rdram, recomp_context* context) {
