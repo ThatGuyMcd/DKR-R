@@ -151,21 +151,30 @@ and Linux x86_64 with GCC 13.
 
 Live races (`docs/ROLLBACK-SELF-TEST.md`, confirmed-state hashes compared with
 `scripts/compare_state_hashes.py`): an arm64 Mac against an x86_64 Windows
-machine over the internet path, builds with the architecture check removed.
+machine over the internet path, on the code that is on main, with the live
+state check on. Recorded 15 November 2026. Every hash was equal in every run.
 
-| Race | State hashes equal | Rollbacks, host / joiner |
-|---|---|---|
-| v77, Windows hosts | 118 of 118 | 61 / 12 |
-| v77, Mac hosts | 118 of 118 | 1 / 0 |
-| v80, Windows hosts | 118 of 118 | 2 / 0 |
-| v80, Mac hosts | 118 of 118 | 1 / 0 |
-| v77, 60 ms added delay, Windows hosts | 118 of 118 | 1732 / 2 |
-| v77, 60 ms added delay, Mac hosts | 114 of 114 | 1643 / 45 |
-| v77, 180 s, Mac hosts | 178 of 178 | 89 / 0 |
+| Race | State hashes compared |
+|---|---|
+| 2 players, v77 and v80, each machine hosting | 117 or 118 each |
+| 2 players, 60 ms added delay, each machine hosting (about 1,700 rollbacks) | 118 each |
+| 3 players, three host and join orders | 117 or 118 each |
+| 4 players, 180 s, each machine hosting | 177 each |
+| Packaged macOS release app, v77 and v80 | 117 and 118 |
+| 80 ms delay, 15 ms jitter, every 50th packet dropped, 180 s, hash every frame, each machine hosting | 5346 and 5342 |
+| A mod that changes race state on both sides (`DKR_OWNED_CHECK_MODS`), each machine hosting | 118 each |
 
-What this does not cover: more than two live players, tracks and vehicles
-beyond the ones the self-test reaches, mods, Linux or Android on arm64 against
-anything, and human input. State was sampled every 30 confirmed frames.
+A peer told to report a wrong hash (`DKR_OWNED_CHECK_CORRUPT_STATE_AT=1500`)
+stopped both machines at frame 1500, with either machine hosting.
+
+Mod code runs in one interpreter (`mods/magic_code_vm.cpp`) on every
+architecture, not in a per-architecture recompiler, so a mod adds no new
+architecture-specific code path. The mod run above differs from the no-mod
+run from its first sampled frame, so the mod was in effect.
+
+What this does not cover: tracks and vehicles beyond the ones the self-test
+reaches, more than one mod, Linux or Android on arm64 against anything live,
+an x86_64 Mac, and human input.
 
 ## Porting to a new platform
 
