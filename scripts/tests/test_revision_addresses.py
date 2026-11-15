@@ -1,9 +1,11 @@
-"""Cross-check runtime-recomp/src/game/revision_addresses.hpp without a ROM.
+"""Cross-check the per-revision guest address tables without a ROM.
 
-The header holds two positional address tables, one per ROM revision. Nothing
-in the build proves an entry is right: an insertion or a transposition still
-compiles and reads the wrong guest memory. This test parses the header and
-checks every entry against sources that do not come from it:
+The tables (AddressTable, kUsV77, kUsV80) are generated from
+runtime-recomp/symbols/revision_addresses.toml into revision_symbols.hpp, which
+revision_addresses.hpp includes. RECORDED holds the values the hand-written
+tables had; the generated tables must equal them (with extern/dkr-decomp, since
+one entry comes from the decomp list), and every recorded entry is checked
+against sources that do not come from the toml:
 
 * the SDK symbol tables (modding/reference-us-v77|v80/data.toml, in the
   repository): a named symbol must sit at the table's address in both revisions;
@@ -18,6 +20,7 @@ how many reached which level.
 """
 
 import bisect
+import importlib.util
 from pathlib import Path
 import re
 import sys
@@ -27,6 +30,8 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 HEADER = ROOT / "runtime-recomp/src/game/revision_addresses.hpp"
+CURRENT_TEST = ROOT / "runtime-recomp/tests/revision_addresses_current_tests.cpp"
+SPEC = ROOT / "runtime-recomp/symbols/revision_addresses.toml"
 SDK = {rev: ROOT / f"modding/reference-us-v{rev}/data.toml" for rev in ("77", "80")}
 DECOMP = {rev: ROOT / f"extern/dkr-decomp/ver/symbols/symbol_addrs.us.v{rev}.txt" for rev in ("77", "80")}
 RAM_START, RAM_END = 0x80000400, 0x80800000
@@ -145,20 +150,235 @@ DECOMP_ONLY = {"AspMainTextStart": "aspMainTextStart"}
 # Fields that deliberately share an address. A new duplicate is an error.
 INTENTIONAL_ALIASES = {frozenset({"EntrypointStackTop", "Cameras"})}
 
+# The hand-written tables revision_addresses.hpp held before they were generated,
+# in field order. The generated tables must equal them entry for entry.
+RECORDED = {
+    "77": [
+        0x80120AC0,
+        0x800D7600,
+        0x800DC630,
+        0x800DC638,
+        0x800DC648,
+        0x800DC65C,
+        0x800DC8AC,
+        0x800DD064,
+        0x800DD2B8,
+        0x800DD31C,
+        0x800DD394,
+        0x800DD434,
+        0x800DD438,
+        0x800DD404,
+        0x800DF4B8,
+        0x800DF480,
+        0x800DF4BC,
+        0x800DF470,
+        0x800DFD98,
+        0x800DFD9C,
+        0x800E0FE8,
+        0x800E30D4,
+        0x800E30D8,
+        0x800E3044,
+        0x800E3188,
+        0x800E3190,
+        0x800E3194,
+        0x80115D30,
+        0x80115F7C,
+        0x8011AE5C,
+        0x8011AE58,
+        0x8011AE60,
+        0x8011AE98,
+        0x8011AEA0,
+        0x8011AD4E,
+        0x8011AD50,
+        0x8011ADAC,
+        0x8011ADB4,
+        0x8011ADC0,
+        0x8011AE90,
+        0x8011AEE4,
+        0x8011AEEC,
+        0x8011AEF0,
+        0x8011B0A0,
+        0x8011B0B0,
+        0x8011B0C8,
+        0x8011D320,
+        0x8011D338,
+        0x8011D350,
+        0x8011D4A0,
+        0x8011D4A4,
+        0x8011D4AC,
+        0x8011D4B0,
+        0x8011D540,
+        0x8011D544,
+        0x80120AC0,
+        0x80121150,
+        0x80120CE0,
+        0x80120CE4,
+        0x80120D10,
+        0x80120D14,
+        0x80120F20,
+        0x80121164,
+        0x80121168,
+        0x801234E8,
+        0x80123515,
+        0x80123516,
+        0x80126328,
+        0x80126330,
+        0x801263B4,
+        0x801263C0,
+        0x801263D4,
+        0x801263DC,
+        0x801263E8,
+        0x801263F0,
+        0x801269C0,
+        0x801267D8,
+        0x80126D37,
+        0x80126CDC,
+        0x80126CE0,
+        0x80126D0C,
+        0x80126CFC,
+        0x800E2834,
+        0x801241E5,
+        0x80126864,
+        0x8012686C,
+        0x80129FC8,
+        0x8012A0E0,
+        0x8012A720,
+        0x8012A724,
+        0x8012A728,
+        0x800E097C,
+        0x801234EC,
+        0x801263E0,
+        0x800DF47C,
+        0x80126C28,
+        0x8012A094,
+        0x8012A098,
+        0x80115D04,
+        0x80115CF8,
+        0x80115D0C,
+        0x80115D1C,
+    ],
+    "80": [
+        0x80121040,
+        0x800D7B60,
+        0x800DCBA0,
+        0x800DCBA8,
+        0x800DCBB8,
+        0x800DCBCC,
+        0x800DCE1C,
+        0x800DD5D4,
+        0x800DD828,
+        0x800DD88C,
+        0x800DD904,
+        0x800DD9A4,
+        0x800DD9A8,
+        0x800DD974,
+        0x800DFA38,
+        0x800DFA00,
+        0x800DFA3C,
+        0x800DF9F0,
+        0x800E0318,
+        0x800E031C,
+        0x800E1568,
+        0x800E3664,
+        0x800E3668,
+        0x800E35D4,
+        0x800E3718,
+        0x800E3720,
+        0x800E3724,
+        0x801162B0,
+        0x801164FC,
+        0x8011B3DC,
+        0x8011B3D8,
+        0x8011B3E0,
+        0x8011B418,
+        0x8011B420,
+        0x8011B2CE,
+        0x8011B2D0,
+        0x8011B32C,
+        0x8011B334,
+        0x8011B340,
+        0x8011B410,
+        0x8011B464,
+        0x8011B46C,
+        0x8011B470,
+        0x8011B620,
+        0x8011B630,
+        0x8011B648,
+        0x8011D8A0,
+        0x8011D8B8,
+        0x8011D8D0,
+        0x8011DA20,
+        0x8011DA24,
+        0x8011DA2C,
+        0x8011DA30,
+        0x8011DAC0,
+        0x8011DAC4,
+        0x80121040,
+        0x801216D0,
+        0x80121260,
+        0x80121264,
+        0x80121290,
+        0x80121294,
+        0x801214A0,
+        0x801216E4,
+        0x801216E8,
+        0x80123A68,
+        0x80123A95,
+        0x80123A96,
+        0x801268C8,
+        0x801268D0,
+        0x80126954,
+        0x80126960,
+        0x80126974,
+        0x8012697C,
+        0x80126988,
+        0x80126990,
+        0x80126F80,
+        0x80126D78,
+        0x801272F7,
+        0x8012729C,
+        0x801272A0,
+        0x801272CC,
+        0x801272BC,
+        0x800E2DB4,
+        0x80124765,
+        0x80126E04,
+        0x80126E0C,
+        0x8012A588,
+        0x8012A6A0,
+        0x8012ACE0,
+        0x8012ACE4,
+        0x8012ACE8,
+        0x800E0EFC,
+        0x80123A6C,
+        0x80126980,
+        0x800DF9FC,
+        0x801271E8,
+        0x8012A654,
+        0x8012A658,
+        0x80116284,
+        0x80116278,
+        0x8011628C,
+        0x8011629C,
+    ],
+}
+
 
 def parse_header():
-    text = HEADER.read_text()
-    struct = text[text.index("struct AddressTable {") : text.index("inline constexpr AddressTable kUsV77")]
+    spec = tomllib.loads(SPEC.read_text())
+    template = spec["template"]
+    struct = template[template.index("struct AddressTable {") : template.index("inline constexpr AddressTable kUsV77")]
     fields = re.findall(r"^\s+std::uint32_t (\w+);", struct, re.M)
-
-    def table(name):
-        start = text.index(f"inline constexpr AddressTable {name}{{")
-        body = re.sub(r"//[^\n]*", "", text[start : text.index("};", start)])
-        return [int(value, 16) for value in re.findall(r"0x([0-9A-Fa-f]{8})U", body)]
-
+    entries = {
+        name: re.findall(
+            r"^\s+\.(\w+) = ", template[template.index(f"AddressTable {name}{{") :].split("};", 1)[0], re.M
+        )
+        for name in ("kUsV77", "kUsV80")
+    }
+    text = HEADER.read_text()
     aliases = re.findall(r"^inline std::uint32_t (\w+) = kUsV77\.(\w+);", text, re.M)
     selected = re.findall(r"^    (\w+) = table\.(\w+);", text, re.M)
-    return fields, {"77": table("kUsV77"), "80": table("kUsV80")}, aliases, selected
+    return fields, entries, aliases, selected
 
 
 def sdk_symbols(rev):
@@ -179,7 +399,8 @@ def decomp_symbols(rev):
     return symbols
 
 
-FIELDS, TABLES, ALIASES, SELECTED = parse_header()
+FIELDS, ENTRIES, ALIASES, SELECTED = parse_header()
+TABLES = RECORDED
 
 
 class StructureTests(unittest.TestCase):
@@ -193,6 +414,16 @@ class StructureTests(unittest.TestCase):
         self.assertTrue(all(name == source for name, source in ALIASES))
         self.assertEqual(sorted(name for name, _ in SELECTED), sorted(FIELDS), "select() misses or repeats a field")
         self.assertTrue(all(name == source for name, source in SELECTED))
+
+    def test_the_template_initialises_every_field_in_declaration_order(self):
+        for name, entries in ENTRIES.items():
+            self.assertEqual(entries, FIELDS, name)
+
+    def test_the_current_table_test_covers_exactly_the_aliases(self):
+        text = CURRENT_TEST.read_text()
+        listed = re.findall(r"^\s+X\((\w+)\)", text, re.M)
+        self.assertEqual(sorted(listed), sorted(alias for alias, _ in ALIASES))
+        self.assertEqual(len(listed), len(set(listed)))
 
     def test_addresses_are_inside_ram(self):
         for rev, values in TABLES.items():
@@ -269,6 +500,26 @@ def named_mismatches(rev, table):
         for field, symbol in EXPECTED_SYMBOL.items()
         if names.get(symbol) != [values[field]]
     ]
+
+
+@unittest.skipUnless(
+    all(path.is_file() for path in DECOMP.values()), "extern/dkr-decomp is not checked out; generated tables skipped"
+)
+class GeneratedTests(unittest.TestCase):
+    def test_generated_tables_equal_the_recorded_hand_written_ones(self):
+        spec = importlib.util.spec_from_file_location("gen_guest_symbols", ROOT / "scripts/gen_guest_symbols.py")
+        gen = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = gen
+        spec.loader.exec_module(gen)
+        text = gen.generate([SPEC])["revision_symbols.hpp"]
+        for rev, name in (("77", "kUsV77"), ("80", "kUsV80")):
+            body = text.split(f"AddressTable {name}{{", 1)[1].split("};", 1)[0]
+            generated = {
+                field: sum(int(v, 16) for v in re.findall(r"0x([0-9A-Fa-f]+)U", expression))
+                for field, expression in re.findall(r"\.(\w+) = ([^,]+),", body)
+            }
+            self.assertEqual(list(generated), FIELDS)
+            self.assertEqual([generated[f] for f in FIELDS], RECORDED[rev], f"v{rev}")
 
 
 class SdkTests(unittest.TestCase):

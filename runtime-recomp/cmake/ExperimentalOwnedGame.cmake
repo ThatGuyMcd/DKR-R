@@ -102,6 +102,8 @@ function(dkr_add_experimental_owned_game target generated)
     )
     target_compile_features(${target} PRIVATE c_std_11 PUBLIC cxx_std_20)
     target_include_directories(${target} BEFORE PRIVATE "${generated}" "${probe}")
+    # probe_native.c reaches the generated guest symbols through legacy_memory_safety.h.
+    dkr_guest_symbols(${target})
     # Reuse the pinned runtime's ARM SIMD compatibility headers read-only.
     # The private RSP header must not depend on the desktop include closure.
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")

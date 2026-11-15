@@ -589,7 +589,10 @@ INPUT_NATIVE_HASH = {
     # Pak path continues to use its separate checkpointed in-memory services.
     "runtime-recomp/src/game/virtual_pak.cpp": "c147dc2ff680c0e0d4f57649b8501700bf337d2b68e27e775216d40628b46937",
     # Oct 1 reviewed opt-in capture hook; stable drive/input branches unchanged.
-    "runtime-recomp/src/game/runtime_netplay.cpp": "e3e759a99f20eb026f490215b18f58fb6bf526f21bb971dc95bae718a9c5f3c3",
+    # Nov 16: the two payload query helpers copy their context through
+    # GuestCallContext (f_odd repaired in place). Their callees use no odd
+    # float registers or doubles, so behaviour is identical.
+    "runtime-recomp/src/game/runtime_netplay.cpp": "5428da9f26f503c81685283184d211d95480c8b7f15e0bb0a3a977979858a2b5",
     # v1.0.15: an offline session with session content off starts with no
     # codes. A supplied online mask is used unchanged.
     "runtime-recomp/src/game/runtime_magic_codes.cpp": "9c01516778a1c9516219f639ee8ccf7bb4c2f919f7118c906adbe81a310da180",
@@ -597,7 +600,11 @@ INPUT_NATIVE_HASH = {
     # The no-session path remains the prior offline/vanilla implementation.
     # Oct 11: aligned, RAM-bounded scans/copies; frozen online tables still
     # bypass offline expansion before reaching the changed implementation.
-    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "7a60851bf21889b28b66569ff3430726c4f7b888483127a307595308d7f0db1e",
+    # Nov 16: guest-call context copies go through GuestCallContext (callees
+    # use no odd float registers or doubles) and the display-list, character
+    # select and memory pool addresses come from generated symbol tables with
+    # the same values (scripts/tests/test_revision_literals.py).
+    "runtime-recomp/src/game/custom_tracks_hooks.cpp": "2827dfb3caa8be798890a47b5a0fd1babc01481fad8858258752af609670a811",
     # Online mod owner: same no-session returns, explicit TLS namespace and
     # closed private guest callback table; no live/default dispatch fallback.
     # Oct 6: bounded sparse model-slot scan and pre-dereference allocation
@@ -607,16 +614,27 @@ INPUT_NATIVE_HASH = {
     # Oct 12: reviewed merge with PR56's frozen-course guard BEFORE any live
     # transport read. Retains caller-owned background lists and offline vehicle
     # selection; neither changes owned checkpoint semantics or asset routing.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "187ca1108cb6987c631b6a6161351d0d1e78c809d6ec05b690e470a26820d989",
+    # Nov 15: display budgets/lists, character slots and settings pointer come from the
+    # generated legacy_world_symbols.hpp (values unchanged).
+    # Nov 15: every guest call made from a copied context (get_settings,
+    # is_drumstick/tt_unlocked, sndp_*, sound_play, get_filtered_cheats,
+    # mempool_alloc_safe, material_set and the track-select cover) now uses
+    # GuestCallContext, which repairs f_odd. None of those callees touches an
+    # odd float register or a double, so no register, RAM or ordering changes.
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "30738ac15d9d4ba15f96023302104979fa52ee45b565f83bd1e4ff81626485ce",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
-    "runtime-recomp/src/game/mods/legacy_memory_safety.h": "e4eb9ee8218c6f76ccfbfe9f5f0604c3b7f8725db7ca28dfe6e3e7c15ae2c48f",
+    # Nov 15: the memory pool table address comes from the generated memory_symbols.hpp
+    # (gMemoryPools, v77 0x80123580, v80 0x80123B00: both unchanged, see test_revision_literals.py).
+    "runtime-recomp/src/game/mods/legacy_memory_safety.h": "064398d57f93b3b579fc3a2d76e38d1b39ee364974e059786ea60341a41c9c7b",
     "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "6b98ab3841104b67ec1295653657c9c1065290abea57648336d77e9665a277a8",
     # Expanded character identities, sparse retained presentation and one
     # immutable sample mount are shared by offline and replay-owned sessions.
     "runtime-recomp/src/game/mods/legacy_character_limits.hpp": "a22e3c2c15674ffb5f954a28e2a268641a0ffbe2acb5459a7fc5b43a156e955a",
     "runtime-recomp/src/game/mods/legacy_character_audio.cpp": "603b776b2cdbc4bfe0e8d4c1283c929a8a524fe966e29bd99b51a32f73bafae3",
     "runtime-recomp/src/game/mods/legacy_character_materialize.cpp": "0f1eddcbdd225a488913d76492dec6b805d446ea1baaa68990df083ea24b5dbd",
-    "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "09a5c45ccad79f4fb63abc68f0702bae47aeba8ecfb13b3e1a551aae3510c1f0",
+    # Nov 15: the presentation callbacks run on a GuestCallContext (f_odd repaired);
+    # the callees (alloc, texture load, bank relocate/play, param, spatial point) use no odd float register.
+    "runtime-recomp/src/game/mods/legacy_character_presentation.cpp": "178ef4f7a55594ac13e3ac9b0f07180445a75c6b8893c1deab06c61fd7773d22",
     # Preserve the already-shipped stock-preview restore correction: empty
     # custom identity is allowed only for a pending retail preview, not races.
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
@@ -628,9 +646,13 @@ INPUT_NATIVE_HASH = {
     # Oct 10: closed constant-load components and finite per-instance data;
     # immutable identities only. No memory instructions, new guest globals,
     # filesystem/network operations, or non-checkpointed interpreter state.
-    "runtime-recomp/src/game/mods/legacy_behaviour.cpp": "f5fd6fac497716550c5a40dba59346c0369bf9f28c4fe97c2e7df3f3cdf64d1d",
+    # Nov 16: the 17 patch site addresses are generated (function plus offset,
+    # symbols/behaviour_site_symbols.toml); the audited instruction words and
+    # replacements stay in this file and every address equals its old value.
+    "runtime-recomp/src/game/mods/legacy_behaviour.cpp": "b0e68e722dc9c421e9c1acbc9d27352e047ead6cedcb6a792cd1978eed811ac8",
     "runtime-recomp/src/game/mods/legacy_behaviour.hpp": "b5263d08404731789e779f7acbf627bf0c2f0d3eff49aebb6d32f28080c64614",
-    "runtime-recomp/src/game/mods/legacy_runtime_character.cpp": "6c2dc43a80d66ce217a8d66a502282f82262cf8aebc72fd3c68129ec6da85e5b",
+    # Nov 15: texture animation and AI RNG calls use GuestCallContext (they already repaired f_odd by hand).
+    "runtime-recomp/src/game/mods/legacy_runtime_character.cpp": "2958ed50acec5864f7fb5d0a65445175b504a28ccf495d4e611a5d1a6ce09ec7",
     "runtime-recomp/src/game/mods/legacy_character_roster.cpp": "cba46e095827e67e733377a75712af87b5b82bb0970df6db970ddeda61ee060c",
     # Pure immutable namespace capacities; stock limits retained. Guards stop
     # before cache stores/null racer writes and cannot mutate replay state.
@@ -651,14 +673,23 @@ FULL_SCENE_NATIVE_HASH = {
     # CPU coordinates/visible neighbourhood are canonical on every peer.
     # PR56 additionally moves the same TailGate/RdramAddress definitions outside
     # the RT64 guard for headless audio/input. Rendered/owned hooks are unchanged.
-    "runtime-recomp/src/game/runtime_stubs.cpp": "89570845e37a6e1d7ed227c1c363ae5138488927a52ee76fadde8aff5190e9a8",
+    # Nov 16: ResumeNativeSequence copies its context through GuestCallContext
+    # and reads __CSPPostNextSeqEvent from the generated decomp table (same
+    # two addresses); the callee uses no odd float registers or doubles.
+    "runtime-recomp/src/game/runtime_stubs.cpp": "ca4124ef57fedd57b4b96ac38c40a0191dfb2d3d903da324644bbbc14df1a976",
     "runtime-recomp/src/game/track_select_draw_guest.h": "053e11b284c433b88b19470534003519ad3d16bc3e625ce4bcc2b5f4f172041e",
     "runtime-recomp/src/game/audio_event_queue.h": "7899cd55f01c95221a71eac64857611a929bc19ff2d1603ca4c3e56a1a4ebf18",
     "runtime-recomp/src/game/audio_event_queue_state.h": "7e479c5c99dc4ab0d43c9ddfc1a082437d631adc688b14e86c7d5a3edf0f7ecf",
     "runtime-recomp/src/game/intro_tail_policy.hpp": "5433ebb8ad644d4c4ff1d4b539494dbd8488225740008343415f5c87af50428f",
     "runtime-recomp/src/game/water_profile.cpp": "e674ca4e4464e00a00eb1e77af9c926adbac4e86fb6911ac1da58ccd4ee8f04d",
     # Both revisions keep the water UV masks and append PR46's music globals.
-    "runtime-recomp/src/game/revision_addresses.hpp": "603770010a38b56b95505787a307c610300a2a359ef9ff2399b0df55a8d87735",
+    # Nov 16: AddressTable and the kUsV77/kUsV80 tables are generated from
+    # symbols/revision_addresses.toml (revision_symbols.hpp); the mutable
+    # aliases and select() are unchanged. Every entry equals the old
+    # hand-written value (scripts/tests/test_revision_addresses.py).
+    # Nov 16: adds current() and its atomic table pointer, set last by select();
+    # no address or alias changed (tests/revision_addresses_current_tests.cpp).
+    "runtime-recomp/src/game/revision_addresses.hpp": "14a133a37a114ee3dd86d837e8db1ea6f86958ac112fdb6cf083ef4893565525",
     # Frozen online binding diverts before offline decoder/global song reads.
     # Without a ModWorld the private hooks retain their prior identity branch.
     "runtime-recomp/src/game/custom_music.cpp": "09953f14e30fa72c5161801b3eafebeff7c5c2a04b5d63f912367e87bfa7421b",
@@ -671,7 +702,9 @@ FULL_SCENE_NATIVE_HASH = {
     # in the owned CPU; per-player preferences are consumed by the decoder.
     # v1.0.15: the layout aspect comes from the display settings policy
     # instead of the raw window size. Still a per-player presentation input.
-    "runtime-recomp/src/game/runtime_enhancements.cpp": "6f3ad102692d2951e3de104025bfc1f17b8aa519acc99e44f4d99d0b0675f9f1",
+    # Nov 16: the scene player and viewport addresses its two reads use come
+    # from generated symbol tables with the same values; no new access.
+    "runtime-recomp/src/game/runtime_enhancements.cpp": "133123433a896ac1b5d6b159d0aeb8beb79c441b6953473026c048ac1fbfad3a",
     "runtime-recomp/src/game/character_select_animation_policy.hpp": "03e0f77cd2969926a48ca434964e4a2b813efa93a0dc31e4b779eb7037a547b1",
     "runtime-recomp/src/game/character_select_music_policy.hpp": "0a762402cc3308eb5197dd97eaac81778079bfdfa0f81a2f4aeb98cbc0ec7c22",
 }
@@ -710,7 +743,7 @@ REVIEWED_MAIN_MERGE_HASH = {
     # Nov 8: event 2 derives selected-actor label anchors and calls three
     # read-only font/camera accessors through the same private payload. The
     # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "187ca1108cb6987c631b6a6161351d0d1e78c809d6ec05b690e470a26820d989",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "30738ac15d9d4ba15f96023302104979fa52ee45b565f83bd1e4ff81626485ce",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
 }
 

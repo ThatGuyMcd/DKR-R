@@ -26,6 +26,12 @@ cmake --build <build-directory> --config Release --parallel 4
 ctest --test-dir <build-directory> -C Release --output-on-failure
 ```
 
+Four tests need sources only the full runtime has (`DKRNativeModWorldTests`,
+`DKRLegacyModBrowserUiTests`, `DKRLegacyModLibraryTests`,
+`DKRLegacyDkrmapArtworkTests`); add `-DDKR_LEGACY_FULL_RUNTIME_TESTS=ON` to try
+them (they do not link here yet). The guest tests that need regenerated sources
+are created only when their `DKR_LEGACY_*_ROOT` is set, and configure says which
+group it skipped.
 On Visual Studio generators executables are under Release. Use the test build
 directory for temporary fixtures, not the source tree.
 This standalone suite complements the complete configured runtime tests;
