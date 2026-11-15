@@ -237,31 +237,16 @@ DirectSession::~DirectSession() {
 void DirectSession::log_locked(const char* format, ...) {
     va_list arguments;
     va_start(arguments, format);
-    va_list measure;
-    va_copy(measure, arguments);
-    const int length = std::vsnprintf(nullptr, 0, format, measure);
-    va_end(measure);
-    std::string line;
-    if (length > 0) {
-        line.resize(static_cast<std::size_t>(length));
-        std::vsnprintf(line.data(), line.size() + 1U, format, arguments);
-    }
+    log_queue_.push(dkr::runtime::session_log::vformat(format, arguments));
     va_end(arguments);
-    if (log_queue_.size() >= kLogQueueCap) {
-        log_queue_.erase(log_queue_.begin());
-        ++log_dropped_;
-    }
-    log_queue_.push_back(std::move(line));
 }
 
 void DirectSession::flush_log() {
     std::scoped_lock flush(log_flush_mutex_);
-    std::vector<std::string> lines;
-    std::uint64_t dropped = 0U;
+    dkr::runtime::session_log::Queue taken;
     {
         std::scoped_lock lock(mutex_);
-        lines.swap(log_queue_);
-        dropped = std::exchange(log_dropped_, 0U);
+        std::swap(taken, log_queue_);
     }
     const auto write = [this](const std::string& line) {
         if (log_sink_)
@@ -269,9 +254,9 @@ void DirectSession::flush_log() {
         else
             std::fwrite(line.data(), 1U, line.size(), stderr);
     };
-    if (dropped)
-        write("[session][log] dropped " + std::to_string(dropped) + " older lines\n");
-    for (const auto& line : lines)
+    if (taken.dropped)
+        write("[session][log] dropped " + std::to_string(taken.dropped) + " older lines\n");
+    for (const auto& line : taken.lines)
         write(line);
 }
 
@@ -875,6 +860,7 @@ void DirectSession::disconnect(std::string_view reason) {
                 notify = party->enabled && party->admitted && !is_host_ && bool(host_address_) && transport_->is_open();
             }
             if (notify) {
+                dkr::runtime::session_log::Scope log_scope(&log_queue_);
                 leaving::begin(this, sender_id_);
                 const auto bytes = dkr::runtime::spectators::link_encode(dkr::runtime::spectators::LinkKind::Leave,
                                                                          leaving::notice(1, sender_id_));
@@ -1178,6 +1164,8 @@ void DirectSession::network_loop() {
         if (state_ != ConnectionState::Failed)
             worker_fault = false;
         if (!worker_fault) {
+            // Stderr writes from the pump and its callees are queued, not made under mutex_.
+            dkr::runtime::session_log::Scope log_scope(&log_queue_);
             try {
                 service_save_jobs_locked();
                 if (transport_->is_open())
@@ -1199,7 +1187,7 @@ void DirectSession::network_loop() {
             std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - pump_started)
                 .count();
         maximum_network_pump_us_ = (std::max)(maximum_network_pump_us_, static_cast<std::uint64_t>(pump_us));
-        if (!log_queue_.empty() || log_dropped_ != 0U) {
+        if (!log_queue_.lines.empty() || log_queue_.dropped != 0U) {
             // stderr may block (a full pipe nobody drains): never write it while holding mutex_.
             lock.unlock();
             flush_log();

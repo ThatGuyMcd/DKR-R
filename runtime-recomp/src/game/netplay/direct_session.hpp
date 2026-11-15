@@ -4,6 +4,7 @@
 
 #include "datagram_socket.hpp"
 #include "../atomic_snapshot.hpp"
+#include "../session_log.hpp"
 #include "session_transport.hpp"
 #include "latency_metrics.hpp"
 #include "netplay_lobby.hpp"
@@ -629,7 +630,7 @@ class DirectSession final {
     // Log from code that runs under mutex_ (the pump and everything it calls).
     // The line is formatted here, exactly as fprintf would, and queued; the
     // owner of the lock flushes the queue to stderr after releasing it. The
-    // queue holds at most kLogQueueCap lines; older ones are dropped and
+    // queue holds at most session_log::Queue::Capacity lines; older ones are dropped and
     // counted.
 #if defined(__GNUC__) || defined(__clang__)
     __attribute__((format(printf, 2, 3)))
@@ -748,9 +749,8 @@ class DirectSession final {
     std::uint64_t& outbound_sequence(const PeerAddress& address, const secure::Key& key);
 
     mutable std::mutex mutex_;
-    static constexpr std::size_t kLogQueueCap = 512;
-    std::vector<std::string> log_queue_;
-    std::uint64_t log_dropped_ = 0U;
+    // Lines queued by code that runs under mutex_ (session_log.hpp).
+    dkr::runtime::session_log::Queue log_queue_;
     // Serialises writers so two flushers cannot reorder batches. Lock order:
     // log_flush_mutex_ -> mutex_ (briefly, to take the queue). Nothing holds
     // mutex_ while taking log_flush_mutex_.

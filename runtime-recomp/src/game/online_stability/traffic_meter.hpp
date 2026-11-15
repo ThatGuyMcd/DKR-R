@@ -1,4 +1,5 @@
 #pragma once
+#include "../session_log.hpp"
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -36,8 +37,7 @@ class QueueAgeMeter {
         for (unsigned lane = 0; lane < 5; ++lane) {
             const auto& r = rows_[lane];
             if (r.count)
-                std::fprintf(
-                    stderr,
+                dkr::runtime::session_log::write(
                     "[online][queue] lane=%u accepted=%llu application-queue-mean-us=%llu application-queue-max-us=%llu max-peer=%llu excludes-sdk-queue=1\n",
                     lane, static_cast<unsigned long long>(r.count), static_cast<unsigned long long>(r.total / r.count),
                     static_cast<unsigned long long>(r.maximum), static_cast<unsigned long long>(r.peer));
@@ -90,8 +90,7 @@ class TrafficMeter {
             const auto v = lanes_[i], old = previous_[i];
             if (v.packets == old.packets && v.blocked == old.blocked)
                 continue;
-            std::fprintf(
-                stderr,
+            dkr::runtime::session_log::write(
                 "[online][traffic] lane=%u interval-ms=%lld admitted-packets=%llu admitted-bytes=%llu blocked=%llu admitted-kbit-s=%.2f excludes-underlay-overhead=1\n",
                 i, static_cast<long long>(ms), static_cast<unsigned long long>(v.packets - old.packets),
                 static_cast<unsigned long long>(v.bytes - old.bytes),

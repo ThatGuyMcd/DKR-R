@@ -144,16 +144,30 @@ struct DirectSessionTestAccess {
             written.clear();
             {
                 std::scoped_lock lock(session.mutex_);
-                for (std::size_t i = 0; i < DirectSession::kLogQueueCap + 10U; ++i)
+                for (std::size_t i = 0; i < dkr::runtime::session_log::Queue::Capacity + 10U; ++i)
                     session.log_locked("[n] %zu\n", i);
-                assert(session.log_queue_.size() == DirectSession::kLogQueueCap);
-                assert(session.log_dropped_ == 10U);
+                assert(session.log_queue_.lines.size() == dkr::runtime::session_log::Queue::Capacity);
+                assert(session.log_queue_.dropped == 10U);
             }
             session.flush_log();
-            assert(written.size() == DirectSession::kLogQueueCap + 1U);
+            assert(written.size() == dkr::runtime::session_log::Queue::Capacity + 1U);
             assert(written.front() == "[session][log] dropped 10 older lines\n");
             assert(written[1] == "[n] 10\n");
-            assert(written.back() == "[n] " + std::to_string(DirectSession::kLogQueueCap + 9U) + "\n");
+            assert(written.back() == "[n] " + std::to_string(dkr::runtime::session_log::Queue::Capacity + 9U) + "\n");
+
+            // Other modules the pump calls write through session_log: queued inside a Scope,
+            // direct (here: untouched) outside one.
+            written.clear();
+            {
+                std::scoped_lock lock(session.mutex_);
+                {
+                    dkr::runtime::session_log::Scope scope(&session.log_queue_);
+                    dkr::runtime::session_log::write("[scoped] %s\n", "queued");
+                }
+                assert(written.empty() && session.log_queue_.lines.size() == 1U);
+            }
+            session.flush_log();
+            assert((written == std::vector<std::string>{"[scoped] queued\n"}));
 
             // disconnect() flushes what is queued once its lock is released.
             written.clear();

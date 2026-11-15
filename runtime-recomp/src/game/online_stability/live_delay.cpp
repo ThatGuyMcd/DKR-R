@@ -1,3 +1,4 @@
+#include "../session_log.hpp"
 #include "live_delay.hpp"
 #include "response_trace.hpp"
 #include <algorithm>
@@ -196,8 +197,7 @@ void LiveDelay::apply(unsigned value, Clock::time_point now) {
         return;
     if (value > current_)
         fill_ += value - current_;
-    std::fprintf(
-        stderr,
+    dkr::runtime::session_log::write(
         "[online][dynamic-delay] epoch=%llu controls=%llu frame=%u owner=%u from=%u to=%u policy=responsive-per-owner\n",
         static_cast<unsigned long long>(epoch_), static_cast<unsigned long long>(controls_), frame_, local_owner_,
         current_, value);
@@ -499,8 +499,7 @@ void LiveDelay::pulse(std::uint64_t epoch, std::uint64_t controls, std::uint32_t
                                                         measured, now, pressure, busy, blocked);
             if (!target)
                 continue;
-            std::fprintf(
-                stderr,
+            dkr::runtime::session_log::write(
                 "[online][delay-target] epoch=%llu member=%llu owner=%u from=%u to=%u late=%u waits=%u replay-pressure=%u window=%u\n",
                 static_cast<unsigned long long>(epoch_), static_cast<unsigned long long>(member), owner,
                 origin->second.message.delay, *target, late, waits, unsigned(pressure), window_);
@@ -549,8 +548,7 @@ void LiveDelay::pulse(std::uint64_t epoch, std::uint64_t controls, std::uint32_t
                       stalled, stalled_owners, oldest, unsigned(inputs_.queued())});
     if (now >= diagnostic_at_) {
         diagnostic_at_ = now + std::chrono::seconds(5);
-        std::fprintf(
-            stderr,
+        dkr::runtime::session_log::write(
             "[online][delay-status] epoch=%llu frame=%u dynamic=%u negotiated=%u lead=%u local-owner=%u missing-mask=0x%X stalled-mask=0x%X arrival-age-ms=%u transitions=%zu sampled-age-upper-ms=%u targets=%zu policy=responsive-per-owner\n",
             static_cast<unsigned long long>(epoch_), frame_, unsigned(id.dynamic), unsigned(negotiated_), current_,
             local_owner_, unsigned(missing_owners), unsigned(stalled_owners), oldest, inputs_.queued(),
