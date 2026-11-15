@@ -120,8 +120,11 @@
     "runtime-recomp/symbols/capture_symbols.toml": "69db87e0e04eb3c6259140bf4d78e6b1c6deaa4795d5f178b464b93fa00c6102",
     "runtime-recomp/symbols/credits_sky_symbols.toml": "251b1726a5ed6851df51b1d792de72f4df0f344ee895e966dfe3457b25cbc70f",
     "runtime-recomp/symbols/detail_symbols.toml": "9f92da38d4e85278325bda85a51d9fa58ec0469da321f49ffbeaac91de52cc83",
+    "runtime-recomp/symbols/legacy_world_symbols.toml": "9f25b4dcd2fae8587dc6fc54fae62abc0fac920200674ccddc5ba7e1891025c5",
+    "runtime-recomp/symbols/memory_symbols.toml": "3b7a0e2a5bd1d85e5a65e53e3badf08abc55cd3ea0df2abb5a956a519a14042f",
     "runtime-recomp/symbols/polish_symbols.toml": "ad5c563f3cc0e0bd44e4d2043563bd84ca294f6883b565c4613d3c1036b5d42a",
     "runtime-recomp/symbols/render_heap_addresses.toml": "0b8d0d2600cc38132800581eeedf8746ae25c1b3bcb37f85a22ec7e02a575230",
+    "runtime-recomp/symbols/resident_assets_symbols.toml": "630f434072a70a262ab218c2158bc0fbada492e7b5ab3a91f6dd574aed1695ba",
     "runtime-recomp/symbols/scenery_symbols.toml": "d291719ffa176a7073de3e6c48fa4cff73584cedb8e0d8a2ceda2be72dbe4f14",
     "runtime-recomp/symbols/startup_symbols.toml": "e4bf2f3fc699742f73ad2ac84445e0651b480bef53f26675454a7090d91ef7d2",
     "runtime-recomp/symbols/title_text_symbols.toml": "e0ae1ea2c67d97949bfc3b51776fa7b874b1fac2d63d5351d2897a8a5103b354",
@@ -174,7 +177,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "32a8294e498443044ef91249c67e2c85cbb7a9e0417c5538ee85d8390d058d1b",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "6d8dae5412967bbb520b604d5b2fb74b5a7b01dfc30ef4e032789e7f1c9058b5",
+    "scripts/generate_replay_probe.py": "040eadebb94e6ba35785cefb99bdf42ca99b3e8538c97974c172b3cf0786e7cb",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
@@ -197,6 +200,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Re-pin mod sources after GuestCallContext conversion; pins and comments only in the generator, no simulation or wire change"
+    "reason": "Mod, records and memory guest addresses read from generated symbols; every value unchanged, recorded in test_revision_literals.py"
   }
 }

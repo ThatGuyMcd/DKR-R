@@ -103,6 +103,41 @@ RECORDED = {
             "gGameNumPlayers": (0x80123500, 0x80123A80),
         },
     ),
+    "legacy_world_symbols.hpp": (
+        ["runtime_legacy_mods.cpp", "records_guest.inl"],
+        {
+            "gNumF3dCmdsPerPlayer": (0x800DD3B0, 0x800DD920),
+            "gDisplayLists": (0x801211F0, 0x80121770),
+            "gCharacterIdSlots": (0x801263F0, 0x80126990),
+            "gSettingsPtr": (0x80123510, 0x80123A90),
+        },
+    ),
+    "resident_assets_symbols.hpp": (
+        ["mods/legacy_resident_assets.cpp"],
+        {
+            "gTextureAssetTable": (0x80126320, 0x801268C0),
+            "gSpriteOffsetTable": (0x80126348, 0x801268E8),
+            "gObjectModelTable": (0x8011D620, 0x8011DBA0),
+            "gAnimationTable": (0x8011D638, 0x8011DBB8),
+            "gObjectAnimationTable": (0x8011D63C, 0x8011DBBC),
+            "gSequenceTable": (0x80115CF8, 0x80116278),
+            "gSeqLengthTable": (0x80115D0C, 0x8011628C),
+            "gNumberOfLoadedTextures": (0x80126330, 0x801268D0),
+            "gTextureCache": (0x80126328, 0x801268C8),
+            "gSpriteCacheCount": (0x80126358, 0x801268F8),
+            "gSpriteCache": (0x8012634C, 0x801268EC),
+            "gModelCacheCount": (0x8011D62C, 0x8011DBAC),
+            "gModelCache": (0x8011D624, 0x8011DBA4),
+        },
+    ),
+    "memory_symbols.hpp": (["mods/legacy_memory_safety.h"], {"gMemoryPools": (0x80123580, 0x80123B00)}),
+}
+
+# header -> (symbol, offset, old v77, old v80): addresses the sources spelled that no
+# symbol names. The header expresses each as a named symbol plus a byte offset.
+OFFSETS = {
+    # The 3D texture table, word 1 of gTextureAssetTable.
+    "resident_assets_symbols.hpp": [("gTextureAssetTable", 4, 0x80126324, 0x801268C4)],
 }
 
 
@@ -133,9 +168,20 @@ class MovedLiteralTests(unittest.TestCase):
                 for value in (v77, v80):
                     self.assertIn(f"0x{value:08X}U", text, f"{header} {symbol}")
 
+    def test_unnamed_addresses_are_a_symbol_plus_the_old_offset(self):
+        tables = {revision: gen.table("sdk", revision, ROOT) for revision in gen.REVISIONS}
+        headers = gen.generate([gen.SPECS / f"{Path(h).stem}.toml" for h in OFFSETS])
+        for header, entries in OFFSETS.items():
+            for symbol, offset, v77, v80 in entries:
+                for revision, expected in (("77", v77), ("80", v80)):
+                    base = tables[revision][symbol][0]
+                    self.assertEqual(base + offset, expected, f"{header} {symbol} v{revision}")
+                    self.assertIn(f"0x{base:08X}U + {offset}U", headers[header], f"{header} {symbol} v{revision}")
+
     def test_no_source_still_spells_an_old_literal(self):
         for header, (sources, recorded) in RECORDED.items():
             old = {value for pair in recorded.values() for value in pair}
+            old |= {value for _, _, v77, v80 in OFFSETS.get(header, []) for value in (v77, v80)}
             for source in sources:
                 text = (ROOT / GAME / source).read_text(encoding="utf-8")
                 spelled = {int(m.group(1), 16) for m in re.finditer(r"0[xX](80[0-9A-Fa-f]{6})U?\b", text)}

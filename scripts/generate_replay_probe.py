@@ -607,14 +607,18 @@ INPUT_NATIVE_HASH = {
     # Oct 12: reviewed merge with PR56's frozen-course guard BEFORE any live
     # transport read. Retains caller-owned background lists and offline vehicle
     # selection; neither changes owned checkpoint semantics or asset routing.
+    # Nov 15: display budgets/lists, character slots and settings pointer come from the
+    # generated legacy_world_symbols.hpp (values unchanged).
     # Nov 15: every guest call made from a copied context (get_settings,
     # is_drumstick/tt_unlocked, sndp_*, sound_play, get_filtered_cheats,
     # mempool_alloc_safe, material_set and the track-select cover) now uses
     # GuestCallContext, which repairs f_odd. None of those callees touches an
     # odd float register or a double, so no register, RAM or ordering changes.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eaeaea6513dc7b27fa91fdebb257c81cec89971c61561ceaa9fc905e50a4cf9b",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "ad1841ef50f6608cf25e20e8f52bd2376e73f043255573ef8fd810ada4a680e2",
     # Oct 9: guest-owned deferred queue/reserve; no shortened borrower lifetime.
-    "runtime-recomp/src/game/mods/legacy_memory_safety.h": "e4eb9ee8218c6f76ccfbfe9f5f0604c3b7f8725db7ca28dfe6e3e7c15ae2c48f",
+    # Nov 15: the memory pool table address comes from the generated memory_symbols.hpp
+    # (gMemoryPools, v77 0x80123580, v80 0x80123B00: both unchanged, see test_revision_literals.py).
+    "runtime-recomp/src/game/mods/legacy_memory_safety.h": "064398d57f93b3b579fc3a2d76e38d1b39ee364974e059786ea60341a41c9c7b",
     "runtime-recomp/src/game/mods/legacy_model_safety.hpp": "6b98ab3841104b67ec1295653657c9c1065290abea57648336d77e9665a277a8",
     # Expanded character identities, sparse retained presentation and one
     # immutable sample mount are shared by offline and replay-owned sessions.
@@ -718,7 +722,7 @@ REVIEWED_MAIN_MERGE_HASH = {
     # Nov 8: event 2 derives selected-actor label anchors and calls three
     # read-only font/camera accessors through the same private payload. The
     # reviewed diff leaves input, Pak, rumble and checkpoint ownership intact.
-    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "eaeaea6513dc7b27fa91fdebb257c81cec89971c61561ceaa9fc905e50a4cf9b",
+    "runtime-recomp/src/game/runtime_legacy_mods.cpp": "ad1841ef50f6608cf25e20e8f52bd2376e73f043255573ef8fd810ada4a680e2",
     "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp": "92db808732d530ad8e70c93bad1e14f3e4396e486d71d758a75cf0f3f9d6af50",
 }
 

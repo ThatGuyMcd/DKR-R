@@ -1,3 +1,4 @@
+#include "legacy_world_symbols.hpp"
 #include "guest_call_context.hpp"
 #include "primary_heap.h"
 #include "owned_vehicle_menu.hpp"
@@ -238,7 +239,8 @@ void course_budget(std::uint8_t* ram, bool install) {
     mods::CharacterMenuMemory guest({ram, guest_memory_size()}, fields);
     const auto assets = session.load();
     const bool rev80 = assets->boot_bank()->revision() == "us.v80";
-    const auto table = rev80 ? 0x800DD920U : 0x800DD3B0U, lists = rev80 ? 0x80121770U : 0x801211F0U;
+    const auto& world_symbols = dkr::runtime::legacy_world_symbols::for_revision(rev80);
+    const auto table = world_symbols.display_budgets, lists = world_symbols.display_lists;
     const auto wanted = mods::online::course_display_budgets(world.authored.get());
     // Section 22 is read at global initialization AND on every level load,
     // including the first INTRO background after display heaps exist. A
@@ -1247,8 +1249,9 @@ extern "C" int dkr_legacy_track_menu(std::uint8_t* rdram, recomp_context* ctx, u
                     dkr::mods::CharacterMenuFields addresses;
                     addresses.fill(0x80000000U);
                     dkr::mods::CharacterMenuMemory g({rdram, legacy::guest_memory_size()}, addresses);
-                    const auto table =
-                        legacy::session.load()->boot_bank()->revision() == "us.v80" ? 0x80126990U : 0x801263f0U;
+                    const auto table = dkr::runtime::legacy_world_symbols::for_revision(
+                                           legacy::session.load()->boot_bank()->revision() == "us.v80")
+                                           .character_ids;
                     constexpr unsigned headers[]{2, 3, 4, 5, 6, 7, 8, 9, 1, 0};
                     const auto base = g.read(table + player, 1);
                     if (base >= 10)

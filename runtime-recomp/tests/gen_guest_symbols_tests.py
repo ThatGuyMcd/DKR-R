@@ -32,6 +32,9 @@ GOLDEN = {
     "render_heap_addresses.hpp": "0cbe828b",
     # v1.0.15 added the light intensity, inverse view and viewport layout symbols.
     "vehicle_symbols.hpp": "fd41fa2d",
+    "legacy_world_symbols.hpp": "89dd7d52",
+    "memory_symbols.hpp": "d1ad4e7e",
+    "resident_assets_symbols.hpp": "bdd2b7fa",
 }
 DECOMP = ROOT / "extern/dkr-decomp/ver/symbols"
 
