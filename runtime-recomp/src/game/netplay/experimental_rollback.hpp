@@ -5,9 +5,11 @@
 #include "netplay_types.hpp"
 #include "../mods/sdk2_command.hpp"
 #include "rollback_state_store.hpp"
+#include "state_cross_check.hpp"
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <optional>
 #include <span>
@@ -113,6 +115,21 @@ class Simulation {
 // confirmed-state hash every `every` confirmed frames (0 = off, the default).
 // Diagnostic output only: nothing is sent and no simulation state changes.
 void set_check_state_log_interval(std::uint32_t every);
+// Self-test hooks for the live cross-architecture state check (party_runtime):
+// force it on in a single-architecture lobby, and make this peer report a wrong
+// hash for the first sampled frame at or after `frame` (0 = never).
+void set_check_verify_forced(bool forced);
+bool check_verify_forced();
+void set_check_corrupt_state_at(std::uint32_t frame);
+std::uint32_t check_corrupt_state_at();
+
+// The hash of the confirmed state at a sampled frame (every kStateCheckEvery
+// confirmed frames), saved with the retained checkpoint and not hashed again.
+struct StateSample {
+    std::uint64_t epoch = 0U;
+    std::uint32_t frame = 0U; // absolute: the driver's start frame plus confirmed frames
+    std::uint64_t hash = 0U;
+};
 
 struct Configuration {
     std::uint64_t epoch = 0U;
@@ -164,6 +181,22 @@ class Driver final {
     Step step(bool allow_advance = true);
     const Statistics& statistics() const {
         return statistics_;
+    }
+    // Sampling is off until asked for, and holds at most kStateSamples. `base` is the
+    // frame this driver started at, so samples land on the same absolute frames
+    // (multiples of kStateCheckEvery) for a racer that joined mid-epoch.
+    void enable_state_samples(bool enabled, std::uint32_t base = 0U) {
+        state_samples_on_ = enabled;
+        state_sample_base_ = base;
+        if (!enabled)
+            state_samples_.clear();
+    }
+    bool take_state_sample(StateSample& sample) {
+        if (state_samples_.empty())
+            return false;
+        sample = state_samples_.front();
+        state_samples_.pop_front();
+        return true;
     }
     const std::string& error() const {
         return error_;
@@ -226,6 +259,10 @@ class Driver final {
     std::unique_ptr<dkr::online_stability::SnapshotHistory<RollbackStateStore>> checkpoints_;
     std::vector<std::uint8_t> scratch_;
     std::optional<std::uint32_t> prepared_restore_;
+    static constexpr std::size_t kStateSamples = 16U;
+    bool state_samples_on_ = false;
+    std::uint32_t state_sample_base_ = 0U;
+    std::deque<StateSample> state_samples_;
     Statistics statistics_{};
     std::uint32_t dirty_frame_ = UINT32_MAX;
     std::uint32_t replay_goal_ = 0U;

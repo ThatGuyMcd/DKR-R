@@ -8,6 +8,8 @@
 #include "online_stability/response_trace.hpp"
 #include "netplay/authoritative_state_codec.hpp"
 #include "netplay/experimental_checkpoint_hash.hpp"
+#include "netplay/failure_recorder.hpp"
+#include "netplay/state_cross_check.hpp"
 #include "mods/sdk2_bridge.hpp"
 #include "online_stability/live_delay.hpp"
 #include "online_stability/input_trace.hpp"
@@ -46,7 +48,11 @@ enum class Msg : std::uint8_t {
     FrameAck,
     Progress,
     LiveInputs,
-    InputReceipt
+    InputReceipt,
+    // Only sent in lobbies that span CPU architectures (or when a self-test
+    // forces the check); older builds ignore unknown types in message().
+    StateHash,
+    Desync
 };
 struct Write {
     Bytes b;
@@ -293,6 +299,11 @@ struct PartyRuntime::Impl {
     std::uint64_t probe_id = 0;
     Cursor probe_cursor{};
     std::map<MemberId, Digest> proofs;
+    // Live cross-architecture state check (state_cross_check.hpp).
+    bool state_check = false, state_corrupted = false, state_silent_logged = false;
+    net::StateCrossCheck cross;
+    std::string desync_text;
+    std::optional<Clock::time_point> desync_deadline;
     Impl(const void* k, ex::OwnedGame& w, ex::PresentationMailbox& b, net::LaunchDescriptor l, HashState h)
         : key(k), world(w), box(b), launch(l), hash(std::move(h)),
           live_delay(dkr::online_stability::control(k), l.input_delay_frames, l.rollback_window), hub(party_link(k)),
@@ -364,6 +375,85 @@ struct PartyRuntime::Impl {
         for (auto id : required())
             if (id != local)
                 send(id, type, body, lane);
+    }
+    std::set<MemberId> racer_peers() const {
+        std::set<MemberId> ids;
+        for (auto id : required())
+            if (id != local)
+                ids.insert(id);
+        return ids;
+    }
+    // Compare and report the hashes the driver sampled at confirmed frames.
+    void state_check_pulse(Clock::time_point now) {
+        if (!state_check || !driver)
+            return;
+        if (desync_deadline) {
+            // The host fails once its report has left the party queue (or after
+            // a short cap), so the racers read the hashes before the lobby closes.
+            bool flushed = true;
+            {
+                std::scoped_lock lock(hub->mutex);
+                for (const auto& lane : hub->outgoing)
+                    flushed = flushed && lane.empty();
+            }
+            if (flushed || now >= *desync_deadline)
+                throw std::runtime_error(desync_text);
+            return;
+        }
+        cross.set_peers(racer_peers());
+        ex::StateSample sample;
+        while (driver->take_state_sample(sample)) {
+            const auto frame = sample.frame;
+            auto hash = sample.hash;
+            if (const auto at = ex::check_corrupt_state_at(); at != 0U && !state_corrupted && frame >= at) {
+                state_corrupted = true;
+                hash ^= 0xC0FFEE5EEDULL;
+                std::fprintf(stderr, "[check][corrupt] reporting a wrong hash for epoch=%llu frame=%u\n",
+                             static_cast<unsigned long long>(sample.epoch), frame);
+            }
+            if (!server()) {
+                Write w;
+                w.n(sample.epoch).n(frame, 4).n(hash);
+                send(host, Msg::StateHash, w.b, Lane::Authoritative);
+                continue;
+            }
+            net::StateMismatch mismatch;
+            if (cross.local(sample.epoch, frame, hash, &mismatch) == net::StateCrossCheck::Verdict::Mismatch)
+                desync(mismatch);
+        }
+        if (server())
+            for (const auto peer : cross.take_silent())
+                if (!state_silent_logged) {
+                    state_silent_logged = true;
+                    std::fprintf(stderr,
+                                 "[party][desync-check] peer=%llu is not reporting state hashes; not verified\n",
+                                 static_cast<unsigned long long>(peer));
+                }
+    }
+    void desync(const net::StateMismatch& m) {
+        if (server() && desync_deadline)
+            return; // already reported; this session is about to fail
+        desync_text = "Rollback determinism failed at simulation frame " + std::to_string(m.frame) + ".";
+        std::fprintf(stderr, "[party][desync] epoch=%llu frame=%u local=%016llX remote=%016llX peer=%llu\n",
+                     static_cast<unsigned long long>(m.epoch), m.frame, static_cast<unsigned long long>(m.local),
+                     static_cast<unsigned long long>(m.remote), static_cast<unsigned long long>(m.peer));
+        record_desync(m);
+        if (server()) {
+            Write w;
+            w.n(m.epoch).n(m.frame, 4).n(m.peer).n(m.local).n(m.remote);
+            racers(Msg::Desync, w.b, Lane::Authoritative);
+            desync_deadline = Clock::now() + std::chrono::milliseconds(300);
+            return;
+        }
+        throw std::runtime_error(desync_text);
+    }
+    void record_desync(const net::StateMismatch& m) {
+        char detail[96];
+        std::snprintf(detail, sizeof detail, "peer=%llu local=%016llX remote=%016llX",
+                      static_cast<unsigned long long>(m.peer), static_cast<unsigned long long>(m.local),
+                      static_cast<unsigned long long>(m.remote));
+        net::failure_recorder().record(net::FailureEventKind::RollbackDesync, m.frame, std::uint32_t(m.local),
+                                       std::uint32_t(m.remote), detail);
     }
     void update_hub() {
         std::scoped_lock lock(hub->mutex);
@@ -459,6 +549,8 @@ struct PartyRuntime::Impl {
             std::string e;
             if (!driver->start({at.epoch, launch.player_count, launch.rollback_window, budget}, e))
                 throw std::runtime_error(e);
+            driver->enable_state_samples(state_check, base);
+            cross.set_peers(racer_peers());
         }
         next_tick = Clock::now();
         observed_now = progress = next_tick;
@@ -1215,6 +1307,30 @@ struct PartyRuntime::Impl {
             input_trace.event(owner, host, 5, received, observed_now);
             break;
         }
+        case Msg::StateHash: {
+            // Racers report to the host only. Anything malformed is dropped.
+            if (!server() || !state_check || !required().contains(source) || bytes.size() - r.pos != 20)
+                return;
+            const auto epoch = r.n();
+            const auto frame = std::uint32_t(r.n(4));
+            const auto hash = r.n();
+            net::StateMismatch mismatch;
+            if (cross.report(source, epoch, frame, hash, &mismatch) == net::StateCrossCheck::Verdict::Mismatch)
+                desync(mismatch);
+            break;
+        }
+        case Msg::Desync: {
+            if (server() || !from_host || !state_check || bytes.size() - r.pos != 36)
+                return;
+            net::StateMismatch m;
+            m.epoch = r.n();
+            m.frame = std::uint32_t(r.n(4));
+            m.peer = r.n();
+            m.local = r.n();
+            m.remote = r.n();
+            desync(m);
+            break;
+        }
         default:
             break;
         }
@@ -1794,6 +1910,7 @@ struct PartyRuntime::Impl {
                                  bool(driver->missing_input_mask() & std::uint8_t(~(port() < 4 ? (1U << port()) : 0U)));
             if (step == ex::Step::Failed)
                 throw std::runtime_error(driver->error());
+            state_check_pulse(now);
             if (step == ex::Step::Advanced) {
                 const bool racing =
                     phase == Phase::Running && !world.requires_confirmed_tick() && !world.scene_view().menu;
@@ -1939,6 +2056,9 @@ bool PartyRuntime::pulse(Clock::time_point now, net::PackedInput input, std::str
     impl_->input_trace.dump();
     error = e.what();
     return false;
+}
+void PartyRuntime::enable_state_check(bool enabled) {
+    impl_->state_check = enabled;
 }
 bool PartyRuntime::watching() const {
     return impl_->watching();

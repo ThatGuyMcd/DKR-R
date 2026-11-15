@@ -21,6 +21,7 @@
 #include "authoritative_state_codec.hpp"
 
 #include "failure_recorder.hpp"
+#include "state_cross_check.hpp"
 #include "netplay_pacing_policy.hpp"
 
 #include "authoritative_state.hpp"
@@ -6145,7 +6146,7 @@ void DirectSession::pump_locked() {
                                 }
                             const bool valid = launch.match_id == match_id_ &&
                                                launch.synchronization == SynchronizationMode::ExperimentalRollback &&
-                                               launch.compatibility_hash == manifest_hash(room_view_.manifest) &&
+                                               launch_hash_accepted(launch.compatibility_hash, room_view_.manifest) &&
                                                room_view_.generation == roster.generation &&
                                                launch.player_count == count && launch.occupied_mask == mask &&
                                                party->seed.size() == 512 &&
@@ -6163,7 +6164,7 @@ void DirectSession::pump_locked() {
                                         static_cast<unsigned long long>(roster.generation),
                                         static_cast<unsigned long long>(room_view_.generation), count,
                                         unsigned(launch.player_count),
-                                        unsigned(launch.compatibility_hash == manifest_hash(room_view_.manifest)),
+                                        unsigned(launch_hash_accepted(launch.compatibility_hash, room_view_.manifest)),
                                         unsigned(party->seed.size() == 512));
                                 }
                                 party->status =
@@ -6453,7 +6454,10 @@ void DirectSession::pump_locked() {
                             LaunchDescriptor launch;
                             launch.match_id = match_id_;
                             launch.lobby_generation = ++party->launch_serial;
-                            launch.compatibility_hash = manifest_hash(manifest_);
+                            bool spans = false;
+                            for (const auto& m : party->party.snapshot().members)
+                                spans = spans || other_architecture_senders_.contains(m.id);
+                            launch.compatibility_hash = launch_compatibility_hash(manifest_, spans);
                             launch.occupied_mask = std::uint8_t((1U << count) - 1);
                             launch.player_count = std::uint8_t(count);
                             launch.input_delay_frames = input_delay_;
@@ -6499,7 +6503,7 @@ void DirectSession::pump_locked() {
                                   gate->rules == room_view_.rules &&
                                   gate->save_generation == session_save_generation_ &&
                                   gate->save_hash == manifest_.session_save_hash &&
-                                  gate->launch->compatibility_hash == manifest_hash(manifest_);
+                                  launch_hash_accepted(gate->launch->compatibility_hash, manifest_);
                     for (const auto& m : party->party.snapshot().members)
                         if (m.role == watch::Role::Racer && !party->ready[m.id])
                             intact = false;
@@ -7220,6 +7224,26 @@ void DirectSession::handle_join_request(const PeerAddress& source, std::span<con
                       protocol::encode_hello_ack({false, 0U, incompatibility, {}, manifest_}));
         return;
     }
+    // Remembered so the launch hash can tell a lobby that spans architectures
+    // from one that does not. Ids of anyone who has left (leave, kick, timeout,
+    // a lobby reset) are pruned here, so the set follows the lobby instead of
+    // growing; nobody present is ever dropped.
+    {
+        std::set<std::uint64_t> present{packet_sender};
+        for (const auto& m : party->party.snapshot().members)
+            present.insert(m.id);
+        for (const PeerRecord& peer : peers_)
+            if (peer.active)
+                present.insert(peer.sender_id);
+        for (const PendingRecord& record : pending_joins_)
+            if (record.active)
+                present.insert(record.sender_id);
+        prune_other_architecture_senders(other_architecture_senders_, present);
+    }
+    if (hello.manifest.architecture == manifest_.architecture)
+        other_architecture_senders_.erase(packet_sender);
+    else
+        other_architecture_senders_.insert(packet_sender);
     PendingRecord* pending = pending_by_sender(packet_sender);
     if (pending && pending->mods_approved &&
         (!(pending->address == source) || pending->key != peer_key || pending->client_public != client_public))
@@ -7889,6 +7913,12 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
             status_ = acknowledgement.message;
             std::fprintf(stderr, "[online][admission] rejected reason=%s settings-sync-offered=%u\n", status_.c_str(),
                          unsigned(compatibility_sync_offer_.has_value()));
+            if (compatibility_sync_offer_)
+                std::fprintf(
+                    stderr, "[online][admission] host architecture=%s contract=%s; local architecture=%s contract=%s\n",
+                    compatibility_sync_offer_->architecture.c_str(),
+                    compatibility_sync_offer_->floating_point_mode.c_str(), manifest_.architecture.c_str(),
+                    manifest_.floating_point_mode.c_str());
             std::fflush(stderr);
             return;
         }
@@ -9825,7 +9855,10 @@ LaunchDescriptor DirectSession::make_launch_descriptor() const {
     LaunchDescriptor descriptor{};
     descriptor.match_id = match_id_;
     descriptor.lobby_generation = room.generation;
-    descriptor.compatibility_hash = manifest_hash(manifest_);
+    bool spans = false;
+    for (const PeerRecord& peer : peers_)
+        spans = spans || (peer.active && other_architecture_senders_.contains(peer.sender_id));
+    descriptor.compatibility_hash = launch_compatibility_hash(manifest_, spans);
     descriptor.input_delay_frames = input_delay_;
     descriptor.synchronization = room.rules.synchronization;
     descriptor.rollback_window =
@@ -9849,7 +9882,7 @@ bool DirectSession::validate_start_descriptor(const protocol::StartPayload& payl
         return false;
     }
     if (!valid_launch_descriptor(descriptor) || payload.descriptor_hash != launch_descriptor_hash(descriptor) ||
-        descriptor.match_id != match_id_ || descriptor.compatibility_hash != manifest_hash(manifest_) ||
+        descriptor.match_id != match_id_ || !launch_hash_accepted(descriptor.compatibility_hash, manifest_) ||
         descriptor.synchronization != room_view_.rules.synchronization ||
         descriptor.rollback_window != (synchronization_has_prediction_window(room_view_.rules.synchronization)
                                            ? room_view_.rules.rollback_window
