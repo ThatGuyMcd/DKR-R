@@ -658,7 +658,11 @@ FULL_SCENE_NATIVE_HASH = {
     "runtime-recomp/src/game/intro_tail_policy.hpp": "5433ebb8ad644d4c4ff1d4b539494dbd8488225740008343415f5c87af50428f",
     "runtime-recomp/src/game/water_profile.cpp": "e674ca4e4464e00a00eb1e77af9c926adbac4e86fb6911ac1da58ccd4ee8f04d",
     # Both revisions keep the water UV masks and append PR46's music globals.
-    "runtime-recomp/src/game/revision_addresses.hpp": "603770010a38b56b95505787a307c610300a2a359ef9ff2399b0df55a8d87735",
+    # Nov 16: AddressTable and the kUsV77/kUsV80 tables are generated from
+    # symbols/revision_addresses.toml (revision_symbols.hpp); the mutable
+    # aliases and select() are unchanged. Every entry equals the old
+    # hand-written value (scripts/tests/test_revision_addresses.py).
+    "runtime-recomp/src/game/revision_addresses.hpp": "edea0ba09e54fa003dcf94e0f7044668410bebfed52342c97a66e4a355bd1820",
     # Frozen online binding diverts before offline decoder/global song reads.
     # Without a ModWorld the private hooks retain their prior identity branch.
     "runtime-recomp/src/game/custom_music.cpp": "09953f14e30fa72c5161801b3eafebeff7c5c2a04b5d63f912367e87bfa7421b",

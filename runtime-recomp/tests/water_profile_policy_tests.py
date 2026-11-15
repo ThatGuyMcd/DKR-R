@@ -10,14 +10,25 @@ from compose_legacy_mod_policy import elf_functions
 from water_profile_policy import compose_water_profile
 
 
+def revision_tables():
+    """The generated per-revision address tables (revision_symbols.hpp), as {name: {field: address}}."""
+    import gen_guest_symbols
+
+    text = gen_guest_symbols.generate([gen_guest_symbols.SPECS / "revision_addresses.toml"])["revision_symbols.hpp"]
+    tables = {}
+    for name in ("kUsV77", "kUsV80"):
+        body = text.split("AddressTable " + name + "{", 1)[1].split("};", 1)[0]
+        tables[name] = {
+            field: sum(int(v, 16) for v in re.findall(r"0x([0-9A-Fa-f]+)U", expression))
+            for field, expression in re.findall(r"\.(\w+) = ([^,]+),", body)
+        }
+    return tables
+
+
 def check_scroll_symbols(elf77, elf80):
-    header = (root / "runtime-recomp/src/game/revision_addresses.hpp").read_text()
-    fields = re.findall(r"std::uint32_t (\w+);", header.split("struct AddressTable {", 1)[1].split("};", 1)[0])
+    tables = revision_tables()
     for revision, elf in [("kUsV77", elf77), ("kUsV80", elf80)]:
-        table = header.split("AddressTable " + revision + "{", 1)[1].split("};", 1)[0]
-        values = [int(v, 16) for v in re.findall(r"0x([0-9A-Fa-f]+)U", table)]
-        assert len(fields) == len(values)
-        addresses = dict(zip(fields, values))
+        addresses = tables[revision]
         symbols = elf_functions(Path(elf), (1,))
         for field in ["WaveTexUVMaskX", "WaveTexUVMaskY"]:
             assert symbols["g" + field] == {(addresses[field], 4)}

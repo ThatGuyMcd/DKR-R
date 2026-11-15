@@ -18,6 +18,7 @@ sys.modules[SPEC.name] = gen_guest_symbols
 SPEC.loader.exec_module(gen_guest_symbols)
 
 GOLDEN = {
+    "revision_symbols.hpp": "e93fe4af",
     "camera_symbols.hpp": "1e0b6071",
     "capture_symbols.hpp": "b465bddf",
     "credits_sky_symbols.hpp": "bddb1255",
