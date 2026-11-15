@@ -115,8 +115,11 @@ void FailureRecorder::clear() {
 }
 
 FailureRecorder& failure_recorder() {
-    static FailureRecorder recorder;
-    return recorder;
+    // Never destroyed: the static DirectSession records its own disconnect
+    // while exit() runs destructors, and a recorder constructed after it would
+    // already be gone (macOS throws from locking the destroyed mutex).
+    static auto* recorder = new FailureRecorder;
+    return *recorder;
 }
 
 } // namespace dkr::runtime::netplay
