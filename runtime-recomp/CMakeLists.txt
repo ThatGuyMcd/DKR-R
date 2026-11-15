@@ -79,15 +79,14 @@ option(DKR_EXPERIMENTAL_RACE_TEST "Owned rollback backend in the existing launch
 if(
     DKR_EXPERIMENTAL_RACE_TEST
     AND (
-        APPLE
+        IOS
         OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8
         OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|aarch64|arm64|ARM64)$"
     )
 )
     message(
         FATAL_ERROR
-        "Integrated rollback requires a supported 64-bit Windows/Linux/Android target. "
-        "Apple is not one yet: see 'Rollback on Apple' in docs/fold-in/open-items.md."
+        "Integrated rollback requires a supported 64-bit desktop Windows/Linux/macOS or Android target."
     )
 endif()
 set(DKR_PATCH_POLICY_V77 "${CMAKE_CURRENT_LIST_DIR}/dkr.us.v77.recomp-policy.json")
@@ -982,11 +981,17 @@ if(DKR_RUNTIME_BUILD_RT64)
     # shipped; without those stages the renderer keeps its earlier behaviour.
     set(rt64_chain "${CMAKE_BINARY_DIR}/generated/hle-command-guard")
     if(DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIMENTAL_RACE_TEST)
+        # Same change as 0001 for the Apple chain, where enhanced water is off
+        # and rt64_framebuffer_renderer.cpp has no WaterProjection.h include.
+        set(render_stability_patch "${DKRPORT_ROOT}/patches/rt64/staged/0001-render-stability.patch")
+        if(APPLE AND NOT DKR_ENHANCED_WATER)
+            set(render_stability_patch "${DKRPORT_ROOT}/patches/rt64/staged/0006-render-stability-apple.patch")
+        endif()
         dkr_stage_patch(
             rt64
             "${rt64_chain}"
             rt64-render-stability
-            "${DKRPORT_ROOT}/patches/rt64/staged/0001-render-stability.patch"
+            "${render_stability_patch}"
             src/render/rt64_texture_cache.cpp
             src/render/rt64_framebuffer_renderer.cpp
             src/hle/rt64_state.cpp
@@ -1748,6 +1753,22 @@ if(TARGET DKRPortGame AND (DKR_EXPERIMENTAL_RENDER_QUALIFICATION OR DKR_EXPERIME
             "${CMAKE_CURRENT_LIST_DIR}/src/game/netplay/experimental_checkpoint_hash.cpp"
     )
     target_include_directories(rt64 INTERFACE "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty")
+    if(NOT DKR_ENHANCED_WATER)
+        # EnhancedWater.cmake exports src/game to rt64's consumers; the gate
+        # sources above include from it whether or not water is built.
+        target_include_directories(rt64 INTERFACE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    endif()
+endif()
+# The standalone frontend below is Windows/Linux only; the launcher itself
+# links the owned engines on every desktop target.
+if(
+    APPLE
+    AND DKR_EXPERIMENTAL_RACE_TEST
+    AND TARGET DKRPortGame
+    AND TARGET DKRExperimentalOwnedGame
+    AND DKR_NETPLAY_WEBRTC
+)
+    target_link_libraries(DKRPortGameCore PRIVATE DKRExperimentalOwnedGame)
 endif()
 if(TARGET DKRPortGame AND DKR_RUNTIME_BUILD_RT64 AND NOT APPLE)
     set(DKR_PRESENTATION_PROBE_SOURCES ${DKR_GAME_SOURCES})
@@ -1892,7 +1913,11 @@ if(DKR_RUNTIME_BUILD_GENERATED)
     endif()
 endif()
 
-if(DKR_EXPERIMENTAL_RACE_TEST AND NOT TARGET DKRExperimentalRaceTest)
+if(
+    DKR_EXPERIMENTAL_RACE_TEST
+    AND NOT TARGET DKRExperimentalRaceTest
+    AND NOT (APPLE AND TARGET DKRExperimentalOwnedGame AND DKR_NETPLAY_WEBRTC AND DKR_RUNTIME_BUILD_RT64)
+)
     message(
         FATAL_ERROR
         "Experimental race test requires RT64, WebRTC and the reviewed isolated owned Patch Pipeline output"
