@@ -31,11 +31,10 @@ def symbols(path):
 
 
 def hud_display_list(header, revision):
-    fields = re.findall(r"std::uint32_t\s+(\w+)\s*;", header.split("struct AddressTable {", 1)[1].split("};", 1)[0])
-    table = header.split("AddressTable kUs" + revision.upper() + "{", 1)[1].split("};", 1)[0]
-    values = [int(value, 16) for value in re.findall(r"0x([0-9A-Fa-f]+)U", table)]
-    assert len(fields) == len(values)
-    return dict(zip(fields, values))["HudDisplayList"]
+    """HudDisplayList from the generated per-revision table (revision_symbols.hpp text)."""
+    body = header.split("AddressTable kUs" + revision.upper() + "{", 1)[1].split("};", 1)[0]
+    expression = dict(re.findall(r"\.(\w+) = ([^,]+),", body))["HudDisplayList"]
+    return sum(int(value, 16) for value in re.findall(r"0x([0-9A-Fa-f]+)U", expression))
 
 
 def instruction(path, address):
@@ -68,9 +67,14 @@ with zipfile.ZipFile(sys.argv[5]) as baseline:
         return baseline.read(matches[0]).decode("utf-8-sig").replace("\r\n", "\n")
 
     for rev, generated, elf in zip(("v77", "v80"), sys.argv[1:3], sys.argv[3:5]):
-        header = "runtime-recomp/src/game/revision_addresses.hpp"
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import gen_guest_symbols
+
+        header = gen_guest_symbols.generate([gen_guest_symbols.SPECS / "revision_addresses.toml"])[
+            "revision_symbols.hpp"
+        ]
         retail = symbols(elf)
-        current_holder = hud_display_list((ROOT / header).read_text(), rev)
+        current_holder = hud_display_list(header, rev)
         assert current_holder == retail["gHudDL"], (rev, hex(current_holder), hex(retail["gHudDL"]))
         assert current_holder != retail["gHudMtx"]
         print(rev, "minimap command holder matches retail gHudDL:", hex(current_holder))
