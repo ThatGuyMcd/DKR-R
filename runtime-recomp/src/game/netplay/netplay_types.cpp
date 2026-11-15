@@ -100,12 +100,6 @@ std::uint64_t stable_hash(std::string_view bytes) {
     return hash;
 }
 
-std::string_view determinism_class(std::string_view architecture) {
-    if (architecture == "x86_64" || architecture == "arm64")
-        return "ieee754-le64-v1";
-    return architecture;
-}
-
 namespace {
 std::uint64_t ManifestHash(const CompatibilityManifest& manifest, std::string_view architecture) {
     std::uint64_t hash = 14695981039346656037ULL;
@@ -133,7 +127,7 @@ std::uint64_t manifest_hash(const CompatibilityManifest& manifest) {
 }
 
 std::uint64_t manifest_class_hash(const CompatibilityManifest& manifest) {
-    return ManifestHash(manifest, determinism_class(manifest.architecture));
+    return ManifestHash(manifest, {});
 }
 
 std::uint64_t launch_compatibility_hash(const CompatibilityManifest& host, bool spans_architectures) {
@@ -192,8 +186,9 @@ std::string incompatibility_reason(const CompatibilityManifest& expected, const 
     if (candidate.simulation_rate != expected.simulation_rate) {
         return "Simulation rates do not match.";
     }
-    if (determinism_class(candidate.architecture) != determinism_class(expected.architecture) ||
-        candidate.floating_point_mode != expected.floating_point_mode) {
+    // Peers are matched on the contract their build vouches for, whatever CPU
+    // it runs on (determinism_contract.hpp).
+    if (candidate.floating_point_mode != expected.floating_point_mode) {
         return "This platform pair has not passed deterministic compatibility.";
     }
     return {};

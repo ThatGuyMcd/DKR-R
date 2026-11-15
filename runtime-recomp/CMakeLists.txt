@@ -75,19 +75,9 @@ include(cmake/RegressionHarness.cmake)
 option(DKR_LEGACY_QUALIFICATION "Build private real-runtime legacy scene qualification hooks (not for packaging)" OFF)
 option(DKR_REPLAY_QUALIFICATION "Private real-game replay fixtures; never package" OFF)
 option(DKR_EXPERIMENTAL_RENDER_QUALIFICATION "PRIVATE generation-retirement GPU probe; never package" OFF)
-option(DKR_EXPERIMENTAL_RACE_TEST "Owned rollback backend in the existing launcher (x64/ARM64)" OFF)
-if(
-    DKR_EXPERIMENTAL_RACE_TEST
-    AND (
-        IOS
-        OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8
-        OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|aarch64|arm64|ARM64)$"
-    )
-)
-    message(
-        FATAL_ERROR
-        "Integrated rollback requires a supported 64-bit desktop Windows/Linux/macOS or Android target."
-    )
+option(DKR_EXPERIMENTAL_RACE_TEST "Owned rollback backend in the existing launcher (64-bit targets)" OFF)
+if(DKR_EXPERIMENTAL_RACE_TEST AND (IOS OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8))
+    message(FATAL_ERROR "Integrated rollback requires a 64-bit desktop or Android target.")
 endif()
 set(DKR_PATCH_POLICY_V77 "${CMAKE_CURRENT_LIST_DIR}/dkr.us.v77.recomp-policy.json")
 set(DKR_PATCH_POLICY_V80 "${CMAKE_CURRENT_LIST_DIR}/dkr.us.v80.recomp-policy.json")

@@ -1,48 +1,67 @@
 # Cross-architecture play
 
 Rollback only works if every peer computes exactly the same game state from
-the same inputs. Lobby admission therefore puts each peer in a *determinism
-class* and refuses peers from another class with "This platform pair has not
-passed deterministic compatibility."
+the same inputs. Peers on different CPU architectures race each other as long
+as their builds make the same promise about how they compute. Nothing lists
+the architectures that are allowed: a build for a CPU nobody has tried yet
+joins in if it can make the promise.
 
-The class comes from the CPU architecture the build was compiled for
-(`determinism_class` in `netplay/netplay_types.cpp`) and from the floating
-point mode.
+## The contract
+
+Each build puts a floating point contract in its lobby manifest
+(`floating_point_mode`, from `netplay/determinism_contract.hpp`). Admission
+refuses a peer whose contract differs with "This platform pair has not passed
+deterministic compatibility."
+
+`strict-ieee754-v1` means:
+
+- `float` and `double` are IEEE 754 binary32 and binary64,
+- the target is little-endian,
+- intermediate results are evaluated in their own type (`FLT_EVAL_METHOD` 0,
+  so no x87 extended precision) and fast-math is off,
+- contraction is off (`-ffp-contract=off`, `/fp:strict`), so an FMA-capable
+  CPU does not fuse what another computes in two steps.
+
+The first three are checked at compile time. The last is a build flag the
+simulation sources are compiled with; keep it when adding a toolchain. A
+build that fails a compile-time check advertises `unverified-<architecture>`
+and only ever meets other builds for that architecture.
+
+The game code itself is recompiled N64 code running against a 32-bit guest
+memory image, which is why it does not care about the host's pointer size or
+calling convention. What can differ between hosts is floating point, and that
+is what the contract pins down.
+
+Gameplay mods are covered the same way: every peer must hold the same mod
+manifest and prepared resources (their hashes are in the same manifest), and
+mod code runs under the same contract as the game.
 
 ## What stays compatible
 
 Every racer has to agree on one compatibility hash before a race launches.
 There are two forms of it:
 
-- `manifest_hash` names the architecture itself. It is what every build
-  before determinism classes computes.
-- `manifest_class_hash` names the class.
+- `manifest_hash` includes the architecture. It is what every build before
+  contracts computes.
+- `manifest_class_hash` leaves the architecture out.
 
-The host puts the class form in the launch only when the lobby actually has
+The host puts the second form in the launch only when the lobby actually has
 peers on more than one architecture, and a racer accepts either form of its
 own manifest. So a lobby on one architecture launches exactly as it always
-has, including against a build of the same release that predates classes. A
-lobby that spans architectures needs every peer to know about classes.
+has, including against a build of the same release that predates this. A
+lobby that spans architectures needs every peer to have it.
 
-One case does not end cleanly: a host with classes admits an older build of
+One case does not end cleanly: a host with contracts admits an older build of
 the same release on another architecture, and that peer never accepts the
 launch. The host cancels the start after 30 seconds. Releases cannot join
 each other at all, so this only happens between development builds and the
 release they are based on.
 
-## Classes
+## Evidence
 
-| Class | Architectures | Floating point mode |
-|---|---|---|
-| `ieee754-le64-v1` | `x86_64`, `arm64` | `strict-ieee754-v1` |
-
-An architecture that is not listed is a class of its own: it can race other
-builds for the same architecture and nothing else. The operating system and
-compiler are not part of the class. They are covered by the evidence below,
-not by a check, so a new compiler or OS for a listed architecture wants the
-same two runs before it ships.
-
-## Evidence for `ieee754-le64-v1`
+The contract is a claim. This is what has been checked so far, and the same
+two runs are what to do for a new architecture, compiler or OS before
+shipping it.
 
 Recorded 14 November 2026 on main at `a81b7a5`.
 
@@ -79,19 +98,23 @@ What this does not cover: more than two live players, tracks and vehicles
 beyond the ones the self-test reaches, mods, Linux or Android on arm64 against
 anything, and human input. State was sampled every 30 confirmed frames.
 
-## Qualifying another architecture
+## Checking a new target
 
-1. Build the replay probe for the new target and for a target already in the
-   class, from the same commit and the same generated payload. Capture the
-   fixture once and copy the same bytes to both machines.
-2. Run the probe for both ROM revisions, 2, 3 and 4 players, and compare every
-   output with `scripts/compare_replay_references.py`. Any difference is a
-   stop: find the first differing frame, do not normalise it away.
-3. Race the two machines against each other with the self-test, in both host
+Nothing has to be changed for a new architecture to be admitted. Before
+shipping one, run the two checks above against a target that already has
+evidence:
+
+1. Build the replay probe for both targets from the same commit and the same
+   generated payload. Capture the fixture once and copy the same bytes to both
+   machines. Run it for both ROM revisions with 2, 3 and 4 players and compare
+   every output with `scripts/compare_replay_references.py`. Any difference is
+   a stop: find the first differing frame, do not normalise it away.
+2. Race the two machines against each other with the self-test, in both host
    and joiner seats and on both revisions, including a run with
    `DKR_OWNED_CHECK_DELIVERY_MS=60` so both sides roll back. Compare the
-   `[check][state]` lines with `scripts/compare_state_hashes.py`. The peers
-   will refuse each other until step 4, so this run needs a private build
-   with the new architecture added to the class.
-4. Add the architecture to `determinism_class`, extend
-   `netplay_core_tests.cpp` and record the evidence in this file.
+   `[check][state]` lines with `scripts/compare_state_hashes.py`.
+3. Record the result in the tables above.
+
+If a target cannot honour the contract (it needs fast-math, or its compiler
+cannot turn contraction off), make its build fail the compile-time check so
+it advertises `unverified-<architecture>`.

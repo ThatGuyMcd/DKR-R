@@ -1,3 +1,4 @@
+#include "determinism_contract.hpp"
 #include "netplay_lobby.hpp"
 #include "rollback_policy.hpp"
 #include "netplay_build_identity.hpp"
@@ -123,53 +124,56 @@ int main() {
                OnlineFailureCode::DeterminismFailure);
     }
 
-    // x86_64 and arm64 share a determinism class and are admitted together.
-    // A lobby on one architecture launches with the hash every earlier build
-    // computes; only a lobby that spans architectures uses the class hash,
-    // and a racer accepts either form of its own manifest.
+    // Peers are admitted on the floating point contract their build vouches
+    // for, not on the CPU. A lobby on one architecture launches with the hash
+    // every earlier build computes; only a lobby that spans architectures
+    // uses the shared hash, and a racer accepts either form of its own.
     {
-        const CompatibilityManifest host = Manifest();
-        CompatibilityManifest racer = host;
-        racer.architecture = "arm64";
-        assert(determinism_class("x86_64") == determinism_class("arm64"));
-        assert(incompatibility_reason(host, racer).empty());
-        assert(incompatibility_reason(racer, host).empty());
-
         // The per-architecture hash is frozen: same-version peers built before
-        // determinism classes existed must keep agreeing with it.
-        assert(manifest_hash(host) == 0xB2DD0BA0FA4A6277ULL);
-        assert(manifest_hash(host) != manifest_hash(racer));
-        assert(manifest_class_hash(host) == manifest_class_hash(racer));
-        assert(manifest_class_hash(host) != manifest_hash(host));
+        // contracts must keep agreeing with it.
+        assert(manifest_hash(Manifest()) == 0xB2DD0BA0FA4A6277ULL);
 
-        assert(launch_compatibility_hash(host, false) == manifest_hash(host));
-        assert(launch_compatibility_hash(host, true) == manifest_class_hash(host));
-        assert(launch_hash_accepted(launch_compatibility_hash(host, false), host));
-        assert(launch_hash_accepted(launch_compatibility_hash(host, true), host));
-        assert(launch_hash_accepted(launch_compatibility_hash(host, true), racer));
-        assert(!launch_hash_accepted(launch_compatibility_hash(host, false), racer));
-        CompatibilityManifest other_settings = racer;
-        other_settings.gameplay_settings_hash ^= 1U;
-        assert(!launch_hash_accepted(launch_compatibility_hash(host, true), other_settings));
+        CompatibilityManifest host = Manifest();
+        host.floating_point_mode = floating_point_contract(true, "x86_64");
+        assert(host.floating_point_mode == "strict-ieee754-v1");
+        for (const char* architecture : {"arm64", "riscv64", "ppc64le", "some-future-cpu"}) {
+            CompatibilityManifest racer = host;
+            racer.architecture = architecture;
+            assert(incompatibility_reason(host, racer).empty());
+            assert(incompatibility_reason(racer, host).empty());
+            assert(manifest_hash(host) != manifest_hash(racer));
+            assert(manifest_class_hash(host) == manifest_class_hash(racer));
+            assert(manifest_class_hash(host) != manifest_hash(host));
 
-        // An architecture nobody has checked is a class of its own.
-        for (const char* unchecked : {"riscv64", "unknown", ""}) {
-            racer.architecture = unchecked;
-            assert(determinism_class(unchecked) == unchecked);
-            assert(incompatibility_reason(host, racer) ==
-                   "This platform pair has not passed deterministic compatibility.");
-            assert(incompatibility_reason(racer, host) ==
-                   "This platform pair has not passed deterministic compatibility.");
-            assert(!launch_hash_accepted(launch_compatibility_hash(host, true), racer));
-            assert(incompatibility_reason(racer, racer).empty());
-            assert(manifest_class_hash(racer) == manifest_hash(racer));
+            assert(launch_compatibility_hash(host, false) == manifest_hash(host));
+            assert(launch_compatibility_hash(host, true) == manifest_class_hash(host));
+            assert(launch_hash_accepted(launch_compatibility_hash(host, false), host));
+            assert(launch_hash_accepted(launch_compatibility_hash(host, true), host));
+            assert(launch_hash_accepted(launch_compatibility_hash(host, true), racer));
+            assert(!launch_hash_accepted(launch_compatibility_hash(host, false), racer));
+            CompatibilityManifest other_settings = racer;
+            other_settings.gameplay_settings_hash ^= 1U;
+            assert(!launch_hash_accepted(launch_compatibility_hash(host, true), other_settings));
         }
 
-        racer = host;
-        racer.architecture = "arm64";
-        racer.floating_point_mode = "fast";
-        assert(incompatibility_reason(host, racer) == "This platform pair has not passed deterministic compatibility.");
-        assert(!launch_hash_accepted(launch_compatibility_hash(host, true), racer));
+        // A build that cannot vouch for the contract only meets its own kind.
+        const char* refused = "This platform pair has not passed deterministic compatibility.";
+        CompatibilityManifest loose = host;
+        loose.architecture = "x86";
+        loose.floating_point_mode = floating_point_contract(false, "x86");
+        assert(loose.floating_point_mode == "unverified-x86");
+        assert(incompatibility_reason(host, loose) == refused);
+        assert(incompatibility_reason(loose, host) == refused);
+        assert(!launch_hash_accepted(launch_compatibility_hash(host, true), loose));
+        assert(incompatibility_reason(loose, loose).empty());
+        CompatibilityManifest other_loose = loose;
+        other_loose.architecture = "arm";
+        other_loose.floating_point_mode = floating_point_contract(false, "arm");
+        assert(incompatibility_reason(loose, other_loose) == refused);
+
+        // Every target we build for honours the contract.
+        assert(kStrictIeee754 && floating_point_contract() == "strict-ieee754-v1");
+        assert(!build_architecture().empty());
     }
 
     static_assert(kAuthoritativeDeltaKeyframeInterval % kLiveReplicaCorrectionInterval == 0U,

@@ -123,6 +123,7 @@
 #include "netplay/netplay_build_identity.hpp"
 #include "netplay/experimental_runtime_admission.hpp"
 #include "netplay/experimental_runtime_presence.hpp"
+#include "netplay/determinism_contract.hpp"
 #include "netplay/experimental_latency.hpp"
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "netplay/experimental_rollback.hpp"
@@ -4510,14 +4511,8 @@ dkr::runtime::netplay::CompatibilityManifest BuildNetplayManifest(const dkr::run
             stable_hash(std::string_view(reinterpret_cast<const char*>(canonical_save.data()), canonical_save.size()));
     }
     manifest.simulation_rate = 30U;
-#if defined(_M_X64) || defined(__x86_64__)
-    manifest.architecture = "x86_64";
-#elif defined(_M_ARM64) || defined(__aarch64__)
-    manifest.architecture = "arm64";
-#else
-    manifest.architecture = "unknown";
-#endif
-    manifest.floating_point_mode = "strict-ieee754-v1";
+    manifest.architecture = std::string(build_architecture());
+    manifest.floating_point_mode = floating_point_contract();
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     manifest.owned_engine_hash = experimental::runtime_engine_identity(identity.revision);
 #endif
