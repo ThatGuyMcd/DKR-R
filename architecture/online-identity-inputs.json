@@ -123,7 +123,7 @@
     "runtime-recomp/symbols/detail_symbols.toml": "9f92da38d4e85278325bda85a51d9fa58ec0469da321f49ffbeaac91de52cc83",
     "runtime-recomp/symbols/display_list_symbols.toml": "ca298334140d074d1e40da0c2d9b369b268c96266ed566ce742d668aacf29929",
     "runtime-recomp/symbols/legacy_world_symbols.toml": "0a3451072470727f05744fd2cf3d6e4b26dec7f5f425376ad7328ccc38934b9c",
-    "runtime-recomp/symbols/memory_symbols.toml": "7745657d8888a0670e7b799cfc450536c61d385ff22ce5a72849540f3edd2a25",
+    "runtime-recomp/symbols/memory_symbols.toml": "ed6319c6e1a51683cbb6cee4714749c42a54c512ea98bdeacc6911c404697098",
     "runtime-recomp/symbols/polish_symbols.toml": "ad5c563f3cc0e0bd44e4d2043563bd84ca294f6883b565c4613d3c1036b5d42a",
     "runtime-recomp/symbols/render_heap_addresses.toml": "0b8d0d2600cc38132800581eeedf8746ae25c1b3bcb37f85a22ec7e02a575230",
     "runtime-recomp/symbols/resident_assets_symbols.toml": "630f434072a70a262ab218c2158bc0fbada492e7b5ab3a91f6dd574aed1695ba",
@@ -202,6 +202,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Mod, records and memory guest addresses read from generated symbols and mod guest calls repaired through GuestCallContext; every value unchanged, recorded in test_revision_literals.py"
+    "reason": "memory_symbols.hpp: include <cstdint> for the C++ half; values unchanged"
   }
 }

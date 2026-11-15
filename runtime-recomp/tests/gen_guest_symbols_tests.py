@@ -20,7 +20,7 @@ SPEC.loader.exec_module(gen_guest_symbols)
 GOLDEN = {
     "audio_queue_symbols.hpp": "069b742c",
     "display_list_symbols.hpp": "833f48e9",
-    "memory_symbols.hpp": "376836a6",
+    "memory_symbols.hpp": "e4995134",
     "camera_symbols.hpp": "1e0b6071",
     "capture_symbols.hpp": "b465bddf",
     "credits_sky_symbols.hpp": "bddb1255",

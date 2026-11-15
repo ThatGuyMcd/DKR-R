@@ -15,6 +15,7 @@ static inline uint32_t dkr_memory_pools_address(unsigned revision) {
     return revision == 77 ? @gMemoryPools:77@ : @gMemoryPools:80@;
 }
 #ifdef __cplusplus
+#include <cstdint>
 namespace dkr::runtime::memory_symbols {
 struct Symbols {std::uint32_t pools;};
 inline constexpr Symbols symbols77{@ALL:77@};
