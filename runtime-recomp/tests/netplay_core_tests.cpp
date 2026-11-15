@@ -171,7 +171,9 @@ int main() {
         other_loose.floating_point_mode = floating_point_contract(false, "arm");
         assert(incompatibility_reason(loose, other_loose) == refused);
 
-        // Every target we build for honours the contract.
+        // Every target we build for honours the contract, clause by clause.
+        for (const auto& clause : kStrictIeee754Clauses)
+            assert(clause.holds && !clause.requirement.empty());
         assert(kStrictIeee754 && floating_point_contract() == "strict-ieee754-v1");
         assert(!build_architecture().empty());
     }

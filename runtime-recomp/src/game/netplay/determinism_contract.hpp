@@ -4,6 +4,7 @@
 // named contract a build can check about itself, not on the CPU it was built
 // for, so an architecture nobody has listed races the others as long as it
 // honours the contract. docs/CROSS-ARCHITECTURE.md has the evidence.
+#include <array>
 #include <bit>
 #include <cfloat>
 #include <limits>
@@ -12,20 +13,39 @@
 
 namespace dkr::runtime::netplay {
 
-// strict-ieee754-v1: IEEE 754 binary32/binary64, little-endian, and every
-// intermediate result evaluated in its own type (no x87 extended precision,
-// no fast-math). The build flags keep contraction off (-ffp-contract=off,
-// /fp:strict), which a translation unit cannot check about itself.
-inline constexpr bool kStrictIeee754 = std::numeric_limits<float>::is_iec559 &&
-                                       std::numeric_limits<double>::is_iec559 &&
-                                       std::endian::native == std::endian::little
+// strict-ieee754-v1, one clause at a time, so a build that falls short can
+// say which clause. Contraction has no clause: the build flags keep it off
+// (-ffp-contract=off, /fp:strict) and a translation unit cannot check that
+// about itself.
+struct ContractClause {
+    std::string_view requirement;
+    bool holds;
+};
+inline constexpr std::array<ContractClause, 5> kStrictIeee754Clauses = {{
+    {"float is IEEE 754 binary32", std::numeric_limits<float>::is_iec559 && sizeof(float) == 4},
+    {"double is IEEE 754 binary64", std::numeric_limits<double>::is_iec559 && sizeof(double) == 8},
+    {"target is little-endian", std::endian::native == std::endian::little},
+    {"intermediates keep their own type (FLT_EVAL_METHOD 0)",
 #if defined(FLT_EVAL_METHOD)
-                                       && FLT_EVAL_METHOD == 0
+     FLT_EVAL_METHOD == 0
+#else
+     true
 #endif
+    },
+    {"fast-math is off",
 #if defined(__FAST_MATH__) || defined(_M_FP_FAST)
-                                       && false
+     false
+#else
+     true
 #endif
-    ;
+    },
+}};
+inline constexpr bool kStrictIeee754 = [] {
+    for (const auto& clause : kStrictIeee754Clauses)
+        if (!clause.holds)
+            return false;
+    return true;
+}();
 
 // For logs and the lobby. "x86_64" and "arm64" are also part of the hash
 // builds without contracts agree on, so those two spellings never change.

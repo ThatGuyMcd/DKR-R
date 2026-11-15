@@ -98,6 +98,45 @@ What this does not cover: more than two live players, tracks and vehicles
 beyond the ones the self-test reaches, mods, Linux or Android on arm64 against
 anything, and human input. State was sampled every 30 confirmed frames.
 
+## Porting to a new platform
+
+Cross-play needs nothing platform-specific. A port that builds the game with
+`DKR_EXPERIMENTAL_RACE_TEST=ON` races every other platform, provided:
+
+1. **It is a 64-bit target.** CMake refuses the option otherwise.
+2. **Its compiler can keep floating point strict.** Use the flags the
+   existing toolchains use for the simulation sources: `-ffp-contract=off
+   -fno-fast-math` (GCC, Clang) or `/fp:strict` (MSVC). Do not add
+   `-ffast-math`, `-Ofast` or anything that implies them.
+3. **The build honours the contract.** Start the game and read the log:
+
+   ```text
+   [online][contract] architecture=riscv64 contract=strict-ieee754-v1
+   ```
+
+   That line means the port will be admitted by everyone else. If it says
+   `contract=unverified-<architecture>`, the lines after it name the clause
+   the build misses (`[online][contract] not met: ...`), and the port can
+   only race itself until that is fixed.
+
+If a lobby refuses the port anyway, the joiner's log has both sides:
+
+```text
+[online][admission] rejected reason=This platform pair has not passed deterministic compatibility.
+[online][admission] host architecture=x86_64 contract=strict-ieee754-v1; local architecture=riscv64 contract=unverified-riscv64
+```
+
+A refusal for any other reason (build, ROM revision, mods, settings) is not
+about the platform: every racer needs the same release and the same content.
+
+`build_architecture()` in `netplay/determinism_contract.hpp` names the common
+architectures for the log. An architecture it does not know shows as
+`unknown` and still races; add its name there when you add the port.
+
+Then check that the promise actually holds on the new hardware, below. It
+takes two machines and about an hour, and it is the only way to find a
+compiler or libm that rounds differently.
+
 ## Checking a new target
 
 Nothing has to be changed for a new architecture to be admitted. Before

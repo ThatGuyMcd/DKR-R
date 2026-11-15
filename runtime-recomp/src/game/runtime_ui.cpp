@@ -4513,6 +4513,18 @@ dkr::runtime::netplay::CompatibilityManifest BuildNetplayManifest(const dkr::run
     manifest.simulation_rate = 30U;
     manifest.architecture = std::string(build_architecture());
     manifest.floating_point_mode = floating_point_contract();
+    // Once per run, for whoever is bringing up a new platform: what this build
+    // tells its peers, and which clause it misses if it cannot race them.
+    static const bool reported = [&manifest] {
+        std::fprintf(stderr, "[online][contract] architecture=%s contract=%s\n", manifest.architecture.c_str(),
+                     manifest.floating_point_mode.c_str());
+        for (const auto& clause : kStrictIeee754Clauses)
+            if (!clause.holds)
+                std::fprintf(stderr, "[online][contract] not met: %.*s\n", int(clause.requirement.size()),
+                             clause.requirement.data());
+        return true;
+    }();
+    (void)reported;
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
     manifest.owned_engine_hash = experimental::runtime_engine_identity(identity.revision);
 #endif

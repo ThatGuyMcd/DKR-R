@@ -7902,6 +7902,12 @@ void DirectSession::handle_client_packet(const protocol::Datagram& packet) {
             status_ = acknowledgement.message;
             std::fprintf(stderr, "[online][admission] rejected reason=%s settings-sync-offered=%u\n", status_.c_str(),
                          unsigned(compatibility_sync_offer_.has_value()));
+            if (compatibility_sync_offer_)
+                std::fprintf(
+                    stderr, "[online][admission] host architecture=%s contract=%s; local architecture=%s contract=%s\n",
+                    compatibility_sync_offer_->architecture.c_str(),
+                    compatibility_sync_offer_->floating_point_mode.c_str(), manifest_.architecture.c_str(),
+                    manifest_.floating_point_mode.c_str());
             std::fflush(stderr);
             return;
         }
