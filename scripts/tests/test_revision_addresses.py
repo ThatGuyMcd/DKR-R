@@ -285,6 +285,14 @@ class SdkTests(unittest.TestCase):
                 if field in ADDRESS_ONLY:
                     self.assertIn(address, by_address, f"v{rev} {field}={address:#x} is not a declared symbol")
 
+    def test_entry_stack_top_is_the_end_of_the_entry_thread_stack(self):
+        # gCameras starts where the 0x1000 byte entrypointThreadStack ends
+        # (src/hasm/entrypoint.s in the decomp), so the initial sp equals it.
+        for rev in SDK:
+            _, names = sdk_symbols(rev)
+            top = dict(zip(FIELDS, TABLES[rev]))["EntrypointStackTop"]
+            self.assertEqual(top, names["entrypointThreadStack"][0] + 0x1000, f"v{rev}")
+
     def test_coverage(self):
         covered = set(EXPECTED_SYMBOL) | set(ADDRESS_ONLY)
         uncovered = [field for field in FIELDS if field not in covered]
