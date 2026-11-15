@@ -1660,6 +1660,7 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
     # executable does. The private generated MEM_* fault trampolines belong
     # only to the revision-isolated owned libraries, never the C++ adapter.
     target_include_directories(DKROwnedRevisionRegistryTests BEFORE PRIVATE "${DKR_RECOMP_SOURCE}/include")
+    dkr_guest_symbols(DKROwnedRevisionRegistryTests)
     if(MSVC)
         target_compile_options(DKROwnedRevisionRegistryTests PRIVATE /EHs /EHc-)
     endif()
@@ -1682,6 +1683,7 @@ if(DKR_EXPERIMENTAL_OWNED_GENERATED)
                 "${DKR_MODERN_RUNTIME_SOURCE}/thirdparty/concurrentqueue"
         )
         target_include_directories(DKRExperimentalOwnedQuickJoinTests BEFORE PRIVATE "${DKR_RECOMP_SOURCE}/include")
+        dkr_guest_symbols(DKRExperimentalOwnedQuickJoinTests)
         file(READ "${DKR_EXPERIMENTAL_OWNED_GENERATED}/manifest.json" DKR_OWNED_MANIFEST)
         string(JSON DKR_OWNED_REVISION GET "${DKR_OWNED_MANIFEST}" revision)
         string(
@@ -2559,6 +2561,7 @@ if(BUILD_TESTING)
     target_link_libraries(DKRNetplayInputLatencyTests PRIVATE DKRNetplayCore)
     add_test(NAME DKRNetplayInputLatency COMMAND DKRNetplayInputLatencyTests)
     add_executable(DKRLegacyMemorySafetyTests tests/legacy_memory_safety_tests.cpp)
+    dkr_guest_symbols(DKRLegacyMemorySafetyTests)
     add_test(NAME DKRLegacyMemorySafety COMMAND DKRLegacyMemorySafetyTests)
     # fixtures-v<rev>/: the production policy's N64Recomp output, one function
     # per file (scripts/compose_payloads.py). cmake/PreparedInputs.cmake
@@ -2611,6 +2614,7 @@ if(BUILD_TESTING)
                 list(APPEND memory_guest_sources "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/${fn}.c")
             endforeach()
             add_executable(DKRLegacyMemoryGuest${revision}Tests ${memory_guest_sources})
+            dkr_guest_symbols(DKRLegacyMemoryGuest${revision}Tests)
             target_compile_definitions(
                 DKRLegacyMemoryGuest${revision}Tests
                 PRIVATE DKR_MEMORY_TEST_REVISION=${revision}
@@ -2650,6 +2654,7 @@ if(BUILD_TESTING)
                 list(APPEND memory_stability_sources "${DKR_MEMORY_FIXTURE_ROOT}/fixtures-v${revision}/${fn}.c")
             endforeach()
             add_executable(DKRMemoryStability${revision}Tests ${memory_stability_sources})
+            dkr_guest_symbols(DKRMemoryStability${revision}Tests)
             target_compile_features(DKRMemoryStability${revision}Tests PRIVATE cxx_std_20)
             target_compile_definitions(DKRMemoryStability${revision}Tests PRIVATE DKR_MEMORY_TEST_REVISION=${revision})
             target_include_directories(
@@ -2868,6 +2873,15 @@ if(BUILD_TESTING)
     add_test(NAME DKRWidescreenPolicy COMMAND DKRWidescreenPolicyTests)
 
     if(DKR_RUNTIME_BUILD_RT64 AND TARGET DKRPortGame)
+        # The settings file through the real LoadSettings and SaveSettings; the
+        # host preset does not compile runtime_ui.cpp, so this needs the game.
+        add_test(
+            NAME DKRSettingsRoundTrip
+            COMMAND
+                "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/tests/settings_round_trip_tests.py"
+                "$<TARGET_FILE:DKRPortGame>" "${CMAKE_CURRENT_LIST_DIR}/../tests/fixtures/settings-round-trip"
+        )
+        set_tests_properties(DKRSettingsRoundTrip PROPERTIES LABELS "runtime" TIMEOUT 180)
         add_executable(DKRSplitScreenRT64Tests tests/split_screen_rt64_tests.cpp)
         target_include_directories(
             DKRSplitScreenRT64Tests
@@ -3348,6 +3362,9 @@ if(BUILD_TESTING)
     )
     dkr_guest_symbols(DKRStartupFlowGuestTests)
     add_test(NAME DKRStartupFlowGuest COMMAND DKRStartupFlowGuestTests)
+    add_executable(DKRRevisionAddressesCurrentTests tests/revision_addresses_current_tests.cpp)
+    target_include_directories(DKRRevisionAddressesCurrentTests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/src/game")
+    add_test(NAME DKRRevisionAddressesCurrent COMMAND DKRRevisionAddressesCurrentTests)
     # Explicit for the current tree, also compatible with main's centralized
     # assertion policy (which covers these new targets automatically).
     foreach(startup_test IN ITEMS DKRStartupFlowTests DKRStartupFlowGuestTests)

@@ -1,4 +1,5 @@
 #include "runtime_state.hpp"
+#include "../guest_call_context.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -140,7 +141,7 @@ bool RuntimeState::restore(std::uint8_t* rdram, std::span<const std::uint8_t> so
 }
 
 void repair_float_register_pointer(recomp_context& context) {
-    context.f_odd = context.mips3_float_mode != 0 ? &context.f1.u32l : &context.f0.u32h;
+    runtime::repair_float_odd_pointer(context);
 }
 
 } // namespace dkr::runtime::netplay

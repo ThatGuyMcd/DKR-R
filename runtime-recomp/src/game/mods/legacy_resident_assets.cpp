@@ -1,3 +1,4 @@
+#include "resident_assets_symbols.hpp"
 #include "legacy_resident_assets.hpp"
 #include "legacy_checkpoint.hpp"
 #include "legacy_audio_bank.hpp"
@@ -35,17 +36,13 @@ bool matches(View memory, std::uint32_t address, View expected) {
 }
 } // namespace
 ResidentAssetLayout resident_asset_layout(const std::string& revision) {
-    if (revision == "us.v77")
-        return {{0x80126320, 0x80126324, 0x80126348, 0x8011d620, 0x8011d638, 0x8011d63c, 0x80115cf8, 0x80115d0c},
-                {{{CacheKind::Texture, 0x80126330, 0x80126328},
-                  {CacheKind::Sprite, 0x80126358, 0x8012634c},
-                  {CacheKind::Model, 0x8011d62c, 0x8011d624}}}};
-    if (revision == "us.v80")
-        return {{0x801268c0, 0x801268c4, 0x801268e8, 0x8011dba0, 0x8011dbb8, 0x8011dbbc, 0x80116278, 0x8011628c},
-                {{{CacheKind::Texture, 0x801268d0, 0x801268c8},
-                  {CacheKind::Sprite, 0x801268f8, 0x801268ec},
-                  {CacheKind::Model, 0x8011dbac, 0x8011dba4}}}};
-    throw Error("Resident asset layout has no verified revision adapter.");
+    if (revision != "us.v77" && revision != "us.v80")
+        throw Error("Resident asset layout has no verified revision adapter.");
+    const auto& symbols = dkr::runtime::resident_assets_symbols::for_revision(revision == "us.v80");
+    return {symbols.tables,
+            {{{CacheKind::Texture, symbols.textures.count, symbols.textures.table},
+              {CacheKind::Sprite, symbols.sprites.count, symbols.sprites.table},
+              {CacheKind::Model, symbols.models.count, symbols.models.table}}}};
 }
 std::shared_ptr<const ResidentBank> ResidentBank::prepare(std::shared_ptr<const AssetBank> stock,
                                                           std::shared_ptr<const AssetBank> candidate, AssetBus& bus) {
