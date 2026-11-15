@@ -637,6 +637,10 @@
       "sha256": "0eb51bdf29fecc325a36acd97b91c6eb8d429d7930ad9294bb81072cc8691d32"
     },
     {
+      "path": "patches/rt64/staged/0006-render-stability-apple.patch",
+      "sha256": "468f54f25b14ddb3ab79bb4ee90f7a09444c2a1a1d68c170c716180e0ef401b5"
+    },
+    {
       "path": "patches/rt64/texture-layer-mip-cache.patch",
       "sha256": "78f925d234f30d66b35e8cf74de2b7f162f58b2ffb4fd4aa7baf7fe3000a0ad5"
     },
