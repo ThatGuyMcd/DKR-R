@@ -1,3 +1,7 @@
+#include "capture_symbols.hpp"
+#include "display_list_symbols.hpp"
+#include "guest_call_context.hpp"
+#include "memory_symbols.hpp"
 #include "custom_tracks.hpp"
 #if defined(DKR_REPLAY_QUALIFICATION) || defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
@@ -205,10 +209,9 @@ struct DisplayListGlobals {
 };
 
 DisplayListGlobals display_list_globals() {
-    if (dkr::runtime::revision_addresses::gSelectedRevision == dkr::runtime::rom::Revision::UsV80) {
-        return {0x800DD920U, 0x80123A8CU, 0x80123AA8U, 0x80121770U};
-    }
-    return {0x800DD3B0U, 0x8012350CU, 0x80123528U, 0x801211F0U};
+    const auto& symbols = dkr::runtime::display_list_symbols::for_revision(
+        dkr::runtime::revision_addresses::gSelectedRevision == dkr::runtime::rom::Revision::UsV80);
+    return {symbols.table, symbols.previous_players, symbols.current_commands, symbols.lists};
 }
 
 // A frame's budget with `players` viewports (0 is one player) for a level
@@ -318,11 +321,11 @@ static void publish_extended_table(std::uint8_t* rdram, recomp_context* context,
         return;
     }
 
-    recomp_context call = *context;
-    call.f_odd = call.mips3_float_mode ? &call.f1.u32l : &call.f0.u32h;
+    dkr::runtime::GuestCallContext guest(*context);
+    recomp_context& call = guest.context;
     call.r4 = static_cast<gpr>(extended.size() * sizeof(std::int32_t));
     call.r5 = static_cast<gpr>(kColourTagGrey);
-    payload->mempool_alloc_safe(rdram, &call);
+    payload->mempool_alloc_safe(rdram, guest.get());
     const auto allocated = static_cast<std::uint32_t>(call.r2);
     if (!addressable(allocated) || (allocated & 3U) || extended.size() > (kRdramEnd - allocated) / 4U) {
         return; // Out of pool: keep the retail table rather than fail the load.
@@ -333,9 +336,9 @@ static void publish_extended_table(std::uint8_t* rdram, recomp_context* context,
     }
     context->r2 = static_cast<gpr>(static_cast<std::int32_t>(allocated));
     if (payload->asset_release) {
-        call = *context;
+        guest.reset(*context);
         call.r4 = rdram_address(retail_address);
-        payload->asset_release(rdram, &call);
+        payload->asset_release(rdram, guest.get());
     }
 }
 
@@ -512,10 +515,10 @@ extern "C" void dkr_custom_tracks_auto_boot(std::uint8_t* rdram, recomp_context*
 
     namespace addresses = dkr::runtime::revision_addresses;
     const auto invoke = [&](dkr::runtime::RecompiledEntrypoint function, gpr argument = 0) {
-        recomp_context call = *context;
-        call.r4 = argument;
-        function(rdram, &call);
-        return call.r2;
+        dkr::runtime::GuestCallContext call(*context);
+        call->r4 = argument;
+        function(rdram, call.get());
+        return call->r2;
     };
     // Reproduce the nonvisual character/game-select setup skipped by auto boot.
     // Merely writing a player slot leaves Settings::racers zeroed (all Krunch).
@@ -536,11 +539,9 @@ extern "C" void dkr_custom_tracks_auto_boot(std::uint8_t* rdram, recomp_context*
     const bool rev_a = addresses::gSelectedRevision == dkr::runtime::rom::Revision::UsV80;
     const bool drumstick = invoke(payload->unlock_drumstick) != 0;
     const bool tt = invoke(payload->unlock_tt) != 0;
-    const std::uint32_t tables77[] = {0x800DFDD0U, 0x800DFE40U, 0x800DFEC0U, 0x800DFF40U};
-    const std::uint32_t tables80[] = {0x800E0350U, 0x800E03C0U, 0x800E0440U, 0x800E04C0U};
+    const auto& capture = dkr::runtime::capture_symbols::for_revision(rev_a);
     const unsigned table = unsigned(drumstick) | (unsigned(tt) << 1);
-    write_word(rdram, rev_a ? 0x8012696CU : 0x801263CCU,
-               static_cast<std::int32_t>((rev_a ? tables80 : tables77)[table]));
+    write_word(rdram, capture.select_data, static_cast<std::int32_t>(capture.tables[table]));
     MEM_B(0, rdram_address(addresses::CharacterIdSlots)) = kCharacterDiddy;
     invoke(payload->charselect_assign_ai, 1);
     invoke(payload->init_racer_headers);
@@ -550,7 +551,7 @@ extern "C" void dkr_custom_tracks_auto_boot(std::uint8_t* rdram, recomp_context*
     }
     std::fprintf(stderr, "\n");
     // mode_menu's direct-level result uses players minus one.
-    write_word(rdram, rev_a ? 0x80123A80U : 0x80123500U, 0);
+    write_word(rdram, capture.game_players, 0);
 
     context->r2 = static_cast<gpr>(kMenuResultStartLevel | level);
 }
@@ -570,9 +571,10 @@ static std::uint32_t grow_main_pool(std::uint8_t* rdram) {
     constexpr std::int32_t kSlotIndexLimit = 0x7FFF; // slot links are s16
     // gMemoryPools, verified against ver/symbols/symbol_addrs.us.v{77,80}.txt.
     // Pool 0 is the main pool; MemoryPool is {maxNumSlots, curNumSlots, slots, size}.
-    const std::uint32_t pool = dkr::runtime::revision_addresses::gSelectedRevision == dkr::runtime::rom::Revision::UsV80
-                                   ? 0x80123B00U
-                                   : 0x80123580U;
+    const std::uint32_t pool =
+        dkr::runtime::memory_symbols::for_revision(dkr::runtime::revision_addresses::gSelectedRevision ==
+                                                   dkr::runtime::rom::Revision::UsV80)
+            .pools;
     const std::int32_t max_slots = read_word(rdram, pool);
     const std::int32_t used_slots = read_word(rdram, pool + 4U);
     const auto slots = static_cast<std::uint32_t>(read_word(rdram, pool + 8U));
@@ -865,25 +867,26 @@ extern "C" void dkr_custom_tracks_prepare_vehicle(std::uint8_t* rdram, recomp_co
         !payload->set_level_default_vehicle) {
         return;
     }
-    recomp_context call = *context;
-    payload->leveltable_vehicle_default(rdram, &call);
+    dkr::runtime::GuestCallContext guest(*context);
+    recomp_context& call = guest.context;
+    payload->leveltable_vehicle_default(rdram, guest.get());
     const auto vehicle = static_cast<std::int32_t>(call.r2);
     auto selected = vehicle;
     // The addon's debug override may name a boss/special vehicle. Preserve it
     // as the load argument, but player-selection arrays index three vehicle
     // records and must remain within the authored normal vehicles for the AI.
     if (selected < 0 || selected >= 3) {
-        call = *context;
-        payload->leveltable_vehicle_usable(rdram, &call);
+        guest.reset(*context);
+        payload->leveltable_vehicle_usable(rdram, guest.get());
         const auto allowed = static_cast<std::uint32_t>(call.r2);
         selected = (allowed & 1U) ? 0 : (allowed & 2U) ? 1 : (allowed & 4U) ? 2 : 0;
     }
     for (int player = 0; player <= players_minus_one; ++player) {
         MEM_B(player, rdram_address(addresses::PlayerSelectVehicle)) = selected;
     }
-    call = *context;
+    guest.reset(*context);
     call.r4 = vehicle;
-    payload->set_level_default_vehicle(rdram, &call);
+    payload->set_level_default_vehicle(rdram, guest.get());
     context->r7 = static_cast<gpr>(vehicle);
     std::fprintf(stderr, "[track-lab] level=%d vehicle=%d selected=%d players=%d\n", level, vehicle, selected,
                  players_minus_one + 1);
