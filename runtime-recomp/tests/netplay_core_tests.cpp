@@ -11,6 +11,7 @@
 #include "revision_addresses.hpp"
 #include "rollback_ring.hpp"
 #include "session_transport.hpp"
+#include "state_cross_check.hpp"
 #include "authoritative_state_codec.hpp"
 
 #include <array>
@@ -39,9 +40,94 @@ dkr::runtime::netplay::CompatibilityManifest Manifest() {
     return manifest;
 }
 
+void StateCrossCheckTests() {
+    using namespace dkr::runtime::netplay;
+    using V = StateCrossCheck::Verdict;
+    constexpr std::uint64_t kEpoch = 92U, kA = 11U, kB = 22U;
+    StateMismatch mismatch{};
+    {
+        // Equal hashes in any arrival order verify the frame and free it.
+        StateCrossCheck check;
+        check.set_peers({kA, kB});
+        assert(check.report(kA, kEpoch, 30U, 7U) == V::Accepted);
+        assert(check.local(kEpoch, 30U, 7U) == V::Accepted);
+        assert(check.pending() == 1U);
+        assert(check.report(kB, kEpoch, 30U, 7U) == V::Accepted);
+        assert(check.pending() == 0U && check.verified_frames() == 1U);
+    }
+    {
+        // A differing report is a mismatch whichever side arrives first.
+        StateCrossCheck check;
+        check.set_peers({kA});
+        assert(check.local(kEpoch, 60U, 5U) == V::Accepted);
+        assert(check.report(kA, kEpoch, 60U, 6U, &mismatch) == V::Mismatch);
+        assert(mismatch.epoch == kEpoch && mismatch.frame == 60U && mismatch.peer == kA && mismatch.local == 5U &&
+               mismatch.remote == 6U);
+        StateCrossCheck late;
+        late.set_peers({kA});
+        assert(late.report(kA, kEpoch, 60U, 6U) == V::Accepted);
+        assert(late.local(kEpoch, 60U, 5U, &mismatch) == V::Mismatch);
+        assert(mismatch.local == 5U && mismatch.remote == 6U);
+    }
+    {
+        // Malformed, unexpected and conflicting reports change nothing.
+        StateCrossCheck check;
+        check.set_peers({kA});
+        assert(check.report(kA, kEpoch, 31U, 1U) == V::Rejected);  // off the cadence
+        assert(check.report(kA, kEpoch, 0U, 1U) == V::Rejected);   // frame 0
+        assert(check.report(kA, 0U, 30U, 1U) == V::Rejected);      // no epoch
+        assert(check.report(99U, kEpoch, 30U, 1U) == V::Rejected); // not a racer
+        assert(check.pending() == 0U);
+        assert(check.report(kA, kEpoch, 30U, 1U) == V::Accepted);
+        assert(check.report(kA, kEpoch, 30U, 1U) == V::Duplicate);
+        assert(check.report(kA, kEpoch, 30U, 2U) == V::Rejected); // conflicting repeat is ignored
+        assert(check.local(kEpoch, 30U, 1U) == V::Accepted);
+        assert(check.verified_frames() == 1U);
+    }
+    {
+        // Memory is bounded: a flood of distinct frames keeps `capacity` entries, and a
+        // report older than everything kept is refused.
+        StateCrossCheck check(4U);
+        check.set_peers({kA});
+        for (std::uint32_t frame = 30U; frame <= 30U * 1000U; frame += 30U)
+            assert(check.report(kA, kEpoch, frame, frame) == V::Accepted);
+        assert(check.pending() == 4U);
+        assert(check.report(kA, kEpoch, 30U, 30U) == V::Rejected);
+        assert(check.report(kA, kEpoch + 1U, 30U, 30U) == V::Accepted); // a newer epoch still fits
+        assert(check.pending() == 4U);
+    }
+    {
+        // A peer that never reports is named once, only for frames this peer sampled.
+        StateCrossCheck check(2U);
+        check.set_peers({kA, kB});
+        for (std::uint32_t frame = 30U; frame <= 150U; frame += 30U) {
+            assert(check.local(kEpoch, frame, frame) == V::Accepted);
+            assert(check.report(kA, kEpoch, frame, frame) == V::Accepted);
+        }
+        const auto silent = check.take_silent();
+        assert(silent.size() == 1U && silent.front() == kB);
+        assert(check.take_silent().empty());
+        assert(check.verified_frames() == 0U);
+        // A stray report for a frame this peer never sampled names nobody.
+        StateCrossCheck stray(2U);
+        stray.set_peers({kA, kB});
+        for (std::uint32_t frame = 30U; frame <= 150U; frame += 30U)
+            assert(stray.report(kA, kEpoch, frame, frame) == V::Accepted);
+        assert(stray.take_silent().empty());
+    }
+    {
+        // Only a launch in the architecture-free form counts as spanning architectures.
+        auto own = Manifest();
+        assert(lobby_spans_architectures(manifest_class_hash(own), own));
+        assert(!lobby_spans_architectures(manifest_hash(own), own));
+        assert(!lobby_spans_architectures(0U, own));
+    }
+}
+
 } // namespace
 
 int main() {
+    StateCrossCheckTests();
     using namespace dkr::runtime::netplay;
 
     // Post-race rendering hitches must not advance the host's transition
