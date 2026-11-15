@@ -42,7 +42,7 @@ class RepositoryRequestTests(unittest.TestCase):
         for spec in sorted(gen_guest_symbols.SPECS.glob("*.toml")):
             request = gen_guest_symbols.load(spec)
             with self.subTest(header=request.header):
-                if request.table == "decomp" and not DECOMP.is_dir():
+                if (request.table == "decomp" or request.decomp) and not DECOMP.is_dir():
                     self.skipTest("needs extern/dkr-decomp")
                 text = gen_guest_symbols.render(request, ROOT)
                 self.assertEqual(hashlib.sha256(text.encode()).hexdigest()[:8], GOLDEN[request.header])
