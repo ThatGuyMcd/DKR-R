@@ -181,7 +181,7 @@
     "scripts/compose_payloads.py": "c662355843564ccd40759cb245de158888abae80baf59c7f309834897626ba68",
     "scripts/gen_guest_symbols.py": "52ac0b14f1893278011f04267858b6f40140e79e8a96e18a552e70f0c3315fbc",
     "scripts/generate_recomp_config.py": "444874a216c9011e6f196aa0a1269594517afcdea5fb3763196e092d99bfc473",
-    "scripts/generate_replay_probe.py": "8012dba2e0627a8091325e0ae7fe5f2a20fb5c805c86b39d665cf94ee2270a58",
+    "scripts/generate_replay_probe.py": "3bc36e17f9c0d822091bd9d9a6fe440973dd4d23c897343665a2d737ef3b5036",
     "scripts/generate_revision_policy.py": "bafbefad41542e00b6c5ec13b02acde69dda7f48e34025f46d92d028da6427b9",
     "scripts/guest_hooks.py": "4058af2139c1211c2db79c8748734c2c1f231ec6168e964166d90c83bb48c6cc",
     "scripts/host_task_policy.py": "aa28c9bcd8110d0ef16b2f6dfde7ec51b8767578f46d3bc5371f197efb016f78",
