@@ -128,6 +128,8 @@ target_include_directories(
         "${DKR_DEPENDENCIES_DIR}/n64-modern-runtime/thirdparty"
 )
 target_compile_definitions(DKRLegacyModCore PRIVATE NOMINMAX)
+include("${CMAKE_CURRENT_LIST_DIR}/GuestSymbols.cmake")
+dkr_guest_symbols(DKRLegacyModCore)
 target_link_libraries(DKRLegacyModCore PRIVATE DKRLegacyDelta PUBLIC DKRMusicSequenceValidator)
 
 # Reuse the exact pinned compression and hashing code already shipped with
