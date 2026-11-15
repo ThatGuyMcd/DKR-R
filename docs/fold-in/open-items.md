@@ -302,15 +302,15 @@ What the deleted release-prep scripts did, for B9b:
 
 ## For Phase C
 
-- Rollback on Apple: `DKR_EXPERIMENTAL_RACE_TEST=ON` now configures and builds
-  on desktop macOS (arm64; enhanced water stays off, so
-  `0006-render-stability-apple.patch` replaces `0001`). The headless
-  `--self-test-owned-host/-join` races pass locally for both revisions, but
-  `release-macos` still builds without it, the standalone
-  `DKRExperimentalRaceTest` frontend stays Windows/Linux only, and no
-  Mac<->Windows play has been tried. A prepared `extern/` needs the rt64
-  `0021` and plume `0003` patches (runtime MSL shaders) without a Metal
-  toolchain: configure with `-DDKR_RT64_PRECOMPILE_MSL=OFF`.
+- Rollback on Apple: `release-macos` and `Build-macOS.sh` build with
+  `DKR_EXPERIMENTAL_RACE_TEST=ON` (arm64; enhanced water stays off, so
+  `0006-render-stability-apple.patch` replaces `0001`), and the packaged app
+  has raced a Windows x86_64 build with every state hash equal
+  (`docs/CROSS-ARCHITECTURE.md`). Still open: the standalone
+  `DKRExperimentalRaceTest` frontend stays Windows/Linux only, an x86_64 Mac
+  build has not raced anything, and iOS is excluded. A prepared `extern/`
+  needs the rt64 `0021` and plume `0003` patches (runtime MSL shaders) without
+  a Metal toolchain: configure with `-DDKR_RT64_PRECOMPILE_MSL=OFF`.
 
 - `atomic_snapshot.hpp`'s libc++ branch uses the free `std::atomic_load`/
   `std::atomic_store` on `shared_ptr`, deprecated in C++20 and removed in

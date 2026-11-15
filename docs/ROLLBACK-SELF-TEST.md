@@ -1,9 +1,9 @@
 # Rollback self-test
 
-A build with `DKR_EXPERIMENTAL_RACE_TEST` (every release preset except macOS
-has it) can run a whole online race by itself: two to four copies of
-`DKR-R-Runtime` on one machine meet in a lobby, start a rollback race and
-drive it for a few seconds, then exit. It needs a ROM and nothing else: no
+A build with `DKR_EXPERIMENTAL_RACE_TEST` (every release preset has it) can
+run a whole online race by itself: two to four copies of `DKR-R-Runtime` on one
+machine meet in a lobby, start a rollback race and drive it for a few seconds,
+then exit. It needs a ROM and nothing else: no
 account, no saved profile, nobody at the controls.
 
 It is the quickest way to check that two builds still play together, and to
@@ -92,11 +92,14 @@ race is whatever the character, vehicle and track cursors start on.
 
 ## Comparing state between peers
 
-The game does not cross-check simulation state between peers during a race.
-Inputs are exchanged, and state is compared only when the checkpoint is
-admitted and at scene boundaries (the menu-to-race hand-over). A mid-race
-divergence would not stop the session or log a failure, so a clean exit code
-says little about whether two peers still agree.
+A lobby whose racers are all on one CPU architecture does not cross-check
+simulation state during a race. Inputs are exchanged, and state is compared
+only when the checkpoint is admitted and at scene boundaries (the menu-to-race
+hand-over). A mid-race divergence there would not stop the session or log a
+failure, so a clean exit code says little about whether two peers still agree.
+A lobby that spans architectures does check itself and stops on a mismatch
+(`docs/CROSS-ARCHITECTURE.md`, "Live state check"); `DKR_OWNED_CHECK_VERIFY=1`
+turns the same check on for any self-test.
 
 To check it, every peer of a self-test run logs the hash of its confirmed
 state at a fixed cadence (every 30 confirmed frames, `DKR_OWNED_CHECK_STATE_EVERY`):
