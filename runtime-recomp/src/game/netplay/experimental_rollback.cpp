@@ -284,7 +284,8 @@ bool Driver::confirm() {
         // cross-architecture check read the same value, hashed once.
         const auto log_every = g_check_state_every.load(std::memory_order_relaxed);
         const bool log_due = log_every != 0U && statistics_.confirmed_frames % log_every == 0U;
-        const bool sample_due = state_samples_on_ && statistics_.confirmed_frames % kStateCheckEvery == 0U;
+        const std::uint32_t sample_frame = state_sample_base_ + statistics_.confirmed_frames;
+        const bool sample_due = state_samples_on_ && sample_frame % kStateCheckEvery == 0U;
         if (log_due || sample_due) {
             // The load reuses scratch_, which a pending restore keeps staged.
             prepared_restore_.reset();
@@ -301,7 +302,7 @@ bool Driver::confirm() {
                 if (sample_due) {
                     if (state_samples_.size() >= kStateSamples)
                         state_samples_.pop_front();
-                    state_samples_.push_back({configuration_.epoch, statistics_.confirmed_frames, saved_hash});
+                    state_samples_.push_back({configuration_.epoch, sample_frame, saved_hash});
                 }
             }
         }

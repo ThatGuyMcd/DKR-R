@@ -403,7 +403,7 @@ struct PartyRuntime::Impl {
         cross.set_peers(racer_peers());
         ex::StateSample sample;
         while (driver->take_state_sample(sample)) {
-            const auto frame = base + sample.frame;
+            const auto frame = sample.frame;
             auto hash = sample.hash;
             if (const auto at = ex::check_corrupt_state_at(); at != 0U && !state_corrupted && frame >= at) {
                 state_corrupted = true;
@@ -549,7 +549,7 @@ struct PartyRuntime::Impl {
             std::string e;
             if (!driver->start({at.epoch, launch.player_count, launch.rollback_window, budget}, e))
                 throw std::runtime_error(e);
-            driver->enable_state_samples(state_check);
+            driver->enable_state_samples(state_check, base);
             cross.set_peers(racer_peers());
         }
         next_tick = Clock::now();

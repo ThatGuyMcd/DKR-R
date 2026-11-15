@@ -21,6 +21,7 @@
 #include "authoritative_state_codec.hpp"
 
 #include "failure_recorder.hpp"
+#include "state_cross_check.hpp"
 #include "netplay_pacing_policy.hpp"
 
 #include "authoritative_state.hpp"
@@ -7224,15 +7225,25 @@ void DirectSession::handle_join_request(const PeerAddress& source, std::span<con
         return;
     }
     // Remembered so the launch hash can tell a lobby that spans architectures
-    // from one that does not. Bounded: an id is dropped when it returns on the
-    // host's architecture, and the set is emptied before it can grow large.
+    // from one that does not. Ids of anyone who has left (leave, kick, timeout,
+    // a lobby reset) are pruned here, so the set follows the lobby instead of
+    // growing; nobody present is ever dropped.
+    {
+        std::set<std::uint64_t> present{packet_sender};
+        for (const auto& m : party->party.snapshot().members)
+            present.insert(m.id);
+        for (const PeerRecord& peer : peers_)
+            if (peer.active)
+                present.insert(peer.sender_id);
+        for (const PendingRecord& record : pending_joins_)
+            if (record.active)
+                present.insert(record.sender_id);
+        prune_other_architecture_senders(other_architecture_senders_, present);
+    }
     if (hello.manifest.architecture == manifest_.architecture)
         other_architecture_senders_.erase(packet_sender);
-    else {
-        if (other_architecture_senders_.size() >= 64U)
-            other_architecture_senders_.clear();
+    else
         other_architecture_senders_.insert(packet_sender);
-    }
     PendingRecord* pending = pending_by_sender(packet_sender);
     if (pending && pending->mods_approved &&
         (!(pending->address == source) || pending->key != peer_key || pending->client_public != client_public))

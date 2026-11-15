@@ -11,6 +11,7 @@
 #include <map>
 #include <optional>
 #include <set>
+#include <unordered_set>
 #include <vector>
 
 namespace dkr::runtime::netplay {
@@ -21,6 +22,15 @@ inline constexpr std::uint32_t kStateCheckEvery = 30U;
 // does when a peer from another architecture is in the lobby.
 inline bool lobby_spans_architectures(std::uint64_t launch_hash, const CompatibilityManifest& own) {
     return launch_hash == manifest_class_hash(own) && launch_hash != manifest_hash(own);
+}
+
+// The host remembers which admitted senders are on another architecture so it can
+// pick the launch hash. Keep only the ones still in the lobby (members, peers or
+// pending joins), so the set cannot grow with joins and leaves and never loses a
+// peer that is present.
+inline void prune_other_architecture_senders(std::unordered_set<std::uint64_t>& senders,
+                                             const std::set<std::uint64_t>& present) {
+    std::erase_if(senders, [&](std::uint64_t id) { return !present.contains(id); });
 }
 
 struct StateMismatch {

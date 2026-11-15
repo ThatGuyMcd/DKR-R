@@ -127,7 +127,7 @@ std::uint32_t check_corrupt_state_at();
 // confirmed frames), saved with the retained checkpoint and not hashed again.
 struct StateSample {
     std::uint64_t epoch = 0U;
-    std::uint32_t frame = 0U;
+    std::uint32_t frame = 0U; // absolute: the driver's start frame plus confirmed frames
     std::uint64_t hash = 0U;
 };
 
@@ -182,9 +182,12 @@ class Driver final {
     const Statistics& statistics() const {
         return statistics_;
     }
-    // Sampling is off until asked for, and holds at most kStateSamples.
-    void enable_state_samples(bool enabled) {
+    // Sampling is off until asked for, and holds at most kStateSamples. `base` is the
+    // frame this driver started at, so samples land on the same absolute frames
+    // (multiples of kStateCheckEvery) for a racer that joined mid-epoch.
+    void enable_state_samples(bool enabled, std::uint32_t base = 0U) {
         state_samples_on_ = enabled;
+        state_sample_base_ = base;
         if (!enabled)
             state_samples_.clear();
     }
@@ -258,6 +261,7 @@ class Driver final {
     std::optional<std::uint32_t> prepared_restore_;
     static constexpr std::size_t kStateSamples = 16U;
     bool state_samples_on_ = false;
+    std::uint32_t state_sample_base_ = 0U;
     std::deque<StateSample> state_samples_;
     Statistics statistics_{};
     std::uint32_t dirty_frame_ = UINT32_MAX;

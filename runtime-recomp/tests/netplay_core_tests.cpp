@@ -20,6 +20,7 @@
 #include <cstring>
 #include <cstdio>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -114,6 +115,14 @@ void StateCrossCheckTests() {
         for (std::uint32_t frame = 30U; frame <= 150U; frame += 30U)
             assert(stray.report(kA, kEpoch, frame, frame) == V::Accepted);
         assert(stray.take_silent().empty());
+    }
+    {
+        // The other-architecture set follows the lobby: leavers go, present peers stay.
+        std::unordered_set<std::uint64_t> senders{1U, 2U, 3U};
+        prune_other_architecture_senders(senders, {2U, 3U, 9U});
+        assert(senders.size() == 2U && senders.contains(2U) && senders.contains(3U));
+        prune_other_architecture_senders(senders, {});
+        assert(senders.empty());
     }
     {
         // Only a launch in the architecture-free form counts as spanning architectures.

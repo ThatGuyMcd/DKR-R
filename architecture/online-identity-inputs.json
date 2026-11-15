@@ -92,8 +92,8 @@
     "runtime-recomp/src/game/netplay/experimental_pump.cpp": "6bda29d224d5030344475a8127b9061d4801e125a5f2c1dde99d86748e716130",
     "runtime-recomp/src/game/netplay/experimental_pump.hpp": "cc0854af90a8bd12005b1dc37f76d8dfa25a6dab9ce2cf3ab56bdccfccbdebaa",
     "runtime-recomp/src/game/netplay/experimental_race_frontend.cpp": "6223a033bcbbc51417d850e6d1acb359d2d987b172daf32de28b615e44228b61",
-    "runtime-recomp/src/game/netplay/experimental_rollback.cpp": "0e69eb2b46298c35a9134cbf1a22e3b53876ed03f506c79ca70402708a3e3d51",
-    "runtime-recomp/src/game/netplay/experimental_rollback.hpp": "d262514c1acdb6c4c10e71fc00fcf2b040ec2436ef42ee713311e85459925dc6",
+    "runtime-recomp/src/game/netplay/experimental_rollback.cpp": "b429eb1fc93a3e2b0454790cdec3c81f8ed29572f57cb4b56abf0e78c96ca738",
+    "runtime-recomp/src/game/netplay/experimental_rollback.hpp": "23656d21cb5cde5cd336e69e9a7c9569799b06756f70bbde15c8078bef4809fe",
     "runtime-recomp/src/game/netplay/experimental_runtime.cpp": "a7af4efe3160b72e8613050149f6a9e14a181923332fa1146b3666b0fe80a063",
     "runtime-recomp/src/game/netplay/experimental_runtime.hpp": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",
     "runtime-recomp/src/game/netplay/experimental_runtime_admission.hpp": "6e2e1b60086bebaccdb50089ea5dce8c40b572fab6912b2562acc7e81211f527",
@@ -106,7 +106,7 @@
     "runtime-recomp/src/game/netplay/runtime_state.hpp": "9d54de461b5220b246763d5f0b044cfc7ed845da4c8ad1ba521eb6f3cb905b07",
     "runtime-recomp/src/game/netplay/setup_policy.hpp": "c2630dbc6a3950e947d0ce380d1be42c71568a864bb7dbef42703df5f1cf31fc",
     "runtime-recomp/src/game/party_release.hpp": "0f364dfe23f991223547679858ca894056974d891040527a2c6e0ea6065e3676",
-    "runtime-recomp/src/game/party_runtime.cpp": "040bb40dc0ef979e709157fbcac4002e4a98edf50d46aa91df58df61ec08b436",
+    "runtime-recomp/src/game/party_runtime.cpp": "0eb45b3483dabebd0e0ae6b98e6fed67ae8593dd5bfdaa40ed899db38893a8fc",
     "runtime-recomp/src/game/party_runtime.hpp": "f71d5b873f71fd24000c43833171967fa40860468f2ee6f50367ac1c1c60b404",
     "runtime-recomp/src/game/runtime_save_routing.cpp": "837917b9ede8d0f9cadd86edaa325da50c7e88a6c34242758f18228112737890",
     "runtime-recomp/src/game/runtime_save_routing.hpp": "cb3ae802050f29e38def0d42c60c01345be2cc46a515a95e9c50d49a06cf6879",
@@ -189,6 +189,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Live state cross-check only runs when the host launched with the architecture-free hash (a peer from another architecture in the lobby) or a self-test forces it; both need builds that have it. Message types are appended and ignored by older builds. Single-architecture lobbies send and simulate exactly as before."
+    "reason": "Only affects lobbies launched with the architecture-free hash: the host prunes its other-architecture sender set to the lobby, and sampled frames use absolute numbering. Single-architecture lobbies send and simulate exactly as before."
   }
 }
