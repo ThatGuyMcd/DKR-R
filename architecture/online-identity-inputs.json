@@ -92,8 +92,8 @@
     "runtime-recomp/src/game/netplay/experimental_pump.cpp": "6bda29d224d5030344475a8127b9061d4801e125a5f2c1dde99d86748e716130",
     "runtime-recomp/src/game/netplay/experimental_pump.hpp": "cc0854af90a8bd12005b1dc37f76d8dfa25a6dab9ce2cf3ab56bdccfccbdebaa",
     "runtime-recomp/src/game/netplay/experimental_race_frontend.cpp": "6223a033bcbbc51417d850e6d1acb359d2d987b172daf32de28b615e44228b61",
-    "runtime-recomp/src/game/netplay/experimental_rollback.cpp": "a6ea5fc63d1556d631a270ad1199484c57fc8929dc7d8de2025e8f9839bd889b",
-    "runtime-recomp/src/game/netplay/experimental_rollback.hpp": "9ef96ed2af7f60cea91bcf56164cfc0ff97e9a93d7b848c68091a44fe2b636d8",
+    "runtime-recomp/src/game/netplay/experimental_rollback.cpp": "2388855af494a2d0c6ba697b66d6af65dd7d043079f60d52d5d0a0fa486dfd7f",
+    "runtime-recomp/src/game/netplay/experimental_rollback.hpp": "a390fab52ad5fb73d079f258ebd18438e4e12777bbd455858ac85c3c44271d7f",
     "runtime-recomp/src/game/netplay/experimental_runtime.cpp": "fead1b921b039ca3817861ad32fc1418c1e9606f37319cdba6c96963d5ea3b53",
     "runtime-recomp/src/game/netplay/experimental_runtime.hpp": "e2bd584098e45af7e67b6198f650d18a204d3b57be6bbe3214639e3abe73598c",
     "runtime-recomp/src/game/netplay/experimental_runtime_admission.hpp": "6e2e1b60086bebaccdb50089ea5dce8c40b572fab6912b2562acc7e81211f527",
@@ -189,6 +189,6 @@
   },
   "last_update": {
     "identity_changed": false,
-    "reason": "Replay probe test tooling only; no simulation or wire change"
+    "reason": "Self-test-only [check][state] log line, off unless --self-test-owned-* sets it; reads a retained checkpoint, sends nothing, simulation and exchanged hashes unchanged"
   }
 }

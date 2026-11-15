@@ -6,10 +6,21 @@
 #include "experimental_performance.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <exception>
 #include <limits>
 
 namespace dkr::runtime::netplay::experimental {
+
+namespace {
+std::atomic<std::uint32_t> g_check_state_every{0U};
+} // namespace
+
+void set_check_state_log_interval(std::uint32_t every) {
+    g_check_state_every.store(every, std::memory_order_relaxed);
+}
 
 Driver::Driver(Simulation& simulation) : simulation_(simulation) {}
 
@@ -253,6 +264,22 @@ bool Driver::confirm() {
             frame->actual_command.words, frame->output.scene_boundary);
         confirmed_inputs_ = frame->actual;
         ++statistics_.confirmed_frames;
+        // Self-test diagnostic: the hash saved with the confirmed frame's retained
+        // checkpoint, so two peers' logs can be diffed (scripts/compare_state_hashes.py).
+        if (const auto every = g_check_state_every.load(std::memory_order_relaxed);
+            every != 0U && statistics_.confirmed_frames % every == 0U) {
+            // The load reuses scratch_, which a pending restore keeps staged.
+            prepared_restore_.reset();
+            const auto began = std::chrono::steady_clock::now();
+            std::uint64_t saved_hash = 0;
+            if (checkpoints_->load(statistics_.confirmed_frames, scratch_, &saved_hash)) {
+                const auto micros =
+                    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - began);
+                std::fprintf(stderr, "[check][state] epoch=%llu frame=%u hash=%016llX us=%lld\n",
+                             static_cast<unsigned long long>(configuration_.epoch), statistics_.confirmed_frames,
+                             static_cast<unsigned long long>(saved_hash), static_cast<long long>(micros.count()));
+            }
+        }
         frame->output.effects.clear();
         if (frame->output.scene_boundary) {
             committed_boundary_ = true;
