@@ -1,3 +1,4 @@
+#include "guest_call_context.hpp"
 #include "runtime_audio_controls.hpp"
 #include "audio_mix_policy.hpp"
 #include "custom_music.hpp"
@@ -74,9 +75,9 @@ extern "C" void dkr_scale_sequence_player_volume(std::uint8_t* rdram, recomp_con
                : authored;
     // A custom track's music file takes the volume its silent carrier song
     // would have had - every fade and slider included - in any presentation.
-    recomp_context frozen = *context;
-    frozen.r5 = scaled;
-    if (dkr::runtime::legacy::frozen_music_volume(rdram, &frozen) ||
+    dkr::runtime::GuestCallContext frozen(*context);
+    frozen->r5 = scaled;
+    if (dkr::runtime::legacy::frozen_music_volume(rdram, frozen.get()) ||
         (!dkr::runtime::legacy::frozen_online_resources() &&
          dkr::runtime::custom_music::intercept_music_volume(rdram, static_cast<std::int16_t>(scaled)))) {
         context->r5 = 0;
@@ -92,9 +93,9 @@ extern "C" void dkr_audio_mix_tick(std::uint8_t* rdram, recomp_context* context)
     if (!dkr::runtime::enhancements::modern_presentation_enabled()) {
         const float previous = g_music_applied.exchange(1.0F, std::memory_order_acq_rel);
         if (previous != 1.0F) {
-            recomp_context call = *context;
-            call.r4 = MEM_BU(0, RdramAddress(kMusicBaseVolumeAddress));
-            dkr::runtime::invoke_music_volume_set(rdram, &call);
+            dkr::runtime::GuestCallContext call(*context);
+            call->r4 = MEM_BU(0, RdramAddress(kMusicBaseVolumeAddress));
+            dkr::runtime::invoke_music_volume_set(rdram, call.get());
         }
         return;
     }
@@ -109,9 +110,9 @@ extern "C" void dkr_audio_mix_tick(std::uint8_t* rdram, recomp_context* context)
     // is ramping. music_volume_set recomputes the game's fade/slider product;
     // the alCSP boundary hook above then applies our final attenuation without
     // corrupting gMusicBaseVolume or waiting for the next map.
-    recomp_context call = *context;
-    call.r4 = MEM_BU(0, RdramAddress(kMusicBaseVolumeAddress));
-    dkr::runtime::invoke_music_volume_set(rdram, &call);
+    dkr::runtime::GuestCallContext call(*context);
+    call->r4 = MEM_BU(0, RdramAddress(kMusicBaseVolumeAddress));
+    dkr::runtime::invoke_music_volume_set(rdram, call.get());
 }
 
 extern "C" void dkr_enter_vehicle_audio_scope(std::uint8_t*, recomp_context*) {
