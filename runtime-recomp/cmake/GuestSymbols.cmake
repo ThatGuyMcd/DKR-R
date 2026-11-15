@@ -4,10 +4,11 @@
 # inputs.
 #
 #   dkr_guest_symbols(<target>)   generate and put them on the target's include path
+#   dkr_guest_symbols_everywhere()   the same for every target created afterwards
 include_guard(GLOBAL)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-function(dkr_guest_symbols target)
+macro(_dkr_generate_guest_symbols)
     set(out "${CMAKE_BINARY_DIR}/generated/symbols")
     set(script "${DKRPORT_ROOT}/scripts/gen_guest_symbols.py")
     file(GLOB requests CONFIGURE_DEPENDS "${DKRPORT_ROOT}/runtime-recomp/symbols/*.toml")
@@ -29,5 +30,17 @@ function(dkr_guest_symbols target)
     if(NOT status EQUAL 0)
         message(FATAL_ERROR "Guest symbol headers could not be generated; see above")
     endif()
+endmacro()
+
+function(dkr_guest_symbols target)
+    _dkr_generate_guest_symbols()
     target_include_directories(${target} PRIVATE "${out}")
+endfunction()
+
+# For headers every target reaches (revision_addresses.hpp includes the
+# generated revision_symbols.hpp): put the generated directory on the include
+# path of every target created after this call in the current directory.
+function(dkr_guest_symbols_everywhere)
+    _dkr_generate_guest_symbols()
+    include_directories("${out}")
 endfunction()

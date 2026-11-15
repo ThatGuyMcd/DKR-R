@@ -60,6 +60,8 @@ include(CTest)
 include(cmake/ProjectTests.cmake)
 include(cmake/SourceRoots.cmake)
 include(cmake/SimulationFlags.cmake)
+include(cmake/GuestSymbols.cmake)
+dkr_guest_symbols_everywhere()
 include(cmake/Localisation.cmake)
 dkr_add_localisation()
 
