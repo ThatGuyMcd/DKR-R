@@ -22,6 +22,42 @@ endmacro()
 # Compared as real paths: Windows callers pass backslashed paths.
 file(TO_CMAKE_PATH "${DKR_PREPARED_DIR}" dkr_prepared_dir)
 get_filename_component(dkr_prepared_dir "${dkr_prepared_dir}" REALPATH)
+# Defaults an earlier configure took from a prepared directory go with it: a
+# payload named since then, or another DKR_PREPARED_DIR, must not be built
+# against the owned engines and kernels of the bundle it replaced. Paths the
+# caller pointed anywhere else are theirs and stay.
+set(dkr_prepared_dependents
+    DKR_EXPERIMENTAL_OWNED_GENERATED
+    DKR_EXPERIMENTAL_OWNED_GENERATED_V80
+    DKR_VISUAL_MODEL_GENERATED_V77
+    DKR_VISUAL_MODEL_GENERATED_V80
+    DKR_CAMERA_KERNEL_V77
+    DKR_CAMERA_KERNEL_V80
+    DKR_MEMORY_FIXTURE_ROOT
+)
+function(dkr_prepared_release directory)
+    foreach(variable IN LISTS ARGN)
+        set(value "$CACHE{${variable}}")
+        if(value STREQUAL "")
+            continue()
+        endif()
+        file(TO_CMAKE_PATH "${value}" value)
+        get_filename_component(value "${value}" REALPATH)
+        string(FIND "${value}/" "${directory}/" position)
+        if(position EQUAL 0)
+            set_property(CACHE ${variable} PROPERTY VALUE "")
+        endif()
+    endforeach()
+endfunction()
+set(dkr_prepared_applied "$CACHE{DKR_PREPARED_DIR_APPLIED}")
+if(NOT dkr_prepared_applied STREQUAL "" AND NOT dkr_prepared_applied STREQUAL dkr_prepared_dir)
+    dkr_prepared_release(
+        "${dkr_prepared_applied}"
+        ${dkr_prepared_dependents}
+        DKR_GENERATED_SOURCE_V77
+        DKR_GENERATED_SOURCE_V80
+    )
+endif()
 set(dkr_foreign_payload OFF)
 foreach(dkr_revision IN ITEMS 77 80)
     set(dkr_named_payload "$CACHE{DKR_GENERATED_SOURCE_V${dkr_revision}}")
@@ -33,6 +69,10 @@ foreach(dkr_revision IN ITEMS 77 80)
         endif()
     endif()
 endforeach()
+if(dkr_foreign_payload)
+    dkr_prepared_release("${dkr_prepared_dir}" ${dkr_prepared_dependents})
+endif()
+set(DKR_PREPARED_DIR_APPLIED "" CACHE INTERNAL "Prepared directory the cached input defaults came from")
 if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json" AND dkr_foreign_payload)
     message(
         WARNING
@@ -43,6 +83,7 @@ if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json" AN
 endif()
 if(DKR_RUNTIME_BUILD_GENERATED AND EXISTS "${dkr_prepared_dir}/prepared.json" AND NOT dkr_foreign_payload)
     set(DKR_PREPARED_DIR "${dkr_prepared_dir}")
+    set(DKR_PREPARED_DIR_APPLIED "${dkr_prepared_dir}" CACHE INTERNAL "")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${DKR_PREPARED_DIR}/prepared.json")
     dkr_prepared_default(
         DKR_GENERATED_SOURCE_V77
