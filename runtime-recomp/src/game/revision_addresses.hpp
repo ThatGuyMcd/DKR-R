@@ -3,6 +3,7 @@
 #include "revision_symbols.hpp"
 #include "rom_revision.hpp"
 
+#include <atomic>
 #include <cstdint>
 
 // These are decomp symbol addresses, not guessed offsets. The selected ROM
@@ -14,6 +15,23 @@ namespace dkr::runtime::revision_addresses {
 // AddressTable and the immutable kUsV77 / kUsV80 tables are generated from
 // runtime-recomp/symbols/revision_addresses.toml (scripts/gen_guest_symbols.py).
 
+// Threading contract.
+//
+// select() is a startup step. The shipped app calls it once, from
+// RegisterGame on the main thread, before the CPU payload's sections are
+// registered and before any guest, render or audio thread exists. The
+// experimental race frontend and the host tests call it on their own single
+// thread before starting anything that reads. Nothing switches revision while
+// the game runs.
+//
+// current() is the one safe read: it goes through a single atomic pointer to
+// an immutable table, so a reader sees either the whole old table or the whole
+// new one, never a mixture. select() publishes it last, with release ordering,
+// so a thread that acquires the new pointer also sees the aliases below.
+// The aliases and gSelectedRevision are plain variables written field by field;
+// they are only safe to read when no select() can run at the same time, which
+// the startup-only rule above guarantees.
+inline std::atomic<const AddressTable*> gCurrentTable{&kUsV77};
 inline rom::Revision gSelectedRevision = rom::Revision::UsV77;
 inline std::uint32_t WaveTexUVMaskX = kUsV77.WaveTexUVMaskX;
 inline std::uint32_t WaveTexUVMaskY = kUsV77.WaveTexUVMaskY;
@@ -120,6 +138,12 @@ inline std::uint32_t SequenceSoundTable = kUsV77.SequenceSoundTable;
 
 inline const AddressTable& table_for(const rom::Revision revision) {
     return revision == rom::Revision::UsV80 ? kUsV80 : kUsV77;
+}
+
+// The table for the selected revision. Prefer this over the aliases below in new
+// code; the aliases are being migrated onto it. See the threading contract above.
+inline const AddressTable& current() {
+    return *gCurrentTable.load(std::memory_order_acquire);
 }
 
 inline bool select(const rom::Revision revision) {
@@ -231,6 +255,7 @@ inline bool select(const rom::Revision revision) {
     SequenceLengths = table.SequenceLengths;
     SequenceSoundTable = table.SequenceSoundTable;
     gSelectedRevision = revision;
+    gCurrentTable.store(&table, std::memory_order_release);
     return true;
 }
 
