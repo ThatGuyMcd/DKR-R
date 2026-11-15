@@ -21,7 +21,8 @@ scripts\Test-IntegratedRollback.ps1 `
     -TestRoot C:\temp\rollback-check-1
 ```
 
-`-TestRoot` must not exist yet. `-Players` is 2 to 4, `-Seconds` 20 to 180
+The script is Windows PowerShell. On macOS and Linux start the peers yourself,
+below. `-TestRoot` must not exist yet. `-Players` is 2 to 4, `-Seconds` 20 to 180
 (default 45). `-Presentation Modern`, `-TargetFps` and `-GraphicsApi Vulkan`
 choose what is drawn.
 
@@ -42,6 +43,24 @@ $invite = 'C:\temp\check\invite.txt'
     --self-test-owned-join $invite --self-test-owned-players 2 --timeout 60
 ```
 
+The same thing in a POSIX shell. The runtime is the built executable
+(`bin/Release/DKR-R` in a macOS build tree; the Windows package has
+`libexec\dkr-r\DKR-R-Runtime.exe`):
+
+```sh
+rom=/path/to/dkr-us-v77.z64
+invite=/tmp/check/invite.txt
+runtime=/path/to/DKR-R
+mkdir -p /tmp/check   # the profile folders below must not exist yet
+
+"$runtime" --rom "$rom" --config /tmp/check/host --self-test-owned-host "$invite" \
+    --self-test-owned-players 2 --timeout 60 &
+sleep 5   # the joiner waits for the invitation file anyway
+"$runtime" --rom "$rom" --config /tmp/check/join --self-test-owned-join "$invite" \
+    --self-test-owned-players 2 --timeout 60
+wait
+```
+
 The rules it enforces before touching anything:
 
 - `--config` is an absolute path to a folder that does not exist. It never
@@ -51,6 +70,16 @@ The rules it enforces before touching anything:
 - `--timeout` is 20 to 180 seconds, `--self-test-owned-players` 2 to 4.
 
 Both peers must be given the same ROM revision.
+
+### Two machines
+
+The invitation is a Quick Join code, so the peers do not have to share a
+disk. Start the host, wait for it to write the invitation file, copy that
+file (it is just the code) to the other machine at an absolute path, and start
+the joiner there with `--self-test-owned-join <that path>`. Both machines need
+internet: Quick Join meets through `wss://0.peerjs.com` and a Google STUN
+server, and there is no relay, so a strict NAT between them can fail. Run it
+once with each machine hosting.
 
 ## Reading the result
 
@@ -64,7 +93,8 @@ on the host:
 
 and on every peer `[rollback][render] epoch=.. frame=N` lines that keep
 counting up until the timeout, then exit code 0. A stalled race shows as the
-frame number stopping.
+frame number stopping. A clean exit does not show the peers agree: compare
+their state hashes (below).
 
 ## Who is driving
 
@@ -134,7 +164,7 @@ anything in a self-test run.
 
 | Variable | Effect |
 | --- | --- |
-| `DKR_OWNED_CHECK_NAME=<name>` | Race under this name (1 to 24 printable ASCII characters). Without it each peer picks its own, see below. |
+| `DKR_OWNED_CHECK_NAME=<name>` | Race under this name (1 to 24 printable ASCII characters). Without it each peer picks its own (see "Who is driving"). |
 | `DKR_OWNED_CHECK_INPUT=wave` | Drive with the old pattern: accelerator held, stick left and right every 15 frames. |
 | `DKR_OWNED_CHECK_MODERN=1` | Use the Modern presentation preset. Needed for the three below. |
 | `DKR_OWNED_CHECK_FPS=60\|120\|180` | Fixed refresh target. |
