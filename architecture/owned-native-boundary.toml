@@ -1,0 +1,347 @@
+# Facts about the 41 first-party sources the owned-engine generators pin by whole-file
+# sha256, recomputed and compared by scripts/native_boundary.py (see its docstring for
+# the rules and what they cannot see). This record sits BESIDE the pins: it does not
+# replace them. After an audited change, run `python3 scripts/native_boundary.py
+# --record` and review the diff; that diff is the audit.
+#
+#   stores                guest store sites per function (all functions with any)
+#   guest_calls           guest functions the file calls
+#   hooks                 extern "C" dkr_* / *_recomp functions it defines
+#   hooks_named_in_probe  the subset runtime-recomp/tests/replay_probe/probe_native.c names
+#   digests               function -> token-stream sha256, for functions whose exact
+#                         behaviour matters (list a function here to digest it)
+
+schema = 1
+
+[vocabulary]
+store_calls = ["WriteFloat", "WriteRdramFloat", "dkr_memory_write", "write_display_list_budget", "write_word"]
+store_members = ["write"]
+
+[[file]]
+path = "runtime-recomp/src/game/audio_event_queue.h"
+stores = {dkr_audio_empty_event = 2, dkr_audio_queue_next = 7, dkr_audio_rebuild_pool = 8, dkr_audio_recover_sequence = 10}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/audio_event_queue_state.h"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/character_select_animation_policy.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/character_select_music_policy.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/custom_music.cpp"
+stores = {restore_row = 1, sequence_loaded = 5}
+guest_calls = []
+hooks = ["dkr_custom_music_sequence_loaded", "dkr_custom_music_sequence_started"]
+hooks_named_in_probe = ["dkr_custom_music_sequence_loaded", "dkr_custom_music_sequence_started"]
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/custom_tracks_hooks.cpp"
+stores = {apply_custom_payload = 5, dkr_custom_tracks_auto_boot = 6, dkr_custom_tracks_prepare_level = 2, dkr_custom_tracks_prepare_vehicle = 1, grow_main_pool = 10, publish_extended_table = 1, size_menu_display_lists = 1, write_display_list_budget = 1, write_word = 1}
+guest_calls = ["asset_release", "charselect_assign_ai", "init_racer_headers", "input_assign_players", "leveltable_vehicle_default", "leveltable_vehicle_usable", "mempool_alloc_safe", "set_level_default_vehicle", "set_time_trial_enabled", "titlescreen_controller_assign", "unlock_drumstick", "unlock_tt"]
+hooks = ["dkr_custom_tracks_asset_load_begin", "dkr_custom_tracks_asset_load_end", "dkr_custom_tracks_asset_override", "dkr_custom_tracks_auto_boot", "dkr_custom_tracks_extend_table", "dkr_custom_tracks_prepare_level", "dkr_custom_tracks_prepare_memory", "dkr_custom_tracks_prepare_vehicle", "dkr_custom_tracks_table_load_begin", "dkr_custom_tracks_table_load_end", "dkr_custom_tracks_track_heap", "dkr_custom_tracks_track_id_override"]
+hooks_named_in_probe = ["dkr_custom_tracks_asset_load_begin", "dkr_custom_tracks_asset_load_end", "dkr_custom_tracks_auto_boot", "dkr_custom_tracks_table_load_begin", "dkr_custom_tracks_table_load_end", "dkr_custom_tracks_track_heap", "dkr_custom_tracks_track_id_override"]
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/finish_presentation_policy.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/intro_tail_policy.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_asset_capacity.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_behaviour.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_behaviour.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_character_audio.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_character_limits.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_character_materialize.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_character_materialize.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_character_presentation.cpp"
+stores = {"CharacterPresentation::play" = 2, "CharacterPresentation::prepare" = 2, call = 1}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_character_roster.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_guest_checkpoint.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_memory_safety.h"
+stores = {dkr_memory_acquire = 1, dkr_memory_enqueue = 4, dkr_memory_install = 7, dkr_memory_release = 1}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_mod_format.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_model_safety.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_runtime_character.cpp"
+stores = {animate_character_textures = 4, dispatch_character_ai_event = 1}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_runtime_session.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_track_catalog.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_track_prepare_job.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/legacy_track_prepare_job.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/online_mod_music.cpp"
+stores = {"MusicState::loaded" = 4, "MusicState::restore_row" = 1}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/mods/online_mod_prepare.cpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/online_roster_policy.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/presentation_identity.cpp"
+stores = {}
+guest_calls = []
+hooks = ["dkr_presentation_finish_camera_node", "dkr_presentation_frame_begin", "dkr_presentation_object_begin", "dkr_presentation_object_end", "dkr_presentation_object_freed", "dkr_presentation_object_spawned", "dkr_presentation_perspective_matrix", "dkr_presentation_scene_begin", "dkr_presentation_task_submitted", "dkr_presentation_wave_begin", "dkr_presentation_wave_block", "dkr_presentation_wave_end", "dkr_presentation_wave_matrix", "dkr_presentation_wave_selection", "dkr_presentation_world_origin_matrix"]
+hooks_named_in_probe = ["dkr_presentation_finish_camera_node", "dkr_presentation_object_begin", "dkr_presentation_object_end", "dkr_presentation_object_freed", "dkr_presentation_object_spawned", "dkr_presentation_perspective_matrix", "dkr_presentation_wave_begin", "dkr_presentation_wave_block", "dkr_presentation_wave_end", "dkr_presentation_wave_matrix", "dkr_presentation_wave_selection", "dkr_presentation_world_origin_matrix"]
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/revision_addresses.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/runtime_enhancements.cpp"
+stores = {SeedCharacterMusicMask = 1, WriteRdramFloat = 1, dkr_character_select_music_unblock = 1, dkr_extended_frustum_begin = 2, dkr_extended_frustum_end = 1, dkr_maximise_persistent_water_detail = 1, dkr_stabilise_persistent_water_transition = 1}
+guest_calls = []
+hooks = ["dkr_anchor_persistent_water_to_camera", "dkr_apply_gameplay_fov", "dkr_apply_maximum_racer_detail", "dkr_character_menu_music_mask", "dkr_character_select_animation_fraction", "dkr_character_select_animation_tick", "dkr_character_select_music_mask", "dkr_character_select_music_unblock", "dkr_extend_hub_segment_bitfield", "dkr_extend_object_draw_distance", "dkr_extended_frustum_begin", "dkr_extended_frustum_end", "dkr_keep_hub_segment_visible", "dkr_keep_local_multiplayer_scenery", "dkr_maximise_persistent_water_detail", "dkr_restore_multiplayer_race_music", "dkr_stabilise_persistent_water_transition"]
+hooks_named_in_probe = ["dkr_anchor_persistent_water_to_camera", "dkr_apply_gameplay_fov", "dkr_apply_maximum_racer_detail", "dkr_character_menu_music_mask", "dkr_character_select_animation_fraction", "dkr_character_select_animation_tick", "dkr_character_select_music_mask", "dkr_character_select_music_unblock", "dkr_extend_hub_segment_bitfield", "dkr_extend_object_draw_distance", "dkr_extended_frustum_begin", "dkr_extended_frustum_end", "dkr_keep_hub_segment_visible", "dkr_keep_local_multiplayer_scenery", "dkr_maximise_persistent_water_detail", "dkr_restore_multiplayer_race_music", "dkr_stabilise_persistent_water_transition"]
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/runtime_hud_layout.cpp"
+stores = {WriteFloat = 1, "dkr::runtime::hud::begin_element" = 3, "dkr::runtime::hud::end_element" = 4, "dkr::runtime::hud::end_minimap" = 3, dkr_hud_text_end = 1, dkr_refresh_combined_accessories = 1}
+guest_calls = []
+hooks = ["dkr_hud_asset_load_failed", "dkr_hud_dialogue_pass_begin", "dkr_hud_dialogue_pass_end", "dkr_hud_element_begin", "dkr_hud_element_end", "dkr_hud_general_pass_begin", "dkr_hud_general_pass_end", "dkr_hud_minimap_begin", "dkr_hud_minimap_end", "dkr_hud_player_pass_begin", "dkr_hud_player_pass_end", "dkr_hud_rect_begin", "dkr_hud_rect_end", "dkr_hud_rect_extent", "dkr_hud_text_begin", "dkr_hud_text_end", "dkr_hud_timer_begin", "dkr_hud_timer_end", "dkr_hud_timer_select", "dkr_refresh_combined_accessories", "dkr_render_heap_sync_notice"]
+hooks_named_in_probe = ["dkr_hud_dialogue_pass_begin", "dkr_hud_dialogue_pass_end", "dkr_hud_element_begin", "dkr_hud_element_end", "dkr_hud_general_pass_begin", "dkr_hud_general_pass_end", "dkr_hud_minimap_begin", "dkr_hud_minimap_end", "dkr_hud_player_pass_begin", "dkr_hud_player_pass_end", "dkr_hud_rect_end", "dkr_hud_rect_extent", "dkr_hud_text_begin", "dkr_hud_text_end", "dkr_hud_timer_end"]
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/runtime_legacy_mods.cpp"
+stores = {course_budget = 1, dkr_legacy_character_menu = 1, dkr_legacy_memory_service = 3}
+guest_calls = ["asset_allocate", "asset_copy", "asset_release", "filtered_cheats", "get_settings", "menu_background", "menu_background_cover", "menu_colour", "menu_font", "menu_material_set", "menu_projection", "menu_render_reset", "menu_sound_play", "menu_text", "menu_text_width", "menu_texture_draw", "menu_texture_free", "menu_texture_load", "menu_view_matrix", "sound_bank_play", "sound_bank_relocate", "sound_parameter", "sound_spatial_point", "stage_camera", "stage_free", "stage_music_fraction", "stage_particles", "stage_spawn", "unlock_drumstick", "unlock_tt"]
+hooks = ["dkr_achievements_observe", "dkr_legacy_asset_api", "dkr_legacy_asset_cache_capacity", "dkr_legacy_asset_cache_guard", "dkr_legacy_character_ai_event", "dkr_legacy_character_cinematic_id", "dkr_legacy_character_cinematic_portrait", "dkr_legacy_character_event", "dkr_legacy_character_hud_bind", "dkr_legacy_character_hud_lookup", "dkr_legacy_character_hud_unbind", "dkr_legacy_character_menu", "dkr_legacy_character_play_sound", "dkr_legacy_character_portrait_lookup", "dkr_legacy_character_race_sound", "dkr_legacy_course_component", "dkr_legacy_heap_capacity", "dkr_legacy_memory_service", "dkr_legacy_model_safety", "dkr_legacy_pi_start_dma", "dkr_legacy_racer_spawn_failed", "dkr_legacy_racer_stat", "dkr_legacy_scene_begin", "dkr_legacy_texture_animation", "dkr_legacy_track_menu", "dkr_vehicle_menu_draw"]
+hooks_named_in_probe = ["dkr_legacy_asset_api", "dkr_legacy_asset_cache_capacity", "dkr_legacy_asset_cache_guard", "dkr_legacy_character_cinematic_id", "dkr_legacy_character_cinematic_portrait", "dkr_legacy_character_event", "dkr_legacy_character_hud_bind", "dkr_legacy_character_hud_lookup", "dkr_legacy_character_hud_unbind", "dkr_legacy_character_play_sound", "dkr_legacy_character_portrait_lookup", "dkr_legacy_character_race_sound", "dkr_legacy_course_component", "dkr_legacy_memory_service", "dkr_legacy_model_safety", "dkr_legacy_pi_start_dma", "dkr_legacy_racer_stat", "dkr_legacy_scene_begin"]
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/runtime_magic_codes.cpp"
+stores = {dkr_apply_launch_magic_codes = 2}
+guest_calls = []
+hooks = ["dkr_apply_launch_magic_codes", "dkr_magic_code_balloon_awarded", "dkr_magic_code_credits_started", "dkr_magic_codes_frame_complete"]
+hooks_named_in_probe = []
+digests = {dkr_apply_launch_magic_codes = "c76ddf25543727cfa77c0337a5f8ce9f61e363ff40416a01277d55d9e1b614c9"}
+
+[[file]]
+path = "runtime-recomp/src/game/runtime_netplay.cpp"
+stores = {advance_host_authoritative_frame = 2, begin_gameplay_level = 2, bootstrap_character_select = 6, drive_authored_tick = 5, lock_character_select_membership = 1, seed_character_select_ai = 2}
+guest_calls = ["get_misc_asset", "is_in_two_player_adventure", "is_player_two_in_control", "leveltable_type"]
+hooks = ["dkr_netplay_adventure_finish_barrier", "dkr_netplay_authoritative_frame_commit", "dkr_netplay_character_select_ai_seed", "dkr_netplay_character_select_enter", "dkr_netplay_character_select_lock", "dkr_netplay_drive_authored_tick", "dkr_netplay_gameplay_level_begin", "dkr_netplay_gameplay_level_end", "dkr_netplay_gameplay_level_ready", "dkr_netplay_postrace_barrier", "dkr_netplay_prepare_controller_init", "dkr_netplay_presentation_output_allowed", "dkr_netplay_presentation_random_begin", "dkr_netplay_presentation_random_end", "dkr_netplay_presentation_random_range", "dkr_netplay_resolve_authored_input_frame"]
+hooks_named_in_probe = ["dkr_netplay_adventure_finish_barrier", "dkr_netplay_character_select_ai_seed", "dkr_netplay_character_select_enter", "dkr_netplay_character_select_lock", "dkr_netplay_postrace_barrier", "dkr_netplay_presentation_random_begin", "dkr_netplay_presentation_random_end", "dkr_netplay_presentation_random_range"]
+digests = {call_payload_query = "0268fc3cfbaf6f78d449dcd420945323f9c0e5903790ef781c2dd5829e6d51bc", call_payload_query_with_argument = "d0d9da590acc643013359f141b44cb9498de78a24355fdd1dce60398267c7114"}
+
+[[file]]
+path = "runtime-recomp/src/game/runtime_stubs.cpp"
+stores = {WriteRdramFloat = 1, dkr_audio_voice_guard = 1, dkr_fix_fullscreen_clear_scissor = 1, dkr_runtime_scene_reset = 3, dkr_scheduler_keep_host_tasks = 1, dkr_skybox_cover_begin = 1, dkr_skybox_cover_end = 1, dkr_title_intro_audio_tail = 1, dkr_track_select_background_cover = 1, dkr_track_select_fullscreen_preview = 2, dkr_transition_cover_begin = 2, dkr_transition_cover_end = 2, dkr_widen_gradient_sky = 2, dkr_widen_void_primitive = 2}
+guest_calls = []
+hooks = ["__osSiGetAccess_recomp", "__osSiRelAccess_recomp", "__osSpSetStatus_recomp", "dkr_audio_bus_guard", "dkr_audio_event_queue_initialize", "dkr_audio_event_queue_next", "dkr_audio_voice_guard", "dkr_background_fill_stretch_begin", "dkr_background_fill_stretch_end", "dkr_billboard_interpolation_begin", "dkr_chequer_background_stretch_begin", "dkr_chequer_background_stretch_end", "dkr_fix_car_steering_wheel_material", "dkr_fix_fullscreen_clear_scissor", "dkr_level_segment_interpolation_begin", "dkr_level_segment_interpolation_end", "dkr_postrace_background_stretch_begin", "dkr_postrace_background_stretch_end", "dkr_postrace_presentation_start", "dkr_postrace_wooden_frame_draw", "dkr_runtime_scene_reset", "dkr_scheduler_dp_event_valid", "dkr_scheduler_dp_handled", "dkr_scheduler_keep_host_tasks", "dkr_scheduler_sp_event_valid", "dkr_scheduler_sp_handled", "dkr_shadow_interpolation_begin", "dkr_shadow_interpolation_end", "dkr_skybox_cover_begin", "dkr_skybox_cover_end", "dkr_split_screen_viewport_fill", "dkr_split_screen_world_aspect_begin", "dkr_split_screen_world_aspect_end", "dkr_surface_interpolation_begin", "dkr_surface_interpolation_end", "dkr_three_player_panel_begin", "dkr_three_player_panel_end", "dkr_title_intro_audio_tail", "dkr_track_select_background_cover", "dkr_track_select_draw", "dkr_track_select_fullscreen_preview", "dkr_track_select_lens_flare_tint_begin", "dkr_track_select_lens_flare_tint_end", "dkr_transition_cover_begin", "dkr_transition_cover_end", "dkr_transition_interpolation_end", "dkr_vehicle_part_interpolation_begin", "dkr_vehicle_part_interpolation_end", "dkr_vehicle_part_matrix_identity", "dkr_widen_gradient_sky", "dkr_widen_void_primitive", "rmonPrintf_recomp"]
+hooks_named_in_probe = ["dkr_audio_bus_guard", "dkr_audio_event_queue_initialize", "dkr_audio_event_queue_next", "dkr_audio_voice_guard", "dkr_background_fill_stretch_begin", "dkr_background_fill_stretch_end", "dkr_billboard_interpolation_begin", "dkr_chequer_background_stretch_begin", "dkr_chequer_background_stretch_end", "dkr_fix_car_steering_wheel_material", "dkr_fix_fullscreen_clear_scissor", "dkr_level_segment_interpolation_begin", "dkr_level_segment_interpolation_end", "dkr_postrace_background_stretch_begin", "dkr_postrace_background_stretch_end", "dkr_postrace_presentation_start", "dkr_postrace_wooden_frame_draw", "dkr_shadow_interpolation_begin", "dkr_shadow_interpolation_end", "dkr_skybox_cover_begin", "dkr_skybox_cover_end", "dkr_split_screen_viewport_fill", "dkr_split_screen_world_aspect_begin", "dkr_split_screen_world_aspect_end", "dkr_surface_interpolation_begin", "dkr_surface_interpolation_end", "dkr_three_player_panel_begin", "dkr_three_player_panel_end", "dkr_title_intro_audio_tail", "dkr_track_select_background_cover", "dkr_track_select_draw", "dkr_track_select_fullscreen_preview", "dkr_track_select_lens_flare_tint_begin", "dkr_track_select_lens_flare_tint_end", "dkr_transition_cover_begin", "dkr_transition_cover_end", "dkr_transition_interpolation_end", "dkr_vehicle_part_interpolation_end", "dkr_vehicle_part_matrix_identity", "dkr_widen_gradient_sky", "dkr_widen_void_primitive"]
+digests = {ResumeNativeSequence = "b6095fe71b606c350fadd10228de99b91390f7e10dd254a827c397264a105a4f"}
+
+[[file]]
+path = "runtime-recomp/src/game/track_select_draw_guest.h"
+stores = {dkr_track_draw_guest = 7}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/virtual_pak.cpp"
+stores = {InitialisePfs = 7, WriteBytes = 1, "dkr::runtime::pak::self_test" = 1, dkr_virtual_pak_reformat = 2, osPfsAllocateFile_recomp = 1, osPfsFileState_recomp = 3, osPfsFindFile_recomp = 1, osPfsFreeBlocks_recomp = 1, osPfsIsPlug_recomp = 1, osPfsNumFiles_recomp = 2, osPfsReadWriteFile_recomp = 1}
+guest_calls = ["osPfsInitPak_recomp"]
+hooks = ["__osContRamRead_recomp", "__osContRamWrite_recomp", "__osGetId_recomp", "__osPfsGetStatus_recomp", "__osPfsSelectBank_recomp", "dkr_virtual_pak_preferred_status", "dkr_virtual_pak_reformat", "osPfsAllocateFile_recomp", "osPfsChecker_recomp", "osPfsDeleteFile_recomp", "osPfsFileState_recomp", "osPfsFindFile_recomp", "osPfsFreeBlocks_recomp", "osPfsInitPak_recomp", "osPfsInit_recomp", "osPfsIsPlug_recomp", "osPfsNumFiles_recomp", "osPfsReadWriteFile_recomp", "osPfsRepairId_recomp"]
+hooks_named_in_probe = []
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/water_profile.cpp"
+stores = {Read = 1}
+guest_calls = []
+hooks = ["dkr_water_private_scene", "dkr_water_profile_begin", "dkr_water_profile_end"]
+hooks_named_in_probe = ["dkr_water_private_scene"]
+digests = {}
+
+[[file]]
+path = "runtime-recomp/src/game/widescreen_policy.hpp"
+stores = {}
+guest_calls = []
+hooks = []
+hooks_named_in_probe = []
+digests = {}
+
