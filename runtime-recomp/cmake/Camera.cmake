@@ -98,6 +98,7 @@ target_include_directories(
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src/game"
 )
 target_include_directories(DKRCameraPresentation PRIVATE "${DKR_DEPENDENCIES_DIR}/rt64/src/contrib")
+dkr_guest_symbols(DKRCameraPresentation)
 target_link_libraries(DKRCameraPresentation PUBLIC DKRCustomMagicCodes)
 if(MSVC)
     target_compile_options(DKRCameraPresentation PRIVATE /fp:strict /W4)
