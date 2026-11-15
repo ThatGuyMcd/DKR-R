@@ -252,11 +252,11 @@ class TitleTextViewport {
         ram_ = state.RDRAM;
         if (!modern_fit || !std::isfinite(aspect) || aspect <= 4.F / 3.F + 0.001F)
             return;
-        const auto menu = u32(revision_addresses::CurrentMenuId);
+        const auto menu = u32(revision_addresses::current().CurrentMenuId);
         credits_ = menu == 25;
-        if (!credits_ && (menu != 0 || u32(revision_addresses::TitleRevealTimer) != 0))
+        if (!credits_ && (menu != 0 || u32(revision_addresses::current().TitleRevealTimer) != 0))
             return;
-        const bool v80 = revision_addresses::CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId;
+        const bool v80 = revision_addresses::current().CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId;
         symbols_ = &title_text_symbols::for_revision(v80);
         credits_elements_ = symbols_->credits_elements;
         const auto fonts = u32(symbols_->fonts);

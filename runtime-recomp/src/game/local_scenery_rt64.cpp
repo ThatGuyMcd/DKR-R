@@ -96,8 +96,9 @@ void LocalSceneryRT64Pass::prepare_live(std::span<const dkr_owned_draw_event> ev
         merged_.sprites[i].transform_flags |= 0x80U;
     if (std::none_of(events.begin(), events.end(), [](const auto& e) { return e.kind == DKR_OWNED_LOCAL_OBJECT; }))
         return;
-    const auto count = word(revision_addresses::ObjectCount), start = word(revision_addresses::ObjectListStart),
-               list = word(revision_addresses::ObjectList);
+    const auto count = word(revision_addresses::current().ObjectCount),
+               start = word(revision_addresses::current().ObjectListStart),
+               list = word(revision_addresses::current().ObjectList);
     if (count > 2048 || start > count)
         throw std::runtime_error("local sprite count");
     std::array<std::vector<std::uint32_t>, 4> drawn;

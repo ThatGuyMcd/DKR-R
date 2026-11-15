@@ -18,10 +18,11 @@ class IntroSky {
     void begin(const RT64::State& state, bool enabled) {
         begin_ = end_ = 0;
         water::enhanced::Memory m(std::span<const std::uint8_t>(state.RDRAM, 0x800000));
-        if (!enabled || m.u32(revision_addresses::CurrentMenuId) != 1)
+        if (!enabled || m.u32(revision_addresses::current().CurrentMenuId) != 1)
             return;
         const auto& symbols =
-            polish_symbols[revision_addresses::CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId ? 1 : 0];
+            polish_symbols[revision_addresses::current().CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId ? 1
+                                                                                                                   : 0];
         const auto obj = m.u32(symbols[6]);
         if (!obj || !m.valid(obj, 0x6C))
             return;
@@ -51,7 +52,7 @@ class IntroSky {
         }
         if (radius_ < 1)
             return;
-        const float fov = m.f32(revision_addresses::CurrentCameraFov);
+        const float fov = m.f32(revision_addresses::current().CurrentCameraFov);
         if (!std::isfinite(fov) || fov < 20 || fov > 140)
             return;
         // tan(FOV/2) describes the exposed vertical cone. The original inset

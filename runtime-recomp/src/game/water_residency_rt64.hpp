@@ -90,12 +90,10 @@ template <class Clock = std::chrono::steady_clock> class LiquidResidencyT {
         }
         const auto generation = cache->getReplacementGeneration();
         enhanced::Memory m(std::span<const std::uint8_t>(state.RDRAM, 0x800000));
-        const auto loaded = m.u32(revision_addresses::NumberOfLoadedTextures),
+        const auto loaded = m.u32(revision_addresses::current().NumberOfLoadedTextures),
                    model = m.u32(enhanced::level_model_symbol());
-        const auto& symbols =
-            presentation::polish_symbols[revision_addresses::CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId
-                                             ? 1
-                                             : 0];
+        const auto& symbols = presentation::polish_symbols
+            [revision_addresses::current().CurrentMenuId == revision_addresses::kUsV80.CurrentMenuId ? 1 : 0];
         const auto waves = m.u32(symbols[7]);
         const bool reset = cache != cache_ || generation != generation_ || scene != scene_;
         if (reset) {
