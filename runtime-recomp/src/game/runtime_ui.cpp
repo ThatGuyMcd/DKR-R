@@ -8232,14 +8232,6 @@ bool dkr::runtime::ui::self_test_settings(const std::filesystem::path& directory
     return std::filesystem::is_regular_file(SettingsPath(), error);
 }
 
-bool dkr::runtime::ui::self_test_settings(const std::filesystem::path& directory) {
-    g_config_directory = directory;
-    LoadSettings();
-    SaveSettings();
-    std::error_code error;
-    return std::filesystem::is_regular_file(SettingsPath(), error);
-}
-
 void dkr::runtime::ui::persist_graphics_api_fallback() {
     GraphicsConfig config = ultramodern::renderer::get_graphics_config();
     config.api_option = GraphicsApi::Auto;
