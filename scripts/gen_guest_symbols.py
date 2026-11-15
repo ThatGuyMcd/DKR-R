@@ -47,6 +47,7 @@ import re
 import sys
 
 import tomllib
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SPECS = ROOT / "runtime-recomp" / "symbols"
@@ -56,6 +57,10 @@ DECOMP_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*) = (0x[0-9A-Fa-f]+);", re.M)
 
 class SymbolError(Exception):
     pass
+
+
+def _no_names() -> dict[str, dict[str, str]]:
+    return {}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -77,7 +82,7 @@ class Request:
     decomp: tuple[str, ...] = ()
     # A listed symbol that has a different name in a revision's table, as
     # {symbol: {"77": name, "80": name}} (the SDK names unnamed data D_<address>).
-    names: dict[str, dict[str, str]] = dataclasses.field(default_factory=dict, hash=False)
+    names: dict[str, dict[str, str]] = dataclasses.field(default_factory=_no_names, hash=False)
     # table = "functions": named patch sites, each a function plus a byte offset
     # into it, resolved per revision from the function tables.
     sites: tuple[Site, ...] = dataclasses.field(default=(), hash=False)
@@ -117,13 +122,24 @@ def load(path: Path) -> Request:
     return request
 
 
-def load_site(path: Path, entry: dict) -> Site:
-    try:
-        name, function, offset = entry["name"], entry["function"], entry["offset"]
-    except KeyError as missing:
-        raise SymbolError(f"{path.name}: a [[site]] needs name, function and offset ({missing} is absent)") from None
-    revisions = tuple(entry.get("revisions", REVISIONS))
-    if not isinstance(offset, int) or offset < 0 or offset % 4 or not revisions or set(revisions) - set(REVISIONS):
+def load_site(path: Path, entry: dict[str, Any]) -> Site:
+    missing = [key for key in ("name", "function", "offset") if key not in entry]
+    if missing:
+        raise SymbolError(f"{path.name}: a [[site]] needs name, function and offset ({missing[0]!r} is absent)")
+    name: Any = entry["name"]
+    function: Any = entry["function"]
+    offset: Any = entry["offset"]
+    listed: Any = entry.get("revisions", REVISIONS)
+    revisions = tuple(str(revision) for revision in listed)
+    if (
+        not isinstance(name, str)
+        or not isinstance(function, str)
+        or not isinstance(offset, int)
+        or offset < 0
+        or offset % 4
+        or not revisions
+        or set(revisions) - set(REVISIONS)
+    ):
         raise SymbolError(f"{path.name}: site {name} needs a word aligned offset and revisions within {REVISIONS}")
     return Site(name, function, offset, revisions)
 
