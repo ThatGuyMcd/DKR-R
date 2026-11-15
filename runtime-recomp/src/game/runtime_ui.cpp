@@ -10030,8 +10030,7 @@ bool InstallOwnedCheckMods(const std::filesystem::path& directory, std::string& 
 }
 } // namespace
 bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identity, const std::filesystem::path& rom,
-                                                    bool host, unsigned players,
-                                                    std::string& error) {
+                                                    bool host, unsigned players, std::string& error) {
     // `[check][state]` cadence in confirmed frames (1 to 100, default 30), for
     // host and joiner alike; only this self-test entry point ever turns it on.
     {
