@@ -45,9 +45,9 @@ import dataclasses
 from pathlib import Path
 import re
 import sys
+from typing import Any
 
 import tomllib
-from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SPECS = ROOT / "runtime-recomp" / "symbols"
