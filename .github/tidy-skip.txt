@@ -271,6 +271,7 @@ runtime-recomp/tests/replay_probe/probe_policies.cpp
 runtime-recomp/tests/replay_probe/probe_presentation.c
 runtime-recomp/tests/replay_probe/probe_save.c
 runtime-recomp/tests/replay_probe/probe_save.cpp
+runtime-recomp/tests/replay_probe/probe_service_shims.cpp
 runtime-recomp/tests/sdl3_input_client_tests.cpp
 runtime-recomp/tests/split_screen_rt64_tests.cpp
 runtime-recomp/tests/track_select_native_draw_tests.cpp
