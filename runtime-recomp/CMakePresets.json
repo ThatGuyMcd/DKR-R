@@ -112,18 +112,18 @@
     },
     {
       "name": "release-macos",
-      "displayName": "Release build, macOS (integrated rollback off)",
+      "displayName": "Release build, macOS",
       "inherits": "release-base",
       "generator": "Ninja",
       "cacheVariables": {
-        "DKR_EXPERIMENTAL_RACE_TEST": "OFF"
+        "DKR_EXPERIMENTAL_RACE_TEST": "ON"
       },
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Darwin"
       },
-      "description": "The one release preset without integrated rollback. It builds and runs on desktop macOS with -DDKR_EXPERIMENTAL_RACE_TEST=ON, but stays off here until it has been checked against other machines ('Rollback on Apple' in docs/fold-in/open-items.md)."
+      "description": "Integrated rollback is on, as in the other release presets. Play with other architectures is covered in docs/CROSS-ARCHITECTURE.md."
     }
   ],
   "buildPresets": [
