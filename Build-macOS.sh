@@ -153,6 +153,7 @@ cmake -S "${project_root}/runtime-recomp" -B "${build_dir}" -G Ninja \
   -DDKR_RELEASE_VERSION="${version}" \
   -DDKR_RUNTIME_BUILD_GENERATED=ON \
   -DDKR_RUNTIME_BUILD_RT64=ON \
+  -DDKR_EXPERIMENTAL_RACE_TEST=ON \
   -DDKR_GENERATED_SOURCE_V77="${generated_source}" \
   -DDKR_GENERATED_SOURCE_V80="${revision_80_generated}" \
   -DDKR_CODE_POLICY_V77="$(code_policy "${generated_source}" 77)" \
