@@ -304,7 +304,7 @@ What the deleted release-prep scripts did, for B9b:
 
 - Rollback on Apple: `release-macos` and `Build-macOS.sh` build with
   `DKR_EXPERIMENTAL_RACE_TEST=ON` (arm64; enhanced water stays off, so
-  `0006-render-stability-apple.patch` replaces `0001`), and the packaged app
+  `staged/0006-render-stability-apple.patch` replaces `staged/0001-render-stability.patch`), and the packaged app
   has raced a Windows x86_64 build with every state hash equal
   (`docs/CROSS-ARCHITECTURE.md`). Still open: the standalone
   `DKRExperimentalRaceTest` frontend stays Windows/Linux only, an x86_64 Mac
