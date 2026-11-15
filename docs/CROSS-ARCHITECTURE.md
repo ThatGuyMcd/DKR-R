@@ -6,6 +6,20 @@ as their builds make the same promise about how they compute. Nothing lists
 the architectures that are allowed: a build for a CPU nobody has tried yet
 joins in if it can make the promise.
 
+## If you have a new target
+
+The short path, each step described below:
+
+1. Build the game with `DKR_EXPERIMENTAL_RACE_TEST=ON` and the strict floating
+   point flags, and read the `[online][contract]` line it logs (see "Porting
+   to a new platform").
+2. Run `scripts/port_check.py` against a machine that already races. It
+   builds the replay probe for your toolchain and compares every byte (see
+   "Checking a new target"). Do not go further until it says `IDENTICAL`.
+3. Race your build against that machine with the self-test, in both host and
+   joiner seats (`docs/ROLLBACK-SELF-TEST.md`, "Two machines").
+4. Add what you ran to the tables under "Evidence".
+
 ## The contract
 
 Each build puts a floating point contract in its lobby manifest
@@ -22,7 +36,7 @@ deterministic compatibility."
 - contraction is off (`-ffp-contract=off`, `/fp:strict`), so an FMA-capable
   CPU does not fuse what another computes in two steps.
 
-The first three are checked at compile time. The last is a build flag the
+The first three bullets are checked at compile time. The last is a build flag the
 simulation sources are compiled with; keep it when adding a toolchain. A
 build that fails a compile-time check advertises `unverified-<architecture>`
 and only ever meets other builds for that architecture.
@@ -116,21 +130,16 @@ it always did, including to a build of the same release that predates this.
 builds with the check can be in a lobby launched with the architecture-free hash,
 so neither type reaches one that lacks it.
 
-Rehearsing it on one machine (self-test only, see `docs/ROLLBACK-SELF-TEST.md`):
-
-- `DKR_OWNED_CHECK_VERIFY=1` turns the check on in a lobby that is all one
-  architecture. Set it on every peer; every peer must be a build with the check.
-- `DKR_OWNED_CHECK_CORRUPT_STATE_AT=<frame>` makes that one peer report a wrong
-  hash for the first sampled frame at or after `frame` (1500 lands in the race,
-  300 in the menus before it). Use it to see the stop above on every peer.
-- `DKR_OWNED_CHECK_STATE_EVERY=<n>` changes how often `[check][state]` is
-  printed (1 to 100, default 30). It does not change the check's cadence.
+To rehearse it, `DKR_OWNED_CHECK_VERIFY=1` turns it on in an all one
+architecture self-test and `DKR_OWNED_CHECK_CORRUPT_STATE_AT=1500` makes one
+peer report a wrong hash inside the race (300 lands in the menus before it).
+Both are in the switch table of `docs/ROLLBACK-SELF-TEST.md`.
 
 ## Evidence
 
-The contract is a claim. This is what has been checked so far, and the same
-two runs are what to do for a new architecture, compiler or OS before
-shipping it.
+The contract is a claim. This is what has been checked so far. A new
+architecture, compiler or OS gets the same two checks (the replay probe, then
+a live race) before it ships.
 
 Recorded 14 and 15 November 2026 on main at `a81b7a5` and `96c67dd`.
 
@@ -208,7 +217,8 @@ an x86_64 Mac, and human input.
 Cross-play needs nothing platform-specific. A port that builds the game with
 `DKR_EXPERIMENTAL_RACE_TEST=ON` races every other platform, provided:
 
-1. **It is a 64-bit target.** CMake refuses the option otherwise.
+1. **It is a 64-bit target, not iOS.** CMake refuses the option on 32-bit
+   targets and on iOS.
 2. **Its compiler can keep floating point strict.** Use the flags the
    existing toolchains use for the simulation sources: `-ffp-contract=off
    -fno-fast-math` (GCC, Clang) or `/fp:strict` (MSVC). Do not add
@@ -312,7 +322,18 @@ scalar fallback that nobody else compiles: expect the bug there.
 If a target cannot honour the contract (it needs fast-math, or its compiler
 cannot turn contraction off), make its build fail the compile-time check so
 it advertises `unverified-<architecture>`. The script still runs, and the
-contract report names the clause that is not met. Then record the result in
-the table above. A live race between two machines
-(`docs/ROLLBACK-SELF-TEST.md`, `scripts/compare_state_hashes.py`) is the
-second check before shipping.
+contract report names the clause that is not met.
+
+### Then race it
+
+The probe replays one captured race. The second check is a live one: build
+the game for the target, race it against a machine that already races with
+the self-test (`docs/ROLLBACK-SELF-TEST.md`, "Two machines"), once with each
+machine hosting, on both ROM revisions, and once with
+`DKR_OWNED_CHECK_DELIVERY_MS=60` on both so they roll back. Every peer logs
+`[check][state]` lines; `scripts/compare_state_hashes.py host.log join.log`
+must exit 0. Because the lobby spans architectures the live state check is on
+by itself, so a divergence also stops the race with a message.
+
+When both pass, add the target to the tables under "Evidence": what you built
+with, the probe result, and the races you ran with their hash counts.
