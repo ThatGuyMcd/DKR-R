@@ -153,7 +153,7 @@ function(dkr_add_experimental_owned_game target generated)
         )
         # All peers use separately rounded multiplies/adds. ARM64 compilers
         # otherwise fuse these where baseline x64 SSE does not.
-        target_compile_options(${target} PRIVATE -ffp-contract=off -fno-fast-math)
+        target_compile_options(${target} PRIVATE -ffp-contract=off -fno-fast-math ${DKR_SIMULATION_WRAP_OPTIONS})
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
             target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-msse4.1>)
         endif()
