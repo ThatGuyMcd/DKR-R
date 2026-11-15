@@ -3,6 +3,7 @@
 
     lock_inputs.py write [--prepared DIR]   record build/prepared in the lock
     lock_inputs.py check [--prepared DIR]   compare build/prepared with it
+    lock_inputs.py sources                  compare the embedded source pins only
 
 runtime-recomp/build-inputs.lock.json records, for the current N64Recomp and
 decomp pins, one digest per prepared input directory (scripts/prepare_payloads.py
@@ -13,6 +14,13 @@ normalised; Windows writes some CRLF) and the manifest fields the configure
 reads; the rest of the JSON and TOML provenance names machine paths and is
 left out. Release builds verify the same digests at configure
 (cmake/BuildInputs.cmake, DKR_VERIFY_BUILD_INPUTS), so a release can't compile inputs nobody pinned.
+
+The owned engines carry private copies of a few runtime sources, which
+scripts/generate_replay_probe.py pins by sha256. The lock records a digest of
+those pins too, and "sources" compares it without the ROMs or a prepared
+directory. A dependency patch or pin change that alters an embedded source
+then fails the tooling suite until the inputs are prepared and locked again,
+rather than the next release configure.
 
 Exit status: 0 written or matching, 1 a mismatch, a missing input or stale
 pins.
@@ -114,6 +122,29 @@ def policy_digest(path: Path) -> str:
     return hashlib.sha256(POLICY_PATHS.sub(r"\1", text).encode("utf-8")).hexdigest()
 
 
+def embedded_sources() -> str:
+    """sha256 over "path sha256\n" of every source the owned engine generator
+    copies into its output, as scripts/generate_replay_probe.py pins them."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import generate_replay_probe as generator
+    finally:
+        sys.path.pop(0)
+    pinned = {"extern/n64-modern-runtime/N64Recomp/include/recomp.h": generator.HEADER_HASH}
+    pinned.update(generator.RSP_INPUT_HASH)
+    return hashlib.sha256("".join(f"{path} {pinned[path]}\n" for path in sorted(pinned)).encode()).hexdigest()
+
+
+def stale_sources(lock: dict[str, object]) -> str | None:
+    recorded = cast("dict[str, str]", lock.get("sources", {})).get("owned")
+    if recorded == embedded_sources():
+        return None
+    return (
+        "the sources the owned engines embed changed since the lock was written (generate_replay_probe.py "
+        "HEADER_HASH / RSP_INPUT_HASH): prepare from the ROMs, then run lock_inputs.py write"
+    )
+
+
 def pins() -> dict[str, str]:
     """The pins the prepared inputs depend on: the N64Recomp and decomp commits."""
 
@@ -139,9 +170,13 @@ def current(prepared: Path) -> dict[str, str]:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("action", choices=("write", "check"))
+    p.add_argument("action", choices=("write", "check", "sources"))
     p.add_argument("--prepared", type=Path, default=ROOT / "build/prepared")
     a = p.parse_args(argv)
+    if a.action == "sources":
+        problem = stale_sources(json.loads(LOCK.read_text(encoding="utf-8")))
+        print(f"lock_inputs: {problem or 'embedded source pins match the lock'}", file=sys.stderr if problem else None)
+        return 1 if problem else 0
     found = current(cast(Path, a.prepared).resolve())
     if a.action == "write":
         record = {
@@ -149,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
             "about": "Digests of the prepared build inputs (scripts/release/lock_inputs.py); "
             "cmake/BuildInputs.cmake verifies them when DKR_VERIFY_BUILD_INPUTS is on.",
             "pins": pins(),
+            "sources": {"owned": embedded_sources()},
             "inputs": found,
         }
         LOCK.write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
@@ -158,6 +194,9 @@ def main(argv: list[str] | None = None) -> int:
     problems = [
         f"{name}: {found[name]}, locked {want}" for name, want in lock["inputs"].items() if found.get(name) != want
     ]
+    stale = stale_sources(lock)
+    if stale:
+        problems.append(stale)
     if lock["pins"] != pins():
         problems.append(f"pins changed since the lock was written: {lock['pins']} -> {pins()}")
     for problem in problems:
