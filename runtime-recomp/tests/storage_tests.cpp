@@ -14,6 +14,19 @@ namespace fs = std::filesystem;
 using Json = nlohmann::json;
 using namespace dkr::storage;
 namespace {
+// The shipped pacing waits 10 s before the startup pass and 5 s before a
+// retry, so a test on real delays takes 30 s and fails when a loaded machine
+// delays the worker by a few seconds. These keep every ordering the service
+// promises (startup once, retry after a publisher, install grace, yielding
+// harder while playing) at a fraction of the time, and leave the 5 to 15 s
+// waits below as a hundredfold margin instead of a two-fold one.
+const Pacing kTestPacing{std::chrono::milliseconds(100), std::chrono::milliseconds(100), std::chrono::milliseconds(4),
+                         std::chrono::milliseconds(3), std::chrono::milliseconds(1)};
+// The service's own defaults are product policy: a change is a decision.
+static_assert(Pacing{}.startup_delay == std::chrono::seconds(10) && Pacing{}.retry_delay == std::chrono::seconds(5) &&
+              Pacing{}.slice == std::chrono::milliseconds(4) &&
+              Pacing{}.playing_yield == std::chrono::milliseconds(36) &&
+              Pacing{}.idle_yield == std::chrono::milliseconds(6));
 fs::path io(fs::path p) {
 #ifdef _WIN32
     p = fs::absolute(p).make_preferred();
@@ -415,7 +428,7 @@ void service_process_and_gameplay(const fs::path& exe) {
     age(p);
     dkr::updates::Child other(exe, {"--hold", dkr::updates::path_utf8(f.root)}, f.root);
     assert(wait_for([&] { return fs::exists(f.root / "child-ready"); }));
-    start(f.root);
+    start(f.root, kTestPacing);
     request(Action::Clean);
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     assert(fs::exists(p));
@@ -426,7 +439,7 @@ void service_process_and_gameplay(const fs::path& exe) {
     assert(wait_for([&] { return !fs::exists(p); }, 8000));
     automatic(false);
     shutdown();
-    start(f.root);
+    start(f.root, kTestPacing);
     assert(!automatic());
     shutdown();
 }
@@ -434,7 +447,7 @@ void startup_once_and_gameplay() {
     Fixture f;
     const auto p = f.put("mod-store/images/" + std::string(64, '7'));
     age(p);
-    start(f.root);
+    start(f.root, kTestPacing);
     gameplay(true);
     assert(wait_for([&] { return !fs::exists(p) && !view().busy; }, 15000));
     const auto kept = f.put("mod-store/images/" + std::string(64, '8'));
@@ -455,7 +468,7 @@ void startup_once_and_gameplay() {
     assert(wait_for([&] { return !fs::exists(f.root / installed["file"].get<std::string>()) && !view().busy; }, 5000));
     assert(fs::exists(kept) && fs::last_write_time(f.root / "storage/last-cleanup.json") == marker);
     shutdown();
-    start(f.root);
+    start(f.root, kTestPacing);
     gameplay(true);
     assert(wait_for([&] { return !fs::exists(kept) && !view().busy; }, 15000));
     shutdown();
@@ -468,7 +481,7 @@ void queued_install_cleanup() {
     f.json("storage/preferences.json", {{"schema", 1}, {"automatic", false}});
     const auto image = f.put("mod-store/images/" + std::string(64, '1'));
     age(image);
-    start(f.root);
+    start(f.root, kTestPacing);
     gameplay(true);
     {
         Activity publishing;
@@ -565,7 +578,7 @@ int main(int argc, char** argv) {
     if (argc == 3 && std::string(argv[1]) == "--hold") {
         const auto root = fs::u8path(argv[2]);
         assert(root.filename().string().starts_with("dkr-storage-test-"));
-        start(root);
+        start(root, kTestPacing);
         std::ofstream(root / "child-ready") << "ready";
         const bool released = wait_for([&] { return fs::exists(root / "child-release"); }, 15000);
         shutdown();

@@ -137,12 +137,13 @@ struct Engine {
             options.progress(result);
             report = now;
         }
-        if (options.background && now - slice >= std::chrono::milliseconds(4)) {
+        if (options.background && now - slice >= options.pacing.slice) {
             const bool playing = options.gameplay && options.gameplay->load();
             std::mutex mutex;
             std::condition_variable_any changed;
             std::unique_lock lock(mutex);
-            changed.wait_for(lock, options.stop, std::chrono::milliseconds(playing ? 36 : 6), [] { return false; });
+            changed.wait_for(lock, options.stop, playing ? options.pacing.playing_yield : options.pacing.idle_yield,
+                             [] { return false; });
             slice = std::chrono::steady_clock::now();
             if (options.stop.stop_requested())
                 throw std::runtime_error("Storage work paused.");
