@@ -35,7 +35,10 @@ target_compile_definitions(DKRLegacyModLaunch PRIVATE DKR_RELEASE_VERSION="${DKR
 if(MSVC)
     target_compile_options(DKRCustomMagicCodes PRIVATE /fp:strict /FS)
 else()
-    target_compile_options(DKRCustomMagicCodes PRIVATE -ffp-contract=off -fno-fast-math -frounding-math)
+    target_compile_options(
+        DKRCustomMagicCodes
+        PRIVATE -ffp-contract=off -fno-fast-math -frounding-math ${DKR_SIMULATION_WRAP_OPTIONS}
+    )
 endif()
 add_executable(DKRMagicCodeInspect EXCLUDE_FROM_ALL "${DKRPORT_ROOT}/runtime-recomp/src/tools/magic_code_inspect.cpp")
 target_link_libraries(DKRMagicCodeInspect PRIVATE DKRCustomMagicCodes)
