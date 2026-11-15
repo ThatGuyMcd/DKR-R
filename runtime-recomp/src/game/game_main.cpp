@@ -22,6 +22,7 @@
 #include "updates/update_service.hpp"
 #include "updates/update_process.hpp"
 #include "runtime_netplay.hpp"
+#include "rollback_check.hpp"
 #include "runtime_support.hpp"
 #include "runtime_log_archive.hpp"
 #include "save_manager.hpp"
@@ -937,6 +938,8 @@ int DkrMain(int argc, char** argv) {
         }
         bool joined = launch.owned_check_host, invitation_written = false, ready = false, started = false,
              accepted = false;
+        bool connection_test_requested = false, connection_tested = false;
+        auto connection_test_deadline = std::chrono::steady_clock::now();
         auto report_at = std::chrono::steady_clock::now();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
         while (std::chrono::steady_clock::now() < deadline && !accepted) {
@@ -993,8 +996,39 @@ int DkrMain(int argc, char** argv) {
                         ++occupants;
                         all_ready = all_ready && racer.ready;
                     }
-                if (occupants == launch.owned_check_players && all_ready)
-                    started = online.request_start(rom_error);
+                if (occupants == launch.owned_check_players && all_ready) {
+                    // DKR_OWNED_CHECK_CONNECTION_TEST=1: run the Rollback connection check in the
+                    // full lobby (the host's Connection panel button) before starting the race.
+                    const char* connection_test = std::getenv("DKR_OWNED_CHECK_CONNECTION_TEST");
+                    if (connection_test && std::string_view(connection_test) == "1" && !connection_tested) {
+                        if (!connection_test_requested) {
+                            std::string test_error;
+                            connection_test_requested = online.request_connection_test(test_error);
+                            connection_test_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+                            if (!connection_test_requested) {
+                                std::fprintf(stderr, "[check][connection-test] refused: %s\n", test_error.c_str());
+                                connection_tested = true;
+                            }
+                        } else {
+                            const auto result = dkr::runtime::rollback_check::snapshot(&online);
+                            if (result.complete || std::chrono::steady_clock::now() >= connection_test_deadline) {
+                                std::fprintf(stderr,
+                                             "[check][connection-test] complete=%u party=%u rows=%zu status=%s\n",
+                                             unsigned(result.complete), unsigned(result.party), result.rows.size(),
+                                             result.status.c_str());
+                                for (const auto& row : result.rows)
+                                    std::fprintf(stderr,
+                                                 "[check][connection-test] peer=%s supported=%u sent=%u replies=%u "
+                                                 "p95=%.1f errors=%u\n",
+                                                 row.name.c_str(), unsigned(row.supported), row.sent, row.replies,
+                                                 row.p95, row.errors);
+                                connection_tested = true;
+                            }
+                        }
+                    }
+                    if (connection_tested || !(connection_test && std::string_view(connection_test) == "1"))
+                        started = online.request_start(rom_error);
+                }
             }
             accepted = online.consume_launch_request();
             if (!accepted)

@@ -1,6 +1,7 @@
 #include "direct_session.hpp"
 #include "online_input_broker.hpp"
 #include "progress_budget.hpp"
+#include "rollback_check.hpp"
 #include "rollback_policy.hpp"
 
 #include <algorithm>
@@ -79,6 +80,30 @@ struct DirectSessionTestAccess {
         }
         session.state_changed_.notify_all();
         session.network_worker_.join();
+    }
+    // The rollback check's context and send callback are private members that
+    // require mutex_; pin what they report for an ordinary two-player lobby and
+    // that unroutable targets are refused without sending.
+    static void rollback_contract(DirectSession& host, DirectSession& client) {
+        const std::uint8_t probe[1] = {0U};
+        {
+            std::scoped_lock lock(host.mutex_);
+            const auto c = host.rollback_context_locked();
+            assert(c.host && c.room == host.match_id_ && c.local == host.sender_id_);
+            assert(c.host_id == host.sender_id_);
+            assert(c.peers.size() == 1U && c.peers[0].id == client.sender_id_);
+            assert(!host.rollback_send_locked(client.sender_id_ + 1U, protocol::MessageType::PreflightControlProbe,
+                                              probe));
+        }
+        {
+            std::scoped_lock lock(client.mutex_);
+            const auto c = client.rollback_context_locked();
+            assert(!c.host && c.room == client.match_id_ && c.local == client.sender_id_);
+            assert(c.host_id == client.host_sender_id_ && c.host_id == host.sender_id_);
+            assert(c.peers.size() == 1U && c.peers[0].id == client.host_sender_id_);
+            assert(!client.rollback_send_locked(client.host_sender_id_ + 1U,
+                                                protocol::MessageType::PreflightControlProbe, probe));
+        }
     }
     DKR_TEST_NOINLINE static void owned_lane_isolation() {
         DirectSession receiver;
@@ -1701,6 +1726,7 @@ int main() {
         // legacy scores and the legacy cold-boot checkpoint exchange this
         // scenario used to drive are superseded (Rollback lobbies exchange
         // checkpoints in the owned engines) and must stay gone.
+        DirectSessionTestAccess::rollback_contract(checkpoint_host, checkpoint_client);
         assert(checkpoint_host.request_connection_test(checkpoint_error));
         assert(!checkpoint_host.view().connection_test_active);
         pump_pair(checkpoint_host, checkpoint_client, 50);
