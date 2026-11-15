@@ -59,6 +59,7 @@ endif()
 include(CTest)
 include(cmake/ProjectTests.cmake)
 include(cmake/SourceRoots.cmake)
+include(cmake/SimulationFlags.cmake)
 include(cmake/Localisation.cmake)
 dkr_add_localisation()
 
@@ -1244,7 +1245,7 @@ if(DKR_RUNTIME_BUILD_GENERATED OR DKR_RUNTIME_BUILD_RT64)
         set_property(
             SOURCE src/game/camera_obstruction.cpp tests/replay_probe/probe_native.c
             APPEND
-            PROPERTY COMPILE_OPTIONS -ffp-contract=off
+            PROPERTY COMPILE_OPTIONS -ffp-contract=off ${DKR_SIMULATION_WRAP_OPTIONS}
         )
     endif()
     if(APPLE AND NOT IOS AND DKR_RUNTIME_BUILD_RT64)
