@@ -89,11 +89,17 @@ class ParserTests(unittest.TestCase):
         self.assertEqual({}, facts(source).stores)
 
     def test_hooks_are_extern_c_dkr_and_recomp_definitions(self):
-        source = b'extern "C" void dkr_a(); extern "C" void dkr_b() {}\nextern "C" { void x_recomp() {} void other() {} }\nvoid dkr_c() {}'
+        source = (
+            b'extern "C" void dkr_a(); extern "C" void dkr_b() {}\n'
+            b'extern "C" { void x_recomp() {} void other() {} }\nvoid dkr_c() {}'
+        )
         self.assertEqual(["dkr_b", "x_recomp"], facts(source).hooks)
 
     def test_guest_calls_by_payload_member_pointer_and_plain_name(self):
-        source = b"void f(){ payload->get_settings(rdram, &c); use(p->get_settings); cam_set_fov(rdram, c); other->cam_set_fov(); x.y(); }"
+        source = (
+            b"void f(){ payload->get_settings(rdram, &c); use(p->get_settings); "
+            b"cam_set_fov(rdram, c); other->cam_set_fov(); x.y(); }"
+        )
         self.assertEqual(["cam_set_fov", "get_settings"], facts(source).guest_calls)
 
 

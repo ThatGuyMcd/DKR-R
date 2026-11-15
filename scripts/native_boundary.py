@@ -41,8 +41,9 @@ import hashlib
 from pathlib import Path
 import re
 import sys
-import tomllib
 from typing import cast
+
+import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
