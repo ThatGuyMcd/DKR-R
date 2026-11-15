@@ -16,7 +16,22 @@ namespace dkr::runtime::netplay::experimental {
 
 namespace {
 std::atomic<std::uint32_t> g_check_state_every{0U};
+std::atomic<bool> g_check_verify_forced{false};
+std::atomic<std::uint32_t> g_check_corrupt_state_at{0U};
 } // namespace
+
+void set_check_verify_forced(bool forced) {
+    g_check_verify_forced.store(forced, std::memory_order_relaxed);
+}
+bool check_verify_forced() {
+    return g_check_verify_forced.load(std::memory_order_relaxed);
+}
+void set_check_corrupt_state_at(std::uint32_t frame) {
+    g_check_corrupt_state_at.store(frame, std::memory_order_relaxed);
+}
+std::uint32_t check_corrupt_state_at() {
+    return g_check_corrupt_state_at.load(std::memory_order_relaxed);
+}
 
 void set_check_state_log_interval(std::uint32_t every) {
     g_check_state_every.store(every, std::memory_order_relaxed);
@@ -264,20 +279,30 @@ bool Driver::confirm() {
             frame->actual_command.words, frame->output.scene_boundary);
         confirmed_inputs_ = frame->actual;
         ++statistics_.confirmed_frames;
-        // Self-test diagnostic: the hash saved with the confirmed frame's retained
-        // checkpoint, so two peers' logs can be diffed (scripts/compare_state_hashes.py).
-        if (const auto every = g_check_state_every.load(std::memory_order_relaxed);
-            every != 0U && statistics_.confirmed_frames % every == 0U) {
+        // The hash saved with the confirmed frame's retained checkpoint: the
+        // self-test log line (scripts/compare_state_hashes.py) and the live
+        // cross-architecture check read the same value, hashed once.
+        const auto log_every = g_check_state_every.load(std::memory_order_relaxed);
+        const bool log_due = log_every != 0U && statistics_.confirmed_frames % log_every == 0U;
+        const bool sample_due = state_samples_on_ && statistics_.confirmed_frames % kStateCheckEvery == 0U;
+        if (log_due || sample_due) {
             // The load reuses scratch_, which a pending restore keeps staged.
             prepared_restore_.reset();
             const auto began = std::chrono::steady_clock::now();
             std::uint64_t saved_hash = 0;
             if (checkpoints_->load(statistics_.confirmed_frames, scratch_, &saved_hash)) {
-                const auto micros =
-                    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - began);
-                std::fprintf(stderr, "[check][state] epoch=%llu frame=%u hash=%016llX us=%lld\n",
-                             static_cast<unsigned long long>(configuration_.epoch), statistics_.confirmed_frames,
-                             static_cast<unsigned long long>(saved_hash), static_cast<long long>(micros.count()));
+                if (log_due) {
+                    const auto micros =
+                        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - began);
+                    std::fprintf(stderr, "[check][state] epoch=%llu frame=%u hash=%016llX us=%lld\n",
+                                 static_cast<unsigned long long>(configuration_.epoch), statistics_.confirmed_frames,
+                                 static_cast<unsigned long long>(saved_hash), static_cast<long long>(micros.count()));
+                }
+                if (sample_due) {
+                    if (state_samples_.size() >= kStateSamples)
+                        state_samples_.pop_front();
+                    state_samples_.push_back({configuration_.epoch, statistics_.confirmed_frames, saved_hash});
+                }
             }
         }
         frame->output.effects.clear();

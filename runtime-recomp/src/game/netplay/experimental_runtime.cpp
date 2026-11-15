@@ -15,6 +15,8 @@
 #include "../mods/sdk2_bridge.hpp"
 #include "experimental_lobby_admission.hpp"
 #include "experimental_checkpoint_hash.hpp"
+#include "experimental_rollback.hpp"
+#include "state_cross_check.hpp"
 #include "experimental_confirmed_output.hpp"
 #include "owned_game.hpp"
 #include "runtime_platform.hpp"
@@ -577,6 +579,16 @@ bool run_party_runtime(ultramodern::renderer::WindowHandle window, const std::fi
                     shared.confirmed_motor.store(enabled ? 1 : 0);
             });
             party::PartyRuntime runtime(&lobby, *world, shared.mailbox, launch, [](auto b) { return digest(b); });
+            {
+                // Only lobbies that span architectures (or a self-test that forces it)
+                // exchange state hashes; everything else is wire-identical to before.
+                const bool spans = lobby_spans_architectures(launch.compatibility_hash, lobby.view().room.manifest);
+                const bool forced = experimental::check_verify_forced();
+                runtime.enable_state_check(spans || forced);
+                if (spans || forced)
+                    std::fprintf(stderr, "[party][desync-check] enabled reason=%s\n",
+                                 spans ? "lobby spans architectures" : "self-test VERIFY");
+            }
             if (!runtime.begin(message))
                 throw std::runtime_error(message);
             std::fprintf(stderr, "[party][boot] checkpoint admission started\n");

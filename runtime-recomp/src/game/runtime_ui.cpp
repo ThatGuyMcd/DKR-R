@@ -9995,6 +9995,22 @@ bool dkr::runtime::ui::configure_owned_online_check(const rom::Identity& identit
         }
         dkr::runtime::netplay::experimental::set_check_state_log_interval(every);
     }
+    // Self-test hooks for the live cross-architecture state check.
+    {
+        const char* verify = std::getenv("DKR_OWNED_CHECK_VERIFY");
+        dkr::runtime::netplay::experimental::set_check_verify_forced(verify && std::string_view(verify) == "1");
+        unsigned corrupt = 0;
+        if (const char* text = std::getenv("DKR_OWNED_CHECK_CORRUPT_STATE_AT"); text && *text) {
+            bool valid = true;
+            for (const char* at = text; *at; ++at) {
+                valid = valid && *at >= '0' && *at <= '9' && corrupt < 10000000U;
+                corrupt = corrupt * 10 + unsigned(*at - '0');
+            }
+            if (!valid)
+                corrupt = 0;
+        }
+        dkr::runtime::netplay::experimental::set_check_corrupt_state_at(corrupt);
+    }
     if (const char* missing = std::getenv("DKR_OWNED_CHECK_MISSING_TARGET");
         missing && std::string_view(missing) == "1")
         dkr::online_presentation::test_fixture::missing_gpu_target = true;
