@@ -82,6 +82,11 @@ CPU racers do (`netplay/check_autopilot.cpp`), holding the accelerator. Every
 frame: there was no race to read (menus, loading), or
 `DKR_OWNED_CHECK_INPUT=wave` is set.
 
+Each peer joins the lobby under a name it picks for itself, a race number
+and a moniker such as `#27 Ping Kong`, and logs it as `[check][name]`. The
+lists live in `netplay/check_names.hpp`; anything added there is checked
+against the lobby's name rules when it compiles.
+
 The menus are not steered: the test presses Start and A on a timer, so the
 race is whatever the character, vehicle and track cursors start on.
 
@@ -126,6 +131,7 @@ anything in a self-test run.
 
 | Variable | Effect |
 | --- | --- |
+| `DKR_OWNED_CHECK_NAME=<name>` | Race under this name (1 to 24 printable ASCII characters). Without it each peer picks its own, see below. |
 | `DKR_OWNED_CHECK_INPUT=wave` | Drive with the old pattern: accelerator held, stick left and right every 15 frames. |
 | `DKR_OWNED_CHECK_MODERN=1` | Use the Modern presentation preset. Needed for the three below. |
 | `DKR_OWNED_CHECK_FPS=60\|120\|180` | Fixed refresh target. |
@@ -135,6 +141,8 @@ anything in a self-test run.
 | `DKR_OWNED_CHECK_RECEIVE_MS=<n>` | Delay what this peer receives by `n` ms, with 15 ms of jitter. |
 | `DKR_OWNED_CHECK_WATCH=1` | On a joiner: join as a spectator, not a racer. |
 | `DKR_OWNED_CHECK_STATE_EVERY=<n>` | Log `[check][state]` every `n` confirmed frames (1 to 100, default 30). 1 is every frame. |
+| `DKR_OWNED_CHECK_VERIFY=1` | Turn on the live state cross-check (`docs/CROSS-ARCHITECTURE.md`) even though every peer is on one architecture. Set it on every peer, all of which must be builds that have the check. |
+| `DKR_OWNED_CHECK_CORRUPT_STATE_AT=<frame>` | This peer reports a wrong state hash for the first sampled frame at or after `frame`, so the check's stop shows up on every peer. Needs the check on. |
 
 Two peers on one machine have almost no latency between them, so a plain run
 never exercises late inputs. Use the delivery or receive delay when that is

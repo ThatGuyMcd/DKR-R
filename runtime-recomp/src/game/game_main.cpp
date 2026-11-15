@@ -36,6 +36,7 @@
 #if defined(DKR_EXPERIMENTAL_RACE_TEST)
 #include "replay_probe_capture.hpp"
 #include "runtime_enhancements.hpp"
+#include "netplay/check_names.hpp"
 #include "netplay/experimental_runtime.hpp"
 #include <cwchar>
 #endif
@@ -961,7 +962,9 @@ int DkrMain(int argc, char** argv) {
                 std::string invitation;
                 file >> invitation;
                 if (dkr::runtime::netplay::valid_quick_join_code(invitation)) {
-                    if (!online.join(invitation, "Owned check client", rom_error))
+                    const std::string name = dkr::runtime::netplay::check_names::choose();
+                    std::fprintf(stderr, "[check][name] %s\n", name.c_str());
+                    if (!online.join(invitation, name, rom_error))
                         break;
                     joined = true;
                 }
